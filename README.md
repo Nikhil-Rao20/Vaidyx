@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="brand/Vaidyx_Logo_Only.svg" alt="Vaidyx Logo" width="120">
+  <img src="static/vaidyx-icon.svg" alt="Vaidyx Logo" width="120">
 </p>
 
 <p align="center">
