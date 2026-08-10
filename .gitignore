@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Vaidyx sensitive data
+data/auth.json
+data/app.db

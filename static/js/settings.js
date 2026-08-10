@@ -1,0 +1,2984 @@
+// static/js/settings.js — Settings panel module (ES6)
+// User-facing preferences: AI models, search, appearance
+
+import uiModule from './ui.js';
+import searchModule from './search.js';
+import { makeWindowDraggable } from './windowDrag.js';
+import { clearDockSide } from './modalSnap.js';
+import { sortModelIds } from './modelSort.js';
+import { providerLogo } from './providers.js';
+import { isAltGrEvent } from './platform.js';
+import { bindMenuDismiss } from './escMenuStack.js';
+
+let initialized = false;
+let modalEl = null;
+let _authPolicy = { password_min_length: 8 };
+
+function el(id) { return document.getElementById(id); }
+function esc(s) { return uiModule.esc(s); }
+function safeRasterDataUrl(raw) {
+  const value = String(raw || '').trim();
+  return /^data:image\/(?:png|jpe?g|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(value) ? value : '';
+}
+
+/* ── Tab switching ── */
+const ADMIN_TABS = new Set(['services', 'added-models', 'tools', 'users', 'system']);
+
+function initTabs() {
+  modalEl.querySelectorAll('[data-settings-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.settingsTab;
+      // Lazy-init admin when first clicking an admin tab
+      if (ADMIN_TABS.has(tab) && window.adminModule && typeof window.adminModule.open === 'function') {
+        window.adminModule.open(tab);
+        return;
+      }
+      modalEl.querySelectorAll('[data-settings-tab]').forEach(b => b.classList.toggle('active', b.dataset.settingsTab === tab));
+      modalEl.querySelectorAll('[data-settings-panel]').forEach(p => p.classList.toggle('hidden', p.dataset.settingsPanel !== tab));
+      // Mark when the Appearance tab is open so the modal can go
+      // semi-transparent — lets the user see the rest of the UI react as
+      // they flip toggles instead of having to close + reopen the modal.
+      document.body.classList.toggle('settings-appearance-open', tab === 'appearance');
+      syncAppearanceOpacity(tab === 'appearance');
+      if (tab === 'ai') refreshAiModelEndpoints();
+    });
+  });
+}
+
+/* ── Dragging ── */
+function initDrag() {
+  const header = modalEl.querySelector('.modal-header');
+  const content = modalEl.querySelector('.settings-modal-content');
+  if (!header || !content) return;
+  // Skip interactive controls in the header (e.g. the opacity slider) so
+  // grabbing them doesn't start a window-drag.
+  makeWindowDraggable(modalEl, {
+    content,
+    header,
+    skipSelector: 'button, input, select, .theme-opacity-wrap',
+    enableDock: true,
+  });
+}
+
+function resetWindowPlacement() {
+  const content = modalEl && modalEl.querySelector('.settings-modal-content');
+  if (!content) return;
+  const hadLeft = modalEl.classList.contains('modal-left-docked');
+  const hadRight = modalEl.classList.contains('modal-right-docked');
+  modalEl.classList.remove('modal-left-docked', 'modal-right-docked');
+  if (hadLeft) clearDockSide('left', modalEl);
+  if (hadRight) clearDockSide('right', modalEl);
+  if (content._leftDockNavObs) {
+    try { content._leftDockNavObs.navObs && content._leftDockNavObs.navObs.disconnect(); } catch (_) {}
+    try { window.removeEventListener('resize', content._leftDockNavObs.reanchor); } catch (_) {}
+    delete content._leftDockNavObs;
+  }
+  delete content._preDockSnapshot;
+  delete content._dockSide;
+  delete content._dockSuspended;
+  delete content.dataset._tilePreSnap;
+  delete content.dataset._tileZone;
+  [
+    'position', 'left', 'top', 'right', 'bottom', 'margin', 'transform',
+    'width', 'height', 'max-width', 'max-height', 'border-radius', 'transition',
+  ].forEach(prop => content.style.removeProperty(prop));
+}
+
+/* ── Delegated link: close Settings + open the Prompt (characters) modal ── */
+function initOpenPromptModalLink() {
+  document.addEventListener('click', async (e) => {
+    const link = e.target.closest('[data-open-prompt-modal]');
+    if (!link) return;
+    e.preventDefault();
+    // Close settings first so the prompt modal isn't stacked on top.
+    if (modalEl && !modalEl.classList.contains('hidden')) close();
+    try {
+      const m = await import('./presets.js');
+      const fn = m.openCustomPresetModal || (m.default && m.default.openCustomPresetModal);
+      if (typeof fn === 'function') fn();
+    } catch (_) {
+      const modal = document.getElementById('custom-preset-modal');
+      if (modal) modal.classList.remove('hidden');
+    }
+    // Force the Persona tab (data-chartab="character") since the link's
+    // whole purpose is editing personas — not landing on Inject by default.
+    const personaTab = document.querySelector('#custom-preset-modal .preset-tab[data-chartab="character"]');
+    if (personaTab) personaTab.click();
+  });
+}
+
+/* ── Close on backdrop / X ── */
+function initClose() {
+  modalEl.querySelector('.close-btn').addEventListener('click', close);
+  modalEl.addEventListener('mousedown', e => {
+    if (uiModule.isTouchInsideModal()) return;
+    if (e.target === modalEl) close();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || !modalEl || modalEl.classList.contains('hidden')) return;
+    // Bail when a transient popover inside the modal is open — Esc should
+    // dismiss just that, not the whole modal. Same-document listeners fire
+    // in registration order regardless of capture/bubble, so the popover's
+    // own handler can't pre-empt ours; we have to opt out here.
+    const popoverOpen = modalEl.querySelector(
+      '#adm-epLocalMoreMenu, #adm-epApiMoreMenu, #adm-provider-menu, #search-provider-menu, [data-popover-open="1"]'
+    );
+    if (popoverOpen && popoverOpen.style.display !== 'none' && !popoverOpen.classList.contains('hidden')) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    close();
+  });
+}
+
+/* ── Appearance-tab opacity slider ──
+   Mirrors the Theme customizer's slider: fades the settings modal's
+   background (and inner cards) via color-mix so the user can watch the
+   rest of the UI react to toggles, while keeping text/controls crisp
+   (no element opacity). Only shown/active on the Appearance tab. */
+const _SETTINGS_PEEK = 55; // % opacity when the Peek toggle is on
+function _applySettingsOpacity(on) {
+  const content = modalEl && modalEl.querySelector('.settings-modal-content, .modal-content');
+  if (!content) return;
+  const cards = content.querySelectorAll('.admin-card');
+  if (on) {
+    const bgMix = `color-mix(in srgb, var(--bg) ${_SETTINGS_PEEK}%, transparent)`;
+    const panelMix = `color-mix(in srgb, var(--panel) ${_SETTINGS_PEEK}%, transparent)`;
+    content.style.setProperty('background', bgMix, 'important');
+    content.style.setProperty('backdrop-filter', 'none', 'important');
+    content.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
+    cards.forEach(c => {
+      c.style.setProperty('background', panelMix, 'important');
+      c.style.setProperty('backdrop-filter', 'none', 'important');
+      c.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
+    });
+  } else {
+    content.style.removeProperty('background');
+    content.style.removeProperty('backdrop-filter');
+    content.style.removeProperty('-webkit-backdrop-filter');
+    cards.forEach(c => {
+      c.style.removeProperty('background');
+      c.style.removeProperty('backdrop-filter');
+      c.style.removeProperty('-webkit-backdrop-filter');
+    });
+  }
+}
+
+// Show/hide the Peek toggle for the Appearance tab and apply or clear the fade.
+function syncAppearanceOpacity(active) {
+  const toggle = el('settings-opacity-wrap');
+  if (toggle) toggle.classList.toggle('hidden', !active);
+  if (active) {
+    _applySettingsOpacity(toggle ? toggle.classList.contains('active') : false);
+  } else {
+    _applySettingsOpacity(false); // clear the fade off the Appearance tab
+  }
+}
+
+function initOpacityToggle() {
+  const toggle = el('settings-opacity-wrap');
+  if (!toggle || toggle.dataset.bound === '1') return;
+  toggle.dataset.bound = '1';
+  toggle.addEventListener('click', () => {
+    const on = !toggle.classList.contains('active');
+    toggle.classList.toggle('active', on);
+    toggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+    _applySettingsOpacity(on);
+  });
+}
+
+/* ═══════════════════════════════════════════
+   AI TAB
+   ═══════════════════════════════════════════ */
+
+const _aiEndpointRefreshers = new Set();
+let _aiEndpointRefreshInFlight = null;
+
+async function _fetchModelEndpoints() {
+  const epRes = await fetch('/api/model-endpoints', { credentials: 'same-origin' });
+  const endpoints = await epRes.json();
+  return Array.isArray(endpoints) ? endpoints : [];
+}
+
+function _endpointLabel(ep) {
+  return ep.name + (ep.online ? '' : ' (offline)');
+}
+
+function _fillEndpointSelect(selectEl, endpoints, selected, keepBlank) {
+  if (!selectEl) return;
+  const previous = selected !== undefined ? selected : selectEl.value;
+  const blankText = keepBlank && selectEl.options[0] && selectEl.options[0].value === ''
+    ? selectEl.options[0].textContent
+    : null;
+  while (selectEl.options.length) selectEl.remove(0);
+  if (blankText !== null) {
+    const blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = blankText;
+    selectEl.appendChild(blank);
+  }
+  (endpoints || []).forEach(function(ep) {
+    if (!ep.is_enabled) return;
+    const opt = document.createElement('option');
+    opt.value = ep.id;
+    opt.textContent = _endpointLabel(ep);
+    selectEl.appendChild(opt);
+  });
+  if (previous && Array.from(selectEl.options).some(function(o) { return o.value === previous; })) {
+    selectEl.value = previous;
+  } else if (blankText !== null) {
+    selectEl.value = '';
+  }
+  _syncEndpointLogo(selectEl);
+}
+
+// Mirror the selected model's provider logo into a sibling <span id="<selectId>-logo">.
+// Wires the change listener exactly once so we can call this every time the
+// select is repopulated without piling on duplicate handlers.
+function _syncModelLogo(selectEl) {
+  if (!selectEl) return;
+  const logoEl = document.getElementById(selectEl.id + '-logo');
+  if (!logoEl) return;
+  const apply = () => { logoEl.innerHTML = providerLogo(selectEl.value) || ''; };
+  apply();
+  if (!selectEl.dataset.logoSync) {
+    selectEl.dataset.logoSync = '1';
+    selectEl.addEventListener('change', apply);
+  }
+}
+
+// Same idea but for endpoint dropdowns where the <option value="…">
+// is an opaque endpoint UUID — fall back to the option's text label
+// so providerLogo() can pattern-match (Anthropic, OpenAI, Ollama, …).
+function _syncEndpointLogo(selectEl) {
+  if (!selectEl) return;
+  const logoEl = document.getElementById(selectEl.id + '-logo');
+  if (!logoEl) return;
+  const apply = () => {
+    const opt = selectEl.options[selectEl.selectedIndex];
+    const label = (opt && opt.textContent) || selectEl.value || '';
+    logoEl.innerHTML = providerLogo(label) || '';
+  };
+  apply();
+  if (!selectEl.dataset.epLogoSync) {
+    selectEl.dataset.epLogoSync = '1';
+    selectEl.addEventListener('change', apply);
+  }
+}
+
+function _fillModelSelect(selectEl, models, selected, keepBlank) {
+  if (!selectEl) return;
+  const previous = selected !== undefined ? selected : selectEl.value;
+  const blankText = keepBlank && selectEl.options[0] && selectEl.options[0].value === ''
+    ? selectEl.options[0].textContent
+    : null;
+  while (selectEl.options.length) selectEl.remove(0);
+  if (blankText !== null) {
+    const blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = blankText;
+    selectEl.appendChild(blank);
+  }
+  sortModelIds(models).forEach(function(m) {
+    const opt = document.createElement('option');
+    opt.value = m;
+    opt.textContent = String(m).split('/').pop();
+    selectEl.appendChild(opt);
+  });
+  if (previous && Array.from(selectEl.options).some(function(o) { return o.value === previous; })) {
+    selectEl.value = previous;
+  } else if (blankText !== null) {
+    selectEl.value = '';
+  }
+  _syncModelLogo(selectEl);
+}
+
+function _registerAiEndpointRefresh(fn) {
+  _aiEndpointRefreshers.add(fn);
+}
+
+export async function refreshAiModelEndpoints() {
+  if (_aiEndpointRefreshInFlight) return _aiEndpointRefreshInFlight;
+  _aiEndpointRefreshInFlight = (async function() {
+    try {
+      const endpoints = await _fetchModelEndpoints();
+      _aiEndpointRefreshers.forEach(function(fn) {
+        try { fn(endpoints); } catch (e) { console.warn('[settings] endpoint refresh handler failed', e); }
+      });
+    } catch (e) {
+      console.warn('[settings] failed to refresh model endpoints', e);
+    } finally {
+      _aiEndpointRefreshInFlight = null;
+    }
+  })();
+  return _aiEndpointRefreshInFlight;
+}
+
+/* Shared fallback-chain widget — mirrors the Default Chat Model fallback UI
+ * for other model cards (Utility, Vision, …). Pass in the container/button
+ * IDs, the endpoints list, the settings key to persist under, and the
+ * model-filter (for Vision we exclude non-chat-capable models).
+ */
+function _bindFallbackWidget(opts) {
+  var fbContainer = el(opts.containerId);
+  var addBtn = el(opts.addBtnId);
+  var endpointsRef = opts.endpoints;       // mutable list reference
+  var modelsFilter = opts.modelsFilter || function() { return true; };
+  var settingKey = opts.settingKey;
+  var current = opts.initial || [];        // [{endpoint_id, model}]
+
+  if (!fbContainer || !addBtn) return { setEndpoints: function() {}, setInitial: function() {} };
+
+  function enabledEps() { return (endpointsRef() || []).filter(function(e) { return e.is_enabled; }); }
+
+  function fillModels(selectEl, epId, selected) {
+    while (selectEl.options.length) selectEl.remove(0);
+    var ep = (endpointsRef() || []).find(function(e) { return e.id === epId; });
+    if (ep && ep.models) {
+      sortModelIds(ep.models).forEach(function(m) {
+        if (!modelsFilter(m, ep)) return;
+        var o = document.createElement('option');
+        o.value = m;
+        o.textContent = m.split('/').pop();
+        selectEl.appendChild(o);
+      });
+    }
+    if (selected) selectEl.value = selected;
+  }
+
+  async function save() {
+    var clean = current.filter(function(f) { return f.endpoint_id && f.model; });
+    var body = {};
+    body[settingKey] = clean;
+    try {
+      await fetch('/api/auth/settings', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+    } catch (e) { console.warn('[fallback] save failed for ' + settingKey, e); }
+  }
+
+  function render() {
+    fbContainer.innerHTML = '';
+    current.forEach(function(fb, idx) {
+      var row = document.createElement('div');
+      row.className = 'settings-fallback-row';
+
+      var num = document.createElement('span');
+      num.className = 'settings-fallback-num';
+      num.textContent = (idx + 1) + '.';
+
+      var epS = document.createElement('select');
+      epS.className = 'settings-select';
+      enabledEps().forEach(function(ep) {
+        var o = document.createElement('option');
+        o.value = ep.id;
+        o.textContent = ep.name + (ep.online ? '' : ' (offline)');
+        epS.appendChild(o);
+      });
+      var first = enabledEps()[0];
+      epS.value = fb.endpoint_id || (first ? first.id : '');
+
+      var mS = document.createElement('select');
+      mS.className = 'settings-select';
+      fillModels(mS, epS.value, fb.model);
+
+      fb.endpoint_id = epS.value;
+      fb.model = mS.value;
+
+      epS.addEventListener('change', function() {
+        fb.endpoint_id = epS.value;
+        fillModels(mS, epS.value, '');
+        fb.model = mS.value;
+        save();
+      });
+      mS.addEventListener('change', function() { fb.model = mS.value; save(); });
+
+      var rm = document.createElement('button');
+      rm.type = 'button';
+      rm.className = 'settings-fallback-remove';
+      rm.title = 'Remove fallback';
+      rm.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
+      rm.addEventListener('click', function() {
+        current.splice(idx, 1);
+        render();
+        save();
+      });
+
+      row.appendChild(num);
+      row.appendChild(epS);
+      row.appendChild(mS);
+      row.appendChild(rm);
+      fbContainer.appendChild(row);
+    });
+  }
+
+  addBtn.addEventListener('click', function() {
+    var first = enabledEps()[0];
+    current.push({ endpoint_id: first ? first.id : '', model: '' });
+    render();
+    save();
+  });
+
+  render();
+
+  return {
+    setInitial: function(list) { current = (list || []).slice(); render(); },
+    refresh: render,
+  };
+}
+
+/* ── Default Chat Model ── */
+async function initDefaultChat() {
+  var epSel = el('set-defaultEpSelect');
+  var modelSel = el('set-defaultModelSelect');
+  var msg = el('set-defaultChatMsg');
+  var fbContainer = el('set-defaultFallbacks');
+  var addFbBtn = el('set-defaultAddFallback');
+  var _endpoints = [];
+  var _fallbacks = []; // [{endpoint_id, model}] — tried in order if primary fails
+
+  function enabledEndpoints() {
+    return _endpoints.filter(function(e) { return e.is_enabled; });
+  }
+
+  // Fill any <select> with the models for a given endpoint id.
+  function fillModels(selectEl, epId, selected) {
+    var ep = _endpoints.find(function(e) { return e.id === epId; });
+    _fillModelSelect(selectEl, ep ? ep.models : [], selected, false);
+  }
+
+  try {
+    _endpoints = await _fetchModelEndpoints();
+    _fillEndpointSelect(epSel, _endpoints, epSel.value, false);
+  } catch (e) { console.warn('Failed to load endpoints for default chat', e); }
+
+  function refreshModels(selectedModel) { fillModels(modelSel, epSel.value, selectedModel); }
+  function refreshEndpointOptions(selectedEndpoint, selectedModel) {
+    _fillEndpointSelect(epSel, _endpoints, selectedEndpoint !== undefined ? selectedEndpoint : epSel.value, false);
+    refreshModels(selectedModel !== undefined ? selectedModel : modelSel.value);
+    renderFallbacks();
+  }
+
+  // Render the fallback chain. Each row is endpoint + model + remove.
+  function renderFallbacks() {
+    fbContainer.innerHTML = '';
+    _fallbacks.forEach(function(fb, idx) {
+      var row = document.createElement('div');
+      row.className = 'settings-fallback-row';
+
+      var num = document.createElement('span');
+      num.className = 'settings-fallback-num';
+      num.textContent = (idx + 1) + '.';
+
+      var epS = document.createElement('select');
+      epS.className = 'settings-select';
+      enabledEndpoints().forEach(function(ep) {
+        var o = document.createElement('option');
+        o.value = ep.id;
+        o.textContent = ep.name + (ep.online ? '' : ' (offline)');
+        epS.appendChild(o);
+      });
+      var first = enabledEndpoints()[0];
+      epS.value = fb.endpoint_id || (first ? first.id : '');
+
+      var mS = document.createElement('select');
+      mS.className = 'settings-select';
+      fillModels(mS, epS.value, fb.model);
+
+      // Keep the model in sync with the values actually shown.
+      fb.endpoint_id = epS.value;
+      fb.model = mS.value;
+
+      epS.addEventListener('change', function() {
+        fb.endpoint_id = epS.value;
+        fillModels(mS, epS.value, '');
+        fb.model = mS.value;
+        saveDefault();
+      });
+      mS.addEventListener('change', function() { fb.model = mS.value; saveDefault(); });
+
+      var rm = document.createElement('button');
+      rm.type = 'button';
+      rm.className = 'settings-fallback-remove';
+      rm.title = 'Remove fallback';
+      rm.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
+      rm.addEventListener('click', function() {
+        _fallbacks.splice(idx, 1);
+        renderFallbacks();
+        saveDefault();
+      });
+
+      row.appendChild(num);
+      row.appendChild(epS);
+      row.appendChild(mS);
+      row.appendChild(rm);
+      fbContainer.appendChild(row);
+    });
+  }
+
+  try {
+    var res = await fetch('/api/auth/settings', { credentials: 'same-origin' });
+    var settings = await res.json();
+    if (settings.default_endpoint_id) epSel.value = settings.default_endpoint_id;
+    refreshModels(settings.default_model || '');
+    _fallbacks = Array.isArray(settings.default_model_fallbacks)
+      ? settings.default_model_fallbacks.map(function(f) {
+          return { endpoint_id: (f && f.endpoint_id) || '', model: (f && f.model) || '' };
+        })
+      : [];
+    renderFallbacks();
+  } catch (e) { console.warn('Failed to load default chat settings', e); }
+
+  epSel.addEventListener('change', function() { refreshModels(''); saveDefault(); });
+  modelSel.addEventListener('change', saveDefault);
+
+  async function saveDefault() {
+    try {
+      var clean = _fallbacks.filter(function(f) { return f.endpoint_id && f.model; });
+      await fetch('/api/auth/settings', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          default_endpoint_id: epSel.value,
+          default_model: modelSel.value,
+          default_model_fallbacks: clean
+        })
+      });
+      msg.textContent = 'Saved'; msg.style.color = 'var(--fg)';
+      setTimeout(function() { msg.textContent = ''; }, 2000);
+    } catch (e) { msg.textContent = 'Failed to save'; msg.style.color = 'var(--red)'; }
+  }
+
+  if (addFbBtn) addFbBtn.addEventListener('click', function() {
+    var first = enabledEndpoints()[0];
+    _fallbacks.push({ endpoint_id: first ? first.id : '', model: '' });
+    renderFallbacks();
+    saveDefault();
+  });
+
+  _registerAiEndpointRefresh(function(endpoints) {
+    _endpoints = endpoints;
+    refreshEndpointOptions(epSel.value, modelSel.value);
+  });
+}
+
+/* ── Utility Model ── */
+async function initUtilityModel() {
+  var epSel = el('set-utilityEpSelect');
+  var modelSel = el('set-utilityModelSelect');
+  var msg = el('set-utilityChatMsg');
+  var _endpoints = [];
+  var fallbackWidget = null;
+  if (epSel && epSel.options[0]) epSel.options[0].textContent = 'Same as chat';
+  if (modelSel && modelSel.options[0]) modelSel.options[0].textContent = 'Same as chat';
+
+  try {
+    _endpoints = await _fetchModelEndpoints();
+    _fillEndpointSelect(epSel, _endpoints, epSel.value, true);
+  } catch (e) { console.warn('Failed to load endpoints for utility model', e); }
+
+  function refreshModels(selectedModel) {
+    var epId = epSel.value;
+    var ep = _endpoints.find(function(e) { return e.id === epId; });
+    _fillModelSelect(modelSel, ep ? ep.models : [], selectedModel, true);
+  }
+
+  try {
+    var res = await fetch('/api/auth/settings', { credentials: 'same-origin' });
+    var settings = await res.json();
+    if (settings.utility_endpoint_id) epSel.value = settings.utility_endpoint_id;
+    refreshModels(settings.utility_model || '');
+    fallbackWidget = _bindFallbackWidget({
+      containerId: 'set-utilityFallbacks',
+      addBtnId: 'set-utilityAddFallback',
+      endpoints: function() { return _endpoints; },
+      settingKey: 'utility_model_fallbacks',
+      initial: Array.isArray(settings.utility_model_fallbacks)
+        ? settings.utility_model_fallbacks.map(function(f) { return { endpoint_id: (f && f.endpoint_id) || '', model: (f && f.model) || '' }; })
+        : [],
+    });
+  } catch (e) { console.warn('Failed to load utility model settings', e); }
+
+  // Persist whatever's currently selected. Empty endpoint or model → backend
+  // transparently falls back to the chat model (mirrors the teacher panel:
+  // no toggle, "—" means "unset, use chat").
+  async function saveUtility() {
+    try {
+      await fetch('/api/auth/settings', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          utility_endpoint_id: epSel.value || '',
+          utility_model: modelSel.value || ''
+        })
+      });
+      msg.textContent = 'Saved'; msg.style.color = 'var(--fg)';
+      setTimeout(function() { msg.textContent = ''; }, 1500);
+    } catch (e) { msg.textContent = 'Failed to save'; msg.style.color = 'var(--red)'; }
+  }
+
+  epSel.addEventListener('change', function() { refreshModels(''); saveUtility(); });
+  modelSel.addEventListener('change', saveUtility);
+
+  _registerAiEndpointRefresh(function(endpoints) {
+    _endpoints = endpoints;
+    _fillEndpointSelect(epSel, _endpoints, epSel.value, true);
+    refreshModels(modelSel.value);
+    if (fallbackWidget && fallbackWidget.refresh) fallbackWidget.refresh();
+  });
+}
+
+/* ── Teacher Model ── */
+// SOTA model called automatically when a self-hosted student model
+// fails an agent-mode task. Stored as a single `teacher_model` string
+// in the form `model@endpoint_name` so the backend's _resolve_model
+// can dispatch directly. Master toggle is the separate
+// `teacher_enabled` flag so the user can pause the feature without
+// losing their endpoint+model selection.
+async function initTeacherModel() {
+  var enabledToggle = el('set-teacherEnabledToggle');
+  var epSel = el('set-teacherEpSelect');
+  var modelSel = el('set-teacherModelSelect');
+  var msg = el('set-teacherChatMsg');
+  if (!epSel || !modelSel) return;
+  var _endpoints = [];
+
+  try {
+    _endpoints = await _fetchModelEndpoints();
+    _fillEndpointSelect(epSel, _endpoints, epSel.value, true);
+  } catch (e) { console.warn('Failed to load endpoints for teacher model', e); }
+
+  function refreshModels(selectedModel) {
+    var epId = epSel.value;
+    var ep = _endpoints.find(function(e) { return e.id === epId; });
+    _fillModelSelect(modelSel, ep ? ep.models : [], selectedModel, true);
+  }
+
+  // Disable / enable the endpoint+model dropdowns based on the
+  // master switch. Greys them out so users see at a glance that the
+  // selection is dormant.
+  function syncEnabled() {
+    var off = enabledToggle ? !enabledToggle.checked : true;
+    // Dim the card when off as a "dormant" cue, but keep the endpoint+model
+    // dropdowns INTERACTIVE — the toggle gates whether escalation runs, not
+    // whether you can configure it. (Previously the config was inert when off,
+    // so users couldn't pick an endpoint until they'd already enabled it.)
+    var card = enabledToggle ? enabledToggle.closest('.admin-card') : null;
+    if (card) card.style.opacity = off ? '0.7' : '';
+    var wrap = card ? card.querySelector('.settings-col') : null;
+    if (wrap) wrap.style.pointerEvents = '';
+    epSel.disabled = false;
+    modelSel.disabled = false;
+  }
+
+  try {
+    var res = await fetch('/api/auth/settings', { credentials: 'same-origin' });
+    var settings = await res.json();
+    if (enabledToggle) enabledToggle.checked = !!settings.teacher_enabled;
+    // teacher_model is stored as "model@endpoint_name". Split on the
+    // LAST `@` so model ids that contain @ aren't mangled.
+    var spec = settings.teacher_model || '';
+    var savedModel = spec;
+    var savedEpName = '';
+    var at = spec.lastIndexOf('@');
+    if (at >= 0) {
+      savedModel = spec.slice(0, at);
+      savedEpName = spec.slice(at + 1);
+    }
+    if (savedEpName) {
+      var match = _endpoints.find(function(ep) {
+        return ep.name && ep.name.toLowerCase().indexOf(savedEpName.toLowerCase()) >= 0;
+      });
+      if (match) epSel.value = match.id;
+    }
+    refreshModels(savedModel);
+    syncEnabled();
+  } catch (e) { console.warn('Failed to load teacher model settings', e); }
+
+  async function saveTeacher() {
+    try {
+      var spec = '';
+      if (epSel.value && modelSel.value) {
+        var ep = _endpoints.find(function(e) { return e.id === epSel.value; });
+        spec = ep ? (modelSel.value + '@' + ep.name) : modelSel.value;
+      }
+      var enabled = enabledToggle ? !!enabledToggle.checked : false;
+      await fetch('/api/auth/settings', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teacher_enabled: enabled, teacher_model: spec })
+      });
+      msg.textContent = enabled ? (spec ? 'Saved' : 'Pick an endpoint + model') : 'Disabled';
+      msg.style.color = enabled && !spec ? 'var(--red)' : 'var(--fg)';
+      setTimeout(function() { msg.textContent = ''; }, 2000);
+    } catch (e) { msg.textContent = 'Failed to save'; msg.style.color = 'var(--red)'; }
+  }
+
+  if (enabledToggle) {
+    enabledToggle.addEventListener('change', function() {
+      syncEnabled();
+      saveTeacher();
+    });
+  }
+  epSel.addEventListener('change', function() { refreshModels(''); saveTeacher(); });
+  modelSel.addEventListener('change', saveTeacher);
+
+  _registerAiEndpointRefresh(function(endpoints) {
+    _endpoints = endpoints;
+    _fillEndpointSelect(epSel, _endpoints, epSel.value, true);
+    refreshModels(modelSel.value);
+  });
+}
+
+/* ── Image Generation ── */
+async function initImageSettings() {
+  const modelSel = el('set-imgModelSelect');
+  const qualSel = el('set-imgQualitySelect');
+  const msg = el('set-imgSettingsMsg');
+  const enabledToggle = el('set-imgEnabledToggle');
+  const configWrap = modelSel ? modelSel.closest('div[style*="flex-direction"]') : null;
+  try {
+    const modelsRes = await fetch('/api/models', { credentials: 'same-origin' });
+    const modelsData = await modelsRes.json();
+    // Inpaint-compat allowlist — image gen here is scoped to inpainting only,
+    // so DALL-E / GPT-Image-1 (no inpaint API) are excluded. Currently:
+    //   - any model with 'inpaint' in the id
+    //   - Stable Diffusion 3.5 Medium (inpaint via diffusers pipeline)
+    const _isInpaintModel = (mid) => {
+      const lower = String(mid || '').toLowerCase();
+      return lower.includes('inpaint')
+        || lower.includes('3.5-medium')
+        || lower.includes('3-5-medium')
+        || lower.includes('sd-3.5-med');
+    };
+    const imageModels = [];
+    (modelsData.items || []).forEach(item => {
+      (item.models || []).forEach(mid => {
+        if (_isInpaintModel(mid)) imageModels.push(mid);
+      });
+    });
+    sortModelIds(imageModels).forEach(mid => { const opt = document.createElement('option'); opt.value = mid; opt.textContent = mid; modelSel.appendChild(opt); });
+    // Hardcoded fallbacks shown as "(not detected)" so users know what to
+    // download/serve to enable inpaint here.
+    ['stable-diffusion-3.5-medium', 'stable-diffusion-inpainting'].forEach(mid => {
+      if (!imageModels.includes(mid)) { const opt = document.createElement('option'); opt.value = mid; opt.textContent = mid + ' (not detected)'; modelSel.appendChild(opt); }
+    });
+  } catch (e) { console.warn('Failed to load models for image settings', e); }
+  try {
+    const settingsRes = await fetch('/api/auth/settings', { credentials: 'same-origin' });
+    const settings = await settingsRes.json();
+    if (settings.image_model) modelSel.value = settings.image_model;
+    if (settings.image_quality) qualSel.value = settings.image_quality;
+    if (enabledToggle) enabledToggle.checked = settings.image_gen_enabled === true;
+  } catch (e) { console.warn('Failed to load settings', e); }
+
+  function syncImgDisabled() {
+    var off = enabledToggle && !enabledToggle.checked;
+    var card = enabledToggle ? enabledToggle.closest('.admin-card') : null;
+    if (card) card.style.opacity = off ? '0.45' : '';
+    if (configWrap) configWrap.style.pointerEvents = off ? 'none' : '';
+  }
+  syncImgDisabled();
+
+  async function saveSettings() {
+    try {
+      const res = await fetch('/api/auth/settings', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_gen_enabled: enabledToggle ? enabledToggle.checked : false, image_model: modelSel.value, image_quality: qualSel.value }) });
+      if (!res.ok) throw new Error(await res.text().catch(() => `HTTP ${res.status}`));
+      msg.textContent = 'Saved'; msg.style.color = 'var(--fg)'; setTimeout(() => { msg.textContent = ''; }, 2000);
+    } catch (e) { msg.textContent = 'Failed to save'; msg.style.color = 'var(--red)'; }
+  }
+  modelSel.addEventListener('change', saveSettings);
+  qualSel.addEventListener('change', saveSettings);
+  if (enabledToggle) enabledToggle.addEventListener('change', function() { syncImgDisabled(); saveSettings(); });
+}
+
+/* ── Vision ── */
+async function initVisionSettings() {
+  const vlSel = el('set-vlModelSelect');
+  const msg = el('set-visionSettingsMsg');
+  const enabledToggle = el('set-visionEnabledToggle');
+  const configWrap = vlSel ? vlSel.closest('div[style*="flex-direction"]') : null;
+  var _visionEndpoints = [];
+  var visionFallbackWidget = null;
+  var _vlExclude = ['audio', 'realtime', 'tts', 'dall-e', 'embedding', 'search', 'whisper'];
+  function _isVisionModel(mid) {
+    var lower = String(mid || '').toLowerCase();
+    return !_vlExclude.some(function(kw) { return lower.includes(kw); });
+  }
+  try {
+    const modelsRes = await fetch('/api/models', { credentials: 'same-origin' });
+    const modelsData = await modelsRes.json();
+    const visionModels = [];
+    (modelsData.items || []).forEach(item => {
+      if (item.offline) return;
+      (item.models || []).forEach(mid => {
+        if (_isVisionModel(mid)) {
+          visionModels.push(mid);
+        }
+      });
+    });
+    sortModelIds(visionModels).forEach(mid => {
+      var opt = document.createElement('option'); opt.value = mid; opt.textContent = mid; vlSel.appendChild(opt);
+    });
+  } catch (e) { console.warn('Failed to load models for vision settings', e); }
+  // Also pull the raw endpoint list so the fallback widget can resolve
+  // endpoint-id → models the same way the other cards do.
+  try {
+    _visionEndpoints = await _fetchModelEndpoints();
+  } catch (e) { console.warn('Failed to load endpoints for vision fallback', e); }
+  try {
+    const settingsRes = await fetch('/api/auth/settings', { credentials: 'same-origin' });
+    const settings = await settingsRes.json();
+    if (settings.vision_model) vlSel.value = settings.vision_model;
+    _syncModelLogo(vlSel);
+    if (enabledToggle) enabledToggle.checked = settings.vision_enabled !== false;
+    visionFallbackWidget = _bindFallbackWidget({
+      containerId: 'set-visionFallbacks',
+      addBtnId: 'set-visionAddFallback',
+      endpoints: function() { return _visionEndpoints; },
+      // Vision fallback list filters to vision-capable models (same heuristic
+      // as the primary select above — exclude audio/tts/embedding/etc.).
+      modelsFilter: function(mid) { return _isVisionModel(mid); },
+      settingKey: 'vision_model_fallbacks',
+      initial: Array.isArray(settings.vision_model_fallbacks)
+        ? settings.vision_model_fallbacks.map(function(f) { return { endpoint_id: (f && f.endpoint_id) || '', model: (f && f.model) || '' }; })
+        : [],
+    });
+  } catch (e) { console.warn('Failed to load vision settings', e); }
+
+  function syncVisionDisabled() {
+    var off = enabledToggle && !enabledToggle.checked;
+    var card = enabledToggle ? enabledToggle.closest('.admin-card') : null;
+    if (card) card.style.opacity = off ? '0.45' : '';
+    if (configWrap) configWrap.style.pointerEvents = off ? 'none' : '';
+  }
+  syncVisionDisabled();
+
+  async function saveSettings() {
+    try {
+      await fetch('/api/auth/settings', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vision_enabled: enabledToggle ? enabledToggle.checked : true, vision_model: vlSel.value }) });
+      msg.textContent = 'Saved'; msg.style.color = 'var(--fg)'; setTimeout(() => { msg.textContent = ''; }, 2000);
+    } catch (e) { msg.textContent = 'Failed to save'; msg.style.color = 'var(--red)'; }
+  }
+  vlSel.addEventListener('change', saveSettings);
+  if (enabledToggle) enabledToggle.addEventListener('change', function() { syncVisionDisabled(); saveSettings(); });
+
+  _registerAiEndpointRefresh(function(endpoints) {
+    _visionEndpoints = endpoints;
+    if (visionFallbackWidget && visionFallbackWidget.refresh) visionFallbackWidget.refresh();
+  });
+}
+
+/* ── Face Recognition ── */
+
+/* ── Text to Speech ── */
+async function initTtsSettings() {
+  var provSel = el('set-ttsProviderSelect');
+  var modelSelect = el('set-ttsModelSelect');
+  var modelInput = el('set-ttsModelInput');
+  var voiceSelect = el('set-ttsVoiceSelect');
+  var voiceInput = el('set-ttsVoiceInput');
+  var modelRow = el('set-ttsModelRow');
+  var voiceRow = el('set-ttsVoiceRow');
+  var speedSelect = el('set-ttsSpeedSelect');
+  var speedRow = el('set-ttsSpeedRow');
+  var ttsMsg = el('set-ttsSettingsMsg');
+  var ttsEnabledToggle = el('set-ttsEnabledToggle');
+  var ttsConfigWrap = provSel ? provSel.closest('div[style*="flex-direction"]') : null;
+
+  function isEndpoint() { return provSel.value.startsWith('endpoint:'); }
+  function getModel() { return isEndpoint() ? modelSelect.value : modelInput.value; }
+  function getVoice() { return isEndpoint() ? voiceSelect.value : voiceInput.value; }
+
+  function updateVisibility() {
+    var prov = provSel.value;
+    modelRow.style.display = prov.startsWith('endpoint:') ? 'flex' : 'none';
+    voiceRow.style.display = prov === 'disabled' ? 'none' : 'flex';
+    speedRow.style.display = prov === 'disabled' ? 'none' : 'flex';
+    if (isEndpoint()) {
+      modelSelect.style.display = ''; modelInput.style.display = 'none';
+      voiceSelect.style.display = ''; voiceInput.style.display = 'none';
+    } else {
+      modelSelect.style.display = 'none'; modelInput.style.display = '';
+      voiceSelect.style.display = 'none'; voiceInput.style.display = prov === 'disabled' ? 'none' : '';
+    }
+  }
+
+  var ttsKeywords = ['tts', 'audio'];
+  try {
+    var epRes = await fetch('/api/model-endpoints', { credentials: 'same-origin' });
+    var endpoints = await epRes.json();
+    endpoints.forEach(function(ep) {
+      if (!ep.is_enabled) return;
+      var hasTTS = (ep.models || []).some(m => ttsKeywords.some(kw => m.toLowerCase().includes(kw)));
+      if (!hasTTS) return;
+      var opt = document.createElement('option'); opt.value = 'endpoint:' + ep.id; opt.textContent = ep.name + ' (API)'; provSel.appendChild(opt);
+    });
+  } catch (e) { console.warn('Failed to load endpoints for TTS', e); }
+
+  try {
+    var settingsRes = await fetch('/api/auth/settings', { credentials: 'same-origin' });
+    var settings = await settingsRes.json();
+    if (settings.tts_provider) provSel.value = settings.tts_provider;
+    if (settings.tts_model) { modelSelect.value = settings.tts_model; modelInput.value = settings.tts_model; }
+    if (settings.tts_voice) { voiceSelect.value = settings.tts_voice; voiceInput.value = settings.tts_voice; }
+    if (settings.tts_speed) { speedSelect.value = settings.tts_speed; }
+    if (ttsEnabledToggle) ttsEnabledToggle.checked = settings.tts_enabled !== false;
+  } catch (e) { console.warn('Failed to load TTS settings', e); }
+
+  function syncTtsDisabled() {
+    var off = ttsEnabledToggle && !ttsEnabledToggle.checked;
+    var card = ttsEnabledToggle ? ttsEnabledToggle.closest('.admin-card') : null;
+    if (card) card.style.opacity = off ? '0.45' : '';
+    if (ttsConfigWrap) ttsConfigWrap.style.pointerEvents = off ? 'none' : '';
+  }
+  syncTtsDisabled();
+  updateVisibility();
+
+  async function saveTTS() {
+    try {
+      await fetch('/api/auth/settings', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tts_enabled: ttsEnabledToggle ? ttsEnabledToggle.checked : true, tts_provider: provSel.value, tts_model: getModel() || 'tts-1', tts_voice: getVoice() || 'alloy', tts_speed: speedSelect.value || '1' }) });
+      ttsMsg.textContent = 'Saved'; ttsMsg.style.color = 'var(--fg)'; setTimeout(() => { ttsMsg.textContent = ''; }, 2000);
+      if (window.aiTTSManager) window.aiTTSManager.checkAvailability();
+    } catch (e) { ttsMsg.textContent = 'Failed to save'; ttsMsg.style.color = 'var(--red)'; }
+  }
+
+  async function saveAndClearCache() {
+    await saveTTS();
+    fetch('/api/tts/clear-cache', { method: 'POST', credentials: 'same-origin' }).catch(function(){});
+  }
+
+  provSel.addEventListener('change', function() {
+    var prov = provSel.value;
+    if (prov === 'local') voiceInput.value = 'af_heart';
+    else if (isEndpoint()) { voiceSelect.value = 'alloy'; modelSelect.value = 'tts-1'; }
+    else if (prov === 'browser') { voiceInput.value = ''; voiceInput.placeholder = 'OS default voice'; }
+    updateVisibility();
+    saveTTS();
+  });
+  modelSelect.addEventListener('change', saveAndClearCache);
+  modelInput.addEventListener('change', saveTTS);
+  voiceSelect.addEventListener('change', saveAndClearCache);
+  voiceInput.addEventListener('change', saveTTS);
+  speedSelect.addEventListener('change', saveAndClearCache);
+  if (ttsEnabledToggle) ttsEnabledToggle.addEventListener('change', function() { syncTtsDisabled(); saveTTS(); });
+
+  // Preview / test button
+  var previewBtn = el('set-ttsPreviewBtn');
+  if (previewBtn) {
+    var previewAudio = null;
+    var previewPlaying = false;
+    function resetPreview() { previewPlaying = false; previewBtn.textContent = 'Preview'; previewBtn.style.borderColor = ''; }
+
+    previewBtn.addEventListener('click', async function() {
+      if (previewPlaying) {
+        if (previewAudio) { previewAudio.pause(); previewAudio = null; }
+        window.speechSynthesis.cancel();
+        resetPreview(); return;
+      }
+      var prov = provSel.value;
+      if (prov === 'disabled') {
+        ttsMsg.textContent = 'Select a provider first'; ttsMsg.style.color = 'var(--red, #e55)';
+        setTimeout(function() { ttsMsg.textContent = ''; }, 2000); return;
+      }
+      var testText = 'Hello, this is a test of text to speech.';
+      previewPlaying = true; previewBtn.textContent = 'Loading...';
+      try {
+        if (prov === 'browser') {
+          if (!('speechSynthesis' in window)) throw new Error('Browser TTS not supported');
+          var utt = new SpeechSynthesisUtterance(testText);
+          var voiceVal = getVoice();
+          if (voiceVal) {
+            var voices = window.speechSynthesis.getVoices();
+            var target = voiceVal.toLowerCase();
+            var match = voices.find(function(v) { return v.name.toLowerCase() === target; }) ||
+                        voices.find(function(v) { return v.name.toLowerCase().includes(target); });
+            if (match) utt.voice = match;
+          }
+          utt.rate = parseFloat(speedSelect.value) || 1;
+          previewBtn.textContent = 'Stop'; previewBtn.style.borderColor = 'var(--red, #e55)';
+          await new Promise(function(resolve, reject) {
+            utt.onend = resolve;
+            utt.onerror = function(e) { reject(new Error('Browser TTS: ' + e.error)); };
+            window.speechSynthesis.speak(utt);
+          });
+        } else {
+          var res = await fetch('/api/tts/synthesize', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: testText, format: 'audio' })
+          });
+          if (!res.ok) { var err = await res.json().catch(function() { return {}; }); throw new Error(err.detail?.message || 'Synthesis failed'); }
+          var blob = await res.blob();
+          var url = URL.createObjectURL(blob);
+          previewAudio = new Audio(url);
+          previewBtn.textContent = 'Stop'; previewBtn.style.borderColor = 'var(--red, #e55)';
+          await new Promise(function(resolve, reject) {
+            previewAudio.onended = function() { URL.revokeObjectURL(url); previewAudio = null; resolve(); };
+            previewAudio.onerror = function() { URL.revokeObjectURL(url); previewAudio = null; reject(new Error('Playback failed')); };
+            previewAudio.play().catch(reject);
+          });
+        }
+      } catch (e) {
+        ttsMsg.textContent = 'Preview failed: ' + e.message; ttsMsg.style.color = 'var(--red, #e55)';
+        setTimeout(function() { ttsMsg.textContent = ''; }, 3000);
+      } finally {
+        resetPreview();
+      }
+    });
+  }
+}
+
+/* ── Speech to Text ── */
+async function initSttSettings() {
+  var provSel = el('set-sttProviderSelect');
+  var modelSelect = el('set-sttModelSelect');
+  var modelInput = el('set-sttModelInput');
+  var modelRow = el('set-sttModelRow');
+  var langRow = el('set-sttLangRow');
+  var langInput = el('set-sttLangInput');
+  var sttMsg = el('set-sttSettingsMsg');
+  var sttEnabledToggle = el('set-sttEnabledToggle');
+  var sttConfigWrap = el('set-sttConfigWrap');
+  // STT was removed from AI Defaults — bail if the UI isn't present.
+  if (!provSel) return;
+
+  function isEndpoint() { return provSel.value.startsWith('endpoint:'); }
+  function getModel() { return isEndpoint() ? modelInput.value : modelSelect.value; }
+
+  function updateVisibility() {
+    var prov = provSel.value;
+    var showModel = prov === 'local' || prov.startsWith('endpoint:');
+    var showLang = prov !== 'disabled';
+    modelRow.style.display = showModel ? 'flex' : 'none';
+    langRow.style.display = showLang ? 'flex' : 'none';
+    if (isEndpoint()) {
+      modelSelect.style.display = 'none'; modelInput.style.display = '';
+    } else {
+      modelSelect.style.display = ''; modelInput.style.display = 'none';
+    }
+  }
+
+  function syncSttDisabled() {
+    var off = sttEnabledToggle && !sttEnabledToggle.checked;
+    var card = sttEnabledToggle ? sttEnabledToggle.closest('.admin-card') : null;
+    if (card) card.style.opacity = off ? '0.45' : '';
+    if (sttConfigWrap) sttConfigWrap.style.pointerEvents = off ? 'none' : '';
+  }
+
+  // Effective provider: if toggle is off, treat as disabled regardless of provider select
+  function effectiveProvider() {
+    if (sttEnabledToggle && !sttEnabledToggle.checked) return 'disabled';
+    return provSel.value;
+  }
+
+  // Add API endpoints that might support STT
+  try {
+    var epRes = await fetch('/api/model-endpoints', { credentials: 'same-origin' });
+    var endpoints = await epRes.json();
+    endpoints.forEach(function(ep) {
+      if (!ep.is_enabled) return;
+      var opt = document.createElement('option'); opt.value = 'endpoint:' + ep.id; opt.textContent = ep.name + ' (API)'; provSel.appendChild(opt);
+    });
+  } catch (e) { console.warn('Failed to load endpoints for STT', e); }
+
+  // Load saved settings
+  try {
+    var settingsRes = await fetch('/api/auth/settings', { credentials: 'same-origin' });
+    var settings = await settingsRes.json();
+    if (settings.stt_provider) provSel.value = settings.stt_provider;
+    if (settings.stt_model) { modelSelect.value = settings.stt_model; modelInput.value = settings.stt_model; }
+    if (settings.stt_language) langInput.value = settings.stt_language;
+    if (sttEnabledToggle) sttEnabledToggle.checked = settings.stt_enabled !== false;
+  } catch (e) { console.warn('Failed to load STT settings', e); }
+
+  syncSttDisabled();
+  updateVisibility();
+
+  async function saveSTT() {
+    try {
+      var enabled = sttEnabledToggle ? sttEnabledToggle.checked : false;
+      await fetch('/api/auth/settings', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stt_enabled: enabled, stt_provider: provSel.value, stt_model: getModel() || 'base', stt_language: langInput.value.trim() }) });
+      sttMsg.textContent = 'Saved'; sttMsg.style.color = 'var(--fg)'; setTimeout(() => { sttMsg.textContent = ''; }, 2000);
+      // Notify voiceRecorder of effective provider and update send button icon
+      if (window.voiceRecorderModule) window.voiceRecorderModule._sttProvider = effectiveProvider();
+      if (window._updateSendBtnIcon) window._updateSendBtnIcon();
+    } catch (e) { sttMsg.textContent = 'Failed to save'; sttMsg.style.color = 'var(--red)'; }
+  }
+
+  provSel.addEventListener('change', function() { updateVisibility(); saveSTT(); });
+  modelSelect.addEventListener('change', saveSTT);
+  modelInput.addEventListener('change', saveSTT);
+  langInput.addEventListener('change', saveSTT);
+  if (sttEnabledToggle) sttEnabledToggle.addEventListener('change', function() { syncSttDisabled(); saveSTT(); });
+}
+
+/* ═══════════════════════════════════════════
+   SEARCH TAB
+   ═══════════════════════════════════════════ */
+
+var _LINK = function(href, text) {
+  return '<a href="' + href + '" target="_blank" rel="noopener noreferrer" style="color:var(--accent, var(--red));text-decoration:underline;">' + text + '</a>';
+};
+var _searchProviderHints = {
+  searxng: 'Private, self-hosted instance. Leave URL empty to use the SEARXNG_INSTANCE env var.',
+  duckduckgo: 'No API key needed, but rate-limited — heavy use can return empty results. Configure a fallback below.',
+  brave: 'Get your API key from ' + _LINK('https://brave.com/search/api/', 'brave.com/search/api'),
+  google_pse: 'Requires a Google API key and a Programmable Search Engine ID (CX). Create one at ' + _LINK('https://programmablesearchengine.google.com/', 'programmablesearchengine.google.com'),
+  tavily: 'AI-optimized search. 1,000 free credits/month at ' + _LINK('https://tavily.com/', 'tavily.com'),
+  serper: 'Google results via API. 2,500 free queries at ' + _LINK('https://serper.dev/', 'serper.dev'),
+  disabled: 'Web search and deep research tools will be unavailable.',
+};
+var _searchNeedsKey = { brave: 1, google_pse: 1, tavily: 1, serper: 1 };
+var _searchLabels = {
+  searxng: 'SearXNG', duckduckgo: 'DuckDuckGo', brave: 'Brave Search',
+  google_pse: 'Google PSE', tavily: 'Tavily', serper: 'Serper', disabled: 'Disabled',
+};
+var _searchKeyFields = {
+  brave: 'brave_api_key', google_pse: 'google_pse_key',
+  tavily: 'tavily_api_key', serper: 'serper_api_key',
+};
+
+async function initSearchSettings() {
+  var provSel = el('set-searchProvider');
+  var countSel = el('set-searchResultCount');
+  var countCustomInput = el('set-searchResultCountCustom');
+  var urlInput = el('set-searchUrl');
+  var urlRow = el('set-searchUrlRow');
+  var keyInput = el('set-searchApiKey');
+  var keyRow = el('set-searchKeyRow');
+  var cxInput = el('set-searchCx');
+  var cxRow = el('set-searchCxRow');
+  var hint = el('set-searchHint');
+  var msg = el('set-searchMsg');
+  var _settings = {};
+
+  function keyFieldFor(prov) { return _searchKeyFields[prov] || ''; }
+
+  function loadKeyForProvider(prov) {
+    var field = keyFieldFor(prov);
+    keyInput.value = field ? (_settings[field] || _settings.search_api_key || '') : '';
+  }
+
+  function updateVisibility() {
+    var prov = provSel.value;
+    urlRow.style.display = prov === 'searxng' ? 'flex' : 'none';
+    keyRow.style.display = _searchNeedsKey[prov] ? 'flex' : 'none';
+    cxRow.style.display = prov === 'google_pse' ? 'flex' : 'none';
+    hint.innerHTML = _searchProviderHints[prov] || '';
+    if (prov === 'brave') keyInput.placeholder = 'Brave API key';
+    else if (prov === 'google_pse') keyInput.placeholder = 'Google API key';
+    else if (prov === 'tavily') keyInput.placeholder = 'Tavily API key';
+    else if (prov === 'serper') keyInput.placeholder = 'Serper API key';
+    else keyInput.placeholder = 'API key';
+    loadKeyForProvider(prov);
+  }
+
+  function updateCountDisplay() {
+    var val = _settings.search_result_count || 5;
+    var presets = ['3', '5', '10', '20'];
+    if (presets.includes(String(val))) {
+      countSel.value = String(val);
+      countCustomInput.style.display = 'none';
+    } else {
+      countSel.value = 'custom';
+      countCustomInput.value = Math.max(1, Math.min(100, val));
+      countCustomInput.style.display = 'block';
+    }
+  }
+
+  try {
+    var res = await fetch('/api/auth/settings', { credentials: 'same-origin' });
+    _settings = await res.json();
+    if (_settings.search_provider) provSel.value = _settings.search_provider;
+    updateCountDisplay();
+    if (_settings.search_url) urlInput.value = _settings.search_url;
+    if (_settings.google_pse_cx) cxInput.value = _settings.google_pse_cx;
+  } catch (e) { console.warn('Failed to load search settings', e); }
+
+  countSel.addEventListener('change', function() {
+    if (this.value === 'custom') {
+      countCustomInput.style.display = 'block';
+      countCustomInput.focus();
+    } else {
+      countCustomInput.style.display = 'none';
+    }
+  });
+
+  updateVisibility();
+
+  async function refreshStatus() {
+    try {
+      var sRes = await fetch('/api/auth/settings', { credentials: 'same-origin' });
+      var s = await sRes.json();
+      _settings = s;
+      var active = s.search_provider || 'searxng';
+      var label = _searchLabels[active] || active;
+      var extra = '';
+      var kf = keyFieldFor(active);
+      var hasKey = kf ? ((s[kf] || '').trim() || (s.search_api_key || '').trim()) : false;
+      if (_searchNeedsKey[active]) {
+        extra = hasKey ? ' (key set)' : ' (no key)';
+      } else if (active === 'searxng' && (s.search_url || '').trim()) {
+        extra = ' (' + s.search_url + ')';
+      }
+      var count = s.search_result_count || 5;
+      msg.textContent = 'Active: ' + label + extra + ' \u00b7 ' + count + ' results';
+      msg.style.color = active === 'disabled' ? 'var(--red)' : (_searchNeedsKey[active] && !hasKey) ? 'var(--red)' : 'var(--fg)';
+    } catch (e) { /* ignore */ }
+  }
+  refreshStatus();
+
+  async function saveSearch() {
+    try {
+      var prov = provSel.value;
+      var resultCount;
+      if (countSel.value === 'custom') {
+        var customVal = parseInt(countCustomInput.value, 10);
+        if (isNaN(customVal) || customVal < 1 || customVal > 100) {
+          resultCount = _settings.search_result_count || 5;
+        } else {
+          resultCount = customVal;
+        }
+      } else {
+        resultCount = parseInt(countSel.value, 10);
+      }
+      var payload = {
+        search_provider: prov,
+        search_result_count: resultCount,
+        search_url: urlInput.value.trim(),
+        google_pse_cx: cxInput.value.trim(),
+      };
+      var kf = keyFieldFor(prov);
+      if (kf) {
+        payload[kf] = keyInput.value.trim();
+        _settings[kf] = keyInput.value.trim();
+      }
+      await fetch('/api/auth/settings', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      msg.textContent = 'Saved'; msg.style.color = 'var(--fg)';
+      setTimeout(refreshStatus, 2000);
+      if (searchModule && searchModule.refresh) searchModule.refresh();
+    } catch (e) { msg.textContent = 'Failed to save'; msg.style.color = 'var(--red)'; }
+  }
+
+  provSel.addEventListener('change', function() { updateVisibility(); saveSearch(); _syncSearchPicker(); });
+  countSel.addEventListener('change', saveSearch);
+  urlInput.addEventListener('change', saveSearch);
+  keyInput.addEventListener('change', saveSearch);
+  cxInput.addEventListener('change', saveSearch);
+
+  // ── Provider picker with logos (mirrors the hidden <select>) ──
+  var picker = el('search-provider-picker');
+  var pickerBtn = el('search-provider-btn');
+  var pickerMenu = el('search-provider-menu');
+  var pickerCurrent = picker ? picker.querySelector('.adm-provider-current') : null;
+  function _searchProviderLogoSvg(key) {
+    return _SEARCH_PROVIDER_LOGOS[key] || '';
+  }
+  function _renderSearchPickerMenu() {
+    if (!pickerMenu) return;
+    pickerMenu.innerHTML = Array.from(provSel.options).map(function(o) {
+      var logo = _searchProviderLogoSvg(o.dataset.searchLogo);
+      var active = o.value === provSel.value ? ' active' : '';
+      return '<div class="adm-provider-item' + active + '" role="option" data-value="' + o.value.replace(/"/g, '&quot;') + '">' +
+        '<span class="adm-provider-logo">' + logo + '</span>' +
+        '<span>' + o.textContent + '</span>' +
+      '</div>';
+    }).join('');
+  }
+  function _syncSearchPicker() {
+    if (!pickerCurrent) return;
+    var opt = provSel.selectedOptions[0] || provSel.options[0];
+    var logo = _searchProviderLogoSvg(opt.dataset.searchLogo);
+    pickerCurrent.querySelector('.adm-provider-logo').innerHTML = logo;
+    pickerCurrent.querySelector('.adm-provider-name').textContent = opt.textContent;
+  }
+  if (picker && pickerBtn && pickerMenu && pickerCurrent) {
+    _renderSearchPickerMenu();
+    _syncSearchPicker();
+    pickerBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      pickerMenu.classList.toggle('hidden');
+    });
+    pickerMenu.addEventListener('click', function(e) {
+      var item = e.target.closest('.adm-provider-item');
+      if (!item) return;
+      provSel.value = item.dataset.value;
+      provSel.dispatchEvent(new Event('change', { bubbles: true }));
+      pickerMenu.classList.add('hidden');
+      _renderSearchPickerMenu();
+    });
+    document.addEventListener('click', function(e) {
+      if (!picker.contains(e.target)) pickerMenu.classList.add('hidden');
+    });
+  }
+
+  // ── Fallback chain ──
+  // Stored as an ordered array of provider IDs (primary not included).
+  // When the primary fails or hits rate-limit, the backend walks this
+  // list in order trying each one.
+  var fbWrap = el('set-searchFallbackChain');
+  function _availableFallbackOptions() {
+    var primary = provSel.value;
+    var chain = _settings.search_fallback_chain || [];
+    var inChain = new Set(chain.concat([primary, 'disabled']));
+    return Array.from(provSel.options)
+      .map(function(o) { return { value: o.value, label: o.textContent, logo: o.dataset.searchLogo }; })
+      .filter(function(o) { return !inChain.has(o.value); });
+  }
+  var addBtn = el('set-searchAddFallback');
+  var TRASH_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
+  function _renderFallbackChain() {
+    if (!fbWrap) return;
+    var chain = (_settings.search_fallback_chain || []).slice();
+    fbWrap.innerHTML = '';
+    chain.forEach(function(p, idx) {
+      var row = document.createElement('div');
+      row.className = 'settings-fallback-row';
+
+      var num = document.createElement('span');
+      num.className = 'settings-fallback-num';
+      num.textContent = (idx + 1) + '.';
+      row.appendChild(num);
+
+      // Inline logo so the row identifies its provider at a glance even
+      // before opening the dropdown. The <select> below still drives
+      // selection; we just mirror its value into the logo span.
+      var logoWrap = document.createElement('span');
+      logoWrap.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;flex-shrink:0;color:var(--fg);';
+      var setLogo = function(val) {
+        var srcOpt = Array.from(provSel.options).find(function(o) { return o.value === val; });
+        logoWrap.innerHTML = srcOpt ? _searchProviderLogoSvg(srcOpt.dataset.searchLogo) : '';
+      };
+      setLogo(p);
+      row.appendChild(logoWrap);
+
+      var sel = document.createElement('select');
+      sel.className = 'settings-select';
+      // Options: this row's current value + every other provider not yet in the chain (and not the primary or 'disabled').
+      var primary = provSel.value;
+      var others = new Set(chain.filter(function(x) { return x !== p; }).concat([primary, 'disabled']));
+      Array.from(provSel.options).forEach(function(o) {
+        if (o.value !== p && others.has(o.value)) return;
+        var opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.textContent;
+        sel.appendChild(opt);
+      });
+      sel.value = p;
+      sel.addEventListener('change', function() {
+        setLogo(sel.value);
+        var next = (_settings.search_fallback_chain || []).slice();
+        next[idx] = sel.value;
+        _saveFallbackChain(next);
+      });
+      row.appendChild(sel);
+
+      var rm = document.createElement('button');
+      rm.type = 'button';
+      rm.className = 'settings-fallback-remove';
+      rm.title = 'Remove fallback';
+      rm.innerHTML = TRASH_SVG;
+      rm.addEventListener('click', function() {
+        var next = (_settings.search_fallback_chain || []).filter(function(x, i) { return i !== idx; });
+        _saveFallbackChain(next);
+      });
+      row.appendChild(rm);
+
+      fbWrap.appendChild(row);
+    });
+    // Add-fallback button: disabled when there are no remaining providers to add.
+    if (addBtn) {
+      var hasMore = _availableFallbackOptions().length > 0;
+      addBtn.style.display = hasMore ? '' : 'none';
+    }
+  }
+  if (addBtn && !addBtn._wired) {
+    addBtn._wired = true;
+    addBtn.addEventListener('click', function() {
+      var avail = _availableFallbackOptions();
+      if (!avail.length) return;
+      var next = (_settings.search_fallback_chain || []).slice();
+      next.push(avail[0].value);
+      _saveFallbackChain(next);
+    });
+  }
+  async function _saveFallbackChain(chain) {
+    _settings.search_fallback_chain = chain;
+    try {
+      await fetch('/api/auth/settings', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ search_fallback_chain: chain }),
+      });
+      msg.textContent = 'Saved'; msg.style.color = 'var(--fg)';
+      setTimeout(refreshStatus, 2000);
+    } catch (e) { msg.textContent = 'Failed to save'; msg.style.color = 'var(--red)'; }
+    _renderFallbackChain();
+  }
+  _renderFallbackChain();
+  // Re-render whenever the primary changes (it gets filtered out of "Add").
+  provSel.addEventListener('change', _renderFallbackChain);
+
+  // ── Test button ── runs a one-off query against the configured provider.
+  var testBtn = el('set-searchTestBtn');
+  if (testBtn) {
+    testBtn.addEventListener('click', async function() {
+      var prov = provSel.value;
+      if (!prov || prov === 'disabled') {
+        msg.textContent = 'Pick a provider first';
+        msg.style.color = 'var(--red)';
+        return;
+      }
+      // Persist current form values first so the test uses what's on screen.
+      await saveSearch();
+      testBtn.disabled = true;
+      var origHtml = testBtn.innerHTML;
+      var wp = null;
+      try {
+        var sp = window.spinnerModule || (await import('./spinner.js')).default;
+        wp = sp.createWhirlpool(11);
+        wp.element.style.cssText = 'display:inline-flex;width:11px;height:11px;margin:0 4px 0 0;';
+        testBtn.innerHTML = '';
+        testBtn.appendChild(wp.element);
+        testBtn.appendChild(document.createTextNode('Testing'));
+      } catch (_) {
+        testBtn.innerHTML = origHtml.replace(/>Test\s*$/, '>Testing...');
+      }
+      msg.textContent = '';
+      var t0 = performance.now();
+      try {
+        var fd = new FormData();
+        fd.append('query', 'hello world');
+        fd.append('provider', prov);
+        fd.append('count', '3');
+        var r = await fetch('/api/search/query', { method: 'POST', body: fd, credentials: 'same-origin' });
+        var d = await r.json();
+        var ms = Math.round(performance.now() - t0);
+        if (d.error) {
+          msg.textContent = '✗ ' + d.error + ' (' + ms + 'ms)';
+          msg.style.color = 'var(--red)';
+        } else if (!d.results || !d.results.length) {
+          msg.textContent = '⚠ No results returned (' + ms + 'ms)';
+          msg.style.color = 'var(--red)';
+        } else {
+          var topTitle = (d.results[0].title || d.results[0].url || '').slice(0, 60);
+          msg.textContent = '✓ ' + d.results.length + ' result' + (d.results.length === 1 ? '' : 's') + ' · ' + ms + 'ms · top: ' + topTitle;
+          msg.style.color = 'var(--fg)';
+        }
+      } catch (e) {
+        msg.textContent = '✗ Test failed: ' + (e && e.message ? e.message : e);
+        msg.style.color = 'var(--red)';
+      } finally {
+        if (wp) { try { wp.destroy(); } catch (_) {} }
+        testBtn.disabled = false; testBtn.innerHTML = origHtml;
+      }
+    });
+  }
+}
+
+// SVG logos for each search provider (16×16 viewBox normalised to 24×24).
+var _SEARCH_PROVIDER_LOGOS = {
+  searxng:   '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0-2a8 8 0 1 1-4.93 14.32l-3.4 3.4a1 1 0 1 1-1.4-1.4l3.4-3.4A8 8 0 0 1 10 2zM13 8.5L11.5 10 13 11.5l-1 1L10.5 11 9 12.5l-1-1L9.5 10 8 8.5l1-1L10.5 9 12 7.5z"/></svg>',
+  duckduckgo:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-1.5 5.5a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4zm5 0a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4zM12 13c-1.5 0-3.6.8-3.6 2.5C8.4 17.2 10.4 18 12 18s3.6-.8 3.6-2.5C15.6 13.8 13.5 13 12 13z"/></svg>',
+  brave:     '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 4l-1.5 1L15 3l-3 .5L9 3 6.5 5 5 4 3 7l1.5 2L4 12l3 5 4 3 1 1 1-1 4-3 3-5-.5-3L21 7l-2-3zM12 17l-2.5-2 .5-3-2-1.5 2-1.5L11 7l3-1 3 1-.5 2 2 1.5-2 1.5.5 3L14.5 17 12 17z"/></svg>',
+  google_pse:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.35 11.1H12v3.2h5.35c-.5 2.4-2.55 4-5.35 4-3.25 0-5.9-2.65-5.9-5.9s2.65-5.9 5.9-5.9c1.55 0 2.95.55 4.05 1.55l2.4-2.4C16.85 4.05 14.55 3 12 3 7 3 3 7 3 12s4 9 9 9c5.2 0 8.65-3.65 8.65-8.8 0-.4-.05-.7-.3-1.1z"/></svg>',
+  tavily:    '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 8.5l4 2.5v6l6 3.5 6-3.5v-6l4-2.5L12 2zm-4 9.5L12 14l4-2.5V16l-4 2.5L8 16v-4.5z"/></svg>',
+  serper:    '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 4a7 7 0 1 0 4.2 12.6l4.5 4.5 1.4-1.4-4.5-4.5A7 7 0 0 0 11 4zm0 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm-1 2v2H8v2h2v2h2v-2h2V10h-2V8h-2z"/></svg>',
+  disabled:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+};
+
+/* ── Deep Research Model (AI tab) ── */
+async function initResearchSettings() {
+  var epSel = el('set-researchEndpoint');
+  var modelSel = el('set-researchModel');
+  var tokensInput = el('set-researchMaxTokens');
+  var extractTimeoutInput = el('set-researchExtractTimeout');
+  var extractConcurrencyInput = el('set-researchExtractConcurrency');
+  var runTimeoutInput = el('set-researchRunTimeout');
+  var msg = el('set-researchMsg');
+  var endpoints = [];
+
+  try {
+    endpoints = await _fetchModelEndpoints();
+    _fillEndpointSelect(epSel, endpoints, epSel.value, true);
+  } catch (e) { console.warn('Failed to load endpoints for research', e); }
+
+  function refreshModels(selectedModel) {
+    var epId = epSel.value;
+    var ep = endpoints.find(function(e) { return e.id === epId; });
+    _fillModelSelect(modelSel, ep ? ep.models : [], selectedModel, true);
+  }
+
+  try {
+    var res = await fetch('/api/auth/settings', { credentials: 'same-origin' });
+    var settings = await res.json();
+    if (settings.research_endpoint_id) epSel.value = settings.research_endpoint_id;
+    refreshModels(settings.research_model || '');
+    if (settings.research_max_tokens) tokensInput.value = settings.research_max_tokens;
+    if (settings.research_extraction_timeout_seconds) extractTimeoutInput.value = settings.research_extraction_timeout_seconds;
+    if (settings.research_extraction_concurrency) extractConcurrencyInput.value = settings.research_extraction_concurrency;
+    if (settings.research_run_timeout_seconds !== undefined && settings.research_run_timeout_seconds !== null) {
+      runTimeoutInput.value = settings.research_run_timeout_seconds;
+    }
+  } catch (e) { console.warn('Failed to load research settings', e); }
+
+  function showStatus() {
+    var parts = [];
+    if (epSel.value) {
+      var epName = epSel.options[epSel.selectedIndex].textContent;
+      var mName = modelSel.value ? modelSel.value.split('/').pop() : 'auto';
+      parts.push(epName + ' / ' + mName);
+    }
+    if (tokensInput.value) {
+      parts.push('Max tokens: ' + tokensInput.value);
+    }
+    if (extractTimeoutInput.value) {
+      parts.push('Extract: ' + extractTimeoutInput.value + 's');
+    }
+    if (extractConcurrencyInput.value) {
+      parts.push('Parallel: ' + extractConcurrencyInput.value);
+    }
+    if (runTimeoutInput.value !== '') {
+      var rtv = parseInt(runTimeoutInput.value, 10);
+      if (!isNaN(rtv)) {
+        parts.push(rtv === 0 ? 'Max time: no limit' : 'Max time: ' + rtv + 's');
+      }
+    }
+    if (parts.length) {
+      msg.textContent = parts.join(' · ');
+      msg.style.color = 'var(--fg)';
+    } else {
+      msg.textContent = 'Using chat defaults';
+      msg.style.color = 'var(--fg)';
+    }
+  }
+  showStatus();
+
+  async function saveResearch() {
+    var payload = {
+      research_endpoint_id: epSel.value,
+      research_model: modelSel.value,
+    };
+    var tv = parseInt(tokensInput.value, 10);
+    if (tv && tv >= 1024) payload.research_max_tokens = tv;
+    var et = parseInt(extractTimeoutInput.value, 10);
+    if (et && et >= 15 && et <= 3600) payload.research_extraction_timeout_seconds = et;
+    var ec = parseInt(extractConcurrencyInput.value, 10);
+    if (ec && ec >= 1 && ec <= 12) payload.research_extraction_concurrency = ec;
+    if (runTimeoutInput.value !== '') {
+      var rt = parseInt(runTimeoutInput.value, 10);
+      // 0 = no limit (disables the hard timeout); otherwise 60s..86400s (24h)
+      if (!isNaN(rt) && (rt === 0 || (rt >= 60 && rt <= 86400))) {
+        payload.research_run_timeout_seconds = rt;
+      }
+    }
+    try {
+      await fetch('/api/auth/settings', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      msg.textContent = 'Saved'; msg.style.color = 'var(--fg)';
+      setTimeout(showStatus, 2000);
+    } catch (e) { msg.textContent = 'Failed to save'; msg.style.color = 'var(--red)'; }
+  }
+
+  epSel.addEventListener('change', async function() {
+    refreshModels('');
+    saveResearch();
+  });
+  modelSel.addEventListener('change', saveResearch);
+  tokensInput.addEventListener('change', saveResearch);
+  extractTimeoutInput.addEventListener('change', saveResearch);
+  extractConcurrencyInput.addEventListener('change', saveResearch);
+  runTimeoutInput.addEventListener('change', saveResearch);
+
+  _registerAiEndpointRefresh(function(nextEndpoints) {
+    endpoints = nextEndpoints;
+    _fillEndpointSelect(epSel, endpoints, epSel.value, true);
+    refreshModels(modelSel.value);
+  });
+}
+
+/* ── Deep Research Search (Search tab) ── */
+async function initResearchSearchSettings() {
+  var searchSel = el('set-researchSearch');
+  var msg = el('set-researchSearchMsg');
+  var logoEl = el('set-researchSearch-logo');
+
+  function updateSearchLogo() {
+    if (!logoEl) return;
+    var opt = searchSel.selectedOptions[0];
+    var key = opt && opt.dataset ? opt.dataset.searchLogo : '';
+    logoEl.innerHTML = key ? (_SEARCH_PROVIDER_LOGOS[key] || '') : '';
+  }
+
+  function updateSearchOptions(settings) {
+    var options = searchSel.querySelectorAll('option');
+    options.forEach(function(opt) {
+      var prov = opt.value;
+      if (!prov) return;
+      var kf = _searchKeyFields[prov];
+      if (!kf) return;
+      var hasKey = ((settings[kf] || '').trim() || (settings.search_api_key || '').trim());
+      if (!hasKey) {
+        opt.textContent = (_searchLabels[prov] || prov) + ' (no key)';
+        opt.style.color = 'var(--red)';
+      } else {
+        opt.textContent = _searchLabels[prov] || prov;
+        opt.style.color = '';
+      }
+    });
+  }
+
+  try {
+    var res = await fetch('/api/auth/settings', { credentials: 'same-origin' });
+    var settings = await res.json();
+    if (settings.research_search_provider) searchSel.value = settings.research_search_provider;
+    updateSearchOptions(settings);
+    updateSearchLogo();
+  } catch (e) { console.warn('Failed to load research search settings', e); }
+
+  async function saveResearchSearch() {
+    try {
+      await fetch('/api/auth/settings', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ research_search_provider: searchSel.value })
+      });
+      msg.textContent = 'Saved'; msg.style.color = 'var(--fg)';
+      setTimeout(function() { msg.textContent = ''; }, 2000);
+    } catch (e) { msg.textContent = 'Failed to save'; msg.style.color = 'var(--red)'; }
+  }
+
+  searchSel.addEventListener('change', function() { updateSearchLogo(); saveResearchSearch(); });
+}
+
+/* ── Agent Settings (AI tab) ── */
+async function initAgentSettings() {
+  var toolsInput = el('set-agentMaxTools');
+  var roundsInput = el('set-agentMaxRounds');
+  var supInput = el('set-agentSupervisorLadder');
+  var msg = el('set-agentMsg');
+  if (!toolsInput) return;
+
+  try {
+    var res = await fetch('/api/auth/settings', { credentials: 'same-origin' });
+    var settings = await res.json();
+    if (settings.agent_max_tool_calls) toolsInput.value = settings.agent_max_tool_calls;
+    if (roundsInput && settings.agent_max_rounds) roundsInput.value = settings.agent_max_rounds;
+    if (supInput) supInput.checked = !!settings.agent_supervisor_ladder;
+  } catch (e) {}
+
+  // Clamp + coerce a raw input to an int in [lo, hi]; falls back to `dflt`
+  // when blank/non-numeric. Mirrors the server-side validation.
+  function clampInt(raw, lo, hi, dflt) {
+    var n = parseInt(raw, 10);
+    if (isNaN(n)) return dflt;
+    return Math.max(lo, Math.min(n, hi));
+  }
+
+  async function save() {
+    var tools = clampInt(toolsInput.value, 0, 1000, 0);
+    var rounds = roundsInput ? clampInt(roundsInput.value, 1, 200, 20) : null;
+    toolsInput.value = tools;                       // reflect the clamped value
+    if (roundsInput) roundsInput.value = rounds;
+    var payload = { agent_max_tool_calls: tools };
+    if (rounds != null) payload.agent_max_rounds = rounds;
+    if (supInput) payload.agent_supervisor_ladder = !!supInput.checked;
+    try {
+      await fetch('/api/auth/settings', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      msg.textContent = (tools > 0 ? 'Limit: ' + tools + ' tool calls' : 'Unlimited tool calls') +
+        (rounds != null ? ' · ' + rounds + ' steps/message' : '') +
+        (supInput && supInput.checked ? ' · supervisor on' : '');
+      msg.style.color = 'var(--fg)';
+    } catch (e) { msg.textContent = 'Failed to save'; msg.style.color = 'var(--red)'; }
+  }
+
+  toolsInput.addEventListener('change', save);
+  if (roundsInput) roundsInput.addEventListener('change', save);
+  if (supInput) supInput.addEventListener('change', save);
+  var cur = parseInt(toolsInput.value, 10) || 0;
+  var curR = roundsInput ? (parseInt(roundsInput.value, 10) || 20) : null;
+  msg.textContent = (cur > 0 ? 'Limit: ' + cur + ' tool calls' : 'Unlimited tool calls') +
+    (curR != null ? ' · ' + curR + ' steps/message' : '') +
+    (supInput && supInput.checked ? ' · supervisor on' : '');
+
+}
+
+/* ═══════════════════════════════════════════
+   APPEARANCE TAB
+   ═══════════════════════════════════════════ */
+function initAppearance() {
+  syncAppearanceCheckboxes();
+  syncPrivacyCheckboxes();
+
+  modalEl.querySelectorAll('[data-ui-key]').forEach(function(chk) {
+    chk.addEventListener('change', async function() {
+      var key = chk.dataset.uiKey;
+
+      if (window.UI_VIS_ADMIN_ONLY && window.UI_VIS_ADMIN_ONLY.has(key) && !chk.checked && !window._isAdmin) {
+        chk.checked = true;
+        if (uiModule && uiModule.showToast) {
+          uiModule.showToast('Only admins can hide Settings.');
+        }
+        return;
+      }
+
+      // Hiding the Settings cog removes the only visible way to re-open this
+      // panel. Warn the user and remind them about the `/settings` slash
+      // command so they don't lock themselves out.
+      if (key === 'sidebar-settings-btn' && !chk.checked) {
+        var ok = true;
+        try {
+          ok = await (uiModule && uiModule.styledConfirm
+            ? uiModule.styledConfirm(
+                'Hide the Settings cog?\n\nYou can re-open this panel any time by typing /settings in the chat input.',
+                { confirmText: 'Hide', cancelText: 'Cancel' }
+              )
+            : Promise.resolve(window.confirm('Hide the Settings cog?\n\nYou can re-open this panel any time by typing /settings in the chat input.')));
+        } catch (_) { ok = false; }
+        if (!ok) {
+          chk.checked = true;
+          return;
+        }
+        if (uiModule && uiModule.showToast) {
+          uiModule.showToast('Settings cog hidden — type /settings to bring it back.', 5000);
+        }
+      }
+
+      var s = window.loadUIVis();
+      s[key] = chk.checked;
+      window.saveUIVis(s);
+      window.applyUIVis(s);
+    });
+  });
+
+  modalEl.querySelectorAll('[data-privacy-key]').forEach(function(chk) {
+    chk.addEventListener('change', function() {
+      if (chk.dataset.privacyKey !== 'sensitive-blur') return;
+      localStorage.setItem('vaidyx-sensitive-blur', chk.checked ? 'on' : 'off');
+      window.dispatchEvent(new CustomEvent('vaidyx-sensitive-blur-change', {
+        detail: { enabled: chk.checked }
+      }));
+    });
+  });
+
+  // Per-section reset buttons (arrow-circle-back icon in each card's h2).
+  // Removes only the keys belonging to this section from the persisted
+  // visibility map so other sections keep their user settings.
+  modalEl.querySelectorAll('[data-vis-reset]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var card = btn.closest('.admin-card');
+      if (!card) return;
+      var keys = Array.from(card.querySelectorAll('[data-ui-key]'))
+        .map(function(c) { return c.dataset.uiKey; })
+        .filter(Boolean);
+      if (!keys.length) return;
+      var s = window.loadUIVis ? window.loadUIVis() : {};
+      keys.forEach(function(k) { delete s[k]; });
+      if (window.saveUIVis) window.saveUIVis(s);
+      syncAppearanceCheckboxes();
+      syncPrivacyCheckboxes();
+      if (window.applyUIVis) window.applyUIVis(s);
+    });
+  });
+}
+
+function syncAppearanceCheckboxes() {
+  var s = window.loadUIVis ? window.loadUIVis() : {};
+  var defaultOff = window.UI_VIS_DEFAULT_OFF || new Set();
+  modalEl.querySelectorAll('[data-ui-key]').forEach(function(chk) {
+    var key = chk.dataset.uiKey;
+    chk.checked = key in s ? s[key] !== false : !defaultOff.has(key);
+  });
+}
+
+function syncPrivacyCheckboxes() {
+  modalEl.querySelectorAll('[data-privacy-key="sensitive-blur"]').forEach(function(chk) {
+    chk.checked = localStorage.getItem('vaidyx-sensitive-blur') === 'on';
+  });
+}
+
+/* ═══════════════════════════════════════════
+   SHORTCUTS TAB
+   ═══════════════════════════════════════════ */
+
+const SHORTCUT_DEFAULTS = {
+  search:         'ctrl+k',
+  toggle_sidebar: 'ctrl+b',
+  new_session:    'ctrl+alt+n',
+  fav_session:    'ctrl+alt+f',
+  delete_session: 'ctrl+alt+d',
+  cancel:         'escape',
+  tts:            'alt+shift+t',
+  incognito:      'ctrl+alt+i',
+  settings:       'ctrl+,',
+  focus_input:    'ctrl+/',
+  // Open-tool shortcuts. Calendar is bound by default; the rest are
+  // unbound (empty) so the user can assign their own in the panel.
+  open_calendar:  'ctrl+alt+c',
+  open_cookbook:  '',
+  open_research:  '',
+  open_library:   '',
+  open_memory:    '',
+  open_notes:     '',
+  open_tasks:     '',
+  open_theme:     '',
+};
+
+const SHORTCUT_ICONS = {
+  search:         '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="10" cy="10" r="7"/><path d="M21 21l-4.35-4.35"/></svg>',
+  toggle_sidebar: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>',
+  new_session:    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+  fav_session:    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>',
+  delete_session: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+  cancel:         '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+  tts:            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>',
+  incognito:      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><line x1="8" y1="16" x2="16" y2="8"/><line x1="8" y1="8" x2="16" y2="16"/></svg>',
+  settings:       '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  focus_input:    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+  open_calendar:  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+  open_cookbook:  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>',
+  open_research:  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>',
+  open_library:   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+  open_memory:    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 1 7 7c0 2.4-1.2 4.5-3 5.7V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.3C6.2 13.5 5 11.4 5 9a7 7 0 0 1 7-7z"/><line x1="10" y1="22" x2="14" y2="22"/></svg>',
+  open_notes:     '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h10l4 4v14H5z"/><path d="M15 3v5h5"/><path d="M8 17.5 15.5 10l2.5 2.5L10.5 20H8z"/></svg>',
+  open_tasks:     '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M9 16l2 2 4-4"/></svg>',
+  open_theme:     '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 0 0 20 5 5 0 0 0 5-5 3 3 0 0 0-3-3h-2a3 3 0 0 1-3-3 5 5 0 0 1 5-5"/></svg>',
+};
+
+const SHORTCUT_LABELS = {
+  search:         'Search conversations',
+  toggle_sidebar: 'Toggle sidebar',
+  new_session:    'New session',
+  fav_session:    'Favorite session',
+  delete_session: 'Delete session',
+  cancel:         'Cancel / close',
+  tts:            'Play/stop TTS',
+  incognito:      'Toggle incognito',
+  settings:       'Toggle Window',
+  focus_input:    'Focus chat input',
+  open_calendar:  'Open Calendar',
+  open_cookbook:  'Open Cookbook',
+  open_research:  'Open Deep Research',
+  open_library:   'Open Library',
+  open_memory:    'Open Memory',
+  open_notes:     'Open Notes',
+  open_tasks:     'Open Tasks',
+  open_theme:     'Open Theme',
+};
+
+const SHORTCUT_CATEGORIES = [
+  { name: 'Navigation', keys: ['search', 'toggle_sidebar', 'focus_input', 'settings'] },
+  { name: 'Sessions', keys: ['new_session', 'fav_session', 'delete_session'] },
+  { name: 'Tools', keys: ['incognito', 'tts', 'cancel'] },
+  { name: 'Open Tools', keys: ['open_calendar', 'open_cookbook', 'open_research', 'open_library', 'open_memory', 'open_notes', 'open_tasks', 'open_theme'] },
+];
+
+function _formatKeyCaps(combo) {
+  return combo.split('+').map(p => {
+    let label;
+    if (p === 'ctrl') label = 'Ctrl';
+    else if (p === 'alt') label = 'Alt';
+    else if (p === 'shift') label = 'Shift';
+    else if (p === 'meta') label = 'Cmd';
+    else if (p === 'escape') label = 'Esc';
+    else if (p === ',') label = ',';
+    else if (p === '/') label = '/';
+    else if (p === 'space') label = 'Space';
+    else label = p.charAt(0).toUpperCase() + p.slice(1);
+    return `<kbd>${label}</kbd>`;
+  }).join('');
+}
+
+function _comboFromEvent(e) {
+  // Drop a stray AltGr keystroke (e.g. AltGr+E to type €) so it isn't recorded
+  // as a bogus ctrl+alt+<char> binding — onKey ignores empty combos. See
+  // platform.js for the macOS carve-out and Windows trade-off.
+  if (isAltGrEvent(e)) return '';
+  const parts = [];
+  if (e.ctrlKey || e.metaKey) parts.push('ctrl');
+  if (e.altKey) parts.push('alt');
+  if (e.shiftKey) parts.push('shift');
+  const key = e.key.toLowerCase();
+  if (!['control', 'alt', 'shift', 'meta'].includes(key)) {
+    parts.push(key === ' ' ? 'space' : key);
+  }
+  return parts.join('+');
+}
+
+async function initShortcuts() {
+  const listEl = el('shortcuts-list');
+  const resetBtn = el('shortcuts-reset-btn');
+  if (!listEl) return;
+
+  // Load saved keybinds
+  let keybinds = { ...SHORTCUT_DEFAULTS };
+  try {
+    const res = await fetch('/api/auth/settings', { credentials: 'same-origin' });
+    const settings = await res.json();
+    if (settings.keybinds) keybinds = { ...keybinds, ...settings.keybinds };
+  } catch (e) {}
+
+  function _findConflicts() {
+    const comboMap = {};
+    for (const [action, combo] of Object.entries(keybinds)) {
+      if (!comboMap[combo]) comboMap[combo] = [];
+      comboMap[combo].push(action);
+    }
+    const conflicts = new Set();
+    for (const actions of Object.values(comboMap)) {
+      if (actions.length > 1) actions.forEach(a => conflicts.add(a));
+    }
+    return conflicts;
+  }
+
+  function render() {
+    listEl.innerHTML = '';
+    const conflicts = _findConflicts();
+
+    for (const cat of SHORTCUT_CATEGORIES) {
+      const catHeader = document.createElement('div');
+      catHeader.className = 'shortcut-category';
+      catHeader.textContent = cat.name;
+      listEl.appendChild(catHeader);
+
+      for (const action of cat.keys) {
+        if (!(action in keybinds)) continue;
+        const combo = keybinds[action];
+        // Unbound shortcuts (empty combo) still render so the user can
+        // assign one \u2014 they show a "Set" affordance instead of keycaps.
+        const label = SHORTCUT_LABELS[action] || action;
+        const icon = SHORTCUT_ICONS[action] || '';
+        const isCustom = combo !== (SHORTCUT_DEFAULTS[action] || '');
+        const hasConflict = combo && conflicts.has(action);
+        const row = document.createElement('div');
+        row.className = 'shortcut-row' + (hasConflict ? ' shortcut-conflict' : '');
+        row.dataset.action = action;
+        const keyContent = combo ? _formatKeyCaps(combo) : '<span class="shortcut-unset">Set</span>';
+        row.innerHTML = `
+          <span class="shortcut-label"><span class="shortcut-icon">${icon}</span>${esc(label)}${hasConflict ? '<span class="shortcut-warn" title="Duplicate shortcut">!</span>' : ''}</span>
+          <div class="shortcut-controls">
+            <span class="shortcut-hint" hidden></span>
+            <button class="shortcut-key${combo ? '' : ' shortcut-key-unset'}" data-action="${action}" title="Click to rebind">${keyContent}</button>
+            <button class="shortcut-action-btn ${isCustom ? 'is-reset' : ''}" data-action="${action}" title="${isCustom ? 'Reset to default' : 'Confirm'}" style="${isCustom ? '' : 'visibility:hidden'}">
+              ${isCustom
+                ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>'
+                : '\u2713'}
+            </button>
+          </div>
+        `;
+        listEl.appendChild(row);
+      }
+    }
+
+    listEl.querySelectorAll('.shortcut-key').forEach(btn => {
+      btn.addEventListener('click', () => startRebind(btn));
+    });
+
+    listEl.querySelectorAll('.shortcut-action-btn.is-reset').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const action = btn.dataset.action;
+        keybinds[action] = SHORTCUT_DEFAULTS[action];
+        saveKeybinds();
+        render();
+      });
+    });
+  }
+
+  function startRebind(btn) {
+    const action = btn.dataset.action;
+    const row = btn.closest('.shortcut-row');
+    const actionBtn = row.querySelector('.shortcut-action-btn');
+    const hintEl = row.querySelector('.shortcut-hint');
+
+    // Remove any other active rebind
+    listEl.querySelectorAll('.shortcut-key.listening').forEach(b => {
+      b.classList.remove('listening');
+      b.innerHTML = _formatKeyCaps(keybinds[b.dataset.action]);
+      const otherRow = b.closest('.shortcut-row');
+      const otherAction = otherRow.querySelector('.shortcut-action-btn');
+      if (otherAction && !otherAction.classList.contains('is-reset')) otherAction.style.visibility = 'hidden';
+    });
+
+    btn.classList.add('listening');
+    btn.textContent = 'Press keys...';
+    // Show confirm button
+    actionBtn.textContent = '\u2713';
+    actionBtn.classList.remove('is-reset');
+    actionBtn.style.visibility = 'visible';
+    actionBtn.title = 'Confirm';
+    // Hint: tell the user how to commit / cancel the rebind.
+    if (hintEl) {
+      hintEl.hidden = false;
+      hintEl.textContent = 'press a key';
+    }
+
+    let pendingCombo = null;
+
+    // Wire confirm button
+    const confirmHandler = () => {
+      if (pendingCombo) {
+        keybinds[action] = pendingCombo;
+        saveKeybinds();
+      }
+      cleanup();
+      render();
+    };
+    actionBtn.addEventListener('click', confirmHandler, { once: true });
+
+    function onKey(e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (e.key === 'Escape') {
+        cleanup();
+        btn.innerHTML = _formatKeyCaps(keybinds[action]);
+        const isCustom = keybinds[action] !== SHORTCUT_DEFAULTS[action];
+        if (isCustom) {
+          actionBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>';
+          actionBtn.classList.add('is-reset');
+          actionBtn.title = 'Reset to default';
+        } else {
+          actionBtn.style.visibility = 'hidden';
+        }
+        return;
+      }
+
+      // Enter commits the previewed combo (same as clicking \u2713). Only acts
+      // as commit once a combo has been captured \u2014 otherwise it would just
+      // try to bind Enter itself.
+      if (e.key === 'Enter' && pendingCombo) {
+        confirmHandler();
+        return;
+      }
+
+      const combo = _comboFromEvent(e);
+      if (!combo || combo === 'ctrl' || combo === 'alt' || combo === 'shift' || combo === 'ctrl+alt' || combo === 'ctrl+shift' || combo === 'alt+shift' || combo === 'ctrl+alt+shift') return;
+
+      // Preview the combo, wait for confirm
+      pendingCombo = combo;
+      btn.innerHTML = _formatKeyCaps(combo);
+      // Now that a combo is captured, prompt to commit with Enter.
+      if (hintEl) hintEl.textContent = '\u21B5 Enter to save';
+    }
+
+    function cleanup() {
+      btn.classList.remove('listening');
+      if (hintEl) { hintEl.hidden = true; hintEl.textContent = ''; }
+      document.removeEventListener('keydown', onKey, true);
+      actionBtn.removeEventListener('click', confirmHandler);
+    }
+
+    document.addEventListener('keydown', onKey, true);
+  }
+
+  async function saveKeybinds() {
+    try {
+      await fetch('/api/auth/settings', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keybinds }),
+      });
+      // Update global keybinds so they take effect immediately
+      window._vaidyxKeybinds = keybinds;
+      if (uiModule && uiModule.showToast) uiModule.showToast('Shortcut saved');
+    } catch (e) {
+      console.error('Failed to save keybinds:', e);
+    }
+  }
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', async () => {
+      keybinds = { ...SHORTCUT_DEFAULTS };
+      render();
+      await saveKeybinds();
+      if (uiModule && uiModule.showToast) uiModule.showToast('Shortcuts reset to defaults');
+    });
+  }
+
+  render();
+}
+
+/* ═══════════════════════════════════════════
+   INIT & REFRESH
+   ═══════════════════════════════════════════ */
+function initAccount() {
+  // Populate user info
+  fetch('/api/auth/status', { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(d => {
+      const nameEl = el('settings-account-username');
+      const roleEl = el('settings-account-role');
+      const avatarEl = el('settings-account-avatar');
+      if (nameEl) nameEl.textContent = d.username || 'Unknown';
+      if (roleEl) roleEl.textContent = d.is_admin ? 'Admin' : 'User';
+      if (avatarEl) {
+        const initial = (d.username || '?')[0].toUpperCase();
+        avatarEl.textContent = initial;
+      }
+    }).catch(() => {});
+
+  // Update password placeholder and policy from server
+  fetch('/api/auth/policy', { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : null)
+    .then(policy => {
+      if (!policy) return;
+      _authPolicy = policy;
+      const pwNew = el('settings-pw-new');
+      if (pwNew) pwNew.placeholder = `New password (min ${policy.password_min_length})`;
+    }).catch(() => {});
+
+  // Change password
+  const saveBtn = el('settings-pw-save');
+  const msgEl = el('settings-pw-msg');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async () => {
+      const cur = el('settings-pw-current').value;
+      const nw = el('settings-pw-new').value;
+      const conf = el('settings-pw-confirm').value;
+      msgEl.style.color = '';
+      if (!cur || !nw) { msgEl.textContent = 'Fill in all fields'; msgEl.style.color = 'var(--red)'; return; }
+      if (nw.length < _authPolicy.password_min_length) { msgEl.textContent = `Min ${_authPolicy.password_min_length} characters`; msgEl.style.color = 'var(--red)'; return; }
+      if (nw !== conf) { msgEl.textContent = 'Passwords don\'t match'; msgEl.style.color = 'var(--red)'; return; }
+      saveBtn.disabled = true;
+      try {
+        const res = await fetch('/api/auth/change-password', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ current_password: cur, new_password: nw })
+        });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Failed'); }
+        msgEl.style.color = 'var(--green)';
+        msgEl.textContent = 'Password updated';
+        el('settings-pw-current').value = '';
+        el('settings-pw-new').value = '';
+        el('settings-pw-confirm').value = '';
+      } catch (e) {
+        msgEl.style.color = 'var(--red)';
+        msgEl.textContent = e.message;
+      } finally {
+        saveBtn.disabled = false;
+      }
+    });
+  }
+
+  // ── Two-Factor Authentication ──
+  const tfaContent = el('settings-2fa-content');
+  if (tfaContent) {
+    async function render2FA() {
+      try {
+        const res = await fetch('/api/auth/2fa/status', { credentials: 'same-origin' });
+        const data = await res.json();
+        if (data.enabled) {
+          // 2FA is ON — show disable option
+          tfaContent.innerHTML = `
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <span style="color:var(--color-save-green, #4caf50);font-size:12px;font-weight:600;">&#x2713; Enabled</span>
+              <span style="font-size:11px;opacity:0.5;">Authenticator app required on login</span>
+            </div>
+            <input id="tfa-disable-pw" type="password" placeholder="Enter password to disable" autocomplete="current-password" style="padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--fg);font-family:inherit;font-size:12px;width:100%;box-sizing:border-box;margin-bottom:6px;">
+            <div class="settings-row" style="justify-content:flex-end;">
+              <span id="tfa-msg" style="font-size:11px;margin-right:auto;"></span>
+              <button class="admin-btn-add" id="tfa-disable-btn" style="opacity:0.7;">Disable 2FA</button>
+            </div>`;
+          el('tfa-disable-btn').addEventListener('click', async () => {
+            const pw = el('tfa-disable-pw').value;
+            const msg = el('tfa-msg');
+            if (!pw) { msg.textContent = 'Enter your password'; msg.style.color = 'var(--red)'; return; }
+            try {
+              const r = await fetch('/api/auth/2fa/disable', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: pw })
+              });
+              if (!r.ok) { const d = await r.json(); throw new Error(d.detail || 'Failed'); }
+              render2FA();
+            } catch (e) { msg.textContent = e.message; msg.style.color = 'var(--red)'; }
+          });
+        } else {
+          // 2FA is OFF — show setup button
+          tfaContent.innerHTML = `
+            <div style="font-size:12px;opacity:0.6;margin-bottom:8px;">Add an extra layer of security with an authenticator app (Aegis, Google Authenticator, etc.)</div>
+            <div class="settings-row" style="justify-content:flex-end;">
+              <span id="tfa-msg" style="font-size:11px;margin-right:auto;"></span>
+              <button class="admin-btn-add" id="tfa-setup-btn">Set Up 2FA</button>
+            </div>`;
+          el('tfa-setup-btn').addEventListener('click', async () => {
+            const msg = el('tfa-msg');
+            try {
+              const r = await fetch('/api/auth/2fa/setup', { method: 'POST', credentials: 'same-origin' });
+              if (!r.ok) { const d = await r.json(); throw new Error(d.detail || 'Failed'); }
+              const setup = await r.json();
+              const qrCode = safeRasterDataUrl(setup.qr_code);
+              // Show QR code + manual secret + verify input
+              tfaContent.innerHTML = `
+                <div style="text-align:center;margin-bottom:12px;">
+                  ${qrCode ? `<img src="${esc(qrCode)}" alt="QR Code" style="border-radius:8px;max-width:200px;">` : ''}
+                </div>
+                <div style="font-size:11px;opacity:0.5;text-align:center;margin-bottom:8px;">
+                  Scan with your authenticator app, or enter manually:
+                </div>
+                <div style="font-family:'Elms Sans',monospace;font-size:12px;text-align:center;padding:6px;background:var(--bg);border:1px solid var(--border);border-radius:4px;margin-bottom:12px;word-break:break-all;user-select:all;cursor:text;">${esc(setup.secret)}</div>
+                <input id="tfa-verify-code" type="text" placeholder="Enter 6-digit code to verify" autocomplete="one-time-code" inputmode="numeric" maxlength="8" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--fg);font-family:inherit;font-size:13px;box-sizing:border-box;text-align:center;letter-spacing:3px;margin-bottom:6px;">
+                <div class="settings-row" style="justify-content:flex-end;">
+                  <span id="tfa-msg" style="font-size:11px;margin-right:auto;"></span>
+                  <button class="admin-btn-add" id="tfa-cancel-btn" style="opacity:0.5;">Cancel</button>
+                  <button class="admin-btn-add" id="tfa-verify-btn">Verify & Enable</button>
+                </div>`;
+              el('tfa-verify-code').focus();
+              el('tfa-cancel-btn').addEventListener('click', () => render2FA());
+              el('tfa-verify-btn').addEventListener('click', async () => {
+                const code = el('tfa-verify-code').value.trim();
+                const vmsg = el('tfa-msg');
+                if (!code) { vmsg.textContent = 'Enter the code'; vmsg.style.color = 'var(--red)'; return; }
+                try {
+                  const vr = await fetch('/api/auth/2fa/confirm', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code })
+                  });
+                  if (!vr.ok) { const d = await vr.json(); throw new Error(d.detail || 'Invalid code'); }
+                  const result = await vr.json();
+                  // Show backup codes
+                  const codes = result.backup_codes || [];
+                  tfaContent.innerHTML = `
+                    <div style="color:var(--color-save-green, #4caf50);font-size:13px;font-weight:600;margin-bottom:8px;">&#x2713; 2FA Enabled!</div>
+                    <div style="font-size:12px;opacity:0.7;margin-bottom:8px;">Save these backup codes somewhere safe. Each can be used once if you lose your authenticator:</div>
+                    <div style="font-family:'Elms Sans',monospace;font-size:12px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;columns:2;column-gap:16px;margin-bottom:8px;">${codes.map(c => '<div style="margin-bottom:2px;">' + c + '</div>').join('')}</div>
+                    <button class="admin-btn-add" id="tfa-done-btn">Done</button>`;
+                  el('tfa-done-btn').addEventListener('click', () => render2FA());
+                } catch (e) { vmsg.textContent = e.message; vmsg.style.color = 'var(--red)'; }
+              });
+            } catch (e) { msg.textContent = e.message; msg.style.color = 'var(--red)'; }
+          });
+        }
+      } catch (_) {
+        tfaContent.innerHTML = '<div style="font-size:11px;opacity:0.4;">Could not load 2FA status</div>';
+      }
+    }
+    render2FA();
+  }
+
+  // Logout
+  const logoutBtn = el('settings-logout-btn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('mouseenter', () => { logoutBtn.style.opacity = '1'; logoutBtn.style.borderColor = 'var(--red)'; logoutBtn.style.color = 'var(--red)'; });
+    logoutBtn.addEventListener('mouseleave', () => { logoutBtn.style.opacity = ''; logoutBtn.style.borderColor = ''; logoutBtn.style.color = ''; });
+    logoutBtn.addEventListener('click', async () => {
+      try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (_) {}
+      // SECURITY: wipe all client-side state on logout so the next user that
+      // signs in on this browser doesn't inherit the previous account's
+      // session id, last-used model, draft chat input, or any cached lists.
+      // Keep "vaidyx-last-user" so the login form remembers the username
+      // (if "Remember me" was on). Without this the chat composer pre-loaded
+      // the previous user's last model into a fresh session, which read as
+      // cross-account leakage.
+      try {
+        const _keepKeys = new Set(['vaidyx-last-user']);
+        const _toRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && !_keepKeys.has(k)) _toRemove.push(k);
+        }
+        _toRemove.forEach(k => localStorage.removeItem(k));
+        sessionStorage.clear();
+      } catch (_) {}
+      window.location.href = '/login';
+    });
+  }
+}
+
+function initAll() {
+  modalEl = el('settings-modal');
+  initTabs();
+  initDrag();
+  initClose();
+  initOpenPromptModalLink();
+  initOpacityToggle();
+  initialized = true;
+  initDefaultChat();
+  initTeacherModel();
+  initUtilityModel();
+  initImageSettings();
+  initVisionSettings();
+  initTtsSettings();
+  initSttSettings();
+  initSearchSettings();
+  initResearchSettings();
+  initResearchSearchSettings();
+  initAgentSettings();
+  initAppearance();
+  initShortcuts();
+  initAccount();
+  initReminderSettings();
+}
+
+async function initReminderSettings() {
+  const root = el('settings-modal');
+  if (!root || !root.querySelector('[data-settings-panel="reminders"]')) return;
+
+  // Public URL field (used for deep-links in outgoing alert emails)
+  const pubUrlIn = el('set-app-public-url');
+  const pubUrlMsg = el('set-app-public-url-msg');
+  if (pubUrlIn) {
+    try {
+      const r = await fetch('/api/auth/settings', { credentials: 'same-origin' });
+      const s = await r.json();
+      pubUrlIn.value = s.app_public_url || '';
+    } catch (_) {}
+    let pubDebounce;
+    pubUrlIn.addEventListener('input', () => {
+      clearTimeout(pubDebounce);
+      pubDebounce = setTimeout(async () => {
+        try {
+          const val = pubUrlIn.value.trim().replace(/\/+$/, '');
+          await fetch('/api/auth/settings', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ app_public_url: val }),
+          });
+          if (pubUrlMsg) {
+            pubUrlMsg.textContent = val ? 'Saved' : 'Cleared (deep-links disabled)';
+            pubUrlMsg.style.color = 'var(--green,#50fa7b)';
+            setTimeout(() => { pubUrlMsg.textContent = ''; }, 2000);
+          }
+        } catch (_) {
+          if (pubUrlMsg) { pubUrlMsg.textContent = 'Save failed'; pubUrlMsg.style.color = 'var(--red)'; }
+        }
+      }, 600);
+    });
+  }
+
+  const channelSel = el('set-reminder-channel');
+  const emailOpt = el('set-reminder-channel-email-opt');
+  const hint = el('set-reminder-channel-hint');
+  const llmToggle = el('set-reminder-llm-toggle');
+  if (!channelSel || !llmToggle) return;
+
+  // Detect configured email accounts. The legacy single-account
+  // `/api/email/config` endpoint was a no-op stub for most installs;
+  // the real per-account list lives at `/api/email/accounts` and is
+  // what the Integrations panel manages. Treat the email channel as
+  // configured if there's at least one account with SMTP set.
+  let emailAccounts = [];
+  const smtpAccountReady = (account) => !!(
+    account.smtp_host
+    && account.smtp_user
+    && (account.has_smtp_password || account.oauth_provider === 'google')
+  );
+  try {
+    const res = await fetch('/api/email/accounts', { credentials: 'same-origin' });
+    if (res.ok) {
+      const d = await res.json();
+      emailAccounts = (d.accounts || []).filter(smtpAccountReady);
+    }
+  } catch (_) {}
+  let smtpConfigured = emailAccounts.length > 0;
+
+  if (!smtpConfigured && emailOpt) {
+    emailOpt.disabled = true;
+    emailOpt.textContent = 'Email (add an account in Integrations)';
+  }
+
+  const emailFromRow = el('set-reminder-email-from-row');
+  const emailAcctSel = el('set-reminder-email-account');
+  const emailToRow = el('set-reminder-email-to-row');
+  const emailToIn = el('set-reminder-email-to');
+
+  function populateReminderEmailAccounts(selectedId = '') {
+    if (!emailAcctSel) return;
+    emailAcctSel.innerHTML = emailAccounts.map(a =>
+      `<option value="${a.id}">${esc(a.name || a.from_address || a.imap_user || 'Unnamed')}${a.is_default ? ' (default)' : ''}</option>`
+    ).join('');
+    const fallback = (emailAccounts.find(a => a.is_default) || emailAccounts[0] || {}).id || '';
+    emailAcctSel.value = (selectedId && emailAccounts.some(a => a.id === selectedId)) ? selectedId : fallback;
+  }
+
+  function applyReminderChannelAvailability() {
+    if (emailOpt) {
+      emailOpt.disabled = !smtpConfigured;
+      emailOpt.textContent = smtpConfigured ? 'Email' : 'Email (add an account in Integrations)';
+    }
+  }
+
+  async function refreshReminderChannelAvailability() {
+    const currentChannel = channelSel.value || 'browser';
+    const currentEmailAccount = emailAcctSel?.value || '';
+    try {
+      const res = await fetch('/api/email/accounts', { credentials: 'same-origin' });
+      if (res.ok) {
+        const d = await res.json();
+        emailAccounts = (d.accounts || []).filter(smtpAccountReady);
+      }
+    } catch (_) {}
+    smtpConfigured = emailAccounts.length > 0;
+
+    applyReminderChannelAvailability();
+    populateReminderEmailAccounts(currentEmailAccount);
+    if (currentChannel === 'email' && !smtpConfigured) channelSel.value = 'browser';
+    else channelSel.value = currentChannel;
+    if (hint) hint.textContent = CHANNEL_HINTS[channelSel.value] || '';
+    syncChannelRows();
+  }
+
+  // Populate the "Send from" picker with all configured email accounts.
+  populateReminderEmailAccounts();
+
+  function syncChannelRows() {
+    const isEmail = channelSel.value === 'email';
+    if (emailFromRow) emailFromRow.style.display = (isEmail && emailAccounts.length > 1) ? 'flex' : 'none';
+    if (emailToRow) emailToRow.style.display = isEmail ? 'flex' : 'none';
+  }
+
+  // Browser notifications fire on EVERY reminder (see
+  // routes/note_routes.py — the in-app notif is always queued
+  // regardless of channel). The hint should make that clear so
+  // users don't think they have to choose between channels.
+  const CHANNEL_HINTS = {
+    browser: 'Reminders appear as browser notifications inside Vaidyx.',
+    email: 'Reminders are emailed and shown as a browser notification.',
+  };
+
+  applyReminderChannelAvailability();
+
+  try {
+    const res = await fetch('/api/auth/settings', { credentials: 'same-origin' });
+    const s = await res.json();
+    let savedChannel = s.reminder_channel || 'browser';
+    if (savedChannel === 'email' && !smtpConfigured) savedChannel = 'browser';
+    channelSel.value = savedChannel;
+    llmToggle.checked = !!s.reminder_llm_synthesis;
+    // Persona dropdown — populate from built-in PROMPT_TEMPLATES (characters)
+    // plus any custom character preset. Selected value persists to
+    // reminder_llm_persona (backend hook lives in src/notes.py once
+    // /api/notes/fire-reminder lands).
+    const personaSel = el('set-reminder-llm-persona');
+    if (personaSel) {
+      try {
+        const presetsMod = await import('./presets.js');
+        const tpl = presetsMod.PROMPT_TEMPLATES || [];
+        const chars = tpl.filter(t => t.isCharacter);
+        for (const c of chars) {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = c.name;
+          personaSel.appendChild(opt);
+        }
+        // Custom character (single-slot preset)
+        try {
+          const all = (presetsMod.getAllPresets && presetsMod.getAllPresets()) || {};
+          if (all.custom && all.custom.character_name) {
+            const opt = document.createElement('option');
+            opt.value = 'custom';
+            opt.textContent = all.custom.character_name + ' (custom)';
+            personaSel.appendChild(opt);
+          }
+        } catch (_) {}
+      } catch (_) {}
+      personaSel.value = s.reminder_llm_persona || '';
+      personaSel.addEventListener('change', () => {
+        save({ reminder_llm_persona: personaSel.value });
+      });
+    }
+    if (emailToIn) emailToIn.value = s.reminder_email_to || '';
+    // Restore the previously-picked email account (if any), otherwise
+    // default to the account flagged is_default in the integrations
+    // list. Falls through to the first option if neither exists.
+    if (emailAcctSel) {
+      const savedId = s.reminder_email_account_id;
+      populateReminderEmailAccounts(savedId || '');
+      if (emailAcctSel.value && emailAcctSel.value !== (savedId || '')) {
+        save({ reminder_email_account_id: emailAcctSel.value || null });
+      }
+    }
+    if (hint) hint.textContent = CHANNEL_HINTS[channelSel.value] || '';
+    syncChannelRows();
+  } catch (e) { console.warn('Failed to load reminder settings', e); }
+
+  async function save(patch) {
+    try {
+      await fetch('/api/auth/settings', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+    } catch (e) { console.warn('Failed to save reminder settings', e); }
+  }
+
+  channelSel.addEventListener('change', () => {
+    if (hint) hint.textContent = CHANNEL_HINTS[channelSel.value] || '';
+    syncChannelRows();
+    save({ reminder_channel: channelSel.value });
+    // Email reminder bell visibility tracks this — broadcast so the
+    // email library can re-evaluate without waiting for a re-open.
+    try { window.dispatchEvent(new CustomEvent('vaidyx-reminder-channel-changed', { detail: { channel: channelSel.value } })); } catch (_) {}
+  });
+  if (emailToIn) {
+    let emailDebounce;
+    emailToIn.addEventListener('input', () => {
+      clearTimeout(emailDebounce);
+      emailDebounce = setTimeout(() => save({ reminder_email_to: emailToIn.value.trim() }), 600);
+    });
+  }
+  if (emailAcctSel) {
+    emailAcctSel.addEventListener('change', () => {
+      save({ reminder_email_account_id: emailAcctSel.value || null });
+    });
+  }
+  // Dim the whole AI Synthesis card when off (matches Vision/Utility/etc.).
+  function syncSynthesisDim() {
+    const card = llmToggle.closest('.admin-card');
+    if (card) card.style.opacity = llmToggle.checked ? '' : '0.45';
+  }
+  syncSynthesisDim();
+  llmToggle.addEventListener('change', () => {
+    syncSynthesisDim();
+    save({ reminder_llm_synthesis: llmToggle.checked });
+  });
+
+  // Test button
+  const testBtn = el('set-reminder-test-btn');
+  const testMsg = el('set-reminder-test-msg');
+  if (testBtn) {
+    testBtn.addEventListener('click', async () => {
+      testBtn.disabled = true;
+      if (testMsg) { testMsg.textContent = 'Sending'; testMsg.style.color = 'var(--fg)'; }
+      // Whirlpool loader right next to the "Sending" text while it sends.
+      let _testSpin = null;
+      try {
+        const _sp = (await import('./spinner.js')).default;
+        _testSpin = _sp.createWhirlpool(14);
+        _testSpin.element.style.cssText = 'width:14px;height:14px;margin:0 0 0 7px;display:inline-block;vertical-align:middle;';
+        (testMsg || testBtn).insertAdjacentElement('afterend', _testSpin.element);
+      } catch (_) {}
+      const _stopTestSpin = () => { try { _testSpin && _testSpin.stop(); _testSpin && _testSpin.element.remove(); } catch (_) {} };
+      try {
+        // Persona picker is in a different scope (Reminders init), look it up
+        // by id so we can pass whatever is currently selected on screen.
+        const personaSel = el('set-reminder-llm-persona');
+        const res = await fetch('/api/notes/fire-reminder', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            note_id: 'test-' + Date.now(),
+            title: 'Test Reminder',
+            body: 'This is a test reminder to verify your settings are working.',
+            channel: channelSel.value,
+            // Mirror the in-UI AI Synthesis toggle + persona so the test never
+            // races a pending save and lets the user preview changes before
+            // hitting Save.
+            llm_synthesis: !!(llmToggle && llmToggle.checked),
+            llm_persona: (personaSel && personaSel.value) || '',
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Server error');
+        if (channelSel.value === 'email' && !data.email_sent) {
+          throw new Error(data.email_error || 'Email reminder was not sent');
+        }
+        let status = 'Delivered via ' + channelSel.value;
+        if (data.synthesis) status += ' (AI: "' + data.synthesis.slice(0, 60) + '...")';
+        if (data.email_sent) status += ' — email sent';
+        if (testMsg) { testMsg.textContent = status; testMsg.style.color = 'var(--green, #50fa7b)'; }
+        // Also fire a browser notification so user can see it
+        if ('Notification' in window && Notification.permission === 'granted') {
+          try {
+            new Notification('Test Reminder', {
+              body: data.synthesis || 'This is a test reminder.',
+              tag: 'reminder-test',
+              icon: '/static/favicon.ico',
+            });
+          } catch {}
+        }
+      } catch (e) {
+        if (testMsg) { testMsg.textContent = 'Failed: ' + e.message; testMsg.style.color = 'var(--red)'; }
+      } finally {
+        _stopTestSpin();
+        testBtn.disabled = false;
+      }
+    });
+  }
+}
+
+
+async function initIntegrations() {
+  const listEl = el('integrations-list');
+  const formCard = el('integration-form-card');
+  const addBtn = el('intg-add-btn');
+  if (!listEl || !formCard) return;
+
+  const presetSel = el('intg-preset');
+  const nameIn = el('intg-name');
+  const urlIn = el('intg-url');
+  const authTypeSel = el('intg-auth-type');
+  const authHeaderRow = el('intg-auth-header-row');
+  const authHeaderIn = el('intg-auth-header');
+  const keyIn = el('intg-key');
+  const descIn = el('intg-description');
+  const saveBtn = el('intg-save-btn');
+  const cancelBtn = el('intg-cancel-btn');
+  const testBtn = el('intg-test-btn');
+  const statusEl = el('intg-status');
+  const formTitle = el('integration-form-title');
+
+  let editingId = null;
+  let presets = {};
+
+  // Presets where the secret is embedded in the URL — no separate key or
+  // auth header is used, so hiding those fields avoids confusion.
+  const URL_AUTH_PRESETS = ['discord_webhook'];
+
+  // Toggle auth header + key row visibility based on auth type and preset.
+  function syncAuthRow() {
+    const v = authTypeSel.value;
+    authHeaderRow.style.display = (v === 'header' || v === 'query') ? 'flex' : 'none';
+    if (v === 'query') authHeaderIn.placeholder = 'api_key';
+    else authHeaderIn.placeholder = 'X-Auth-Token';
+    const keyRow = keyIn?.closest('.settings-row');
+    if (keyRow) keyRow.style.display = URL_AUTH_PRESETS.includes(presetSel?.value) ? 'none' : '';
+  }
+  authTypeSel.addEventListener('change', syncAuthRow);
+
+  // Load presets
+  try {
+    const res = await fetch('/api/auth/integrations/presets', { credentials: 'same-origin' });
+    if (res.ok) {
+      const data = await res.json();
+      presets = data.presets || {};
+      for (const [key, preset] of Object.entries(presets)) {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = preset.name || key;
+        presetSel.appendChild(opt);
+      }
+    }
+  } catch (e) {}
+
+  // Preset auto-fill
+  presetSel.addEventListener('change', () => {
+    const p = presets[presetSel.value];
+    if (!p) return;
+    nameIn.value = p.name || '';
+    authTypeSel.value = p.auth_type || 'none';
+    authHeaderIn.value = p.auth_header || '';
+    descIn.value = p.description || '';
+    syncAuthRow();
+  });
+
+  // Render list
+  async function renderList() {
+    try {
+      const res = await fetch('/api/auth/integrations', { credentials: 'same-origin' });
+      if (!res.ok) { listEl.innerHTML = '<div style="padding:12px;opacity:0.5;font-size:12px;">Admin access required</div>'; return; }
+      const data = await res.json();
+      const items = data.integrations || [];
+      if (!items.length) {
+        listEl.innerHTML = '<div style="padding:12px;opacity:0.5;font-size:12px;text-align:center;">No integrations configured</div>';
+        return;
+      }
+      listEl.innerHTML = items.map(i => `
+        <div class="admin-card" style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:600;">${_esc(i.name || i.id)}</div>
+            <div style="font-size:11px;opacity:0.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_esc(i.base_url || '')}</div>
+          </div>
+          <div style="display:flex;gap:4px;flex-shrink:0;">
+            <button class="admin-btn-sm intg-edit-btn" data-id="${i.id}" style="font-size:11px;">Edit</button>
+            <button class="admin-btn-sm intg-del-btn" data-id="${i.id}" style="font-size:11px;opacity:0.6;">Del</button>
+          </div>
+        </div>
+      `).join('');
+      listEl.querySelectorAll('.intg-edit-btn').forEach(b => b.addEventListener('click', () => startEdit(b.dataset.id)));
+      listEl.querySelectorAll('.intg-del-btn').forEach(b => b.addEventListener('click', () => doDelete(b.dataset.id)));
+    } catch (e) { listEl.innerHTML = '<div style="padding:12px;color:var(--red);font-size:12px;">Failed to load</div>'; }
+  }
+
+  function _esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+  // Start editing
+  async function startEdit(id) {
+    editingId = id;
+    formTitle.textContent = 'Edit Integration';
+    // Fetch full data (with unmasked key from a dedicated edit fetch — we'll just load what we have)
+    try {
+      const res = await fetch('/api/auth/integrations', { credentials: 'same-origin' });
+      const data = await res.json();
+      const item = (data.integrations || []).find(i => i.id === id);
+      if (!item) return;
+      presetSel.value = item.preset || '';
+      nameIn.value = item.name || '';
+      urlIn.value = item.base_url || '';
+      authTypeSel.value = item.auth_type || 'none';
+      authHeaderIn.value = item.auth_header || '';
+      keyIn.value = ''; // masked — user re-enters if changing
+      keyIn.placeholder = item.api_key ? 'Leave blank to keep current' : 'API key or token';
+      descIn.value = item.description || '';
+      syncAuthRow();
+      formCard.style.display = '';
+    } catch (e) {}
+  }
+
+  // Show add form
+  addBtn.addEventListener('click', () => {
+    editingId = null;
+    formTitle.textContent = 'Add Integration';
+    presetSel.value = '';
+    nameIn.value = '';
+    urlIn.value = '';
+    authTypeSel.value = 'header';
+    authHeaderIn.value = '';
+    keyIn.value = '';
+    keyIn.placeholder = 'API key or token';
+    descIn.value = '';
+    statusEl.textContent = '';
+    syncAuthRow();
+    formCard.style.display = '';
+  });
+
+  cancelBtn.addEventListener('click', () => {
+    formCard.style.display = 'none';
+    statusEl.textContent = '';
+  });
+
+  // Save
+  saveBtn.addEventListener('click', async () => {
+    const payload = {
+      name: nameIn.value.trim(),
+      base_url: urlIn.value.trim().replace(/\/+$/, ''),
+      auth_type: authTypeSel.value,
+      auth_header: authHeaderIn.value.trim(),
+      description: descIn.value.trim(),
+    };
+    if (presetSel.value) payload.preset = presetSel.value;
+    if (keyIn.value.trim()) payload.api_key = keyIn.value.trim();
+    if (!payload.name) { statusEl.textContent = 'Name required'; statusEl.style.color = 'var(--red)'; return; }
+    if (!payload.base_url) { statusEl.textContent = 'URL required'; statusEl.style.color = 'var(--red)'; return; }
+
+    try {
+      const url = editingId ? `/api/auth/integrations/${editingId}` : '/api/auth/integrations';
+      const method = editingId ? 'PUT' : 'POST';
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), credentials: 'same-origin' });
+      if (res.ok) {
+        statusEl.textContent = 'Saved';
+        statusEl.style.color = 'var(--green, #98c379)';
+        formCard.style.display = 'none';
+        await renderList();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        statusEl.textContent = err.detail || 'Save failed';
+        statusEl.style.color = 'var(--red)';
+      }
+    } catch (e) {
+      statusEl.textContent = 'Error saving';
+      statusEl.style.color = 'var(--red)';
+    }
+  });
+
+  // Test
+  testBtn.addEventListener('click', async () => {
+    if (!editingId) { statusEl.textContent = 'Save first, then test'; statusEl.style.color = 'var(--fg)'; return; }
+    statusEl.textContent = 'Testing...';
+    statusEl.style.color = 'var(--fg)';
+    try {
+      const res = await fetch(`/api/auth/integrations/${editingId}/test`, { method: 'POST', credentials: 'same-origin' });
+      const data = await res.json();
+      statusEl.textContent = data.message || (data.ok ? 'OK' : 'Failed');
+      statusEl.style.color = data.ok ? 'var(--green, #98c379)' : 'var(--red)';
+    } catch (e) {
+      statusEl.textContent = 'Connection failed';
+      statusEl.style.color = 'var(--red)';
+    }
+  });
+
+  // Delete
+  async function doDelete(id) {
+    if (!await window.styledConfirm('Delete this integration?', { confirmText: 'Delete', danger: true })) return;
+    try {
+      await fetch(`/api/auth/integrations/${id}`, { method: 'DELETE', credentials: 'same-origin' });
+      if (editingId === id) { formCard.style.display = 'none'; editingId = null; }
+      await renderList();
+    } catch (e) {}
+  }
+
+  syncAuthRow();
+  renderList();
+}
+
+/* ══ Unified Integrations ══ */
+
+const INTG_TYPES = {
+  api:     { label: 'API',     icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>' },
+  caldav:  { label: 'CalDAV',  icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' },
+  contacts: { label: 'Contacts', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' },
+  carddav: { label: 'CardDAV', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' },
+  email:   { label: 'Email',   icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>' },
+  mcp:     { label: 'MCP',     icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>' },
+  codex:   { label: 'Codex',   icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 10.696.453a6.023 6.023 0 0 0-5.75 4.172 6.061 6.061 0 0 0-3.946 2.945 6.024 6.024 0 0 0 .742 7.099 5.98 5.98 0 0 0 .516 4.911 6.046 6.046 0 0 0 6.51 2.9A5.996 5.996 0 0 0 13.26 23.547a6.023 6.023 0 0 0 5.75-4.172 6.061 6.061 0 0 0 3.946-2.945 6.024 6.024 0 0 0-.674-6.609zM13.26 21.047a4.508 4.508 0 0 1-2.886-1.041l.143-.082 4.793-2.769a.777.777 0 0 0 .391-.676V10.34l2.026 1.17a.072.072 0 0 1 .039.061v5.596a4.532 4.532 0 0 1-4.506 4.48zM3.968 17.64a4.473 4.473 0 0 1-.537-3.018l.143.086 4.793 2.769a.79.79 0 0 0 .782 0l5.852-3.379v2.34a.072.072 0 0 1-.029.062l-4.845 2.796a4.532 4.532 0 0 1-6.159-1.656zM2.804 7.922a4.49 4.49 0 0 1 2.348-1.973V11.6a.778.778 0 0 0 .391.676l5.852 3.378-2.026 1.17a.072.072 0 0 1-.068 0L4.456 14.03a4.532 4.532 0 0 1-1.652-6.108zm16.423 3.823L13.375 8.367l2.026-1.17a.072.072 0 0 1 .068 0l4.845 2.796a4.525 4.525 0 0 1-.7 8.08V12.42a.778.778 0 0 0-.387-.676zm2.015-3.025l-.143-.086-4.793-2.769a.79.79 0 0 0-.782 0L9.672 9.243V6.903a.072.072 0 0 1 .029-.062l4.845-2.796a4.525 4.525 0 0 1 6.696 4.675zM8.598 12.66L6.57 11.49a.072.072 0 0 1-.039-.061V5.833a4.525 4.525 0 0 1 7.413-3.48l-.143.082-4.793 2.769a.777.777 0 0 0-.391.676l-.019 6.78zm1.1-2.379l2.607-1.505 2.607 1.505v3.01l-2.607 1.505-2.607-1.505z"/></svg>' },
+  claude:  { label: 'Claude',  icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z"/></svg>' },
+  vault:   { label: 'Vault',   icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' },
+};
+
+// Config shared by the Codex Agent and Claude Agent forms. Both use the same
+// scope-gated /api/codex/* backend; this just parameterizes the UI label,
+// default token name, and the per-agent install commands.
+const AGENT_CONFIGS = {
+  codex: {
+    label: 'Codex Agent',
+    word: 'Codex',
+    namePrefix: 'codex agent',
+    defaultName: 'Codex Agent',
+    pluginPath: '/api/codex/plugin.zip',
+    setupDescription: 'Downloads a plugin bundle and registers it.',
+    buildSetup: (origin, token) => `export VAIDYX_URL=${origin}
+export VAIDYX_API_TOKEN='${token}'
+mkdir -p ~/plugins
+curl -fsSL -H "Authorization: Bearer $VAIDYX_API_TOKEN" "$VAIDYX_URL/api/codex/plugin.zip" -o /tmp/vaidyx-codex-plugin.zip
+python3 -m zipfile -e /tmp/vaidyx-codex-plugin.zip ~/plugins
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+p = Path.home() / ".agents" / "plugins" / "marketplace.json"
+p.parent.mkdir(parents=True, exist_ok=True)
+if p.exists():
+    data = json.loads(p.read_text())
+else:
+    data = {"name": "personal", "interface": {"displayName": "Personal"}, "plugins": []}
+
+data.setdefault("name", "personal")
+data.setdefault("interface", {}).setdefault("displayName", "Personal")
+plugins = data.setdefault("plugins", [])
+entry = {
+    "name": "vaidyx",
+    "source": {"source": "local", "path": "./plugins/vaidyx"},
+    "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+    "category": "Productivity",
+}
+data["plugins"] = [item for item in plugins if item.get("name") != "vaidyx"] + [entry]
+p.write_text(json.dumps(data, indent=2) + "\\n")
+PY
+codex plugin add vaidyx@personal
+python3 ~/plugins/vaidyx/scripts/vaidyx_api.py capabilities`,
+  },
+  claude: {
+    label: 'Claude Agent',
+    word: 'Claude',
+    namePrefix: 'claude agent',
+    defaultName: 'Claude Agent',
+    pluginPath: '/api/claude/plugin.zip',
+    setupDescription: 'Downloads a plugin bundle and registers it.',
+    buildSetup: (origin, token) => `export VAIDYX_URL=${origin}
+export VAIDYX_API_TOKEN='${token}'
+mkdir -p ~/.claude
+curl -fsSL -H "Authorization: Bearer $VAIDYX_API_TOKEN" "$VAIDYX_URL/api/claude/plugin.zip" -o /tmp/vaidyx-claude-skill.zip
+python3 -m zipfile -e /tmp/vaidyx-claude-skill.zip ~/.claude/
+python3 ~/.claude/skills/vaidyx/scripts/vaidyx_api.py capabilities`,
+  },
+};
+
+/* ── Admin visibility sync ── */
+function syncAdminVisibility() {
+  if (!modalEl) return;
+  const isAdmin = !!window._isAdmin;
+  modalEl.querySelectorAll('.admin-only').forEach(el => {
+    el.style.display = isAdmin ? '' : 'none';
+  });
+}
+
+/* ═══════════════════════════════════════════
+   PUBLIC API
+   ═══════════════════════════════════════════ */
+export function open(tab) {
+  if (!initialized) initAll();
+  syncAppearanceCheckboxes();
+  if (modalEl.classList.contains('hidden')) {
+    resetWindowPlacement();
+  }
+  modalEl.classList.remove('hidden');
+  syncAdminVisibility();
+  const content = modalEl.querySelector('.settings-modal-content');
+  if (tab) {
+    modalEl.querySelectorAll('[data-settings-tab]').forEach(b => b.classList.toggle('active', b.dataset.settingsTab === tab));
+    modalEl.querySelectorAll('[data-settings-panel]').forEach(p => p.classList.toggle('hidden', p.dataset.settingsPanel !== tab));
+  }
+  // Auto-init admin data if showing an admin tab
+  const activeTab = tab || (modalEl.querySelector('[data-settings-tab].active') || {}).dataset?.settingsTab || 'services';
+  document.body.classList.toggle('settings-appearance-open', activeTab === 'appearance');
+  syncAppearanceOpacity(activeTab === 'appearance');
+  if (activeTab === 'ai') refreshAiModelEndpoints();
+  if (ADMIN_TABS.has(activeTab) && window.adminModule && !window.adminModule._initialized) {
+    window.adminModule._initData();
+  }
+}
+
+export function close() {
+  if (!modalEl) return;
+  // Always clear the appearance-tab body class so the rest of the app
+  // doesn't keep its dimmed state if the modal got closed mid-tab.
+  document.body.classList.remove('settings-appearance-open');
+  syncAppearanceOpacity(false); // clear any opacity-slider fade
+  const content = modalEl.querySelector('.modal-content, .settings-modal-content');
+  if (content && !content.classList.contains('modal-closing')) {
+    content.classList.add('modal-closing');
+    content.addEventListener('animationend', () => {
+      modalEl.classList.add('hidden');
+      content.classList.remove('modal-closing');
+    }, { once: true });
+    setTimeout(() => { if (!modalEl.classList.contains('hidden')) { modalEl.classList.add('hidden'); content.classList.remove('modal-closing'); } }, 250);
+  } else {
+    modalEl.classList.add('hidden');
+  }
+}
+
+// Handle redirect back from Google OAuth2 — open settings and show status.
+(function _handleOauthRedirect() {
+  const sp = new URLSearchParams(window.location.search);
+  if (!sp.has('email_oauth_success') && !sp.has('email_oauth_error')) return;
+  // Strip params from URL without a page reload.
+  const clean = window.location.pathname + window.location.hash;
+  window.history.replaceState(null, '', clean);
+  const success = sp.has('email_oauth_success');
+  const errMsg = sp.get('email_oauth_error') || '';
+  // Open settings once the document is ready. This module owns
+  // the open() API, so it does not need to wait for a window-level alias.
+  function _showResult() {
+    open();
+    // Brief toast-style banner.
+    const banner = document.createElement('div');
+    banner.textContent = success
+      ? 'Google account connected — email is ready'
+      : `Google OAuth failed: ${errMsg || 'unknown error'}`;
+    Object.assign(banner.style, {
+      position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
+      background: success ? 'var(--accent, #50fa7b)' : 'var(--red, #ff5555)',
+      color: '#000', padding: '8px 18px', borderRadius: '6px', fontSize: '12px',
+      fontWeight: '600', zIndex: '99999', pointerEvents: 'none',
+      boxShadow: '0 2px 12px rgba(0,0,0,0.3)',
+    });
+    document.body.appendChild(banner);
+    setTimeout(() => banner.remove(), 4000);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _showResult, { once: true });
+  } else {
+    _showResult();
+  }
+})();
+
+const settingsModule = { open, close, initIntegrations, syncAdminVisibility, refreshAiModelEndpoints };
+
+
+export default settingsModule;

@@ -1,0 +1,36 @@
+{
+  "nikhil:4602ef99648436e91f736239b28a58712d2590ed707d8d304d2a8d4a062097db": {
+    "id": "99290a148f0b45abae4b3b9724e938c5.png",
+    "path": "/home/tanuh/Desktop/Vaidyx/data/uploads/2026/08/10/99290a148f0b45abae4b3b9724e938c5.png",
+    "mime": "image/png",
+    "size": 42749,
+    "name": "image.png",
+    "hash": "4602ef99648436e91f736239b28a58712d2590ed707d8d304d2a8d4a062097db",
+    "checksum_sha256": "4602ef99648436e91f736239b28a58712d2590ed707d8d304d2a8d4a062097db",
+    "original_name": "image.png",
+    "uploaded_at": "2026-08-10T10:40:36.524409",
+    "created_at": "2026-08-10T10:40:36.524409",
+    "last_accessed": "2026-08-10T10:40:36.524409",
+    "client_ip": "127.0.0.1",
+    "owner": "nikhil",
+    "width": 217,
+    "height": 232
+  },
+  "nikhil:064e00c7e2171923af48baf3088e0e32ed839780eaa0b97b24e29fd669f9cc5a": {
+    "id": "95375f3ff3a9418b92afba06d42fd098.jpeg",
+    "path": "/home/tanuh/Desktop/Vaidyx/data/uploads/2026/08/10/95375f3ff3a9418b92afba06d42fd098.jpeg",
+    "mime": "image/jpeg",
+    "size": 30824,
+    "name": "image.jpeg",
+    "hash": "064e00c7e2171923af48baf3088e0e32ed839780eaa0b97b24e29fd669f9cc5a",
+    "checksum_sha256": "064e00c7e2171923af48baf3088e0e32ed839780eaa0b97b24e29fd669f9cc5a",
+    "original_name": "image.jpeg",
+    "uploaded_at": "2026-08-10T11:37:23.603331",
+    "created_at": "2026-08-10T11:37:23.603331",
+    "last_accessed": "2026-08-10T12:08:01.764956",
+    "client_ip": "127.0.0.1",
+    "owner": "nikhil",
+    "width": 557,
+    "height": 550
+  }
+}
