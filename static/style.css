@@ -1635,6 +1635,40 @@ body.bg-pattern-sparkles {
     }
     .models-group-content.indented .models-row { border-bottom: 1px solid color-mix(in srgb, var(--fg) 7%, transparent); }
     .models-group-content.indented .models-row:last-child { border-bottom: none; }
+    /* ── Model variant groups ── */
+    .models-variant-wrapper { margin-bottom: 1px; }
+    .models-variant-header {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      background: transparent;
+      transition: background 0.08s;
+      user-select: none;
+    }
+    .models-variant-header:hover { background: color-mix(in srgb, var(--fg) 6%, transparent); }
+    .models-variant-badge {
+      font-size: 0.70em;
+      padding: 1px 6px;
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--accent, #7c3aed) 15%, transparent);
+      color: var(--accent, #7c3aed);
+      flex-shrink: 0;
+      font-weight: 500;
+    }
+    .models-variant-arrow { font-size: 0.70em; opacity: 0.5; flex-shrink: 0; }
+    .models-variant-sub {
+      padding-left: 12px;
+      border-left: 2px solid color-mix(in srgb, var(--fg) 10%, transparent);
+      margin-left: 14px;
+      margin-bottom: 2px;
+    }
+    .models-variant-sub.hidden { display: none; }
+    .models-variant-sub .models-row { font-size: 12px; padding: 2px 8px; }
     /* ── Session folders ── */
     .session-folder { margin: 2px 0; }
     .session-folder-header {

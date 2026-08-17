@@ -65,6 +65,28 @@ FUNCTION_TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
+            "name": "drug_lookup",
+            "description": "Look up authoritative FDA drug label information in real-time — indications, dosage, contraindications, warnings, drug interactions, adverse reactions. Use when a clinician asks about a specific drug's prescribing information, safety, interactions, or dosing. Free, no API key, covers most FDA-approved drugs. For India: cross-reference with CIMS India for brand names and NLEM availability.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "drug": {
+                        "type": "string",
+                        "description": "Drug name to look up — can be generic (e.g. 'metformin', 'lorazepam') or brand name (e.g. 'Glucophage', 'Ativan')"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": ["generic", "brand"],
+                        "description": "Whether the name is a generic name or brand name (default: brand, tries both)"
+                    }
+                },
+                "required": ["drug"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "read_file",
             "description": "Read a file from disk. Optionally read a line range with offset/limit for large files.",
             "parameters": {

@@ -1464,6 +1464,69 @@ async function _cmdModels(args, ctx) {
   return true;
 }
 
+async function _cmdCompare(args, ctx) {
+  // Get available models from cache
+  const cachedItems = window.modelsModule ? window.modelsModule.getCachedItems() : [];
+  const allModels = [];
+  (cachedItems || []).forEach(item => {
+    (item.models || []).forEach((mid, i) => {
+      allModels.push({ mid, url: item.url, endpointId: item.endpoint_id, displayName: (item.models_display || [])[i] || mid });
+    });
+  });
+
+  if (allModels.length < 2) {
+    slashReply('Need at least 2 models available to compare. Add more models in Settings → Added Models.');
+    return true;
+  }
+
+  // Default: compare top 3 models (or all if fewer)
+  const compareModels = allModels.slice(0, Math.min(3, allModels.length));
+  const query = args.join(' ').trim();
+
+  // Build the comparison UI
+  let html = `
+    <div style="font-size:0.92em;margin-bottom:8px;">
+      <b>Compare Models</b> — Send the same query to multiple models simultaneously for a second opinion.
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;">`;
+
+  compareModels.forEach(m => {
+    html += `
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--panel);">
+        <span style="flex:1;font-weight:500;">${ctx.esc(m.displayName.split('/').pop())}</span>
+        <button type="button" onclick="window._startCompareChat('${ctx.esc(m.url)}','${ctx.esc(m.mid)}','${ctx.esc(m.endpointId || '')}','${ctx.esc(query)}')"
+          style="padding:3px 10px;border-radius:4px;border:none;background:var(--accent,#7c3aed);color:#fff;cursor:pointer;font-size:0.85em;">
+          Open Chat
+        </button>
+      </div>`;
+  });
+
+  html += `
+    </div>
+    <div style="margin-top:8px;font-size:0.8em;opacity:0.6;">
+      ${query ? `Query: "${ctx.esc(query.slice(0, 80))}${query.length > 80 ? '...' : ''}"` : 'Click "Open Chat" on each model — type your query in all tabs for side-by-side comparison.'}
+    </div>`;
+
+  // Register the helper function globally
+  window._startCompareChat = function(url, mid, endpointId, prefill) {
+    if (sessionModule) {
+      sessionModule.createDirectChat(url, mid, endpointId || null);
+      if (prefill) {
+        setTimeout(() => {
+          const msgInput = document.getElementById('message');
+          if (msgInput && !msgInput.value) {
+            msgInput.value = prefill;
+            msgInput.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        }, 400);
+      }
+    }
+  };
+
+  slashReply(html);
+  return true;
+}
+
 async function _cmdModel(args, ctx) {
   const sub = (args[0] || '').toLowerCase();
   if (sub === 'list' || sub === 'ls') return _cmdModels(args.slice(1), ctx);
@@ -5056,6 +5119,13 @@ const COMMANDS = {
     help: 'Open Deep Research',
     handler: (args, ctx) => _cmdToolPanel('research', args, ctx),
     usage: '/research'
+  },
+  compare: {
+    alias: ['second-opinion', 'multimodel', 'diff'],
+    category: 'Clinical',
+    help: 'Compare same query across multiple models — clinical second opinion',
+    handler: _cmdCompare,
+    usage: '/compare [your clinical question]'
   },
   model: {
     alias: [],

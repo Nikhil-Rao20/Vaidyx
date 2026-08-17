@@ -19,6 +19,7 @@ from src.tool_utils import _truncate
 logger = logging.getLogger(__name__)
 
 from .web_tools import WebSearchTool, WebFetchTool
+from .openfda_tool import OpenFDADrugTool
 from .filesystem_tools import ReadFileTool, WriteFileTool, EditFileTool, ApplyPatchTool, LsTool, GlobTool, GrepTool, GetWorkspaceTool
 from .coding_tools import TodoWriteTool
 from .document_tools import CreateDocumentTool, UpdateDocumentTool, EditDocumentTool, SuggestDocumentTool, ManageDocumentTool
@@ -34,6 +35,7 @@ from .admin_tools import (
 TOOL_HANDLERS = {
     "web_search": WebSearchTool().execute,
     "web_fetch": WebFetchTool().execute,
+    "drug_lookup": OpenFDADrugTool().execute,
     "read_file": ReadFileTool().execute,
     "write_file": WriteFileTool().execute,
     "edit_file": EditFileTool().execute,
@@ -71,7 +73,7 @@ SHELL_TIMEOUT = 60
 PYTHON_TIMEOUT = 30
 
 # Tool types that trigger execution
-TOOL_TAGS = {"web_search", "web_fetch", "read_file", "write_file", "edit_file",
+TOOL_TAGS = {"web_search", "web_fetch", "drug_lookup", "read_file", "write_file", "edit_file",
              "apply_patch", "todowrite",
              "grep", "glob", "ls", "get_workspace", "manage_bg_jobs",
              "create_document", "update_document", "edit_document",

@@ -228,6 +228,101 @@ export function renderAttachStrip() {
     }
   }
   if (window._updateSendBtnIcon) window._updateSendBtnIcon();
+
+  // ── Imaging-trigger: surface llavamed:7b in the picker when an image is attached ──
+  // llavamed is hidden by default (clinical text models handle text Q&A).
+  // When the user attaches any image, we temporarily add it to the visible list
+  // so they can optionally switch to the medical imaging specialist model.
+  _syncLlavamedVisibility();
+}
+
+function _hasImageAttachment() {
+  return pendingFiles.some(f =>
+    (f.type && f.type.startsWith('image/')) ||
+    /\.(png|jpe?g|gif|webp|bmp|dcm|tiff?)$/i.test(f.name || '')
+  );
+}
+
+let _llavamedInjected = false;
+
+function _syncLlavamedVisibility() {
+  const hasImage = _hasImageAttachment();
+  if (hasImage && !_llavamedInjected) {
+    _llavamedInjected = true;
+    _injectLlavamed();
+  } else if (!hasImage && _llavamedInjected) {
+    _llavamedInjected = false;
+    _removeLlavamed();
+  }
+}
+
+function _injectLlavamed() {
+  try {
+    if (!window.modelsModule) return;
+    const items = window.modelsModule.getCachedItems();
+    if (!items) return;
+    // Check if llavamed is already visible
+    const alreadyVisible = items.some(it =>
+      (it.models || []).includes('llavamed:7b') ||
+      (it.models_extra || []).includes('llavamed:7b')
+    );
+    if (alreadyVisible) return;
+    // Find the endpoint item (url will be same as other models)
+    const ref = items.find(it => it.url && (it.models || []).length > 0);
+    if (!ref) return;
+    // Add a synthetic llavamed entry for the duration of this attachment session
+    const _llavaBanner = document.getElementById('llavamed-imaging-banner');
+    if (_llavaBanner) return;
+    const banner = document.createElement('div');
+    banner.id = 'llavamed-imaging-banner';
+    banner.style.cssText = 'font-size:11px;padding:4px 10px;opacity:0.7;border-top:1px solid var(--border);margin-top:4px;';
+    banner.textContent = '🔬 Image attached — LLaVA-Med (medical imaging AI) is now available:';
+    const row = document.createElement('div');
+    row.id = 'llavamed-imaging-row';
+    const modelsBox = document.getElementById('models');
+    if (modelsBox) {
+      modelsBox.appendChild(banner);
+      // Build a model row using the public _buildModelRow logic via modelsModule refresh trick
+      // Simpler: build manually matching the existing row style
+      const r = document.createElement('div');
+      r.className = 'models-row';
+      r.setAttribute('data-model-id', 'llavamed:7b');
+      r.setAttribute('data-imaging-injected', 'true');
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'grow';
+      nameSpan.textContent = 'llavamed:7b';
+      const badge = document.createElement('span');
+      badge.className = 'model-type-badge';
+      badge.textContent = 'IMAGING';
+      badge.style.cssText = 'font-size:0.65em;padding:1px 4px;border-radius:3px;background:#0891b2;color:#fff;margin-left:6px;';
+      nameSpan.appendChild(badge);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = '+ Chat';
+      btn.className = 'model-chat-btn';
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (window.sessionModule) window.sessionModule.createDirectChat(ref.url, 'llavamed:7b', ref.endpoint_id);
+      });
+      r.addEventListener('click', (e) => {
+        if (e.target.closest('.model-chat-btn')) return;
+        if (window.sessionModule) window.sessionModule.createDirectChat(ref.url, 'llavamed:7b', ref.endpoint_id);
+      });
+      r.appendChild(nameSpan);
+      r.appendChild(btn);
+      row.appendChild(r);
+      modelsBox.appendChild(row);
+    }
+  } catch (e) { /* non-fatal */ }
+}
+
+function _removeLlavamed() {
+  try {
+    const banner = document.getElementById('llavamed-imaging-banner');
+    const row = document.getElementById('llavamed-imaging-row');
+    if (banner) banner.remove();
+    if (row) row.remove();
+  } catch (e) { /* non-fatal */ }
 }
 
 function _createChip(f, idx) {

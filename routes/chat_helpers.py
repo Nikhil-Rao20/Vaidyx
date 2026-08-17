@@ -739,13 +739,27 @@ async def build_chat_context(
     # The stream path uses enhanced_message (with CoT/preprocessing applied),
     # the sync path uses text_for_context.
     _ctx_msg = preprocessed.enhanced_message if use_enhanced_message else preprocessed.text_for_context
+    # Merge global system prompt (from settings) with any active preset system prompt.
+    # Global prompt acts as the base; the preset (if any) is appended so it can
+    # specialise or override the global framing for that turn.
+    _global_sys = ""
+    try:
+        from src.settings import get_setting as _get_setting
+        _global_sys = (_get_setting("global_system_prompt") or "").strip()
+    except Exception:
+        pass
+    _preset_sys = (preset.system_prompt or "").strip()
+    if _global_sys and _preset_sys:
+        _combined_sys = _global_sys + "\n\n" + _preset_sys
+    else:
+        _combined_sys = _global_sys or _preset_sys or ""
     _preface_kwargs = dict(
         message=_ctx_msg,
         session=sess,
         use_web=use_web and not skip_web,
         use_memory=mem_enabled,
         time_filter=time_filter,
-        preset_system_prompt=preset.system_prompt,
+        preset_system_prompt=_combined_sys or None,
         owner=user,
         character_name=preset.character_name,
         agent_mode=agent_mode,

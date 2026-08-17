@@ -73,6 +73,17 @@ function _setSortMode(mode) {
   Storage.set(SORT_KEY, mode);
 }
 
+function _groupByBase(models) {
+  const order = [];
+  const map = {};
+  for (const m of models) {
+    const base = m.mid.includes(':') ? m.mid.split(':')[0] : m.mid;
+    if (!map[base]) { map[base] = []; order.push(base); }
+    map[base].push(m);
+  }
+  return order.map(b => ({ base: b, variants: map[b] }));
+}
+
 /**
  * Build a single model row element.
  */
@@ -146,6 +157,29 @@ function _buildModelRow(mid, url, displayName, endpointId, offline, modelType) {
     });
   }
 
+  // "Compare" button — opens a parallel chat with the current question pre-filled
+  if (!offline && modelType !== 'image') {
+    const cmpBtn = document.createElement('button');
+    cmpBtn.type = 'button';
+    cmpBtn.textContent = '≈';
+    cmpBtn.title = 'Get second opinion from this model';
+    cmpBtn.className = 'model-compare-btn';
+    cmpBtn.style.cssText = 'font-size:0.9em;padding:2px 6px;border-radius:3px;border:1px solid var(--border);background:transparent;cursor:pointer;opacity:0.5;transition:opacity 0.15s;margin-left:2px;';
+    cmpBtn.addEventListener('mouseenter', () => { cmpBtn.style.opacity = '1'; });
+    cmpBtn.addEventListener('mouseleave', () => { cmpBtn.style.opacity = '0.5'; });
+    cmpBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const msgInput = document.getElementById('message');
+      const currentQuery = msgInput ? msgInput.value.trim() : '';
+      if (window._startCompareChat) {
+        window._startCompareChat(url, mid, endpointId, currentQuery);
+      } else {
+        _startChat(url, mid, endpointId);
+      }
+    });
+    row.appendChild(cmpBtn);
+  }
+
   // Clicking anywhere on the row (except drag handle and fav) starts a chat
   if (!offline) {
     let _touchMoved = false;
@@ -162,6 +196,57 @@ function _buildModelRow(mid, url, displayName, endpointId, offline, modelType) {
   row.appendChild(span);
   row.appendChild(btn);
   return row;
+}
+
+function _buildVariantGroupRow(base, variants, collapseKey, offline) {
+  const collapsed = _loadCollapsed()[collapseKey] === true;
+  const wrapper = document.createElement('div');
+  wrapper.className = 'models-variant-wrapper';
+
+  const header = document.createElement('div');
+  header.className = 'models-variant-header' + (offline ? ' models-row-offline' : '');
+
+  const handle = document.createElement('span');
+  handle.className = 'item-drag-handle';
+  handle.textContent = '⋮⋮';
+  handle.title = 'Drag to reorder';
+
+  const nameSpan = document.createElement('span');
+  nameSpan.className = 'grow';
+  nameSpan.textContent = base;
+
+  const badge = document.createElement('span');
+  badge.className = 'models-variant-badge';
+  badge.textContent = variants.length + ' variants';
+
+  const arrow = document.createElement('span');
+  arrow.className = 'models-variant-arrow';
+  arrow.textContent = collapsed ? '▶' : '▼';
+
+  header.appendChild(handle);
+  header.appendChild(nameSpan);
+  header.appendChild(badge);
+  header.appendChild(arrow);
+
+  header.addEventListener('click', (e) => {
+    if (e.target.closest('.item-drag-handle')) return;
+    const s = _loadCollapsed();
+    s[collapseKey] = !collapsed;
+    _saveCollapsed(s);
+    refreshModels();
+  });
+
+  const sub = document.createElement('div');
+  sub.className = 'models-variant-sub' + (collapsed ? ' hidden' : '');
+
+  variants.forEach(({ mid, url, endpointId, offline: varOffline, modelType }) => {
+    const tag = mid.includes(':') ? mid.split(':').slice(1).join(':') : mid;
+    sub.appendChild(_buildModelRow(mid, url, tag, endpointId, varOffline, modelType));
+  });
+
+  wrapper.appendChild(header);
+  wrapper.appendChild(sub);
+  return wrapper;
 }
 
 export async function refreshModels(force = false, opts = {}) {
@@ -448,27 +533,34 @@ export async function refreshModels(force = false, opts = {}) {
           epModels.sort((a, b) => ((usage[b.mid] || {}).count || 0) - ((usage[a.mid] || {}).count || 0));
         }
 
-        // Show up to MAX_VISIBLE models, rest behind "show more"
+        // Group models by base name — multi-variant models get a collapsible sub-list
+        const allEpModels = [...epModels, ...epExtra];
+        const grouped = _groupByBase(allEpModels);
+
+        // Show up to MAX_VISIBLE groups, rest behind "show more"
         const MAX_VISIBLE = 5;
-        const visible = epModels.slice(0, MAX_VISIBLE);
-        const overflow = epModels.slice(MAX_VISIBLE);
-        const allHidden = [...overflow, ...epExtra];
+        const visibleGroups = grouped.slice(0, MAX_VISIBLE);
+        const hiddenGroups = grouped.slice(MAX_VISIBLE);
 
-        visible.forEach(({ mid, url, displayName, endpointId, offline, modelType }) => {
-          target.appendChild(_buildModelRow(mid, url, displayName, endpointId, offline, modelType));
-        });
+        function _renderGroup({ base, variants }) {
+          if (variants.length === 1) {
+            const { mid, url, displayName, endpointId, offline, modelType } = variants[0];
+            return _buildModelRow(mid, url, displayName, endpointId, offline, modelType);
+          }
+          return _buildVariantGroupRow(base, variants, 'variant:' + base, variants[0].offline);
+        }
 
-        if (allHidden.length > 0) {
+        visibleGroups.forEach(g => target.appendChild(_renderGroup(g)));
+
+        if (hiddenGroups.length > 0) {
+          const hiddenCount = hiddenGroups.reduce((n, g) => n + g.variants.length, 0);
           const showMoreBtn = document.createElement('div');
           showMoreBtn.className = 'models-show-all-btn';
           showMoreBtn.style.cssText = 'text-align:center;padding:6px;opacity:0.5;cursor:pointer;font-size:0.82em;';
-          showMoreBtn.textContent = `Show ${allHidden.length} more model${allHidden.length === 1 ? '' : 's'}`;
-          showMoreBtn._target = target;
+          showMoreBtn.textContent = `Show ${hiddenCount} more model${hiddenCount === 1 ? '' : 's'}`;
           showMoreBtn.addEventListener('click', () => {
             showMoreBtn.remove();
-            allHidden.forEach(({ mid, url, displayName, endpointId, offline, modelType }) => {
-              target.appendChild(_buildModelRow(mid, url, displayName, endpointId, offline, modelType));
-            });
+            hiddenGroups.forEach(g => target.appendChild(_renderGroup(g)));
           });
           target.appendChild(showMoreBtn);
         }

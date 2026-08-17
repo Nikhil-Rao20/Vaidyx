@@ -100,6 +100,7 @@ _COMMON_TOOL_NAMES = {
     "update_plan",
     "web_fetch",
     "web_search",
+    "drug_lookup",
     "write_file",
 }
 

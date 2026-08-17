@@ -220,3 +220,20 @@ __marimo__/
 # Vaidyx sensitive data
 data/auth.json
 data/app.db
+
+# Vaidyx model files and caches
+data/gguf_models/
+data/fastembed_cache/
+data/chromadb/
+
+# Vaidyx runtime state
+data/sessions.json
+data/memory.json
+data/memory_tidy_state.json
+data/settings.json
+
+# Vaidyx local/operational scripts
+data/vaidyx-tmux/
+
+# SSL certificates and keys
+ssl/
