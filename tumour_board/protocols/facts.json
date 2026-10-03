@@ -1,0 +1,334 @@
+{
+ "_note": "Primary fields the extractor looks for. Values are always copied as written in the source document, with a verbatim quote. doc_types are hints for which documents to search.",
+ "doc_types": [
+  "clinical_note",
+  "referral",
+  "discharge_summary",
+  "ct",
+  "mri",
+  "xray",
+  "ultrasound",
+  "mammogram",
+  "pet_ct",
+  "bone_scan",
+  "histopathology",
+  "cytology",
+  "ihc",
+  "molecular",
+  "lab",
+  "endoscopy",
+  "operative_note",
+  "treatment_summary",
+  "tumour_board_record",
+  "pulmonary_function",
+  "other"
+ ],
+ "facts": {
+  "ecog": {
+   "label": "ECOG performance status",
+   "desc": "ECOG / WHO performance status as written",
+   "doc_types": [
+    "clinical_note",
+    "referral",
+    "discharge_summary"
+   ]
+  },
+  "smoking_history": {
+   "label": "Smoking history",
+   "desc": "smoking status / pack-years as written",
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ]
+  },
+  "menopausal_status": {
+   "label": "Menopausal status",
+   "desc": "pre/peri/postmenopausal as written",
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ]
+  },
+  "comorbidities": {
+   "label": "Comorbidities",
+   "desc": "documented comorbid conditions",
+   "doc_types": [
+    "clinical_note",
+    "referral",
+    "discharge_summary"
+   ]
+  },
+  "clinical_question": {
+   "label": "Question for the Tumour Board",
+   "desc": "the clinical question the treating team asks the board",
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ]
+  },
+  "recorded_stage": {
+   "label": "Stage as recorded",
+   "desc": "TNM / stage exactly as written by the reporting clinician (never derive)",
+   "doc_types": [
+    "pet_ct",
+    "ct",
+    "mri",
+    "clinical_note",
+    "histopathology",
+    "tumour_board_record"
+   ]
+  },
+  "lesion_size": {
+   "label": "Primary lesion size",
+   "desc": "size of the primary lesion as written in the imaging report",
+   "doc_types": [
+    "ct",
+    "mri",
+    "mammogram",
+    "ultrasound",
+    "pet_ct"
+   ]
+  },
+  "nodal_findings": {
+   "label": "Nodal findings (imaging)",
+   "desc": "lymph node findings as written",
+   "doc_types": [
+    "ct",
+    "mri",
+    "pet_ct",
+    "mammogram",
+    "ultrasound"
+   ]
+  },
+  "distant_findings": {
+   "label": "Distant disease (imaging)",
+   "desc": "statement about distant metastatic disease as written",
+   "doc_types": [
+    "ct",
+    "pet_ct",
+    "bone_scan",
+    "mri"
+   ]
+  },
+  "comparison_prior": {
+   "label": "Comparison with prior imaging",
+   "desc": "comparison with an earlier study, as written",
+   "doc_types": [
+    "ct",
+    "mri",
+    "pet_ct",
+    "mammogram"
+   ]
+  },
+  "suv_max": {
+   "label": "SUVmax (primary)",
+   "desc": "SUVmax of the primary lesion",
+   "doc_types": [
+    "pet_ct"
+   ]
+  },
+  "histologic_type": {
+   "label": "Histologic type",
+   "desc": "tumour histologic type / diagnosis line as written",
+   "doc_types": [
+    "histopathology",
+    "cytology"
+   ]
+  },
+  "grade": {
+   "label": "Grade / differentiation",
+   "desc": "histologic grade or differentiation as written",
+   "doc_types": [
+    "histopathology"
+   ]
+  },
+  "lvi": {
+   "label": "Lymphovascular invasion",
+   "desc": "LVI as written",
+   "doc_types": [
+    "histopathology"
+   ]
+  },
+  "margins": {
+   "label": "Margins",
+   "desc": "resection margin status as written",
+   "doc_types": [
+    "histopathology"
+   ]
+  },
+  "pdl1": {
+   "label": "PD-L1",
+   "desc": "PD-L1 result (TPS/CPS, clone) as written, including 'Pending'; if the report says the test is pending, sent out or awaited, copy that statement as the value",
+   "doc_types": [
+    "histopathology",
+    "ihc",
+    "molecular"
+   ]
+  },
+  "egfr": {
+   "label": "EGFR",
+   "desc": "EGFR mutation result as written; if the report says the test is pending, sent out or awaited, copy that statement as the value",
+   "doc_types": [
+    "molecular",
+    "histopathology"
+   ]
+  },
+  "alk": {
+   "label": "ALK",
+   "desc": "ALK result as written; if the report says the test is pending, sent out or awaited, copy that statement as the value",
+   "doc_types": [
+    "molecular",
+    "ihc",
+    "histopathology"
+   ]
+  },
+  "ros1": {
+   "label": "ROS1",
+   "desc": "ROS1 result as written; if the report says the test is pending, sent out or awaited, copy that statement as the value",
+   "doc_types": [
+    "molecular",
+    "ihc",
+    "histopathology"
+   ]
+  },
+  "kras": {
+   "label": "KRAS",
+   "desc": "KRAS result as written; if the report says the test is pending, sent out or awaited, copy that statement as the value",
+   "doc_types": [
+    "molecular",
+    "histopathology"
+   ]
+  },
+  "er": {
+   "label": "Estrogen receptor (ER)",
+   "desc": "ER result as written; if the report says the test is pending, sent out or awaited, copy that statement as the value",
+   "doc_types": [
+    "ihc",
+    "histopathology"
+   ]
+  },
+  "pr": {
+   "label": "Progesterone receptor (PR)",
+   "desc": "PR result as written; if the report says the test is pending, sent out or awaited, copy that statement as the value",
+   "doc_types": [
+    "ihc",
+    "histopathology"
+   ]
+  },
+  "her2": {
+   "label": "HER2",
+   "desc": "HER2 result as written (IHC score and/or ISH result); the final reported status if given; if the report says the test is pending, sent out or awaited, copy that statement as the value",
+   "doc_types": [
+    "ihc",
+    "histopathology",
+    "molecular"
+   ]
+  },
+  "ki67": {
+   "label": "Ki-67",
+   "desc": "Ki-67 index as written; if the report says the test is pending, sent out or awaited, copy that statement as the value",
+   "doc_types": [
+    "ihc",
+    "histopathology"
+   ]
+  },
+  "mmr": {
+   "label": "MMR / MSI status",
+   "desc": "mismatch repair IHC or MSI result as written; if the report says the test is pending, sent out or awaited, copy that statement as the value",
+   "doc_types": [
+    "histopathology",
+    "ihc",
+    "molecular"
+   ]
+  },
+  "ras_braf": {
+   "label": "RAS / BRAF",
+   "desc": "KRAS/NRAS/BRAF result as written, including 'Not performed'; if the report says the test is pending, sent out or awaited, copy that statement as the value",
+   "doc_types": [
+    "molecular",
+    "histopathology"
+   ]
+  },
+  "distance_from_anal_verge": {
+   "label": "Distance from anal verge",
+   "desc": "tumour distance from the anal verge as written",
+   "doc_types": [
+    "endoscopy",
+    "mri"
+   ]
+  },
+  "mrf_status": {
+   "label": "Mesorectal fascia (MRF)",
+   "desc": "MRF / CRM status on MRI as written",
+   "doc_types": [
+    "mri"
+   ]
+  },
+  "emvi": {
+   "label": "EMVI",
+   "desc": "extramural venous invasion on MRI as written",
+   "doc_types": [
+    "mri"
+   ]
+  },
+  "haemoglobin": {
+   "label": "Haemoglobin",
+   "desc": "haemoglobin value with unit",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "wbc": {
+   "label": "WBC count",
+   "desc": "total white cell count with unit, or 'Not reported' if so written",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "platelets": {
+   "label": "Platelet count",
+   "desc": "platelet count with unit",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "creatinine": {
+   "label": "Serum creatinine",
+   "desc": "serum creatinine with unit",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "bilirubin": {
+   "label": "Total bilirubin",
+   "desc": "total bilirubin with unit",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "cea": {
+   "label": "CEA",
+   "desc": "carcinoembryonic antigen with unit",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "treatment_received": {
+   "label": "Treatment received",
+   "desc": "treatment delivered as documented (dose, fractions, agents, dates)",
+   "doc_types": [
+    "treatment_summary",
+    "discharge_summary",
+    "clinical_note"
+   ]
+  },
+  "treatment_completion_date": {
+   "label": "Treatment completion date",
+   "desc": "date the documented treatment course was completed",
+   "doc_types": [
+    "treatment_summary",
+    "clinical_note"
+   ]
+  }
+ }
+}

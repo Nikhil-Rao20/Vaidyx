@@ -1,0 +1,21 @@
+{
+ "id": "breast", "label": "Breast cancer", "version": "0.2",
+ "note": "Configurable by the clinical team. Prototype defaults informed by NCCN/ESMO/NCG workup lists and the CAP breast biomarker template; to be confirmed by the hospital Tumour Board.",
+ "mandatory": [
+  {"id": "clinical_history", "label": "Clinical history and performance status", "doc_types": ["clinical_note", "referral"], "department": "Surgical Oncology", "required_facts": ["ecog", "menopausal_status", "clinical_question"], "sla_days": 2},
+  {"id": "breast_imaging", "label": "Breast imaging report (mammography / ultrasound)", "doc_types": ["mammogram", "ultrasound"], "department": "Radiology", "required_facts": ["lesion_size"], "sla_days": 3},
+  {"id": "histopathology", "label": "Core biopsy histopathology", "doc_types": ["histopathology"], "department": "Pathology", "required_facts": ["histologic_type", "grade"], "sla_days": 5},
+  {"id": "receptor_status", "label": "Receptor status (ER / PR / HER2) and Ki-67", "facts_only": true, "fact_doc_types": ["ihc", "histopathology", "molecular"], "department": "Pathology", "required_facts": ["er", "pr", "her2", "ki67"], "sla_days": 7},
+  {"id": "systemic_staging", "label": "Systemic staging imaging", "doc_types": ["ct", "pet_ct"], "department": "Radiology", "required_facts": ["distant_findings"], "sla_days": 5},
+  {"id": "baseline_labs", "label": "Baseline blood tests", "doc_types": ["lab"], "department": "Laboratory Medicine", "required_facts": ["haemoglobin", "wbc", "platelets", "creatinine"], "sla_days": 2}
+ ],
+ "optional": [
+  {"id": "mri_breast", "label": "MRI breast", "doc_types": ["mri"], "department": "Radiology"},
+  {"id": "axilla", "label": "Axillary node sampling (FNAC / biopsy)", "doc_types": ["cytology", "histopathology"], "department": "Pathology"},
+  {"id": "bone_scan", "label": "Bone scan", "doc_types": ["bone_scan"], "department": "Nuclear Medicine"},
+  {"id": "previous_board", "label": "Previous Tumour Board record", "doc_types": ["tumour_board_record"], "department": "Tumour Board coordinator"}
+ ],
+ "extract_facts": ["ecog", "menopausal_status", "comorbidities", "clinical_question", "recorded_stage", "lesion_size", "nodal_findings", "distant_findings",
+                   "histologic_type", "grade", "lvi", "er", "pr", "her2", "ki67", "haemoglobin", "wbc", "platelets", "creatinine", "bilirubin"],
+ "post_board": {"required_record_fields": ["decision_text", "recorded_by", "actions"], "follow_up_default_days": 14}
+}

@@ -1,0 +1,150 @@
+"""Async client for the local vLLM servers: parallel calls, JSON-schema constrained outputs, image inputs, audit.
+
+Constrained decoding only restricts which tokens may be emitted (valid JSON for the schema). Weights, precision and
+sampling are untouched (bf16, greedy), so nothing here is accuracy-lossy.
+"""
+import asyncio, base64, hashlib, io, json, mimetypes, time
+from typing import Any, AsyncIterator, Optional
+
+import httpx
+
+from . import config
+
+_client: Optional[httpx.AsyncClient] = None
+_sem = asyncio.Semaphore(config.LLM_CONCURRENCY)
+
+
+class LLMError(RuntimeError):
+    pass
+
+
+def client() -> httpx.AsyncClient:
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient(timeout=httpx.Timeout(600, connect=10), limits=httpx.Limits(max_connections=128))
+    return _client
+
+
+def image_part(path_or_bytes, mime: str = None, max_side: int = None) -> dict:
+    """Image content part. Large images are downscaled to max_side (long edge) only if larger."""
+    from PIL import Image
+    if isinstance(path_or_bytes, (bytes, bytearray)):
+        raw = bytes(path_or_bytes)
+    else:
+        raw = open(path_or_bytes, "rb").read()
+        mime = mime or mimetypes.guess_type(str(path_or_bytes))[0]
+    max_side = max_side or config.OCR_MAX_SIDE
+    im = Image.open(io.BytesIO(raw))
+    if max(im.size) > max_side or im.mode not in ("RGB", "L"):
+        im = im.convert("RGB")
+        if max(im.size) > max_side:
+            s = max_side / max(im.size); im = im.resize((int(im.size[0] * s), int(im.size[1] * s)), Image.LANCZOS)
+        buf = io.BytesIO(); im.save(buf, "PNG"); raw = buf.getvalue(); mime = "image/png"
+    return {"type": "image_url", "image_url": {"url": f"data:{mime or 'image/png'};base64," + base64.b64encode(raw).decode()}}
+
+
+def _guided(role):
+    # Default: validate-and-retry (no constrained decoding). Measured on our corpus as more accurate and it leaves the
+    # model's token choices untouched; set "guided_json": true in models.json to use vLLM structured outputs instead.
+    return config.models()[role].get("guided_json", False)
+
+
+def skeleton(schema):
+    """Human-readable JSON template of a schema (models follow examples better than raw JSON Schema)."""
+    t = schema.get("type")
+    if t == "object":
+        return {k: skeleton(v) for k, v in schema.get("properties", {}).items()}
+    if t == "array":
+        return [skeleton(schema.get("items", {}))]
+    if "enum" in schema:
+        return "one of: " + " | ".join(map(str, schema["enum"]))
+    if t == "boolean":
+        return "true or false"
+    if t in ("integer", "number"):
+        return 0
+    return schema.get("description") or "text"
+
+
+def _payload(role, messages, max_tokens, temperature, json_schema, stream):
+    m = config.models()[role]
+    if json_schema is not None and not _guided(role):  # validate-and-retry mode: schema given as instructions only
+        messages = messages[:-1] + [{**messages[-1], "content": _append_text(messages[-1]["content"],
+                    "\n\nAnswer with only one JSON object (no prose, no code fences) with exactly this structure, filled in:\n" + json.dumps(skeleton(json_schema), indent=1))}]
+        json_schema = None
+    body: dict[str, Any] = {"model": m["model"], "messages": messages, "max_tokens": max_tokens, "temperature": temperature, "stream": stream}
+    if json_schema is not None:
+        # vLLM structured outputs; disable_any_whitespace stops the known "endless whitespace" failure of JSON grammars
+        body["structured_outputs"] = {"json": json_schema, "disable_any_whitespace": True}
+    if m.get("chat_template_kwargs"):
+        body["chat_template_kwargs"] = m["chat_template_kwargs"]
+    if stream:
+        body["stream_options"] = {"include_usage": True}
+    return m, body
+
+
+def _append_text(content, extra):
+    if isinstance(content, str):
+        return content + extra
+    return content + [{"type": "text", "text": extra}]
+
+
+def parse_json_loose(text):
+    t = text.strip()
+    if t.startswith("```"):
+        t = t.split("\n", 1)[1] if "\n" in t else t
+        t = t.rsplit("```", 1)[0]
+    i, j = t.find("{"), t.rfind("}")
+    return json.loads(t[i: j + 1])
+
+
+async def chat(role: str, messages: list, *, json_schema: dict = None, max_tokens: int = 1024, temperature: float = 0.0,
+               purpose: str = "", audit=None) -> Any:
+    """One completion. Returns parsed JSON when json_schema is given, else text. Logs to `audit` (callable) if given."""
+    m, body = _payload(role, messages, max_tokens, temperature, json_schema, False)
+    t0 = time.time()
+    async with _sem:
+        try:
+            r = await client().post(m["base_url"].rstrip("/") + "/chat/completions", json=body)
+        except httpx.HTTPError as e:
+            raise LLMError(f"{role} model server unreachable at {m['base_url']}: {e}") from e
+    if r.status_code != 200:
+        raise LLMError(f"{role} model error {r.status_code}: {r.text[:300]}")
+    d = r.json(); text = d["choices"][0]["message"].get("content") or ""
+    usage = d.get("usage", {}); dt = time.time() - t0
+    if audit:
+        audit({"kind": "llm_call", "role": role, "model": m["model"], "purpose": purpose, "seconds": round(dt, 2),
+               "prompt_tokens": usage.get("prompt_tokens"), "completion_tokens": usage.get("completion_tokens"),
+               "finish": d["choices"][0].get("finish_reason"),
+               "prompt_sha256": hashlib.sha256(json.dumps(messages, default=str).encode()).hexdigest()[:16]})
+    if json_schema is not None:
+        try:
+            return json.loads(text) if _guided(role) else parse_json_loose(text)
+        except (json.JSONDecodeError, ValueError) as e:
+            if not _guided(role) and not purpose.endswith("(retry)"):
+                return await chat(role, messages, json_schema=json_schema, max_tokens=max_tokens, temperature=temperature, purpose=purpose + " (retry)", audit=audit)
+            raise LLMError(f"invalid JSON from {role} ({purpose}): {text[:200]}") from e
+    return text
+
+
+async def stream(role: str, messages: list, *, max_tokens: int = 1024, temperature: float = 0.0) -> AsyncIterator[str]:
+    m, body = _payload(role, messages, max_tokens, temperature, None, True)
+    async with _sem:
+        async with client().stream("POST", m["base_url"].rstrip("/") + "/chat/completions", json=body) as r:
+            async for line in r.aiter_lines():
+                if not line.startswith("data: ") or line.endswith("[DONE]"):
+                    continue
+                d = json.loads(line[6:])
+                if d.get("choices") and d["choices"][0]["delta"].get("content"):
+                    yield d["choices"][0]["delta"]["content"]
+
+
+async def health() -> dict:
+    out = {}
+    for role, m in config.models().items():
+        try:
+            r = await client().get(m["base_url"].rstrip("/") + "/models", timeout=3)
+            ids = [x["id"] for x in r.json().get("data", [])]
+            out[role] = {"online": m["model"] in ids, "served": ids, **{k: m.get(k) for k in ("model", "label", "origin", "medical", "base_url")}}
+        except Exception as e:
+            out[role] = {"online": False, "error": str(e)[:120], **{k: m.get(k) for k in ("model", "label", "origin", "medical", "base_url")}}
+    return out

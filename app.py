@@ -178,6 +178,7 @@ _TIMEOUT_EXEMPT_PREFIXES = (
     "/api/cookbook/setup",  # remote pacman/apt installs
     "/api/upload",          # large files
     "/api/memory/audit",    # retains own 120s LLM inactivity timeout
+    "/api/tb",              # Tumour Board: agent streams and long model calls (own per-call timeouts in tumour_board/llm.py)
 )
 
 
@@ -734,6 +735,10 @@ app.include_router(setup_vault_routes())
 from routes.contacts.contacts_routes import setup_contacts_routes
 app.include_router(setup_contacts_routes())
 
+# Vaidyx-TB: AI agent for the Tumour Board (tumour_board/ package, docs/tumour-board/DESIGN.md)
+from routes.tumour_board_routes import setup_tumour_board_routes
+app.include_router(setup_tumour_board_routes())
+
 # ========= ROUTES (kept in app.py) =========
 
 @app.get("/")
@@ -747,6 +752,11 @@ async def serve_index(request: Request):
     # "not found". This keeps the app-shell route consistent with the other
     # bundled-template routes instead of mislabelling the fault as a 404.
     return serve_html_with_nonce(request, abs_join(BASE_DIR, "index.html"))
+
+@app.get("/tb")
+async def serve_tumour_board(request: Request):
+    """Vaidyx-TB workspace (Tumour Board). Auth is enforced by the middleware like the main app shell."""
+    return serve_html_with_nonce(request, abs_join(BASE_DIR, "static/tb/index.html"))
 
 @app.get("/notes")
 async def serve_notes(request: Request):

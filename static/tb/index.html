@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vaidyx · Tumour Board</title>
+<link rel="icon" href="/static/vaidyx-icon.svg">
+<link rel="stylesheet" href="/static/tb/tb.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/tb"><img src="/static/vaidyx-wordmark.svg" alt="Vaidyx"><span class="divider"></span><span class="product">AI Agent for Tumour Board</span></a>
+  <div class="models" id="models"></div>
+  <nav class="topnav">
+    <button class="ghost" id="btn-cards">Model and data cards</button>
+    <a class="ghost" href="/">Vaidyx chat</a>
+  </nav>
+</header>
+
+<div class="layout">
+  <aside class="side">
+    <div class="side-head">
+      <h3>Tumour Board Case Files</h3>
+      <button class="primary sm" id="btn-new">+ New</button>
+    </div>
+    <div id="case-list" class="case-list"></div>
+    <div class="side-demo">
+      <h4>Synthetic demo cases</h4>
+      <div id="demo-list"></div>
+    </div>
+  </aside>
+
+  <main class="main" id="main">
+    <section class="welcome" id="welcome">
+      <h1>Make the Tumour Board Case File complete, before the board.</h1>
+      <p class="lead">Vaidyx checks every Case File against the records configured as mandatory for that cancer, confirms each report is the final signed version, finds the required fields inside each document with a verifiable source quote, routes gaps to the Responsible Department, and prepares a cited Case File summary and role-specific support for the board.</p>
+      <div class="pillars">
+        <div><b>Before the board</b><span>Pre-Authorization gate, gap routing, re-check</span></div>
+        <div><b>During the board</b><span>Ask the Case File, specialty support, cited summary</span></div>
+        <div><b>After the board</b><span>AI-assisted adjudication, follow-up tracking</span></div>
+      </div>
+      <p class="muted">Select a Case File on the left, or load a synthetic demo case.</p>
+    </section>
+
+    <section id="case" class="hidden">
+      <div class="case-head">
+        <div>
+          <div class="eyebrow" id="c-protocol"></div>
+          <h1 id="c-title"></h1>
+          <div class="muted" id="c-meta"></div>
+        </div>
+        <div class="readiness" id="c-ready"></div>
+      </div>
+      <nav class="tabs" id="tabs">
+        <button data-tab="ready" class="on">Pre-Authorization</button>
+        <button data-tab="docs">Documents</button>
+        <button data-tab="ask">Ask the Case File</button>
+        <button data-tab="roles">Specialty support</button>
+        <button data-tab="summary">Case File summary</button>
+        <button data-tab="board">Board and follow-up</button>
+        <button data-tab="audit">Audit</button>
+      </nav>
+      <div class="tab" id="tab-ready"></div>
+      <div class="tab hidden" id="tab-docs"></div>
+      <div class="tab hidden" id="tab-ask"></div>
+      <div class="tab hidden" id="tab-roles"></div>
+      <div class="tab hidden" id="tab-summary"></div>
+      <div class="tab hidden" id="tab-board"></div>
+      <div class="tab hidden" id="tab-audit"></div>
+    </section>
+  </main>
+</div>
+
+<footer class="scope">AI support for the Tumour Board. Informing, not managing: the agent checks, finds and organises what the signed records say. It does not diagnose, interpret scans, assign stage or recommend treatment. Human oversight (expert-in-the-loop) throughout.</footer>
+
+<div class="drawer hidden" id="drawer"><div class="drawer-body" id="drawer-body"></div></div>
+<div class="modal hidden" id="modal"><div class="modal-body" id="modal-body"></div></div>
+<div class="toast hidden" id="toast"></div>
+<script type="module" src="/static/tb/tb.js"></script>
+</body>
+</html>

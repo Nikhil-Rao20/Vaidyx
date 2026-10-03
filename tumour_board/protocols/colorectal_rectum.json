@@ -1,0 +1,23 @@
+{
+ "id": "colorectal_rectum", "label": "Rectal cancer", "version": "0.2",
+ "note": "Configurable by the clinical team. Includes a restaging rule for re-discussion after neoadjuvant therapy. Prototype defaults; to be confirmed by the hospital Tumour Board.",
+ "mandatory": [
+  {"id": "clinical_history", "label": "Clinical history and performance status", "doc_types": ["clinical_note", "referral"], "department": "GI Oncology", "required_facts": ["ecog", "clinical_question"], "sla_days": 2},
+  {"id": "endoscopy", "label": "Endoscopy report", "doc_types": ["endoscopy"], "department": "Gastroenterology", "required_facts": ["distance_from_anal_verge"], "sla_days": 5},
+  {"id": "histopathology", "label": "Histopathology report", "doc_types": ["histopathology"], "department": "Pathology", "required_facts": ["histologic_type"], "sla_days": 5},
+  {"id": "mmr", "label": "MMR / MSI status", "facts_only": true, "fact_doc_types": ["histopathology", "ihc", "molecular"], "department": "Pathology", "required_facts": ["mmr"], "sla_days": 7},
+  {"id": "baseline_mri_pelvis", "label": "Baseline MRI pelvis (rectal protocol)", "doc_types": ["mri"], "region": "pelvis|rect", "department": "Radiology", "required_facts": ["recorded_stage"], "sla_days": 5},
+  {"id": "systemic_staging", "label": "CT chest / abdomen / pelvis staging", "doc_types": ["ct", "pet_ct"], "department": "Radiology", "required_facts": ["distant_findings"], "sla_days": 5},
+  {"id": "cea", "label": "CEA", "facts_only": true, "fact_doc_types": ["lab"], "department": "Laboratory Medicine", "required_facts": ["cea"], "sla_days": 2},
+  {"id": "restaging_mri", "label": "Restaging MRI pelvis after neoadjuvant therapy", "doc_types": ["mri"], "region": "pelvis|rect", "department": "Radiology",
+   "required_facts": [], "must_postdate_doc_type": "treatment_summary", "applies_if_doc_type_present": "treatment_summary", "sla_days": 7}
+ ],
+ "optional": [
+  {"id": "ras_braf", "label": "RAS / BRAF", "doc_types": ["molecular"], "department": "Molecular Pathology"},
+  {"id": "treatment_summary", "label": "Neoadjuvant treatment summary", "doc_types": ["treatment_summary"], "department": "Radiation Oncology"},
+  {"id": "previous_board", "label": "Previous Tumour Board record", "doc_types": ["tumour_board_record"], "department": "Tumour Board coordinator"}
+ ],
+ "extract_facts": ["ecog", "comorbidities", "clinical_question", "recorded_stage", "lesion_size", "nodal_findings", "distant_findings", "histologic_type", "grade", "mmr", "ras_braf",
+                   "distance_from_anal_verge", "mrf_status", "emvi", "haemoglobin", "wbc", "platelets", "creatinine", "cea", "treatment_received", "treatment_completion_date"],
+ "post_board": {"required_record_fields": ["decision_text", "recorded_by", "actions"], "follow_up_default_days": 14}
+}

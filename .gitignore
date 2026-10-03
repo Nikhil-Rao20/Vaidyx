@@ -237,3 +237,6 @@ data/vaidyx-tmux/
 
 # SSL certificates and keys
 ssl/
+
+# Vaidyx-TB runtime data (cases, evals, caches, model config)
+data/tumour_board/

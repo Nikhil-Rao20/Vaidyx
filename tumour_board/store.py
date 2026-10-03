@@ -1,0 +1,141 @@
+"""File-based case storage. One directory per Tumour Board Case File:
+
+cases/<case_id>/case.json        identity, protocol, patient, created
+cases/<case_id>/state.json       gate result, actions, board records, expert reviews, AI artefacts
+cases/<case_id>/docs/<doc_id>/   original file + doc.json (pages, classification, facts, verification)
+cases/<case_id>/audit.jsonl      append-only log of every AI call and user action
+"""
+import asyncio, json, os, re, shutil, time, uuid
+from datetime import datetime
+from pathlib import Path
+
+from . import config
+
+_locks: dict[str, asyncio.Lock] = {}
+
+
+def now_iso():
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def lock(case_id: str) -> asyncio.Lock:
+    return _locks.setdefault(case_id, asyncio.Lock())
+
+
+def safe_id(s: str) -> str:
+    s = re.sub(r"[^A-Za-z0-9_.-]", "-", s.strip())[:64]
+    if not s or s.startswith("."):
+        raise ValueError("invalid id")
+    return s
+
+
+def case_dir(case_id: str) -> Path:
+    return config.CASES_DIR / safe_id(case_id)
+
+
+def _write_json(p: Path, obj):
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    tmp.write_text(json.dumps(obj, indent=2, ensure_ascii=False))
+    os.replace(tmp, p)
+
+
+def _read_json(p: Path, default=None):
+    try:
+        return json.loads(p.read_text())
+    except FileNotFoundError:
+        return default
+
+
+def list_cases():
+    out = []
+    if not config.CASES_DIR.exists():
+        return out
+    for d in sorted(config.CASES_DIR.iterdir()):
+        c = _read_json(d / "case.json")
+        if c:
+            st = _read_json(d / "state.json", {})
+            g = st.get("gate") or {}
+            out.append({**c, "documents": len(list((d / "docs").glob("*/doc.json"))) if (d / "docs").exists() else 0,
+                        "gate_passed": g.get("passed"), "open_actions": sum(1 for a in st.get("actions", []) if a["status"] != "completed"),
+                        "readiness": g.get("readiness")})
+    return out
+
+
+def create_case(case_id, patient: dict, protocol: str, board_date: str = "", created_by: str = ""):
+    d = case_dir(case_id)
+    if (d / "case.json").exists():
+        raise FileExistsError(case_id)
+    c = {"case_id": case_id, "patient": patient, "protocol": protocol, "board_date": board_date, "created": now_iso(), "created_by": created_by}
+    _write_json(d / "case.json", c)
+    _write_json(d / "state.json", {"actions": [], "board_records": [], "reviews": [], "artefacts": {}, "gate": None})
+    return c
+
+
+def delete_case(case_id):
+    shutil.rmtree(case_dir(case_id), ignore_errors=True)
+
+
+def get_case(case_id):
+    return _read_json(case_dir(case_id) / "case.json")
+
+
+def get_state(case_id):
+    return _read_json(case_dir(case_id) / "state.json", {"actions": [], "board_records": [], "reviews": [], "artefacts": {}, "gate": None})
+
+
+def save_state(case_id, st):
+    _write_json(case_dir(case_id) / "state.json", st)
+
+
+def add_document_file(case_id, src_name: str, data: bytes, rel_path: str = ""):
+    doc_id = "D" + uuid.uuid4().hex[:8]
+    ext = Path(src_name).suffix.lower()
+    dd = case_dir(case_id) / "docs" / doc_id
+    dd.mkdir(parents=True, exist_ok=True)
+    (dd / f"original{ext}").write_bytes(data)
+    doc = {"doc_id": doc_id, "filename": Path(src_name).name, "rel_path": rel_path or Path(src_name).name, "ext": ext,
+           "size": len(data), "added": now_iso(), "state": "queued"}
+    _write_json(dd / "doc.json", doc)
+    return doc
+
+
+def original_path(case_id, doc_id) -> Path:
+    dd = case_dir(case_id) / "docs" / safe_id(doc_id)
+    return next(dd.glob("original.*"))
+
+
+def get_doc(case_id, doc_id):
+    return _read_json(case_dir(case_id) / "docs" / safe_id(doc_id) / "doc.json")
+
+
+def save_doc(case_id, doc):
+    _write_json(case_dir(case_id) / "docs" / doc["doc_id"] / "doc.json", doc)
+
+
+def list_docs(case_id):
+    base = case_dir(case_id) / "docs"
+    if not base.exists():
+        return []
+    docs = [_read_json(p) for p in base.glob("*/doc.json")]
+    return sorted([d for d in docs if d], key=lambda d: (d.get("rel_path") or ""))
+
+
+def audit(case_id, event: dict):
+    event = {"ts": now_iso(), **event}
+    p = case_dir(case_id) / "audit.jsonl"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with open(p, "a") as f:
+        f.write(json.dumps(event, ensure_ascii=False, default=str) + "\n")
+
+
+def read_audit(case_id, limit=500):
+    p = case_dir(case_id) / "audit.jsonl"
+    if not p.exists():
+        return []
+    lines = p.read_text().splitlines()[-limit:]
+    return [json.loads(l) for l in lines]
+
+
+def auditor(case_id):
+    return lambda ev: audit(case_id, ev)
