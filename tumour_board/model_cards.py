@@ -62,6 +62,13 @@ def build():
         q = load(f"qa_{bk}.json")
         if q:
             f["Measured: Ask the Case File (33 probes)"] = f"pass {q['pass']}/{q['n']}, fabrication {q['fabrication']}, mean {q['mean_seconds']} s"
+        se = sorted(ev.glob("summary_eval_*.json"), key=lambda x: x.stat().st_mtime)
+        if se and "reasoner" in rl:
+            d = json.loads(se[-1].read_text())["cases"]
+            exp = sum(c["expected_fields"] for c in d.values()); cov = sum(c["in_either"] for c in d.values())
+            f["Measured: Case File summary omission check (synthetic, 3 cases)"] = f"{cov}/{exp} answer-key fields present in the verified fields table or a cited summary sentence"
+        if "reader" in rl:
+            f["Scanned pages"] = "read twice (full resolution and 70% downscale); numbers that differ between reads are flagged and the values containing them go to expert review"
         t = load("tcga_eval.json")
         if t and ("extractor" in rl):
             f["Measured: real TCGA pathology reports (30)"] = f"{t['claims']} extracted values, {t['ungrounded_claims']} ungrounded; agreement {t['agreement']}"

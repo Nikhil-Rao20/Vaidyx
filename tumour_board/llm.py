@@ -3,7 +3,7 @@
 Constrained decoding only restricts which tokens may be emitted (valid JSON for the schema). Weights, precision and
 sampling are untouched (bf16, greedy), so nothing here is accuracy-lossy.
 """
-import asyncio, base64, hashlib, io, json, mimetypes, time
+import asyncio, base64, hashlib, io, json, mimetypes, re, time
 from typing import Any, AsyncIterator, Optional
 
 import httpx
@@ -89,16 +89,23 @@ def _append_text(content, extra):
 
 
 def parse_json_loose(text):
+    """Parse the JSON object inside possibly chatty output; repairs the common trailing-comma slip."""
     t = text.strip()
-    if t.startswith("```"):
-        t = t.split("\n", 1)[1] if "\n" in t else t
+    if "```" in t:
+        t = re.sub(r"^.*?```(?:json)?\s*", "", t, count=1, flags=re.S)
         t = t.rsplit("```", 1)[0]
     i, j = t.find("{"), t.rfind("}")
-    return json.loads(t[i: j + 1])
+    if i < 0 or j < 0:
+        raise ValueError("no JSON object")
+    body = t[i: j + 1]
+    try:
+        return json.loads(body)
+    except json.JSONDecodeError:
+        return json.loads(re.sub(r",\s*([}\]])", r"\1", body))
 
 
 async def chat(role: str, messages: list, *, json_schema: dict = None, max_tokens: int = 1024, temperature: float = 0.0,
-               purpose: str = "", audit=None) -> Any:
+               purpose: str = "", audit=None, _retries: int = 0) -> Any:
     """One completion. Returns parsed JSON when json_schema is given, else text. Logs to `audit` (callable) if given."""
     m, body = _payload(role, messages, max_tokens, temperature, json_schema, False)
     t0 = time.time()
@@ -110,6 +117,7 @@ async def chat(role: str, messages: list, *, json_schema: dict = None, max_token
     if r.status_code != 200:
         raise LLMError(f"{role} model error {r.status_code}: {r.text[:300]}")
     d = r.json(); text = d["choices"][0]["message"].get("content") or ""
+    finish = d["choices"][0].get("finish_reason")
     usage = d.get("usage", {}); dt = time.time() - t0
     if audit:
         audit({"kind": "llm_call", "role": role, "model": m["model"], "purpose": purpose, "seconds": round(dt, 2),
@@ -120,8 +128,17 @@ async def chat(role: str, messages: list, *, json_schema: dict = None, max_token
         try:
             return json.loads(text) if _guided(role) else parse_json_loose(text)
         except (json.JSONDecodeError, ValueError) as e:
-            if not _guided(role) and not purpose.endswith("(retry)"):
-                return await chat(role, messages, json_schema=json_schema, max_tokens=max_tokens, temperature=temperature, purpose=purpose + " (retry)", audit=audit)
+            # Greedy decoding is deterministic: re-sending the same prompt gives the same broken output. So the retry
+            # must change something: (1) output cut off -> more room; (2) otherwise ask the model to repair its own JSON.
+            if _retries < 2:
+                if finish == "length":
+                    return await chat(role, messages, json_schema=json_schema, max_tokens=int(max_tokens * 1.8), temperature=temperature,
+                                      purpose=purpose, audit=audit, _retries=_retries + 1)
+                repair = messages + [{"role": "assistant", "content": text},
+                                     {"role": "user", "content": "That was not valid JSON. Return the same content as ONE valid JSON object only, "
+                                      "no prose and no code fences, matching the requested structure exactly."}]
+                return await chat(role, repair, json_schema=json_schema, max_tokens=max_tokens, temperature=temperature,
+                                  purpose=purpose + " (repair)", audit=audit, _retries=_retries + 1)
             raise LLMError(f"invalid JSON from {role} ({purpose}): {text[:200]}") from e
     return text
 

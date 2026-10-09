@@ -27,8 +27,16 @@ def main(base, pw, out):
             for t in ["docs", "summary", "board", "audit"]:
                 pg.click(f"#tabs button[data-tab='{t}']"); pg.wait_for_timeout(900)
                 pg.screenshot(path=f"{out}/{cid}_{t}.png", full_page=True)
-        # document drawer with highlights
-        pg.click(".citem[data-case='TB-001']"); pg.wait_for_selector("#tab-ready .req")
+        # re-check toast must explain what was checked
+        pg.click(".citem[data-case='TB-001']"); pg.wait_for_selector("#tab-ready .req"); pg.click("#btn-recheck"); pg.wait_for_timeout(1500)
+        t = pg.inner_text("#toast")
+        if "Re-checked" not in t or "not re-read" not in t:
+            errors.append("re-check toast missing detail: " + t[:120])
+        pg.click("#tabs button[data-tab='summary']"); pg.wait_for_timeout(600)
+        if pg.locator("#sumout h4").count() and pg.locator("#sumout h4").count() < 6:
+            errors.append("summary does not show the 6 NCG sections")
+        # document drawer with highlights (select the tab explicitly: re-clicking the same case keeps the current tab by design)
+        pg.click(".citem[data-case='TB-001']"); pg.click("#tabs button[data-tab='ready']"); pg.wait_for_selector("#tab-ready .req")
         pg.click("#tabs button[data-tab='docs']"); pg.wait_for_selector("tr[data-doc]")
         pg.locator("tr[data-doc]").nth(3).click(); pg.wait_for_selector("#doctext", timeout=15000); pg.wait_for_timeout(1200)
         pg.screenshot(path=f"{out}/TB-001_doc_drawer.png"); pg.keyboard.press("Escape")

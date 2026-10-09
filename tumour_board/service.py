@@ -23,10 +23,15 @@ async def process_docs(case_id, doc_ids, job):
         if state in ("ready", "error"):
             job["done"] += 1
 
-    await asyncio.gather(*[extract.process_document(case_id, d, case["protocol"], case.get("patient"), progress) for d in doc_ids])
-    async with store.lock(case_id):
-        gate = rules.evaluate(case_id)
-        rules.sync_actions(case_id, gate)
+    try:
+        await asyncio.gather(*[extract.process_document(case_id, d, case["protocol"], case.get("patient"), progress) for d in doc_ids])
+        async with store.lock(case_id):
+            gate = rules.evaluate(case_id)
+            rules.sync_actions(case_id, gate)
+    except Exception as e:  # the UI polls this job: it must reach a terminal state
+        job["state"] = "failed"; job["error"] = f"{e.__class__.__name__}: {str(e)[:300]}"; job["seconds"] = round(time.time() - job["started"], 1)
+        store.audit(case_id, {"kind": "error", "where": "ingestion", "error": job["error"]})
+        return
     try:  # warm the search index (chunk embeddings) so the first search is instant
         from . import search
         await asyncio.to_thread(search.index, case_id)
@@ -37,23 +42,61 @@ async def process_docs(case_id, doc_ids, job):
 
 
 def add_files(case_id, files, user=""):
-    """files: list of (relative_path, bytes). Returns a job (processing runs in the background)."""
-    ids = []
+    """files: list of (relative_path, bytes). Identical files already in the Case File are skipped (SHA-256).
+    Returns a job (processing runs in the background)."""
+    ids, skipped, unsupported = [], [], []
     for rel, data in files:
         if Path(rel).suffix.lower() not in ingest.SUPPORTED or Path(rel).name.startswith("."):
-            continue
+            unsupported.append(rel); continue
+        dup = store.find_duplicate(case_id, data)
+        if dup:
+            skipped.append({"file": rel, "same_as": dup["doc_id"]})
+            store.audit(case_id, {"kind": "document_duplicate_skipped", "file": rel, "same_as": dup["doc_id"], "by": user}); continue
         d = store.add_document_file(case_id, Path(rel).name, data, rel)
         ids.append(d["doc_id"])
         store.audit(case_id, {"kind": "document_added", "doc_id": d["doc_id"], "file": rel, "by": user})
+    job = _job(case_id, len(ids))
+    job["skipped_duplicates"], job["unsupported"] = skipped, unsupported
+    job["task"] = asyncio.get_event_loop().create_task(process_docs(case_id, ids, job))
+    return job
+
+
+def reprocess(case_id, which="errors", user=""):
+    """Re-run reading / classification / extraction. which = 'errors' | 'all' | list of doc ids. Needed after a protocol
+    or model change, or to retry documents that failed."""
+    docs = store.list_docs(case_id)
+    if which == "all":
+        ids = [d["doc_id"] for d in docs]
+    elif which == "errors":
+        ids = [d["doc_id"] for d in docs if d.get("state") != "ready"]
+    else:
+        ids = [d for d in which if any(x["doc_id"] == d for x in docs)]
+    for i in ids:
+        d = store.get_doc(case_id, i); d["state"] = "queued"; d.pop("error", None); store.save_doc(case_id, d)
+    store.audit(case_id, {"kind": "reprocess", "documents": ids, "by": user})
     job = _job(case_id, len(ids))
     job["task"] = asyncio.get_event_loop().create_task(process_docs(case_id, ids, job))
     return job
 
 
+def delete_document(case_id, doc_id, user=""):
+    d = store.get_doc(case_id, doc_id)
+    store.delete_document(case_id, doc_id)
+    store.audit(case_id, {"kind": "document_deleted", "doc_id": doc_id, "file": (d or {}).get("rel_path"), "by": user})
+    return recheck(case_id, user)
+
+
 def recheck(case_id, user=""):
+    """Re-evaluate the Pre-Authorization rules over the already-processed documents (deterministic, milliseconds) and
+    re-sync the routed actions. Documents are NOT re-read here: use reprocess() for that."""
+    before = store.get_state(case_id).get("gate") or {}
     gate = rules.evaluate(case_id)
     st = rules.sync_actions(case_id, gate, by=user)
-    store.audit(case_id, {"kind": "recheck", "by": user, "passed": gate["passed"], "readiness": gate["readiness"]})
+    changed = [r["label"] for r in gate["requirements"] if {x["id"]: x["status"] for x in before.get("requirements", [])}.get(r["id"]) not in (None, r["status"])]
+    st["recheck"] = {"documents_checked": gate["documents"]["ready"], "processing": gate["documents"]["processing"], "errors": gate["documents"]["errors"],
+                     "satisfied": gate["satisfied"], "total": gate["total"], "passed": gate["passed"], "changed": changed,
+                     "open_actions": sum(1 for a in st.get("actions", []) if a["status"] != "completed")}
+    store.audit(case_id, {"kind": "recheck", "by": user, "passed": gate["passed"], "readiness": gate["readiness"], "changed": changed})
     return st
 
 

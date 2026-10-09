@@ -76,11 +76,19 @@ STAGE = re.compile(r"\b[cpyr]?T[0-4][a-d]?\s*N[0-3][a-c]?(\s*M[01][a-c]?)?\b|\bs
 QUOTE = re.compile(r"\"[^\"]{2,400}\"|“[^”]{2,400}”")
 
 
+# Reported speech: the sentence attributes the wording to a document or to the clinicians, so it is documentation, not advice.
+REPORTED = re.compile(r"\b(the |previous |prior |earlier )?(tumou?r board|board|mdt|record|minutes|report|note|letter|summary|plan|decision|"
+                      r"radiologist|pathologist|oncologist|surgeon|physician|clinician|treating team|team|dr\.?\s*[A-Z][a-z]+)\b.{0,60}"
+                      r"\b(recorded|records|documented|documents|noted|notes|stated|states|wrote|writes|advised|recommended|recommends|planned|plans|decided|decision was|suggested|impression|concluded|reads)\b", re.I)
+
+
 def scan_output(text):
     """Find policy violations outside quoted source text. Returns list of {sentence, reason}."""
     issues = []
     for sent in re.split(r"(?<=[.!?])\s+|\n", text):
         bare = QUOTE.sub(" ", sent)
+        if REPORTED.search(bare) and not re.search(r"\b(i|we)\b\s+(would\s+)?(recommend|suggest|advise)", bare, re.I):
+            continue  # documented wording attributed to its source
         if PRESCRIPTIVE.search(bare):
             issues.append({"sentence": sent.strip(), "reason": "prescriptive or diagnostic wording"})
         elif STAGE.search(bare) and not re.search(r"\b(recorded|documented|as written|states|reported)\b", bare, re.I):

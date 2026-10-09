@@ -17,6 +17,11 @@ SOURCES = {  # folder -> (organisation label, region tag, boost)
     "esmo": ("ESMO", "International", 1.0), "cap_protocols": ("CAP cancer protocol", "International", 1.0),
     "asco_cap": ("ASCO / CAP", "International", 1.0), "acr_appropriateness": ("ACR Appropriateness Criteria", "International", 0.95),
     "acr_rads": ("ACR RADS", "International", 0.9), "recist": ("RECIST", "International", 0.9), "nci_pdq": ("NCI PDQ (US)", "US", 0.85),
+    "pmjay": ("PM-JAY / National Health Authority, India", "India", 1.3), "iria": ("ICRI / IRIA onco-imaging checklists, India", "India", 1.25),
+    "nhs_england": ("NHS England MDT guidance", "UK", 1.0), "rcpath": ("Royal College of Pathologists dataset", "UK", 1.0),
+    "rcr": ("Royal College of Radiologists imaging recommendations", "UK", 0.95), "nice": ("NICE guideline", "UK", 0.95),
+    "iccr": ("ICCR dataset", "International", 1.0), "eusoma": ("EUSOMA / ESMO", "International", 0.95),
+    "victoria_au": ("Victorian Cancer MDM quality framework", "Australia", 0.9),
 }
 CANCER_WORDS = {"lung_nsclc": ["lung", "nsclc", "thoracic"], "breast": ["breast"], "colorectal_rectum": ["rect", "colorectal", "colon"]}
 _lock = threading.Lock()
@@ -32,8 +37,10 @@ _REF_LINE = re.compile(r"(^|\n|\.\s)[A-Z][A-Za-z'\-]+ [A-Z]{1,3}[,.]\s")
 
 def _is_reference_list(t):
     """Bibliography text (author lists, journal citations) is not guideline content."""
-    hits = len(re.findall(r"et al\.|\bdoi\b|\d{4};\s?\d+|\bPMID\b|\d{4}\.\s?\d+\(", t))
-    return hits >= 3 or (hits >= 1 and len(_REF_LINE.findall(t)) >= 2) or bool(re.match(r"\s*[A-Z][a-z]+ [A-Z]{1,2}[,.] .{0,120}(et al|\d{4})", t))
+    hits = len(re.findall(r"et al\.|\bdoi\b|\d{4};\s?\d+|\bPMID\b|\d{4}\.\s?\d+\(|\b\d{1,3}\(\d{1,2}\):\s?\d+|\b\d{1,4}:\d{1,4}-\d{1,4}\b", t))
+    authors = len(re.findall(r"\b[A-Z][a-z]+ [A-Z]{1,3}\b(?=[,.])", t))  # 'Lee HJ,' 'Chung WS,' style author tokens
+    return hits >= 3 or (hits >= 1 and (len(_REF_LINE.findall(t)) >= 2 or authors >= 3)) or authors >= 6 \
+        or bool(re.match(r"\s*[A-Z][a-z]+ [A-Z]{1,2}[,.] .{0,120}(et al|\d{4})", t))
 
 
 def _read(p: Path):
@@ -101,7 +108,9 @@ class GuidelineIndex:
         if cache.exists() and np.load(cache)["sig"].item() == sig:
             self.emb = np.load(cache)["emb"]
         else:
-            m = search._embed([c["title"] + "\n" + c["text"] for c in self.chunks]) if self.chunks else np.zeros((0, 768), np.float32)
+            # embed in batches so a long rebuild never holds the embedder lock continuously (Case File searches interleave)
+            texts = [c["title"] + "\n" + c["text"] for c in self.chunks]
+            m = np.concatenate([search._embed(texts[i:i + 128]) for i in range(0, len(texts), 128)]) if texts else np.zeros((0, 768), np.float32)
             self.emb = m / np.maximum(np.linalg.norm(m, axis=1, keepdims=True), 1e-9)
             cache.parent.mkdir(parents=True, exist_ok=True); np.savez(cache, emb=self.emb, sig=np.array(sig))
 

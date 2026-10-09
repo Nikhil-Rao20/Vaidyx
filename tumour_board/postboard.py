@@ -17,8 +17,8 @@ CLAIMS_SCHEMA = {"type": "object", "additionalProperties": False, "properties": 
     "required": ["fact", "value_as_written", "span"]}}}, "required": ["claims"]}
 
 
-_NEG = r"\b(negative|not detected|no mutation detected|no (pathogenic )?(variant|alteration)s? detected|wild[- ]?type|absent|not amplified)\b"
-_POS = r"\b(positive|detected|mutated|mutation present|present|amplified)\b"
+_NEG = r"\b(negative|not detected|no mutation detected|no (pathogenic )?(variant|alteration)s? detected|wild[- ]?type|absent|not amplified|no evidence of|not seen|not identified|free of|without)\b|\bno\b"
+_POS = r"\b(positive|detected|mutated|mutation present|present|amplified|evidence of|seen|identified|involved|suspicious)\b"
 
 
 def _polarity(s):
@@ -43,6 +43,9 @@ async def adjudicate(case_id, record):
     for f in prot.get("post_board", {}).get("required_record_fields", []):
         if not record.get(f):
             flags.append({"kind": "documentation", "severity": "review", "text": f"Decision record is missing: {f.replace('_', ' ')}"})
+    # Victorian Cancer MDM quality framework: errors or changes to pathology / radiology reports raised at the meeting must be recorded
+    if re.search(r"\b(discrepan|correct(ed|ion)|amend|error|wrong|revise|mis-?report|typo)", record.get("decision_text", ""), re.I) and not record.get("report_corrections_raised"):
+        flags.append({"kind": "documentation", "severity": "review", "text": "The decision text mentions a correction or discrepancy; record it under 'Report corrections raised at the meeting'"})
     for i, a in enumerate(record.get("actions") or []):
         if not a.get("department"):
             flags.append({"kind": "documentation", "severity": "review", "text": f"Action {i + 1} has no Responsible Department"})
@@ -78,11 +81,16 @@ async def adjudicate(case_id, record):
         if not src or src["verification"] != "verified":
             checks.append({**c, "result": "no_verified_source", "source": None})
             continue
-        a, b = _nums(c["value_as_written"]), _nums(src["value"])
-        if a and b and sorted(a) != sorted(b):
+        a, b = _nums(c["value_as_written"]), _nums(src["value"] + " " + (src.get("quote") or ""))
+        if a and b and not set(a) <= set(b):  # every number the board wrote must exist in the source value / quote
             res = "discrepancy"
             flags.append({"kind": "transcription", "severity": "expert_review", "fact": c["fact"],
                           "text": f"Possible transcription discrepancy: {cat[c['fact']]['label']} recorded as \"{c['value_as_written']}\"; source value \"{src['value']}\"",
+                          "recorded": c["value_as_written"], "source_value": src["value"], "source_quote": src["quote"], "source_doc": src["doc_id"], "source_title": src["doc_title"]})
+        elif _polarity(c["value_as_written"]) and _polarity(src["value"] + " " + (src.get("quote") or "")) and _polarity(c["value_as_written"]) != _polarity(src["value"] + " " + (src.get("quote") or "")):
+            res = "discrepancy"  # polarity flip: 'negative' recorded where the source says positive, or the reverse
+            flags.append({"kind": "transcription", "severity": "expert_review", "fact": c["fact"],
+                          "text": f"Possible polarity discrepancy: {cat[c['fact']]['label']} recorded as \"{c['value_as_written']}\"; source states \"{src['value']}\"",
                           "recorded": c["value_as_written"], "source_value": src["value"], "source_quote": src["quote"], "source_doc": src["doc_id"], "source_title": src["doc_title"]})
         elif not a and _polarity(c["value_as_written"]) and _polarity(c["value_as_written"]) == _polarity(src["value"]):
             res = "consistent"

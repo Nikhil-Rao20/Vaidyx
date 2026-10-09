@@ -5,7 +5,7 @@ cases/<case_id>/state.json       gate result, actions, board records, expert rev
 cases/<case_id>/docs/<doc_id>/   original file + doc.json (pages, classification, facts, verification)
 cases/<case_id>/audit.jsonl      append-only log of every AI call and user action
 """
-import asyncio, json, os, re, shutil, time, uuid
+import asyncio, hashlib, json, os, re, shutil, time, uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -88,6 +88,19 @@ def save_state(case_id, st):
     _write_json(case_dir(case_id) / "state.json", st)
 
 
+def find_duplicate(case_id, data: bytes):
+    """An identical file already in the Case File (same SHA-256), or None."""
+    h = hashlib.sha256(data).hexdigest()
+    for d in list_docs(case_id):
+        if d.get("sha256") == h:
+            return d
+    return None
+
+
+def delete_document(case_id, doc_id):
+    shutil.rmtree(case_dir(case_id) / "docs" / safe_id(doc_id), ignore_errors=True)
+
+
 def add_document_file(case_id, src_name: str, data: bytes, rel_path: str = ""):
     doc_id = "D" + uuid.uuid4().hex[:8]
     ext = Path(src_name).suffix.lower()
@@ -95,7 +108,7 @@ def add_document_file(case_id, src_name: str, data: bytes, rel_path: str = ""):
     dd.mkdir(parents=True, exist_ok=True)
     (dd / f"original{ext}").write_bytes(data)
     doc = {"doc_id": doc_id, "filename": Path(src_name).name, "rel_path": rel_path or Path(src_name).name, "ext": ext,
-           "size": len(data), "added": now_iso(), "state": "queued"}
+           "size": len(data), "sha256": hashlib.sha256(data).hexdigest(), "added": now_iso(), "state": "queued"}
     _write_json(dd / "doc.json", doc)
     return doc
 
@@ -113,12 +126,20 @@ def save_doc(case_id, doc):
     _write_json(case_dir(case_id) / "docs" / doc["doc_id"] / "doc.json", doc)
 
 
+_docs_cache: dict[str, tuple] = {}
+
+
 def list_docs(case_id):
     base = case_dir(case_id) / "docs"
     if not base.exists():
         return []
-    docs = [_read_json(p) for p in base.glob("*/doc.json")]
-    return sorted([d for d in docs if d], key=lambda d: (d.get("rel_path") or ""))
+    sig = tuple(sorted((p.name, p.stat().st_mtime_ns, p.stat().st_size) for p in base.glob("*/doc.json")))
+    hit = _docs_cache.get(case_id)
+    if hit and hit[0] == sig:
+        return [dict(d) for d in hit[1]]
+    docs = sorted([d for d in (_read_json(p) for p in base.glob("*/doc.json")) if d], key=lambda d: (d.get("rel_path") or ""))
+    _docs_cache[case_id] = (sig, docs)
+    return [dict(d) for d in docs]
 
 
 def audit(case_id, event: dict):

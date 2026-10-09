@@ -41,6 +41,15 @@ def _locate_quote(quote, pages):
     return out
 
 
+NEGATION = re.compile(r"\b(no|not|negative|absent|without|free of|non-?\w+|never|neither|nor|none|unremarkable|normal|denies|ruled out|not identified|not seen|not detected)\b", re.I)
+
+
+def polarity_flag(text, quotes):
+    """True when a cited quote carries a negation cue but the statement carries none (possible polarity flip,
+    e.g. 'no evidence of metastasis' summarised as 'metastasis'). Shown to the reader as a review flag."""
+    return bool(quotes) and any(NEGATION.search(q) for q in quotes) and not NEGATION.search(text or "")
+
+
 def verify_statements(case_id, statements):
     docs = {d["doc_id"]: d for d in store.list_docs(case_id)}
     out = []
@@ -66,7 +75,10 @@ def verify_statements(case_id, statements):
                     merged[c["doc_id"]] = dict(c)
                 elif c["quote"] not in m["quote"]:
                     m["quote"] += " ... " + c["quote"]
-            out.append({"text": st["text"], "citations": list(merged.values())})
+            item = {"text": st["text"], "citations": list(merged.values())}
+            if polarity_flag(st["text"], [c["quote"] for c in cites]):
+                item["flags"] = ["check negation against the source"]
+            out.append(item)
     return out
 
 
@@ -86,13 +98,7 @@ async def ask(case_id, question, history=None):
         au({"kind": "guardrail_input", "category": gate["category"], "layer": gate["layer"]})
         return {"status": "out_of_scope", "category": gate["category"], "message": gate["message"], "value_hits": values["hits"][:12],
                 "seconds": round(time.time() - t0, 2)}
-    full = search.case_text(case_id, max_chars=48000)
-    if full:
-        context, mode = full, "full Case File"
-    else:
-        hits = (await asyncio.to_thread(search.index(case_id).search, question, 14))
-        context = "\n\n".join(f"=== DOCUMENT {h['doc_id']} | {h['doc_title']} | {h['date'] or '?'} | page {h['page'] + 1} ===\n{h['text']}" for h in hits)
-        mode = "retrieved passages"
+    context, mode = await asyncio.to_thread(search.context_for, case_id, question, 48000)
     if values["hits"]:
         context += "\n\n=== LINES MATCHING THE QUESTION (for convenience; cite the document) ===\n" + \
                    "\n".join(f"[{h['doc_id']} | {h['date'] or '?'}] {h['text']}" for h in values["hits"][:25])

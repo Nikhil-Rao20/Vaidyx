@@ -45,6 +45,12 @@ def html_doc(d, patient):
         else:
             body += "".join(f"<p>{line}</p>" for line in c.split("\n"))
     foot = "".join(f"<div>{line}</div>" for line in d["footer"])
+    if not d.get("stamp"):
+        return f"""<html><head><meta charset='utf-8'><style>{CSS}</style></head><body>
+<div class='wm'>SYNTHETIC - DEMO ONLY</div>
+<div class='hdr'><div class='h'>{HOSP}</div><div class='d'>{d['dept']}</div></div>
+<h1>{d['title']}</h1><table class='pt'>{pt}</table>{body}
+<div class='foot'>{foot}</div></body></html>"""
     return f"""<html><head><meta charset='utf-8'><style>{CSS}</style></head><body>
 <div class='wm'>SYNTHETIC - DEMO ONLY</div>
 <div class='hdr'><div class='h'>{HOSP}</div><div class='d'>{d['dept']}</div></div>
@@ -318,7 +324,18 @@ A3 = [
       truth=dict(doc_type="lab", status="FINAL", signed=True, fields={"haemoglobin": "11.2", "wbc": "6,400", "platelets": "2.10", "creatinine": "0.9", "cea": "4.1"})),
 ]
 
-CASES = [("TB-001", "lung_nsclc", P1, C1, A1), ("TB-002", "breast", P2, C2, []), ("TB-003", "colorectal_rectum", P3, C3, A3)]
+# TB-002 later arrival: an Indian-format laboratory report with NO "Report status" line (only an end-of-report marker and Sd/-)
+A2 = [
+ dict(path="lab/pre_chemo_bloods_2026-09-01.png", fmt="scan", dept="Clinical Laboratory, NABL accredited",
+      title="LABORATORY INVESTIGATION REPORT", meta=[("Collected", "01/09/2026 07:55"), ("Reported", "01/09/2026 13:20"), ("Ref. by", "Dr. Meera Nair (Medical Oncology)")],
+      sections=[("Haematology", [["Investigation", "Observed value", "Unit", "Biological ref. interval"], ["Haemoglobin", "12.4", "gm%", "12.0 - 15.0"],
+                                  ["Total WBC count", "5,900", "cells/cumm", "4,000 - 11,000"], ["Platelet count", "2.65", "lakhs/cumm", "1.5 - 4.1"]]),
+                ("Renal function", [["Investigation", "Observed value", "Unit", "Biological ref. interval"], ["Blood urea", "22", "mg/dl", "15 - 40"], ["S. Creatinine", "0.8", "mg/dl", "0.5 - 1.1"]])],
+      footer=["*** End of Report ***", "Sd/-", "Dr. A. Menon, MD (Pathology), Reg. No. KMC 45678"], stamp="",
+      truth=dict(doc_type="lab", status="FINAL", signed=True, fields={"haemoglobin": "12.4", "wbc": "5,900", "platelets": "2.65", "creatinine": "0.8"})),
+]
+
+CASES = [("TB-001", "lung_nsclc", P1, C1, A1), ("TB-002", "breast", P2, C2, A2), ("TB-003", "colorectal_rectum", P3, C3, A3)]
 
 
 def to_scan(pdf_path, png_path, seed):

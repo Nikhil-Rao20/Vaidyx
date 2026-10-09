@@ -30,7 +30,10 @@ def _user(request):
 
 
 def _case(case_id):
-    c = store.get_case(case_id)
+    try:
+        c = store.get_case(case_id)
+    except ValueError:
+        raise HTTPException(404, "Case not found")
     if not c:
         raise HTTPException(404, "Case not found")
     return c
@@ -107,7 +110,7 @@ def setup_tumour_board_routes():
         for d in store.list_docs(case_id):
             docs.append({k: d.get(k) for k in ("doc_id", "filename", "rel_path", "ext", "state", "error", "classification", "identity", "added")} |
                         {"facts": d.get("facts", {}), "pages": len(d.get("pages") or []), "methods": sorted({p["method"] for p in d.get("pages") or []})})
-        facts = rules.resolve_facts(store.list_docs(case_id))
+        facts = rules.resolve_facts(store.list_docs(case_id), st.get("overrides"))
         cat = protocol.facts()
         return {"case": c, "state": st, "documents": docs, "facts": {k: {"label": cat.get(k, {}).get("label", k), **v} for k, v in facts.items()},
                 "timeline": postboard.timeline(case_id)}
@@ -132,6 +135,16 @@ def setup_tumour_board_routes():
         if not j:
             raise HTTPException(404, "job not found")
         return {k: v for k, v in j.items() if k != "task"}
+
+    @r.get("/cases/{case_id}/export")
+    async def export(case_id: str, request: Request):
+        """Portable record of the Case File (state, documents' extracted data, audit) for the hospital record system."""
+        _user(request); c = _case(case_id)
+        docs = []
+        for d in store.list_docs(case_id):
+            docs.append({k: d.get(k) for k in ("doc_id", "filename", "rel_path", "sha256", "classification", "identity", "facts", "state", "processed")})
+        return JSONResponse({"case": c, "state": store.get_state(case_id), "documents": docs, "audit": store.read_audit(case_id, 5000)},
+                            headers={"Content-Disposition": f'attachment; filename="{c["case_id"]}_case_file.json"'})
 
     @r.get("/cases/{case_id}/documents/{doc_id}")
     async def doc(case_id: str, doc_id: str, request: Request):
@@ -158,7 +171,34 @@ def setup_tumour_board_routes():
     @r.post("/cases/{case_id}/recheck")
     async def recheck(case_id: str, request: Request):
         u = _user(request); _case(case_id)
-        return service.recheck(case_id, u)
+        async with store.lock(case_id):  # never interleave with an ingestion job writing the same state
+            return service.recheck(case_id, u)
+
+    @r.post("/cases/{case_id}/reprocess")
+    async def reprocess(case_id: str, request: Request):
+        u = _user(request); _case(case_id)
+        b = await request.json() if (await request.body()) else {}
+        job = service.reprocess(case_id, b.get("which", "errors"), u)
+        return {"job": job["id"], "total": job["total"]}
+
+    @r.delete("/cases/{case_id}/documents/{doc_id}")
+    async def delete_doc(case_id: str, doc_id: str, request: Request):
+        u = _user(request); _case(case_id)
+        if not store.get_doc(case_id, doc_id):
+            raise HTTPException(404, "document not found")
+        async with store.lock(case_id):
+            return service.delete_document(case_id, doc_id, u)
+
+    @r.post("/cases/{case_id}/overrides")
+    async def overrides(case_id: str, request: Request):
+        """Clinical overrides for this Case File: {"kind": "requirements"|"documents", "key": id, "value": {...} | null}.
+        requirements: {"waived": true, "reason": "..."}; documents: {"attested_final": true, "reason": "..."}."""
+        u = _user(request); _case(case_id); b = await request.json()
+        if b.get("kind") not in ("requirements", "documents"):
+            raise HTTPException(400, "kind must be requirements or documents")
+        async with store.lock(case_id):
+            rules.set_override(case_id, b["kind"], str(b.get("key", "")), b.get("value"), u)
+            return service.recheck(case_id, u)
 
     @r.post("/cases/{case_id}/actions/{action_id}")
     async def update_action(case_id: str, action_id: str, request: Request):

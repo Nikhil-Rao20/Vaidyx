@@ -32,7 +32,7 @@ async function loadModels() {
 
 // ------------------------------------------------------------------ cases
 async function loadCases() {
-  const d = await api("/cases");
+  const d = await api("/cases"); S.demoList = d.demo;
   $("#case-list").innerHTML = d.cases.length ? d.cases.map((c) => `
     <div class="citem ${c.case_id === S.caseId ? "on" : ""}" data-case="${esc(c.case_id)}">
       <div class="t"><span>${esc(c.patient?.name || c.case_id)}</span>${c.gate_passed ? '<span class="chip c-ok">Ready</span>' : c.readiness != null ? `<span class="chip c-warn">${c.readiness}%</span>` : ""}</div>
@@ -80,6 +80,7 @@ function showTab(t) {
 }
 
 // ------------------------------------------------------------------ citations / evidence
+const flagHTML = (x) => (x.flags || []).map((f) => `<span class="chip c-warn" title="The cited source contains a negation (no / not / negative / absent) that this sentence does not; read the source before relying on it.">${esc(f)}</span>`).join("");
 function citeHTML(c) {
   const label = `${c.doc_title || c.doc_id}${c.date ? " · " + fmtDate(c.date) : ""}`;
   return `<span class="cite" data-doc="${esc(c.doc_id)}" data-page="${c.page ?? ""}" data-start="${c.start ?? ""}" data-end="${c.end ?? ""}" title="&quot;${esc(c.quote)}&quot;">${esc(label)}</span>`;
@@ -96,7 +97,11 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") { $("#draw
 const STATUS = {
   satisfied: ["c-ok", "Satisfied", "i-ok", "✓"], missing_record: ["c-bad", "Record missing", "i-bad", "×"], not_final: ["c-bad", "Not final / signed", "i-bad", "!"],
   missing_field: ["c-warn", "Field missing or pending", "i-warn", "!"], needs_review: ["c-rev", "Needs expert review", "i-rev", "?"], not_applicable: ["c-mute", "Not applicable", "i-na", "–"],
+  needs_confirmation: ["c-warn", "Confirm final version", "i-warn", "?"], waived: ["c-mute", "Waived for this Case File", "i-na", "–"],
 };
+const FINALISH = (c) => ["FINAL", "AMENDED", "CORRECTED"].includes(c.status) && c.signed !== "no";
+const statusChip = (c) => { if (!c || !c.status) return ""; const ok = FINALISH(c); const un = c.status === "UNSTATED" && c.signed !== "no";
+  return `<span class="chip ${ok || (un && c.signed === "yes") ? "c-ok" : un ? "c-warn" : "c-bad"}" title="${esc((c.status_notes || []).join("; "))}">${un ? (c.signed === "yes" ? "Signed, status not stated" : "Status not stated") : esc(c.status)}${c.signed === "no" ? " · unsigned" : c.signed === "yes" && !un ? " · signed" : ""}</span>`; };
 
 // ------------------------------------------------------------------ tab: Pre-Authorization
 function renderReady() {
@@ -107,10 +112,12 @@ function renderReady() {
       const d = S.data.documents.find((x) => x.doc_id === e.doc_id); const cl = d?.classification || {};
       return `<span class="cite" data-doc="${esc(e.doc_id)}" title="${esc(e.quote || "")}">${esc(e.value ? `${S.facts?.[e.fact]?.label || e.fact}: ${e.value}` : (cl.title || e.doc_id))}${cl.report_date_iso ? " · " + fmtDate(cl.report_date_iso) : ""}</span>`;
     }).join("");
+    const attest = r.status === "needs_confirmation" && r.evidence[0]?.doc_id ? `<button class="ghost sm" data-attest="${esc(r.evidence[0].doc_id)}">Attest: final, signed</button>` : "";
+    const waive = r.status === "waived" ? `<button class="ghost sm" data-unwaive="${esc(r.id)}">Remove waiver</button>` : (r.status !== "satisfied" && r.status !== "not_applicable") ? `<button class="ghost sm" data-waive="${esc(r.id)}" title="Clinical decision that this record is not required for this Case File (audited)">Waive</button>` : "";
     return `<div class="req"><div class="icon ${s[2]}">${s[3]}</div><div style="flex:1">
-      <div style="display:flex;justify-content:space-between;gap:8px"><span class="lbl">${esc(r.label)}</span><span class="chip ${s[0]}">${s[1]}</span></div>
+      <div style="display:flex;justify-content:space-between;gap:8px"><span class="lbl">${esc(r.label)}</span><span style="display:flex;gap:4px;align-items:center">${attest}${waive}<span class="chip ${s[0]}">${s[1]}</span></span></div>
       <div class="dept">Responsible Department: ${esc(r.department)}</div>
-      ${r.problems.map((p) => `<div class="prob">${esc(p)}</div>`).join("")}<div class="ev">${ev}</div></div></div>`;
+      ${r.problems.map((p) => `<div class="prob">${esc(p)}</div>`).join("")}${(r.notes || []).map((p) => `<div class="prob muted">${esc(p)}</div>`).join("")}<div class="ev">${ev}</div></div></div>`;
   }).join("") : `<div class="muted">Not evaluated yet. Add documents to start.</div>`;
   const opt = g ? g.optional.map((o) => `<span class="chip ${o.available ? "c-info" : "c-mute"}" style="margin:2px">${o.available ? "✓ " : ""}${esc(o.label)}</span>`).join("") : "";
   const acts = (state.actions || []).filter((a) => a.source === "pre_authorization");
@@ -120,7 +127,11 @@ function renderReady() {
     <div class="card"><h3>Pre-Authorization check <span><button class="ghost sm" id="btn-recheck">Re-check now</button></span></h3>
       <div class="muted small" style="margin-bottom:6px">Mandatory records for this protocol (configurable per Case File). A record counts only when it is the final, signed version and its required primary fields are found with a verified source quote. Document exists ≠ Document is ready.</div>
       ${reqs}</div>
+    ${g?.core_data?.length ? `<div class="card"><h3>MDT minimum core data <span class="muted small">${g.core_data.filter((c) => c.present).length} of ${g.core_data.length} documented</span></h3>
+      <div class="muted small" style="margin-bottom:6px">Informational checklist (not part of the gate). Source: ${esc(g.core_data_source || "")}.</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">${g.core_data.map((c) => c.present ? `<span class="cite" data-doc="${esc(c.evidence[0]?.doc_id || "")}" title="${esc((c.evidence[0]?.value || "") + " | " + (c.evidence[0]?.quote || ""))}">✓ ${esc(c.label)}</span>` : `<span class="chip c-mute">– ${esc(c.label)}</span>`).join("")}</div></div>` : ""}
     <div class="card"><h3>Optional records available</h3><div>${opt || '<span class="muted small">None</span>'}</div></div>
+    ${g?.policy_basis ? `<div class="card"><h3>Why a Pre-Authorization gate</h3><div class="small" style="color:#475569">${esc(g.policy_basis)}</div></div>` : ""}
   </div><div>
     <div class="card"><h3>Routed actions <span class="muted small">${acts.filter((a) => a.status !== "completed").length} open</span></h3>
       <div class="muted small" style="margin-bottom:8px">The agent identifies and routes the gap. It does not perform the missing clinical task.</div>${actHTML}</div>
@@ -129,16 +140,31 @@ function renderReady() {
       <button class="ghost sm" id="pick-files" style="margin-top:8px">Choose files</button> <button class="ghost sm" id="pick-folder">Choose folder</button></div>
       <input type="file" id="f-files" multiple class="hidden"><input type="file" id="f-folder" webkitdirectory multiple class="hidden">
       <div id="job"></div>
-      ${S.caseId && S.data.case && (S.data.case.case_id || "").startsWith("TB-") ? `<button class="ghost sm" id="btn-arrivals" style="margin-top:10px">Demo: new reports arrive from departments</button>` : ""}
+      ${(S.demoList || []).some((x) => x.case_id === S.caseId && x.has_arrivals) ? `<button class="ghost sm" id="btn-arrivals" style="margin-top:10px">Demo: new reports arrive from departments</button>` : ""}
+      <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">${docs.errors ? `<button class="ghost sm" id="btn-reproc-err">Re-process ${docs.errors} failed</button>` : ""}<button class="ghost sm" id="btn-reproc-all" title="Re-read, re-classify and re-extract every document (after a protocol or model change)">Re-process all documents</button><a class="ghost sm" href="/api/tb/cases/${esc(S.caseId)}/export">Export Case File record</a></div>
       <div class="muted small" style="margin-top:10px">${docs.total || 0} documents · ${docs.ready || 0} processed${docs.processing ? ` · ${docs.processing} processing` : ""}${docs.errors ? ` · ${docs.errors} errors` : ""}${docs.identity_flags?.length ? ` · <b style="color:#b23a2f">${docs.identity_flags.length} identity flags</b>` : ""}</div>
     </div></div></div>`;
-  $("#btn-recheck").onclick = async () => { await api(`/cases/${S.caseId}/recheck`, { method: "POST" }); await openCase(S.caseId, true); toast("Re-check complete"); };
+  $("#btn-recheck").onclick = async () => { const st = await api(`/cases/${S.caseId}/recheck`, { method: "POST" }); await openCase(S.caseId, true); const r = st.recheck || {};
+    toast(`Re-checked ${r.documents_checked} processed document(s) against the protocol: ${r.satisfied}/${r.total} satisfied${r.processing ? `, ${r.processing} still processing` : ""}${r.errors ? `, ${r.errors} failed to read` : ""}. ${r.changed?.length ? "Changed: " + r.changed.join(", ") + "." : "No change."} Documents are not re-read by a re-check; use Re-process for that.`, 9000); };
+  const reproc = async (which) => { const j = await api(`/cases/${S.caseId}/reprocess`, { json: { which } }); watchJob(j.job); };
+  if ($("#btn-reproc-err")) $("#btn-reproc-err").onclick = () => reproc("errors");
+  $("#btn-reproc-all").onclick = () => { if (confirm("Re-read, re-classify and re-extract every document in this Case File?")) reproc("all"); };
+  $$("[data-waive]", $("#tab-ready")).forEach((b) => (b.onclick = async () => { const reason = prompt("Reason for waiving this record for this Case File (recorded in the audit log):"); if (reason === null) return;
+    await api(`/cases/${S.caseId}/overrides`, { json: { kind: "requirements", key: b.dataset.waive, value: { waived: true, reason } } }); await openCase(S.caseId, true); toast("Requirement waived and recorded"); }));
+  $$("[data-unwaive]", $("#tab-ready")).forEach((b) => (b.onclick = async () => { await api(`/cases/${S.caseId}/overrides`, { json: { kind: "requirements", key: b.dataset.unwaive, value: null } }); await openCase(S.caseId, true); }));
+  $$("[data-attest]", $("#tab-ready")).forEach((b) => (b.onclick = () => attestDoc(b.dataset.attest)));
   bindUpload();
   const arr = $("#btn-arrivals");
   if (arr) arr.onclick = async () => { try { const j = await api(`/cases/${S.caseId}/demo-arrivals`, { method: "POST" }); watchJob(j.job); } catch (e) { toast(e.message); } };
   bindActions($("#tab-ready"));
 }
 
+async function attestDoc(docId) {
+  const reason = prompt("Confirm that this document is the final, signed version (your name is recorded with this attestation). Note (optional):");
+  if (reason === null) return;
+  await api(`/cases/${S.caseId}/overrides`, { json: { kind: "documents", key: docId, value: { attested_final: true, reason } } });
+  await openCase(S.caseId, true); toast("Attestation recorded in the audit log");
+}
 function actionHTML(a) {
   return `<div class="action ${a.status}"><div class="h"><span>${esc(a.label)}</span><span class="chip ${a.status === "completed" ? "c-ok" : a.status === "overdue" ? "c-bad" : "c-warn"}">${a.status === "completed" ? "Completed" : a.status === "overdue" ? "Overdue" : "Pending"}</span></div>
     <div class="w">${esc(a.what)}</div>
@@ -214,8 +240,10 @@ async function watchJob(id) {
       <div class="jobline"><span>${j.done}/${j.total} documents processed · ${((Date.now() - t0) / 1000).toFixed(1)} s</span>
       ${["reading", "classifying", "extracting"].map((k) => (count(k) ? `<span class="chip c-info">${count(k)} ${k}</span>` : "")).join("")}
       ${count("error") ? `<span class="chip c-bad">${count("error")} errors</span>` : ""}</div>`;
+    if (j.state === "failed") { toast("Processing failed: " + (j.error || "unknown error") + ". Use Re-process to retry.", 9000); await openCase(S.caseId, true); break; }
     if (j.state === "finished") {
-      toast(`Processed ${j.total} documents in ${j.seconds} s. Pre-Authorization re-checked: ${j.gate.satisfied}/${j.gate.total} satisfied.`, 6000);
+      const extra = [j.skipped_duplicates?.length ? `${j.skipped_duplicates.length} identical file(s) already in the Case File were skipped` : "", j.unsupported?.length ? `${j.unsupported.length} unsupported file(s) ignored` : ""].filter(Boolean).join("; ");
+      toast(`Processed ${j.total} documents in ${j.seconds} s. Pre-Authorization re-checked: ${j.gate.satisfied}/${j.gate.total} satisfied.${extra ? " " + extra + "." : ""}`, 7000);
       await openCase(S.caseId, true); break;
     }
     await new Promise((r) => setTimeout(r, 700));
@@ -228,12 +256,14 @@ function renderDocs() {
   $("#tab-docs").innerHTML = `<div class="card"><h3>Documents in the Case File <span class="muted small">${docs.length}</span></h3>
   <table class="t"><thead><tr><th>Document</th><th>Type</th><th>Date</th><th>Status</th><th>Read by</th><th>Fields found</th></tr></thead><tbody>
   ${docs.map((d) => { const c = d.classification || {}; const nf = Object.values(d.facts || {});
-    const st = d.state !== "ready" ? `<span class="chip ${d.state === "error" ? "c-bad" : "c-info"}">${esc(d.state)}</span>` :
-      `<span class="chip ${["FINAL", "AMENDED", "CORRECTED"].includes(c.status) && c.signed !== "no" ? "c-ok" : "c-bad"}">${esc(c.status || "UNKNOWN")}${c.signed === "no" ? " · unsigned" : c.signed === "yes" ? " · signed" : ""}</span>`;
-    return `<tr class="click" data-doc="${esc(d.doc_id)}"><td><b>${esc(c.title || d.filename)}</b><div class="small muted">${esc(d.rel_path)}${d.identity === "mismatch_or_missing" ? ' · <span style="color:#b23a2f">patient ID not found</span>' : ""}</div></td>
+    const att = (S.data.state.overrides?.documents || {})[d.doc_id];
+    const st = d.state !== "ready" ? `<span class="chip ${d.state === "error" ? "c-bad" : "c-info"}" title="${esc(d.error || "")}">${esc(d.state)}</span>` : statusChip(c) + (att?.attested_final ? ` <span class="chip c-ok" title="${esc(att.reason || "")}">attested final by ${esc(att.by)}</span>` : "");
+    const unst = d.state === "ready" && c.status === "UNSTATED" && c.signed !== "no" && !att?.attested_final;
+    return `<tr class="click" data-doc="${esc(d.doc_id)}"><td><b>${esc(c.title || d.filename)}</b><div class="small muted">${esc(d.rel_path)}${d.identity === "mismatch_or_missing" ? ' · <span style="color:#b23a2f">patient ID not found</span>' : d.identity === "name_match" ? ' · <span style="color:#a96e0a">matched by name only</span>' : ""}</div></td>
       <td>${esc(DT[c.doc_type] || c.doc_type || "")}</td><td>${fmtDate(c.report_date_iso)}</td><td>${st}</td>
       <td class="small">${(d.methods || []).map((m) => (m === "vision-transcription" ? "Vision reader (scan)" : m === "text-layer" ? "PDF text layer" : m)).join(", ")}</td>
-      <td>${nf.filter((f) => f.verification === "verified").length} verified${nf.filter((f) => f.verification !== "verified").length ? ` · <span class="chip c-rev">${nf.filter((f) => f.verification !== "verified").length} not verified</span>` : ""}</td></tr>`; }).join("")}
+      <td>${nf.filter((f) => f.verification === "verified").length} verified${nf.filter((f) => f.verification !== "verified").length ? ` · <span class="chip c-rev">${nf.filter((f) => f.verification !== "verified").length} not verified</span>` : ""}
+      <div style="margin-top:4px;display:flex;gap:4px">${unst ? `<button class="ghost sm" data-attest-doc="${esc(d.doc_id)}">Attest final</button>` : ""}<button class="ghost sm" data-del-doc="${esc(d.doc_id)}" title="Remove this document from the Case File (audited)">Remove</button></div></td></tr>`; }).join("")}
   </tbody></table></div>
   <div class="card"><h3>Primary fields across the Case File</h3><div class="muted small" style="margin-bottom:8px">Current value = most recent verified value from a final, signed document. Every value links to its source quote.</div>
   <table class="t"><thead><tr><th>Field</th><th>Current value</th><th>Source</th><th>History</th></tr></thead><tbody>
@@ -242,7 +272,10 @@ function renderDocs() {
       <td>${citeHTML({ ...c.location, doc_id: c.doc_id, doc_title: c.doc_title, date: c.date, quote: c.quote })}</td>
       <td class="small muted">${f.history.length > 1 ? f.history.map((h) => `${esc(h.value)} (${fmtDate(h.date)})`).join(" → ") : ""}</td></tr>`; }).join("")}
   </tbody></table></div>`;
-  $$("tr[data-doc]").forEach((tr) => (tr.onclick = () => openDoc(tr.dataset.doc)));
+  $$("tr[data-doc]").forEach((tr) => (tr.onclick = (e) => { if (!e.target.closest("button")) openDoc(tr.dataset.doc); }));
+  $$("[data-attest-doc]").forEach((b) => (b.onclick = () => attestDoc(b.dataset.attestDoc)));
+  $$("[data-del-doc]").forEach((b) => (b.onclick = async () => { if (!confirm("Remove this document from the Case File? The removal is recorded in the audit log.")) return;
+    await api(`/cases/${S.caseId}/documents/${b.dataset.delDoc}`, { method: "DELETE" }); await openCase(S.caseId, true); toast("Document removed; Pre-Authorization re-checked"); }));
 }
 
 async function openDoc(docId, focus) {
@@ -264,17 +297,18 @@ async function openDoc(docId, focus) {
     isPdf ? `<img class="orig" id="pdfimg" src="/api/tb/cases/${S.caseId}/documents/${docId}/file?render=1&page=${pg}">` : `<div class="muted">No image preview for this format.</div>`;
   $("#drawer-body").innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
     <div><div class="eyebrow">${esc(DT[c.doc_type] || c.doc_type || "")} · ${esc(c.department || "")}</div><h2 style="margin:4px 0;color:#00183c">${esc(c.title || d.filename)}</h2>
-    <div class="muted small">${esc(d.rel_path)} · ${fmtDate(c.report_date_iso)} · <span class="chip ${["FINAL", "AMENDED", "CORRECTED"].includes(c.status) ? "c-ok" : "c-bad"}">${esc(c.status)}</span> ${c.signed === "no" ? '<span class="chip c-bad">unsigned</span>' : ""}</div></div>
+    <div class="muted small">${esc(d.rel_path)} · ${fmtDate(c.report_date_iso)} · ${statusChip(c)}${(c.status_notes || []).length ? ` <span class="chip c-warn">${esc(c.status_notes.join("; "))}</span>` : ""}</div></div>
     <div><a class="ghost" href="/api/tb/cases/${S.caseId}/documents/${docId}/file" target="_blank">Open original</a> <button class="ghost" data-close>Close</button></div></div>
     <div class="kv" style="margin:12px 0"><div>Status line</div><div>${esc(c.status_quote || "not found")}</div><div>Signature</div><div>${esc(c.signature_quote || c.signer || "not found")}</div>
-    <div>Patient ID check</div><div>${d.identity === "match" ? "Matches the Case File patient" : "Not found in document: verify it belongs to this patient"}</div>
-    <div>Read by</div><div>${esc([...new Set(pages.map((p) => p.method))].join(", "))}</div></div>
+    <div>Patient ID check</div><div>${d.identity === "match" ? "UHID / MRN matches the Case File patient" : d.identity === "name_match" ? "Patient name matches (identifier not found in the document)" : "Not found in document: verify it belongs to this patient"}</div>
+    <div>Read by</div><div>${esc([...new Set(pages.map((p) => p.method))].join(", "))}${pages.some((p) => p.ocr_reads) ? " (two independent reads per scanned page; numbers compared)" : ""}</div></div>
     <div class="docview"><div>${preview}</div><div>
       ${pages.length > 1 ? `<div style="margin-bottom:6px">${pages.map((p, i) => `<button class="ghost sm" data-pg="${i}">Page ${i + 1}</button>`).join(" ")}</div>` : ""}
       <div class="doctext" id="doctext">${marks(pg)}</div>
       <h4 style="color:#00183c">Fields found in this document</h4>
       <table class="t"><tbody>${Object.entries(d.facts || {}).map(([k, f]) => `<tr><td>${esc(k)}</td><td><b>${esc(f.value)}</b>${f.state === "pending" ? ' <span class="chip c-warn">pending</span>' : ""}</td>
-        <td><span class="chip ${f.verification === "verified" ? "c-ok" : "c-rev"}">${esc(f.verification)}</span></td><td class="small muted">"${esc(f.quote)}"</td></tr>`).join("") || '<tr><td class="muted">None</td></tr>'}</tbody></table>
+        <td><span class="chip ${f.verification === "verified" ? "c-ok" : "c-rev"}" title="${esc(f.reason || "")}">${esc(f.verification)}</span>${f.polarity === "negated" ? ' <span class="chip c-mute" title="The value is a negative finding (no / not / negative / absent)">negated</span>' : ""}</td><td class="small muted">"${esc(f.quote)}"</td></tr>`).join("") || '<tr><td class="muted">None</td></tr>'}</tbody></table>
+      ${pages.some((p) => p.ocr_uncertain_numbers?.length) ? `<div class="flag review" style="margin-top:8px"><div class="k">OCR disagreement</div>The two reads of this scanned page differ on these numbers: ${esc(pages.flatMap((p) => p.ocr_uncertain_numbers || []).join(", "))}. Values containing them are marked for expert review; read the scan image.</div>` : ""}
     </div></div>`;
   $("#drawer").classList.remove("hidden");
   $$("[data-pg]").forEach((b) => (b.onclick = () => { $("#doctext").innerHTML = marks(+b.dataset.pg); const im = $("#pdfimg"); if (im) im.src = im.src.replace(/page=\d+/, "page=" + b.dataset.pg); }));
@@ -321,7 +355,7 @@ async function ask(text) {
 function renderAnswers() {
   const el = $("#answers"); if (!el) return;
   el.innerHTML = S.chat.slice().reverse().map((c) => `<div class="qbox">${esc(c.q)}</div>` + (c.pending ? `<div class="muted"><span class="spin"></span> Reading the Case File...</div>` :
-    c.a.status === "answered" ? `<div class="answer">${c.a.statements.map((s) => `<p>${esc(s.text)} ${s.citations.map(citeHTML).join("")}</p>`).join("")}</div>
+    c.a.status === "answered" ? `<div class="answer">${c.a.statements.map((s) => `<p>${esc(s.text)} ${s.citations.map(citeHTML).join("")}${flagHTML(s)}</p>`).join("")}</div>
       <div class="small muted">${c.a.seconds} s · ${esc(c.a.mode)}${c.a.dropped_unverified ? ` · ${c.a.dropped_unverified} unverified statement(s) removed` : ""}</div>` :
     c.a.status === "out_of_scope" ? `<div class="refusal"><b>Outside the assistant's scope.</b> ${esc(c.a.message)}</div>` :
     `<div class="refusal"><b>${c.a.status === "error" ? "Error" : "Not documented in the Case File."}</b> ${esc(c.a.message)}</div>`)).join("");
@@ -369,7 +403,7 @@ function showBrief(role, b) {
   const rv = b.review || {};
   box.innerHTML = `<h3>${esc(b.label)} <span>${rv.status === "reviewed" ? `<span class="chip c-ok">Reviewed by ${esc(rv.by)}</span>` : rv.status === "flagged" ? `<span class="chip c-bad">Flagged for correction</span>` : `<span class="chip c-rev">AI draft · awaiting expert review</span>`}</span></h3>
     <div class="small muted">${esc(b.generated?.replace("T", " "))} · ${b.seconds} s · ${esc(b.model)}${b.dropped_unverified ? ` · ${b.dropped_unverified} unverified item(s) removed` : ""}${b.guardrail_removed ? ` · ${b.guardrail_removed} removed by scope guardrail` : ""}</div>
-    ${b.sections.map((s) => `<h4>${esc(s.heading)}</h4><ul>${s.items.map((it) => `<li>${esc(it.text)} ${it.citations.map(citeHTML).join("")}</li>`).join("")}</ul>`).join("")}
+    ${b.sections.map((s) => `<h4>${esc(s.heading)}</h4><ul>${s.items.map((it) => `<li>${esc(it.text)} ${it.citations.map(citeHTML).join("")}${flagHTML(it)}</li>`).join("")}</ul>`).join("")}
     ${b.points_for_review.length ? `<h4>Points for review (not treatment recommendations)</h4><ul>${b.points_for_review.map((it) => `<li>${esc(it.text)} ${it.citations.map(citeHTML).join("")}</li>`).join("")}</ul>` : ""}
     ${b.not_documented.length ? `<h4>Not documented</h4><ul>${b.not_documented.map((x) => `<li class="muted">${esc(x)}</li>`).join("")}</ul>` : ""}
     ${reviewBar("brief_" + role, rv)}`;
@@ -402,7 +436,8 @@ function renderSummary() {
     S.data = await api("/cases/" + S.caseId); showSummary(r); };
   $("#gl-case").onclick = async () => { $("#glout").innerHTML = `<span class="spin"></span> Searching the guideline library...`;
     const r = await api(`/cases/${S.caseId}/guidelines`); $("#glout").innerHTML = r.queries.map((q) => `<h4 style="color:#00183c;margin:14px 0 4px">${esc(q.query)}</h4>` + glHTML(q)).join(""); };
-  $("#sum").onclick = () => go(false); if ($("#sum-force")) $("#sum-force").onclick = () => go(true); if ($("#sum-print")) $("#sum-print").onclick = () => window.print();
+  $("#sum").onclick = () => go(false); if ($("#sum-force")) $("#sum-force").onclick = () => go(true);
+  if ($("#sum-print")) $("#sum-print").onclick = () => { document.body.classList.add("print-summary"); window.print(); setTimeout(() => document.body.classList.remove("print-summary"), 500); };
   if (s) showSummary(s);
 }
 function showSummary(s) {
@@ -410,10 +445,12 @@ function showSummary(s) {
   const rv = s.review || {};
   $("#sumout").innerHTML = `<div class="eyebrow">Automated Case File summary${s.status !== "ready" ? " · INCOMPLETE: Pre-Authorization not met" : ""}</div>
     <h2 style="color:#00183c;margin:4px 0 12px">${esc(p.name)} · ${esc(p.agesex || "")}</h2>
-    ${s.paragraphs.map((para) => `<p>${para.map((x) => `${esc(x.text)} ${x.citations.map(citeHTML).join("")}`).join(" ")}</p>`).join("")}
+    ${s.structure ? `<div class="muted small" style="margin-bottom:8px">Structure: ${esc(s.structure)}</div>` : ""}
+    ${(s.sections || []).length ? s.sections.map((sec) => `<h4 style="color:#00183c;margin:12px 0 4px">${esc(sec.title)}</h4>${sec.sentences.length ? `<p>${sec.sentences.map((x) => `<span ${x.from_fields ? 'title="Added from the verified primary fields (no model text)" style="color:#334155"' : ""}>${esc(x.text)}</span> ${x.citations.map(citeHTML).join("")}${flagHTML(x)}`).join(" ")}</p>` : `<p class="muted small">Nothing verified for this section in the Case File.</p>`}`).join("")
+      : s.paragraphs.map((para) => `<p>${para.map((x) => `${esc(x.text)} ${x.citations.map(citeHTML).join("")}${flagHTML(x)}`).join(" ")}</p>`).join("")}
     ${s.stage_as_recorded ? `<div class="stagebox"><b>Stage, as recorded in the ${esc(s.stage_as_recorded.doc_title)}:</b> ${esc(s.stage_as_recorded.value)} ${citeHTML({ ...s.stage_as_recorded, quote: s.stage_as_recorded.quote })}<div class="small muted">Extracted from the signed source report. The agent does not derive or assign stage.</div></div>` : ""}
     ${s.points_for_review.length ? `<h4 style="color:#00183c">Points for review</h4><ul>${s.points_for_review.map((x) => `<li>${esc(x.text)} ${x.citations.map(citeHTML).join("")}</li>`).join("")}</ul>` : ""}
-    <div class="small muted">${esc(s.generated?.replace("T", " "))} · ${s.seconds} s · ${esc(s.model)}${s.dropped_unverified ? ` · ${s.dropped_unverified} unverified sentence(s) removed` : ""}</div>
+    <div class="small muted">${esc(s.generated?.replace("T", " "))} · ${s.seconds} s · ${esc(s.model)}${s.dropped_unverified ? ` · ${s.dropped_unverified} unverified sentence(s) removed` : ""}${s.filled_from_fields ? ` · ${s.filled_from_fields} sentence(s) added from verified fields` : ""}</div>
     ${reviewBar("summary", rv)}`;
   bindReview($("#sumout"));
 }
@@ -435,12 +472,16 @@ function renderBoard() {
       <label>Board date</label><input type="date" id="b-date" value="${new Date().toISOString().slice(0, 10)}">
       <label>Decision recorded by the board</label><textarea id="b-text" placeholder="As decided and dictated by the board"></textarea>
       <label>Recorded by</label><input id="b-by" placeholder="Name, role">
+      <label>Participants present (names and specialties)</label><input id="b-part" placeholder="e.g. Dr A (Med Onc), Dr B (Surg Onc), Dr C (Radiology), Dr D (Pathology)">
+      <label>Report corrections or discrepancies raised at the meeting (if any)</label><input id="b-corr" placeholder="e.g. Pathology to issue addendum correcting PD-L1 TPS">
+      <label>Divergent opinions / dissenting clinicians (if any)</label><input id="b-div" placeholder="Recorded verbatim, with names">
       <label>Actions (Responsible Department · task · due)</label><div id="b-acts"></div><button class="ghost sm" id="b-add">+ Action</button>
       <label>Next Tumour Board review</label><input type="date" id="b-next">
       <div style="margin-top:12px"><button class="primary" id="b-save">Save record and run adjudication</button></div></div>
     ${records.map((b) => `<div class="card"><h3>Tumour Board record · ${fmtDate(b.board_date)} <span class="chip ${b.adjudication.status === "consistent" ? "c-ok" : "c-rev"}">${b.adjudication.status === "consistent" ? "Consistent" : "Flag for expert review"}</span></h3>
       <div class="small muted">Recorded by ${esc(b.recorded_by)} · entered ${esc(b.recorded_at.replace("T", " ").slice(0, 16))} by ${esc(b.entered_by)}</div>
       <p style="white-space:pre-wrap">${esc(b.decision_text)}</p>
+      <div class="kv small">${b.participants ? `<div>Participants</div><div>${esc(b.participants)}</div>` : ""}${b.report_corrections_raised ? `<div>Report corrections raised</div><div>${esc(b.report_corrections_raised)}</div>` : ""}${b.divergent_opinions ? `<div>Divergent opinions</div><div>${esc(b.divergent_opinions)}</div>` : ""}</div>
       ${b.adjudication.flags.map((f) => `<div class="flag ${f.severity === "expert_review" ? "" : "review"}"><div class="k">${f.kind === "transcription" ? "Possible transcription discrepancy" : f.kind === "consistency" ? "Documentation consistency" : "Documentation"}</div>
         <div>${esc(f.text)}</div>${f.source_quote ? `<div class="small" style="margin-top:4px">Source: ${citeHTML({ doc_id: f.source_doc, doc_title: f.source_title, quote: f.source_quote })} "${esc(f.source_quote)}"</div><div class="small muted">Expert review required. The agent flags the difference; it does not decide which value is correct.</div>` : ""}</div>`).join("")}
       ${b.adjudication.value_checks.filter((v) => v.result === "consistent").map((v) => `<div class="small"><span class="chip c-ok">✓</span> ${esc(v.value_as_written)} matches the source</div>`).join("")}</div>`).join("")}
@@ -455,7 +496,8 @@ function renderBoard() {
   $("#b-add").onclick = () => addRow();
   $("#b-save").onclick = async () => {
     const actions = $$("#b-acts .arow").map((r) => ({ department: r.children[0].value, task: r.children[1].value, due: r.children[2].value })).filter((a) => a.task);
-    const body = { board_date: $("#b-date").value, decision_text: $("#b-text").value, recorded_by: $("#b-by").value, actions, next_review: $("#b-next").value };
+    const body = { board_date: $("#b-date").value, decision_text: $("#b-text").value, recorded_by: $("#b-by").value, participants: $("#b-part").value,
+      report_corrections_raised: $("#b-corr").value, divergent_opinions: $("#b-div").value, actions, next_review: $("#b-next").value };
     $("#b-save").innerHTML = `<span class="spin"></span> Adjudicating...`;
     await api(`/cases/${S.caseId}/board-records`, { json: body });
     S.data = await api("/cases/" + S.caseId); renderBoard(); toast("Tumour Board record saved and checked");

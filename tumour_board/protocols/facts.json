@@ -329,6 +329,44 @@
     "treatment_summary",
     "clinical_note"
    ]
+  },
+  "patient_preference": {
+   "label": "Patient preference / special circumstances",
+   "desc": "documented patient preference, consent or special circumstances (for example declines surgery, lives far away, financial constraints) as written",
+   "doc_types": [
+    "clinical_note",
+    "referral",
+    "discharge_summary",
+    "tumour_board_record"
+   ]
+  },
+  "clinical_trial_note": {
+   "label": "Clinical trial availability / suitability",
+   "desc": "any documented statement about clinical trial availability or suitability, as written",
+   "doc_types": [
+    "clinical_note",
+    "referral",
+    "tumour_board_record"
+   ]
+  },
+  "diagnosis_date_mode": {
+   "label": "Date and mode of diagnosis",
+   "desc": "the date and the way the diagnosis was established (for example biopsy on 08-Sep-2026) as written",
+   "doc_types": [
+    "clinical_note",
+    "referral",
+    "histopathology",
+    "discharge_summary"
+   ]
+  },
+  "presenting_complaint": {
+   "label": "Presenting complaints",
+   "desc": "the presenting / chief complaints and their duration as written (for example 'haemoptysis for 6 weeks')",
+   "doc_types": [
+    "clinical_note",
+    "referral",
+    "discharge_summary"
+   ]
   }
  }
 }

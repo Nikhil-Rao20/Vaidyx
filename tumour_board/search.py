@@ -171,6 +171,43 @@ def index(case_id):
     return _index_cache[case_id][1]
 
 
+def _doc_block(d, text):
+    c = d.get("classification") or {}
+    return (f"=== DOCUMENT {d['doc_id']} | {c.get('title') or d['filename']} | type {c.get('doc_type')} | date {c.get('report_date_iso') or c.get('report_date') or '?'} "
+            f"| status {c.get('status')}{' | UNSIGNED' if c.get('signed') == 'no' else ''} ===\n{text}")
+
+
+def context_for(case_id, question, budget=48000, doc_types=None):
+    """Model context for a question. Whole Case File when it fits; otherwise whole documents in relevance order
+    (most relevant passage score, recency as tie-break) until the budget is used, then the best remaining passages.
+    Returns (context, mode)."""
+    docs = [d for d in store.list_docs(case_id) if d.get("state") == "ready" and (not doc_types or (d.get("classification") or {}).get("doc_type") in doc_types)]
+    full = {d["doc_id"]: "\n".join(p["text"] for p in d.get("pages") or []) for d in docs}
+    total = sum(len(_doc_block(d, full[d["doc_id"]])) + 2 for d in docs)
+    if total <= budget:
+        return "\n\n".join(_doc_block(d, full[d["doc_id"]]) for d in docs), "full Case File"
+    ix = index(case_id)
+    hits = ix.search(question, k=60)
+    best = {}
+    for h in hits:
+        if h["doc_id"] in full:
+            best[h["doc_id"]] = max(best.get(h["doc_id"], 0.0), h["score"])
+    order = sorted(docs, key=lambda d: (best.get(d["doc_id"], 0.0), (d.get("classification") or {}).get("report_date_iso") or ""), reverse=True)
+    parts, used, included = [], 0, set()
+    for d in order:
+        blk = _doc_block(d, full[d["doc_id"]])
+        if used + len(blk) <= budget * 0.85:
+            parts.append(blk); used += len(blk) + 2; included.add(d["doc_id"])
+    for h in hits:  # best passages from documents that did not fit whole
+        if h["doc_id"] in included:
+            continue
+        blk = f"=== PASSAGE from {h['doc_id']} | {h['doc_title']} | {h['date'] or '?'} | page {h['page'] + 1} ===\n{h['text']}"
+        if used + len(blk) > budget:
+            break
+        parts.append(blk); used += len(blk) + 2
+    return "\n\n".join(parts), f"{len(included)} of {len(docs)} documents whole, plus passages"
+
+
 def case_text(case_id, max_chars=60000):
     """Whole Case File as text with document headers (used when it fits the model context, like HAO)."""
     parts = []

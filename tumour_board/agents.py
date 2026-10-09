@@ -139,14 +139,21 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
         g = await guardrails.check_input(focus_question, au)
         if not g["allowed"]:
             yield {"type": "error", "message": g["message"], "category": g["category"]}; return
-    relevant = [d for d in store.list_docs(case_id) if (d.get("classification") or {}).get("doc_type") in r["doc_types"]]
+    relevant = sorted([d for d in store.list_docs(case_id) if d.get("state") == "ready" and (d.get("classification") or {}).get("doc_type") in r["doc_types"]],
+                      key=lambda d: (d.get("classification") or {}).get("report_date_iso") or "", reverse=True)
     scratch = [f"Patient: {case['patient'].get('name')} ({case['patient'].get('mrn')}). Protocol: {case['protocol']}.",
                "DOCUMENTS:\n" + _doc_list(case_id),
                "VERIFIED FIELDS:\n" + _facts_text(case_id),
                "PRE-AUTHORIZATION GAPS:\n" + _gaps_text(case_id)]
-    # documents of this specialty are read up front (Case Files are small; fewer tool calls = faster)
-    for d in relevant[:6]:
-        scratch.append(f"DOCUMENT {d['doc_id']} (read):\n" + "\n".join(p["text"] for p in d.get("pages") or [])[:6000])
+    # documents of this specialty are read up front, newest first, within a context budget (the rest stay reachable via tools)
+    budget, used = 40000, 0
+    for d in relevant:
+        text = "\n".join(p["text"] for p in d.get("pages") or [])
+        if used + len(text) > budget:
+            yield {"type": "step", "tool": "skip", "input": d["doc_id"], "thought": f"Not pre-read (context budget): {(d.get('classification') or {}).get('title') or d['filename']}; available via read_document", "auto": True}
+            continue
+        used += len(text)
+        scratch.append(f"DOCUMENT {d['doc_id']} (read):\n" + text)
         yield {"type": "step", "tool": "read_document", "input": d["doc_id"], "thought": f"Reading {(d.get('classification') or {}).get('title') or d['filename']}", "auto": True}
     task = f"Prepare the {r['label']} brief" + (f", focusing on: {focus_question}" if focus_question else "") + "."
     for step in range(max_steps):
@@ -194,11 +201,20 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
         issues += iss
         if not iss:
             pts2.append(p)
-    nd = [x for x in (b.get("not_documented") or []) if not guardrails.scan_output(x)]
+    nd, nd_dropped = [], 0
+    for x in (b.get("not_documented") or []):
+        if guardrails.scan_output(x):
+            continue
+        hits = search.find_values(case_id, x, 5)["hits"]  # the claim 'X is not documented' is checked against the Case File
+        if hits:
+            nd_dropped += 1
+            au({"kind": "not_documented_claim_rejected", "role": role, "claim": x, "found_in": [h["doc_id"] for h in hits[:3]]})
+        else:
+            nd.append(x)
     if issues:
         au({"kind": "guardrail_output", "where": f"agent {role}", "issues": issues})
     brief = {"role": role, "label": r["label"], "sections": sections, "points_for_review": pts2, "not_documented": nd,
-             "dropped_unverified": dropped, "guardrail_removed": len(issues), "generated": store.now_iso(),
+             "dropped_unverified": dropped, "guardrail_removed": len(issues), "not_documented_rejected": nd_dropped, "generated": store.now_iso(),
              "model": __import__("tumour_board.config", fromlist=["models"]).models()["reasoner"].get("label") or "reasoner",
              "seconds": round(time.time() - t0, 1), "review": {"status": "ai_draft"}}
     st = store.get_state(case_id); st.setdefault("artefacts", {})[f"brief_{role}"] = brief; store.save_state(case_id, st)

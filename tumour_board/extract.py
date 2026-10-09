@@ -3,9 +3,10 @@ then deterministic grounding. Nothing the model says is trusted until its quote 
 import asyncio, re
 from datetime import datetime
 
-from . import grounding, ingest, llm, protocol, store
+from . import docstatus, grounding, ingest, llm, protocol, store
 
 STATUS = ["FINAL", "AMENDED", "CORRECTED", "PRELIMINARY", "DRAFT", "CANCELLED", "UNKNOWN"]
+NEGATED_RE = re.compile(r"\b(no|not|negative|absent|without|free of|non-?\w*|not seen|not identified|not detected|no evidence)\b", re.I)
 PENDING_RE = re.compile(r"\b(pending|awaited|not reported|not available|not performed|not done|to follow|sent to|in process|requested|will follow)\b", re.I)
 
 SYS = ("You read clinical documents for a Tumour Board Case File. You copy information exactly as written. "
@@ -55,7 +56,11 @@ def _status_from_text(text):
     return status, squote, signed
 
 
-def parse_date(s):
+def parse_date(s):  # compatibility wrapper
+    return docstatus.parse_date(s)
+
+
+def _old_parse_date(s):
     s = (s or "").strip()
     for fmt in ("%d-%b-%Y", "%d %b %Y", "%Y-%m-%d", "%d/%m/%Y", "%d.%m.%Y", "%d-%m-%Y", "%b %d, %Y", "%d %B %Y", "%d-%B-%Y"):
         try:
@@ -121,23 +126,30 @@ async def process_document(case_id, doc_id, protocol_id, case_patient=None, prog
             doc.update(state="error", error="no readable text"); store.save_doc(case_id, doc); return doc
         doc["state"] = "classifying"; store.save_doc(case_id, doc); progress and progress(doc_id, "classifying")
         c = await classify(full, au)
-        status, squote, signed = _status_from_text(full)
-        if status == "UNKNOWN" and c.get("status_quote"):
-            status = _status_from_text(c["status_quote"])[0]
-            squote = c["status_quote"] if grounding.locate(c["status_quote"], texts) else ""
-        c["status"], c["status_quote"], c["signed"] = status, squote, signed
-        m = re.search(r"^.*\b(reported|signed|verified|checked|authori[sz]ed|recorded)\s+(and verified\s+)?by\b.*$", full, re.I | re.M)
-        if m:  # the signature line as written (more reliable than the model's choice)
-            c["signature_quote"] = m.group(0).strip()
-        c["report_date_iso"] = parse_date(c.get("report_date")) or parse_date(doc["filename"].replace("_", " "))
-        for k in ("signature_quote", "patient_id"):  # header values are kept only if they are really in the text
-            if c.get(k) and not grounding.locate(c[k], texts):
-                c[k + "_unverified"] = c[k]; c[k] = ""
+        status, squote, notes = docstatus.detect_status(full)
+        signed, sline = docstatus.detect_signature(full)
+        if status == "UNSTATED" and c.get("status_quote") and grounding.locate(c["status_quote"], texts):
+            st2, _, _ = docstatus.detect_status(c["status_quote"])  # the model found a status line the rules missed
+            if st2 != "UNSTATED":
+                status, squote = st2, c["status_quote"]
+        c["status"], c["status_quote"], c["signed"], c["status_notes"] = status, squote, signed, notes
+        c["signature_quote"] = sline or (c.get("signature_quote") if c.get("signature_quote") and grounding.locate(c["signature_quote"], texts) else "")
+        c["report_date_iso"] = docstatus.parse_date(c.get("report_date")) or docstatus.parse_date(doc["filename"].replace("_", " ")) \
+            or (docstatus.find_dates(full) or [""])[0]
+        if c.get("patient_id") and not grounding.locate(c["patient_id"], texts):
+            c["patient_id_unverified"] = c["patient_id"]; c["patient_id"] = ""
         doc["classification"] = c
-        # identity check: the document should belong to this Case File's patient
-        if case_patient and case_patient.get("mrn"):
-            mrn = grounding.norm(case_patient["mrn"])
-            doc["identity"] = "match" if mrn and mrn in grounding.norm(full) else "mismatch_or_missing"
+        # identity check: the document should belong to this Case File's patient (UHID/MRN first, then name tokens)
+        if case_patient and (case_patient.get("mrn") or case_patient.get("name")):
+            nf = grounding.norm(full)
+            mrn = grounding.norm(case_patient.get("mrn") or "")
+            toks = [t for t in re.findall(r"[a-z]{3,}", grounding.norm(case_patient.get("name") or "")) if t not in ("synthetic", "mr", "mrs", "ms", "dr")]
+            if mrn and mrn in nf:
+                doc["identity"] = "match"
+            elif toks and sum(1 for t in toks if t in nf) >= min(2, len(toks)):
+                doc["identity"] = "name_match"
+            else:
+                doc["identity"] = "mismatch_or_missing"
         doc["state"] = "extracting"; store.save_doc(case_id, doc); progress and progress(doc_id, "extracting")
         fids = protocol.facts_for_doc(protocol_id, c["doc_type"])
         raw = await extract_facts(full, fids, au)
@@ -152,9 +164,15 @@ async def process_document(case_id, doc_id, protocol_id, case_patient=None, prog
                 if v2["status"] != "unverified":
                     v = v2
             pending = bool(PENDING_RE.search(r["value"]))
+            # numbers the two OCR reads disagreed on make the value uncertain (expert must read the scan)
+            if v["status"] == "verified" and v["location"] is not None:
+                unc = set((pages[v["location"]["page"]].get("ocr_uncertain_numbers") or []))
+                if unc & set(x.replace(",", "") for x in re.findall(r"\d+(?:[.,]\d+)*", r["value"])):
+                    v = {**v, "status": "needs_review", "reason": "the two OCR reads of this page disagree on a number in this value"}
             facts[fid] = {"value": r["value"].strip(), "quote": (v["location"] or {}).get("matched") or r.get("quote", ""),
                           "model_quote": r.get("quote", ""), "verification": v["status"], "reason": v.get("reason"),
-                          "location": v["location"], "state": "pending" if pending else "present"}
+                          "location": v["location"], "state": "pending" if pending else "present",
+                          "polarity": "negated" if NEGATED_RE.search(r["value"]) else "affirmed"}
             au({"kind": "fact_verification", "doc_id": doc_id, "fact": fid, "value": r["value"], "result": v["status"], "reason": v.get("reason")})
         doc["facts"] = facts
         doc["state"] = "ready"; doc["processed"] = store.now_iso()

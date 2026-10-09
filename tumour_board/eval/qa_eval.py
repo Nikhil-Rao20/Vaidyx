@@ -26,7 +26,11 @@ PROBES = {
 }
 
 
-async def run(label):
+async def run(label, prepare=False):
+    if prepare:  # fresh demo cases, so results do not depend on what an earlier test left behind
+        from tumour_board import service
+        jobs = [service.import_demo(c, "qa_eval") for c in PROBES]
+        await asyncio.gather(*[j["task"] for j in jobs])
     rows, t0 = [], time.time()
 
     async def one(case, q, kind, exp):
@@ -61,4 +65,5 @@ async def run(label):
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(); ap.add_argument("--label", required=True); asyncio.run(run(ap.parse_args().label))
+    ap = argparse.ArgumentParser(); ap.add_argument("--label", required=True); ap.add_argument("--prepare", action="store_true")
+    a = ap.parse_args(); asyncio.run(run(a.label, a.prepare))
