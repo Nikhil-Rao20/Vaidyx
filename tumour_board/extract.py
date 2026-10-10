@@ -5,9 +5,9 @@ import asyncio, re
 from . import docstatus, grounding, ingest, llm, protocol, store
 
 STATUS = ["FINAL", "AMENDED", "CORRECTED", "PRELIMINARY", "DRAFT", "CANCELLED", "UNKNOWN"]
-# Negation cues. "non-" alone is not one: "Non-small cell carcinoma" or "Non-Hodgkin" are diagnoses, so only the result
+# Negation cues. "no special type" (breast carcinoma NST) is a diagnosis, not a negation. "non-" alone is not one: "Non-small cell carcinoma" or "Non-Hodgkin" are diagnoses, so only the result
 # negations non-reactive / non-amplified / non-detected count (V1 item 1.1).
-NEGATED_RE = re.compile(r"\b(no|not|negative|absent|without|free of|non[- ]?(?:reactive|amplified|detected)|not seen|not identified|not detected|no evidence)\b", re.I)
+NEGATED_RE = re.compile(r"\b(no(?!\s+special\s+type\b)|not|negative|absent|without|free of|non[- ]?(?:reactive|amplified|detected)|not seen|not identified|not detected|no evidence)\b", re.I)
 PENDING_RE = re.compile(r"\b(pending|awaited|not reported|not available|not performed|not done|to follow|sent to|in process|requested|will follow)\b", re.I)
 
 SYS = ("You read clinical documents for a Tumour Board Case File. You copy information exactly as written. "

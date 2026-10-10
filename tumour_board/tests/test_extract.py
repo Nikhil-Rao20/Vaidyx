@@ -116,7 +116,8 @@ def test_negation_cues(s):
 
 @pytest.mark.parametrize("s", ["Positive", "EGFR exon 19 deletion detected", "Adenocarcinoma, acinar predominant", "TPS 60%",
                                "Non-small cell carcinoma, adenocarcinoma type", "NSCLC, non-squamous", "Non-Hodgkin lymphoma",
-                               "Nonspecific inflammation", "non-mucinous adenocarcinoma"])
+                               "Nonspecific inflammation", "non-mucinous adenocarcinoma",
+                               "Invasive breast carcinoma of no special type (ductal).", "Invasive carcinoma, no special type, grade 2"])
 def test_affirmed_values(s):
     assert not extract.NEGATED_RE.search(s) and not qa.NEGATION.search(s)
 
