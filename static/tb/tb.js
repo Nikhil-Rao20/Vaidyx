@@ -242,7 +242,7 @@ async function watchJob(id) {
       ${count("error") ? `<span class="chip c-bad">${count("error")} errors</span>` : ""}</div>`;
     if (j.state === "failed") { toast("Processing failed: " + (j.error || "unknown error") + ". Use Re-process to retry.", 9000); await openCase(S.caseId, true); break; }
     if (j.state === "finished") {
-      const extra = [j.skipped_duplicates?.length ? `${j.skipped_duplicates.length} identical file(s) already in the Case File were skipped` : "", j.unsupported?.length ? `${j.unsupported.length} unsupported file(s) ignored` : ""].filter(Boolean).join("; ");
+      const extra = [j.skipped_duplicates?.length ? `${j.skipped_duplicates.length} identical file(s) already in the Case File were skipped` : "", j.unsupported?.length ? `${j.unsupported.length} file(s) not read: ` + j.unsupported.map(u => `${u.file} (${u.reason})`).join(", ") : ""].filter(Boolean).join("; ");
       toast(`Processed ${j.total} documents in ${j.seconds} s. Pre-Authorization re-checked: ${j.gate.satisfied}/${j.gate.total} satisfied.${extra ? " " + extra + "." : ""}`, 7000);
       await openCase(S.caseId, true); break;
     }

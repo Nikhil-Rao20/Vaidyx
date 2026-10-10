@@ -4,7 +4,7 @@ Order of preference (most faithful first):
   1. text layer of a PDF / plain-text / office document (exact, no model involved)
   2. page image -> vision "reader" model, verbatim transcription (only for scans / photos / image-only PDFs)
 """
-import asyncio, io, re
+import asyncio, io, re, shutil, subprocess, tempfile
 from pathlib import Path
 
 from . import config, llm, store
@@ -13,6 +13,17 @@ TEXT_EXT = {".txt", ".md", ".csv", ".json", ".xml", ".hl7"}
 IMG_EXT = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
 OFFICE_EXT = {".docx", ".doc", ".rtf", ".odt", ".xlsx", ".pptx"}
 SUPPORTED = TEXT_EXT | IMG_EXT | OFFICE_EXT | {".pdf"}
+# Accepted only when LibreOffice (soffice) is on PATH to convert them to PDF; otherwise refused at upload.
+REJECTED_EXT = {".doc", ".rtf", ".odt"}
+REJECT_MESSAGE = "Save as PDF or DOCX and upload again"
+SOFFICE_TIMEOUT = 120
+
+
+def reject_reason(name_or_path) -> str | None:
+    """Why a file must be refused at upload, or None if it can be read. Only .doc / .rtf / .odt without LibreOffice."""
+    if Path(str(name_or_path)).suffix.lower() in REJECTED_EXT and shutil.which("soffice") is None:
+        return REJECT_MESSAGE
+    return None
 
 OCR_PROMPT = (
     "Transcribe all text on this page exactly as written, from top to bottom. Keep every value, unit, date, name, "
@@ -60,6 +71,71 @@ def _docx_text(path: Path) -> str:
     return re.sub(r"<[^>]+>", "", xml)
 
 
+_SLIDE = re.compile(r"^<!-- Slide number: (\d+) -->[ \t]*$", re.M)
+
+
+def _cell_text(v) -> str:
+    """A cell exactly as stored: str(value), no number formatting (31 -> '31', '007' -> '007', 2.45 -> '2.45');
+    dates as ISO (a midnight datetime as its date); empty -> ''. Line breaks inside a cell become spaces so that
+    each row stays on one line."""
+    import datetime as dt
+    if v is None:
+        return ""
+    if isinstance(v, dt.datetime):
+        return v.date().isoformat() if v.time() == dt.time() and v.tzinfo is None else v.isoformat(sep=" ")
+    if isinstance(v, (dt.date, dt.time)):
+        return v.isoformat()
+    return str(v).replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
+
+
+def _xlsx_pages(path: Path) -> list[dict]:
+    """One page per worksheet: first line '## <sheet name>', then one '| a | b | c |' row per line. Read with openpyxl
+    (cached values, not formulas), never through pandas, which reformats values (31 -> 31.0, '007' -> 7). Trailing
+    empty cells and empty rows are dropped; a sheet with no values gives an empty page (page N stays sheet N)."""
+    from openpyxl import load_workbook
+    wb = load_workbook(str(path), read_only=True, data_only=True)
+    try:
+        pages = []
+        for ws in wb.worksheets:
+            rows = []
+            for row in ws.iter_rows(values_only=True):
+                cells = [_cell_text(v) for v in row]
+                while cells and not cells[-1]:
+                    cells.pop()
+                if cells:
+                    rows.append("| " + " | ".join(cells) + " |")
+            pages.append({"text": "\n".join([f"## {ws.title}"] + rows) if rows else "", "method": "office-text"})
+    finally:
+        wb.close()
+    return pages or [{"text": "", "method": "office-text"}]
+
+
+def _pptx_pages(text: str) -> list[dict]:
+    """One page per slide, split on markitdown's '<!-- Slide number: N -->' markers (marker dropped, page N is slide
+    N, a blank slide gives an empty page), so citations can point at a slide. One page if there are no markers."""
+    marks = list(_SLIDE.finditer(text))
+    parts = [text[m.end():(marks[i + 1].start() if i + 1 < len(marks) else len(text))].strip() for i, m in enumerate(marks)]
+    if parts and text[:marks[0].start()].strip():  # anything before the first marker stays with slide 1
+        parts[0] = (text[:marks[0].start()].strip() + "\n" + parts[0]).strip()
+    if not parts:
+        parts = [text.strip()]
+    return [{"text": t, "method": "office-text"} for t in parts]
+
+
+async def _soffice_to_pdf_pages(path: Path, audit=None) -> list[dict]:
+    """Convert .doc / .rtf / .odt with LibreOffice (headless) to PDF, then read that PDF the normal way."""
+    with tempfile.TemporaryDirectory(prefix="tb-soffice-") as tmp:
+        cmd = [shutil.which("soffice") or "soffice", "--headless", "--convert-to", "pdf", "--outdir", tmp, str(path)]
+        try:
+            await asyncio.to_thread(subprocess.run, cmd, capture_output=True, timeout=SOFFICE_TIMEOUT, check=False)
+        except (subprocess.TimeoutExpired, OSError) as e:
+            return [{"text": "", "method": f"unsupported (conversion to PDF failed: {e.__class__.__name__})"}]
+        pdf = Path(tmp) / (path.stem + ".pdf")
+        if not pdf.exists():
+            return [{"text": "", "method": "unsupported (conversion to PDF failed)"}]
+        return await extract_pages(pdf, audit)
+
+
 def _img_bytes(im) -> bytes:
     buf = io.BytesIO(); im.convert("RGB").save(buf, "PNG"); return buf.getvalue()
 
@@ -98,9 +174,21 @@ async def extract_pages(path: Path, audit=None) -> list[dict]:
                 return [{"text": _docx_text(path), "method": "office-text"}]
             except Exception as e:
                 return [{"text": "", "method": f"unsupported ({e.__class__.__name__})"}]
+        if ext in REJECTED_EXT:
+            if shutil.which("soffice") is None:
+                return [{"text": "", "method": f"unsupported ({REJECT_MESSAGE})"}]
+            return await _soffice_to_pdf_pages(path, audit)
+        if ext == ".xlsx":
+            try:
+                return _xlsx_pages(path)
+            except Exception as e:
+                return [{"text": "", "method": f"unsupported (could not read {ext} file: {e.__class__.__name__})"}]
         try:
             from markitdown import MarkItDown
-            return [{"text": MarkItDown().convert(str(path)).text_content, "method": "office-text"}]
+            text = MarkItDown().convert(str(path)).text_content or ""
+        except ImportError:
+            return [{"text": "", "method": f"unsupported (install markitdown to read {ext} files)"}]
         except Exception as e:
-            return [{"text": "", "method": f"unsupported ({e.__class__.__name__}: install markitdown for {ext})"}]
+            return [{"text": "", "method": f"unsupported (could not read {ext} file: {e.__class__.__name__})"}]
+        return _pptx_pages(text)
     return [{"text": "", "method": "unsupported format"}]

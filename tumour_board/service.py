@@ -42,12 +42,16 @@ async def process_docs(case_id, doc_ids, job):
 
 
 def add_files(case_id, files, user=""):
-    """files: list of (relative_path, bytes). Identical files already in the Case File are skipped (SHA-256).
-    Returns a job (processing runs in the background)."""
+    """files: list of (relative_path, bytes). Identical files already in the Case File are skipped (SHA-256); files that cannot be
+    read are refused (job["unsupported"]: file + reason, audited) and never stored. Returns a job (processing runs in the background)."""
     ids, skipped, unsupported = [], [], []
     for rel, data in files:
-        if Path(rel).suffix.lower() not in ingest.SUPPORTED or Path(rel).name.startswith("."):
-            unsupported.append(rel); continue
+        reason = ingest.reject_reason(rel)  # .doc / .rtf / .odt without LibreOffice: refused with a clear message (V1 item 1.4)
+        if reason is None and (Path(rel).suffix.lower() not in ingest.SUPPORTED or Path(rel).name.startswith(".")):
+            reason = "Unsupported file type"
+        if reason:
+            unsupported.append({"file": rel, "reason": reason})
+            store.audit(case_id, {"kind": "document_rejected", "file": rel, "reason": reason, "by": user}); continue
         dup = store.find_duplicate(case_id, data)
         if dup:
             skipped.append({"file": rel, "same_as": dup["doc_id"]})
