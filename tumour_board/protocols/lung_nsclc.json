@@ -1,8 +1,8 @@
 {
  "id": "lung_nsclc",
  "label": "Lung cancer (NSCLC)",
- "version": "0.3",
- "note": "Configurable by the clinical team. Prototype defaults informed by NCCN/ESMO/NCG workup lists and CAP biomarker templates; to be confirmed by the hospital Tumour Board.",
+ "version": "0.4",
+ "note": "Configurable by the clinical team. Prototype defaults informed by NCG, ICMR, ESMO and CAP; to be rebuilt from the NCG Essential / Optimal tiers (V1 item 4.1); to be confirmed by the hospital Tumour Board.",
  "mandatory": [
   {
    "id": "clinical_history",
