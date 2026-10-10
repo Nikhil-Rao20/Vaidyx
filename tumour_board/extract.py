@@ -188,6 +188,10 @@ def _verify_value(value, quote, texts, pages):
             unc = set(page["ocr_uncertain_numbers"])
             if unc & set(x.replace(",", "") for x in re.findall(r"\d+(?:[.,]\d+)*", value)):
                 v = {**v, "status": "needs_review", "reason": "the two OCR reads of this page disagree on a number in this value"}
+        if v["status"] == "verified":  # Hindi / regional script or illegible parts on the quoted line: a person checks it (V1 item 3.6)
+            fl = ingest.flagged_overlap(page, loc["start"], loc["end"])
+            if fl is not None:
+                v = {**v, "status": "needs_review", "reason": "the quoted line " + fl["flag"].replace(": verify", "") + ": verify against the source"}
     return v
 
 

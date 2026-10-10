@@ -215,7 +215,8 @@ def setup_tumour_board_routes():
         docs = []
         for d in all_docs:
             docs.append({k: d.get(k) for k in ("doc_id", "filename", "rel_path", "ext", "state", "error", "classification", "identity", "identity_read", "added", "department", "uploaded_by")} |
-                        {"facts": d.get("facts", {}), "pages": len(d.get("pages") or []), "methods": sorted({p["method"] for p in d.get("pages") or []})})
+                        {"facts": d.get("facts", {}), "pages": len(d.get("pages") or []), "methods": sorted({p["method"] for p in d.get("pages") or []}),
+                         "page_flags": sorted({f for p in d.get("pages") or [] for f in p.get("flags") or []})})  # Hindi / regional text, illegible parts (V1 item 3.6)
         facts = rules.resolve_facts(rules.case_docs(case_id, st), st.get("overrides"))  # confirmations overlaid (V1 item 2.2)
         cat = protocol.facts()
         return {"case": c, "state": st, "documents": docs, "facts": {k: {"label": cat.get(k, {}).get("label", k), **v} for k, v in facts.items()},

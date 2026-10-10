@@ -87,6 +87,22 @@ def test_ocr_uncertain_span_on_the_quoted_line_needs_review(run):
     assert f["platelets"]["verification"] == "verified"
 
 
+def test_value_on_a_flagged_line_needs_review(run):
+    """A value quoted from a line in Hindi / regional script or with illegible parts goes to a person (V1 item 3.6); the other lines are untouched."""
+    text = util.TEXT.replace("Haemoglobin 11.8 g/dL", "Haemoglobin 11.8 g/dL (हीमोग्लोबिन)")
+    pages = ingest.page_flags(text)
+    assert pages["flags"] == ["contains Hindi / regional text (Devanagari)"]
+    raw = {**util.RAW, "haemoglobin": {"found": True, "value": "11.8 g/dL", "quote": "Haemoglobin 11.8 g/dL"}}
+    f = run(text=text, raw=raw, page_extra=pages)["facts"]
+    assert f["haemoglobin"]["verification"] == "needs_review"
+    assert f["haemoglobin"]["reason"] == "the quoted line contains Hindi / regional text (Devanagari): verify against the source"
+    assert f["platelets"]["verification"] == "verified"
+    text2 = util.TEXT.replace("Platelets 2.45 lakhs/cumm", "Platelets 2.45 lakhs/cumm [illegible]")
+    f2 = run(text=text2, raw={**util.RAW, "platelets": {"found": True, "value": "2.45 lakhs/cumm", "quote": "Platelets 2.45 lakhs/cumm"}}, page_extra=ingest.page_flags(text2))["facts"]
+    assert f2["platelets"]["verification"] == "needs_review" and f2["platelets"]["reason"] == "the quoted line handwriting / illegible parts: verify against the source"
+    assert f2["haemoglobin"]["verification"] == "verified"
+
+
 def test_ocr_single_digit_elsewhere_on_the_page_does_not_touch_other_values(run):
     """Single digits now count in the OCR check, but only the line they sit on is uncertain: a list marker slip elsewhere leaves the lab values verified."""
     s = util.TEXT.index("Patient SYNTHETIC")
