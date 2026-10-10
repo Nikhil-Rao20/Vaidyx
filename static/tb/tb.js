@@ -2,7 +2,10 @@
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const S = { caseId: null, data: null, tab: "ready", cards: null, roles: null, protocols: null, chat: [], briefs: {} };
+const S = { caseId: null, data: null, tab: "ready", cards: null, roles: null, protocols: null, chat: [], briefs: {}, me: null, org: null };
+// permissions: the server decides (org.can on every route); the UI only hides what the current user may not do (V1 item 2.1)
+const can = (k, id) => { const v = (S.data?.permissions || {})[k]; return v === true || !!(v && typeof v === "object" && id && v[id]); };
+const meCan = (k) => !!S.me && (S.me.admin || (k === "create_case" ? S.me.coordinator : false));
 
 async function api(path, opts = {}) {
   const o = { credentials: "same-origin", ...opts };
@@ -40,7 +43,7 @@ async function loadCases() {
     </div>`).join("") : `<div class="muted small">No Case Files yet.</div>`;
   $$(".citem").forEach((el) => (el.onclick = () => openCase(el.dataset.case)));
   $("#demo-list").innerHTML = d.demo.map((c) => `<div class="demo"><b>${esc(c.case_id)}</b> ${esc(c.patient?.name)}<br><span class="muted">${esc(c.protocol)} · ${c.files} files${c.has_arrivals ? " · has later arrivals" : ""}</span><br>
-      <button class="ghost sm" data-demo="${esc(c.case_id)}" style="margin-top:6px">Load as new Case File</button></div>`).join("") || `<div class="muted small">No demo corpus found.</div>`;
+      ${meCan("create_case") ? `<button class="ghost sm" data-demo="${esc(c.case_id)}" style="margin-top:6px">Load as new Case File</button>` : ""}</div>`).join("") || `<div class="muted small">No demo corpus found.</div>`;
   $$("[data-demo]").forEach((b) => (b.onclick = async () => {
     if (!confirm(`Load synthetic case ${b.dataset.demo}? Any existing Case File with this id is replaced.`)) return;
     const j = await api("/demo/" + b.dataset.demo, { method: "POST" });
@@ -112,8 +115,8 @@ function renderReady() {
       const d = S.data.documents.find((x) => x.doc_id === e.doc_id); const cl = d?.classification || {};
       return `<span class="cite" data-doc="${esc(e.doc_id)}" title="${esc(e.quote || "")}">${esc(e.value ? `${S.facts?.[e.fact]?.label || e.fact}: ${e.value}` : (cl.title || e.doc_id))}${cl.report_date_iso ? " · " + fmtDate(cl.report_date_iso) : ""}</span>`;
     }).join("");
-    const attest = r.status === "needs_confirmation" && r.evidence[0]?.doc_id ? `<button class="ghost sm" data-attest="${esc(r.evidence[0].doc_id)}">Attest: final, signed</button>` : "";
-    const waive = r.status === "waived" ? `<button class="ghost sm" data-unwaive="${esc(r.id)}">Remove waiver</button>` : (r.status !== "satisfied" && r.status !== "not_applicable") ? `<button class="ghost sm" data-waive="${esc(r.id)}" title="Clinical decision that this record is not required for this Case File (audited)">Waive</button>` : "";
+    const attest = r.status === "needs_confirmation" && r.evidence[0]?.doc_id && can("confirm", r.evidence[0].doc_id) ? `<button class="ghost sm" data-attest="${esc(r.evidence[0].doc_id)}">Attest: final, signed</button>` : "";
+    const waive = !can("waive", r.id) ? "" : r.status === "waived" ? `<button class="ghost sm" data-unwaive="${esc(r.id)}">Remove waiver</button>` : (r.status !== "satisfied" && r.status !== "not_applicable") ? `<button class="ghost sm" data-waive="${esc(r.id)}" title="Clinical decision that this record is not required for this Case File (audited)">Waive</button>` : "";
     return `<div class="req"><div class="icon ${s[2]}">${s[3]}</div><div style="flex:1">
       <div style="display:flex;justify-content:space-between;gap:8px"><span class="lbl">${esc(r.label)}</span><span style="display:flex;gap:4px;align-items:center">${attest}${waive}<span class="chip ${s[0]}">${s[1]}</span></span></div>
       <div class="dept">Responsible Department: ${esc(r.department)}</div>
@@ -135,29 +138,30 @@ function renderReady() {
   </div><div>
     <div class="card"><h3>Routed actions <span class="muted small">${acts.filter((a) => a.status !== "completed").length} open</span></h3>
       <div class="muted small" style="margin-bottom:8px">The agent identifies and routes the gap. It does not perform the missing clinical task.</div>${actHTML}</div>
-    <div class="card"><h3>Add documents</h3>
-      <div class="drop" id="drop">Drop files or a whole folder here<br><span class="small">PDF, scanned images (PNG / JPG / TIFF), text and Office files</span><br>
+    <div class="card"><h3>${can("upload") ? "Add documents" : "Documents"}</h3>
+      ${can("upload") ? `<div class="drop" id="drop">Drop files or a whole folder here<br><span class="small">PDF, scanned images (PNG / JPG / TIFF), text and Office files</span><br>
       <button class="ghost sm" id="pick-files" style="margin-top:8px">Choose files</button> <button class="ghost sm" id="pick-folder">Choose folder</button></div>
-      <input type="file" id="f-files" multiple class="hidden"><input type="file" id="f-folder" webkitdirectory multiple class="hidden">
+      <input type="file" id="f-files" multiple class="hidden"><input type="file" id="f-folder" webkitdirectory multiple class="hidden">` : `<div class="muted small">Department users upload through "Upload for my department" in the side panel; records are matched to the patient and filed here.</div>`}
       <div id="job"></div>
-      ${(S.demoList || []).some((x) => x.case_id === S.caseId && x.has_arrivals) ? `<button class="ghost sm" id="btn-arrivals" style="margin-top:10px">Demo: new reports arrive from departments</button>` : ""}
-      <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">${docs.errors ? `<button class="ghost sm" id="btn-reproc-err">Re-process ${docs.errors} failed</button>` : ""}<button class="ghost sm" id="btn-reproc-all" title="Re-read, re-classify and re-extract every document (after a protocol or model change)">Re-process all documents</button><a class="ghost sm" href="/api/tb/cases/${esc(S.caseId)}/export">Export Case File record</a></div>
+      ${can("upload") && (S.demoList || []).some((x) => x.case_id === S.caseId && x.has_arrivals) ? `<button class="ghost sm" id="btn-arrivals" style="margin-top:10px">Demo: new reports arrive from departments</button>` : ""}
+      <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">${can("reprocess") && docs.errors ? `<button class="ghost sm" id="btn-reproc-err">Re-process ${docs.errors} failed</button>` : ""}${can("reprocess") ? `<button class="ghost sm" id="btn-reproc-all" title="Re-read, re-classify and re-extract every document (after a protocol or model change)">Re-process all documents</button>` : ""}<a class="ghost sm" href="/api/tb/cases/${esc(S.caseId)}/export">Export Case File record</a></div>
       <div class="muted small" style="margin-top:10px">${docs.total || 0} documents · ${docs.ready || 0} processed${docs.processing ? ` · ${docs.processing} processing` : ""}${docs.errors ? ` · ${docs.errors} errors` : ""}${docs.identity_flags?.length ? ` · <b style="color:#b23a2f">${docs.identity_flags.length} identity flags</b>` : ""}</div>
     </div></div></div>`;
   $("#btn-recheck").onclick = async () => { const st = await api(`/cases/${S.caseId}/recheck`, { method: "POST" }); await openCase(S.caseId, true); const r = st.recheck || {};
     toast(`Re-checked ${r.documents_checked} processed document(s) against the protocol: ${r.satisfied}/${r.total} satisfied${r.processing ? `, ${r.processing} still processing` : ""}${r.errors ? `, ${r.errors} failed to read` : ""}. ${r.changed?.length ? "Changed: " + r.changed.join(", ") + "." : "No change."} Documents are not re-read by a re-check; use Re-process for that.`, 9000); };
   const reproc = async (which) => { const j = await api(`/cases/${S.caseId}/reprocess`, { json: { which } }); watchJob(j.job); };
   if ($("#btn-reproc-err")) $("#btn-reproc-err").onclick = () => reproc("errors");
-  $("#btn-reproc-all").onclick = () => { if (confirm("Re-read, re-classify and re-extract every document in this Case File?")) reproc("all"); };
+  if ($("#btn-reproc-all")) $("#btn-reproc-all").onclick = () => { if (confirm("Re-read, re-classify and re-extract every document in this Case File?")) reproc("all"); };
   $$("[data-waive]", $("#tab-ready")).forEach((b) => (b.onclick = async () => { const reason = prompt("Reason for waiving this record for this Case File (recorded in the audit log):"); if (reason === null) return;
     await api(`/cases/${S.caseId}/overrides`, { json: { kind: "requirements", key: b.dataset.waive, value: { waived: true, reason } } }); await openCase(S.caseId, true); toast("Requirement waived and recorded"); }));
   $$("[data-unwaive]", $("#tab-ready")).forEach((b) => (b.onclick = async () => { await api(`/cases/${S.caseId}/overrides`, { json: { kind: "requirements", key: b.dataset.unwaive, value: null } }); await openCase(S.caseId, true); }));
   $$("[data-attest]", $("#tab-ready")).forEach((b) => (b.onclick = () => attestDoc(b.dataset.attest)));
-  bindUpload();
+  if ($("#drop")) bindUpload();
   const arr = $("#btn-arrivals");
   if (arr) arr.onclick = async () => { try { const j = await api(`/cases/${S.caseId}/demo-arrivals`, { method: "POST" }); watchJob(j.job); } catch (e) { toast(e.message); } };
   bindActions($("#tab-ready"));
 }
+
 
 async function attestDoc(docId) {
   const reason = prompt("Confirm that this document is the final, signed version (your name is recorded with this attestation). Note (optional):");
@@ -169,7 +173,7 @@ function actionHTML(a) {
   return `<div class="action ${a.status}"><div class="h"><span>${esc(a.label)}</span><span class="chip ${a.status === "completed" ? "c-ok" : a.status === "overdue" ? "c-bad" : "c-warn"}">${a.status === "completed" ? "Completed" : a.status === "overdue" ? "Overdue" : "Pending"}</span></div>
     <div class="w">${esc(a.what)}</div>
     <div class="f"><span>Responsible Department: <b>${esc(a.department)}</b> · due ${fmtDate(a.due)}</span>
-    ${a.status !== "completed" ? `<span><button class="ghost sm" data-req="${a.id}">Request message</button> <button class="ghost sm" data-act="${a.id}" data-st="completed">Mark completed</button></span>` : `<span>${a.completed ? "closed " + esc(a.completed.slice(0, 16).replace("T", " ")) : ""}</span>`}</div>
+    ${a.status !== "completed" ? `<span><button class="ghost sm" data-req="${a.id}">Request message</button> ${can("update_action", a.id) ? `<button class="ghost sm" data-act="${a.id}" data-st="completed">Mark completed</button>` : ""}</span>` : `<span>${a.completed ? "closed " + esc(a.completed.slice(0, 16).replace("T", " ")) : ""}</span>`}</div>
     ${a.history?.length > 1 ? `<details class="small muted"><summary>History</summary>${a.history.map((h) => `<div>${esc(h.ts.slice(0, 16).replace("T", " "))} ${esc(h.event)}</div>`).join("")}</details>` : ""}</div>`;
 }
 function requestText(a) {
@@ -260,11 +264,11 @@ function renderDocs() {
     const att = (S.data.state.overrides?.documents || {})[d.doc_id];
     const st = d.state !== "ready" ? `<span class="chip ${d.state === "error" ? "c-bad" : "c-info"}" title="${esc(d.error || "")}">${esc(d.state)}</span>` : statusChip(c) + (att?.attested_final ? ` <span class="chip c-ok" title="${esc(att.reason || "")}">attested final by ${esc(att.by)}</span>` : "");
     const unst = d.state === "ready" && c.status === "UNSTATED" && c.signed !== "no" && !att?.attested_final;
-    return `<tr class="click" data-doc="${esc(d.doc_id)}"><td><b>${esc(c.title || d.filename)}</b><div class="small muted">${esc(d.rel_path)}${d.identity === "mismatch_or_missing" ? ' · <span style="color:#b23a2f">patient ID not found</span>' : d.identity === "name_match" ? ' · <span style="color:#8a5300">matched by name only</span>' : ""}</div></td>
+    return `<tr class="click" data-doc="${esc(d.doc_id)}"><td><b>${esc(c.title || d.filename)}</b><div class="small muted">${esc(d.rel_path)}${d.department ? ` · uploaded by ${esc(deptName(d.department))}${d.uploaded_by ? " (" + esc(d.uploaded_by) + ")" : ""}` : ""}${d.identity === "mismatch_or_missing" ? ' · <span style="color:#b23a2f">patient ID not found</span>' : d.identity === "name_match" ? ' · <span style="color:#8a5300">matched by name only</span>' : ""}</div></td>
       <td>${esc(DT[c.doc_type] || c.doc_type || "")}</td><td>${fmtDate(c.report_date_iso)}</td><td>${st}</td>
       <td class="small">${(d.methods || []).map((m) => (m === "vision-transcription" ? "Vision reader (scan)" : m === "text-layer" ? "PDF text layer" : m)).join(", ")}</td>
       <td>${nf.filter((f) => f.verification === "verified").length} verified${nf.filter((f) => f.verification !== "verified").length ? ` · <span class="chip c-rev">${nf.filter((f) => f.verification !== "verified").length} not verified</span>` : ""}
-      <div style="margin-top:4px;display:flex;gap:4px">${unst ? `<button class="ghost sm" data-attest-doc="${esc(d.doc_id)}">Attest final</button>` : ""}<button class="ghost sm" data-del-doc="${esc(d.doc_id)}" title="Remove this document from the Case File (audited)">Remove</button></div></td></tr>`; }).join("")}
+      <div style="margin-top:4px;display:flex;gap:4px">${unst && can("confirm", d.doc_id) ? `<button class="ghost sm" data-attest-doc="${esc(d.doc_id)}">Attest final</button>` : ""}${can("delete_document", d.doc_id) ? `<button class="ghost sm" data-del-doc="${esc(d.doc_id)}" title="Remove this document from the Case File (audited)">Remove</button>` : ""}</div></td></tr>`; }).join("")}
   </tbody></table></div>
   <div class="card"><h3>Primary fields across the Case File</h3><div class="muted small" style="margin-bottom:8px">Current value = most recent verified value from a final, signed document. Every value links to its source quote.</div>
   <table class="t"><thead><tr><th>Field</th><th>Current value</th><th>Source</th><th>History</th></tr></thead><tbody>
@@ -411,6 +415,7 @@ function showBrief(role, b) {
   bindReview(box);
 }
 function reviewBar(art, rv) {
+  if (!can("review")) return rv.status ? `<div class="small muted">Review: ${esc(rv.status)} by ${esc(rv.by || "")}</div>` : "";
   return `<div class="reviewbar"><b class="small">Human oversight (expert-in-the-loop)</b><input placeholder="Comment for the record" data-cm="${art}" value="${esc(rv.comment || "")}">
     <button class="ghost sm" data-rv="${art}" data-st="reviewed">Mark reviewed</button><button class="danger sm" data-rv="${art}" data-st="flagged">Flag for correction</button></div>`;
 }
@@ -469,7 +474,7 @@ function renderBoard() {
   const records = (st.board_records || []).slice().reverse();
   const allActs = (st.actions || []).slice().sort((a, b) => (a.status === "completed") - (b.status === "completed") || a.due.localeCompare(b.due));
   $("#tab-board").innerHTML = `<div class="grid2"><div>
-    <div class="card form"><h3>Record the Tumour Board decision</h3><div class="muted small">Entered by the clinical team. The agent then checks the record (AI-assisted adjudication): documentation completeness, values against the signed sources, open Pre-Authorization items. It does not judge the clinical decision.</div>
+    ${!can("board_record") ? `<div class="card"><h3>Tumour Board decision</h3><div class="muted small">Decisions are recorded by the Tumour Board coordinator.</div></div>` : `<div class="card form"><h3>Record the Tumour Board decision</h3><div class="muted small">Entered by the clinical team. The agent then checks the record (AI-assisted adjudication): documentation completeness, values against the signed sources, open Pre-Authorization items. It does not judge the clinical decision.</div>
       <label>Board date</label><input type="date" id="b-date" value="${new Date().toISOString().slice(0, 10)}">
       <label>Decision recorded by the board</label><textarea id="b-text" placeholder="As decided and dictated by the board"></textarea>
       <label>Recorded by</label><input id="b-by" placeholder="Name, role">
@@ -478,7 +483,7 @@ function renderBoard() {
       <label>Divergent opinions / dissenting clinicians (if any)</label><input id="b-div" placeholder="Recorded verbatim, with names">
       <label>Actions (Responsible Department · task · due)</label><div id="b-acts"></div><button class="ghost sm" id="b-add">+ Action</button>
       <label>Next Tumour Board review</label><input type="date" id="b-next">
-      <div style="margin-top:12px"><button class="primary" id="b-save">Save record and run adjudication</button></div></div>
+      <div style="margin-top:12px"><button class="primary" id="b-save">Save record and run adjudication</button></div></div>`}
     ${records.map((b) => `<div class="card"><h3>Tumour Board record · ${fmtDate(b.board_date)} <span class="chip ${b.adjudication.status === "consistent" ? "c-ok" : "c-rev"}">${b.adjudication.status === "consistent" ? "Consistent" : "Flag for expert review"}</span></h3>
       <div class="small muted">Recorded by ${esc(b.recorded_by)} · entered ${esc(b.recorded_at.replace("T", " ").slice(0, 16))} by ${esc(b.entered_by)}</div>
       <p style="white-space:pre-wrap">${esc(b.decision_text)}</p>
@@ -493,9 +498,9 @@ function renderBoard() {
     <div class="card"><h3>Longitudinal Case File</h3><div class="timeline">${S.data.timeline.map((e) => `<div class="tev ${e.kind}"><div class="d">${fmtDate(e.date)}</div>${e.doc_id ? `<span class="cite" data-doc="${esc(e.doc_id)}">${esc(e.title)}</span> <span class="chip ${["FINAL", "AMENDED", "CORRECTED"].includes(e.status) ? "c-ok" : "c-bad"}">${esc(e.status)}</span>` : esc(e.title)}${e.kind === "action" ? ` <span class="chip c-mute">${esc(e.status)}</span>` : ""}</div>`).join("")}</div></div>
   </div></div>`;
   const addRow = (d = "", t = "", due = "") => $("#b-acts").insertAdjacentHTML("beforeend", `<div class="arow"><select>${depts.map((x) => `<option ${x === d ? "selected" : ""}>${x}</option>`).join("")}</select><input placeholder="Task" value="${esc(t)}"><input type="date" value="${due}"><button class="ghost sm" data-rmrow>×</button></div>`);
-  addRow();
-  $("#b-add").onclick = () => addRow();
-  $("#b-save").onclick = async () => {
+  if ($("#b-acts")) addRow();
+  if ($("#b-add")) $("#b-add").onclick = () => addRow();
+  if ($("#b-save")) $("#b-save").onclick = async () => {
     const actions = $$("#b-acts .arow").map((r) => ({ department: r.children[0].value, task: r.children[1].value, due: r.children[2].value })).filter((a) => a.task);
     const body = { board_date: $("#b-date").value, decision_text: $("#b-text").value, recorded_by: $("#b-by").value, participants: $("#b-part").value,
       report_corrections_raised: $("#b-corr").value, divergent_opinions: $("#b-div").value, actions, next_review: $("#b-next").value };
@@ -547,12 +552,64 @@ async function newCase() {
   };
 }
 
+
+// ------------------------------------------------------------------ hospital, departments, users (admin) · V1 item 2.1
+const deptName = (id) => (S.org?.departments || []).find((d) => d.id === id)?.name || id || "";
+async function loadOrg() {
+  try { S.org = await api("/org"); S.me = S.org.me; } catch (e) { S.org = null; S.me = null; }
+  $("#btn-org").classList.toggle("hidden", !S.me?.admin);
+  $("#btn-new").classList.toggle("hidden", !meCan("create_case"));
+}
+async function showOrg() {
+  const o = await api("/org");
+  const slug = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  const users = {}; (o.vaidyx_users || []).forEach((u) => (users[u.username] = { departments: {}, coordinator: false, is_admin: u.is_admin, ...(o.users[u.username] || {}) }));
+  Object.entries(o.users || {}).forEach(([u, v]) => { if (!users[u]) users[u] = { departments: {}, coordinator: false, ...v, missing: true }; });
+  const deptRow = (d) => `<tr class="orow" data-id="${esc(d.id)}"><td><input class="o-name" value="${esc(d.name)}"></td><td><input class="o-alias" value="${esc((d.aliases || []).join(", "))}" placeholder="Other names used in protocols and reports"></td><td class="small muted">${esc(d.id)}</td><td><button class="ghost sm" data-rmrow title="Remove department">×</button></td></tr>`;
+  const roleSel = (u, v) => `<div class="urow" data-user="${esc(u)}"><label class="small"><input type="checkbox" class="u-coord" ${v.coordinator ? "checked" : ""}> Coordinator</label>
+      <div class="u-depts">${Object.entries(v.departments || {}).map(([d, r]) => `<span class="chip c-info" data-dept="${esc(d)}" data-role="${esc(r)}">${esc(deptName(d))} · ${esc(r)} <button class="x" data-rmchip aria-label="remove">×</button></span>`).join("")}</div>
+      <div class="u-add"><select class="u-dept">${(o.departments || []).map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join("")}</select><select class="u-role"><option value="member">member</option><option value="head">head</option></select><button class="ghost sm" data-addrole>Add</button></div></div>`;
+  $("#modal-body").innerHTML = `<h2 style="color:#1f2933;margin-top:0">Hospital and departments</h2>
+    <div class="muted small">One hospital. Logins are the Vaidyx accounts (created under the main app's admin settings); here each account is placed in departments with a role. Vaidyx admins are Tumour Board admins. Saved changes are recorded in the audit log.</div>
+    <div class="form"><div class="grid3">
+      <div><label>Hospital name</label><input id="o-hname" value="${esc(o.hospital?.name || "")}"></div>
+      <div><label>Hospital level (NCG tiers)</label><select id="o-level"><option value="essential" ${o.hospital?.level !== "optimal" ? "selected" : ""}>Essential</option><option value="optimal" ${o.hospital?.level === "optimal" ? "selected" : ""}>Optimal</option></select></div>
+      <div><label>Hospital type (PM-JAY paperwork)</label><select id="o-type"><option value="" ${!o.hospital?.type ? "selected" : ""}>Not set</option><option value="public" ${o.hospital?.type === "public" ? "selected" : ""}>Public</option><option value="private" ${o.hospital?.type === "private" ? "selected" : ""}>Private</option></select></div></div></div>
+    <h3 style="margin:16px 0 6px">Departments <button class="ghost sm" id="o-adddept">+ Department</button></h3>
+    <table class="t"><thead><tr><th>Name</th><th>Also known as</th><th>Id</th><th></th></tr></thead><tbody id="o-depts">${(o.departments || []).map(deptRow).join("")}</tbody></table>
+    <h3 style="margin:16px 0 6px">Users and roles</h3>
+    <div class="muted small" style="margin-bottom:6px">Member: upload for the department, see its inbox, confirm its documents. Head: also waive a requirement for the department. Coordinator: list Case Files, run matching, run board sessions.</div>
+    <table class="t"><thead><tr><th>Account</th><th>Roles</th></tr></thead><tbody id="o-users">${Object.entries(users).sort().map(([u, v]) => `<tr><td><b>${esc(u)}</b>${v.is_admin ? ' <span class="chip c-ok">Vaidyx admin</span>' : ""}${v.missing ? ' <span class="chip c-warn" title="No Vaidyx account with this name">no account</span>' : ""}</td><td>${roleSel(u, v)}</td></tr>`).join("") || `<tr><td colspan="2" class="muted">No accounts.</td></tr>`}</tbody></table>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="ghost" data-closemodal>Cancel</button><button class="primary" id="o-save">Save</button></div>`;
+  $("#modal").classList.remove("hidden");
+  $("#o-adddept").onclick = () => { const name = prompt("Department name (as the hospital calls it):"); if (!name) return; $("#o-depts").insertAdjacentHTML("beforeend", deptRow({ id: slug(name), name, aliases: [] })); };
+  $("#modal-body").addEventListener("click", (e) => {
+    if (e.target.closest("[data-rmchip]")) e.target.closest(".chip").remove();
+    const add = e.target.closest("[data-addrole]");
+    if (add) { const row = add.closest(".urow"); const d = row.querySelector(".u-dept").value, r = row.querySelector(".u-role").value;
+      const box = row.querySelector(".u-depts"); const old = box.querySelector(`[data-dept="${d}"]`); if (old) old.remove();
+      box.insertAdjacentHTML("beforeend", `<span class="chip c-info" data-dept="${esc(d)}" data-role="${esc(r)}">${esc(deptName(d))} · ${esc(r)} <button class="x" data-rmchip aria-label="remove">×</button></span>`); }
+  });
+  $("#o-save").onclick = async () => {
+    const departments = $$("#o-depts tr.orow").map((tr) => ({ id: tr.dataset.id, name: $(".o-name", tr).value.trim(), aliases: $(".o-alias", tr).value.split(",").map((x) => x.trim()).filter(Boolean) }));
+    const users = {};
+    $$("#o-users .urow").forEach((row) => { const deps = {}; $$(".chip[data-dept]", row).forEach((c) => (deps[c.dataset.dept] = c.dataset.role));
+      const coord = $(".u-coord", row).checked; if (Object.keys(deps).length || coord) users[row.dataset.user] = { departments: deps, coordinator: coord }; });
+    try {
+      await api("/org", { method: "PUT", json: { hospital: { name: $("#o-hname").value.trim(), level: $("#o-level").value, type: $("#o-type").value }, departments, users, admins: o.admins || [] } });
+      $("#modal").classList.add("hidden"); toast("Hospital set-up saved"); await loadOrg(); if (S.caseId) openCase(S.caseId, true);
+    } catch (e) { toast(e.message, 7000); }
+  };
+}
+
 // ------------------------------------------------------------------ boot
 $$("#tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 $("#btn-new").onclick = newCase;
 $("#btn-cards").onclick = showCards;
+$("#btn-org").onclick = showOrg;
 (async () => {
   const pr = await api("/protocols"); S.protocols = pr.protocols; S.facts = pr.facts;
+  await loadOrg();
   await loadCases(); loadModels(); setInterval(loadModels, 30000);
   const m = location.hash.match(/case=([\w.-]+)/); if (m) openCase(m[1]);
 })();

@@ -1,11 +1,12 @@
-"""HTTP API for Vaidyx-TB (AI agent for the Tumour Board). All routes require a logged-in Vaidyx user."""
+"""HTTP API for Vaidyx-TB (AI agent for the Tumour Board). All routes require a logged-in Vaidyx user; actions that change a Case File
+are checked against the hospital's departments and roles in org.json through org.can() (V1 item 2.1)."""
 import json
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
 from src.auth_helpers import require_user
-from tumour_board import agents, config, guidelines, llm, postboard, protocol, qa, rules, search, service, store, summary
+from tumour_board import agents, config, guidelines, llm, org, postboard, protocol, qa, rules, search, service, store, summary
 
 
 from fastapi.routing import APIRoute
@@ -27,6 +28,37 @@ class _ModelErrorRoute(APIRoute):
 
 def _user(request):
     return require_user(request) or "local"
+
+
+def _roles(request):
+    """Who is asking: the Vaidyx login plus the Tumour Board roles from org.json (V1 item 2.1). Vaidyx admins are TB admins."""
+    u = require_user(request)
+    mgr = getattr(request.app.state, "auth_manager", None)
+    admin = bool(u and mgr is not None and callable(getattr(mgr, "is_admin", None)) and mgr.is_admin(u))
+    return org.roles(u or "", vaidyx_admin=admin)
+
+
+def _need(r, action, department=None):
+    """One permission check on every route that changes something: a forbidden action is a 403 with a plain message."""
+    try:
+        org.require(r, action, department)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+
+
+def _doc_department(d):
+    return (d or {}).get("department")  # department id recorded at upload (department uploads, V1 item 2.3); None for coordinator uploads
+
+
+def _case_permissions(r, c, st, docs):
+    """What this user may do on this Case File, so the UI can hide forbidden actions (the routes still enforce them)."""
+    prot = protocol.get(c["protocol"]) if c.get("protocol") else {"mandatory": []}
+    return {"upload": org.can(r, "upload_to_case"), "reprocess": org.can(r, "upload_to_case"), "delete_case": org.can(r, "delete_case"),
+            "board_record": org.can(r, "board_record"), "review": org.can(r, "review"), "list_case": org.can(r, "list_case"),
+            "waive": {q["id"]: org.can(r, "waive", org.department_id(q.get("department", ""))) for q in prot.get("mandatory", [])},
+            "confirm": {d["doc_id"]: org.can(r, "confirm", _doc_department(d)) for d in docs},
+            "delete_document": {d["doc_id"]: org.can(r, "delete_document", _doc_department(d)) for d in docs},
+            "update_action": {a["id"]: org.can(r, "update_action", org.department_id(a.get("department", ""))) for a in st.get("actions", [])}}
 
 
 def _case(case_id):
@@ -69,6 +101,30 @@ def setup_tumour_board_routes():
         _user(request)
         return {k: {"label": v["label"], "department": v["department"], "focus": v["focus"]} for k, v in agents.ROLES.items()}
 
+    @r.get("/org")
+    async def get_org(request: Request):
+        """The hospital, its departments and the caller's own roles. The user map and the Vaidyx account list are returned to admins only."""
+        rl = _roles(request)
+        o = org.load()
+        out = {"hospital": o["hospital"], "departments": o["departments"], "me": rl, "my_departments": org.my_departments(rl)}
+        if rl["admin"]:
+            mgr = getattr(request.app.state, "auth_manager", None)
+            out["users"], out["admins"] = o["users"], o["admins"]
+            try:
+                out["vaidyx_users"] = [{"username": x["username"], "is_admin": bool(x.get("is_admin"))} for x in mgr.list_users()] if mgr else []
+            except Exception:
+                out["vaidyx_users"] = []
+        return out
+
+    @r.put("/org")
+    async def put_org(request: Request):
+        rl = _roles(request); _need(rl, "manage_org"); b = await request.json()
+        try:
+            o = org.save(b, by=rl["user"])
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {"ok": True, "hospital": o["hospital"], "departments": o["departments"], "users": o["users"], "admins": o["admins"]}
+
     @r.get("/cases")
     async def cases(request: Request):
         _user(request)
@@ -76,7 +132,7 @@ def setup_tumour_board_routes():
 
     @r.post("/cases")
     async def create(request: Request):
-        u = _user(request); b = await request.json()
+        u = _user(request); _need(_roles(request), "create_case"); b = await request.json()
         try:
             c = store.create_case(store.safe_id(b["case_id"]), b.get("patient", {}), b["protocol"], b.get("board_date", ""), u)
         except FileExistsError:
@@ -86,17 +142,18 @@ def setup_tumour_board_routes():
 
     @r.delete("/cases/{case_id}")
     async def delete(case_id: str, request: Request):
-        _user(request); _case(case_id); store.delete_case(case_id); return {"ok": True}
+        u = _user(request); _need(_roles(request), "delete_case"); _case(case_id)
+        store.audit(case_id, {"kind": "case_deleted", "by": u}); store.delete_case(case_id); return {"ok": True}
 
     @r.post("/demo/{case_id}")
     async def demo(case_id: str, request: Request):
-        u = _user(request)
+        u = _user(request); _need(_roles(request), "create_case")
         job = service.import_demo(store.safe_id(case_id), u)
         return {"job": job["id"], "total": job["total"]}
 
     @r.post("/cases/{case_id}/demo-arrivals")
     async def arrivals(case_id: str, request: Request):
-        u = _user(request); _case(case_id)
+        u = _user(request); _need(_roles(request), "upload_to_case"); _case(case_id)
         job = service.demo_arrivals(case_id, u)
         if not job:
             raise HTTPException(404, "No demo arrivals for this case")
@@ -104,20 +161,21 @@ def setup_tumour_board_routes():
 
     @r.get("/cases/{case_id}")
     async def get_case(case_id: str, request: Request):
-        _user(request); c = _case(case_id)
+        rl = _roles(request); c = _case(case_id)
         st = store.get_state(case_id)
+        all_docs = store.list_docs(case_id)
         docs = []
-        for d in store.list_docs(case_id):
-            docs.append({k: d.get(k) for k in ("doc_id", "filename", "rel_path", "ext", "state", "error", "classification", "identity", "added")} |
+        for d in all_docs:
+            docs.append({k: d.get(k) for k in ("doc_id", "filename", "rel_path", "ext", "state", "error", "classification", "identity", "added", "department", "uploaded_by")} |
                         {"facts": d.get("facts", {}), "pages": len(d.get("pages") or []), "methods": sorted({p["method"] for p in d.get("pages") or []})})
-        facts = rules.resolve_facts(store.list_docs(case_id), st.get("overrides"))
+        facts = rules.resolve_facts(all_docs, st.get("overrides"))
         cat = protocol.facts()
         return {"case": c, "state": st, "documents": docs, "facts": {k: {"label": cat.get(k, {}).get("label", k), **v} for k, v in facts.items()},
-                "timeline": postboard.timeline(case_id)}
+                "timeline": postboard.timeline(case_id), "permissions": _case_permissions(rl, c, st, all_docs)}
 
     @r.post("/cases/{case_id}/documents")
     async def upload(case_id: str, request: Request, files: list[UploadFile] = File(...), paths: str = Form("[]")):
-        u = _user(request); _case(case_id)
+        u = _user(request); _need(_roles(request), "upload_to_case"); _case(case_id)
         rels = json.loads(paths or "[]")
         data = []
         for i, f in enumerate(files):
@@ -176,7 +234,7 @@ def setup_tumour_board_routes():
 
     @r.post("/cases/{case_id}/reprocess")
     async def reprocess(case_id: str, request: Request):
-        u = _user(request); _case(case_id)
+        u = _user(request); _need(_roles(request), "upload_to_case"); _case(case_id)
         b = await request.json() if (await request.body()) else {}
         job = service.reprocess(case_id, b.get("which", "errors"), u)
         return {"job": job["id"], "total": job["total"]}
@@ -184,8 +242,10 @@ def setup_tumour_board_routes():
     @r.delete("/cases/{case_id}/documents/{doc_id}")
     async def delete_doc(case_id: str, doc_id: str, request: Request):
         u = _user(request); _case(case_id)
-        if not store.get_doc(case_id, doc_id):
+        d = store.get_doc(case_id, doc_id)
+        if not d:
             raise HTTPException(404, "document not found")
+        _need(_roles(request), "delete_document", _doc_department(d))
         async with store.lock(case_id):
             return service.delete_document(case_id, doc_id, u)
 
@@ -193,9 +253,15 @@ def setup_tumour_board_routes():
     async def overrides(case_id: str, request: Request):
         """Clinical overrides for this Case File: {"kind": "requirements"|"documents", "key": id, "value": {...} | null}.
         requirements: {"waived": true, "reason": "..."}; documents: {"attested_final": true, "reason": "..."}."""
-        u = _user(request); _case(case_id); b = await request.json()
+        u = _user(request); c = _case(case_id); b = await request.json()
         if b.get("kind") not in ("requirements", "documents"):
             raise HTTPException(400, "kind must be requirements or documents")
+        rl = _roles(request)
+        if b["kind"] == "documents":
+            _need(rl, "confirm", _doc_department(store.get_doc(case_id, str(b.get("key", "")))))
+        else:
+            dept = next((q.get("department") for q in protocol.get(c["protocol"]).get("mandatory", []) if q["id"] == str(b.get("key", ""))), "")
+            _need(rl, "waive", org.department_id(dept or ""))
         async with store.lock(case_id):
             rules.set_override(case_id, b["kind"], str(b.get("key", "")), b.get("value"), u)
             return service.recheck(case_id, u)
@@ -206,6 +272,7 @@ def setup_tumour_board_routes():
         st = store.get_state(case_id)
         for a in st.get("actions", []):
             if a["id"] == action_id:
+                _need(_roles(request), "update_action", org.department_id(a.get("department", "")))
                 if b.get("status") in ("pending", "completed", "overdue"):
                     a["status"] = b["status"]
                 if b.get("note"):
@@ -250,12 +317,12 @@ def setup_tumour_board_routes():
 
     @r.post("/cases/{case_id}/board-records")
     async def board(case_id: str, request: Request):
-        u = _user(request); _case(case_id); b = await request.json()
+        u = _user(request); _need(_roles(request), "board_record"); _case(case_id); b = await request.json()
         return await postboard.record_decision(case_id, b, u)
 
     @r.post("/cases/{case_id}/review")
     async def review(case_id: str, request: Request):
-        u = _user(request); _case(case_id); b = await request.json()
+        u = _user(request); _need(_roles(request), "review"); _case(case_id); b = await request.json()
         try:
             return service.review(case_id, b["artefact"], b.get("status", "reviewed"), b.get("comment", ""), u)
         except KeyError:

@@ -7,7 +7,7 @@
 <link rel="icon" href="/static/vaidyx-icon.svg">
 <link rel="preload" href="/static/tb/fonts/AtkinsonHyperlegible-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/static/tb/fonts/AtkinsonHyperlegible-Bold.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/static/tb/tb.css?v=1.9d">
+<link rel="stylesheet" href="/static/tb/tb.css?v=2.1">
 </head>
 <body>
 <header class="top">
@@ -15,6 +15,7 @@
   <a class="brand" href="/tb"><img src="/static/vaidyx-wordmark.svg" alt="Vaidyx"><span class="divider"></span><span class="product">AI Agent for Tumour Board</span></a>
   <div class="models" id="models"></div>
   <nav class="topnav">
+    <button class="ghost hidden" id="btn-org" title="Departments, users and roles (admin)">Hospital and departments</button>
     <button class="ghost" id="btn-cards">Model and data cards</button>
     <a class="ghost" href="/">Vaidyx chat</a>
   </nav>
@@ -24,7 +25,7 @@
   <aside class="side">
     <div class="side-head">
       <h3>Tumour Board Case Files</h3>
-      <button class="primary sm" id="btn-new">+ New</button>
+      <button class="primary sm hidden" id="btn-new">+ New</button>
     </div>
     <div id="case-list" class="case-list"></div>
     <div class="side-demo">
@@ -79,6 +80,6 @@
 <div class="drawer hidden" id="drawer"><div class="drawer-body" id="drawer-body"></div></div>
 <div class="modal hidden" id="modal"><div class="modal-body" id="modal-body"></div></div>
 <div class="toast hidden" id="toast"></div>
-<script type="module" src="/static/tb/tb.js"></script>
+<script type="module" src="/static/tb/tb.js?v=2.1"></script>
 </body>
 </html>
