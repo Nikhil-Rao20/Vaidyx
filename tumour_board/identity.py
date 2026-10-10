@@ -18,7 +18,8 @@ Reading policy (read_identity)
 
 Matching policy (match): an exact ID with a compatible name auto-links (the caller audits it, a person can undo it); an ID
 whose name, age or sex disagrees is a possible wrong ID; a name alone only ever suggests, and only when it fits exactly
-one patient; name variants are suggested, never linked without an ID.
+one patient; name variants are suggested, never linked without an ID. A new Case File opens on its own only for an unknown
+UHID / MRN / CR No. / Hospital No. with a patient name read and no existing patient whose name, age and sex fit.
 """
 import re
 import unicodedata
@@ -30,6 +31,8 @@ ID_KINDS = ("uhid", "mrn", "cr_no", "ip_no", "op_no", "reg_no", "hospital_no", "
 # kinds that identify a patient of this hospital (may open a new Case File); ip_no / op_no / pmjay / abha only link to an
 # existing patient's known ids
 HOSPITAL_ID_KINDS = ("uhid", "mrn", "cr_no", "hospital_no", "reg_no")
+# kinds that may open a new Case File on their own: a Reg. No. (often per visit) links to a patient who has it, never opens one
+OPENS_CASE_KINDS = ("uhid", "mrn", "cr_no", "hospital_no")
 TITLES = ("mr", "mrs", "ms", "shri", "sri", "smt", "kumari", "km", "master", "baby", "dr", "late", "selvi", "thiru", "miss", "mx")
 ID_DISPLAY = {"uhid": "UHID", "mrn": "MRN", "cr_no": "CR No.", "ip_no": "IP No.", "op_no": "OP No.", "reg_no": "Reg. No.",
               "hospital_no": "Hospital No.", "abha": "ABHA", "pmjay": "PM-JAY ID"}
@@ -366,10 +369,17 @@ def _clean_text(v):
     return v.strip(" \t:-,.;")
 
 
+_MASKED_AADHAAR = re.compile(r"[\s:#\-]*X{4} X{4} \d{4}(?!\d)", re.I)  # exactly the form mask_aadhaar() writes
+
+
 def _id_token(v):
+    """The identifier after a label: one token with a digit, at least 3 characters ('X100', 'XR-2210', 'KMH/OP/26/55120');
+    a masked Aadhaar ('XXXX XXXX 1180') is never an identifier."""
+    if _MASKED_AADHAAR.match(v or ""):
+        return ""
     m = re.match(r"[\s:#\-]*([^\s|]+)", v or "")
     tok = m.group(1).rstrip(".,;:)") if m else ""
-    return tok if len(tok) >= 3 and re.search(r"\d", tok) and not re.fullmatch(r"[Xx\-\s]+\d{0,4}", tok) else ""
+    return tok if len(tok) >= 3 and re.search(r"\d", tok) else ""
 
 
 class _Page:
@@ -450,7 +460,10 @@ class _Page:
                 continue
             for n, (kind, s, e, text) in enumerate(labels):
                 end = labels[n + 1][1] if n + 1 < len(labels) else len(line)
-                value = (line[e:] if kind in ("age", "sex") else line[e:end]).split("|")[0]  # 'Age: 62 Years Sex: M' read together
+                cells = (line[e:] if kind in ("age", "sex") else line[e:end]).split("|")  # 'Age: 62 Years Sex: M' read together
+                # the value follows the label in the same cell ('UHID SYN-1'), or sits in the next cell of a transcribed table
+                # ('Name | Smt. Sunita Devi | UHID | SYN-500911 | Age / Sex | 67 Y / F')
+                value = cells[0] if cells[0].strip(" :-.#") else next((c for c in cells[1:] if c.strip(" :-.#")), "")
                 self.add(kind, text.rstrip(" :"), value, line, i)
             if not any(k in ("agesex", "age", "sex") for k, *_ in labels) and labels and _AGESEX_RX.search(line):
                 a, s = parse_agesex(line)  # 'Patient: ... | MRN: ... | 62 Y / M'
@@ -650,6 +663,26 @@ def _fmt_rel(r):
     return f"{r.get('kind') or ''} {r.get('name')}".strip()
 
 
+def _fits(a):
+    """Name (exact, variant, or initials with a distinctive token) + same sex + age within 1 year (or the same DOB)."""
+    lv = a["name"]
+    name_ok = lv["level"] in ("exact", "variant") or (lv["level"] == "initials" and lv["distinctive"])
+    when_ok = a["dob_fit"] is True or (a["dob_fit"] is None and a["age_fit"] is True)
+    return name_ok and not lv["sex_conflict"] and a["sex_fit"] is True and when_ok
+
+
+def _known_id(patient, kind):
+    """The Case File's own identifier to show beside a printed one: same kind first, then a comparable kind, then any."""
+    p = patient or {}
+    raw = [(k, p[k]) for k in ID_KINDS if isinstance(p.get(k), str) and p[k].strip()]
+    raw += [(it["kind"], it["value"]) for it in p.get("ids") or [] if isinstance(it, dict) and it.get("kind") in ID_KINDS and it.get("value")]
+    if not raw:
+        return ""
+    k, v = min(raw, key=lambda x: (x[0] != kind, _GROUP.get(x[0]) != _GROUP.get(kind)))
+    same = k == kind or (k in ("uhid", "mrn") and kind in ("uhid", "mrn"))  # the Case File label is 'UHID / MRN'
+    return f"{ID_DISPLAY[kind if same else k]} {v}"
+
+
 def match(identity: dict, patients: list, today=None) -> dict:
     """Decide where a record goes. patients: [{"case_id", "patient": case["patient"], "listed": bool}].
 
@@ -659,8 +692,10 @@ def match(identity: dict, patients: list, today=None) -> dict:
        IP / OP No., ABHA, PM-JAY ID): with a compatible name (exact, variant, initials), no sex conflict, age within
        1 year and no DOB or same-kind ID contradicting it -> auto_link (a relation mismatch is only noted). Otherwise
        -> id_conflict (possible wrong ID). IDs pointing to two Case Files -> id_conflict, never a link.
-    2. No ID matched but a hospital ID (UHID, MRN, CR No., Hospital No., Reg. No.) is printed -> new_case on it. Only an
-       ABHA / IP / OP / PM-JAY number that nobody has -> needs_matching (portable or episode numbers never open a Case File).
+    2. No ID matched but a UHID, MRN, CR No. or Hospital No. is printed (OPENS_CASE_KINDS) -> new_case on it, only when a
+       patient name was read and no Case File fits the name, sex and age (or DOB) as in rule 3; otherwise needs_matching
+       (the same patient registered twice, or a different person). Only a Reg. No. / ABHA / IP / OP / PM-JAY number that
+       nobody has -> needs_matching (per-visit, portable or episode numbers never open a Case File).
     3. No ID printed: name (exact or variant, or initials with a non-generic token agreeing) + same sex + age within
        1 year (or the same DOB when both are known) + compatible relation name when both are known, fitting exactly one
        Case File -> suggest (a person confirms; never automatic). Two or more -> needs_matching. A single-token name
@@ -696,6 +731,7 @@ def match(identity: dict, patients: list, today=None) -> dict:
             if any(_GROUP.get(k) == _GROUP[kind] and v == nv for k, v in rec["ids"]):
                 hits.setdefault(cid, (kind, printed))
     listed = {cid: lst for cid, _, lst in recs}
+    raw = {p.get("case_id"): p.get("patient") or {} for p in patients or []}
     if len(hits) > 1:
         return res("id_conflict", "the IDs on this record point to more than one Case File (" + ", ".join(map(str, hits)) + "): a person must decide",
                    candidates=[_cand(cid, assess[cid], True, listed.get(cid)) for cid in hits])
@@ -727,26 +763,32 @@ def match(identity: dict, patients: list, today=None) -> dict:
         return res("auto_link", reason, case_id=cid, candidates=cand, matched_on=on)
     # 2. unknown IDs
     if items:
-        hosp = next(((k, p) for k, _, p in items if k in HOSPITAL_ID_KINDS), None)
+        hosp = next(((k, p) for k, _, p in items if k in OPENS_CASE_KINDS), None)
         cands = name_cands()
         if hosp:
-            reason = f"{ID_DISPLAY[hosp[0]]} {hosp[1]} is on no Case File: new Case File (awaiting listing)"
+            shown = f"{ID_DISPLAY[hosp[0]]} {hosp[1]}"
+            if not name:
+                return res("needs_matching", f"{shown} is on no Case File; an identifier was read but no patient name: a person must decide",
+                           candidates=cands)
+            fits = [cid for cid, a in assess.items() if _fits(a)]
+            if fits:
+                known = ", ".join(f"{cid} ({k})" if k else str(cid) for cid, k in ((c, _known_id(raw.get(c), hosp[0])) for c in fits))
+                rest = [c for c in cands if c["case_id"] not in fits]
+                return res("needs_matching", f"{shown} is on no Case File, but the name, age and sex fit {known}: the same patient "
+                                             "registered twice, or a different person; a person must decide",
+                           candidates=[_cand(cid, assess[cid], False, listed.get(cid)) for cid in fits] + rest)
+            reason = f"{shown} is on no Case File: new Case File (awaiting listing)"
             if cands:
                 reason += "; same or similar name on " + ", ".join(c["case_id"] for c in cands) + " with a different ID"
             return res("new_case", reason, candidates=cands, matched_on={"kind": hosp[0], "value": hosp[1]})
         shown = ", ".join(f"{ID_DISPLAY[k]} {p}" for k, _, p in items)
-        return res("needs_matching", f"{shown} is on no Case File and is not a hospital ID of this hospital (an ABHA is portable "
-                                     "across hospitals, an IP / OP No. is one episode): link to a patient or start a new Case File", candidates=cands)
+        return res("needs_matching", f"{shown} is on no Case File and cannot open one on its own (a Reg. No. may be one visit, an ABHA "
+                                     "is portable across hospitals, an IP / OP No. is one episode): link to a patient or start a new Case File",
+                   candidates=cands)
     # 3. name + age / sex
     if not name:
         return res("needs_matching", "no ID and no patient name could be read: link to a patient or start a new Case File")
-    fits = []
-    for cid, a in assess.items():
-        lv = a["name"]
-        name_ok = lv["level"] in ("exact", "variant") or (lv["level"] == "initials" and lv["distinctive"])
-        when_ok = a["dob_fit"] is True or (a["dob_fit"] is None and a["age_fit"] is True)
-        if name_ok and not lv["sex_conflict"] and not a["single"] and a["sex_fit"] is True and when_ok and a["rel_ok"] is not False:
-            fits.append(cid)
+    fits = [cid for cid, a in assess.items() if _fits(a) and not a["single"] and a["rel_ok"] is not False]
     if len(fits) == 1:
         cid = fits[0]
         return res("suggest", f"no ID printed; {_why(assess[cid])}: suggested link to {cid}, a person confirms", case_id=cid,

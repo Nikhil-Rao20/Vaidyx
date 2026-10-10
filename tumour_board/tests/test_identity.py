@@ -445,3 +445,92 @@ def test_describe():
     assert I.describe(read(OPD)) == "Shri Ramesh Kumar, 58 Y / M, DOB 14/03/1968, UHID SYN-400118, ABHA 91-4021-7788-3105"
     assert I.describe({}) == "name not read"
     assert "\u2014" not in I.describe(read(CBC))
+
+
+# ---- review fixes: when an unknown identifier may open a Case File (M5), masked Aadhaar vs real IDs (minor 6) ---------
+def test_unknown_uhid_without_name_needs_matching():
+    r = I.match(idt(None, [("uhid", "SYN-777001")], 52, "F"), PATIENTS, TODAY)
+    assert r["decision"] == "needs_matching" and r["case_id"] is None and r["matched_on"] is None
+    assert "an identifier was read but no patient name: a person must decide" in r["reason"]
+    assert I.match(idt(None, [("uhid", "SYN-777001")]), [], TODAY)["decision"] == "needs_matching"  # even with no Case Files at all
+
+
+def test_unknown_uhid_with_name_age_sex_fitting_a_patient_needs_matching():
+    r = I.match(idt("Sunita Devi", [("uhid", "SYN-500911")], 52, "F"), PATIENTS, TODAY)
+    assert r["decision"] == "needs_matching" and r["case_id"] is None and r["matched_on"] is None
+    assert r["candidates"][0]["case_id"] == "TB-005" and r["candidates"][0]["id_match"] is False
+    assert r["reason"] == ("UHID SYN-500911 is on no Case File, but the name, age and sex fit TB-005 (UHID SYN-500263): the same patient "
+                           "registered twice, or a different person; a person must decide")
+    # a variant name, age +1, an unknown Hospital No.: still a person's decision
+    r = I.match(idt("Laxmi Iyer", [("hospital_no", "SYN-299999")], 49, "F"), PATIENTS, TODAY)
+    assert r["decision"] == "needs_matching" and "TB-002 (MRN SYN-200417)" in r["reason"]
+    # the same DOB fits even when the printed age is off; a CR No. names the Case File's own CR No.
+    r = I.match(idt("Ramesh Kumar", [("cr_no", "CR/2026/09999")], 60, "M", dob="1968-03-14"), PATIENTS, TODAY)
+    assert r["decision"] == "needs_matching" and "TB-004 (CR No. CR/2026/04118)" in r["reason"]
+    # two exact fits: both listed, never a new Case File
+    twin = {"case_id": "TB-010", "patient": {"name": "Lakshmi Iyer", "mrn": "SYN-201111", "agesex": "48 Y / F"}}
+    r = I.match(idt("Lakshmi Iyer", [("uhid", "SYN-299999")], 48, "F"), PATIENTS + [twin], TODAY)
+    assert r["decision"] == "needs_matching" and [c["case_id"] for c in r["candidates"][:2]] == ["TB-002", "TB-010"]
+
+
+def test_unknown_uhid_opens_a_case_only_when_nobody_fits():
+    for text in (PAP, CBC):  # the second Sunita Devi is 67, TB-005 is 52: a different patient
+        r = m(text)
+        assert r["decision"] == "new_case" and r["matched_on"] == {"kind": "uhid", "value": "SYN-500911"} and "TB-005" in r["reason"]
+    for bad in (idt("Sunita Devi", [("uhid", "SYN-500911")], 52, None),     # sex not read
+                idt("Sunita Devi", [("uhid", "SYN-500911")], 52, "M"),      # sex differs
+                idt("Sunita Kumari", [("uhid", "SYN-500911")], 52, "F")):   # Devi / Kumari: another name
+        assert I.match(bad, PATIENTS, TODAY)["decision"] == "new_case", bad
+    # an initial with only a common surname is not a fit: R. Kumar 62 M with an unknown UHID opens a Case File
+    assert I.match(idt("R. Kumar", [("uhid", "SYN-100999")], 62, "M"), PATIENTS, TODAY)["decision"] == "new_case"
+
+
+def test_unknown_reg_no_never_opens_a_case_but_links():
+    r = I.match(idt("Asha Rani", [("reg_no", "55120")], 44, "F"), PATIENTS, TODAY)
+    assert r["decision"] == "needs_matching" and r["case_id"] is None and "Reg. No. 55120" in r["reason"]
+    assert I.match(idt("Asha Rani", [("reg_no", "55120")], 44, "F"), [], TODAY)["decision"] == "needs_matching"
+    # a patient who has that Reg. No. (or the same number as UHID / MRN) is linked
+    reg = {"case_id": "TB-011", "patient": {"name": "Asha Rani", "mrn": "SYN-700001", "agesex": "44 Y / F", "ids": [{"kind": "reg_no", "value": "55120"}]}}
+    r = I.match(idt("Asha Rani", [("reg_no", "55120")], 44, "F"), PATIENTS + [reg], TODAY)
+    assert (r["decision"], r["case_id"], r["matched_on"]["kind"]) == ("auto_link", "TB-011", "reg_no")
+    plain = {"case_id": "TB-012", "patient": {"name": "Asha Rani", "mrn": "SYN-700001", "agesex": "44 Y / F"}}
+    r = I.match(idt("Asha Rani", [("reg_no", "SYN-700001")], 44, "F"), PATIENTS + [plain], TODAY)
+    assert (r["decision"], r["case_id"]) == ("auto_link", "TB-012")
+    # a Reg. No. beside an unknown UHID: the UHID decides
+    r = I.match(idt("Asha Rani", [("reg_no", "55120"), ("uhid", "SYN-700002")], 44, "F"), PATIENTS, TODAY)
+    assert r["decision"] == "new_case" and r["matched_on"]["kind"] == "uhid"
+
+
+@pytest.mark.parametrize("value", ["X100", "XR-2210", "KMH/OP/26/55120", "XX-1234"])
+def test_identifiers_that_start_with_x_are_read(value):
+    r = read(f"Patient name Asha Rani\nUHID {value}\nAge / Sex 44 Y / F")
+    assert kinds(r) == [("uhid", value)]
+    r = read(f"Name UHID Age / Sex\nAsha Rani {value} 44 Y / F")  # boxed grid
+    assert kinds(r) == [("uhid", value)] and (r["age"], r["sex"]) == (44, "F")
+
+
+def test_masked_aadhaar_is_never_an_identifier():
+    for t in ("Patient name Asha Rani\nUHID XXXX XXXX 1180\nAge / Sex 44 Y / F",
+              "Patient name Asha Rani\nUHID xxxx xxxx 1180\nAge / Sex 44 Y / F",
+              "Patient name Asha Rani\nUHID 7395 8406 1180\nAge / Sex 44 Y / F",  # masked on reading, then refused
+              "Patient name Asha Rani\nReg. No. XXXX XXXX 1180\nAge / Sex 44 Y / F"):
+        r = read(t)
+        assert r["ids"] == [] and "7395" not in str(r), t
+    assert I._id_token("XXXX XXXX 1180") == "" and I._id_token(": XXXX XXXX 1180 15/09/2026") == ""
+    assert I._id_token("X100") == "X100"
+
+
+def test_transcribed_table_with_label_and_value_in_alternate_cells():
+    """The vision reader transcribes a boxed lab header as one pipe-separated line: label | value | label | value."""
+    text = ("Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Laboratory Medicine\nHAEMATOLOGY REPORT\n"
+            "Name | Smt. Sunita Devi | UHID | SYN-500911 | Age / Sex | 67 Y / F\n"
+            "Aadhaar No. | 7395 8406 1180 | Reg. date | 15/09/2026 08:20 | Collected on | 15/09/2026 08:30\n"
+            "Reported on | 15/09/2026 12:10 | Ref. by | OPD (Gynaecology) | Sample ID | LAB/26/119870\n"
+            "Haemoglobin | 10.8 | gm% | 12.0 - 15.0\n*** End of report ***\nSd/-\nDr. Suresh Babu, MD (Pathology), KMC Reg. No. 69021")
+    r = I.read_identity([text])
+    assert r["name"]["value"] == "Smt. Sunita Devi" and [(i["kind"], i["value"]) for i in r["ids"]] == [("uhid", "SYN-500911")]
+    assert (r["age"], r["sex"], r["aadhaar_seen"]) == (67, "F", True) and "LAB/26/119870" not in str(r["ids"])
+    assert grounding.locate(r["name"]["quote"], [text]) and grounding.locate(r["ids"][0]["quote"], [text])
+    # the same line with the value in the label's own cell still reads
+    r2 = I.read_identity(["HAEMATOLOGY REPORT\nName: Smt. Sunita Devi | UHID: SYN-500911 | Age / Sex: 67 Y / F"])
+    assert r2["name"]["value"] == "Smt. Sunita Devi" and r2["ids"][0]["value"] == "SYN-500911" and r2["age"] == 67
