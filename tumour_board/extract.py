@@ -2,7 +2,7 @@
 then deterministic grounding. Nothing the model says is trusted until its quote is found in the source text."""
 import asyncio, re
 
-from . import dates, docstatus, grounding, identity, ingest, llm, negation, protocol, store
+from . import confirm, dates, docstatus, doctype, grounding, identity, ingest, llm, negation, protocol, store
 
 STATUS = ["FINAL", "AMENDED", "CORRECTED", "PRELIMINARY", "DRAFT", "CANCELLED", "UNKNOWN"]
 # Negation cues shared with qa and postboard (see negation.py).
@@ -212,6 +212,17 @@ def finish_classification(c, full, texts, filename, dob_iso=""):
             status, squote = st2, c["status_quote"]
     c["status"], c["status_quote"], c["signed"], c["status_notes"] = status, squote, signed, notes
     c["signature_quote"] = sline or (c.get("signature_quote") if c.get("signature_quote") and grounding.locate(c["signature_quote"], texts) else "")
+    # document type cross-check (V1 item 3.2): title keywords on the first lines and the filename, independent of the model. Agree or no
+    # evidence: the model's type stands. Disagree: both types are kept for the gate, which asks the clinician where it matters.
+    model_type = c.get("doc_type") if c.get("doc_type") in protocol.doc_types() else ""
+    chk = doctype.cross_check(model_type, texts, filename)
+    c["doc_type_keyword"], c["doc_type_check"] = chk["keyword_type"], chk["note"]
+    c.pop("doc_type_disagreement", None)
+    if not model_type:
+        c["doc_type"] = chk["keyword_type"] or "other"  # the model gave no usable type: the keywords, else other
+    elif chk["agree"] is False:
+        c["doc_type_disagreement"] = {"keyword_type": chk["keyword_type"], "model_type": model_type, "note": chk["note"],
+                                      "evidence": [{"keyword": e.get("keyword"), "quote": e.get("quote"), "where": e.get("where")} for e in chk.get("evidence") or []][:5]}
     dd = dates.document_dates(texts, filename, c.get("doc_type") or "", c.get("report_date") or "", dob_iso)
     c.update({k: dd[k] for k in DATE_KEYS})
     if c.get("patient_id") and not grounding.locate(c["patient_id"], texts):
@@ -321,7 +332,9 @@ async def process_document(case_id, doc_id, protocol_id, case_patient=None, prog
             store.save_doc(case_id, doc); progress and progress(doc_id, "ready")
             return doc
         doc["state"] = "extracting"; store.save_doc(case_id, doc); progress and progress(doc_id, "extracting")
-        fids = protocol.facts_for_doc(protocol_id, c["doc_type"])
+        confirmed = confirm.latest(store.get_state(case_id), "confirm_doc_type", doc_id)  # the clinician's type wins (V1 item 3.2)
+        doc_type = (confirmed["fields"]["doc_type"] if confirmed else "") or c["doc_type"]
+        fids = protocol.facts_for_doc(protocol_id, doc_type)
         raw = await extract_facts(full, fids, au)
         facts = {}
         for fid in fids:

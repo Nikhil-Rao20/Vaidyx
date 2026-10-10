@@ -16,7 +16,7 @@ def test_tb001_lung_gate(demo_cases):
     assert req(g, "pdl1")["problems"] == ['Pending: PD-L1: "Pending" in HISTOPATHOLOGY REPORT']
     assert req(g, "baseline_labs")["problems"] == ['Pending: WBC count: "Not reported" in HAEMATOLOGY REPORT (CBC)']
     assert req(g, "brain_mri")["problems"] == ["No brain mri (staging) in the Case File"]
-    assert g["documents"] == {"total": 8, "ready": 8, "processing": 0, "errors": 0, "non_final": ["D67977cf8"], "unconfirmed": [], "date_unconfirmed": [], "date_flags": {}, "identity_flags": []}
+    assert g["documents"] == {"total": 8, "ready": 8, "processing": 0, "errors": 0, "non_final": ["D67977cf8"], "unconfirmed": [], "date_unconfirmed": [], "date_flags": {}, "type_disagreements": [], "identity_flags": []}
 
 
 def test_tb001_ct_evidence_is_the_newer_ct(demo_cases):

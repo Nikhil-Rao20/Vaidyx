@@ -267,6 +267,20 @@ def list_case(case_id, protocol_id, setting="", board_date="", hospital_level=""
     return job
 
 
+def reextract_document(case_id, doc_id, user=""):
+    """Extract one document's fields again from its stored pages (no second read or classification): after a clinician confirmed
+    its document type (V1 item 3.2). Returns a job, or None when the Case File is not listed or the document has no stored pages."""
+    case = store.get_case(case_id)
+    d = store.get_doc(case_id, doc_id)
+    if not case or not case.get("protocol") or not d or not d.get("pages") or not d.get("classification"):
+        return None
+    d["state"] = "queued"; d.pop("error", None); store.save_doc(case_id, d)
+    store.audit(case_id, {"kind": "reextract", "doc_id": doc_id, "by": user})
+    job = _job(case_id, 1, [doc_id])
+    job["task"] = asyncio.get_event_loop().create_task(process_docs(case_id, [doc_id], job, from_stored=True))
+    return job
+
+
 def unfile_document(case_id, doc_id, user="", reason=""):
     """Move a document that came from the intake area back to the Needs matching queue (reverses an auto-link or a person's filing)."""
     moved = intake.unfile(case_id, doc_id, user, reason)

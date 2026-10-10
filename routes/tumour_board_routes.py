@@ -444,7 +444,8 @@ def setup_tumour_board_routes():
             except ValueError as e:
                 raise HTTPException(400, str(e))
             st = service.recheck(case_id, u) if c.get("protocol") else store.get_state(case_id)
-        return {"confirmation": rec, "state": st}
+        job = service.reextract_document(case_id, key, u) if ctype == "confirm_doc_type" else None  # fields again under the confirmed type (V1 item 3.2)
+        return {"confirmation": rec, "state": st, **({"job": job["id"]} if job else {})}
 
     @r.post("/cases/{case_id}/confirmations/{conf_id}/undo")
     async def confirmation_undo(case_id: str, conf_id: str, request: Request):

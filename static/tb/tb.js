@@ -203,7 +203,7 @@ function confirmDialog({ title, intro, fields = [], submit = "Record" }) {
   });
 }
 async function recordConfirmation(type, key, fields, reason) {
-  try { const r = await api(`/cases/${S.caseId}/confirmations`, { json: { type, key, fields: fields || {}, reason: reason || "" } }); await openCase(S.caseId, true); toast(`${CONF_LABEL[type] || "Confirmation"} recorded in the audit log`); return r; }
+  try { const r = await api(`/cases/${S.caseId}/confirmations`, { json: { type, key, fields: fields || {}, reason: reason || "" } }); await openCase(S.caseId, true); toast(`${CONF_LABEL[type] || "Confirmation"} recorded in the audit log${r.job ? "; the fields are being extracted again under the confirmed type" : ""}`); if (r.job) watchJob(r.job); return r; }
   catch (e) { toast(e.message, 7000); return null; }
 }
 function confirmationsHTML() {

@@ -52,10 +52,13 @@ def get(protocol_id):
 
 
 def facts_for_doc(protocol_id, doc_type):
-    """Fact ids worth extracting from a document of this type under this protocol."""
+    """Fact ids worth extracting from a document of this type under this protocol. A document of type `other` (anything the
+    catalogue does not name) is asked only for the protocol's required fields, not the whole extraction list (V1 item 3.2)."""
     p = get(protocol_id)
     cat = facts()
+    required = list(dict.fromkeys(f for r in p["mandatory"] for f in r.get("required_facts", [])))
+    if doc_type == "other":
+        return [f for f in required if f in cat]
     wanted = list(dict.fromkeys(p.get("extract_facts", [])))
-    for r in p["mandatory"]:
-        wanted += [f for f in r.get("required_facts", []) if f not in wanted]
-    return [f for f in wanted if f in cat and (doc_type in cat[f]["doc_types"] or doc_type == "other")]
+    wanted += [f for f in required if f not in wanted]
+    return [f for f in wanted if f in cat and doc_type in cat[f]["doc_types"]]

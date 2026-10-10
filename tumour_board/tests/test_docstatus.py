@@ -63,6 +63,35 @@ def test_unstated_without_draft_word_has_no_note():
     assert ds.detect_status("Impression: normal study") == ("UNSTATED", "", [])
 
 
+# ---- V1 3.2: a "final diagnosis" header whose content is still pending is explicit negative evidence ------------------
+@pytest.mark.parametrize("text", [
+    "FINAL DIAGNOSIS: pending IHC",
+    "Final diagnosis: Awaited",
+    "FINAL DIAGNOSIS:\nDeferred until immunohistochemistry",
+    "Final diagnosis is pending",
+    "Final diagnosis to follow after IHC",
+    "Final diagnosis: report to follow",
+    "FINAL PATHOLOGICAL DIAGNOSIS - will follow",
+])
+def test_final_diagnosis_pending_is_preliminary(text):
+    st, quote, notes = ds.detect_status(text)
+    assert st == "PRELIMINARY" and quote.lower().startswith("final") and notes == []
+
+
+def test_final_diagnosis_pending_quote_is_the_snippet():
+    st, quote, _ = ds.detect_status("Specimen: core biopsy, right lung\nFINAL DIAGNOSIS: pending IHC\nSd/- Dr. S. Rao")
+    assert st == "PRELIMINARY" and "FINAL DIAGNOSIS: pending IHC" in quote
+
+
+@pytest.mark.parametrize("text", [
+    "FINAL DIAGNOSIS: Adenocarcinoma",
+    "FINAL DIAGNOSIS: Adenocarcinoma, HER2 pending",       # a diagnosis is given; one test still pending
+    "Final diagnosis: invasive ductal carcinoma. IHC awaited for receptor status",
+])
+def test_real_final_diagnosis_stays_final(text):
+    assert ds.detect_status(text)[0] == "FINAL"
+
+
 @pytest.mark.parametrize("text,signed", [
     ("Electronically signed by Dr. Meera Nair", "yes"),
     ("Digitally signed", "yes"),

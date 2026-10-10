@@ -48,12 +48,36 @@ def _needs_confirmation(d):
     return c.get("status") == "UNSTATED" and c.get("signed") != "no"
 
 
+def _header(d, lines=10):
+    """The first lines of page 1 (title, department, study name): what the keyword table reads (V1 item 3.2)."""
+    pages = d.get("pages") or []
+    text = (pages[0].get("text") if pages and isinstance(pages[0], dict) else "") or ""
+    return "\n".join([ln.strip() for ln in text.splitlines() if ln.strip()][:lines])
+
+
 def _region_ok(d, region):
     if not region:
         return True
     c = d.get("classification") or {}
-    hay = " ".join([c.get("body_region", ""), c.get("title", ""), d.get("filename", "")]).lower()
+    hay = " ".join([c.get("body_region", ""), c.get("title", ""), d.get("filename", ""), _header(d)]).lower()  # the header text too (V1 item 3.2)
     return re.search(region, hay) is not None
+
+
+def _doc_types(d) -> set:
+    """The document types a document may be: the model's, plus the keyword table's when they disagree and no clinician has
+    confirmed the type yet (V1 item 3.2). A confirmed type (rules.case_docs overlay) is the only one."""
+    c = d.get("classification") or {}
+    types = {c.get("doc_type")} if c.get("doc_type") else set()
+    dis = c.get("doc_type_disagreement")
+    if dis and dis.get("keyword_type") and not c.get("doc_type_confirmed_by"):
+        types.add(dis["keyword_type"])
+    return types
+
+
+def _type_note(d):
+    c = d.get("classification") or {}
+    dis = c.get("doc_type_disagreement") or {}
+    return dis.get("note") or f"the reader model called it {c.get('doc_type')} and the title keywords say {dis.get('keyword_type')}"
 
 
 def resolve_facts(docs, overrides=None):
@@ -64,6 +88,7 @@ def resolve_facts(docs, overrides=None):
         c = d.get("classification") or {}
         for fid, f in (d.get("facts") or {}).items():
             hist.setdefault(fid, []).append({**f, "doc_id": d["doc_id"], "doc_title": c.get("title") or d["filename"], "doc_type": c.get("doc_type"),
+                                             "doc_types": sorted(_doc_types(d)), "type_note": _type_note(d) if len(_doc_types(d)) > 1 else "",
                                              "date": dates.doc_dates(d)["event"] or None, "report_date": dates.doc_dates(d)["report"] or None,
                                              "date_unconfirmed": dates.doc_dates(d)["unconfirmed"],
                                              "doc_final": _is_final(d, overrides), "doc_status": c.get("status")})
@@ -98,8 +123,11 @@ def evaluate(case_id):
         if req.get("applies_if_doc_type_present") and not any((d.get("classification") or {}).get("doc_type") == req["applies_if_doc_type_present"] for d in ready):
             r["status"] = "not_applicable"; results.append(r); continue
         date_needs = []  # documents whose unconfirmed date decides this requirement: a clinician confirms it (V1 item 3.1)
+        type_needs = []  # documents that match this requirement under only one of their two possible types (V1 item 3.2)
         if not req.get("facts_only"):
-            cands = [d for d in ready if (d.get("classification") or {}).get("doc_type") in req["doc_types"] and _region_ok(d, req.get("region"))]
+            want = set(req["doc_types"])
+            cands = [d for d in ready if _doc_types(d) & want and _region_ok(d, req.get("region"))]
+            type_needs += [d for d in cands if len(_doc_types(d)) > 1 and len(_doc_types(d) & want) == 1]
             if req.get("must_postdate_doc_type"):
                 refs = [x for x in ready if (x.get("classification") or {}).get("doc_type") == req["must_postdate_doc_type"]]
                 ref = max([dates.doc_dates(x)["event"] for x in refs if dates.doc_dates(x)["event"]], default="")
@@ -145,7 +173,9 @@ def evaluate(case_id):
         allowed = set(req.get("fact_doc_types") or req.get("doc_types") or [])
         missing, pending, review = [], [], []
         for fid in req.get("required_facts", []):
-            hist = [h for h in facts.get(fid, {}).get("history", []) if not allowed or h["doc_type"] in allowed]
+            hist = [h for h in facts.get(fid, {}).get("history", []) if not allowed or set(h["doc_types"]) & allowed]
+            type_needs += [h for h in hist if allowed and len(h["doc_types"]) > 1 and len(set(h["doc_types"]) & allowed) == 1
+                           and h["doc_id"] not in {x["doc_id"] for x in type_needs}]
             good = [h for h in hist if h["verification"] in VERIFIED and h["doc_final"] and h["state"] == "present"]
             if req.get("must_postdate_doc_type") and r.get("postdate_reference"):
                 good = [h for h in good if (h["date"] or "") > r["postdate_reference"]]
@@ -181,6 +211,19 @@ def evaluate(case_id):
                     pass  # confirmation first; field problems are listed with it
             elif review and r["status"] == "satisfied":
                 r["status"] = "needs_review"
+        if type_needs and r["status"] != "not_applicable":  # the document type decides whether this record counts: a clinician confirms it
+            r["status"] = "needs_confirmation"
+            seen = set()
+            for x in type_needs:
+                did = x["doc_id"]
+                if did in seen:
+                    continue
+                seen.add(did)
+                title = x.get("doc_title") or (x.get("classification") or {}).get("title") or x.get("filename") or did
+                r["problems"].insert(0, f"Confirm the document type of {title}: {x.get('type_note') or _type_note(x)}")
+                r.setdefault("needs", []).append({"type": "confirm_doc_type", "doc_id": did})
+                if not any(e.get("doc_id") == did for e in r["evidence"]):
+                    r["evidence"].append({"doc_id": did, "quote": ""})
         if date_needs and r["status"] != "not_applicable":  # confirmation first (like an attestation): the date decides the check
             r["status"] = "needs_confirmation"
             seen = set()
@@ -217,6 +260,7 @@ def evaluate(case_id):
                           "non_final": [d["doc_id"] for d in ready if not _is_final(d, overrides)],
                           "unconfirmed": [d["doc_id"] for d in ready if _needs_confirmation(d) and not _is_final(d, overrides)],
                           "date_unconfirmed": [d["doc_id"] for d in ready if dates.doc_dates(d)["unconfirmed"]],
+                          "type_disagreements": [d["doc_id"] for d in ready if len(_doc_types(d)) > 1],
                           "date_flags": {d["doc_id"]: dates.doc_dates(d)["flags"] for d in ready if dates.doc_dates(d)["flags"]},
                           "identity_flags": [d["doc_id"] for d in ready if d.get("identity") in ("mismatch_or_missing", "id_differs")]}}
     return gate

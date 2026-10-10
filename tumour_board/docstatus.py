@@ -18,6 +18,11 @@ _NEG = [
     ("DRAFT", re.compile(r"\b(draft|unsigned)\s*/\s*(unsigned|draft)\b|\breport status\s*[:\-]\s*draft\b|^\s*draft\b|\bdraft report\b", re.I | re.M)),
     ("PRELIMINARY", re.compile(r"\b(preliminary|provisional|interim)\s+(report|result|diagnosis)\b|\breport status\s*[:\-]\s*(preliminary|provisional)\b|\bpreliminary\s*\(|\(\s*(preliminary|provisional)\s*\)", re.I)),
     ("CANCELLED", re.compile(r"\b(report|result)\s+(cancelled|canceled|withdrawn|entered in error)\b|\bcancelled report\b", re.I)),
+    # a "final diagnosis" header whose content is still pending ("FINAL DIAGNOSIS: pending IHC", "Final diagnosis: to follow")
+    # is explicit negative evidence; "FINAL DIAGNOSIS: Adenocarcinoma, HER2 pending" gives a diagnosis and stays FINAL
+    ("PRELIMINARY", re.compile(r"\bfinal\s+(?:pathologic(?:al)?\s+)?(?:diagnosis|result)s?\s*[:\-]?[ \t]*\n?[ \t]*"
+                               r"(?:(?:is|will|shall|be|being|the|report|diagnosis|result)\s+)*"
+                               r"(?:pending|awaited|deferred|to\s+follow|will\s+follow|to\s+be\s+(?:issued|followed|given))\b", re.I)),
 ]
 _POS = [
     ("CORRECTED", re.compile(r"\bcorrected (report|diagnosis|result)\b|\breport status\s*[:\-]\s*corrected\b", re.I)),

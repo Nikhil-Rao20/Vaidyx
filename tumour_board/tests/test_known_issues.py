@@ -18,8 +18,3 @@ def test_failed_document_blocks_the_gate(unit_case):
         make_doc("Dct000001", "ct", region="chest", facts={"lesion_size": fact("3.2 cm")}), make_doc("Dbad00001", "other", state="error"))
     assert not rules.evaluate(unit_case)["passed"]
 
-
-# ---- found while writing 0.3 (listed in the plan under "Found during the run") -------------------------------------------------------------
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="found in 0.3, fixed alongside V1 item 3.2: 'Final diagnosis pending' is read as FINAL")
-def test_final_diagnosis_pending_is_not_final():
-    assert docstatus.detect_status("FINAL DIAGNOSIS: pending IHC")[0] != "FINAL"

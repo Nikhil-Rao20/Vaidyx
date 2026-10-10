@@ -1,0 +1,111 @@
+{
+  "_note": [
+    "Document type keywords (V1 item 3.2). A second opinion on the reader model's document type, read ONLY from the header of page 1 (the first header_lines non-empty lines: hospital, department, title, study name) and the filename. Never deeper: a histopathology report that mentions a 'CT guided biopsy' in the body stays histopathology.",
+    "Matching: case-insensitive and whole words; a space, hyphen, slash, dot or underscore in a phrase matches any of them or nothing ('PET-CT' matches 'PET/CT', 'PET CT', 'PETCT'; 'X-ray' matches 'Xray'). Write both spellings where Indian and US differ (tumour / tumor, haematology / hematology).",
+    "Per type: 'patterns' count on any header line; 'title_only' count only on a title line (and in the filename); 'case_sensitive' match the exact capitals in the text ('EGFR' the gene, not 'eGFR' the kidney test) but any case in the filename; 'beats' lists the types whose matches on the SAME line are dropped when this type matches there ('PET/CT' is pet_ct, not ct; 'CYTOLOGY REPORT (FNAC)' is cytology, not histopathology).",
+    "Weights: a title line (one of the first title_lines lines, a line in capitals, or a line ending with REPORT) counts 'title'; other header lines count 'header'; the filename counts least. A department line ('Department of Pathology') or a hospital line counts as a header line even when it is in capitals: the study line names the document, the department does not. Each type counts once per line (its best match).",
+    "Addendum: when a title line says ADDENDUM, a header line that names the report it belongs to ('Relates to IHC report of ...') gives that report's type with weight 'addendum_parent' (an addendum is filed with its parent report).",
+    "ignore: phrases blanked out before matching ('CT guided' biopsy is a biopsy, not a CT; 'MRD No.', 'OPD No.' and 'HPE No.' are number labels, not the document's type; 'ALK PHOS' is a liver test, not the ALK gene). 'MR' alone is deliberately absent: it matches the salutation 'Mr.'.",
+    "Result: the type with the highest total; none when there is no evidence or when two types share the top total (ambiguous). Clinical team: add a phrase under its type, a title-only word for short words that are too common in report bodies, or a 'beats' entry for a new conflict."
+  ],
+  "header_lines": 10,
+  "title_lines": 3,
+  "weights": {"title": 3, "header": 1, "filename": 0.5, "addendum_parent": 5},
+  "department_words": ["department of", "dept of", "deptt of", "division of", "section of", "unit of", "department"],
+  "institution_words": ["hospital", "hospitals", "institute", "institution", "centre", "center", "diagnostics", "healthcare", "health care", "medical college", "nursing home", "laboratories", "labs", "foundation", "trust", "AIIMS", "PGIMER", "JIPMER"],
+  "ignore": ["CT guided", "CT guidance", "USG guided", "US guided", "ultrasound guided", "ultrasonography guided", "sonography guided", "EUS guided", "image guided", "fluoroscopy guided", "MRD No", "MRD Number", "MRI No", "OPD No", "OPD Number", "OPD Reg No", "OP No", "IPD No", "HPE No", "HP No", "Biopsy No", "ALK PHOS", "ALK PHOSPHATASE"],
+  "addendum": {
+    "title_words": ["addendum", "addenda", "supplementary report"],
+    "parent_phrases": ["relates to", "related to", "addendum to", "supplementary to", "supplement to", "refers to", "in continuation of", "further to"]
+  },
+  "types": {
+    "ct": {
+      "patterns": ["CECT", "NCCT", "HRCT", "CT scan", "CT thorax", "CT chest", "CT abdomen", "CT pelvis", "CT brain", "CT head", "CT neck", "CT KUB", "CT angiography", "CT urography", "CT enterography", "computed tomography", "contrast enhanced CT", "MDCT"],
+      "title_only": ["CT"]
+    },
+    "mri": {
+      "patterns": ["MRI", "MR imaging", "magnetic resonance", "MR study", "CEMRI", "MR enterography", "multiparametric MR"],
+      "title_only": []
+    },
+    "xray": {
+      "patterns": ["X-ray", "Xray", "chest PA", "chest PA view", "radiograph", "radiography", "skiagram", "CXR"],
+      "title_only": []
+    },
+    "ultrasound": {
+      "patterns": ["USG", "ultrasound", "ultrasonography", "sonography", "sonology", "Doppler"],
+      "title_only": []
+    },
+    "mammogram": {
+      "patterns": ["mammogram", "mammography", "mammographic", "sonomammography", "sonomammogram", "mammo", "tomosynthesis"],
+      "title_only": [],
+      "beats": ["ultrasound"]
+    },
+    "pet_ct": {
+      "patterns": ["PET-CT", "PET scan", "FDG PET", "FDG-PET", "PSMA PET", "DOTATATE PET", "positron emission tomography", "PET-MRI"],
+      "title_only": ["PET"],
+      "beats": ["ct", "mri"]
+    },
+    "bone_scan": {
+      "patterns": ["bone scan", "bone scintigraphy", "skeletal scintigraphy", "MDP", "whole body bone scan"],
+      "title_only": []
+    },
+    "histopathology": {
+      "patterns": ["histopathology", "histopathological", "histopathology report", "HPE", "biopsy report", "surgical pathology", "histology report", "trucut", "tru-cut", "core biopsy", "resection specimen", "frozen section"],
+      "title_only": ["histology"],
+      "beats": ["ultrasound", "ct", "mri", "endoscopy"]
+    },
+    "cytology": {
+      "patterns": ["cytology", "cytopathology", "FNAC", "FNA", "fine needle", "fine-needle aspiration", "pap smear", "fluid cytology", "cytological"],
+      "title_only": [],
+      "beats": ["histopathology", "ultrasound", "ct"]
+    },
+    "ihc": {
+      "patterns": ["immunohistochemistry", "immunohistochemical", "IHC", "receptor status", "ER/PR", "hormone receptor"],
+      "title_only": [],
+      "beats": ["histopathology"]
+    },
+    "molecular": {
+      "patterns": ["NGS", "mutation analysis", "mutation testing", "ROS1", "KRAS", "BRAF", "BRCA", "molecular", "next generation sequencing", "gene rearrangement", "RT-PCR"],
+      "case_sensitive": ["EGFR", "ALK", "FISH", "PCR"],
+      "title_only": [],
+      "beats": ["histopathology"]
+    },
+    "lab": {
+      "patterns": ["haematology", "hematology", "biochemistry", "CBC", "complete blood count", "haemogram", "hemogram", "LFT", "RFT", "KFT", "liver function test", "renal function test", "kidney function test", "serum", "tumour marker", "tumor marker", "tumour markers", "tumor markers", "CEA", "CA 15-3", "CA-125", "CA 19-9", "PSA", "AFP", "beta HCG", "blood test", "blood tests", "laboratory report", "laboratory investigation", "laboratory investigations", "lab report", "clinical pathology", "serology", "coagulation profile", "thyroid profile", "HbA1c"],
+      "title_only": []
+    },
+    "endoscopy": {
+      "patterns": ["colonoscopy", "endoscopy", "bronchoscopy", "UGI scopy", "UGI endoscopy", "sigmoidoscopy", "gastroscopy", "OGD", "OGD scopy", "EBUS", "cystoscopy", "laryngoscopy", "proctoscopy", "ERCP", "EUS"],
+      "title_only": []
+    },
+    "operative_note": {
+      "patterns": ["operative note", "operative notes", "operation note", "operation notes", "operative record", "surgery note", "surgical note", "OT note", "OT notes", "procedure note", "operative findings"],
+      "title_only": [],
+      "beats": ["histopathology"]
+    },
+    "discharge_summary": {
+      "patterns": ["discharge summary", "discharge card", "discharge note", "discharge certificate"],
+      "title_only": []
+    },
+    "treatment_summary": {
+      "patterns": ["treatment summary", "completion summary", "RT completion", "chemotherapy summary", "radiotherapy summary", "end of treatment", "RT summary", "chemo summary"],
+      "title_only": []
+    },
+    "tumour_board_record": {
+      "patterns": ["tumour board", "tumor board", "MDT", "multidisciplinary", "multi-disciplinary", "board minutes", "MDT meeting"],
+      "title_only": []
+    },
+    "clinical_note": {
+      "patterns": ["OPD", "OPD note", "consultation", "clinical note", "clinic note", "progress note", "follow up", "follow up note", "case sheet", "out patient", "outpatient"],
+      "title_only": []
+    },
+    "referral": {
+      "patterns": ["referral", "referral letter", "referred to", "reference letter", "to whomsoever", "to whom so ever", "to whom it may concern"],
+      "title_only": []
+    },
+    "pulmonary_function": {
+      "patterns": ["PFT", "spirometry", "pulmonary function", "lung function test"],
+      "title_only": []
+    }
+  }
+}

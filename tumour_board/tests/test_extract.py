@@ -20,6 +20,23 @@ def test_status_signature_and_date(run):
     assert c["report_date_iso"] == "2026-09-04"
 
 
+def test_doc_type_cross_check(run):
+    """V1 item 3.2: the title keywords are checked against the model's type; a disagreement keeps both types for the gate."""
+    text = "Sahyadri Cancer Institute (SYNTHETIC)\nDEPARTMENT OF RADIO-DIAGNOSIS\nCECT THORAX WITH CONTRAST\nPatient SYNTHETIC, Test Patient UHID SYN-900001\nReported on 04/09/2026"
+    c = run(text=text, cls={"doc_type": "mri", "title": "CECT THORAX", "body_region": "chest"}, raw={}, filename="scan.pdf")["classification"]
+    assert c["doc_type"] == "mri" and c["doc_type_keyword"] == "ct"
+    assert c["doc_type_disagreement"]["keyword_type"] == "ct" and c["doc_type_disagreement"]["model_type"] == "mri" and "CECT THORAX" in c["doc_type_disagreement"]["note"]
+    assert c["doc_type_disagreement"]["evidence"][0]["where"].startswith("line")
+    c = run(text=text, cls={"doc_type": "ct", "title": "CECT THORAX", "body_region": "chest"}, raw={}, filename="scan.pdf")["classification"]
+    assert c["doc_type"] == "ct" and "doc_type_disagreement" not in c and c["doc_type_keyword"] == "ct"
+    c = run(cls={"doc_type": "lab"})["classification"]  # the lab fixture: HAEMATOLOGY REPORT agrees
+    assert c["doc_type"] == "lab" and "doc_type_disagreement" not in c
+    c = run(text="SYNTHETIC\nNotes\nPlain text with no study name\nReported on 04/09/2026", cls={"doc_type": "other"}, raw={}, filename="notes.txt")["classification"]
+    assert c["doc_type"] == "other" and c["doc_type_keyword"] == "" and "doc_type_disagreement" not in c
+    c = run(text=text, cls={"doc_type": ""}, raw={}, filename="scan.pdf")["classification"]  # no usable model type: the keywords stand in
+    assert c["doc_type"] == "ct" and "doc_type_disagreement" not in c
+
+
 def test_filename_date_is_a_suggestion_only(run):
     """V1 item 3.1: the filename never sets the date; a document with no labelled date is unconfirmed and the filename is offered to the dialog."""
     c = run(cls={"report_date": ""}, filename="cbc_2026-09-03.txt")["classification"]
