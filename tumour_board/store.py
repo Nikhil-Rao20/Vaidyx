@@ -4,6 +4,9 @@ cases/<case_id>/case.json        identity, protocol, patient, created
 cases/<case_id>/state.json       gate result, actions, board records, expert reviews, AI artefacts
 cases/<case_id>/docs/<doc_id>/   original file + doc.json (pages, classification, facts, verification)
 cases/<case_id>/audit.jsonl      append-only log of every AI call and user action
+
+intake/<doc_id>/                 department uploads before they are matched to a patient (V1 item 2.3): original file + doc.json
+intake/audit.jsonl               append-only log of intake events (uploads, matching, filing)
 """
 import asyncio, hashlib, json, os, re, shutil, time, uuid
 from datetime import datetime
@@ -66,7 +69,8 @@ def create_case(case_id, patient: dict, protocol: str, board_date: str = "", cre
     d = case_dir(case_id)
     if (d / "case.json").exists():
         raise FileExistsError(case_id)
-    c = {"case_id": case_id, "patient": patient, "protocol": protocol, "board_date": board_date, "created": now_iso(), "created_by": created_by}
+    c = {"case_id": case_id, "patient": patient, "protocol": protocol, "board_date": board_date, "created": now_iso(), "created_by": created_by,
+         "listing": {"status": "listed" if protocol else "awaiting_listing"}}  # a Case File without a protocol waits for the coordinator to list it (V1 item 2.5)
     _write_json(d / "case.json", c)
     _write_json(d / "state.json", {"actions": [], "board_records": [], "reviews": [], "artefacts": {}, "gate": None})
     return c
@@ -160,3 +164,83 @@ def read_audit(case_id, limit=500):
 
 def auditor(case_id):
     return lambda ev: audit(case_id, ev)
+
+
+# ---- intake area: department uploads before patient matching (V1 item 2.3) ----------------------------------------
+
+def intake_dir() -> Path:
+    return config.DATA_ROOT / "intake"
+
+
+def intake_doc_dir(doc_id: str) -> Path:
+    return intake_dir() / safe_id(doc_id)
+
+
+def add_intake_file(src_name: str, data: bytes, rel_path: str, department: str, user: str):
+    """Store an uploaded file in the intake area, tagged with the uploading department, user and time."""
+    doc_id = "D" + uuid.uuid4().hex[:8]
+    ext = Path(src_name).suffix.lower()
+    dd = intake_doc_dir(doc_id)
+    dd.mkdir(parents=True, exist_ok=True)
+    (dd / f"original{ext}").write_bytes(data)
+    doc = {"doc_id": doc_id, "filename": Path(src_name).name, "rel_path": rel_path or Path(src_name).name, "ext": ext,
+           "size": len(data), "sha256": hashlib.sha256(data).hexdigest(), "added": now_iso(), "state": "queued",
+           "department": department, "uploaded_by": user, "intake": True}
+    _write_json(dd / "doc.json", doc)
+    return doc
+
+
+def get_intake(doc_id: str):
+    return _read_json(intake_doc_dir(doc_id) / "doc.json")
+
+
+def save_intake(doc):
+    _write_json(intake_doc_dir(doc["doc_id"]) / "doc.json", doc)
+
+
+def intake_original_path(doc_id: str) -> Path:
+    return next(intake_doc_dir(doc_id).glob("original.*"))
+
+
+def list_intake():
+    base = intake_dir()
+    if not base.exists():
+        return []
+    docs = [d for d in (_read_json(p) for p in base.glob("*/doc.json")) if d]
+    return sorted(docs, key=lambda d: d.get("added") or "")
+
+
+def delete_intake(doc_id: str):
+    shutil.rmtree(intake_doc_dir(doc_id), ignore_errors=True)
+
+
+def move_intake_to_case(doc_id: str, case_id: str):
+    """Move an intake document (original + record) into cases/<case_id>/docs/<doc_id>/ keeping its id. Returns the record."""
+    src = intake_doc_dir(doc_id)
+    doc = _read_json(src / "doc.json")
+    if not doc:
+        raise KeyError(doc_id)
+    dst = case_dir(case_id) / "docs" / safe_id(doc_id)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(src), str(dst))
+    _docs_cache.pop(case_id, None)
+    return doc
+
+
+def audit_intake(event: dict):
+    event = {"ts": now_iso(), **event}
+    p = intake_dir() / "audit.jsonl"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with open(p, "a") as f:
+        f.write(json.dumps(event, ensure_ascii=False, default=str) + "\n")
+
+
+def read_intake_audit(limit=500):
+    p = intake_dir() / "audit.jsonl"
+    if not p.exists():
+        return []
+    return [json.loads(l) for l in p.read_text().splitlines()[-limit:]]
+
+
+def intake_auditor(doc_id):
+    return lambda ev: audit_intake({"doc_id": doc_id, **ev})

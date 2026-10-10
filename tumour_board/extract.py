@@ -76,45 +76,74 @@ async def extract_facts(text, fact_ids, audit=None):
     return await llm.chat("extractor", msg, json_schema=_facts_schema(fact_ids), max_tokens=1800, purpose="extract fields", audit=audit)
 
 
-async def process_document(case_id, doc_id, protocol_id, case_patient=None, progress=None):
-    """Full pipeline for one document. Writes results into the doc record. Safe to re-run."""
+def finish_classification(c, full, texts, filename):
+    """Rules over the model's header reading: status and signature from docstatus, the model's quotes kept only when found in the
+    text, the report date from the model then the filename then the first date in the text (item 3.1 replaces this), the patient id
+    kept only when found verbatim. Shared by Case File processing and intake (V1 item 2.3)."""
+    status, squote, notes = docstatus.detect_status(full)
+    signed, sline = docstatus.detect_signature(full)
+    if status == "UNSTATED" and c.get("status_quote") and grounding.locate(c["status_quote"], texts):
+        st2, _, _ = docstatus.detect_status(c["status_quote"])  # the model found a status line the rules missed
+        if st2 != "UNSTATED":
+            status, squote = st2, c["status_quote"]
+    c["status"], c["status_quote"], c["signed"], c["status_notes"] = status, squote, signed, notes
+    c["signature_quote"] = sline or (c.get("signature_quote") if c.get("signature_quote") and grounding.locate(c["signature_quote"], texts) else "")
+    c["report_date_iso"] = docstatus.parse_date(c.get("report_date")) or docstatus.parse_date(filename.replace("_", " ")) \
+        or (docstatus.find_dates(full) or [""])[0]
+    if c.get("patient_id") and not grounding.locate(c["patient_id"], texts):
+        c["patient_id_unverified"] = c["patient_id"]; c["patient_id"] = ""
+    return c
+
+
+def identity_check(full, case_patient):
+    """Does the document belong to this Case File's patient? UHID / MRN first, then name tokens. None when there is no patient."""
+    if not (case_patient and (case_patient.get("mrn") or case_patient.get("name"))):
+        return None
+    nf = grounding.norm(full)
+    mrn = grounding.norm(case_patient.get("mrn") or "")
+    toks = [t for t in re.findall(r"[a-z]{3,}", grounding.norm(case_patient.get("name") or "")) if t not in ("synthetic", "mr", "mrs", "ms", "dr")]
+    if mrn and mrn in nf:
+        return "match"
+    if toks and sum(1 for t in toks if t in nf) >= min(2, len(toks)):
+        return "name_match"
+    return "mismatch_or_missing"
+
+
+async def process_document(case_id, doc_id, protocol_id, case_patient=None, progress=None, from_stored=False):
+    """Full pipeline for one document. Writes results into the doc record. Safe to re-run.
+
+    from_stored=True (a document filed from the intake area, or re-extracted after a clinician confirmation): the stored pages and
+    classification are reused, nothing is re-read or re-classified; only the identity check and the field extraction run.
+    protocol_id empty (a Case File not yet listed, V1 item 2.5): no fields are extracted; the document is read and classified only."""
     au = store.auditor(case_id)
     doc = store.get_doc(case_id, doc_id)
     path = store.original_path(case_id, doc_id)
     try:
-        doc["state"] = "reading"; store.save_doc(case_id, doc); progress and progress(doc_id, "reading")
-        pages = await ingest.extract_pages(path, audit=au)
-        doc["pages"] = pages
+        if from_stored and doc.get("pages") and doc.get("classification"):
+            pages = doc["pages"]
+        else:
+            doc["state"] = "reading"; doc.pop("error", None); store.save_doc(case_id, doc); progress and progress(doc_id, "reading")
+            pages = await ingest.extract_pages(path, audit=au)
+            doc["pages"] = pages
+            doc.pop("classification", None)
         texts = [p["text"] for p in pages]
         full = _doc_text(pages)
         if not full.strip() or all(not t.strip() for t in texts):
-            doc.update(state="error", error="no readable text"); store.save_doc(case_id, doc); return doc
-        doc["state"] = "classifying"; store.save_doc(case_id, doc); progress and progress(doc_id, "classifying")
-        c = await classify(full, au)
-        status, squote, notes = docstatus.detect_status(full)
-        signed, sline = docstatus.detect_signature(full)
-        if status == "UNSTATED" and c.get("status_quote") and grounding.locate(c["status_quote"], texts):
-            st2, _, _ = docstatus.detect_status(c["status_quote"])  # the model found a status line the rules missed
-            if st2 != "UNSTATED":
-                status, squote = st2, c["status_quote"]
-        c["status"], c["status_quote"], c["signed"], c["status_notes"] = status, squote, signed, notes
-        c["signature_quote"] = sline or (c.get("signature_quote") if c.get("signature_quote") and grounding.locate(c["signature_quote"], texts) else "")
-        c["report_date_iso"] = docstatus.parse_date(c.get("report_date")) or docstatus.parse_date(doc["filename"].replace("_", " ")) \
-            or (docstatus.find_dates(full) or [""])[0]
-        if c.get("patient_id") and not grounding.locate(c["patient_id"], texts):
-            c["patient_id_unverified"] = c["patient_id"]; c["patient_id"] = ""
-        doc["classification"] = c
+            doc.update(state="error", error="no readable text"); store.save_doc(case_id, doc); progress and progress(doc_id, "error"); return doc
+        if not doc.get("classification"):
+            doc["state"] = "classifying"; store.save_doc(case_id, doc); progress and progress(doc_id, "classifying")
+            c = await classify(full, au)
+            doc["classification"] = finish_classification(c, full, texts, doc["filename"])
+        c = doc["classification"]
         # identity check: the document should belong to this Case File's patient (UHID/MRN first, then name tokens)
-        if case_patient and (case_patient.get("mrn") or case_patient.get("name")):
-            nf = grounding.norm(full)
-            mrn = grounding.norm(case_patient.get("mrn") or "")
-            toks = [t for t in re.findall(r"[a-z]{3,}", grounding.norm(case_patient.get("name") or "")) if t not in ("synthetic", "mr", "mrs", "ms", "dr")]
-            if mrn and mrn in nf:
-                doc["identity"] = "match"
-            elif toks and sum(1 for t in toks if t in nf) >= min(2, len(toks)):
-                doc["identity"] = "name_match"
-            else:
-                doc["identity"] = "mismatch_or_missing"
+        ident = identity_check(full, case_patient)
+        if ident:
+            doc["identity"] = ident
+        if not protocol_id:  # not listed yet: no protocol, so nothing to extract (V1 item 2.5)
+            doc["facts"] = {}
+            doc["state"] = "ready"; doc["processed"] = store.now_iso()
+            store.save_doc(case_id, doc); progress and progress(doc_id, "ready")
+            return doc
         doc["state"] = "extracting"; store.save_doc(case_id, doc); progress and progress(doc_id, "extracting")
         fids = protocol.facts_for_doc(protocol_id, c["doc_type"])
         raw = await extract_facts(full, fids, au)

@@ -160,6 +160,11 @@ table.t tr.click { cursor: pointer; } table.t tr.click:hover td { background: va
 .form input:focus, .form textarea:focus, .form select:focus, .reviewbar input:focus { outline: 2px solid var(--tint-line); border-color: var(--accent); }
 .form textarea { min-height: 90px; }
 .arow { display: grid; grid-template-columns: 1.2fr 2fr 1fr auto; gap: 6px; margin-bottom: 6px; }
+.side-intake { margin-top: 18px; } .side-intake h4 { margin-top: 0; }
+.intake-card { padding: 10px 12px; margin-top: 8px; } .intake-card label { display: block; font-weight: 700; color: var(--muted); margin-bottom: 4px; }
+.intake-card select { width: 100%; padding: 6px 8px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--panel); margin-bottom: 8px; }
+.intake-card .drop { padding: 10px; }
+.iact { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; align-items: center; } .iact select { padding: 4px 6px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--panel); max-width: 260px; }
 .conf { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .conf:last-child { border-bottom: 0; }
 .grid3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; }

@@ -71,6 +71,13 @@ def run_flow(b, base, pw, out, size, sfx, errors):
     pg.click("#tabs button[data-tab='summary']"); pg.click("#gl-case"); pg.wait_for_selector("#glout .hit", timeout=180000)
     shot("TB-001_guidelines", full_page=True)
     pg.click("#btn-cards"); pg.wait_for_timeout(1500); shot("model_cards"); pg.keyboard.press("Escape")
+    # department uploads and the Needs matching queue (V1 2.3); the hospital set-up screen (V1 2.1)
+    if pg.locator("#btn-side").is_visible() and not pg.evaluate("document.body.classList.contains('side-open')"):
+        pg.click("#btn-side"); pg.wait_for_timeout(350)
+    if pg.locator("#btn-queue").is_visible():
+        pg.click("#btn-queue"); pg.wait_for_selector("#intake .card", timeout=20000); pg.wait_for_timeout(600); shot("intake_queue", full_page=True)
+    if pg.locator("#btn-org").is_visible():
+        pg.click("#btn-org"); pg.wait_for_selector("#o-depts tr", timeout=20000); pg.wait_for_timeout(500); shot("org_admin"); pg.keyboard.press("Escape")
     pg.close()
 
 

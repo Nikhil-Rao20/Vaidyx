@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from src.auth_helpers import require_user
 from tumour_board import agents, config, guidelines, llm, org, postboard, protocol, qa, rules, search, service, store, summary
 from tumour_board import confirm  # clinician confirmations (V1 item 2.2)
+from tumour_board import intake  # department uploads and patient matching (V1 items 2.3, 2.4)
 
 
 from fastapi.routing import APIRoute
@@ -185,6 +186,117 @@ def setup_tumour_board_routes():
                 raise HTTPException(413, f"{f.filename} is larger than 60 MB")
             data.append((rels[i] if i < len(rels) and rels[i] else f.filename, b))
         job = service.add_files(case_id, data, u)
+        return {"job": job["id"], "total": job["total"]}
+
+    # ---- intake: department uploads before patient matching (V1 item 2.3) ----------------------------------------------
+    def _intake(doc_id, rl):
+        try:
+            d = store.get_intake(doc_id)
+        except ValueError:
+            raise HTTPException(404, "document not found")
+        if not d:
+            raise HTTPException(404, "document not found")
+        if not (rl["admin"] or rl["coordinator"] or org.can(rl, "inbox", d.get("department"))):
+            raise HTTPException(403, "This document was uploaded by another department")
+        return d
+
+    @r.post("/intake/documents")
+    async def intake_upload(request: Request, files: list[UploadFile] = File(...), paths: str = Form("[]"), department: str = Form("")):
+        """Upload for a department without choosing a Case File. The files are read, classified and identified in the intake area, then
+        matched to a patient (filed automatically on an exact identifier, otherwise queued for a person)."""
+        u = _user(request); rl = _roles(request)
+        dept = org.department_id(department) if department else None
+        if not dept:
+            raise HTTPException(400, "Choose the department you are uploading for")
+        _need(rl, "upload", dept)
+        rels = json.loads(paths or "[]")
+        data = []
+        for i, f in enumerate(files):
+            b = await f.read()
+            if len(b) > 60 * 1024 * 1024:
+                raise HTTPException(413, f"{f.filename} is larger than 60 MB")
+            data.append((rels[i] if i < len(rels) and rels[i] else f.filename, b))
+        job = service.add_intake_files(data, dept, u)
+        return {"job": job["id"], "total": job["total"], "department": dept}
+
+    @r.get("/intake")
+    async def intake_queue(request: Request):
+        rl = _roles(request)
+        docs = intake.queue(rl)
+        cases = [{"case_id": c["case_id"], "patient": c.get("patient") or {}, "protocol": c.get("protocol"), "listing": c.get("listing")} for c in store.list_cases()]
+        return {"documents": docs, "cases": cases, "can_match": org.can(rl, "match"), "can_create": org.can(rl, "create_case"),
+                "departments": org.my_departments(rl), "audit": store.read_intake_audit(200) if (rl["admin"] or rl["coordinator"]) else []}
+
+    @r.get("/intake/{doc_id}")
+    async def intake_doc(doc_id: str, request: Request):
+        return _intake(doc_id, _roles(request))
+
+    @r.get("/intake/{doc_id}/file")
+    async def intake_file(doc_id: str, request: Request, render: int = 0, page: int = 0):
+        _intake(doc_id, _roles(request))
+        p = store.intake_original_path(doc_id)
+        if render and p.suffix.lower() == ".pdf":
+            import io
+            import pypdfium2 as pdfium
+            from fastapi.responses import Response
+            pdf = pdfium.PdfDocument(str(p))
+            im = pdf[max(0, min(page, len(pdf) - 1))].render(scale=1.6).to_pil()
+            buf = io.BytesIO(); im.save(buf, "PNG")
+            return Response(buf.getvalue(), media_type="image/png")
+        return FileResponse(p)
+
+    @r.post("/intake/{doc_id}/file-to-case")
+    async def intake_file_to_case(doc_id: str, request: Request):
+        """A person files the document into a Case File ({"case_id": ..., "reason": ...}); recorded as a confirm_match in that Case File."""
+        u = _user(request); rl = _roles(request); _need(rl, "match"); _intake(doc_id, rl); b = await request.json()
+        case_id = store.safe_id(str(b.get("case_id", "")))
+        if not store.get_case(case_id):
+            raise HTTPException(404, "Case not found")
+        job = service.file_intake(doc_id, case_id, u, "confirmed", str(b.get("reason", "")))
+        return {"job": job["id"], "case_id": case_id, "duplicate": job.get("duplicate")}
+
+    @r.post("/intake/{doc_id}/new-case")
+    async def intake_new_case(doc_id: str, request: Request):
+        """Start a new Case File from the document's identity ({"case_id"?: ..., "patient"?: {...}}); it waits for listing (V1 item 2.5)."""
+        u = _user(request); rl = _roles(request); _need(rl, "create_case"); d = _intake(doc_id, rl)
+        b = await request.json() if (await request.body()) else {}
+        cid = store.safe_id(str(b["case_id"])) if b.get("case_id") else None
+        if cid and store.get_case(cid):
+            raise HTTPException(409, "Case already exists")
+        pat = b.get("patient") if isinstance(b.get("patient"), dict) else None
+        if cid:
+            pat = pat or intake.patient_from_identity(d)
+            store.create_case(cid, pat, "", created_by=u)
+            store.audit(cid, {"kind": "case_created", "by": u, "from_intake": doc_id, "listing": "awaiting_listing"})
+            job = service.file_intake(doc_id, cid, u, "new_case", str(b.get("reason", "")))
+        else:
+            job = service.file_intake(doc_id, None, u, "new_case", str(b.get("reason", "")), patient=pat)
+        return {"job": job["id"], "case_id": job["case_id"]}
+
+    @r.post("/intake/{doc_id}/not-this-patient")
+    async def intake_not_this_patient(doc_id: str, request: Request):
+        u = _user(request); rl = _roles(request); _need(rl, "match"); _intake(doc_id, rl); b = await request.json()
+        case_id = store.safe_id(str(b.get("case_id", "")))
+        if not store.get_case(case_id):
+            raise HTTPException(404, "Case not found")
+        async with store.lock(case_id):
+            try:
+                return intake.not_this_patient(doc_id, case_id, u, str(b.get("reason", "")))
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+
+    @r.delete("/intake/{doc_id}")
+    async def intake_discard(doc_id: str, request: Request):
+        u = _user(request); rl = _roles(request); d = _intake(doc_id, rl)
+        _need(rl, "delete_document", d.get("department"))
+        reason = request.query_params.get("reason", "")
+        intake.discard(doc_id, u, reason)
+        return {"ok": True}
+
+    @r.post("/intake/{doc_id}/reprocess")
+    async def intake_reprocess(doc_id: str, request: Request):
+        u = _user(request); rl = _roles(request); d = _intake(doc_id, rl); _need(rl, "upload", d.get("department"))
+        job = service.reprocess_intake([doc_id], u)
         return {"job": job["id"], "total": job["total"]}
 
     @r.get("/jobs/{job_id}")

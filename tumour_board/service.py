@@ -3,7 +3,7 @@ demo case import, expert reviews."""
 import asyncio, json, logging, time, uuid
 from pathlib import Path
 
-from . import config, extract, ingest, rules, store
+from . import config, extract, ingest, intake, rules, store
 
 log = logging.getLogger("tumour_board")
 
@@ -76,7 +76,7 @@ def _job(case_id, total, doc_ids=None):
     return JOBS[jid]
 
 
-async def process_docs(case_id, doc_ids, job):
+async def process_docs(case_id, doc_ids, job, from_stored=False):
     case = store.get_case(case_id)
 
     def progress(doc_id, state):
@@ -87,9 +87,10 @@ async def process_docs(case_id, doc_ids, job):
         _save_job(job)
 
     try:
-        await asyncio.gather(*[extract.process_document(case_id, d, case["protocol"], case.get("patient"), progress) for d in doc_ids])
+        kw = {"from_stored": True} if from_stored else {}  # documents filed from intake keep their stored pages and classification
+        await asyncio.gather(*[extract.process_document(case_id, d, case.get("protocol"), case.get("patient"), progress, **kw) for d in doc_ids])
         async with store.lock(case_id):
-            gate = rules.evaluate(case_id)
+            gate = rules.evaluate(case_id)  # None while the Case File is not listed (V1 item 2.5)
             rules.sync_actions(case_id, gate)
     except Exception as e:  # the UI polls this job: it must reach a terminal state
         job["state"] = "failed"; job["error"] = f"{e.__class__.__name__}: {str(e)[:300]}"; job["seconds"] = round(time.time() - job["started"], 1)
@@ -101,9 +102,11 @@ async def process_docs(case_id, doc_ids, job):
         await asyncio.to_thread(search.index, case_id)
     except Exception:
         pass
-    job["state"] = "finished"; job["seconds"] = round(time.time() - job["started"], 1); job["gate"] = {k: gate[k] for k in ("passed", "readiness", "satisfied", "total")}
+    job["state"] = "finished"; job["seconds"] = round(time.time() - job["started"], 1)
+    job["gate"] = {k: gate[k] for k in ("passed", "readiness", "satisfied", "total")} if gate else None
     _save_job(job)
-    store.audit(case_id, {"kind": "ingestion_finished", "documents": len(doc_ids), "seconds": job["seconds"], "gate_passed": gate["passed"], "readiness": gate["readiness"]})
+    store.audit(case_id, {"kind": "ingestion_finished", "documents": len(doc_ids), "seconds": job["seconds"], "gate_passed": gate["passed"] if gate else None,
+                          "readiness": gate["readiness"] if gate else None})
 
 
 def add_files(case_id, files, user=""):
@@ -146,6 +149,84 @@ def reprocess(case_id, which="errors", user=""):
     store.audit(case_id, {"kind": "reprocess", "documents": ids, "by": user})
     job = _job(case_id, len(ids), ids)
     job["task"] = asyncio.get_event_loop().create_task(process_docs(case_id, ids, job))
+    return job
+
+
+def add_intake_files(files, department, user=""):
+    """Department upload without a Case File (V1 item 2.3): files: list of (relative_path, bytes). Same refusal rules as add_files;
+    identical bytes already waiting in the intake area are skipped. Returns a job (processing and matching run in the background)."""
+    ids, skipped, unsupported = [], [], []
+    waiting = {d.get("sha256"): d["doc_id"] for d in store.list_intake()}
+    for rel, data in files:
+        reason = ingest.reject_reason(rel)
+        if reason is None and (Path(rel).suffix.lower() not in ingest.SUPPORTED or Path(rel).name.startswith(".")):
+            reason = "Unsupported file type"
+        if reason:
+            unsupported.append({"file": rel, "reason": reason})
+            store.audit_intake({"kind": "document_rejected", "file": rel, "reason": reason, "department": department, "by": user}); continue
+        import hashlib
+        h = hashlib.sha256(data).hexdigest()
+        if h in waiting:
+            skipped.append({"file": rel, "same_as": waiting[h]})
+            store.audit_intake({"kind": "document_duplicate_skipped", "file": rel, "same_as": waiting[h], "department": department, "by": user}); continue
+        d = store.add_intake_file(Path(rel).name, data, rel, department, user)
+        ids.append(d["doc_id"]); waiting[h] = d["doc_id"]
+        store.audit_intake({"kind": "document_added", "doc_id": d["doc_id"], "file": rel, "department": department, "by": user})
+    job = _job("intake", len(ids), ids)
+    job["skipped_duplicates"], job["unsupported"], job["department"] = skipped, unsupported, department
+    _save_job(job)
+    job["task"] = asyncio.get_event_loop().create_task(process_intake(ids, job))
+    return job
+
+
+async def process_intake(doc_ids, job):
+    """Run intake.process on each document in parallel and summarise where each one went."""
+    def progress(doc_id, state):
+        job["doc_states"][doc_id] = state
+        job["events"].append({"t": round(time.time() - job["started"], 2), "doc_id": doc_id, "state": state})
+        if state in ("ready", "error", "needs_matching", "duplicate"):
+            job["done"] += 1
+        _save_job(job)
+    try:
+        await asyncio.gather(*[intake.process(d, progress) for d in doc_ids])
+    except Exception as e:
+        job["state"] = "failed"; job["error"] = f"{e.__class__.__name__}: {str(e)[:300]}"; job["seconds"] = round(time.time() - job["started"], 1)
+        _save_job(job); store.audit_intake({"kind": "error", "where": "intake", "error": job["error"]}); return
+    filed, needs, errors = {}, [], []
+    for d in doc_ids:
+        rec = store.get_intake(d)
+        if rec is None:  # moved into a Case File
+            case = next((c["case_id"] for c in store.list_cases() if any(x["doc_id"] == d for x in store.list_docs(c["case_id"]))), None)
+            filed[d] = case
+        elif rec.get("state") == "error":
+            errors.append(d)
+        else:
+            needs.append(d)
+    job.update(state="finished", seconds=round(time.time() - job["started"], 1), filed=filed, needs_matching=needs, errors=errors, gate=None)
+    _save_job(job)
+    store.audit_intake({"kind": "intake_finished", "documents": len(doc_ids), "filed": filed, "needs_matching": needs, "errors": errors, "seconds": job["seconds"]})
+
+
+def reprocess_intake(doc_ids, user=""):
+    """Read, classify, identify and match intake documents again (after an error, or when new Case Files arrived)."""
+    ids = [d for d in doc_ids if store.get_intake(d)]
+    for i in ids:
+        d = store.get_intake(i); d["state"] = "queued"; d.pop("error", None); store.save_intake(d)
+    store.audit_intake({"kind": "reprocess", "documents": ids, "by": user})
+    job = _job("intake", len(ids), ids)
+    job["task"] = asyncio.get_event_loop().create_task(process_intake(ids, job))
+    return job
+
+
+def file_intake(doc_id, case_id, user="", how="confirmed", reason="", patient=None):
+    """A person files an intake document into a Case File (or starts a new one with case_id None). Returns a job on the Case File."""
+    moved = intake.file_to_case(doc_id, case_id, user, how, reason, patient)
+    cid = moved["filed"]["case_id"]
+    if moved.get("state") == "duplicate":
+        job = _job(cid, 0, []); job.update(state="finished", seconds=0.0, gate=None, duplicate=moved["filed"]); _save_job(job)
+        return job
+    job = _job(cid, 1, [doc_id])
+    job["task"] = asyncio.get_event_loop().create_task(process_docs(cid, [doc_id], job, from_stored=True))
     return job
 
 

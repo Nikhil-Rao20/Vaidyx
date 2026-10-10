@@ -73,7 +73,10 @@ def resolve_facts(docs, overrides=None):
 
 
 def evaluate(case_id):
+    """The Pre-Authorization gate, or None for a Case File that is not listed yet (no protocol: records are shown but nothing is checked)."""
     case = store.get_case(case_id)
+    if not case.get("protocol"):
+        return None
     prot = protocol.get(case["protocol"])
     cat = protocol.facts()
     state = store.get_state(case_id)
@@ -199,6 +202,10 @@ def set_override(case_id, kind, key, value: dict, by=""):
 def sync_actions(case_id, gate, by=""):
     """Open an action for every unmet requirement; complete actions whose requirement is now satisfied."""
     st = store.get_state(case_id)
+    if gate is None:  # not listed yet
+        st["gate"] = None
+        store.save_state(case_id, st)
+        return st
     actions = st.get("actions", [])
     today = date.today()
     case = store.get_case(case_id); prot = protocol.get(case["protocol"])

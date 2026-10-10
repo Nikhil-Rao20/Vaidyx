@@ -28,6 +28,17 @@
       <button class="primary sm hidden" id="btn-new">+ New</button>
     </div>
     <div id="case-list" class="case-list"></div>
+    <div class="side-intake hidden" id="side-intake">
+      <h4>Department uploads</h4>
+      <button class="ghost sm" id="btn-queue" title="Records that could not be matched to a patient automatically">Needs matching <span class="chip c-warn hidden" id="queue-count">0</span></button>
+      <div class="card intake-card" id="intake-upload">
+        <label class="small" for="up-dept">Upload for my department</label>
+        <select id="up-dept"></select>
+        <div class="drop small" id="up-drop">Drop files here<br><button class="ghost sm" id="up-pick" style="margin-top:6px">Choose files</button> <button class="ghost sm" id="up-folder">Folder</button></div>
+        <input type="file" id="up-files" multiple class="hidden"><input type="file" id="up-files-dir" webkitdirectory multiple class="hidden">
+        <div id="up-job" class="small"></div>
+      </div>
+    </div>
     <div class="side-demo">
       <h4>Synthetic demo cases</h4>
       <div id="demo-list"></div>
@@ -45,6 +56,8 @@
       </div>
       <p class="muted">Select a Case File on the left, or load a synthetic demo case.</p>
     </section>
+
+    <section id="intake" class="hidden"></section>
 
     <section id="case" class="hidden">
       <div class="case-head">

@@ -38,8 +38,8 @@ async function loadCases() {
   const d = await api("/cases"); S.demoList = d.demo;
   $("#case-list").innerHTML = d.cases.length ? d.cases.map((c) => `
     <div class="citem ${c.case_id === S.caseId ? "on" : ""}" data-case="${esc(c.case_id)}">
-      <div class="t"><span>${esc(c.patient?.name || c.case_id)}</span>${c.gate_passed ? '<span class="chip c-ok">Ready</span>' : c.readiness != null ? `<span class="chip c-warn">${c.readiness}%</span>` : ""}</div>
-      <div class="s">${esc(c.case_id)} · ${esc(c.protocol)} · ${c.documents} documents${c.open_actions ? ` · ${c.open_actions} open actions` : ""}</div>
+      <div class="t"><span>${esc(c.patient?.name || c.case_id)}</span>${c.gate_passed ? '<span class="chip c-ok">Ready</span>' : c.readiness != null ? `<span class="chip c-warn">${c.readiness}%</span>` : c.listing?.status === "awaiting_listing" ? '<span class="chip c-mute">Awaiting listing</span>' : ""}</div>
+      <div class="s">${esc(c.case_id)} · ${esc(c.protocol || "no protocol yet")} · ${c.documents} documents${c.open_actions ? ` · ${c.open_actions} open actions` : ""}</div>
     </div>`).join("") : `<div class="muted small">No Case Files yet.</div>`;
   $$(".citem").forEach((el) => (el.onclick = () => openCase(el.dataset.case)));
   $("#demo-list").innerHTML = d.demo.map((c) => `<div class="demo"><b>${esc(c.case_id)}</b> ${esc(c.patient?.name)}<br><span class="muted">${esc(c.protocol)} · ${c.files} files${c.has_arrivals ? " · has later arrivals" : ""}</span><br>
@@ -54,11 +54,11 @@ async function loadCases() {
 async function openCase(id, keepTab) {
   if (id !== S.caseId) { S.tab = "ready"; S.chat = []; }
   S.caseId = id; S.data = await api("/cases/" + encodeURIComponent(id));
-  $("#welcome").classList.add("hidden"); $("#case").classList.remove("hidden");
+  $("#welcome").classList.add("hidden"); $("#intake").classList.add("hidden"); $("#case").classList.remove("hidden");
   const c = S.data.case, p = c.patient || {};
   $("#c-protocol").textContent = (S.protocols?.find((x) => x.id === c.protocol)?.label || c.protocol) + " · Tumour Board Case File";
   $("#c-title").textContent = p.name || c.case_id;
-  $("#c-meta").textContent = [c.case_id, p.mrn && "UHID / MRN " + p.mrn, p.agesex, c.board_date && "Board " + fmtDate(c.board_date)].filter(Boolean).join(" · ");
+  $("#c-meta").textContent = [c.case_id, p.mrn && "UHID / MRN " + p.mrn, p.agesex, c.board_date && "Board " + fmtDate(c.board_date), c.listing?.status === "awaiting_listing" && "Awaiting listing"].filter(Boolean).join(" · ");
   renderReadiness();
   if (!keepTab) S.tab = S.tab || "ready";
   showTab(S.tab);
@@ -332,8 +332,9 @@ function renderDocs() {
     await api(`/cases/${S.caseId}/documents/${b.dataset.delDoc}`, { method: "DELETE" }); await openCase(S.caseId, true); toast("Document removed; Pre-Authorization re-checked"); }));
 }
 
-async function openDoc(docId, focus) {
-  const d = await api(`/cases/${S.caseId}/documents/${docId}`);
+async function openDoc(docId, focus, base) {
+  base = base || `/cases/${S.caseId}/documents/${docId}`;
+  const d = await api(base);
   const c = d.classification || {};
   const pages = d.pages || [];
   const pg = focus?.page ?? 0;
@@ -347,14 +348,17 @@ async function openDoc(docId, focus) {
   };
   const isImg = [".png", ".jpg", ".jpeg", ".webp", ".bmp"].includes(d.ext);
   const isPdf = d.ext === ".pdf";
-  const preview = isImg ? `<img class="orig" src="/api/tb/cases/${S.caseId}/documents/${docId}/file">` :
-    isPdf ? `<img class="orig" id="pdfimg" src="/api/tb/cases/${S.caseId}/documents/${docId}/file?render=1&page=${pg}">` : `<div class="muted">No image preview for this format.</div>`;
+  const preview = isImg ? `<img class="orig" src="/api/tb${base}/file">` :
+    isPdf ? `<img class="orig" id="pdfimg" src="/api/tb${base}/file?render=1&page=${pg}">` : `<div class="muted">No image preview for this format.</div>`;
+  const idr = d.identity_read;
+  const idHTML = idr ? `<div>Identity as printed</div><div>${esc(identityText(idr))}${idr.notes?.length ? ` <span class="muted">(${esc(idr.notes.join("; "))})</span>` : ""}</div>` : "";
   $("#drawer-body").innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
     <div><div class="eyebrow">${esc(DT[c.doc_type] || c.doc_type || "")} · ${esc(c.department || "")}</div><h2 style="margin:4px 0;color:#1f2933">${esc(c.title || d.filename)}</h2>
     <div class="muted small">${esc(d.rel_path)} · ${fmtDate(c.report_date_iso)} · ${statusChip(c)}${(c.status_notes || []).length ? ` <span class="chip c-warn">${esc(c.status_notes.join("; "))}</span>` : ""}</div></div>
-    <div><a class="ghost" href="/api/tb/cases/${S.caseId}/documents/${docId}/file" target="_blank">Open original</a> <button class="ghost" data-close>Close</button></div></div>
+    <div><a class="ghost" href="/api/tb${base}/file" target="_blank">Open original</a> <button class="ghost" data-close>Close</button></div></div>
     <div class="kv" style="margin:12px 0"><div>Status line</div><div>${esc(c.status_quote || "not found")}</div><div>Signature</div><div>${esc(c.signature_quote || c.signer || "not found")}</div>
-    <div>Patient ID check</div><div>${d.identity === "match" ? "UHID / MRN matches the Case File patient" : d.identity === "name_match" ? "Patient name matches (identifier not found in the document)" : "Not found in document: verify it belongs to this patient"}</div>
+    ${d.department ? `<div>Uploaded by</div><div>${esc(deptName(d.department))}${d.uploaded_by ? " (" + esc(d.uploaded_by) + ")" : ""} · ${esc((d.added || "").slice(0, 16).replace("T", " "))}</div>` : ""}${idHTML}
+    ${d.intake ? "" : `<div>Patient ID check</div><div>${d.identity === "match" ? "UHID / MRN matches the Case File patient" : d.identity === "name_match" ? "Patient name matches (identifier not found in the document)" : "Not found in document: verify it belongs to this patient"}</div>`}
     <div>Read by</div><div>${esc([...new Set(pages.map((p) => p.method))].join(", "))}${pages.some((p) => p.ocr_reads) ? " (two independent reads per scanned page; numbers compared)" : ""}</div></div>
     <div class="docview"><div>${preview}</div><div>
       ${pages.length > 1 ? `<div style="margin-bottom:6px">${pages.map((p, i) => `<button class="ghost sm" data-pg="${i}">Page ${i + 1}</button>`).join(" ")}</div>` : ""}
@@ -651,14 +655,103 @@ async function showOrg() {
   };
 }
 
+// ------------------------------------------------------------------ department uploads and the Needs matching queue · V1 items 2.3 / 2.4
+function identityText(idr) {
+  if (!idr) return "";
+  const ids = (idr.ids || []).map((i) => `${{ uhid: "UHID", mrn: "MRN", cr_no: "CR No.", ip_no: "IP No.", op_no: "OP No.", reg_no: "Reg. No.", hospital_no: "Hospital No.", abha: "ABHA", pmjay: "PM-JAY ID" }[i.kind] || i.kind} ${i.value}`);
+  return [idr.name?.value || "name not read", idr.age != null || idr.sex ? `${idr.age ?? "?"} Y / ${idr.sex || "?"}` : "", idr.dob ? "DOB " + fmtDate(idr.dob) : "", idr.relation?.name ? `${idr.relation.kind || ""} ${idr.relation.name}`.trim() : "",
+    ...ids, idr.aadhaar_seen ? "Aadhaar seen, masked" : ""].filter(Boolean).join(" · ");
+}
+const DECISION = { auto_link: ["c-ok", "Filed automatically"], suggest: ["c-warn", "Suggested match: confirm"], needs_matching: ["c-warn", "Needs matching"],
+  new_case: ["c-info", "New Case File"], id_conflict: ["c-bad", "Possible wrong ID"] };
+async function refreshQueueCount() {
+  if (!S.me) return;
+  try { const q = await api("/intake"); S.queue = q; const n = q.documents.filter((d) => d.state !== "filed").length;
+    $("#queue-count").textContent = n; $("#queue-count").classList.toggle("hidden", !n); } catch (e) {}
+}
+function bindIntakeUpload() {
+  const my = S.org?.my_departments || [];
+  $("#side-intake").classList.toggle("hidden", !my.length);
+  if (!my.length) return;
+  $("#up-dept").innerHTML = my.map((d) => `<option value="${esc(d.id)}">${esc(d.name)}${d.role ? " (" + esc(d.role) + ")" : ""}</option>`).join("");
+  const send = async (list) => {
+    if (!list.length) return;
+    const fd = new FormData(); list.forEach(([f]) => fd.append("files", f)); fd.append("paths", JSON.stringify(list.map(([, p]) => p))); fd.append("department", $("#up-dept").value);
+    $("#up-job").innerHTML = `<span class="spin"></span> Uploading ${list.length} file(s)...`;
+    const r = await fetch("/api/tb/intake/documents", { method: "POST", body: fd, credentials: "same-origin" });
+    if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch (e) {} $("#up-job").textContent = ""; toast("Upload failed: " + m, 7000); return; }
+    watchIntakeJob((await r.json()).job);
+  };
+  $("#up-pick").onclick = () => $("#up-files").click(); $("#up-folder").onclick = () => $("#up-files-dir").click();
+  $("#up-files").onchange = (e) => send([...e.target.files].map((f) => [f, f.name]));
+  $("#up-files-dir").onchange = (e) => send([...e.target.files].map((f) => [f, f.webkitRelativePath || f.name]));
+  const drop = $("#up-drop");
+  drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); }; drop.ondragleave = () => drop.classList.remove("over");
+  drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); send([...e.dataTransfer.files].map((f) => [f, f.name])); };
+}
+async function watchIntakeJob(id) {
+  const t0 = Date.now();
+  while (true) {
+    let j; try { j = await api("/jobs/" + id); } catch (e) { break; }
+    const st = Object.values(j.doc_states), count = (k) => st.filter((s) => s === k).length;
+    $("#up-job").innerHTML = `<div class="progress"><div style="width:${j.total ? (100 * j.done) / j.total : 100}%"></div></div>${j.done}/${j.total} read · ${((Date.now() - t0) / 1000).toFixed(1)} s ${count("needs_matching") ? `· ${count("needs_matching")} need matching` : ""}`;
+    if (j.state === "failed" || j.state === "interrupted") { toast((j.error || "Processing failed") + ".", 8000); break; }
+    if (j.state === "finished") {
+      const filed = Object.entries(j.filed || {}), needs = (j.needs_matching || []).length, errs = (j.errors || []).length;
+      const extra = [j.unsupported?.length ? `${j.unsupported.length} file(s) not read: ` + j.unsupported.map((u) => `${u.file} (${u.reason})`).join(", ") : "", j.skipped_duplicates?.length ? `${j.skipped_duplicates.length} already waiting` : ""].filter(Boolean).join("; ");
+      $("#up-job").innerHTML = `<span class="muted">${filed.length} filed · ${needs} need matching${errs ? ` · ${errs} failed` : ""} · ${j.seconds} s</span>`;
+      toast(`${j.total} document(s) read for ${deptName(j.department)}: ${filed.length} filed into Case Files (${[...new Set(filed.map(([, c]) => c))].join(", ") || "none"}), ${needs} waiting for a person to match${errs ? `, ${errs} failed to read` : ""}.${extra ? " " + extra + "." : ""}`, 9000);
+      await refreshQueueCount(); if (!$("#intake").classList.contains("hidden")) showIntake(); loadCases(); if (S.caseId) openCase(S.caseId, true);
+      break;
+    }
+    await new Promise((r) => setTimeout(r, 700));
+  }
+}
+async function showIntake() {
+  const q = await api("/intake"); S.queue = q;
+  $("#welcome").classList.add("hidden"); $("#case").classList.add("hidden"); $("#intake").classList.remove("hidden");
+  $$(".citem").forEach((el) => el.classList.remove("on"));
+  const caseLabel = (cid) => { const c = q.cases.find((x) => x.case_id === cid); return c ? `${c.patient?.name || cid} (${cid}${c.listing?.status === "awaiting_listing" ? ", awaiting listing" : ""})` : cid; };
+  const caseOpts = (sel) => q.cases.map((c) => `<option value="${esc(c.case_id)}" ${c.case_id === sel ? "selected" : ""}>${esc(caseLabel(c.case_id))}</option>`).join("");
+  const docs = q.documents.filter((d) => d.state !== "filed");
+  const row = (d) => { const m = d.match || {}, c = d.classification || {}, dec = DECISION[m.decision] || ["c-mute", d.state];
+    const cands = (m.candidates || []).map((x) => `<div class="small"><span class="cite" data-open-case="${esc(x.case_id)}">${esc(caseLabel(x.case_id))}</span> <span class="muted">${esc(x.why || "")}</span>${q.can_match ? ` <button class="ghost sm" data-file="${esc(d.doc_id)}" data-case="${esc(x.case_id)}">File here</button> <button class="ghost sm" data-notthis="${esc(d.doc_id)}" data-case="${esc(x.case_id)}">Not this patient</button>` : ""}</div>`).join("");
+    const act = q.can_match && ["needs_matching", "duplicate", "error"].includes(d.state) ? `<div class="iact"><select data-sel="${esc(d.doc_id)}">${caseOpts(m.case_id || (m.candidates || [])[0]?.case_id)}</select><button class="primary sm" data-file="${esc(d.doc_id)}">File into Case File</button>${q.can_create ? `<button class="ghost sm" data-newcase="${esc(d.doc_id)}">New Case File</button>` : ""}<button class="ghost sm" data-discard="${esc(d.doc_id)}">Discard</button>${d.state === "error" ? `<button class="ghost sm" data-retry="${esc(d.doc_id)}">Read again</button>` : ""}</div>` : "";
+    return `<tr><td><b class="click" data-intake="${esc(d.doc_id)}">${esc(c.title || d.filename)}</b><div class="small muted">${esc(d.rel_path)} · ${esc(DT[c.doc_type] || c.doc_type || "")}${c.report_date_iso ? " · " + fmtDate(c.report_date_iso) : ""} ${d.state === "ready" || c.status ? statusChip(c) : ""}</div></td>
+      <td class="small">${esc(deptName(d.department))}<div class="muted">${esc(d.uploaded_by || "")} · ${esc((d.added || "").slice(0, 16).replace("T", " "))}</div></td>
+      <td class="small">${d.state === "error" ? `<span class="chip c-bad" title="${esc(d.error || "")}">failed to read</span> <span class="muted">${esc(d.error || "")}</span>` : d.state === "duplicate" ? `<span class="chip c-mute">identical file already in ${esc(d.filed?.case_id || "")}</span>` : ["queued", "reading", "classifying", "identifying"].includes(d.state) ? `<span class="chip c-info"><span class="spin"></span> ${esc(d.state)}</span>` : esc(identityText(d.identity_read))}</td>
+      <td><span class="chip ${dec[0]}">${esc(dec[1])}</span><div class="small muted">${esc(m.reason || "")}</div>${cands}${act}</td></tr>`; };
+  $("#intake").innerHTML = `<div class="case-head"><div><div class="eyebrow">Department uploads</div><h1>Needs matching</h1>
+      <div class="muted">Records uploaded by departments that could not be matched to a patient on an exact identifier. A person files each one into a Case File, starts a new Case File, or discards it. Every decision is recorded in the audit log.</div></div></div>
+    <div class="card"><h3>Waiting <span class="muted small">${docs.length}</span></h3>
+    ${docs.length ? `<table class="t"><thead><tr><th>Record</th><th>Uploaded by</th><th>Patient as printed</th><th>Decision</th></tr></thead><tbody>${docs.map(row).join("")}</tbody></table>` : `<div class="muted">Nothing waiting. Department uploads that match a patient exactly are filed into the Case File automatically.</div>`}</div>
+    ${q.audit?.length ? `<div class="card"><h3>Intake log <span class="muted small">${q.audit.length} events</span></h3><table class="t"><tbody>${q.audit.slice().reverse().slice(0, 60).map((e) => { const { ts, kind, ...rest } = e; return `<tr><td class="small">${esc(ts.replace("T", " ").slice(0, 16))}</td><td><span class="chip c-info">${esc(kind)}</span></td><td class="small">${esc(JSON.stringify(rest)).slice(0, 220)}</td></tr>`; }).join("")}</tbody></table></div>` : ""}`;
+  const after = async (jobId, cid) => { toast(cid ? `Filed into ${cid}; fields are being extracted` : "Done"); await showIntake(); refreshQueueCount(); loadCases(); if (jobId && cid) { S.caseId = cid; } };
+  $$("[data-intake]").forEach((el) => (el.onclick = () => openDoc(el.dataset.intake, null, `/intake/${el.dataset.intake}`)));
+  $$("[data-open-case]").forEach((el) => (el.onclick = () => openCase(el.dataset.openCase)));
+  $$("[data-file]").forEach((b) => (b.onclick = async () => { const cid = b.dataset.case || $(`[data-sel="${b.dataset.file}"]`)?.value; if (!cid) return;
+    const v = await confirmDialog({ title: "File this record into a Case File", intro: `Confirm that this record belongs to ${caseLabel(cid)}. The match is recorded as your confirmation in that Case File.`, fields: [{ id: "reason", label: "Note", type: "text", placeholder: "e.g. UHID checked on the hospital card" }], submit: "File" });
+    if (!v) return; try { const r = await api(`/intake/${b.dataset.file}/file-to-case`, { json: { case_id: cid, reason: v.reason } }); await after(r.job, r.duplicate ? null : cid); if (r.duplicate) toast("An identical file is already in that Case File; nothing was added", 6000); } catch (e) { toast(e.message, 7000); } }));
+  $$("[data-notthis]").forEach((b) => (b.onclick = async () => { const v = await confirmDialog({ title: "Not this patient", intro: `Record that this document is not ${caseLabel(b.dataset.case)}. The Case File will not be suggested again for it.`, fields: [{ id: "reason", label: "Reason", type: "text", required: true }], submit: "Record" });
+    if (!v) return; try { await api(`/intake/${b.dataset.notthis}/not-this-patient`, { json: { case_id: b.dataset.case, reason: v.reason } }); await showIntake(); } catch (e) { toast(e.message, 7000); } }));
+  $$("[data-newcase]").forEach((b) => (b.onclick = async () => { const d = q.documents.find((x) => x.doc_id === b.dataset.newcase), idr = d?.identity_read || {};
+    const v = await confirmDialog({ title: "Start a new Case File from this record", intro: "A new Case File is created with the identity printed on the record. It waits for the coordinator to list it (cancer, NCG setting, board date) before the Pre-Authorization check runs.",
+      fields: [{ id: "case_id", label: "Case File ID", type: "text", placeholder: "leave empty for the next number" }, { id: "name", label: "Patient name", type: "text", value: idr.name?.value || "", required: true }, { id: "mrn", label: "UHID / MRN", type: "text", value: (idr.ids || []).find((i) => ["uhid", "mrn", "hospital_no", "reg_no", "cr_no"].includes(i.kind))?.value || "" }, { id: "agesex", label: "Age / Sex", type: "text", value: idr.age != null && idr.sex ? `${idr.age} Y / ${idr.sex}` : "" }], submit: "Create and file" });
+    if (!v) return; try { const r = await api(`/intake/${b.dataset.newcase}/new-case`, { json: { case_id: v.case_id, patient: { name: v.name, mrn: v.mrn, agesex: v.agesex, ids: idr.ids?.map((i) => ({ kind: i.kind, value: i.value })) || [], abha: idr.abha || null, dob: idr.dob || null, sex: idr.sex || null, age: idr.age ?? null } } }); await after(r.job, r.case_id); } catch (e) { toast(e.message, 7000); } }));
+  $$("[data-discard]").forEach((b) => (b.onclick = async () => { const v = await confirmDialog({ title: "Discard this record", intro: "The file is removed from the intake area. The removal is recorded in the intake log.", fields: [{ id: "reason", label: "Reason", type: "text", required: true }], submit: "Discard" });
+    if (!v) return; try { await api(`/intake/${b.dataset.discard}?reason=${encodeURIComponent(v.reason)}`, { method: "DELETE" }); await showIntake(); refreshQueueCount(); } catch (e) { toast(e.message, 7000); } }));
+  $$("[data-retry]").forEach((b) => (b.onclick = async () => { try { const r = await api(`/intake/${b.dataset.retry}/reprocess`, { method: "POST" }); watchIntakeJob(r.job); } catch (e) { toast(e.message, 7000); } }));
+}
+
 // ------------------------------------------------------------------ boot
 $$("#tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 $("#btn-new").onclick = newCase;
 $("#btn-cards").onclick = showCards;
 $("#btn-org").onclick = showOrg;
+$("#btn-queue").onclick = showIntake;
 (async () => {
   const pr = await api("/protocols"); S.protocols = pr.protocols; S.facts = pr.facts;
-  await loadOrg();
+  await loadOrg(); bindIntakeUpload(); refreshQueueCount();
   await loadCases(); loadModels(); setInterval(loadModels, 30000);
   const m = location.hash.match(/case=([\w.-]+)/); if (m) openCase(m[1]);
 })();

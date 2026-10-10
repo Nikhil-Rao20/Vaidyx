@@ -84,6 +84,55 @@ def phase2(c, base):
     c.post(f"/api/tb/cases/TB-001/confirmations/{r['confirmation']['id']}/undo")
     check("legacy /overrides alias still records a confirmation", "attest_final" in {x["type"] for x in c.post("/api/tb/cases/TB-001/overrides", json={"kind": "documents", "key": doc["doc_id"], "value": {"attested_final": True, "reason": "e2e"}}).json().get("confirmations", [])})
     c.post("/api/tb/cases/TB-001/overrides", json={"kind": "documents", "key": doc["doc_id"], "value": None})
+    # ---- 2.3 department uploads: a member uploads without a Case File; the record waits in the queue tagged with department and user
+    corpus = "/data/vaidyx/tb_demo_corpus/intake"
+    xray = open(f"{corpus}/radio_diagnosis/xray_chest_pa_2026-09-03.pdf", "rb").read()
+    note = b"SAHYADRI CANCER INSTITUTE (SYNTHETIC)\nX-RAY CHEST PA VIEW\nPatient name Kumar R\nAge / Sex 62 Y / M\nStudy date 03/09/2026\nFindings: no change.\nReport status: FINAL\nReported by: Dr. Shalini Rao, MD (Radio-diagnosis)\n"
+    check("member: upload for another department forbidden (403)", m.post("/api/tb/intake/documents", files=[("files", ("x.txt", note))], data={"paths": "[]", "department": "pathology"}).status_code == 403)
+    r = m.post("/api/tb/intake/documents", files=[("files", ("xray_followup.txt", note)), ("files", ("old.doc", b"x"))], data={"paths": json.dumps(["xray_followup.txt", "old.doc"]), "department": "Radio-diagnosis"})
+    check("member: upload for own department accepted", r.status_code == 200 and r.json()["department"] == "radio_diagnosis", r.text[:120])
+    jj, secs = wait_job(c, r.json()["job"])
+    check("intake job read the record and refused the .doc", jj["state"] == "finished" and jj["total"] == 1 and jj["unsupported"] and jj["gate"] is None, f"{secs}s")
+    q = m.get("/api/tb/intake").json()
+    mine = [d for d in q["documents"] if d.get("uploaded_by") == "tb-e2e-radio"]
+    check("member sees own department's intake records, tagged with department and user", len(mine) >= 1 and mine[0]["department"] == "radio_diagnosis" and mine[0]["added"]
+          and mine[0]["state"] in ("needs_matching", "filed") and not q["can_match"], json.dumps({k: mine[0].get(k) for k in ("state", "department")}) if mine else "none")
+    check("head of another department does not see it", not any(d.get("uploaded_by") == "tb-e2e-radio" for d in h.get("/api/tb/intake").json()["documents"]))
+    qa = c.get("/api/tb/intake").json()
+    rec = next((d for d in qa["documents"] if d.get("uploaded_by") == "tb-e2e-radio"), None)
+    check("coordinator / admin sees the whole queue with the intake log", rec is not None and qa["can_match"] and isinstance(qa.get("audit"), list))
+    if rec and rec["state"] == "needs_matching":
+        check("record was read and classified in the intake area", (rec.get("classification") or {}).get("doc_type") == "xray" and rec.get("identity_read") is not None, json.dumps(rec.get("classification", {}).get("doc_type")))
+        check("member cannot file (403)", m.post(f"/api/tb/intake/{rec['doc_id']}/file-to-case", json={"case_id": "TB-001"}).status_code == 403)
+        r = c.post(f"/api/tb/intake/{rec['doc_id']}/file-to-case", json={"case_id": "TB-001", "reason": "e2e: checked with the department"}).json()
+        jj, secs = wait_job(c, r["job"])
+        d1 = c.get("/api/tb/cases/TB-001").json()
+        filed = next((x for x in d1["documents"] if x["doc_id"] == rec["doc_id"]), None)
+        check("filed into TB-001 with the uploader's department recorded", filed is not None and filed["department"] == "radio_diagnosis" and filed["uploaded_by"] == "tb-e2e-radio" and filed["state"] == "ready", f"{secs}s")
+        check("filing recorded as a confirm_match in the Case File", any(x["type"] == "confirm_match" and x["key"] == rec["doc_id"] for x in d1["state"].get("confirmations", [])))
+        check("record left the queue", not any(d["doc_id"] == rec["doc_id"] for d in c.get("/api/tb/intake").json()["documents"]))
+        c.delete(f"/api/tb/cases/TB-001/documents/{rec['doc_id']}")
+    # a record that belongs to nobody: new Case File, awaiting listing
+    r = c.post("/api/tb/intake/documents", files=[("files", ("pap.pdf", open(f"{corpus}/pathology/pap_smear_2026-09-15.pdf", "rb").read()))], data={"paths": json.dumps(["pap.pdf"]), "department": "pathology"}).json()
+    jj, _ = wait_job(c, r["job"])
+    new_cid = None
+    if jj.get("filed"):
+        new_cid = list(jj["filed"].values())[0]
+        check("record with an unknown hospital ID opened a new Case File automatically (2.4)", bool(new_cid), new_cid)
+    else:
+        rec = next((d for d in c.get("/api/tb/intake").json()["documents"] if d["rel_path"] == "pap.pdf"), None)
+        r2 = c.post(f"/api/tb/intake/{rec['doc_id']}/new-case", json={"reason": "e2e"}).json() if rec else {}
+        if r2.get("job"):
+            wait_job(c, r2["job"]); new_cid = r2["case_id"]
+        check("coordinator starts a new Case File from the queue", bool(new_cid), new_cid or "")
+    if new_cid:
+        nc = c.get(f"/api/tb/cases/{new_cid}").json()
+        check("new Case File waits for listing: records shown, no gate", nc["case"]["listing"]["status"] == "awaiting_listing" and nc["state"]["gate"] is None and len(nc["documents"]) == 1 and nc["documents"][0]["state"] == "ready")
+        check("new Case File carries the printed identity (UHID, age / sex), never Aadhaar", nc["case"]["patient"].get("mrn") == "SYN-500911" and "aadhaar" not in json.dumps(nc["case"]["patient"]).lower(), json.dumps(nc["case"]["patient"])[:160])
+        c.delete(f"/api/tb/cases/{new_cid}")
+    for d in c.get("/api/tb/intake").json()["documents"]:
+        if d.get("uploaded_by") in E2E_USERS or d["rel_path"] in ("pap.pdf",):
+            c.delete(f"/api/tb/intake/{d['doc_id']}?reason=e2e+cleanup")
     m.close(); h.close()
 
 
