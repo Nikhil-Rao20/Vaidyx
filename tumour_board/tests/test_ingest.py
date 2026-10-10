@@ -439,3 +439,105 @@ def test_ocr_aadhaar_masked_before_the_line_check(monkeypatch):
     blob = __import__("json").dumps([p, events])
     assert "6043" not in blob and "1187" not in blob and p["aadhaar_masked"] == 1
     assert p["second_read"].startswith("Aadhaar No. XXXX XXXX 2209")
+
+
+# ---- Hindi / regional text and handwriting flags (V1 item 3.6) ------------------------------------------------
+TB005_OPD = Path("/data/vaidyx/tb_demo_corpus/truth/reference_text/TB-005/surgical_oncology/surgical_oncology_opd_2026-09-03.png.txt")
+HINDI_LINE = "मरीज़ ने बताया कि बाएँ स्तन में गांठ चार महीने से है।"
+DEVANAGARI_FLAG = "contains Hindi / regional text (Devanagari)"
+SYNTHETIC_OPD = ("Sahyadri Cancer Institute (SYNTHETIC)\nUHID SYN-500263\nHypothyroidism on thyroxine 50 mcg once daily.\n"
+                 + HINDI_LINE + "\nECOG performance status: 0\n")
+
+
+def _flag_offsets_ok(text, flags):
+    return all(text[x["start"]:x["end"]] == x["line"] for x in flags["flagged_lines"])
+
+
+@pytest.mark.skipif(not TB005_OPD.exists(), reason="demo corpus not present")
+def test_tb005_opd_hindi_line_is_flagged(tmp_path):
+    f = tmp_path / "opd.txt"; f.write_bytes(TB005_OPD.read_bytes())
+    (p,) = pages(f)
+    assert p["text"] == TB005_OPD.read_text()  # never translated or removed
+    assert p["flags"] == [DEVANAGARI_FLAG]
+    assert [(x["line"], x["flag"]) for x in p["flagged_lines"]] == [(HINDI_LINE, DEVANAGARI_FLAG)] and _flag_offsets_ok(p["text"], p)
+
+
+def test_page_flags_devanagari_lines_and_offsets():
+    fl = ingest.page_flags(SYNTHETIC_OPD)
+    assert fl["flags"] == [DEVANAGARI_FLAG] and [x["line"] for x in fl["flagged_lines"]] == [HINDI_LINE] and _flag_offsets_ok(SYNTHETIC_OPD, fl)
+
+
+@pytest.mark.parametrize("line,script", [("நோயாளி வலி இல்லை", "Tamil"), ("রোগীর ব্যথা নেই", "Bengali"), ("ರೋಗಿ ನೋವು ಇಲ್ಲ", "Kannada"),
+                                         ("రోగికి నొప్పి లేదు", "Telugu"), ("രോഗിക്ക് വേദനയില്ല", "Malayalam"), ("ਮਰੀਜ਼ ਨੂੰ ਦਰਦ ਨਹੀਂ", "Gurmukhi"),
+                                         ("દર્દીને દુખાવો નથી", "Gujarati"), ("ରୋଗୀଙ୍କୁ ଯନ୍ତ୍ରଣା ନାହିଁ", "Odia")])
+def test_page_flags_names_each_indic_script(line, script):
+    fl = ingest.page_flags("Hb 11.8 g/dL\n" + line)
+    assert fl["flags"] == [f"contains Hindi / regional text ({script})"] and fl["flagged_lines"][0]["line"] == line
+
+
+def test_page_flags_two_scripts_and_illegible_in_one_page():
+    text = "Hb 11.8 g/dL\nमरीज़ ठीक है\nநோயாளி நலம்\nDiagnosis: [illegible] carcinoma"
+    fl = ingest.page_flags(text)
+    assert fl["flags"] == ["contains Hindi / regional text (Devanagari, Tamil)", "handwriting / illegible parts: verify"]
+    assert [x["flag"] for x in fl["flagged_lines"]] == ["contains Hindi / regional text (Devanagari)", "contains Hindi / regional text (Tamil)",
+                                                         "handwriting / illegible parts: verify"]
+    assert _flag_offsets_ok(text, fl)
+
+
+@pytest.mark.parametrize("marker", ["[illegible]", "[Illegible]", "(illegible)", "[unreadable]", "[UNCLEAR]", "[handwritten note]",
+                                    "[handwritten: signature]", "???", "?????", "[illegible word]"])
+def test_page_flags_illegible_markers(marker):
+    text = f"Clinical notes\nBiopsy from {marker} lesion\nECOG 1"
+    fl = ingest.page_flags(text)
+    assert fl["flags"] == ["handwriting / illegible parts: verify"]
+    assert [x["line"] for x in fl["flagged_lines"]] == [f"Biopsy from {marker} lesion"] and _flag_offsets_ok(text, fl)
+
+
+@pytest.mark.parametrize("text", ["Package rate ₹ 1,20,000 under PM-JAY", "Is this the right side?", "Clear margins (R0)",
+                                  "Résumé of café visit, naïve", "", "Handwritten consent attached", "Question?? Please confirm"])
+def test_page_flags_plain_text_is_not_flagged(text):
+    assert ingest.page_flags(text) == {}
+
+
+def test_english_only_pages_have_no_flags(tmp_path):
+    import json
+    for doc in (FIXTURES / "cases").glob("*/docs/*/doc.json"):
+        for pg in json.loads(doc.read_text()).get("pages") or []:
+            assert ingest.page_flags(pg.get("text") or "") == {}, doc
+    for f in [OFFICE / "lab_values.xlsx", OFFICE / "board_slides.pptx", FIXTURES / "long_discharge_summary.txt"]:
+        if f.exists():
+            assert all("flags" not in p and "flagged_lines" not in p for p in pages(f)), f
+
+
+def test_text_layer_pdf_hindi_line_is_flagged(monkeypatch, tmp_path):
+    text = SYNTHETIC_OPD + "Hindi note above kept as written in the record for the clinician to read."
+
+    class FakePage:
+        def extract_text(self):
+            return text
+
+    class FakeReader:
+        def __init__(self, path):
+            self.pages = [FakePage()]
+    import pypdf
+    monkeypatch.setattr(pypdf, "PdfReader", FakeReader)
+    f = tmp_path / "referral.pdf"; f.write_bytes(b"%PDF-1.4 synthetic")
+    (p,) = pages(f)
+    assert p["method"] == "text-layer" and p["text"] == text and p["flags"] == [DEVANAGARI_FLAG]
+
+
+def test_flagged_overlap():
+    fl = ingest.page_flags(SYNTHETIC_OPD)
+    page = {"text": SYNTHETIC_OPD, **fl}
+    at = SYNTHETIC_OPD.index("स्तन")
+    assert ingest.flagged_overlap(page, at, at + 4)["line"] == HINDI_LINE
+    at = SYNTHETIC_OPD.index("50 mcg")
+    assert ingest.flagged_overlap(page, at, at + 6) is None
+    assert ingest.flagged_overlap({"text": "x"}, 0, 1) is None
+
+
+def test_ocr_page_carries_the_flags(monkeypatch):
+    p = _two_reads(monkeypatch, SYNTHETIC_OPD + "Signed [illegible]", SYNTHETIC_OPD + "Signed [illegible]")
+    assert p["text"] == SYNTHETIC_OPD + "Signed [illegible]"
+    assert p["flags"] == [DEVANAGARI_FLAG, "handwriting / illegible parts: verify"] and _flag_offsets_ok(p["text"], p)
+    assert "flags" not in _two_reads(monkeypatch, "Hb 11.8 g/dL", "Hb 11.8 g/dL")

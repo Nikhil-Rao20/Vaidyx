@@ -28,20 +28,6 @@ def test_date_after_number_and_word_is_found():
     assert docstatus.find_dates("Age 62 Years 02/09/2026") == ["2026-09-02"]
 
 
-# ---- 3.4 long documents are truncated before extraction -----------------------------------------------------
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="fixed in V1 item 3.4")
-def test_extraction_sees_text_after_14000_chars(monkeypatch):
-    sent = []
-
-    async def fake_chat(role, msgs, **kw):
-        sent.append(" ".join(m["content"] for m in msgs if isinstance(m["content"], str)))
-        return {"haemoglobin": {"found": False, "value": "", "quote": ""}}
-    monkeypatch.setattr(extract.llm, "chat", fake_chat)
-    long_text = "SYNTHETIC discharge summary\n" + "Day-wise course: stable, afebrile.\n" * 500 + "Haemoglobin 11.8 g/dL\n"
-    asyncio.run(extract.extract_facts(long_text, ["haemoglobin"]))
-    assert any("Haemoglobin 11.8 g/dL" in s for s in sent)
-
-
 # ---- 4.3 failed documents block the gate --------------------------------------------------------------------
 @pytest.mark.xfail(strict=True, raises=AssertionError, reason="fixed in V1 item 4.3")
 def test_failed_document_blocks_the_gate(unit_case):

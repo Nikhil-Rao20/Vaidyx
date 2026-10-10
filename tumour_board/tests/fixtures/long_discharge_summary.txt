@@ -1,0 +1,163 @@
+SYNTHETIC - NOT A REAL PATIENT
+Sahyadri Cancer Institute (SYNTHETIC), Pune
+DEPARTMENT OF MEDICAL ONCOLOGY
+DISCHARGE SUMMARY
+Patient: SYNTHETIC, Ramesh Kulkarni    Age/Sex: 58 Y / M
+UHID: SYN-480021    IP No.: SYN-IP-77120
+Date of admission: 02/09/2026    Date of discharge: 24/09/2026
+Consultant: Dr. S. Deshpande (SYNTHETIC)
+
+Diagnosis as recorded: Carcinoma right lung, adenocarcinoma (see histopathology report)
+Presenting complaints: cough for 3 months, breathlessness on exertion, loss of weight 6 kg.
+Past history: Type 2 diabetes mellitus on oral hypoglycaemics for 8 years. Hypertension on amlodipine 5 mg OD.
+
+COURSE IN HOSPITAL (day-wise)
+Day 1 (02/09/2026), Morning round: pain controlled with paracetamol 650 mg SOS; tolerating oral diet; blood sugars monitored, insulin sliding scale as per chart. Plan continued as per treating team.
+Day 1 (02/09/2026), Afternoon review: pulse 84/min, BP 130/80 mmHg; afebrile, vitals stable; mild cough, saturating 95% on room air. Plan continued as per treating team.
+Day 1 (02/09/2026), Evening round: slept well overnight; bowel and bladder normal; mild cough, saturating 95% on room air. Plan continued as per treating team.
+Day 1 (02/09/2026), Night duty note: pain controlled with paracetamol 650 mg SOS; seen by dietician, high-protein diet advised; afebrile, vitals stable. Plan continued as per treating team.
+Day 1 (02/09/2026), Nursing note: bowel and bladder normal; ambulant in ward; afebrile, vitals stable. Plan continued as per treating team.
+Day 1 (02/09/2026), Physiotherapy note: mild cough, saturating 95% on room air; blood sugars monitored, insulin sliding scale as per chart; IV line site clean. Plan continued as per treating team.
+Day 2 (03/09/2026), Morning round: mild cough, saturating 95% on room air; ambulant in ward; slept well overnight. Plan continued as per treating team.
+Day 2 (03/09/2026), Afternoon review: bowel and bladder normal; blood sugars monitored, insulin sliding scale as per chart; afebrile, vitals stable. Plan continued as per treating team.
+Day 2 (03/09/2026), Evening round: slept well overnight; seen by dietician, high-protein diet advised; mild cough, saturating 95% on room air. Plan continued as per treating team.
+Day 2 (03/09/2026), Night duty note: ambulant in ward; pulse 84/min, BP 130/80 mmHg; IV line site clean. Plan continued as per treating team.
+Day 2 (03/09/2026), Nursing note: seen by dietician, high-protein diet advised; afebrile, vitals stable; slept well overnight. Plan continued as per treating team.
+Day 2 (03/09/2026), Physiotherapy note: seen by dietician, high-protein diet advised; blood sugars monitored, insulin sliding scale as per chart; afebrile, vitals stable. Plan continued as per treating team.
+Investigations day 2: Random blood sugar 148 mg/dL. Serum sodium 134 mmol/L. Serum potassium 4.8 mmol/L.
+Day 3 (04/09/2026), Morning round: slept well overnight; tolerating oral diet; no fresh complaints. Plan continued as per treating team.Day 3 (04/09/2026), Afternoon review: blood sugars monitored, insulin sliding scale as per chart; tolerating oral diet; bowel and bladder normal. Plan continued as per treating team.
+Day 3 (04/09/2026), Evening round: mild cough, saturating 95% on room air; seen by dietician, high-protein diet advised; no fresh complaints. Plan continued as per treating team.
+Day 3 (04/09/2026), Night duty note: bowel and bladder normal; pulse 84/min, BP 130/80 mmHg; tolerating oral diet. Plan continued as per treating team.
+Day 3 (04/09/2026), Nursing note: mild cough, saturating 95% on room air; seen by dietician, high-protein diet advised; IV line site clean. Plan continued as per treating team.
+Day 3 (04/09/2026), Physiotherapy note: pulse 84/min, BP 130/80 mmHg; ambulant in ward; pain controlled with paracetamol 650 mg SOS. Plan continued as per treating team.
+Day 4 (05/09/2026), Morning round: mild cough, saturating 95% on room air; bowel and bladder normal; intake and output charted. Plan continued as per treating team.
+Day 4 (05/09/2026), Afternoon review: mild cough, saturating 95% on room air; seen by dietician, high-protein diet advised; afebrile, vitals stable. Plan continued as per treating team.
+Day 4 (05/09/2026), Evening round: seen by dietician, high-protein diet advised; ambulant in ward; chest physiotherapy continued. Plan continued as per treating team.
+Day 4 (05/09/2026), Night duty note: pulse 84/min, BP 130/80 mmHg; bowel and bladder normal; blood sugars monitored, insulin sliding scale as per chart. Plan continued as per treating team.
+Day 4 (05/09/2026), Nursing note: IV line site clean; pain controlled with paracetamol 650 mg SOS; chest physiotherapy continued. Plan continued as per treating team.
+Day 4 (05/09/2026), Physiotherapy note: seen by dietician, high-protein diet advised; chest physiotherapy continued; pain controlled with paracetamol 650 mg SOS. Plan continued as per treating team.
+Investigations day 4: Random blood sugar 158 mg/dL. Serum sodium 137 mmol/L. Serum potassium 4.2 mmol/L.
+Day 5 (06/09/2026), Morning round: intake and output charted; IV line site clean; ambulant in ward. Plan continued as per treating team.
+Day 5 (06/09/2026), Afternoon review: mild cough, saturating 95% on room air; seen by dietician, high-protein diet advised; no fresh complaints. Plan continued as per treating team.
+Day 5 (06/09/2026), Evening round: bowel and bladder normal; chest physiotherapy continued; pain controlled with paracetamol 650 mg SOS. Plan continued as per treating team.
+Day 5 (06/09/2026), Night duty note: intake and output charted; chest physiotherapy continued; no fresh complaints. Plan continued as per treating team.
+Day 5 (06/09/2026), Nursing note: seen by dietician, high-protein diet advised; mild cough, saturating 95% on room air; IV line site clean. Plan continued as per treating team.Day 5 (06/09/2026), Physiotherapy note: bowel and bladder normal; blood sugars monitored, insulin sliding scale as per chart; tolerating oral diet. Plan continued as per treating team.
+Day 6 (07/09/2026), Morning round: IV line site clean; pain controlled with paracetamol 650 mg SOS; tolerating oral diet. Plan continued as per treating team.
+Day 6 (07/09/2026), Afternoon review: chest physiotherapy continued; blood sugars monitored, insulin sliding scale as per chart; afebrile, vitals stable. Plan continued as per treating team.
+Day 6 (07/09/2026), Evening round: pulse 84/min, BP 130/80 mmHg; mild cough, saturating 95% on room air; bowel and bladder normal. Plan continued as per treating team.
+Day 6 (07/09/2026), Night duty note: seen by dietician, high-protein diet advised; IV line site clean; pain controlled with paracetamol 650 mg SOS. Plan continued as per treating team.
+Day 6 (07/09/2026), Nursing note: pain controlled with paracetamol 650 mg SOS; intake and output charted; slept well overnight. Plan continued as per treating team.
+Day 6 (07/09/2026), Physiotherapy note: seen by dietician, high-protein diet advised; chest physiotherapy continued; slept well overnight. Plan continued as per treating team.
+Investigations day 6: Random blood sugar 178 mg/dL. Serum sodium 135 mmol/L. Serum potassium 4.1 mmol/L.
+Day 7 (08/09/2026), Morning round: no fresh complaints; chest physiotherapy continued; intake and output charted. Plan continued as per treating team.
+Day 7 (08/09/2026), Afternoon review: pulse 84/min, BP 130/80 mmHg; mild cough, saturating 95% on room air; afebrile, vitals stable. Plan continued as per treating team.
+Day 7 (08/09/2026), Evening round: intake and output charted; slept well overnight; no fresh complaints. Plan continued as per treating team.
+Day 7 (08/09/2026), Night duty note: pulse 84/min, BP 130/80 mmHg; seen by dietician, high-protein diet advised; slept well overnight. Plan continued as per treating team.
+Day 7 (08/09/2026), Nursing note: slept well overnight; chest physiotherapy continued; no fresh complaints. Plan continued as per treating team.
+Day 7 (08/09/2026), Physiotherapy note: intake and output charted; blood sugars monitored, insulin sliding scale as per chart; pulse 84/min, BP 130/80 mmHg. Plan continued as per treating team.
+Day 8 (09/09/2026), Morning round: pain controlled with paracetamol 650 mg SOS; afebrile, vitals stable; chest physiotherapy continued. Plan continued as per treating team.
+Day 8 (09/09/2026), Afternoon review: pain controlled with paracetamol 650 mg SOS; tolerating oral diet; seen by dietician, high-protein diet advised. Plan continued as per treating team.
+Day 8 (09/09/2026), Evening round: mild cough, saturating 95% on room air; chest physiotherapy continued; afebrile, vitals stable. Plan continued as per treating team.
+Day 8 (09/09/2026), Night duty note: ambulant in ward; IV line site clean; no fresh complaints. Plan continued as per treating team.Day 8 (09/09/2026), Nursing note: tolerating oral diet; intake and output charted; ambulant in ward. Plan continued as per treating team.
+Day 8 (09/09/2026), Physiotherapy note: blood sugars monitored, insulin sliding scale as per chart; slept well overnight; chest physiotherapy continued. Plan continued as per treating team.
+Investigations day 8: Random blood sugar 130 mg/dL. Serum sodium 136 mmol/L. Serum potassium 4.7 mmol/L.
+Day 9 (10/09/2026), Morning round: blood sugars monitored, insulin sliding scale as per chart; bowel and bladder normal; no fresh complaints. Plan continued as per treating team.
+Day 9 (10/09/2026), Afternoon review: tolerating oral diet; blood sugars monitored, insulin sliding scale as per chart; bowel and bladder normal. Plan continued as per treating team.
+Day 9 (10/09/2026), Evening round: no fresh complaints; intake and output charted; blood sugars monitored, insulin sliding scale as per chart. Plan continued as per treating team.
+Day 9 (10/09/2026), Night duty note: pain controlled with paracetamol 650 mg SOS; pulse 84/min, BP 130/80 mmHg; blood sugars monitored, insulin sliding scale as per chart. Plan continued as per treating team.
+Day 9 (10/09/2026), Nursing note: ambulant in ward; tolerating oral diet; mild cough, saturating 95% on room air. Plan continued as per treating team.
+Day 9 (10/09/2026), Physiotherapy note: tolerating oral diet; slept well overnight; ambulant in ward. Plan continued as per treating team.
+Day 10 (11/09/2026), Morning round: pulse 84/min, BP 130/80 mmHg; ambulant in ward; afebrile, vitals stable. Plan continued as per treating team.
+Day 10 (11/09/2026), Afternoon review: chest physiotherapy continued; seen by dietician, high-protein diet advised; tolerating oral diet. Plan continued as per treating team.
+Day 10 (11/09/2026), Evening round: no fresh complaints; slept well overnight; afebrile, vitals stable. Plan continued as per treating team.
+Day 10 (11/09/2026), Night duty note: tolerating oral diet; blood sugars monitored, insulin sliding scale as per chart; bowel and bladder normal. Plan continued as per treating team.
+Day 10 (11/09/2026), Nursing note: pain controlled with paracetamol 650 mg SOS; seen by dietician, high-protein diet advised; IV line site clean. Plan continued as per treating team.
+Day 10 (11/09/2026), Physiotherapy note: pain controlled with paracetamol 650 mg SOS; tolerating oral diet; intake and output charted. Plan continued as per treating team.
+Investigations day 10: Random blood sugar 185 mg/dL. Serum sodium 134 mmol/L. Serum potassium 4.7 mmol/L.
+Day 11 (12/09/2026), Morning round: slept well overnight; IV line site clean; pulse 84/min, BP 130/80 mmHg. Plan continued as per treating team.
+Day 11 (12/09/2026), Afternoon review: IV line site clean; bowel and bladder normal; blood sugars monitored, insulin sliding scale as per chart. Plan continued as per treating team.Day 11 (12/09/2026), Evening round: blood sugars monitored, insulin sliding scale as per chart; slept well overnight; IV line site clean. Plan continued as per treating team.
+Day 11 (12/09/2026), Night duty note: mild cough, saturating 95% on room air; chest physiotherapy continued; pulse 84/min, BP 130/80 mmHg. Plan continued as per treating team.
+Day 11 (12/09/2026), Nursing note: blood sugars monitored, insulin sliding scale as per chart; afebrile, vitals stable; ambulant in ward. Plan continued as per treating team.
+Day 11 (12/09/2026), Physiotherapy note: mild cough, saturating 95% on room air; ambulant in ward; chest physiotherapy continued. Plan continued as per treating team.
+Day 12 (13/09/2026), Morning round: tolerating oral diet; mild cough, saturating 95% on room air; pain controlled with paracetamol 650 mg SOS. Plan continued as per treating team.
+Day 12 (13/09/2026), Afternoon review: seen by dietician, high-protein diet advised; afebrile, vitals stable; mild cough, saturating 95% on room air. Plan continued as per treating team.
+Day 12 (13/09/2026), Evening round: afebrile, vitals stable; seen by dietician, high-protein diet advised; tolerating oral diet. Plan continued as per treating team.
+Day 12 (13/09/2026), Night duty note: bowel and bladder normal; mild cough, saturating 95% on room air; pain controlled with paracetamol 650 mg SOS. Plan continued as per treating team.
+Day 12 (13/09/2026), Nursing note: seen by dietician, high-protein diet advised; afebrile, vitals stable; mild cough, saturating 95% on room air. Plan continued as per treating team.
+Day 12 (13/09/2026), Physiotherapy note: slept well overnight; ambulant in ward; seen by dietician, high-protein diet advised. Plan continued as per treating team.
+Investigations day 12: Random blood sugar 168 mg/dL. Serum sodium 136 mmol/L. Serum potassium 4.4 mmol/L.
+Day 13 (14/09/2026), Morning round: pain controlled with paracetamol 650 mg SOS; seen by dietician, high-protein diet advised; slept well overnight. Plan continued as per treating team.
+Day 13 (14/09/2026), Afternoon review: chest physiotherapy continued; mild cough, saturating 95% on room air; IV line site clean. Plan continued as per treating team.
+Day 13 (14/09/2026), Evening round: slept well overnight; chest physiotherapy continued; IV line site clean. Plan continued as per treating team.
+Day 13 (14/09/2026), Night duty note: chest physiotherapy continued; slept well overnight; no fresh complaints. Plan continued as per treating team.
+Day 13 (14/09/2026), Nursing note: mild cough, saturating 95% on room air; tolerating oral diet; slept well overnight. Plan continued as per treating team.
+Day 13 (14/09/2026), Physiotherapy note: intake and output charted; pain controlled with paracetamol 650 mg SOS; slept well overnight. Plan continued as per treating team.
+Day 14 (15/09/2026), Morning round: no fresh complaints; chest physiotherapy continued; intake and output charted. Plan continued as per treating team.Day 14 (15/09/2026), Afternoon review: tolerating oral diet; bowel and bladder normal; afebrile, vitals stable. Plan continued as per treating team.
+Day 14 (15/09/2026), Evening round: ambulant in ward; bowel and bladder normal; pain controlled with paracetamol 650 mg SOS. Plan continued as per treating team.
+Day 14 (15/09/2026), Night duty note: tolerating oral diet; intake and output charted; bowel and bladder normal. Plan continued as per treating team.
+Day 14 (15/09/2026), Nursing note: afebrile, vitals stable; IV line site clean; bowel and bladder normal. Plan continued as per treating team.
+Day 14 (15/09/2026), Physiotherapy note: no fresh complaints; pulse 84/min, BP 130/80 mmHg; mild cough, saturating 95% on room air. Plan continued as per treating team.
+Investigations day 14: Random blood sugar 153 mg/dL. Serum sodium 139 mmol/L. Serum potassium 4.2 mmol/L.
+Day 15 (16/09/2026), Morning round: pain controlled with paracetamol 650 mg SOS; IV line site clean; ambulant in ward. Plan continued as per treating team.
+Day 15 (16/09/2026), Afternoon review: bowel and bladder normal; slept well overnight; IV line site clean. Plan continued as per treating team.
+Day 15 (16/09/2026), Evening round: pain controlled with paracetamol 650 mg SOS; pulse 84/min, BP 130/80 mmHg; ambulant in ward. Plan continued as per treating team.
+Day 15 (16/09/2026), Night duty note: seen by dietician, high-protein diet advised; IV line site clean; ambulant in ward. Plan continued as per treating team.
+Day 15 (16/09/2026), Nursing note: IV line site clean; ambulant in ward; blood sugars monitored, insulin sliding scale as per chart. Plan continued as per treating team.
+Day 15 (16/09/2026), Physiotherapy note: intake and output charted; IV line site clean; ambulant in ward. Plan continued as per treating team.
+Day 16 (17/09/2026), Morning round: ambulant in ward; bowel and bladder normal; chest physiotherapy continued. Plan continued as per treating team.
+Day 16 (17/09/2026), Afternoon review: pain controlled with paracetamol 650 mg SOS; intake and output charted; afebrile, vitals stable. Plan continued as per treating team.
+Day 16 (17/09/2026), Evening round: afebrile, vitals stable; IV line site clean; no fresh complaints. Plan continued as per treating team.
+Day 16 (17/09/2026), Night duty note: chest physiotherapy continued; no fresh complaints; ambulant in ward. Plan continued as per treating team.
+Day 16 (17/09/2026), Nursing note: intake and output charted; seen by dietician, high-protein diet advised; pain controlled with paracetamol 650 mg SOS. Plan continued as per treating team.
+Day 16 (17/09/2026), Physiotherapy note: chest physiotherapy continued; IV line site clean; intake and output charted. Plan continued as per treating team.
+Investigations day 16: Random blood sugar 164 mg/dL. Serum sodium 139 mmol/L. Serum potassium 4.1 mmol/L.Day 17 (18/09/2026), Morning round: ambulant in ward; mild cough, saturating 95% on room air; slept well overnight. Plan continued as per treating team.
+Day 17 (18/09/2026), Afternoon review: chest physiotherapy continued; ambulant in ward; pain controlled with paracetamol 650 mg SOS. Plan continued as per treating team.
+Day 17 (18/09/2026), Evening round: ambulant in ward; chest physiotherapy continued; seen by dietician, high-protein diet advised. Plan continued as per treating team.
+Day 17 (18/09/2026), Night duty note: seen by dietician, high-protein diet advised; afebrile, vitals stable; chest physiotherapy continued. Plan continued as per treating team.
+Day 17 (18/09/2026), Nursing note: pulse 84/min, BP 130/80 mmHg; pain controlled with paracetamol 650 mg SOS; slept well overnight. Plan continued as per treating team.
+Day 17 (18/09/2026), Physiotherapy note: mild cough, saturating 95% on room air; pulse 84/min, BP 130/80 mmHg; slept well overnight. Plan continued as per treating team.
+Day 18 (19/09/2026), Morning round: blood sugars monitored, insulin sliding scale as per chart; IV line site clean; intake and output charted. Plan continued as per treating team.
+Day 18 (19/09/2026), Afternoon review: IV line site clean; ambulant in ward; chest physiotherapy continued. Plan continued as per treating team.
+Day 18 (19/09/2026), Evening round: tolerating oral diet; blood sugars monitored, insulin sliding scale as per chart; pulse 84/min, BP 130/80 mmHg. Plan continued as per treating team.
+Day 18 (19/09/2026), Night duty note: pain controlled with paracetamol 650 mg SOS; mild cough, saturating 95% on room air; intake and output charted. Plan continued as per treating team.
+Day 18 (19/09/2026), Nursing note: blood sugars monitored, insulin sliding scale as per chart; chest physiotherapy continued; slept well overnight. Plan continued as per treating team.
+Day 18 (19/09/2026), Physiotherapy note: intake and output charted; mild cough, saturating 95% on room air; slept well overnight. Plan continued as per treating team.
+Investigations day 18: Random blood sugar 140 mg/dL. Serum sodium 136 mmol/L. Serum potassium 4.2 mmol/L.
+Day 19 (20/09/2026), Morning round: afebrile, vitals stable; tolerating oral diet; seen by dietician, high-protein diet advised. Plan continued as per treating team.
+Day 19 (20/09/2026), Afternoon review: chest physiotherapy continued; IV line site clean; pulse 84/min, BP 130/80 mmHg. Plan continued as per treating team.
+Day 19 (20/09/2026), Evening round: tolerating oral diet; seen by dietician, high-protein diet advised; IV line site clean. Plan continued as per treating team.
+Day 19 (20/09/2026), Night duty note: chest physiotherapy continued; pulse 84/min, BP 130/80 mmHg; pain controlled with paracetamol 650 mg SOS. Plan continued as per treating team.
+Day 19 (20/09/2026), Nursing note: tolerating oral diet; bowel and bladder normal; IV line site clean. Plan continued as per treating team.Day 19 (20/09/2026), Physiotherapy note: tolerating oral diet; afebrile, vitals stable; IV line site clean. Plan continued as per treating team.
+Day 20 (21/09/2026), Morning round: IV line site clean; intake and output charted; pulse 84/min, BP 130/80 mmHg. Plan continued as per treating team.
+Day 20 (21/09/2026), Afternoon review: mild cough, saturating 95% on room air; bowel and bladder normal; intake and output charted. Plan continued as per treating team.
+Day 20 (21/09/2026), Evening round: tolerating oral diet; blood sugars monitored, insulin sliding scale as per chart; ambulant in ward. Plan continued as per treating team.
+Day 20 (21/09/2026), Night duty note: slept well overnight; ambulant in ward; afebrile, vitals stable. Plan continued as per treating team.
+Day 20 (21/09/2026), Nursing note: no fresh complaints; ambulant in ward; slept well overnight. Plan continued as per treating team.
+Day 20 (21/09/2026), Physiotherapy note: bowel and bladder normal; ambulant in ward; seen by dietician, high-protein diet advised. Plan continued as per treating team.
+Investigations day 20: Random blood sugar 161 mg/dL. Serum sodium 138 mmol/L. Serum potassium 4.8 mmol/L.
+Day 21 (22/09/2026), Morning round: blood sugars monitored, insulin sliding scale as per chart; tolerating oral diet; afebrile, vitals stable. Plan continued as per treating team.
+Day 21 (22/09/2026), Afternoon review: intake and output charted; pain controlled with paracetamol 650 mg SOS; chest physiotherapy continued. Plan continued as per treating team.
+Day 21 (22/09/2026), Evening round: pulse 84/min, BP 130/80 mmHg; seen by dietician, high-protein diet advised; bowel and bladder normal. Plan continued as per treating team.
+Day 21 (22/09/2026), Night duty note: blood sugars monitored, insulin sliding scale as per chart; bowel and bladder normal; tolerating oral diet. Plan continued as per treating team.
+Day 21 (22/09/2026), Nursing note: bowel and bladder normal; tolerating oral diet; slept well overnight. Plan continued as per treating team.
+Day 21 (22/09/2026), Physiotherapy note: bowel and bladder normal; afebrile, vitals stable; chest physiotherapy continued. Plan continued as per treating team.
+Day 22 (23/09/2026), Morning round: IV line site clean; tolerating oral diet; seen by dietician, high-protein diet advised. Plan continued as per treating team.
+Day 22 (23/09/2026), Afternoon review: afebrile, vitals stable; IV line site clean; tolerating oral diet. Plan continued as per treating team.
+Day 22 (23/09/2026), Evening round: tolerating oral diet; slept well overnight; chest physiotherapy continued. Plan continued as per treating team.
+Day 22 (23/09/2026), Night duty note: seen by dietician, high-protein diet advised; intake and output charted; mild cough, saturating 95% on room air. Plan continued as per treating team.Day 22 (23/09/2026), Nursing note: bowel and bladder normal; afebrile, vitals stable; pain controlled with paracetamol 650 mg SOS. Plan continued as per treating team.
+Day 22 (23/09/2026), Physiotherapy note: pulse 84/min, BP 130/80 mmHg; bowel and bladder normal; IV line site clean. Plan continued as per treating team.
+Investigations day 22: Random blood sugar 181 mg/dL. Serum sodium 135 mmol/L. Serum potassium 4.8 mmol/L.
+Day 23 (24/09/2026), Morning round: afebrile, vitals stable; ambulant in ward; IV line site clean. Plan continued as per treating team.
+Day 23 (24/09/2026), Afternoon review: no fresh complaints; afebrile, vitals stable; mild cough, saturating 95% on room air. Plan continued as per treating team.
+Day 23 (24/09/2026), Evening round: bowel and bladder normal; chest physiotherapy continued; slept well overnight. Plan continued as per treating team.
+Day 23 (24/09/2026), Night duty note: afebrile, vitals stable; IV line site clean; mild cough, saturating 95% on room air. Plan continued as per treating team.
+Day 23 (24/09/2026), Nursing note: chest physiotherapy continued; pain controlled with paracetamol 650 mg SOS; seen by dietician, high-protein diet advised. Plan continued as per treating team.
+Day 23 (24/09/2026), Physiotherapy note: bowel and bladder normal; seen by dietician, high-protein diet advised; slept well overnight. Plan continued as per treating team.
+CONDITION AT DISCHARGE
+General condition fair, afebrile, ambulant without support.
+ECOG performance status: 1
+Medications at discharge: Tab. Metformin 500 mg BD, Tab. Amlodipine 5 mg OD, Tab. Paracetamol 650 mg SOS.
+Follow-up: Medical Oncology OPD after 1 week with reports. To be discussed at the Tumour Board.
+Discharge summary prepared by: Dr. P. Joshi, Resident (SYNTHETIC)
+Verified by: Dr. S. Deshpande, Consultant Medical Oncologist (SYNTHETIC)
+SYNTHETIC - NOT A REAL PATIENT

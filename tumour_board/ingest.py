@@ -159,6 +159,7 @@ async def ocr_page(png_bytes: bytes, audit=None) -> dict:
     page = {"text": full, "second_read": second, "method": "vision-transcription", "ocr_reads": 2}
     if n_masked:
         page["aadhaar_masked"] = n_masked
+    page.update(page_flags(full))
     if spans:
         page["ocr_uncertain_spans"] = spans
         page["ocr_uncertain_numbers"] = uncertain
@@ -173,6 +174,61 @@ def uncertain_overlap(page: dict, start: int, end: int) -> dict | None:
     for span in page.get("ocr_uncertain_spans") or []:
         if span["start"] < end and start < span["end"]:
             return span
+    return None
+
+
+# Hindi / regional text and handwriting (V1 item 3.6): flagged, never translated or removed; values from flagged lines
+# need review.
+INDIC_SCRIPTS = (("Devanagari", 0x0900, 0x097F), ("Bengali", 0x0980, 0x09FF), ("Gurmukhi", 0x0A00, 0x0A7F),
+                 ("Gujarati", 0x0A80, 0x0AFF), ("Odia", 0x0B00, 0x0B7F), ("Tamil", 0x0B80, 0x0BFF), ("Telugu", 0x0C00, 0x0C7F),
+                 ("Kannada", 0x0C80, 0x0CFF), ("Malayalam", 0x0D00, 0x0D7F))
+REGIONAL_FLAG = "contains Hindi / regional text"
+ILLEGIBLE_FLAG = "handwriting / illegible parts: verify"
+_ILLEGIBLE = re.compile(r"\[\s*(?:illegible|unreadable|unclear)\b[^\]\n]*\]|\(\s*(?:illegible|unreadable|unclear)\b[^)\n]*\)"
+                        r"|\[\s*handwritten\b[^\]\n]*\]|\?{3,}", re.I)
+
+
+def _indic_scripts(line: str) -> list:
+    """Indic scripts with at least one letter or sign in this line, in INDIC_SCRIPTS order (punctuation alone, such as
+    a danda, does not count; the rupee sign and Latin text are outside these blocks)."""
+    import unicodedata
+    found = set()
+    for ch in line:
+        o = ord(ch)
+        if 0x0900 <= o <= 0x0D7F and unicodedata.category(ch)[0] in "LM":
+            found.update(name for name, lo, hi in INDIC_SCRIPTS if lo <= o <= hi)
+    return [name for name, _, _ in INDIC_SCRIPTS if name in found]
+
+
+def page_flags(text: str) -> dict:
+    """{} for a page in plain English. Otherwise {"flags": [...], "flagged_lines": [{"start", "end", "line", "flag"}]}:
+    lines in an Indic script ("contains Hindi / regional text (Devanagari)") and lines with an illegible / handwriting
+    marker ("handwriting / illegible parts: verify"). Offsets are of the stripped line in text, as for the OCR spans; a
+    line with both gets one entry per flag. The text itself is never changed."""
+    lines, scripts, pos = [], [], 0
+    for raw in (text or "").split("\n"):
+        line = raw.strip()
+        if line:
+            start = pos + len(raw) - len(raw.lstrip())
+            here = _indic_scripts(line)
+            if here:
+                scripts += [x for x in here if x not in scripts]
+                lines.append({"start": start, "end": start + len(line), "line": line, "flag": f"{REGIONAL_FLAG} ({', '.join(here)})"})
+            if _ILLEGIBLE.search(line):
+                lines.append({"start": start, "end": start + len(line), "line": line, "flag": ILLEGIBLE_FLAG})
+        pos += len(raw) + 1
+    if not lines:
+        return {}
+    flags = ([f"{REGIONAL_FLAG} ({', '.join(n for n, _, _ in INDIC_SCRIPTS if n in scripts)})"] if scripts else []) + \
+            ([ILLEGIBLE_FLAG] if any(x["flag"] == ILLEGIBLE_FLAG for x in lines) else [])
+    return {"flags": flags, "flagged_lines": lines}
+
+
+def flagged_overlap(page: dict, start: int, end: int) -> dict | None:
+    """The first flagged line of this page overlapping [start, end) of page["text"], else None."""
+    for line in page.get("flagged_lines") or []:
+        if line["start"] < end and start < line["end"]:
+            return line
     return None
 
 
@@ -300,7 +356,7 @@ async def _soffice_to_pdf_pages(path: Path, audit=None) -> list[dict]:
         pdf = Path(tmp) / (path.stem + ".pdf")
         if not pdf.exists():
             return [{"text": "", "method": "unsupported (conversion to PDF failed)"}]
-        return await extract_pages(pdf, audit)
+        return await _read_pages(pdf, audit)
 
 
 def _img_bytes(im) -> bytes:
@@ -308,7 +364,15 @@ def _img_bytes(im) -> bytes:
 
 
 async def extract_pages(path: Path, audit=None) -> list[dict]:
-    """Returns [{"text": str, "method": "text-layer"|"vision-transcription"|"plain-text"|...}]"""
+    """Returns [{"text": str, "method": "text-layer"|"vision-transcription"|"plain-text"|...}], each page carrying
+    page_flags (Hindi / regional text, illegible parts) whatever way it was read."""
+    pages = await _read_pages(path, audit)
+    for page in pages:
+        page.update(page_flags(page.get("text") or ""))
+    return pages
+
+
+async def _read_pages(path: Path, audit=None) -> list[dict]:
     ext = path.suffix.lower()
     if ext in TEXT_EXT:
         return [{"text": path.read_text(errors="replace"), "method": "plain-text"}]

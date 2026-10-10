@@ -8,7 +8,7 @@ carries a verified quote; the brief stays an AI draft until an expert marks it r
 Agent loop (ReAct style, model-agnostic, JSON steps): observe -> choose a tool -> read the result -> ... -> write
 the brief. Tools only read the Case File.
 """
-import asyncio, json, time
+import asyncio, json, re, time
 
 from . import dates, guardrails, llm, protocol, qa, rules, search, store
 
@@ -44,7 +44,8 @@ NOT_LISTED = "This Case File is not listed yet: list it before preparing a brief
 
 TOOLS_DOC = """Tools (all read-only):
 - list_documents: no input. Lists every document with id, title, type, date, status (and clinician attestations).
-- read_document: input = a document id. Returns the full text of that document.
+- read_document: input = a document id, optionally with pages (for example 'D123 pages 3-5' or 'D123 page 2'). Returns the text of
+  those pages (up to 12,000 characters). Without pages it returns the first pages that fit and says which pages are not shown.
 - search: input = a question or keywords. Returns the most relevant passages from all documents.
 - find_values: input = a term (for example 'PD-L1', 'CEA', 'Ki-67'). Returns every line in the Case File that mentions it, with dates.
 - get_facts: no input. Returns the primary fields already extracted and verified by the system.
@@ -127,14 +128,57 @@ def _gaps_text(case_id):
     return "\n".join(f"- {r['label']} ({r['department']}): {r['status']}. {'; '.join(r['problems'])}" for r in g["requirements"] if r["status"] != "satisfied") or "(no gaps)"
 
 
+READ_CAP = 12000  # characters per read_document result and per tool result kept in the scratchpad (V1 item 3.4)
+_PAGE_RANGE = re.compile(r"^(?:pages?|pp?\.?)?\s*(\d+)(?:\s*(?:-|to)\s*(\d+))?$", re.I)
+
+
+def _read_document(case_id, arg):
+    """'<doc id>' or '<doc id> pages 3-5' (also 'p3-5', 'pages 3', 'page 3'); pages are 1-based. Returns the pages that fit in
+    READ_CAP characters, each under a [page N] line, and a last line naming the pages not shown when the text is cut."""
+    parts = arg.strip().split(None, 1)
+    d = store.get_doc(case_id, parts[0]) if parts else None
+    if not d:
+        return "No document with that id. Use list_documents."
+    pages = d.get("pages") or []
+    n = len(pages)
+    if not n:
+        return "This document has no readable text."
+    a, b = 1, n
+    if len(parts) > 1:
+        m = _PAGE_RANGE.match(parts[1].strip())
+        if not m:
+            return f"Could not read the page range '{parts[1].strip()}'. Ask for pages like '{d['doc_id']} pages 2-4' or '{d['doc_id']} page 2'."
+        a = int(m.group(1)); b = int(m.group(2) or a)
+        if a < 1 or b < a or a > n:
+            return f"Document {d['doc_id']} has {n} page{'s' if n != 1 else ''}; pages {a} to {b} do not exist. Ask for pages 1 to {n}."
+        b = min(b, n)
+    budget = READ_CAP - 200  # room for the continuation line
+
+    def rest(i):  # pages i..b not shown
+        if i == b:
+            return f"page {i} not shown; ask for it with '{d['doc_id']} page {i}'"
+        return f"pages {i} to {b} not shown; ask for them with '{d['doc_id']} pages {i}-{b}'"
+    out, used, last = [], 0, a - 1
+    for i in range(a, b + 1):
+        block = f"[page {i}]\n{pages[i - 1].get('text') or ''}"
+        if used + len(block) + 1 > budget:
+            if not out:  # one page longer than the cap: show its start
+                out.append(block[:budget])
+                more = f"the rest of page {i} is not shown"
+                out.append(f"[... document continues: {more}" + (f"; {rest(i + 1)}" if i < b else "") + "]")
+                return "\n".join(out)
+            break
+        out.append(block); used += len(block) + 1; last = i
+    if last < b:
+        out.append(f"[... document continues: {rest(last + 1)}]")
+    return "\n".join(out)
+
+
 async def _tool(case_id, tool, arg):
     if tool == "list_documents":
         return _doc_list(case_id)
     if tool == "read_document":
-        d = store.get_doc(case_id, arg.strip().split()[0]) if arg.strip() else None
-        if not d:
-            return "No document with that id. Use list_documents."
-        return "\n".join(p["text"] for p in d.get("pages") or [])[:7000]
+        return _read_document(case_id, arg)
     if tool == "search":
         hits = await asyncio.to_thread(search.index(case_id).search, arg, 6)
         return "\n\n".join(f"[{h['doc_id']} | {h['doc_title']} | {h['date'] or '?'}]\n{h['text']}" for h in hits) or "No results."
@@ -194,7 +238,7 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
             yield {"type": "step", "tool": "finish", "input": "", "thought": s.get("thought", "")}
             break
         obs = await _tool(case_id, tool, arg)
-        scratch.append(f"TOOL {tool}({arg}) RESULT:\n{obs[:6000]}")
+        scratch.append(f"TOOL {tool}({arg}) RESULT:\n{obs[:READ_CAP]}")
         au({"kind": "agent_tool", "role": role, "tool": tool, "input": arg})
         yield {"type": "step", "tool": tool, "input": arg, "thought": s.get("thought", ""), "observation": obs[:600]}
     msgs = [{"role": "system", "content": _system(role)},

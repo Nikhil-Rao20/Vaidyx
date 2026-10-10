@@ -140,3 +140,96 @@ def test_timeline_uses_confirmed_date(unit_case):
     _pdl1_doc(unit_case)
     confirm.record(unit_case, "confirm_dates", "Dihc00000", {"report_date": "07/09/2026"}, by="Dr. Rao")
     assert [(e["doc_id"], e["date"]) for e in postboard.timeline(unit_case) if e["kind"] == "document"] == [("Dihc00000", "2026-09-07")]
+
+
+# ---- read_document takes page ranges; tool results up to 12,000 characters (V1 item 3.4) -----------------------------
+def _long_doc(unit_case, n=8, size=2900):
+    d = make_doc("Dlong0001", "discharge_summary", title="DISCHARGE SUMMARY")
+    d["pages"] = [{"text": f"SYNTHETIC page {i} marker\n" + (f"Day-wise course page {i}: afebrile, vitals stable.\n" * 60)[:size], "method": "text-layer"}
+                  for i in range(1, n + 1)]
+    add(unit_case, d)
+    return d
+
+
+def _read(unit_case, arg):
+    return asyncio.run(agents._tool(unit_case, "read_document", arg))
+
+
+@pytest.mark.parametrize("arg", ["Dlong0001 pages 3-5", "Dlong0001 p3-5", "Dlong0001 pages 3 to 5", "Dlong0001 Pages 3 - 5"])
+def test_read_document_page_range(unit_case, arg):
+    _long_doc(unit_case)
+    obs = _read(unit_case, arg)
+    assert [i for i in range(1, 9) if f"SYNTHETIC page {i} marker" in obs] == [3, 4, 5]
+    assert obs.startswith("[page 3]\n") and "[page 5]\n" in obs and "document continues" not in obs
+
+
+@pytest.mark.parametrize("arg", ["Dlong0001 page 2", "Dlong0001 pages 2", "Dlong0001 p2"])
+def test_read_document_single_page(unit_case, arg):
+    _long_doc(unit_case)
+    obs = _read(unit_case, arg)
+    assert [i for i in range(1, 9) if f"SYNTHETIC page {i} marker" in obs] == [2]
+
+
+def test_read_document_without_range_is_cut_at_12000_with_a_continuation_line(unit_case):
+    _long_doc(unit_case)
+    obs = _read(unit_case, "Dlong0001")
+    assert len(obs) <= 12000 and agents.READ_CAP == 12000
+    shown = [i for i in range(1, 9) if f"SYNTHETIC page {i} marker" in obs]
+    assert shown == [1, 2, 3, 4]
+    assert obs.endswith("\n[... document continues: pages 5 to 8 not shown; ask for them with 'Dlong0001 pages 5-8']")
+    assert "Day-wise course page 4" in _read(unit_case, "Dlong0001 pages 4-8")
+
+
+def test_read_document_short_document_is_whole(unit_case):
+    _long_doc(unit_case, n=2, size=500)
+    obs = _read(unit_case, "Dlong0001")
+    assert "SYNTHETIC page 1 marker" in obs and "SYNTHETIC page 2 marker" in obs and "document continues" not in obs
+
+
+def test_read_document_oversized_page_is_cut(unit_case):
+    d = _long_doc(unit_case, n=2)
+    d["pages"][0]["text"] = "SYNTHETIC\n" + "x" * 20000
+    add(unit_case, d)
+    obs = _read(unit_case, "Dlong0001")
+    assert len(obs) <= 12000 and obs.endswith("[... document continues: the rest of page 1 is not shown; page 2 not shown; ask for it with 'Dlong0001 page 2']")
+
+
+@pytest.mark.parametrize("arg,msg", [("Dlong0001 pages 12-14", "Document Dlong0001 has 8 pages; pages 12 to 14 do not exist. Ask for pages 1 to 8."),
+                                     ("Dlong0001 pages 5-3", "Document Dlong0001 has 8 pages; pages 5 to 3 do not exist. Ask for pages 1 to 8."),
+                                     ("Dlong0001 pages 0", "Document Dlong0001 has 8 pages; pages 0 to 0 do not exist. Ask for pages 1 to 8."),
+                                     ("Dlong0001 the end", "Could not read the page range 'the end'. Ask for pages like 'Dlong0001 pages 2-4' or 'Dlong0001 page 2'."),
+                                     ("Dnope0001 pages 1-2", "No document with that id. Use list_documents.")])
+def test_read_document_bad_range(unit_case, arg, msg):
+    _long_doc(unit_case)
+    assert _read(unit_case, arg) == msg
+
+
+def test_read_document_range_past_the_end_is_clamped(unit_case):
+    _long_doc(unit_case)
+    obs = _read(unit_case, "Dlong0001 pages 7-20")
+    assert [i for i in range(1, 9) if f"SYNTHETIC page {i} marker" in obs] == [7, 8] and "document continues" not in obs
+
+
+def test_tools_doc_describes_page_ranges():
+    line = next(ln for ln in agents.TOOLS_DOC.splitlines() if ln.startswith("- read_document"))
+    assert "pages 3-5" in line and "\u2014" not in agents.TOOLS_DOC
+
+
+def test_agent_scratchpad_keeps_12000_characters_of_a_tool_result(unit_case, monkeypatch):
+    _long_doc(unit_case)
+    seen = []
+
+    async def fake_chat(role, msgs, json_schema=None, **kw):
+        seen.append(msgs[-1]["content"])
+        if json_schema is agents.STEP_SCHEMA:
+            return {"thought": "read", "tool": "read_document", "input": "Dlong0001 pages 1-8"} if len(seen) == 1 else {"thought": "done", "tool": "finish", "input": ""}
+        return {"sections": [], "points_for_review": [], "not_documented": []}
+    monkeypatch.setattr(llm, "chat", fake_chat)
+    monkeypatch.setattr(agents.llm, "chat", fake_chat)
+
+    async def go():
+        return [e async for e in agents.run_agent(unit_case, "pathology", max_steps=2)]
+    ev = asyncio.run(go())
+    assert ev[-1]["type"] == "brief"
+    obs = asyncio.run(agents._tool(unit_case, "read_document", "Dlong0001 pages 1-8"))
+    assert len(obs) > 7000 and f"RESULT:\n{obs}" in seen[1]  # the whole result (over the old 6,000 cap) reaches the next step

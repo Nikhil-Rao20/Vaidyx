@@ -62,18 +62,133 @@ def _facts_schema(fact_ids):
     return {"type": "object", "additionalProperties": False, "properties": {f: item for f in fact_ids}, "required": list(fact_ids)}
 
 
-async def extract_facts(text, fact_ids, audit=None):
-    if not fact_ids:
-        return {}
-    cat = protocol.facts()
-    spec = "\n".join(f"- {f}: {cat[f]['label']} ({cat[f]['desc']})" for f in fact_ids)
-    msg = [{"role": "system", "content": SYS},
-           {"role": "user", "content": "Find these fields in the document.\n" + spec + "\n\nRules:\n"
+WINDOW = 12000  # characters per extraction window; longer documents are read in windows along page boundaries (V1 item 3.4)
+
+
+def _page_spans(text):
+    """(page number, start, end) of each '[page N]' block of a _doc_text() text; a text without page markers is one block (page None)."""
+    if not text.startswith("[page 1]\n"):
+        return [(None, 0, len(text))]
+    starts, k = [0], 2
+    while (j := text.find(f"\n\n[page {k}]\n", starts[-1])) >= 0:
+        starts.append(j + 2); k += 1
+    return [(i + 1, st, starts[i + 1] - 2 if i + 1 < len(starts) else len(text)) for i, st in enumerate(starts)]
+
+
+def _line_chunks(text, start, end, limit):
+    """[start, end) cut into pieces of at most `limit` characters at line boundaries (mid-line only for a line longer than `limit`)."""
+    out = []
+    while end - start > limit:
+        cut = text.rfind("\n", start, start + limit)
+        if cut <= start:
+            out.append((start, start + limit)); start += limit
+        else:
+            out.append((start, cut)); start = cut + 1
+    out.append((start, end))
+    return out
+
+
+def _windows(text, limit=WINDOW):
+    """Windows of at most `limit` characters along page boundaries, one page of overlap between consecutive windows. A page longer
+    than `limit` is cut at line boundaries into windows of its own. Returns [(start, end, label)]; one window when the text fits."""
+    if len(text) <= limit:
+        return [(0, len(text), "")]
+    units = []  # (page, start, end, part, parts)
+    for pg, st, en in _page_spans(text):
+        pieces = _line_chunks(text, st, en, limit)
+        units += [(pg, a, b, i + 1, len(pieces)) for i, (a, b) in enumerate(pieces)]
+    npages = sum(1 for u in units if u[3] == 1)
+    out, i = [], 0
+    while i < len(units):
+        j = i
+        while j + 1 < len(units) and units[j + 1][2] - units[i][1] <= limit:
+            j += 1
+        first, last = units[i], units[j]
+        if first[0] is None:
+            label = ""
+        elif first[4] > 1:
+            label = f"page {first[0]} (piece {first[3]} of {first[4]}) of {npages}"
+        elif first[0] == last[0]:
+            label = f"page {first[0]} of {npages}"
+        else:
+            label = f"pages {first[0]} to {last[0]} of {npages}"
+        out.append((first[1], last[2], label))
+        if j == len(units) - 1:
+            break
+        # the next window starts on this window's last page (overlap) unless that page alone would leave no room for the next one
+        i = j if j > i and units[j + 1][2] - units[j][1] <= limit else j + 1
+    return out
+
+
+def _facts_prompt(spec, document, part=""):
+    where = "this part of the document" if part else "this document"
+    head = f"DOCUMENT, {part}; the other parts are read separately:\n" if part else "DOCUMENT:\n"
+    return ("Find these fields in the document.\n" + spec + "\n\nRules:\n"
             "1. value: copy the value exactly as written in the document (keep units, wording such as 'Pending' or 'Not reported').\n"
             "2. quote: copy the shortest complete line or phrase from the document that contains the value, character for character.\n"
-            "3. If the field is not written in this document, set found=false and leave value and quote empty. Do not guess, infer or calculate.\n\n"
-            "DOCUMENT:\n" + text[:14000]}]
-    return await llm.chat("extractor", msg, json_schema=_facts_schema(fact_ids), max_tokens=1800, purpose="extract fields", audit=audit)
+            f"3. If the field is not written in {where}, set found=false and leave value and quote empty. Do not guess, infer or calculate.\n\n"
+            + head + document)
+
+
+async def extract_facts(text, fact_ids, audit=None, pages=None):
+    """Primary fields with verbatim quotes. A document that fits in one window (WINDOW characters) is read in one call, as before;
+    a longer one is read in windows along page boundaries, in parallel (V1 item 3.4). Per field the first answer in document order
+    is returned; other windows' answers with a different value are kept under "alternatives" ([{value, quote}]) for the caller
+    to verify against the whole document. `pages` (the page records) may be given instead of the joined text."""
+    if not fact_ids:
+        return {}
+    if pages is not None:
+        text = _doc_text(pages)
+    cat = protocol.facts()
+    spec = "\n".join(f"- {f}: {cat[f]['label']} ({cat[f]['desc']})" for f in fact_ids)
+    wins = _windows(text)
+    if len(wins) == 1:
+        msg = [{"role": "system", "content": SYS}, {"role": "user", "content": _facts_prompt(spec, text[:14000])}]
+        return await llm.chat("extractor", msg, json_schema=_facts_schema(fact_ids), max_tokens=1800, purpose="extract fields", audit=audit)
+    n = len(wins)
+
+    def part(i, label):
+        return f"part {i + 1} of {n}" + (f" ({label})" if label else "")
+    results = await asyncio.gather(*[
+        llm.chat("extractor", [{"role": "system", "content": SYS}, {"role": "user", "content": _facts_prompt(spec, text[a:b], part(i, label))}],
+                 json_schema=_facts_schema(fact_ids), max_tokens=1800, purpose=f"extract fields (window {i + 1} of {n})", audit=audit)
+        for i, (a, b, label) in enumerate(wins)])
+    out = {}
+    for fid in fact_ids:
+        answers = [r[fid] for r in results if isinstance((r or {}).get(fid), dict) and r[fid].get("found") and (r[fid].get("value") or "").strip()]
+        if not answers:
+            out[fid] = {"found": False, "value": "", "quote": ""}
+            continue
+        first = answers[0]
+        out[fid] = {"found": True, "value": first["value"], "quote": first.get("quote") or ""}
+        seen, alts = {grounding.norm(first["value"])}, []
+        for a in answers[1:]:
+            k = grounding.norm(a["value"])
+            if k not in seen:  # the same value read twice (the overlap page) is one value
+                seen.add(k); alts.append({"value": a["value"], "quote": a.get("quote") or ""})
+        if alts:
+            out[fid]["alternatives"] = alts
+    return out
+
+
+def _verify_value(value, quote, texts, pages):
+    """Grounding of one extracted value against the whole document: the quote, else the value itself as the verbatim evidence;
+    a number the two OCR reads of its page disagreed on makes a verified value needs_review (the expert reads the scan)."""
+    v = grounding.verify(value, quote or value, texts)
+    if v["status"] == "unverified" and quote != value:  # the value itself may be the verbatim evidence
+        v2 = grounding.verify(value, value, texts)
+        if v2["status"] != "unverified":
+            v = v2
+    if v["status"] == "verified" and v["location"] is not None:
+        loc = v["location"]; page = pages[loc["page"]] if loc["page"] < len(pages) else {}
+        span = ingest.uncertain_overlap(page, loc["start"], loc["end"])  # the quote sits on a line the two OCR reads disagree on (V1 item 3.3)
+        if span is not None:
+            v = {**v, "status": "needs_review", "reason": "OCR check: " + span["reason"]}
+        elif "ocr_uncertain_spans" not in page and page.get("ocr_uncertain_numbers"):  # a page read before the line check existed: the old per-page list
+            unc = set(page["ocr_uncertain_numbers"])
+            if unc & set(x.replace(",", "") for x in re.findall(r"\d+(?:[.,]\d+)*", value)):
+                v = {**v, "status": "needs_review", "reason": "the two OCR reads of this page disagree on a number in this value"}
+    return v
 
 
 def finish_classification(c, full, texts, filename):
@@ -204,22 +319,27 @@ async def process_document(case_id, doc_id, protocol_id, case_patient=None, prog
             r = raw.get(fid) or {}
             if not r.get("found") or not (r.get("value") or "").strip():
                 continue
-            v = grounding.verify(r["value"], r.get("quote") or r["value"], texts)
-            if v["status"] == "unverified" and r.get("quote") != r["value"]:  # the value itself may be the verbatim evidence
-                v2 = grounding.verify(r["value"], r["value"], texts)
-                if v2["status"] != "unverified":
-                    v = v2
-            pending = bool(PENDING_RE.search(r["value"]))
-            # numbers the two OCR reads disagreed on make the value uncertain (expert must read the scan)
-            if v["status"] == "verified" and v["location"] is not None:
-                unc = set((pages[v["location"]["page"]].get("ocr_uncertain_numbers") or []))
-                if unc & set(x.replace(",", "") for x in re.findall(r"\d+(?:[.,]\d+)*", r["value"])):
-                    v = {**v, "status": "needs_review", "reason": "the two OCR reads of this page disagree on a number in this value"}
-            facts[fid] = {"value": r["value"].strip(), "quote": (v["location"] or {}).get("matched") or r.get("quote", ""),
-                          "model_quote": r.get("quote", ""), "verification": v["status"], "reason": v.get("reason"),
+            # every value read (the first, and different values from other windows of a long document) is verified against the
+            # whole document; unverified alternatives are dropped, several verified values go to the expert with every quote (V1 item 3.4)
+            cands = [{"value": r["value"], "quote": r.get("quote", "")}] + [
+                {"value": a["value"], "quote": a.get("quote") or ""} for a in r.get("alternatives") or [] if (a.get("value") or "").strip()]
+            checked = [(cd, _verify_value(cd["value"], cd["quote"], texts, pages)) for cd in cands]
+            ok = [(cd, v) for cd, v in checked if v["status"] != "unverified"]
+            (main, v), others = (ok[0] if ok else checked[0]), ok[1:]
+            pending = bool(PENDING_RE.search(main["value"]))
+            facts[fid] = {"value": main["value"].strip(), "quote": (v["location"] or {}).get("matched") or main["quote"],
+                          "model_quote": main["quote"], "verification": v["status"], "reason": v.get("reason"),
                           "location": v["location"], "state": "pending" if pending else "present",
-                          "polarity": "negated" if NEGATED_RE.search(r["value"]) else "affirmed"}
-            au({"kind": "fact_verification", "doc_id": doc_id, "fact": fid, "value": r["value"], "result": v["status"], "reason": v.get("reason")})
+                          "polarity": "negated" if NEGATED_RE.search(main["value"]) else "affirmed"}
+            ev = {"kind": "fact_verification", "doc_id": doc_id, "fact": fid, "value": main["value"], "result": v["status"], "reason": v.get("reason")}
+            if others:
+                facts[fid].update(verification="needs_review", reason="different values in different parts of the document",
+                                  alternatives=[{"value": cd["value"].strip(), "quote": (w["location"] or {}).get("matched") or cd["quote"],
+                                                 "location": w["location"], "verification": w["status"]} for cd, w in others])
+                ev.update(result="needs_review", reason=facts[fid]["reason"], alternatives=[cd["value"] for cd, _ in others])
+            if len(cands) > 1:
+                ev["alternatives_dropped"] = len(cands) - len(ok) - (0 if ok else 1)
+            au(ev)
         doc["facts"] = facts
         doc["state"] = "ready"; doc["processed"] = store.now_iso()
         store.save_doc(case_id, doc); progress and progress(doc_id, "ready")
