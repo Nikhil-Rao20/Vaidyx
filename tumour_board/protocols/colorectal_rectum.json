@@ -3,6 +3,17 @@
  "label": "Rectal cancer",
  "version": "0.3",
  "note": "Configurable by the clinical team. Includes a restaging rule for re-discussion after neoadjuvant therapy. Prototype defaults; to be confirmed by the hospital Tumour Board.",
+ "settings_note": "NCG setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes stage). Item 4.1 derives the required records per setting from the NCG tiers.",
+ "settings": [
+  {
+   "id": "non_metastatic",
+   "label": "Non-metastatic (no distant disease recorded)"
+  },
+  {
+   "id": "metastatic",
+   "label": "Metastatic (distant disease recorded)"
+  }
+ ],
  "mandatory": [
   {
    "id": "clinical_history",

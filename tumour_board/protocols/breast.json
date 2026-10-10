@@ -3,6 +3,21 @@
  "label": "Breast cancer",
  "version": "0.4",
  "note": "Configurable by the clinical team. Prototype defaults informed by NCG, ICMR, ESMO and the CAP breast biomarker template; to be rebuilt from the NCG Essential / Optimal tiers (V1 item 4.1); to be confirmed by the hospital Tumour Board.",
+ "settings_note": "NCG setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes stage). Item 4.1 derives the required records per setting from the NCG tiers.",
+ "settings": [
+  {
+   "id": "early",
+   "label": "Early (operable), as recorded"
+  },
+  {
+   "id": "locally_advanced",
+   "label": "Locally advanced, as recorded"
+  },
+  {
+   "id": "metastatic",
+   "label": "Metastatic, as recorded"
+  }
+ ],
  "mandatory": [
   {
    "id": "clinical_history",

@@ -135,12 +135,27 @@ def setup_tumour_board_routes():
     @r.post("/cases")
     async def create(request: Request):
         u = _user(request); _need(_roles(request), "create_case"); b = await request.json()
+        prot = b.get("protocol") or ""
+        if prot and not protocol.exists(prot):
+            raise HTTPException(400, f"Unknown protocol: {prot}")
+        level = b.get("hospital_level") or ((org.load().get("hospital") or {}).get("level") if prot else "")
         try:
-            c = store.create_case(store.safe_id(b["case_id"]), b.get("patient", {}), b["protocol"], b.get("board_date", ""), u)
+            c = store.create_case(store.safe_id(b["case_id"]), b.get("patient", {}), prot, b.get("board_date", ""), u, b.get("setting", ""), level or "")
         except FileExistsError:
             raise HTTPException(409, "Case already exists")
-        store.audit(c["case_id"], {"kind": "case_created", "by": u})
+        store.audit(c["case_id"], {"kind": "case_created", "by": u, "listing": c["listing"]["status"], "protocol": prot, "setting": c.get("setting")})
         return c
+
+    @r.post("/cases/{case_id}/listing")
+    async def list_case(case_id: str, request: Request):
+        """The coordinator lists the Case File for the board (V1 item 2.5): {"protocol", "setting", "board_date", "hospital_level"}.
+        Pre-Authorization starts when listed (fields extracted from the stored pages, gate evaluated)."""
+        u = _user(request); _need(_roles(request), "list_case"); _case(case_id); b = await request.json()
+        try:
+            job = service.list_case(case_id, str(b.get("protocol", "")), str(b.get("setting", "") or ""), str(b.get("board_date", "") or ""), str(b.get("hospital_level", "") or ""), u)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {"job": job["id"], "total": job["total"], "case": store.get_case(case_id)}
 
     @r.delete("/cases/{case_id}")
     async def delete(case_id: str, request: Request):

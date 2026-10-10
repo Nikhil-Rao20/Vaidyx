@@ -65,15 +65,21 @@ def list_cases():
     return out
 
 
-def create_case(case_id, patient: dict, protocol: str, board_date: str = "", created_by: str = ""):
+def create_case(case_id, patient: dict, protocol: str, board_date: str = "", created_by: str = "", setting: str = "", hospital_level: str = ""):
     d = case_dir(case_id)
     if (d / "case.json").exists():
         raise FileExistsError(case_id)
-    c = {"case_id": case_id, "patient": patient, "protocol": protocol, "board_date": board_date, "created": now_iso(), "created_by": created_by,
-         "listing": {"status": "listed" if protocol else "awaiting_listing"}}  # a Case File without a protocol waits for the coordinator to list it (V1 item 2.5)
+    c = {"case_id": case_id, "patient": patient, "protocol": protocol, "setting": setting, "hospital_level": hospital_level, "board_date": board_date,
+         "created": now_iso(), "created_by": created_by,
+         # a Case File without a protocol waits for the coordinator to list it (V1 item 2.5)
+         "listing": {"status": "listed", "listed_by": created_by, "listed_at": now_iso()} if protocol else {"status": "awaiting_listing"}}
     _write_json(d / "case.json", c)
     _write_json(d / "state.json", {"actions": [], "board_records": [], "reviews": [], "artefacts": {}, "gate": None})
     return c
+
+
+def save_case(case):
+    _write_json(case_dir(case["case_id"]) / "case.json", case)
 
 
 def delete_case(case_id):

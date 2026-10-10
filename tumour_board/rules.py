@@ -175,7 +175,8 @@ def evaluate(case_id):
                                   if h["verification"] in VERIFIED and h["state"] == "present"][:3]})
     applicable = [r for r in results if r["status"] not in ("not_applicable", "waived")]
     ok = [r for r in applicable if r["status"] == "satisfied"]
-    gate = {"evaluated": store.now_iso(), "protocol": prot["id"], "protocol_version": prot.get("version"),
+    gate = {"evaluated": store.now_iso(), "protocol": prot["id"], "protocol_version": prot.get("version"), "setting": case.get("setting") or "",
+            "hospital_level": case.get("hospital_level") or "",
             "passed": len(ok) == len(applicable) and not [d for d in docs if d.get("state") not in ("ready", "error")],
             "readiness": round(100 * len(ok) / max(len(applicable), 1)), "satisfied": len(ok), "total": len(applicable),
             "requirements": results, "optional": optional, "core_data": core, "core_data_source": prot.get("core_data_source"), "policy_basis": prot.get("policy_basis"),

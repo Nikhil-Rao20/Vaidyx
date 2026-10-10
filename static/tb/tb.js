@@ -36,11 +36,12 @@ async function loadModels() {
 // ------------------------------------------------------------------ cases
 async function loadCases() {
   const d = await api("/cases"); S.demoList = d.demo;
-  $("#case-list").innerHTML = d.cases.length ? d.cases.map((c) => `
+  const awaiting = d.cases.filter((c) => c.listing?.status === "awaiting_listing");
+  $("#case-list").innerHTML = (awaiting.length ? `<div class="small muted" style="margin:2px 0 6px">${awaiting.length} awaiting listing</div>` : "") + (d.cases.length ? d.cases.slice().sort((a, b) => (b.listing?.status === "awaiting_listing") - (a.listing?.status === "awaiting_listing")).map((c) => `
     <div class="citem ${c.case_id === S.caseId ? "on" : ""}" data-case="${esc(c.case_id)}">
       <div class="t"><span>${esc(c.patient?.name || c.case_id)}</span>${c.gate_passed ? '<span class="chip c-ok">Ready</span>' : c.readiness != null ? `<span class="chip c-warn">${c.readiness}%</span>` : c.listing?.status === "awaiting_listing" ? '<span class="chip c-mute">Awaiting listing</span>' : ""}</div>
       <div class="s">${esc(c.case_id)} · ${esc(c.protocol || "no protocol yet")} · ${c.documents} documents${c.open_actions ? ` · ${c.open_actions} open actions` : ""}</div>
-    </div>`).join("") : `<div class="muted small">No Case Files yet.</div>`;
+    </div>`).join("") : `<div class="muted small">No Case Files yet.</div>`);
   $$(".citem").forEach((el) => (el.onclick = () => openCase(el.dataset.case)));
   $("#demo-list").innerHTML = d.demo.map((c) => `<div class="demo"><b>${esc(c.case_id)}</b> ${esc(c.patient?.name)}<br><span class="muted">${esc(c.protocol)} · ${c.files} files${c.has_arrivals ? " · has later arrivals" : ""}</span><br>
       ${meCan("create_case") ? `<button class="ghost sm" data-demo="${esc(c.case_id)}" style="margin-top:6px">Load as new Case File</button>` : ""}</div>`).join("") || `<div class="muted small">No demo corpus found.</div>`;
@@ -58,7 +59,11 @@ async function openCase(id, keepTab) {
   const c = S.data.case, p = c.patient || {};
   $("#c-protocol").textContent = (S.protocols?.find((x) => x.id === c.protocol)?.label || c.protocol) + " · Tumour Board Case File";
   $("#c-title").textContent = p.name || c.case_id;
-  $("#c-meta").textContent = [c.case_id, p.mrn && "UHID / MRN " + p.mrn, p.agesex, c.board_date && "Board " + fmtDate(c.board_date), c.listing?.status === "awaiting_listing" && "Awaiting listing"].filter(Boolean).join(" · ");
+  const setLabel = S.protocols?.find((x) => x.id === c.protocol)?.settings?.find((x) => x.id === c.setting)?.label;
+  $("#c-meta").textContent = [c.case_id, p.mrn && "UHID / MRN " + p.mrn, p.agesex, c.listing?.status === "awaiting_listing" ? "Awaiting listing: no Pre-Authorization check until the coordinator lists it" : "", setLabel && "NCG setting: " + setLabel,
+    c.hospital_level && "Hospital level: " + c.hospital_level, c.board_date && "Board " + fmtDate(c.board_date)].filter(Boolean).join(" · ");
+  $("#c-actions").innerHTML = can("list_case") ? `<button class="${c.listing?.status === "awaiting_listing" ? "primary" : "ghost"} sm" id="btn-list">${c.listing?.status === "awaiting_listing" ? "List for the board" : "Change listing"}</button>` : "";
+  if ($("#btn-list")) $("#btn-list").onclick = listCase;
   renderReadiness();
   if (!keepTab) S.tab = S.tab || "ready";
   showTab(S.tab);
@@ -67,7 +72,7 @@ async function openCase(id, keepTab) {
 
 function renderReadiness() {
   const g = S.data.state.gate;
-  if (!g) { $("#c-ready").innerHTML = ""; return; }
+  if (!g) { $("#c-ready").innerHTML = S.data.case.listing?.status === "awaiting_listing" ? `<div class="rtext"><b>Not listed yet</b><span>Records are kept; the Pre-Authorization check starts when the Case File is listed</span></div>` : ""; return; }
   const pct = g.readiness, r = 26, C = 2 * Math.PI * r, col = g.passed ? "#1e6b45" : pct >= 60 ? "#8a5300" : "#b23a2f";
   $("#c-ready").innerHTML = `<svg class="ring" viewBox="0 0 64 64"><circle cx="32" cy="32" r="${r}" fill="none" stroke="#d9e2ec" stroke-width="7"/>
     <circle cx="32" cy="32" r="${r}" fill="none" stroke="${col}" stroke-width="7" stroke-linecap="round" stroke-dasharray="${C * pct / 100} ${C}" transform="rotate(-90 32 32)"/>
@@ -180,6 +185,7 @@ function confirmDialog({ title, intro, fields = [], submit = "Record" }) {
     $("#modal").classList.remove("hidden");
     const done = (v) => { $("#modal").classList.add("hidden"); resolve(v); };
     $("#cd-cancel").onclick = () => done(null);
+    if ($("#cd-protocol") && $("#cd-setting")) $("#cd-protocol").onchange = () => { const p = (S.protocols || []).find((x) => x.id === $("#cd-protocol").value); $("#cd-setting").innerHTML = `<option value="">Not chosen yet</option>` + (p?.settings || []).map((x) => `<option value="${esc(x.id)}">${esc(x.label)}</option>`).join(""); };
     $("#cd-ok").onclick = () => { const out = {}; for (const x of fields) { const v = $("#cd-" + x.id).value.trim(); if (x.required && !v) { toast(`${x.label} is required`); return; } out[x.id] = v; } done(out); };
     const first = fields[0] && $("#cd-" + fields[0].id); if (first) first.focus();
   });
@@ -593,12 +599,16 @@ async function newCase() {
     <label>Case File ID</label><input id="n-id" placeholder="e.g. TB-2026-0142">
     <label>Patient name</label><input id="n-name"><label>UHID / MRN</label><input id="n-mrn"><label>Age / Sex</label><input id="n-agesex" placeholder="62 Y / M">
     <label>Protocol</label><select id="n-prot">${ps.map((p) => `<option value="${esc(p.id)}">${esc(p.label)} (v${esc(p.version)})</option>`).join("")}</select>
+    <label>NCG setting (as recorded in the signed reports, chosen by the clinician)</label><select id="n-setting"></select>
+    <label>Hospital level (NCG tiers)</label><select id="n-level"><option value="essential">Essential</option><option value="optimal">Optimal</option></select>
     <label>Board date</label><input type="date" id="n-date">
     <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end"><button class="ghost" data-closemodal>Cancel</button><button class="primary" id="n-go">Create</button></div></div>`;
   $("#modal").classList.remove("hidden");
+  const fillSettings = () => { const p = ps.find((x) => x.id === $("#n-prot").value); $("#n-setting").innerHTML = `<option value="">Not chosen yet</option>` + (p?.settings || []).map((x) => `<option value="${esc(x.id)}">${esc(x.label)}</option>`).join(""); };
+  fillSettings(); $("#n-prot").onchange = fillSettings; $("#n-level").value = S.org?.hospital?.level || "essential";
   $("#n-go").onclick = async () => {
     try {
-      const c = await api("/cases", { json: { case_id: $("#n-id").value.trim(), protocol: $("#n-prot").value, board_date: $("#n-date").value,
+      const c = await api("/cases", { json: { case_id: $("#n-id").value.trim(), protocol: $("#n-prot").value, board_date: $("#n-date").value, setting: $("#n-setting").value, hospital_level: $("#n-level").value,
         patient: { name: $("#n-name").value, mrn: $("#n-mrn").value, agesex: $("#n-agesex").value } } });
       $("#modal").classList.add("hidden"); S.tab = "ready"; await openCase(c.case_id);
     } catch (e) { toast(e.message); }
@@ -741,6 +751,20 @@ async function showIntake() {
   $$("[data-discard]").forEach((b) => (b.onclick = async () => { const v = await confirmDialog({ title: "Discard this record", intro: "The file is removed from the intake area. The removal is recorded in the intake log.", fields: [{ id: "reason", label: "Reason", type: "text", required: true }], submit: "Discard" });
     if (!v) return; try { await api(`/intake/${b.dataset.discard}?reason=${encodeURIComponent(v.reason)}`, { method: "DELETE" }); await showIntake(); refreshQueueCount(); } catch (e) { toast(e.message, 7000); } }));
   $$("[data-retry]").forEach((b) => (b.onclick = async () => { try { const r = await api(`/intake/${b.dataset.retry}/reprocess`, { method: "POST" }); watchIntakeJob(r.job); } catch (e) { toast(e.message, 7000); } }));
+}
+
+// ------------------------------------------------------------------ Case File listing (coordinator) · V1 item 2.5
+async function listCase() {
+  const c = S.data.case, ps = S.protocols || [];
+  const v = await confirmDialog({ title: c.listing?.status === "awaiting_listing" ? "List this Case File for the Tumour Board" : "Change the listing",
+    intro: "Cancer protocol, NCG setting (chosen by the clinician from what the signed reports record) and board date. The Pre-Authorization check starts when the Case File is listed; the hospital level decides which NCG tier applies.",
+    fields: [{ id: "protocol", label: "Protocol", type: "select", value: c.protocol || ps[0]?.id, options: ps.map((p) => [p.id, `${p.label} (v${p.version})`]) },
+      { id: "setting", label: "NCG setting", type: "select", value: c.setting || "", options: [["", "Not chosen yet"], ...(ps.find((p) => p.id === (c.protocol || ps[0]?.id))?.settings || []).map((x) => [x.id, x.label])] },
+      { id: "hospital_level", label: "Hospital level", type: "select", value: c.hospital_level || S.org?.hospital?.level || "essential", options: [["essential", "Essential"], ["optimal", "Optimal"]] },
+      { id: "board_date", label: "Board date", type: "date", value: c.board_date || "" }], submit: "List" });
+  if (!v) return;
+  try { const r = await api(`/cases/${S.caseId}/listing`, { json: v }); toast(r.total ? `Listed. Extracting fields from ${r.total} document(s) and running the Pre-Authorization check...` : "Listing saved; Pre-Authorization re-checked", 6000); S.tab = "ready"; await openCase(S.caseId, true); if (r.total) watchJob(r.job); loadCases(); }
+  catch (e) { toast(e.message, 7000); }
 }
 
 // ------------------------------------------------------------------ boot

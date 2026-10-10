@@ -3,7 +3,7 @@ demo case import, expert reviews."""
 import asyncio, json, logging, time, uuid
 from pathlib import Path
 
-from . import config, extract, ingest, intake, rules, store
+from . import config, extract, ingest, intake, org, protocol, rules, store
 
 log = logging.getLogger("tumour_board")
 
@@ -207,6 +207,50 @@ async def process_intake(doc_ids, job):
     store.audit_intake({"kind": "intake_finished", "documents": len(doc_ids), "filed": filed, "needs_matching": needs, "errors": errors, "seconds": job["seconds"]})
 
 
+def list_case(case_id, protocol_id, setting="", board_date="", hospital_level="", user=""):
+    """The coordinator lists a Case File for the board (V1 item 2.5): cancer protocol, NCG setting (chosen by the clinician), board date
+    and the hospital level (Essential / Optimal; defaults to org.json). Pre-Authorization starts when listed: every processed document
+    is extracted from its stored pages under the protocol (no second read) and the gate is evaluated. Re-listing with another protocol
+    extracts again; changing only the setting, date or level re-checks. Returns a job on the Case File."""
+    case = store.get_case(case_id)
+    if not case:
+        raise KeyError(case_id)
+    if not protocol.exists(protocol_id):
+        raise ValueError(f"Unknown protocol: {protocol_id}")
+    ids = {x["id"] for x in protocol.settings(protocol_id)}
+    if setting and setting not in ids:
+        raise ValueError(f"Unknown NCG setting for {protocol_id}: {setting}")
+    hospital_level = hospital_level or (org.load().get("hospital") or {}).get("level") or "essential"
+    if hospital_level not in org.LEVELS:
+        raise ValueError("Hospital level must be essential or optimal")
+    if board_date:
+        from .docstatus import parse_date
+        iso = parse_date(board_date)
+        if not iso:
+            raise ValueError(f"Not a valid board date: {board_date}")
+        board_date = iso
+    before = {k: case.get(k) for k in ("protocol", "setting", "board_date", "hospital_level")}
+    case.update(protocol=protocol_id, setting=setting, board_date=board_date, hospital_level=hospital_level,
+                listing={"status": "listed", "listed_by": user, "listed_at": store.now_iso(), "previous": case.get("listing")})
+    store.save_case(case)
+    store.audit(case_id, {"kind": "case_listed", "by": user, "protocol": protocol_id, "setting": setting, "board_date": board_date, "hospital_level": hospital_level, "before": before})
+    ids = [d["doc_id"] for d in store.list_docs(case_id) if d.get("state") == "ready" and d.get("pages")]
+    if before["protocol"] == protocol_id or not ids:
+        if not ids or before["protocol"] == protocol_id:
+            recheck(case_id, user)
+        job = _job(case_id, 0, []); job.update(state="finished", seconds=0.0, gate=None, listed=True)
+        g = store.get_state(case_id).get("gate")
+        job["gate"] = {k: g[k] for k in ("passed", "readiness", "satisfied", "total")} if g else None
+        _save_job(job)
+        return job
+    for i in ids:
+        d = store.get_doc(case_id, i); d["state"] = "queued"; store.save_doc(case_id, d)
+    job = _job(case_id, len(ids), ids)
+    job["listed"] = True
+    job["task"] = asyncio.get_event_loop().create_task(process_docs(case_id, ids, job, from_stored=True))
+    return job
+
+
 def reprocess_intake(doc_ids, user=""):
     """Read, classify, identify and match intake documents again (after an error, or when new Case Files arrived)."""
     ids = [d for d in doc_ids if store.get_intake(d)]
@@ -300,6 +344,10 @@ def recheck(case_id, user=""):
     before = store.get_state(case_id).get("gate") or {}
     gate = rules.evaluate(case_id)
     st = rules.sync_actions(case_id, gate, by=user)
+    if gate is None:  # not listed yet (V1 item 2.5): nothing to check
+        st["recheck"] = {"listed": False, "documents_checked": 0, "processing": 0, "errors": 0, "satisfied": 0, "total": 0, "passed": None, "changed": [], "open_actions": 0}
+        store.audit(case_id, {"kind": "recheck", "by": user, "listed": False})
+        return st
     changed = [r["label"] for r in gate["requirements"] if {x["id"]: x["status"] for x in before.get("requirements", [])}.get(r["id"]) not in (None, r["status"])]
     st["recheck"] = {"documents_checked": gate["documents"]["ready"], "processing": gate["documents"]["processing"], "errors": gate["documents"]["errors"],
                      "satisfied": gate["satisfied"], "total": gate["total"], "passed": gate["passed"], "changed": changed,

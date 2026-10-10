@@ -24,8 +24,17 @@ def list_protocols():
         if f.name == "facts.json":
             continue
         p = json.loads(f.read_text())
-        out.append({"id": p["id"], "label": p["label"], "version": p.get("version"), "note": p.get("note")})
+        out.append({"id": p["id"], "label": p["label"], "version": p.get("version"), "note": p.get("note"), "settings": p.get("settings") or []})
     return out
+
+
+def settings(protocol_id):
+    """The NCG settings a Case File under this protocol can be listed with (chosen by the clinician, V1 item 2.5)."""
+    return get(protocol_id).get("settings") or []
+
+
+def exists(protocol_id):
+    return bool(protocol_id) and (config.PROTOCOL_DIR / f"{protocol_id}.json").exists() and protocol_id != "facts"
 
 
 def get(protocol_id):

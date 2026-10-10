@@ -129,6 +129,18 @@ def phase2(c, base):
         nc = c.get(f"/api/tb/cases/{new_cid}").json()
         check("new Case File waits for listing: records shown, no gate", nc["case"]["listing"]["status"] == "awaiting_listing" and nc["state"]["gate"] is None and len(nc["documents"]) == 1 and nc["documents"][0]["state"] == "ready")
         check("new Case File carries the printed identity (UHID, age / sex), never Aadhaar", nc["case"]["patient"].get("mrn") == "SYN-500911" and "aadhaar" not in json.dumps(nc["case"]["patient"]).lower(), json.dumps(nc["case"]["patient"])[:160])
+        # ---- 2.5 listing: the coordinator lists the Case File; Pre-Authorization starts
+        check("member cannot list a Case File (403)", m.post(f"/api/tb/cases/{new_cid}/listing", json={"protocol": "breast"}).status_code == 403)
+        check("listing with an unknown setting refused (400)", c.post(f"/api/tb/cases/{new_cid}/listing", json={"protocol": "breast", "setting": "non_metastatic"}).status_code == 400)
+        r = c.post(f"/api/tb/cases/{new_cid}/listing", json={"protocol": "breast", "setting": "early", "board_date": "18/10/2026", "hospital_level": "essential"}).json()
+        if r.get("total"):
+            wait_job(c, r["job"])
+        nc2 = c.get(f"/api/tb/cases/{new_cid}").json()
+        g = nc2["state"]["gate"]
+        check("listed: protocol, NCG setting, board date and level saved; gate evaluated", nc2["case"]["listing"]["status"] == "listed" and nc2["case"]["setting"] == "early" and nc2["case"]["board_date"] == "2026-10-18"
+              and g is not None and g["protocol"] == "breast" and g["setting"] == "early" and g["hospital_level"] == "essential" and g["total"] > 0, json.dumps({k: (g or {}).get(k) for k in ("protocol", "setting", "satisfied", "total")}))
+        check("listing audited and the record extracted under the protocol from its stored pages", any(e["kind"] == "case_listed" for e in c.get(f"/api/tb/cases/{new_cid}/audit").json()["events"])
+              and nc2["documents"][0]["state"] == "ready" and "facts" in nc2["documents"][0])
         c.delete(f"/api/tb/cases/{new_cid}")
     for d in c.get("/api/tb/intake").json()["documents"]:
         if d.get("uploaded_by") in E2E_USERS or d["rel_path"] in ("pap.pdf",):
