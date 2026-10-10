@@ -120,7 +120,7 @@ async def process_docs(case_id, doc_ids, job, from_stored=False):
 def add_files(case_id, files, user=""):
     """files: list of (relative_path, bytes). Identical files already in the Case File are skipped (SHA-256); files that cannot be
     read are refused (job["unsupported"]: file + reason, audited) and never stored. Returns a job (processing runs in the background)."""
-    ids, skipped, unsupported = [], [], []
+    ids, skipped, unsupported, warnings = [], [], [], []
     for rel, data in files:
         reason = ingest.reject_reason(rel)  # .doc / .rtf / .odt without LibreOffice: refused with a clear message (V1 item 1.4)
         if reason is None and (Path(rel).suffix.lower() not in ingest.SUPPORTED or Path(rel).name.startswith(".")):
@@ -135,8 +135,12 @@ def add_files(case_id, files, user=""):
         d = store.add_document_file(case_id, Path(rel).name, data, rel)
         ids.append(d["doc_id"])
         store.audit(case_id, {"kind": "document_added", "doc_id": d["doc_id"], "file": rel, "by": user})
+        w = ingest.scan_warning(store.original_path(case_id, d["doc_id"]), rel)  # a big scan: the user knows the wait (V1 item 3.7)
+        if w:
+            warnings.append({"doc_id": d["doc_id"], "file": rel, "message": w})
+            store.audit(case_id, {"kind": "scan_warning", "doc_id": d["doc_id"], "file": rel, "message": w})
     job = _job(case_id, len(ids), ids)
-    job["skipped_duplicates"], job["unsupported"] = skipped, unsupported
+    job["skipped_duplicates"], job["unsupported"], job["warnings"] = skipped, unsupported, warnings
     _save_job(job)
     job["task"] = asyncio.get_event_loop().create_task(process_docs(case_id, ids, job))
     return job
@@ -163,7 +167,7 @@ def reprocess(case_id, which="errors", user=""):
 def add_intake_files(files, department, user=""):
     """Department upload without a Case File (V1 item 2.3): files: list of (relative_path, bytes). Same refusal rules as add_files;
     identical bytes already waiting in the intake area are skipped. Returns a job (processing and matching run in the background)."""
-    ids, skipped, unsupported = [], [], []
+    ids, skipped, unsupported, warnings = [], [], [], []
     waiting = {d.get("sha256"): d["doc_id"] for d in store.list_intake()}
     for rel, data in files:
         reason = ingest.reject_reason(rel)
@@ -180,8 +184,12 @@ def add_intake_files(files, department, user=""):
         d = store.add_intake_file(Path(rel).name, data, rel, department, user)
         ids.append(d["doc_id"]); waiting[h] = d["doc_id"]
         store.audit_intake({"kind": "document_added", "doc_id": d["doc_id"], "file": rel, "department": department, "by": user})
+        w = ingest.scan_warning(store.intake_original_path(d["doc_id"]), rel)  # V1 item 3.7
+        if w:
+            warnings.append({"doc_id": d["doc_id"], "file": rel, "message": w})
+            store.audit_intake({"kind": "scan_warning", "doc_id": d["doc_id"], "file": rel, "department": department, "message": w})
     job = _job("intake", len(ids), ids)
-    job["skipped_duplicates"], job["unsupported"], job["department"] = skipped, unsupported, department
+    job["skipped_duplicates"], job["unsupported"], job["department"], job["warnings"] = skipped, unsupported, department, warnings
     _save_job(job)
     job["task"] = asyncio.get_event_loop().create_task(process_intake(ids, job))
     return job

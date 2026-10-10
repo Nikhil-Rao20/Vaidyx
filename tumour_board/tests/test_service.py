@@ -192,3 +192,27 @@ def test_restart_after_documents_were_done_only_rechecks(unit_case, monkeypatch)
     kinds = [(e["kind"], e.get("by")) for e in store.read_audit(unit_case)]
     assert ("recheck", "system:restart") in kinds and not any(k == "reprocess" for k, _ in kinds)
     assert store.get_state(unit_case)["gate"]["requirements"]
+
+
+def test_big_scan_warning_at_upload(unit_case, monkeypatch):
+    """A scan with more than 50 image-only pages warns the user at upload with an estimated time (V1 item 3.7): on the job, audited."""
+    async def fake_process(case_id, doc_id, protocol_id, case_patient=None, progress=None, from_stored=False):
+        d = store.get_doc(case_id, doc_id); d["state"] = "ready"; d["pages"] = [{"text": "x", "method": "text-layer"}]; d["classification"] = {}; store.save_doc(case_id, d)
+        progress and progress(doc_id, "ready")
+    monkeypatch.setattr(service.extract, "process_document", fake_process)
+    monkeypatch.setattr(ingest, "scan_warning", lambda path, name=None: f"{name} has 100 scanned pages: reading it will take about 2 minutes" if str(name).endswith("big_scan.pdf") else None)
+    job = _add(unit_case, [("outside/big_scan.pdf", b"%PDF-1.4 synthetic"), ("lab/cbc.txt", b"SYNTHETIC Hb 11.8")])
+    assert job["total"] == 2 and len(job["warnings"]) == 1
+    w = job["warnings"][0]
+    assert w["file"] == "outside/big_scan.pdf" and w["message"] == "outside/big_scan.pdf has 100 scanned pages: reading it will take about 2 minutes" and w["doc_id"].startswith("D")
+    ev = [e for e in store.read_audit(unit_case) if e["kind"] == "scan_warning"]
+    assert len(ev) == 1 and ev[0]["doc_id"] == w["doc_id"] and ev[0]["message"] == w["message"]
+    assert service.get_job(job["id"])["warnings"] == job["warnings"]  # saved with the job record
+
+
+def test_no_warning_for_small_files(unit_case, monkeypatch):
+    async def fake_process(case_id, doc_id, protocol_id, case_patient=None, progress=None, from_stored=False):
+        progress and progress(doc_id, "ready")
+    monkeypatch.setattr(service.extract, "process_document", fake_process)
+    job = _add(unit_case, [("lab/cbc.txt", b"SYNTHETIC Hb 11.8")])
+    assert job["warnings"] == []

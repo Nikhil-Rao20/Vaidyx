@@ -293,7 +293,9 @@ async function uploadFiles(list) {
   $("#job").innerHTML = `<div class="small" style="margin-top:8px"><span class="spin"></span> Uploading ${list.length} files...</div>`;
   const r = await fetch(`/api/tb/cases/${S.caseId}/documents`, { method: "POST", body: fd, credentials: "same-origin" });
   if (!r.ok) { toast("Upload failed: " + r.statusText); return; }
-  watchJob((await r.json()).job);
+  const res = await r.json();
+  if (res.warnings?.length) toast(res.warnings.map((w) => w.message).join("; ") + ". The other documents are read meanwhile.", 10000);  // big scans (V1 item 3.7)
+  watchJob(res.job);
 }
 async function watchJob(id) {
   const box = () => $("#job");
@@ -309,7 +311,7 @@ async function watchJob(id) {
     if (j.state === "failed") { toast("Processing failed: " + (j.error || "unknown error") + ". Use Re-process to retry.", 9000); await openCase(S.caseId, true); break; }
     if (j.state === "interrupted") { toast((j.error || "The server restarted; the documents were queued again automatically") + ".", 8000); await openCase(S.caseId, true); break; }
     if (j.state === "finished") {
-      const extra = [j.skipped_duplicates?.length ? `${j.skipped_duplicates.length} identical file(s) already in the Case File were skipped` : "", j.unsupported?.length ? `${j.unsupported.length} file(s) not read: ` + j.unsupported.map(u => `${u.file} (${u.reason})`).join(", ") : ""].filter(Boolean).join("; ");
+      const extra = [j.skipped_duplicates?.length ? `${j.skipped_duplicates.length} identical file(s) already in the Case File were skipped` : "", j.unsupported?.length ? `${j.unsupported.length} file(s) not read: ` + j.unsupported.map(u => `${u.file} (${u.reason})`).join(", ") : "", (j.warnings || []).map((w) => w.message).join("; ")].filter(Boolean).join("; ");
       toast(`Processed ${j.total} documents in ${j.seconds} s. Pre-Authorization re-checked: ${j.gate.satisfied}/${j.gate.total} satisfied.${extra ? " " + extra + "." : ""}`, 7000);
       await openCase(S.caseId, true); break;
     }
@@ -700,7 +702,9 @@ function bindIntakeUpload() {
     $("#up-job").innerHTML = `<span class="spin"></span> Uploading ${list.length} file(s)...`;
     const r = await fetch("/api/tb/intake/documents", { method: "POST", body: fd, credentials: "same-origin" });
     if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch (e) {} $("#up-job").textContent = ""; toast("Upload failed: " + m, 7000); return; }
-    watchIntakeJob((await r.json()).job);
+    const res = await r.json();
+    if (res.warnings?.length) toast(res.warnings.map((w) => w.message).join("; "), 10000);
+    watchIntakeJob(res.job);
   };
   $("#up-pick").onclick = () => $("#up-files").click(); $("#up-folder").onclick = () => $("#up-files-dir").click();
   $("#up-files").onchange = (e) => send([...e.target.files].map((f) => [f, f.name]));
@@ -718,7 +722,7 @@ async function watchIntakeJob(id) {
     if (j.state === "failed" || j.state === "interrupted") { toast((j.error || "Processing failed") + ".", 8000); break; }
     if (j.state === "finished") {
       const filed = Object.entries(j.filed || {}), needs = (j.needs_matching || []).length, errs = (j.errors || []).length;
-      const extra = [j.unsupported?.length ? `${j.unsupported.length} file(s) not read: ` + j.unsupported.map((u) => `${u.file} (${u.reason})`).join(", ") : "", j.skipped_duplicates?.length ? `${j.skipped_duplicates.length} already waiting` : ""].filter(Boolean).join("; ");
+      const extra = [j.unsupported?.length ? `${j.unsupported.length} file(s) not read: ` + j.unsupported.map((u) => `${u.file} (${u.reason})`).join(", ") : "", j.skipped_duplicates?.length ? `${j.skipped_duplicates.length} already waiting` : "", (j.warnings || []).map((w) => w.message).join("; ")].filter(Boolean).join("; ");
       $("#up-job").innerHTML = `<span class="muted">${filed.length} filed · ${needs} need matching${errs ? ` · ${errs} failed` : ""} · ${j.seconds} s</span>`;
       toast(`${j.total} document(s) read for ${deptName(j.department)}: ${filed.length} filed into Case Files (${[...new Set(filed.map(([, c]) => c))].join(", ") || "none"}), ${needs} waiting for a person to match${errs ? `, ${errs} failed to read` : ""}.${extra ? " " + extra + "." : ""}`, 9000);
       await refreshQueueCount(); if (!$("#intake").classList.contains("hidden")) showIntake(); loadCases(); if (S.caseId) openCase(S.caseId, true);

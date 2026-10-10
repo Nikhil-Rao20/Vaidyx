@@ -233,7 +233,7 @@ def setup_tumour_board_routes():
                 raise HTTPException(413, f"{f.filename} is larger than 60 MB")
             data.append((rels[i] if i < len(rels) and rels[i] else f.filename, b))
         job = service.add_files(case_id, data, u)
-        return {"job": job["id"], "total": job["total"]}
+        return {"job": job["id"], "total": job["total"], "warnings": job.get("warnings") or []}
 
     # ---- intake: department uploads before patient matching (V1 item 2.3) ----------------------------------------------
     def _intake(doc_id, rl, actionable=False):
@@ -266,7 +266,7 @@ def setup_tumour_board_routes():
                 raise HTTPException(413, f"{f.filename} is larger than 60 MB")
             data.append((rels[i] if i < len(rels) and rels[i] else f.filename, b))
         job = service.add_intake_files(data, dept, u)
-        return {"job": job["id"], "total": job["total"], "department": dept}
+        return {"job": job["id"], "total": job["total"], "department": dept, "warnings": job.get("warnings") or []}
 
     @r.get("/intake")
     async def intake_queue(request: Request):

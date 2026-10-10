@@ -541,3 +541,122 @@ def test_ocr_page_carries_the_flags(monkeypatch):
     assert p["text"] == SYNTHETIC_OPD + "Signed [illegible]"
     assert p["flags"] == [DEVANAGARI_FLAG, "handwriting / illegible parts: verify"] and _flag_offsets_ok(p["text"], p)
     assert "flags" not in _two_reads(monkeypatch, "Hb 11.8 g/dL", "Hb 11.8 g/dL")
+
+
+# ---- big scans: batches + warning (V1 item 3.7) --------------------------------------------------------------
+DECCAN_SCAN = Path("/data/vaidyx/tb_demo_corpus/cases/TB-006/outside_records/deccan_general_hospital_records_scan.pdf")
+ENGLISH_LINE = "Patient reviewed in the clinic today and the biopsy report was discussed with the family"
+
+
+def _blank_pdf(path, n):
+    from pypdf import PdfWriter
+    w = PdfWriter()
+    for _ in range(n):
+        w.add_blank_page(width=36, height=36)  # tiny pages: cheap to render
+    with open(path, "wb") as f:
+        w.write(f)
+    return path
+
+
+def _fake_reader(monkeypatch, text_pages=()):
+    """Fake ocr_page and _img_bytes: images are numbered in render order; each read records how many images had been
+    rendered when it ran (its batch boundary)."""
+    rendered, calls = [], []
+
+    def img(im):
+        rendered.append(1); return f"img{len(rendered) - 1}".encode()
+
+    async def read(b, audit=None):
+        calls.append(len(rendered)); return {"text": "read of " + b.decode(), "method": "vision-transcription"}
+    monkeypatch.setattr(ingest, "_img_bytes", img)
+    monkeypatch.setattr(ingest, "ocr_page", read)
+    if text_pages:
+        import pypdf
+        real = pypdf.PdfReader
+
+        class Reader:
+            def __init__(self, p):
+                self.pages = [type("P", (), {"extract_text": (lambda self, i=i: ENGLISH_LINE if i in text_pages else "")})()
+                              for i in range(len(real(p).pages))]
+        monkeypatch.setattr(pypdf, "PdfReader", Reader)
+    return calls
+
+
+def test_scanned_pdf_read_in_batches_of_20(monkeypatch, tmp_path):
+    calls = _fake_reader(monkeypatch)
+    p = pages(_blank_pdf(tmp_path / "scan.pdf", 45))
+    from collections import Counter
+    assert Counter(calls) == {20: 20, 40: 20, 45: 5}  # 20 rendered and read, then the next 20, then 5
+    assert [x["text"] for x in p] == [f"read of img{i}" for i in range(45)]
+
+
+def test_batches_keep_page_order_with_text_layer_pages(monkeypatch, tmp_path):
+    text_pages = {0, 7, 14, 21, 28}
+    calls = _fake_reader(monkeypatch, text_pages)
+    p = pages(_blank_pdf(tmp_path / "mixed.pdf", 30))
+    image_pages = [i for i in range(30) if i not in text_pages]
+    assert len(calls) == 25 and sorted(set(calls)) == [20, 25]
+    assert [x["method"] for x in p] == ["text-layer" if i in text_pages else "vision-transcription" for i in range(30)]
+    assert [p[i]["text"] for i in image_pages] == [f"read of img{k}" for k in range(25)]
+
+
+def test_small_scan_is_one_batch(monkeypatch, tmp_path):
+    calls = _fake_reader(monkeypatch)
+    assert len(pages(_blank_pdf(tmp_path / "small.pdf", 3))) == 3 and calls == [3, 3, 3]
+
+
+def test_scan_batch_env_override(monkeypatch, tmp_path):
+    monkeypatch.setenv("TB_SCAN_BATCH", "4")
+    calls = _fake_reader(monkeypatch)
+    pages(_blank_pdf(tmp_path / "scan.pdf", 10))
+    assert calls == [4] * 4 + [8] * 4 + [10] * 2
+
+
+def test_multiframe_tiff_read_in_batches(monkeypatch, tmp_path):
+    from PIL import Image
+    f = tmp_path / "scan.tiff"
+    frames = [Image.new("RGB", (8, 8), (i, i, i)) for i in range(25)]
+    frames[0].save(f, save_all=True, append_images=frames[1:])
+    calls = _fake_reader(monkeypatch)
+    p = pages(f)
+    assert calls == [20] * 20 + [25] * 5 and [x["text"] for x in p] == [f"read of img{i}" for i in range(25)]
+
+
+@pytest.mark.skipif(not DECCAN_SCAN.exists(), reason="demo corpus not present")
+def test_scan_estimate_and_warning_on_the_100_page_demo_scan(monkeypatch):
+    for k in ("TB_SCAN_SECONDS_PER_PAGE", "TB_SCAN_WARN_PAGES"):
+        monkeypatch.delenv(k, raising=False)
+    assert ingest.scan_estimate(DECCAN_SCAN) == {"pages": 100, "image_pages": 100, "seconds": 120}
+    w = ingest.scan_warning(DECCAN_SCAN, DECCAN_SCAN.name)
+    assert w == "deccan_general_hospital_records_scan.pdf has 100 scanned pages: reading it will take about 2 minutes"
+    assert "—" not in w and "–" not in w
+
+
+def test_text_pdf_has_no_image_pages_and_no_warning(tmp_path):
+    f = tmp_path / "note.pdf"; f.write_bytes(_pdf_bytes(ENGLISH_LINE))
+    assert ingest.scan_estimate(f) == {"pages": 1, "image_pages": 0, "seconds": 0}
+    assert ingest.scan_warning(f, "note.pdf") is None
+
+
+def test_scan_estimate_counts_blank_pages_and_frames(tmp_path):
+    from PIL import Image
+    assert ingest.scan_estimate(_blank_pdf(tmp_path / "b.pdf", 3)) == {"pages": 3, "image_pages": 3, "seconds": 4}  # 3.6 s rounded up
+    png = tmp_path / "photo.png"; Image.new("RGB", (8, 8)).save(png)
+    assert ingest.scan_estimate(png) == {"pages": 1, "image_pages": 1, "seconds": 2}
+    assert ingest.scan_estimate(tmp_path / "notes.txt") is None and ingest.scan_estimate(OFFICE / "lab_values.xlsx") is None
+    bad = tmp_path / "broken.pdf"; bad.write_bytes(b"not a pdf")
+    assert ingest.scan_estimate(bad) is None and ingest.scan_warning(bad, "broken.pdf") is None
+
+
+def test_scan_warning_threshold_and_env_overrides(monkeypatch, tmp_path):
+    f = _blank_pdf(tmp_path / "scan.pdf", 51)
+    assert ingest.scan_warning(f, "scan.pdf") == "scan.pdf has 51 scanned pages: reading it will take about 2 minutes"  # 61.2 s
+    assert ingest.scan_warning(_blank_pdf(tmp_path / "fifty.pdf", 50), "fifty.pdf") is None  # warns only above 50
+    monkeypatch.setenv("TB_SCAN_WARN_PAGES", "100")
+    assert ingest.scan_warning(f, "scan.pdf") is None
+    monkeypatch.setenv("TB_SCAN_WARN_PAGES", "10")
+    monkeypatch.setenv("TB_SCAN_SECONDS_PER_PAGE", "0.5")
+    assert ingest.scan_estimate(f)["seconds"] == 26
+    assert ingest.scan_warning(f) == "scan.pdf has 51 scanned pages: reading it will take about 26 seconds"  # filename defaults to the file's name
+    monkeypatch.setenv("TB_SCAN_SECONDS_PER_PAGE", "not a number")
+    assert ingest.scan_estimate(f)["seconds"] == 62

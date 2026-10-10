@@ -359,6 +359,83 @@ async def _soffice_to_pdf_pages(path: Path, audit=None) -> list[dict]:
         return await _read_pages(pdf, audit)
 
 
+# Big scans (V1 item 3.7): image-only pages are rendered and read SCAN_BATCH at a time, so a 100-page scan never has
+# all its page images in memory; above SCAN_WARN_PAGES image-only pages the upload warns with an estimated time. The
+# environment (TB_SCAN_BATCH, TB_SCAN_SECONDS_PER_PAGE, TB_SCAN_WARN_PAGES) overrides these, read on each call.
+SCAN_BATCH = 20
+SCAN_SECONDS_PER_PAGE = 1.2  # the 100-page demo scan took about 90 s end to end
+SCAN_WARN_PAGES = 50
+
+
+def _scan_setting(name: str, default, cast):
+    import os
+    try:
+        v = cast(os.environ[name])
+        return v if v > 0 else default
+    except (KeyError, ValueError):
+        return default
+
+
+def _scan_batch() -> int:
+    return _scan_setting("TB_SCAN_BATCH", SCAN_BATCH, int)
+
+
+def _layer_ok(t: str) -> bool:
+    """A PDF page's text layer is used as is (no vision reader) when it has some length and reads like text."""
+    return len(t.strip()) >= 40 and text_layer_usable(t)
+
+
+def scan_estimate(path) -> dict | None:
+    """{"pages": N, "image_pages": M, "seconds": est} for a PDF or image file: M pages would go to the vision reader
+    (PDF pages whose text layer fails _layer_ok, or image frames), est = M x SCAN_SECONDS_PER_PAGE rounded up. Cheap:
+    pypdf text extraction or the frame count, no rendering, no model call. None for other files or unreadable ones."""
+    import math
+    path = Path(path); ext = path.suffix.lower()
+    try:
+        if ext == ".pdf":
+            from pypdf import PdfReader
+            texts = [pg.extract_text() or "" for pg in PdfReader(str(path)).pages]
+            n, m = len(texts), sum(1 for t in texts if not _layer_ok(t))
+        elif ext in IMG_EXT:
+            from PIL import Image
+            with Image.open(path) as im:
+                n = m = getattr(im, "n_frames", 1)
+        else:
+            return None
+    except Exception:
+        return None
+    per_page = _scan_setting("TB_SCAN_SECONDS_PER_PAGE", SCAN_SECONDS_PER_PAGE, float)
+    return {"pages": n, "image_pages": m, "seconds": math.ceil(round(m * per_page, 6))}
+
+
+def scan_warning(path, filename: str | None = None) -> str | None:
+    """A plain sentence for the user when the file has more than SCAN_WARN_PAGES scanned pages, else None. E.g.
+    "deccan_general_hospital_records_scan.pdf has 100 scanned pages: reading it will take about 2 minutes"."""
+    import math
+    est = scan_estimate(path)
+    if not est or est["image_pages"] <= _scan_setting("TB_SCAN_WARN_PAGES", SCAN_WARN_PAGES, int):
+        return None
+    secs = est["seconds"]
+    if secs >= 60:
+        n = math.ceil(secs / 60); took = f"{n} minute{'s' if n != 1 else ''}"
+    else:
+        took = f"{secs} second{'s' if secs != 1 else ''}"
+    return f"{filename or Path(path).name} has {est['image_pages']} scanned pages: reading it will take about {took}"
+
+
+async def _read_in_batches(images, audit=None) -> list[dict]:
+    """ocr_page over an iterable of page images, SCAN_BATCH at a time: the next batch is rendered only after the
+    previous one has been read. Order kept."""
+    out, batch, size = [], [], _scan_batch()
+    for img in images:
+        batch.append(img)
+        if len(batch) >= size:
+            out += await asyncio.gather(*[ocr_page(b, audit) for b in batch]); batch = []
+    if batch:
+        out += await asyncio.gather(*[ocr_page(b, audit) for b in batch])
+    return out
+
+
 def _img_bytes(im) -> bytes:
     buf = io.BytesIO(); im.convert("RGB").save(buf, "PNG"); return buf.getvalue()
 
@@ -382,23 +459,26 @@ async def _read_pages(path: Path, audit=None) -> list[dict]:
         pages, todo = [], []
         for i, p in enumerate(reader.pages):
             t = p.extract_text() or ""
-            if len(t.strip()) >= 40 and text_layer_usable(t):
+            if _layer_ok(t):
                 pages.append({"text": t, "method": "text-layer"})
             else:
                 pages.append(None); todo.append(i)
         if todo:
             import pypdfium2 as pdfium
             pdf = pdfium.PdfDocument(str(path))
-            imgs = [_img_bytes(pdf[i].render(scale=2.0).to_pil()) for i in todo]
-            read = await asyncio.gather(*[ocr_page(b, audit) for b in imgs])
+            try:
+                read = await _read_in_batches((_img_bytes(pdf[i].render(scale=2.0).to_pil()) for i in todo), audit)
+            finally:
+                pdf.close()
             for i, pg in zip(todo, read):
                 pages[i] = pg
         return pages
     if ext in IMG_EXT:
         from PIL import Image, ImageSequence
         im = Image.open(path)
-        frames = [_img_bytes(f.copy()) for f in ImageSequence.Iterator(im)] if getattr(im, "n_frames", 1) > 1 else [path.read_bytes()]
-        return list(await asyncio.gather(*[ocr_page(b, audit) for b in frames]))
+        if getattr(im, "n_frames", 1) > 1:  # multi-frame TIFF: frames rendered and read in batches like PDF pages
+            return await _read_in_batches((_img_bytes(f.copy()) for f in ImageSequence.Iterator(im)), audit)
+        return [await ocr_page(path.read_bytes(), audit)]
     if ext in OFFICE_EXT:
         if ext == ".docx":
             try:
