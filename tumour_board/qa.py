@@ -41,7 +41,8 @@ def _locate_quote(quote, pages):
     return out
 
 
-NEGATION = re.compile(r"\b(no|not|negative|absent|without|free of|non-?\w+|never|neither|nor|none|unremarkable|normal|denies|ruled out|not identified|not seen|not detected)\b", re.I)
+# "non-" alone is not a negation (Non-small cell carcinoma, Non-Hodgkin): only the result negations count (V1 item 1.1)
+NEGATION = re.compile(r"\b(no|not|negative|absent|without|free of|non[- ]?(?:reactive|amplified|detected)|never|neither|nor|none|unremarkable|normal|denies|ruled out|not identified|not seen|not detected)\b", re.I)
 
 
 def polarity_flag(text, quotes):

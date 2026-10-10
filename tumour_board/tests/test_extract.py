@@ -107,16 +107,27 @@ def test_ocr_page_agreeing_reads_have_no_uncertain_numbers(monkeypatch):
     assert "ocr_uncertain_numbers" not in _ocr(monkeypatch, "Hb 11.8 g/dL", "Hb 11.8 g/dL")
 
 
-# ---- negation and pending cues (real negations; the non- false positive is a known issue) ------------------
-@pytest.mark.parametrize("s", ["HIV non-reactive", "non-reactive", "EGFR mutation not detected", "Negative", "No evidence of metastasis",
-                               "HER2 non-amplified", "absent"])
+# ---- negation and pending cues: only real result negations; "non-" alone is not one (V1 item 1.1) ----------
+@pytest.mark.parametrize("s", ["HIV non-reactive", "non-reactive", "HBsAg nonreactive", "EGFR mutation not detected", "Negative",
+                               "No evidence of metastasis", "HER2 non-amplified", "HER2 non amplified", "absent", "Fusion non-detected"])
 def test_negation_cues(s):
     assert extract.NEGATED_RE.search(s) and qa.NEGATION.search(s)
 
 
-@pytest.mark.parametrize("s", ["Positive", "EGFR exon 19 deletion detected", "Adenocarcinoma, acinar predominant", "TPS 60%"])
+@pytest.mark.parametrize("s", ["Positive", "EGFR exon 19 deletion detected", "Adenocarcinoma, acinar predominant", "TPS 60%",
+                               "Non-small cell carcinoma, adenocarcinoma type", "NSCLC, non-squamous", "Non-Hodgkin lymphoma",
+                               "Nonspecific inflammation", "non-mucinous adenocarcinoma"])
 def test_affirmed_values(s):
     assert not extract.NEGATED_RE.search(s) and not qa.NEGATION.search(s)
+
+
+def test_nsclc_answer_gets_no_negation_flag():
+    assert not qa.polarity_flag("The histopathology records NSCLC.", ["Non-small cell carcinoma of lung"])
+
+
+def test_real_negation_in_quote_still_flags_an_affirmed_answer():
+    assert qa.polarity_flag("EGFR mutation detected.", ["EGFR mutation not detected"])
+    assert qa.polarity_flag("HIV reactive.", ["HIV non-reactive"])
 
 
 @pytest.mark.parametrize("s,pending", [("Pending", True), ("result awaited", True), ("Not reported", True), ("sent to reference laboratory", True),

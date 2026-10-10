@@ -43,6 +43,16 @@ def test_patterns_respect_word_boundaries():
     assert not rx.search("Hbs Ag negative") and not rx.search("thb")
 
 
+def test_her2_query_does_not_pull_er_lines():  # the key "er" used to match inside "her2" (fixed in V1 item 1.1)
+    pats = search._patterns("HER2")
+    assert r"\ber\b" not in pats and not any("receptor" in p for p in pats) and r"\bher2\b" in pats
+
+
+def test_er_query_still_matches_as_a_word():
+    assert r"\ber\b" in search._patterns("ER status") and r"\ber\b" in search._patterns("er")
+    assert r"\ber\b" not in search._patterns("liver lesion")
+
+
 def test_find_values_on_demo_case(demo_cases):
     r = search.find_values("TB-001", "PD-L1")
     assert r["patterns"] == PDL1

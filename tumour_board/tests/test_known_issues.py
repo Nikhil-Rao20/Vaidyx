@@ -1,7 +1,7 @@
 """Known issues, written the way the fixed behaviour should look. Each is a strict xfail: when the fix lands the test
 passes, strict mode turns that into a failure, and the fix removes the marker.
 
-Items 1.1 / 1.2 / 3.1 / 3.3 / 3.4 / 4.3 are planned in docs_Eswar/changes_v1.md (from the doc 01 pain points). Tests marked
+Items 1.2 / 3.1 / 3.3 / 3.4 / 4.3 are planned in docs_Eswar/changes_v1.md (from the doc 01 pain points). Tests marked
 "found in 0.3" were found while writing these tests."""
 import asyncio
 
@@ -9,22 +9,6 @@ import pytest
 
 from tumour_board import agents, docstatus, extract, ingest, qa, rules, search
 from tumour_board.tests.util import TEXT, add, fact, make_doc
-
-
-# ---- 1.1 negation: words starting with "non-" ---------------------------------------------------------------
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="fixed in V1 item 1.1")
-def test_non_small_cell_is_not_negated_in_extract():
-    assert not extract.NEGATED_RE.search("Non-small cell carcinoma, adenocarcinoma type")
-
-
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="fixed in V1 item 1.1")
-def test_non_small_cell_is_not_negated_in_qa():
-    assert not qa.NEGATION.search("Non-small cell carcinoma, adenocarcinoma type")
-
-
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="fixed in V1 item 1.1")
-def test_nsclc_answer_gets_no_negation_flag():
-    assert not qa.polarity_flag("The histopathology records NSCLC.", ["Non-small cell carcinoma of lung"])
 
 
 # ---- 1.2 agents see attestations ----------------------------------------------------------------------------
@@ -85,11 +69,6 @@ def test_failed_document_blocks_the_gate(unit_case):
 
 
 # ---- found while writing 0.3 (listed in the plan under "Found during the run") -------------------------------------------------------------
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="found in 0.3, fixed alongside V1 item 1.1: the key 'er' is matched as a substring of 'her2'")
-def test_her2_query_does_not_pull_er_lines():
-    assert r"\ber\b" not in search._patterns("HER2")
-
-
 @pytest.mark.xfail(strict=True, raises=AssertionError, reason="found in 0.3, fixed alongside V1 item 3.5: council prefix after 'Reg. No.' (KMC 45678) is not read as a signature")
 def test_reg_no_with_council_prefix_is_signed():
     assert docstatus.detect_signature("Dr. S. Rao, MD (Pathology)\nReg. No. KMC 45678")[0] == "yes"

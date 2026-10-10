@@ -37,7 +37,8 @@ def _patterns(query):
     q = query.lower().strip()
     pats = []
     for key, syns in SYNONYMS.items():
-        if any(re.search(s if s.startswith(r"\b") else re.escape(s), q) for s in syns + [re.escape(key)]):
+        # the key itself matches only as a whole word: "er" must not match inside "her2" (V1 item 1.1)
+        if any(re.search(s if s.startswith(r"\b") else re.escape(s), q) for s in syns) or re.search(r"\b" + re.escape(key) + r"\b", q):
             pats += [s if s.startswith(r"\b") else (r"\b" + re.escape(s) + r"\b" if len(s) <= 5 else re.escape(s)) for s in syns]
     if not pats:  # plain words of the query (skip filler words)
         stop = {"what", "is", "the", "of", "a", "an", "in", "for", "and", "was", "were", "value", "result", "results", "find", "show", "me", "where", "patient",
