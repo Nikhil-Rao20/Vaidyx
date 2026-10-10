@@ -21,9 +21,94 @@ def wait_job(c, jid):
         time.sleep(0.5)
 
 
-def main(base, pw):
+E2E_USERS = {"tb-e2e-radio": "Radio-e2e-2026!", "tb-e2e-pathhead": "Path-e2e-2026!"}  # throw-away Vaidyx accounts, created and deleted by this script
+
+
+def phase2(c, base):
+    """V1 Phase 2: departments and roles (2.1), confirmations (2.2). Runs as admin on `c`; department users get their own clients."""
+    o = c.get("/api/tb/org").json()
+    check("org: admin sees departments, users and own roles", o["me"]["admin"] and len(o["departments"]) >= 12 and "users" in o and "vaidyx_users" in o,
+          f"{len(o.get('departments', []))} departments")
+    for u, pw in E2E_USERS.items():
+        c.request("DELETE", "/api/auth/users", json={"username": u})
+        r = c.post("/api/auth/users", json={"username": u, "password": pw, "is_admin": False})
+        check(f"create test account {u}", r.status_code == 200, r.text[:80])
+    users = dict(o.get("users") or {})
+    users["tb-e2e-radio"] = {"departments": {"radio_diagnosis": "member"}, "coordinator": False}
+    users["tb-e2e-pathhead"] = {"departments": {"pathology": "head"}, "coordinator": False}
+    r = c.put("/api/tb/org", json={**{k: o[k] for k in ("hospital", "departments", "admins")}, "users": users})
+    check("org: admin saves users with department roles", r.status_code == 200 and r.json()["users"]["tb-e2e-radio"]["departments"] == {"radio_diagnosis": "member"}, r.text[:120])
+    m = httpx.Client(base_url=base, timeout=120); h = httpx.Client(base_url=base, timeout=120)
+    check("department users log in", m.post("/api/auth/login", json={"username": "tb-e2e-radio", "password": E2E_USERS["tb-e2e-radio"]}).status_code == 200
+          and h.post("/api/auth/login", json={"username": "tb-e2e-pathhead", "password": E2E_USERS["tb-e2e-pathhead"]}).status_code == 200)
+    me = m.get("/api/tb/org").json()
+    check("member sees only own roles, no user map", me["me"]["departments"] == {"radio_diagnosis": "member"} and not me["me"]["admin"] and "users" not in me and [d["id"] for d in me["my_departments"]] == ["radio_diagnosis"])
+    check("member: PUT /org forbidden", m.put("/api/tb/org", json=o).status_code == 403)
+    check("member: create Case File forbidden", m.post("/api/tb/cases", json={"case_id": "TB-FORBID", "protocol": "lung_nsclc"}).status_code == 403)
+    check("member: upload straight into a Case File forbidden", m.post("/api/tb/cases/TB-001/documents", files=[("files", ("x.txt", b"synthetic"))], data={"paths": "[]"}).status_code == 403)
+    check("member: delete Case File forbidden", m.delete("/api/tb/cases/TB-001").status_code == 403)
+    d = m.get("/api/tb/cases/TB-001").json()
+    perm = d.get("permissions", {})
+    check("member: can view the Case File, actions hidden", d["case"]["case_id"] == "TB-001" and perm.get("upload") is False and perm.get("board_record") is False
+          and not any(perm.get("waive", {}).values()) and not any(perm.get("delete_document", {}).values()), json.dumps({k: v for k, v in perm.items() if not isinstance(v, dict)}))
+    req_ids = [r["id"] for r in d["state"]["gate"]["requirements"]]
+    rad = next((r for r in d["state"]["gate"]["requirements"] if r["department"] == "Radiology"), None)
+    path_req = next((r for r in d["state"]["gate"]["requirements"] if r["department"] == "Pathology"), None)
+    check("member: waive forbidden (403) even in own department", m.post("/api/tb/cases/TB-001/confirmations", json={"type": "waive", "key": rad["id"], "reason": "e2e"}).status_code == 403 if rad else False)
+    hd = h.get("/api/tb/cases/TB-001").json()["permissions"]
+    check("head: may waive only own department's requirements", hd["waive"].get(path_req["id"]) is True and hd["waive"].get(rad["id"]) is False, json.dumps(hd["waive"]))
+    check("head: waive outside own department forbidden (403)", h.post("/api/tb/cases/TB-001/confirmations", json={"type": "waive", "key": rad["id"], "reason": "e2e"}).status_code == 403)
+    check("head: waive without a reason refused (400)", h.post("/api/tb/cases/TB-001/confirmations", json={"type": "waive", "key": path_req["id"], "reason": ""}).status_code == 400)
+    r = h.post("/api/tb/cases/TB-001/confirmations", json={"type": "waive", "key": path_req["id"], "reason": "e2e: slides reviewed outside"}).json()
+    st = {x["id"]: x["status"] for x in r["state"]["gate"]["requirements"]}
+    check("head: waive in own department recorded and applied", st[path_req["id"]] == "waived" and r["confirmation"]["by"] == "tb-e2e-pathhead" and r["confirmation"]["type"] == "waive", st.get(path_req["id"]))
+    r2 = h.post(f"/api/tb/cases/TB-001/confirmations/{r['confirmation']['id']}/undo").json()
+    check("head: undo restores the requirement", {x["id"]: x["status"] for x in r2["state"]["gate"]["requirements"]}[path_req["id"]] != "waived" and r2["confirmation"]["undone"]["by"] == "tb-e2e-pathhead")
+    au = c.get("/api/tb/cases/TB-001/audit").json()["events"]
+    check("confirmation and undo audited with the user", any(e["kind"] == "confirmation" and e["by"] == "tb-e2e-pathhead" for e in au) and any(e["kind"] == "confirmation_undone" for e in au))
+    check("undo twice refused (409)", h.post(f"/api/tb/cases/TB-001/confirmations/{r['confirmation']['id']}/undo").status_code == 409)
+    check("unknown confirmation type refused (400)", c.post("/api/tb/cases/TB-001/confirmations", json={"type": "bless", "key": "x"}).status_code == 400)
+    # value confirmation (mechanism check): a clinician records a value against a FINAL report after reading the source (here the WBC
+    # that the synthetic CBC scan reports as "Not reported"); it counts for the gate, is shown as "confirmed" and names the clinician.
+    # A value confirmed on a DRAFT report would still not count: the gate's final-signed rule is unchanged.
+    doc = next(x for x in d["documents"] if "cbc" in (x.get("rel_path") or ""))
+    r = c.post("/api/tb/cases/TB-001/confirmations", json={"type": "confirm_value", "key": f"{doc['doc_id']}:wbc", "fields": {"value": "6,200 /cumm"}}).json()
+    ev = next((x for x in r["state"]["gate"]["requirements"] if x["id"] == "baseline_labs"), {})
+    check("confirmed value counts for the gate with the clinician named", any(e.get("fact") == "wbc" and e.get("value") == "6,200 /cumm" for e in ev.get("evidence", [])) and ev["status"] == "satisfied", ev.get("status"))
+    d2 = c.get("/api/tb/cases/TB-001").json()
+    check("confirmed value shown in the Case File facts as confirmed", d2["facts"].get("wbc", {}).get("current", {}).get("verification") == "confirmed" and d2["facts"]["wbc"]["current"].get("confirmed_by") == "admin")
+    draft = next(x for x in d["documents"] if (x.get("classification") or {}).get("status") == "DRAFT")
+    r3 = c.post("/api/tb/cases/TB-001/confirmations", json={"type": "confirm_value", "key": f"{draft['doc_id']}:pdl1", "fields": {"value": "TPS 60%"}}).json()
+    check("a value confirmed on a DRAFT report still does not pass the gate", next(x["status"] for x in r3["state"]["gate"]["requirements"] if x["id"] == "pdl1") == "missing_field")
+    c.post(f"/api/tb/cases/TB-001/confirmations/{r3['confirmation']['id']}/undo")
+    c.post(f"/api/tb/cases/TB-001/confirmations/{r['confirmation']['id']}/undo")
+    check("legacy /overrides alias still records a confirmation", "attest_final" in {x["type"] for x in c.post("/api/tb/cases/TB-001/overrides", json={"kind": "documents", "key": doc["doc_id"], "value": {"attested_final": True, "reason": "e2e"}}).json().get("confirmations", [])})
+    c.post("/api/tb/cases/TB-001/overrides", json={"kind": "documents", "key": doc["doc_id"], "value": None})
+    m.close(); h.close()
+
+
+def phase2_cleanup(c):
+    """Remove the throw-away accounts and their org roles."""
+    try:
+        o = c.get("/api/tb/org").json()
+        users = {k: v for k, v in (o.get("users") or {}).items() if k not in E2E_USERS}
+        c.put("/api/tb/org", json={**{k: o[k] for k in ("hospital", "departments", "admins")}, "users": users})
+    except Exception as e:
+        print("cleanup org failed:", e)
+    for u in E2E_USERS:
+        c.request("DELETE", "/api/auth/users", json={"username": u})
+
+
+def main(base, pw, only=None):
     c = httpx.Client(base_url=base, timeout=600)
     check("login", c.post("/api/auth/login", json={"username": "admin", "password": pw}).status_code == 200)
+    if only == "phase2":
+        try:
+            phase2(c, base)
+        finally:
+            phase2_cleanup(c)
+        print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
+        return 0 if not FAIL else 1
     # 1. import lung case (incomplete)
     j, s = wait_job(c, c.post("/api/tb/demo/TB-001").json()["job"])
     g = c.get("/api/tb/cases/TB-001").json()["state"]["gate"]
@@ -144,6 +229,11 @@ def main(base, pw):
     cl = lab[0]["classification"] if lab else {}
     check("Indian-format report (no status line) read as FINAL and signed", cl.get("status") == "FINAL" and cl.get("signed") == "yes", f"{cl.get('status')} / {cl.get('signed')} / {cl.get('signature_quote', '')[:60]}")
     check("latest lab values come from the new report", "12.4" in d2["facts"].get("haemoglobin", {}).get("current", {}).get("value", ""), d2["facts"].get("haemoglobin", {}).get("current", {}).get("value"))
+    # 9. V1 Phase 2: departments, roles and confirmations
+    try:
+        phase2(c, base)
+    finally:
+        phase2_cleanup(c)
     # leave the demo Case Files in their fresh state for the next user / test
     for cid in ("TB-001", "TB-002", "TB-003"):
         wait_job(c, c.post(f"/api/tb/demo/{cid}").json()["job"])
@@ -154,4 +244,5 @@ def main(base, pw):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--base", default="http://127.0.0.1:7000"); ap.add_argument("--password", required=True)
-    a = ap.parse_args(); sys.exit(main(a.base, a.password))
+    ap.add_argument("--only", default=None, help="run one section only (phase2)")
+    a = ap.parse_args(); sys.exit(main(a.base, a.password, a.only))

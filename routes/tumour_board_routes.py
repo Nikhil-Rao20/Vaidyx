@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from src.auth_helpers import require_user
 from tumour_board import agents, config, guidelines, llm, org, postboard, protocol, qa, rules, search, service, store, summary
+from tumour_board import confirm  # clinician confirmations (V1 item 2.2)
 
 
 from fastapi.routing import APIRoute
@@ -168,7 +169,7 @@ def setup_tumour_board_routes():
         for d in all_docs:
             docs.append({k: d.get(k) for k in ("doc_id", "filename", "rel_path", "ext", "state", "error", "classification", "identity", "added", "department", "uploaded_by")} |
                         {"facts": d.get("facts", {}), "pages": len(d.get("pages") or []), "methods": sorted({p["method"] for p in d.get("pages") or []})})
-        facts = rules.resolve_facts(all_docs, st.get("overrides"))
+        facts = rules.resolve_facts(rules.case_docs(case_id, st), st.get("overrides"))  # confirmations overlaid (V1 item 2.2)
         cat = protocol.facts()
         return {"case": c, "state": st, "documents": docs, "facts": {k: {"label": cat.get(k, {}).get("label", k), **v} for k, v in facts.items()},
                 "timeline": postboard.timeline(case_id), "permissions": _case_permissions(rl, c, st, all_docs)}
@@ -249,21 +250,68 @@ def setup_tumour_board_routes():
         async with store.lock(case_id):
             return service.delete_document(case_id, doc_id, u)
 
+    def _confirmation_permission(rl, case_id, c, ctype, key):
+        """The permission each confirmation type needs (plan 2.2: permission goes through can()). Document-level types are
+        checked against the department that uploaded the document; a waiver against the requirement's Responsible Department."""
+        action = confirm.TYPES[ctype]["action"]
+        if ctype == "waive":
+            dept = next((q.get("department") for q in protocol.get(c["protocol"]).get("mandatory", []) if q["id"] == key), "") if c.get("protocol") else ""
+            _need(rl, "waive", org.department_id(dept or ""))
+        elif confirm.TYPES[ctype]["target"] in ("document", "fact"):
+            doc_id = key.partition(":")[0] if confirm.TYPES[ctype]["target"] == "fact" else key
+            _need(rl, action, _doc_department(store.get_doc(case_id, doc_id) if doc_id else None))
+        elif ctype == "resolve_flag":
+            _need(rl, "board_record")
+        else:
+            _need(rl, action)
+
+    @r.post("/cases/{case_id}/confirmations")
+    async def confirmations(case_id: str, request: Request):
+        """One clinician confirmation (V1 item 2.2): {"type": attest_final | waive | confirm_dates | confirm_doc_type | confirm_match |
+        dismiss_failed | confirm_value | resolve_flag, "key": id, "fields": {...}, "reason": "..."}. Validated, audited, undoable;
+        applied after the model so it wins and survives a re-process. Returns the record and the re-checked state."""
+        u = _user(request); c = _case(case_id); b = await request.json()
+        ctype, key = str(b.get("type", "")), str(b.get("key", ""))
+        if ctype not in confirm.TYPES:
+            raise HTTPException(400, f"Unknown confirmation type: {ctype}")
+        _confirmation_permission(_roles(request), case_id, c, ctype, key)
+        async with store.lock(case_id):
+            try:
+                rec = confirm.record(case_id, ctype, key, b.get("fields") or {}, b.get("reason", ""), u)
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+            st = service.recheck(case_id, u) if c.get("protocol") else store.get_state(case_id)
+        return {"confirmation": rec, "state": st}
+
+    @r.post("/cases/{case_id}/confirmations/{conf_id}/undo")
+    async def confirmation_undo(case_id: str, conf_id: str, request: Request):
+        u = _user(request); c = _case(case_id)
+        rec = next((x for x in store.get_state(case_id).get("confirmations", []) if x["id"] == conf_id), None)
+        if not rec:
+            raise HTTPException(404, "confirmation not found")
+        _confirmation_permission(_roles(request), case_id, c, rec["type"], rec["key"])
+        async with store.lock(case_id):
+            try:
+                rec = confirm.undo(case_id, conf_id, u)
+            except KeyError:
+                raise HTTPException(409, "already undone")
+            st = service.recheck(case_id, u) if c.get("protocol") else store.get_state(case_id)
+        return {"confirmation": rec, "state": st}
+
     @r.post("/cases/{case_id}/overrides")
     async def overrides(case_id: str, request: Request):
-        """Clinical overrides for this Case File: {"kind": "requirements"|"documents", "key": id, "value": {...} | null}.
-        requirements: {"waived": true, "reason": "..."}; documents: {"attested_final": true, "reason": "..."}."""
+        """Kept as an alias of /confirmations: {"kind": "requirements"|"documents", "key": id, "value": {...} | null}.
+        requirements: {"waived": true, "reason": "..."} = waive; documents: {"attested_final": true, "reason": "..."} = attest_final; null undoes."""
         u = _user(request); c = _case(case_id); b = await request.json()
         if b.get("kind") not in ("requirements", "documents"):
             raise HTTPException(400, "kind must be requirements or documents")
-        rl = _roles(request)
-        if b["kind"] == "documents":
-            _need(rl, "confirm", _doc_department(store.get_doc(case_id, str(b.get("key", "")))))
-        else:
-            dept = next((q.get("department") for q in protocol.get(c["protocol"]).get("mandatory", []) if q["id"] == str(b.get("key", ""))), "")
-            _need(rl, "waive", org.department_id(dept or ""))
+        key = str(b.get("key", ""))
+        _confirmation_permission(_roles(request), case_id, c, "waive" if b["kind"] == "requirements" else "attest_final", key)
         async with store.lock(case_id):
-            rules.set_override(case_id, b["kind"], str(b.get("key", "")), b.get("value"), u)
+            try:
+                confirm.legacy_override(case_id, b["kind"], key, b.get("value"), u)
+            except ValueError as e:
+                raise HTTPException(400, str(e))
             return service.recheck(case_id, u)
 
     @r.post("/cases/{case_id}/actions/{action_id}")

@@ -134,6 +134,7 @@ function renderReady() {
       <div class="muted small" style="margin-bottom:6px">Informational checklist (not part of the gate). Source: ${esc(g.core_data_source || "")}.</div>
       <div style="display:flex;flex-wrap:wrap;gap:4px">${g.core_data.map((c) => c.present ? `<span class="cite" data-doc="${esc(c.evidence[0]?.doc_id || "")}" title="${esc((c.evidence[0]?.value || "") + " | " + (c.evidence[0]?.quote || ""))}">✓ ${esc(c.label)}</span>` : `<span class="chip c-mute">– ${esc(c.label)}</span>`).join("")}</div></div>` : ""}
     <div class="card"><h3>Optional records available</h3><div>${opt || '<span class="muted small">None</span>'}</div></div>
+    ${confirmationsHTML()}
     ${g?.policy_basis ? `<div class="card"><h3>Why a Pre-Authorization gate</h3><div class="small" style="color:#475569">${esc(g.policy_basis)}</div></div>` : ""}
   </div><div>
     <div class="card"><h3>Routed actions <span class="muted small">${acts.filter((a) => a.status !== "completed").length} open</span></h3>
@@ -152,9 +153,9 @@ function renderReady() {
   const reproc = async (which) => { const j = await api(`/cases/${S.caseId}/reprocess`, { json: { which } }); watchJob(j.job); };
   if ($("#btn-reproc-err")) $("#btn-reproc-err").onclick = () => reproc("errors");
   if ($("#btn-reproc-all")) $("#btn-reproc-all").onclick = () => { if (confirm("Re-read, re-classify and re-extract every document in this Case File?")) reproc("all"); };
-  $$("[data-waive]", $("#tab-ready")).forEach((b) => (b.onclick = async () => { const reason = prompt("Reason for waiving this record for this Case File (recorded in the audit log):"); if (reason === null) return;
-    await api(`/cases/${S.caseId}/overrides`, { json: { kind: "requirements", key: b.dataset.waive, value: { waived: true, reason } } }); await openCase(S.caseId, true); toast("Requirement waived and recorded"); }));
-  $$("[data-unwaive]", $("#tab-ready")).forEach((b) => (b.onclick = async () => { await api(`/cases/${S.caseId}/overrides`, { json: { kind: "requirements", key: b.dataset.unwaive, value: null } }); await openCase(S.caseId, true); }));
+  $$("[data-waive]", $("#tab-ready")).forEach((b) => (b.onclick = () => waiveReq(b.dataset.waive)));
+  $$("[data-unwaive]", $("#tab-ready")).forEach((b) => (b.onclick = async () => { await api(`/cases/${S.caseId}/overrides`, { json: { kind: "requirements", key: b.dataset.unwaive, value: null } }); await openCase(S.caseId, true); toast("Waiver removed"); }));
+  bindConfirmations($("#tab-ready"));
   $$("[data-attest]", $("#tab-ready")).forEach((b) => (b.onclick = () => attestDoc(b.dataset.attest)));
   if ($("#drop")) bindUpload();
   const arr = $("#btn-arrivals");
@@ -163,11 +164,59 @@ function renderReady() {
 }
 
 
+// ------------------------------------------------------------------ clinician confirmations (one reusable dialog) · V1 item 2.2
+const CONF_LABEL = { attest_final: "Attested final, signed", waive: "Requirement waived", confirm_dates: "Dates confirmed", confirm_doc_type: "Document type confirmed",
+  confirm_match: "Patient match confirmed", dismiss_failed: "Failed document dismissed", confirm_value: "Value confirmed", resolve_flag: "Flag resolved" };
+function confirmDialog({ title, intro, fields = [], submit = "Record" }) {
+  // Returns a promise of {field: value} or null. Every field: {id, label, type: text|textarea|select|date, options: [[value, label]], required, value, placeholder}
+  return new Promise((resolve) => {
+    const f = (x) => x.type === "textarea" ? `<textarea id="cd-${x.id}" placeholder="${esc(x.placeholder || "")}">${esc(x.value || "")}</textarea>`
+      : x.type === "select" ? `<select id="cd-${x.id}">${(x.options || []).map(([v, l]) => `<option value="${esc(v)}" ${v === x.value ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`
+      : `<input id="cd-${x.id}" type="${x.type === "date" ? "date" : "text"}" value="${esc(x.value || "")}" placeholder="${esc(x.placeholder || "")}">`;
+    $("#modal-body").innerHTML = `<h3 style="color:#1f2933;margin-top:0">${esc(title)}</h3>${intro ? `<div class="small muted">${esc(intro)}</div>` : ""}
+      <div class="form">${fields.map((x) => `<label>${esc(x.label)}${x.required ? "" : ' <span class="muted" style="font-weight:400">(optional)</span>'}</label>${f(x)}`).join("")}</div>
+      <div class="small muted" style="margin-top:10px">Recorded with your name and the time in the audit log. It can be undone; the record of both stays.</div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button class="ghost" id="cd-cancel">Cancel</button><button class="primary" id="cd-ok">${esc(submit)}</button></div>`;
+    $("#modal").classList.remove("hidden");
+    const done = (v) => { $("#modal").classList.add("hidden"); resolve(v); };
+    $("#cd-cancel").onclick = () => done(null);
+    $("#cd-ok").onclick = () => { const out = {}; for (const x of fields) { const v = $("#cd-" + x.id).value.trim(); if (x.required && !v) { toast(`${x.label} is required`); return; } out[x.id] = v; } done(out); };
+    const first = fields[0] && $("#cd-" + fields[0].id); if (first) first.focus();
+  });
+}
+async function recordConfirmation(type, key, fields, reason) {
+  try { const r = await api(`/cases/${S.caseId}/confirmations`, { json: { type, key, fields: fields || {}, reason: reason || "" } }); await openCase(S.caseId, true); toast(`${CONF_LABEL[type] || "Confirmation"} recorded in the audit log`); return r; }
+  catch (e) { toast(e.message, 7000); return null; }
+}
+function confirmationsHTML() {
+  const list = (S.data.state.confirmations || []).filter((c) => !c.undone);
+  if (!list.length) return "";
+  const what = (c) => c.type === "confirm_value" ? `${esc(c.key.split(":")[1] || "")}: "${esc(c.fields?.value || "")}"` : c.type === "confirm_doc_type" ? esc(DT[c.fields?.doc_type] || c.fields?.doc_type || "")
+    : c.type === "confirm_dates" ? [c.fields?.report_date && "report " + fmtDate(c.fields.report_date), c.fields?.event_date && "event " + fmtDate(c.fields.event_date)].filter(Boolean).join(", ")
+    : c.type === "waive" ? esc(S.data.state.gate?.requirements?.find((r) => r.id === c.key)?.label || c.key) : esc(S.data.documents.find((d) => d.doc_id === c.key)?.classification?.title || c.key);
+  return `<div class="card"><h3>Clinician confirmations <span class="muted small">${list.length}</span></h3>
+    <div class="muted small" style="margin-bottom:6px">Human decisions recorded against the Case File. They are applied after the model, so they win and survive a re-process.</div>
+    ${list.map((c) => `<div class="conf"><span class="chip c-ok">${esc(CONF_LABEL[c.type] || c.type)}</span> ${what(c)}${c.reason ? ` <span class="muted">(${esc(c.reason)})</span>` : ""}
+      <span class="small muted">by ${esc(c.by)} ${esc((c.at || "").slice(0, 16).replace("T", " "))}</span> <button class="ghost sm" data-undo="${esc(c.id)}">Undo</button></div>`).join("")}</div>`;
+}
+function bindConfirmations(root) {
+  $$("[data-undo]", root).forEach((b) => (b.onclick = async () => { if (!confirm("Undo this confirmation? Both the confirmation and the undo stay in the audit log.")) return;
+    try { await api(`/cases/${S.caseId}/confirmations/${b.dataset.undo}/undo`, { method: "POST" }); await openCase(S.caseId, true); toast("Confirmation undone"); } catch (e) { toast(e.message, 7000); } }));
+}
+
 async function attestDoc(docId) {
-  const reason = prompt("Confirm that this document is the final, signed version (your name is recorded with this attestation). Note (optional):");
-  if (reason === null) return;
-  await api(`/cases/${S.caseId}/overrides`, { json: { kind: "documents", key: docId, value: { attested_final: true, reason } } });
-  await openCase(S.caseId, true); toast("Attestation recorded in the audit log");
+  const d = S.data.documents.find((x) => x.doc_id === docId);
+  const v = await confirmDialog({ title: "Attest: final, signed version", intro: `You confirm that "${d?.classification?.title || d?.filename || docId}" is the final, signed version of the report, as checked in the source.`,
+    fields: [{ id: "reason", label: "Note", type: "textarea", placeholder: "e.g. verified with the department" }], submit: "Attest" });
+  if (!v) return;
+  await recordConfirmation("attest_final", docId, {}, v.reason);
+}
+async function waiveReq(reqId) {
+  const r = S.data.state.gate?.requirements?.find((x) => x.id === reqId);
+  const v = await confirmDialog({ title: "Waive a requirement for this Case File", intro: `Clinical decision that "${r?.label || reqId}" is not required for this Case File. It leaves the Pre-Authorization check for this Case File only.`,
+    fields: [{ id: "reason", label: "Reason", type: "textarea", required: true, placeholder: "e.g. CT done at the referring hospital, report in the file" }], submit: "Waive" });
+  if (!v) return;
+  await recordConfirmation("waive", reqId, {}, v.reason);
 }
 function actionHTML(a) {
   return `<div class="action ${a.status}"><div class="h"><span>${esc(a.label)}</span><span class="chip ${a.status === "completed" ? "c-ok" : a.status === "overdue" ? "c-bad" : "c-warn"}">${a.status === "completed" ? "Completed" : a.status === "overdue" ? "Overdue" : "Pending"}</span></div>

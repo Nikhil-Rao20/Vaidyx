@@ -7,9 +7,16 @@ import re
 import uuid
 from datetime import date, datetime, timedelta
 
-from . import protocol, store
+from . import confirm, protocol, store
 
 FINAL_OK = {"FINAL", "AMENDED", "CORRECTED"}
+VERIFIED = {"verified", "confirmed"}  # a value counts when code found its quote, or a clinician confirmed it against the source (V1 item 2.2)
+
+
+def case_docs(case_id, state=None):
+    """The Case File's documents as the clinicians confirmed them: confirmations (document type, dates, values) are overlaid
+    on the model's reading at read time, so they win and survive a re-process (V1 item 2.2)."""
+    return confirm.apply_to_docs(store.list_docs(case_id), store.get_state(case_id) if state is None else state)
 STATUS_RANK = {"CORRECTED": 4, "AMENDED": 4, "FINAL": 3, "PRELIMINARY": 1, "DRAFT": 0, "CANCELLED": -1, "UNKNOWN": 0}
 
 
@@ -59,8 +66,8 @@ def resolve_facts(docs, overrides=None):
                                              "date": c.get("report_date_iso"), "doc_final": _is_final(d, overrides), "doc_status": c.get("status")})
     out = {}
     for fid, h in hist.items():
-        tiers = [[e for e in h if e["verification"] == "verified" and e["doc_final"] and e["state"] == "present"],
-                 [e for e in h if e["verification"] == "verified"], h]
+        tiers = [[e for e in h if e["verification"] in VERIFIED and e["doc_final"] and e["state"] == "present"],
+                 [e for e in h if e["verification"] in VERIFIED], h]
         out[fid] = {"current": next(t[-1] for t in tiers if t), "history": h}
     return out
 
@@ -69,9 +76,10 @@ def evaluate(case_id):
     case = store.get_case(case_id)
     prot = protocol.get(case["protocol"])
     cat = protocol.facts()
-    docs = store.list_docs(case_id)
+    state = store.get_state(case_id)
+    docs = case_docs(case_id, state)
     ready = [d for d in docs if d.get("state") == "ready"]
-    overrides = store.get_state(case_id).get("overrides") or {}
+    overrides = state.get("overrides") or {}
     facts = resolve_facts(docs, overrides)
     results = []
     for req in prot["mandatory"]:
@@ -121,7 +129,7 @@ def evaluate(case_id):
         missing, pending, review = [], [], []
         for fid in req.get("required_facts", []):
             hist = [h for h in facts.get(fid, {}).get("history", []) if not allowed or h["doc_type"] in allowed]
-            good = [h for h in hist if h["verification"] == "verified" and h["doc_final"] and h["state"] == "present"]
+            good = [h for h in hist if h["verification"] in VERIFIED and h["doc_final"] and h["state"] == "present"]
             if req.get("must_postdate_doc_type") and r.get("postdate_reference"):
                 good = [h for h in good if (h["date"] or "") > r["postdate_reference"]]
             if good:
@@ -158,10 +166,10 @@ def evaluate(case_id):
         optional.append({"id": opt["id"], "label": opt["label"], "available": bool(hit), "doc_ids": [d["doc_id"] for d in hit]})
     core = []  # informational MDT minimum core data (not part of the gate): documented anywhere in the Case File, verified
     for c in prot.get("core_data", []):
-        hits = [h for fid in c["facts"] for h in facts.get(fid, {}).get("history", []) if h["verification"] == "verified" and h["state"] == "present"]
+        hits = [h for fid in c["facts"] for h in facts.get(fid, {}).get("history", []) if h["verification"] in VERIFIED and h["state"] == "present"]
         core.append({"id": c["id"], "label": c["label"], "present": bool(hits),
                      "evidence": [{"doc_id": h["doc_id"], "fact": fid, "value": h["value"], "quote": h["quote"]} for fid in c["facts"] for h in facts.get(fid, {}).get("history", [])
-                                  if h["verification"] == "verified" and h["state"] == "present"][:3]})
+                                  if h["verification"] in VERIFIED and h["state"] == "present"][:3]})
     applicable = [r for r in results if r["status"] not in ("not_applicable", "waived")]
     ok = [r for r in applicable if r["status"] == "satisfied"]
     gate = {"evaluated": store.now_iso(), "protocol": prot["id"], "protocol_version": prot.get("version"),
