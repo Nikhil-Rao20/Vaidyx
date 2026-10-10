@@ -72,7 +72,7 @@ async def adjudicate(case_id, record):
         claims = (await llm.chat("reasoner", msg, json_schema=schema, max_tokens=700, purpose="adjudication: values in decision", audit=au)).get("claims", [])
     except Exception as e:
         flags.append({"kind": "system", "severity": "info", "text": f"Value check unavailable: {str(e)[:120]}"})
-    facts = rules.resolve_facts(store.list_docs(case_id))
+    facts = rules.resolve_facts(store.list_docs(case_id), store.get_state(case_id).get("overrides"))  # attestations count (V1 item 1.2)
     checks = []
     for c in claims:
         if c.get("span") and not grounding.locate(c["span"], [record.get("decision_text", "")]):

@@ -41,7 +41,7 @@ ROLES = {
 }
 
 TOOLS_DOC = """Tools (all read-only):
-- list_documents: no input. Lists every document with id, title, type, date, status.
+- list_documents: no input. Lists every document with id, title, type, date, status (and clinician attestations).
 - read_document: input = a document id. Returns the full text of that document.
 - search: input = a question or keywords. Returns the most relevant passages from all documents.
 - find_values: input = a term (for example 'PD-L1', 'CEA', 'Ki-67'). Returns every line in the Case File that mentions it, with dates.
@@ -79,23 +79,40 @@ def _system(role):
             "never recommendations. Your output is a draft for expert review.")
 
 
+def _overrides(case_id):
+    """The Case File's clinician confirmations (attestations, waivers): they beat the model's reading everywhere (V1 item 1.2)."""
+    return store.get_state(case_id).get("overrides") or {}
+
+
+def _attestation(overrides, doc_id):
+    att = (overrides.get("documents") or {}).get(doc_id) or {}
+    return f"attested final by {att.get('by') or 'clinician'}" if att.get("attested_final") else ""
+
+
 def _doc_list(case_id):
-    rows = []
+    rows, ov = [], _overrides(case_id)
     for d in store.list_docs(case_id):
         c = d.get("classification") or {}
-        rows.append(f"{d['doc_id']} | {c.get('title') or d['filename']} | {c.get('doc_type')} | {c.get('report_date_iso') or '?'} | {c.get('status')}"
-                    + (" | unsigned" if c.get("signed") == "no" else ""))
+        att = _attestation(ov, d["doc_id"])
+        status = c.get("status")
+        if att:
+            status = f"status not stated, {att}" if status in ("UNSTATED", "UNKNOWN", None) else f"{status}, {att}"
+        rows.append(f"{d['doc_id']} | {c.get('title') or d['filename']} | {c.get('doc_type')} | {c.get('report_date_iso') or '?'} | {status}"
+                    + (" | unsigned" if c.get("signed") == "no" and not att else ""))
     return "\n".join(rows)
 
 
 def _facts_text(case_id):
-    facts = rules.resolve_facts(store.list_docs(case_id))
+    ov = _overrides(case_id)
+    facts = rules.resolve_facts(store.list_docs(case_id), ov)
     cat = protocol.facts()
     lines = []
     for fid, f in facts.items():
         for h in f["history"]:
             if h["verification"] == "verified":
-                lines.append(f"{cat.get(fid, {}).get('label', fid)}: {h['value']}  [{h['doc_id']} {h['doc_title']} {h['date'] or ''} {h['doc_status']}]")
+                att = _attestation(ov, h["doc_id"])
+                lines.append(f"{cat.get(fid, {}).get('label', fid)}: {h['value']}  [{h['doc_id']} {h['doc_title']} {h['date'] or ''} {h['doc_status']}"
+                             + (f", {att}" if att else "") + "]")
     return "\n".join(lines) or "(none)"
 
 
