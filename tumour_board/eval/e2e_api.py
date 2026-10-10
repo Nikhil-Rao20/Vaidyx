@@ -285,7 +285,7 @@ def phase3(c):
     req = {r["id"]: r for r in st["gate"]["requirements"]}
     check("3.1 confirmed event date after treatment satisfies the restaging requirement", req["restaging_mri"]["status"] == "satisfied", "; ".join(req["restaging_mri"]["problems"]))
     cm2 = next(x for x in c.get("/api/tb/cases/TB-TEST3").json()["documents"] if x["doc_id"] == did)["classification"]
-    check("3.1 confirmation shown on the document (dates_confirmed_by)", cm2.get("dates_confirmed_by") == "admin" or bool(cm2.get("dates_confirmed_by")), str(cm2.get("dates_confirmed_by")))
+    check("3.1 confirmation shown on the document (dates_confirmed_by)", cm2.get("dates_confirmed_by") == "admin" and cm2.get("event_date_iso") == "2026-09-20", f"{cm2.get('dates_confirmed_by')} {cm2.get('event_date_iso')}")
     st = c.post("/api/tb/cases/TB-TEST3/confirmations", json={"type": "confirm_dates", "key": did, "fields": {"event_date": "01/06/2026"}, "reason": "e2e: before treatment"}).json()["state"]
     req = {r["id"]: r for r in st["gate"]["requirements"]}
     check("3.1 an MRI dated before treatment no longer counts", req["restaging_mri"]["status"] == "missing_record", req["restaging_mri"]["status"])
