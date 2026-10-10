@@ -11,7 +11,12 @@ import httpx
 from . import config
 
 _client: Optional[httpx.AsyncClient] = None
-_sem = asyncio.Semaphore(config.LLM_CONCURRENCY)
+_queues: dict[str, asyncio.Semaphore] = {}  # one queue per model server URL, created lazily on first use
+
+# Connection-level failures (the server is busy accepting connections, or dropped one) are retried with these delays
+# (seconds). A read timeout (the 600 s budget) and HTTP error statuses are not retried.
+_RETRY_DELAYS = (1, 2, 4)
+_RETRYABLE = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout, httpx.RemoteProtocolError, httpx.ReadError)
 
 
 class LLMError(RuntimeError):
@@ -21,8 +26,45 @@ class LLMError(RuntimeError):
 def client() -> httpx.AsyncClient:
     global _client
     if _client is None:
-        _client = httpx.AsyncClient(timeout=httpx.Timeout(600, connect=10), limits=httpx.Limits(max_connections=128))
+        _client = httpx.AsyncClient(timeout=httpx.Timeout(600, connect=30), limits=httpx.Limits(max_connections=128))
     return _client
+
+
+def _norm(base_url: str) -> str:
+    return base_url.rstrip("/")
+
+
+def _queue_size(base_url: str) -> int:
+    """Reader's server -> reader size; reasoner's server -> reasoner size; any other server -> fallback size."""
+    url, cfg, sizes = _norm(base_url), config.models(), config.concurrency()
+    for role in ("reader", "reasoner"):
+        if role in cfg and _norm(cfg[role]["base_url"]) == url:
+            return sizes[role]
+    return sizes["other"]
+
+
+def _queue(base_url: str) -> asyncio.Semaphore:
+    """The queue for one model server (cached per URL, not per role: roles on the same server share it)."""
+    url = _norm(base_url)
+    q = _queues.get(url)
+    if q is None:
+        q = _queues[url] = asyncio.Semaphore(_queue_size(url))
+    return q
+
+
+def _err(e: Exception) -> str:
+    return f"{type(e).__name__}: {e}"
+
+
+def _unreachable(role, m, e) -> LLMError:
+    return LLMError(f"{role} model server unreachable at {m['base_url']} ({_err(e)})")
+
+
+async def _retry_wait(role, attempt, e, audit):
+    """Audit one connection-level failure and wait before the next attempt (outside the queue, so the slot is free)."""
+    if audit:
+        audit({"kind": "llm_retry", "role": role, "attempt": attempt, "error": _err(e)[:300]})
+    await asyncio.sleep(_RETRY_DELAYS[attempt - 1])
 
 
 def image_part(path_or_bytes, mime: str = None, max_side: int = None) -> dict:
@@ -109,11 +151,18 @@ async def chat(role: str, messages: list, *, json_schema: dict = None, max_token
     """One completion. Returns parsed JSON when json_schema is given, else text. Logs to `audit` (callable) if given."""
     m, body = _payload(role, messages, max_tokens, temperature, json_schema, False)
     t0 = time.time()
-    async with _sem:
+    url = _norm(m["base_url"])
+    for attempt in range(len(_RETRY_DELAYS) + 1):
         try:
-            r = await client().post(m["base_url"].rstrip("/") + "/chat/completions", json=body)
+            async with _queue(url):
+                r = await client().post(url + "/chat/completions", json=body)
+            break
+        except _RETRYABLE as e:
+            if attempt >= len(_RETRY_DELAYS):
+                raise _unreachable(role, m, e) from e
+            await _retry_wait(role, attempt + 1, e, audit)
         except httpx.HTTPError as e:
-            raise LLMError(f"{role} model server unreachable at {m['base_url']}: {e}") from e
+            raise _unreachable(role, m, e) from e
     if r.status_code != 200:
         raise LLMError(f"{role} model error {r.status_code}: {r.text[:300]}")
     d = r.json(); text = d["choices"][0]["message"].get("content") or ""
@@ -143,16 +192,27 @@ async def chat(role: str, messages: list, *, json_schema: dict = None, max_token
     return text
 
 
-async def stream(role: str, messages: list, *, max_tokens: int = 1024, temperature: float = 0.0) -> AsyncIterator[str]:
+async def stream(role: str, messages: list, *, max_tokens: int = 1024, temperature: float = 0.0, audit=None) -> AsyncIterator[str]:
     m, body = _payload(role, messages, max_tokens, temperature, None, True)
-    async with _sem:
-        async with client().stream("POST", m["base_url"].rstrip("/") + "/chat/completions", json=body) as r:
-            async for line in r.aiter_lines():
-                if not line.startswith("data: ") or line.endswith("[DONE]"):
-                    continue
-                d = json.loads(line[6:])
-                if d.get("choices") and d["choices"][0]["delta"].get("content"):
-                    yield d["choices"][0]["delta"]["content"]
+    url = _norm(m["base_url"])
+    yielded = False
+    for attempt in range(len(_RETRY_DELAYS) + 1):
+        try:
+            async with _queue(url):
+                async with client().stream("POST", url + "/chat/completions", json=body) as r:
+                    async for line in r.aiter_lines():
+                        if not line.startswith("data: ") or line.endswith("[DONE]"):
+                            continue
+                        d = json.loads(line[6:])
+                        if d.get("choices") and d["choices"][0]["delta"].get("content"):
+                            yielded = True
+                            yield d["choices"][0]["delta"]["content"]
+            return
+        except _RETRYABLE as e:
+            # retry only before any text went out; a half-streamed answer is never restarted
+            if yielded or attempt >= len(_RETRY_DELAYS):
+                raise _unreachable(role, m, e) from e
+            await _retry_wait(role, attempt + 1, e, audit)
 
 
 async def health() -> dict:

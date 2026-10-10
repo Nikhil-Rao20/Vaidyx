@@ -3,6 +3,12 @@
 Override with environment variables or data/tumour_board/models.json (written by the admin UI / scripts):
   {"reader":   {"base_url": "...", "model": "...", "label": "...", "origin": "...", "medical": true},
    "reasoner": {...}}
+
+Model queues: one queue (concurrency limit) per model server URL, so a big scan on the reader does not make Q&A on the
+reasoner wait behind hundreds of queued calls. Roles that point at the same URL share one queue. Sizes:
+  TB_CONCURRENCY_READER    in-flight calls to the reader's server   (default 24)
+  TB_CONCURRENCY_REASONER  in-flight calls to the reasoner's server (default 32)
+  TB_LLM_CONCURRENCY       in-flight calls to any other server      (default 48)
 """
 import json, os
 from pathlib import Path
@@ -37,4 +43,14 @@ def models():
 
 
 LLM_CONCURRENCY = int(os.getenv("TB_LLM_CONCURRENCY", "48"))
+
+
+def concurrency() -> dict:
+    """Queue sizes per server kind (read from the environment on each call; see the module docstring)."""
+    return {
+        # Lower than the reasoner: vision calls with 1800 px images saturate the reader's API server (it stalls accepting connections).
+        "reader": int(os.getenv("TB_CONCURRENCY_READER", "24")),
+        "reasoner": int(os.getenv("TB_CONCURRENCY_REASONER", "32")),
+        "other": int(os.getenv("TB_LLM_CONCURRENCY", str(LLM_CONCURRENCY))),
+    }
 OCR_MAX_SIDE = int(os.getenv("TB_OCR_MAX_SIDE", "1800"))
