@@ -1,0 +1,59 @@
+{
+  "_note": [
+    "Indian units and report conventions (V1 item 3.5). Used ONLY when comparing numbers (the Q&A and summary number guard, post-board adjudication). The value shown to the reader is always the value as written.",
+    "families: each unit spelling with its factor to the family base unit (value x factor = value in the base unit). Spellings are matched case-insensitively; a space matches any spacing or a dot ('cu mm' matches 'cumm', 'cu.mm', 'cu mm'); 'µ' matches µ, μ, u or mc; '^3' matches ^3, **3, 3 or a superscript 3. A number written as '2.45 x 10^5' is multiplied out before the unit is read.",
+    "Indian first: lakh(s) / lac(s) per cumm, gm%, cumm / cmm. A bare 'lakh' without '/cumm' is NOT a unit here (it is also a rupee amount).",
+    "analyte_conversions: conversions that depend on the analyte (mg/dL to µmol/L). They are not exact (rounded factors), so they are compared with a 2 % tolerance and only when the analyte label (see analytes) is next to the number.",
+    "analytes: label synonyms and the units customarily used for that analyte. A number with a label but no unit ('WBC 7.2') is compared with a quoted quantity of the same analyte expressed in one of these units only.",
+    "Clinical team: add a spelling under its family, a synonym under its analyte, or a new analyte; keep factors exact and mark rounded conversions exact: false."
+  ],
+  "families": {
+    "count_per_volume": {
+      "base": "/µL", "exact": true,
+      "units": {
+        "/µL": 1, "cells/µL": 1, "per µL": 1, "/cumm": 1, "/cu mm": 1, "cells/cumm": 1, "per cumm": 1, "per cu mm": 1, "/cmm": 1, "/c mm": 1, "/mm^3": 1, "cells/mm^3": 1,
+        "x10^3/µL": 1000, "x10^3/cumm": 1000, "x10^3/mm^3": 1000, "x10^9/L": 1000, "thousand/µL": 1000, "thousand/cumm": 1000, "K/µL": 1000,
+        "lakhs/cumm": 100000, "lakh/cumm": 100000, "lacs/cumm": 100000, "lac/cumm": 100000, "lakhs per cumm": 100000, "lakh per cumm": 100000,
+        "lacs per cumm": 100000, "lac per cumm": 100000, "lakhs/cu mm": 100000, "lakh/cu mm": 100000, "lakhs/cmm": 100000, "lakh/cmm": 100000,
+        "lakhs/µL": 100000, "lakh/µL": 100000, "lakhs/mm^3": 100000, "lakh/mm^3": 100000,
+        "million/cumm": 1000000, "millions/cumm": 1000000, "million/cu mm": 1000000, "million/cmm": 1000000, "million/µL": 1000000, "millions/µL": 1000000, "mill/cumm": 1000000,
+        "x10^6/µL": 1000000, "x10^6/cumm": 1000000, "x10^6/mm^3": 1000000, "x10^12/L": 1000000
+      }
+    },
+    "mass_per_volume": {
+      "base": "mg/dL", "exact": true,
+      "units": {
+        "mg/dL": 1, "mg/dl": 1, "mg%": 1, "mg/100 mL": 1, "mg/L": 0.1,
+        "g/dL": 1000, "gm/dL": 1000, "gms/dL": 1000, "gm%": 1000, "gms%": 1000, "g%": 1000, "g/100 mL": 1000, "g/L": 100, "gm/L": 100,
+        "µg/dL": 0.001, "µg/L": 0.0001, "ng/mL": 0.0001, "ng/dL": 0.000001, "pg/mL": 0.0000001
+      }
+    },
+    "molar": {
+      "base": "µmol/L", "exact": true,
+      "units": {"µmol/L": 1, "mmol/L": 1000, "nmol/L": 0.001, "pmol/L": 0.000001}
+    },
+    "length": {
+      "base": "mm", "exact": true,
+      "units": {"mm": 1, "cm": 10}
+    },
+    "percent": {
+      "base": "%", "exact": true,
+      "units": {"%": 1, "percent": 1}
+    }
+  },
+  "analyte_conversions": [
+    {"analyte": "creatinine", "from_unit": "mg/dL", "to_unit": "µmol/L", "factor": 88.4, "exact": false, "_note": "1 mg/dL creatinine = 88.4 µmol/L"},
+    {"analyte": "bilirubin", "from_unit": "mg/dL", "to_unit": "µmol/L", "factor": 17.1, "exact": false, "_note": "1 mg/dL bilirubin = 17.1 µmol/L"},
+    {"analyte": "glucose", "from_unit": "mmol/L", "to_unit": "mg/dL", "factor": 18.0, "exact": false, "_note": "1 mmol/L glucose = 18.0 mg/dL"}
+  ],
+  "analytes": {
+    "wbc": {"labels": ["TLC", "WBC", "WBC count", "total WBC count", "total WBC", "total leucocyte count", "total leukocyte count", "total count", "white cell count", "white blood cell count", "leucocyte count", "leukocyte count", "leucocytes", "leukocytes"],
+            "units": ["/cumm", "x10^3/µL", "x10^9/L"]},
+    "dlc": {"labels": ["DLC", "differential leucocyte count", "differential leukocyte count", "differential count"], "units": ["%"]},
+    "haemoglobin": {"labels": ["Hb", "Hgb", "haemoglobin", "hemoglobin"], "units": ["g/dL", "g/L"]},
+    "platelets": {"labels": ["plt", "platelets", "platelet count", "platelet", "PLT count"], "units": ["/cumm", "x10^3/µL", "lakhs/cumm", "x10^9/L"]},
+    "creatinine": {"labels": ["S. creatinine", "serum creatinine", "creatinine", "S.Cr"], "units": ["mg/dL", "µmol/L"]},
+    "bilirubin": {"labels": ["T. bilirubin", "total bilirubin", "S. bilirubin", "serum bilirubin", "bilirubin"], "units": ["mg/dL", "µmol/L"]},
+    "glucose": {"labels": ["glucose", "blood sugar", "blood glucose", "FBS", "RBS", "PPBS", "FBG"], "units": ["mg/dL", "mmol/L"]}
+  }
+}

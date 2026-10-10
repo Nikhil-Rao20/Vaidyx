@@ -34,6 +34,23 @@ def test_date_number_allowed_from_cited_document_date(demo_cases):
     assert len(out) == 1
 
 
+def test_number_guard_accepts_the_same_quantity_in_indian_units(unit_case):
+    """V1 item 3.5: a statement may restate a quoted value in other units; the quote is what is shown, the statement keeps its wording."""
+    add(unit_case, make_doc("Dcbc00000", "lab", text="SYNTHETIC\nHAEMATOLOGY REPORT\nHb 11.8 gm%\nTLC 7,200/cumm\nPlatelets 2.45 lakhs/cumm\nReport status: FINAL"))
+    for text, quote in [("Platelets are 2,45,000/µL.", "Platelets 2.45 lakhs/cumm"), ("Platelets are 245 x10^3/µL.", "Platelets 2.45 lakhs/cumm"),
+                        ("WBC is 7.2.", "TLC 7,200/cumm"), ("WBC is 7.2 x10^3/µL.", "TLC 7,200/cumm"), ("Haemoglobin is 11.8 g/dL.", "Hb 11.8 gm%")]:
+        out = qa.verify_statements(unit_case, [_one(text, "Dcbc00000", quote)])
+        assert len(out) == 1 and out[0]["text"] == text and out[0]["citations"][0]["quote"] == quote, text
+
+
+def test_number_guard_still_drops_a_different_number_in_other_units(unit_case):
+    add(unit_case, make_doc("Dcbc00000", "lab", text="SYNTHETIC\nHAEMATOLOGY REPORT\nHb 11.8 gm%\nTLC 7,200/cumm\nPlatelets 2.45 lakhs/cumm\nReport status: FINAL"))
+    for text, quote in [("Platelets are 2,54,000/µL.", "Platelets 2.45 lakhs/cumm"), ("Platelets are 2.54 lakhs/cumm.", "Platelets 2.45 lakhs/cumm"),
+                        ("WBC is 72.", "TLC 7,200/cumm"), ("Haemoglobin is 7.2.", "TLC 7,200/cumm"), ("Haemoglobin is 118 g/dL.", "Hb 11.8 gm%"),
+                        ("Haemoglobin is 11.85 g/dL.", "Hb 11.8 gm%")]:
+        assert qa.verify_statements(unit_case, [_one(text, "Dcbc00000", quote)]) == [], text
+
+
 def test_polarity_flag_on_statement(demo_cases):
     out = qa.verify_statements("TB-001", [_one("p40 result is recorded.", "D67977cf8", "p40 Negative")])
     assert out[0]["flags"] == ["check negation against the source"]

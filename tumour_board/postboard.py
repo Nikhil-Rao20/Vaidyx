@@ -9,7 +9,7 @@ import re
 import uuid
 from datetime import date, timedelta
 
-from . import dates, grounding, llm, negation, protocol, rules, store
+from . import dates, grounding, llm, negation, protocol, rules, store, units
 
 NOT_LISTED = "Case File not listed: no Pre-Authorization check to compare with"
 
@@ -90,7 +90,8 @@ async def adjudicate(case_id, record):
             src = {**src, "quote": ""}
         src_text = src["value"] + " " + (src.get("quote") or "")
         a, b = _nums(c["value_as_written"]), _nums(src_text)
-        if a and b and not set(a) <= set(b):  # every number the board wrote must exist in the source value / quote
+        # every number the board wrote must exist in the source value / quote, as is or as the same quantity in other units (V1 item 3.5)
+        if a and b and not set(a) <= set(b) and not units.numbers_equivalent(c["value_as_written"], src_text):
             res = "discrepancy"
             flags.append({"kind": "transcription", "severity": "expert_review", "fact": c["fact"],
                           "text": f"Possible transcription discrepancy: {cat[c['fact']]['label']} recorded as \"{c['value_as_written']}\"; source value \"{src['value']}\"",

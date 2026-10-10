@@ -2,7 +2,7 @@
 Every sentence carries verified quotes; stage appears only as recorded in a signed report (copied, never derived)."""
 import time
 
-from . import config, grounding, guardrails, llm, protocol, qa, rules, search, store
+from . import config, grounding, guardrails, llm, protocol, qa, rules, search, store, units
 
 # Verified facts that belong to each NCG section. If the model's sentences for a section are dropped (or it wrote none), these
 # facts are added as plain, cited sentences, so a section only says "not documented" when nothing verified exists for it.
@@ -21,7 +21,8 @@ def _covered(value, text):
     if v and v in t:
         return True
     nums = grounding.numbers(value)
-    return bool(nums) and all(n in grounding.numbers(text) for n in nums) and any(w in t for w in v.split() if len(w) > 3)
+    # every number present as is or as the same quantity in other units ('2.45 lakhs/cumm' = '245 x10^3/uL'; V1 item 3.5)
+    return bool(nums) and units.numbers_equivalent(value, text) and any(w in t for w in v.split() if len(w) > 3)
 
 
 def fill_from_facts(sections, facts, cat):

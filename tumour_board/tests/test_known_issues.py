@@ -20,11 +20,6 @@ def test_failed_document_blocks_the_gate(unit_case):
 
 
 # ---- found while writing 0.3 (listed in the plan under "Found during the run") -------------------------------------------------------------
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="found in 0.3, fixed alongside V1 item 3.5: council prefix after 'Reg. No.' (KMC 45678) is not read as a signature")
-def test_reg_no_with_council_prefix_is_signed():
-    assert docstatus.detect_signature("Dr. S. Rao, MD (Pathology)\nReg. No. KMC 45678")[0] == "yes"
-
-
 @pytest.mark.xfail(strict=True, raises=AssertionError, reason="found in 0.3, fixed alongside V1 item 3.2: 'Final diagnosis pending' is read as FINAL")
 def test_final_diagnosis_pending_is_not_final():
     assert docstatus.detect_status("FINAL DIAGNOSIS: pending IHC")[0] != "FINAL"

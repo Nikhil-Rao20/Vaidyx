@@ -6,7 +6,7 @@ statements without a verified quote are dropped -> output guardrail -> "Not docu
 """
 import asyncio, re, time
 
-from . import dates, grounding, guardrails, llm, negation, rules, search, store
+from . import dates, grounding, guardrails, llm, negation, rules, search, store, units
 
 ANSWER_SCHEMA = {"type": "object", "additionalProperties": False, "properties": {
     "answer_found": {"type": "boolean"},
@@ -68,6 +68,8 @@ def verify_statements(case_id, statements):
         allowed = set(n for c in cites for n in grounding.numbers(c["quote"] + " " + (c["doc_title"] or "") + " " + (c["date"] or "")))
         allowed |= {n.lstrip("0") or "0" for n in allowed}
         nums = {n.lstrip("0") or "0" for n in grounding.numbers(st.get("text", ""))}
+        if nums - allowed:  # a statement number may also be a quoted quantity in other units ('2,45,000/µL' for '2.45 lakhs/cumm'; V1 item 3.5)
+            nums = {n.lstrip("0") or "0" for n in units.unmatched_numbers(st.get("text", ""), "\n".join(c["quote"] for c in cites))}
         if cites and nums <= allowed:
             merged = {}
             for c in cites:  # one citation chip per document; quotes from the same document are joined

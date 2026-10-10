@@ -103,6 +103,34 @@ def test_signer_line_without_signature_is_unknown():
     assert ds.detect_signature("Dr. Meera Nair, MD Pathology") == ("unknown", "Dr. Meera Nair, MD Pathology")
 
 
+def test_reg_no_with_council_prefix_is_signed():
+    """Found in 0.3, fixed in V1 item 3.5 (was a strict xfail in test_known_issues)."""
+    assert ds.detect_signature("Dr. S. Rao, MD (Pathology)\nReg. No. KMC 45678") == ("yes", "Dr. S. Rao, MD (Pathology)")
+
+
+@pytest.mark.parametrize("text", [
+    "Reg. No. KMC 45678", "Reg No: TNMC/12345", "KMC Reg. No. 45678", "Regn. No. 12345 (MMC)", "MCI 12345", "NMC Reg 123456",
+    "Reg. No. KMC-45678", "Registration No. DMC/R/04512", "APMC Regn No 67890", "WBMC 55123", "Dr. A. Iyer, MD, TCMC 22345", "KMC/45678",
+])
+def test_council_registration_is_a_signature(text):
+    """V1 item 3.5: State Medical Council / NMC / MCI registration in the usual Indian layouts."""
+    assert ds.detect_signature(text)[0] == "yes"
+
+
+@pytest.mark.parametrize("text", [
+    "UHID: KMC 123456", "UHID KMC123456", "Patient ID KMC 778899", "MRN KMC 445566", "Sample No. KMC 12345", "Lab No: KMC/2026/4411",
+    "Sample No. 2026/4411", "UHID: SYN-900001", "CR No. 2026/0042", "pmc 2026",
+])
+def test_identifiers_and_sample_numbers_are_not_signatures(text):
+    """A hospital identifier or a lab sample number, even one that starts with a council-like code, is not a signature."""
+    assert ds.detect_signature(text)[0] == "unknown"
+
+
+def test_reg_no_without_council_unchanged():
+    """'Reg. No.' with a number and no council code reads as today (a registration number is a signature cue); V1 item 3.5 only adds councils."""
+    assert ds.detect_signature("Reg. No. 2026/4411")[0] == "yes"
+
+
 @pytest.mark.parametrize("s,iso", [
     ("02-Sep-2026", "2026-09-02"),
     ("02/09/2026", "2026-09-02"),  # day first (India)
