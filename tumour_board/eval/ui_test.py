@@ -1,4 +1,5 @@
-"""Browser test of the Vaidyx-TB UI (headless Chromium via Playwright). Fails on any JS error; saves screenshots.
+"""Browser test of the Vaidyx-TB UI (headless Chromium via Playwright). Fails on any JS error raised on a Tumour Board
+page (/tb and /static/tb/*; the main app's login page is outside this module and is not counted); saves screenshots.
 Usage: LD_LIBRARY_PATH=... python -m tumour_board.eval.ui_test --password <pw> [--out dir]"""
 import argparse, os, sys
 
@@ -11,8 +12,9 @@ def main(base, pw, out):
     with sync_playwright() as p:
         b = p.chromium.launch(env={**os.environ})
         pg = b.new_page(viewport={"width": 1600, "height": 1000}, device_scale_factor=1)
-        pg.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
-        pg.on("console", lambda m: m.type == "error" and errors.append(f"console: {m.text}"))
+        tb_page = lambda: pg.url.startswith(base + "/tb")  # only errors raised while a Tumour Board page is open count
+        pg.on("pageerror", lambda e: tb_page() and errors.append(f"pageerror: {e}"))
+        pg.on("console", lambda m: m.type == "error" and tb_page() and errors.append(f"console: {m.text} ({(m.location or {}).get('url', '')})"))
         pg.goto(base + "/login")
         pg.fill("input[type=text], input[name=username], #username", "admin")
         pg.fill("input[type=password]", pw)
@@ -22,13 +24,15 @@ def main(base, pw, out):
         pg.screenshot(path=f"{out}/00_home.png")
         shots = []
         for cid in ["TB-001", "TB-002", "TB-003"]:
-            pg.click(f".citem[data-case='{cid}']"); pg.wait_for_selector("#tab-ready .req", timeout=20000); pg.wait_for_timeout(500)
+            pg.click(f".citem[data-case='{cid}']"); pg.click("#tabs button[data-tab='ready']")  # the Pre-Authorization tab, before waiting for its rows
+            pg.wait_for_selector("#tab-ready .req", timeout=20000); pg.wait_for_timeout(500)
             pg.screenshot(path=f"{out}/{cid}_1_preauth.png", full_page=True); shots.append(f"{cid} preauth")
             for t in ["docs", "summary", "board", "audit"]:
                 pg.click(f"#tabs button[data-tab='{t}']"); pg.wait_for_timeout(900)
                 pg.screenshot(path=f"{out}/{cid}_{t}.png", full_page=True)
         # re-check toast must explain what was checked
-        pg.click(".citem[data-case='TB-001']"); pg.wait_for_selector("#tab-ready .req"); pg.click("#btn-recheck"); pg.wait_for_timeout(1500)
+        pg.click(".citem[data-case='TB-001']"); pg.click("#tabs button[data-tab='ready']"); pg.wait_for_selector("#tab-ready .req")
+        pg.click("#btn-recheck"); pg.wait_for_timeout(1500)
         t = pg.inner_text("#toast")
         if "Re-checked" not in t or "not re-read" not in t:
             errors.append("re-check toast missing detail: " + t[:120])
