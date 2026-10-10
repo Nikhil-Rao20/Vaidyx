@@ -10,9 +10,12 @@ SKIP_UI=0; SKIP_EVALS=0
 for a in "$@"; do case $a in --skip-ui) SKIP_UI=1 ;; --skip-evals) SKIP_EVALS=1 ;; esac; done
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
 PY=${TB_PYTHON:-/data/vaidyx/venv/app/bin/python}
-OUT=$REPO/data/tumour_board/eval/v1/$LABEL
+OUT=${TB_DATA_ROOT:-$REPO/data/tumour_board}/eval/v1/$LABEL   # same root as tumour_board.config
 PW="$(awk '{print $NF}' ~/vaidyx/.vaidyx_admin_login)"   # never printed
-cd "$REPO"; mkdir -p "$OUT"
+cd "$REPO"
+if [ -e "$OUT" ]; then echo "gate: '$OUT' exists; a run never mixes with an earlier one. Use a new label or remove that folder." >&2; exit 2; fi
+mkdir -p "$OUT"
+rm -f "data/tumour_board/eval/qa_v1-$LABEL.json" "data/tumour_board/eval/summary_eval_v1-$LABEL.json"   # no stale JSON can be copied
 echo "gate '$LABEL' started $(date -Is)" > "$OUT/run_timings.txt"
 step() {  # name, command...
   local name=$1; shift; local t0=$(date +%s)
