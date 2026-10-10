@@ -14,11 +14,12 @@ def _add(case_id, files):
 
 def test_doc_without_libreoffice_is_refused_with_the_message(unit_case, monkeypatch):
     monkeypatch.setattr(ingest.shutil, "which", lambda name: None)
-    job = _add(unit_case, [("notes/old_summary.doc", b"synthetic"), ("x.rtf", b"synthetic"), ("x.odt", b"synthetic")])
+    job = _add(unit_case, [("notes/old_summary.doc", b"synthetic"), ("x.rtf", b"synthetic"), ("x.odt", b"synthetic"), ("old.xls", b"synthetic")])
     assert job["total"] == 0 and store.list_docs(unit_case) == []
-    assert job["unsupported"] == [{"file": f, "reason": "Save as PDF or DOCX and upload again"} for f in ("notes/old_summary.doc", "x.rtf", "x.odt")]
+    assert job["unsupported"] == [{"file": f, "reason": "Save as PDF or DOCX and upload again"} for f in ("notes/old_summary.doc", "x.rtf", "x.odt")] \
+        + [{"file": "old.xls", "reason": "Save as XLSX or PDF and upload again"}]
     rejected = [e for e in store.read_audit(unit_case) if e["kind"] == "document_rejected"]
-    assert [e["file"] for e in rejected] == ["notes/old_summary.doc", "x.rtf", "x.odt"] and rejected[0]["by"] == "tester"
+    assert [e["file"] for e in rejected] == ["notes/old_summary.doc", "x.rtf", "x.odt", "old.xls"] and rejected[0]["by"] == "tester"
 
 
 def test_unknown_extension_and_hidden_files_are_refused_plainly(unit_case):

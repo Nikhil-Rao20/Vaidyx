@@ -12,6 +12,7 @@ from tumour_board.tests.conftest import FIXTURES
 OFFICE = FIXTURES / "office"
 TB004_XLSX = Path("/data/vaidyx/tb_demo_corpus/cases/TB-004/laboratory_medicine/biochemistry_2026-09-05.xlsx")
 MSG = "Save as PDF or DOCX and upload again"
+XLS_MSG = "Save as XLSX or PDF and upload again"
 
 
 def pages(path):
@@ -103,6 +104,79 @@ def test_xlsx_values_exactly_as_stored(tmp_path):
         "| Note | SYNTHETIC DEMO ONLY |"]  # a line break inside a cell does not split the row
 
 
+def test_xlsx_wrong_dimension_tag_reads_everything(tmp_path):
+    """Lab systems often write a stale <dimension>; read-only openpyxl would trust it and cut rows and columns."""
+    import re, zipfile
+    from openpyxl import Workbook
+    wb = Workbook(); ws = wb.active; ws.title = "Lab"
+    for row in [("Investigation", "Result", "Units", "Ref"), ("Haemoglobin", "11.8", "g/dL", "13 - 17"), ("Platelets", "2.45", "lakhs/cumm", "1.5 - 4.1")]:
+        ws.append(row)
+    good = tmp_path / "good.xlsx"; wb.save(good)
+    bad = tmp_path / "bad.xlsx"
+    with zipfile.ZipFile(good) as zin, zipfile.ZipFile(bad, "w", zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == "xl/worksheets/sheet1.xml":
+                data, n = re.subn(rb'<dimension ref="[^"]+"', b'<dimension ref="A1:B2"', data)
+                assert n == 1
+            zout.writestr(item, data)
+    assert b'<dimension ref="A1:B2"' in zipfile.ZipFile(bad).read("xl/worksheets/sheet1.xml")
+    assert pages(bad)[0]["text"].splitlines() == [
+        "## Lab",
+        "| Investigation | Result | Units | Ref |",
+        "| Haemoglobin | 11.8 | g/dL | 13 - 17 |",
+        "| Platelets | 2.45 | lakhs/cumm | 1.5 - 4.1 |"]
+
+
+def test_xlsx_percent_cells_as_shown(tmp_path):
+    from openpyxl import Workbook
+    wb = Workbook(); ws = wb.active; ws.title = "IHC"
+    ws.append(("Marker", "Result"))
+    for name, v, fmt in [("Ki-67", 0.45, "0%"), ("PD-L1 TPS", 0.6, "0.0%"), ("ER", 0.955, "0.00%"), ("HER2", 0.125, "0%"), ("Count", 0.45, "General")]:
+        ws.append((name, v)); ws.cell(ws.max_row, 2).number_format = fmt
+    wb.save(tmp_path / "ihc.xlsx")
+    lines = pages(tmp_path / "ihc.xlsx")[0]["text"].splitlines()
+    assert lines[2:] == ["| Ki-67 | 45% |", "| PD-L1 TPS | 60.0% |", "| ER | 95.50% |", "| HER2 | 13% |", "| Count | 0.45 |"]
+
+
+def test_percent_text():
+    assert ingest._percent_text(0.45, "0%") == "45%" and ingest._percent_text(0.45, "0.0%") == "45.0%"
+    assert ingest._percent_text(1, "0%") == "100%" and ingest._percent_text(-0.005, "0%") == "-1%"
+    assert ingest._percent_text(0.45, "General") is None and ingest._percent_text("45%", "0%") is None
+    assert ingest._percent_text(True, "0%") is None
+
+
+def test_xlsx_formula_without_saved_value_is_marked(tmp_path):
+    from openpyxl import Workbook
+    wb = Workbook(); ws = wb.active; ws.title = "Calc"
+    ws.append(("Investigation", "Result")); ws.append(("eGFR", "=186*2")); ws.append(("Creatinine", 0.9))
+    wb.create_sheet("Plain").append(("UHID", "SYN-900001"))
+    wb.save(tmp_path / "calc.xlsx")  # openpyxl saves formulas without a cached value
+    p = pages(tmp_path / "calc.xlsx")
+    assert p[0]["text"].splitlines() == ["## Calc", "| Investigation | Result |", f"| eGFR | {ingest.FORMULA_NO_VALUE} |", "| Creatinine | 0.9 |"]
+    assert ingest.FORMULA_NO_VALUE == "[formula, no saved value]"
+    assert p[0]["needs_review"] == "a formula cell has no saved value; open the file to check"
+    assert "needs_review" not in p[1] and p[1]["text"] == "## Plain\n| UHID | SYN-900001 |"
+
+
+def test_xlsx_formula_with_saved_value_uses_the_value(tmp_path):
+    import re, zipfile
+    from openpyxl import Workbook
+    wb = Workbook(); ws = wb.active
+    ws.append(("eGFR", "=186*2"))
+    src = tmp_path / "src.xlsx"; wb.save(src)
+    dst = tmp_path / "saved.xlsx"  # add a cached value as Excel would: <f>186*2</f><v>372</v>
+    with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dst, "w") as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == "xl/worksheets/sheet1.xml":
+                data, n = re.subn(rb"<f>186\*2</f>(?:<v>\s*</v>|<v\s*/>)?", b"<f>186*2</f><v>372</v>", data)
+                assert n == 1
+            zout.writestr(item, data)
+    p = pages(dst)
+    assert p[0]["text"].splitlines()[1] == "| eGFR | 372 |" and "needs_review" not in p[0]
+
+
 def test_cell_text():
     import datetime as dt
     assert [ingest._cell_text(v) for v in (None, 31, "007", 2.45, 11.8, True, dt.date(2026, 1, 2), dt.datetime(2026, 1, 2))] == \
@@ -156,6 +230,29 @@ def test_reject_reason_without_soffice(monkeypatch, name):
     assert ingest.reject_reason(name) == MSG
 
 
+@pytest.mark.parametrize("name", ["labs.xls", "LABS.XLS", Path("a/b.xls")])
+def test_reject_reason_xls(monkeypatch, name):
+    no_soffice(monkeypatch)
+    assert ingest.reject_reason(name) == XLS_MSG
+    with_soffice(monkeypatch)
+    assert ingest.reject_reason(name) is None
+
+
+def test_xls_without_soffice_reads_nothing(monkeypatch, tmp_path):
+    no_soffice(monkeypatch)
+    f = tmp_path / "labs.xls"; f.write_bytes(b"\xd0\xcf\x11\xe0 synthetic")
+    assert pages(f) == [{"text": "", "method": f"unsupported ({XLS_MSG})"}]
+
+
+def test_xls_with_soffice_goes_through_conversion(monkeypatch, tmp_path):
+    with_soffice(monkeypatch)
+    calls = []
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: calls.append(cmd) or subprocess.CompletedProcess(cmd, 1, b"", b""))
+    f = tmp_path / "labs.xls"; f.write_bytes(b"\xd0\xcf\x11\xe0 synthetic")
+    assert pages(f) == [{"text": "", "method": "unsupported (conversion to PDF failed)"}]
+    assert len(calls) == 1 and calls[0][-1] == str(f) and "--convert-to" in calls[0]
+
+
 @pytest.mark.parametrize("name", ["x.pdf", "x.docx", "x.xlsx", "x.pptx", "x.txt", "x.png"])
 def test_reject_reason_none_for_supported(monkeypatch, name):
     no_soffice(monkeypatch)
@@ -173,8 +270,8 @@ def test_rejected_types_stay_in_supported():
 
 def test_messages_plain_no_em_dash():
     src = Path(ingest.__file__).read_text()
-    assert "—" not in src and "–" not in src
-    assert MSG == ingest.REJECT_MESSAGE
+    assert "\u2014" not in src and "\u2013" not in src
+    assert MSG == ingest.REJECT_MESSAGE and XLS_MSG == ingest.REJECT_MESSAGES[".xls"]
 
 
 def test_doc_without_soffice_reads_nothing(monkeypatch, tmp_path):
@@ -203,10 +300,13 @@ def test_doc_with_soffice_converts_to_pdf(monkeypatch, tmp_path):
     p = pages(f)
     assert len(calls) == 1
     cmd, kw = calls[0]
-    assert cmd[:5] == ["/usr/bin/soffice", "--headless", "--convert-to", "pdf", "--outdir"] and cmd[-1] == str(f)
+    outdir = cmd[cmd.index("--outdir") + 1]
+    assert cmd[0] == "/usr/bin/soffice" and cmd[-1] == str(f)
+    assert cmd[1] == "-env:UserInstallation=" + (Path(outdir) / "profile").as_uri()  # own profile per conversion
+    assert cmd[2:6] == ["--headless", "--convert-to", "pdf", "--outdir"]
     assert kw["timeout"] == 120
     assert len(p) == 1 and p[0]["method"] == "text-layer" and "adenocarcinoma" in p[0]["text"] and "SYN-900001" in p[0]["text"]
-    assert not Path(cmd[5]).exists()  # temporary output directory cleaned up
+    assert not Path(outdir).exists()  # temporary output directory cleaned up
 
 
 def test_doc_with_soffice_conversion_fails(monkeypatch, tmp_path):

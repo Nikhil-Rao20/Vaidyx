@@ -11,18 +11,21 @@ from . import config, llm, store
 
 TEXT_EXT = {".txt", ".md", ".csv", ".json", ".xml", ".hl7"}
 IMG_EXT = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
-OFFICE_EXT = {".docx", ".doc", ".rtf", ".odt", ".xlsx", ".pptx"}
+OFFICE_EXT = {".docx", ".doc", ".rtf", ".odt", ".xls", ".xlsx", ".pptx"}
 SUPPORTED = TEXT_EXT | IMG_EXT | OFFICE_EXT | {".pdf"}
 # Accepted only when LibreOffice (soffice) is on PATH to convert them to PDF; otherwise refused at upload.
-REJECTED_EXT = {".doc", ".rtf", ".odt"}
+REJECTED_EXT = {".doc", ".rtf", ".odt", ".xls"}
 REJECT_MESSAGE = "Save as PDF or DOCX and upload again"
+REJECT_MESSAGES = {".xls": "Save as XLSX or PDF and upload again"}  # anything else in REJECTED_EXT: REJECT_MESSAGE
 SOFFICE_TIMEOUT = 120
 
 
 def reject_reason(name_or_path) -> str | None:
-    """Why a file must be refused at upload, or None if it can be read. Only .doc / .rtf / .odt without LibreOffice."""
-    if Path(str(name_or_path)).suffix.lower() in REJECTED_EXT and shutil.which("soffice") is None:
-        return REJECT_MESSAGE
+    """Why a file must be refused at upload, or None if it can be read. Only .doc / .rtf / .odt / .xls without
+    LibreOffice."""
+    ext = Path(str(name_or_path)).suffix.lower()
+    if ext in REJECTED_EXT and shutil.which("soffice") is None:
+        return REJECT_MESSAGES.get(ext, REJECT_MESSAGE)
     return None
 
 OCR_PROMPT = (
@@ -88,23 +91,67 @@ def _cell_text(v) -> str:
     return str(v).replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
 
 
+FORMULA_NO_VALUE = "[formula, no saved value]"
+FORMULA_REVIEW = "a formula cell has no saved value; open the file to check"
+
+
+def _percent_text(v, fmt: str) -> str | None:
+    """A number shown as a percentage in Excel (number format with '%') as the clinician sees it: 0.45 with '0%' ->
+    '45%', with '0.0%' -> '45.0%' (Excel rounds half away from zero). None if the cell is not a percent number."""
+    from decimal import Decimal, ROUND_HALF_UP
+    if not fmt or "%" not in fmt or isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    m = re.search(r"\.([0#?]+)", fmt.split(";")[0])
+    places = len(m.group(1)) if m else 0
+    shown = (Decimal(repr(v)) * 100).quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP)
+    return f"{shown}%"
+
+
+def _formula_cells(path: Path) -> dict:
+    """{sheet title: {(row, column)}} of cells holding a formula (read-only pass with data_only=False)."""
+    from openpyxl import load_workbook
+    wb = load_workbook(str(path), read_only=True, data_only=False)
+    try:
+        out = {}
+        for ws in wb.worksheets:
+            ws.reset_dimensions()
+            out[ws.title] = {(c.row, c.column) for row in ws.iter_rows() for c in row
+                             if isinstance(c.value, str) and c.value.startswith("=") and getattr(c, "row", None)}
+        return out
+    finally:
+        wb.close()
+
+
 def _xlsx_pages(path: Path) -> list[dict]:
     """One page per worksheet: first line '## <sheet name>', then one '| a | b | c |' row per line. Read with openpyxl
-    (cached values, not formulas), never through pandas, which reformats values (31 -> 31.0, '007' -> 7). Trailing
-    empty cells and empty rows are dropped; a sheet with no values gives an empty page (page N stays sheet N)."""
+    (cached values), never through pandas, which reformats values (31 -> 31.0, '007' -> 7). Each cell is str(value),
+    except percent-formatted numbers (shown as Excel shows them) and formulas with no saved value (written as
+    FORMULA_NO_VALUE and the page flagged needs_review). The stored <dimension> is ignored (lab systems often write a
+    wrong one, which would silently cut rows and columns). Trailing empty cells and empty rows are dropped; a sheet
+    with no values gives an empty page (page N stays sheet N)."""
     from openpyxl import load_workbook
+    formulas = _formula_cells(path)
     wb = load_workbook(str(path), read_only=True, data_only=True)
     try:
         pages = []
         for ws in wb.worksheets:
-            rows = []
-            for row in ws.iter_rows(values_only=True):
-                cells = [_cell_text(v) for v in row]
+            ws.reset_dimensions()
+            rows, unsaved = [], False
+            for row in ws.iter_rows():
+                cells = []
+                for c in row:
+                    if c.value is None and (getattr(c, "row", None), getattr(c, "column", None)) in formulas.get(ws.title, ()):
+                        cells.append(FORMULA_NO_VALUE); unsaved = True; continue
+                    pct = _percent_text(c.value, getattr(c, "number_format", ""))
+                    cells.append(pct if pct is not None else _cell_text(c.value))
                 while cells and not cells[-1]:
                     cells.pop()
                 if cells:
                     rows.append("| " + " | ".join(cells) + " |")
-            pages.append({"text": "\n".join([f"## {ws.title}"] + rows) if rows else "", "method": "office-text"})
+            page = {"text": "\n".join([f"## {ws.title}"] + rows) if rows else "", "method": "office-text"}
+            if unsaved:
+                page["needs_review"] = FORMULA_REVIEW
+            pages.append(page)
     finally:
         wb.close()
     return pages or [{"text": "", "method": "office-text"}]
@@ -123,9 +170,11 @@ def _pptx_pages(text: str) -> list[dict]:
 
 
 async def _soffice_to_pdf_pages(path: Path, audit=None) -> list[dict]:
-    """Convert .doc / .rtf / .odt with LibreOffice (headless) to PDF, then read that PDF the normal way."""
+    """Convert .doc / .rtf / .odt / .xls with LibreOffice (headless) to PDF, then read that PDF the normal way. Each
+    run gets its own LibreOffice profile in the temporary directory, so parallel conversions do not collide."""
     with tempfile.TemporaryDirectory(prefix="tb-soffice-") as tmp:
-        cmd = [shutil.which("soffice") or "soffice", "--headless", "--convert-to", "pdf", "--outdir", tmp, str(path)]
+        profile = "-env:UserInstallation=" + (Path(tmp) / "profile").as_uri()
+        cmd = [shutil.which("soffice") or "soffice", profile, "--headless", "--convert-to", "pdf", "--outdir", tmp, str(path)]
         try:
             await asyncio.to_thread(subprocess.run, cmd, capture_output=True, timeout=SOFFICE_TIMEOUT, check=False)
         except (subprocess.TimeoutExpired, OSError) as e:
@@ -176,7 +225,7 @@ async def extract_pages(path: Path, audit=None) -> list[dict]:
                 return [{"text": "", "method": f"unsupported ({e.__class__.__name__})"}]
         if ext in REJECTED_EXT:
             if shutil.which("soffice") is None:
-                return [{"text": "", "method": f"unsupported ({REJECT_MESSAGE})"}]
+                return [{"text": "", "method": f"unsupported ({REJECT_MESSAGES.get(ext, REJECT_MESSAGE)})"}]
             return await _soffice_to_pdf_pages(path, audit)
         if ext == ".xlsx":
             try:
