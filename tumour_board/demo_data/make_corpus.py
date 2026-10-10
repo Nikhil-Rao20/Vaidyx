@@ -1,15 +1,55 @@
 """Generate SYNTHETIC Tumour Board Case Files for development, testing and demos.
 
 Every document is fictional and watermarked "SYNTHETIC". Output layout:
-  <out>/cases/<CASE_ID>/<department>/<file>     the folder a hospital would hand over (pdf text layer, scanned png, txt)
+  <out>/cases/<CASE_ID>/<department>/<file>     the folder a hospital would hand over (pdf text layer, scanned png, photo png,
+                                                txt, docx, xlsx, corrupted pdf, image-only pdf); case.json makes it importable
   <out>/arrivals/<CASE_ID>/<department>/<file>  documents that "arrive later" (to demo gap closure and re-check)
+  <out>/intake/<department>/<file>              department batches with no Case File, mixing several patients (patient matching)
   <out>/truth/<CASE_ID>.json                    answer key used by the automated evaluation (never shown to the app)
+  <out>/truth/intake.json                       answer key for the intake batches
+  <out>/truth/reference_text/<CASE_ID or intake>/<file>.txt   exact text of every NEW image document (scan, photo, image-only pdf)
 
-Run with an environment that has weasyprint + pypdfium2 + pillow:
+Cases: TB-001 lung, TB-002 breast, TB-003 rectum (original demo cases, documents unchanged); TB-004 lung, TB-005 breast,
+TB-006 rectum (Indian-format test material for plan item V1-0.5, defined in india_corpus.py).
+
+Answer key schema (truth/<CASE_ID>.json):
+  case_id, protocol, patient {name, mrn, agesex}       as in case.json
+  registered_identity                                  TB-004 onwards: every identifier the hospital holds for the patient
+  board_decision                                       TB-005: {document, board_date, text, dose_slips [{drug, regimen, written,
+                                                       reference, kind}], absent_specialties, note}
+  documents / arrivals: {<relative path>: {
+    doc_type          one of protocol.doc_types()
+    status            FINAL | AMENDED | CORRECTED | PRELIMINARY | DRAFT | CANCELLED | UNSTATED (the docstatus vocabulary);
+                      null when the file cannot be read
+    signed            true | false (null when the file cannot be read)
+    fields            {fact id: value as printed}; null = pending or not reported (must not be filled in)
+    report_date       ISO date the report was signed or issued; null when not printed
+    event_date        ISO date of the event the report describes (collected, study, procedure, visit, received, board date)
+    event_end         optional, end of a span (admission to discharge, treatment dates)
+    event_label       the wording of the event date label, e.g. "collected on", "study date"
+    identity          patient identity exactly as printed: name, and where printed uhid, mrn, cr_no, ip_no, abha,
+                      aadhaar (must be masked by the app, never used), age_sex, dob, relation (S/o, W/o), outside_id, op_no_outside
+    optional keys     expected ("failed" for the corrupted file), ignore_dates {iso: why} (DOB, next review: never a report
+                      date), not_negations, negated, pending, other_values (values with no protocol fact, e.g. hiv),
+                      hindi_lines, handwritten_lines, handwriting_method, supersedes, superseded_by, supersedes_values_of,
+                      facts_by_page and pages (the 100-page scan), exercises (what the document tests, plain words)
+  }}
+  TB-001..003 documents keep their original keys and gain report_date, event_date, event_label (event_end) and identity.
+
+Answer key schema (truth/intake.json):
+  patients {label: identity}, files {<path under intake/>: {department, doc_type, status, signed, report_date, event_date,
+  event_label, identity, expected_case (case id, or null = must NOT be filed into an existing Case File),
+  route ("case" | "needs_matching" | "new_patient_or_needs_matching"), reason}}
+
+Run with an environment that has weasyprint + pypdfium2 + pillow + numpy:
   python make_corpus.py --out /path/to/demo_corpus
+Output is reproducible byte for byte (fixed seeds, fixed zip timestamps).
 """
-import argparse, json, random, shutil
+import argparse, json, random, shutil, sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import india_corpus  # noqa: E402  (new Indian-format cases TB-004 onwards and the intake batches)
 
 HOSP = "Sahyadri Cancer Institute (SYNTHETIC)"
 
@@ -338,6 +378,58 @@ A2 = [
 CASES = [("TB-001", "lung_nsclc", P1, C1, A1), ("TB-002", "breast", P2, C2, A2), ("TB-003", "colorectal_rectum", P3, C3, A3)]
 
 
+# Answer-key gains for the original cases (V1-0.5): report / event dates and identity as printed. Documents are unchanged.
+# (case, path): (report_date, event_date, event_label[, event_end])
+OLD_DATES = {
+ ("TB-001", "01_clinical/medical_oncology_opd_note_2026-09-02.pdf"): ("2026-09-02", "2026-09-02", "visit date"),
+ ("TB-001", "02_radiology/cect_thorax_2026-08-28.pdf"): ("2026-08-28", "2026-08-28", "study date"),
+ ("TB-001", "02_radiology/ct_thorax_2025-11-10_prior.pdf"): ("2025-11-10", "2025-11-10", "study date"),
+ ("TB-001", "03_nuclear_medicine/pet_ct_2026-09-06.png"): ("2026-09-06", "2026-09-06", "study date"),
+ ("TB-001", "04_pathology/histopathology_2026-09-08_draft.png"): ("2026-09-08", "2026-09-08", "received"),
+ ("TB-001", "05_lab/cbc_2026-09-04.png"): ("2026-09-04", "2026-09-04", "sample date"),
+ ("TB-001", "05_lab/renal_liver_function_2026-09-04.pdf"): ("2026-09-04", "2026-09-04", "sample date"),
+ ("TB-001", "06_discharge/discharge_summary_2026-09-05.pdf"): ("2026-09-05", "2026-09-01", "admitted / discharged", "2026-09-05"),
+ ("TB-001", "04_pathology/histopathology_2026-09-12_final.pdf"): ("2026-09-12", "2026-09-08", "received"),
+ ("TB-001", "07_molecular/molecular_pathology_2026-09-15.pdf"): ("2026-09-15", "2026-09-08", "specimen (biopsy) date"),
+ ("TB-001", "02_radiology/mri_brain_2026-09-14.pdf"): ("2026-09-14", "2026-09-14", "study date"),
+ ("TB-001", "05_lab/cbc_2026-09-14.pdf"): ("2026-09-14", "2026-09-14", "sample date"),
+ ("TB-002", "clinical/surgical_oncology_note_2026-08-20.pdf"): ("2026-08-20", "2026-08-20", "visit date"),
+ ("TB-002", "radiology/mammogram_ultrasound_2026-08-12.pdf"): ("2026-08-12", "2026-08-12", "study date"),
+ ("TB-002", "radiology/mri_breast_2026-08-18.pdf"): ("2026-08-18", "2026-08-18", "study date"),
+ ("TB-002", "pathology/core_biopsy_histopathology_2026-08-16.pdf"): ("2026-08-16", "2026-08-14", "received"),
+ ("TB-002", "pathology/fnac_left_axilla_2026-08-16.pdf"): ("2026-08-16", None, None),
+ ("TB-002", "pathology/ihc_breast_2026-08-19_preliminary.pdf"): ("2026-08-19", None, None),
+ ("TB-002", "pathology/her2_fish_addendum_2026-08-25.pdf"): ("2026-08-25", None, None),
+ ("TB-002", "radiology/cect_chest_abdomen_2026-08-22.pdf"): ("2026-08-22", "2026-08-22", "study date"),
+ ("TB-002", "nuclear_medicine/bone_scan_2026-08-23.png"): ("2026-08-23", "2026-08-23", "study date"),
+ ("TB-002", "lab/blood_tests_2026-08-20.pdf"): ("2026-08-20", "2026-08-20", "sample date"),
+ ("TB-002", "lab/pre_chemo_bloods_2026-09-01.png"): ("2026-09-01", "2026-09-01", "collected"),
+ ("TB-003", "clinical/gi_oncology_note_2026-09-18.txt"): ("2026-09-18", "2026-09-18", "visit date"),
+ ("TB-003", "endoscopy/colonoscopy_2026-05-30.pdf"): ("2026-05-30", "2026-05-30", "procedure date"),
+ ("TB-003", "pathology/rectal_biopsy_2026-06-02.pdf"): ("2026-06-02", None, None),
+ ("TB-003", "radiology/mri_pelvis_2026-06-05_baseline.pdf"): ("2026-06-05", "2026-06-05", "study date"),
+ ("TB-003", "radiology/cect_chest_abdomen_pelvis_2026-06-06.pdf"): ("2026-06-06", "2026-06-06", "study date"),
+ ("TB-003", "lab/cea_2026-06-04.pdf"): ("2026-06-04", "2026-06-04", "sample date"),
+ ("TB-003", "lab/blood_tests_2026-09-15.png"): ("2026-09-15", "2026-09-15", "sample date"),
+ ("TB-003", "tumour_board/tumour_board_record_2026-06-12.pdf"): ("2026-06-12", "2026-06-12", "board date"),
+ ("TB-003", "radiotherapy/rt_completion_summary_2026-08-10.pdf"): ("2026-08-10", "2026-06-30", "treatment dates", "2026-08-10"),
+ ("TB-003", "radiology/mri_pelvis_restaging_2026-10-01.pdf"): ("2026-10-01", "2026-10-01", "study date"),
+ ("TB-003", "lab/cbc_kft_cea_2026-09-29.png"): ("2026-09-29", "2026-09-29", "sample collected"),
+}
+
+
+def old_truth_gain(cid, d, pat):
+    rd, ed, label, *end = OLD_DATES[(cid, d["path"])]
+    g = {"report_date": rd, "event_date": ed, "event_label": label}
+    if end:
+        g["event_end"] = end[0]
+    if d["fmt"] == "txt":  # the TB-003 note prints "Patient: ... | MRN: ... | 57 Y / M"
+        g["identity"] = {"name": pat["name"], "mrn": pat["mrn"], "age_sex": pat["agesex"]}
+    else:                  # html_doc prints Patient / UHID / Age / Sex
+        g["identity"] = {"name": pat["name"], "uhid": pat["mrn"], "age_sex": pat["agesex"]}
+    return g
+
+
 def to_scan(pdf_path, png_path, seed):
     import pypdfium2 as pdfium
     from PIL import Image, ImageFilter
@@ -369,11 +461,12 @@ def build(out):
                         weasyprint.HTML(string=html).write_pdf(str(target))
                     else:
                         tmp = target.with_suffix(".tmp.pdf"); weasyprint.HTML(string=html).write_pdf(str(tmp))
-                        to_scan(tmp, target, seed=hash(d["path"]) % 10000); tmp.unlink()
-                truth["documents" if group == "cases" else "arrivals"][d["path"]] = d["truth"]
+                        to_scan(tmp, target, seed=india_corpus.stable_seed(d["path"])); tmp.unlink()
+                truth["documents" if group == "cases" else "arrivals"][d["path"]] = {**d["truth"], **old_truth_gain(cid, d, pat)}
         (out / "truth").mkdir(parents=True, exist_ok=True)
         (out / "truth" / f"{cid}.json").write_text(json.dumps(truth, indent=2))
         (out / "cases" / cid / "case.json").write_text(json.dumps({"case_id": cid, "protocol": protocol, "patient": pat}, indent=2))
+    india_corpus.build_v1(out, weasyprint, to_scan)
     print("written", out)
 
 
