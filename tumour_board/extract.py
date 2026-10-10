@@ -1,7 +1,6 @@
 """Document understanding: classification, FINAL / SIGNED status, primary-field extraction with verbatim quotes,
 then deterministic grounding. Nothing the model says is trusted until its quote is found in the source text."""
 import asyncio, re
-from datetime import datetime
 
 from . import docstatus, grounding, ingest, llm, protocol, store
 
@@ -36,43 +35,8 @@ CLASSIFY_SCHEMA = {
 }
 
 
-def _status_from_text(text):
-    """Deterministic status / signature detection from the document text itself."""
-    m = re.search(r"(?:report|record|document)\s+status\s*[:\-]\s*([A-Za-z ()/-]{3,40})", text, re.I)
-    status, squote = "UNKNOWN", ""
-    if m:
-        squote = m.group(0).strip()
-        v = m.group(1).upper()
-        for s in ["CORRECTED", "AMENDED", "PRELIMINARY", "DRAFT", "CANCELLED", "FINAL"]:
-            if s in v:
-                status = s; break
-        if status == "FINAL" and "AMEND" in v:
-            status = "AMENDED"
-    elif re.search(r"\bdraft\b", text, re.I):
-        status, squote = "DRAFT", re.search(r".{0,30}\bdraft\b.{0,30}", text, re.I).group(0).strip()
-    signed = "unknown"
-    if re.search(r"signature\s+pending|unsigned|not\s+signed|awaiting\s+signature", text, re.I):
-        signed = "no"
-    elif re.search(r"electronically signed|digitally signed|\bsigned\s*(by|:|on)\b|\(signed\)", text, re.I):
-        signed = "yes"
-    return status, squote, signed
-
-
 def parse_date(s):  # compatibility wrapper
     return docstatus.parse_date(s)
-
-
-def _old_parse_date(s):
-    s = (s or "").strip()
-    for fmt in ("%d-%b-%Y", "%d %b %Y", "%Y-%m-%d", "%d/%m/%Y", "%d.%m.%Y", "%d-%m-%Y", "%b %d, %Y", "%d %B %Y", "%d-%B-%Y"):
-        try:
-            return datetime.strptime(s[:20].strip(), fmt).date().isoformat()
-        except ValueError:
-            pass
-    m = re.search(r"(\d{1,2})[-/ ](\w{3})[-/ ](\d{4})|(\d{4})-(\d{2})-(\d{2})", s)
-    if m:
-        return parse_date(m.group(0))
-    return ""
 
 
 async def classify(text, audit=None):

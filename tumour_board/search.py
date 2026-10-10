@@ -207,16 +207,3 @@ def context_for(case_id, question, budget=48000, doc_types=None):
             break
         parts.append(blk); used += len(blk) + 2
     return "\n\n".join(parts), f"{len(included)} of {len(docs)} documents whole, plus passages"
-
-
-def case_text(case_id, max_chars=60000):
-    """Whole Case File as text with document headers (used when it fits the model context, like HAO)."""
-    parts = []
-    for d in store.list_docs(case_id):
-        if d.get("state") != "ready":
-            continue
-        c = d.get("classification") or {}
-        hdr = f"=== DOCUMENT {d['doc_id']} | {c.get('title') or d['filename']} | type {c.get('doc_type')} | date {c.get('report_date_iso') or c.get('report_date') or '?'} | status {c.get('status')} ==="
-        parts.append(hdr + "\n" + "\n".join(p["text"] for p in d.get("pages") or []))
-    t = "\n\n".join(parts)
-    return t if len(t) <= max_chars else None

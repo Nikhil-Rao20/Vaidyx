@@ -49,7 +49,7 @@ def match_value(truth, got):
 
 
 async def run(key, port):
-    from tumour_board import config, extract, ingest, protocol
+    from tumour_board import config, docstatus, extract, ingest, protocol
     from tumour_board.grounding import verify
     res = {"model": key, "reader": {}, "extractor": {}}
     vision = os.getenv("BAKEOFF_VISION", "1") == "1"
@@ -94,7 +94,7 @@ async def run(key, port):
                 err = f"malformed output: {str(cl)[:160]}"
             if err:
                 stats["errors"] += 1; stats["details"].append({"doc": rel, "error": err}); continue
-            status, _, signed = extract._status_from_text(fx[2])
+            status, _, _ = docstatus.detect_status(fx[2]); signed, _ = docstatus.detect_signature(fx[2])
             stats["doc_type_ok"] += cl["doc_type"] == tr["doc_type"]
             stats["status_ok"] += status == tr["status"]
             fids, raw, text = fx
