@@ -882,6 +882,7 @@ app.router.lifespan_context = _lifespan
 async def _startup_event():
     global upload_cleanup_task
     logger.info("Application starting up...")
+    from tumour_board.service import resume_after_restart; resume_after_restart()  # Vaidyx-TB: re-queue documents left mid-processing (V1 1.8)
     # Wipe any leftover incognito sessions from previous process — they're
     # ephemeral by design and must not survive a restart.
     try:

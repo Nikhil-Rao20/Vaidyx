@@ -1,16 +1,78 @@
 """Orchestration: ingestion jobs (parallel document processing with live progress), Pre-Authorization re-check,
 demo case import, expert reviews."""
-import asyncio, json, time, uuid
+import asyncio, json, logging, time, uuid
 from pathlib import Path
 
 from . import config, extract, ingest, rules, store
 
-JOBS: dict[str, dict] = {}
+log = logging.getLogger("tumour_board")
+
+JOBS: dict[str, dict] = {}  # in-memory fast path; every job is also saved to data/tumour_board/jobs/<id>.json (V1 item 1.8)
+JOB_MAX_AGE = 24 * 3600  # seconds; older jobs are dropped from memory and from disk
+STUCK_STATES = ("queued", "reading", "classifying", "extracting")  # a document in one of these after a restart was cut off mid-processing
+RESTART_USER = "system:restart"
 
 
-def _job(case_id, total):
+def _jobs_dir() -> Path:
+    d = config.DATA_ROOT / "jobs"  # derived at call time: tests point config.DATA_ROOT at a temporary folder
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _save_job(job):
+    """Write the job record (everything except the asyncio task) to jobs/<id>.json. Never raises: progress must not stop on a disk error."""
+    try:
+        store._write_json(_jobs_dir() / f"{store.safe_id(job['id'])}.json", {k: v for k, v in job.items() if k != "task"})
+    except Exception:
+        log.exception("could not save job %s", job.get("id"))
+
+
+def _read_job_file(p: Path):
+    try:
+        return json.loads(p.read_text())
+    except Exception:
+        return None
+
+
+def get_job(job_id):
+    """The job record (without the task): in memory first, then on disk (after a restart), else None."""
+    j = JOBS.get(job_id)
+    if j is not None:
+        return {k: v for k, v in j.items() if k != "task"}
+    try:
+        p = _jobs_dir() / f"{store.safe_id(job_id)}.json"
+    except ValueError:
+        return None
+    return _read_job_file(p) if p.exists() else None
+
+
+def _prune():
+    """Drop in-memory jobs started more than 24 h ago and delete their files on disk, so neither grows without bound. Returns the count removed."""
+    cutoff = time.time() - JOB_MAX_AGE
+    removed = set()
+    for jid in [k for k, j in JOBS.items() if j.get("started", 0) < cutoff]:
+        JOBS.pop(jid, None); removed.add(jid)
+    try:
+        for p in _jobs_dir().glob("*.json"):
+            rec = _read_job_file(p)
+            try:
+                started = float(rec["started"]) if isinstance(rec, dict) and "started" in rec else p.stat().st_mtime
+            except (TypeError, ValueError, OSError):
+                started = 0
+            if started < cutoff:
+                p.unlink(missing_ok=True); removed.add(p.stem)
+    except Exception:
+        log.exception("could not prune job files")
+    return len(removed)
+
+
+def _job(case_id, total, doc_ids=None):
+    _prune()
     jid = "J" + uuid.uuid4().hex[:8]
-    JOBS[jid] = {"id": jid, "case_id": case_id, "total": total, "done": 0, "events": [], "state": "running", "started": time.time(), "doc_states": {}}
+    started = time.time()
+    JOBS[jid] = {"id": jid, "case_id": case_id, "total": total, "done": 0, "events": [], "state": "running", "started": started, "doc_states": {},
+                 "started_iso": store.now_iso(), "doc_ids": list(doc_ids or [])}
+    _save_job(JOBS[jid])
     return JOBS[jid]
 
 
@@ -22,6 +84,7 @@ async def process_docs(case_id, doc_ids, job):
         job["events"].append({"t": round(time.time() - job["started"], 2), "doc_id": doc_id, "state": state})
         if state in ("ready", "error"):
             job["done"] += 1
+        _save_job(job)
 
     try:
         await asyncio.gather(*[extract.process_document(case_id, d, case["protocol"], case.get("patient"), progress) for d in doc_ids])
@@ -30,6 +93,7 @@ async def process_docs(case_id, doc_ids, job):
             rules.sync_actions(case_id, gate)
     except Exception as e:  # the UI polls this job: it must reach a terminal state
         job["state"] = "failed"; job["error"] = f"{e.__class__.__name__}: {str(e)[:300]}"; job["seconds"] = round(time.time() - job["started"], 1)
+        _save_job(job)
         store.audit(case_id, {"kind": "error", "where": "ingestion", "error": job["error"]})
         return
     try:  # warm the search index (chunk embeddings) so the first search is instant
@@ -38,6 +102,7 @@ async def process_docs(case_id, doc_ids, job):
     except Exception:
         pass
     job["state"] = "finished"; job["seconds"] = round(time.time() - job["started"], 1); job["gate"] = {k: gate[k] for k in ("passed", "readiness", "satisfied", "total")}
+    _save_job(job)
     store.audit(case_id, {"kind": "ingestion_finished", "documents": len(doc_ids), "seconds": job["seconds"], "gate_passed": gate["passed"], "readiness": gate["readiness"]})
 
 
@@ -59,8 +124,9 @@ def add_files(case_id, files, user=""):
         d = store.add_document_file(case_id, Path(rel).name, data, rel)
         ids.append(d["doc_id"])
         store.audit(case_id, {"kind": "document_added", "doc_id": d["doc_id"], "file": rel, "by": user})
-    job = _job(case_id, len(ids))
+    job = _job(case_id, len(ids), ids)
     job["skipped_duplicates"], job["unsupported"] = skipped, unsupported
+    _save_job(job)
     job["task"] = asyncio.get_event_loop().create_task(process_docs(case_id, ids, job))
     return job
 
@@ -78,9 +144,56 @@ def reprocess(case_id, which="errors", user=""):
     for i in ids:
         d = store.get_doc(case_id, i); d["state"] = "queued"; d.pop("error", None); store.save_doc(case_id, d)
     store.audit(case_id, {"kind": "reprocess", "documents": ids, "by": user})
-    job = _job(case_id, len(ids))
+    job = _job(case_id, len(ids), ids)
     job["task"] = asyncio.get_event_loop().create_task(process_docs(case_id, ids, job))
     return job
+
+
+def resume_after_restart():
+    """Start-up hook (V1 item 1.8), called once from the app's async start-up while the event loop runs. Jobs that were running
+    when the server stopped are marked interrupted; documents left mid-processing (queued / reading / classifying / extracting)
+    are queued again, one job per case. Documents that are ready or in error are never touched. Never raises: a broken case
+    folder is logged and skipped so the app still starts."""
+    out = {"requeued": {}, "interrupted_jobs": [], "pruned": 0}
+    try:
+        out["pruned"] = _prune()
+    except Exception:
+        log.exception("resume_after_restart: prune failed")
+    interrupted = {}  # case_id -> [job records]
+    try:
+        for p in sorted(_jobs_dir().glob("*.json")):
+            rec = _read_job_file(p)
+            if not isinstance(rec, dict) or rec.get("state") != "running" or rec.get("id") in JOBS:
+                continue
+            rec["state"] = "interrupted"; rec["error"] = "The server restarted; the documents were queued again automatically"
+            rec["seconds"] = round(time.time() - float(rec.get("started") or time.time()), 1)
+            _save_job(rec)
+            out["interrupted_jobs"].append(rec["id"])
+            interrupted.setdefault(rec.get("case_id"), []).append(rec)
+    except Exception:
+        log.exception("resume_after_restart: could not read job records")
+    try:
+        case_dirs = sorted(d for d in config.CASES_DIR.iterdir() if d.is_dir()) if config.CASES_DIR.exists() else []
+    except Exception:
+        log.exception("resume_after_restart: could not list case folders"); case_dirs = []
+    for d in case_dirs:  # folder by folder (not store.list_cases()): one unreadable case.json must not hide the other cases
+        try:
+            c = store._read_json(d / "case.json")
+            if not c:
+                continue
+            case_id = c["case_id"]
+            stuck = [x["doc_id"] for x in store.list_docs(case_id) if x.get("state") in STUCK_STATES]
+            if not stuck:
+                continue
+            job = reprocess(case_id, stuck, user=RESTART_USER)
+            out["requeued"][case_id] = list(job["doc_ids"])
+            store.audit(case_id, {"kind": "resume_after_restart", "documents": list(job["doc_ids"]), "by": RESTART_USER, "job": job["id"]})
+            for rec in interrupted.get(case_id, []):
+                rec["resumed_by"] = job["id"]; _save_job(rec)
+            log.info("resume_after_restart: %s: queued %d document(s) again (job %s)", case_id, len(stuck), job["id"])
+        except Exception:
+            log.exception("resume_after_restart: skipped case folder %s", d.name)
+    return out
 
 
 def delete_document(case_id, doc_id, user=""):

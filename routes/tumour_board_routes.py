@@ -131,10 +131,10 @@ def setup_tumour_board_routes():
     @r.get("/jobs/{job_id}")
     async def job(job_id: str, request: Request):
         _user(request)
-        j = service.JOBS.get(job_id)
+        j = service.get_job(job_id)  # in memory, or on disk after a restart (V1 item 1.8)
         if not j:
             raise HTTPException(404, "job not found")
-        return {k: v for k, v in j.items() if k != "task"}
+        return j
 
     @r.get("/cases/{case_id}/export")
     async def export(case_id: str, request: Request):
