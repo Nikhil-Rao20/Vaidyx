@@ -1,5 +1,5 @@
 """service.add_files: files that cannot be read are refused with a clear message, audited and never stored (V1 item 1.4)."""
-import asyncio
+import asyncio, json
 
 from tumour_board import ingest, service, store
 
@@ -170,3 +170,24 @@ def test_restart_survives_a_broken_case_folder(unit_case, monkeypatch):
     out = asyncio.run(go())
     assert list(out["requeued"]) == [unit_case] and store.get_doc(unit_case, ids["reading"])["state"] == "ready"
     service.JOBS.clear()
+
+
+def test_restart_after_documents_were_done_only_rechecks(unit_case, monkeypatch):
+    """A job cut off after its documents finished (during index warm-up or gate sync) is not re-queued; the gate is re-checked."""
+    import time
+    from tumour_board.tests.util import add, fact, make_doc
+    add(unit_case, make_doc("Dhist0001", "histopathology", facts={"histologic_type": fact("Adenocarcinoma")}))
+    jd = service._jobs_dir(); jd.mkdir(parents=True, exist_ok=True)
+    (jd / "Jdead0001.json").write_text(json.dumps({"id": "Jdead0001", "case_id": unit_case, "total": 1, "done": 1, "events": [], "state": "running",
+                                                  "started": time.time() - 60, "doc_states": {"Dhist0001": "ready"}, "doc_ids": ["Dhist0001"]}))
+    service.JOBS.clear()
+
+    async def go():
+        return service.resume_after_restart()
+    out = asyncio.run(go())
+    assert out["requeued"] == {} and out["interrupted_jobs"] == ["Jdead0001"]
+    rec = json.loads((jd / "Jdead0001.json").read_text())
+    assert rec["state"] == "interrupted" and "Pre-Authorization check was run again" in rec["error"] and "resumed_by" not in rec
+    kinds = [(e["kind"], e.get("by")) for e in store.read_audit(unit_case)]
+    assert ("recheck", "system:restart") in kinds and not any(k == "reprocess" for k, _ in kinds)
+    assert store.get_state(unit_case)["gate"]["requirements"]

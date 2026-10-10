@@ -165,6 +165,7 @@ def resume_after_restart():
             rec = _read_job_file(p)
             if not isinstance(rec, dict) or rec.get("state") != "running" or rec.get("id") in JOBS:
                 continue
+            rec.setdefault("id", p.stem)
             rec["state"] = "interrupted"; rec["error"] = "The server restarted; the documents were queued again automatically"
             rec["seconds"] = round(time.time() - float(rec.get("started") or time.time()), 1)
             _save_job(rec)
@@ -193,6 +194,15 @@ def resume_after_restart():
             log.info("resume_after_restart: %s: queued %d document(s) again (job %s)", case_id, len(stuck), job["id"])
         except Exception:
             log.exception("resume_after_restart: skipped case folder %s", d.name)
+    for case_id, recs in interrupted.items():  # a job cut off after its documents were done (index warm-up or gate sync): re-check only
+        if case_id in out["requeued"]:
+            continue
+        try:
+            recheck(case_id, user=RESTART_USER)
+            for rec in recs:
+                rec["error"] = "The server restarted after the documents were processed; the Pre-Authorization check was run again"; _save_job(rec)
+        except Exception:
+            log.exception("resume_after_restart: re-check failed for %s", case_id)
     return out
 
 
