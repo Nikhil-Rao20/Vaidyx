@@ -2,6 +2,8 @@
 document list, the facts text and the value checks of the board decision. Model calls are replaced by fakes."""
 import asyncio
 
+import pytest
+
 from tumour_board import agents, llm, postboard, rules
 from tumour_board.tests.util import add, fact, make_doc
 
@@ -49,3 +51,22 @@ def test_adjudication_uses_the_attested_document_as_current(unit_case, monkeypat
     after = _adjudicate(unit_case, monkeypatch, "Adenocarcinoma")
     assert [c["source"]["doc_id"] for c in after["value_checks"]] == ["Dhist0001"]
     assert not any(f["kind"] == "transcription" for f in after["flags"])
+
+
+# ---- adjudication shares the negation cues (review of 1.1): a flip against "non-amplified" must be caught -------------
+@pytest.mark.parametrize("written,source,expected", [
+    ("HER2 amplified", "HER2 non-amplified", "discrepancy"),
+    ("EGFR mutation detected", "EGFR non-detected", "discrepancy"),
+    ("HBV DNA detectable", "HBV DNA non-detectable", "discrepancy"),
+    ("HER2 not amplified", "HER2 non-amplified", "consistent"),
+    ("HER2 negative", "HER2 negative (IHC 2+, FISH non-amplified)", "consistent"),
+    ("Invasive carcinoma of no special type", "Invasive breast carcinoma of no special type (ductal).", "consistent"),
+])
+def test_adjudication_polarity_uses_the_shared_negation_cues(written, source, expected):
+    a, b = postboard._polarity(written), postboard._polarity(source)
+    assert bool(a and b and a != b) == (expected == "discrepancy"), (a, b)
+
+
+def test_no_special_type_is_not_negative_in_adjudication():
+    assert postboard._polarity("Invasive carcinoma of no special type") is None
+    assert postboard._polarity("no evidence of metastasis") == "neg"

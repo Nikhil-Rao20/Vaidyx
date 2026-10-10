@@ -9,7 +9,7 @@ import re
 import uuid
 from datetime import date, timedelta
 
-from . import grounding, llm, protocol, rules, store
+from . import grounding, llm, negation, protocol, rules, store
 
 CLAIMS_SCHEMA = {"type": "object", "additionalProperties": False, "properties": {"claims": {"type": "array", "items": {
     "type": "object", "additionalProperties": False, "properties": {
@@ -17,8 +17,9 @@ CLAIMS_SCHEMA = {"type": "object", "additionalProperties": False, "properties": 
     "required": ["fact", "value_as_written", "span"]}}}, "required": ["claims"]}
 
 
-_NEG = r"\b(negative|not detected|no mutation detected|no (pathogenic )?(variant|alteration)s? detected|wild[- ]?type|absent|not amplified|no evidence of|not seen|not identified|free of|without)\b|\bno\b"
-_POS = r"\b(positive|detected|mutated|mutation present|present|amplified|evidence of|seen|identified|involved|suspicious)\b"
+# result negations first (shared cues in negation.py): "non-amplified" must never read as "amplified"
+_NEG = r"\b(" + negation.NON + r"|negative|not detected|no mutation detected|no (pathogenic )?(variant|alteration)s? detected|wild[- ]?type|absent|not amplified|no evidence of|not seen|not identified|free of|without)\b|\b" + negation.NO + r"\b"
+_POS = r"\b(positive|detected|detectable|mutated|mutation present|present|amplified|evidence of|seen|identified|involved|suspicious)\b"
 
 
 def _polarity(s):

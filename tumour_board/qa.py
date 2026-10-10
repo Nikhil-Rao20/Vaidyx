@@ -6,7 +6,7 @@ statements without a verified quote are dropped -> output guardrail -> "Not docu
 """
 import asyncio, re, time
 
-from . import grounding, guardrails, llm, search, store
+from . import grounding, guardrails, llm, negation, search, store
 
 ANSWER_SCHEMA = {"type": "object", "additionalProperties": False, "properties": {
     "answer_found": {"type": "boolean"},
@@ -42,7 +42,7 @@ def _locate_quote(quote, pages):
 
 
 # "no special type" (breast NST) and "non-" alone are not negations (Non-small cell carcinoma, Non-Hodgkin): only the result negations count (V1 item 1.1)
-NEGATION = re.compile(r"\b(no(?!\s+special\s+type\b)|not|negative|absent|without|free of|non[- ]?(?:reactive|amplified|detected)|never|neither|nor|none|unremarkable|normal|denies|ruled out|not identified|not seen|not detected)\b", re.I)
+NEGATION = re.compile(r"\b(" + negation.NO + "|not|negative|absent|without|free of|" + negation.NON + r"|never|neither|nor|none|unremarkable|normal|denies|ruled out|not identified|not seen|not detected)\b", re.I)
 
 
 def polarity_flag(text, quotes):

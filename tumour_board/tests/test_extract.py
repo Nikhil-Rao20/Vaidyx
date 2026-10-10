@@ -109,7 +109,7 @@ def test_ocr_page_agreeing_reads_have_no_uncertain_numbers(monkeypatch):
 
 # ---- negation and pending cues: only real result negations; "non-" alone is not one (V1 item 1.1) ----------
 @pytest.mark.parametrize("s", ["HIV non-reactive", "non-reactive", "HBsAg nonreactive", "EGFR mutation not detected", "Negative",
-                               "No evidence of metastasis", "HER2 non-amplified", "HER2 non amplified", "absent", "Fusion non-detected"])
+                               "No evidence of metastasis", "HER2 non-amplified", "HER2 non amplified", "absent", "Fusion non-detected", "HBV DNA non-detectable"])
 def test_negation_cues(s):
     assert extract.NEGATED_RE.search(s) and qa.NEGATION.search(s)
 
