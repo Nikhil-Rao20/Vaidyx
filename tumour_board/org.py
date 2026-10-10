@@ -45,13 +45,20 @@ DEPT_ROLES = ("member", "head")
 
 # Who may do what. "who" lists the roles allowed: "member" / "head" mean of the department named in the call (for a
 # department-scoped action), "coordinator" is the hospital-level flag, "known" is anyone mapped in org.json, "any" is
-# any logged-in user. Admins may do everything that is listed here. For a department-scoped action called without a
-# department, a member / head of any department qualifies, unless "no_dept" gives the rule for that case.
+# any logged-in user. Admins may do everything that is listed here.
+# A department-scoped action called without a department (a document uploaded straight into a Case File by the
+# coordinator, a document from before departments existed, an action with no Responsible Department) is decided by
+# "no_dept" alone: such an item belongs to the coordinator, never to a member / head of some other department. Every
+# department-scoped action declares "no_dept"; a missing one means admin only (fail closed). A department name that
+# does not resolve (e.g. "Cardiology") matches no membership: "who" applies with no department role, so only the
+# coordinator (where "who" lists it) and admins qualify.
 ACTIONS = {
     "view": {"who": ("any",), "dept": False, "doc": "Open the Tumour Board pages (any logged-in user)"},
-    "upload": {"who": ("member", "head", "coordinator"), "dept": True, "doc": "Upload a document for a department"},
+    "upload": {"who": ("member", "head", "coordinator"), "dept": True, "no_dept": ("coordinator",),
+               "doc": "Upload a document for a department (no department: coordinator)"},
     "upload_to_case": {"who": ("coordinator",), "dept": False, "doc": "Upload straight into a Case File"},
-    "inbox": {"who": ("member", "head"), "dept": True, "doc": "See a department's inbox"},
+    "inbox": {"who": ("member", "head"), "dept": True, "no_dept": (),
+              "doc": "See a department's inbox (no department: admin; an inbox always has a department)"},
     "confirm": {"who": ("member", "head", "coordinator"), "dept": True, "no_dept": ("coordinator",),
                 "doc": "Confirm a department's document (no department: coordinator)"},
     "waive": {"who": ("head",), "dept": True, "no_dept": (), "doc": "Waive a requirement for a department (no department: admin)"},
@@ -63,8 +70,10 @@ ACTIONS = {
     "create_case": {"who": ("coordinator",), "dept": False, "doc": "Create a Case File"},
     "delete_case": {"who": ("coordinator",), "dept": False, "doc": "Delete a Case File"},
     "board_record": {"who": ("coordinator",), "dept": False, "doc": "Record the board discussion"},
-    "delete_document": {"who": ("head", "coordinator"), "dept": True, "doc": "Delete a department's document"},
-    "update_action": {"who": ("member", "head", "coordinator"), "dept": True, "doc": "Update a pending action for a department"},
+    "delete_document": {"who": ("head", "coordinator"), "dept": True, "no_dept": ("coordinator",),
+                        "doc": "Delete a department's document (no department: coordinator)"},
+    "update_action": {"who": ("member", "head", "coordinator"), "dept": True, "no_dept": ("coordinator",),
+                      "doc": "Update a pending action for a department (no department: coordinator)"},
     "review": {"who": ("known",), "dept": False, "doc": "Expert review of an AI artefact (human oversight)"},
     "manage_org": {"who": (), "dept": False, "doc": "Edit the hospital, departments and users (admin only)"},
 }
@@ -263,7 +272,9 @@ def roles(username: str, vaidyx_admin: bool = False) -> dict:
     """The Tumour Board roles of a Vaidyx login.
 
     admin: a Vaidyx admin or listed in org.json admins. An empty username means authentication is off (single-user
-    mode): there is no login to tie a role to, so that user is treated as admin. Only existing departments and the
+    mode): there is no login to tie a role to, so that user is treated as admin. This only happens when the main app
+    runs with AUTH_ENABLED=false or through its localhost bypass; ~/vaidyx/start_vaidyx_app.sh sets neither, so a
+    normal deployment always has a username. Only existing departments and the
     roles member / head are honoured, even if org.json was edited by hand. known: admin, coordinator or a member of at
     least one department."""
     username = str(username or "").strip()
@@ -287,17 +298,19 @@ def _allowed(r: dict, who, department) -> bool:
     if "coordinator" in who and r.get("coordinator"):
         return True
     want = {x for x in who if x in DEPT_ROLES}  # a head is also a member: rules open to members list both
-    mine = r.get("departments") or {}
-    if department is None:
-        return any(role in want for role in mine.values())
-    return mine.get(department) in want
+    if department is None:  # no department named: no department role counts (can() passes None only for that case)
+        return False
+    return (r.get("departments") or {}).get(department) in want
 
 
 def can(r: dict, action: str, department: str | None = None) -> bool:
-    """True if the user with roles `r` may do `action` (for `department`: an id, name or alias). See ACTIONS.
+    """True if the user with roles `r` may do `action` (for `department`: an id, name or alias, passed raw; it is
+    resolved here, so "Radiology" and "radio_diagnosis" are the same). See ACTIONS.
 
-    Admins may do every listed action; an unknown action is refused for everyone. A department that does not resolve
-    matches no membership (coordinators and admins keep their hospital-wide rights)."""
+    Admins may do every listed action; an unknown action is refused for everyone. A department-scoped action with no
+    (or an empty) department follows its "no_dept" rule (admin only if none is declared): a member / head of some
+    department never qualifies through it. A department that does not resolve matches no membership (coordinators and
+    admins keep their hospital-wide rights where "who" lists them)."""
     rule = ACTIONS.get(action)
     if rule is None or not isinstance(r, dict):
         return False
@@ -305,10 +318,11 @@ def can(r: dict, action: str, department: str | None = None) -> bool:
         return True
     who = rule["who"]
     dept = None
-    if rule["dept"] and department is not None and str(department).strip():
-        dept = department_id(department) or _UNKNOWN
-    elif rule["dept"] and "no_dept" in rule:
-        who = rule["no_dept"]
+    if rule["dept"]:
+        if department is not None and str(department).strip():
+            dept = department_id(department) or _UNKNOWN
+        else:
+            who = rule.get("no_dept", ())
     return _allowed(r, who, dept)
 
 
