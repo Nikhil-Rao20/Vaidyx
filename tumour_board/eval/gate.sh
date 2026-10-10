@@ -3,7 +3,7 @@
 # data/tumour_board/eval/v1/<label>/ with a README.md that compares the numbers with the baseline.
 #   tumour_board/eval/gate.sh <label> [--skip-ui] [--skip-evals]
 # --skip-evals leaves out the Q&A and summary evals (only needed when extraction, search, Q&A, summary or agent code changed);
-# --skip-ui leaves out the browser test (only needed when the UI changed). Both model servers and the app must be running.
+# --skip-ui leaves out the browser test (only needed when the UI changed); TB_GATE_VIEWPORTS=desktop narrows it to one width. Both model servers and the app must be running.
 set -u
 LABEL=${1:?usage: gate.sh <label> [--skip-ui] [--skip-evals]}; shift
 SKIP_UI=0; SKIP_EVALS=0
@@ -25,7 +25,7 @@ step() {  # name, command...
 }
 [ -d tumour_board/tests ] && step unit "$PY" -m pytest tumour_board/tests -q
 step e2e_api "$PY" -m tumour_board.eval.e2e_api --password "$PW"
-[ $SKIP_UI = 1 ] || step ui_test env LD_LIBRARY_PATH=/data/vaidyx/venv/pdf/lib "$PY" -m tumour_board.eval.ui_test --password "$PW" --out "$OUT/ui_shots"
+[ $SKIP_UI = 1 ] || step ui_test env LD_LIBRARY_PATH=/data/vaidyx/venv/pdf/lib "$PY" -m tumour_board.eval.ui_test --password "$PW" --viewports "${TB_GATE_VIEWPORTS:-desktop,tablet,phone}" --out "$OUT/ui_shots"
 if [ $SKIP_EVALS = 0 ]; then
   step qa_eval "$PY" -m tumour_board.eval.qa_eval --label "v1-$LABEL" --prepare
   step summary_eval "$PY" -m tumour_board.eval.summary_eval --label "v1-$LABEL"
