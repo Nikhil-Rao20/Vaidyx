@@ -106,28 +106,52 @@ def mask_pages(pages):
 
 
 def identity_check(full, case_patient, idr=None):
-    """Does the document belong to this Case File's patient? match: an identifier printed on the document equals one the Case File
-    knows (or the UHID / MRN is found in the text); name_match: the printed name is compatible with the patient's (exact, a
-    transliteration variant or initials) but no identifier agrees; mismatch_or_missing: an identifier agrees but the name, age or
-    sex differs (possible wrong patient), or nothing agrees. None when the Case File has no patient."""
+    """Does the document belong to this Case File's patient? Returns (verdict, matcher decision).
+    match: an identifier printed on the document equals one the Case File knows (compatible name, no sex or age conflict);
+    name_match: no identifier agrees but the printed name is compatible (exact, a transliteration variant, initials) and no identifier
+    contradicts; id_differs: the document prints a hospital identifier this Case File does not know (another patient's, or one not
+    learned yet): check it; mismatch_or_missing: an identifier agrees but the name, age or sex differs (possible wrong patient), or
+    nothing agrees. The old text search (UHID / MRN substring, name tokens) is used only when the rules read neither an identifier
+    nor a name. None when the Case File has no patient."""
     if not (case_patient and (case_patient.get("mrn") or case_patient.get("name"))):
-        return None
-    if idr is not None:
+        return None, None
+    if idr is not None and (idr.get("ids") or idr.get("name")):
         m = identity.match(idr, [{"case_id": "this", "patient": case_patient}])
-        if m["decision"] == "auto_link":
-            return "match"
-        if m["decision"] == "id_conflict":
-            return "mismatch_or_missing"
-        if any(c.get("name_match") in ("exact", "variant", "initials") and not c.get("sex_fit") is False for c in m.get("candidates", [])):
-            return "name_match"
+        d = m["decision"]
+        compatible = any(c.get("name_match") in ("exact", "variant", "initials") and c.get("sex_fit") is not False for c in m.get("candidates", []))
+        if d == "auto_link":
+            return "match", m
+        if d == "id_conflict":
+            return "mismatch_or_missing", m
+        if d == "new_case" or (idr.get("ids") and compatible):
+            return "id_differs", m
+        if compatible or d == "suggest":
+            return "name_match", m
+        return "mismatch_or_missing", m
     nf = grounding.norm(full)
     mrn = grounding.norm(case_patient.get("mrn") or "")
     toks = [t for t in re.findall(r"[a-z]{3,}", grounding.norm(case_patient.get("name") or "")) if t not in ("synthetic", "mr", "mrs", "ms", "dr")]
     if mrn and mrn in nf:
-        return "match"
+        return "match", None
     if toks and sum(1 for t in toks if t in nf) >= min(2, len(toks)):
-        return "name_match"
-    return "mismatch_or_missing"
+        return "name_match", None
+    return "mismatch_or_missing", None
+
+
+def refresh_identity(case_id, doc_id, case_patient):
+    """Re-run the identity check of a processed document against the Case File's current patient record (no model): after the Case
+    File learned identifiers from other records, a document that printed only the CR No. may now match."""
+    doc = store.get_doc(case_id, doc_id)
+    if not doc or doc.get("state") != "ready" or not doc.get("identity_read"):
+        return doc
+    ident, m = identity_check(_doc_text(doc.get("pages") or []), case_patient, doc["identity_read"])
+    if ident and ident != doc.get("identity"):
+        doc["identity"] = ident
+        if ident == "match":
+            from . import intake
+            intake.learn_ids(case_id, doc["identity_read"], "system:identity", doc_id)
+        store.save_doc(case_id, doc)
+    return doc
 
 
 async def process_document(case_id, doc_id, protocol_id, case_patient=None, progress=None, from_stored=False):
@@ -160,12 +184,13 @@ async def process_document(case_id, doc_id, protocol_id, case_patient=None, prog
         if not doc.get("identity_read"):
             from . import intake  # the same reader as the intake area (model fallback quote checked)
             doc["identity_read"] = intake.read_identity(doc, identity.patient_record(case_patient or {})["ids"])
-        ident = identity_check(full, case_patient, doc["identity_read"])
+        ident, m = identity_check(full, case_patient, doc["identity_read"])
         if ident:
             doc["identity"] = ident
-            if ident == "match":  # an exact identifier: the Case File learns the record's other identifiers (CR No., ABHA, IP No.)
+            if ident == "match" and m is not None and m["decision"] == "auto_link":  # an exact identifier: the Case File learns the record's other identifiers
                 from . import intake
                 intake.learn_ids(case_id, doc["identity_read"], "system:identity", doc_id)
+        doc["extracted_under"] = protocol_id or ""  # the protocol the fields were extracted under (re-run if the Case File is listed meanwhile)
         if not protocol_id:  # not listed yet: no protocol, so nothing to extract (V1 item 2.5)
             doc["facts"] = {}
             doc["state"] = "ready"; doc["processed"] = store.now_iso()

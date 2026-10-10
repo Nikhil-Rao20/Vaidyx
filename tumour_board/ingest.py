@@ -7,7 +7,7 @@ Order of preference (most faithful first):
 import asyncio, io, re, shutil, subprocess, tempfile
 from pathlib import Path
 
-from . import config, llm, store
+from . import config, identity, llm, store
 
 TEXT_EXT = {".txt", ".md", ".csv", ".json", ".xml", ".hl7"}
 IMG_EXT = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
@@ -48,9 +48,13 @@ async def ocr_page(png_bytes: bytes, audit=None) -> dict:
     reported as uncertain: generative OCR can silently 'correct' a digit, and lab values are where that matters most.
     The full-resolution read is the transcription used downstream."""
     full, second = await asyncio.gather(ocr_image(png_bytes, audit), ocr_image(png_bytes, audit, max_side=int(0.7 * config.OCR_MAX_SIDE)))
+    full, n_masked = identity.mask_aadhaar(full)  # Aadhaar masked at the source: never in the text, the uncertain numbers or the audit (V1 item 2.4)
+    second, _ = identity.mask_aadhaar(second)
     n1 = set(x.replace(",", "") for x in _NUM.findall(full)); n2 = set(x.replace(",", "") for x in _NUM.findall(second))
     uncertain = sorted((n1 ^ n2) - {x for x in (n1 ^ n2) if len(x) <= 1})  # single digits (list numbers) are noise
     page = {"text": full, "method": "vision-transcription", "ocr_reads": 2}
+    if n_masked:
+        page["aadhaar_masked"] = n_masked
     if uncertain:
         page["ocr_uncertain_numbers"] = uncertain
         if audit:

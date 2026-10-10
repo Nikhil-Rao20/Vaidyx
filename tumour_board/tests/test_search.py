@@ -3,7 +3,7 @@ import re
 
 import pytest
 
-from tumour_board import search, store
+from tumour_board import confirm, search, store
 from tumour_board.tests.util import add, make_doc
 
 PDL1 = [r"\bpd\-l1\b", r"\bpdl1\b", r"\bpd\ l1\b", r"\btps\b", r"\b22c3\b", r"\bsp263\b", r"\bcps\b"]
@@ -92,3 +92,15 @@ def test_chunks_cover_the_page_with_offsets():
     for c in ch:
         assert text[c["start"]:c["end"]].strip() == c["text"]
     assert ch[-1]["end"] == len(text)
+
+
+def test_value_finder_and_context_use_confirmations(unit_case):
+    """Review of 2.2 (M7): page text is unchanged, but hits and context carry the confirmed document type and date."""
+    add(unit_case, make_doc("Dnote0000", "clinical_note", date="2026-09-01", text="SYNTHETIC\nNOTE\nPD-L1 (22C3) TPS 60%\nReport status: FINAL"))
+    confirm.record(unit_case, "confirm_doc_type", "Dnote0000", {"doc_type": "ihc"}, by="Dr. Rao")
+    confirm.record(unit_case, "confirm_dates", "Dnote0000", {"report_date": "2026-09-03"}, by="Dr. Rao")
+    hits = search.find_values(unit_case, "PD-L1")["hits"]
+    assert [(h["doc_id"], h["doc_type"], h["date"], h["text"]) for h in hits] == [("Dnote0000", "ihc", "2026-09-03", "PD-L1 (22C3) TPS 60%")]
+    ctx, mode = search.context_for(unit_case, "PD-L1", doc_types=["ihc"])
+    assert mode == "full Case File" and "=== DOCUMENT Dnote0000 | CLINICAL_NOTE REPORT Dnote0000 | type ihc | date 2026-09-03" in ctx
+    assert search.context_for(unit_case, "PD-L1", doc_types=["clinical_note"])[0] == ""

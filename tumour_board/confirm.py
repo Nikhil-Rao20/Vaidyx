@@ -214,9 +214,11 @@ def apply_to_doc(doc, state):
             from . import extract  # the same pending wording as extraction ("awaited", "not reported"): a confirmed "Awaited" stays pending
             fid = c["key"].partition(":")[2]
             prev = (d.get("facts") or {}).get(fid)
-            fact = dict(prev) if prev else {"quote": f["value"], "reason": None, "location": None, "polarity": "affirmed"}
+            fact = dict(prev) if prev else {"reason": None, "polarity": "affirmed"}
+            # the clinician's reading is the evidence: no model quote is shown as if it supported the confirmed value
             fact.update({"model_value": (prev or {}).get("value"), "model_verification": (prev or {}).get("verification"),
-                         "model_state": (prev or {}).get("state"), "value": f["value"], "verification": "confirmed",
+                         "model_state": (prev or {}).get("state"), "model_quote": (prev or {}).get("quote"), "model_location": (prev or {}).get("location"),
+                         "value": f["value"], "quote": "", "location": None, "verification": "confirmed",
                          "state": "pending" if extract.PENDING_RE.search(f["value"]) else "present", "confirmed_by": c["by"], "confirmation": c["id"]})
             d.setdefault("facts", {})[fid] = fact
         elif c["type"] == "dismiss_failed":

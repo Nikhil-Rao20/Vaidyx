@@ -233,6 +233,19 @@ def move_intake_to_case(doc_id: str, case_id: str):
     return doc
 
 
+def move_case_doc_to_intake(case_id: str, doc_id: str):
+    """Move a document (original + record) out of a Case File back into the intake area, keeping its id. Returns the record."""
+    src = case_dir(case_id) / "docs" / safe_id(doc_id)
+    doc = _read_json(src / "doc.json")
+    if not doc:
+        raise KeyError(doc_id)
+    dst = intake_doc_dir(doc_id)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(src), str(dst))
+    _docs_cache.pop(case_id, None)
+    return doc
+
+
 def audit_intake(event: dict):
     event = {"ts": now_iso(), **event}
     p = intake_dir() / "audit.jsonl"

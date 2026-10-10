@@ -263,12 +263,13 @@ def test_model_identifier_is_used_only_when_it_equals_a_known_id(fakes, monkeypa
     monkeypatch.setattr(extract, "classify", fake_classify)
     job = _upload([("visit.txt", text.encode())])  # no Case File knows SYN-600744: the unlabelled model id is only a note
     d = store.list_intake()[0]
-    assert d["match"]["decision"] == "needs_matching" and d["identity_read"]["ids"] == [] and any("reader model" in n for n in d["identity_read"]["notes"])
-    assert d["identity_read"]["name"]["value"] == "Md. Irfan Shaikh" and "quote checked" in d["identity_read"]["name"]["label"]
+    assert d["match"]["decision"] == "needs_matching" and d["identity_read"]["ids"] == [] and any("Qwen3.5-4B reader" in n for n in d["identity_read"]["notes"])
+    assert d["identity_read"]["name"]["value"] == "Md. Irfan Shaikh" and "quote checked" in d["identity_read"]["name"]["label"] and d["identity_read"]["model_read"] == ["name"]
     intake.discard(d["doc_id"], "t")
     store.create_case("TB-006", {"name": "Mohammed Irfan Shaikh", "mrn": "SYN-600744", "agesex": "61 Y / M"}, "lung_nsclc", created_by="t")
     job = _upload([("visit2.txt", text.encode())])
-    assert list(job["filed"].values()) == ["TB-006"]
+    d = store.list_intake()[0]  # both the name and the identifier came from the model: suggested for a person, never linked on its own
+    assert job["filed"] == {} and d["match"]["decision"] == "suggest" and d["match"]["case_id"] == "TB-006" and d["identity_read"]["model_read"] == ["name", "id"]
 
 
 def test_case_document_identity_uses_the_rules_and_learns_ids(fakes, monkeypatch):
@@ -283,7 +284,7 @@ def test_case_document_identity_uses_the_rules_and_learns_ids(fakes, monkeypatch
     monkeypatch.setattr(extract, "classify", cls_ct)
     d1 = store.add_document_file("TB-004", "cect.txt", cect.encode())
     out = asyncio.run(extract.process_document("TB-004", d1["doc_id"], "lung_nsclc", pat))
-    assert out["identity"] == "name_match" and out["identity_read"]["ids"][0]["kind"] == "cr_no"  # CR No. not known yet: name "R. Kumar" is compatible, not proof
+    assert out["identity"] == "id_differs" and out["identity_read"]["ids"][0]["kind"] == "cr_no"  # CR No. not known yet: flagged until another record teaches it
     async def cls_hpe(t, audit=None):
         return {**CLS, "title": "HISTOPATHOLOGY REPORT", "doc_type": "histopathology", "patient_name": "Mr. Ramesh Kumar", "patient_id": "SYN-400118"}
     monkeypatch.setattr(extract, "classify", cls_hpe)
@@ -303,3 +304,84 @@ def test_registered_name_drops_titles_and_relation():
     assert intake.registered_name("Smt. Sunita Devi") == "Sunita Devi"
     assert intake.registered_name("Shri Ramesh Kumar S/o Mohan Lal") == "Ramesh Kumar"
     assert intake.registered_name("Mr. RAMESH KUMAR") == "RAMESH KUMAR" and intake.registered_name("") == ""
+
+
+def test_unfile_reverses_a_link_and_forgets_learned_ids(fakes):
+    store.create_case("TB-006", {"name": "Mohammed Irfan Shaikh", "mrn": "SYN-600744", "agesex": "61 Y / M"}, "lung_nsclc", created_by="t")
+    job = _upload([("lft.txt", LFT.encode())])
+    doc_id = list(job["filed"])[0]
+    st = store.get_state("TB-006")
+    cm = [c for c in st["confirmations"] if c["type"] == "confirm_match" and c["key"] == doc_id and not c.get("undone")]
+    assert len(cm) == 1 and cm[0]["by"] == intake.MATCH_USER and cm[0]["fields"] == {"case_id": "TB-006"}  # the matcher's decision is on record, undoable
+    assert store.get_case("TB-006")["patient"]["ids"] and store.get_state("TB-006")["gate"]["documents"]["ready"] == 1
+    out = service.unfile_document("TB-006", doc_id, "coord", "wrong patient")
+    rec = store.get_intake(doc_id)
+    assert store.get_doc("TB-006", doc_id) is None and rec["state"] == "needs_matching" and rec["rejected_cases"] == ["TB-006"] and rec["unfiled"]["by"] == "coord"
+    assert "facts" not in rec and "filed" not in rec and rec["pages"] and rec["classification"]  # read once, never re-read
+    assert store.get_case("TB-006")["patient"].get("ids", []) == [] and out["state"]["gate"]["documents"]["ready"] == 0
+    assert all(c.get("undone") for c in store.get_state("TB-006")["confirmations"] if c["type"] == "confirm_match")
+    kinds = [e["kind"] for e in store.read_audit("TB-006")]
+    assert "document_unfiled" in kinds and "patient_ids_unlearned" in kinds and "confirmation_undone" in kinds
+    assert [e for e in store.read_intake_audit() if e["kind"] == "unfiled"][0]["case_id"] == "TB-006"
+    # the record is not linked to TB-006 again on re-read, and a coordinator-uploaded document cannot be unfiled
+    async def go():
+        j = service.reprocess_intake([doc_id], "coord"); await j["task"]; return j
+    j = asyncio.run(go())
+    assert j["needs_matching"] == [doc_id] and "not TB-006" in store.get_intake(doc_id)["match"]["reason"]
+    d = store.add_document_file("TB-006", "direct.txt", NOID.encode())
+    with pytest.raises(ValueError):
+        intake.unfile("TB-006", d["doc_id"], "coord")
+
+
+def test_remove_forgets_learned_ids_and_protected_cases_are_never_matched_or_taught(fakes, monkeypatch):
+    store.create_case("TB-006", {"name": "Mohammed Irfan Shaikh", "mrn": "SYN-600744", "agesex": "61 Y / M"}, "lung_nsclc", created_by="t")
+    job = _upload([("lft.txt", LFT.encode())])
+    doc_id = list(job["filed"])[0]
+    assert store.get_case("TB-006")["patient"]["ids"]
+    service.delete_document("TB-006", doc_id, "coord")
+    assert store.get_case("TB-006")["patient"]["ids"] == [] and any(e["kind"] == "patient_ids_unlearned" for e in store.read_audit("TB-006"))
+    monkeypatch.setattr(config, "PROTECTED_CASES", {"TB-006"})
+    job = _upload([("lft2.txt", LFT.replace("0.6", "0.7").encode())])
+    cid = list(job["filed"].values())[0]
+    assert cid != "TB-006" and cid.startswith("TB-")  # a protected Case File is invisible to the matcher: the record opens its own Case File
+    idr = store.get_doc(cid, list(job["filed"])[0])["identity_read"]
+    assert intake.learn_ids("TB-006", idr, "t", "Dx") == [] and store.get_case("TB-006")["patient"]["ids"] == []  # and is never taught
+
+
+def test_intake_record_filed_during_processing_is_not_recreated(fakes, monkeypatch):
+    d = store.add_intake_file("rbs.txt", NOID.encode(), "rbs.txt", "laboratory_medicine", "lab.user")
+
+    async def slow_classify(t, audit=None):
+        intake.discard(d["doc_id"], "coord", "while reading")  # a person acts while the record is being read
+        return dict(CLS)
+    monkeypatch.setattr(extract, "classify", slow_classify)
+    asyncio.run(intake.process(d["doc_id"]))
+    assert not store.intake_doc_dir(d["doc_id"]).exists() and store.list_intake() == []  # no ghost folder
+
+
+def test_stale_protocol_documents_are_extracted_again_after_listing(fakes, monkeypatch):
+    store.create_case("TB-2026-0001", {"name": "Ramesh Kumar", "mrn": "SYN-400118"}, "", created_by="coord")
+    d = store.add_document_file("TB-2026-0001", "hpe.txt", LFT.replace("LIVER FUNCTION TESTS", "HISTOPATHOLOGY REPORT").encode())
+
+    async def cls_hpe(t, audit=None):
+        c = store.get_case("TB-2026-0001"); c["protocol"] = "lung_nsclc"; c["listing"] = {"status": "listed"}; store.save_case(c)  # listed while the document is in flight
+        return {**CLS, "title": "HISTOPATHOLOGY REPORT", "doc_type": "histopathology"}
+    monkeypatch.setattr(extract, "classify", cls_hpe)
+
+    async def go():
+        job = service._job("TB-2026-0001", 1, [d["doc_id"]]); await service.process_docs("TB-2026-0001", [d["doc_id"]], job); return job
+    job = asyncio.run(go())
+    doc = store.get_doc("TB-2026-0001", d["doc_id"])
+    assert doc["extracted_under"] == "lung_nsclc" and doc["facts"].get("histologic_type") and job["gate"]["total"] == 8
+
+
+def test_ocr_uncertain_numbers_never_carry_an_aadhaar(monkeypatch):
+    reads = iter(["Aadhaar No. 6043 1187 2200\nHb 11.8", "Aadhaar No. 6043 1187 2200\nHb 11.6"])
+
+    async def fake(png, audit=None, max_side=None):
+        return next(reads)
+    monkeypatch.setattr(ingest, "ocr_image", fake)
+    events = []
+    page = asyncio.run(ingest.ocr_page(b"png", audit=events.append))
+    assert "2200" in page["text"] and "6043 1187 2200" not in page["text"] and page["aadhaar_masked"] == 1
+    assert page["ocr_uncertain_numbers"] == ["11.6", "11.8"] and "6043" not in __import__("json").dumps(events)

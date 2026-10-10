@@ -13,7 +13,7 @@ def test_lung_and_breast_notes_name_indian_sources_first():
     for pid in ("lung_nsclc", "breast"):
         note = protocol.get(pid)["note"]
         assert note.index("NCG") < note.index("ESMO") and "ICMR" in note
-        assert protocol.get(pid)["version"] == "0.4"
+        assert protocol.get(pid)["version"] == "0.5"
 
 
 def test_every_protocol_parses():

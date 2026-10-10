@@ -68,20 +68,31 @@ def phase2(c, base):
     check("confirmation and undo audited with the user", any(e["kind"] == "confirmation" and e["by"] == "tb-e2e-pathhead" for e in au) and any(e["kind"] == "confirmation_undone" for e in au))
     check("undo twice refused (409)", h.post(f"/api/tb/cases/TB-001/confirmations/{r['confirmation']['id']}/undo").status_code == 409)
     check("unknown confirmation type refused (400)", c.post("/api/tb/cases/TB-001/confirmations", json={"type": "bless", "key": "x"}).status_code == 400)
-    # value confirmation (mechanism check): a clinician records a value against a FINAL report after reading the source (here the WBC
-    # that the synthetic CBC scan reports as "Not reported"); it counts for the gate, is shown as "confirmed" and names the clinician.
-    # A value confirmed on a DRAFT report would still not count: the gate's final-signed rule is unchanged.
-    doc = next(x for x in d["documents"] if "cbc" in (x.get("rel_path") or ""))
-    r = c.post("/api/tb/cases/TB-001/confirmations", json={"type": "confirm_value", "key": f"{doc['doc_id']}:wbc", "fields": {"value": "6,200 /cumm"}}).json()
-    ev = next((x for x in r["state"]["gate"]["requirements"] if x["id"] == "baseline_labs"), {})
-    check("confirmed value counts for the gate with the clinician named", any(e.get("fact") == "wbc" and e.get("value") == "6,200 /cumm" for e in ev.get("evidence", [])) and ev["status"] == "satisfied", ev.get("status"))
-    d2 = c.get("/api/tb/cases/TB-001").json()
-    check("confirmed value shown in the Case File facts as confirmed", d2["facts"].get("wbc", {}).get("current", {}).get("verification") == "confirmed" and d2["facts"]["wbc"]["current"].get("confirmed_by") == "admin")
-    draft = next(x for x in d["documents"] if (x.get("classification") or {}).get("status") == "DRAFT")
-    r3 = c.post("/api/tb/cases/TB-001/confirmations", json={"type": "confirm_value", "key": f"{draft['doc_id']}:pdl1", "fields": {"value": "TPS 60%"}}).json()
-    check("a value confirmed on a DRAFT report still does not pass the gate", next(x["status"] for x in r3["state"]["gate"]["requirements"] if x["id"] == "pdl1") == "missing_field")
-    c.post(f"/api/tb/cases/TB-001/confirmations/{r3['confirmation']['id']}/undo")
-    c.post(f"/api/tb/cases/TB-001/confirmations/{r['confirmation']['id']}/undo")
+    # value confirmation on a dedicated Case File (independent of the demo Case File's state): a FINAL CT without a lesion size, then a
+    # clinician records the size read in the source; it counts for the gate, is shown as "confirmed by", and a value confirmed on a
+    # DRAFT report still does not pass (the final-signed rule is unchanged).
+    c.delete("/api/tb/cases/TB-P2C")
+    c.post("/api/tb/cases", json={"case_id": "TB-P2C", "protocol": "lung_nsclc", "setting": "non_metastatic", "patient": {"name": "SYNTHETIC, Test Patient", "mrn": "SYN-998", "agesex": "60 Y / M"}})
+    ct = ("SAHYADRI CANCER INSTITUTE (SYNTHETIC)\nDepartment of Radio-diagnosis\nCECT THORAX\nPatient: SYNTHETIC, Test Patient  UHID: SYN-998  60 Y / M\nStudy date: 02/09/2026\n"
+          "Findings: lobulated mass in the right lower lobe with post-obstructive consolidation. No pleural effusion.\nImpression: right lower lobe mass.\nReport status: FINAL\nReported by: Dr. Shalini Rao, MD (Radio-diagnosis), KMC Reg. No. 66310\n").encode()
+    hp = ("SAHYADRI CANCER INSTITUTE (SYNTHETIC)\nDepartment of Pathology\nHISTOPATHOLOGY REPORT\nPatient: SYNTHETIC, Test Patient  UHID: SYN-998  60 Y / M\nSpecimen: core biopsy right lung.\n"
+          "Microscopy: sheets of malignant epithelial cells.\nReport status: DRAFT / UNSIGNED\n").encode()
+    j = c.post("/api/tb/cases/TB-P2C/documents", files=[("files", ("cect_thorax.txt", ct)), ("files", ("hpe_draft.txt", hp))], data={"paths": json.dumps(["cect_thorax.txt", "hpe_draft.txt"])}).json()
+    wait_job(c, j["job"])
+    dd = c.get("/api/tb/cases/TB-P2C").json()
+    ctdoc = next((x for x in dd["documents"] if "cect" in x["rel_path"]), None); hpdoc = next((x for x in dd["documents"] if "hpe" in x["rel_path"]), None)
+    st0 = {x["id"]: x["status"] for x in dd["state"]["gate"]["requirements"]}
+    check("dedicated case: CT read as final, lesion size missing, histopathology draft", st0.get("ct_thorax") == "missing_field" and st0.get("histopathology") == "not_final", json.dumps({k: st0.get(k) for k in ("ct_thorax", "histopathology")}))
+    r = c.post("/api/tb/cases/TB-P2C/confirmations", json={"type": "confirm_value", "key": f"{ctdoc['doc_id']}:lesion_size", "fields": {"value": "4.6 x 3.8 cm"}}).json() if ctdoc else {}
+    ev = next((x for x in r.get("state", {}).get("gate", {}).get("requirements", []) if x["id"] == "ct_thorax"), {})
+    check("confirmed value counts for the gate with the clinician named", ev.get("status") == "satisfied" and any(e.get("fact") == "lesion_size" and e.get("value") == "4.6 x 3.8 cm" and e.get("quote") == "" for e in ev.get("evidence", [])), ev.get("status"))
+    d2 = c.get("/api/tb/cases/TB-P2C").json()
+    cur = d2["facts"].get("lesion_size", {}).get("current", {})
+    check("confirmed value shown in the Case File facts as confirmed, no model quote", cur.get("verification") == "confirmed" and cur.get("confirmed_by") == "admin" and cur.get("quote") == "" and cur.get("location") is None)
+    r3 = c.post("/api/tb/cases/TB-P2C/confirmations", json={"type": "confirm_value", "key": f"{hpdoc['doc_id']}:histologic_type", "fields": {"value": "Adenocarcinoma"}}).json() if hpdoc else {}
+    check("a value confirmed on a DRAFT report still does not pass the gate", next((x["status"] for x in r3.get("state", {}).get("gate", {}).get("requirements", []) if x["id"] == "histopathology"), None) == "not_final")
+    c.delete("/api/tb/cases/TB-P2C")
+    doc = next(x for x in d["documents"] if (x.get("classification") or {}).get("doc_type") == "histopathology")
     check("legacy /overrides alias still records a confirmation", "attest_final" in {x["type"] for x in c.post("/api/tb/cases/TB-001/overrides", json={"kind": "documents", "key": doc["doc_id"], "value": {"attested_final": True, "reason": "e2e"}}).json().get("confirmations", [])})
     c.post("/api/tb/cases/TB-001/overrides", json={"kind": "documents", "key": doc["doc_id"], "value": None})
     # ---- 2.3 department uploads: a member uploads without a Case File; the record waits in the queue tagged with department and user
@@ -145,7 +156,6 @@ def phase2(c, base):
     for d in c.get("/api/tb/intake").json()["documents"]:
         if d.get("uploaded_by") in E2E_USERS or d["rel_path"] in ("pap.pdf",):
             c.delete(f"/api/tb/intake/{d['doc_id']}?reason=e2e+cleanup")
-    m.close(); h.close()
     # ---- 2.4 patient matching: the whole synthetic intake batch (3 departments, 8 records, 5 patients) against the answer key
     truth = json.load(open("/data/vaidyx/tb_demo_corpus/truth/intake.json"))["files"]
     have = {x["case_id"] for x in c.get("/api/tb/cases").json()["cases"]}
@@ -196,6 +206,23 @@ def phase2(c, base):
         full = c.get(f"/api/tb/cases/TB-002/documents/{mam['doc_id']}").json() if mam else {}
         check("name variant (Laxmi / Lakshmi) linked on the UHID and recorded as a variant match", mam is not None and mam.get("identity") == "match"
               and (full.get("match") or {}).get("decision") == "auto_link" and "variant" in (full.get("match") or {}).get("reason", ""), (full.get("match") or {}).get("reason", "")[:120])
+        # reversal: an auto-link is recorded as a confirm_match by the matcher and can be undone, which moves the record back to the queue
+        xray_rel = "radio_diagnosis/xray_chest_pa_2026-09-03.pdf"
+        if where.get(xray_rel) == "TB-001":
+            d1 = c.get("/api/tb/cases/TB-001").json()
+            xd = next(x for x in d1["documents"] if x["rel_path"] == xray_rel)
+            cm = next((x for x in d1["state"].get("confirmations", []) if x["type"] == "confirm_match" and x["key"] == xd["doc_id"] and not x.get("undone")), None)
+            check("auto-link recorded in the Case File as a match by system:matching with Undo", cm is not None and cm["by"] == "system:matching" and d1["permissions"]["undo_confirmation"].get(cm["id"]) is True and d1["permissions"]["unfile"].get(xd["doc_id"]) is True)
+            check("member cannot unfile (403)", m.post(f"/api/tb/cases/TB-001/documents/{xd['doc_id']}/unfile", json={"reason": "e2e"}).status_code == 403)
+            r = c.post(f"/api/tb/cases/TB-001/confirmations/{cm['id']}/undo").json() if cm else {}
+            back = next((x for x in c.get("/api/tb/intake").json()["documents"] if x["doc_id"] == xd["doc_id"]), None)
+            check("undo of the match moves the record back to the queue, marked not this patient for TB-001", r.get("unfiled") is True and back is not None and back["state"] == "needs_matching" and "TB-001" in (back.get("rejected_cases") or [])
+                  and not any(x["doc_id"] == xd["doc_id"] for x in c.get("/api/tb/cases/TB-001").json()["documents"]))
+            p1 = c.get("/api/tb/cases/TB-001").json()["case"]["patient"]
+            check("identifiers learned from the unfiled record are forgotten", not any(i.get("from_doc") == xd["doc_id"] for i in p1.get("ids", [])))
+            au1 = {e["kind"] for e in c.get("/api/tb/cases/TB-001/audit").json()["events"]}
+            check("unfile audited in the Case File", {"document_unfiled", "confirmation_undone"} <= au1)
+            where.pop(xray_rel, None)
         # clean up: filed records out of the Case Files, the new Case File, the waiting record
         for rel, cid in where.items():
             did = next(x["doc_id"] for x in c.get(f"/api/tb/cases/{cid}").json()["documents"] if x["rel_path"] == rel)
@@ -207,6 +234,7 @@ def phase2(c, base):
             c.delete(f"/api/tb/intake/{d['doc_id']}?reason=e2e+cleanup")
     else:
         print("SKIP 2.4 intake batch: TB-004..006 not imported (python -m tumour_board.eval.prepare_cases TB-004 TB-005 TB-006)")
+    m.close(); h.close()
 
 
 def phase2_cleanup(c):

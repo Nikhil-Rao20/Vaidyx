@@ -248,7 +248,7 @@ def test_apply_to_doc_value_the_model_missed(unit_case):
     confirm.record(unit_case, "confirm_value", "Dhist0001:pdl1", {"value": "TPS 70%"}, by="Dr. Rao")
     d = confirm.apply_to_doc(hist(facts={}), store.get_state(unit_case))
     f = d["facts"]["pdl1"]
-    assert (f["value"], f["quote"], f["model_value"], f["verification"], f["state"]) == ("TPS 70%", "TPS 70%", None, "confirmed", "present")
+    assert (f["value"], f["quote"], f["location"], f["model_value"], f["verification"], f["state"], f["confirmed_by"]) == ("TPS 70%", "", None, None, "confirmed", "present", "Dr. Rao")
 
 
 def test_empty_confirmed_date_means_not_stated(unit_case):
@@ -319,7 +319,7 @@ def test_confirmed_value_satisfies_the_requirement_and_survives_reprocess(unit_c
     confirm.record(unit_case, "confirm_value", "Dhist0001:pdl1", {"value": "TPS 60%"}, "", by="Dr. Rao")  # read by the clinician on the scan image
     g = rules.evaluate(unit_case)
     assert req(g, "pdl1")["status"] == "satisfied"
-    assert req(g, "pdl1")["evidence"] == [{"doc_id": "Dhist0001", "fact": "pdl1", "value": "TPS 60%", "quote": "TPS 60%"}]
+    assert req(g, "pdl1")["evidence"] == [{"doc_id": "Dhist0001", "fact": "pdl1", "value": "TPS 60%", "quote": ""}]  # the clinician's name is the evidence, no model quote
     d = next(x for x in rules.case_docs(unit_case) if x["doc_id"] == "Dhist0001")
     assert d["facts"]["pdl1"]["verification"] == "confirmed" and d["facts"]["pdl1"]["confirmed_by"] == "Dr. Rao"
     assert "pdl1" not in store.get_doc(unit_case, "Dhist0001")["facts"]  # doc.json untouched: the overlay is read-time

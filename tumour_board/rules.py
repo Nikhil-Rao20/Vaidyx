@@ -127,6 +127,9 @@ def evaluate(case_id):
                 if d.get("identity") == "mismatch_or_missing":
                     r["problems"].append(f"Patient identifier not found in {c.get('title') or d['filename']}: check the document belongs to this patient")
                     r["status"] = "needs_review"
+                elif d.get("identity") == "id_differs":
+                    r["problems"].append(f"{c.get('title') or d['filename']} prints an identifier this Case File does not know: check the document belongs to this patient")
+                    r["status"] = "needs_review"
         # required fields
         allowed = set(req.get("fact_doc_types") or req.get("doc_types") or [])
         missing, pending, review = [], [], []
@@ -184,7 +187,7 @@ def evaluate(case_id):
                           "errors": len([d for d in docs if d.get("state") == "error"]),
                           "non_final": [d["doc_id"] for d in ready if not _is_final(d, overrides)],
                           "unconfirmed": [d["doc_id"] for d in ready if _needs_confirmation(d) and not _is_final(d, overrides)],
-                          "identity_flags": [d["doc_id"] for d in ready if d.get("identity") == "mismatch_or_missing"]}}
+                          "identity_flags": [d["doc_id"] for d in ready if d.get("identity") in ("mismatch_or_missing", "id_differs")]}}
     return gate
 
 

@@ -6,7 +6,7 @@ statements without a verified quote are dropped -> output guardrail -> "Not docu
 """
 import asyncio, re, time
 
-from . import grounding, guardrails, llm, negation, search, store
+from . import grounding, guardrails, llm, negation, rules, search, store
 
 ANSWER_SCHEMA = {"type": "object", "additionalProperties": False, "properties": {
     "answer_found": {"type": "boolean"},
@@ -52,7 +52,7 @@ def polarity_flag(text, quotes):
 
 
 def verify_statements(case_id, statements):
-    docs = {d["doc_id"]: d for d in store.list_docs(case_id)}
+    docs = {d["doc_id"]: d for d in rules.case_docs(case_id)}  # citations carry the confirmed date and type (V1 item 2.2)
     out = []
     for st in statements or []:
         cites = []

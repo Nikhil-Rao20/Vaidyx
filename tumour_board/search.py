@@ -7,7 +7,7 @@ from collections import Counter
 
 import numpy as np
 
-from . import config, store
+from . import config, rules, store
 
 EMBED_MODEL = "snowflake/snowflake-arctic-embed-m-long"  # US (Snowflake), Apache-2.0, non-medical, fp32 ONNX on CPU
 _embedder = None
@@ -50,6 +50,12 @@ def _patterns(query):
     return pats
 
 
+def _docs(case_id):
+    """The documents with clinician confirmations overlaid (V1 item 2.2): page text is unchanged, but the document type and
+    dates shown with every hit and passage are the confirmed ones."""
+    return rules.case_docs(case_id)
+
+
 def find_values(case_id, query, limit=60):
     """Line-level scan of every page of every document. Milliseconds for a Case File of hundreds of pages."""
     pats = _patterns(query)
@@ -57,7 +63,7 @@ def find_values(case_id, query, limit=60):
         return {"patterns": [], "hits": []}
     rx = re.compile("|".join(f"(?:{p})" for p in pats), re.I)
     hits = []
-    for d in store.list_docs(case_id):
+    for d in _docs(case_id):
         if d.get("state") != "ready":
             continue
         c = d.get("classification") or {}
@@ -108,7 +114,7 @@ def _embed(texts, prefix=""):
 
 class CaseIndex:
     def __init__(self, case_id):
-        docs = [d for d in store.list_docs(case_id) if d.get("state") == "ready"]
+        docs = [d for d in _docs(case_id) if d.get("state") == "ready"]
         self.meta = {d["doc_id"]: d for d in docs}
         self.chunks = [ch for d in docs for ch in chunks_for(d)]
         for i, ch in enumerate(self.chunks):
@@ -165,7 +171,7 @@ class CaseIndex:
 
 
 def index(case_id):
-    sig = tuple(sorted((d["doc_id"], d.get("processed", "")) for d in store.list_docs(case_id) if d.get("state") == "ready"))
+    sig = tuple(sorted((d["doc_id"], d.get("processed", ""), tuple(d.get("confirmations") or ())) for d in _docs(case_id) if d.get("state") == "ready"))
     cur = _index_cache.get(case_id)
     if not cur or cur[0] != sig:
         _index_cache[case_id] = (sig, CaseIndex(case_id))
@@ -182,7 +188,7 @@ def context_for(case_id, question, budget=48000, doc_types=None):
     """Model context for a question. Whole Case File when it fits; otherwise whole documents in relevance order
     (most relevant passage score, recency as tie-break) until the budget is used, then the best remaining passages.
     Returns (context, mode)."""
-    docs = [d for d in store.list_docs(case_id) if d.get("state") == "ready" and (not doc_types or (d.get("classification") or {}).get("doc_type") in doc_types)]
+    docs = [d for d in _docs(case_id) if d.get("state") == "ready" and (not doc_types or (d.get("classification") or {}).get("doc_type") in doc_types)]
     full = {d["doc_id"]: "\n".join(p["text"] for p in d.get("pages") or []) for d in docs}
     total = sum(len(_doc_block(d, full[d["doc_id"]])) + 2 for d in docs)
     if total <= budget:

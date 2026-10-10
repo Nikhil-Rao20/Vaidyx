@@ -76,6 +76,7 @@ def run_flow(b, base, pw, out, size, sfx, errors):
         pg.click("#btn-side"); pg.wait_for_timeout(350)
     if pg.locator("#btn-queue").is_visible():
         pg.click("#btn-queue"); pg.wait_for_selector("#intake .card", timeout=20000); pg.wait_for_timeout(600); shot("intake_queue", full_page=True)
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(300)  # narrow screens: the side panel must be closed before the top bar is clickable
     if pg.locator("#btn-org").is_visible():
         pg.click("#btn-org"); pg.wait_for_selector("#o-depts tr", timeout=20000); pg.wait_for_timeout(500); shot("org_admin"); pg.keyboard.press("Escape")
     pg.close()

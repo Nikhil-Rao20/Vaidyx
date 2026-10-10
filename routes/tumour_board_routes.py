@@ -48,6 +48,12 @@ def _need(r, action, department=None):
         raise HTTPException(403, str(e))
 
 
+def _need_known(r):
+    """Model calls and re-checks are for users the hospital set-up knows (a department member, head, coordinator or admin)."""
+    if not (r.get("admin") or r.get("known")):
+        raise HTTPException(403, "Your account is not placed in any department yet. Ask a Tumour Board admin.")
+
+
 def _doc_department(d):
     return (d or {}).get("department")  # department id recorded at upload (department uploads, V1 item 2.3); None for coordinator uploads
 
@@ -57,10 +63,31 @@ def _case_permissions(r, c, st, docs):
     prot = protocol.get(c["protocol"]) if c.get("protocol") else {"mandatory": []}
     return {"upload": org.can(r, "upload_to_case"), "reprocess": org.can(r, "upload_to_case"), "delete_case": org.can(r, "delete_case"),
             "board_record": org.can(r, "board_record"), "review": org.can(r, "review"), "list_case": org.can(r, "list_case"),
-            "waive": {q["id"]: org.can(r, "waive", org.department_id(q.get("department", ""))) for q in prot.get("mandatory", [])},
+            "waive": {q["id"]: org.can(r, "waive", q.get("department") or None) for q in prot.get("mandatory", [])},
             "confirm": {d["doc_id"]: org.can(r, "confirm", _doc_department(d)) for d in docs},
             "delete_document": {d["doc_id"]: org.can(r, "delete_document", _doc_department(d)) for d in docs},
-            "update_action": {a["id"]: org.can(r, "update_action", org.department_id(a.get("department", ""))) for a in st.get("actions", [])}}
+            "unfile": {d["doc_id"]: bool(d.get("intake")) and org.can(r, "match") for d in docs},
+            "update_action": {a["id"]: org.can(r, "update_action", a.get("department") or None) for a in st.get("actions", [])},
+            "undo_confirmation": {x["id"]: _can_confirm(r, c, st, x["type"], x["key"]) for x in st.get("confirmations", []) if not x.get("undone")}}
+
+
+def _can_confirm(r, c, st, ctype, key):
+    """May this user record / undo a confirmation of this type on this key (same rule as the route, as a boolean)."""
+    spec = confirm.TYPES.get(ctype)
+    if not spec:
+        return False
+    if ctype == "waive":
+        dept = next((q.get("department") for q in protocol.get(c["protocol"]).get("mandatory", []) if q["id"] == key), "") if c.get("protocol") else ""
+        return org.can(r, "waive", dept or None)
+    if spec["target"] in ("document", "fact"):
+        doc_id = key.partition(":")[0] if spec["target"] == "fact" else key
+        d = store.get_doc(c["case_id"], doc_id) if doc_id else None
+        if ctype == "confirm_match":
+            return org.can(r, "match")
+        return org.can(r, spec["action"], _doc_department(d))
+    if ctype == "resolve_flag":
+        return org.can(r, "board_record")
+    return org.can(r, spec["action"])
 
 
 def _case(case_id):
@@ -138,7 +165,11 @@ def setup_tumour_board_routes():
         prot = b.get("protocol") or ""
         if prot and not protocol.exists(prot):
             raise HTTPException(400, f"Unknown protocol: {prot}")
+        if b.get("setting") and (not prot or b["setting"] not in {x["id"] for x in protocol.settings(prot)}):
+            raise HTTPException(400, f"Unknown NCG setting: {b['setting']}")
         level = b.get("hospital_level") or ((org.load().get("hospital") or {}).get("level") if prot else "")
+        if level and level not in org.LEVELS:
+            raise HTTPException(400, "Hospital level must be essential or optimal")
         try:
             c = store.create_case(store.safe_id(b["case_id"]), b.get("patient", {}), prot, b.get("board_date", ""), u, b.get("setting", ""), level or "")
         except FileExistsError:
@@ -204,7 +235,7 @@ def setup_tumour_board_routes():
         return {"job": job["id"], "total": job["total"]}
 
     # ---- intake: department uploads before patient matching (V1 item 2.3) ----------------------------------------------
-    def _intake(doc_id, rl):
+    def _intake(doc_id, rl, actionable=False):
         try:
             d = store.get_intake(doc_id)
         except ValueError:
@@ -213,6 +244,8 @@ def setup_tumour_board_routes():
             raise HTTPException(404, "document not found")
         if not (rl["admin"] or rl["coordinator"] or org.can(rl, "inbox", d.get("department"))):
             raise HTTPException(403, "This document was uploaded by another department")
+        if actionable and d.get("state") not in intake.ACTIONABLE:
+            raise HTTPException(409, f"This record is still being read ({d.get('state')}); try again in a moment")
         return d
 
     @r.post("/intake/documents")
@@ -263,7 +296,7 @@ def setup_tumour_board_routes():
     @r.post("/intake/{doc_id}/file-to-case")
     async def intake_file_to_case(doc_id: str, request: Request):
         """A person files the document into a Case File ({"case_id": ..., "reason": ...}); recorded as a confirm_match in that Case File."""
-        u = _user(request); rl = _roles(request); _need(rl, "match"); _intake(doc_id, rl); b = await request.json()
+        u = _user(request); rl = _roles(request); _need(rl, "match"); _intake(doc_id, rl, actionable=True); b = await request.json()
         case_id = store.safe_id(str(b.get("case_id", "")))
         if not store.get_case(case_id):
             raise HTTPException(404, "Case not found")
@@ -273,7 +306,7 @@ def setup_tumour_board_routes():
     @r.post("/intake/{doc_id}/new-case")
     async def intake_new_case(doc_id: str, request: Request):
         """Start a new Case File from the document's identity ({"case_id"?: ..., "patient"?: {...}}); it waits for listing (V1 item 2.5)."""
-        u = _user(request); rl = _roles(request); _need(rl, "create_case"); d = _intake(doc_id, rl)
+        u = _user(request); rl = _roles(request); _need(rl, "create_case"); d = _intake(doc_id, rl, actionable=True)
         b = await request.json() if (await request.body()) else {}
         cid = store.safe_id(str(b["case_id"])) if b.get("case_id") else None
         if cid and store.get_case(cid):
@@ -290,7 +323,7 @@ def setup_tumour_board_routes():
 
     @r.post("/intake/{doc_id}/not-this-patient")
     async def intake_not_this_patient(doc_id: str, request: Request):
-        u = _user(request); rl = _roles(request); _need(rl, "match"); _intake(doc_id, rl); b = await request.json()
+        u = _user(request); rl = _roles(request); _need(rl, "match"); _intake(doc_id, rl, actionable=True); b = await request.json()
         case_id = store.safe_id(str(b.get("case_id", "")))
         if not store.get_case(case_id):
             raise HTTPException(404, "Case not found")
@@ -302,7 +335,7 @@ def setup_tumour_board_routes():
 
     @r.delete("/intake/{doc_id}")
     async def intake_discard(doc_id: str, request: Request):
-        u = _user(request); rl = _roles(request); d = _intake(doc_id, rl)
+        u = _user(request); rl = _roles(request); d = _intake(doc_id, rl, actionable=True)
         _need(rl, "delete_document", d.get("department"))
         reason = request.query_params.get("reason", "")
         intake.discard(doc_id, u, reason)
@@ -310,7 +343,7 @@ def setup_tumour_board_routes():
 
     @r.post("/intake/{doc_id}/reprocess")
     async def intake_reprocess(doc_id: str, request: Request):
-        u = _user(request); rl = _roles(request); d = _intake(doc_id, rl); _need(rl, "upload", d.get("department"))
+        u = _user(request); rl = _roles(request); d = _intake(doc_id, rl, actionable=True); _need(rl, "upload", d.get("department"))
         job = service.reprocess_intake([doc_id], u)
         return {"job": job["id"], "total": job["total"]}
 
@@ -356,7 +389,7 @@ def setup_tumour_board_routes():
 
     @r.post("/cases/{case_id}/recheck")
     async def recheck(case_id: str, request: Request):
-        u = _user(request); _case(case_id)
+        u = _user(request); _need_known(_roles(request)); _case(case_id)
         async with store.lock(case_id):  # never interleave with an ingestion job writing the same state
             return service.recheck(case_id, u)
 
@@ -383,7 +416,9 @@ def setup_tumour_board_routes():
         action = confirm.TYPES[ctype]["action"]
         if ctype == "waive":
             dept = next((q.get("department") for q in protocol.get(c["protocol"]).get("mandatory", []) if q["id"] == key), "") if c.get("protocol") else ""
-            _need(rl, "waive", org.department_id(dept or ""))
+            _need(rl, "waive", dept or None)
+        elif ctype == "confirm_match":
+            _need(rl, "match")
         elif confirm.TYPES[ctype]["target"] in ("document", "fact"):
             doc_id = key.partition(":")[0] if confirm.TYPES[ctype]["target"] == "fact" else key
             _need(rl, action, _doc_department(store.get_doc(case_id, doc_id) if doc_id else None))
@@ -417,13 +452,35 @@ def setup_tumour_board_routes():
         if not rec:
             raise HTTPException(404, "confirmation not found")
         _confirmation_permission(_roles(request), case_id, c, rec["type"], rec["key"])
+        if rec.get("undone"):
+            raise HTTPException(409, "already undone")
         async with store.lock(case_id):
+            if rec["type"] == "confirm_match" and (rec.get("fields") or {}).get("case_id") and store.get_doc(case_id, rec["key"]):
+                # undoing a match (a person's or the matcher's) moves the document back to the Needs matching queue
+                out = service.unfile_document(case_id, rec["key"], u, "match undone")
+                return {"confirmation": next((x for x in store.get_state(case_id).get("confirmations", []) if x["id"] == conf_id), rec), "state": out["state"], "unfiled": True}
             try:
                 rec = confirm.undo(case_id, conf_id, u)
             except KeyError:
                 raise HTTPException(409, "already undone")
+            if rec["type"] == "confirm_match" and not (rec.get("fields") or {}).get("case_id"):
+                intake.clear_rejection(rec["key"], case_id)  # "not this patient" withdrawn: the Case File may be suggested again
             st = service.recheck(case_id, u) if c.get("protocol") else store.get_state(case_id)
         return {"confirmation": rec, "state": st}
+
+    @r.post("/cases/{case_id}/documents/{doc_id}/unfile")
+    async def unfile_doc(case_id: str, doc_id: str, request: Request):
+        """Reverse a patient match: the document goes back to the Needs matching queue; the Case File forgets what it learned from it."""
+        u = _user(request); _need(_roles(request), "match"); _case(case_id)
+        d = store.get_doc(case_id, doc_id)
+        if not d:
+            raise HTTPException(404, "document not found")
+        b = await request.json() if (await request.body()) else {}
+        async with store.lock(case_id):
+            try:
+                return service.unfile_document(case_id, doc_id, u, str(b.get("reason", "")))
+            except ValueError as e:
+                raise HTTPException(409, str(e))
 
     @r.post("/cases/{case_id}/overrides")
     async def overrides(case_id: str, request: Request):
@@ -447,7 +504,7 @@ def setup_tumour_board_routes():
         st = store.get_state(case_id)
         for a in st.get("actions", []):
             if a["id"] == action_id:
-                _need(_roles(request), "update_action", org.department_id(a.get("department", "")))
+                _need(_roles(request), "update_action", a.get("department") or None)
                 if b.get("status") in ("pending", "completed", "overdue"):
                     a["status"] = b["status"]
                 if b.get("note"):
@@ -471,12 +528,12 @@ def setup_tumour_board_routes():
 
     @r.post("/cases/{case_id}/ask")
     async def ask(case_id: str, request: Request):
-        _user(request); _case(case_id); b = await request.json()
+        _need_known(_roles(request)); _case(case_id); b = await request.json()
         return await qa.ask(case_id, b.get("question", ""), b.get("history"))
 
     @r.post("/cases/{case_id}/agents/{role}")
     async def agent(case_id: str, role: str, request: Request):
-        _user(request); _case(case_id)
+        _need_known(_roles(request)); _case(case_id)
         b = await request.json() if (await request.body()) else {}
 
         async def gen():
@@ -486,7 +543,7 @@ def setup_tumour_board_routes():
 
     @r.post("/cases/{case_id}/summary")
     async def make_summary(case_id: str, request: Request):
-        _user(request); _case(case_id)
+        _need_known(_roles(request)); _case(case_id)
         b = await request.json() if (await request.body()) else {}
         return await summary.build(case_id, force=bool(b.get("force")))
 

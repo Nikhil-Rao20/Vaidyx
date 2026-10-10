@@ -89,6 +89,14 @@ async def process_docs(case_id, doc_ids, job, from_stored=False):
     try:
         kw = {"from_stored": True} if from_stored else {}  # documents filed from intake keep their stored pages and classification
         await asyncio.gather(*[extract.process_document(case_id, d, case.get("protocol"), case.get("patient"), progress, **kw) for d in doc_ids])
+        case = store.get_case(case_id) or case  # the Case File may have been listed (or its patient record extended) meanwhile
+        stale = [d["doc_id"] for d in store.list_docs(case_id) if d.get("state") == "ready" and d.get("pages") and "extracted_under" in d
+                 and d["extracted_under"] != (case.get("protocol") or "")]
+        if stale:  # extracted under a protocol that changed while they were in flight: once more from the stored pages
+            await asyncio.gather(*[extract.process_document(case_id, d, case.get("protocol"), case.get("patient"), progress, from_stored=True) for d in stale])
+        for d in store.list_docs(case_id):  # identifiers learned from other records may settle a document that printed only a CR No.
+            if d.get("state") == "ready" and d.get("identity") in ("id_differs", "name_match"):
+                extract.refresh_identity(case_id, d["doc_id"], (store.get_case(case_id) or case).get("patient"))
         async with store.lock(case_id):
             gate = rules.evaluate(case_id)  # None while the Case File is not listed (V1 item 2.5)
             rules.sync_actions(case_id, gate)
@@ -251,6 +259,13 @@ def list_case(case_id, protocol_id, setting="", board_date="", hospital_level=""
     return job
 
 
+def unfile_document(case_id, doc_id, user="", reason=""):
+    """Move a document that came from the intake area back to the Needs matching queue (reverses an auto-link or a person's filing)."""
+    moved = intake.unfile(case_id, doc_id, user, reason)
+    st = recheck(case_id, user)
+    return {"document": moved, "state": st}
+
+
 def reprocess_intake(doc_ids, user=""):
     """Read, classify, identify and match intake documents again (after an error, or when new Case Files arrived)."""
     ids = [d for d in doc_ids if store.get_intake(d)]
@@ -333,6 +348,7 @@ def resume_after_restart():
 
 def delete_document(case_id, doc_id, user=""):
     d = store.get_doc(case_id, doc_id)
+    intake.unlearn_ids(case_id, doc_id, user)  # identifiers learned from this record go with it
     store.delete_document(case_id, doc_id)
     store.audit(case_id, {"kind": "document_deleted", "doc_id": doc_id, "file": (d or {}).get("rel_path"), "by": user})
     return recheck(case_id, user)

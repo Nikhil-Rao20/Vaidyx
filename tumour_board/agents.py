@@ -40,6 +40,8 @@ ROLES = {
                          "doc_types": ["pet_ct", "bone_scan"]},
 }
 
+NOT_LISTED = "This Case File is not listed yet: list it before preparing a brief"
+
 TOOLS_DOC = """Tools (all read-only):
 - list_documents: no input. Lists every document with id, title, type, date, status (and clinician attestations).
 - read_document: input = a document id. Returns the full text of that document.
@@ -91,7 +93,7 @@ def _attestation(overrides, doc_id):
 
 def _doc_list(case_id):
     rows, ov = [], _overrides(case_id)
-    for d in store.list_docs(case_id):
+    for d in rules.case_docs(case_id):  # confirmed document type and dates win (V1 item 2.2)
         c = d.get("classification") or {}
         att = _attestation(ov, d["doc_id"])
         status = c.get("status")
@@ -104,20 +106,24 @@ def _doc_list(case_id):
 
 def _facts_text(case_id):
     ov = _overrides(case_id)
-    facts = rules.resolve_facts(store.list_docs(case_id), ov)
+    facts = rules.resolve_facts(rules.case_docs(case_id), ov)
     cat = protocol.facts()
     lines = []
     for fid, f in facts.items():
         for h in f["history"]:
-            if h["verification"] == "verified":
+            if h["verification"] in rules.VERIFIED:
                 att = _attestation(ov, h["doc_id"])
-                lines.append(f"{cat.get(fid, {}).get('label', fid)}: {h['value']}  [{h['doc_id']} {h['doc_title']} {h['date'] or ''} {h['doc_status']}"
-                             + (f", {att}" if att else "") + "]")
+                # a value a clinician confirmed carries no quote of its own: say who confirmed it (V1 item 2.2)
+                conf = h.get("confirmed_by") or ("clinician" if h["verification"] == "confirmed" else "")
+                lines.append(f"{cat.get(fid, {}).get('label', fid)}: {h['value']}" + (f" (confirmed by {conf}, no quote)" if conf else "")
+                             + f"  [{h['doc_id']} {h['doc_title']} {h['date'] or ''} {h['doc_status']}" + (f", {att}" if att else "") + "]")
     return "\n".join(lines) or "(none)"
 
 
 def _gaps_text(case_id):
-    g = store.get_state(case_id).get("gate") or rules.evaluate(case_id)
+    g = (store.get_state(case_id).get("gate") or rules.evaluate(case_id)) if store.get_case(case_id).get("protocol") else None
+    if g is None:
+        return "(not listed: no Pre-Authorization check yet)"
     return "\n".join(f"- {r['label']} ({r['department']}): {r['status']}. {'; '.join(r['problems'])}" for r in g["requirements"] if r["status"] != "satisfied") or "(no gaps)"
 
 
@@ -149,6 +155,9 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
     au = store.auditor(case_id)
     t0 = time.time()
     case = store.get_case(case_id)
+    if not case.get("protocol"):  # an unlisted Case File (V1 item 2.5): no brief, no model call
+        au({"kind": "agent_not_listed", "role": role})
+        yield {"type": "error", "message": NOT_LISTED}; return
     r = ROLES[role]
     au({"kind": "agent_start", "role": role, "focus": focus_question})
     yield {"type": "start", "role": role, "label": r["label"]}
@@ -156,7 +165,7 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
         g = await guardrails.check_input(focus_question, au)
         if not g["allowed"]:
             yield {"type": "error", "message": g["message"], "category": g["category"]}; return
-    relevant = sorted([d for d in store.list_docs(case_id) if d.get("state") == "ready" and (d.get("classification") or {}).get("doc_type") in r["doc_types"]],
+    relevant = sorted([d for d in rules.case_docs(case_id) if d.get("state") == "ready" and (d.get("classification") or {}).get("doc_type") in r["doc_types"]],
                       key=lambda d: (d.get("classification") or {}).get("report_date_iso") or "", reverse=True)
     scratch = [f"Patient: {case['patient'].get('name')} ({case['patient'].get('mrn')}). Protocol: {case['protocol']}.",
                "DOCUMENTS:\n" + _doc_list(case_id),

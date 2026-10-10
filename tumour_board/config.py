@@ -54,3 +54,6 @@ def concurrency() -> dict:
         "other": int(os.getenv("TB_LLM_CONCURRENCY", str(LLM_CONCURRENCY))),
     }
 OCR_MAX_SIDE = int(os.getenv("TB_OCR_MAX_SIDE", "1800"))
+# Case Files holding real patient data that automatic matching must never link into or write to (V1 item 2.4): the intake matcher
+# skips them and no identifier is ever learned into them. Comma-separated ids; the default is the real case on this server.
+PROTECTED_CASES = {c.strip() for c in os.getenv("TB_PROTECTED_CASES", "TB-2026-bharath").split(",") if c.strip()}

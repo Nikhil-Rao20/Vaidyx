@@ -65,6 +65,9 @@ async function openCase(id, keepTab) {
   $("#c-actions").innerHTML = can("list_case") ? `<button class="${c.listing?.status === "awaiting_listing" ? "primary" : "ghost"} sm" id="btn-list">${c.listing?.status === "awaiting_listing" ? "List for the board" : "Change listing"}</button>` : "";
   if ($("#btn-list")) $("#btn-list").onclick = listCase;
   renderReadiness();
+  const unlisted = c.listing?.status === "awaiting_listing";
+  $$("#tabs button").forEach((b) => b.classList.toggle("hidden", unlisted && ["roles", "summary", "board"].includes(b.dataset.tab)));
+  if (unlisted && ["roles", "summary", "board"].includes(S.tab)) S.tab = "ready";
   if (!keepTab) S.tab = S.tab || "ready";
   showTab(S.tab);
   loadCases();
@@ -172,6 +175,7 @@ function renderReady() {
 // ------------------------------------------------------------------ clinician confirmations (one reusable dialog) · V1 item 2.2
 const CONF_LABEL = { attest_final: "Attested final, signed", waive: "Requirement waived", confirm_dates: "Dates confirmed", confirm_doc_type: "Document type confirmed",
   confirm_match: "Patient match confirmed", dismiss_failed: "Failed document dismissed", confirm_value: "Value confirmed", resolve_flag: "Flag resolved" };
+const confLabel = (c) => c.type === "confirm_match" ? (c.fields?.case_id ? (c.by === "system:matching" ? "Filed by the matcher (exact identifier)" : "Patient match confirmed") : "Not this patient") : CONF_LABEL[c.type] || c.type;
 function confirmDialog({ title, intro, fields = [], submit = "Record" }) {
   // Returns a promise of {field: value} or null. Every field: {id, label, type: text|textarea|select|date, options: [[value, label]], required, value, placeholder}
   return new Promise((resolve) => {
@@ -202,12 +206,12 @@ function confirmationsHTML() {
     : c.type === "waive" ? esc(S.data.state.gate?.requirements?.find((r) => r.id === c.key)?.label || c.key) : esc(S.data.documents.find((d) => d.doc_id === c.key)?.classification?.title || c.key);
   return `<div class="card"><h3>Clinician confirmations <span class="muted small">${list.length}</span></h3>
     <div class="muted small" style="margin-bottom:6px">Human decisions recorded against the Case File. They are applied after the model, so they win and survive a re-process.</div>
-    ${list.map((c) => `<div class="conf"><span class="chip c-ok">${esc(CONF_LABEL[c.type] || c.type)}</span> ${what(c)}${c.reason ? ` <span class="muted">(${esc(c.reason)})</span>` : ""}
-      <span class="small muted">by ${esc(c.by)} ${esc((c.at || "").slice(0, 16).replace("T", " "))}</span> <button class="ghost sm" data-undo="${esc(c.id)}">Undo</button></div>`).join("")}</div>`;
+    ${list.map((c) => `<div class="conf"><span class="chip ${c.type === "confirm_match" && !c.fields?.case_id ? "c-mute" : "c-ok"}">${esc(confLabel(c))}</span> ${what(c)}${c.reason ? ` <span class="muted">(${esc(c.reason)})</span>` : ""}
+      <span class="small muted">by ${esc(c.by)} ${esc((c.at || "").slice(0, 16).replace("T", " "))}</span> ${can("undo_confirmation", c.id) ? `<button class="ghost sm" data-undo="${esc(c.id)}" title="${c.type === "confirm_match" && c.fields?.case_id ? "The document goes back to the Needs matching queue" : "Undo this confirmation"}">${c.type === "confirm_match" && c.fields?.case_id ? "Undo: back to matching" : "Undo"}</button>` : ""}</div>`).join("")}</div>`;
 }
 function bindConfirmations(root) {
   $$("[data-undo]", root).forEach((b) => (b.onclick = async () => { if (!confirm("Undo this confirmation? Both the confirmation and the undo stay in the audit log.")) return;
-    try { await api(`/cases/${S.caseId}/confirmations/${b.dataset.undo}/undo`, { method: "POST" }); await openCase(S.caseId, true); toast("Confirmation undone"); } catch (e) { toast(e.message, 7000); } }));
+    try { const r = await api(`/cases/${S.caseId}/confirmations/${b.dataset.undo}/undo`, { method: "POST" }); await openCase(S.caseId, true); toast(r.unfiled ? "Match undone: the document is back in the Needs matching queue" : "Confirmation undone"); refreshQueueCount(); } catch (e) { toast(e.message, 7000); } }));
 }
 
 async function attestDoc(docId) {
@@ -319,21 +323,23 @@ function renderDocs() {
     const att = (S.data.state.overrides?.documents || {})[d.doc_id];
     const st = d.state !== "ready" ? `<span class="chip ${d.state === "error" ? "c-bad" : "c-info"}" title="${esc(d.error || "")}">${esc(d.state)}</span>` : statusChip(c) + (att?.attested_final ? ` <span class="chip c-ok" title="${esc(att.reason || "")}">attested final by ${esc(att.by)}</span>` : "");
     const unst = d.state === "ready" && c.status === "UNSTATED" && c.signed !== "no" && !att?.attested_final;
-    return `<tr class="click" data-doc="${esc(d.doc_id)}"><td><b>${esc(c.title || d.filename)}</b><div class="small muted">${esc(d.rel_path)}${d.department ? ` · uploaded by ${esc(deptName(d.department))}${d.uploaded_by ? " (" + esc(d.uploaded_by) + ")" : ""}` : ""}${d.identity === "mismatch_or_missing" ? ' · <span style="color:#b23a2f">patient ID not found</span>' : d.identity === "name_match" ? ' · <span style="color:#8a5300">matched by name only</span>' : ""}</div></td>
+    return `<tr class="click" data-doc="${esc(d.doc_id)}"><td><b>${esc(c.title || d.filename)}</b><div class="small muted">${esc(d.rel_path)}${d.department ? ` · uploaded by ${esc(deptName(d.department))}${d.uploaded_by ? " (" + esc(d.uploaded_by) + ")" : ""}` : ""}${d.identity === "mismatch_or_missing" ? ' · <span style="color:#b23a2f">patient ID not found</span>' : d.identity === "id_differs" ? ' · <span style="color:#b23a2f">prints an identifier this Case File does not know</span>' : d.identity === "name_match" ? ' · <span style="color:#8a5300">matched by name only</span>' : ""}</div></td>
       <td>${esc(DT[c.doc_type] || c.doc_type || "")}</td><td>${fmtDate(c.report_date_iso)}</td><td>${st}</td>
       <td class="small">${(d.methods || []).map((m) => (m === "vision-transcription" ? "Vision reader (scan)" : m === "text-layer" ? "PDF text layer" : m)).join(", ")}</td>
       <td>${nf.filter((f) => f.verification === "verified").length} verified${nf.filter((f) => f.verification !== "verified").length ? ` · <span class="chip c-rev">${nf.filter((f) => f.verification !== "verified").length} not verified</span>` : ""}
-      <div style="margin-top:4px;display:flex;gap:4px">${unst && can("confirm", d.doc_id) ? `<button class="ghost sm" data-attest-doc="${esc(d.doc_id)}">Attest final</button>` : ""}${can("delete_document", d.doc_id) ? `<button class="ghost sm" data-del-doc="${esc(d.doc_id)}" title="Remove this document from the Case File (audited)">Remove</button>` : ""}</div></td></tr>`; }).join("")}
+      <div style="margin-top:4px;display:flex;gap:4px">${unst && can("confirm", d.doc_id) ? `<button class="ghost sm" data-attest-doc="${esc(d.doc_id)}">Attest final</button>` : ""}${can("unfile", d.doc_id) ? `<button class="ghost sm" data-unfile-doc="${esc(d.doc_id)}" title="Not this patient: move the record back to the Needs matching queue (audited, the Case File forgets what it learned from it)">Back to matching</button>` : ""}${can("delete_document", d.doc_id) ? `<button class="ghost sm" data-del-doc="${esc(d.doc_id)}" title="Remove this document from the Case File (audited)">Remove</button>` : ""}</div></td></tr>`; }).join("")}
   </tbody></table></div>
   <div class="card"><h3>Primary fields across the Case File</h3><div class="muted small" style="margin-bottom:8px">Current value = most recent verified value from a final, signed document. Every value links to its source quote.</div>
   <table class="t"><thead><tr><th>Field</th><th>Current value</th><th>Source</th><th>History</th></tr></thead><tbody>
   ${Object.entries(S.data.facts).map(([k, f]) => { const c = f.current;
     return `<tr><td>${esc(f.label)}</td><td><b>${esc(c.value)}</b> ${c.state === "pending" ? '<span class="chip c-warn">pending</span>' : ""}${c.verification !== "verified" ? '<span class="chip c-rev">' + esc(c.verification) + "</span>" : ""}${!c.doc_final ? '<span class="chip c-bad">non-final doc</span>' : ""}</td>
-      <td>${citeHTML({ ...c.location, doc_id: c.doc_id, doc_title: c.doc_title, date: c.date, quote: c.quote })}</td>
+      <td>${c.verification === "confirmed" ? `<span class="chip c-ok" title="Read by the clinician in the source document; no model quote">confirmed by ${esc(c.confirmed_by || "clinician")}</span> <span class="cite" data-doc="${esc(c.doc_id)}">${esc(c.doc_title || c.doc_id)}</span>` : citeHTML({ ...c.location, doc_id: c.doc_id, doc_title: c.doc_title, date: c.date, quote: c.quote })}</td>
       <td class="small muted">${f.history.length > 1 ? f.history.map((h) => `${esc(h.value)} (${fmtDate(h.date)})`).join(" → ") : ""}</td></tr>`; }).join("")}
   </tbody></table></div>`;
   $$("tr[data-doc]").forEach((tr) => (tr.onclick = (e) => { if (!e.target.closest("button")) openDoc(tr.dataset.doc); }));
   $$("[data-attest-doc]").forEach((b) => (b.onclick = () => attestDoc(b.dataset.attestDoc)));
+  $$("[data-unfile-doc]").forEach((b) => (b.onclick = async () => { const v = await confirmDialog({ title: "Move this record back to matching", intro: "The document leaves this Case File and returns to the Needs matching queue; this Case File will not be suggested for it again, and identifiers learned from it are forgotten. Recorded in both audit logs.", fields: [{ id: "reason", label: "Reason", type: "text", required: true }], submit: "Move back" });
+    if (!v) return; try { await api(`/cases/${S.caseId}/documents/${b.dataset.unfileDoc}/unfile`, { json: { reason: v.reason } }); await openCase(S.caseId, true); refreshQueueCount(); toast("Record moved back to the Needs matching queue"); } catch (e) { toast(e.message, 7000); } }));
   $$("[data-del-doc]").forEach((b) => (b.onclick = async () => { if (!confirm("Remove this document from the Case File? The removal is recorded in the audit log.")) return;
     await api(`/cases/${S.caseId}/documents/${b.dataset.delDoc}`, { method: "DELETE" }); await openCase(S.caseId, true); toast("Document removed; Pre-Authorization re-checked"); }));
 }
@@ -364,7 +370,7 @@ async function openDoc(docId, focus, base) {
     <div><a class="ghost" href="/api/tb${base}/file" target="_blank">Open original</a> <button class="ghost" data-close>Close</button></div></div>
     <div class="kv" style="margin:12px 0"><div>Status line</div><div>${esc(c.status_quote || "not found")}</div><div>Signature</div><div>${esc(c.signature_quote || c.signer || "not found")}</div>
     ${d.department ? `<div>Uploaded by</div><div>${esc(deptName(d.department))}${d.uploaded_by ? " (" + esc(d.uploaded_by) + ")" : ""} · ${esc((d.added || "").slice(0, 16).replace("T", " "))}</div>` : ""}${idHTML}
-    ${d.intake ? "" : `<div>Patient ID check</div><div>${d.identity === "match" ? "UHID / MRN matches the Case File patient" : d.identity === "name_match" ? "Patient name matches (identifier not found in the document)" : "Not found in document: verify it belongs to this patient"}</div>`}
+    ${d.intake ? "" : `<div>Patient ID check</div><div>${d.identity === "match" ? "An identifier on the document matches the Case File patient" : d.identity === "name_match" ? "Patient name matches (no identifier agrees)" : d.identity === "id_differs" ? "The document prints an identifier this Case File does not know: verify it belongs to this patient" : "Not found in document: verify it belongs to this patient"}</div>`}
     <div>Read by</div><div>${esc([...new Set(pages.map((p) => p.method))].join(", "))}${pages.some((p) => p.ocr_reads) ? " (two independent reads per scanned page; numbers compared)" : ""}</div></div>
     <div class="docview"><div>${preview}</div><div>
       ${pages.length > 1 ? `<div style="margin-bottom:6px">${pages.map((p, i) => `<button class="ghost sm" data-pg="${i}">Page ${i + 1}</button>`).join(" ")}</div>` : ""}
@@ -670,7 +676,7 @@ function identityText(idr) {
   if (!idr) return "";
   const ids = (idr.ids || []).map((i) => `${{ uhid: "UHID", mrn: "MRN", cr_no: "CR No.", ip_no: "IP No.", op_no: "OP No.", reg_no: "Reg. No.", hospital_no: "Hospital No.", abha: "ABHA", pmjay: "PM-JAY ID" }[i.kind] || i.kind} ${i.value}`);
   return [idr.name?.value || "name not read", idr.age != null || idr.sex ? `${idr.age ?? "?"} Y / ${idr.sex || "?"}` : "", idr.dob ? "DOB " + fmtDate(idr.dob) : "", idr.relation?.name ? `${idr.relation.kind || ""} ${idr.relation.name}`.trim() : "",
-    ...ids, idr.aadhaar_seen ? "Aadhaar seen, masked" : ""].filter(Boolean).join(" · ");
+    ...ids, idr.aadhaar_seen ? "Aadhaar seen, masked" : "", (idr.model_read || []).length ? `(${idr.model_read.join(" and ")} read by the Qwen3.5-4B reader, Chinese, non-medical; quote checked)` : ""].filter(Boolean).join(" · ");
 }
 const DECISION = { auto_link: ["c-ok", "Filed automatically"], suggest: ["c-warn", "Suggested match: confirm"], needs_matching: ["c-warn", "Needs matching"],
   new_case: ["c-info", "New Case File"], id_conflict: ["c-bad", "Possible wrong ID"] };
@@ -725,7 +731,7 @@ async function showIntake() {
   const caseOpts = (sel) => q.cases.map((c) => `<option value="${esc(c.case_id)}" ${c.case_id === sel ? "selected" : ""}>${esc(caseLabel(c.case_id))}</option>`).join("");
   const docs = q.documents.filter((d) => d.state !== "filed");
   const row = (d) => { const m = d.match || {}, c = d.classification || {}, dec = DECISION[m.decision] || ["c-mute", d.state];
-    const cands = (m.candidates || []).map((x) => `<div class="small"><span class="cite" data-open-case="${esc(x.case_id)}">${esc(caseLabel(x.case_id))}</span> <span class="muted">${esc(x.why || "")}</span>${q.can_match ? ` <button class="ghost sm" data-file="${esc(d.doc_id)}" data-case="${esc(x.case_id)}">File here</button> <button class="ghost sm" data-notthis="${esc(d.doc_id)}" data-case="${esc(x.case_id)}">Not this patient</button>` : ""}</div>`).join("");
+    const cands = (m.candidates || []).map((x) => `<div class="small"><span class="cite" data-open-case="${esc(x.case_id)}">${esc(caseLabel(x.case_id))}</span> <span class="muted">${esc(x.why || "")}</span>${q.can_match && ["needs_matching", "duplicate", "error"].includes(d.state) ? ` <button class="ghost sm" data-file="${esc(d.doc_id)}" data-case="${esc(x.case_id)}">File here</button> <button class="ghost sm" data-notthis="${esc(d.doc_id)}" data-case="${esc(x.case_id)}">Not this patient</button>` : ""}</div>`).join("");
     const act = q.can_match && ["needs_matching", "duplicate", "error"].includes(d.state) ? `<div class="iact"><select data-sel="${esc(d.doc_id)}">${caseOpts(m.case_id || (m.candidates || [])[0]?.case_id)}</select><button class="primary sm" data-file="${esc(d.doc_id)}">File into Case File</button>${q.can_create ? `<button class="ghost sm" data-newcase="${esc(d.doc_id)}">New Case File</button>` : ""}<button class="ghost sm" data-discard="${esc(d.doc_id)}">Discard</button>${d.state === "error" ? `<button class="ghost sm" data-retry="${esc(d.doc_id)}">Read again</button>` : ""}</div>` : "";
     return `<tr><td><b class="click" data-intake="${esc(d.doc_id)}">${esc(c.title || d.filename)}</b><div class="small muted">${esc(d.rel_path)} · ${esc(DT[c.doc_type] || c.doc_type || "")}${c.report_date_iso ? " · " + fmtDate(c.report_date_iso) : ""} ${d.state === "ready" || c.status ? statusChip(c) : ""}</div></td>
       <td class="small">${esc(deptName(d.department))}<div class="muted">${esc(d.uploaded_by || "")} · ${esc((d.added || "").slice(0, 16).replace("T", " "))}</div></td>
@@ -746,7 +752,7 @@ async function showIntake() {
     if (!v) return; try { await api(`/intake/${b.dataset.notthis}/not-this-patient`, { json: { case_id: b.dataset.case, reason: v.reason } }); await showIntake(); } catch (e) { toast(e.message, 7000); } }));
   $$("[data-newcase]").forEach((b) => (b.onclick = async () => { const d = q.documents.find((x) => x.doc_id === b.dataset.newcase), idr = d?.identity_read || {};
     const v = await confirmDialog({ title: "Start a new Case File from this record", intro: "A new Case File is created with the identity printed on the record. It waits for the coordinator to list it (cancer, NCG setting, board date) before the Pre-Authorization check runs.",
-      fields: [{ id: "case_id", label: "Case File ID", type: "text", placeholder: "leave empty for the next number" }, { id: "name", label: "Patient name", type: "text", value: idr.name?.value || "", required: true }, { id: "mrn", label: "UHID / MRN", type: "text", value: (idr.ids || []).find((i) => ["uhid", "mrn", "hospital_no", "reg_no", "cr_no"].includes(i.kind))?.value || "" }, { id: "agesex", label: "Age / Sex", type: "text", value: idr.age != null && idr.sex ? `${idr.age} Y / ${idr.sex}` : "" }], submit: "Create and file" });
+      fields: [{ id: "case_id", label: "Case File ID", type: "text", placeholder: "leave empty for the next number" }, { id: "name", label: "Patient name", type: "text", value: idr.name?.value || "", required: true }, { id: "mrn", label: "UHID / MRN", type: "text", value: (idr.ids || []).find((i) => ["uhid", "mrn", "hospital_no"].includes(i.kind))?.value || "" }, { id: "agesex", label: "Age / Sex", type: "text", value: idr.age != null && idr.sex ? `${idr.age} Y / ${idr.sex}` : "" }], submit: "Create and file" });
     if (!v) return; try { const r = await api(`/intake/${b.dataset.newcase}/new-case`, { json: { case_id: v.case_id, patient: { name: v.name, mrn: v.mrn, agesex: v.agesex, ids: idr.ids?.map((i) => ({ kind: i.kind, value: i.value })) || [], abha: idr.abha || null, dob: idr.dob || null, sex: idr.sex || null, age: idr.age ?? null } } }); await after(r.job, r.case_id); } catch (e) { toast(e.message, 7000); } }));
   $$("[data-discard]").forEach((b) => (b.onclick = async () => { const v = await confirmDialog({ title: "Discard this record", intro: "The file is removed from the intake area. The removal is recorded in the intake log.", fields: [{ id: "reason", label: "Reason", type: "text", required: true }], submit: "Discard" });
     if (!v) return; try { await api(`/intake/${b.dataset.discard}?reason=${encodeURIComponent(v.reason)}`, { method: "DELETE" }); await showIntake(); refreshQueueCount(); } catch (e) { toast(e.message, 7000); } }));
@@ -787,7 +793,7 @@ $("#btn-queue").onclick = showIntake;
   btn.addEventListener("click", () => set(!document.body.classList.contains("side-open")));
   document.addEventListener("click", (e) => {
     if (!document.body.classList.contains("side-open")) return;
-    if (e.target.closest(".side .citem, .side [data-demo], .side #btn-new") || (!e.target.closest(".side") && !e.target.closest("#btn-side"))) set(false);
+    if (e.target.closest(".side .citem, .side [data-demo], .side #btn-new, .side #btn-queue") || (!e.target.closest(".side") && !e.target.closest("#btn-side"))) set(false);
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") set(false); });
   window.addEventListener("resize", () => { if (innerWidth > 860) set(false); });

@@ -1,5 +1,6 @@
 """qa.verify_statements: every statement needs a quote found in the cited document, and every number in it must be in that quote."""
-from tumour_board import qa
+from tumour_board import confirm, qa
+from tumour_board.tests.util import add, make_doc
 
 
 def _one(text, doc_id, quote):
@@ -36,3 +37,11 @@ def test_date_number_allowed_from_cited_document_date(demo_cases):
 def test_polarity_flag_on_statement(demo_cases):
     out = qa.verify_statements("TB-001", [_one("p40 result is recorded.", "D67977cf8", "p40 Negative")])
     assert out[0]["flags"] == ["check negation against the source"]
+
+
+def test_citations_carry_the_confirmed_date_and_type(unit_case):
+    """Review of 2.2 (M7): the citation shows the clinician-confirmed report date, and a number from that date is allowed."""
+    add(unit_case, make_doc("Dlab00000", "lab", date="2026-09-01", text="SYNTHETIC\nHAEMATOLOGY REPORT\nHaemoglobin 11.8 g/dL\nReport status: FINAL"))
+    confirm.record(unit_case, "confirm_dates", "Dlab00000", {"report_date": "2026-09-14"}, by="Dr. Rao")
+    out = qa.verify_statements(unit_case, [_one("On 2026-09-14 haemoglobin was 11.8 g/dL.", "Dlab00000", "Haemoglobin 11.8 g/dL")])
+    assert len(out) == 1 and out[0]["citations"][0]["date"] == "2026-09-14"

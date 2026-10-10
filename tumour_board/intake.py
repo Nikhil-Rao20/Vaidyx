@@ -10,9 +10,11 @@ in the Case File's own audit log; the document keeps its department, uploader an
 import asyncio, re, time
 from datetime import date
 
-from . import confirm, extract, grounding, identity, ingest, org, rules, store
+from . import config, confirm, extract, grounding, identity, ingest, org, rules, store
 
 MATCH_USER = "system:matching"
+MODEL_LABEL = "Qwen3.5-4B reader (Chinese, non-medical), quote checked"  # a value read by the model, not by the rules
+ACTIONABLE = ("needs_matching", "duplicate", "error")  # states in which a person may file, discard or re-read an intake record
 LEARN_KINDS = ("uhid", "mrn", "cr_no", "ip_no", "op_no", "hospital_no", "abha")  # identifiers a Case File learns from its matched records
 QUEUE_STATES = ("queued", "reading", "classifying", "identifying", "needs_matching", "duplicate", "error")
 
@@ -30,26 +32,29 @@ def read_identity(doc, known_ids=None):
     texts = [p.get("text", "") for p in pages]
     idr = identity.read_identity(texts, doc.get("filename", ""))
     c = doc.get("classification") or {}
+    idr["model_read"] = []
     if idr.get("name") is None and c.get("patient_name"):
         loc = grounding.locate(c["patient_name"], texts)
-        if loc:
-            idr["name"] = {"value": c["patient_name"], "quote": loc["matched"], "page": loc["page"], "label": "model (non-medical reader), quote checked"}
-            idr["notes"].append("patient name read by the reader model (the rules found none); quote checked")
+        if loc and loc["score"] >= 100:  # the located text itself, exact only: a fuzzy match could let a normalised spelling through
+            idr["name"] = {"value": loc["matched"].strip(), "quote": loc["matched"], "page": loc["page"], "label": MODEL_LABEL}
+            idr["model_read"].append("name")
+            idr["notes"].append("patient name read by the Qwen3.5-4B reader (Chinese, non-medical); the rules found none; quote checked")
     if not idr.get("ids") and c.get("patient_id"):
         loc = grounding.locate(c["patient_id"], texts)
         nv = identity.normalise_id(c["patient_id"])
         if loc and nv:
             known = {v for kind, v in (known_ids or set()) if kind in identity.HOSPITAL_ID_KINDS}
             if nv in known:
-                idr["ids"].append({"kind": "uhid", "value": c["patient_id"], "quote": loc["matched"], "page": loc["page"], "label": "model (non-medical reader), equals a known UHID / MRN"})
-            idr["notes"].append(f"identifier read by the reader model without a label: {c['patient_id']}" + ("" if nv in known else " (not used for matching: no label, matches no Case File)"))
+                idr["ids"].append({"kind": "uhid", "value": loc["matched"].strip(), "quote": loc["matched"], "page": loc["page"], "label": MODEL_LABEL + ", equals a known UHID / MRN"})
+                idr["model_read"].append("id")
+            idr["notes"].append(f"identifier read by the Qwen3.5-4B reader without a label: {c['patient_id']}" + ("" if nv in known else " (not used for matching: no label, matches no Case File)"))
     return idr
 
 
 def patients_for_matching(exclude=()):
     """Every Case File's registered patient, for the matcher."""
     return [{"case_id": c["case_id"], "patient": c.get("patient") or {}, "listed": (c.get("listing") or {}).get("status") != "awaiting_listing"}
-            for c in store.list_cases() if c["case_id"] not in exclude]
+            for c in store.list_cases() if c["case_id"] not in exclude and c["case_id"] not in config.PROTECTED_CASES]
 
 
 def known_ids(patients=None):
@@ -69,6 +74,8 @@ def decide(doc, patients=None):
     idr = doc.get("identity_read") or {}
     m = identity.match(idr, patients)
     rejected = set(doc.get("rejected_cases") or [])
+    if m["decision"] == "auto_link" and {"name", "id"} <= set(idr.get("model_read") or []):  # both the name and the identifier came from the model: a person confirms
+        m = {**m, "decision": "suggest", "reason": m["reason"] + ". Both the name and the identifier were read by the reader model, not by the rules: suggested, a person confirms"}
     if m["decision"] in ("auto_link", "suggest") and m["case_id"] in rejected:
         m = {**m, "decision": "needs_matching", "case_id": None,
              "reason": f"{m['reason']}. A person already recorded that this record is not {m['case_id']}: a person must decide"}
@@ -84,7 +91,7 @@ def learn_ids(case_id, idr, by, doc_id=None):
     UHID / MRN / CR No. / IP / OP No. / ABHA are added to case.patient.ids when new, audited, so a later record carrying only the
     CR No. still auto-links. Never Aadhaar, never from a name-only match."""
     case = store.get_case(case_id)
-    if not case:
+    if not case or case_id in config.PROTECTED_CASES:
         return []
     pat = case.setdefault("patient", {})
     have = identity.patient_record(pat)["ids"]
@@ -102,9 +109,66 @@ def learn_ids(case_id, idr, by, doc_id=None):
         pat["mrn"] = next((x["value"] for x in new if x["kind"] in ("uhid", "mrn", "hospital_no")), pat.get("mrn", ""))
     if not pat.get("agesex") and idr.get("age") is not None and idr.get("sex"):
         pat["agesex"] = f"{idr['age']} Y / {idr['sex']}"
-    store._write_json(store.case_dir(case_id) / "case.json", case)
+    store.save_case(case)
     store.audit(case_id, {"kind": "patient_ids_learned", "ids": new, "doc_id": doc_id, "by": by})
     return new
+
+
+def unlearn_ids(case_id, doc_id, by):
+    """Forget the identifiers a Case File learned from one record (when the record is unfiled or removed), audited."""
+    case = store.get_case(case_id)
+    if not case:
+        return []
+    ids = (case.get("patient") or {}).get("ids") or []
+    gone = [x for x in ids if x.get("from_doc") == doc_id]
+    if not gone:
+        return []
+    case["patient"]["ids"] = [x for x in ids if x.get("from_doc") != doc_id]
+    store.save_case(case)
+    store.audit(case_id, {"kind": "patient_ids_unlearned", "ids": gone, "doc_id": doc_id, "by": by})
+    return gone
+
+
+def _alive(doc_id):
+    """False once a person has filed or discarded the record while it was being read: nothing more may be written for it."""
+    return (store.intake_doc_dir(doc_id) / "doc.json").exists()
+
+
+def unfile(case_id, doc_id, by, reason=""):
+    """Reverse a link: move a document that came from the intake area back to the Needs matching queue. The Case File forgets the
+    identifiers learned from it, is marked "not this patient" for the record, and its open confirm_match is undone. Audited both sides."""
+    doc = store.get_doc(case_id, doc_id)
+    if not doc:
+        raise KeyError(doc_id)
+    if not doc.get("intake"):
+        raise ValueError("This document was uploaded straight into the Case File; remove it instead")
+    unlearn_ids(case_id, doc_id, by)
+    for c in confirm.active(case_id, "confirm_match", doc_id):
+        confirm.undo(case_id, c["id"], by)
+    moved = store.move_case_doc_to_intake(case_id, doc_id)
+    moved.pop("facts", None); moved.pop("identity", None); moved.pop("processed", None); moved.pop("extracted_under", None)
+    prev = moved.pop("filed", None)
+    moved["unfiled"] = {"case_id": case_id, "by": by, "at": store.now_iso(), "reason": reason, "was": prev}
+    moved.setdefault("rejected_cases", [])
+    if case_id not in moved["rejected_cases"]:
+        moved["rejected_cases"].append(case_id)
+    moved["match"] = {"decision": "needs_matching", "case_id": None, "candidates": [c for c in (moved.get("match") or {}).get("candidates", []) if c.get("case_id") != case_id],
+                      "reason": f"Moved back from {case_id} by {by}" + (f": {reason}" if reason else "") + ". A person decides where it belongs", "matched_on": None}
+    moved["state"] = "needs_matching"
+    store.save_intake(moved)
+    store.audit(case_id, {"kind": "document_unfiled", "doc_id": doc_id, "file": moved.get("rel_path"), "by": by, "reason": reason})
+    store.audit_intake({"kind": "unfiled", "doc_id": doc_id, "case_id": case_id, "by": by, "reason": reason})
+    return moved
+
+
+def clear_rejection(doc_id, case_id):
+    """Undo of a "not this patient": the Case File may be suggested again for the record (if it is still in the queue)."""
+    doc = store.get_intake(doc_id)
+    if not doc:
+        return None
+    doc["rejected_cases"] = [c for c in doc.get("rejected_cases") or [] if c != case_id]
+    store.save_intake(doc)
+    return doc
 
 
 _TITLE_RX = re.compile(r"^(?:(?:" + "|".join(identity.TITLES) + r")\.?\s+)+", re.I)
@@ -146,6 +210,8 @@ async def process(doc_id, progress=None):
     try:
         doc["state"] = "reading"; doc.pop("error", None); store.save_intake(doc); progress and progress(doc_id, "reading")
         pages = extract.mask_pages(await ingest.extract_pages(path, audit=au))  # Aadhaar masked before anything is stored or prompted
+        if not _alive(doc_id):
+            return doc
         doc["pages"] = pages
         texts = [p["text"] for p in pages]
         full = _doc_text(pages)
@@ -153,6 +219,8 @@ async def process(doc_id, progress=None):
             doc.update(state="error", error="no readable text"); store.save_intake(doc); progress and progress(doc_id, "error"); return doc
         doc["state"] = "classifying"; store.save_intake(doc); progress and progress(doc_id, "classifying")
         c = await extract.classify(full, au)
+        if not _alive(doc_id):
+            return doc
         doc["classification"] = extract.finish_classification(c, full, texts, doc["filename"])
         doc["state"] = "identifying"; store.save_intake(doc); progress and progress(doc_id, "identifying")
         patients = patients_for_matching()
@@ -169,7 +237,9 @@ async def process(doc_id, progress=None):
             progress and progress(doc_id, "needs_matching")
         return store.get_intake(doc_id) or doc
     except Exception as e:
-        doc.update(state="error", error=f"{e.__class__.__name__}: {str(e)[:300]}"); store.save_intake(doc)
+        doc.update(state="error", error=f"{e.__class__.__name__}: {str(e)[:300]}")
+        if _alive(doc_id):
+            store.save_intake(doc)
         au({"kind": "error", "error": doc["error"]}); progress and progress(doc_id, "error")
         return doc
 
@@ -204,7 +274,7 @@ def file_to_case(doc_id, case_id, by, how="confirmed", reason="", patient=None):
                           "uploaded_by": moved.get("uploaded_by"), "how": how, "reason": reason, "by": by,
                           "identity": (moved.get("identity_read") or {}).get("name", {}) and (moved["identity_read"]["name"] or {}).get("value")})
     store.audit_intake({"kind": "filed", "doc_id": doc_id, "case_id": case_id, "how": how, "by": by, "reason": reason})
-    if how == "confirmed" and by != MATCH_USER:
+    if how in ("confirmed", "auto", "new_case"):  # a person's decision, or the matcher's: both are recorded in the Case File and can be undone (unfile)
         try:
             confirm.record(case_id, "confirm_match", doc_id, {"case_id": case_id}, reason, by)
         except ValueError:

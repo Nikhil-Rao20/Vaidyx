@@ -25,18 +25,28 @@ def _covered(value, text):
 
 
 def fill_from_facts(sections, facts, cat):
-    """Append cited sentences built from verified current facts that the model's verified sentences do not already carry."""
+    """Append cited sentences built from verified current facts that the model's verified sentences do not already carry.
+    A value a clinician confirmed (V1 item 2.2) has no quote of its own: its sentence names who confirmed it and carries no citation."""
     added = 0
     for sec in sections:
         have = " ".join(x["text"] + " " + " ".join(c["quote"] for c in x["citations"]) for x in sec["sentences"])
         for fid in SECTION_FACTS.get(sec["id"], []):
             cur = (facts.get(fid) or {}).get("current")
-            if not cur or cur["verification"] != "verified" or cur["state"] != "present" or not cur.get("doc_final") or not cur.get("location"):
+            if not cur or cur["verification"] not in rules.VERIFIED or cur["state"] != "present" or not cur.get("doc_final"):
+                continue
+            confirmed = cur.get("confirmed_by") or ("clinician" if cur["verification"] == "confirmed" else "")
+            if not confirmed and not cur.get("location"):
                 continue
             if _covered(cur["value"], have):
                 continue
+            label = cat.get(fid, {}).get("label", fid)
+            if confirmed:
+                sec["sentences"].append({"text": f"{label}: {cur['value']} (confirmed by {confirmed} against the {cur['doc_title']}, {cur['date'] or 'date not stated'}; no quote).",
+                                         "citations": [], "from_fields": True, "confirmed_by": confirmed})
+                have += " " + cur["value"]; added += 1
+                continue
             loc = cur["location"]
-            sec["sentences"].append({"text": f"{cat.get(fid, {}).get('label', fid)}: {cur['value']} (as recorded in the {cur['doc_title']}, {cur['date'] or 'date not stated'}).",
+            sec["sentences"].append({"text": f"{label}: {cur['value']} (as recorded in the {cur['doc_title']}, {cur['date'] or 'date not stated'}).",
                                      "citations": [{"doc_id": cur["doc_id"], "quote": cur["quote"], "page": loc["page"], "start": loc["start"], "end": loc["end"],
                                                     "doc_title": cur["doc_title"], "date": cur["date"], "status": cur.get("doc_status")}], "from_fields": True})
             have += " " + cur["value"]; added += 1
@@ -56,6 +66,8 @@ SCHEMA = {"type": "object", "additionalProperties": False, "properties": {
                           "description": "items to clarify at the board: pending results, superseded or discordant reports (not recommendations)"}},
     "required": ["sentences", "points_for_review"]}
 
+NOT_LISTED = "This Case File is not listed yet: list it (cancer protocol, NCG setting, board date) before compiling the summary"
+
 SYS = ("You compile the Case File summary for a Tumour Board from signed clinical records. Write like a careful registrar presenting "
        "a case: concise, factual, chronological. Attribute every finding to its source report (for example 'The PET/CT report records ...'). "
        "Copy values exactly. Cite each sentence with the document id and an exact quote. Do not diagnose, interpret images, derive or assign "
@@ -66,13 +78,15 @@ async def build(case_id, force=False):
     t0 = time.time()
     au = store.auditor(case_id)
     st = store.get_state(case_id)
-    gate = st.get("gate") or rules.evaluate(case_id)
+    case = store.get_case(case_id)
+    gate = (st.get("gate") or rules.evaluate(case_id)) if case.get("protocol") else None
+    if gate is None:  # an unlisted Case File (V1 item 2.5): no protocol, so nothing to compile against and no model call
+        return {"status": "not_listed", "message": NOT_LISTED}
     if not gate.get("passed") and not force:
         return {"status": "gate_not_met", "message": "The Case File summary is compiled once every Pre-Authorization check is met.",
                 "open": [r["label"] for r in gate["requirements"] if r["status"] not in ("satisfied", "not_applicable")]}
-    case = store.get_case(case_id)
     full, mode = search.context_for(case_id, "clinical history performance status imaging findings pathology biomarkers stage as recorded treatment", 60000)
-    facts = rules.resolve_facts(store.list_docs(case_id), st.get("overrides"))
+    facts = rules.resolve_facts(rules.case_docs(case_id, st), st.get("overrides"))  # clinician confirmations win (V1 item 2.2)
     stage = facts.get("recorded_stage", {}).get("current")
     msgs = [{"role": "system", "content": SYS},
             {"role": "user", "content": f"Patient: {case['patient'].get('name')}, {case['patient'].get('agesex', '')}.\n\nDOCUMENTS:\n{full}\n\n"
@@ -102,8 +116,9 @@ async def build(case_id, force=False):
     pts = [s for s in qa.verify_statements(case_id, r.get("points_for_review")) if not guardrails.scan_output(s["text"])]
     out = {"status": "ready" if gate.get("passed") else "incomplete_gate", "sections": sections, "structure": "NCG Virtual Tumour Board case template",
            "paragraphs": paras, "points_for_review": pts,
-           "stage_as_recorded": ({"value": stage["value"], "quote": stage["quote"], "doc_id": stage["doc_id"], "doc_title": stage["doc_title"], "date": stage["date"]}
-                                 if stage and stage["verification"] == "verified" else None),
+           "stage_as_recorded": ({"value": stage["value"], "quote": "" if stage.get("confirmed_by") else stage["quote"], "doc_id": stage["doc_id"],
+                                  "doc_title": stage["doc_title"], "date": stage["date"], **({"confirmed_by": stage["confirmed_by"]} if stage.get("confirmed_by") else {})}
+                                 if stage and stage["verification"] in rules.VERIFIED else None),
            "dropped_unverified": dropped, "guardrail_removed": len(removed), "filled_from_fields": filled, "generated": store.now_iso(), "seconds": round(time.time() - t0, 1),
            "model": config.models()["reasoner"].get("label") or "reasoner", "review": {"status": "ai_draft"}, "gate_passed": gate.get("passed"), "context": mode}
     if removed:

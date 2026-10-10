@@ -153,9 +153,12 @@ def index():
 
 
 def queries_for_case(case_id):
-    """Turn the case's open Pre-Authorization items and protocol into guideline look-ups (reference only)."""
+    """Turn the case's open Pre-Authorization items and protocol into guideline look-ups (reference only). An unlisted
+    Case File (V1 item 2.5) has no protocol and no gate, so there is nothing case-specific to look up yet."""
     from . import store
     case = store.get_case(case_id)
+    if not case.get("protocol"):
+        return []
     prot = protocol.get(case["protocol"])
     gate = store.get_state(case_id).get("gate") or {}
     qs = []

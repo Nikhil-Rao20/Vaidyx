@@ -11,6 +11,8 @@ from datetime import date, timedelta
 
 from . import grounding, llm, negation, protocol, rules, store
 
+NOT_LISTED = "Case File not listed: no Pre-Authorization check to compare with"
+
 CLAIMS_SCHEMA = {"type": "object", "additionalProperties": False, "properties": {"claims": {"type": "array", "items": {
     "type": "object", "additionalProperties": False, "properties": {
         "fact": {"type": "string", "enum": None}, "value_as_written": {"type": "string"}, "span": {"type": "string", "description": "exact text from the decision"}},
@@ -39,9 +41,11 @@ def _nums(s):
 async def adjudicate(case_id, record):
     au = store.auditor(case_id)
     case = store.get_case(case_id)
-    prot = protocol.get(case["protocol"])
+    listed = bool(case.get("protocol"))  # an unlisted Case File (V1 item 2.5) has no protocol and no Pre-Authorization gate
     flags = []
-    for f in prot.get("post_board", {}).get("required_record_fields", []):
+    if not listed:
+        flags.append({"kind": "consistency", "severity": "review", "text": NOT_LISTED})
+    for f in (protocol.get(case["protocol"]).get("post_board", {}).get("required_record_fields", []) if listed else []):
         if not record.get(f):
             flags.append({"kind": "documentation", "severity": "review", "text": f"Decision record is missing: {f.replace('_', ' ')}"})
     # Victorian Cancer MDM quality framework: errors or changes to pathology / radiology reports raised at the meeting must be recorded
@@ -52,7 +56,7 @@ async def adjudicate(case_id, record):
             flags.append({"kind": "documentation", "severity": "review", "text": f"Action {i + 1} has no Responsible Department"})
         if not a.get("due"):
             flags.append({"kind": "documentation", "severity": "review", "text": f"Action {i + 1} has no due date"})
-    gate = store.get_state(case_id).get("gate") or {}
+    gate = (store.get_state(case_id).get("gate") or {}) if listed else {}
     open_items = [r["label"] for r in gate.get("requirements", []) if r["status"] not in ("satisfied", "not_applicable")]
     if open_items:
         flags.append({"kind": "consistency", "severity": "review", "text": "Decision recorded while these Pre-Authorization items were open: " + "; ".join(open_items)})
@@ -73,22 +77,25 @@ async def adjudicate(case_id, record):
         claims = (await llm.chat("reasoner", msg, json_schema=schema, max_tokens=700, purpose="adjudication: values in decision", audit=au)).get("claims", [])
     except Exception as e:
         flags.append({"kind": "system", "severity": "info", "text": f"Value check unavailable: {str(e)[:120]}"})
-    facts = rules.resolve_facts(store.list_docs(case_id), store.get_state(case_id).get("overrides"))  # attestations count (V1 item 1.2)
+    facts = rules.resolve_facts(rules.case_docs(case_id), store.get_state(case_id).get("overrides"))  # attestations (V1 item 1.2) and confirmations (2.2) count
     checks = []
     for c in claims:
         if c.get("span") and not grounding.locate(c["span"], [record.get("decision_text", "")]):
             continue  # model must quote the decision text itself
         src = facts.get(c["fact"], {}).get("current")
-        if not src or src["verification"] != "verified":
+        if not src or src["verification"] not in rules.VERIFIED:
             checks.append({**c, "result": "no_verified_source", "source": None})
             continue
-        a, b = _nums(c["value_as_written"]), _nums(src["value"] + " " + (src.get("quote") or ""))
+        if src.get("confirmed_by"):  # a clinician-confirmed value is compared on its own (the model's quote may carry the value it replaced)
+            src = {**src, "quote": ""}
+        src_text = src["value"] + " " + (src.get("quote") or "")
+        a, b = _nums(c["value_as_written"]), _nums(src_text)
         if a and b and not set(a) <= set(b):  # every number the board wrote must exist in the source value / quote
             res = "discrepancy"
             flags.append({"kind": "transcription", "severity": "expert_review", "fact": c["fact"],
                           "text": f"Possible transcription discrepancy: {cat[c['fact']]['label']} recorded as \"{c['value_as_written']}\"; source value \"{src['value']}\"",
                           "recorded": c["value_as_written"], "source_value": src["value"], "source_quote": src["quote"], "source_doc": src["doc_id"], "source_title": src["doc_title"]})
-        elif _polarity(c["value_as_written"]) and _polarity(src["value"] + " " + (src.get("quote") or "")) and _polarity(c["value_as_written"]) != _polarity(src["value"] + " " + (src.get("quote") or "")):
+        elif _polarity(c["value_as_written"]) and _polarity(src_text) and _polarity(c["value_as_written"]) != _polarity(src_text):
             res = "discrepancy"  # polarity flip: 'negative' recorded where the source says positive, or the reverse
             flags.append({"kind": "transcription", "severity": "expert_review", "fact": c["fact"],
                           "text": f"Possible polarity discrepancy: {cat[c['fact']]['label']} recorded as \"{c['value_as_written']}\"; source states \"{src['value']}\"",
@@ -102,7 +109,8 @@ async def adjudicate(case_id, record):
                           "recorded": c["value_as_written"], "source_value": src["value"], "source_quote": src["quote"], "source_doc": src["doc_id"], "source_title": src["doc_title"]})
         else:
             res = "consistent"
-        checks.append({**c, "result": res, "source": {"value": src["value"], "doc_id": src["doc_id"], "quote": src["quote"]}})
+        checks.append({**c, "result": res, "source": {"value": src["value"], "doc_id": src["doc_id"], "quote": src["quote"],
+                                                       **({"confirmed_by": src["confirmed_by"]} if src.get("confirmed_by") else {})}})
     au({"kind": "adjudication", "flags": len(flags), "claims": len(claims)})
     return {"flags": flags, "value_checks": checks, "status": "flag_for_expert_review" if flags else "consistent", "evaluated": store.now_iso()}
 
@@ -126,7 +134,7 @@ async def record_decision(case_id, record, user=""):
 
 def timeline(case_id):
     ev = []
-    for d in store.list_docs(case_id):
+    for d in rules.case_docs(case_id):  # confirmed dates and document types (V1 item 2.2)
         c = d.get("classification") or {}
         if c.get("report_date_iso"):
             ev.append({"date": c["report_date_iso"], "kind": "document", "doc_type": c.get("doc_type"), "title": c.get("title") or d["filename"],

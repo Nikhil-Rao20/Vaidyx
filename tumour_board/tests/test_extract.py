@@ -46,7 +46,8 @@ def test_unverified_patient_id_is_moved_aside(run):
 def test_identity(run):
     assert run()["identity"] == "match"
     assert run(text=TEXT.replace("SYN-900001", ""))["identity"] == "name_match"
-    assert run(patient={"mrn": "SYN-111111", "name": "SYNTHETIC, Other Person"})["identity"] == "mismatch_or_missing"
+    assert run(patient={"mrn": "SYN-111111", "name": "SYNTHETIC, Other Person"})["identity"] == "id_differs"  # the document prints a UHID this Case File does not know
+    assert run(text=TEXT.replace("SYN-900001", "").replace("SYNTHETIC, Test Patient", "Some Other Name"), cls={"patient_name": "", "patient_id": ""})["identity"] == "mismatch_or_missing"
 
 
 def test_facts_grounded(run):
