@@ -169,7 +169,7 @@ async def chat(role: str, messages: list, *, json_schema: dict = None, max_token
     finish = d["choices"][0].get("finish_reason")
     usage = d.get("usage", {}); dt = time.time() - t0
     if audit:
-        audit({"kind": "llm_call", "role": role, "model": m["model"], "purpose": purpose, "seconds": round(dt, 2),
+        audit({"kind": "llm_call", "role": role, "model": m["model"], "purpose": purpose, "seconds": round(dt, 2), "attempts": attempt + 1,  # seconds include retry waits
                "prompt_tokens": usage.get("prompt_tokens"), "completion_tokens": usage.get("completion_tokens"),
                "finish": d["choices"][0].get("finish_reason"),
                "prompt_sha256": hashlib.sha256(json.dumps(messages, default=str).encode()).hexdigest()[:16]})
@@ -200,6 +200,8 @@ async def stream(role: str, messages: list, *, max_tokens: int = 1024, temperatu
         try:
             async with _queue(url):
                 async with client().stream("POST", url + "/chat/completions", json=body) as r:
+                    if r.status_code != 200:
+                        raise LLMError(f"{role} model error {r.status_code}: {(await r.aread())[:300]!r}")
                     async for line in r.aiter_lines():
                         if not line.startswith("data: ") or line.endswith("[DONE]"):
                             continue
