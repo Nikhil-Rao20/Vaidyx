@@ -5,12 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Vaidyx · Tumour Board</title>
 <link rel="icon" href="/static/vaidyx-icon.svg">
-<link rel="stylesheet" href="/static/tb/tb.css">
+<link rel="preload" href="/static/tb/fonts/AtkinsonHyperlegible-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/tb/fonts/AtkinsonHyperlegible-Bold.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/tb/tb.css?v=1.9d">
 </head>
 <body>
 <header class="top">
   <button class="ghost menu-btn" id="btn-side" aria-label="Show Case Files" aria-expanded="false"><span class="menu-ico" aria-hidden="true"></span><span class="lbl">Case Files</span></button>
-  <a class="brand" href="/tb"><img src="/static/vaidyx-wordmark-white.svg" alt="Vaidyx"><span class="divider"></span><span class="product">AI Agent for Tumour Board</span></a>
+  <a class="brand" href="/tb"><img src="/static/vaidyx-wordmark.svg" alt="Vaidyx"><span class="divider"></span><span class="product">AI Agent for Tumour Board</span></a>
   <div class="models" id="models"></div>
   <nav class="topnav">
     <button class="ghost" id="btn-cards">Model and data cards</button>

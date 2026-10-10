@@ -65,10 +65,10 @@ async function openCase(id, keepTab) {
 function renderReadiness() {
   const g = S.data.state.gate;
   if (!g) { $("#c-ready").innerHTML = ""; return; }
-  const pct = g.readiness, r = 26, C = 2 * Math.PI * r, col = g.passed ? "#2f7d55" : pct >= 60 ? "#a96e0a" : "#b23a2f";
-  $("#c-ready").innerHTML = `<svg class="ring" viewBox="0 0 64 64"><circle cx="32" cy="32" r="${r}" fill="none" stroke="#e2e8f0" stroke-width="7"/>
+  const pct = g.readiness, r = 26, C = 2 * Math.PI * r, col = g.passed ? "#1e6b45" : pct >= 60 ? "#8a5300" : "#b23a2f";
+  $("#c-ready").innerHTML = `<svg class="ring" viewBox="0 0 64 64"><circle cx="32" cy="32" r="${r}" fill="none" stroke="#d9e2ec" stroke-width="7"/>
     <circle cx="32" cy="32" r="${r}" fill="none" stroke="${col}" stroke-width="7" stroke-linecap="round" stroke-dasharray="${C * pct / 100} ${C}" transform="rotate(-90 32 32)"/>
-    <text x="32" y="37" text-anchor="middle" font-size="15" font-weight="600" fill="#00183c">${pct}%</text></svg>
+    <text x="32" y="37" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2933">${pct}%</text></svg>
     <div class="rtext"><b>${g.passed ? "Readiness criteria met" : "Pre-Authorization pending"}</b><span>${g.satisfied} of ${g.total} mandatory records satisfied</span></div>`;
 }
 
@@ -184,7 +184,7 @@ Please upload the final, signed report to the Case File by ${fmtDate(a.due)}. Th
 function bindActions(root) {
   $$("[data-req]", root).forEach((b) => (b.onclick = () => {
     const a = (S.data.state.actions || []).find((x) => x.id === b.dataset.req);
-    $("#modal-body").innerHTML = `<h3 style="color:#00183c;margin-top:0">Request to ${esc(a.department)}</h3><textarea id="reqtxt" style="width:100%;min-height:190px;padding:10px;border:1px solid #e2e8f0;border-radius:8px">${esc(requestText(a))}</textarea>
+    $("#modal-body").innerHTML = `<h3 style="color:#1f2933;margin-top:0">Request to ${esc(a.department)}</h3><textarea id="reqtxt" style="width:100%;min-height:190px;padding:10px;border:1px solid #d9e2ec;border-radius:8px">${esc(requestText(a))}</textarea>
       <div style="text-align:right;margin-top:10px"><button class="ghost" data-closemodal>Close</button> <button class="primary" id="reqcopy">Copy</button></div>`;
     $("#modal").classList.remove("hidden");
     $("#reqcopy").onclick = async () => { try { await navigator.clipboard.writeText($("#reqtxt").value); toast("Copied"); } catch (e) { $("#reqtxt").select(); toast("Select and copy the text"); } };
@@ -260,7 +260,7 @@ function renderDocs() {
     const att = (S.data.state.overrides?.documents || {})[d.doc_id];
     const st = d.state !== "ready" ? `<span class="chip ${d.state === "error" ? "c-bad" : "c-info"}" title="${esc(d.error || "")}">${esc(d.state)}</span>` : statusChip(c) + (att?.attested_final ? ` <span class="chip c-ok" title="${esc(att.reason || "")}">attested final by ${esc(att.by)}</span>` : "");
     const unst = d.state === "ready" && c.status === "UNSTATED" && c.signed !== "no" && !att?.attested_final;
-    return `<tr class="click" data-doc="${esc(d.doc_id)}"><td><b>${esc(c.title || d.filename)}</b><div class="small muted">${esc(d.rel_path)}${d.identity === "mismatch_or_missing" ? ' · <span style="color:#b23a2f">patient ID not found</span>' : d.identity === "name_match" ? ' · <span style="color:#a96e0a">matched by name only</span>' : ""}</div></td>
+    return `<tr class="click" data-doc="${esc(d.doc_id)}"><td><b>${esc(c.title || d.filename)}</b><div class="small muted">${esc(d.rel_path)}${d.identity === "mismatch_or_missing" ? ' · <span style="color:#b23a2f">patient ID not found</span>' : d.identity === "name_match" ? ' · <span style="color:#8a5300">matched by name only</span>' : ""}</div></td>
       <td>${esc(DT[c.doc_type] || c.doc_type || "")}</td><td>${fmtDate(c.report_date_iso)}</td><td>${st}</td>
       <td class="small">${(d.methods || []).map((m) => (m === "vision-transcription" ? "Vision reader (scan)" : m === "text-layer" ? "PDF text layer" : m)).join(", ")}</td>
       <td>${nf.filter((f) => f.verification === "verified").length} verified${nf.filter((f) => f.verification !== "verified").length ? ` · <span class="chip c-rev">${nf.filter((f) => f.verification !== "verified").length} not verified</span>` : ""}
@@ -297,7 +297,7 @@ async function openDoc(docId, focus) {
   const preview = isImg ? `<img class="orig" src="/api/tb/cases/${S.caseId}/documents/${docId}/file">` :
     isPdf ? `<img class="orig" id="pdfimg" src="/api/tb/cases/${S.caseId}/documents/${docId}/file?render=1&page=${pg}">` : `<div class="muted">No image preview for this format.</div>`;
   $("#drawer-body").innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-    <div><div class="eyebrow">${esc(DT[c.doc_type] || c.doc_type || "")} · ${esc(c.department || "")}</div><h2 style="margin:4px 0;color:#00183c">${esc(c.title || d.filename)}</h2>
+    <div><div class="eyebrow">${esc(DT[c.doc_type] || c.doc_type || "")} · ${esc(c.department || "")}</div><h2 style="margin:4px 0;color:#1f2933">${esc(c.title || d.filename)}</h2>
     <div class="muted small">${esc(d.rel_path)} · ${fmtDate(c.report_date_iso)} · ${statusChip(c)}${(c.status_notes || []).length ? ` <span class="chip c-warn">${esc(c.status_notes.join("; "))}</span>` : ""}</div></div>
     <div><a class="ghost" href="/api/tb/cases/${S.caseId}/documents/${docId}/file" target="_blank">Open original</a> <button class="ghost" data-close>Close</button></div></div>
     <div class="kv" style="margin:12px 0"><div>Status line</div><div>${esc(c.status_quote || "not found")}</div><div>Signature</div><div>${esc(c.signature_quote || c.signer || "not found")}</div>
@@ -306,7 +306,7 @@ async function openDoc(docId, focus) {
     <div class="docview"><div>${preview}</div><div>
       ${pages.length > 1 ? `<div style="margin-bottom:6px">${pages.map((p, i) => `<button class="ghost sm" data-pg="${i}">Page ${i + 1}</button>`).join(" ")}</div>` : ""}
       <div class="doctext" id="doctext">${marks(pg)}</div>
-      <h4 style="color:#00183c">Fields found in this document</h4>
+      <h4 style="color:#1f2933">Fields found in this document</h4>
       <table class="t"><tbody>${Object.entries(d.facts || {}).map(([k, f]) => `<tr><td>${esc(k)}</td><td><b>${esc(f.value)}</b>${f.state === "pending" ? ' <span class="chip c-warn">pending</span>' : ""}</td>
         <td><span class="chip ${f.verification === "verified" ? "c-ok" : "c-rev"}" title="${esc(f.reason || "")}">${esc(f.verification)}</span>${f.polarity === "negated" ? ' <span class="chip c-mute" title="The value is a negative finding (no / not / negative / absent)">negated</span>' : ""}</td><td class="small muted">"${esc(f.quote)}"</td></tr>`).join("") || '<tr><td class="muted">None</td></tr>'}</tbody></table>
       ${pages.some((p) => p.ocr_uncertain_numbers?.length) ? `<div class="flag review" style="margin-top:8px"><div class="k">OCR disagreement</div>The two reads of this scanned page differ on these numbers: ${esc(pages.flatMap((p) => p.ocr_uncertain_numbers || []).join(", "))}. Values containing them are marked for expert review; read the scan image.</div>` : ""}
@@ -369,7 +369,7 @@ async function renderRoles() {
   $("#tab-roles").innerHTML = `<div class="card"><h3>Role-specific AI support <button class="ghost sm" id="all-briefs">Prepare all briefs in parallel</button></h3>
     <div class="muted small">When a specialist is unavailable, the corresponding support agent prepares a specialty-specific brief from the Case File records. Each item carries a verified quote. Briefs are AI drafts until reviewed by an expert. Role-specific support, not autonomous clinical decision-making.</div></div>
     <div class="roles" style="margin-top:12px">${Object.entries(S.roles).map(([k, r]) => `<div class="role" id="role-${k}"><h4>${esc(r.label)}</h4><p>${esc(r.focus)}</p>
-      <div style="display:flex;gap:6px"><input placeholder="Optional focus question" id="focus-${k}" style="flex:1;padding:6px 8px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px">
+      <div style="display:flex;gap:6px"><input placeholder="Optional focus question" id="focus-${k}" style="flex:1;padding:6px 8px;border:1px solid #d9e2ec;border-radius:8px;font-size:12px">
       <button class="primary sm" data-role="${k}">${arts["brief_" + k] ? "Refresh" : "Prepare brief"}</button></div></div>`).join("")}</div>
     <div id="briefs" style="margin-top:14px"></div>`;
   $$("[data-role]").forEach((b) => (b.onclick = () => runAgent(b.dataset.role)));
@@ -436,7 +436,7 @@ function renderSummary() {
     const r = await api(`/cases/${S.caseId}/summary`, { json: { force } }); if (r.status === "gate_not_met") { $("#sumout").innerHTML = esc(r.message); return; }
     S.data = await api("/cases/" + S.caseId); showSummary(r); };
   $("#gl-case").onclick = async () => { $("#glout").innerHTML = `<span class="spin"></span> Searching the guideline library...`;
-    const r = await api(`/cases/${S.caseId}/guidelines`); $("#glout").innerHTML = r.queries.map((q) => `<h4 style="color:#00183c;margin:14px 0 4px">${esc(q.query)}</h4>` + glHTML(q)).join(""); };
+    const r = await api(`/cases/${S.caseId}/guidelines`); $("#glout").innerHTML = r.queries.map((q) => `<h4 style="color:#1f2933;margin:14px 0 4px">${esc(q.query)}</h4>` + glHTML(q)).join(""); };
   $("#sum").onclick = () => go(false); if ($("#sum-force")) $("#sum-force").onclick = () => go(true);
   if ($("#sum-print")) $("#sum-print").onclick = () => { document.body.classList.add("print-summary"); window.print(); setTimeout(() => document.body.classList.remove("print-summary"), 500); };
   if (s) showSummary(s);
@@ -445,12 +445,12 @@ function showSummary(s) {
   const p = S.data.case.patient || {};
   const rv = s.review || {};
   $("#sumout").innerHTML = `<div class="eyebrow">Automated Case File summary${s.status !== "ready" ? " · INCOMPLETE: Pre-Authorization not met" : ""}</div>
-    <h2 style="color:#00183c;margin:4px 0 12px">${esc(p.name)} · ${esc(p.agesex || "")}</h2>
+    <h2 style="color:#1f2933;margin:4px 0 12px">${esc(p.name)} · ${esc(p.agesex || "")}</h2>
     ${s.structure ? `<div class="muted small" style="margin-bottom:8px">Structure: ${esc(s.structure)}</div>` : ""}
-    ${(s.sections || []).length ? s.sections.map((sec) => `<h4 style="color:#00183c;margin:12px 0 4px">${esc(sec.title)}</h4>${sec.sentences.length ? `<p>${sec.sentences.map((x) => `<span ${x.from_fields ? 'title="Added from the verified primary fields (no model text)" style="color:#334155"' : ""}>${esc(x.text)}</span> ${x.citations.map(citeHTML).join("")}${flagHTML(x)}`).join(" ")}</p>` : `<p class="muted small">Nothing verified for this section in the Case File.</p>`}`).join("")
+    ${(s.sections || []).length ? s.sections.map((sec) => `<h4 style="color:#1f2933;margin:12px 0 4px">${esc(sec.title)}</h4>${sec.sentences.length ? `<p>${sec.sentences.map((x) => `<span ${x.from_fields ? 'title="Added from the verified primary fields (no model text)" style="color:#334155"' : ""}>${esc(x.text)}</span> ${x.citations.map(citeHTML).join("")}${flagHTML(x)}`).join(" ")}</p>` : `<p class="muted small">Nothing verified for this section in the Case File.</p>`}`).join("")
       : s.paragraphs.map((para) => `<p>${para.map((x) => `${esc(x.text)} ${x.citations.map(citeHTML).join("")}${flagHTML(x)}`).join(" ")}</p>`).join("")}
     ${s.stage_as_recorded ? `<div class="stagebox"><b>Stage, as recorded in the ${esc(s.stage_as_recorded.doc_title)}:</b> ${esc(s.stage_as_recorded.value)} ${citeHTML({ ...s.stage_as_recorded, quote: s.stage_as_recorded.quote })}<div class="small muted">Extracted from the signed source report. The agent does not derive or assign stage.</div></div>` : ""}
-    ${s.points_for_review.length ? `<h4 style="color:#00183c">Points for review</h4><ul>${s.points_for_review.map((x) => `<li>${esc(x.text)} ${x.citations.map(citeHTML).join("")}</li>`).join("")}</ul>` : ""}
+    ${s.points_for_review.length ? `<h4 style="color:#1f2933">Points for review</h4><ul>${s.points_for_review.map((x) => `<li>${esc(x.text)} ${x.citations.map(citeHTML).join("")}</li>`).join("")}</ul>` : ""}
     <div class="small muted">${esc(s.generated?.replace("T", " "))} · ${s.seconds} s · ${esc(s.model)}${s.dropped_unverified ? ` · ${s.dropped_unverified} unverified sentence(s) removed` : ""}${s.filled_from_fields ? ` · ${s.filled_from_fields} sentence(s) added from verified fields` : ""}</div>
     ${reviewBar("summary", rv)}`;
   bindReview($("#sumout"));
@@ -520,7 +520,7 @@ async function renderAudit() {
 // ------------------------------------------------------------------ model and data cards
 async function showCards() {
   const r = await api("/models");
-  $("#modal-body").innerHTML = `<h2 style="color:#00183c;margin-top:0">Model and data cards</h2>
+  $("#modal-body").innerHTML = `<h2 style="color:#1f2933;margin-top:0">Model and data cards</h2>
     <p class="muted small">Every model and data asset used by the system ships with a published card: source, version, intended use, provenance, limitations.</p>
     ${r.cards.map((c) => `<div class="card"><h3>${esc(c.name)} <span>${(c.tags || []).map((t) => `<span class="chip ${/chin/i.test(t) ? "c-cn" : /non-medical/i.test(t) ? "c-nm" : "c-info"}">${esc(t)}</span>`).join(" ")}</span></h3>
       <div class="kv">${Object.entries(c.fields || {}).map(([k, v]) => `<div>${esc(k)}</div><div>${esc(v)}</div>`).join("")}</div></div>`).join("")}
@@ -531,7 +531,7 @@ async function showCards() {
 // ------------------------------------------------------------------ new case
 async function newCase() {
   const ps = S.protocols;
-  $("#modal-body").innerHTML = `<h2 style="color:#00183c;margin-top:0">New Tumour Board Case File</h2><div class="form">
+  $("#modal-body").innerHTML = `<h2 style="color:#1f2933;margin-top:0">New Tumour Board Case File</h2><div class="form">
     <label>Case File ID</label><input id="n-id" placeholder="e.g. TB-2026-0142">
     <label>Patient name</label><input id="n-name"><label>UHID / MRN</label><input id="n-mrn"><label>Age / Sex</label><input id="n-agesex" placeholder="62 Y / M">
     <label>Protocol</label><select id="n-prot">${ps.map((p) => `<option value="${esc(p.id)}">${esc(p.label)} (v${esc(p.version)})</option>`).join("")}</select>
