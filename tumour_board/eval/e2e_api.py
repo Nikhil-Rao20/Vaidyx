@@ -249,6 +249,80 @@ def phase2_cleanup(c):
         c.request("DELETE", "/api/auth/users", json={"username": u})
 
 
+SCAN_100 = "/data/vaidyx/tb_demo_corpus/cases/TB-006/outside_records/deccan_general_hospital_records_scan.pdf"
+HINDI_SCAN = "/data/vaidyx/tb_demo_corpus/cases/TB-005/surgical_oncology/surgical_oncology_opd_2026-09-03.png"
+
+
+def phase3(c):
+    """V1 Phase 3: labelled dates and the confirm_dates flow (3.1), confirm_doc_type with re-extraction (3.2), Hindi flags (3.6),
+    the big-scan warning (3.7). Runs on its own synthetic Case File TB-TEST3 (rectum protocol: restaging MRI after treatment)."""
+    import os
+    c.delete("/api/tb/cases/TB-TEST3")
+    r = c.post("/api/tb/cases", json={"case_id": "TB-TEST3", "protocol": "colorectal_rectum", "patient": {"name": "SYNTHETIC, Test Patient", "mrn": "SYN-998", "agesex": "55 Y / M"}})
+    check("phase3: synthetic rectum Case File created", r.status_code == 200, r.text[:80])
+    ts = ("SAHYADRI CANCER INSTITUTE (SYNTHETIC)\nDEPARTMENT OF RADIATION ONCOLOGY\nRT COMPLETION SUMMARY\nPatient: SYNTHETIC, Test Patient  UHID: SYN-998  55 Y / M\n"
+          "Diagnosis as recorded: carcinoma rectum.\nTreatment received: long-course chemoradiation 50.4 Gy in 28 fractions with concurrent capecitabine.\n"
+          "Date of completion: 10/08/2026\nNext review: 05/10/2026\nReport status: FINAL\nReported on 12/08/2026\nSd/- Dr. R. Nair, Radiation Oncologist, Reg. No. KMC 45678\n").encode()
+    mri = ("SAHYADRI CANCER INSTITUTE (SYNTHETIC)\nDEPARTMENT OF RADIO-DIAGNOSIS\nMRI PELVIS WITH CONTRAST\nPatient: SYNTHETIC, Test Patient  UHID: SYN-998  55 Y / M\n"
+           "Findings: rectal wall thickening as recorded, mesorectal fascia clear.\nImpression: as above.\nReport status: FINAL\nSd/- Dr. S. Rao, Consultant Radiologist, Reg. No. KMC 12345\n").encode()
+    j = c.post("/api/tb/cases/TB-TEST3/documents", files=[("files", ("rt_completion_summary.txt", ts)), ("files", ("mri_pelvis_restaging.txt", mri))],
+               data={"paths": json.dumps(["radiotherapy/rt_completion_summary.txt", "radiology/mri_pelvis_restaging.txt"])}).json()
+    wait_job(c, j["job"])
+    d = c.get("/api/tb/cases/TB-TEST3").json()
+    docs = {x["rel_path"]: x for x in d["documents"]}
+    cts, cmri = docs["radiotherapy/rt_completion_summary.txt"]["classification"], docs["radiology/mri_pelvis_restaging.txt"]["classification"]
+    check("3.1 treatment summary: event = date of completion, report = reported on, next review ignored",
+          cts.get("event_date_iso") == "2026-08-10" and cts.get("report_date_iso") == "2026-08-12" and not cts.get("date_unconfirmed")
+          and any(x["iso"] == "2026-10-05" and x["kind"] == "ignore" for x in cts.get("dates") or []), f"{cts.get('event_date_iso')} / {cts.get('report_date_iso')} / {cts.get('event_date_label')}")
+    check("3.1 MRI with no date is unconfirmed (no guess)", cmri.get("date_unconfirmed") is True and not cmri.get("report_date_iso") and not cmri.get("event_date_iso"), json.dumps({k: cmri.get(k) for k in ("report_date_iso", "event_date_iso", "date_unconfirmed")}))
+    g = d["state"]["gate"]; req = {r["id"]: r for r in g["requirements"]}
+    rs = req.get("restaging_mri", {})
+    did = docs["radiology/mri_pelvis_restaging.txt"]["doc_id"]
+    check("3.1 restaging MRI with an unconfirmed date asks for confirmation", rs.get("status") == "needs_confirmation" and {"type": "confirm_dates", "doc_id": did} in (rs.get("needs") or []),
+          f"{rs.get('status')}: {'; '.join(rs.get('problems') or [])[:120]}")
+    check("3.1 gate lists the undated document", did in (g["documents"].get("date_unconfirmed") or []))
+    st = c.post("/api/tb/cases/TB-TEST3/confirmations", json={"type": "confirm_dates", "key": did, "fields": {"event_date": "20/09/2026"}, "reason": "e2e: read from the scan"}).json()["state"]
+    req = {r["id"]: r for r in st["gate"]["requirements"]}
+    check("3.1 confirmed event date after treatment satisfies the restaging requirement", req["restaging_mri"]["status"] == "satisfied", "; ".join(req["restaging_mri"]["problems"]))
+    cm2 = next(x for x in c.get("/api/tb/cases/TB-TEST3").json()["documents"] if x["doc_id"] == did)["classification"]
+    check("3.1 confirmation shown on the document (dates_confirmed_by)", cm2.get("dates_confirmed_by") == "admin" or bool(cm2.get("dates_confirmed_by")), str(cm2.get("dates_confirmed_by")))
+    st = c.post("/api/tb/cases/TB-TEST3/confirmations", json={"type": "confirm_dates", "key": did, "fields": {"event_date": "01/06/2026"}, "reason": "e2e: before treatment"}).json()["state"]
+    req = {r["id"]: r for r in st["gate"]["requirements"]}
+    check("3.1 an MRI dated before treatment no longer counts", req["restaging_mri"]["status"] == "missing_record", req["restaging_mri"]["status"])
+    # 3.2: the classification carries the keyword check; confirming the type extracts the fields again from the stored pages
+    check("3.2 keyword check recorded on the classification", cmri.get("doc_type_keyword") == "mri" and "doc_type_check" in cmri, f"{cmri.get('doc_type_keyword')} / {cmri.get('doc_type_check', '')[:80]}")
+    r = c.post("/api/tb/cases/TB-TEST3/confirmations", json={"type": "confirm_doc_type", "key": did, "fields": {"doc_type": "mri"}, "reason": "e2e"}).json()
+    check("3.2 confirm_doc_type starts a re-extraction job", bool(r.get("job")), json.dumps({k: r.get(k) for k in ("job",)}))
+    if r.get("job"):
+        jj, secs = wait_job(c, r["job"])
+        dd = next(x for x in c.get("/api/tb/cases/TB-TEST3").json()["documents"] if x["doc_id"] == did)
+        check("3.2 re-extraction finished with no second read, type confirmed", jj["state"] == "finished" and dd["state"] == "ready" and dd["classification"].get("doc_type_confirmed_by"), f"{secs}s")
+        au = c.get("/api/tb/cases/TB-TEST3/audit").json()["events"]
+        check("3.2 re-extraction audited", any(e["kind"] == "reextract" for e in au))
+    # 3.6: the Hindi / handwritten OPD scan of the demo corpus is flagged, text untouched
+    if os.path.exists(HINDI_SCAN):
+        j = c.post("/api/tb/cases/TB-TEST3/documents", files=[("files", ("surgical_oncology_opd_2026-09-03.png", open(HINDI_SCAN, "rb").read()))],
+                   data={"paths": json.dumps(["scans/surgical_oncology_opd_2026-09-03.png"])}).json()
+        wait_job(c, j["job"])
+        dd = next((x for x in c.get("/api/tb/cases/TB-TEST3").json()["documents"] if x["rel_path"] == "scans/surgical_oncology_opd_2026-09-03.png"), None)
+        check("3.6 Hindi line on the scanned OPD note flagged", dd is not None and any("Hindi / regional text" in f for f in dd.get("page_flags") or []), json.dumps((dd or {}).get("page_flags")))
+        full = c.get(f"/api/tb/cases/TB-TEST3/documents/{dd['doc_id']}").json() if dd else {}
+        pg = (full.get("pages") or [{}])[0]
+        check("3.6 flagged lines carry offsets into the untouched text", bool(pg.get("flagged_lines")) and all(pg["text"][l["start"]:l["end"]] == l["line"] for l in pg.get("flagged_lines") or []))
+        check("3.3 second read kept and spans have offsets", pg.get("ocr_reads") == 2 and "second_read" in pg and all(pg["text"][sp["start"]:sp["end"]] == sp["line"] for sp in pg.get("ocr_uncertain_spans") or [] if sp.get("read") != "second"))
+    # 3.7: the 100-page scan warns at upload with an estimated time, then reads in batches
+    if os.path.exists(SCAN_100):
+        t0 = time.time()
+        r = c.post("/api/tb/cases/TB-TEST3/documents", files=[("files", ("deccan_general_hospital_records_scan.pdf", open(SCAN_100, "rb").read()))],
+                   data={"paths": json.dumps(["outside/deccan_general_hospital_records_scan.pdf"])}).json()
+        w = r.get("warnings") or []
+        check("3.7 upload warns about the 100-page scan with an estimated time", len(w) == 1 and "100 scanned pages" in w[0]["message"] and "about" in w[0]["message"], json.dumps(w)[:160])
+        jj, secs = wait_job(c, r["job"])
+        dd = next((x for x in c.get("/api/tb/cases/TB-TEST3").json()["documents"] if x["rel_path"] == "outside/deccan_general_hospital_records_scan.pdf"), None)
+        check("3.7 100 pages read in batches, all pages present", dd is not None and dd["state"] == "ready" and dd["pages"] == 100 and jj.get("warnings"), f"{secs}s, {(dd or {}).get('pages')} pages, {round(time.time() - t0)} s in all")
+    c.delete("/api/tb/cases/TB-TEST3")
+
+
 def main(base, pw, only=None):
     c = httpx.Client(base_url=base, timeout=600)
     check("login", c.post("/api/auth/login", json={"username": "admin", "password": pw}).status_code == 200)
@@ -257,6 +331,10 @@ def main(base, pw, only=None):
             phase2(c, base)
         finally:
             phase2_cleanup(c)
+        print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
+        return 0 if not FAIL else 1
+    if only == "phase3":
+        phase3(c)
         print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
         return 0 if not FAIL else 1
     # 1. import lung case (incomplete)
@@ -384,6 +462,8 @@ def main(base, pw, only=None):
         phase2(c, base)
     finally:
         phase2_cleanup(c)
+    # 10. V1 Phase 3: dates, document type, flags, big scans
+    phase3(c)
     # leave the demo Case Files in their fresh state for the next user / test
     for cid in ("TB-001", "TB-002", "TB-003"):
         wait_job(c, c.post(f"/api/tb/demo/{cid}").json()["job"])
@@ -394,5 +474,5 @@ def main(base, pw, only=None):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--base", default="http://127.0.0.1:7000"); ap.add_argument("--password", required=True)
-    ap.add_argument("--only", default=None, help="run one section only (phase2)")
+    ap.add_argument("--only", default=None, help="run one section only (phase2 | phase3)")
     a = ap.parse_args(); sys.exit(main(a.base, a.password, a.only))
