@@ -7,7 +7,9 @@ Every document is fictional and watermarked "SYNTHETIC". Output layout:
   <out>/intake/<department>/<file>              department batches with no Case File, mixing several patients (patient matching)
   <out>/truth/<CASE_ID>.json                    answer key used by the automated evaluation (never shown to the app)
   <out>/truth/intake.json                       answer key for the intake batches
-  <out>/truth/reference_text/<CASE_ID or intake>/<file>.txt   exact text of every NEW image document (scan, photo, image-only pdf)
+  <out>/truth/reference_text/<CASE_ID or intake>/<file>.txt   exact text of every image document (scan, photo, image-only pdf),
+                                                TB-001..003 scans included (eval/bakeoff.py reads them); Hindi and handwritten
+                                                lines carry the answer-key text (pdfium garbles Devanagari, the image is correct)
 
 Cases: TB-001 lung, TB-002 breast, TB-003 rectum (original demo cases, documents unchanged); TB-004 lung, TB-005 breast,
 TB-006 rectum (Indian-format test material for plan item V1-0.5, defined in india_corpus.py).
@@ -16,7 +18,7 @@ Answer key schema (truth/<CASE_ID>.json):
   case_id, protocol, patient {name, mrn, agesex}       as in case.json
   registered_identity                                  TB-004 onwards: every identifier the hospital holds for the patient
   board_decision                                       TB-005: {document, board_date, text, dose_slips [{drug, regimen, written,
-                                                       reference, kind}], absent_specialties, note}
+                                                       reference, kind}], absent_specialties, note (why the slip is there)}
   documents / arrivals: {<relative path>: {
     doc_type          one of protocol.doc_types()
     status            FINAL | AMENDED | CORRECTED | PRELIMINARY | DRAFT | CANCELLED | UNSTATED (the docstatus vocabulary);
@@ -31,19 +33,27 @@ Answer key schema (truth/<CASE_ID>.json):
                       aadhaar (must be masked by the app, never used), age_sex, dob, relation (S/o, W/o), outside_id, op_no_outside
     optional keys     expected ("failed" for the corrupted file), ignore_dates {iso: why} (DOB, next review: never a report
                       date), not_negations, negated, pending, other_values (values with no protocol fact, e.g. hiv),
-                      hindi_lines, handwritten_lines, handwriting_method, supersedes, superseded_by, supersedes_values_of,
-                      facts_by_page and pages (the 100-page scan), exercises (what the document tests, plain words)
+                      hindi_lines, hindi_meaning_for_testers (English meaning of the Hindi line, for human testers only:
+                      never a fact, never shown by the app), handwritten_lines, handwriting_method, supersedes, superseded_by,
+                      supersedes_values_of, facts_by_page and pages (the 100-page scan), exercises (what the document tests, plain words)
   }}
   TB-001..003 documents keep their original keys and gain report_date, event_date, event_label (event_end) and identity.
+  fields may hold a key that is not a protocol fact: "birads" (mammogram, TB-002 and TB-005) is not in protocols/*.json, so
+  protocol.facts_for_doc never asks for it and the model evaluations skip it (check_corpus.py still checks it is printed);
+  it stays under fields, as in the original TB-002 key.
 
 Answer key schema (truth/intake.json):
-  patients {label: identity}, files {<path under intake/>: {department, doc_type, status, signed, report_date, event_date,
+  note (one sentence on how to read expected_case), patients {label: identity},
+  files {<path under intake/>: {department, doc_type, status, signed, report_date, event_date,
   event_label, identity, expected_case (case id, or null = must NOT be filed into an existing Case File),
   route ("case" | "needs_matching" | "new_patient_or_needs_matching"), reason}}
 
-Run with an environment that has weasyprint + pypdfium2 + pillow + numpy:
-  python make_corpus.py --out /path/to/demo_corpus
-Output is reproducible byte for byte (fixed seeds, fixed zip timestamps).
+Canonical regeneration from the repo root (the pdf venv has weasyprint 69.0 + pypdfium2 + pillow + numpy), then the self-check:
+  /data/vaidyx/venv/pdf/bin/python tumour_board/demo_data/make_corpus.py --out <out>
+  PYTHONPATH=$PWD /data/vaidyx/venv/app/bin/python tumour_board/demo_data/check_corpus.py --corpus <out>
+Output is reproducible byte for byte within the pdf venv (fixed seeds, fixed zip timestamps). The app venv (weasyprint 70.0,
+needs LD_LIBRARY_PATH=/data/vaidyx/venv/pdf/lib) gives the same text, images and answer key, but every PDF differs in bytes
+(/Producer "WeasyPrint 70.0" instead of "WeasyPrint 69.0"), so regenerate with the pdf venv.
 """
 import argparse, json, random, shutil, sys
 from pathlib import Path
@@ -461,6 +471,7 @@ def build(out):
                         weasyprint.HTML(string=html).write_pdf(str(target))
                     else:
                         tmp = target.with_suffix(".tmp.pdf"); weasyprint.HTML(string=html).write_pdf(str(tmp))
+                        india_corpus.save_ref(out, cid, d["path"], india_corpus.pdf_text(tmp))  # exact text, read by eval/bakeoff.py
                         to_scan(tmp, target, seed=india_corpus.stable_seed(d["path"])); tmp.unlink()
                 truth["documents" if group == "cases" else "arrivals"][d["path"]] = {**d["truth"], **old_truth_gain(cid, d, pat)}
         (out / "truth").mkdir(parents=True, exist_ok=True)

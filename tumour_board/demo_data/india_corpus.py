@@ -177,19 +177,20 @@ def lab_grid(idt_rows, reg, collected, reported, refby, sample_id):
     return [(k, v) for k, v in idt_rows] + [("Reg. date", reg), ("Collected on", collected), ("Reported on", reported), ("Ref. by", refby), ("Sample ID", sample_id)]
 
 
-# ---- long discharge summary (~25k characters) -------------------------------------------------------------------
+# ---- long discharge summary (about 24,700 characters) -------------------------------------------------------------
 def long_discharge_sections():
     rnd = random.Random(4041)
     days = ["06/09/2026", "07/09/2026", "08/09/2026", "09/09/2026", "10/09/2026", "11/09/2026", "12/09/2026", "13/09/2026", "14/09/2026"]
+    tmax = [101.2, 100.8, 100.4] + [98.6] * 6  # maximum temperature of each day (F): the Daily vitals table and the notes agree
     course = [
         "Admitted through the emergency department with haemoptysis (about 2 to 3 tablespoons of fresh blood over 24 hours), fever with chills for 4 days and breathlessness on exertion.",
-        "Fever spikes persisted overnight (maximum 101.4 F). Sputum less blood-tinged. Blood cultures drawn before antibiotics, no growth so far.",
-        "Afebrile since morning. Cough with mucopurulent sputum, no fresh haemoptysis. Chest physiotherapy started. Tolerating oral diet.",
+        "Fever spikes persisted overnight (maximum 100.8 F). Sputum less blood-tinged. Blood cultures drawn before antibiotics, no growth so far.",
+        "Last fever spike of 100.4 F in the early morning, afebrile since then. Cough with mucopurulent sputum, no fresh haemoptysis. Chest physiotherapy started. Tolerating oral diet.",
         "Clinically improving. Repeat chest radiograph shows partial resolution of right lower zone consolidation. Pre-procedure work-up for CT-guided biopsy sent.",
         "CT-guided core biopsy of the right lower lobe lesion done under local anaesthesia (3 cores, 18G). Post-procedure chest radiograph: no pneumothorax.",
         "Mild procedure-site pain, settled with paracetamol. No haemoptysis. Ambulating in the ward. Diet and sleep normal.",
         "Afebrile for more than 72 hours. Antibiotics changed to oral route as per sensitivity pattern of sputum culture (no significant growth).",
-        "Stable. Counselled with family regarding pending biopsy report and need for further staging investigations as outpatient.",
+        "Stable. Counselled with family regarding the preliminary biopsy report, the pending final report and molecular tests, and outpatient review of the staging reports.",
         "Fit for discharge. Vitals stable, saturating well on room air. Discharge medications explained to patient and attendant (son).",
     ]
     secs = [
@@ -203,13 +204,13 @@ def long_discharge_sections():
                                        "chills, more in the evenings, relieved by paracetamol. He also reports breathlessness on climbing one flight of stairs (mMRC grade 2), loss of appetite and weight loss "
                                        "of about 5 kg over 2 months. There is no history of chest pain, hoarseness of voice, difficulty in swallowing, swelling of the face or neck, bone pain, headache, "
                                        "vomiting, seizures or weakness of the limbs. He was seen at Kaveri Multispeciality Hospital (SYNTHETIC), Mandya, where a chest X-ray showed a right lower zone opacity, "
-                                       "and was referred here; an outside CECT thorax dated 02/09/2026 was done before admission."),
+                                       "and was referred here. A CECT thorax was done in the Radio-diagnosis department of this hospital on 02/09/2026 at the request of the referring "
+                                       "doctor, and he was first seen in the Medical Oncology OPD on 05/09/2026, the day before this admission."),
         ("Outside records reviewed", "Referral letter dated 30/08/2026 from Kaveri Multispeciality Hospital (SYNTHETIC). Chest X-ray PA view (outside, 28/08/2026): right lower zone opacity. "
-                                     "CECT thorax (02/09/2026): right lower lobe mass with post-obstructive consolidation and ipsilateral hilar and subcarinal nodes. Prescriptions of the local "
-                                     "practitioner (two courses of oral antibiotics and cough syrups). No previous chest imaging is available for comparison."),
+                                     "Prescriptions of the local practitioner (two courses of oral antibiotics and cough syrups). No chest imaging older than this X-ray is available for comparison."),
         ("Past history", "Known hypertensive for 6 years on Tab. Telmisartan 40 mg once daily. Not a known diabetic. No history of tuberculosis or contact with tuberculosis. "
                          "No previous surgery. No known drug allergy."),
-        ("Personal history", "Beedi smoker for 30 years, about 15 beedis per day; stopped 2 months ago. Occasional alcohol, stopped. Mixed diet. Works as a farmer. "
+        ("Personal history", "Beedi smoker for 25 years, about 20 beedis per day; stopped 2 months ago. Occasional alcohol, stopped. Mixed diet. Works as a farmer. "
                              "Lives with wife and son in a rural area of Mandya district (fictional address details withheld)."),
         ("Family history", "No family history of malignancy. Father had hypertension."),
         ("General examination at admission", "Conscious, oriented, moderately built and nourished. Pallor present. No icterus, cyanosis, clubbing, lymphadenopathy or pedal oedema. "
@@ -218,7 +219,7 @@ def long_discharge_sections():
                                               "Cardiovascular system: S1 S2 heard, no murmur. Abdomen: soft, non-tender, no organomegaly. Central nervous system: no focal neurological deficit."),
     ]
     for i, (day, note) in enumerate(zip(days, course), 1):
-        t = round(rnd.uniform(98.2, 101.4) if i < 3 else rnd.uniform(97.8, 99.0), 1)
+        t = min(round(rnd.uniform(98.2, 101.4) if i < 3 else rnd.uniform(97.8, 99.0), 1), tmax[i - 1])
         pr, sbp, dbp = rnd.randint(78, 108), rnd.randint(124, 148), rnd.randint(76, 90)
         spo2 = rnd.randint(92, 95) if i < 3 else rnd.randint(95, 98)
         rr = rnd.randint(16, 24)
@@ -230,12 +231,12 @@ def long_discharge_sections():
                      f"Medications given: Inj. Piperacillin-tazobactam 4.5 g IV 8-hourly {'(continued)' if i < 7 else '(stopped on day 7, changed to oral Tab. Amoxicillin-clavulanate 625 mg 8-hourly)'}; "
                      f"Inj. Tranexamic acid 500 mg IV 8-hourly {'(continued)' if i < 4 else '(stopped)'}; Tab. Telmisartan 40 mg once daily; Inj. Pantoprazole 40 mg IV once daily; "
                      f"Syp. Ascoril 10 mL thrice daily; Nebulisation with Ipratropium and Levosalbutamol 6-hourly; Tab. Paracetamol 650 mg SOS for fever or pain.\n"
-                     f"Nursing: chest physiotherapy twice daily, incentive spirometry encouraged, fall-risk precautions, input-output charting maintained, {'oxygen weaned to room air by evening' if i == 3 else 'no new nursing concern'}.\n"
+                     f"Nursing: chest physiotherapy twice daily, incentive spirometry encouraged, fall-risk precautions, input-output charting maintained, {'oxygen weaned to room air in the morning' if i == 3 else 'no new nursing concern'}.\n"
                      f"Evening round: patient reviewed by the duty resident. {rnd.choice(['No fresh complaints.', 'Complains of mild cough at night, no blood.', 'Slept well, appetite improving.', 'Mild generalised weakness, no breathlessness at rest.'])} "
                      f"Chest auscultation unchanged from the morning. No new neurological symptom. Urine output adequate. Attendant (son) updated about the day's events and plan; questions answered.\n"
-                     f"Investigations sent this day: {['CBC, renal function, electrolytes, CRP, blood culture x 2, sputum culture, sputum AFB, HIV / HBsAg / HCV serology, ECG', 'Sputum AFB second sample, CBNAAT', 'CBC, renal function, electrolytes, CRP', 'PT / INR, aPTT, blood grouping and typing, 2D echo', 'Post-procedure chest radiograph', 'None', 'CBC, CRP', 'Random blood sugar, HbA1c', 'CBC, renal function before discharge'][i - 1]}.\n"
+                     f"Investigations sent this day: {['CBC, renal and liver function, electrolytes, CRP, blood culture x 2, sputum culture, sputum AFB, HIV / HBsAg / HCV serology, ECG', 'Sputum AFB second sample, CBNAAT', 'CBC, renal and liver function, electrolytes, CRP, 2D echo, MRI brain with contrast', 'PT / INR, aPTT, blood grouping and typing, random blood sugar, HbA1c, whole body FDG PET/CT', 'CBC, renal and liver function, electrolytes, CRP, post-procedure chest radiograph', 'None', 'None', 'CBC, renal and liver function, electrolytes, CRP before discharge', 'None'][i - 1]}.\n"
                      f"Diet: {'soft diet, high protein, as per dietician' if i > 1 else 'nil by mouth for 6 hours, then liquids'}; oral fluid intake encouraged, about 2 litres per day. Bowel and bladder habits normal. Pain score {rnd.randint(0, 3)}/10.\n"
-                     f"Plan as recorded by the treating unit: {'continue antibiotics, monitor for fresh haemoptysis, await cultures' if i < 4 else ('pre-procedure work-up for CT-guided biopsy' if i == 4 else ('post-biopsy monitoring' if i < 7 else 'continue oral antibiotics, plan discharge with outpatient staging'))}."))
+                     f"Plan as recorded by the treating unit: {'continue antibiotics, monitor for fresh haemoptysis, await cultures' if i < 4 else ('pre-procedure work-up for CT-guided biopsy' if i == 4 else ('post-biopsy monitoring' if i < 7 else 'continue oral antibiotics, plan discharge with outpatient review of the biopsy and staging reports'))}."))
     labs = [["Date", "Hb (gm%)", "TLC (cells/cumm)", "Platelets (lakhs/cumm)", "S. Creatinine (mg/dl)", "S. Sodium (mmol/L)", "CRP (mg/L)"],
             ["06/09/2026", "10.9", "16,800", "3.4", "1.2", "133", "96"], ["08/09/2026", "11.1", "13,200", "3.6", "1.0", "135", "54"],
             ["10/09/2026", "11.3", "9,700", "3.2", "0.9", "137", "21"], ["13/09/2026", "11.6", "8,100", "2.9", "0.9", "138", "8"]]
@@ -245,20 +246,23 @@ def long_discharge_sections():
                                  "Serology (06/09/2026): HIV I and II antibodies: Non-reactive. HBsAg: Non-reactive. Anti-HCV: Non-reactive.\n"
                                  "Coagulation (09/09/2026): PT 13.2 s (control 12.5 s), INR 1.05, aPTT 31 s. Random blood sugar 118 mg/dl. HbA1c 5.6%.\n"
                                  "ECG: sinus tachycardia on admission, normal on day 4. 2D echo: normal biventricular function, LVEF 60%.\n"
-                                 "CECT thorax (02/09/2026, outside study reviewed): right lower lobe mass with post-obstructive consolidation; report on file with Radio-diagnosis."),
+                                 "CECT thorax (02/09/2026, done in this hospital before admission): right lower lobe mass with post-obstructive consolidation and ipsilateral hilar and "
+                                 "subcarinal nodes; report on file with Radio-diagnosis.\n"
+                                 "MRI brain with contrast (08/09/2026) and whole body FDG PET/CT (09/09/2026) were done during this stay; the reports are on file with Radio-diagnosis "
+                                 "and Nuclear Medicine and will be reviewed with the final biopsy report."),
         ("Consultations during the stay", "Cardiology (08/09/2026): fit for the planned procedure from the cardiac point of view; continue telmisartan. 2D echo normal.\n"
                                           "Physiotherapy (from 07/09/2026): chest physiotherapy twice daily, incentive spirometry, graded ambulation; exercise sheet given.\n"
                                           "Dietician (07/09/2026): high protein diet, small frequent meals, about 1,800 kcal and 70 g protein per day; diet chart in the local language given.\n"
-                                          "Medical Oncology (12/09/2026): seen in the ward; the patient and family were told the biopsy result is pending; outpatient review planned with the reports.\n"
+                                          "Medical Oncology (12/09/2026): seen in the ward; the patient and family were told that the final biopsy report, PD-L1 and molecular tests are pending; outpatient review planned with the reports.\n"
                                           "Medical social worker (13/09/2026): explained the PM-JAY entitlement and documents needed for the pre-authorisation; family has the Ayushman card."),
         ("Counselling", "The diagnosis under evaluation, the biopsy procedure and its risks were explained to the patient and his son in Kannada. Written informed consent was taken before the biopsy. "
-                        "The family was informed that further tests (PET/CT, brain MRI and molecular tests on the biopsy) may be needed after the final biopsy report, and that the treatment plan "
+                        "The family was informed that the PET/CT and brain MRI done during this stay, the final biopsy report and the molecular tests on the biopsy will be reviewed together, and that the treatment plan "
                         "will be decided at the hospital's Tumour Board. Warning signs (fresh haemoptysis, fever, breathlessness, chest pain) and whom to contact were explained."),
         ("Liver function and other biochemistry", [["Date", "T. bilirubin (mg/dl)", "SGPT (U/L)", "SGOT (U/L)", "ALP (U/L)", "S. Albumin (gm/dl)", "S. Potassium (mmol/L)", "Blood urea (mg/dl)"],
                                                    ["06/09/2026", "0.9", "38", "41", "102", "3.3", "3.9", "36"], ["08/09/2026", "0.8", "35", "33", "98", "3.3", "4.1", "30"],
                                                    ["10/09/2026", "0.8", "31", "30", "95", "3.4", "4.2", "27"], ["13/09/2026", "0.7", "29", "27", "92", "3.6", "4.3", "24"]]),
         ("Daily vitals summary", [["Date", "Max temp (F)", "Pulse (per min)", "BP (mmHg)", "SpO2", "Oxygen"]] + [
-            [d, f"{(101.2 - 0.4 * k) if k < 3 else 98.6:.1f}", str(104 - 3 * k), f"{144 - 2 * k}/{88 - k}", f"{92 + min(k, 5)}%", "2 L/min" if k < 2 else "room air"] for k, d in enumerate(days)]),
+            [d, f"{tmax[k]:.1f}", str(104 - 3 * k), f"{144 - 2 * k}/{88 - k}", f"{92 + min(k, 5)}%", "2 L/min" if k < 2 else "room air"] for k, d in enumerate(days)]),
         ("Risk assessments", "Fall risk (Morse scale) on admission: 35, moderate; fall precautions taken. Pressure injury risk (Braden scale): 19, low. "
                              "Venous thromboembolism risk assessed: mechanical prophylaxis with early ambulation; pharmacological prophylaxis withheld because of haemoptysis. "
                              "Nutrition screening (MUST): score 2, high risk; dietician referral done. Pain assessed every shift with the numeric rating scale. "
@@ -269,7 +273,7 @@ def long_discharge_sections():
                                               "Inj. Lignocaine 2% (local) for the biopsy on 10/09/2026. No missed doses recorded in the medication chart."),
         ("Instructions given to the patient", "Take medicines as written in the medication list; do not stop telmisartan. Eat small frequent high-protein meals. Do not smoke beedis or cigarettes, and avoid "
                                               "second-hand smoke. Keep the biopsy site dry for 2 days. Walk inside the house several times a day and continue the breathing exercises taught by the physiotherapist. "
-                                              "Bring all reports, including outside CT films and the discharge summary, to the next visit. Keep the PM-JAY (Ayushman) card and identity proof ready for the pre-authorisation."),
+                                              "Bring all reports, including the outside chest X-ray film, the CT, MRI and PET/CT reports and the discharge summary, to the next visit. Keep the PM-JAY (Ayushman) card and identity proof ready for the pre-authorisation."),
         ("Procedure note", "10/09/2026: CT-guided core biopsy of the right lower lobe lesion. Consent taken. Local anaesthesia with 2% lignocaine. Three 18G cores obtained and sent for histopathology "
                            "and immunohistochemistry, with a request to save tissue for molecular testing. No immediate complication. Post-procedure chest radiograph: no pneumothorax."),
         ("Condition at discharge", "Afebrile, haemodynamically stable, no haemoptysis for 7 days, saturating 97% on room air, ambulant with assistance for longer distances.\n"
@@ -406,6 +410,27 @@ def pdf_text(pdf_path):
     return "\n\f\n".join(doc[i].get_textpage().get_text_range().replace("\r\n", "\n") for i in range(len(doc)))
 
 
+def fix_known_lines(ref, known):
+    """Put the answer-key text of the Hindi and handwritten lines into the reference text.
+
+    pdfium extracts Devanagari with artefacts (U+0235 where the vowel sign of कि is reordered) and wraps long lines, while
+    the rendered image is correct. A run of 1 to 3 extracted lines is replaced by the known line when, after dropping every
+    character that does not occur in the known line, it equals the known line (whitespace ignored)."""
+    lines = ref.split("\n")
+    for k in known:
+        chars, want = set(k), "".join(k.split())
+        for i in range(len(lines)):
+            hit = next((n for n in (1, 2, 3) if i + n <= len(lines)
+                        and len(" ".join(lines[i:i + n])) <= len(k) + 8
+                        and "".join(c for c in " ".join(lines[i:i + n]) if c in chars and not c.isspace()) == want), None)
+            if hit:
+                lines[i:i + hit] = [k]
+                break
+        else:
+            raise ValueError(f"known line not found in the reference text: {k}")
+    return "\n".join(lines)
+
+
 def to_photo(pdf_path, png_path, seed):
     """Phone photo of a printed page: tilted, on a desk, with a shadow across one side, warm cast, soft focus."""
     from PIL import Image, ImageFilter
@@ -467,7 +492,7 @@ C4 = [
  dict(path="medical_oncology/medical_oncology_opd_2026-09-05.pdf", fmt="pdf", dept="Department of Medical Oncology", title="MEDICAL ONCOLOGY OPD NOTE",
       id_rows=_rk_opd_rows, meta=[("Relation", P4["relation"]), ("Visit date", "05/09/2026"), ("Next review", "19/09/2026")],
       sections=[("Presenting complaints", "Cough for 2 months, blood in sputum for 10 days, weight loss of about 5 kg."),
-                ("History", "Beedi smoker, 30 years, about 15 per day (25 pack-years equivalent), stopped 2 months ago. Hypertension on telmisartan 40 mg once daily."),
+                ("History", "Beedi smoker, 25 years, about 20 per day (25 pack-years equivalent), stopped 2 months ago. Hypertension on telmisartan 40 mg once daily."),
                 ("Performance status", "ECOG performance status: 1"),
                 ("Question for the Tumour Board", "Discussion of staging work-up and management plan after biopsy.")],
       footer=signed("FINAL", "Dr. Anand Kulkarni, MD, DM (Medical Oncology), KMC Reg. No. 71234", "05/09/2026 15:20"), stamp="FINAL / SIGNED",
@@ -488,7 +513,7 @@ C4 = [
                  identity={"name": "Ramesh Kumar", "relation": "S/o Mohan Lal", "age_sex": "58 Y / M", "aadhaar": AADHAAR_RK, "op_no_outside": "KMH/OP/26/55120"},
                  exercises=["Word .docx", "Aadhaar printed (must be masked, never used for matching)", "no status line", "Sd/- signature", "outside hospital OP number"])),
  dict(path="radio_diagnosis/cect_thorax_2026-09-02.pdf", fmt="pdf", dept="Department of Radio-diagnosis", title="CECT THORAX",
-      grid=_rk_ct_rows + [("Study date", "02/09/2026"), ("Reported on", "03/09/2026"), ("Ref. by", "Dr. Anand Kulkarni")],
+      grid=_rk_ct_rows + [("Study date", "02/09/2026"), ("Reported on", "03/09/2026"), ("Ref. by", "Dr. Harish Gowda (Kaveri Multispeciality Hospital, Mandya)")],
       sections=[("Findings", "Lobulated soft tissue mass in the superior segment of the right lower lobe measuring 4.6 x 3.8 cm with post-obstructive consolidation.\n"
                              "Enlarged right hilar node (1.6 cm) and subcarinal node (1.4 cm short axis). No contralateral mediastinal node.\n"
                              "No pleural effusion. Liver and adrenals in the imaged sections normal. No destructive bone lesion."),
@@ -562,7 +587,7 @@ C4 = [
                  other_values={"hiv": "Non-reactive", "hbsag": "Non-reactive", "anti_hcv": "Non-reactive"},
                  not_negations=["HIV I and II antibodies: Non-reactive", "non-small cell carcinoma"],
                  ignore_dates={"2026-09-22": "follow-up review date"},
-                 exercises=["very long document (about 25,000 characters) with the ECOG value near the end", "'HIV non-reactive' is a result, not a negation",
+                 exercises=["very long document (about 24,700 characters) with the ECOG value near the end", "'HIV non-reactive' is a result, not a negation",
                             "ECOG 2 here conflicts with ECOG 1 in the OPD note of 05/09/2026 (later document)", "surname-first name"])),
 ]
 _rk_hp2_rows, _rk_hp2_id = ident(P4, "Mr. Ramesh Kumar", ["uhid", "cr_no", "age_sex"])
@@ -812,9 +837,9 @@ INTAKE = {
  ],
  "Pathology": [
   dict(path="pathology/slide_review_2026-09-12.pdf", fmt="pdf", dept="Department of Pathology", title="SLIDE REVIEW (SECOND OPINION)",
-       id_rows=_in["sd5_review"][0], meta=[("Material", "Outside slides of left breast core biopsy"), ("Received on", "10/09/2026")],
+       id_rows=_in["sd5_review"][0], meta=[("Material", "Slides of left breast core biopsy HP/2026/7490, internal second opinion"), ("Received on", "10/09/2026")],
        sections=[("Opinion", "Agree with invasive breast carcinoma of no special type, grade 2.")],
-       footer=signed("FINAL", "Dr. Fatima Begum, MD (Pathology), KMC Reg. No. 62290", "12/09/2026 13:00"), stamp="FINAL / SIGNED",
+       footer=signed("FINAL", "Dr. Meenakshi Iyengar, MD (Pathology), KMC Reg. No. 68814", "12/09/2026 13:00"), stamp="FINAL / SIGNED",
        truth=dict(doc_type="histopathology", status="FINAL", signed=True, report_date="2026-09-12", event_date="2026-09-10", event_label="received on", identity=_in["sd5_review"][1],
                   expected_case="TB-005", route="case", reason="UHID SYN-500263 matches TB-005; name printed with an initial")),
   dict(path="pathology/pap_smear_2026-09-15.pdf", fmt="pdf", dept="Department of Pathology", title="CERVICAL CYTOLOGY (PAP SMEAR)",
@@ -882,10 +907,11 @@ def _write_doc(d, target, weasyprint, to_scan):
     else:
         ref = pdf_text(tmp); to_scan(tmp, target, seed=seed)
     tmp.unlink()
-    return ref
+    known = d["truth"].get("hindi_lines", []) + d["truth"].get("handwritten_lines", [])
+    return fix_known_lines(ref, known) if ref is not None and known else ref
 
 
-def _save_ref(out, cid, rel, ref):
+def save_ref(out, cid, rel, ref):
     if ref is None:
         return
     p = out / "truth" / "reference_text" / cid / (rel + ".txt")
@@ -900,7 +926,7 @@ def build_v1(out, weasyprint, to_scan):
         for group, items in (("cases", docs), ("arrivals", arrivals)):
             for d in items:
                 target = out / group / cid / d["path"]; target.parent.mkdir(parents=True, exist_ok=True)
-                _save_ref(out, cid, d["path"], _write_doc(d, target, weasyprint, to_scan))
+                save_ref(out, cid, d["path"], _write_doc(d, target, weasyprint, to_scan))
                 truth["documents" if group == "cases" else "arrivals"][d["path"]] = d["truth"]
         if cid == "TB-005":
             truth["board_decision"] = BOARD_DECISION
@@ -913,6 +939,6 @@ def build_v1(out, weasyprint, to_scan):
     for dept, items in INTAKE.items():
         for d in items:
             target = out / "intake" / d["path"]; target.parent.mkdir(parents=True, exist_ok=True)
-            _save_ref(out, "intake", d["path"], _write_doc(d, target, weasyprint, to_scan))
+            save_ref(out, "intake", d["path"], _write_doc(d, target, weasyprint, to_scan))
             intake["files"][d["path"]] = {"department": dept, **d["truth"]}
     (out / "truth" / "intake.json").write_text(json.dumps(intake, indent=2, ensure_ascii=False))
