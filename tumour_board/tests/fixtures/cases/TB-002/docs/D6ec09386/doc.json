@@ -1,0 +1,93 @@
+{
+ "doc_id": "D6ec09386",
+ "filename": "her2_fish_addendum_2026-08-25.pdf",
+ "rel_path": "pathology/her2_fish_addendum_2026-08-25.pdf",
+ "ext": ".pdf",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-09T16:42:01",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Pathology\nADDENDUM: HER2 FISH\nPatient SYNTHETIC, Lakshmi Iyer\nUHID SYN-200417\nAge / Sex 48 Y / F\nSpecimen Core biopsy, left breast\nRelates to IHC report of 19-Aug-2026\nHER2 in situ hybridisation\nHER2/CEP17 ratio: 1.3. Average HER2 copy number: 3.1 signals per cell.\nResult: HER2 not amplified (ASCO/CAP 2023 group 5).\nFinal receptor status\nER positive (90%), PR positive (70%), HER2 negative (IHC 2+, FISH not amplified), Ki-67 25%.\nReport status: FINAL (AMENDED)\nReported by: Dr. Kavita Shah, Consultant Pathologist (electronically signed)\nSigned: 25-Aug-2026 16:00\nFINAL / SIGNED\nSYNTHETIC -\nDEMO ONLY",
+   "method": "text-layer"
+  }
+ ],
+ "classification": {
+  "title": "ADDENDUM: HER2 FISH",
+  "department": "Department of Pathology",
+  "doc_type": "ihc",
+  "body_region": "left breast",
+  "report_date": "25-Aug-2026 16:00",
+  "status_quote": "Report status: FINAL (AMENDED)",
+  "signature_quote": "Reported by: Dr. Kavita Shah, Consultant Pathologist (electronically signed)",
+  "signer": "Dr. Kavita Shah, Consultant Pathologist",
+  "patient_name": "Lakshmi Iyer",
+  "patient_id": "SYN-200417",
+  "status": "AMENDED",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-08-25"
+ },
+ "facts": {
+  "er": {
+   "value": "ER positive (90%)",
+   "quote": "ER positive (90%), PR positive (70%), HER2 negative (IHC 2+, FISH not amplified), Ki-67 25%.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 392,
+    "end": 484,
+    "score": 100.0,
+    "matched": "ER positive (90%), PR positive (70%), HER2 negative (IHC 2+, FISH not amplified), Ki-67 25%."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "pr": {
+   "value": "PR positive (70%)",
+   "quote": "ER positive (90%), PR positive (70%), HER2 negative (IHC 2+, FISH not amplified), Ki-67 25%.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 392,
+    "end": 484,
+    "score": 100.0,
+    "matched": "ER positive (90%), PR positive (70%), HER2 negative (IHC 2+, FISH not amplified), Ki-67 25%."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "her2": {
+   "value": "HER2 not amplified (ASCO/CAP 2023 group 5)",
+   "quote": "Result: HER2 not amplified (ASCO/CAP 2023 group 5).",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 318,
+    "end": 369,
+    "score": 100.0,
+    "matched": "Result: HER2 not amplified (ASCO/CAP 2023 group 5)."
+   },
+   "state": "present",
+   "polarity": "negated"
+  },
+  "ki67": {
+   "value": "Ki-67 25%",
+   "quote": "ER positive (90%), PR positive (70%), HER2 negative (IHC 2+, FISH not amplified), Ki-67 25%.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 392,
+    "end": 484,
+    "score": 100.0,
+    "matched": "ER positive (90%), PR positive (70%), HER2 negative (IHC 2+, FISH not amplified), Ki-67 25%."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  }
+ }
+}

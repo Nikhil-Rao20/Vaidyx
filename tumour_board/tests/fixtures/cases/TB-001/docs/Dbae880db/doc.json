@@ -1,0 +1,108 @@
+{
+ "doc_id": "Dbae880db",
+ "filename": "medical_oncology_opd_note_2026-09-02.pdf",
+ "rel_path": "01_clinical/medical_oncology_opd_note_2026-09-02.pdf",
+ "ext": ".pdf",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-11T00:45:18",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Medical Oncology\nMEDICAL ONCOLOGY OPD NOTE\nPatient SYNTHETIC, Ramesh Kumar\nUHID SYN-100231\nAge / Sex 62 Y / M\nVisit date 02-Sep-2026\nPresenting complaints\nHaemoptysis for 6 weeks, weight loss of 6 kg over 2 months, cough.\nHistory\nEx-smoker, 30 pack-years, quit in 2020. Hypertension on amlodipine 5 mg once daily. No\ndiabetes.\nPerformance status\nECOG performance status: 1\nInvestigations so far\nCECT thorax (28-Aug-2026), PET/CT (06-Sep-2026) and CT-guided biopsy (08-Sep-2026)\narranged.\nQuestion for the T umour Board\nMultidisciplinary discussion of staging and management plan.\nReport status: FINAL\nReported by: Dr. Meera Nair, Consultant Medical Oncologist (electronically signed)\nSigned: 02-Sep-2026 16:40\nFINAL / SIGNED\nSYNTHETIC -\nDEMO ONLY",
+   "method": "text-layer"
+  }
+ ],
+ "classification": {
+  "title": "MEDICAL ONCOLOGY OPD NOTE",
+  "department": "Department of Medical Oncology",
+  "doc_type": "clinical_note",
+  "body_region": "",
+  "report_date": "02-Sep-2026",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "Reported by: Dr. Meera Nair, Consultant Medical Oncologist (electronically signed)",
+  "signer": "Dr. Meera Nair, Consultant Medical Oncologist",
+  "patient_name": "Ramesh Kumar",
+  "patient_id": "SYN-100231",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-09-02"
+ },
+ "facts": {
+  "presenting_complaint": {
+   "value": "Haemoptysis for 6 weeks, weight loss of 6 kg over 2 months, cough.",
+   "quote": "Haemoptysis for 6 weeks, weight loss of 6 kg over 2 months, cough.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 207,
+    "end": 273,
+    "score": 100.0,
+    "matched": "Haemoptysis for 6 weeks, weight loss of 6 kg over 2 months, cough."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "ecog": {
+   "value": "1",
+   "quote": "ECOG performance status: 1",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 398,
+    "end": 424,
+    "score": 100.0,
+    "matched": "ECOG performance status: 1"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "smoking_history": {
+   "value": "Ex-smoker, 30 pack-years, quit in 2020.",
+   "quote": "Ex-smoker, 30 pack-years, quit in 2020.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 282,
+    "end": 321,
+    "score": 100.0,
+    "matched": "Ex-smoker, 30 pack-years, quit in 2020."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "comorbidities": {
+   "value": "Hypertension on amlodipine 5 mg once daily. No diabetes.",
+   "quote": "Hypertension on amlodipine 5 mg once daily. No\ndiabetes.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 322,
+    "end": 378,
+    "score": 100.0,
+    "matched": "Hypertension on amlodipine 5 mg once daily. No\ndiabetes."
+   },
+   "state": "present",
+   "polarity": "negated"
+  },
+  "clinical_question": {
+   "value": "Multidisciplinary discussion of staging and management plan.",
+   "quote": "Multidisciplinary discussion of staging and management plan.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 571,
+    "end": 631,
+    "score": 100.0,
+    "matched": "Multidisciplinary discussion of staging and management plan."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  }
+ }
+}

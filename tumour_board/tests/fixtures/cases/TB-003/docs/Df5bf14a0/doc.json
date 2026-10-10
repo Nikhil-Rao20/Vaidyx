@@ -1,0 +1,93 @@
+{
+ "doc_id": "Df5bf14a0",
+ "filename": "rectal_biopsy_2026-06-02.pdf",
+ "rel_path": "pathology/rectal_biopsy_2026-06-02.pdf",
+ "ext": ".pdf",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-09T16:42:04",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Pathology\nHISTOPATHOLOGY REPORT\nPatient SYNTHETIC, Abdul Rahman\nUHID SYN-300582\nAge / Sex 57 Y / M\nSpecimen Endoscopic biopsies, rectal growth\nDiagnosis\nAdenocarcinoma, moderately differentiated.\nMismatch repair proteins (IHC)\nProtein Result\nMLH1 Retained\nPMS2 Retained\nMSH2 Retained\nMSH6 Retained\nInterpretation of MMR IHC (as reported)\nMismatch repair proficient (pMMR).\nKRAS / NRAS / BRAF\nNot performed.\nReport status: FINAL\nReported by: Dr. Kavita Shah, Consultant Pathologist (electronically signed)\nSigned: 02-Jun-2026 17:10\nFINAL / SIGNED\nSYNTHETIC -\nDEMO ONLY",
+   "method": "text-layer"
+  }
+ ],
+ "classification": {
+  "title": "HISTOPATHOLOGY REPORT",
+  "department": "Department of Pathology",
+  "doc_type": "histopathology",
+  "body_region": "rectal",
+  "report_date": "02-Jun-2026 17:10",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "Reported by: Dr. Kavita Shah, Consultant Pathologist (electronically signed)",
+  "signer": "Dr. Kavita Shah, Consultant Pathologist",
+  "patient_name": "Abdul Rahman",
+  "patient_id": "SYN-300582",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-06-02"
+ },
+ "facts": {
+  "histologic_type": {
+   "value": "Adenocarcinoma",
+   "quote": "Adenocarcinoma, moderately differentiated.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 205,
+    "end": 247,
+    "score": 100.0,
+    "matched": "Adenocarcinoma, moderately differentiated."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "grade": {
+   "value": "moderately differentiated",
+   "quote": "Adenocarcinoma, moderately differentiated.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 205,
+    "end": 247,
+    "score": 100.0,
+    "matched": "Adenocarcinoma, moderately differentiated."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "mmr": {
+   "value": "Mismatch repair proficient (pMMR)",
+   "quote": "Mismatch repair proficient (pMMR).",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 390,
+    "end": 424,
+    "score": 100.0,
+    "matched": "Mismatch repair proficient (pMMR)."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "ras_braf": {
+   "value": "Not performed",
+   "quote": "Not performed.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 444,
+    "end": 458,
+    "score": 100.0,
+    "matched": "Not performed."
+   },
+   "state": "pending",
+   "polarity": "negated"
+  }
+ }
+}

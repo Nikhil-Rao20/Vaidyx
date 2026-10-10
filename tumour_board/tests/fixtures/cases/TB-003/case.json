@@ -1,0 +1,12 @@
+{
+ "case_id": "TB-003",
+ "patient": {
+  "name": "SYNTHETIC, Abdul Rahman",
+  "mrn": "SYN-300582",
+  "agesex": "57 Y / M"
+ },
+ "protocol": "colorectal_rectum",
+ "board_date": "",
+ "created": "2026-10-09T16:42:02",
+ "created_by": "admin"
+}

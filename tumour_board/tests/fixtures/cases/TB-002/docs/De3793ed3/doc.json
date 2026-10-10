@@ -1,0 +1,78 @@
+{
+ "doc_id": "De3793ed3",
+ "filename": "core_biopsy_histopathology_2026-08-16.pdf",
+ "rel_path": "pathology/core_biopsy_histopathology_2026-08-16.pdf",
+ "ext": ".pdf",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-09T16:42:01",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Pathology\nHISTOPATHOLOGY REPORT\nPatient SYNTHETIC, Lakshmi Iyer\nUHID SYN-200417\nAge / Sex 48 Y / F\nSpecimen Ultrasound-guided core biopsy, left breast mass\nReceived 14-Aug-2026\nDiagnosis\nInvasive breast carcinoma of no special type (ductal).\nGrade\nNottingham grade 2 (tubules 3, pleomorphism 2, mitoses 2; score 7/9).\nLymphovascular invasion\nNot identified in the cores.\nReport status: FINAL\nReported by: Dr. Kavita Shah, Consultant Pathologist (electronically signed)\nSigned: 16-Aug-2026 12:20\nFINAL / SIGNED\nSYNTHETIC -\nDEMO ONLY",
+   "method": "text-layer"
+  }
+ ],
+ "classification": {
+  "title": "HISTOPATHOLOGY REPORT",
+  "department": "Department of Pathology",
+  "doc_type": "histopathology",
+  "body_region": "left breast",
+  "report_date": "16-Aug-2026 12:20",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "Reported by: Dr. Kavita Shah, Consultant Pathologist (electronically signed)",
+  "signer": "Dr. Kavita Shah, Consultant Pathologist",
+  "patient_name": "Lakshmi Iyer",
+  "patient_id": "SYN-200417",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-08-16"
+ },
+ "facts": {
+  "histologic_type": {
+   "value": "Invasive breast carcinoma of no special type (ductal).",
+   "quote": "Invasive breast carcinoma of no special type (ductal).",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 239,
+    "end": 293,
+    "score": 100.0,
+    "matched": "Invasive breast carcinoma of no special type (ductal)."
+   },
+   "state": "present",
+   "polarity": "negated"
+  },
+  "grade": {
+   "value": "Nottingham grade 2 (tubules 3, pleomorphism 2, mitoses 2; score 7/9).",
+   "quote": "Nottingham grade 2 (tubules 3, pleomorphism 2, mitoses 2; score 7/9).",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 300,
+    "end": 369,
+    "score": 100.0,
+    "matched": "Nottingham grade 2 (tubules 3, pleomorphism 2, mitoses 2; score 7/9)."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "lvi": {
+   "value": "Not identified in the cores.",
+   "quote": "Not identified in the cores.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 394,
+    "end": 422,
+    "score": 100.0,
+    "matched": "Not identified in the cores."
+   },
+   "state": "present",
+   "polarity": "negated"
+  }
+ }
+}

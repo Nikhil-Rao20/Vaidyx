@@ -1,0 +1,153 @@
+"""docstatus: report status, signature and date rules (characterisation of today's behaviour)."""
+import json
+
+import pytest
+
+from tumour_board import docstatus as ds
+from tumour_board.tests.conftest import FIXTURES
+
+
+@pytest.mark.parametrize("text,status", [
+    ("Report status: FINAL", "FINAL"),
+    ("Report Status - Amended", "AMENDED"),
+    ("Report status: Final (Amended)", "AMENDED"),
+    ("Report status: Corrected", "CORRECTED"),
+    ("Report status: Preliminary", "PRELIMINARY"),
+    ("Report status: provisional", "PRELIMINARY"),
+    ("Report status: Draft", "DRAFT"),
+    ("Report status: Cancelled", "CANCELLED"),
+    ("Result status: canceled", "CANCELLED"),
+    ("Record status: FINAL", "FINAL"),
+    ("FINAL DIAGNOSIS: Adenocarcinoma", "FINAL"),
+    ("FINAL PATHOLOGIC DIAGNOSIS", "FINAL"),
+    ("*** End of report ***", "FINAL"),
+    ("ADDENDUM: HER2 FISH", "AMENDED"),
+    ("Revised report issued", "AMENDED"),
+    ("Supplementary report", "AMENDED"),
+    ("Corrected report", "CORRECTED"),
+    ("DRAFT REPORT", "DRAFT"),
+    ("DRAFT / UNSIGNED", "DRAFT"),
+    ("Preliminary report: pending IHC", "PRELIMINARY"),
+    ("Interim result", "PRELIMINARY"),
+    ("Biopsy (provisional) see addendum", "PRELIMINARY"),
+    ("Report cancelled", "CANCELLED"),
+    ("Report withdrawn", "CANCELLED"),
+    ("Impression: mass in right upper lobe", "UNSTATED"),
+    ("Entered in error", "UNSTATED"),  # needs "report entered in error"
+])
+def test_detect_status(text, status):
+    assert ds.detect_status(text)[0] == status
+
+
+def test_status_line_beats_other_markers():
+    st, quote, _ = ds.detect_status("FINAL DIAGNOSIS: adenocarcinoma\nReport status: PRELIMINARY (pending HER2 FISH)")
+    assert st == "PRELIMINARY" and quote.startswith("Report status: PRELIMINARY")
+
+
+def test_negative_markers_beat_positive_ones():
+    assert ds.detect_status("Preliminary report.\nFINAL DIAGNOSIS: adenocarcinoma")[0] == "PRELIMINARY"
+    assert ds.detect_status("DRAFT REPORT\n*** End of report ***")[0] == "DRAFT"
+
+
+def test_amended_beats_final_without_status_line():
+    assert ds.detect_status("FINAL DIAGNOSIS: carcinoma\nADDENDUM: HER2 FISH not amplified")[0] == "AMENDED"
+
+
+def test_unstated_with_draft_word_adds_note():
+    st, quote, notes = ds.detect_status("This is a draft copy of the summary")
+    assert (st, quote) == ("UNSTATED", "")
+    assert notes == ["the word 'draft' appears in the text; confirm this is the final version"]
+
+
+def test_unstated_without_draft_word_has_no_note():
+    assert ds.detect_status("Impression: normal study") == ("UNSTATED", "", [])
+
+
+@pytest.mark.parametrize("text,signed", [
+    ("Electronically signed by Dr. Meera Nair", "yes"),
+    ("Digitally signed", "yes"),
+    ("e-signed", "yes"),
+    ("Sd/-", "yes"),
+    ("Sd/- Dr. Rao", "yes"),
+    ("(Sd.) Dr Rao", "yes"),
+    ("Reg No: TN/12345", "yes"),
+    ("Reg. No. 45678", "yes"),
+    ("KMC Reg. No. 54321", "yes"),
+    ("NMC 123456", "yes"),
+    ("Verified by Dr. A. Menon", "yes"),
+    ("Reported by: Dr. Meera Nair, Consultant", "yes"),
+    ("Signed out by Dr X", "yes"),
+    ("Authorised signatory", "yes"),
+    ("unsigned", "no"),
+    ("Signature pending", "no"),
+    ("Not yet signed", "no"),
+    ("Awaiting verification", "no"),
+    ("Pending sign-out", "no"),
+    ("Impression: normal", "unknown"),
+    ("Dr. Meera Nair, MD Pathology", "unknown"),  # a name with a degree is a signer line, not a signature
+])
+def test_detect_signature(text, signed):
+    assert ds.detect_signature(text)[0] == signed
+
+
+def test_unsigned_anywhere_wins():
+    assert ds.detect_signature("Signed by Dr X.\nAddendum unsigned")[0] == "no"
+
+
+def test_signer_line_returned():
+    signed, line = ds.detect_signature("Diagnosis: carcinoma\nReported by: Dr. A. Menon, Consultant Pathologist\nReg. No. 45678")
+    assert signed == "yes" and line == "Reported by: Dr. A. Menon, Consultant Pathologist"
+
+
+def test_signer_line_without_signature_is_unknown():
+    assert ds.detect_signature("Dr. Meera Nair, MD Pathology") == ("unknown", "Dr. Meera Nair, MD Pathology")
+
+
+@pytest.mark.parametrize("s,iso", [
+    ("02-Sep-2026", "2026-09-02"),
+    ("02/09/2026", "2026-09-02"),  # day first (India)
+    ("02.09.2026", "2026-09-02"),
+    ("02-09-26", "2026-09-02"),
+    ("2 September 2026", "2026-09-02"),
+    ("2nd Sept 2026", "2026-09-02"),
+    ("29-Sept-26", "2026-09-29"),
+    ("5 Sep. 2026", "2026-09-05"),
+    ("Sep 2, 2026", "2026-09-02"),
+    ("Sept 29 2026", "2026-09-29"),
+    ("2026-09-02", "2026-09-02"),
+    ("13/02/2026", "2026-02-13"),
+    ("02/13/2026", "2026-02-13"),  # month > 12 in the second slot: read as month first
+    ("Reported on: 05/09/2026", "2026-09-05"),
+    ("31/02/2026", ""),  # impossible date
+    ("12/12/1985", ""),  # years before 1990 are ignored
+    ("04-Jun-89", ""),
+    ("", ""),
+    (None, ""),
+    ("no date here", ""),
+])
+def test_parse_date(s, iso):
+    assert ds.parse_date(s) == iso
+
+
+def test_parse_date_takes_first_valid_date():
+    assert ds.parse_date("DOB: 12/03/1964 Reported: 05/09/2026") == "2026-09-05"  # 1964 is outside the year window
+    assert ds.parse_date("Collected 01/09/2026 Reported 05/09/2026") == "2026-09-01"
+
+
+def test_find_dates_unique_in_order_with_limit():
+    assert ds.find_dates("seen 01/09/2026; reported 05/09/2026; again 05-Sep-2026") == ["2026-09-01", "2026-09-05"]
+    many = " ".join(f"{d:02d}/09/2026" for d in range(1, 12))
+    assert len(ds.find_dates(many)) == 6 and len(ds.find_dates(many, limit=3)) == 3
+
+
+def _fixture_docs():
+    return sorted((FIXTURES / "cases").glob("*/docs/*/doc.json"))
+
+
+@pytest.mark.parametrize("path", _fixture_docs(), ids=lambda p: f"{p.parts[-4]}-{p.parts[-2]}")
+def test_rules_reproduce_fixture_classification(path):
+    """The stored status / signed of every demo document is what the rules give on its text today."""
+    d = json.loads(path.read_text())
+    full = "\n\n".join(f"[page {i + 1}]\n{p['text']}" for i, p in enumerate(d["pages"]))
+    assert ds.detect_status(full)[0] == d["classification"]["status"]
+    assert ds.detect_signature(full)[0] == d["classification"]["signed"]

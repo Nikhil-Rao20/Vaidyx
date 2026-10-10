@@ -1,0 +1,63 @@
+{
+ "doc_id": "Da024c6a1",
+ "filename": "rt_completion_summary_2026-08-10.pdf",
+ "rel_path": "radiotherapy/rt_completion_summary_2026-08-10.pdf",
+ "ext": ".pdf",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-09T16:42:04",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Radiation Oncology\nRADIOTHERAPY COMPLETION SUMMARY\nPatient SYNTHETIC, Abdul Rahman\nUHID SYN-300582\nAge / Sex 57 Y / M\nTreatment dates 30-Jun-2026 to 10-Aug-2026\nTreatment delivered\n50.4 Gy in 28 fractions to the pelvis (IMRT) with concurrent capecitabine 825 mg/m2 twice\ndaily on radiotherapy days.\nAcute toxicity\nGrade 1 proctitis, grade 1 skin reaction.\nReport status: FINAL\nReported by: Dr. Sunita Rao, Consultant Radiation Oncologist (electronically signed)\nSigned: 10-Aug-2026 17:30\nFINAL / SIGNED\nSYNTHETIC -\nDEMO ONLY",
+   "method": "text-layer"
+  }
+ ],
+ "classification": {
+  "title": "RADIOTHERAPY COMPLETION SUMMARY",
+  "department": "Department of Radiation Oncology",
+  "doc_type": "treatment_summary",
+  "body_region": "pelvis",
+  "report_date": "10-Aug-2026",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "Reported by: Dr. Sunita Rao, Consultant Radiation Oncologist (electronically signed)",
+  "signer": "Dr. Sunita Rao, Consultant Radiation Oncologist",
+  "patient_name": "Abdul Rahman",
+  "patient_id": "SYN-300582",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-08-10"
+ },
+ "facts": {
+  "treatment_received": {
+   "value": "50.4 Gy in 28 fractions to the pelvis (IMRT) with concurrent capecitabine 825 mg/m2 twice daily on radiotherapy days.",
+   "quote": "50.4 Gy in 28 fractions to the pelvis (IMRT) with concurrent capecitabine 825 mg/m2 twice\ndaily on radiotherapy days.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 233,
+    "end": 350,
+    "score": 100.0,
+    "matched": "50.4 Gy in 28 fractions to the pelvis (IMRT) with concurrent capecitabine 825 mg/m2 twice\ndaily on radiotherapy days."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "treatment_completion_date": {
+   "value": "10-Aug-2026",
+   "quote": "10-Aug-2026",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 201,
+    "end": 212,
+    "score": 100.0,
+    "matched": "10-Aug-2026"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  }
+ }
+}

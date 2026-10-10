@@ -1,0 +1,108 @@
+{
+ "doc_id": "D3ae85a7f",
+ "filename": "surgical_oncology_note_2026-08-20.pdf",
+ "rel_path": "clinical/surgical_oncology_note_2026-08-20.pdf",
+ "ext": ".pdf",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-09T16:42:02",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Surgical Oncology\nSURGICAL ONCOLOGY CLINIC NOTE\nPatient SYNTHETIC, Lakshmi Iyer\nUHID SYN-200417\nAge / Sex 48 Y / F\nVisit date 20-Aug-2026\nHistory\nPainless lump in the left breast for 3 months. Premenopausal. Mother had breast cancer at 55\nyears.\nExamination\n3 cm firm mass, upper outer quadrant, left breast. Palpable mobile left axillary node.\nPerformance status\nECOG performance status: 0\nClinical stage as recorded by the treating surgeon\ncT2 N1 M0, Stage IIB (AJCC 8th edition, anatomic)\nQuestion for the T umour Board\nDiscussion of sequencing of treatment.\nReport status: FINAL\nReported by: Dr. Vivek Menon, Consultant Surgical Oncologist (electronically signed)\nSigned: 20-Aug-2026 13:15\nFINAL / SIGNED\nSYNTHETIC -\nDEMO ONLY",
+   "method": "text-layer"
+  }
+ ],
+ "classification": {
+  "title": "SURGICAL ONCOLOGY CLINIC NOTE",
+  "department": "Department of Surgical Oncology",
+  "doc_type": "clinical_note",
+  "body_region": "left breast",
+  "report_date": "20-Aug-2026",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "Clinical stage as recorded by the treating surgeon",
+  "signer": "Dr. Vivek Menon, Consultant Surgical Oncologist",
+  "patient_name": "Lakshmi Iyer",
+  "patient_id": "SYN-200417",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-08-20"
+ },
+ "facts": {
+  "presenting_complaint": {
+   "value": "Painless lump in the left breast for 3 months",
+   "quote": "Painless lump in the left breast for 3 months",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 198,
+    "end": 243,
+    "score": 100.0,
+    "matched": "Painless lump in the left breast for 3 months"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "ecog": {
+   "value": "0",
+   "quote": "ECOG performance status: 0",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 416,
+    "end": 442,
+    "score": 100.0,
+    "matched": "ECOG performance status: 0"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "menopausal_status": {
+   "value": "Premenopausal",
+   "quote": "Premenopausal",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 245,
+    "end": 258,
+    "score": 100.0,
+    "matched": "Premenopausal"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "clinical_question": {
+   "value": "Discussion of sequencing of treatment",
+   "quote": "Discussion of sequencing of treatment",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 575,
+    "end": 612,
+    "score": 100.0,
+    "matched": "Discussion of sequencing of treatment"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "recorded_stage": {
+   "value": "cT2 N1 M0, Stage IIB (AJCC 8th edition, anatomic)",
+   "quote": "cT2 N1 M0, Stage IIB (AJCC 8th edition, anatomic)",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 494,
+    "end": 543,
+    "score": 100.0,
+    "matched": "cT2 N1 M0, Stage IIB (AJCC 8th edition, anatomic)"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  }
+ }
+}

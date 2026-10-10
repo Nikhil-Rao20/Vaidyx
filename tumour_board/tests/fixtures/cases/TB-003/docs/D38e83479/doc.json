@@ -1,0 +1,108 @@
+{
+ "doc_id": "D38e83479",
+ "filename": "blood_tests_2026-09-15.png",
+ "rel_path": "lab/blood_tests_2026-09-15.png",
+ "ext": ".png",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-09T16:42:06",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Laboratory Medicine\nHAEMATOLOGY AND BIOCHEMISTRY\nPatient SYNTHETIC, Abdul Rahman\nUHID SYN-300582\nAge / Sex 57 Y / M\nSample date 15-Sep-2026\nResults\nTest Result Unit Ref. range\nHaemoglobin 10.9 g/dL 13.0 - 17.0\nWBC count 5.2 x10^3/uL 4.0 - 11.0\nPlatelet count 198 x10^3/uL 150 - 410\nSerum creatinine 1.0 mg/dL 0.7 - 1.3\nCEA 12.4 ng/mL < 5.0\nReport status: FINAL\nReported by: Dr. A. Menon, Consultant Pathologist (electronically signed)\nSigned: 15-Sep-2026 11:20\nFINAL / SIGNED",
+   "method": "vision-transcription"
+  }
+ ],
+ "classification": {
+  "title": "HAEMATOLOGY AND BIOCHEMISTRY",
+  "department": "Department of Laboratory Medicine",
+  "doc_type": "lab",
+  "body_region": "",
+  "report_date": "15-Sep-2026",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "Reported by: Dr. A. Menon, Consultant Pathologist (electronically signed)",
+  "signer": "Dr. A. Menon, Consultant Pathologist",
+  "patient_name": "SYNTHETIC, Abdul Rahman",
+  "patient_id": "SYN-300582",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-09-15"
+ },
+ "facts": {
+  "haemoglobin": {
+   "value": "10.9 g/dL",
+   "quote": "Haemoglobin 10.9 g/dL 13.0 - 17.0",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 228,
+    "end": 261,
+    "score": 100.0,
+    "matched": "Haemoglobin 10.9 g/dL 13.0 - 17.0"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "wbc": {
+   "value": "5.2 x10^3/uL",
+   "quote": "WBC count 5.2 x10^3/uL 4.0 - 11.0",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 262,
+    "end": 295,
+    "score": 100.0,
+    "matched": "WBC count 5.2 x10^3/uL 4.0 - 11.0"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "platelets": {
+   "value": "198 x10^3/uL",
+   "quote": "Platelet count 198 x10^3/uL 150 - 410",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 296,
+    "end": 333,
+    "score": 100.0,
+    "matched": "Platelet count 198 x10^3/uL 150 - 410"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "creatinine": {
+   "value": "1.0 mg/dL",
+   "quote": "Serum creatinine 1.0 mg/dL 0.7 - 1.3",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 334,
+    "end": 370,
+    "score": 100.0,
+    "matched": "Serum creatinine 1.0 mg/dL 0.7 - 1.3"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "cea": {
+   "value": "12.4 ng/mL",
+   "quote": "CEA 12.4 ng/mL < 5.0",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 371,
+    "end": 391,
+    "score": 100.0,
+    "matched": "CEA 12.4 ng/mL < 5.0"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  }
+ }
+}

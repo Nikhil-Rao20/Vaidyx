@@ -1,0 +1,32 @@
+{
+ "doc_id": "D5540e1ba",
+ "filename": "fnac_left_axilla_2026-08-16.pdf",
+ "rel_path": "pathology/fnac_left_axilla_2026-08-16.pdf",
+ "ext": ".pdf",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-09T16:42:00",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Pathology\nCYTOLOGY REPORT (FNAC)\nPatient SYNTHETIC, Lakshmi Iyer\nUHID SYN-200417\nAge / Sex 48 Y / F\nSpecimen FNAC, left axillary lymph node\nDiagnosis\nPositive for metastatic carcinoma.\nReport status: FINAL\nReported by: Dr. Kavita Shah, Consultant Pathologist (electronically signed)\nSigned: 16-Aug-2026 12:45\nFINAL / SIGNED\nSYNTHETIC -\nDEMO ONLY",
+   "method": "text-layer"
+  }
+ ],
+ "classification": {
+  "title": "CYTOLOGY REPORT (FNAC)",
+  "department": "Department of Pathology",
+  "doc_type": "cytology",
+  "body_region": "left axillary lymph node",
+  "report_date": "16-Aug-2026 12:45",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "Reported by: Dr. Kavita Shah, Consultant Pathologist (electronically signed)",
+  "signer": "Dr. Kavita Shah, Consultant Pathologist (electronically signed)",
+  "patient_name": "Lakshmi Iyer",
+  "patient_id": "SYN-200417",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-08-16"
+ },
+ "facts": {}
+}

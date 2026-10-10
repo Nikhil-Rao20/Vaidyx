@@ -1,0 +1,32 @@
+{
+ "doc_id": "D6a18d577",
+ "filename": "tumour_board_record_2026-06-12.pdf",
+ "rel_path": "tumour_board/tumour_board_record_2026-06-12.pdf",
+ "ext": ".pdf",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-09T16:42:04",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nMultidisciplinary T umour Board\nTUMOUR BOARD RECORD\nPatient SYNTHETIC, Abdul Rahman\nUHID SYN-300582\nAge / Sex 57 Y / M\nBoard date 12-Jun-2026\nPresent\nSurgical oncology, radiation oncology, medical oncology, radiology, pathology.\nDecision recorded by the board\nLong-course chemoradiation. Restaging MRI pelvis 8 to 10 weeks after completion. Re-discuss\nat the T umour Board with restaging.\nActions\nRadiation Oncology: start chemoradiation. Radiology: restaging MRI pelvis after completion.\nRecord status: FINAL\nRecorded by: Dr. Farhan Siddiqui, Tumour Board coordinator (electronically signed)\nSigned: 12-Jun-2026 18:00\nFINAL / SIGNED\nSYNTHETIC -\nDEMO ONLY",
+   "method": "text-layer"
+  }
+ ],
+ "classification": {
+  "title": "TUMOUR BOARD RECORD",
+  "department": "Multidisciplinary T umour Board",
+  "doc_type": "tumour_board_record",
+  "body_region": "",
+  "report_date": "12-Jun-2026",
+  "status_quote": "Record status: FINAL",
+  "signature_quote": "Decision recorded by the board",
+  "signer": "Dr. Farhan Siddiqui, Tumour Board coordinator (electronically signed)",
+  "patient_name": "Abdul Rahman",
+  "patient_id": "SYN-300582",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-06-12"
+ },
+ "facts": {}
+}

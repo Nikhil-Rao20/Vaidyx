@@ -1,0 +1,108 @@
+{
+ "doc_id": "Dfaffb7a9",
+ "filename": "blood_tests_2026-08-20.pdf",
+ "rel_path": "lab/blood_tests_2026-08-20.pdf",
+ "ext": ".pdf",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-09T16:42:01",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Laboratory Medicine\nHAEMATOLOGY AND BIOCHEMISTRY\nPatient SYNTHETIC, Lakshmi Iyer\nUHID SYN-200417\nAge / Sex 48 Y / F\nSample date 20-Aug-2026\nResults\nT est Result Unit Ref. range\nHaemoglobin 12.9 g/dL 12.0 - 15.0\nWBC count 6.4 x10^3/uL 4.0 - 11.0\nPlatelet count 280 x10^3/uL 150 - 410\nSerum creatinine 0.7 mg/dL 0.5 - 1.1\nALT 21 U/L < 35\nT otal bilirubin 0.5 mg/dL 0.2 - 1.2\nReport status: FINAL\nReported by: Dr. A. Menon, Consultant Pathologist (electronically signed)\nSigned: 20-Aug-2026 14:00\nFINAL / SIGNED\nSYNTHETIC -\nDEMO ONLY",
+   "method": "text-layer"
+  }
+ ],
+ "classification": {
+  "title": "HAEMATOLOGY AND BIOCHEMISTRY",
+  "department": "Department of Laboratory Medicine",
+  "doc_type": "lab",
+  "body_region": "",
+  "report_date": "20-Aug-2026",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "Reported by: Dr. A. Menon, Consultant Pathologist (electronically signed)",
+  "signer": "Dr. A. Menon, Consultant Pathologist",
+  "patient_name": "Lakshmi Iyer",
+  "patient_id": "SYN-200417",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-08-20"
+ },
+ "facts": {
+  "haemoglobin": {
+   "value": "12.9 g/dL",
+   "quote": "Haemoglobin 12.9 g/dL 12.0 - 15.0",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 229,
+    "end": 262,
+    "score": 100.0,
+    "matched": "Haemoglobin 12.9 g/dL 12.0 - 15.0"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "wbc": {
+   "value": "6.4 x10^3/uL",
+   "quote": "WBC count 6.4 x10^3/uL 4.0 - 11.0",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 263,
+    "end": 296,
+    "score": 100.0,
+    "matched": "WBC count 6.4 x10^3/uL 4.0 - 11.0"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "platelets": {
+   "value": "280 x10^3/uL",
+   "quote": "Platelet count 280 x10^3/uL 150 - 410",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 297,
+    "end": 334,
+    "score": 100.0,
+    "matched": "Platelet count 280 x10^3/uL 150 - 410"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "creatinine": {
+   "value": "0.7 mg/dL",
+   "quote": "Serum creatinine 0.7 mg/dL 0.5 - 1.1",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 335,
+    "end": 371,
+    "score": 100.0,
+    "matched": "Serum creatinine 0.7 mg/dL 0.5 - 1.1"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "bilirubin": {
+   "value": "0.5 mg/dL",
+   "quote": "T otal bilirubin 0.5 mg/dL 0.2 - 1.2",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 388,
+    "end": 424,
+    "score": 100.0,
+    "matched": "T otal bilirubin 0.5 mg/dL 0.2 - 1.2"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  }
+ }
+}

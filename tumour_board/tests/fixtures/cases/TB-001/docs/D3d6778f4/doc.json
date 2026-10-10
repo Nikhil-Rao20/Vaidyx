@@ -1,0 +1,63 @@
+{
+ "doc_id": "D3d6778f4",
+ "filename": "ct_thorax_2025-11-10_prior.pdf",
+ "rel_path": "02_radiology/ct_thorax_2025-11-10_prior.pdf",
+ "ext": ".pdf",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-11T00:45:17",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Radiology\nCT THORAX REPORT\nPatient SYNTHETIC, Ramesh Kumar\nUHID SYN-100231\nAge / Sex 62 Y / M\nStudy date 10-Nov-2025\nFindings\nSolid nodule in the right upper lobe measuring 2.1 cm. No mediastinal lymphadenopathy.\nImpression (reporting radiologist)\nRight upper lobe nodule. Follow-up advised.\nReport status: FINAL\nReported by: Dr. Arjun Rao, Consultant Radiologist (electronically signed)\nSigned: 10-Nov-2025 11:05\nFINAL / SIGNED\nSYNTHETIC -\nDEMO ONLY",
+   "method": "text-layer"
+  }
+ ],
+ "classification": {
+  "title": "CT THORAX REPORT",
+  "department": "Department of Radiology",
+  "doc_type": "ct",
+  "body_region": "THORAX",
+  "report_date": "10-Nov-2025",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "Reported by: Dr. Arjun Rao, Consultant Radiologist (electronically signed)",
+  "signer": "Dr. Arjun Rao, Consultant Radiologist",
+  "patient_name": "Ramesh Kumar",
+  "patient_id": "SYN-100231",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2025-11-10"
+ },
+ "facts": {
+  "lesion_size": {
+   "value": "2.1 cm",
+   "quote": "Solid nodule in the right upper lobe measuring 2.1 cm.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 178,
+    "end": 232,
+    "score": 100.0,
+    "matched": "Solid nodule in the right upper lobe measuring 2.1 cm."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "nodal_findings": {
+   "value": "No mediastinal lymphadenopathy",
+   "quote": "No mediastinal lymphadenopathy.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 233,
+    "end": 264,
+    "score": 100.0,
+    "matched": "No mediastinal lymphadenopathy."
+   },
+   "state": "present",
+   "polarity": "negated"
+  }
+ }
+}

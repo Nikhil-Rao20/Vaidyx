@@ -1,0 +1,93 @@
+{
+ "doc_id": "D41f9d46c",
+ "filename": "cect_thorax_2026-08-28.pdf",
+ "rel_path": "02_radiology/cect_thorax_2026-08-28.pdf",
+ "ext": ".pdf",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-11T00:45:18",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Radiology\nCECT THORAX REPORT\nPatient SYNTHETIC, Ramesh Kumar\nUHID SYN-100231\nAge / Sex 62 Y / M\nStudy date 28-Aug-2026\nComparison CT thorax 10-Nov-2025\nFindings\nSpiculated mass in the right upper lobe measuring 5.2 x 4.1 cm, previously 2.1 cm on CT\ndated 10-Nov-2025.\nEnlarged right hilar lymph node, 1.8 cm short axis. Subcarinal (station 7) node 1.6 cm. Right\nlower paratracheal (4R) node 1.2 cm.\nNo pleural effusion. Adrenal glands normal. No lytic or sclerotic bone lesion in the imaged\nskeleton.\nImpression (reporting radiologist)\nRight upper lobe mass with interval increase in size; ipsilateral hilar and mediastinal\nlymphadenopathy.\nReport status: FINAL\nReported by: Dr. Arjun Rao, Consultant Radiologist (electronically signed)\nSigned: 28-Aug-2026 19:12\nFINAL / SIGNED\nSYNTHETIC -\nDEMO ONLY",
+   "method": "text-layer"
+  }
+ ],
+ "classification": {
+  "title": "CECT THORAX REPORT",
+  "department": "Department of Radiology",
+  "doc_type": "ct",
+  "body_region": "thorax",
+  "report_date": "28-Aug-2026",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "Reported by: Dr. Arjun Rao, Consultant Radiologist (electronically signed)",
+  "signer": "Dr. Arjun Rao, Consultant Radiologist",
+  "patient_name": "Ramesh Kumar",
+  "patient_id": "SYN-100231",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-08-28"
+ },
+ "facts": {
+  "lesion_size": {
+   "value": "5.2 x 4.1 cm",
+   "quote": "Spiculated mass in the right upper lobe measuring 5.2 x 4.1 cm, previously 2.1 cm on CT\ndated 10-Nov-2025.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 213,
+    "end": 319,
+    "score": 100.0,
+    "matched": "Spiculated mass in the right upper lobe measuring 5.2 x 4.1 cm, previously 2.1 cm on CT\ndated 10-Nov-2025."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "nodal_findings": {
+   "value": "Enlarged right hilar lymph node, 1.8 cm short axis. Subcarinal (station 7) node 1.6 cm. Right lower paratracheal (4R) node 1.2 cm.",
+   "quote": "Enlarged right hilar lymph node, 1.8 cm short axis. Subcarinal (station 7) node 1.6 cm. Right\nlower paratracheal (4R) node 1.2 cm.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 320,
+    "end": 450,
+    "score": 100.0,
+    "matched": "Enlarged right hilar lymph node, 1.8 cm short axis. Subcarinal (station 7) node 1.6 cm. Right\nlower paratracheal (4R) node 1.2 cm."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "distant_findings": {
+   "value": "No lytic or sclerotic bone lesion in the imaged skeleton.",
+   "quote": "No pleural effusion. Adrenal glands normal. No lytic or sclerotic bone lesion in the imaged\nskeleton.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 451,
+    "end": 552,
+    "score": 100.0,
+    "matched": "No pleural effusion. Adrenal glands normal. No lytic or sclerotic bone lesion in the imaged\nskeleton."
+   },
+   "state": "present",
+   "polarity": "negated"
+  },
+  "comparison_prior": {
+   "value": "previously 2.1 cm on CT dated 10-Nov-2025",
+   "quote": "Spiculated mass in the right upper lobe measuring 5.2 x 4.1 cm, previously 2.1 cm on CT\ndated 10-Nov-2025.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 213,
+    "end": 319,
+    "score": 100.0,
+    "matched": "Spiculated mass in the right upper lobe measuring 5.2 x 4.1 cm, previously 2.1 cm on CT\ndated 10-Nov-2025."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  }
+ }
+}

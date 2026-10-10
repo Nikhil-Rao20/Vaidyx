@@ -1,0 +1,123 @@
+{
+ "doc_id": "D26fef91f",
+ "filename": "gi_oncology_note_2026-09-18.txt",
+ "rel_path": "clinical/gi_oncology_note_2026-09-18.txt",
+ "ext": ".txt",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-09T16:42:06",
+ "pages": [
+  {
+   "text": "SAHYADRI CANCER INSTITUTE (SYNTHETIC) - DEPARTMENT OF GI ONCOLOGY\nGI ONCOLOGY FOLLOW-UP NOTE\nPatient: SYNTHETIC, Abdul Rahman | MRN: SYN-300582 | 57 Y / M\nVisit date: 18-Sep-2026\n\nDiagnosis on record: adenocarcinoma of the rectum (biopsy 02-Jun-2026).\nCompleted long-course chemoradiation (50.4 Gy in 28 fractions with capecitabine) on 10-Aug-2026.\nTolerated well. Mild proctitis, settled. Type 2 diabetes on metformin 500 mg twice daily.\nECOG performance status: 1\nRestaging MRI pelvis requested, appointment awaited.\nQuestion for the Tumour Board: re-discussion after completion of chemoradiation, as planned at the Tumour Board of 12-Jun-2026.\n\nReport status: FINAL\nSigned: Dr. Farhan Siddiqui, Consultant GI Oncologist (electronically signed) 18-Sep-2026 12:30\n",
+   "method": "plain-text"
+  }
+ ],
+ "classification": {
+  "title": "GI ONCOLOGY FOLLOW-UP NOTE",
+  "department": "DEPARTMENT OF GI ONCOLOGY",
+  "doc_type": "clinical_note",
+  "body_region": "",
+  "report_date": "18-Sep-2026",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "ui, Consultant GI Oncologist (electronically signed) 18-Sep-2026 12:30",
+  "signer": "Dr. Farhan Siddiqui",
+  "patient_name": "SYNTHETIC, Abdul Rahman",
+  "patient_id": "SYN-300582",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-09-18"
+ },
+ "facts": {
+  "ecog": {
+   "value": "1",
+   "quote": "ECOG performance status: 1",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 439,
+    "end": 465,
+    "score": 100.0,
+    "matched": "ECOG performance status: 1"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "comorbidities": {
+   "value": "Type 2 diabetes on metformin 500 mg twice daily",
+   "quote": "Type 2 diabetes on metformin 500 mg twice daily.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 390,
+    "end": 438,
+    "score": 100.0,
+    "matched": "Type 2 diabetes on metformin 500 mg twice daily."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "clinical_question": {
+   "value": "re-discussion after completion of chemoradiation, as planned at the Tumour Board of 12-Jun-2026",
+   "quote": "Question for the Tumour Board: re-discussion after completion of chemoradiation, as planned at the Tumour Board of 12-Jun-2026.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 519,
+    "end": 646,
+    "score": 100.0,
+    "matched": "Question for the Tumour Board: re-discussion after completion of chemoradiation, as planned at the Tumour Board of 12-Jun-2026."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "treatment_received": {
+   "value": "long-course chemoradiation (50.4 Gy in 28 fractions with capecitabine)",
+   "quote": "Completed long-course chemoradiation (50.4 Gy in 28 fractions with capecitabine) on 10-Aug-2026.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 252,
+    "end": 348,
+    "score": 100.0,
+    "matched": "Completed long-course chemoradiation (50.4 Gy in 28 fractions with capecitabine) on 10-Aug-2026."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "treatment_completion_date": {
+   "value": "10-Aug-2026",
+   "quote": "Completed long-course chemoradiation (50.4 Gy in 28 fractions with capecitabine) on 10-Aug-2026.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 252,
+    "end": 348,
+    "score": 100.0,
+    "matched": "Completed long-course chemoradiation (50.4 Gy in 28 fractions with capecitabine) on 10-Aug-2026."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "diagnosis_date_mode": {
+   "value": "02-Jun-2026",
+   "quote": "adenocarcinoma of the rectum (biopsy 02-Jun-2026).",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 201,
+    "end": 251,
+    "score": 100.0,
+    "matched": "adenocarcinoma of the rectum (biopsy 02-Jun-2026)."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  }
+ }
+}

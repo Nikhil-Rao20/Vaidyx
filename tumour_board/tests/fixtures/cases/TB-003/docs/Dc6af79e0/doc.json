@@ -1,0 +1,48 @@
+{
+ "doc_id": "Dc6af79e0",
+ "filename": "colonoscopy_2026-05-30.pdf",
+ "rel_path": "endoscopy/colonoscopy_2026-05-30.pdf",
+ "ext": ".pdf",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-09T16:42:03",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Gastroenterology\nCOLONOSCOPY REPORT\nPatient SYNTHETIC, Abdul Rahman\nUHID SYN-300582\nAge / Sex 57 Y / M\nProcedure date 30-May-2026\nFindings\nCircumferential ulceroproliferative growth from 6 cm to 11 cm from the anal verge. Scope\ncould be negotiated beyond. Rest of the colon normal to caecum.\nProcedure\nMultiple biopsies taken from the growth.\nReport status: FINAL\nReported by: Dr. L. Thomas, Consultant Gastroenterologist (electronically signed)\nSigned: 30-May-2026 13:45\nFINAL / SIGNED\nSYNTHETIC -\nDEMO ONLY",
+   "method": "text-layer"
+  }
+ ],
+ "classification": {
+  "title": "COLONOSCOPY REPORT",
+  "department": "Department of Gastroenterology",
+  "doc_type": "endoscopy",
+  "body_region": "colon",
+  "report_date": "30-May-2026",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "Reported by: Dr. L. Thomas, Consultant Gastroenterologist (electronically signed)",
+  "signer": "Dr. L. Thomas, Consultant Gastroenterologist",
+  "patient_name": "Abdul Rahman",
+  "patient_id": "SYN-300582",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-05-30"
+ },
+ "facts": {
+  "distance_from_anal_verge": {
+   "value": "6 cm to 11 cm",
+   "quote": "Circumferential ulceroproliferative growth from 6 cm to 11 cm from the anal verge.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 191,
+    "end": 273,
+    "score": 100.0,
+    "matched": "Circumferential ulceroproliferative growth from 6 cm to 11 cm from the anal verge."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  }
+ }
+}

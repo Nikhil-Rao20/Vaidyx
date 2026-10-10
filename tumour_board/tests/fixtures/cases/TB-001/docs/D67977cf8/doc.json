@@ -1,0 +1,108 @@
+{
+ "doc_id": "D67977cf8",
+ "filename": "histopathology_2026-09-08_draft.png",
+ "rel_path": "04_pathology/histopathology_2026-09-08_draft.png",
+ "ext": ".png",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-11T00:45:19",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Pathology\nHISTOPATHOLOGY REPORT\nPatient SYNTHETIC, Ramesh Kumar\nUHID SYN-100231\nAge / Sex 62 Y / M\nSpecimen CT-guided core biopsy, right upper lobe lesion\nReceived 08-Sep-2026\nMicroscopy\nCores show infiltrating malignant glands with acinar predominant pattern.\nDiagnosis\nAdenocarcinoma, lung, acinar predominant.\nImmunohistochemistry\nMarker Result\nTTF-1 Positive\nNapsin A Positive\np40 Negative\nPD-L1 (22C3) TPS Pending\nMolecular testing\nEGFR / ALK / ROS1: sample sent to reference laboratory, result awaited.\nReport status: DRAFT\nReported by: (signature pending)\nDate: 08-Sep-2026\nDRAFT / UNSIGNED",
+   "method": "vision-transcription"
+  }
+ ],
+ "classification": {
+  "title": "HISTOPATHOLOGY REPORT",
+  "department": "Department of Pathology",
+  "doc_type": "histopathology",
+  "body_region": "right upper lobe lesion",
+  "report_date": "08-Sep-2026",
+  "status_quote": "Report status: DRAFT",
+  "signature_quote": "t status: DRAFT Reported by: (signature pending) Date: 08-Sep-2026 DRAFT / UN",
+  "signer": "",
+  "patient_name": "Ramesh Kumar",
+  "patient_id": "SYN-100231",
+  "status": "DRAFT",
+  "signed": "no",
+  "status_notes": [],
+  "report_date_iso": "2026-09-08"
+ },
+ "facts": {
+  "histologic_type": {
+   "value": "Adenocarcinoma, lung, acinar predominant.",
+   "quote": "Adenocarcinoma, lung, acinar predominant.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 323,
+    "end": 364,
+    "score": 100.0,
+    "matched": "Adenocarcinoma, lung, acinar predominant."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "pdl1": {
+   "value": "Pending",
+   "quote": "PD-L1 (22C3) TPS Pending",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 446,
+    "end": 470,
+    "score": 100.0,
+    "matched": "PD-L1 (22C3) TPS Pending"
+   },
+   "state": "pending",
+   "polarity": "affirmed"
+  },
+  "egfr": {
+   "value": "sample sent to reference laboratory, result awaited.",
+   "quote": "EGFR / ALK / ROS1: sample sent to reference laboratory, result awaited.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 489,
+    "end": 560,
+    "score": 100.0,
+    "matched": "EGFR / ALK / ROS1: sample sent to reference laboratory, result awaited."
+   },
+   "state": "pending",
+   "polarity": "affirmed"
+  },
+  "alk": {
+   "value": "sample sent to reference laboratory, result awaited.",
+   "quote": "EGFR / ALK / ROS1: sample sent to reference laboratory, result awaited.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 489,
+    "end": 560,
+    "score": 100.0,
+    "matched": "EGFR / ALK / ROS1: sample sent to reference laboratory, result awaited."
+   },
+   "state": "pending",
+   "polarity": "affirmed"
+  },
+  "ros1": {
+   "value": "sample sent to reference laboratory, result awaited.",
+   "quote": "EGFR / ALK / ROS1: sample sent to reference laboratory, result awaited.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 489,
+    "end": 560,
+    "score": 100.0,
+    "matched": "EGFR / ALK / ROS1: sample sent to reference laboratory, result awaited."
+   },
+   "state": "pending",
+   "polarity": "affirmed"
+  }
+ }
+}

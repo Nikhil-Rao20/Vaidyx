@@ -1,0 +1,63 @@
+{
+ "doc_id": "D5f11517a",
+ "filename": "renal_liver_function_2026-09-04.pdf",
+ "rel_path": "05_lab/renal_liver_function_2026-09-04.pdf",
+ "ext": ".pdf",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-11T00:45:17",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Biochemistry\nBIOCHEMISTRY REPORT\nPatient SYNTHETIC, Ramesh Kumar\nUHID SYN-100231\nAge / Sex 62 Y / M\nSample date 04-Sep-2026\nRenal and liver function\nT est Result Unit Ref. range\nSerum creatinine 0.9 mg/dL 0.7 - 1.3\neGFR 88 mL/min/1.73m2 > 60\nT otal bilirubin 0.7 mg/dL 0.2 - 1.2\nALT 32 U/L < 41\nAST 28 U/L < 40\nAlbumin 3.9 g/dL 3.5 - 5.2\nSodium 138 mmol/L 135 - 145\nReport status: FINAL\nReported by: Dr. R. Pillai, Consultant Biochemist (electronically signed)\nSigned: 04-Sep-2026 13:10\nFINAL / SIGNED\nSYNTHETIC -\nDEMO ONLY",
+   "method": "text-layer"
+  }
+ ],
+ "classification": {
+  "title": "BIOCHEMISTRY REPORT",
+  "department": "Department of Biochemistry",
+  "doc_type": "lab",
+  "body_region": "",
+  "report_date": "04-Sep-2026",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "Reported by: Dr. R. Pillai, Consultant Biochemist (electronically signed)",
+  "signer": "Dr. R. Pillai, Consultant Biochemist",
+  "patient_name": "Ramesh Kumar",
+  "patient_id": "SYN-100231",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-09-04"
+ },
+ "facts": {
+  "creatinine": {
+   "value": "0.9 mg/dL",
+   "quote": "Serum creatinine 0.9 mg/dL 0.7 - 1.3",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 230,
+    "end": 266,
+    "score": 100.0,
+    "matched": "Serum creatinine 0.9 mg/dL 0.7 - 1.3"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "bilirubin": {
+   "value": "0.7 mg/dL",
+   "quote": "T otal bilirubin 0.7 mg/dL 0.2 - 1.2",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 294,
+    "end": 330,
+    "score": 100.0,
+    "matched": "T otal bilirubin 0.7 mg/dL 0.2 - 1.2"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  }
+ }
+}
