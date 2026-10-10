@@ -1,7 +1,8 @@
-"""Browser test of the Vaidyx-TB UI (headless Chromium via Playwright). Fails on any JS error raised on a Tumour Board
-page (/tb and /static/tb/*; the main app's login page is outside this module and is not counted); saves screenshots.
+"""Browser test of the Vaidyx-TB UI (headless Chromium via Playwright). Fails on any JS error raised while a Tumour Board
+page (path /tb) is open; the main app's login and index pages are outside this module and are not counted. Saves screenshots.
 Usage: LD_LIBRARY_PATH=... python -m tumour_board.eval.ui_test --password <pw> [--out dir]"""
 import argparse, os, sys
+from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright
 
@@ -12,7 +13,7 @@ def main(base, pw, out):
     with sync_playwright() as p:
         b = p.chromium.launch(env={**os.environ})
         pg = b.new_page(viewport={"width": 1600, "height": 1000}, device_scale_factor=1)
-        tb_page = lambda: pg.url.startswith(base + "/tb")  # only errors raised while a Tumour Board page is open count
+        tb_page = lambda: urlparse(pg.url).path.rstrip("/") == "/tb"  # only errors raised while a Tumour Board page is open count
         pg.on("pageerror", lambda e: tb_page() and errors.append(f"pageerror: {e}"))
         pg.on("console", lambda m: m.type == "error" and tb_page() and errors.append(f"console: {m.text} ({(m.location or {}).get('url', '')})"))
         pg.goto(base + "/login")
