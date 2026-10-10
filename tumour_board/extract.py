@@ -2,7 +2,7 @@
 then deterministic grounding. Nothing the model says is trusted until its quote is found in the source text."""
 import asyncio, re
 
-from . import docstatus, grounding, ingest, llm, negation, protocol, store
+from . import docstatus, grounding, identity, ingest, llm, negation, protocol, store
 
 STATUS = ["FINAL", "AMENDED", "CORRECTED", "PRELIMINARY", "DRAFT", "CANCELLED", "UNKNOWN"]
 # Negation cues shared with qa and postboard (see negation.py).
@@ -95,10 +95,31 @@ def finish_classification(c, full, texts, filename):
     return c
 
 
-def identity_check(full, case_patient):
-    """Does the document belong to this Case File's patient? UHID / MRN first, then name tokens. None when there is no patient."""
+def mask_pages(pages):
+    """Aadhaar numbers are masked in the page text before anything is stored, shown or sent to a model (V1 item 2.4): never used,
+    never kept. The page records how many were masked."""
+    for p in pages:
+        t, n = identity.mask_aadhaar(p.get("text") or "")
+        if n:
+            p["text"] = t; p["aadhaar_masked"] = n
+    return pages
+
+
+def identity_check(full, case_patient, idr=None):
+    """Does the document belong to this Case File's patient? match: an identifier printed on the document equals one the Case File
+    knows (or the UHID / MRN is found in the text); name_match: the printed name is compatible with the patient's (exact, a
+    transliteration variant or initials) but no identifier agrees; mismatch_or_missing: an identifier agrees but the name, age or
+    sex differs (possible wrong patient), or nothing agrees. None when the Case File has no patient."""
     if not (case_patient and (case_patient.get("mrn") or case_patient.get("name"))):
         return None
+    if idr is not None:
+        m = identity.match(idr, [{"case_id": "this", "patient": case_patient}])
+        if m["decision"] == "auto_link":
+            return "match"
+        if m["decision"] == "id_conflict":
+            return "mismatch_or_missing"
+        if any(c.get("name_match") in ("exact", "variant", "initials") and not c.get("sex_fit") is False for c in m.get("candidates", [])):
+            return "name_match"
     nf = grounding.norm(full)
     mrn = grounding.norm(case_patient.get("mrn") or "")
     toks = [t for t in re.findall(r"[a-z]{3,}", grounding.norm(case_patient.get("name") or "")) if t not in ("synthetic", "mr", "mrs", "ms", "dr")]
@@ -123,7 +144,7 @@ async def process_document(case_id, doc_id, protocol_id, case_patient=None, prog
             pages = doc["pages"]
         else:
             doc["state"] = "reading"; doc.pop("error", None); store.save_doc(case_id, doc); progress and progress(doc_id, "reading")
-            pages = await ingest.extract_pages(path, audit=au)
+            pages = mask_pages(await ingest.extract_pages(path, audit=au))  # Aadhaar masked before anything is stored (V1 item 2.4)
             doc["pages"] = pages
             doc.pop("classification", None)
         texts = [p["text"] for p in pages]
@@ -135,10 +156,16 @@ async def process_document(case_id, doc_id, protocol_id, case_patient=None, prog
             c = await classify(full, au)
             doc["classification"] = finish_classification(c, full, texts, doc["filename"])
         c = doc["classification"]
-        # identity check: the document should belong to this Case File's patient (UHID/MRN first, then name tokens)
-        ident = identity_check(full, case_patient)
+        # identity as printed (rules first; V1 item 2.4) and the check that the document belongs to this Case File's patient
+        if not doc.get("identity_read"):
+            from . import intake  # the same reader as the intake area (model fallback quote checked)
+            doc["identity_read"] = intake.read_identity(doc, identity.patient_record(case_patient or {})["ids"])
+        ident = identity_check(full, case_patient, doc["identity_read"])
         if ident:
             doc["identity"] = ident
+            if ident == "match":  # an exact identifier: the Case File learns the record's other identifiers (CR No., ABHA, IP No.)
+                from . import intake
+                intake.learn_ids(case_id, doc["identity_read"], "system:identity", doc_id)
         if not protocol_id:  # not listed yet: no protocol, so nothing to extract (V1 item 2.5)
             doc["facts"] = {}
             doc["state"] = "ready"; doc["processed"] = store.now_iso()

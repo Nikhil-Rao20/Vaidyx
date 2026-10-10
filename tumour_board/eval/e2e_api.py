@@ -1,6 +1,6 @@
 """End-to-end test through the HTTP API of the running app (same calls as the UI). Usage:
   python -m tumour_board.eval.e2e_api --base http://127.0.0.1:7000 --password <admin password>"""
-import argparse, json, sys, time
+import argparse, json, os, sys, time
 
 import httpx
 
@@ -134,6 +134,67 @@ def phase2(c, base):
         if d.get("uploaded_by") in E2E_USERS or d["rel_path"] in ("pap.pdf",):
             c.delete(f"/api/tb/intake/{d['doc_id']}?reason=e2e+cleanup")
     m.close(); h.close()
+    # ---- 2.4 patient matching: the whole synthetic intake batch (3 departments, 8 records, 5 patients) against the answer key
+    truth = json.load(open("/data/vaidyx/tb_demo_corpus/truth/intake.json"))["files"]
+    have = {x["case_id"] for x in c.get("/api/tb/cases").json()["cases"]}
+    if {"TB-004", "TB-005", "TB-006"} <= have:
+        jj, secs = wait_job(c, c.post("/api/tb/cases/TB-004/reprocess", json={"which": "all"}).json()["job"])  # the Case File learns its CR No. and ABHA from its own records
+        p4 = c.get("/api/tb/cases/TB-004").json()["case"]["patient"]
+        check("TB-004 learned its CR No. and ABHA from its own documents", {x["kind"] for x in p4.get("ids", [])} >= {"cr_no", "abha"}, json.dumps(p4.get("ids", []))[:200] + f" ({secs}s)")
+        filed, waiting = {}, {}
+        for dept, folder in (("Radio-diagnosis", "radio_diagnosis"), ("Pathology", "pathology"), ("Laboratory Medicine", "laboratory_medicine")):
+            files = [(f, open(f"{corpus}/{folder}/{f}", "rb").read()) for f in sorted(os.listdir(f"{corpus}/{folder}"))]
+            r = c.post("/api/tb/intake/documents", files=[("files", (f, b)) for f, b in files], data={"paths": json.dumps([f"{folder}/{f}" for f, _ in files]), "department": dept}).json()
+            jj, secs = wait_job(c, r["job"])
+            for did, cid in (jj.get("filed") or {}).items():
+                filed[did] = cid
+            for did in jj.get("needs_matching") or []:
+                waiting[did] = folder
+        # where did each file go
+        where = {}
+        for cid in sorted({x for x in filed.values() if x}):
+            for x in c.get(f"/api/tb/cases/{cid}").json()["documents"]:
+                if x["doc_id"] in filed:
+                    where[x["rel_path"]] = cid
+        queue = {d["rel_path"]: d for d in c.get("/api/tb/intake").json()["documents"]}
+        new_ids = sorted({x for x in filed.values() if x and x not in have})
+        ok_auto, bad = [], []
+        for rel, t in truth.items():
+            exp = t.get("expected_case")
+            if exp:
+                (ok_auto if where.get(rel) == exp else bad).append(f"{rel} -> {where.get(rel) or queue.get(rel, {}).get('state')} (expected {exp})")
+        check("one patient's records from several departments auto-link to the right Case Files", not bad and len(ok_auto) == 5, "; ".join(bad) or f"{len(ok_auto)} auto-linked")
+        same_name = ["pathology/pap_smear_2026-09-15.pdf", "laboratory_medicine/cbc_2026-09-15.png"]
+        check("same name, different UHID: never filed into TB-005, one new Case File for both records", all(where.get(r) not in ("TB-005", None) for r in same_name)
+              and len({where.get(r) for r in same_name}) == 1 and len(new_ids) == 1, json.dumps({r: where.get(r) for r in same_name}))
+        rbs = queue.get("laboratory_medicine/rbs_2026-09-16_no_id.pdf")
+        check("no identifier: waits for a person with the same-name Case Files listed, never linked", rbs is not None and rbs["match"]["decision"] == "needs_matching"
+              and {x["case_id"] for x in rbs["match"]["candidates"]} >= {"TB-001", "TB-004"}, json.dumps((rbs or {}).get("match", {}).get("reason", ""))[:160])
+        if new_ids:
+            nc = c.get(f"/api/tb/cases/{new_ids[0]}").json()
+            cbc = next((x for x in nc["documents"] if "cbc" in x["rel_path"]), None)
+            check("new Case File registered without the title, with UHID and age / sex", nc["case"]["patient"]["name"] == "Sunita Devi" and nc["case"]["patient"]["mrn"] == "SYN-500911" and "67" in nc["case"]["patient"].get("agesex", ""), json.dumps(nc["case"]["patient"])[:160])
+            if cbc:
+                full = c.get(f"/api/tb/cases/{new_ids[0]}/documents/{cbc['doc_id']}").json()
+                txt = " ".join(pg["text"] for pg in full["pages"])
+                check("Aadhaar masked in the stored scan text, never in the patient record", "7395 8406 1180" not in txt and "XXXX XXXX 1180" in txt and (full.get("identity_read") or {}).get("aadhaar_seen") is True
+                      and "aadhaar" not in json.dumps(nc["case"]["patient"]).lower(), txt[:0] + ("masked" if "XXXX XXXX 1180" in txt else "NOT masked"))
+        d2 = c.get("/api/tb/cases/TB-002").json()
+        mam = next((x for x in d2["documents"] if "mammogram_followup" in x["rel_path"]), None)
+        full = c.get(f"/api/tb/cases/TB-002/documents/{mam['doc_id']}").json() if mam else {}
+        check("name variant (Laxmi / Lakshmi) linked on the UHID and recorded as a variant match", mam is not None and mam.get("identity") == "match"
+              and (full.get("match") or {}).get("decision") == "auto_link" and "variant" in (full.get("match") or {}).get("reason", ""), (full.get("match") or {}).get("reason", "")[:120])
+        # clean up: filed records out of the Case Files, the new Case File, the waiting record
+        for rel, cid in where.items():
+            did = next(x["doc_id"] for x in c.get(f"/api/tb/cases/{cid}").json()["documents"] if x["rel_path"] == rel)
+            if cid in have:
+                c.delete(f"/api/tb/cases/{cid}/documents/{did}")
+        for cid in new_ids:
+            c.delete(f"/api/tb/cases/{cid}")
+        for d in c.get("/api/tb/intake").json()["documents"]:
+            c.delete(f"/api/tb/intake/{d['doc_id']}?reason=e2e+cleanup")
+    else:
+        print("SKIP 2.4 intake batch: TB-004..006 not imported (python -m tumour_board.eval.prepare_cases TB-004 TB-005 TB-006)")
 
 
 def phase2_cleanup(c):
