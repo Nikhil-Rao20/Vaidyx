@@ -7,7 +7,7 @@ import re
 import uuid
 from datetime import date, datetime, timedelta
 
-from . import confirm, protocol, store
+from . import confirm, dates, protocol, store
 
 FINAL_OK = {"FINAL", "AMENDED", "CORRECTED"}
 VERIFIED = {"verified", "confirmed"}  # a value counts when code found its quote, or a clinician confirmed it against the source (V1 item 2.2)
@@ -21,8 +21,9 @@ STATUS_RANK = {"CORRECTED": 4, "AMENDED": 4, "FINAL": 3, "PRELIMINARY": 1, "DRAF
 
 
 def _doc_sort_key(d):
+    """Clinical order: event date, then report date, then status (V1 item 3.1)."""
     c = d.get("classification") or {}
-    return (c.get("report_date_iso") or "", STATUS_RANK.get(c.get("status"), 0))
+    return (*dates.doc_dates(d)["sort"], STATUS_RANK.get(c.get("status"), 0))
 
 
 NEGATIVE = {"DRAFT", "PRELIMINARY", "CANCELLED"}
@@ -63,7 +64,8 @@ def resolve_facts(docs, overrides=None):
         c = d.get("classification") or {}
         for fid, f in (d.get("facts") or {}).items():
             hist.setdefault(fid, []).append({**f, "doc_id": d["doc_id"], "doc_title": c.get("title") or d["filename"], "doc_type": c.get("doc_type"),
-                                             "date": c.get("report_date_iso"), "doc_final": _is_final(d, overrides), "doc_status": c.get("status")})
+                                             "date": dates.doc_dates(d)["event"] or None, "report_date": dates.doc_dates(d)["report"] or None,
+                                             "doc_final": _is_final(d, overrides), "doc_status": c.get("status")})
     out = {}
     for fid, h in hist.items():
         tiers = [[e for e in h if e["verification"] in VERIFIED and e["doc_final"] and e["state"] == "present"],
@@ -97,10 +99,10 @@ def evaluate(case_id):
         if not req.get("facts_only"):
             cands = [d for d in ready if (d.get("classification") or {}).get("doc_type") in req["doc_types"] and _region_ok(d, req.get("region"))]
             if req.get("must_postdate_doc_type"):
-                ref = [x["classification"].get("report_date_iso") for x in ready if (x.get("classification") or {}).get("doc_type") == req["must_postdate_doc_type"]]
+                ref = [dates.doc_dates(x)["event"] for x in ready if (x.get("classification") or {}).get("doc_type") == req["must_postdate_doc_type"]]
                 ref = max([x for x in ref if x], default="")
-                if ref:
-                    cands = [d for d in cands if (d["classification"].get("report_date_iso") or "") > ref]
+                if ref:  # "after treatment" compares event dates (V1 item 3.1)
+                    cands = [d for d in cands if dates.doc_dates(d)["event"] > ref]
                     r["postdate_reference"] = ref
             cands.sort(key=_doc_sort_key, reverse=True)
             finals = [d for d in cands if _is_final(d, overrides)]

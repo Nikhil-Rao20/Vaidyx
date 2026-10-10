@@ -10,7 +10,7 @@ the brief. Tools only read the Case File.
 """
 import asyncio, json, time
 
-from . import guardrails, llm, protocol, qa, rules, search, store
+from . import dates, guardrails, llm, protocol, qa, rules, search, store
 
 ROLES = {
     "radiology": {"label": "Radiology support", "department": "Radiology",
@@ -99,7 +99,7 @@ def _doc_list(case_id):
         status = c.get("status")
         if att:
             status = f"status not stated, {att}" if status in ("UNSTATED", "UNKNOWN", None) else f"{status}, {att}"
-        rows.append(f"{d['doc_id']} | {c.get('title') or d['filename']} | {c.get('doc_type')} | {c.get('report_date_iso') or '?'} | {status}"
+        rows.append(f"{d['doc_id']} | {c.get('title') or d['filename']} | {c.get('doc_type')} | {dates.doc_dates(d)['event'] or '?'} | {status}"
                     + (" | unsigned" if c.get("signed") == "no" and not att else ""))
     return "\n".join(rows)
 
@@ -166,7 +166,7 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
         if not g["allowed"]:
             yield {"type": "error", "message": g["message"], "category": g["category"]}; return
     relevant = sorted([d for d in rules.case_docs(case_id) if d.get("state") == "ready" and (d.get("classification") or {}).get("doc_type") in r["doc_types"]],
-                      key=lambda d: (d.get("classification") or {}).get("report_date_iso") or "", reverse=True)
+                      key=lambda d: dates.doc_dates(d)["sort"], reverse=True)
     scratch = [f"Patient: {case['patient'].get('name')} ({case['patient'].get('mrn')}). Protocol: {case['protocol']}.",
                "DOCUMENTS:\n" + _doc_list(case_id),
                "VERIFIED FIELDS:\n" + _facts_text(case_id),

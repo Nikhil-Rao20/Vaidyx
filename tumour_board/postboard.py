@@ -9,7 +9,7 @@ import re
 import uuid
 from datetime import date, timedelta
 
-from . import grounding, llm, negation, protocol, rules, store
+from . import dates, grounding, llm, negation, protocol, rules, store
 
 NOT_LISTED = "Case File not listed: no Pre-Authorization check to compare with"
 
@@ -136,9 +136,10 @@ def timeline(case_id):
     ev = []
     for d in rules.case_docs(case_id):  # confirmed dates and document types (V1 item 2.2)
         c = d.get("classification") or {}
-        if c.get("report_date_iso"):
-            ev.append({"date": c["report_date_iso"], "kind": "document", "doc_type": c.get("doc_type"), "title": c.get("title") or d["filename"],
-                       "status": c.get("status"), "doc_id": d["doc_id"]})
+        dd = dates.doc_dates(d)  # the timeline uses the event date (V1 item 3.1)
+        if dd["event"]:
+            ev.append({"date": dd["event"], "kind": "document", "doc_type": c.get("doc_type"), "title": c.get("title") or d["filename"],
+                       "status": c.get("status"), "doc_id": d["doc_id"], "report_date": dd["report"], "date_assumed": dd["event_assumed"]})
     st = store.get_state(case_id)
     for b in st.get("board_records", []):
         ev.append({"date": (b.get("board_date") or b["recorded_at"])[:10], "kind": "board", "title": "Tumour Board decision recorded", "record": b["id"]})

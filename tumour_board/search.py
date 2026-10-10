@@ -7,7 +7,7 @@ from collections import Counter
 
 import numpy as np
 
-from . import config, rules, store
+from . import config, dates, rules, store
 
 EMBED_MODEL = "snowflake/snowflake-arctic-embed-m-long"  # US (Snowflake), Apache-2.0, non-medical, fp32 ONNX on CPU
 _embedder = None
@@ -74,7 +74,7 @@ def find_values(case_id, query, limit=60):
                 if m and len(line.strip()) > 1:
                     s = pos + (len(line) - len(line.lstrip()))
                     hits.append({"doc_id": d["doc_id"], "doc_title": c.get("title") or d["filename"], "doc_type": c.get("doc_type"),
-                                 "date": c.get("report_date_iso"), "status": c.get("status"), "page": pi, "start": s, "end": pos + len(line.rstrip()),
+                                 "date": dates.doc_dates(d)["event"] or None, "status": c.get("status"), "page": pi, "start": s, "end": pos + len(line.rstrip()),
                                  "text": line.strip(), "match": m.group(0)})
                 pos += len(line)
     hits.sort(key=lambda h: (h["date"] or ""), reverse=True)
@@ -120,7 +120,7 @@ class CaseIndex:
         for i, ch in enumerate(self.chunks):
             c = self.meta[ch["doc_id"]].get("classification") or {}
             ch.update(id=f"C{i}", doc_title=c.get("title") or self.meta[ch["doc_id"]]["filename"], doc_type=c.get("doc_type"),
-                      date=c.get("report_date_iso"), status=c.get("status"))
+                      date=dates.doc_dates(self.meta[ch["doc_id"]])["event"] or None, status=c.get("status"))
         self.tok = [tokenize(c["doc_title"] + " " + c["text"]) for c in self.chunks]
         self.df = Counter(t for ts in self.tok for t in set(ts))
         self.avgdl = sum(map(len, self.tok)) / max(len(self.tok), 1)
@@ -180,7 +180,7 @@ def index(case_id):
 
 def _doc_block(d, text):
     c = d.get("classification") or {}
-    return (f"=== DOCUMENT {d['doc_id']} | {c.get('title') or d['filename']} | type {c.get('doc_type')} | date {c.get('report_date_iso') or c.get('report_date') or '?'} "
+    return (f"=== DOCUMENT {d['doc_id']} | {c.get('title') or d['filename']} | type {c.get('doc_type')} | date {dates.doc_dates(d)['event'] or c.get('report_date') or '?'} "
             f"| status {c.get('status')}{' | UNSIGNED' if c.get('signed') == 'no' else ''} ===\n{text}")
 
 
@@ -199,7 +199,7 @@ def context_for(case_id, question, budget=48000, doc_types=None):
     for h in hits:
         if h["doc_id"] in full:
             best[h["doc_id"]] = max(best.get(h["doc_id"], 0.0), h["score"])
-    order = sorted(docs, key=lambda d: (best.get(d["doc_id"], 0.0), (d.get("classification") or {}).get("report_date_iso") or ""), reverse=True)
+    order = sorted(docs, key=lambda d: (best.get(d["doc_id"], 0.0), dates.doc_dates(d)["event"]), reverse=True)
     parts, used, included = [], 0, set()
     for d in order:
         blk = _doc_block(d, full[d["doc_id"]])
