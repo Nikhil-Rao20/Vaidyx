@@ -199,7 +199,28 @@ DATE_KEYS = ("report_date_iso", "event_date_iso", "report_date_assumed", "event_
              "report_date_label", "event_date_label", "date_unconfirmed", "date_suggestion", "date_flags", "dates", "model_date_iso")
 
 
-def finish_classification(c, full, texts, filename, dob_iso=""):
+def set_dates(c, texts, filename, doc_type, dob_iso="", pages=None):
+    """Read the document's dates for this doc type (V1 item 3.1) and flag a date whose line the two OCR reads disagree on or that
+    carries Hindi / regional text or illegible parts (3.3 / 3.6): such a date is not trusted where it decides a check."""
+    dd = dates.document_dates(texts, filename, doc_type or "", c.get("report_date") or "", dob_iso)
+    c.update({k: dd[k] for k in DATE_KEYS})
+    c["dates_type"] = doc_type or ""
+    for k in ("report", "event"):
+        q = dd.get(f"{k}_date_quote")
+        if not q or dd.get(f"{k}_date_assumed") or not pages:
+            continue
+        loc = grounding.locate(q, texts)
+        if not loc or loc["page"] >= len(pages):
+            continue
+        page = pages[loc["page"]]
+        if ingest.uncertain_overlap(page, loc["start"], loc["end"]) is not None:
+            c["date_flags"].append(f"the {k} date is on a line the two OCR reads disagree on: read the scan")
+        if ingest.flagged_overlap(page, loc["start"], loc["end"]) is not None:
+            c["date_flags"].append(f"the {k} date is on a line with Hindi / regional text or illegible parts: verify")
+    return c
+
+
+def finish_classification(c, full, texts, filename, dob_iso="", pages=None):
     """Rules over the model's header reading: status and signature from docstatus, the model's quotes kept only when found in the
     text, the report and event dates read with their labels from the text (V1 item 3.1: the model's date only when found in the text,
     the filename a suggestion only, no date found = unconfirmed), the patient id kept only when found verbatim. Shared by Case File
@@ -223,8 +244,7 @@ def finish_classification(c, full, texts, filename, dob_iso=""):
     elif chk["agree"] is False:
         c["doc_type_disagreement"] = {"keyword_type": chk["keyword_type"], "model_type": model_type, "note": chk["note"],
                                       "evidence": [{"keyword": e.get("keyword"), "quote": e.get("quote"), "where": e.get("where")} for e in chk.get("evidence") or []][:5]}
-    dd = dates.document_dates(texts, filename, c.get("doc_type") or "", c.get("report_date") or "", dob_iso)
-    c.update({k: dd[k] for k in DATE_KEYS})
+    set_dates(c, texts, filename, c.get("doc_type"), dob_iso, pages)
     if c.get("patient_id") and not grounding.locate(c["patient_id"], texts):
         c["patient_id_unverified"] = c["patient_id"]; c["patient_id"] = ""
     return c
@@ -313,7 +333,7 @@ async def process_document(case_id, doc_id, protocol_id, case_patient=None, prog
         if not doc.get("classification"):
             doc["state"] = "classifying"; store.save_doc(case_id, doc); progress and progress(doc_id, "classifying")
             c = await classify(full, au)
-            doc["classification"] = finish_classification(c, full, texts, doc["filename"], identity.patient_record(case_patient or {}).get("dob") or "")
+            doc["classification"] = finish_classification(c, full, texts, doc["filename"], identity.patient_record(case_patient or {}).get("dob") or "", pages)
         c = doc["classification"]
         # identity as printed (rules first; V1 item 2.4) and the check that the document belongs to this Case File's patient
         if not doc.get("identity_read"):
@@ -334,6 +354,9 @@ async def process_document(case_id, doc_id, protocol_id, case_patient=None, prog
         doc["state"] = "extracting"; store.save_doc(case_id, doc); progress and progress(doc_id, "extracting")
         confirmed = confirm.latest(store.get_state(case_id), "confirm_doc_type", doc_id)  # the clinician's type wins (V1 item 3.2)
         doc_type = (confirmed["fields"]["doc_type"] if confirmed else "") or c["doc_type"]
+        if doc_type != (c.get("dates_type") if "dates_type" in c else c.get("doc_type")):  # the event date priorities follow the type: read the dates again
+            set_dates(c, texts, doc["filename"], doc_type, identity.patient_record(case_patient or {}).get("dob") or "", pages)
+            store.save_doc(case_id, doc)
         fids = protocol.facts_for_doc(protocol_id, doc_type)
         raw = await extract_facts(full, fids, au)
         facts = {}

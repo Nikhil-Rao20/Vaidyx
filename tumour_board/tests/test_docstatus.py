@@ -102,7 +102,7 @@ def test_real_final_diagnosis_stays_final(text):
     ("Reg No: TN/12345", "yes"),
     ("Reg. No. 45678", "yes"),
     ("KMC Reg. No. 54321", "yes"),
-    ("NMC 123456", "yes"),
+    ("Dr. P. Menon, NMC 123456", "yes"),
     ("Verified by Dr. A. Menon", "yes"),
     ("Reported by: Dr. Meera Nair, Consultant", "yes"),
     ("Signed out by Dr X", "yes"),
@@ -138,8 +138,8 @@ def test_reg_no_with_council_prefix_is_signed():
 
 
 @pytest.mark.parametrize("text", [
-    "Reg. No. KMC 45678", "Reg No: TNMC/12345", "KMC Reg. No. 45678", "Regn. No. 12345 (MMC)", "MCI 12345", "NMC Reg 123456",
-    "Reg. No. KMC-45678", "Registration No. DMC/R/04512", "APMC Regn No 67890", "WBMC 55123", "Dr. A. Iyer, MD, TCMC 22345", "KMC/45678",
+    "Reg. No. KMC 45678", "Reg No: TNMC/12345", "KMC Reg. No. 45678", "Regn. No. 12345 (MMC)", "Dr. S. Rao, MCI 12345", "NMC Reg 123456",
+    "Reg. No. KMC-45678", "Registration No. DMC/R/04512", "APMC Regn No 67890", "Dr. P. Sen, MBBS, MD, WBMC 55123", "Dr. A. Iyer, MD, TCMC 22345", "Dr. K. Shetty (KMC/45678)",
 ])
 def test_council_registration_is_a_signature(text):
     """V1 item 3.5: State Medical Council / NMC / MCI registration in the usual Indian layouts."""
@@ -234,3 +234,10 @@ def test_rules_reproduce_fixture_classification(path):
     full = "\n\n".join(f"[page {i + 1}]\n{p['text']}" for i, p in enumerate(d["pages"]))
     assert ds.detect_status(full)[0] == d["classification"]["status"]
     assert ds.detect_signature(full)[0] == d["classification"]["signed"]
+
+
+@pytest.mark.parametrize("text", ["Lab Ref KMC/2026/12345", "IP KMC 45678", "Accession KMC-2026-0042", "Barcode TNMC12345", "PMC 2026 annual",
+                                  "MCI 12345", "WBMC 55123", "KMC/45678", "GMC 2026/4411", "Sample ABMC 123456"])
+def test_bare_council_code_without_a_doctor_line_is_not_a_signature(text):
+    """Hospital abbreviations (KMC, GMC, MMC) prefix IP, lab and accession numbers: a bare code is a signature only on a doctor's line (review of Phase 3)."""
+    assert ds.detect_signature("Patient X\n" + text + "\nFindings: as above")[0] == "unknown"

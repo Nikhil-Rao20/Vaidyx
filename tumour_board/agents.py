@@ -135,8 +135,10 @@ _PAGE_RANGE = re.compile(r"^(?:pages?|pp?\.?)?\s*(\d+)(?:\s*(?:-|to)\s*(\d+))?$"
 def _read_document(case_id, arg):
     """'<doc id>' or '<doc id> pages 3-5' (also 'p3-5', 'pages 3', 'page 3'); pages are 1-based. Returns the pages that fit in
     READ_CAP characters, each under a [page N] line, and a last line naming the pages not shown when the text is cut."""
-    parts = arg.strip().split(None, 1)
-    d = store.get_doc(case_id, parts[0]) if parts else None
+    parts = arg.strip().replace("\u2013", "-").split(None, 1)  # "D123, pages 3-5" and an en dash are accepted
+    if parts:
+        parts[0] = parts[0].strip(",;:")
+    d = store.get_doc(case_id, parts[0]) if parts and parts[0] else None
     if not d:
         return "No document with that id. Use list_documents."
     pages = d.get("pages") or []

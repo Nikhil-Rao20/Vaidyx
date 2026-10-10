@@ -212,6 +212,9 @@ def apply_to_doc(doc, state):
                     cls[k + "_assumed"] = False  # the clinician read it (or said the document does not state it)
                     cls[k + "_label"] = "confirmed by " + c["by"]
                     cls[k + "_quote"] = ""
+                elif cls.get(k + "_assumed") or not cls.get(k + "_iso"):  # the other date stood in for this one: the confirmed date stands in now
+                    cls["model_" + k + "_iso"] = cls.get(k + "_iso")
+                    cls[k + "_iso"] = ""; cls[k + "_assumed"] = False; cls[k + "_label"] = ""; cls[k + "_quote"] = ""
             cls["dates_confirmed_by"] = c["by"]
             cls["date_unconfirmed"] = False  # a confirmation settles the date question (V1 item 3.1), even "not stated"
             cls["date_flags"] = []

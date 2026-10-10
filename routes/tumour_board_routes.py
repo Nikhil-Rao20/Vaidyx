@@ -1,6 +1,6 @@
 """HTTP API for Vaidyx-TB (AI agent for the Tumour Board). All routes require a logged-in Vaidyx user; actions that change a Case File
 are checked against the hospital's departments and roles in org.json through org.can() (V1 item 2.1)."""
-import json
+import asyncio, json
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -213,7 +213,7 @@ def setup_tumour_board_routes():
         st = store.get_state(case_id)
         all_docs = store.list_docs(case_id)
         docs = []
-        for d in all_docs:
+        for d in rules.case_docs(case_id, st):  # as the clinicians confirmed them (type, dates, values; V1 items 2.2, 3.1, 3.2)
             docs.append({k: d.get(k) for k in ("doc_id", "filename", "rel_path", "ext", "state", "error", "classification", "identity", "identity_read", "added", "department", "uploaded_by")} |
                         {"facts": d.get("facts", {}), "pages": len(d.get("pages") or []), "methods": sorted({p["method"] for p in d.get("pages") or []}),
                          "page_flags": sorted({f for p in d.get("pages") or [] for f in p.get("flags") or []})})  # Hindi / regional text, illegible parts (V1 item 3.6)
@@ -232,8 +232,9 @@ def setup_tumour_board_routes():
             if len(b) > 60 * 1024 * 1024:
                 raise HTTPException(413, f"{f.filename} is larger than 60 MB")
             data.append((rels[i] if i < len(rels) and rels[i] else f.filename, b))
-        job = service.add_files(case_id, data, u)
-        return {"job": job["id"], "total": job["total"], "warnings": job.get("warnings") or []}
+        job = service.add_files(case_id, data, u, warn=False)
+        warnings = service.attach_warnings(job["id"], await asyncio.to_thread(service.scan_warnings, case_id, job["doc_ids"], u))  # page count off the event loop
+        return {"job": job["id"], "total": job["total"], "warnings": warnings}
 
     # ---- intake: department uploads before patient matching (V1 item 2.3) ----------------------------------------------
     def _intake(doc_id, rl, actionable=False):
@@ -265,8 +266,9 @@ def setup_tumour_board_routes():
             if len(b) > 60 * 1024 * 1024:
                 raise HTTPException(413, f"{f.filename} is larger than 60 MB")
             data.append((rels[i] if i < len(rels) and rels[i] else f.filename, b))
-        job = service.add_intake_files(data, dept, u)
-        return {"job": job["id"], "total": job["total"], "department": dept, "warnings": job.get("warnings") or []}
+        job = service.add_intake_files(data, dept, u, warn=False)
+        warnings = service.attach_warnings(job["id"], await asyncio.to_thread(service.scan_warnings, "intake", job["doc_ids"], u, True))
+        return {"job": job["id"], "total": job["total"], "department": dept, "warnings": warnings}
 
     @r.get("/intake")
     async def intake_queue(request: Request):
@@ -444,7 +446,7 @@ def setup_tumour_board_routes():
             except ValueError as e:
                 raise HTTPException(400, str(e))
             st = service.recheck(case_id, u) if c.get("protocol") else store.get_state(case_id)
-        job = service.reextract_document(case_id, key, u) if ctype == "confirm_doc_type" else None  # fields again under the confirmed type (V1 item 3.2)
+            job = service.reextract_document(case_id, key, u) if ctype == "confirm_doc_type" else None  # fields again under the confirmed type (V1 item 3.2)
         return {"confirmation": rec, "state": st, **({"job": job["id"]} if job else {})}
 
     @r.post("/cases/{case_id}/confirmations/{conf_id}/undo")
@@ -468,7 +470,8 @@ def setup_tumour_board_routes():
             if rec["type"] == "confirm_match" and not (rec.get("fields") or {}).get("case_id"):
                 intake.clear_rejection(rec["key"], case_id)  # "not this patient" withdrawn: the Case File may be suggested again
             st = service.recheck(case_id, u) if c.get("protocol") else store.get_state(case_id)
-        return {"confirmation": rec, "state": st}
+            job = service.reextract_document(case_id, rec["key"], u) if rec["type"] == "confirm_doc_type" else None  # back to the model's type: fields again
+        return {"confirmation": rec, "state": st, **({"job": job["id"]} if job else {})}
 
     @r.post("/cases/{case_id}/documents/{doc_id}/unfile")
     async def unfile_doc(case_id: str, doc_id: str, request: Request):

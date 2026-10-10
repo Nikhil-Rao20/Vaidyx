@@ -7,7 +7,7 @@ import re
 import uuid
 from datetime import date, datetime, timedelta
 
-from . import confirm, dates, protocol, store
+from . import confirm, dates, doctype, grounding, protocol, store
 
 FINAL_OK = {"FINAL", "AMENDED", "CORRECTED"}
 VERIFIED = {"verified", "confirmed"}  # a value counts when code found its quote, or a clinician confirmed it against the source (V1 item 2.2)
@@ -48,19 +48,23 @@ def _needs_confirmation(d):
     return c.get("status") == "UNSTATED" and c.get("signed") != "no"
 
 
-def _header(d, lines=10):
-    """The first lines of page 1 (title, department, study name): what the keyword table reads (V1 item 3.2)."""
+def _study_lines(d):
+    """The header lines that name the study ("CECT THORAX", "MRI BRAIN"): the title keyword hits of the first lines of page 1 (V1 item
+    3.2). Department, hospital, patient and signature lines carry no study keyword and never count ("Head: Dr. Rao" is not a brain study)."""
     pages = d.get("pages") or []
     text = (pages[0].get("text") if pages and isinstance(pages[0], dict) else "") or ""
-    return "\n".join([ln.strip() for ln in text.splitlines() if ln.strip()][:lines])
+    if not text:
+        return ""
+    ev = doctype.keyword_type([text], "").get("evidence") or []
+    return "\n".join(e.get("quote") or "" for e in ev if str(e.get("where", "")).startswith("line"))
 
 
 def _region_ok(d, region):
     if not region:
         return True
     c = d.get("classification") or {}
-    hay = " ".join([c.get("body_region", ""), c.get("title", ""), d.get("filename", ""), _header(d)]).lower()  # the header text too (V1 item 3.2)
-    return re.search(region, hay) is not None
+    hay = " ".join([c.get("body_region", ""), c.get("title", ""), d.get("filename", ""), _study_lines(d)]).lower()
+    return re.search(r"\b(?:" + region + ")", hay) is not None  # whole words from the start ("rect" still matches rectum / rectal)
 
 
 def _doc_types(d) -> set:
@@ -77,7 +81,7 @@ def _doc_types(d) -> set:
 def _type_note(d):
     c = d.get("classification") or {}
     dis = c.get("doc_type_disagreement") or {}
-    return dis.get("note") or f"the reader model called it {c.get('doc_type')} and the title keywords say {dis.get('keyword_type')}"
+    return dis.get("note") or f"the reader model (Qwen3.5-4B, Chinese, non-medical) called it {c.get('doc_type')} and the title keywords say {dis.get('keyword_type')}"
 
 
 def resolve_facts(docs, overrides=None):
@@ -90,7 +94,8 @@ def resolve_facts(docs, overrides=None):
             hist.setdefault(fid, []).append({**f, "doc_id": d["doc_id"], "doc_title": c.get("title") or d["filename"], "doc_type": c.get("doc_type"),
                                              "doc_types": sorted(_doc_types(d)), "type_note": _type_note(d) if len(_doc_types(d)) > 1 else "",
                                              "date": dates.doc_dates(d)["event"] or None, "report_date": dates.doc_dates(d)["report"] or None,
-                                             "date_unconfirmed": dates.doc_dates(d)["unconfirmed"],
+                                             "date_unconfirmed": dates.doc_dates(d)["unconfirmed"], "date_questionable": dates.doc_dates(d)["questionable"],
+                                             "date_flags": dates.doc_dates(d)["flags"],
                                              "doc_final": _is_final(d, overrides), "doc_status": c.get("status")})
     out = {}
     for fid, h in hist.items():
@@ -120,25 +125,29 @@ def evaluate(case_id):
             r["status"] = "waived"; r["waiver"] = w
             r["problems"].append(f"Waived for this Case File by {w.get('by') or 'clinician'}: {w.get('reason') or 'no reason given'}")
             results.append(r); continue
-        if req.get("applies_if_doc_type_present") and not any((d.get("classification") or {}).get("doc_type") == req["applies_if_doc_type_present"] for d in ready):
-            r["status"] = "not_applicable"; results.append(r); continue
-        date_needs = []  # documents whose unconfirmed date decides this requirement: a clinician confirms it (V1 item 3.1)
+        date_needs = []  # documents whose unconfirmed or flagged date decides this requirement: a clinician confirms it (V1 item 3.1)
         type_needs = []  # documents that match this requirement under only one of their two possible types (V1 item 3.2)
+        if req.get("applies_if_doc_type_present"):
+            present = [d for d in ready if req["applies_if_doc_type_present"] in _doc_types(d)]
+            if not present:
+                r["status"] = "not_applicable"; results.append(r); continue
+            type_needs += [d for d in present if len(_doc_types(d)) > 1]  # whether this requirement applies rests on a disputed type
         if not req.get("facts_only"):
             want = set(req["doc_types"])
             cands = [d for d in ready if _doc_types(d) & want and _region_ok(d, req.get("region"))]
             type_needs += [d for d in cands if len(_doc_types(d)) > 1 and len(_doc_types(d) & want) == 1]
             if req.get("must_postdate_doc_type"):
-                refs = [x for x in ready if (x.get("classification") or {}).get("doc_type") == req["must_postdate_doc_type"]]
-                ref = max([dates.doc_dates(x)["event"] for x in refs if dates.doc_dates(x)["event"]], default="")
-                for x in refs:  # the reference event (end of treatment) has no confirmed date: nothing can be placed after it
-                    if dates.doc_dates(x)["unconfirmed"]:
+                refs = [x for x in ready if req["must_postdate_doc_type"] in _doc_types(x)]
+                type_needs += [x for x in refs if len(_doc_types(x)) > 1]  # the end-of-treatment reference rests on a disputed type
+                ref = max([dates.doc_dates(x)["event"] for x in refs if dates.doc_dates(x)["event"] and not dates.doc_dates(x)["questionable"]], default="")
+                for x in refs:  # the reference event (end of treatment) has no trusted date: nothing can be placed after it
+                    if dates.doc_dates(x)["questionable"]:
                         date_needs.append((x, f"the {req['label'].lower()} must be dated after it"))
                 if ref:  # "after treatment" compares event dates (V1 item 3.1)
-                    undated = [d for d in cands if dates.doc_dates(d)["unconfirmed"]]
-                    cands = [d for d in cands if dates.doc_dates(d)["event"] > ref]
+                    undated = [d for d in cands if dates.doc_dates(d)["questionable"]]
+                    cands = [d for d in cands if not dates.doc_dates(d)["questionable"] and dates.doc_dates(d)["event"] > ref]
                     r["postdate_reference"] = ref
-                    if not cands:  # only undated candidates: ask for their date instead of calling the record missing
+                    if not cands:  # only undated or flagged candidates: ask for their date instead of calling the record missing
                         date_needs += [(d, f"it must be dated after {ref}") for d in undated]
             cands.sort(key=_doc_sort_key, reverse=True)
             finals = [d for d in cands if _is_final(d, overrides)]
@@ -182,10 +191,10 @@ def evaluate(case_id):
             if good:
                 g = sorted(good, key=lambda h: h["date"] or "")[-1]
                 r["evidence"].append({"doc_id": g["doc_id"], "fact": fid, "value": g["value"], "quote": g["quote"]})
-                if len({h["doc_id"] for h in good}) > 1:  # which value is current depends on the dates: an unconfirmed one must be confirmed first
+                if len({h["doc_id"] for h in good}) > 1 and len({grounding.norm(h["value"]) for h in good}) > 1:  # which value is current depends on the dates
                     seen = set()
                     for h in good:
-                        if h.get("date_unconfirmed") and h["doc_id"] not in seen:
+                        if h.get("date_questionable") and h["doc_id"] not in seen:
                             seen.add(h["doc_id"]); date_needs.append((h, f"{cat[fid]['label'].lower()} is documented more than once and the current value depends on the dates"))
             elif any(h["state"] == "pending" for h in hist):
                 h = [h for h in hist if h["state"] == "pending"][-1]
@@ -233,14 +242,18 @@ def evaluate(case_id):
                     continue
                 seen.add(did)
                 title = x.get("doc_title") or (x.get("classification") or {}).get("title") or x.get("filename") or did
-                r["problems"].insert(0, f"Confirm the date of {title}: no document date was found in its text and {why}")
+                dd = dates.doc_dates(x) if "classification" in x else None
+                cause = "no document date was found in its text" if (dd is None or dd["unconfirmed"]) else "its date is flagged (" + "; ".join(dd["flags"]) + ")"
+                if dd is None and x.get("date_flags"):
+                    cause = "its date is flagged (" + "; ".join(x["date_flags"]) + ")"
+                r["problems"].insert(0, f"Confirm the date of {title}: {cause} and {why}")
                 r.setdefault("needs", []).append({"type": "confirm_dates", "doc_id": did})
                 if not any(e.get("doc_id") == did for e in r["evidence"]):
                     r["evidence"].append({"doc_id": did, "quote": ""})
         results.append(r)
     optional = []
     for opt in prot.get("optional", []):
-        hit = [d for d in ready if (d.get("classification") or {}).get("doc_type") in opt["doc_types"]]
+        hit = [d for d in ready if _doc_types(d) & set(opt["doc_types"])]
         optional.append({"id": opt["id"], "label": opt["label"], "available": bool(hit), "doc_ids": [d["doc_id"] for d in hit]})
     core = []  # informational MDT minimum core data (not part of the gate): documented anywhere in the Case File, verified
     for c in prot.get("core_data", []):

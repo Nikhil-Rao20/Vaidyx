@@ -36,6 +36,8 @@ def doc_dates(doc) -> dict:
             # the finder (or a clinician saying "not stated") answers the question explicitly; otherwise no date = unconfirmed
             "unconfirmed": bool(c["date_unconfirmed"]) if c.get("date_unconfirmed") is not None else not (report or event),
             "flags": list(c.get("date_flags") or []),
+            # a flagged date (after today, before the DOB, day / month unclear, on an uncertain OCR line) is not trusted where the date decides a check
+            "questionable": (bool(c["date_unconfirmed"]) if c.get("date_unconfirmed") is not None else not (report or event)) or bool(c.get("date_flags")),
             "sort": (event or report, report or event)}
 
 

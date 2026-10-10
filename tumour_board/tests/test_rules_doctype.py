@@ -1,4 +1,4 @@
-"""Document type cross-check in the gate (V1 item 3.2): a document whose title keywords disagree with the reader model's type counts
+"""Document type cross-check in the gate (V1 item 3.2): a document whose title keywords disagree with the reader model (Qwen3.5-4B, Chinese, non-medical)'s type counts
 under both types, and a requirement it matches under only one of them asks the clinician to confirm the type; `other` documents are
 asked only for the protocol's required fields; the region check reads the header text."""
 import asyncio
@@ -10,7 +10,7 @@ from tumour_board.tests.util import add, fact, make_doc, req
 def disagree(doc, keyword_type, note=None):
     c = doc["classification"]
     c["doc_type_keyword"] = keyword_type
-    c["doc_type_disagreement"] = {"keyword_type": keyword_type, "model_type": c["doc_type"], "note": note or f"the title line says {keyword_type.upper()} ({keyword_type}); the reader model said {c['doc_type']}"}
+    c["doc_type_disagreement"] = {"keyword_type": keyword_type, "model_type": c["doc_type"], "note": note or f"the title line says {keyword_type.upper()} ({keyword_type}); the reader model (Qwen3.5-4B, Chinese, non-medical) said {c['doc_type']}"}
     return doc
 
 
@@ -29,7 +29,7 @@ def test_model_mri_but_title_says_ct_asks_for_confirmation(unit_case):
     g = rules.evaluate(unit_case)
     r = req(g, "ct_thorax")
     assert r["status"] == "needs_confirmation"
-    assert r["problems"][0] == "Confirm the document type of CECT THORAX: the title line says CT (ct); the reader model said mri"
+    assert r["problems"][0] == "Confirm the document type of CECT THORAX: the title line says CT (ct); the reader model (Qwen3.5-4B, Chinese, non-medical) said mri"
     assert r["needs"] == [{"type": "confirm_doc_type", "doc_id": "Dct000001"}]
     assert g["documents"]["type_disagreements"] == ["Dct000001"] and not g["passed"]
 
@@ -132,3 +132,34 @@ def test_reextract_refuses_unlisted_or_unread(unit_case):
     c = store.get_case(unit_case); c["protocol"] = ""; store.save_case(c)
     add(unit_case, hist())
     assert service.reextract_document(unit_case, "Dhist0001") is None  # not listed
+
+
+def test_region_check_ignores_department_and_signature_lines(unit_case):
+    """Review of Phase 3: "Head: Dr. A. Rao" or "CORRECTED REPORT" in the header must not make an abdominal MRI a brain or pelvic study."""
+    d = make_doc("Dmri00001", "mri", region="abdomen", title="MRI ABDOMEN", filename="mri_abdomen.pdf")
+    d["pages"] = [{"text": "Sahyadri Cancer Institute (SYNTHETIC)\nHead: Dr. A. Rao, Department of Radio-diagnosis\nCORRECTED REPORT\nMRI ABDOMEN WITH CONTRAST\nPatient: X", "method": "text-layer"}]
+    assert not rules._region_ok(d, "brain|head|cranial") and not rules._region_ok(d, "pelvis|rect")
+    d["pages"] = [{"text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Radio-diagnosis\nMRI BRAIN WITH CONTRAST\nPatient: X", "method": "text-layer"}]
+    assert rules._region_ok(d, "brain|head|cranial")
+    d2 = make_doc("Dmri00002", "mri", region="", title="MRI REPORT", filename="scan.pdf")
+    d2["pages"] = [{"text": "Hospital\nDepartment of Radio-diagnosis\nMRI PELVIS\nPatient: X", "method": "text-layer"}]
+    assert rules._region_ok(d2, "pelvis|rect") and not rules._region_ok(d2, "thorax|chest|lung")
+
+
+def test_disputed_treatment_summary_decides_applicability_by_asking(unit_case):
+    """The model called the RT completion summary a clinical note while its title says treatment summary: the restaging requirement must ask, not vanish."""
+    ts = disagree(make_doc("Dtx000001", "clinical_note", title="RT COMPLETION SUMMARY", date="2026-08-10"), "treatment_summary")
+    add(unit_case, hist(), ct(), ts, make_doc("Dmri00001", "mri", region="pelvis", date="2026-09-20"))
+    g = rules.evaluate(unit_case)
+    r = req(g, "restaging_mri")
+    assert r["status"] == "needs_confirmation" and {"type": "confirm_doc_type", "doc_id": "Dtx000001"} in r["needs"] and not g["passed"]
+    confirm.record(unit_case, "confirm_doc_type", "Dtx000001", {"doc_type": "treatment_summary"}, by="Dr. Rao")
+    assert req(rules.evaluate(unit_case), "restaging_mri")["status"] == "satisfied"
+    confirm.record(unit_case, "confirm_doc_type", "Dtx000001", {"doc_type": "clinical_note"}, by="Dr. Rao")
+    assert req(rules.evaluate(unit_case), "restaging_mri")["status"] == "not_applicable"
+
+
+def test_optional_records_count_both_types(unit_case):
+    add(unit_case, hist(), ct(), disagree(make_doc("Dx0000001", "other", title="CHEST X-RAY PA VIEW"), "xray"))
+    g = rules.evaluate(unit_case)
+    assert next(o for o in g["optional"] if o["id"] == "prior_imaging")["available"]

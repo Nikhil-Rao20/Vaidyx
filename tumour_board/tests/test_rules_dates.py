@@ -106,3 +106,31 @@ def test_confirm_dates_overlay_clears_unconfirmed(unit_case):
     c = confirm.apply_to_doc(undated(hist()), store.get_state(unit_case))["classification"]
     assert c["report_date_iso"] == "2026-09-04" and c["date_unconfirmed"] is False and c["report_date_assumed"] is False
     assert c["report_date_label"] == "confirmed by Dr. Iyer" and c["report_date_quote"] == "" and c["date_flags"] == []
+
+
+def test_flagged_date_is_not_trusted_where_it_decides_the_check(unit_case):
+    """Review of Phase 3: a date after today, before the DOB or on an uncertain OCR line is asked about like a missing one."""
+    tx = make_doc("Dtx000001", "treatment_summary", title="RT SUMMARY", date="2026-08-10"); tx["classification"]["date_flags"] = ["event date is after today"]
+    add(unit_case, hist(), ct(), tx, make_doc("Dmri00001", "mri", region="pelvis", date="2026-09-20"))
+    r = req(rules.evaluate(unit_case), "restaging_mri")
+    assert r["status"] == "needs_confirmation" and r["needs"] == [{"type": "confirm_dates", "doc_id": "Dtx000001"}]
+    assert r["problems"][0].startswith("Confirm the date of RT SUMMARY: its date is flagged (event date is after today)")
+    confirm.record(unit_case, "confirm_dates", "Dtx000001", {"event_date": "10/08/2026"}, by="Dr. Rao")
+    assert req(rules.evaluate(unit_case), "restaging_mri")["status"] == "satisfied"
+
+
+def test_same_value_in_two_undated_documents_is_not_asked(unit_case):
+    a = hist(date="2026-09-01")
+    b = undated(make_doc("Dhist0002", "histopathology", title="HPE COPY", facts={"histologic_type": fact("Adenocarcinoma"), "pdl1": fact("TPS 60%")}))
+    add(unit_case, a, b, ct())
+    assert req(rules.evaluate(unit_case), "pdl1")["status"] == "satisfied"
+
+
+def test_confirming_one_date_clears_a_stand_in(unit_case):
+    d = hist()  # report 2026-09-01, event stands in
+    confirm.record(unit_case, "confirm_dates", "Dhist0001", {"report_date": "04/09/2026"}, by="Dr. Rao")
+    c = confirm.apply_to_doc(d, store.get_state(unit_case))["classification"]
+    assert c["report_date_iso"] == "2026-09-04" and c["event_date_iso"] == "" and c["event_date_assumed"] is False
+    from tumour_board import dates
+    dd = dates.doc_dates({"classification": c})
+    assert dd["event"] == "2026-09-04" and dd["event_assumed"] and not dd["questionable"]

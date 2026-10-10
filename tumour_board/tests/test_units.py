@@ -22,10 +22,8 @@ from tumour_board.tests.conftest import FIXTURES
     ("7200 cells/cumm", "7.2 K/µL"),
     ("4.5 million/cumm", "4.5 x10^6/µL"),
     ("60 mm", "6 cm"),
-    ("S. creatinine 1.1 mg/dL", "97 µmol/L"),  # 1.1 x 88.4 = 97.2, a rounded conversion: within 2 %
-    ("Serum creatinine 97 umol/L", "1.1 mg/dL"),
-    ("T. bilirubin 1.0 mg/dL", "17 µmol/L"),
-    ("Blood sugar 5.5 mmol/L", "99 mg/dL"),
+
+
     ("2.45", "2.45"),  # unitless numbers compare as today
 ])
 def test_same_quantity(a, b):
@@ -42,6 +40,10 @@ def test_same_quantity(a, b):
     ("60", "6"),
     ("6", "6 cm"),  # a bare number is not a quantity
     ("1.1 mg/dL", "97 µmol/L"),  # analyte conversion needs the analyte label
+    ("S. creatinine 1.1 mg/dL", "97 µmol/L"),  # a rounded conversion (1.1 x 88.4 = 97.2) is never equal by default (review: 1.22 mg/dL would pass against 106 µmol/L)
+    ("Serum creatinine 97 umol/L", "1.1 mg/dL"),
+    ("T. bilirubin 1.0 mg/dL", "17 µmol/L"),
+    ("Blood sugar 5.5 mmol/L", "99 mg/dL"),
     ("S. creatinine 1.3 mg/dL", "97 µmol/L"),
     ("T. bilirubin 1.1 mg/dL", "97 µmol/L"),  # creatinine factor does not apply to bilirubin
     ("Hb 11.8 g/dL", "Platelets 11.8 g/dL"),  # different analytes
@@ -134,3 +136,11 @@ def test_equivalent_numbers_is_unit_blind_so_guards_use_numbers_equivalent():
     """'6 cm' is also 60 (mm): equivalent_numbers lists 60, numbers_equivalent still rejects '60 cm' because it keeps the unit."""
     assert "60" in units.equivalent_numbers("6 cm")
     assert not units.numbers_equivalent("60 cm", "6 cm") and units.numbers_equivalent("60 mm", "6 cm")
+
+
+def test_rounded_analyte_conversion_only_on_request():
+    """The creatinine / bilirubin / glucose factors are rounded: off by default (the guards), on only when a caller passes a tolerance."""
+    assert not units.same_quantity("S. creatinine 1.1 mg/dL", "97 µmol/L")
+    assert units.same_quantity("S. creatinine 1.1 mg/dL", "97 µmol/L", tol=0.02)
+    assert not units.same_quantity("S. creatinine 1.22 mg/dL", "106 µmol/L")
+    assert not units.numbers_equivalent("Creatinine 1.22 mg/dL", "S. creatinine 106 µmol/L")

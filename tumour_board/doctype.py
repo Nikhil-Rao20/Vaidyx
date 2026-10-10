@@ -1,4 +1,4 @@
-"""Document type cross-check (V1 item 3.2): a keyword second opinion on the reader model's document type.
+"""Document type cross-check (V1 item 3.2): a keyword second opinion on the reader model (Qwen3.5-4B, Chinese, non-medical)'s document type.
 
 Deterministic, no model. Reads ONLY the header of page 1 (the first ~10 non-empty lines: hospital, department, title,
 study name) and the filename, never deeper, against the editable table protocols/doc_type_keywords.json (its `_note`
@@ -181,28 +181,28 @@ STRONG = 3  # a disagreement needs title-level evidence (a title line scores 3);
 
 
 def cross_check(model_type, texts, filename: str = "") -> dict:
-    """The keyword type against the reader model's type.
+    """The keyword type against the reader model (Qwen3.5-4B, Chinese, non-medical)'s type.
 
     agree: True (same type), False (different: keep both, confirm_doc_type where it matters), None (no keyword evidence
     or ambiguous evidence: the model's type stands). note: one plain-English sentence for the reviewer."""
     model_type = (model_type or "").strip()
     kw = keyword_type(texts, filename)
     kt = kw["type"]
-    said = f"the reader model said {model_type}" if model_type else "the reader model gave no type"
+    said = f"the reader model (Qwen3.5-4B, Chinese, non-medical) said {model_type}" if model_type else "the reader model (Qwen3.5-4B, Chinese, non-medical) gave no type"
     if not kt:
         if kw["scores"]:
             tops = sorted(t for t, s in kw["scores"].items() if s == max(kw["scores"].values()))
             note = f"the header points to more than one type ({', '.join(tops)}); "
         else:
             note = "no document type keywords in the header or filename; "
-        note += f"the reader model's type ({model_type}) stands" if model_type else "the reader model gave no type"
+        note += f"the reader model (Qwen3.5-4B, Chinese, non-medical)'s type ({model_type}) stands" if model_type else "the reader model (Qwen3.5-4B, Chinese, non-medical) gave no type"
         return {"keyword_type": "", "model_type": model_type, "agree": None, "evidence": kw["evidence"], "note": note}
     top = max((e for e in kw["evidence"] if e["type"] == kt), key=lambda e: e["weight"])
     agree = kt == model_type
     if not agree and model_type and kw["scores"].get(kt, 0) < STRONG and not (model_type == "other" and top.get("where") == "filename"):
         # a lone header line ("Review with CBP, LFT after 1 week" in an OPD note) is a hint, not a title: the model's type stands;
         # when the model gave up (other), the filename still counts
-        note = f"only a weak keyword hint: {_where(top)} ({kt}); the reader model's type ({model_type}) stands"
+        note = f"only a weak keyword hint: {_where(top)} ({kt}); the reader model (Qwen3.5-4B, Chinese, non-medical)'s type ({model_type}) stands"
         return {"keyword_type": kt, "model_type": model_type, "agree": None, "evidence": kw["evidence"], "note": note}
-    note = f"{_where(top)} ({kt}); " + (f"the reader model also said {model_type}" if agree else said)
+    note = f"{_where(top)} ({kt}); " + (f"the reader model (Qwen3.5-4B, Chinese, non-medical) also said {model_type}" if agree else said)
     return {"keyword_type": kt, "model_type": model_type, "agree": agree, "evidence": kw["evidence"], "note": note}

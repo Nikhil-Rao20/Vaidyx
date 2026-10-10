@@ -254,7 +254,7 @@ def test_apply_to_doc_value_the_model_missed(unit_case):
 def test_empty_confirmed_date_means_not_stated(unit_case):
     confirm.record(unit_case, "confirm_dates", "Dhist0001", {"report_date": ""}, by="Dr. Rao")
     c = confirm.apply_to_doc(hist(), store.get_state(unit_case))["classification"]
-    assert c["report_date_iso"] == "" and c["model_report_date_iso"] == "2026-09-01" and "event_date_iso" not in c
+    assert c["report_date_iso"] == "" and c["model_report_date_iso"] == "2026-09-01" and not c.get("event_date_iso")  # nothing stands in: the clinician said no date is stated
 
 
 def test_unconfirmed_doc_is_returned_equal(unit_case):

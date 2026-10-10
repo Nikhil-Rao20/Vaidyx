@@ -117,9 +117,34 @@ async def process_docs(case_id, doc_ids, job, from_stored=False):
                           "readiness": gate["readiness"] if gate else None})
 
 
-def add_files(case_id, files, user=""):
+def scan_warnings(case_id, doc_ids, user="", intake=False):
+    """Big-scan warnings for stored documents (V1 item 3.7): counts the image-only pages without rendering. Pure file reading, so a
+    route may run it in a thread (asyncio.to_thread) and attach the result with attach_warnings()."""
+    out = []
+    for doc_id in doc_ids:
+        d = store.get_intake(doc_id) if intake else store.get_doc(case_id, doc_id)
+        if not d:
+            continue
+        path = store.intake_original_path(doc_id) if intake else store.original_path(case_id, doc_id)
+        w = ingest.scan_warning(path, d.get("rel_path") or d.get("filename"))
+        if w:
+            out.append({"doc_id": doc_id, "file": d.get("rel_path") or d.get("filename"), "message": w})
+            ev = {"kind": "scan_warning", "doc_id": doc_id, "file": d.get("rel_path"), "message": w, "by": user}
+            store.audit_intake({**ev, "department": d.get("department")}) if intake else store.audit(case_id, ev)
+    return out
+
+
+def attach_warnings(job_id, warnings):
+    job = JOBS.get(job_id)
+    if job is not None:
+        job["warnings"] = warnings; _save_job(job)
+    return warnings
+
+
+def add_files(case_id, files, user="", warn=True):
     """files: list of (relative_path, bytes). Identical files already in the Case File are skipped (SHA-256); files that cannot be
-    read are refused (job["unsupported"]: file + reason, audited) and never stored. Returns a job (processing runs in the background)."""
+    read are refused (job["unsupported"]: file + reason, audited) and never stored. Returns a job (processing runs in the background).
+    warn=False leaves the big-scan warnings to the caller (scan_warnings in a thread, attach_warnings)."""
     ids, skipped, unsupported, warnings = [], [], [], []
     for rel, data in files:
         reason = ingest.reject_reason(rel)  # .doc / .rtf / .odt without LibreOffice: refused with a clear message (V1 item 1.4)
@@ -135,10 +160,8 @@ def add_files(case_id, files, user=""):
         d = store.add_document_file(case_id, Path(rel).name, data, rel)
         ids.append(d["doc_id"])
         store.audit(case_id, {"kind": "document_added", "doc_id": d["doc_id"], "file": rel, "by": user})
-        w = ingest.scan_warning(store.original_path(case_id, d["doc_id"]), rel)  # a big scan: the user knows the wait (V1 item 3.7)
-        if w:
-            warnings.append({"doc_id": d["doc_id"], "file": rel, "message": w})
-            store.audit(case_id, {"kind": "scan_warning", "doc_id": d["doc_id"], "file": rel, "message": w})
+    if warn:
+        warnings = scan_warnings(case_id, ids, user)  # a big scan: the user knows the wait (V1 item 3.7)
     job = _job(case_id, len(ids), ids)
     job["skipped_duplicates"], job["unsupported"], job["warnings"] = skipped, unsupported, warnings
     _save_job(job)
@@ -164,7 +187,7 @@ def reprocess(case_id, which="errors", user=""):
     return job
 
 
-def add_intake_files(files, department, user=""):
+def add_intake_files(files, department, user="", warn=True):
     """Department upload without a Case File (V1 item 2.3): files: list of (relative_path, bytes). Same refusal rules as add_files;
     identical bytes already waiting in the intake area are skipped. Returns a job (processing and matching run in the background)."""
     ids, skipped, unsupported, warnings = [], [], [], []
@@ -184,10 +207,8 @@ def add_intake_files(files, department, user=""):
         d = store.add_intake_file(Path(rel).name, data, rel, department, user)
         ids.append(d["doc_id"]); waiting[h] = d["doc_id"]
         store.audit_intake({"kind": "document_added", "doc_id": d["doc_id"], "file": rel, "department": department, "by": user})
-        w = ingest.scan_warning(store.intake_original_path(d["doc_id"]), rel)  # V1 item 3.7
-        if w:
-            warnings.append({"doc_id": d["doc_id"], "file": rel, "message": w})
-            store.audit_intake({"kind": "scan_warning", "doc_id": d["doc_id"], "file": rel, "department": department, "message": w})
+    if warn:
+        warnings = scan_warnings("intake", ids, user, intake=True)  # V1 item 3.7
     job = _job("intake", len(ids), ids)
     job["skipped_duplicates"], job["unsupported"], job["department"], job["warnings"] = skipped, unsupported, department, warnings
     _save_job(job)
@@ -273,6 +294,9 @@ def reextract_document(case_id, doc_id, user=""):
     case = store.get_case(case_id)
     d = store.get_doc(case_id, doc_id)
     if not case or not case.get("protocol") or not d or not d.get("pages") or not d.get("classification"):
+        return None
+    if d.get("state") in STUCK_STATES:  # another job is working on it: its run will read the confirmation (confirm.latest) itself
+        store.audit(case_id, {"kind": "reextract_skipped", "doc_id": doc_id, "by": user, "state": d.get("state")})
         return None
     d["state"] = "queued"; d.pop("error", None); store.save_doc(case_id, d)
     store.audit(case_id, {"kind": "reextract", "doc_id": doc_id, "by": user})

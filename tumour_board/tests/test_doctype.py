@@ -200,36 +200,36 @@ CECT = hdr("Department of Radio-diagnosis", "CECT THORAX")
 def test_cross_check_agree():
     r = doctype.cross_check("ct", [CECT], "")
     assert (r["keyword_type"], r["model_type"], r["agree"]) == ("ct", "ct", True)
-    assert r["note"] == "the title line says CECT THORAX (ct); the reader model also said ct"
+    assert r["note"] == "the title line says CECT THORAX (ct); the reader model (Qwen3.5-4B, Chinese, non-medical) also said ct"
 
 
 def test_cross_check_disagree():
     r = doctype.cross_check("mri", [CECT], "")
     assert r["agree"] is False and r["keyword_type"] == "ct" and r["model_type"] == "mri"
-    assert r["note"] == "the title line says CECT THORAX (ct); the reader model said mri"
+    assert r["note"] == "the title line says CECT THORAX (ct); the reader model (Qwen3.5-4B, Chinese, non-medical) said mri"
 
 
 def test_cross_check_other_with_keyword_evidence_disagrees():
     r = doctype.cross_check("other", [], "usg_abdomen_2026-09-01.jpg")
-    assert r["agree"] is False and r["note"] == "the filename usg_abdomen_2026-09-01.jpg (ultrasound); the reader model said other"
+    assert r["agree"] is False and r["note"] == "the filename usg_abdomen_2026-09-01.jpg (ultrasound); the reader model (Qwen3.5-4B, Chinese, non-medical) said other"
 
 
 def test_cross_check_no_evidence():
     r = doctype.cross_check("mri", ["Sahyadri Cancer Institute\nPage 1"], "scan.pdf")
     assert r["agree"] is None and r["keyword_type"] == "" and r["evidence"] == []
-    assert r["note"] == "no document type keywords in the header or filename; the reader model's type (mri) stands"
+    assert r["note"] == "no document type keywords in the header or filename; the reader model (Qwen3.5-4B, Chinese, non-medical)'s type (mri) stands"
 
 
 def test_cross_check_ambiguous():
     r = doctype.cross_check("ct", [hdr("Department of Radiology", "MRI BRAIN AND CT THORAX")], "")
-    assert r["agree"] is None and r["note"] == "the header points to more than one type (ct, mri); the reader model's type (ct) stands"
+    assert r["agree"] is None and r["note"] == "the header points to more than one type (ct, mri); the reader model (Qwen3.5-4B, Chinese, non-medical)'s type (ct) stands"
 
 
 def test_cross_check_header_line_wording():
     t = "Sahyadri Cancer Institute\nPatient name Mr. Ravi\nUHID SYN-1\nAge / Sex 55 Y / M\nStudy: contrast enhanced CT of the neck"
     r = doctype.cross_check("", [t], "")
     assert r["agree"] is False and r["keyword_type"] == "ct"
-    assert r["note"] == "header line 5 says Study: contrast enhanced CT of the neck (ct); the reader model gave no type"
+    assert r["note"] == "header line 5 says Study: contrast enhanced CT of the neck (ct); the reader model (Qwen3.5-4B, Chinese, non-medical) gave no type"
 
 
 def test_module_is_import_light():

@@ -219,7 +219,7 @@ function confirmationsHTML() {
 }
 function bindConfirmations(root) {
   $$("[data-undo]", root).forEach((b) => (b.onclick = async () => { if (!confirm("Undo this confirmation? Both the confirmation and the undo stay in the audit log.")) return;
-    try { const r = await api(`/cases/${S.caseId}/confirmations/${b.dataset.undo}/undo`, { method: "POST" }); await openCase(S.caseId, true); toast(r.unfiled ? "Match undone: the document is back in the Needs matching queue" : "Confirmation undone"); refreshQueueCount(); } catch (e) { toast(e.message, 7000); } }));
+    try { const r = await api(`/cases/${S.caseId}/confirmations/${b.dataset.undo}/undo`, { method: "POST" }); await openCase(S.caseId, true); toast(r.unfiled ? "Match undone: the document is back in the Needs matching queue" : "Confirmation undone" + (r.job ? "; the fields are being extracted again" : "")); if (r.job) watchJob(r.job); refreshQueueCount(); } catch (e) { toast(e.message, 7000); } }));
 }
 
 async function attestDoc(docId) {
@@ -246,6 +246,7 @@ function dateCell(c) {
   const by = c.dates_confirmed_by ? ` <span class="chip c-ok" title="Confirmed by ${esc(c.dates_confirmed_by)}">confirmed</span>` : "";
   return `${fmtDate(dd.event)}${dd.eventAssumed ? ` <span class="muted small" title="Only the report date was found; it stands in for the event date">(report date)</span>` : dd.report && dd.report !== dd.event ? ` <span class="muted small" title="Report date">(reported ${fmtDate(dd.report)})</span>` : ""}${by}${flags ? " " + flags : ""}`;
 }
+const dmy = (iso) => (iso && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : iso || "");  // Indian day-first form for the dialog
 const dateKindLabel = { report: "report date", event: "event date", event_low: "received / registered (used only when no event date)", ignore: "ignored", unlabelled: "no label (not used)" };
 async function confirmDates(docId) {
   const d = S.data.documents.find((x) => x.doc_id === docId); const c = d?.classification || {};
@@ -253,8 +254,8 @@ async function confirmDates(docId) {
   const intro = `Read the dates in the source document "${c.title || d?.filename || docId}" and type them as printed. Report date = when the report was signed out; event date = when the study, sample, procedure or visit happened. Leave a field empty if the document does not state it.`
     + (seen ? ` Dates seen in the text: ${seen}.` : " No date was found in the text.") + (c.date_suggestion ? ` The filename suggests ${fmtDate(c.date_suggestion)} (a suggestion only).` : "") + ((c.date_flags || []).length ? ` Flags: ${c.date_flags.join("; ")}.` : "");
   const v = await confirmDialog({ title: "Confirm the document dates", intro,
-    fields: [{ id: "report_date", label: "Report date (DD/MM/YYYY)", type: "text", value: c.report_date_assumed ? "" : (c.report_date_iso || ""), placeholder: c.date_suggestion || "DD/MM/YYYY" },
-             { id: "event_date", label: "Event date (DD/MM/YYYY)", type: "text", value: c.event_date_assumed ? "" : (c.event_date_iso || ""), placeholder: "DD/MM/YYYY" },
+    fields: [{ id: "report_date", label: "Report date (DD/MM/YYYY)", type: "text", value: c.report_date_assumed ? "" : dmy(c.report_date_iso), placeholder: dmy(c.date_suggestion) || "DD/MM/YYYY" },
+             { id: "event_date", label: "Event date (DD/MM/YYYY)", type: "text", value: c.event_date_assumed ? "" : dmy(c.event_date_iso), placeholder: "DD/MM/YYYY" },
              { id: "reason", label: "Note", type: "text", placeholder: "e.g. date read from the signature line of the scan" }], submit: "Confirm dates" });
   if (!v) return;
   await recordConfirmation("confirm_dates", docId, { report_date: v.report_date, event_date: v.event_date }, v.reason);

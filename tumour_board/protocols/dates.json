@@ -207,32 +207,25 @@
    "procedure"
   ],
   "ct": [
-   "study",
-   "procedure"
+   "study"
   ],
   "mri": [
-   "study",
-   "procedure"
+   "study"
   ],
   "xray": [
-   "study",
-   "procedure"
+   "study"
   ],
   "ultrasound": [
-   "study",
-   "procedure"
+   "study"
   ],
   "mammogram": [
-   "study",
-   "procedure"
+   "study"
   ],
   "pet_ct": [
-   "study",
-   "procedure"
+   "study"
   ],
   "bone_scan": [
-   "study",
-   "procedure"
+   "study"
   ],
   "pulmonary_function": [
    "study",

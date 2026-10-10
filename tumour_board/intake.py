@@ -221,7 +221,7 @@ async def process(doc_id, progress=None):
         c = await extract.classify(full, au)
         if not _alive(doc_id):
             return doc
-        doc["classification"] = extract.finish_classification(c, full, texts, doc["filename"])
+        doc["classification"] = extract.finish_classification(c, full, texts, doc["filename"], "", doc.get("pages"))
         doc["state"] = "identifying"; store.save_intake(doc); progress and progress(doc_id, "identifying")
         patients = patients_for_matching()
         doc["identity_read"] = read_identity(doc, known_ids(patients))

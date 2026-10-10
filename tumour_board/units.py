@@ -20,6 +20,7 @@ from functools import lru_cache
 from . import config, grounding
 
 EXACT_TOL = 1e-9  # exact conversions: float noise only (11.85 g/dL is not 11.8 g/dL)
+ALLOW_INEXACT = False  # rounded analyte conversions (creatinine, bilirubin, glucose) never make two numbers equal unless a caller passes tol
 INEXACT_TOL = 0.02  # rounded analyte conversions (88.4, 17.1, 18.0)
 
 _SUP = {"⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4", "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9", "⁻": "-"}
@@ -214,6 +215,8 @@ def same_quantity(a, b, tol=None):
     if conv is None:
         return False
     v, exact = conv
+    if not (exact and a["exact"] and b["exact"]) and tol is None and not ALLOW_INEXACT:
+        return False  # a rounded conversion (creatinine, bilirubin, glucose) could let a different number through: never by default
     t = EXACT_TOL if exact and a["exact"] and b["exact"] else INEXACT_TOL
     if tol is not None:
         t = tol if exact else max(tol, INEXACT_TOL)

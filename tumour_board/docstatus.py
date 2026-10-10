@@ -33,6 +33,7 @@ _POS = [
 _SIG_NO = re.compile(r"signature\s+pending|\bunsigned\b|not\s+(yet\s+)?signed|awaiting\s+(signature|sign[- ]?out|verification)|pending\s+(signature|sign[- ]?out|verification)", re.I)
 # State Medical Council / NMC / MCI codes, written in capitals (so 'pmc' or 'amc' in running text is not one)
 _COUNCIL = r"(?-i:TNMC|APMC|TSMC|WBMC|TCMC|OCMC|UPMC|CGMC|MPMC|KMC|MMC|DMC|RMC|PMC|HMC|NMC|MCI|GMC|BMC|JMC|AMC|[A-Z]{2,4}MC)"
+_COUNCIL_NAMED = r"(?-i:TNMC|APMC|TSMC|WBMC|TCMC|OCMC|UPMC|CGMC|MPMC|KMC|MMC|DMC|RMC|PMC|HMC|NMC|MCI)"  # the plan's list, for the bare form
 _SIG_YES = re.compile(
     r"electronically signed|digitally signed|e-?signed|\bsigned\s*(out\s*)?(by|:|on)\b|\(signed\)|\bsd/-|\(sd\.?\)|\bsd\.\s*-|"
     r"\b(verified|authenticated|validated|approved|released|authori[sz]ed|reported|dictated|checked(?: and verified)?)\s+by\b|"
@@ -40,7 +41,11 @@ _SIG_YES = re.compile(
     # medical council registration (V1 item 3.5): 'Reg. No. KMC 45678', 'Reg No: TNMC/12345', 'KMC Reg. No. 45678', 'MCI 12345', 'NMC Reg 123456';
     # a council code right after 'UHID:', 'Sample No.', 'MRN' etc. is an identifier, not a signature
     rf"\breg(n|istration)?\.?\s*(no\.?)?\s*[:#]?\s*\(?{_COUNCIL}\)?\s*[:#/.-]?\s*\d{{3,}}|"
-    rf"(?<![:#])(?<![:#]\s)(?<!\bno\.\s)(?<!\bno\s)(?<!\bno\.)(?<!id\s)(?<!mrn\s)\b{_COUNCIL}\s*[/(]?\s*(reg(n|istration)?\.?)?\s*(no\.?)?\s*[:#/.-]?\s*\d{{4,}}", re.I)
+    rf"\b{_COUNCIL_NAMED}\s*[/(]?\s*reg(n|istration)?\.?\s*(no\.?)?\s*[:#/.-]?\s*\d{{4,}}|"
+    # a bare council code + number counts only on a doctor's line (Dr., a qualification or a Reg keyword before it): hospital
+    # abbreviations (KMC, GMC, MMC) also prefix IP, lab and accession numbers, which are identifiers, not signatures
+    rf"(?:\bdr\.?\s|\bprof\.?\s|\b(?:MBBS|MD|MS|DNB|DM|MCh|FRCR|FRCPath|DMRD|DMRE|MRCP|FRCS|PhD)\b|\breg(?:n|istration)?\b)[^\n]{{0,80}}?"
+    rf"(?<![:#])(?<![:#]\s)(?<!\bno\.\s)(?<!\bno\s)(?<!\bno\.)(?<!id\s)(?<!mrn\s)\b{_COUNCIL_NAMED}\s*[/(]?\s*(reg(n|istration)?\.?)?\s*(no\.?)?\s*[:#/.-]?\s*\d{{4,}}", re.I)
 _SIGNER_LINE = re.compile(r"^.*\b(reported|signed|verified|checked|authenticated|validated|approved|authori[sz]ed|recorded|dictated|released)\s+(and verified\s+)?by\b.*$|^.*\bsd/-.*$|^\s*(dr\.?|prof\.?)\s+[A-Z][A-Za-z.\- ]{2,60}(,|\s)\s*(M\.?D\.?|MBBS|DNB|MS|MCh|DM|FRCR|FRCPath|Consultant)[^\n]{0,80}$",
                           re.I | re.M)
 _DRAFT_ANYWHERE = re.compile(r"\bdraft\b", re.I)
