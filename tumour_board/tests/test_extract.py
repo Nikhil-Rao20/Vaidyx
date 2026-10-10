@@ -20,13 +20,44 @@ def test_status_signature_and_date(run):
     assert c["report_date_iso"] == "2026-09-04"
 
 
-def test_date_falls_back_to_filename(run):
-    assert run(cls={"report_date": ""}, filename="cbc_2026-09-03.txt")["classification"]["report_date_iso"] == "2026-09-03"
+def test_filename_date_is_a_suggestion_only(run):
+    """V1 item 3.1: the filename never sets the date; a document with no labelled date is unconfirmed and the filename is offered to the dialog."""
+    c = run(cls={"report_date": ""}, filename="cbc_2026-09-03.txt")["classification"]
+    assert c["report_date_iso"] == "2026-09-04" and c["date_suggestion"] == "2026-09-03" and not c["date_unconfirmed"]  # "Reported on 04/09/2026" is in the text
+    c = run(text=TEXT.replace("Reported on 04/09/2026", ""), cls={"report_date": ""}, filename="cbc_2026-09-03.txt")["classification"]
+    assert c["date_unconfirmed"] and c["report_date_iso"] == "" and c["event_date_iso"] == "" and c["date_suggestion"] == "2026-09-03"
 
 
-def test_date_falls_back_to_first_date_in_text(run):
-    text = TEXT.replace("Reported on 04/09/2026", "Collected 02/09/2026\nReported on 04/09/2026")
-    assert run(text=text, cls={"report_date": ""})["classification"]["report_date_iso"] == "2026-09-02"
+def test_labelled_event_and_report_dates(run):
+    text = TEXT.replace("Reported on 04/09/2026", "Collected on 02/09/2026\nReported on 04/09/2026")
+    c = run(text=text, cls={"report_date": ""})["classification"]
+    assert (c["report_date_iso"], c["event_date_iso"]) == ("2026-09-04", "2026-09-02")
+    assert not c["report_date_assumed"] and not c["event_date_assumed"]
+    assert c["event_date_label"] == "Collected on" and c["event_date_quote"] == "Collected on 02/09/2026"
+
+
+def test_report_only_stands_in_for_event_and_is_marked(run):
+    c = run()["classification"]
+    assert c["report_date_iso"] == c["event_date_iso"] == "2026-09-04" and c["event_date_assumed"] and not c["report_date_assumed"]
+
+
+def test_report_date_is_not_taken_from_dob(run):  # was a 3.1 strict xfail in test_known_issues.py
+    text = TEXT.replace("Test Patient\n", "Test Patient\nDOB 12/03/1995\n")
+    c = run(text=text, cls={"report_date": ""})["classification"]
+    assert c["report_date_iso"] == "2026-09-04"
+    assert any(x["iso"] == "1995-03-12" and x["kind"] == "ignore" for x in c["dates"])
+
+
+def test_model_date_used_only_if_found_in_text(run):  # was a 3.1 strict xfail in test_known_issues.py
+    assert run(cls={"report_date": "01-Jan-2026"})["classification"]["report_date_iso"] == "2026-09-04"
+
+
+def test_date_flags_and_dob_from_the_case_file(run):
+    text = TEXT.replace("Reported on 04/09/2026", "Reported on 04/09/2099")
+    c = run(text=text)["classification"]
+    assert "report date is after today" in c["date_flags"]
+    c = run(patient={"mrn": "SYN-900001", "name": "SYNTHETIC, Test Patient", "dob": "01/01/2030"})["classification"]
+    assert any("before the date of birth" in f for f in c["date_flags"])
 
 
 def test_model_status_quote_used_only_when_found(run):

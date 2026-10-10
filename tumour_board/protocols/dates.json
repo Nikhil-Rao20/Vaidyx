@@ -1,0 +1,268 @@
+{
+ "_about": "Label lexicon for document dates (V1 item 3.1, tumour_board/dates.py). Each label is a case-insensitive regex matched on the text just before a date (same line, same table cell) or on the table header above it. kind: report (sign-out), event (when the clinical event happened), event_low (counts as the event only for event_low_doc_types and only when no proper event date is found), ignore (never a document date), unspecified (bare 'Date:', report date only when nothing better exists). anywhere: an ignore label that wins over a nearer label in the same cell. header: false for labels that are never a date column. full: matched against the whole label. range_end: the group of the second date of a range ('Treatment dates 30-Jun-2026 to 10-Aug-2026'). Indian lab and radiology wording first.",
+ "labels": [
+  {
+   "kind": "report",
+   "group": "report",
+   "rx": "^report\\s+dated$",
+   "full": true
+  },
+  {
+   "kind": "unspecified",
+   "group": "date",
+   "rx": "^(date|dated|date\\s*(&|and)\\s*time|date\\s*/\\s*time)$",
+   "full": true
+  },
+  {
+   "kind": "ignore",
+   "group": "date of birth",
+   "rx": "\\b(date\\s+of\\s+birth|d\\.?\\s?o\\.?\\s?b\\.?|birth\\s*date|born(\\s+on)?)(?![a-z])",
+   "anywhere": true
+  },
+  {
+   "kind": "ignore",
+   "group": "age",
+   "rx": "\\bage\\b",
+   "header": false
+  },
+  {
+   "kind": "ignore",
+   "group": "LMP",
+   "rx": "\\b(l\\.?m\\.?p\\.?|last\\s+menstrual\\s+period)(?![a-z])",
+   "anywhere": true
+  },
+  {
+   "kind": "ignore",
+   "group": "next review / follow-up",
+   "rx": "\\b(next\\s+(review|visit|appointment|follow[\\s-]*up|date|dose|cycle)|review(\\s+(on|date|in|after|at|with))?|follow[\\s-]*up(\\s+(on|date|visit|in))?|revisit|recall|appointment(\\s+(on|date|given))?|(come|report)\\s+(back|again)\\s+on|to\\s+come\\s+on|due\\s+(on|date))\\b",
+   "anywhere": true
+  },
+  {
+   "kind": "ignore",
+   "group": "another record",
+   "rx": "\\b(compar(ed|ison|ing)|previous(ly)?|prior|earlier|old\\s+(ct|mri|scan|report|film)s?|relates?\\s+to|replaces?|superseded|see\\s+the|in\\s+reference\\s+to|with\\s+reference\\s+to|vide|outside\\s+report|last\\s+(ct|mri|scan|pet))\\b",
+   "anywhere": true
+  },
+  {
+   "kind": "ignore",
+   "group": "another record (dated)",
+   "rx": "\\bdated$"
+  },
+  {
+   "kind": "ignore",
+   "group": "printed on",
+   "rx": "\\b(print(ed)?(\\s+(on|date|at|time))?|date\\s+of\\s+print(ing)?)\\b",
+   "anywhere": true
+  },
+  {
+   "kind": "ignore",
+   "group": "bill / invoice / receipt",
+   "rx": "\\b(bill(ing)?|invoice|payment|claim|receipt\\s+(no|date|number))\\b",
+   "anywhere": true
+  },
+  {
+   "kind": "ignore",
+   "group": "validity / expiry",
+   "rx": "\\b(valid\\s+(till|upto|up\\s+to|until|thru|through)|validity|expir(y|es|ed|ation)|exp\\.?\\s+date|best\\s+before|use\\s+before)\\b",
+   "anywhere": true
+  },
+  {
+   "kind": "ignore",
+   "group": "patient registration / card",
+   "rx": "\\b((uhid|mrn|patient|hospital|mrd|abha|card|ayushman|pm[\\s-]*jay|aadhaar|id)\\s+(reg(istration|n|d)?\\.?|issue[ds]?|created|generated)|card\\b.{0,20}\\bissue[ds]?|registered\\s+(patient|with))\\b",
+   "anywhere": true
+  },
+  {
+   "kind": "ignore",
+   "group": "requested / ordered",
+   "rx": "\\b(requested|ordered|requisition(ed)?|referred|request\\s+date|order\\s+date)(\\s+on)?\\b"
+  },
+  {
+   "kind": "ignore",
+   "group": "date of diagnosis",
+   "rx": "\\b(date\\s+of\\s+(diagnosis|death|onset)|diagnosed(\\s+(on|in))?|expired\\s+on|died\\s+on|onset)\\b"
+  },
+  {
+   "kind": "report",
+   "group": "report",
+   "rx": "\\b(date\\s+of\\s+report(ing)?|report(ing|ed)?\\s+(date|on|at|time)|reported|report\\s+date)\\b"
+  },
+  {
+   "kind": "report",
+   "group": "report",
+   "rx": "\\b(authori[sz]ed|verified|approved|validated|released|finali[sz]ed|checked)(\\s+(on|by|date|at))?\\b"
+  },
+  {
+   "kind": "report",
+   "group": "report",
+   "rx": "\\b((e-?|electronically\\s+|digitally\\s+)?signed(\\s+(out|on|by|at|date))?|sign[\\s-]*out(\\s+date)?|date\\s+of\\s+sign[\\s-]*out)\\b"
+  },
+  {
+   "kind": "report",
+   "group": "report",
+   "rx": "\\b(date\\s+of\\s+issue|issue\\s+date|issued\\s+on|report\\s+issued(\\s+on)?)\\b"
+  },
+  {
+   "kind": "event",
+   "group": "collected",
+   "rx": "\\b((sample|specimen|blood)\\s+)?collect(ed|ion)(\\s+(on|date|at|time))?\\b|\\bdate\\s+of\\s+(sample\\s+)?collection\\b|\\b(drawn|sampled)(\\s+on)?\\b|\\bsample\\s+(date|drawn|taken)\\b|\\bdate\\s+of\\s+sample\\b"
+  },
+  {
+   "kind": "event",
+   "group": "specimen",
+   "rx": "\\bspecimen\\s+(date|taken\\s+on|obtained\\s+on)\\b|\\bdate\\s+of\\s+specimen\\b"
+  },
+  {
+   "kind": "event",
+   "group": "study",
+   "rx": "\\b(study|exam(ination)?|scan(ning)?|imaging|investigation)\\s+(date|done\\s+on|on|performed\\s+on)\\b|\\bdate\\s+of\\s+(the\\s+)?(study|exam(ination)?|scan|imaging|investigation)\\b|\\b(scanned|examined|imaged)\\s+on\\b"
+  },
+  {
+   "kind": "event",
+   "group": "procedure",
+   "rx": "\\b(procedure|biopsy|surgery|operation|endoscopy|colonoscopy|gastroscopy|bronchoscopy|fnac|aspiration)\\s+(date|done\\s+on|on|performed\\s+on)\\b|\\bdate\\s+of\\s+(the\\s+)?(procedure|biopsy|surgery|operation|endoscopy|colonoscopy|gastroscopy|bronchoscopy|fnac)\\b|\\b(operated|biopsied|performed)\\s+on\\b"
+  },
+  {
+   "kind": "event",
+   "group": "visit",
+   "rx": "\\b(visit|consultation|opd|clinic|attendance)\\s+date\\b|\\bdate\\s+of\\s+(the\\s+)?(visit|consultation|attendance|opd\\s+visit)\\b|\\b(visited|consulted)\\s+on\\b"
+  },
+  {
+   "kind": "event",
+   "group": "admission",
+   "rx": "\\b(date\\s+of\\s+admission|admission\\s+date|admitted\\s+on|admission|admitted)\\b"
+  },
+  {
+   "kind": "event",
+   "group": "discharge",
+   "rx": "\\b(date\\s+of\\s+discharge|discharge\\s+date|discharged\\s+on|discharge|discharged)\\b"
+  },
+  {
+   "kind": "event",
+   "group": "completion",
+   "rx": "\\b(date\\s+of\\s+completion|completion\\s+date|completed\\s+on|treatment\\s+completed(\\s+on)?|(rt|radiotherapy|chemotherapy|chemoradiation|treatment|course)\\s+(completed|ended|end\\s+date)(\\s+on)?|last\\s+fraction(\\s+(on|date))?|date\\s+of\\s+last\\s+fraction|end\\s+of\\s+treatment|end\\s+date)\\b"
+  },
+  {
+   "kind": "event",
+   "group": "treatment start",
+   "rx": "\\b((treatment|rt|radiotherapy|chemotherapy|chemoradiation)\\s+start(ed)?(\\s+(on|date))?|start\\s+date|date\\s+of\\s+start|first\\s+fraction(\\s+(on|date))?)\\b"
+  },
+  {
+   "kind": "event",
+   "group": "treatment start",
+   "rx": "\\b(treatment|rt|radiotherapy|chemotherapy|chemoradiation)\\s+(dates|period|duration)\\b|\\b(duration|period)\\s+of\\s+(treatment|rt|radiotherapy|chemotherapy)\\b",
+   "range_end": "completion"
+  },
+  {
+   "kind": "event",
+   "group": "board",
+   "rx": "\\b((tumou?r|multidisciplinary|mdt|mdm)\\s+)?board\\s+(date|meeting\\s+date|on)\\b|\\b(meeting|mdt|mdm)\\s+date\\b|\\bdate\\s+of\\s+(the\\s+)?(tumou?r\\s+)?(board|meeting|mdt|mdm)\\b|\\bdiscussed\\s+on\\b"
+  },
+  {
+   "kind": "event_low",
+   "group": "received",
+   "rx": "\\b((sample|specimen|block|biopsy|slides?)\\s+)?received(\\s+(on|date|at))?\\b|\\breceiv(ed|ing)\\s+date\\b|\\bdate\\s+of\\s+receipt\\b"
+  },
+  {
+   "kind": "event_low",
+   "group": "registration",
+   "rx": "\\b(reg(istration|n|d)?\\.?\\s*(date|on|time)|registered\\s+on|date\\s+of\\s+registration)\\b"
+  }
+ ],
+ "event_low_doc_types": [
+  "lab",
+  "histopathology",
+  "cytology",
+  "ihc",
+  "molecular"
+ ],
+ "event_low_order": [
+  "received",
+  "registration"
+ ],
+ "event_priority": {
+  "lab": [
+   "collected",
+   "specimen",
+   "procedure"
+  ],
+  "histopathology": [
+   "collected",
+   "specimen",
+   "procedure"
+  ],
+  "cytology": [
+   "collected",
+   "specimen",
+   "procedure"
+  ],
+  "ihc": [
+   "collected",
+   "specimen",
+   "procedure"
+  ],
+  "molecular": [
+   "collected",
+   "specimen",
+   "procedure"
+  ],
+  "ct": [
+   "study",
+   "procedure"
+  ],
+  "mri": [
+   "study",
+   "procedure"
+  ],
+  "xray": [
+   "study",
+   "procedure"
+  ],
+  "ultrasound": [
+   "study",
+   "procedure"
+  ],
+  "mammogram": [
+   "study",
+   "procedure"
+  ],
+  "pet_ct": [
+   "study",
+   "procedure"
+  ],
+  "bone_scan": [
+   "study",
+   "procedure"
+  ],
+  "pulmonary_function": [
+   "study",
+   "procedure"
+  ],
+  "clinical_note": [
+   "visit"
+  ],
+  "referral": [
+   "visit"
+  ],
+  "discharge_summary": [
+   "discharge",
+   "admission"
+  ],
+  "treatment_summary": [
+   "completion",
+   "treatment start"
+  ],
+  "endoscopy": [
+   "procedure",
+   "study"
+  ],
+  "operative_note": [
+   "procedure",
+   "study"
+  ],
+  "tumour_board_record": [
+   "board"
+  ]
+ },
+ "_event_default": "doc types not listed (other, unknown): the earliest labelled event date of any group (a bundle of records starts at its first event)"
+}

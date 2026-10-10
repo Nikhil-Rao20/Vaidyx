@@ -209,7 +209,12 @@ def apply_to_doc(doc, state):
                 if k in f:
                     cls["model_" + k + "_iso"] = cls.get(k + "_iso")
                     cls[k + "_iso"] = f[k]
+                    cls[k + "_assumed"] = False  # the clinician read it (or said the document does not state it)
+                    cls[k + "_label"] = "confirmed by " + c["by"]
+                    cls[k + "_quote"] = ""
             cls["dates_confirmed_by"] = c["by"]
+            cls["date_unconfirmed"] = False  # a confirmation settles the date question (V1 item 3.1), even "not stated"
+            cls["date_flags"] = []
         elif c["type"] == "confirm_value":
             from . import extract  # the same pending wording as extraction ("awaited", "not reported"): a confirmed "Awaited" stays pending
             fid = c["key"].partition(":")[2]

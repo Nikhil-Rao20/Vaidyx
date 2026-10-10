@@ -18,7 +18,7 @@ async function api(path, opts = {}) {
 function toast(msg, ms = 3500) { const t = $("#toast"); t.textContent = msg; t.classList.remove("hidden"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.add("hidden"), ms); }
 // Document dates (V1 item 3.1): event date (clinical order) with the report date standing in when only one was found; unconfirmed = none found.
 const docDates = (c) => { c = c || {}; const r = c.report_date_iso || "", e = c.event_date_iso || "";
-  return { report: r || e, event: e || r, reportAssumed: !!c.report_date_assumed || (!r && !!e), eventAssumed: !!c.event_date_assumed || (!e && !!r), unconfirmed: !!c.date_unconfirmed || !(r || e), flags: c.date_flags || [] }; };
+  return { report: r || e, event: e || r, reportAssumed: !!c.report_date_assumed || (!r && !!e), eventAssumed: !!c.event_date_assumed || (!e && !!r), unconfirmed: c.date_unconfirmed != null ? !!c.date_unconfirmed : !(r || e), flags: c.date_flags || [] }; };
 const fmtDate = (d) => { if (!d) return "?"; const x = new Date(d + (d.length === 10 ? "T00:00:00" : "")); return isNaN(x) ? d : x.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }); };
 const DT = { clinical_note: "Clinical note", referral: "Referral", discharge_summary: "Discharge summary", ct: "CT", mri: "MRI", xray: "X-ray", ultrasound: "Ultrasound",
   mammogram: "Mammogram", pet_ct: "PET/CT", bone_scan: "Bone scan", histopathology: "Histopathology", cytology: "Cytology", ihc: "IHC", molecular: "Molecular",
@@ -111,7 +111,7 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") { $("#draw
 const STATUS = {
   satisfied: ["c-ok", "Satisfied", "i-ok", "✓"], missing_record: ["c-bad", "Record missing", "i-bad", "×"], not_final: ["c-bad", "Not final / signed", "i-bad", "!"],
   missing_field: ["c-warn", "Field missing or pending", "i-warn", "!"], needs_review: ["c-rev", "Needs expert review", "i-rev", "?"], not_applicable: ["c-mute", "Not applicable", "i-na", "–"],
-  needs_confirmation: ["c-warn", "Confirm final version", "i-warn", "?"], waived: ["c-mute", "Waived for this Case File", "i-na", "–"],
+  needs_confirmation: ["c-warn", "Needs your confirmation", "i-warn", "?"], waived: ["c-mute", "Waived for this Case File", "i-na", "–"],
 };
 const FINALISH = (c) => ["FINAL", "AMENDED", "CORRECTED"].includes(c.status) && c.signed !== "no";
 const statusChip = (c) => { if (!c || !c.status) return ""; const ok = FINALISH(c); const un = c.status === "UNSTATED" && c.signed !== "no";
@@ -126,7 +126,10 @@ function renderReady() {
       const d = S.data.documents.find((x) => x.doc_id === e.doc_id); const cl = d?.classification || {};
       return `<span class="cite" data-doc="${esc(e.doc_id)}" title="${esc(e.quote || "")}">${esc(e.value ? `${S.facts?.[e.fact]?.label || e.fact}: ${e.value}` : (cl.title || e.doc_id))}${docDates(cl).event ? " · " + fmtDate(docDates(cl).event) : ""}</span>`;
     }).join("");
-    const attest = r.status === "needs_confirmation" && r.evidence[0]?.doc_id && can("confirm", r.evidence[0].doc_id) ? `<button class="ghost sm" data-attest="${esc(r.evidence[0].doc_id)}">Attest: final, signed</button>` : "";
+    const needs = r.needs || (r.status === "needs_confirmation" && r.evidence[0]?.doc_id ? [{ type: "attest_final", doc_id: r.evidence[0].doc_id }] : []);
+    const attest = needs.filter((n) => can("confirm", n.doc_id)).map((n) => n.type === "attest_final" ? `<button class="ghost sm" data-attest="${esc(n.doc_id)}">Attest: final, signed</button>`
+      : n.type === "confirm_dates" ? `<button class="ghost sm" data-confdate="${esc(n.doc_id)}">Confirm date</button>`
+      : n.type === "confirm_doc_type" ? `<button class="ghost sm" data-conftype="${esc(n.doc_id)}">Confirm document type</button>` : "").join("");
     const waive = !can("waive", r.id) ? "" : r.status === "waived" ? `<button class="ghost sm" data-unwaive="${esc(r.id)}">Remove waiver</button>` : (r.status !== "satisfied" && r.status !== "not_applicable") ? `<button class="ghost sm" data-waive="${esc(r.id)}" title="Clinical decision that this record is not required for this Case File (audited)">Waive</button>` : "";
     return `<div class="req"><div class="icon ${s[2]}">${s[3]}</div><div style="flex:1">
       <div style="display:flex;justify-content:space-between;gap:8px"><span class="lbl">${esc(r.label)}</span><span style="display:flex;gap:4px;align-items:center">${attest}${waive}<span class="chip ${s[0]}">${s[1]}</span></span></div>
@@ -167,6 +170,8 @@ function renderReady() {
   $$("[data-waive]", $("#tab-ready")).forEach((b) => (b.onclick = () => waiveReq(b.dataset.waive)));
   $$("[data-unwaive]", $("#tab-ready")).forEach((b) => (b.onclick = async () => { await api(`/cases/${S.caseId}/overrides`, { json: { kind: "requirements", key: b.dataset.unwaive, value: null } }); await openCase(S.caseId, true); toast("Waiver removed"); }));
   bindConfirmations($("#tab-ready"));
+  $$("[data-confdate]", $("#tab-ready")).forEach((b) => (b.onclick = () => confirmDates(b.dataset.confdate)));
+  $$("[data-conftype]", $("#tab-ready")).forEach((b) => (b.onclick = () => confirmDocType(b.dataset.conftype)));
   $$("[data-attest]", $("#tab-ready")).forEach((b) => (b.onclick = () => attestDoc(b.dataset.attest)));
   if ($("#drop")) bindUpload();
   const arr = $("#btn-arrivals");
@@ -223,6 +228,44 @@ async function attestDoc(docId) {
     fields: [{ id: "reason", label: "Note", type: "textarea", placeholder: "e.g. verified with the department" }], submit: "Attest" });
   if (!v) return;
   await recordConfirmation("attest_final", docId, {}, v.reason);
+}
+function datesKV(c) {
+  const dd = docDates(c);
+  const one = (k, label) => { const iso = c[k + "_date_iso"], ass = dd[k === "report" ? "reportAssumed" : "eventAssumed"];
+    const txt = dd.unconfirmed ? "not found in the text: confirm it from the source" : ass ? `${fmtDate(dd[k])} (stands in: only the ${k === "report" ? "event" : "report"} date was found)` : iso ? `${fmtDate(iso)}${c[k + "_date_label"] ? " · " + esc(c[k + "_date_label"]) : ""}${c[k + "_date_quote"] ? ` · "${esc(c[k + "_date_quote"])}"` : ""}` : "not stated";
+    return `<div>${label}</div><div>${txt}</div>`; };
+  const seen = (c.dates || []).filter((x) => x.kind !== "report" && x.kind !== "event").map((x) => `${fmtDate(x.iso)} (${esc(x.label || dateKindLabel[x.kind] || x.kind)}${x.kind === "ignore" ? ", ignored" : ""})`).join("; ");
+  return one("report", "Report date") + one("event", "Event date") + (dd.flags.length ? `<div>Date check</div><div><span class="chip c-warn">${esc(dd.flags.join("; "))}</span></div>` : "")
+    + (seen ? `<div>Other dates seen</div><div class="small muted">${seen}</div>` : "") + (c.dates_confirmed_by ? `<div>Dates confirmed by</div><div>${esc(c.dates_confirmed_by)}</div>` : "");
+}
+// Document dates (V1 item 3.1): event date shown; "(report date)" when it stands in; "date not found" asks for confirmation; sanity flags.
+function dateCell(c) {
+  const dd = docDates(c);
+  if (dd.unconfirmed) return `<span class="chip c-warn" title="No labelled report or event date was found in the text. Confirm it from the source document.">date not found</span>`;
+  const flags = dd.flags.map((f) => `<span class="chip c-warn" title="${esc(f)}">check date</span>`).join(" ");
+  const by = c.dates_confirmed_by ? ` <span class="chip c-ok" title="Confirmed by ${esc(c.dates_confirmed_by)}">confirmed</span>` : "";
+  return `${fmtDate(dd.event)}${dd.eventAssumed ? ` <span class="muted small" title="Only the report date was found; it stands in for the event date">(report date)</span>` : dd.report && dd.report !== dd.event ? ` <span class="muted small" title="Report date">(reported ${fmtDate(dd.report)})</span>` : ""}${by}${flags ? " " + flags : ""}`;
+}
+const dateKindLabel = { report: "report date", event: "event date", event_low: "received / registered (used only when no event date)", ignore: "ignored", unlabelled: "no label (not used)" };
+async function confirmDates(docId) {
+  const d = S.data.documents.find((x) => x.doc_id === docId); const c = d?.classification || {};
+  const seen = (c.dates || []).map((x) => `${fmtDate(x.iso)} = ${x.label || dateKindLabel[x.kind] || x.kind}${x.kind === "ignore" ? " (ignored)" : ""}`).join("; ");
+  const intro = `Read the dates in the source document "${c.title || d?.filename || docId}" and type them as printed. Report date = when the report was signed out; event date = when the study, sample, procedure or visit happened. Leave a field empty if the document does not state it.`
+    + (seen ? ` Dates seen in the text: ${seen}.` : " No date was found in the text.") + (c.date_suggestion ? ` The filename suggests ${fmtDate(c.date_suggestion)} (a suggestion only).` : "") + ((c.date_flags || []).length ? ` Flags: ${c.date_flags.join("; ")}.` : "");
+  const v = await confirmDialog({ title: "Confirm the document dates", intro,
+    fields: [{ id: "report_date", label: "Report date (DD/MM/YYYY)", type: "text", value: c.report_date_assumed ? "" : (c.report_date_iso || ""), placeholder: c.date_suggestion || "DD/MM/YYYY" },
+             { id: "event_date", label: "Event date (DD/MM/YYYY)", type: "text", value: c.event_date_assumed ? "" : (c.event_date_iso || ""), placeholder: "DD/MM/YYYY" },
+             { id: "reason", label: "Note", type: "text", placeholder: "e.g. date read from the signature line of the scan" }], submit: "Confirm dates" });
+  if (!v) return;
+  await recordConfirmation("confirm_dates", docId, { report_date: v.report_date, event_date: v.event_date }, v.reason);
+}
+async function confirmDocType(docId) {
+  const d = S.data.documents.find((x) => x.doc_id === docId); const c = d?.classification || {}; const dis = c.doc_type_disagreement;
+  const intro = `The reader model (Qwen3.5-4B, Chinese, non-medical) called "${c.title || d?.filename || docId}" ${DT[c.model_doc_type || c.doc_type] || c.doc_type}` + (dis ? `; the title keywords say ${DT[dis.keyword_type] || dis.keyword_type} (${dis.note || "keyword match"})` : "") + ". Choose the type as the document itself states it. The fields are extracted again from the stored text.";
+  const opts = Object.entries(DT).map(([k, l]) => [k, l]);
+  const v = await confirmDialog({ title: "Confirm the document type", intro, fields: [{ id: "doc_type", label: "Document type", type: "select", options: opts, value: dis?.keyword_type || c.doc_type }, { id: "reason", label: "Note", type: "text" }], submit: "Confirm type" });
+  if (!v) return;
+  await recordConfirmation("confirm_doc_type", docId, { doc_type: v.doc_type }, v.reason);
 }
 async function waiveReq(reqId) {
   const r = S.data.state.gate?.requirements?.find((x) => x.id === reqId);
@@ -329,10 +372,10 @@ function renderDocs() {
     const st = d.state !== "ready" ? `<span class="chip ${d.state === "error" ? "c-bad" : "c-info"}" title="${esc(d.error || "")}">${esc(d.state)}</span>` : statusChip(c) + (att?.attested_final ? ` <span class="chip c-ok" title="${esc(att.reason || "")}">attested final by ${esc(att.by)}</span>` : "");
     const unst = d.state === "ready" && c.status === "UNSTATED" && c.signed !== "no" && !att?.attested_final;
     return `<tr class="click" data-doc="${esc(d.doc_id)}"><td><b>${esc(c.title || d.filename)}</b><div class="small muted">${esc(d.rel_path)}${d.department ? ` · uploaded by ${esc(deptName(d.department))}${d.uploaded_by ? " (" + esc(d.uploaded_by) + ")" : ""}` : ""}${d.identity === "mismatch_or_missing" ? ' · <span style="color:#b23a2f">patient ID not found</span>' : d.identity === "id_differs" ? ' · <span style="color:#b23a2f">prints an identifier this Case File does not know</span>' : d.identity === "name_match" ? ' · <span style="color:#8a5300">matched by name only</span>' : ""}</div></td>
-      <td>${esc(DT[c.doc_type] || c.doc_type || "")}</td><td>${fmtDate(docDates(c).event)}</td><td>${st}</td>
+      <td>${esc(DT[c.doc_type] || c.doc_type || "")}${c.doc_type_disagreement ? ` <span class="chip c-warn" title="${esc(c.doc_type_disagreement.note || "")}">keywords say ${esc(DT[c.doc_type_disagreement.keyword_type] || c.doc_type_disagreement.keyword_type)}</span>` : ""}</td><td>${dateCell(c)}</td><td>${st}</td>
       <td class="small">${(d.methods || []).map((m) => (m === "vision-transcription" ? "Vision reader (scan)" : m === "text-layer" ? "PDF text layer" : m)).join(", ")}${(d.page_flags || []).map((f) => ` <span class="chip c-warn" title="Transcribed as is, never translated into facts; values from these lines need a person's check">${esc(f)}</span>`).join("")}</td>
       <td>${nf.filter((f) => f.verification === "verified").length} verified${nf.filter((f) => f.verification !== "verified").length ? ` · <span class="chip c-rev">${nf.filter((f) => f.verification !== "verified").length} not verified</span>` : ""}
-      <div style="margin-top:4px;display:flex;gap:4px">${unst && can("confirm", d.doc_id) ? `<button class="ghost sm" data-attest-doc="${esc(d.doc_id)}">Attest final</button>` : ""}${can("unfile", d.doc_id) ? `<button class="ghost sm" data-unfile-doc="${esc(d.doc_id)}" title="Not this patient: move the record back to the Needs matching queue (audited, the Case File forgets what it learned from it)">Back to matching</button>` : ""}${can("delete_document", d.doc_id) ? `<button class="ghost sm" data-del-doc="${esc(d.doc_id)}" title="Remove this document from the Case File (audited)">Remove</button>` : ""}</div></td></tr>`; }).join("")}
+      <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">${unst && can("confirm", d.doc_id) ? `<button class="ghost sm" data-attest-doc="${esc(d.doc_id)}">Attest final</button>` : ""}${d.state === "ready" && (docDates(c).unconfirmed || docDates(c).flags.length) && can("confirm", d.doc_id) ? `<button class="ghost sm" data-confdate="${esc(d.doc_id)}">Confirm date</button>` : ""}${d.state === "ready" && c.doc_type_disagreement && !c.doc_type_confirmed_by && can("confirm", d.doc_id) ? `<button class="ghost sm" data-conftype="${esc(d.doc_id)}">Confirm type</button>` : ""}${can("unfile", d.doc_id) ? `<button class="ghost sm" data-unfile-doc="${esc(d.doc_id)}" title="Not this patient: move the record back to the Needs matching queue (audited, the Case File forgets what it learned from it)">Back to matching</button>` : ""}${can("delete_document", d.doc_id) ? `<button class="ghost sm" data-del-doc="${esc(d.doc_id)}" title="Remove this document from the Case File (audited)">Remove</button>` : ""}</div></td></tr>`; }).join("")}
   </tbody></table></div>
   <div class="card"><h3>Primary fields across the Case File</h3><div class="muted small" style="margin-bottom:8px">Current value = most recent verified value from a final, signed document. Every value links to its source quote.</div>
   <table class="t"><thead><tr><th>Field</th><th>Current value</th><th>Source</th><th>History</th></tr></thead><tbody>
@@ -343,6 +386,8 @@ function renderDocs() {
   </tbody></table></div>`;
   $$("tr[data-doc]").forEach((tr) => (tr.onclick = (e) => { if (!e.target.closest("button")) openDoc(tr.dataset.doc); }));
   $$("[data-attest-doc]").forEach((b) => (b.onclick = () => attestDoc(b.dataset.attestDoc)));
+  $$("[data-confdate]", $("#tab-docs")).forEach((b) => (b.onclick = () => confirmDates(b.dataset.confdate)));
+  $$("[data-conftype]", $("#tab-docs")).forEach((b) => (b.onclick = () => confirmDocType(b.dataset.conftype)));
   $$("[data-unfile-doc]").forEach((b) => (b.onclick = async () => { const v = await confirmDialog({ title: "Move this record back to matching", intro: "The document leaves this Case File and returns to the Needs matching queue; this Case File will not be suggested for it again, and identifiers learned from it are forgotten. Recorded in both audit logs.", fields: [{ id: "reason", label: "Reason", type: "text", required: true }], submit: "Move back" });
     if (!v) return; try { await api(`/cases/${S.caseId}/documents/${b.dataset.unfileDoc}/unfile`, { json: { reason: v.reason } }); await openCase(S.caseId, true); refreshQueueCount(); toast("Record moved back to the Needs matching queue"); } catch (e) { toast(e.message, 7000); } }));
   $$("[data-del-doc]").forEach((b) => (b.onclick = async () => { if (!confirm("Remove this document from the Case File? The removal is recorded in the audit log.")) return;
@@ -371,9 +416,10 @@ async function openDoc(docId, focus, base) {
   const idHTML = idr ? `<div>Identity as printed</div><div>${esc(identityText(idr))}${idr.notes?.length ? ` <span class="muted">(${esc(idr.notes.join("; "))})</span>` : ""}</div>` : "";
   $("#drawer-body").innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
     <div><div class="eyebrow">${esc(DT[c.doc_type] || c.doc_type || "")} · ${esc(c.department || "")}</div><h2 style="margin:4px 0;color:#1f2933">${esc(c.title || d.filename)}</h2>
-    <div class="muted small">${esc(d.rel_path)} · ${fmtDate(docDates(c).event)} · ${statusChip(c)}${(c.status_notes || []).length ? ` <span class="chip c-warn">${esc(c.status_notes.join("; "))}</span>` : ""}</div></div>
+    <div class="muted small">${esc(d.rel_path)} · ${dateCell(c)} · ${statusChip(c)}${(c.status_notes || []).length ? ` <span class="chip c-warn">${esc(c.status_notes.join("; "))}</span>` : ""}</div></div>
     <div><a class="ghost" href="/api/tb${base}/file" target="_blank">Open original</a> <button class="ghost" data-close>Close</button></div></div>
     <div class="kv" style="margin:12px 0"><div>Status line</div><div>${esc(c.status_quote || "not found")}</div><div>Signature</div><div>${esc(c.signature_quote || c.signer || "not found")}</div>
+    ${datesKV(c)}
     ${d.department ? `<div>Uploaded by</div><div>${esc(deptName(d.department))}${d.uploaded_by ? " (" + esc(d.uploaded_by) + ")" : ""} · ${esc((d.added || "").slice(0, 16).replace("T", " "))}</div>` : ""}${idHTML}
     ${d.intake ? "" : `<div>Patient ID check</div><div>${d.identity === "match" ? "An identifier on the document matches the Case File patient" : d.identity === "name_match" ? "Patient name matches (no identifier agrees)" : d.identity === "id_differs" ? "The document prints an identifier this Case File does not know: verify it belongs to this patient" : "Not found in document: verify it belongs to this patient"}</div>`}
     <div>Read by</div><div>${esc([...new Set(pages.map((p) => p.method))].join(", "))}${pages.some((p) => p.ocr_reads) ? " (two independent reads per scanned page; numbers compared)" : ""}</div></div>

@@ -65,6 +65,7 @@ def resolve_facts(docs, overrides=None):
         for fid, f in (d.get("facts") or {}).items():
             hist.setdefault(fid, []).append({**f, "doc_id": d["doc_id"], "doc_title": c.get("title") or d["filename"], "doc_type": c.get("doc_type"),
                                              "date": dates.doc_dates(d)["event"] or None, "report_date": dates.doc_dates(d)["report"] or None,
+                                             "date_unconfirmed": dates.doc_dates(d)["unconfirmed"],
                                              "doc_final": _is_final(d, overrides), "doc_status": c.get("status")})
     out = {}
     for fid, h in hist.items():
@@ -96,14 +97,21 @@ def evaluate(case_id):
             results.append(r); continue
         if req.get("applies_if_doc_type_present") and not any((d.get("classification") or {}).get("doc_type") == req["applies_if_doc_type_present"] for d in ready):
             r["status"] = "not_applicable"; results.append(r); continue
+        date_needs = []  # documents whose unconfirmed date decides this requirement: a clinician confirms it (V1 item 3.1)
         if not req.get("facts_only"):
             cands = [d for d in ready if (d.get("classification") or {}).get("doc_type") in req["doc_types"] and _region_ok(d, req.get("region"))]
             if req.get("must_postdate_doc_type"):
-                ref = [dates.doc_dates(x)["event"] for x in ready if (x.get("classification") or {}).get("doc_type") == req["must_postdate_doc_type"]]
-                ref = max([x for x in ref if x], default="")
+                refs = [x for x in ready if (x.get("classification") or {}).get("doc_type") == req["must_postdate_doc_type"]]
+                ref = max([dates.doc_dates(x)["event"] for x in refs if dates.doc_dates(x)["event"]], default="")
+                for x in refs:  # the reference event (end of treatment) has no confirmed date: nothing can be placed after it
+                    if dates.doc_dates(x)["unconfirmed"]:
+                        date_needs.append((x, f"the {req['label'].lower()} must be dated after it"))
                 if ref:  # "after treatment" compares event dates (V1 item 3.1)
+                    undated = [d for d in cands if dates.doc_dates(d)["unconfirmed"]]
                     cands = [d for d in cands if dates.doc_dates(d)["event"] > ref]
                     r["postdate_reference"] = ref
+                    if not cands:  # only undated candidates: ask for their date instead of calling the record missing
+                        date_needs += [(d, f"it must be dated after {ref}") for d in undated]
             cands.sort(key=_doc_sort_key, reverse=True)
             finals = [d for d in cands if _is_final(d, overrides)]
             if not cands:
@@ -115,6 +123,7 @@ def evaluate(case_id):
                     r["status"] = "needs_confirmation"
                     r["problems"].append(f"{c.get('title') or d['filename']} has no explicit status or signature line: confirm it is the final, signed version"
                                          + ("; " + "; ".join(c.get("status_notes") or []) if c.get("status_notes") else ""))
+                    r.setdefault("needs", []).append({"type": "attest_final", "doc_id": d["doc_id"]})
                 else:
                     r["status"] = "not_final"
                     r["problems"].append(f"{c.get('title') or d['filename']} is {c.get('status', 'UNKNOWN')}" + (" and unsigned" if c.get("signed") == "no" else "")
@@ -143,6 +152,11 @@ def evaluate(case_id):
             if good:
                 g = sorted(good, key=lambda h: h["date"] or "")[-1]
                 r["evidence"].append({"doc_id": g["doc_id"], "fact": fid, "value": g["value"], "quote": g["quote"]})
+                if len({h["doc_id"] for h in good}) > 1:  # which value is current depends on the dates: an unconfirmed one must be confirmed first
+                    seen = set()
+                    for h in good:
+                        if h.get("date_unconfirmed") and h["doc_id"] not in seen:
+                            seen.add(h["doc_id"]); date_needs.append((h, f"{cat[fid]['label'].lower()} is documented more than once and the current value depends on the dates"))
             elif any(h["state"] == "pending" for h in hist):
                 h = [h for h in hist if h["state"] == "pending"][-1]
                 pending.append(f"{cat[fid]['label']}: \"{h['value']}\" in {h['doc_title']}")
@@ -167,6 +181,19 @@ def evaluate(case_id):
                     pass  # confirmation first; field problems are listed with it
             elif review and r["status"] == "satisfied":
                 r["status"] = "needs_review"
+        if date_needs and r["status"] != "not_applicable":  # confirmation first (like an attestation): the date decides the check
+            r["status"] = "needs_confirmation"
+            seen = set()
+            for x, why in date_needs:
+                did = x["doc_id"]
+                if did in seen:
+                    continue
+                seen.add(did)
+                title = x.get("doc_title") or (x.get("classification") or {}).get("title") or x.get("filename") or did
+                r["problems"].insert(0, f"Confirm the date of {title}: no document date was found in its text and {why}")
+                r.setdefault("needs", []).append({"type": "confirm_dates", "doc_id": did})
+                if not any(e.get("doc_id") == did for e in r["evidence"]):
+                    r["evidence"].append({"doc_id": did, "quote": ""})
         results.append(r)
     optional = []
     for opt in prot.get("optional", []):
@@ -189,6 +216,8 @@ def evaluate(case_id):
                           "errors": len([d for d in docs if d.get("state") == "error"]),
                           "non_final": [d["doc_id"] for d in ready if not _is_final(d, overrides)],
                           "unconfirmed": [d["doc_id"] for d in ready if _needs_confirmation(d) and not _is_final(d, overrides)],
+                          "date_unconfirmed": [d["doc_id"] for d in ready if dates.doc_dates(d)["unconfirmed"]],
+                          "date_flags": {d["doc_id"]: dates.doc_dates(d)["flags"] for d in ready if dates.doc_dates(d)["flags"]},
                           "identity_flags": [d["doc_id"] for d in ready if d.get("identity") in ("mismatch_or_missing", "id_differs")]}}
     return gate
 

@@ -11,23 +11,6 @@ from tumour_board import agents, docstatus, extract, ingest, qa, rules, search
 from tumour_board.tests.util import TEXT, add, fact, make_doc
 
 
-# ---- 3.1 dates ----------------------------------------------------------------------------------------------
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="fixed in V1 item 3.1")
-def test_report_date_is_not_taken_from_dob(run):
-    text = TEXT.replace("Test Patient\n", "Test Patient\nDOB 12/03/1995\n")
-    assert run(text=text, cls={"report_date": ""})["classification"]["report_date_iso"] == "2026-09-04"  # today: 1995-03-12
-
-
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="fixed in V1 item 3.1")
-def test_model_date_used_only_if_found_in_text(run):
-    assert run(cls={"report_date": "01-Jan-2026"})["classification"]["report_date_iso"] == "2026-09-04"  # today: 2026-01-01
-
-
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="found in 0.3, to be covered by V1 item 3.1: 'number word number' (Age 62 Years 02/...) swallows the date that follows")
-def test_date_after_number_and_word_is_found():
-    assert docstatus.find_dates("Age 62 Years 02/09/2026") == ["2026-09-02"]
-
-
 # ---- 4.3 failed documents block the gate --------------------------------------------------------------------
 @pytest.mark.xfail(strict=True, raises=AssertionError, reason="fixed in V1 item 4.3")
 def test_failed_document_blocks_the_gate(unit_case):

@@ -134,6 +134,32 @@ def test_parse_date_takes_first_valid_date():
     assert ds.parse_date("Collected 01/09/2026 Reported 05/09/2026") == "2026-09-01"
 
 
+@pytest.mark.parametrize("text,isos", [
+    ("Age 62 Years 02/09/2026", ["2026-09-02"]),  # found in 0.3: "62 Years 02" was read as a date and swallowed the real one
+    ("Ward 4 dated 04/09/2026", ["2026-09-04"]),
+    ("Bed 12 Sept 2026 notes 05/09/2026", ["2026-09-12", "2026-09-05"]),
+    ("Hb 11 gm% 03/09/2026", ["2026-09-03"]),
+    ("LAB/26/118011 and HP/2026/7731", []),  # sample numbers are not dates
+    ("ABHA No. 91-4021-7788-3105", []),
+])
+def test_find_dates_after_number_and_word(text, isos):
+    assert ds.find_dates(text) == isos
+
+
+@pytest.mark.parametrize("s,iso", [
+    ("01-Jan-2026", "2026-01-01"), ("2026-09-29", "2026-09-29"), ("29/09/2026", "2026-09-29"), ("29-09-26", "2026-09-29"),
+    ("Sep 29, 2026", "2026-09-29"), ("29 SEP 2026", "2026-09-29"), ("Sept. 29, 2026", "2026-09-29"), ("4th June 2026", "2026-06-04"),
+    ("29/09/2026 10:15 AM", "2026-09-29"), ("120/09/2026", ""), ("29/09/20261", ""),
+])
+def test_parse_date_formats_used_by_confirm_service_identity(s, iso):
+    assert ds.parse_date(s) == iso
+
+
+def test_match_iso_year_window():
+    m = ds._DATE_RX.search("DOB 14/03/1968")
+    assert ds.match_iso(m) == "" and ds.match_iso(m, (1900, 2100)) == "1968-03-14"
+
+
 def test_find_dates_unique_in_order_with_limit():
     assert ds.find_dates("seen 01/09/2026; reported 05/09/2026; again 05-Sep-2026") == ["2026-09-01", "2026-09-05"]
     many = " ".join(f"{d:02d}/09/2026" for d in range(1, 12))

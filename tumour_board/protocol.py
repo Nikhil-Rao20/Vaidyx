@@ -21,9 +21,9 @@ def facts():
 def list_protocols():
     out = []
     for f in sorted(config.PROTOCOL_DIR.glob("*.json")):
-        if f.name == "facts.json":
-            continue
         p = json.loads(f.read_text())
+        if not _is_protocol(p):  # facts.json and the lexicons (dates, units, document type keywords) live in the same folder
+            continue
         out.append({"id": p["id"], "label": p["label"], "version": p.get("version"), "note": p.get("note"), "settings": p.get("settings") or []})
     return out
 
@@ -33,8 +33,18 @@ def settings(protocol_id):
     return get(protocol_id).get("settings") or []
 
 
+def _is_protocol(p) -> bool:
+    return isinstance(p, dict) and "id" in p and "mandatory" in p
+
+
 def exists(protocol_id):
-    return bool(protocol_id) and (config.PROTOCOL_DIR / f"{protocol_id}.json").exists() and protocol_id != "facts"
+    f = config.PROTOCOL_DIR / f"{protocol_id}.json"
+    if not protocol_id or not f.exists():
+        return False
+    try:
+        return _is_protocol(json.loads(f.read_text()))
+    except (ValueError, OSError):
+        return False
 
 
 def get(protocol_id):

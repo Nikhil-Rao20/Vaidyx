@@ -2,7 +2,7 @@
 then deterministic grounding. Nothing the model says is trusted until its quote is found in the source text."""
 import asyncio, re
 
-from . import docstatus, grounding, identity, ingest, llm, negation, protocol, store
+from . import dates, docstatus, grounding, identity, ingest, llm, negation, protocol, store
 
 STATUS = ["FINAL", "AMENDED", "CORRECTED", "PRELIMINARY", "DRAFT", "CANCELLED", "UNKNOWN"]
 # Negation cues shared with qa and postboard (see negation.py).
@@ -195,10 +195,15 @@ def _verify_value(value, quote, texts, pages):
     return v
 
 
-def finish_classification(c, full, texts, filename):
+DATE_KEYS = ("report_date_iso", "event_date_iso", "report_date_assumed", "event_date_assumed", "report_date_quote", "event_date_quote",
+             "report_date_label", "event_date_label", "date_unconfirmed", "date_suggestion", "date_flags", "dates", "model_date_iso")
+
+
+def finish_classification(c, full, texts, filename, dob_iso=""):
     """Rules over the model's header reading: status and signature from docstatus, the model's quotes kept only when found in the
-    text, the report date from the model then the filename then the first date in the text (item 3.1 replaces this), the patient id
-    kept only when found verbatim. Shared by Case File processing and intake (V1 item 2.3)."""
+    text, the report and event dates read with their labels from the text (V1 item 3.1: the model's date only when found in the text,
+    the filename a suggestion only, no date found = unconfirmed), the patient id kept only when found verbatim. Shared by Case File
+    processing and intake (V1 item 2.3)."""
     status, squote, notes = docstatus.detect_status(full)
     signed, sline = docstatus.detect_signature(full)
     if status == "UNSTATED" and c.get("status_quote") and grounding.locate(c["status_quote"], texts):
@@ -207,8 +212,8 @@ def finish_classification(c, full, texts, filename):
             status, squote = st2, c["status_quote"]
     c["status"], c["status_quote"], c["signed"], c["status_notes"] = status, squote, signed, notes
     c["signature_quote"] = sline or (c.get("signature_quote") if c.get("signature_quote") and grounding.locate(c["signature_quote"], texts) else "")
-    c["report_date_iso"] = docstatus.parse_date(c.get("report_date")) or docstatus.parse_date(filename.replace("_", " ")) \
-        or (docstatus.find_dates(full) or [""])[0]
+    dd = dates.document_dates(texts, filename, c.get("doc_type") or "", c.get("report_date") or "", dob_iso)
+    c.update({k: dd[k] for k in DATE_KEYS})
     if c.get("patient_id") and not grounding.locate(c["patient_id"], texts):
         c["patient_id_unverified"] = c["patient_id"]; c["patient_id"] = ""
     return c
@@ -297,7 +302,7 @@ async def process_document(case_id, doc_id, protocol_id, case_patient=None, prog
         if not doc.get("classification"):
             doc["state"] = "classifying"; store.save_doc(case_id, doc); progress and progress(doc_id, "classifying")
             c = await classify(full, au)
-            doc["classification"] = finish_classification(c, full, texts, doc["filename"])
+            doc["classification"] = finish_classification(c, full, texts, doc["filename"], identity.patient_record(case_patient or {}).get("dob") or "")
         c = doc["classification"]
         # identity as printed (rules first; V1 item 2.4) and the check that the document belongs to this Case File's patient
         if not doc.get("identity_read"):
