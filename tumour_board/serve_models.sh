@@ -2,8 +2,8 @@
 # Serve the Vaidyx-TB models on the H200 (bf16, exact Hugging Face weights). Usage:
 #   tumour_board/serve_models.sh reader                 # Qwen3.5-4B reader/extractor on :8101
 #   tumour_board/serve_models.sh reasoner <model-dir>   # reasoning model on :8100 (default gemma-4-31B-it)
-# The reasoner runs with n-gram (prompt-lookup) speculative decoding by default: about 3x faster output, token for token identical
-# (the draft is only accepted where the model agrees; weights, precision and sampling are untouched). Set TB_SPEC to another vLLM
+# The reasoner runs with n-gram (prompt-lookup) speculative decoding by default: about 3x faster output, the same tokens under
+# greedy decoding up to GPU numerical noise (the draft is only accepted where the model agrees; weights, precision and sampling are untouched). Set TB_SPEC to another vLLM
 # speculative-config JSON, or TB_SPEC= (empty) to turn it off.
 source /home/bharath.tangella/vaidyx/env.sh
 export VLLM_CACHE_ROOT=/data/vaidyx/vllm_cache_tb
