@@ -555,3 +555,16 @@ $("#btn-cards").onclick = showCards;
   await loadCases(); loadModels(); setInterval(loadModels, 30000);
   const m = location.hash.match(/case=([\w.-]+)/); if (m) openCase(m[1]);
 })();
+
+// small screens: the case list is a slide-over panel
+(function () {
+  const btn = document.getElementById("btn-side"); if (!btn) return;
+  const set = (on) => { document.body.classList.toggle("side-open", on); btn.setAttribute("aria-expanded", on ? "true" : "false"); };
+  btn.addEventListener("click", () => set(!document.body.classList.contains("side-open")));
+  document.addEventListener("click", (e) => {
+    if (!document.body.classList.contains("side-open")) return;
+    if (e.target.closest(".side .citem, .side [data-demo], .side #btn-new") || (!e.target.closest(".side") && !e.target.closest("#btn-side"))) set(false);
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") set(false); });
+  window.addEventListener("resize", () => { if (innerWidth > 860) set(false); });
+})();

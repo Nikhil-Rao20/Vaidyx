@@ -240,3 +240,8 @@ ssl/
 
 # Vaidyx-TB runtime data (cases, evals, caches, model config)
 data/tumour_board/
+
+# personal onboarding notes (not shared)
+docs_Eswar/
+CLAUDE.md
+.claude/
