@@ -320,3 +320,122 @@ def test_doc_with_soffice_conversion_fails(monkeypatch, tmp_path):
     assert p[0]["text"] == "" and p[0]["method"].startswith("unsupported (conversion to PDF failed")
     monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, b"", b""))
     assert pages(f) == [{"text": "", "method": "unsupported (conversion to PDF failed)"}]
+
+
+# ---- two-read OCR check, line by line (V1 item 3.3) -----------------------------------------------------------
+def _two_reads(monkeypatch, full, second, events=None):
+    async def fake(png, audit=None, max_side=None):
+        return second if max_side else full
+    monkeypatch.setattr(ingest, "ocr_image", fake)
+    return asyncio.run(ingest.ocr_page(b"png", audit=events.append if events is not None else None))
+
+
+def _span_text_ok(p):
+    return all(p["text"][s["start"]:s["end"]] == s["line"] for s in p.get("ocr_uncertain_spans", []) if s.get("read") != "second")
+
+
+def test_ocr_single_digit_slip_is_flagged(monkeypatch):
+    p = _two_reads(monkeypatch, "PD-L1 TPS 6%\nECOG 1", "PD-L1 TPS 8%\nECOG 2")
+    assert {"6", "8"} <= set(p["ocr_uncertain_numbers"])
+    spans = p["ocr_uncertain_spans"]
+    assert [(s["line"], s["numbers"], s["reason"]) for s in spans] == [
+        ("PD-L1 TPS 6%", ["6", "8"], "the two OCR reads disagree on a number"),
+        ("ECOG 1", ["1", "2"], "the two OCR reads disagree on a number")]
+    assert _span_text_ok(p)
+
+
+def test_ocr_keeps_both_reads(monkeypatch):
+    p = _two_reads(monkeypatch, "ECOG 1", "ECOG 2")
+    assert p["text"] == "ECOG 1" and p["second_read"] == "ECOG 2" and p["ocr_reads"] == 2 and p["method"] == "vision-transcription"
+
+
+def test_ocr_number_found_elsewhere_still_flags_its_line(monkeypatch):
+    full = "Hb 11.8 g/dL\nWBC 7200 /cumm\nPlatelets 2.45 lakh/cumm"
+    second = "Hb 11.3 g/dL\nWBC 7200 /cumm\nMCV 11.8 fL"
+    p = _two_reads(monkeypatch, full, second)
+    hb = ingest.uncertain_overlap(p, full.index("11.8"), full.index("11.8") + 4)
+    assert hb and hb["line"] == "Hb 11.8 g/dL" and hb["numbers"] == ["11.3", "11.8"]
+    assert ingest.uncertain_overlap(p, full.index("7200"), full.index("7200") + 4) is None  # agreeing line is never a span
+    assert _span_text_ok(p)
+
+
+def test_ocr_shifted_table_rows_flag_only_the_missing_row(monkeypatch):
+    rows = ["| Hb | 11.8 | g/dL |", "| WBC | 7200 | /cumm |", "| Platelets | 2,45,000 | /cumm |",
+            "| Creatinine | 0.9 | mg/dL |", "| ALT | 32 | U/L |", "| AST | 28 | U/L |"]
+    p = _two_reads(monkeypatch, "\n".join(rows), "\n".join(rows[:2] + rows[3:]))
+    spans = p["ocr_uncertain_spans"]
+    assert [(s["line"], s["reason"]) for s in spans] == [(rows[2], "this line with numbers appears in one read only")]
+    assert p["ocr_uncertain_numbers"] == ["245000"] and _span_text_ok(p)
+
+
+def test_ocr_dropped_row_and_a_slip_further_down(monkeypatch):
+    rows = ["| Hb | 11.8 |", "| WBC | 7200 |", "| Platelets | 245000 |", "| ALT | 32 |", "| AST | 28 |", "| ALP | 96 |"]
+    second = rows[:2] + ["| ALT | 32 |", "| AST | 23 |", "| ALP | 96 |"]
+    p = _two_reads(monkeypatch, "\n".join(rows), "\n".join(second))
+    assert [(s["line"], s["numbers"]) for s in p["ocr_uncertain_spans"]] == [(rows[2], ["245000"]), (rows[4], ["23", "28"])]
+
+
+def test_ocr_merged_rows_flag_only_those_rows(monkeypatch):
+    rows = ["Hb 11.8 g/dL", "WBC 7200 /cumm", "Platelets 245000 /cumm", "Creatinine 0.9 mg/dL", "Urea 24 mg/dL"]
+    second = rows[:2] + ["Platelets 245000 /cumm Creatinine 0.9 mg/dL", rows[4]]
+    p = _two_reads(monkeypatch, "\n".join(rows), "\n".join(second))
+    flagged = {s["line"] for s in p["ocr_uncertain_spans"]}
+    assert flagged == {rows[2], rows[3]} and _span_text_ok(p)  # the rows either side still align
+
+
+def test_ocr_line_in_second_read_only(monkeypatch):
+    p = _two_reads(monkeypatch, "Hb 11.8 g/dL\nUrea 24 mg/dL", "Hb 11.8 g/dL\nWBC 7200 /cumm\nUrea 24 mg/dL")
+    (s,) = p["ocr_uncertain_spans"]
+    assert s["read"] == "second" and s["line"] == "WBC 7200 /cumm" and s["numbers"] == ["7200"] and s["start"] == s["end"]
+    assert s["start"] == p["text"].index("Urea") and p["ocr_uncertain_numbers"] == ["7200"]
+    assert ingest.uncertain_overlap(p, 0, len("Hb 11.8 g/dL")) is None and ingest.uncertain_overlap(p, s["start"], s["start"] + 4) is None
+
+
+def test_ocr_numbers_in_a_different_order_or_count(monkeypatch):
+    p = _two_reads(monkeypatch, "BP 120/80 mmHg\nSize 3.2 x 2.1 cm", "BP 80/120 mmHg\nSize 3.2 cm")
+    assert [(s["line"], s["numbers"]) for s in p["ocr_uncertain_spans"]] == [("BP 120/80 mmHg", ["120", "80"]), ("Size 3.2 x 2.1 cm", ["2.1"])]
+
+
+def test_ocr_identical_reads_have_no_spans(monkeypatch):
+    events = []
+    p = _two_reads(monkeypatch, "Hb 11.8 g/dL\nECOG 1", "Hb 11.8 g/dL\nECOG 1", events)
+    assert "ocr_uncertain_spans" not in p and "ocr_uncertain_numbers" not in p and events == []
+
+
+@pytest.mark.parametrize("full,second", [
+    ("1. Chest CT\n2. Biopsy", "1) Chest CT\n2) Biopsy"),
+    ("(1) Chest CT", "a) Chest CT"),
+    ("- 1 -\nHb 11.8", "- 2 -\nHb 11.8"),
+    ("Page 1 of 2\nHb 11.8", "Page 2 of 2\nHb 11.8"),
+    ("| Hb | 11.8 |", "Hb | 11.8"),
+    ("Platelets 2,45,000", "Platelets  245000"),
+    ("Hb 11.8\n\n\nECOG 1", "  Hb   11.8\nECOG 1  "),
+])
+def test_ocr_markers_pipes_and_spacing_are_not_disagreements(monkeypatch, full, second):
+    assert "ocr_uncertain_spans" not in _two_reads(monkeypatch, full, second)
+
+
+def test_ocr_disagreement_audit_event(monkeypatch):
+    events = []
+    _two_reads(monkeypatch, "PD-L1 TPS 6%\nECOG 1\nHb 11.8", "PD-L1 TPS 8%\nECOG 1\nHb 11.8", events)
+    assert events == [{"kind": "ocr_disagreement", "numbers": ["6", "8"], "lines": 1}]
+
+
+def test_uncertain_overlap_by_offsets(monkeypatch):
+    full = "Patient: Test Patient\n  PD-L1 TPS 6%  \nECOG 1"
+    p = _two_reads(monkeypatch, full, "Patient: Test Patient\nPD-L1 TPS 8%\nECOG 1")
+    (s,) = p["ocr_uncertain_spans"]
+    assert p["text"][s["start"]:s["end"]] == s["line"] == "PD-L1 TPS 6%"
+    at = full.index("6%")
+    assert ingest.uncertain_overlap(p, at, at + 2) is s
+    assert ingest.uncertain_overlap(p, 0, full.index("\n")) is None
+    assert ingest.uncertain_overlap(p, full.index("ECOG"), len(full)) is None
+    assert ingest.uncertain_overlap({"text": "x"}, 0, 1) is None
+
+
+def test_ocr_aadhaar_masked_before_the_line_check(monkeypatch):
+    events = []
+    p = _two_reads(monkeypatch, "Aadhaar No. 6043 1187 2200\nHb 11.8", "Aadhaar No. 6043 1187 2209\nHb 11.8", events)
+    blob = __import__("json").dumps([p, events])
+    assert "6043" not in blob and "1187" not in blob and p["aadhaar_masked"] == 1
+    assert p["second_read"].startswith("Aadhaar No. XXXX XXXX 2209")

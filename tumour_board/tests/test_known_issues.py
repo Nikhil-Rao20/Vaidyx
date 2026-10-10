@@ -28,16 +28,6 @@ def test_date_after_number_and_word_is_found():
     assert docstatus.find_dates("Age 62 Years 02/09/2026") == ["2026-09-02"]
 
 
-# ---- 3.3 two-read OCR check ignores single digits -----------------------------------------------------------
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="fixed in V1 item 3.3")
-def test_ocr_single_digit_slip_is_flagged(monkeypatch):
-    async def fake(png, audit=None, max_side=None):
-        return "PD-L1 TPS 8%\nECOG 2" if max_side else "PD-L1 TPS 6%\nECOG 1"
-    monkeypatch.setattr(ingest, "ocr_image", fake)
-    p = asyncio.run(ingest.ocr_page(b"png"))
-    assert {"6", "8"} <= set(p.get("ocr_uncertain_numbers", []))
-
-
 # ---- 3.4 long documents are truncated before extraction -----------------------------------------------------
 @pytest.mark.xfail(strict=True, raises=AssertionError, reason="fixed in V1 item 3.4")
 def test_extraction_sees_text_after_14000_chars(monkeypatch):

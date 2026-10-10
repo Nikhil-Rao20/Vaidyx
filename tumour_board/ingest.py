@@ -43,23 +43,137 @@ async def ocr_image(png_bytes: bytes, audit=None, max_side=None) -> str:
 _NUM = re.compile(r"\d+(?:[.,]\d+)*")
 
 
+# Two-read OCR check, line by line (V1 item 3.3). Not compared: list markers at the start of a line ("1.", "1)", "(1)",
+# "a)", "- 1 -"), page markers ("Page 1 of 2") and the pipes of table rows.
+_LIST_MARKER = re.compile(r"^\s*(?:\(\s*(?:\d{1,3}|[A-Za-z]|[ivxIVX]{1,4})\s*\)|(?:\d{1,3}|[A-Za-z])[.)]|-\s*\d{1,3}\s*-)(?=\s|$)")
+_PAGE_MARK = re.compile(r"\bpage\s*(?:no\.?\s*)?\d+(?:\s*(?:of|/)\s*\d+)?\b", re.I)
+OCR_NUMBER_DISAGREES = "the two OCR reads disagree on a number"
+OCR_ONE_READ_ONLY = "this line with numbers appears in one read only"
+_OCR_PAIR_MIN = 0.5  # lines less alike than this are not partners (each then counts as in one read only)
+
+
+def _ocr_lines(text: str) -> list:
+    """(start, end, line, key) of each line with content; start/end are offsets of the stripped line in text, key is the
+    line normalised for alignment (no pipes or list marker, lowercase, spaces collapsed, thousands commas dropped,
+    digits kept)."""
+    out, pos = [], 0
+    for raw in (text or "").split("\n"):
+        line = raw.strip()
+        key = " ".join(re.sub(r"(?<=\d),(?=\d)", "", _LIST_MARKER.sub(" ", line.replace("|", " "), count=1)).lower().split())
+        if key:
+            start = pos + len(raw) - len(raw.lstrip())
+            out.append((start, start + len(line), line, key))
+        pos += len(raw) + 1
+    return out
+
+
+def _ocr_line_numbers(line: str) -> list:
+    """The numbers of a line in order (thousands commas removed), without list markers and page markers."""
+    s = _PAGE_MARK.sub(" ", _LIST_MARKER.sub(" ", line.replace("|", " "), count=1))
+    return [x.replace(",", "") for x in _NUM.findall(s)]
+
+
+def _ocr_pair_block(a: list, b: list) -> list:
+    """Partners between two runs of differing lines (keys), in order: the pairing with the greatest total likeness,
+    lines less alike than _OCR_PAIR_MIN never paired. Returns [(i, j)]."""
+    from difflib import SequenceMatcher
+    n, m = len(a), len(b)
+    sim = [[0.0] * m for _ in range(n)]
+    for i in range(n):
+        for j in range(m):
+            sm = SequenceMatcher(None, a[i], b[j], autojunk=False)
+            if sm.real_quick_ratio() >= _OCR_PAIR_MIN and sm.quick_ratio() >= _OCR_PAIR_MIN:
+                r = sm.ratio()
+                sim[i][j] = r if r >= _OCR_PAIR_MIN else 0.0
+    best = [[0.0] * (m + 1) for _ in range(n + 1)]
+    for i in range(n - 1, -1, -1):
+        for j in range(m - 1, -1, -1):
+            best[i][j] = max(best[i + 1][j], best[i][j + 1], best[i + 1][j + 1] + sim[i][j] if sim[i][j] else 0.0)
+    pairs, i, j = [], 0, 0
+    while i < n and j < m:
+        if sim[i][j] and best[i][j] == best[i + 1][j + 1] + sim[i][j]:
+            pairs.append((i, j)); i += 1; j += 1
+        elif best[i][j] == best[i + 1][j]:
+            i += 1
+        else:
+            j += 1
+    return pairs
+
+
+def _ocr_differing(a: list, b: list) -> list:
+    """Numbers that differ between two lines' number lists (digits, count or order); [] when they agree."""
+    if a == b:
+        return []
+    from collections import Counter
+    ca, cb = Counter(a), Counter(b)
+    diff = set((ca - cb) + (cb - ca))
+    if not diff:  # same numbers in a different order
+        diff = {x for pair in zip(a, b) if pair[0] != pair[1] for x in pair}
+    return sorted(diff)
+
+
+def ocr_line_check(full: str, second: str) -> list:
+    """Uncertain spans of the full-resolution read: lines whose numbers differ from their partner line in the second read
+    (aligned with SequenceMatcher, so a dropped or merged row affects only that row), and lines with numbers that have
+    no partner. Offsets are into `full`. A line found only in the second read gets a zero-width span where it would
+    sit in `full` (marked "read": "second"); its "line" is the second read's line."""
+    from difflib import SequenceMatcher
+    la, lb = _ocr_lines(full), _ocr_lines(second)
+    pairs, only_a, only_b = [], [], []
+    for tag, i1, i2, j1, j2 in SequenceMatcher(None, [x[3] for x in la], [x[3] for x in lb], autojunk=False).get_opcodes():
+        if tag == "equal":
+            pairs += zip(range(i1, i2), range(j1, j2))
+            continue
+        block = [(i1 + i, j1 + j) for i, j in _ocr_pair_block([x[3] for x in la[i1:i2]], [x[3] for x in lb[j1:j2]])]
+        pairs += block
+        only_a += sorted(set(range(i1, i2)) - {i for i, _ in block})
+        at = la[i2][0] if i2 < len(la) else len(full or "")
+        only_b += [(j, at) for j in sorted(set(range(j1, j2)) - {j for _, j in block})]
+    spans = []
+    for i, j in pairs:
+        diff = _ocr_differing(_ocr_line_numbers(la[i][2]), _ocr_line_numbers(lb[j][2]))
+        if diff:
+            spans.append({"start": la[i][0], "end": la[i][1], "line": la[i][2], "numbers": diff, "reason": OCR_NUMBER_DISAGREES})
+    for i in only_a:
+        nums = _ocr_line_numbers(la[i][2])
+        if nums:
+            spans.append({"start": la[i][0], "end": la[i][1], "line": la[i][2], "numbers": sorted(set(nums)), "reason": OCR_ONE_READ_ONLY})
+    for j, at in only_b:
+        nums = _ocr_line_numbers(lb[j][2])
+        if nums:
+            spans.append({"start": at, "end": at, "line": lb[j][2], "numbers": sorted(set(nums)), "reason": OCR_ONE_READ_ONLY, "read": "second"})
+    return sorted(spans, key=lambda s: (s["start"], s["end"]))
+
+
 async def ocr_page(png_bytes: bytes, audit=None) -> dict:
-    """Two independent reads of the page (full resolution and a 70% downscale). Numbers that appear in only one read are
-    reported as uncertain: generative OCR can silently 'correct' a digit, and lab values are where that matters most.
-    The full-resolution read is the transcription used downstream."""
+    """Two independent reads of the page (full resolution and a 70% downscale), compared line by line: a line whose
+    numbers differ from its partner line in the other read, or a line with numbers found in one read only, is an
+    uncertain span (generative OCR can silently 'correct' a digit, and lab values are where that matters most). Single
+    digits count (ECOG 1 vs 2, TPS 6% vs 8%); list markers, page markers and table pipes do not. The full-resolution
+    read is the transcription used downstream; the second read is kept as "second_read"."""
     full, second = await asyncio.gather(ocr_image(png_bytes, audit), ocr_image(png_bytes, audit, max_side=int(0.7 * config.OCR_MAX_SIDE)))
     full, n_masked = identity.mask_aadhaar(full)  # Aadhaar masked at the source: never in the text, the uncertain numbers or the audit (V1 item 2.4)
     second, _ = identity.mask_aadhaar(second)
-    n1 = set(x.replace(",", "") for x in _NUM.findall(full)); n2 = set(x.replace(",", "") for x in _NUM.findall(second))
-    uncertain = sorted((n1 ^ n2) - {x for x in (n1 ^ n2) if len(x) <= 1})  # single digits (list numbers) are noise
-    page = {"text": full, "method": "vision-transcription", "ocr_reads": 2}
+    spans = ocr_line_check(full, second)
+    uncertain = sorted({n for s in spans for n in s["numbers"]})
+    page = {"text": full, "second_read": second, "method": "vision-transcription", "ocr_reads": 2}
     if n_masked:
         page["aadhaar_masked"] = n_masked
-    if uncertain:
+    if spans:
+        page["ocr_uncertain_spans"] = spans
         page["ocr_uncertain_numbers"] = uncertain
         if audit:
-            audit({"kind": "ocr_disagreement", "numbers": uncertain})
+            audit({"kind": "ocr_disagreement", "numbers": uncertain, "lines": len(spans)})
     return page
+
+
+def uncertain_overlap(page: dict, start: int, end: int) -> dict | None:
+    """The first uncertain OCR span of this page overlapping [start, end) of page["text"], else None. A zero-width span
+    (a line found only in the second read) overlaps only a range that strictly contains its position."""
+    for span in page.get("ocr_uncertain_spans") or []:
+        if span["start"] < end and start < span["end"]:
+            return span
+    return None
 
 
 def text_layer_usable(t: str) -> bool:
