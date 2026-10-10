@@ -2,6 +2,9 @@
 # Serve the Vaidyx-TB models on the H200 (bf16, exact Hugging Face weights). Usage:
 #   tumour_board/serve_models.sh reader                 # Qwen3.5-4B reader/extractor on :8101
 #   tumour_board/serve_models.sh reasoner <model-dir>   # reasoning model on :8100 (default gemma-4-31B-it)
+# The reasoner runs with n-gram (prompt-lookup) speculative decoding by default: about 3x faster output, token for token identical
+# (the draft is only accepted where the model agrees; weights, precision and sampling are untouched). Set TB_SPEC to another vLLM
+# speculative-config JSON, or TB_SPEC= (empty) to turn it off.
 source /home/bharath.tangella/vaidyx/env.sh
 export VLLM_CACHE_ROOT=/data/vaidyx/vllm_cache_tb
 LOG=/home/bharath.tangella/vaidyx/Vaidyx/data/tumour_board/logs; mkdir -p $LOG
@@ -11,6 +14,7 @@ case "$1" in
       --gpu-memory-utilization 0.17 --max-num-seqs 256 --limit-mm-per-prompt '{"image":1}' --host 127.0.0.1 --port 8101 > $LOG/reader.log 2>&1 < /dev/null & ;;
   reasoner)
     M=${2:-gemma-4-31B-it}
+    SPEC=${TB_SPEC-'{"method":"ngram","num_speculative_tokens":6,"prompt_lookup_max":5,"prompt_lookup_min":2}'}
     setsid nohup vllm serve /data/vaidyx/models/$M --served-model-name reasoner --dtype bfloat16 --max-model-len 32768 \
-      --gpu-memory-utilization ${3:-0.70} --max-num-seqs 256 --limit-mm-per-prompt '{"image":0}' ${TB_SPEC:+--speculative-config "$TB_SPEC"} --host 127.0.0.1 --port 8100 > $LOG/reasoner.log 2>&1 < /dev/null & ;;
+      --gpu-memory-utilization ${3:-0.70} --max-num-seqs 256 --limit-mm-per-prompt '{"image":0}' ${SPEC:+--speculative-config "$SPEC"} --host 127.0.0.1 --port 8100 > $LOG/reasoner.log 2>&1 < /dev/null & ;;
 esac
