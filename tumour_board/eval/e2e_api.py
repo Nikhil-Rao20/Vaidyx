@@ -646,6 +646,86 @@ def phase6(c):
         pass
 
 
+def phase7(c):
+    """V1 Phase 7: PM-JAY board composition (7.1), guideline checks of doses, RT and stage (7.2), flag resolution with an amended decision
+    (7.3), board actions in department inboxes with a closing suggestion (7.4). TB-002 (breast, reset by the full run) and TB-TEST7."""
+    text = ("Clinical stage IIIA. Neoadjuvant chemotherapy: 4 cycles of AC (Inj. Doxorubicin 6 mg/m2 IV and Inj. Cyclophosphamide 600 mg/m2 IV, "
+            "every 21 days), followed by Inj. Paclitaxel 80 mg/m2 IV weekly for 12 weeks. Then surgery and adjuvant radiotherapy.")
+    rec = c.post("/api/tb/cases/TB-002/board-records", json={"board_date": "2026-10-20", "recorded_by": "Dr. Tumour Board Coordinator (synthetic)", "decision_text": text,
+           "members": [{"name": "Dr. A. Rao (synthetic)", "department": "Medical Oncology"}, {"name": "Dr. B. Shah (synthetic)", "department": "Surgical Oncology"}],
+           "actions": [{"department": "Medical Oncology", "task": "Counsel the patient", "due": "2026-12-20"}]}).json()
+    rid, flags = rec.get("id"), (rec.get("adjudication") or {}).get("flags") or []
+    comp = [f for f in flags if f["kind"] == "composition"]
+    check("7.1 missing radiation oncologist flagged (PM-JAY HBP 2.2 quoted; members typed with their departments)",
+          len(comp) == 1 and comp[0]["missing"] == ["radiation_oncology"] and comp[0]["reference"]["region"] == "India" and rec["attendance"]["present"] == ["Medical Oncology", "Surgical Oncology"],
+          "; ".join(f["text"][:90] for f in comp))
+    room = c.post("/api/tb/cases/TB-002/board-records", json={"decision_text": "Plan as discussed.", "recorded_by": "Dr. Coordinator (synthetic)", "actions": [],
+            "participants": "Dr A (Med Onc), Dr B (Surg Onc), Radiation Oncology (AI support agent)"}).json()
+    check("7.1 an AI support agent never counts as a member", any(f["kind"] == "composition" and f["missing"] == ["radiation_oncology"] for f in room["adjudication"]["flags"]))
+    g = [f for f in flags if f["kind"] == "guideline"]
+    dose = [f for f in g if f.get("check") == "dose" and f["severity"] == "expert_review"]
+    ref = (dose[0].get("reference") or {}) if dose else {}
+    check("7.2 'Doxorubicin 6 mg/m2' flagged as a possible transcription error with its Indian guideline source (page, quote)",
+          len(dose) == 1 and "oxorubicin" in dose[0]["text"] and ref.get("region") == "India" and ref.get("page") and "60" in (ref.get("quote") or ""),
+          f"{dose[0]['text'][:140] if dose else 'no dose flag'} | {ref.get('org')} p {ref.get('page')}: {(ref.get('quote') or '')[:70]}")
+    checks = (rec["adjudication"].get("guideline_checks") or {}).get("checks") or []
+    ok = {x.get("drug"): x["result"] for x in checks if x.get("kind") == "drug"}
+    check("7.2 correct doses not flagged (cyclophosphamide 600 mg/m2, paclitaxel 80 mg/m2 weekly)",
+          ok.get("cyclophosphamide") == "consistent" and ok.get("paclitaxel") == "consistent"
+          and not any(w in f["text"].lower() for f in g if f["severity"] != "info" for w in ("cyclophosphamide", "paclitaxel")), json.dumps(ok))
+    stage = [f for f in g if f.get("check") == "stage"]
+    check("7.2 stage in the decision (IIIA) vs the stage recorded in the signed report (IIB): review, cites the report",
+          len(stage) == 1 and stage[0]["severity"] == "review" and (stage[0].get("source") or {}).get("doc_id"), stage[0]["text"][:160] if stage else "no stage flag")
+    # 7.3: corrected -> version 2 with history; intentional deviation needs a reason; all resolved -> final; undo -> version 3
+    r = c.post(f"/api/tb/cases/TB-002/board-records/{rid}/flags/{dose[0]['id'] if dose else 'F0'}/resolve", json={"resolution": "corrected", "value": "60 mg/m2"}).json().get("record") or {}
+    check("7.3 flag corrected: the decision is amended as version 2, version 1 kept",
+          r.get("version") == 2 and "Doxorubicin 60 mg/m2" in r.get("decision_text", "") and r["versions"][0]["decision_text"] == text and r["versions"][1]["by"] == "admin",
+          (r.get("versions") or [{}])[-1].get("reason", ""))
+    bad = c.post(f"/api/tb/cases/TB-002/board-records/{rid}/flags/{comp[0]['id'] if comp else 'F0'}/resolve", json={"resolution": "intentional_deviation"})
+    check("7.3 an intentional deviation needs a reason", bad.status_code == 400, f"{bad.status_code} {bad.text[:80]}")
+    c.post(f"/api/tb/cases/TB-002/board-records/{rid}/flags/{comp[0]['id'] if comp else 'F0'}/resolve",
+           json={"resolution": "intentional_deviation", "reason": "Radiation Oncology reviewed the Case File before the meeting (synthetic)"})
+    cur = next(b for b in c.get("/api/tb/cases/TB-002").json()["state"]["board_records"] if b["id"] == rid)
+    for f in cur["adjudication"]["flags"]:
+        if f["severity"] in ("review", "expert_review") and not f.get("resolution"):
+            c.post("/api/tb/cases/TB-002/confirmations", json={"type": "resolve_flag", "key": f"{rid}:{f['id']}", "fields": {"resolution": "false_alarm"}, "reason": "e2e"})
+    cur = next(b for b in c.get("/api/tb/cases/TB-002").json()["state"]["board_records"] if b["id"] == rid)
+    check("7.3 the decision counts as final once every flag is resolved (audited)", (cur.get("resolution") or {}).get("final") is True
+          and any(e["kind"] == "board_flag_resolved" for e in c.get("/api/tb/cases/TB-002/audit").json()["events"]), json.dumps(cur.get("resolution")))
+    conf = next((f["resolution"]["confirmation"] for f in cur["adjudication"]["flags"] if (f.get("resolution") or {}).get("resolution") == "corrected"), "")
+    u = c.post(f"/api/tb/cases/TB-002/confirmations/{conf}/undo", json={}).json().get("record") or {}
+    check("7.3 undo takes the correction back as version 3 (history kept)", u.get("version") == 3 and u.get("decision_text") == text and len(u.get("versions") or []) == 3
+          and (u.get("resolution") or {}).get("final") is False)
+    # 7.4: a board action reaches the department inbox, overdue on display; a later MRI suggests closing; a person closes it
+    c.delete("/api/tb/cases/TB-TEST7")
+    c.post("/api/tb/cases", json={"case_id": "TB-TEST7", "protocol": "breast", "board_date": "2026-10-20",
+                                  "patient": {"name": "SYNTHETIC, Follow-up Patient", "mrn": "SYN-997", "agesex": "49 Y / F"}})
+    yday = (__import__("datetime").date.today() - __import__("datetime").timedelta(days=1)).isoformat()
+    r7 = c.post("/api/tb/cases/TB-TEST7/board-records", json={"decision_text": "Response assessment before surgery.", "recorded_by": "Dr. Coordinator (synthetic)",
+          "participants": "Dr A (Med Onc), Dr B (Surg Onc), Dr C (Rad Onc)", "actions": [{"department": "Radio-diagnosis", "task": "MRI breast after chemotherapy", "due": yday}]}).json()
+    act = next((a for a in c.get("/api/tb/cases/TB-TEST7").json()["state"]["actions"] if a.get("source") == "board"), {})
+    ib = c.get("/api/tb/inbox").json()
+    row = next((q for d in ib["departments"] if d["id"] == "radio_diagnosis" for q in d["requests"] if q["action_id"] == act.get("id")), {})
+    check("7.4 board action in the Radio-diagnosis inbox: labelled, overdue worked out on display, department notified",
+          row.get("source") == "board" and row.get("source_label") == "Tumour Board action" and row.get("overdue") and row.get("board_record") == r7.get("id")
+          and any(n["kind"] == "board_action" and n.get("action_id") == act.get("id") for n in c.get("/api/tb/notifications", params={"limit": 200}).json()["notifications"]),
+          f"{row.get('status')}, {row.get('days_overdue')} d")
+    mri = ("SAHYADRI CANCER INSTITUTE (SYNTHETIC)\nDEPARTMENT OF RADIO-DIAGNOSIS\nMRI BREAST (BILATERAL), CONTRAST\nPatient: SYNTHETIC, Follow-up Patient  UHID: SYN-997  49 Y / F\n"
+           "Study date: 05/10/2026\nFindings: Post-chemotherapy reduction in the size of the left breast lesion, now 1.8 cm.\nImpression: partial response.\n"
+           "Report status: FINAL\nSd/- Dr. R. Nair, MD (Radio-diagnosis), KMC 51234\nReported on 05/10/2026\n").encode()
+    wait_job(c, c.post("/api/tb/cases/TB-TEST7/documents", files=[("files", ("mri_breast.txt", mri))], data={"paths": json.dumps(["mri_breast.txt"])}).json()["job"])
+    act = next((a for a in c.get("/api/tb/cases/TB-TEST7").json()["state"]["actions"] if a.get("id") == act.get("id")), {})
+    sug = act.get("suggested_close") or {}
+    check("7.4 the MRI that arrived later suggests closing the action (never closed by itself)", bool(sug.get("doc_id")) and act.get("status") != "completed", sug.get("reason", "no suggestion"))
+    cl = c.post(f"/api/tb/cases/TB-TEST7/actions/{act.get('id')}/close", json={"doc_id": sug.get("doc_id", "")}).json()
+    ib = c.get("/api/tb/inbox").json()
+    row = next((q for d in ib["departments"] if d["id"] == "radio_diagnosis" for q in d["requests"] if q["action_id"] == act.get("id")), {})
+    au7 = [e["kind"] for e in c.get("/api/tb/cases/TB-TEST7/audit").json()["events"]]
+    check("7.4 closed by a person with that document: completed in the inbox, audited", cl.get("status") == "completed" and cl.get("closed_doc_id") == sug.get("doc_id")
+          and row.get("status") == "completed" and "board_action_suggested" in au7 and "board_action_closed" in au7, f"{row.get('status')} {row.get('completed')}")
+    c.delete("/api/tb/cases/TB-TEST7")
+
+
 def main(base, pw, only=None):
     c = httpx.Client(base_url=base, timeout=600)
     check("login", c.post("/api/auth/login", json={"username": "admin", "password": pw}).status_code == 200)
@@ -670,6 +750,10 @@ def main(base, pw, only=None):
         return 0 if not FAIL else 1
     if only == "phase6":
         phase6(c)
+        print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
+        return 0 if not FAIL else 1
+    if only == "phase7":
+        phase7(c)
         print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
         return 0 if not FAIL else 1
     # 1. import lung case (incomplete)
@@ -806,6 +890,8 @@ def main(base, pw, only=None):
     phase5(c)
     # 13. V1 Phase 6: board session, agents for absent specialties, agent log vs decision, removed items, no-documents agents
     phase6(c)
+    # 14. V1 Phase 7: PM-JAY board composition, guideline checks, flag resolution and amended decision, board actions in inboxes
+    phase7(c)
     # leave the demo Case Files in their fresh state for the next user / test
     for cid in ("TB-001", "TB-002", "TB-003"):
         wait_job(c, c.post(f"/api/tb/demo/{cid}").json()["job"])
@@ -816,5 +902,5 @@ def main(base, pw, only=None):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--base", default="http://127.0.0.1:7000"); ap.add_argument("--password", required=True)
-    ap.add_argument("--only", default=None, help="run one section only (phase2 | phase3 | phase4 | phase5 | phase6)")
+    ap.add_argument("--only", default=None, help="run one section only (phase2 | phase3 | phase4 | phase5 | phase6 | phase7)")
     a = ap.parse_args(); sys.exit(main(a.base, a.password, a.only))
