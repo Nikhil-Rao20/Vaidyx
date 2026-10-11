@@ -118,7 +118,7 @@ def test_summary_stores_removed_items_with_where_and_counts(ihc_case, monkeypatc
     assert got == [("investigations", "document_not_found"), ("fitness", "number_not_in_quote"), ("questions", "guardrail"),
                    ("points_for_review", "quote_not_found"), ("points_for_review", "guardrail")]
     assert out["dropped_unverified"] == 3  # sections and points for review
-    assert out["guardrail_removed"] == 2 and out["points_for_review"] == []
+    assert out["guardrail_removed"] == 2 and out["approximate"] == 0 and out["near_match"] is False and out["points_for_review"] == []
     inv = next(s for s in out["sections"] if s["id"] == "investigations")
     assert [s["text"] for s in inv["sentences"]][:1] == [GOOD["text"]]
     assert store.get_state(ihc_case)["artefacts"]["summary"]["removed"] == out["removed"]

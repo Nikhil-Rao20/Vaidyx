@@ -30,7 +30,8 @@ def fill_from_facts(sections, facts, cat):
     A value a clinician confirmed (V1 item 2.2) has no quote of its own: its sentence names who confirmed it and carries no citation."""
     added = 0
     for sec in sections:
-        have = " ".join(x["text"] + " " + " ".join(c["quote"] for c in x["citations"]) for x in sec["sentences"])
+        # an approximate sentence (V1 item 6.5) never stands in for the exact one: the print view leaves it out until reviewed
+        have = " ".join(x["text"] + " " + " ".join(c["quote"] for c in x["citations"]) for x in sec["sentences"] if not x.get("approximate"))
         for fid in SECTION_FACTS.get(sec["id"], []):
             cur = (facts.get(fid) or {}).get("current")
             if not cur or cur["verification"] not in rules.VERIFIED or cur["state"] != "present" or not cur.get("doc_final"):
@@ -100,11 +101,12 @@ async def build(case_id, force=False):
     grouped = {k: [] for k, _ in SECTIONS}
     for x in r.get("sentences") or []:
         grouped.setdefault(x.get("section") if x.get("section") in grouped else "investigations", []).append(x)
+    near = config.near_match()  # approximate source matches kept and flagged, behind a flag (V1 item 6.5)
     sections, paras, removed, issues = [], [], [], []
 
     def _check(items, where):
         """Verified items that pass the output guardrail; every removal is kept with its reason and place (V1 item 6.4)."""
-        ok, drops = qa.verify(case_id, items)
+        ok, drops = qa.verify(case_id, items, near_match=near)
         removed.extend({**x, "where": where} for x in drops)
         keep = []
         for s in ok:
@@ -127,13 +129,14 @@ async def build(case_id, force=False):
     # verification drops of sections AND points for review (before V1 item 6.4 dropped points were not counted)
     dropped = sum(1 for x in removed if x["reason"] != "guardrail")
     by_reason = {k: n for k in qa.REASONS if (n := sum(1 for x in removed if x["reason"] == k))}
+    approximate = sum(1 for x in [s for sec in sections for s in sec["sentences"]] + pts if x.get("approximate"))
     out = {"status": "ready" if gate.get("passed") else "incomplete_gate", "sections": sections, "structure": "NCG Virtual Tumour Board case template",
            "paragraphs": paras, "points_for_review": pts,
            "stage_as_recorded": ({"value": stage["value"], "quote": "" if stage.get("confirmed_by") else stage["quote"], "doc_id": stage["doc_id"],
                                   "doc_title": stage["doc_title"], "date": stage["date"], **({"confirmed_by": stage["confirmed_by"]} if stage.get("confirmed_by") else {})}
                                  if stage and stage["verification"] in rules.VERIFIED else None),
-           "dropped_unverified": dropped, "guardrail_removed": by_reason.get("guardrail", 0), "removed": removed,
-           "filled_from_fields": filled, "generated": store.now_iso(), "seconds": round(time.time() - t0, 1),
+           "dropped_unverified": dropped, "guardrail_removed": by_reason.get("guardrail", 0), "removed": removed, "approximate": approximate,
+           "near_match": near, "filled_from_fields": filled, "generated": store.now_iso(), "seconds": round(time.time() - t0, 1),
            "model": config.models()["reasoner"].get("label") or "reasoner", "review": {"status": "ai_draft"}, "gate_passed": gate.get("passed"), "context": mode,
            "signature": sig}  # what it was compiled from; a changed Case File marks it stale (V1 item 4.5)
     if issues:

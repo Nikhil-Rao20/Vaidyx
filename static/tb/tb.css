@@ -272,3 +272,4 @@ table.t tr.click { cursor: pointer; } table.t tr.click:hover td { background: va
 
 details.removed { margin: 8px 0; } details.removed summary { cursor: pointer; color: var(--link); } details.removed s { color: var(--muted); }
 @media print { .noprint { display: none !important; } }
+.approx { outline: 1px dashed #d9a441; outline-offset: 1px; }

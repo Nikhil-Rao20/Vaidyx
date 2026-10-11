@@ -398,7 +398,7 @@ def no_documents_brief(case_id, role, sig, t0):
     return {"role": role, "label": ROLES[role]["label"], "no_documents": True, "department": dept,
             "message": f"No {dept} documents in this Case File" + (f" ({', '.join(extra)})" if extra else ""),
             "open_items": open_department_items(case_id, role), "sections": [], "points_for_review": [], "not_documented": [], "removed": [],
-            "dropped_unverified": 0, "guardrail_removed": 0, "not_documented_rejected": 0, "references_dropped": 0,
+            "dropped_unverified": 0, "guardrail_removed": 0, "not_documented_rejected": 0, "references_dropped": 0, "approximate": 0,
             "generated": store.now_iso(), "model": "", "seconds": round(time.time() - t0, 1), "review": {"status": "no_model_call"}, "signature": sig}
 
 
@@ -501,9 +501,10 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
     except Exception as e:
         yield {"type": "error", "message": str(e)[:200]}; return
     dropped = 0; issues = []; removed = []  # removed: every item taken out, with the reason (V1 item 6.4)
+    near = config.near_match()  # approximate quotes kept, flagged "check source", only behind TB_NEAR_MATCH (V1 item 6.5)
     sections = []
     for sec in b.get("sections") or []:
-        items, drop = qa.verify(case_id, sec.get("items"))
+        items, drop = qa.verify(case_id, sec.get("items"), near_match=near)
         dropped += len(drop); removed += [{**x, "where": sec.get("heading", "")} for x in drop]
         kept = []
         for it in items:
@@ -516,7 +517,7 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
             sections.append({"heading": sec.get("heading", ""), "items": kept})
     pts2, refs_dropped = [], 0
     for raw in b.get("points_for_review") or []:
-        v, drop = qa.verify(case_id, [raw])  # one at a time: each kept point keeps its own references
+        v, drop = qa.verify(case_id, [raw], near_match=near)  # one at a time: each kept point keeps its own references
         if not v:
             dropped += 1; removed += [{**x, "where": "points_for_review"} for x in drop]; continue
         p = v[0]
@@ -554,7 +555,8 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
         au({"kind": "guardrail_output", "where": f"agent {role}", "issues": issues})
     brief = {"role": role, "label": r["label"], "sections": sections, "points_for_review": pts2, "not_documented": nd,
              "dropped_unverified": dropped, "guardrail_removed": sum(x["reason"] == "guardrail" for x in removed), "not_documented_rejected": nd_dropped,
-             "removed": removed, "generated": store.now_iso(),
+             "removed": removed, "near_match": near, "generated": store.now_iso(),
+             "approximate": sum(bool(it.get("approximate")) for s_ in sections for it in s_["items"]) + sum(bool(p.get("approximate")) for p in pts2),
              "references_dropped": refs_dropped, "pack": _pack_summary(role, case["protocol"]),
              "model": config.models()["reasoner"].get("label") or "reasoner",
              "seconds": round(time.time() - t0, 1), "review": {"status": "ai_draft"},
@@ -562,6 +564,6 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
     st = store.get_state(case_id); st.setdefault("artefacts", {})[f"brief_{role}"] = brief; store.save_state(case_id, st)
     au({"kind": "agent_brief", "role": role, "items": sum(len(s["items"]) for s in sections), "points": len(pts2), "dropped_unverified": dropped,
         "guardrail_removed": brief["guardrail_removed"], "removed": {k: sum(x["reason"] == k for x in removed) for k in sorted({x["reason"] for x in removed})},
-        "seconds": brief["seconds"], "references": sum(len(p["references"]) for p in pts2),
+        "approximate": brief["approximate"], "seconds": brief["seconds"], "references": sum(len(p["references"]) for p in pts2),
         "points_with_indian_reference": sum(any(x["region"] == "India" for x in p["references"]) for p in pts2), "references_dropped": refs_dropped})
     yield {"type": "brief", "brief": brief}

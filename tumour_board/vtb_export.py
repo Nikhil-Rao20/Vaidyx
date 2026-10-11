@@ -208,9 +208,15 @@ def _diagnosis(st, docs_list) -> str:
     return f"{_clean(cur['value'])} [{_clean(cur.get('doc_title'))}, {_ddmmyyyy(cur.get('date')) or 'date not stated'}]"
 
 
+def _printed(summ, s) -> bool:
+    """A sentence or point goes into this print view when it has text; one kept on an approximate source match only once an
+    expert has reviewed the summary (V1 item 6.5)."""
+    return bool(_clean(s.get("text"))) and (not s.get("approximate") or (summ.get("review") or {}).get("status") == "reviewed")
+
+
 def _section_lines(summ, sid, docs):
     sec = next((s for s in summ.get("sections") or [] if s.get("id") == sid), None) or {}
-    return [_sentence(s, docs) for s in sec.get("sentences") or [] if _clean(s.get("text"))]
+    return [_sentence(s, docs) for s in sec.get("sentences") or [] if _printed(summ, s)]
 
 
 def _stage_line(summ) -> str:
@@ -276,7 +282,7 @@ def content(case_id: str) -> dict:
             tail = [stage] if stage else []
             extra["stage"] = stage
         if n == 6:
-            pts = [_sentence(x, docs) for x in summ.get("points_for_review") or [] if _clean(x.get("text"))]
+            pts = [_sentence(x, docs) for x in summ.get("points_for_review") or [] if _printed(summ, x)]
             body = body + ([POINTS_HEADING] + pts if pts else [])
             extra["points_for_review"] = pts
         items, pt, cut = fit(body, tail, w, h)

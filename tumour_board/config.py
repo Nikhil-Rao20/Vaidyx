@@ -58,3 +58,9 @@ OCR_MAX_SIDE = int(os.getenv("TB_OCR_MAX_SIDE", "1800"))
 # Case Files holding real patient data that automatic matching must never link into or write to (V1 item 2.4): the intake matcher
 # skips them and no identifier is ever learned into them. Comma-separated ids; the default is the real case on this server.
 PROTECTED_CASES = {c.strip() for c in os.getenv("TB_PROTECTED_CASES", "TB-2026-bharath").split(",") if c.strip()}
+
+
+def near_match() -> bool:
+    """V1 item 6.5: keep items whose quote matches the source only approximately in briefs and the summary, flagged "approximate source
+    match: check source" (TB_NEAR_MATCH=1). Off until the clinical team accepts it; read on every call. Q&A never uses it."""
+    return os.getenv("TB_NEAR_MATCH", "").strip().lower() in ("1", "true", "yes", "on")
