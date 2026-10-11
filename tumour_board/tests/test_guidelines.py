@@ -187,3 +187,15 @@ def test_section_index_has_its_own_cache(lib):
     with pytest.raises(ValueError):
         guidelines.GuidelineIndex(chunking="semantic")
 
+
+# ---------------------------------------------------------------- pack filter (V1 item 5.5)
+def test_search_limited_to_pack_sources(lib):
+    root, calls = lib
+    (root / "ncg_india" / "synoptic-reporting-radiology-template.txt").write_text("Rectal MRI synoptic template: mesorectal fascia, EMVI and CRM reported.")
+    idx = guidelines.GuidelineIndex()
+    only_esmo = idx.search("lung cancer staging EGFR", 5, sources=[("esmo", None)])
+    assert only_esmo and all(h["file"].startswith("esmo/") for h in only_esmo)
+    tpl = idx.search("lung cancer staging", 5, sources=[("ncg_india", frozenset({"synoptic-reporting-radiology-template.txt"}))])
+    assert [h["file"] for h in tpl] == ["ncg_india/synoptic-reporting-radiology-template.txt"]
+    assert idx.search("lung", 5, sources=[("rcr", None)]) == []
+    assert len(idx.search("lung cancer", 5)) == len(idx.chunks) == 3  # no filter: every passage

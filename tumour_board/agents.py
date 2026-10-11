@@ -6,11 +6,13 @@ the board may want to clarify. It does not interpret images, diagnose, stage or 
 carries a verified quote; the brief stays an AI draft until an expert marks it reviewed (expert-in-the-loop).
 
 Agent loop (ReAct style, model-agnostic, JSON steps): observe -> choose a tool -> read the result -> ... -> write
-the brief. Tools only read the Case File.
+the brief. Tools only read the Case File and the agent's guideline pack (V1 item 5.5: guideline folders of its specialty, Indian
+sources first, and a reporting checklist). A guideline passage is a "reference" cited by id with a verbatim quote, kept apart from
+the record citations; it is never a fact about the patient and never a recommendation for this patient.
 """
 import asyncio, json, re, time
 
-from . import dates, guardrails, llm, protocol, qa, rules, search, store
+from . import dates, guardrails, guidelines, llm, packs, protocol, qa, rules, search, store
 
 ROLES = {
     "radiology": {"label": "Radiology support", "department": "Radiology",
@@ -50,11 +52,14 @@ TOOLS_DOC = """Tools (all read-only):
 - find_values: input = a term (for example 'PD-L1', 'CEA', 'Ki-67'). Returns every line in the Case File that mentions it, with dates.
 - get_facts: no input. Returns the primary fields already extracted and verified by the system.
 - get_gaps: no input. Returns the Pre-Authorization gaps (missing, pending or non-final records).
+- search_guidelines: input = a question or keywords. Returns reference passages from this specialty's guideline pack, Indian sources
+  first (NCG, ICMR, Tata Memorial Centre, PM-JAY, ICRI / IRIA), then international, each with an id such as G3. Reference text only:
+  never a fact about this patient and never a recommendation for this patient.
 - finish: no input. Use when you have read enough to write the brief."""
 
 STEP_SCHEMA = {"type": "object", "additionalProperties": False, "properties": {
     "thought": {"type": "string", "description": "one short sentence: what you still need"},
-    "tool": {"type": "string", "enum": ["list_documents", "read_document", "search", "find_values", "get_facts", "get_gaps", "finish"]},
+    "tool": {"type": "string", "enum": ["list_documents", "read_document", "search", "find_values", "get_facts", "get_gaps", "search_guidelines", "finish"]},
     "input": {"type": "string"}}, "required": ["thought", "tool", "input"]}
 
 ITEM = {"type": "object", "additionalProperties": False, "properties": {
@@ -62,10 +67,16 @@ ITEM = {"type": "object", "additionalProperties": False, "properties": {
     "citations": {"type": "array", "items": {"type": "object", "additionalProperties": False,
                   "properties": {"doc_id": {"type": "string"}, "quote": {"type": "string", "description": "exact text copied from that document"}},
                   "required": ["doc_id", "quote"]}}}, "required": ["text", "citations"]}
+POINT = {"type": "object", "additionalProperties": False, "properties": {  # a point for review may cite guideline references (V1 item 5.5)
+    "text": {"type": "string"}, "citations": ITEM["properties"]["citations"],
+    "references": {"type": "array", "description": "guideline passages relevant to this point, by id (G1, G2 ...), Indian sources first",
+                   "items": {"type": "object", "additionalProperties": False,
+                             "properties": {"ref_id": {"type": "string"}, "quote": {"type": "string", "description": "exact text copied from that guideline passage"}},
+                             "required": ["ref_id", "quote"]}}}, "required": ["text", "citations", "references"]}
 BRIEF_SCHEMA = {"type": "object", "additionalProperties": False, "properties": {
     "sections": {"type": "array", "items": {"type": "object", "additionalProperties": False,
                  "properties": {"heading": {"type": "string"}, "items": {"type": "array", "items": ITEM}}, "required": ["heading", "items"]}},
-    "points_for_review": {"type": "array", "items": ITEM, "description": "questions or clarifications for the board (never treatment recommendations)"},
+    "points_for_review": {"type": "array", "items": POINT, "description": "questions or clarifications for the board (never treatment recommendations)"},
     "not_documented": {"type": "array", "items": {"type": "string"}, "description": "items relevant to this specialty that are not documented"}},
     "required": ["sections", "points_for_review", "not_documented"]}
 
@@ -79,7 +90,9 @@ def _system(role):
             "quote; do not interpret images or scans (only what reports state); do not diagnose; do not derive or assign stage (only quote the stage "
             "as recorded); do not recommend, suggest or choose any treatment or management; do not predict prognosis. Points for review are "
             "questions or clarifications for the board about the records (for example a pending result, a draft report, two reports that differ), "
-            "never recommendations. Your output is a draft for expert review.")
+            "never recommendations. Guideline passages (ids G1, G2 ...) are reference text: cite them only under 'references' of a point for "
+            "review, prefer Indian sources (NCG, ICMR, Tata Memorial Centre, PM-JAY, ICRI / IRIA), never present guideline text as a fact about "
+            "the patient or as advice for this patient. Your output is a draft for expert review.")
 
 
 def _overrides(case_id):
@@ -176,7 +189,105 @@ def _read_document(case_id, arg):
     return "\n".join(out)
 
 
-async def _tool(case_id, tool, arg):
+# V1 item 5.5: guideline references of the specialty pack
+ROLE_QUERY = {  # the pack search run before the first step, with the protocol label in front
+    "radiology": "imaging work-up and imaging report contents", "pathology": "pathology reporting and biomarker testing",
+    "medical_oncology": "work-up and fitness assessment before systemic therapy", "surgical_oncology": "work-up and assessment of resectability",
+    "radiation_oncology": "work-up before radiotherapy and response assessment", "nuclear_medicine": "PET-CT and bone scan indications in staging"}
+_GENERIC = set("the and for with from that this which there their these those into about after before between within without also only "
+               "not any are was were been has have had can may should would will report reports reported patient case file documented document "
+               "documents board clarify clarification whether confirm please result results date dated available stated state status".split())
+
+
+# cancer sites named in guideline file names: a passage from a guideline for another cancer is never attached to this Case File
+_SITES = ("lung", "nsclc", "thoracic", "breast", "rect", "colorectal", "colon", "head", "neck", "oral", "gyn", "cervi", "ovar", "endomet",
+          "prostate", "gall", "liver", "hepat", "gastric", "stomach", "oesoph", "esoph", "pancrea", "renal", "kidney", "bladder", "thyroid",
+          "glioma", "lymphoma", "sarcoma")
+
+
+def _cancer_fit(h, protocol_id):
+    """'same' when the passage's guideline is about this Case File's cancer, 'other' when it is about another cancer, '' otherwise
+    (a guideline for many cancers, such as ICRI / IRIA or the PM-JAY manual)."""
+    name = (h["file"] + " " + h["title"]).lower()
+    words = guidelines.CANCER_WORDS.get(protocol_id or "", [])
+    if any(w in name for w in words):
+        return "same"
+    return "other" if any(x in name for x in _SITES) else ""
+
+
+def _content_words(text):
+    return {t for t in search.tokenize(text or "") if len(t) >= 3 and t not in _GENERIC and not t.isdigit()}
+
+
+def _ref_label(h):
+    return f"{h['org']} | {h['title']} | p. {h['page']}" + (f"-{h['page_end']}" if h.get("page_end") and h["page_end"] != h["page"] else "") + f" | {h['region']}"
+
+
+def _search_guidelines(role, case, arg, refs):
+    """Pack search; every passage gets an id (G1, G2 ...) kept in refs for the references of the brief."""
+    res = packs.search(role, arg, case.get("protocol"))
+    out = []
+    for h in res["india"] + res["international"]:
+        rid = next((k for k, v in refs.items() if (v["file"], v["page"], v["text"]) == (h["file"], h["page"], h["text"])), None)
+        if rid is None:
+            rid = f"G{len(refs) + 1}"; refs[rid] = h
+        out.append(f"[{rid} | {_ref_label(h)}]\n{h['text'][:2000]}")  # a passage is about 1,100 characters; tables can run longer
+    return "\n\n".join(out) or "No guideline passage found in this specialty's pack."
+
+
+def _reference(h, quote, by):
+    return {"file": h["file"], "title": h["title"], "org": h["org"], "region": h["region"], "page": h["page"],
+            "page_end": h.get("page_end") or h["page"], "quote": quote, "by": by}
+
+
+def _verify_references(point_refs, refs, protocol_id=None):
+    """The point's references whose quote is verbatim in the cited guideline passage and whose guideline is not about another cancer;
+    the rest are dropped (counted)."""
+    out, dropped = [], 0
+    for r in point_refs or []:
+        h = refs.get((r.get("ref_id") or "").strip())
+        locs = qa._locate_quote(r.get("quote") or "", [h["text"]]) if h else []
+        if not locs or (protocol_id and _cancer_fit(h, protocol_id) == "other"):
+            dropped += 1; continue
+        ref = _reference(h, " ... ".join(l["matched"] for l in locs), "agent")
+        if not any((x["file"], x["page"]) == (ref["file"], ref["page"]) for x in out):
+            out.append(ref)
+    return out, dropped
+
+
+def _relevance(words, acronyms, text):
+    """Content words shared with a passage; a shared acronym (EGFR, PET-CT, CECT, HER2) counts twice."""
+    shared = words & _content_words(text)
+    return len(shared) + len(shared & acronyms)
+
+
+def _indian_reference(role, case, text):
+    """When a point cites no Indian source: the best Indian passage of the pack for the point, if it shares at least two content words
+    (or one acronym such as EGFR) with it and comes from a guideline for this cancer (or a general one whose passage names the cancer);
+    the quote is its most overlapping sentence, verbatim. None when the pack has no such passage."""
+    cwords = guidelines.CANCER_WORDS.get(case.get("protocol") or "", [])
+    words = _content_words(text)
+    acronyms = {t.lower() for t in re.findall(r"\b[A-Z][A-Z0-9]+(?:-[A-Z0-9]+)*\b", text or "") if len(t) >= 3} & words
+    if not words:
+        return None
+    for h in packs.search(role, text, case.get("protocol"), india=3, intl=0)["india"]:
+        fit = _cancer_fit(h, case.get("protocol"))
+        if fit == "other" or (fit == "" and not any(w in h["text"].lower() for w in cwords)):
+            continue
+        if _relevance(words, acronyms, h["text"]) < 2:
+            continue
+        sents = [x.strip() for x in re.split(r"(?<=[.;:])\s+|\n", h["text"]) if len(x.strip()) >= 20]
+        best = max(sents, key=lambda x: _relevance(words, acronyms, x), default="")
+        if best and _relevance(words, acronyms, best) >= 1:
+            return _reference(h, best[:400], "search")
+    return None
+
+
+async def _tool(case_id, tool, arg, role=None, refs=None):
+    if tool == "search_guidelines":
+        if role is None or refs is None:
+            return "Guideline search is not available here."
+        return await asyncio.to_thread(_search_guidelines, role, store.get_case(case_id), arg, refs)
     if tool == "list_documents":
         return _doc_list(case_id)
     if tool == "read_document":
@@ -192,6 +303,14 @@ async def _tool(case_id, tool, arg):
     if tool == "get_gaps":
         return _gaps_text(case_id)
     return ""
+
+
+def _pack_summary(role, protocol_id):
+    """What the brief drew on: the pack's sources (India first) and the reporting checklist used, for the reader."""
+    pk = packs.pack(role)
+    cl = packs.checklist(role, protocol_id)
+    return {"label": pk["label"], "sources": [{"org": s["org"], "region": s["region"]} for s in pk["sources"]],
+            "checklist": {"title": cl["title"], "org": cl["org"], "region": cl["region"], "pages": cl["pages"], "file": cl["file"]} if cl else None}
 
 
 async def run_agent(case_id, role, focus_question="", max_steps=5):
@@ -218,6 +337,19 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
                "DOCUMENTS:\n" + _doc_list(case_id),
                "VERIFIED FIELDS:\n" + _facts_text(case_id),
                "PRE-AUTHORIZATION GAPS:\n" + _gaps_text(case_id)]
+    refs = {}  # guideline passages seen in this run, by id (V1 item 5.5)
+    checklist = packs.checklist_text(role, case["protocol"])
+    if checklist:
+        scratch.append(checklist)
+    prot_label = (protocol.get(case["protocol"]) or {}).get("label") or case["protocol"]
+    gq = f"{prot_label}: {ROLE_QUERY.get(role, r['focus'][:80])}"
+    try:
+        gl = await asyncio.to_thread(_search_guidelines, role, case, gq, refs)
+        scratch.append(f"GUIDELINE REFERENCES (reference text from the {r['label'].lower()} pack, Indian sources first; cite by id under "
+                       f"'references' of a point for review; never a fact about this patient or a recommendation for this patient):\n{gl}")
+        yield {"type": "step", "tool": "search_guidelines", "input": gq, "thought": "Guideline pack, Indian sources first", "auto": True}
+    except Exception as e:  # the guideline index is optional for a brief: the records still are the source
+        au({"kind": "agent_guidelines_unavailable", "role": role, "error": str(e)[:200]})
     # documents of this specialty are read up front, newest first, within a context budget (the rest stay reachable via tools)
     budget, used = 40000, 0
     for d in relevant:
@@ -240,14 +372,18 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
         if tool == "finish":
             yield {"type": "step", "tool": "finish", "input": "", "thought": s.get("thought", "")}
             break
-        obs = await _tool(case_id, tool, arg)
+        try:
+            obs = await _tool(case_id, tool, arg, role, refs)
+        except Exception as e:  # a failing tool (e.g. the guideline index not built) is an observation, not the end of the brief
+            obs = f"The tool failed ({type(e).__name__}); continue with the records."
         scratch.append(f"TOOL {tool}({arg}) RESULT:\n{obs[:READ_CAP]}")
         au({"kind": "agent_tool", "role": role, "tool": tool, "input": arg})
         yield {"type": "step", "tool": tool, "input": arg, "thought": s.get("thought", ""), "observation": obs[:600]}
     msgs = [{"role": "system", "content": _system(role)},
             {"role": "user", "content": "\n\n".join(scratch) + f"\n\nTASK: {task}\nWrite the brief now: 3 to 5 sections with short factual items "
-             "(each with citations), points for review (questions about the records for the board, each with citations), and anything relevant "
-             "to this specialty that is not documented."}]
+             "(each with citations), points for review (questions about the records for the board, each with citations, and with references "
+             "to the guideline passages above that bear on the point, by id with an exact quote, Indian sources first; an empty list when none "
+             "applies), and anything relevant to this specialty that is not documented."}]
     try:
         b = await llm.chat("reasoner", msgs, json_schema=BRIEF_SCHEMA, max_tokens=2200, purpose=f"agent {role} brief", audit=au)
     except Exception as e:
@@ -266,14 +402,27 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
                 kept.append(it)
         if kept:
             sections.append({"heading": sec.get("heading", ""), "items": kept})
-    pts = qa.verify_statements(case_id, b.get("points_for_review"))
-    dropped += len(b.get("points_for_review") or []) - len(pts)
-    pts2 = []
-    for p in pts:
+    pts2, refs_dropped = [], 0
+    for raw in b.get("points_for_review") or []:
+        v = qa.verify_statements(case_id, [raw])  # one at a time: each kept point keeps its own references
+        if not v:
+            dropped += 1; continue
+        p = v[0]
         iss = guardrails.scan_output(p["text"])
         issues += iss
-        if not iss:
-            pts2.append(p)
+        if iss:
+            continue
+        p["references"], nd_refs = _verify_references(raw.get("references"), refs, case["protocol"])
+        refs_dropped += nd_refs
+        if not any(x["region"] == "India" for x in p["references"]):  # an Indian source whenever the pack has one for this point
+            try:
+                ind = await asyncio.to_thread(_indian_reference, role, case, p["text"])
+            except Exception:
+                ind = None
+            if ind:
+                p["references"].insert(0, ind)
+        p["references"].sort(key=lambda x: x["region"] != "India")
+        pts2.append(p)
     nd, nd_dropped = [], 0
     for x in (b.get("not_documented") or []):
         if guardrails.scan_output(x):
@@ -288,10 +437,12 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
         au({"kind": "guardrail_output", "where": f"agent {role}", "issues": issues})
     brief = {"role": role, "label": r["label"], "sections": sections, "points_for_review": pts2, "not_documented": nd,
              "dropped_unverified": dropped, "guardrail_removed": len(issues), "not_documented_rejected": nd_dropped, "generated": store.now_iso(),
+             "references_dropped": refs_dropped, "pack": _pack_summary(role, case["protocol"]),
              "model": __import__("tumour_board.config", fromlist=["models"]).models()["reasoner"].get("label") or "reasoner",
              "seconds": round(time.time() - t0, 1), "review": {"status": "ai_draft"},
              "signature": sig}  # what it was written from; a changed Case File marks it stale (V1 item 4.5)
     st = store.get_state(case_id); st.setdefault("artefacts", {})[f"brief_{role}"] = brief; store.save_state(case_id, st)
     au({"kind": "agent_brief", "role": role, "items": sum(len(s["items"]) for s in sections), "points": len(pts2), "dropped_unverified": dropped,
-        "guardrail_removed": len(issues), "seconds": brief["seconds"]})
+        "guardrail_removed": len(issues), "seconds": brief["seconds"], "references": sum(len(p["references"]) for p in pts2),
+        "points_with_indian_reference": sum(any(x["region"] == "India" for x in p["references"]) for p in pts2), "references_dropped": refs_dropped})
     yield {"type": "brief", "brief": brief}

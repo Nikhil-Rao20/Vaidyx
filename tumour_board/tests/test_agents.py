@@ -5,7 +5,7 @@ import asyncio
 
 import pytest
 
-from tumour_board import agents, confirm, llm, postboard, rules, summary
+from tumour_board import agents, confirm, llm, postboard, rules, store, summary
 from tumour_board.tests.util import add, fact, make_doc
 
 
@@ -248,3 +248,131 @@ def test_agent_scratchpad_keeps_12000_characters_of_a_tool_result(unit_case, mon
     assert ev[-1]["type"] == "brief"
     obs = asyncio.run(agents._tool(unit_case, "read_document", "Dlong0001 pages 1-8"))
     assert len(obs) > 7000 and f"RESULT:\n{obs}" in seen[1]  # the whole result (over the old 6,000 cap) reaches the next step
+
+
+# ---------------------------------------------------------------- guideline packs in the agents (V1 item 5.5)
+NCG = {"file": "ncg_india/ncg-guidelines-for-thoracic-cancer-2019.pdf", "title": "ncg guidelines for thoracic cancer 2019",
+       "org": "National Cancer Grid (NCG), India", "region": "India", "page": 4, "page_end": 4, "score": 0.05,
+       "text": "WORK UP\nMolecular testing for EGFR(a) and ALK(a) on the biopsy specimen before treatment planning.\nPD-L1 testing (b)."}
+ASCO = {"file": "asco_cap/2018-lung-update-summary.pdf", "title": "2018 lung update summary", "org": "ASCO / CAP", "region": "International",
+        "page": 1, "page_end": 1, "score": 0.04, "text": "Laboratories should use EGFR mutation testing for lung adenocarcinoma in advanced stage disease."}
+
+
+@pytest.fixture
+def fake_pack(monkeypatch):
+    calls = []
+
+    def fake_search(role, q, cancer=None, india=3, intl=2):
+        calls.append((role, q, cancer))
+        return {"india": [NCG][:india], "international": [ASCO][:intl]}
+    monkeypatch.setattr(agents.packs, "search", fake_search)
+    return calls
+
+
+def test_tools_doc_and_step_schema_offer_search_guidelines():
+    assert "search_guidelines" in agents.STEP_SCHEMA["properties"]["tool"]["enum"]
+    line = next(ln for ln in agents.TOOLS_DOC.splitlines() if ln.startswith("- search_guidelines"))
+    assert "Indian sources" in line or "Indian sources" in agents.TOOLS_DOC
+    assert "never a recommendation for this patient" in agents.TOOLS_DOC and "—" not in agents.TOOLS_DOC
+    assert agents.BRIEF_SCHEMA["properties"]["points_for_review"]["items"]["required"] == ["text", "citations", "references"]
+
+
+def test_search_guidelines_numbers_passages_india_first(fake_pack):
+    refs = {}
+    out = agents._search_guidelines("pathology", {"protocol": "lung_nsclc"}, "EGFR testing", refs)
+    assert out.index("[G1 | National Cancer Grid (NCG), India") < out.index("[G2 | ASCO / CAP")
+    assert refs["G1"] is NCG and refs["G2"] is ASCO and fake_pack[-1] == ("pathology", "EGFR testing", "lung_nsclc")
+    agents._search_guidelines("pathology", {"protocol": "lung_nsclc"}, "EGFR again", refs)
+    assert sorted(refs) == ["G1", "G2"]  # the same passage keeps its id
+
+
+def test_references_need_a_verbatim_quote():
+    refs = {"G1": NCG, "G2": ASCO}
+    kept, dropped = agents._verify_references([
+        {"ref_id": "G1", "quote": "Molecular testing for EGFR(a) and ALK(a)"},
+        {"ref_id": "G2", "quote": "EGFR testing is mandatory for every patient"},  # not in the passage
+        {"ref_id": "G9", "quote": "anything"}], refs)  # unknown id
+    assert dropped == 2 and len(kept) == 1
+    assert kept[0] == {"file": NCG["file"], "title": NCG["title"], "org": NCG["org"], "region": "India", "page": 4, "page_end": 4,
+                       "quote": "Molecular testing for EGFR(a) and ALK(a)", "by": "agent"}
+
+
+def test_indian_reference_found_by_search_when_relevant(fake_pack):
+    ref = agents._indian_reference("pathology", {"protocol": "lung_nsclc"}, "The EGFR and ALK molecular results are not documented on the biopsy.")
+    assert ref["region"] == "India" and ref["by"] == "search"
+    assert ref["quote"] == "Molecular testing for EGFR(a) and ALK(a) on the biopsy specimen before treatment planning." and ref["quote"] in NCG["text"]
+    assert agents._indian_reference("pathology", {"protocol": "lung_nsclc"}, "Haemoglobin of 9.8 g/dL is pending signature.") is None
+
+
+def _lung_case():
+    store.create_case("TB-LUNG", {"name": "SYNTHETIC, Lung Patient", "mrn": "SYN-900009", "agesex": "61 Y / M"}, "lung_nsclc", created_by="test")
+    add("TB-LUNG", make_doc("Dhist0009", "histopathology", text="SYNTHETIC\nHISTOPATHOLOGY REPORT\nEGFR mutation analysis: awaited\nReport status: FINAL"))
+    return "TB-LUNG"
+
+
+def test_brief_points_carry_verified_references_india_first(fake_pack, monkeypatch):
+    case_id = _lung_case()
+    prompts = []
+
+    async def fake_chat(role, msgs, json_schema=None, **kw):
+        prompts.append(msgs[-1]["content"])
+        if json_schema is agents.STEP_SCHEMA:
+            return {"thought": "done", "tool": "finish", "input": ""}
+        return {"sections": [], "not_documented": [], "points_for_review": [
+            {"text": "EGFR mutation analysis is awaited on the histopathology report.",
+             "citations": [{"doc_id": "Dhist0009", "quote": "EGFR mutation analysis: awaited"}],
+             "references": [{"ref_id": "G2", "quote": "Laboratories should use EGFR mutation testing"},
+                            {"ref_id": "G1", "quote": "not in the passage"}]}]}
+    monkeypatch.setattr(agents.llm, "chat", fake_chat)
+
+    async def go():
+        return [e async for e in agents.run_agent(case_id, "radiology", max_steps=1)]
+    ev = asyncio.run(go())
+    brief = ev[-1]["brief"]
+    assert any(e.get("tool") == "search_guidelines" and e.get("auto") for e in ev)
+    assert "REPORTING CHECKLIST (reference: ICRI / IRIA synoptic reporting in lung cancer, India" in prompts[0]  # the radiology lung checklist
+    assert "GUIDELINE REFERENCES" in prompts[0] and "[G1 | National Cancer Grid (NCG), India" in prompts[0]
+    refs = brief["points_for_review"][0]["references"]
+    assert [r["region"] for r in refs] == ["India", "International"]  # the Indian passage, found by search, comes first
+    assert refs[0]["by"] == "search" and refs[1]["by"] == "agent" and brief["references_dropped"] == 1
+    assert brief["pack"]["checklist"]["title"].startswith("ICRI / IRIA") and brief["pack"]["sources"][0]["region"] == "India"
+
+
+def test_brief_without_guideline_index_still_written(monkeypatch):
+    case_id = _lung_case()
+
+    def broken(*a, **k):
+        raise RuntimeError("index not built")
+    monkeypatch.setattr(agents.packs, "search", broken)
+
+    async def fake_chat(role, msgs, json_schema=None, **kw):
+        if json_schema is agents.STEP_SCHEMA:
+            return {"thought": "done", "tool": "finish", "input": ""}
+        return {"sections": [], "not_documented": [], "points_for_review": [
+            {"text": "EGFR mutation analysis is awaited.", "citations": [{"doc_id": "Dhist0009", "quote": "EGFR mutation analysis: awaited"}], "references": []}]}
+    monkeypatch.setattr(agents.llm, "chat", fake_chat)
+
+    async def go():
+        return [e async for e in agents.run_agent(case_id, "pathology", max_steps=1)]
+    brief = asyncio.run(go())[-1]["brief"]
+    assert brief["points_for_review"][0]["references"] == []
+
+
+GALL = {"file": "iria/ICRI-IRIA-onco-imaging-protocols-and-reporting-checklists-2020.pdf", "title": "ICRI IRIA onco imaging protocols and reporting checklists 2020",
+        "org": "ICRI / IRIA onco-imaging checklists, India", "region": "India", "page": 77, "page_end": 77, "score": 0.05,
+        "text": "CECT helps to determine the resectability of gall bladder carcinoma and provides a vascular road map for radical surgery."}
+HN = {"file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf", "title": "ncg guidelines for head neck cancer 2019",
+      "org": "National Cancer Grid (NCG), India", "region": "India", "page": 27, "page_end": 27, "score": 0.05,
+      "text": "ECOG performance 0-1: concurrent chemoradiation. ECOG performance > 2: radiotherapy alone."}
+
+
+def test_references_from_another_cancer_are_never_attached(monkeypatch):
+    def fake_search(role, q, cancer=None, india=3, intl=2):
+        return {"india": [GALL, HN], "international": []}
+    monkeypatch.setattr(agents.packs, "search", fake_search)
+    # a breast Case File: the multi-cancer ICRI passage does not name breast, the head & neck guideline is another cancer
+    assert agents._indian_reference("radiology", {"protocol": "breast"}, "Confirm the CECT thorax and abdomen report is final and signed.") is None
+    assert agents._indian_reference("medical_oncology", {"protocol": "lung_nsclc"}, "The ECOG performance status differs between the OPD note and discharge.") is None
+    kept, dropped = agents._verify_references([{"ref_id": "G1", "quote": "ECOG performance 0-1"}], {"G1": HN}, "lung_nsclc")
+    assert kept == [] and dropped == 1  # the agent cited a head & neck guideline on a lung Case File
+    assert agents._cancer_fit(NCG, "lung_nsclc") == "same" and agents._cancer_fit(GALL, "breast") == "" and agents._cancer_fit(HN, "lung_nsclc") == "other"

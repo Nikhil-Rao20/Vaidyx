@@ -29,6 +29,21 @@ def data_root(tmp_path, monkeypatch):
     store._docs_cache.clear()
 
 
+class _NoGuidelines:
+    chunks = []
+
+    def search(self, q, k=8, cancer=None, sources=None):
+        return []
+
+
+@pytest.fixture(autouse=True)
+def no_guideline_index(monkeypatch):
+    """The shared guideline index (the whole library, embedded on CPU) is never built in the unit suite: guidelines.index() is an empty
+    stub. Tests of the index build their own GuidelineIndex on a temporary folder; agent tests patch packs.search."""
+    from tumour_board import guidelines
+    monkeypatch.setattr(guidelines, "index", lambda: _NoGuidelines())
+
+
 @pytest.fixture
 def demo_cases(data_root):
     """TB-001 (lung), TB-002 (breast), TB-003 (rectum) copied into the temporary data root."""

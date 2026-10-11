@@ -280,7 +280,18 @@ class GuidelineIndex:
             self.reused = len(keys) - len(todo)
             cache.parent.mkdir(parents=True, exist_ok=True); np.savez(cache, emb=self.emb, sig=np.array(sig), keys=np.array(keys))
 
-    def search(self, q, k=8, cancer=None):
+    def _source_mask(self, sources):
+        """Chunks inside the given sources: [(folder, file names or None)] (a specialty pack, V1 item 5.5); cached per pack."""
+        key = tuple((f, tuple(sorted(fs)) if fs else None) for f, fs in sources)
+        masks = self.__dict__.setdefault("_masks", {})
+        if key not in masks:
+            allow = dict(key)
+            masks[key] = np.array([(c["file"].split("/")[0] in allow) and (allow[c["file"].split("/")[0]] is None or c["file"].rsplit("/", 1)[-1] in allow[c["file"].split("/")[0]])
+                                   for c in self.chunks], bool)
+        return masks[key]
+
+    def search(self, q, k=8, cancer=None, sources=None):
+        """Hybrid search; sources=[(folder, file names or None)] limits it to those folders / files, ranked among them only."""
         if not self.chunks:
             return []
         n = len(self.chunks); lex = np.zeros(n)
@@ -293,6 +304,9 @@ class GuidelineIndex:
                         lex[i] += idf * tf * 2.4 / (tf + 1.4 * (0.25 + 0.75 * len(ts) / self.avgdl))
         qv = search._embed([q], prefix="Represent this sentence for searching relevant passages: ")[0]
         sem = self.emb @ (qv / np.linalg.norm(qv))
+        mask = self._source_mask(sources) if sources is not None else None
+        if mask is not None:
+            lex = np.where(mask, lex, -np.inf); sem = np.where(mask, sem, -np.inf)
         rr = np.zeros(n)
         for arr in (lex, sem):
             for rank, i in enumerate(np.argsort(-arr)[:300]):
@@ -300,7 +314,9 @@ class GuidelineIndex:
         words = CANCER_WORDS.get(cancer or "", [])
         for i, c in enumerate(self.chunks):
             rr[i] *= c["boost"] * (1.25 if words and any(w in (c["file"] + c["title"]).lower() for w in words) else (0.8 if words else 1.0))
-        top = np.argsort(-rr)[:k]
+        if mask is not None:
+            rr = np.where(mask, rr, -1.0)
+        top = [i for i in np.argsort(-rr)[:k] if rr[i] >= 0]
         return [{**{k2: self.chunks[i][k2] for k2 in ("text", "file", "title", "org", "region", "page")}, "page_end": self.chunks[i].get("page_end") or self.chunks[i]["page"],
                  "score": round(float(rr[i]), 5)} for i in top]
 

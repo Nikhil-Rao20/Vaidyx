@@ -147,6 +147,9 @@ table.t tr.click { cursor: pointer; } table.t tr.click:hover td { background: va
 .search input:focus { outline: 2px solid var(--tint-line); border-color: var(--accent); }
 .hit { padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 14px; cursor: pointer; }
 .hit:hover { background: var(--tint-2); }
+.grefs { margin: 4px 0 6px; }
+.gref { border-left: 3px solid var(--tint-line); padding: 2px 0 2px 8px; margin: 4px 0; color: var(--body); }
+.gref .gq { color: var(--muted); margin-top: 2px; }
 .hit mark, .doctext mark { background: #fff1a8; color: inherit; padding: 0 1px; border-radius: 2px; }
 .answer { font-size: 16px; line-height: 1.65; }
 .answer p { margin: 0 0 8px; }

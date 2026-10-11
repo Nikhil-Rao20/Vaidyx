@@ -1,0 +1,204 @@
+{
+  "version": "0.1",
+  "note": "Which guideline folders each specialty agent searches, Indian sources first, and a short reporting checklist per protocol (element names with the verbatim line and page of the source). Reference only, never a recommendation for this patient: agents use a checklist to note which reporting elements the Case File records do not document, never to interpret images, stage, diagnose or recommend treatment. Built for V1 item 5.5; PM-JAY oncology STGs are not on disk yet (pmjay holds HBP 2.2 pre-authorization rules).",
+  "packs": {
+    "radiology": {
+      "label": "Radiology",
+      "sources": [
+        {"folder": "iria"},
+        {"folder": "ncg_india", "files": ["synoptic-reporting-radiology-template.pdf"]},
+        {"folder": "acr_appropriateness"},
+        {"folder": "acr_rads"},
+        {"folder": "rcr"},
+        {"folder": "recist"}
+      ],
+      "checklists": {
+        "lung_nsclc": {
+          "title": "ICRI / IRIA synoptic reporting in lung cancer",
+          "file": "iria/ICRI-IRIA-onco-imaging-protocols-and-reporting-checklists-2020.pdf",
+          "items": [
+            {"text": "Type of study and technical protocol", "page": 46, "quote": "Type of study and the technical protocol"},
+            {"text": "Date and time of the examination", "page": 46, "quote": "Date and time of the examination"},
+            {"text": "Relevant clinical information", "page": 46, "quote": "Relevant clinical information"},
+            {"text": "Contrast information", "page": 46, "quote": "Contrast information"},
+            {"text": "Quality of examination", "page": 46, "quote": "Quality of examination"},
+            {"text": "Comparison with the previous study and its date", "page": 46, "quote": "Comparison to the previous study and date"},
+            {"text": "Urgent findings: pneumothorax, pulmonary thromboembolism", "page": 46, "quote": "Pneumothorax. Pulmonary thromboembolism."},
+            {"text": "Lung mass: location, size, shape, consistency", "page": 46, "quote": "Lung Mass - Location: Size: Shape : Spiculated / Round / Smoothly shaped"},
+            {"text": "Local extent: pleura, airways, chest wall, vessels, nerves", "page": 46, "quote": "Local extent (Involved/ Not involved and extent)"},
+            {"text": "Regional lymph nodes: size, location, level of suspicion", "page": 46, "quote": "Regional extent Lymph nodes:"},
+            {"text": "Distant metastases: pulmonary, lymphangitic, hepatic, adrenal, skeletal", "page": 47, "quote": "Distant Metastases Pulmonary: Lymphangitic spread: Hepatic: Adrenal: Skeletal:"},
+            {"text": "Effusion: pericardial, pleural", "page": 47, "quote": "Effusion Pericardial: Pleural:"},
+            {"text": "Associated lung disease: ILD, COPD", "page": 47, "quote": "Associated lung parenchymal diseases: ILD/COPD"},
+            {"text": "Impression documented in the report", "page": 47, "quote": "Impression"}
+          ]
+        },
+        "breast": {
+          "title": "ICRI / IRIA structured reporting, breast mammography, ultrasound and MRI",
+          "file": "iria/ICRI-IRIA-onco-imaging-protocols-and-reporting-checklists-2020.pdf",
+          "items": [
+            {"text": "Indication", "page": 53, "quote": "Indication:"},
+            {"text": "Clinical findings", "page": 53, "quote": "Clinical Findings:"},
+            {"text": "Breast parenchymal density (ACR category)", "page": 53, "quote": "Breast Parenchymal Density (ACR Category):"},
+            {"text": "Lesion type, size, quadrant, clock position, distance from the nipple", "page": 53, "quote": "(Mass/ microcalcification/ distortion/asymmetry) of size"},
+            {"text": "Mass: shape, margins, density", "page": 53, "quote": "Mass: shape, margins,density, associated findings"},
+            {"text": "Microcalcification: morphology, distribution", "page": 53, "quote": "Microcalcification : morphology, distribution"},
+            {"text": "Associated findings: skin, nipple areolar complex", "page": 53, "quote": "Associated findings; Skin thickening or retraction"},
+            {"text": "Contralateral breast", "page": 53, "quote": "Contralateral breast:"},
+            {"text": "Axillary lymph nodes, both sides", "page": 53, "quote": "No size significant lymphadenopathy in the contralateral axilla"},
+            {"text": "Comparison with previous studies", "page": 53, "quote": "Comparison with previous studies:"},
+            {"text": "Ultrasound findings", "page": 53, "quote": "USG Finding:"},
+            {"text": "MRI: lesion size in three dimensions (ML, SI, AP)", "page": 53, "quote": "mediolateral (ML), superoinferior (SI), and anteroposterior (AP) dimensions"},
+            {"text": "Internal mammary lymph nodes", "page": 54, "quote": "internal mammary lymphadenopathy"},
+            {"text": "BI-RADS category documented in the report", "page": 52, "quote": "The level of suspicion for malignancy should be recorded using BI-RADS reporting system"}
+          ]
+        },
+        "colorectal_rectum": {
+          "title": "ICRI / IRIA rectal cancer primary staging MRI template",
+          "file": "iria/ICRI-IRIA-onco-imaging-protocols-and-reporting-checklists-2020.pdf",
+          "items": [
+            {"text": "MRI date", "page": 160, "quote": "MRI dated:"},
+            {"text": "Sequences and planes", "page": 160, "quote": "Procedure Description: Baseline study: sequences and planes"},
+            {"text": "Distance of lowest tumour margin from anal verge", "page": 160, "quote": "Distance of lowest tumour margin from anal verge"},
+            {"text": "Longitudinal tumour size", "page": 160, "quote": "Longitudinal tumour size"},
+            {"text": "Morphology and circumferential location", "page": 160, "quote": "Morphology & Circumferential location"},
+            {"text": "Relation to the anterior peritoneal reflection", "page": 160, "quote": "Tumor relationship to anterior peritoneal reflection:"},
+            {"text": "T stage documented in the report", "page": 160, "quote": "T stage:"},
+            {"text": "Extramural depth of tumour invasion", "page": 160, "quote": "maximum extramural depth of tumour invasion"},
+            {"text": "Involved adjacent structures", "page": 160, "quote": "For T4b lesion, involved structures:"},
+            {"text": "Mesorectal fascia involved or threatened", "page": 160, "quote": "Mesorectal fascia involved/threatened* by primary"},
+            {"text": "Anal canal and sphincter involvement", "page": 160, "quote": "Anal canal involvement by tumour"},
+            {"text": "Mesorectal lymph nodes", "page": 161, "quote": "Mesorectal lymph node spread"},
+            {"text": "Extra mesorectal lymph nodes", "page": 161, "quote": "Extra mesorectal lymph node spread:"},
+            {"text": "Impression documented: CRM, pelvic sidewall nodes, sphincter, EMVI", "page": 161, "quote": "CRM (involved/threatened/not involved/not applicable) Pelvic sidewall nodes Sphincter involved/not involved EMVI"}
+          ]
+        }
+      },
+      "checklist_note": "From the ICRI / IRIA onco-imaging reporting checklists (India). The NCG-KCDO radiology synoptic template has rectal and colon templates but none for lung or breast."
+    },
+    "pathology": {
+      "label": "Pathology",
+      "sources": [
+        {"folder": "ncg_india"},
+        {"folder": "icmr"},
+        {"folder": "tmc"},
+        {"folder": "cap_protocols"},
+        {"folder": "rcpath"},
+        {"folder": "iccr"},
+        {"folder": "asco_cap"}
+      ],
+      "checklists": {
+        "lung_nsclc": {
+          "title": "CAP lung resection protocol 5.1: core elements",
+          "file": "cap_protocols/Lung_5.1.0.0.REL_CAPCP.pdf",
+          "items": [
+            {"text": "Procedure", "page": 4, "quote": "Procedure (select all that apply)"},
+            {"text": "Specimen laterality", "page": 4, "quote": "Specimen Laterality"},
+            {"text": "Tumour focality", "page": 4, "quote": "Tumor Focality"},
+            {"text": "Tumour site", "page": 5, "quote": "Tumor Site (select all that apply)"},
+            {"text": "Tumour size", "page": 5, "quote": "Tumor Size"},
+            {"text": "Histologic type", "page": 6, "quote": "Histologic Type"},
+            {"text": "Spread through air spaces (STAS)", "page": 7, "quote": "Spread Through Air Spaces (STAS)"},
+            {"text": "Visceral pleura invasion", "page": 8, "quote": "Visceral Pleura Invasion"},
+            {"text": "Direct invasion of other structures", "page": 8, "quote": "Direct Invasion of Other Structures"},
+            {"text": "Treatment effect and residual viable tumour", "page": 9, "quote": "Percentage of Residual Viable Tumor"},
+            {"text": "Lymphatic and / or vascular invasion", "page": 9, "quote": "Lymphatic and / or Vascular Invasion"},
+            {"text": "Margin status", "page": 9, "quote": "Margin Status for Invasive Tumor"},
+            {"text": "Regional lymph node status", "page": 11, "quote": "Regional Lymph Node Status"},
+            {"text": "Number of lymph nodes examined", "page": 12, "quote": "Number of Lymph Nodes Examined"}
+          ]
+        },
+        "breast": {
+          "title": "CAP invasive breast carcinoma resection protocol 4.11: core elements",
+          "file": "cap_protocols/Breast.Invasive.Res_4.11.0.0.REL_CAPCP.pdf",
+          "items": [
+            {"text": "Procedure", "page": 5, "quote": "Procedure"},
+            {"text": "Specimen laterality", "page": 5, "quote": "Specimen Laterality"},
+            {"text": "Tumour focality", "page": 5, "quote": "Tumor Focality"},
+            {"text": "Histologic type", "page": 6, "quote": "Histologic Type"},
+            {"text": "Histologic grade (Nottingham)", "page": 6, "quote": "Histologic Grade (Nottingham Histologic Score)"},
+            {"text": "Tumour size", "page": 7, "quote": "Tumor Size"},
+            {"text": "Ductal carcinoma in situ (DCIS)", "page": 8, "quote": "Ductal Carcinoma In Situ (DCIS)"},
+            {"text": "Lymphatic and / or vascular invasion", "page": 10, "quote": "Lymphatic and / or Vascular Invasion"},
+            {"text": "Treatment effect in breast", "page": 10, "quote": "Treatment Effect in Breast"},
+            {"text": "Margin status for invasive carcinoma", "page": 12, "quote": "Final Margin Status for Invasive Carcinoma"},
+            {"text": "Regional lymph node status", "page": 13, "quote": "Regional Lymph Node Status"},
+            {"text": "Total number of lymph nodes examined", "page": 14, "quote": "Total Number of Lymph Nodes Examined"},
+            {"text": "ER and PgR status", "page": 17, "quote": "Estrogen Receptor (ER) Status"},
+            {"text": "HER2 status", "page": 18, "quote": "HER2 Status (by immunohistochemistry)"}
+          ]
+        },
+        "colorectal_rectum": {
+          "title": "CAP colon and rectum resection protocol 4.4: core elements",
+          "file": "cap_protocols/ColoRectal_4.4.0.1.REL_CAPCP.pdf",
+          "items": [
+            {"text": "Procedure", "page": 4, "quote": "Procedure"},
+            {"text": "Macroscopic evaluation of mesorectum (rectal)", "page": 4, "quote": "Macroscopic Evaluation of Mesorectum (required only for rectal cancers)"},
+            {"text": "Tumour site", "page": 4, "quote": "Tumor Site"},
+            {"text": "Histologic type", "page": 5, "quote": "Histologic Type"},
+            {"text": "Histologic grade", "page": 5, "quote": "Histologic Grade"},
+            {"text": "Tumour size", "page": 5, "quote": "Tumor Size"},
+            {"text": "Tumour extent", "page": 6, "quote": "Tumor Extent"},
+            {"text": "Macroscopic tumour perforation", "page": 6, "quote": "Macroscopic Tumor Perforation"},
+            {"text": "Lymphatic and / or vascular invasion", "page": 6, "quote": "Lymphatic and / or Vascular Invasion"},
+            {"text": "Perineural invasion", "page": 6, "quote": "Perineural Invasion"},
+            {"text": "Treatment effect", "page": 7, "quote": "Treatment Effect"},
+            {"text": "Margin status for invasive carcinoma", "page": 7, "quote": "Margin Status for Invasive Carcinoma"},
+            {"text": "Regional lymph nodes: status and number examined", "page": 9, "quote": "Number of Lymph Nodes Examined"},
+            {"text": "Tumour deposits", "page": 10, "quote": "Tumor Deposits"}
+          ]
+        }
+      },
+      "checklist_note": "Indian sources (NCG, ICMR, TMC) define no pathology reporting dataset, so the checklists come from the international CAP protocols (resection specimens)."
+    },
+    "medical_oncology": {
+      "label": "Medical Oncology",
+      "sources": [
+        {"folder": "ncg_india"},
+        {"folder": "icmr"},
+        {"folder": "tmc"},
+        {"folder": "pmjay"},
+        {"folder": "esmo"},
+        {"folder": "nice"}
+      ],
+      "checklists": {},
+      "checklist_note": "No checklist: the NCG work-up for each cancer is already the Case File's Pre-Authorization list (protocols/<cancer>.json), so a second list would duplicate it."
+    },
+    "surgical_oncology": {
+      "label": "Surgical Oncology",
+      "sources": [
+        {"folder": "ncg_india"},
+        {"folder": "icmr"},
+        {"folder": "tmc"},
+        {"folder": "pmjay"},
+        {"folder": "esmo"},
+        {"folder": "nice"}
+      ],
+      "checklists": {},
+      "checklist_note": "No checklist: the NCG work-up for each cancer is already the Case File's Pre-Authorization list (protocols/<cancer>.json), so a second list would duplicate it."
+    },
+    "radiation_oncology": {
+      "label": "Radiation Oncology",
+      "sources": [
+        {"folder": "ncg_india"},
+        {"folder": "icmr"},
+        {"folder": "tmc"},
+        {"folder": "pmjay"},
+        {"folder": "esmo"},
+        {"folder": "nice"}
+      ],
+      "checklists": {},
+      "checklist_note": "No checklist: the NCG work-up for each cancer is already the Case File's Pre-Authorization list (protocols/<cancer>.json), so a second list would duplicate it."
+    },
+    "nuclear_medicine": {
+      "label": "Nuclear Medicine",
+      "sources": [
+        {"folder": "ncg_india"},
+        {"folder": "iria"},
+        {"folder": "acr_appropriateness"}
+      ],
+      "checklists": {},
+      "checklist_note": "No checklist: no Indian or international PET-CT reporting checklist is on disk. NCG gives PET-CT indications only; the ICRI / IRIA PET CT chapter covers the imaging protocol, not report content."
+    }
+  }
+}

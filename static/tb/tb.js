@@ -573,10 +573,23 @@ function showBrief(role, b) {
     ${stale ? `<div class="banner warn stale"><b>${esc(stale)}.</b> Prepare the brief again (Refresh) before the board relies on it.</div>` : ""}
     <div class="small muted">${esc(b.generated?.replace("T", " "))} · ${b.seconds} s · ${esc(b.model)}${b.dropped_unverified ? ` · ${b.dropped_unverified} unverified item(s) removed` : ""}${b.guardrail_removed ? ` · ${b.guardrail_removed} removed by scope guardrail` : ""}</div>
     ${b.sections.map((s) => `<h4>${esc(s.heading)}</h4><ul>${s.items.map((it) => `<li>${esc(it.text)} ${it.citations.map(citeHTML).join("")}${flagHTML(it)}</li>`).join("")}</ul>`).join("")}
-    ${b.points_for_review.length ? `<h4>Points for review (not treatment recommendations)</h4><ul>${b.points_for_review.map((it) => `<li>${esc(it.text)} ${it.citations.map(citeHTML).join("")}</li>`).join("")}</ul>` : ""}
+    ${b.pack ? `<div class="small muted">Guideline pack: ${packLine(b.pack)}${b.pack.checklist ? ` · Reporting checklist: ${esc(b.pack.checklist.title)} (${esc(b.pack.checklist.region)}, ${esc(b.pack.checklist.pages)})` : ""}</div>` : ""}
+    ${b.points_for_review.length ? `<h4>Points for review (not treatment recommendations)</h4><ul>${b.points_for_review.map((it) => `<li>${esc(it.text)} ${it.citations.map(citeHTML).join("")}${(it.references || []).length ? `<div class="grefs">${it.references.map(refHTML).join("")}</div>` : ""}</li>`).join("")}</ul>
+      ${b.points_for_review.some((it) => (it.references || []).length) ? `<div class="small muted">References are guideline text for the board to consult, Indian sources first; they are not facts about this patient and not a recommendation for this patient.</div>` : ""}` : ""}
     ${b.not_documented.length ? `<h4>Not documented</h4><ul>${b.not_documented.map((x) => `<li class="muted">${esc(x)}</li>`).join("")}</ul>` : ""}
     ${reviewBar("brief_" + role, rv)}`;
   bindReview(box);
+}
+// guideline references of a brief's point for review (V1 item 5.5): labelled "Reference", separate from the record citations
+function refHTML(r) {
+  const pages = r.page_end && r.page_end !== r.page ? `pp. ${r.page}-${r.page_end}` : `p. ${r.page}`;
+  return `<div class="gref small"><span class="chip ${r.region === "India" ? "c-ok" : "c-info"}">${esc(r.region)}</span> <b>Reference</b> · ${esc(r.org)} · ${esc(r.title)}, ${pages}
+    <a href="/api/tb/guidelines/file?path=${encodeURIComponent(r.file)}#page=${r.page}" target="_blank">open</a>${r.by === "search" ? ` <span class="muted">(found by guideline search)</span>` : ""}<div class="gq">"${esc(r.quote)}"</div></div>`;
+}
+function packLine(pk) {
+  const names = (reg) => [...new Set(pk.sources.filter((x) => (x.region === "India") === reg).map((x) => x.org))].map(esc).join(", ");
+  const ind = names(true), intl = names(false);
+  return (ind ? `${ind} (India)` : "") + (ind && intl ? ", then " : "") + (intl ? `${intl}` : "");
 }
 function reviewBar(art, rv) {
   if (!can("review")) return rv.status ? `<div class="small muted">Review: ${esc(rv.status)} by ${esc(rv.by || "")}</div>` : "";

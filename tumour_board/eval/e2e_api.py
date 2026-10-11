@@ -480,6 +480,47 @@ def phase4(c, base):
         c.request("DELETE", "/api/auth/users", json={"username": user})
 
 
+def phase5(c):
+    """V1 Phase 5: Indian guideline sources, bibliography filter, specialty packs in the agents (guideline references)."""
+    from tumour_board import agents, guidelines
+    def gsearch(q, cancer=None):
+        return c.post("/api/tb/guidelines/search", json={"query": q, "cancer": cancer}).json()
+    r = gsearch("Indications for neck dissection in oral cavity squamous cell carcinoma")
+    check("5.1 NCG head & neck guideline first for an oral cavity question", (r["india"] or [{}])[0].get("file", "").endswith("ncg-guidelines-for-head-neck-cancer-2019.pdf"),
+          (r["india"] or [{}])[0].get("file", ""))
+    r = gsearch("Carcinoma cervix staging work-up FIGO MRI pelvis")
+    check("5.1 NCG gynaecological guideline first for a cervix question", (r["india"] or [{}])[0].get("file", "").endswith("ncg-guidelines-for-gynecological-cancer-2019.docx"),
+          (r["india"] or [{}])[0].get("file", ""))
+    r = gsearch("Management of HER2 positive early breast cancer in India", "breast")
+    check("5.1 Tata Memorial Centre 2024 first for a breast question", (r["india"] or [{}])[0].get("file", "").startswith("tmc/"), (r["india"] or [{}])[0].get("file", ""))
+    r = gsearch("PM-JAY pre-authorization for cancer treatment: multidisciplinary tumour board decision")
+    check("5.1 PM-JAY HBP 2.2 manual (PDF pages) first for a pre-authorization question",
+          (r["india"] or [{}])[0].get("file", "") == "pmjay/NHA-HBP-2.2-manual-2021.pdf", f"{(r['india'] or [{}])[0].get('file', '')} p {(r['india'] or [{}])[0].get('page')}")
+    hits = [h for q in ("RECIST response evaluation criteria Eisenhauer Therasse", "osimertinib EGFR mutated NSCLC FLAURA trial", "letrozole neoadjuvant P024 trial")
+            for h in (lambda x: x["india"] + x["international"])(gsearch(q))]
+    check("5.2 no bibliography passage among guideline results", hits and not any(guidelines._is_reference_list(h["text"]) for h in hits), f"{len(hits)} passages")
+    # 5.5: the radiology agent on the lung Case File: pack with Indian sources first, ICRI / IRIA lung checklist, references verbatim, India first
+    t0 = time.time(); brief = None; tools = []
+    with c.stream("POST", "/api/tb/cases/TB-001/agents/radiology", json={}) as resp:
+        for line in resp.iter_lines():
+            if line.strip():
+                ev = json.loads(line); tools.append(ev.get("tool"))
+                if ev["type"] == "brief":
+                    brief = ev["brief"]
+    pk = (brief or {}).get("pack") or {}
+    check("5.5 radiology brief names its pack, Indian sources first, and the ICRI / IRIA lung checklist",
+          bool(pk) and pk["sources"][0]["region"] == "India" and (pk.get("checklist") or {}).get("title", "").startswith("ICRI / IRIA") and "search_guidelines" in tools,
+          f"{round(time.time() - t0, 1)} s, checklist {(pk.get('checklist') or {}).get('title')}")
+    pts = (brief or {}).get("points_for_review") or []
+    refs = [r for p in pts for r in p.get("references") or []]
+    check("5.5 guideline references labelled and India first on every point", all(r.get("quote") and r.get("page") and r.get("org") for r in refs)
+          and all([x["region"] != "India" for x in p.get("references") or []] == sorted(x["region"] != "India" for x in p.get("references") or []) for p in pts),
+          f"{len(pts)} points, {len(refs)} references, {sum(any(x['region'] == 'India' for x in p.get('references') or []) for p in pts)} points with an Indian source")
+    case = c.get("/api/tb/cases/TB-001").json()["case"]
+    missing = [p["text"] for p in pts if not any(x["region"] == "India" for x in p.get("references") or []) and agents._indian_reference("radiology", case, p["text"])]
+    check("5.5 every point cites an Indian source whenever the pack has a relevant one", not missing, "; ".join(missing)[:200])
+
+
 def main(base, pw, only=None):
     c = httpx.Client(base_url=base, timeout=600)
     check("login", c.post("/api/auth/login", json={"username": "admin", "password": pw}).status_code == 200)
@@ -496,6 +537,10 @@ def main(base, pw, only=None):
         return 0 if not FAIL else 1
     if only == "phase4":
         phase4(c, base)
+        print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
+        return 0 if not FAIL else 1
+    if only == "phase5":
+        phase5(c)
         print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
         return 0 if not FAIL else 1
     # 1. import lung case (incomplete)
@@ -628,6 +673,8 @@ def main(base, pw, only=None):
     phase3(c)
     # 11. V1 Phase 4: NCG tiers, two-level gate, failed documents, inbox and notifications, stale summary, NCG VTB export
     phase4(c, base)
+    # 12. V1 Phase 5: Indian guideline library, specialty packs
+    phase5(c)
     # leave the demo Case Files in their fresh state for the next user / test
     for cid in ("TB-001", "TB-002", "TB-003"):
         wait_job(c, c.post(f"/api/tb/demo/{cid}").json()["job"])
@@ -638,5 +685,5 @@ def main(base, pw, only=None):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--base", default="http://127.0.0.1:7000"); ap.add_argument("--password", required=True)
-    ap.add_argument("--only", default=None, help="run one section only (phase2 | phase3 | phase4)")
+    ap.add_argument("--only", default=None, help="run one section only (phase2 | phase3 | phase4 | phase5)")
     a = ap.parse_args(); sys.exit(main(a.base, a.password, a.only))
