@@ -6,6 +6,9 @@ Case File (base documents + arrivals) is processed, every key field with a value
 primary-fields table (gate evidence) or in a summary sentence.
 
 Usage: python -m tumour_board.eval.summary_eval [--label name]   (models must be running; cases are re-imported)
+
+V1 Phase 9 (items 9.1 / 9.2): the oral cavity (TB-007) and cervix (TB-008) Case Files run after TB-001..003 the same way. `cases` keeps
+every case; `groups` says which are the original cases (the gate's ">= 47/48" rule and the timing comparison) and which are Phase 9.
 """
 import argparse, asyncio, json, time
 
@@ -15,6 +18,8 @@ from tumour_board.grounding import norm
 CORPUS = config.DEMO_CORPUS
 KEYMAP = {"mrf": "mrf_status", "dose": "treatment_received", "emvi": "emvi"}  # answer-key names -> fact catalogue ids
 NOT_FACTS = {"iv_antibiotics"}  # answer-key items that are not catalogue fields (checked in the summary text only)
+CASES = ["TB-001", "TB-002", "TB-003"]  # the original cases: the gate rules and timings are computed on these only
+CASES_V9 = ["TB-007"]  # Phase 9 cases (oral cavity; TB-008 cervix is added here). Their answer-key fields are fact catalogue ids already.
 
 
 def _present(value, haystacks):
@@ -30,8 +35,12 @@ def _present(value, haystacks):
 
 
 async def run(label):
-    out = {"label": label, "cases": {}}
-    for cid in ["TB-001", "TB-002", "TB-003"]:
+    v9 = [c for c in CASES_V9 if (CORPUS / "cases" / c / "case.json").exists() and (CORPUS / "truth" / f"{c}.json").exists()]
+    for c in CASES_V9:
+        if c not in v9:
+            print(f"SKIP {c}: not in the demo corpus {CORPUS} (case or answer key missing)")
+    out = {"label": label, "cases": {}, "groups": {"original": list(CASES), "phase9": v9}}
+    for cid in CASES + v9:
         j = service.import_demo(cid, "summary_eval"); await j["task"]
         j2 = service.demo_arrivals(cid, "summary_eval")
         if j2:

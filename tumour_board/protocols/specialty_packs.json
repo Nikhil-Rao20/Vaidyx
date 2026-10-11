@@ -6,7 +6,7 @@
       "label": "Radiology",
       "sources": [
         {"folder": "iria"},
-        {"folder": "ncg_india", "files": ["synoptic-reporting-radiology-template.pdf"]},
+        {"folder": "ncg_india", "files": ["synoptic-reporting-radiology-template.pdf", "ncg-guidelines-for-head-neck-cancer-2019.pdf"]},
         {"folder": "acr_appropriateness"},
         {"folder": "acr_rads"},
         {"folder": "rcr"},
@@ -72,9 +72,29 @@
             {"text": "Extra mesorectal lymph nodes", "page": 161, "quote": "Extra mesorectal lymph node spread:"},
             {"text": "Impression documented: CRM, pelvic sidewall nodes, sphincter, EMVI", "page": 161, "quote": "CRM (involved/threatened/not involved/not applicable) Pelvic sidewall nodes Sphincter involved/not involved EMVI"}
           ]
+        },
+        "oral_cavity": {
+          "title": "NCG head and neck radiology synoptic reporting format, oral cavity",
+          "file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf",
+          "items": [
+            {"text": "Date of the CT / MR scan", "page": 37, "quote": "CT scan/ MR scan of the neck dated:"},
+            {"text": "Location or epicentre of the lesion", "page": 37, "quote": "Location/ epicenter: Buccal mucosa/ Retromolar trigone/ Alveolus/ Lip"},
+            {"text": "Laterality", "page": 37, "quote": "Laterality:"},
+            {"text": "Size of the lesion in three dimensions", "page": 37, "quote": "Size: ….X …. X … cm."},
+            {"text": "Depth of invasion", "page": 37, "quote": "Depth of invasion:"},
+            {"text": "Masticator space and infratemporal fossa involvement", "page": 37, "quote": "Masticator space involvement: Not involved/ Involved"},
+            {"text": "Floor of mouth, tongue and gingivolingual sulcus involvement", "page": 37, "quote": "Floor of mouth: Not involved/ Involved"},
+            {"text": "Maxillary sinus and hard palate involvement", "page": 38, "quote": "Maxillary sinus involvement: Not involved/ Involved"},
+            {"text": "Perineural spread and nerve involved", "page": 38, "quote": "Perineural spread: Absent/ Present/ cannot be commented*"},
+            {"text": "Extension up to the skull base or intracranial", "page": 38, "quote": "Intracranial extension: Present/ Absent/ Suspicious or cannot be commented*"},
+            {"text": "Vascular involvement (carotid contact)", "page": 38, "quote": "Vascular involvement: Absent/ Present (with CCA and ICA)"},
+            {"text": "Bone status: erosion, marrow invasion, mandibular canal", "page": 38, "quote": "Medullary/ marrow invasion: Absent/ Present"},
+            {"text": "Nodal disease and levels", "page": 39, "quote": "Presence of nodal disease: Metastatic/ Benign (reactive) / Indeterminate"},
+            {"text": "Extracapsular spread of nodes", "page": 39, "quote": "Perinodal extension/extracapsular spread: Absent/ Present"}
+          ]
         }
       },
-      "checklist_note": "From the ICRI / IRIA onco-imaging reporting checklists (India). The NCG-KCDO radiology synoptic template has rectal and colon templates but none for lung or breast."
+      "checklist_note": "From the ICRI / IRIA onco-imaging reporting checklists (India). The NCG-KCDO radiology synoptic template has rectal and colon templates but none for lung or breast. Oral cavity: the radiology synoptic reporting format of the NCG head and neck guideline (Annexure 1, India)."
     },
     "pathology": {
       "label": "Pathology",
@@ -147,9 +167,28 @@
             {"text": "Regional lymph nodes: status and number examined", "page": 9, "quote": "Number of Lymph Nodes Examined"},
             {"text": "Tumour deposits", "page": 10, "quote": "Tumor Deposits"}
           ]
+        },
+        "oral_cavity": {
+          "title": "NCG head and neck pathology synoptic reporting format, lip and oral cavity (core items)",
+          "file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf",
+          "items": [
+            {"text": "Operative procedure (biopsy or resection)", "page": 52, "quote": "Operative procedure: Biopsy / Resection / Not specified"},
+            {"text": "Pre-procedural therapy", "page": 52, "quote": "Pre-procedural therapy:"},
+            {"text": "Tumour laterality and location", "page": 52, "quote": "Tumor laterality:"},
+            {"text": "Size of tumour (maximum dimension)", "page": 52, "quote": "Size of tumor: ……X……X…. (Maximum dimension mandatory"},
+            {"text": "Margins with gross distance", "page": 52, "quote": "document gross distance of each margin from tumor"},
+            {"text": "Histologic type", "page": 53, "quote": "Histologic type of tumor: …………………. (As per WHO 2017 classification)"},
+            {"text": "Grade of tumour", "page": 53, "quote": "Grade of tumor:"},
+            {"text": "Depth of invasion", "page": 53, "quote": "Depth of invasion: ≤5 mm / >5 mm and ≤10 mm / >10 mm / Cannot be determined"},
+            {"text": "Perineural invasion", "page": 53, "quote": "Perineural invasion (PNI): Absent / Present / Cannot be determined"},
+            {"text": "Lymphovascular emboli", "page": 53, "quote": "Lymphovascular emboli: Absent / Present / Cannot be determined"},
+            {"text": "Underlying bone involvement", "page": 53, "quote": "Underlying bone (if included): - Not involved / - Involved (Cortical erosion vs. Medullary infiltration)"},
+            {"text": "Margin status and closest distance", "page": 53, "quote": "Close (specify distance of closest margin)"},
+            {"text": "Extranodal extension (node dissection)", "page": 54, "quote": "Extanodal extension (ENE): - Absent"}
+          ]
         }
       },
-      "checklist_note": "Indian sources (NCG, ICMR, TMC) define no pathology reporting dataset, so the checklists come from the international CAP protocols (resection specimens)."
+      "checklist_note": "Oral cavity: the NCG head and neck pathology synoptic format (Annexure 2, India; core items only). Other cancers: Indian sources (NCG, ICMR, TMC) define no pathology reporting dataset, so the checklists come from the international CAP protocols (resection specimens)."
     },
     "medical_oncology": {
       "label": "Medical Oncology",

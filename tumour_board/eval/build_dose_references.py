@@ -58,7 +58,7 @@ DRUGS = [
     "capmatinib", "tepotinib", "sotorasib", "adagrasib", "entrectinib", "larotrectinib", "lenvatinib", "ramucirumab",
     "aflibercept", "tremelimumab", "cemiplimab", "dostarlimab", "nab-paclitaxel", "topotecan", "vincristine", "prednisone",
     "tucatinib", "alpelisib", "sacituzumab govitecan", "fruquintinib", "tegafur", "uracil", "trametinib", "binimetinib",
-    "necitumumab", "datopotamab deruxtecan", "rituximab", "levamisole",
+    "necitumumab", "datopotamab deruxtecan", "rituximab", "levamisole", "celecoxib",
 ]
 # Aliases the guideline text itself uses (and the standard abbreviation 5-FU); brand names come only from the hospital formulary.
 ALIASES = {"adriamycin": "doxorubicin", "5-fluorouracil": "fluorouracil", "5-fu": "fluorouracil", "5fu": "fluorouracil",
@@ -103,6 +103,12 @@ SOURCES = {
         ("nci_pdq/rectal-treatment-pdq.txt", "all"),
         ("nci_pdq/colon-treatment-pdq.txt", "all"),
     ],
+    # V1 item 9.1: only Indian sources on disk for oral cavity (no ESMO, NICE or NCI PDQ head and neck file)
+    "oral_cavity": [
+        ("ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf", "all"),
+        ("ncg_india/ncg-guidelines-manual-2021.pdf", r"\b(oral (cavity|cancer)|buccal|head and neck)\b"),
+        ("icmr/ICMR-STW-oncology-all-2020.pdf", r"\b(oral (cavity|cancer)|buccal|head and neck)\b"),
+    ],
 }
 
 # Curation (step 2), recorded after reading the candidates. Pages of a file kept for a cancer (others are another cancer).
@@ -110,6 +116,9 @@ PAGES = {
     # NCG thoracic 2019: p8 lung RT (mesothelioma lines dropped below), p9-10 NSCLC chemotherapy and targeted therapy;
     # p11 SCLC, p14 thymoma, p17-20 oesophagus / GEJ are other cancers.
     ("lung_nsclc", "ncg_india/ncg-guidelines-for-thoracic-cancer-2019.pdf"): {8, 9, 10},
+    # NCG head and neck 2019: p4-9 oral cancer (work-up, surgery, adjuvant therapy, NACT and palliative regimens); p10 onwards are other
+    # head and neck sites (oropharynx, larynx ...), the recurrent / metastatic chart (p36) repeats the oral p8-9 regimens.
+    ("oral_cavity", "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf"): {4, 5, 6, 7, 8, 9},
 }
 # Lines that are not a dosing statement: dose reductions, caps, cumulative limits, HDR boosts.
 DROP_QUOTE = [r"reduce[sd]? (the )?(starting )?dose|dose reduces|reduced starting dose|use starting dose|reduce the \w+ dose",
@@ -138,6 +147,9 @@ DROP = {
     "colorectal_rectum:rectal-treatment-pdq:p18:oxaliplatin:60mg/m2", "colorectal_rectum:rectal-treatment-pdq:p18:fluorouracil:250mg/m2",  # trial arms
     "colorectal_rectum:rectal-treatment-pdq:p28:pembrolizumab:10mg/kg", "colorectal_rectum:colon-treatment-pdq:p22:pembrolizumab:10mg/kg",  # dose comparison
     "colorectal_rectum:rectal-treatment-pdq:p27:sotorasib:240mg", "colorectal_rectum:colon-treatment-pdq:p21:sotorasib:240mg",  # dose comparison arm
+    # oral cavity
+    "oral_cavity:ncg-guidelines-for-head-neck:p8:fluorouracil:10000mg/m2*", "oral_cavity:ncg-guidelines-for-head-neck:p9:fluorouracil:10000mg/m2*",  # "5FU 10000 mg/m2" (CF, EXTREME):
+    # likely a misprint for 1000 mg/m2 a day (D1-D4); kept, it would flag a correct 1000 mg/m2 as a tenfold slip. For clinical review (pendings).
 }
 
 

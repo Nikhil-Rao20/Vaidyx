@@ -42,6 +42,15 @@
     "referral"
    ]
   },
+  "tobacco_use": {
+   "label": "Tobacco use",
+   "desc": "tobacco habits as written: chewing (gutka, khaini, mawa, betel quid / paan with tobacco) and smoking (bidi, cigarette), with amount and duration",
+   "doc_types": [
+    "clinical_note",
+    "referral",
+    "discharge_summary"
+   ]
+  },
   "menopausal_status": {
    "label": "Menopausal status",
    "desc": "pre/peri/postmenopausal as written",
@@ -91,6 +100,15 @@
     "pet_ct"
    ]
   },
+  "depth_of_invasion": {
+   "label": "Depth of invasion (DOI)",
+   "desc": "depth of invasion of the primary tumour as written (for example 'Depth of invasion about 12 mm'), in a pathology or imaging report",
+   "doc_types": [
+    "histopathology",
+    "ct",
+    "mri"
+   ]
+  },
   "nodal_findings": {
    "label": "Nodal findings (imaging)",
    "desc": "lymph node findings as written",
@@ -100,6 +118,16 @@
     "pet_ct",
     "mammogram",
     "ultrasound"
+   ]
+  },
+  "ene": {
+   "label": "Extranodal extension (ENE)",
+   "desc": "extranodal / extracapsular / perinodal extension of nodal disease as written",
+   "doc_types": [
+    "histopathology",
+    "ct",
+    "mri",
+    "pet_ct"
    ]
   },
   "distant_findings": {
@@ -151,6 +179,15 @@
    "desc": "LVI as written",
    "doc_types": [
     "histopathology"
+   ]
+  },
+  "pni": {
+   "label": "Perineural invasion (PNI)",
+   "desc": "perineural invasion or perineural spread as written",
+   "doc_types": [
+    "histopathology",
+    "ct",
+    "mri"
    ]
   },
   "margins": {
@@ -351,6 +388,15 @@
    "doc_types": [
     "treatment_summary",
     "clinical_note"
+   ]
+  },
+  "dental_evaluation": {
+   "label": "Dental evaluation",
+   "desc": "the pre-treatment dental evaluation as written: dental findings, OPG (orthopantomogram) findings, extractions or dental care advised before treatment",
+   "doc_types": [
+    "clinical_note",
+    "referral",
+    "xray"
    ]
   },
   "patient_preference": {

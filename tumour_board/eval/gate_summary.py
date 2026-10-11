@@ -6,6 +6,11 @@ from pathlib import Path
 from tumour_board import config
 
 RUNS = config.DATA_ROOT / "eval" / "v1"
+ORIGINAL_CASES = ("TB-001", "TB-002", "TB-003")  # the existing rules and the timing comparison use these cases only (like with like)
+# V1 Phase 9 (oral cavity TB-007, cervix TB-008): minimum passes of their Q&A probes and minimum key fields found by the summary eval.
+# None = rule "0 fabrications, recorded" until the first measurement; the orchestrator then sets the numbers.
+V9_QA_MIN = 11  # TB-007: 12 probes, measured 11/12 (the miss was rephrased with the report named: answered 3 of 3); 0 fabrications always
+V9_SUM_MIN = 18  # TB-007: 18 of 19 key fields (miss: ENE "no perinodal extension", a negated imaging finding)
 
 
 def numbers(d):
@@ -36,14 +41,48 @@ def numbers(d):
         n["ui_errors"] = 0 if m and m.group(1).strip().startswith("none") and rc.get("ui_test", 1) == 0 else (len(re.findall(r"console: |pageerror: |re-check toast|summary does not", m.group(1))) or -1 if m else -1)
     qa = next(d.glob("qa_v1-*.json"), None)
     if qa:
-        j = json.loads(qa.read_text()); secs = [r["seconds"] for r in j["rows"] if r.get("seconds")]
+        j = json.loads(qa.read_text())  # top level = the original wave (TB-001..003); the Phase 9 wave is the `phase9` block
+        secs = [r["seconds"] for r in j["rows"] if r.get("seconds") and r.get("case", ORIGINAL_CASES[0]) in ORIGINAL_CASES]
         n.update(qa_pass=j["pass"], qa_n=j["n"], qa_fabrication=j["fabrication"], qa_median_seconds=round(statistics.median(secs), 1) if secs else None)
+        p9 = j.get("phase9")
+        n["qa9_ran"] = p9 is not None
+        if p9 is not None:
+            secs = [r["seconds"] for r in p9.get("rows") or [] if r.get("seconds")]
+            n.update(qa9_pass=p9["pass"], qa9_n=p9["n"], qa9_fabrication=p9["fabrication"], qa9_cases=p9.get("cases") or sorted({r["case"] for r in p9.get("rows") or []}),
+                     qa9_median_seconds=round(statistics.median(secs), 1) if secs else None)
     sm = next(d.glob("summary_eval_v1-*.json"), None)
     if sm:
-        j = json.loads(sm.read_text()); cs = j["cases"].values()
+        j = json.loads(sm.read_text())
+        cs = [c for cid, c in j["cases"].items() if cid in ORIGINAL_CASES]
         n.update(sum_hit=sum(c["in_either"] for c in cs), sum_total=sum(c["expected_fields"] for c in cs),
                  sum_mean_seconds=round(statistics.mean([c["summary_seconds"] for c in cs if c.get("summary_seconds")] or [0]), 1))
+        v9 = {cid: c for cid, c in j["cases"].items() if cid not in ORIGINAL_CASES}
+        n["sum9_ran"] = bool(v9)
+        if v9:
+            n.update(sum9_hit=sum(c["in_either"] for c in v9.values()), sum9_total=sum(c["expected_fields"] for c in v9.values()), sum9_cases=sorted(v9),
+                     sum9_misses=[f"{cid}: {m['field']}" for cid, c in sorted(v9.items()) for m in c.get("misses") or []],
+                     sum9_mean_seconds=round(statistics.mean([c["summary_seconds"] for c in v9.values() if c.get("summary_seconds")] or [0]), 1))
     return n
+
+
+def phase9_rows(run, base):
+    """The two Phase 9 rows (oral cavity / cervix Case Files): never mixed into the original rules. A run whose evals did not produce the
+    Phase 9 numbers shows "not run" and the row is skipped (never counted as a pass); fabrications make the gate RED."""
+    qa_rule = "0 fabrications, recorded" if V9_QA_MIN is None else f"0 fabrications, >= {V9_QA_MIN} pass"
+    if "qa9_pass" in run:
+        qa_this = f"{run['qa9_pass']}/{run['qa9_n']} pass, {run['qa9_fabrication']} fabrications ({', '.join(run['qa9_cases'])})"
+        qa_ok = run["qa9_fabrication"] == 0 and (V9_QA_MIN is None or run["qa9_pass"] >= V9_QA_MIN)
+    else:
+        qa_this, qa_ok = ("not run (no Phase 9 block)" if "qa_pass" in run else None), None
+    sum_rule = "recorded" if V9_SUM_MIN is None else f">= {V9_SUM_MIN} key fields"
+    if "sum9_hit" in run:
+        sum_this = f"{run['sum9_hit']}/{run['sum9_total']} key fields ({', '.join(run['sum9_cases'])})"
+        sum_ok = V9_SUM_MIN is None or run["sum9_hit"] >= V9_SUM_MIN
+    else:
+        sum_this, sum_ok = ("not run (no Phase 9 cases)" if "sum_hit" in run else None), None
+    return [("Ask the Case File, oral cavity / cervix (Phase 9)", qa_this,
+             f"{base.get('qa9_pass')}/{base.get('qa9_n')}, {base.get('qa9_fabrication')} fabrications" if "qa9_pass" in base else "n/a", qa_rule, qa_ok),
+            ("Summary omission, Phase 9 cases", sum_this, f"{base.get('sum9_hit')}/{base.get('sum9_total')}" if "sum9_hit" in base else "n/a", sum_rule, sum_ok)]
 
 
 def fmt(v):
@@ -73,12 +112,18 @@ def main(label, baseline):
         ("Timings", ", ".join(f"{k.replace('_seconds', '')} {fmt(run.get(k))} s" for k in ("ingest_seconds", "ask_single_seconds", "qa_median_seconds", "sum_mean_seconds") if run.get(k) is not None) or None,
          ", ".join(f"{k.replace('_seconds', '')} {fmt(base.get(k))} s" for k in ("ingest_seconds", "ask_single_seconds", "qa_median_seconds", "sum_mean_seconds") if base.get(k) is not None) or "n/a",
          "no more than 20 % slower", (not any(slower(k) for k in ("ingest_seconds", "qa_median_seconds", "sum_mean_seconds"))) if any(run.get(k) is not None for k in ("ingest_seconds", "qa_median_seconds", "sum_mean_seconds")) else None),
-    ]
+    ] + phase9_rows(run, base)
     lines = [f"# Gate run `{label}` vs baseline `{baseline}`", "", "| Check | This run | Baseline | Rule | OK |", "|---|---|---|---|---|"]
     lines += [f"| {c} | {r if r is not None else 'skipped'} | {b} | {rule} | {'skipped' if ok is None else ('yes' if ok else 'NO')} |" for c, r, b, rule, ok in rows]
     verdict = "GREEN" if all(ok for _, r, _, _, ok in rows if ok is not None) else "RED"
+    t9 = ", ".join(f"{k.replace('9_', ' ').replace('_seconds', '')} {run[k]} s" for k in ("qa9_median_seconds", "sum9_mean_seconds") if run.get(k) is not None)
+    if t9:
+        lines += ["", f"Phase 9 timings (oral cavity / cervix Case Files; recorded, not in the 20 % rule): {t9}"]
+    if run.get("sum9_misses"):
+        lines += ["", "Phase 9 summary misses: " + "; ".join(run["sum9_misses"])]
     lines += ["", f"**Gate: {verdict}** (unit tests and the end-to-end API are never optional; the other checks may be skipped when their code did not change, and a skipped check is never counted as a pass).", "",
-              "Timings note: the Q&A eval sends all 33 questions at once, so its median includes queueing; compare like with like."]
+              f"Timings note: the Q&A eval sends the {run.get('qa_n') or 33} questions of TB-001..003 at once, so its median includes queueing; the Phase 9 questions run "
+              "afterwards as a second wave and are timed separately. The Q&A median and the summary mean in the 20 % rule are TB-001..003 only; compare like with like."]
     out = "\n".join(lines) + "\n"; (RUNS / label / "gate_summary.md").write_text(out); print(out)
     return 0 if verdict == "GREEN" else 1
 

@@ -1,11 +1,11 @@
 """Indian-format SYNTHETIC test material for plan item V1-0.5 (imported by make_corpus.py).
 
-Adds Case Files TB-004 (lung), TB-005 (breast), TB-006 (rectum) and a mixed department intake batch.
+Adds Case Files TB-004 (lung), TB-005 (breast), TB-006 (rectum), TB-007 (oral cavity, V1-9.1) and a mixed department intake batch.
 Every person, hospital, doctor, council registration number and ID here is invented. Every document carries the
 "SYNTHETIC - DEMO ONLY" watermark (or the word SYNTHETIC in the header for Word / Excel / text files).
 The schema of the answer key is documented in make_corpus.py.
 """
-import json, random, time, zipfile, zlib
+import json, random, shutil, time, zipfile, zlib
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -52,6 +52,7 @@ P4 = dict(name="Ramesh Kumar", uhid="SYN-400118", cr_no="CR/2026/04118", ip_no="
 P5 = dict(name="Sunita Devi", uhid="SYN-500263", abha="91-6730-2245-9018", age_sex="52 Y / F", dob="02/01/1974", relation="W/o Rajesh Prasad")
 P5B = dict(name="Sunita Devi", uhid="SYN-500911", age_sex="67 Y / F", dob="11/07/1959", relation="W/o Late Ram Prakash", aadhaar=AADHAAR_SD2)
 P6 = dict(name="Mohammed Irfan Shaikh", mrn="SYN-600744", ip_no="IP/26/18832", age_sex="61 Y / M", outside_id="DGH-26-071134")
+P7 = dict(name="Manjunath Gowda", uhid="SYN-700352", abha="91-5512-0846-2271", age_sex="54 Y / M", relation="S/o Late Ningappa Gowda")
 # patients of the original demo cases, as their records would arrive in an intake batch
 P1 = dict(name="Ramesh Kumar", uhid="SYN-100231", age_sex="62 Y / M")
 P2 = dict(name="Lakshmi Iyer", uhid="SYN-200417", age_sex="48 Y / F")
@@ -793,10 +794,128 @@ A6 = [
                  exercises=["pending value arrives later", "collected 5 days before reported"])),
 ]
 
+# =================================================================================================================
+# CASE TB-007: oral cavity (left buccal mucosa, plan item V1-9.1). Gutka chewer, cT4a N1 recorded by the surgeon,
+# dental evaluation only in a Word file (name with the title Sri), and a board record with weekly cisplatin and adjuvant RT.
+# =================================================================================================================
+_mg_rows, _mg_id = ident(P7, "Manjunath Gowda", ["uhid", "age_sex"])
+_mg_opd_rows, _mg_opd_id = ident(P7, "Manjunath Gowda", ["uhid", "age_sex", "relation"])
+_mg_hp_rows, _mg_hp_id = ident(P7, "Manjunath Gowda", ["uhid", "abha", "age_sex"])
+_mg_lab_rows, _mg_lab_id = ident(P7, "Manjunath Gowda", ["uhid", "age_sex"], labels={"name": "Name"})
+_SHALINI = "Dr. Shalini Rao, MD (Radio-diagnosis), KMC Reg. No. 66310"
+DECISION_TEXT_7 = ("Composite resection: wide local excision of the left buccal mucosa lesion with segmental mandibulectomy, left modified neck "
+                   "dissection (levels I to V) and reconstruction with a pectoralis major myocutaneous flap. Adjuvant radiotherapy 60 Gy in 30 "
+                   "fractions to the tumour bed and neck, with concurrent Inj. Cisplatin 40 mg/m2 IV weekly if the final histopathology shows a "
+                   "positive margin or extranodal extension. Stage as recorded: cT4a N1 M0.")
+BOARD_DECISION_7 = {"document": "tumour_board/tumour_board_record_2026-09-24.pdf", "board_date": "2026-09-24", "text": DECISION_TEXT_7,
+                    "dose_slips": [], "absent_specialties": [],
+                    "note": "No planted error: doses as in the references and all three oncologists present; the board record is fictional."}
+
+C7 = [
+ dict(path="surgical_oncology/head_neck_opd_2026-09-14.pdf", fmt="pdf", dept="Department of Surgical Oncology (Head and Neck Services)",
+      title="HEAD AND NECK ONCOLOGY OPD", id_rows=_mg_opd_rows, meta=[("Visit date", "14/09/2026")],
+      sections=[("Presenting complaints", "Non-healing ulcer in the left cheek for 3 months. Difficulty in opening the mouth for 1 month."),
+                ("History", "Chews gutka (tobacco with areca nut) for 20 years, 4 to 5 sachets a day; stopped 3 months ago. Occasional bidi smoking. "
+                            "Type 2 diabetes mellitus on metformin 500 mg twice daily."),
+                ("Examination", "Ulceroproliferative lesion 4 x 3 cm in the left buccal mucosa extending to the lower gingivobuccal sulcus; induration up to "
+                                "the skin of the cheek, skin free. Mouth opening two fingers (interincisal distance 2.5 cm). Left level IB lymph node 2 x 2 cm, "
+                                "firm, mobile. No other palpable neck node."),
+                ("Performance status", "ECOG performance status: 1"),
+                ("Clinical stage as recorded by the treating surgeon", "cT4a N1 M0 (AJCC 8th edition), Stage IVA"),
+                ("Question for the Tumour Board", "Operability: composite resection with segmental or marginal mandibulectomy, and the need for adjuvant treatment.")],
+      footer=signed("FINAL", "Dr. Prakash Hegde, MS, MCh (Surgical Oncology), KMC Reg. No. 81234", "14/09/2026 13:10"), stamp="FINAL / SIGNED",
+      truth=dict(doc_type="clinical_note", status="FINAL", signed=True,
+                 fields={"ecog": "1", "clinical_question": "Operability", "recorded_stage": "cT4a N1 M0", "tobacco_use": "gutka",
+                         "presenting_complaint": "Non-healing ulcer in the left cheek for 3 months"},
+                 report_date="2026-09-14", event_date="2026-09-14", event_label="visit date", identity=_mg_opd_id,
+                 exercises=["smokeless tobacco (gutka) recorded as tobacco use", "stage recorded by the treating surgeon (never derived)",
+                            "no dental evaluation in this note: the dental record must come from the dental Word file only"])),
+ dict(path="pathology/biopsy_left_buccal_mucosa_2026-09-10.pdf", fmt="pdf", dept="Department of Pathology", title="HISTOPATHOLOGY REPORT",
+      id_rows=_mg_hp_rows, meta=[("Specimen", "Punch biopsy, left buccal mucosa"), ("Received on", "08/09/2026"), ("Lab No.", "HP/2026/8123")],
+      sections=[("Diagnosis", "Squamous cell carcinoma, keratinising, moderately differentiated."),
+                ("Additional findings", "Perineural invasion: Not identified in this biopsy.\n"
+                                        "Depth of invasion: cannot be assessed in this superficial biopsy (see imaging).")],
+      footer=signed("FINAL", "Dr. Fatima Begum, MD (Pathology), KMC Reg. No. 62290", "10/09/2026 16:40"), stamp="FINAL / SIGNED",
+      truth=dict(doc_type="histopathology", status="FINAL", signed=True,
+                 fields={"histologic_type": "Squamous cell carcinoma", "grade": "moderately differentiated", "pni": "Not identified"},
+                 report_date="2026-09-10", event_date="2026-09-08", event_label="received on", identity=_mg_hp_id,
+                 negated=["Perineural invasion: Not identified"],
+                 exercises=["ABHA number printed", "negated value 'Not identified' is a real result",
+                            "depth of invasion not assessable in a superficial biopsy: must not be filled from this report"])),
+ dict(path="radio_diagnosis/cect_face_neck_2026-09-16.pdf", fmt="pdf", dept="Department of Radio-diagnosis", title="CECT FACE AND NECK",
+      id_rows=_mg_rows, meta=[("Study date", "16/09/2026"), ("Ref. by", "Dr. Prakash Hegde")],
+      sections=[("Findings", "Enhancing ulcerative mass in the left buccal mucosa measuring 4.2 x 3.1 x 2.6 cm, extending to the lower gingivobuccal sulcus "
+                             "and the retromolar trigone. Depth of invasion about 12 mm. Erosion of the outer cortex of the left mandibular body (premolar to "
+                             "molar region); no medullary involvement. Masticator space free. Skin of the cheek free.\n"
+                             "Neck: left level IB lymph node 2.1 x 1.8 cm with central necrosis; no perinodal extension. No other significant cervical lymphadenopathy."),
+                ("Impression (reporting radiologist)", "Carcinoma of the left buccal mucosa with outer cortical erosion of the mandible and a left level IB "
+                                                       "metastatic node. Stage as recorded: cT4a N1.")],
+      footer=signed("FINAL", _SHALINI, "16/09/2026 17:35"), stamp="FINAL / SIGNED",
+      truth=dict(doc_type="ct", status="FINAL", signed=True,
+                 fields={"lesion_size": "4.2 x 3.1 x 2.6 cm", "nodal_findings": "left level IB lymph node 2.1 x 1.8 cm", "depth_of_invasion": "12 mm",
+                         "recorded_stage": "cT4a N1", "ene": "no perinodal extension"},
+                 report_date="2026-09-16", event_date="2026-09-16", event_label="study date", identity=_mg_id,
+                 negated=["Perinodal extension: no perinodal extension"],
+                 exercises=["depth of invasion from imaging", "outer cortical erosion of the mandible (recorded stage cT4a, never derived)",
+                            "negated value 'no perinodal extension' is a real result"])),
+ dict(path="radio_diagnosis/xray_chest_pa_2026-09-15.png", fmt="scan", dept="Department of Radio-diagnosis", title="X-RAY CHEST PA VIEW",
+      id_rows=_mg_rows, meta=[("Study date", "15/09/2026")],
+      sections=[("Findings", "Both lung fields clear. No nodule or mass. Costophrenic angles clear. Cardiac silhouette normal."),
+                ("Impression", "No radiological evidence of pulmonary metastasis.")],
+      footer=signed("FINAL", _SHALINI, "15/09/2026 16:20"), stamp="FINAL / SIGNED",
+      truth=dict(doc_type="xray", status="FINAL", signed=True, fields={"distant_findings": "No radiological evidence of pulmonary metastasis"},
+                 report_date="2026-09-15", event_date="2026-09-15", event_label="study date", identity=_mg_id,
+                 exercises=["scanned image", "chest X-ray as the distant work-up"])),
+ dict(path="surgical_oncology/dental_evaluation_2026-09-17.docx", fmt="docx",
+      blocks=[("b", HOSP), ("p", WM), ("p", "Department of Dental and Prosthetic Surgery"), ("b", "PRE-TREATMENT DENTAL EVALUATION"),
+              ("p", "Date: 17/09/2026"),
+              ("table", [["Patient name", "Sri Manjunath Gowda"], ["UHID", P7["uhid"]], ["Age / Sex", P7["age_sex"]]]),
+              ("p", "OPG (orthopantomogram) dated 17/09/2026: horizontal bone loss around 36 and 37; no other bony lesion seen."),
+              ("p", "Dental evaluation: grossly carious 36 and 37, extraction advised before radiotherapy. Oral prophylaxis done. Fluoride trays advised."),
+              ("p", "Nutrition: weight 58 kg, BMI 20.1 kg/m2; high-protein diet counselling by the dietician."),
+              ("p", "Swallowing: no difficulty in swallowing reported."),
+              ("p", "Sd/-"), ("p", "Dr. Kavya Shetty, MDS (Prosthodontics), KSDC Reg. No. A-10422")],
+      truth=dict(doc_type="clinical_note", status="UNSTATED", signed=True, fields={"dental_evaluation": "36 and 37"},
+                 report_date="2026-09-17", event_date="2026-09-17", event_label="date",
+                 identity={"name": "Sri Manjunath Gowda", "uhid": P7["uhid"], "age_sex": P7["age_sex"]},
+                 exercises=["Word file", "name with the title Sri", "no status line, Sd/- signature", "Karnataka State Dental Council registration (KSDC)",
+                            "the only source of the dental evaluation (pre-radiotherapy dental clearance)"])),
+ dict(path="laboratory_medicine/cbc_rft_lft_serology_2026-09-15.pdf", fmt="pdf", dept="Department of Laboratory Medicine", title="LABORATORY INVESTIGATION REPORT",
+      grid=lab_grid(_mg_lab_rows, "15/09/2026 08:05", "15/09/2026 08:15", "15/09/2026 14:20", "Dr. Prakash Hegde", "LAB/26/121044"),
+      sections=[("Haematology", [["Investigation", "Result", "Units", "Biological ref. interval"], ["Haemoglobin", "13.1", "gm%", "13.0 - 17.0"],
+                                  ["Total leucocyte count (TLC)", "8,400", "cells/cumm", "4,000 - 11,000"], ["Platelet count", "2.6", "lakhs/cumm", "1.5 - 4.1"]]),
+                ("Biochemistry", [["Investigation", "Result", "Units", "Biological ref. interval"], ["S. Creatinine", "0.9", "mg/dl", "0.7 - 1.3"],
+                                   ["Total bilirubin", "0.6", "mg/dl", "0.2 - 1.2"], ["HbA1c", "7.4", "%", "4.0 - 5.6"]]),
+                ("Serology", [["Investigation", "Result", "Method"], ["HIV I and II antibodies", "Non-reactive", "CLIA"], ["HBsAg", "Non-reactive", "CLIA"],
+                              ["Anti-HCV", "Non-reactive", "CLIA"]])],
+      footer=sd("Dr. Suresh Babu, MD (Pathology)", "KMC Reg. No. 69021"), nabl=NABL,
+      truth=dict(doc_type="lab", status="FINAL", signed=True,
+                 fields={"haemoglobin": "13.1", "wbc": "8,400", "platelets": "2.6", "creatinine": "0.9", "bilirubin": "0.6"},
+                 report_date="2026-09-15", event_date="2026-09-15", event_label="collected on", identity=_mg_lab_id,
+                 other_values={"hba1c": "7.4", "hiv": "Non-reactive", "hbsag": "Non-reactive", "anti_hcv": "Non-reactive"},
+                 not_negations=["HIV I and II antibodies: Non-reactive", "HBsAg: Non-reactive", "Anti-HCV: Non-reactive"],
+                 exercises=["'Non-reactive' serology is a result, not a negation", "gm%, TLC, lakhs/cumm", "HbA1c of a diabetic (no protocol fact)", "NABL footer"])),
+]
+A7 = [
+ dict(path="tumour_board/tumour_board_record_2026-09-24.pdf", fmt="pdf", dept="Multidisciplinary Tumour Board", title="TUMOUR BOARD RECORD",
+      id_rows=_mg_rows, meta=[("Board date", "24/09/2026")],
+      sections=[("Present", "Surgical oncology (Dr. Prakash Hegde), radiation oncology (Dr. Meera Iyer), medical oncology (Dr. Anand Kulkarni), "
+                            "radio-diagnosis (Dr. Shalini Rao), pathology (Dr. Fatima Begum)."),
+                ("Decision recorded by the board", DECISION_TEXT_7),
+                ("Actions", "Dental and Prosthetic Surgery: extraction of 36 and 37 before surgery. Surgical Oncology: schedule surgery within two weeks.")],
+      footer=["Record status: FINAL", "Recorded by: Dr. Anand Kulkarni, Tumour Board coordinator (electronically signed)", "Signed: 24/09/2026 18:45"], stamp="FINAL / SIGNED",
+      truth=dict(doc_type="tumour_board_record", status="FINAL", signed=True, fields={}, report_date="2026-09-24", event_date="2026-09-24", event_label="board date",
+                 identity=_mg_id, board_decision=BOARD_DECISION_7,
+                 exercises=["board decision with weekly cisplatin and an adjuvant RT schedule (guideline check against NCG head and neck)",
+                            "all three oncologists present (PM-JAY composition met)"])),
+]
+
 V1_CASES = [("TB-004", "lung_nsclc", dict(name="Ramesh Kumar", mrn=P4["uhid"], agesex=P4["age_sex"]), C4, A4),
             ("TB-005", "breast", dict(name="Sunita Devi", mrn=P5["uhid"], agesex=P5["age_sex"]), C5, A5),
-            ("TB-006", "colorectal_rectum", dict(name="Mohammed Irfan Shaikh", mrn=P6["mrn"], agesex=P6["age_sex"]), C6, A6)]
-V1_PATIENTS = {"TB-004": P4, "TB-005": P5, "TB-006": P6}
+            ("TB-006", "colorectal_rectum", dict(name="Mohammed Irfan Shaikh", mrn=P6["mrn"], agesex=P6["age_sex"]), C6, A6),
+            ("TB-007", "oral_cavity", dict(name="Manjunath Gowda", mrn=P7["uhid"], agesex=P7["age_sex"]), C7, A7)]
+V1_PATIENTS = {"TB-004": P4, "TB-005": P5, "TB-006": P6, "TB-007": P7}
+BOARD_DECISIONS = {"TB-005": BOARD_DECISION, "TB-007": BOARD_DECISION_7}  # truth["board_decision"] per case
 
 # =================================================================================================================
 # INTAKE: department batches without a Case File, mixing several patients (patient matching, item 2.4)
@@ -919,22 +1038,33 @@ def save_ref(out, cid, rel, ref):
     p.write_text(ref)
 
 
-def build_v1(out, weasyprint, to_scan):
+def build_v1(out, weasyprint, to_scan, only=None):
+    """Write the V1 cases and the intake batches. `only` (a set of case ids) writes just those cases: their own folders under
+    cases/, arrivals/ and truth/reference_text/ are replaced and their truth file rewritten; nothing else (other cases, intake)
+    is touched."""
     out = Path(out)
     for cid, protocol, pat, docs, arrivals in V1_CASES:
+        if only is not None and cid not in only:
+            continue
+        if only is not None:
+            for d in (out / "cases" / cid, out / "arrivals" / cid, out / "truth" / "reference_text" / cid):
+                if d.exists():
+                    shutil.rmtree(d)
         truth = {"case_id": cid, "protocol": protocol, "patient": pat, "registered_identity": V1_PATIENTS[cid], "documents": {}, "arrivals": {}}
         for group, items in (("cases", docs), ("arrivals", arrivals)):
             for d in items:
                 target = out / group / cid / d["path"]; target.parent.mkdir(parents=True, exist_ok=True)
                 save_ref(out, cid, d["path"], _write_doc(d, target, weasyprint, to_scan))
                 truth["documents" if group == "cases" else "arrivals"][d["path"]] = d["truth"]
-        if cid == "TB-005":
-            truth["board_decision"] = BOARD_DECISION
+        if cid in BOARD_DECISIONS:
+            truth["board_decision"] = BOARD_DECISIONS[cid]
         (out / "truth").mkdir(parents=True, exist_ok=True)
         (out / "truth" / f"{cid}.json").write_text(json.dumps(truth, indent=2, ensure_ascii=False))
         (out / "cases" / cid / "case.json").write_text(json.dumps({"case_id": cid, "protocol": protocol, "patient": pat}, indent=2))
+    if only is not None:
+        return
     intake = {"note": "Department batches without a Case File. Each file must reach expected_case; null means it must NOT be filed into any existing Case File.",
-              "patients": {"TB-001": P1, "TB-002": P2, "TB-004": P4, "TB-005": P5, "TB-006": P6, "no Case File (second Sunita Devi)": P5B},
+              "patients": {"TB-001": P1, "TB-002": P2, "TB-004": P4, "TB-005": P5, "TB-006": P6, "TB-007": P7, "no Case File (second Sunita Devi)": P5B},
               "files": {}}
     for dept, items in INTAKE.items():
         for d in items:

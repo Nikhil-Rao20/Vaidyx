@@ -25,7 +25,8 @@ SOURCES = {  # folder -> (organisation label, region tag, boost)
     "victoria_au": ("Victorian Cancer MDM quality framework", "Australia", 0.9),
     "tmc": ("Tata Memorial Centre Evidence Based Management, India", "India", 1.3),
 }
-CANCER_WORDS = {"lung_nsclc": ["lung", "nsclc", "thoracic"], "breast": ["breast"], "colorectal_rectum": ["rect", "colorectal", "colon"]}
+CANCER_WORDS = {"lung_nsclc": ["lung", "nsclc", "thoracic"], "breast": ["breast"], "colorectal_rectum": ["rect", "colorectal", "colon"],
+                "oral_cavity": ["oral", "head neck", "head-neck", "head and neck", "buccal", "tongue", "mouth"]}
 INDEX_VERSION = 5  # bump when chunking or filtering changes: the cached index is rebuilt, embeddings of unchanged chunks reused
 _lock = threading.Lock()
 _IDX = None
@@ -371,5 +372,7 @@ def queries_for_case(case_id):
             qs.append(f"{prot['label']}: {r['label']} before multidisciplinary treatment planning")
     base = {"lung_nsclc": ["NSCLC staging work-up PET-CT brain MRI", "NSCLC biomarker testing EGFR ALK ROS1 PD-L1 before treatment"],
             "breast": ["breast cancer ER PR HER2 Ki-67 testing and reporting", "breast cancer staging work-up imaging locally advanced"],
-            "colorectal_rectum": ["rectal cancer restaging MRI after chemoradiotherapy response assessment", "rectal cancer MRI reporting mesorectal fascia EMVI"]}
+            "colorectal_rectum": ["rectal cancer restaging MRI after chemoradiotherapy response assessment", "rectal cancer MRI reporting mesorectal fascia EMVI"],
+            "oral_cavity": ["oral cancer work-up imaging of the primary and neck chest X-ray dental evaluation",
+                            "oral cavity carcinoma pathology reporting depth of invasion perineural invasion margins extranodal extension"]}
     return (qs + base.get(prot["id"], []))[:6]

@@ -118,6 +118,9 @@ def test_parse_stage_needs_a_stage_not_a_sequence_name():
 
 # ---------------------------------------------------------------- the reference table
 
+CANCERS = ("breast", "lung_nsclc", "colorectal_rectum", "oral_cavity")
+
+
 def test_table_validates():
     t = dosecheck.table()
     assert "clinical review" in t["_note"] or "review by the clinical team" in t["_note"]
@@ -125,7 +128,7 @@ def test_table_validates():
     refs = t["references"]
     assert len({r["id"] for r in refs}) == len(refs)
     for r in refs:
-        assert r["cancer"] in ("breast", "lung_nsclc", "colorectal_rectum")
+        assert r["cancer"] in CANCERS
         assert r["source_kind"] in ("regimen", "trial_summary")
         assert r["region"] in dosecheck.REGION_ORDER
         assert r["file"] and r["org"] and isinstance(r["page"], int) and r["quote"].strip()
@@ -137,11 +140,12 @@ def test_table_validates():
         else:
             assert r["kind"] == "rt"
             assert r["total_gy"] > 0 and isinstance(r["fractions"], int) and r["fractions"] >= 1
-    for cancer in ("breast", "lung_nsclc", "colorectal_rectum"):
+    for cancer in CANCERS:
         regions = [dosecheck.REGION_ORDER[r["region"]] for r in refs if r["cancer"] == cancer]
         assert regions == sorted(regions), f"{cancer}: Indian entries first"
         assert regions[0] == 0
-        assert {r["kind"] for r in refs if r["cancer"] == cancer} == {"drug", "rt"}
+        # oral cavity (9.1): the NCG oral section gives no RT fractionation ("70 Gy" only), so no RT reference on disk
+        assert {r["kind"] for r in refs if r["cancer"] == cancer} == ({"drug"} if cancer == "oral_cavity" else {"drug", "rt"})
     generics = {r["drug"] for r in refs if r["kind"] == "drug"}
     assert all(g in generics for g in t["aliases"].values())
 
@@ -587,3 +591,16 @@ def test_plan_step_not_compared_with_recorded_stage(no_items):
     out = run("Stage 1: surgery. Stage 2: adjuvant chemotherapy.", recorded_stage=REC)
     assert [c for c in out["checks"] if c["kind"] == "stage"] == [] and out["flags"] == []
     assert dosecheck.parse_stage("Stage 2", bare=True)["group"] == "II"  # a recorded value is known to be a stage
+
+
+def test_oral_cavity_references_are_indian_and_curated():
+    """V1 item 9.1: NCG head and neck 2019 pp 7-9 only (oral cancer pages); the 5FU '10000 mg/m2' misprint is left out, celecoxib is its
+    own drug (its 200 mg is no longer read as a methotrexate dose)."""
+    oc = dosecheck.references("oral_cavity")
+    assert oc and all(r["region"] == "India" and r["file"].startswith("ncg_india/ncg-guidelines-for-head-neck") and 7 <= r["page"] <= 9 for r in oc)
+    assert any(r["drug"] == "cisplatin" and r["dose"] == 30 and r.get("dose_max") == 40 and r["page"] == 7 for r in oc)
+    assert any(r["drug"] == "cisplatin" and r["dose"] == 100 and r["page"] == 7 for r in oc)
+    assert not any(r["drug"] == "fluorouracil" and r["dose"] >= 10000 for r in oc)
+    assert any(r["drug"] == "celecoxib" and r["dose"] == 200 for r in oc) and not any(r["drug"] == "methotrexate" and r["unit"] == "mg" for r in oc)
+    assert dosecheck.compare_dose("cisplatin", 40, "mg/m2", "oral_cavity")[0] == "consistent"
+    assert dosecheck.compare_dose("cisplatin", 400, "mg/m2", "oral_cavity")[0] == "possible_transcription_error"

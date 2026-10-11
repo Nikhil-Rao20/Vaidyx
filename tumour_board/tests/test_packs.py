@@ -57,7 +57,7 @@ def test_known_indian_folders_are_tagged_india():
 def test_allowed_sources_shape():
     src = packs.allowed_sources("radiology")
     assert src[0] == ("iria", None)
-    assert src[1] == ("ncg_india", frozenset({"synoptic-reporting-radiology-template.pdf"}))
+    assert src[1] == ("ncg_india", frozenset({"synoptic-reporting-radiology-template.pdf", "ncg-guidelines-for-head-neck-cancer-2019.pdf"}))
     assert all(isinstance(f, str) and (files is None or isinstance(files, frozenset)) for f, files in src)
     with pytest.raises(KeyError):
         packs.allowed_sources("cardiology")
@@ -80,6 +80,11 @@ def test_checklists_and_text():
     for role in ("medical_oncology", "surgical_oncology", "radiation_oncology", "nuclear_medicine"):
         assert packs.checklist(role, "lung_nsclc") is None and packs.checklist_text(role, "lung_nsclc") == ""
     assert packs.checklist("radiology", "no_such_protocol") is None
+    for role, part in (("radiology", "Annexure 1"), ("pathology", "Annexure 2")):  # V1 item 9.1: Indian (NCG head and neck) checklists for oral cavity
+        oc = packs.checklist(role, "oral_cavity")
+        assert oc["region"] == "India" and oc["file"] == "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf" and 10 <= len(oc["items"]) <= 14
+        assert part in packs.pack(role)["checklist_note"]
+    assert "Depth of invasion" in packs.checklist_text("radiology", "oral_cavity") and "Perineural invasion" in packs.checklist_text("pathology", "oral_cavity")
 
 
 def test_checklist_items_are_reporting_elements_not_actions():

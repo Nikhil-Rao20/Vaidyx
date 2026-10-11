@@ -6,7 +6,9 @@ import pytest
 
 from tumour_board import config, org, protocol
 
-PIDS = ("lung_nsclc", "breast", "colorectal_rectum")
+PIDS = ("lung_nsclc", "breast", "colorectal_rectum", "oral_cavity")
+# research notes holding every quoted NCG line: 4.1 (lung, breast, rectum), 9.1 / 9.2 (oral cavity, cervix)
+NOTES = {"ncg_tiers_4.1.md": ("lung_nsclc", "breast", "colorectal_rectum"), "ncg_tiers_9.md": ("oral_cavity",)}
 
 
 def _rec(pid, rid):
@@ -40,15 +42,20 @@ def test_every_record_has_tier_source_and_valid_fields(pid):
             assert "—" not in r.get(k, ""), r["id"]
 
 
-def test_quotes_are_verbatim_from_the_research_note():
-    note = config.PROTOCOL_DIR.parents[1] / "docs_Eswar" / "research" / "ncg_tiers_4.1.md"
+@pytest.mark.parametrize("name", sorted(NOTES))
+def test_quotes_are_verbatim_from_the_research_note(name):
+    note = config.PROTOCOL_DIR.parents[1] / "docs_Eswar" / "research" / name
     if not note.exists():
         pytest.skip("research note not in this checkout")
     text = note.read_text()
-    for pid in PIDS:
+    for pid in NOTES[name]:
         for r in protocol.records(pid):
             for src in r["sources"]:
                 assert src["quote"] in text, (pid, r["id"], src["quote"])
+
+
+def test_every_protocol_is_covered_by_a_research_note():
+    assert set(PIDS) == {p for pids in NOTES.values() for p in pids}
 
 
 def test_records_and_mandatory_are_the_same_list():
@@ -140,3 +147,31 @@ def test_list_protocols_and_met_fact():
     assert {"xray", "ultrasound"} <= set(protocol.facts()["distant_findings"]["doc_types"])
     assert "distant_findings" in protocol.facts_for_doc("breast", "xray")
     assert "pdl1" in protocol.facts_for_doc("lung_nsclc", "ihc")  # Optimal records' fields are still extracted
+
+
+def test_oral_cavity_tiers_by_setting():
+    """V1 item 9.1: NCG head and neck 2019, oral cancer work-up (p 4). Listed records without a letter are Essential; the imaging of the
+    primary and neck relaxes to Optimal in early disease; PET-CT / CECT thorax (high-risk patients only) are shown, never counted."""
+    for setting in ("early", "locally_advanced", "metastatic", None):
+        req = {r["id"] for r in protocol.records("oral_cavity") if protocol.required(r, setting, "essential")}
+        assert {"clinical_history", "histopathology", "chest_imaging", "dental_evaluation"} <= req, setting
+        assert not req & {"pet_ct", "cect_thorax"}, setting
+        assert ("primary_neck_imaging" in req) == (setting != "early"), setting
+    assert protocol.required(_rec("oral_cavity", "primary_neck_imaging"), "early", "optimal")
+    assert protocol.tier_for(_rec("oral_cavity", "primary_neck_imaging"), None) == "a"  # setting not recorded: the strictest
+    assert not any(protocol.required(_rec("oral_cavity", r), s, "optimal") for r in ("pet_ct", "cect_thorax") for s in ("early", "locally_advanced", None))
+    dental = _rec("oral_cavity", "dental_evaluation")
+    assert dental["facts_only"] and dental["required_facts"] == ["dental_evaluation"] and "clinical_note" in dental["fact_doc_types"]
+    assert all(s["guideline"] == "NCG Guidelines for Head and Neck Cancer (2019)" and s["page"] == 4 for s in _rec("oral_cavity", "chest_imaging")["sources"])
+
+
+def test_oral_cavity_fields_and_extraction():
+    cat = protocol.facts()
+    for f in ("tobacco_use", "depth_of_invasion", "pni", "ene", "dental_evaluation"):
+        assert f in cat and cat[f]["label"] and "—" not in cat[f]["desc"], f
+    assert "dental_evaluation" in protocol.facts_for_doc("oral_cavity", "clinical_note")
+    assert "dental_evaluation" in protocol.facts_for_doc("oral_cavity", "other")  # a required field is asked of an unclassified document (3.2)
+    assert {"depth_of_invasion", "pni", "histologic_type"} <= set(protocol.facts_for_doc("oral_cavity", "histopathology"))
+    assert {"depth_of_invasion", "lesion_size", "nodal_findings", "ene"} <= set(protocol.facts_for_doc("oral_cavity", "ct"))
+    assert "dental_evaluation" not in protocol.facts_for_doc("breast", "clinical_note")  # other protocols unchanged
+    assert protocol.setting_label("oral_cavity", "locally_advanced") == "Locally advanced (Stage III to IVB), as recorded"

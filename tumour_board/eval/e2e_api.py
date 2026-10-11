@@ -801,6 +801,202 @@ def phase8(c):
         c.delete("/api/tb/cases/TB-TEST8")
 
 
+try:  # the corpus generator owns the decision text; the copy below is used only when it cannot be imported
+    from tumour_board.demo_data.india_corpus import DECISION_TEXT_7
+except Exception:
+    DECISION_TEXT_7 = ("Composite resection: wide local excision of the left buccal mucosa lesion with segmental mandibulectomy, left modified neck "
+                       "dissection (levels I to V) and reconstruction with a pectoralis major myocutaneous flap. Adjuvant radiotherapy 60 Gy in 30 "
+                       "fractions to the tumour bed and neck, with concurrent Inj. Cisplatin 40 mg/m2 IV weekly if the final histopathology shows a "
+                       "positive margin or extranodal extension. Stage as recorded: cT4a N1 M0.")
+
+# V1 Phase 9: one entry per new demo Case File; phase9() walks each through the whole workflow. TB-008 (cervix, item 9.2) is one more entry.
+V9_CASES = {
+    "TB-007": {
+        "site": "oral cavity", "protocol": "oral_cavity",
+        "counted": ["clinical_history", "histopathology", "primary_neck_imaging", "chest_imaging", "dental_evaluation"],  # NCG records that count
+        "optional": ["pet_ct", "cect_thorax"],  # NCG Optional (c): shown, never counted
+        # V1 item 3.2 safeguard, intended: the reader types the dental Word file "other" while its title keywords say clinical_note, so the two
+        # records it could satisfy wait for one clinician confirmation of its type (as the UI does), then the gate passes
+        "confirm_type": {"rel_path": "surgical_oncology/dental_evaluation_2026-09-17.docx", "doc_type": "clinical_note", "records": ["clinical_history", "dental_evaluation"]},
+        "listing": {"protocol": "oral_cavity", "setting": "locally_advanced", "board_date": "18/10/2026", "hospital_level": "essential"},
+        "intake": {"department": "Radio-diagnosis", "filename": "usg_neck_2026-09-30.txt", "text":
+                   "SAHYADRI CANCER INSTITUTE (SYNTHETIC)\nDEPARTMENT OF RADIO-DIAGNOSIS\nULTRASOUND NECK\nPatient: Manjunath Gowda  UHID: SYN-700352  54 Y / M\n"
+                   "Study date: 30/09/2026\nFindings: left level IB lymph node 2.0 x 1.7 cm. No other enlarged cervical lymph node. Both lobes of the thyroid normal.\n"
+                   "Impression: left level IB lymph node, as described.\nReport status: FINAL\nSd/- Dr. Shalini Rao, MD (Radio-diagnosis), KMC Reg. No. 66310\n"
+                   "Reported on 30/09/2026\n"},
+        "ask": ("What depth of invasion does the CT report record?", "12"),
+        "refuse": "Should he have surgery or chemoradiation?",
+        "brief_role": "radiology", "checklist": "head and neck",
+        "decision": DECISION_TEXT_7, "drug": "cisplatin", "dose": "40 mg/m2", "slip": "400 mg/m2", "guideline_file": "ncg-guidelines-for-head-neck-cancer",
+        "members": [{"name": "Dr. P. Hegde (synthetic)", "department": "Surgical Oncology"}, {"name": "Dr. M. Iyer (synthetic)", "department": "Radiation Oncology"},
+                    {"name": "Dr. A. Kulkarni (synthetic)", "department": "Medical Oncology"}],
+        "action": {"department": "Surgical Oncology", "task": "Schedule surgery"}, "inbox": "surgical_oncology",
+    },
+}
+
+
+def _brief(c, cid, role):
+    """Stream one specialty agent's brief (as the UI does): (brief or None, tools used)."""
+    brief, tools = None, []
+    with c.stream("POST", f"/api/tb/cases/{cid}/agents/{role}", json={}) as resp:
+        for line in resp.iter_lines():
+            if line.strip():
+                ev = json.loads(line); tools.append(ev.get("tool"))
+                if ev["type"] == "brief":
+                    brief = ev["brief"]
+    return brief, tools
+
+
+def phase9_case(c, cid, spec):
+    """One Phase 9 demo Case File end to end through the HTTP API: import and gate under its NCG protocol (a disputed document type is
+    confirmed as the UI does), listing with the NCG setting, a department upload matched on the UHID, Ask, the Case File summary, the
+    specialty brief with its reporting checklist, the arrivals and the board decision (PM-JAY composition, Indian guideline dose check, recorded stage, a planted dose slip, the board action in the
+    department inbox). The Case File is re-imported at the end, so it stays as the corpus defines it."""
+    import datetime
+    t_case = time.time(); tag = f"9 {cid} ({spec['site']})"
+    if spec["protocol"] not in {p["id"] for p in c.get("/api/tb/protocols").json()["protocols"]}:
+        check(f"{tag}: protocol {spec['protocol']} installed", False, f"tumour_board/protocols/{spec['protocol']}.json is not in this checkout")
+    # a. import: every document read, the gate under the protocol with its NCG records
+    r = c.post(f"/api/tb/demo/{cid}")
+    if r.status_code != 200:
+        check(f"{tag}: demo Case File imported", False, f"HTTP {r.status_code} {r.text[:120]} (generate it: python -m tumour_board.demo_data.make_corpus)")
+        return
+    j, secs = wait_job(c, r.json()["job"])
+    d = c.get(f"/api/tb/cases/{cid}").json(); g = d["state"]["gate"] or {}
+    bad = [f"{x['rel_path']}: {x['state']} {x.get('error') or ''}" for x in d["documents"] if x["state"] != "ready"]
+    check(f"{tag}: imported, every document read", j.get("state") == "finished" and d["documents"] and not bad, f"{j.get('total')} docs in {secs}s; " + ("; ".join(bad)[:160] or "no errors"))
+    req = {x["id"]: x for x in g.get("requirements") or []}; shown = {x["id"]: x for x in g.get("shown") or []}
+    miss = [k for k in spec["counted"] if k not in req]
+    check(f"{tag}: gate under {spec['protocol']} counts the NCG records", g.get("protocol") == spec["protocol"] and not miss,
+          f"protocol {g.get('protocol')}; expected {', '.join(spec['counted'])}; the gate counts {', '.join(sorted(req)) or 'nothing'}" + (f"; missing {', '.join(miss)}" if miss else ""))
+    opt = {k: (shown.get(k) or {}) for k in spec["optional"]}
+    check(f"{tag}: {', '.join(spec['optional'])} shown as NCG Optional, not counted", all(v.get("tier") == "c" and v.get("required") is False and k not in req for k, v in opt.items()),
+          json.dumps({k: (v.get("tier"), v.get("required")) if v else ("counted" if k in req else "absent") for k, v in opt.items()}))
+    ct = spec.get("confirm_type")
+    if ct:  # a disputed document type: the records it could satisfy wait for one confirmation naming that document; the others are satisfied
+        doc = next((x for x in d["documents"] if x["rel_path"] == ct["rel_path"]), {})
+        waiting = {k: req.get(k, {}).get("status") for k in ct["records"]}
+        named = all({"type": "confirm_doc_type", "doc_id": doc.get("doc_id")} in (req.get(k, {}).get("needs") or []) for k in ct["records"])
+        rest = {k: v["status"] for k, v in req.items() if k not in ct["records"] and v["status"] != "satisfied"}
+        typed = (doc.get("classification") or {}).get("doc_type")
+        agreed = typed == ct["doc_type"] and not (doc.get("classification") or {}).get("doc_type_disagreement")
+        # the reader is not bit-identical between runs: when it typed the document right, nothing is disputed and no confirmation is asked
+        check(f"{tag}: disputed type of {ct['rel_path']}: {', '.join(ct['records'])} need a confirmation of its type (or the reader typed it {ct['doc_type']}), the other records satisfied",
+              bool(doc) and not rest and ((set(waiting.values()) == {"needs_confirmation"} and named and g.get("passed") is False) or (agreed and set(waiting.values()) == {"satisfied"})),
+              f"read as {typed!r}; {json.dumps(waiting)}; named {named}; other open {json.dumps(rest)}; {g.get('satisfied')}/{g.get('total')}")
+        if doc and not agreed:
+            r = c.post(f"/api/tb/cases/{cid}/confirmations", json={"type": "confirm_doc_type", "key": doc["doc_id"], "fields": {"doc_type": ct["doc_type"]},
+                                                                    "reason": "e2e: type read on the document"})
+            if r.status_code == 200 and r.json().get("job"):
+                wait_job(c, r.json()["job"])
+            check(f"{tag}: document type confirmed as {ct['doc_type']}", r.status_code == 200, f"HTTP {r.status_code} {r.text[:100] if r.status_code != 200 else ''}")
+            c.post(f"/api/tb/cases/{cid}/recheck")
+            d = c.get(f"/api/tb/cases/{cid}").json(); g = d["state"]["gate"] or {}; req = {x["id"]: x for x in g.get("requirements") or []}
+    unsat = {k: f"{v['status']}: {'; '.join(v.get('problems') or [])[:80]}" for k, v in req.items() if v["status"] != "satisfied"}
+    check(f"{tag}: every counted record satisfied, gate passed", g.get("passed") is True and not unsat and g.get("total") == len(spec["counted"]),
+          f"{g.get('satisfied')}/{g.get('total')} " + json.dumps(unsat)[:200])
+    # b. listing with the NCG setting
+    r = c.post(f"/api/tb/cases/{cid}/listing", json=spec["listing"])
+    if r.status_code == 200 and r.json().get("total"):
+        wait_job(c, r.json()["job"])
+    d = c.get(f"/api/tb/cases/{cid}").json(); g = d["state"]["gate"] or {}; shown = {x["id"]: x for x in g.get("shown") or []}
+    lst = spec["listing"]
+    check(f"{tag}: listed with the NCG setting {lst['setting']}; gate still passes; PET-CT shown, not required",
+          r.status_code == 200 and d["case"].get("setting") == lst["setting"] and g.get("setting") == lst["setting"] and g.get("hospital_level") == lst["hospital_level"]
+          and g.get("passed") is True and (shown.get("pet_ct") or {}).get("required") is False,
+          f"HTTP {r.status_code} {r.text[:80] if r.status_code != 200 else ''} setting {g.get('setting')}, {g.get('satisfied')}/{g.get('total')} passed {g.get('passed')}, "
+          f"PET-CT {(shown.get('pet_ct') or {}).get('tier')}")
+    # c. patient matching: a department upload without a Case File lands in this Case File on the UHID; then removed again
+    it = spec["intake"]
+    r = c.post("/api/tb/intake/documents", files=[("files", (it["filename"], it["text"].encode()))], data={"paths": json.dumps([it["filename"]]), "department": it["department"]})
+    jj = wait_job(c, r.json()["job"])[0] if r.status_code == 200 else {}
+    landed = jj.get("filed") or {}  # doc_id -> Case File
+    queued = [x for x in c.get("/api/tb/intake").json()["documents"] if x["rel_path"] == it["filename"]]
+    check(f"{tag}: department upload ({it['department']}) matched on the UHID and filed into {cid}", r.status_code == 200 and list(landed.values()) == [cid],
+          f"filed {json.dumps(landed)}; waiting {[(x['state'], (x.get('match') or {}).get('reason', '')[:80]) for x in queued]}")
+    for did, cs in landed.items():
+        if cs == "TB-2026-bharath":  # never touch the real case; say so loudly instead
+            check(f"{tag}: synthetic upload never filed into the real Case File", False, "filed into TB-2026-bharath: remove it by hand")
+            continue
+        c.delete(f"/api/tb/cases/{cs}/documents/{did}")
+    for x in queued:
+        c.delete(f"/api/tb/intake/{x['doc_id']}?reason=e2e+cleanup")
+    left = [x["rel_path"] for x in c.get(f"/api/tb/cases/{cid}").json()["documents"] if x["rel_path"].endswith(it["filename"])]
+    check(f"{tag}: the matched upload removed again", not left, ", ".join(left))
+    # d. Ask the Case File
+    q, want = spec["ask"]
+    a = c.post(f"/api/tb/cases/{cid}/ask", json={"question": q}).json()
+    quotes = [cc.get("quote", "") for s in a.get("statements") or [] for cc in s.get("citations") or []]
+    check(f"{tag}: Ask '{q}' answered with a citation containing {want}", a.get("status") == "answered" and any(want in x for x in quotes),
+          f"{a.get('status')} {a.get('seconds')} s: {[s['text'][:80] for s in a.get('statements') or []][:2]}")
+    a = c.post(f"/api/tb/cases/{cid}/ask", json={"question": spec["refuse"]}).json()
+    check(f"{tag}: '{spec['refuse']}' refused", a.get("status") == "out_of_scope" and not a.get("statements"), f"{a.get('status')} {a.get('category', '')}")
+    # e. Case File summary: every sentence cited, current
+    sm = c.post(f"/api/tb/cases/{cid}/summary", json={}).json()
+    sents = [x for p in sm.get("paragraphs") or [] for x in p]
+    stale = c.get(f"/api/tb/cases/{cid}").json()["stale"].get("summary")
+    check(f"{tag}: Case File summary compiled, every sentence cited, not stale", sm.get("status") == "ready" and sents and all(x.get("citations") for x in sents) and stale == "",
+          f"{len(sents)} sentences, {sum(not x.get('citations') for x in sents)} uncited, {sm.get('seconds')} s, stale {stale!r}"[:200])
+    # f. specialty brief with the reporting checklist of the site
+    t0 = time.time(); brief, tools = _brief(c, cid, spec["brief_role"])
+    items = [it2 for sec in (brief or {}).get("sections") or [] for it2 in sec.get("items") or []]
+    title = (((brief or {}).get("pack") or {}).get("checklist") or {}).get("title") or ""
+    check(f"{tag}: {spec['brief_role']} brief returns cited items", bool(items) and all(x.get("citations") for x in items),
+          f"{len(items)} items, {sum(not x.get('citations') for x in items)} uncited, {len((brief or {}).get('points_for_review') or [])} points, {round(time.time() - t0, 1)} s")
+    check(f"{tag}: {spec['brief_role']} brief names the {spec['checklist']} reporting checklist", spec["checklist"] in title.lower(), title or "no checklist")
+    # g. arrivals: the board record arrives; the board decision is recorded and checked
+    r = c.post(f"/api/tb/cases/{cid}/demo-arrivals")
+    if r.status_code == 200:
+        wait_job(c, r.json()["job"])
+    docs = c.get(f"/api/tb/cases/{cid}").json()["documents"]
+    tbr = [x for x in docs if (x.get("classification") or {}).get("doc_type") == "tumour_board_record"]
+    check(f"{tag}: arrivals: the board record document arrives and is read", r.status_code == 200 and bool(tbr) and all(x["state"] == "ready" for x in tbr),
+          f"HTTP {r.status_code}; {[(x['rel_path'], x['state']) for x in tbr] or [x['rel_path'] for x in docs][-3:]}")
+    due = (datetime.date.today() + datetime.timedelta(days=14)).isoformat()
+    body = {"board_date": "2026-10-18", "recorded_by": "Dr. Tumour Board Coordinator (synthetic)", "decision_text": spec["decision"],
+            "members": spec["members"], "actions": [{**spec["action"], "due": due}]}
+    rec = c.post(f"/api/tb/cases/{cid}/board-records", json=body).json()
+    flags = (rec.get("adjudication") or {}).get("flags") or []
+    checks = ((rec.get("adjudication") or {}).get("guideline_checks") or {}).get("checks") or []
+    comp = [f for f in flags if f["kind"] == "composition"]
+    check(f"{tag}: board record: all three oncologists present, no PM-JAY composition flag", bool(rec.get("id")) and not comp, "; ".join(f["text"][:100] for f in comp) or f"{rec.get('id')}")
+    drug = [x for x in checks if x.get("kind") == "drug" and x.get("drug") == spec["drug"]]
+    refs = [rr for x in drug for rr in x.get("references") or []]
+    dose_er = [f for f in flags if f["kind"] == "guideline" and f.get("check") == "dose" and f["severity"] == "expert_review"]
+    check(f"{tag}: {spec['drug']} {spec['dose']} consistent with the Indian {spec['guideline_file']} line, no dose flag for expert review",
+          bool(drug) and all(x["result"] == "consistent" for x in drug) and any(rr.get("region") == "India" and spec["guideline_file"] in (rr.get("file") or "") for rr in refs) and not dose_er,
+          f"{[(x['recorded'], x['result']) for x in drug]}; refs {[(rr.get('org'), rr.get('file'), rr.get('page')) for rr in refs][:2]}; "
+          f"flags {[f['text'][:80] for f in dose_er]}; RT {[(x.get('recorded'), x['result']) for x in checks if x.get('kind') == 'rt']}")
+    stage = [x for x in checks if x.get("kind") == "stage"]
+    check(f"{tag}: stage check reads the recorded stage (no 'differs')", any(x["result"] == "stage_consistent" for x in stage)
+          and not any(x["result"] == "stage_differs" for x in stage) and not [f for f in flags if f.get("check") == "stage"],
+          f"{[(x['recorded'], x['result'], (x.get('source') or {}).get('value')) for x in stage]}")
+    slip_text = spec["decision"].replace(spec["dose"], spec["slip"], 1)  # the same record with one planted dose slip
+    slip = c.post(f"/api/tb/cases/{cid}/board-records", json={**body, "decision_text": slip_text}).json()
+    sf = [f for f in (slip.get("adjudication") or {}).get("flags") or [] if f["kind"] == "guideline" and f.get("check") == "dose" and f["severity"] == "expert_review"]
+    ref = (sf[0].get("reference") or {}) if sf else {}
+    check(f"{tag}: planted slip '{spec['slip']}' flagged for expert review citing an Indian line", slip_text != spec["decision"]
+          and len(sf) == 1 and spec["drug"] in sf[0]["text"].lower() and ref.get("region") == "India" and ref.get("page") and ref.get("quote"),
+          f"{sf[0]['text'][:140] if sf else 'no dose flag'} | {ref.get('org')} p {ref.get('page')}: {(ref.get('quote') or '')[:70]}")
+    ib = c.get("/api/tb/inbox").json()
+    rows = [q2 for dd in ib["departments"] if dd["id"] == spec["inbox"] for q2 in dd["requests"] if q2["case_id"] == cid and q2.get("source") == "board"]
+    check(f"{tag}: board action in the {spec['action']['department']} inbox (Tumour Board action)", bool(rows) and all(x.get("source_label") == "Tumour Board action" for x in rows),
+          f"{len(rows)} rows: {[(x.get('label'), x.get('status')) for x in rows][:2]}")
+    # h. leave the Case File as the corpus defines it
+    wait_job(c, c.post(f"/api/tb/demo/{cid}").json()["job"])
+    print(f"INFO {tag}: section took {round(time.time() - t_case)} s (re-imported at the end)", flush=True)
+
+
+def phase9(c):
+    """V1 Phase 9 (items 9.1 / 9.2): every new demo Case File (oral cavity TB-007, later cervix TB-008) runs the full workflow end to end."""
+    have = {x.get("case_id") for x in c.get("/api/tb/cases").json().get("demo") or []}
+    for cid, spec in V9_CASES.items():
+        if cid not in have:
+            check(f"9 {cid} ({spec['site']}): in the demo corpus", False, "not found under /data/vaidyx/tb_demo_corpus/cases (python -m tumour_board.demo_data.make_corpus)")
+            continue
+        phase9_case(c, cid, spec)
+
+
 def main(base, pw, only=None):
     c = httpx.Client(base_url=base, timeout=600)
     check("login", c.post("/api/auth/login", json={"username": "admin", "password": pw}).status_code == 200)
@@ -833,6 +1029,10 @@ def main(base, pw, only=None):
         return 0 if not FAIL else 1
     if only == "phase8":
         phase8(c)
+        print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
+        return 0 if not FAIL else 1
+    if only == "phase9":
+        phase9(c)
         print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
         return 0 if not FAIL else 1
     # 1. import lung case (incomplete)
@@ -973,6 +1173,8 @@ def main(base, pw, only=None):
     phase7(c)
     # 15. V1 Phase 8: scanned documents (from-scan badge, critical values from scans need a confirmation against the image)
     phase8(c)
+    # 16. V1 Phase 9: the oral cavity (and later cervix) demo Case Files through the whole workflow (re-imported at the end of the section)
+    phase9(c)
     # leave the demo Case Files in their fresh state for the next user / test
     for cid in ("TB-001", "TB-002", "TB-003"):
         wait_job(c, c.post(f"/api/tb/demo/{cid}").json()["job"])
@@ -983,5 +1185,5 @@ def main(base, pw, only=None):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--base", default="http://127.0.0.1:7000"); ap.add_argument("--password", required=True)
-    ap.add_argument("--only", default=None, help="run one section only (phase2 | phase3 | phase4 | phase5 | phase6 | phase7 | phase8)")
+    ap.add_argument("--only", default=None, help="run one section only (phase2 | phase3 | phase4 | phase5 | phase6 | phase7 | phase8 | phase9)")
     a = ap.parse_args(); sys.exit(main(a.base, a.password, a.only))

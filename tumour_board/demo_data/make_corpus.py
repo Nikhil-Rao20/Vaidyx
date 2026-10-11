@@ -12,13 +12,15 @@ Every document is fictional and watermarked "SYNTHETIC". Output layout:
                                                 lines carry the answer-key text (pdfium garbles Devanagari, the image is correct)
 
 Cases: TB-001 lung, TB-002 breast, TB-003 rectum (original demo cases, documents unchanged); TB-004 lung, TB-005 breast,
-TB-006 rectum (Indian-format test material for plan item V1-0.5, defined in india_corpus.py).
+TB-006 rectum (Indian-format test material for plan item V1-0.5), TB-007 oral cavity (V1-9.1), defined in india_corpus.py.
+--only TB-007[,TB-008] builds just those V1 cases into an existing corpus (no full rebuild, other cases and intake untouched).
 
 Answer key schema (truth/<CASE_ID>.json):
   case_id, protocol, patient {name, mrn, agesex}       as in case.json
   registered_identity                                  TB-004 onwards: every identifier the hospital holds for the patient
-  board_decision                                       TB-005: {document, board_date, text, dose_slips [{drug, regimen, written,
-                                                       reference, kind}], absent_specialties, note (why the slip is there)}
+  board_decision                                       TB-005, TB-007: {document, board_date, text, dose_slips [{drug, regimen,
+                                                       written, reference, kind}], absent_specialties, note (why the slip is there,
+                                                       or that there is none)}
   documents / arrivals: {<relative path>: {
     doc_type          one of protocol.doc_types()
     status            FINAL | AMENDED | CORRECTED | PRELIMINARY | DRAFT | CANCELLED | UNSTATED (the docstatus vocabulary);
@@ -454,9 +456,17 @@ def to_scan(pdf_path, png_path, seed):
     im.save(png_path, optimize=True)
 
 
-def build(out):
+def build(out, only=None):
     import weasyprint
     out = Path(out)
+    if only:  # add or replace just these V1 cases in an existing corpus; everything else stays as it is
+        known = [c[0] for c in india_corpus.V1_CASES]
+        bad = [c for c in only if c not in known]
+        if bad:
+            sys.exit(f"--only: unknown case {', '.join(bad)} (V1 cases: {', '.join(known)})")
+        india_corpus.build_v1(out, weasyprint, to_scan, only=set(only))
+        print("written", ", ".join(only), "into", out)
+        return
     if out.exists(): shutil.rmtree(out)
     for cid, protocol, pat, docs, arrivals in CASES:
         truth = {"case_id": cid, "protocol": protocol, "patient": pat, "documents": {}, "arrivals": {}}
@@ -482,4 +492,8 @@ def build(out):
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(); ap.add_argument("--out", required=True); build(ap.parse_args().out)
+    ap = argparse.ArgumentParser(); ap.add_argument("--out", required=True)
+    ap.add_argument("--only", help="comma-separated V1 case ids (e.g. TB-007): build only these into the existing --out corpus, "
+                                   "replacing their own folders and truth file and leaving everything else untouched")
+    a = ap.parse_args()
+    build(a.out, [c.strip() for c in a.only.split(",") if c.strip()] if a.only else None)

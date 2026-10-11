@@ -28,7 +28,7 @@
       "title_only": []
     },
     "xray": {
-      "patterns": ["X-ray", "Xray", "chest PA", "chest PA view", "radiograph", "radiography", "skiagram", "CXR"],
+      "patterns": ["X-ray", "Xray", "chest PA", "chest PA view", "radiograph", "radiography", "skiagram", "CXR", "OPG", "orthopantomogram", "orthopantomography"],
       "title_only": []
     },
     "ultrasound": {
@@ -96,7 +96,7 @@
       "title_only": []
     },
     "clinical_note": {
-      "patterns": ["OPD", "OPD note", "consultation", "clinical note", "clinic note", "progress note", "follow up", "follow up note", "case sheet", "out patient", "outpatient"],
+      "patterns": ["OPD", "OPD note", "consultation", "clinical note", "clinic note", "progress note", "follow up", "follow up note", "case sheet", "out patient", "outpatient", "dental evaluation"],
       "title_only": []
     },
     "referral": {

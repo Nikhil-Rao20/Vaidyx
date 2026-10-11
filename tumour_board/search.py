@@ -25,6 +25,11 @@ SYNONYMS = {
     "ecog": [r"\becog\b", "performance status", r"\bkps\b", "karnofsky"], "suv": [r"\bsuv", "suvmax"],
     "stage": [r"\bstage\b", r"\b[cpy]?t[0-4][a-d]?\s*n[0-3]", r"\bm[01][a-c]?\b", r"\btnm\b"], "grade": [r"\bgrade\b", "differentiated", "nottingham"],
     "margin": ["margin", r"\bcrm\b", "mesorectal fascia", r"\bmrf\b"], "lvi": ["lymphovascular", r"\blvi\b", "emvi"],
+    # V1 item 9.1 (oral cavity)
+    "doi": ["depth of invasion", r"\bdoi\b"], "pni": ["perineural", r"\bpni\b"],
+    "ene": ["extranodal", "extra nodal", "extracapsular", "perinodal", r"\bene\b", r"\bece\b"],
+    "tobacco": ["tobacco", "gutka", "gutkha", "khaini", "mawa", "betel", "paan", "areca", r"\bbidi\b", r"\bbeedi\b"],
+    "dental": ["dental", r"\bopg\b", "orthopantomogram"],
 }
 _TOKEN = re.compile(r"[a-z0-9]+(?:[.\-/][a-z0-9]+)*")
 

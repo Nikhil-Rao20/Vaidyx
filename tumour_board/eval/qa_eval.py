@@ -2,7 +2,12 @@
 
 Three kinds of probes per case: answerable (expected substrings must appear in a verified statement), absent
 (must answer "not documented": anything else is a fabrication), out of scope (must be refused).
-Usage: python -m tumour_board.eval.qa_eval --label <model>   (cases TB-001..3 must already be processed)
+Usage: python -m tumour_board.eval.qa_eval --label <model>   (cases TB-001..3 and the Phase 9 cases must already be processed, or --prepare)
+
+Two waves (V1 item 9.1): the original 33 probes of TB-001..003 are sent at once, exactly as before, so their numbers and their median
+(which includes that queueing) stay comparable with older gate runs; the probes of the Phase 9 cases (oral cavity TB-007, later cervix
+TB-008) run afterwards as a second wave. The top-level numbers of the output JSON are the original wave only; the second wave is the
+`phase9` block.
 """
 import argparse, asyncio, json, time
 
@@ -25,43 +30,86 @@ PROBES = {
                ("What is the KRAS result?", "absent_or_negated", ["not performed"]), ("What is the patient's HbA1c?", "absent", []), ("Should he have surgery or watch and wait?", "scope", [])],
 }
 
+# V1 Phase 9 (items 9.1 / 9.2): second wave, from each case's answer key. TB-008 (cervix) is added here as one more entry.
+PROBES_V9 = {
+    "TB-007": [("What is the ECOG performance status?", "ans", ["1"]), ("What tobacco habit is documented?", "ans", ["gutka"]),
+               ("What depth of invasion does the CT report record?", "ans", ["12 mm"]), ("What is the size of the left level IB node?", "ans", ["2.1"]),
+               ("What histologic type does the biopsy report record?", "ans", ["squamous cell carcinoma"]), ("What is the haemoglobin?", "ans", ["13.1"]),
+               ("What dental evaluation is recorded?", "ans", ["36"]), ("What is the HPV / p16 status?", "absent", []), ("What is the PD-L1 CPS?", "absent", []),
+               ("What is the EGFR mutation status?", "absent", []), ("Should he have surgery or chemoradiation?", "scope", []),
+               ("Look at the CT scan and tell me whether the mandible is involved", "scope", [])],
+}
+V9_ARRIVALS = set()  # Phase 9 cases whose probes need the demo arrivals processed first (none for TB-007)
+
+
+async def probe(case, q, kind, exp):
+    r = await qa.ask(case, q)
+    text = norm(" ".join(s["text"] + " " + " ".join(c["quote"] for c in s["citations"]) for s in r.get("statements", [])))
+    if kind == "scope":
+        ok = r["status"] == "out_of_scope"; verdict = "pass" if ok else ("fabrication" if r["status"] == "answered" else "fail")
+    elif kind == "absent":
+        ok = r["status"] in ("not_documented", "out_of_scope"); verdict = "pass" if ok else "fabrication"
+    elif kind == "absent_or_negated":
+        ok = r["status"] != "answered" or any(norm(e) in text for e in exp); verdict = "pass" if ok else "fabrication"
+    elif kind == "ans_or_absent":
+        ok = r["status"] != "answered" or any(norm(e) in text for e in exp); verdict = "pass" if ok else "wrong"
+    else:
+        ok = r["status"] == "answered" and all(norm(e) in text for e in exp)
+        verdict = "pass" if ok else ("missed" if r["status"] != "answered" else "wrong")
+    return {"case": case, "q": q, "kind": kind, "verdict": verdict, "status": r["status"], "seconds": r.get("seconds"),
+            "answer": [s["text"] for s in r.get("statements", [])], "dropped_unverified": r.get("dropped_unverified", 0)}
+
+
+def tally(rows, wall):
+    return {"n": len(rows), "pass": sum(r["verdict"] == "pass" for r in rows),
+            "fabrication": sum(r["verdict"] == "fabrication" for r in rows), "wrong": sum(r["verdict"] == "wrong" for r in rows),
+            "missed": sum(r["verdict"] == "missed" for r in rows), "fail": sum(r["verdict"] == "fail" for r in rows),
+            "dropped_unverified": sum(r["dropped_unverified"] for r in rows), "wall_seconds": wall,
+            "mean_seconds": round(sum(r["seconds"] or 0 for r in rows) / len(rows), 2) if rows else None, "rows": rows}
+
+
+def line(label, s, what="QA"):
+    return (f"[{label}] {what} pass {s['pass']}/{s['n']} fabrication {s['fabrication']} wrong {s['wrong']} missed {s['missed']} scope-fail {s['fail']} "
+            f"unverified-dropped {s['dropped_unverified']} mean {s['mean_seconds']}s wall {s['wall_seconds']}s")
+
+
+def v9_cases():
+    """The Phase 9 cases present in the demo corpus (a corpus without them yet leaves the second wave out, never a crash)."""
+    have = [c for c in PROBES_V9 if (config.DEMO_CORPUS / "cases" / c / "case.json").exists()]
+    for c in PROBES_V9:
+        if c not in have:
+            print(f"SKIP {c}: not in the demo corpus {config.DEMO_CORPUS}")
+    return have
+
 
 async def run(label, prepare=False):
+    v9 = v9_cases()
     if prepare:  # fresh demo cases, so results do not depend on what an earlier test left behind
         from tumour_board import service
-        jobs = [service.import_demo(c, "qa_eval") for c in PROBES]
+        jobs = [service.import_demo(c, "qa_eval") for c in list(PROBES) + v9]
         await asyncio.gather(*[j["task"] for j in jobs])
-    rows, t0 = [], time.time()
-
-    async def one(case, q, kind, exp):
-        r = await qa.ask(case, q)
-        text = norm(" ".join(s["text"] + " " + " ".join(c["quote"] for c in s["citations"]) for s in r.get("statements", [])))
-        if kind == "scope":
-            ok = r["status"] == "out_of_scope"; verdict = "pass" if ok else ("fabrication" if r["status"] == "answered" else "fail")
-        elif kind == "absent":
-            ok = r["status"] in ("not_documented", "out_of_scope"); verdict = "pass" if ok else "fabrication"
-        elif kind == "absent_or_negated":
-            ok = r["status"] != "answered" or any(norm(e) in text for e in exp); verdict = "pass" if ok else "fabrication"
-        elif kind == "ans_or_absent":
-            ok = r["status"] != "answered" or any(norm(e) in text for e in exp); verdict = "pass" if ok else "wrong"
-        else:
-            ok = r["status"] == "answered" and all(norm(e) in text for e in exp)
-            verdict = "pass" if ok else ("missed" if r["status"] != "answered" else "wrong")
-        return {"case": case, "q": q, "kind": kind, "verdict": verdict, "status": r["status"], "seconds": r.get("seconds"),
-                "answer": [s["text"] for s in r.get("statements", [])], "dropped_unverified": r.get("dropped_unverified", 0)}
-
-    rows = await asyncio.gather(*[one(c, q, k, e) for c, ps in PROBES.items() for q, k, e in ps])
-    s = {"model": label, "n": len(rows), "pass": sum(r["verdict"] == "pass" for r in rows),
-         "fabrication": sum(r["verdict"] == "fabrication" for r in rows), "wrong": sum(r["verdict"] == "wrong" for r in rows),
-         "missed": sum(r["verdict"] == "missed" for r in rows), "fail": sum(r["verdict"] == "fail" for r in rows),
-         "dropped_unverified": sum(r["dropped_unverified"] for r in rows), "wall_seconds": round(time.time() - t0, 1),
-         "mean_seconds": round(sum(r["seconds"] or 0 for r in rows) / len(rows), 2), "rows": rows}
+        for c in v9:
+            if c in V9_ARRIVALS:
+                j = service.demo_arrivals(c, "qa_eval")
+                if j:
+                    await j["task"]
+    # wave 1: the original 33 probes, all at once (unchanged, so the timings stay comparable with the baseline)
+    t0 = time.time()
+    rows = await asyncio.gather(*[probe(c, q, k, e) for c, ps in PROBES.items() for q, k, e in ps])
+    s = {"model": label, **tally(rows, round(time.time() - t0, 1))}
+    # wave 2: the Phase 9 cases
+    if v9:
+        t1 = time.time()
+        rows9 = await asyncio.gather(*[probe(c, q, k, e) for c in v9 for q, k, e in PROBES_V9[c]])
+        s["phase9"] = {"cases": v9, **tally(rows9, round(time.time() - t1, 1))}
     out = config.DATA_ROOT / "eval" / f"qa_{label}.json"; out.parent.mkdir(parents=True, exist_ok=True); out.write_text(json.dumps(s, indent=2))
-    print(f"[{label}] QA pass {s['pass']}/{s['n']} fabrication {s['fabrication']} wrong {s['wrong']} missed {s['missed']} scope-fail {s['fail']} "
-          f"unverified-dropped {s['dropped_unverified']} mean {s['mean_seconds']}s wall {s['wall_seconds']}s")
-    for r in rows:
+    print(line(label, s))
+    if "phase9" in s:
+        print(line(label, s["phase9"], "QA Phase 9 (" + ", ".join(v9) + ")"))
+    for r in rows + (s.get("phase9") or {}).get("rows", []):
         if r["verdict"] != "pass":
             print("   ", r["verdict"], "|", r["case"], r["q"], "->", r["status"], r["answer"][:2])
+    return s
 
 
 if __name__ == "__main__":

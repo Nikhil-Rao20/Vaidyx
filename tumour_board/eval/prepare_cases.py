@@ -1,7 +1,18 @@
-"""Import and process the synthetic demo cases headlessly (same pipeline as the UI). Prints timing and gate status."""
+"""Import and process the synthetic demo cases headlessly (same pipeline as the UI). Prints timing and gate status.
+With no arguments: TB-001..003 and the Phase 9 cases (TB-007 oral cavity; later TB-008 cervix), so the gate leaves every demo Case File
+fresh; a Phase 9 case not in the demo corpus yet is skipped with a note."""
 import asyncio, sys, time
 
-from tumour_board import service, store
+from tumour_board import config, service, store
+from tumour_board.eval.summary_eval import CASES, CASES_V9
+
+
+def default_cases():
+    have = [c for c in CASES_V9 if (config.DEMO_CORPUS / "cases" / c / "case.json").exists()]
+    for c in CASES_V9:
+        if c not in have:
+            print(f"SKIP {c}: not in the demo corpus {config.DEMO_CORPUS}")
+    return list(CASES) + have
 
 
 async def main(cases):
@@ -19,4 +30,4 @@ async def main(cases):
 
 
 if __name__ == "__main__":
-    asyncio.run(main(sys.argv[1:] or ["TB-001", "TB-002", "TB-003"]))
+    asyncio.run(main(sys.argv[1:] or default_cases()))
