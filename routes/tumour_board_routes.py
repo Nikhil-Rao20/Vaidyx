@@ -9,6 +9,7 @@ from src.auth_helpers import require_user
 from tumour_board import agents, config, guidelines, llm, notify, org, postboard, protocol, qa, rules, search, service, store, summary
 from tumour_board import confirm  # clinician confirmations (V1 item 2.2)
 from tumour_board import intake  # department uploads and patient matching (V1 items 2.3, 2.4)
+from tumour_board import board  # board sessions, attendance, agent log (V1 items 6.1 to 6.3)
 
 log = logging.getLogger("tumour_board")
 
@@ -605,7 +606,7 @@ def setup_tumour_board_routes():
         return await summary.build(case_id, force=bool(b.get("force")))
 
     @r.post("/cases/{case_id}/board-records")
-    async def board(case_id: str, request: Request):
+    async def board_records(case_id: str, request: Request):
         u = _user(request); _need(_roles(request), "board_record"); _case(case_id); b = await request.json()
         return await postboard.record_decision(case_id, b, u)
 
@@ -644,6 +645,109 @@ def setup_tumour_board_routes():
         if root not in p.parents or not p.is_file():
             raise HTTPException(404, "not found")
         return FileResponse(p)
+
+    # ---- board sessions: agenda, attendance (V1 item 6.1) --------------------------------------------------------------------
+    def _session(sid):
+        try:
+            s = board.get(sid)
+        except ValueError:
+            raise HTTPException(404, "Board session not found")
+        if not s:
+            raise HTTPException(404, "Board session not found")
+        return s
+
+    def _session_call(fn, *a, **k):
+        try:
+            return fn(*a, **k)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+    def _on_agenda(s, case_id):
+        if case_id not in {a["case_id"] for a in s["agenda"]}:
+            raise HTTPException(404, "This Case File is not on the session's agenda")
+
+    def _room(s, rl):
+        """Everything the Board room shows: the session, the specialties, and for each Case File on the agenda its gate, its summary and
+        the briefs of the absent specialties' agents (with their stale state)."""
+        absent = board.absent_roles(s)
+        cases = {}
+        for a in s["agenda"]:
+            cid = a["case_id"]; c = store.get_case(cid)
+            if not c:
+                cases[cid] = {"missing": True}; continue
+            st = store.get_state(cid); g = st.get("gate") or {}
+            sig = rules.case_signature(cid, st)
+            arts = st.get("artefacts") or {}
+            stale = lambda x: (rules.stale_reason(x["signature"], sig) if x.get("signature") else "Compiled before the Case File signature was kept") if x else ""
+            cases[cid] = {"patient": c.get("patient") or {}, "protocol": c.get("protocol"), "setting": c.get("setting"), "board_date": c.get("board_date"),
+                          "gate": {"passed": g.get("passed"), "satisfied": g.get("satisfied"), "total": g.get("total"), "readiness": g.get("readiness")},
+                          "summary": arts.get("summary"), "summary_stale": stale(arts.get("summary")),
+                          "briefs": {r_: arts.get(f"brief_{r_}") for r_ in absent if arts.get(f"brief_{r_}")},
+                          "briefs_stale": {r_: stale(arts.get(f"brief_{r_}")) for r_ in absent if arts.get(f"brief_{r_}")},
+                          "board_records": [{"id": b_["id"], "board_date": b_.get("board_date"), "session": b_.get("session"), "status": b_["adjudication"]["status"],
+                                             "flags": len(b_["adjudication"]["flags"])} for b_ in st.get("board_records", [])]}
+        return {"session": s, "specialties": board.specialties(), "absent_roles": absent, "participants": board.participants(s),
+                "roles": {k: {"label": v["label"], "department": agents.department_of(k)} for k, v in agents.ROLES.items()},
+                "cases": cases, "can_manage": org.can(rl, "session"), "can_ask": bool(rl.get("admin") or rl.get("known")),
+                "marks": board.MARKS}
+
+    @r.get("/sessions")
+    async def sessions(request: Request):
+        rl = _roles(request)
+        return {"sessions": board.list_sessions(), "can_manage": org.can(rl, "session")}
+
+    @r.get("/sessions/candidates")
+    async def session_candidates(request: Request, date: str = ""):
+        """The Case Files listed for the board on that date (V1 item 6.1), in agenda order."""
+        _user(request)
+        return {"date": date, "cases": _session_call(board.listed_for_date, date)}
+
+    @r.post("/sessions")
+    async def session_create(request: Request):
+        u = _user(request); _need(_roles(request), "session"); b = await request.json()
+        ids = [store.safe_id(str(x)) for x in b["case_ids"]] if isinstance(b.get("case_ids"), list) else None
+        return _session_call(board.create, str(b.get("date", "")), u, ids, str(b.get("title", ""))[:120])
+
+    @r.get("/sessions/{sid}")
+    async def session_get(sid: str, request: Request):
+        rl = _roles(request); _session(sid)
+        return _room(board.get(sid), rl)
+
+    @r.put("/sessions/{sid}/agenda")
+    async def session_agenda(sid: str, request: Request):
+        u = _user(request); _need(_roles(request), "session"); _session(sid); b = await request.json()
+        return _session_call(board.set_agenda, sid, [store.safe_id(str(x)) for x in b.get("case_ids") or []], u)
+
+    @r.post("/sessions/{sid}/attendance")
+    async def session_attendance(sid: str, request: Request):
+        """{"department": id, "status": present | absent | not_marked}."""
+        u = _user(request); _need(_roles(request), "session"); _session(sid); b = await request.json()
+        return _session_call(board.set_attendance, sid, str(b.get("department", "")), str(b.get("status", "")), u)
+
+    @r.post("/sessions/{sid}/members")
+    async def session_member(sid: str, request: Request):
+        u = _user(request); _need(_roles(request), "session"); _session(sid); b = await request.json()
+        return _session_call(board.add_member, sid, str(b.get("name", "")), str(b.get("department", "")), u)
+
+    @r.delete("/sessions/{sid}/members/{member_id}")
+    async def session_member_remove(sid: str, member_id: str, request: Request):
+        u = _user(request); _need(_roles(request), "session"); _session(sid)
+        return _session_call(board.remove_member, sid, member_id, u)
+
+    @r.post("/sessions/{sid}/start")
+    async def session_start(sid: str, request: Request):
+        u = _user(request); _need(_roles(request), "session"); _session(sid)
+        return _session_call(board.start, sid, u)
+
+    @r.post("/sessions/{sid}/current")
+    async def session_current(sid: str, request: Request):
+        u = _user(request); _need(_roles(request), "session"); _session(sid); b = await request.json()
+        return _session_call(board.set_current, sid, str(b.get("case_id", "")), u)
+
+    @r.post("/sessions/{sid}/close")
+    async def session_close(sid: str, request: Request):
+        u = _user(request); _need(_roles(request), "session"); _session(sid)
+        return _session_call(board.close, sid, u)
 
     @r.get("/models")
     async def model_cards(request: Request):
