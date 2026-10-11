@@ -129,3 +129,66 @@ def test_board_actions_reach_the_department_and_a_new_mri_suggests_closing(unit_
     service.recheck(unit_case, "tester")  # the same suggestion found again: no new audit event or notification
     assert len([e for e in store.read_audit(unit_case) if e["kind"] == "board_action_suggested"]) == 1
     assert len([n for n in notify._load() if n["kind"] == "board_action_suggestion"]) == 1
+
+
+# ---- 7.2 guideline checks in the adjudication: doses vs the cancer's references, stage vs the signed report -------------
+TB005 = ("Neoadjuvant chemotherapy: 4 cycles of AC (Inj. Doxorubicin 6 mg/m2 IV and Inj. Cyclophosphamide 600 mg/m2 IV, every 21 days), "
+         "followed by Inj. Paclitaxel 80 mg/m2 IV weekly for 12 weeks. Clinical stage IIIA.")
+
+
+def _breast_case(monkeypatch, stage_docs=()):
+    from tumour_board import store
+    from tumour_board.tests.util import add, fact, make_doc
+    store.create_case("TB-BR7", {"name": "SYNTHETIC, Breast Patient", "mrn": "SYN-777", "agesex": "52 Y / F"}, "breast", created_by="test")
+    for doc_id, doc_type, value, status in stage_docs:
+        add("TB-BR7", make_doc(doc_id, doc_type, status=status, facts={"recorded_stage": fact(value)}))
+    _no_claims(monkeypatch)
+    return "TB-BR7"
+
+
+def test_adjudication_flags_the_tenfold_dose_slip_with_its_indian_source(monkeypatch):
+    cid = _breast_case(monkeypatch, [("Dnote0001", "clinical_note", "cT2 N1 M0, Stage IIB", "FINAL")])
+    adj = asyncio.run(postboard.adjudicate(cid, {"decision_text": TB005, "recorded_by": "Dr. C", "actions": [],
+                                                 "participants": "Dr A (Med Onc), Dr B (Surg Onc), Dr C (Rad Onc)"}))
+    g = [f for f in adj["flags"] if f["kind"] == "guideline"]
+    dose = [f for f in g if f["check"] == "dose"]
+    assert len(dose) == 1 and dose[0]["severity"] == "expert_review" and "Doxorubicin" in dose[0]["text"]
+    assert dose[0]["reference"]["region"] == "India" and dose[0]["reference"]["page"] and "60 mg/m2" in dose[0]["reference"]["quote"]
+    assert dose[0]["span"] in TB005 and dose[0]["recorded"] == "6 mg/m2"
+    ok = {c["drug"]: c["result"] for c in adj["guideline_checks"]["checks"] if c["kind"] == "drug"}
+    assert ok == {"doxorubicin": "possible_transcription_error", "cyclophosphamide": "consistent", "paclitaxel": "consistent"}
+    stage = [f for f in g if f["check"] == "stage"]
+    assert len(stage) == 1 and stage[0]["severity"] == "review" and stage[0]["source"]["doc_id"] == "Dnote0001"
+    assert adj["guideline_checks"]["ran"] is True and adj["status"] == "flag_for_expert_review"
+
+
+def test_stage_comes_from_signed_reports_never_from_an_earlier_board_record(monkeypatch):
+    from tumour_board import rules, store
+    cid = _breast_case(monkeypatch, [("Dnote0001", "clinical_note", "Stage IIB", "DRAFT"), ("Dtbr0001", "tumour_board_record", "Stage IIIA", "FINAL")])
+    facts = rules.resolve_facts(rules.case_docs(cid), {})
+    assert postboard.recorded_stage(facts) is None  # a draft note and an earlier board record are not signed reports of the stage
+    adj = asyncio.run(postboard.adjudicate(cid, {"decision_text": "Clinical stage IIIA. Plan agreed.", "participants": "Dr A (Med Onc), Dr B (Surg Onc), Dr C (Rad Onc)"}))
+    assert not any(f.get("check") == "stage" for f in adj["flags"])
+    assert [c["result"] for c in adj["guideline_checks"]["checks"] if c["kind"] == "stage"] == ["stage_not_compared"]
+
+
+def test_information_only_items_do_not_flag_the_record(monkeypatch):
+    cid = _breast_case(monkeypatch)
+    adj = asyncio.run(postboard.adjudicate(cid, {"decision_text": "Inj. Paclitaxel 80 mg/m2 weekly; Inj. Pemetrexed 500 mg/m2.", "recorded_by": "Dr. C",
+                                                 "actions": [{"department": "Medical Oncology", "task": "Counsel", "due": "2026-12-01"}],
+                                                 "participants": "Dr A (Med Onc), Dr B (Surg Onc), Dr C (Rad Onc)"}))
+    info = [f for f in adj["flags"] if f["kind"] == "guideline"]
+    assert len(info) == 1 and info[0]["severity"] == "info" and "No guideline reference found: Pemetrexed" in info[0]["text"]  # a lung drug: no breast reference
+    assert not any(f["severity"] in ("review", "expert_review") for f in adj["flags"]) and adj["status"] == "consistent"
+
+
+def test_a_failing_guideline_check_never_stops_the_adjudication(monkeypatch):
+    from tumour_board import dosecheck
+    cid = _breast_case(monkeypatch)
+
+    async def boom(*a, **k):
+        raise RuntimeError("references unreadable")
+    monkeypatch.setattr(dosecheck, "check_decision", boom)
+    adj = asyncio.run(postboard.adjudicate(cid, {"decision_text": TB005, "participants": "Dr A (Med Onc), Dr B (Surg Onc), Dr C (Rad Onc)"}))
+    assert any(f["kind"] == "system" and "Guideline checks unavailable" in f["text"] for f in adj["flags"])
+    assert adj["guideline_checks"]["ran"] is False and adj["status"] == "flag_for_expert_review"

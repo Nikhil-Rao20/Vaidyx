@@ -4,12 +4,15 @@ The board's decision is entered by a clinician. The agent never decides; it chec
   1. documentation rules from the protocol (decision text, recorded by, actions with a Responsible Department and due date);
   2. values quoted in the decision vs the verified source values (possible transcription discrepancy, e.g. 6% vs 60%);
   3. decision recorded while Pre-Authorization items were still open (documentation consistency);
-  4. board composition: PM-JAY HBP 2.2 asks for surgical, radiation and medical oncologists (V1 item 7.1); an agent never counts.
+  4. board composition: PM-JAY HBP 2.2 asks for surgical, radiation and medical oncologists (V1 item 7.1); an agent never counts;
+  5. guideline checks (V1 item 7.2, dosecheck.py): drug doses and radiotherapy schedules as written vs the dose references of the
+     Case File's cancer (Indian first, each with its page and verbatim line), the stage as written vs the stage recorded in signed reports.
 Flags go to expert review; the agent does not decide which value is clinically correct."""
+import asyncio
 import re
 import uuid
 
-from . import dates, followup, grounding, llm, negation, org, protocol, rules, store, units
+from . import dates, dosecheck, followup, grounding, llm, negation, org, protocol, rules, store, units
 
 NOT_LISTED = "Case File not listed: no Pre-Authorization check to compare with"
 
@@ -72,6 +75,18 @@ def _piece_departments(piece):
         if did and not re.fullmatch(r"(?:gi\s+)?oncology", chunk.strip(), re.I):  # a bare "Oncology" does not say which oncologist
             out.add(did)
     return out
+
+
+def recorded_stage(facts):
+    """The stage as recorded by a reporting clinician in a signed report (V1 item 7.2): the newest verified value from a final document,
+    never from an earlier board record; a clinician-confirmed value stands on its own. None when no signed report records a stage."""
+    hist = ((facts or {}).get("recorded_stage") or {}).get("history") or []
+    ok = [e for e in hist if e.get("verification") in rules.VERIFIED and e.get("doc_final") and e.get("state", "present") == "present"
+          and e.get("doc_type") != "tumour_board_record"]
+    if not ok:
+        return None
+    e = ok[-1]
+    return {"value": e["value"], "quote": "" if e.get("confirmed_by") else (e.get("quote") or ""), "doc_id": e["doc_id"], "doc_title": e.get("doc_title") or e["doc_id"]}
 
 
 def composition(record):
@@ -155,12 +170,22 @@ async def adjudicate(case_id, record):
            {"role": "user", "content": f"Known fields: {spec}\n\nDECISION RECORD:\n{record.get('decision_text', '')}\n\nList every value in the record that "
             "corresponds to one of the known fields (for example a biomarker percentage, a lab value, a tumour size, a stage as quoted). "
             "If there are none, return an empty list."}]
-    claims = []
-    try:
-        claims = (await llm.chat("reasoner", msg, json_schema=schema, max_tokens=700, purpose="adjudication: values in decision", audit=au)).get("claims", [])
-    except Exception as e:
-        flags.append({"kind": "system", "severity": "info", "text": f"Value check unavailable: {str(e)[:120]}"})
     facts = rules.resolve_facts(rules.case_docs(case_id), store.get_state(case_id).get("overrides"))  # attestations (V1 item 1.2) and confirmations (2.2) count
+    # the value listing and the guideline checks (V1 item 7.2) are independent reasoner calls: run together
+    claims_call = llm.chat("reasoner", msg, json_schema=schema, max_tokens=700, purpose="adjudication: values in decision", audit=au)
+    guide_call = dosecheck.check_decision(record.get("decision_text", ""), case["protocol"], recorded_stage(facts), audit=au) if listed else None
+    got = await asyncio.gather(claims_call, *([guide_call] if guide_call else []), return_exceptions=True)
+    claims = []
+    if isinstance(got[0], BaseException):
+        flags.append({"kind": "system", "severity": "info", "text": f"Value check unavailable: {str(got[0])[:120]}"})
+    else:
+        claims = (got[0] or {}).get("claims", [])
+    guide = None
+    if guide_call:
+        if isinstance(got[1], BaseException):
+            flags.append({"kind": "system", "severity": "info", "text": f"Guideline checks unavailable: {str(got[1])[:120]}"})
+        else:
+            guide = got[1]
     checks = []
     for c in claims:
         if c.get("span") and not grounding.locate(c["span"], [record.get("decision_text", "")]):
@@ -195,8 +220,13 @@ async def adjudicate(case_id, record):
             res = "consistent"
         checks.append({**c, "result": res, "source": {"value": src["value"], "doc_id": src["doc_id"], "quote": src["quote"],
                                                        **({"confirmed_by": src["confirmed_by"]} if src.get("confirmed_by") else {})}})
+    if guide:
+        flags += guide["flags"]
     au({"kind": "adjudication", "flags": len(flags), "claims": len(claims)})
-    return {"flags": flags, "value_checks": checks, "composition": comp, "status": "flag_for_expert_review" if flags else "consistent", "evaluated": store.now_iso()}
+    # information-only items (a check that found no guideline reference) need no resolution; a check that could not run still shows
+    attention = any(f.get("severity") in ("review", "expert_review") or f.get("kind") == "system" for f in flags)
+    return {"flags": flags, "value_checks": checks, "composition": comp, "guideline_checks": {"checks": (guide or {}).get("checks", []), "ran": guide is not None},
+            "status": "flag_for_expert_review" if attention else "consistent", "evaluated": store.now_iso()}
 
 
 async def record_decision(case_id, record, user=""):

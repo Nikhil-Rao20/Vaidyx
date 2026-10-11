@@ -697,7 +697,19 @@ function glHTML(r) {
 // ------------------------------------------------------------------ tab: board & follow-up
 const BOARD_DEPTS = ["Medical Oncology", "Surgical Oncology", "Radiation Oncology", "Radio-diagnosis", "Pathology", "Molecular Pathology", "Nuclear Medicine", "Laboratory Medicine", "Gastroenterology", "Pulmonary Medicine", "Tumour Board coordination"];
 const PMJAY = { surgical_oncology: "Surgical Oncologist", radiation_oncology: "Radiation Oncologist", medical_oncology: "Medical Oncologist" };
-const FLAGKIND = { transcription: "Possible transcription discrepancy", consistency: "Documentation consistency", composition: "PM-JAY board composition", documentation: "Documentation" };
+const FLAGKIND = { transcription: "Possible transcription discrepancy", consistency: "Documentation consistency", composition: "PM-JAY board composition", documentation: "Documentation",
+  guideline: "Guideline check", system: "Check not run" };
+// guideline checks (V1 item 7.2): doses and RT schedules vs the cancer's dose references (Indian first), stage as written vs the signed report
+const GCHECK = { dose: "Guideline check: dose", rt: "Guideline check: radiotherapy schedule", stage: "Stage as recorded" };
+const gRefHTML = (f) => f.check === "stage" && f.source ? `<div class="small" style="margin-top:4px">Signed report: ${f.source.doc_id ? citeHTML({ doc_id: f.source.doc_id, doc_title: f.source.doc_title, quote: f.source.quote || f.source.value }) : esc(f.source.doc_title || "")} "${esc(f.source.quote || f.source.value)}"</div>`
+  : f.reference ? refHTML(f.reference) : "";
+function guidelineOkHTML(b) {
+  const g = b.adjudication.guideline_checks;
+  if (!g || !g.checks) return "";
+  const ok = g.checks.filter((x) => x.result === "consistent" || x.result === "stage_consistent");
+  const label = (x) => x.kind === "stage" ? `Stage "${x.recorded}" matches the signed report` : `${x.kind === "rt" ? "Radiotherapy" : x.drug.charAt(0).toUpperCase() + x.drug.slice(1)} "${x.recorded}" matches a guideline reference${x.references?.[0] ? ` (${x.references[0].org}, p ${x.references[0].page})` : ""}`;
+  return ok.map((x) => `<div class="small"><span class="chip c-ok">✓</span> ${esc(label(x))}</div>`).join("") + (g.ran ? "" : `<div class="small muted">Guideline checks did not run for this record.</div>`);
+}
 // PM-JAY board composition (V1 item 7.1): which of the three oncologists the record shows present; an agent never counts
 const compHTML = (c) => !c ? "" : `<div class="small" style="margin-top:6px"><b>PM-JAY board composition</b> ${c.checked ? Object.keys(PMJAY).map((d) => `<span class="chip ${c.present.includes(d) ? "c-ok" : "c-rev"}">${PMJAY[d]}: ${c.present.includes(d) ? "present" : "not recorded"}</span>`).join(" ")
   : `<span class="chip c-rev">Not checked: specialties not recorded</span>`}${c.how ? ` <span class="muted">(${c.how === "attendance" ? "from the attendance" : "read from the participants text"})</span>` : ""}</div>`;
@@ -724,9 +736,9 @@ function renderBoard() {
       <p style="white-space:pre-wrap">${esc(b.decision_text)}</p>
       <div class="kv small">${b.participants ? `<div>Participants</div><div>${esc(b.participants)}</div>` : ""}${b.report_corrections_raised ? `<div>Report corrections raised</div><div>${esc(b.report_corrections_raised)}</div>` : ""}${b.divergent_opinions ? `<div>Divergent opinions</div><div>${esc(b.divergent_opinions)}</div>` : ""}</div>
       ${compHTML(b.adjudication.composition)}
-      ${b.adjudication.flags.map((f) => `<div class="flag ${f.severity === "expert_review" ? "" : "review"}"><div class="k">${FLAGKIND[f.kind] || "Documentation"}</div>
-        <div>${esc(f.text)}</div>${f.reference && f.kind === "composition" ? refHTML(f.reference) : ""}${f.source_quote ? `<div class="small" style="margin-top:4px">Source: ${citeHTML({ doc_id: f.source_doc, doc_title: f.source_title, quote: f.source_quote })} "${esc(f.source_quote)}"</div><div class="small muted">Expert review required. The agent flags the difference; it does not decide which value is correct.</div>` : ""}</div>`).join("")}
-      ${b.adjudication.value_checks.filter((v) => v.result === "consistent").map((v) => `<div class="small"><span class="chip c-ok">✓</span> ${esc(v.value_as_written)} matches the source</div>`).join("")}</div>`).join("")}
+      ${b.adjudication.flags.map((f) => `<div class="flag ${f.severity === "expert_review" ? "" : f.severity === "info" ? "info" : "review"}"><div class="k">${f.kind === "guideline" ? GCHECK[f.check] || FLAGKIND.guideline : FLAGKIND[f.kind] || "Documentation"}${f.severity === "info" ? ` <span class="chip c-mute">Info only, not a pass</span>` : ""}</div>
+        <div>${esc(f.text)}</div>${f.reference && f.kind === "composition" ? refHTML(f.reference) : ""}${f.kind === "guideline" ? gRefHTML(f) : ""}${f.source_quote ? `<div class="small" style="margin-top:4px">Source: ${citeHTML({ doc_id: f.source_doc, doc_title: f.source_title, quote: f.source_quote })} "${esc(f.source_quote)}"</div><div class="small muted">Expert review required. The agent flags the difference; it does not decide which value is correct.</div>` : ""}</div>`).join("")}
+      ${b.adjudication.value_checks.filter((v) => v.result === "consistent").map((v) => `<div class="small"><span class="chip c-ok">✓</span> ${esc(v.value_as_written)} matches the source</div>`).join("")}${guidelineOkHTML(b)}</div>`).join("")}
   </div><div>
     <div class="card"><h3>Follow-up tracker <span class="muted small">${allActs.filter((a) => a.status !== "completed").length} open</span></h3>
       ${allActs.map(actionHTML).join("") || '<div class="muted small">No actions.</div>'}
