@@ -381,6 +381,21 @@ def setup_tumour_board_routes():
         ids = None if b.get("all") else [str(x) for x in (b.get("ids") or [])]
         return {"changed": notify.mark_read(rl, ids), "unread": notify.unread_count(rl)}
 
+    @r.get("/cases/{case_id}/export/vtb")
+    async def export_vtb(case_id: str, request: Request):
+        """The NCG Virtual Tumour Board case template filled from the verified Case File summary (V1 item 4.6), for referral to a
+        Regional Cancer Centre or the NCG VTB. Refused (409) without a current summary. Audited."""
+        u = _user(request); _need_known(_roles(request)); _case(case_id)
+        from tumour_board import vtb_export
+        try:
+            data = await asyncio.to_thread(vtb_export.build, case_id)
+        except vtb_export.ExportNotReady as e:
+            raise HTTPException(409, str(e))
+        store.audit(case_id, {"kind": "export_vtb", "by": u, "bytes": len(data), "template": "NCG Virtual Tumour Board case template"})
+        from fastapi.responses import Response
+        return Response(data, media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        headers={"Content-Disposition": f'attachment; filename="{vtb_export.filename(case_id)}"'})
+
     @r.get("/cases/{case_id}/export")
     async def export(case_id: str, request: Request):
         """Portable record of the Case File (state, documents' extracted data, audit) for the hospital record system."""

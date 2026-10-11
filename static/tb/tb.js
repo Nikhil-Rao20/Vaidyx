@@ -592,7 +592,7 @@ function renderSummary() {
     <div class="muted small">Compiled once every Pre-Authorization check is met. Each sentence links to its source quote; the stage appears only as recorded in a signed report. Points for review, not treatment recommendations.</div>
     ${s && S.data.stale?.summary ? `<div class="banner warn stale"><b>${esc(S.data.stale.summary)}.</b> Regenerate it before the board relies on it or exports it.</div>` : ""}
     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="primary" id="sum" ${g?.passed ? "" : "disabled"}>${s ? "Regenerate" : "Compile Case File summary"}</button>
-    ${g?.passed ? "" : `<button class="ghost" id="sum-force">Compile draft anyway (marked incomplete)</button>`}${s ? `<button class="ghost" id="sum-print">Print</button>` : ""}</div></div>
+    ${g?.passed ? "" : `<button class="ghost" id="sum-force">Compile draft anyway (marked incomplete)</button>`}${s ? `<button class="ghost" id="sum-print">Print</button> <button class="ghost" id="sum-export" ${S.data.stale?.summary ? "disabled" : ""} title="${S.data.stale?.summary ? "Regenerate the summary first: the Case File changed since it was compiled" : "Fill the National Cancer Grid Virtual Tumour Board case template (.pptx) from this summary, every sentence cited, for referral to a Regional Cancer Centre or the NCG VTB"}">Export for NCG Virtual Tumour Board / RCC referral (.pptx)</button>` : ""}</div></div>
     <div id="sumout" class="card summary ${s ? "" : "hidden"}"></div>
     <div class="card"><h3>Guideline references for this Case File <button class="ghost sm" id="gl-case">Find relevant sections</button></h3>
       <div class="muted small">Reference text retrieved from the guideline library for the board to consult, India first (National Cancer Grid, ICMR), then international. Not a recommendation for this patient.</div><div id="glout"></div></div>`;
@@ -603,6 +603,11 @@ function renderSummary() {
     const r = await api(`/cases/${S.caseId}/guidelines`); $("#glout").innerHTML = r.queries.map((q) => `<h4 style="color:#1f2933;margin:14px 0 4px">${esc(q.query)}</h4>` + glHTML(q)).join(""); };
   $("#sum").onclick = () => go(false); if ($("#sum-force")) $("#sum-force").onclick = () => go(true);
   if ($("#sum-print")) $("#sum-print").onclick = () => { document.body.classList.add("print-summary"); window.print(); setTimeout(() => document.body.classList.remove("print-summary"), 500); };
+  if ($("#sum-export")) $("#sum-export").onclick = async () => {  // V1 item 4.6
+    const r = await fetch(`/api/tb/cases/${encodeURIComponent(S.caseId)}/export/vtb`, { credentials: "same-origin" });
+    if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch (e) {} toast(m, 9000); return; }
+    const blob = await r.blob(); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${S.caseId}_ncg_vtb_case.pptx`; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000); toast("NCG Virtual Tumour Board case file exported (.pptx); recorded in the audit log", 6000); };
   if (s) showSummary(s);
 }
 function showSummary(s) {
