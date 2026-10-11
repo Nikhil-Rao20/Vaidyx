@@ -285,7 +285,8 @@ def _evaluate_record(req, ready, facts, overrides, cat):
             p = (f"Confirm {cat[fid]['label']} against the scan image: \"{h['value']}\" was read from a scanned page of {h['doc_title']} "
                  "(critical value: the transcription alone does not count)")
             need = {"type": "confirm_value", "doc_id": h["doc_id"], "fact": fid, "value": h["value"],
-                    **({k: loc[k] for k in ("page", "start", "end") if k in loc} if loc else {})}
+                    **({k: loc[k] for k in ("page", "start", "end") if k in loc} if loc else {}),
+                    **({"boxes": h["boxes"]} if h.get("boxes") else {})}  # where it was read on the image (V1 item 8.4)
             r["problems"].append(p); l2["problems"].append(p)
             r.setdefault("needs", []).append(need); l2["needs"].append(need)
         if l2["status"] == "satisfied":

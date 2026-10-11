@@ -741,14 +741,15 @@ def scan_png(lines, size=34):
 
 
 PDL1_SCAN = ["SAHYADRI CANCER INSTITUTE (SYNTHETIC)", "DEPARTMENT OF PATHOLOGY", "IMMUNOHISTOCHEMISTRY REPORT",
-             "Patient: SYNTHETIC, Test Patient    UHID: SYN-996    63 Y / M", "Specimen: FFPE block of the lung biopsy",
+             "Patient: SYNTHETIC, Test Patient    UHID: SYN-996    63 Y / M", "Aadhaar: 4821 6093 2200 (synthetic)", "Specimen: FFPE block of the lung biopsy",
              "Date of report: 27/09/2026", "PD-L1 (22C3) Tumour Proportion Score: 60%", "Report status: FINAL",
              "Sd/- Dr. A. Menon, Consultant Pathologist, Reg. No. KMC 11223"]
 
 
 def phase8(c):
     """V1 Phase 8 on its own synthetic Case File TB-TEST8 (lung, Optimal hospital, so PD-L1 is required): a PD-L1 report uploaded as a
-    scan says "from scan" (8.1), needs one confirmation against the image before it counts, then counts (8.2)."""
+    scan says "from scan" (8.1), needs one confirmation against the image before it counts, then counts (8.2); the independent OCR engine
+    read the page (8.3); the value carries its word boxes on the image and the preview has the Aadhaar number blacked out (8.4)."""
     c.delete("/api/tb/cases/TB-TEST8")
     try:
         r = c.post("/api/tb/cases", json={"case_id": "TB-TEST8", "protocol": "lung_nsclc", "setting": "metastatic", "hospital_level": "optimal", "board_date": "2026-10-21",
@@ -768,6 +769,24 @@ def phase8(c):
         need = next((n for n in pd.get("needs") or [] if n["type"] == "confirm_value" and n.get("fact") == "pdl1"), None)
         check("8.2 scanned PD-L1 needs a confirmation against the image (Level 2)", pd.get("status") == "needs_confirmation" and pd.get("level") == 2 and need is not None
               and need["doc_id"] == doc.get("doc_id") and pd.get("required") is True, f"{pd.get('status')} L{pd.get('level')} {need}")
+        page = (full.get("pages") or [{}])[0]
+        eng = page.get("ocr_engine") or {}
+        check("8.3 the independent OCR engine read the scanned page (words with boxes, Aadhaar masked)", eng.get("engine") == "tesseract" and len(eng.get("words") or []) > 20
+              and "4821" not in json.dumps(eng) and "6093" not in json.dumps(eng), f"{eng.get('engine')} {eng.get('version')} {len(eng.get('words') or [])} words {page.get('ocr_engine_note', '')}")
+        check("8.3 a clean scan raises no engine disagreement", not [x for x in page.get("ocr_uncertain_spans") or [] if x.get("source") == "engine"],
+              json.dumps([x for x in page.get("ocr_uncertain_spans") or [] if x.get("source") == "engine"])[:160])
+        check("8.4 the PD-L1 value carries its word box on the image", len(f.get("boxes") or []) == 1 and bool(page.get("box_map")), json.dumps(f.get("boxes")))
+        check("8.4 the confirmation request carries the box (the dialog highlights the value)", bool(need) and need.get("boxes") == f.get("boxes"), json.dumps((need or {}).get("boxes")))
+        r = c.get(f"/api/tb/cases/TB-TEST8/documents/{doc.get('doc_id')}/file")
+        masked = [w for w in eng.get("words") or [] if w[0] == "XXXX"]
+        black = False
+        if r.status_code == 200 and masked:
+            import io
+            from PIL import Image
+            im = Image.open(io.BytesIO(r.content)).convert("RGB"); w = masked[0]
+            black = im.getpixel((int((w[1] + w[3]) / 2 * im.size[0]), int((w[2] + w[4]) / 2 * im.size[1]))) == (0, 0, 0)
+        check("8.4 the preview has the Aadhaar groups blacked out", r.headers.get("content-type", "").startswith("image/png") and len(masked) == 2 and black,
+              f"{r.headers.get('content-type')} {len(masked)} masked words, black={black}")
         ev = [e for e in pd.get("evidence") or [] if e.get("fact") == "pdl1"]
         check("8.1 Pre-Authorization evidence says from scan", bool(ev) and ev[0].get("source_method") == "vision-transcription", json.dumps(ev)[:160])
         if need:

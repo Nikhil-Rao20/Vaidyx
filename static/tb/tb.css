@@ -215,6 +215,12 @@ table.t tr.click { cursor: pointer; } table.t tr.click:hover td { background: va
 .docview > * { min-width: 0; }
 .drawer-body table { max-width: 100%; }
 .docview img.orig { max-width: 100%; width: 100%; border: 1px solid var(--line); border-radius: 8px; }
+/* V1 item 8.4: word boxes of the independent OCR engine drawn over the scan image (fractions of the image) */
+.scanwrap { position: relative; display: block; }
+.scanwrap img { display: block; }
+.ocrbox { position: absolute; pointer-events: none; border-radius: 2px; }
+.ocrbox.fact { border: 2px solid var(--accent); background: rgba(0, 156, 148, .12); }
+.ocrbox.focus { border: 2px solid #c98f00; background: rgba(255, 213, 74, .35); }
 .doctext { white-space: pre-wrap; font-family: var(--mono); font-size: 12.5px; line-height: 1.6; color: var(--ink); background: var(--tint-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px; max-height: 70vh; overflow: auto; }
 .doctext mark.focus { background: #ffd54a; outline: 2px solid #c98f00; }
 .modal { position: fixed; inset: 0; background: rgba(16, 42, 67, .4); display: flex; align-items: center; justify-content: center; z-index: 30; }

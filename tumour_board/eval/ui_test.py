@@ -54,6 +54,11 @@ def run_flow(b, base, pw, out, size, sfx, errors):
         errors.append("no 'from scan (OCR)' tag on TB-001's values (V1 8.1)")
     pg.locator("tr[data-doc]").nth(3).click(); pg.wait_for_selector("#doctext", timeout=15000); pg.wait_for_timeout(1200)
     shot("TB-001_doc_drawer"); pg.keyboard.press("Escape")
+    # V1 item 8.4: a scanned document shows where its fields were read on the image (the independent OCR engine's word boxes)
+    pg.locator("tr[data-doc]", has_text="PET").first.click(); pg.wait_for_selector("#doctext", timeout=15000); pg.wait_for_timeout(1500)
+    if pg.locator("#ocrboxes .ocrbox").count() == 0:
+        errors.append("no word boxes drawn over TB-001's scanned PET-CT (V1 8.4)")
+    shot("TB-001_scan_boxes"); pg.keyboard.press("Escape")
     # ask + instant search
     pg.click("#tabs button[data-tab='ask']"); pg.fill("#q", "PD-L1"); pg.wait_for_timeout(900)
     pg.fill("#q", "What is the PD-L1 result and is it from a final report?"); pg.click("#ask")

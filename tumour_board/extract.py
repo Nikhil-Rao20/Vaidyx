@@ -2,7 +2,7 @@
 then deterministic grounding. Nothing the model says is trusted until its quote is found in the source text."""
 import asyncio, re
 
-from . import confirm, dates, docstatus, doctype, grounding, identity, ingest, llm, negation, protocol, scanned, store
+from . import confirm, dates, docstatus, doctype, grounding, identity, ingest, llm, negation, ocr_boxes, protocol, scanned, store
 
 STATUS = ["FINAL", "AMENDED", "CORRECTED", "PRELIMINARY", "DRAFT", "CANCELLED", "UNKNOWN"]
 # Negation cues shared with qa and postboard (see negation.py).
@@ -260,6 +260,34 @@ def mask_pages(pages):
     return pages
 
 
+def add_box_maps(pages):
+    """V1 item 8.4: for every scanned page the independent OCR engine read (item 8.3), the map from offsets in the stored (Aadhaar-masked)
+    transcription to word boxes on the page image (`ocr_boxes.token_map`), computed once and kept on the page as `box_map`. Pages read
+    before the engine existed have no words and get none. Returns True when a page gained a map."""
+    changed = False
+    for p in pages or []:
+        eng = p.get("ocr_engine") if isinstance(p, dict) else None
+        if isinstance(eng, dict) and eng.get("words") and "box_map" not in p:
+            p["box_map"] = ocr_boxes.token_map(p.get("text") or "", eng["words"]); changed = True
+    return changed
+
+
+def quote_boxes(pages, location):
+    """Boxes on the page image (fractions of the image, one rectangle per text line) where a verified quote was read (V1 item 8.4); []
+    when the page has no box map or fewer than ocr_boxes.SUGGESTED_COVERAGE of the quote's words were matched to engine words (no box
+    rather than a misleading one)."""
+    if not isinstance(location, dict) or not isinstance(location.get("page"), int) or not 0 <= location["page"] < len(pages or []):
+        return []
+    p = pages[location["page"]]
+    tmap = p.get("box_map") if isinstance(p, dict) else None
+    if not tmap:
+        return []
+    s, e = location.get("start"), location.get("end")
+    if not isinstance(s, int) or not isinstance(e, int) or ocr_boxes.span_coverage(tmap, p.get("text") or "", s, e) < ocr_boxes.SUGGESTED_COVERAGE:
+        return []
+    return ocr_boxes.boxes_for_span(tmap, s, e)
+
+
 def identity_check(full, case_patient, idr=None):
     """Does the document belong to this Case File's patient? Returns (verdict, matcher decision).
     match: an identifier printed on the document equals one the Case File knows (compatible name, no sex or age conflict);
@@ -326,6 +354,7 @@ async def process_document(case_id, doc_id, protocol_id, case_patient=None, prog
             pages = mask_pages(await ingest.extract_pages(path, audit=au))  # Aadhaar masked before anything is stored (V1 item 2.4)
             doc["pages"] = pages
             doc.pop("classification", None)
+        add_box_maps(pages)  # word boxes on the scan image (V1 item 8.4), also for pages filed from the intake area
         texts = [p["text"] for p in pages]
         full = _doc_text(pages)
         if not full.strip() or all(not t.strip() for t in texts):
@@ -377,6 +406,9 @@ async def process_document(case_id, doc_id, protocol_id, case_patient=None, prog
                           "location": v["location"], "state": "pending" if pending else "present",
                           "polarity": "negated" if NEGATED_RE.search(main["value"]) else "affirmed"}
             facts[fid]["source_method"] = scanned.fact_source_method(pages, facts[fid])  # "vision-transcription": read from a scan (V1 item 8.1)
+            boxes = quote_boxes(pages, v["location"]) if v["status"] != "unverified" else []
+            if boxes:  # where the quote was read on the scan image (V1 item 8.4)
+                facts[fid]["boxes"] = boxes
             ev = {"kind": "fact_verification", "doc_id": doc_id, "fact": fid, "value": main["value"], "result": v["status"], "reason": v.get("reason")}
             if others:
                 facts[fid].update(verification="needs_review", reason="different values in different parts of the document",

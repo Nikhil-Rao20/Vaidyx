@@ -346,7 +346,7 @@ async function confirmValue(n) {
   const img = scanImageURL(S.caseId, d, n.page);
   const v = await confirmDialog({ title: `Confirm ${label} against the scan`,
     intro: `"${n.value}" was read from page ${page} of ${title}, a scanned page, by the vision reader (Qwen3.5-4B, Chinese, non-medical). Read ${label} on the image and record it exactly as written there; correct it if the transcription is wrong. It counts for the Pre-Authorization once you confirm it.`,
-    html: img ? `<div class="confscan"><img src="${esc(img)}" alt="${esc(`Page ${page} of ${title}`)}"></div>` : `<div class="small muted">No image preview for this format: open the original from the Documents tab.</div>`,
+    html: img ? `<div class="confscan"><div class="scanwrap"><img src="${esc(img)}" alt="${esc(`Page ${page} of ${title}`)}">${(n.boxes || []).map((r) => boxDiv(r, "focus", `${label} as read`)).join("")}</div></div>${(n.boxes || []).length ? '<div class="small muted">Highlighted: where the value was read on the image (independent OCR engine word positions).</div>' : ""}` : `<div class="small muted">No image preview for this format: open the original from the Documents tab.</div>`,
     fields: [{ id: "value", label: `${label} as written on the scan`, type: "text", required: true, value: n.value }], submit: "Confirm value" });
   if (!v) return;
   await recordConfirmation("confirm_value", `${n.doc_id}:${n.fact}`, { value: v.value });
@@ -493,6 +493,20 @@ function renderDocs() {
     await api(`/cases/${S.caseId}/documents/${b.dataset.delDoc}`, { method: "DELETE" }); await openCase(S.caseId, true); toast("Document removed; Pre-Authorization re-checked"); }));
 }
 
+// V1 item 8.4: where a quote was read on the scan image, from the independent OCR engine's word boxes (page.box_map: transcription
+// offsets -> boxes as fractions of the image). Drawn only where words were matched, and only when at least 60 % of the quote's words were.
+function spanBoxes(p, s, e) {
+  const map = (p && p.box_map) || []; if (!map.length || isNaN(s) || isNaN(e)) return [];
+  const t = (p.text || "").slice(s, e), re = /[^\s|]+/g; let m, tot = 0, hit = 0;
+  while ((m = re.exec(t))) { if (!/[\p{L}\p{N}]/u.test(m[0])) continue; tot++; const a = s + m.index, b = a + m[0].length; if (map.some((x) => x[0] < b && a < x[1])) hit++; }
+  if (!tot || hit / tot < 0.6) return [];
+  const lines = [];
+  for (const x of map) { if (!(x[0] < e && s < x[1])) continue; const b = x.slice(2);
+    const l = lines.find((r) => Math.min(r[3], b[3]) - Math.max(r[1], b[1]) >= 0.5 * Math.min(r[3] - r[1], b[3] - b[1]));
+    if (l) { l[0] = Math.min(l[0], b[0]); l[1] = Math.min(l[1], b[1]); l[2] = Math.max(l[2], b[2]); l[3] = Math.max(l[3], b[3]); } else lines.push([...b]); }
+  return lines.map((r) => [Math.max(0, r[0] - 0.003), Math.max(0, r[1] - 0.003), Math.min(1, r[2] + 0.003), Math.min(1, r[3] + 0.003)]);
+}
+const boxDiv = (r, k, t) => `<div class="ocrbox ${k}" title="${esc(t)}" style="left:${(r[0] * 100).toFixed(2)}%;top:${(r[1] * 100).toFixed(2)}%;width:${((r[2] - r[0]) * 100).toFixed(2)}%;height:${((r[3] - r[1]) * 100).toFixed(2)}%"></div>`;
 async function openDoc(docId, focus, base) {
   base = base || `/cases/${S.caseId}/documents/${docId}`;
   const d = await api(base);
@@ -509,8 +523,17 @@ async function openDoc(docId, focus, base) {
   };
   const isImg = [".png", ".jpg", ".jpeg", ".webp", ".bmp"].includes(d.ext);
   const isPdf = d.ext === ".pdf";
-  const preview = isImg ? `<img class="orig" src="/api/tb${base}/file">` :
-    isPdf ? `<img class="orig" id="pdfimg" src="/api/tb${base}/file?render=1&page=${pg}">` : `<div class="muted">No image preview for this format.</div>`;
+  const preview = isImg ? `<div class="scanwrap"><img class="orig" src="/api/tb${base}/file" alt="Original document"><div id="ocrboxes"></div></div><div class="small muted" id="boxnote"></div>` :
+    isPdf ? `<div class="scanwrap"><img class="orig" id="pdfimg" src="/api/tb${base}/file?render=1&page=${pg}" alt="Page preview"><div id="ocrboxes"></div></div><div class="small muted" id="boxnote"></div>` : `<div class="muted">No image preview for this format.</div>`;
+  const drawBoxes = (pi) => {  // V1 item 8.4: the cited quote (strong) and this page's fields (light) on the scan image
+    const el = $("#ocrboxes"), note = $("#boxnote"), p = pages[pi] || {}; if (!el) return;
+    const out = [];
+    if (focus && focus.page === pi && focus.start !== "" && !isNaN(focus.start)) spanBoxes(p, focus.start, focus.end).forEach((r) => out.push(boxDiv(r, "focus", "Cited quote")));
+    Object.entries(d.facts || {}).forEach(([k, f]) => { if (f.location?.page === pi) (f.boxes || []).forEach((r) => out.push(boxDiv(r, "fact", S.facts?.[k]?.label || k))); });
+    el.innerHTML = out.join("");
+    if (note) note.textContent = p.method !== "vision-transcription" ? "" : p.box_map ? (out.length ? "Highlights: where the words were read on the image (independent OCR engine word positions, shown only where its words match the transcription)." : "")
+      : p.ocr_engine_note ? `No word positions on this page: ${p.ocr_engine_note}.` : "No word positions on this page (read before the independent OCR engine was added: re-process the document to get them).";
+  };
   const idr = d.identity_read;
   const idHTML = idr ? `<div>Identity as printed</div><div>${esc(identityText(idr))}${idr.notes?.length ? ` <span class="muted">(${esc(idr.notes.join("; "))})</span>` : ""}</div>` : "";
   $("#drawer-body").innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
@@ -532,7 +555,8 @@ async function openDoc(docId, focus, base) {
       ${pages.some((p) => p.ocr_uncertain_numbers?.length) ? `<div class="flag review" style="margin-top:8px"><div class="k">OCR disagreement</div>The two reads of this scanned page differ on these numbers: ${esc(pages.flatMap((p) => p.ocr_uncertain_numbers || []).join(", "))}. Values containing them are marked for expert review; read the scan image.</div>` : ""}
     </div></div>`;
   $("#drawer").classList.remove("hidden");
-  $$("[data-pg]").forEach((b) => (b.onclick = () => { $("#doctext").innerHTML = marks(+b.dataset.pg); const im = $("#pdfimg"); if (im) im.src = im.src.replace(/page=\d+/, "page=" + b.dataset.pg); }));
+  drawBoxes(pg);
+  $$("[data-pg]").forEach((b) => (b.onclick = () => { $("#doctext").innerHTML = marks(+b.dataset.pg); const im = $("#pdfimg"); if (im) im.src = im.src.replace(/page=\d+/, "page=" + b.dataset.pg); drawBoxes(+b.dataset.pg); }));
   setTimeout(() => $("#doctext mark.focus")?.scrollIntoView({ block: "center" }), 50);
 }
 

@@ -172,3 +172,85 @@ def test_a_newer_different_scanned_value_still_needs_confirmation(unit_case):
     r = util.req(rules.evaluate(unit_case), "pdl1")
     assert r["status"] == "needs_confirmation"
     assert [n["value"] for n in r["needs"] if n["type"] == "confirm_value"] == ["TPS 80%"]
+
+
+# ---- V1 item 8.4: word boxes on the scan image ----
+
+from tumour_board import extract  # noqa: E402
+
+LINE = "PD-L1 (22C3) Tumour Proportion Score: 60%"
+
+
+def _words(text, y0=0.40, y1=0.43, line=3):
+    """Synthetic engine words for one line of text, laid out left to right (the 8.3 word format)."""
+    out, x = [], 0.05
+    for t in text.split():
+        w = 0.012 * len(t)
+        out.append([t, round(x, 4), y0, round(x + w, 4), y1, 95, line]); x += w + 0.01
+    return out
+
+
+def _engine_page(text=LINE, words=None):
+    return {"text": text, "method": SCAN, "ocr_engine": {"engine": "tesseract", "version": "5", "lang": "eng", "size": [1700, 900], "text": text,
+                                                          "words": _words(text) if words is None else words}}
+
+
+def test_box_map_added_once_to_engine_pages_only():
+    pages = [_engine_page(), {"text": "typed", "method": "text-layer"}]
+    assert extract.add_box_maps(pages) is True
+    assert pages[0]["box_map"] and "box_map" not in pages[1]
+    assert extract.add_box_maps(pages) is False  # kept, not recomputed
+
+
+def test_quote_boxes_cover_the_quote_line():
+    pages = [_engine_page()]; extract.add_box_maps(pages)
+    s = LINE.index("Score"); boxes = extract.quote_boxes(pages, {"page": 0, "start": s, "end": len(LINE)})
+    assert len(boxes) == 1
+    x0, y0, x1, y1 = boxes[0]
+    assert y0 < 0.40 < 0.43 < y1 and x0 < x1
+
+
+def test_no_box_when_the_engine_read_another_number():
+    pages = [_engine_page(words=_words(LINE.replace("60%", "80%")))]; extract.add_box_maps(pages)
+    s = LINE.index("60%")
+    assert extract.quote_boxes(pages, {"page": 0, "start": s, "end": s + 3}) == []
+
+
+def test_no_box_without_engine_words_or_location():
+    assert extract.quote_boxes([{"text": LINE, "method": SCAN}], {"page": 0, "start": 0, "end": 5}) == []
+    assert extract.quote_boxes([], {"page": 0, "start": 0, "end": 5}) == []
+    assert extract.quote_boxes([_engine_page()], None) == []
+
+
+def test_extracted_scan_fact_stores_its_boxes(run):
+    text = util.TEXT
+    words = [w for i, line in enumerate(text.split("\n")) for w in _words(line, 0.05 + i * 0.05, 0.08 + i * 0.05, i)]
+    doc = run(page_extra={"method": SCAN, "ocr_engine": {"engine": "tesseract", "words": words}})
+    hb = doc["facts"]["haemoglobin"]
+    assert hb["source_method"] == SCAN and len(hb["boxes"]) == 1
+    assert store.get_doc("TB-UNIT", doc["doc_id"])["pages"][0]["box_map"]  # kept on the stored page for citations
+
+
+def test_confirm_value_need_carries_the_boxes(unit_case):
+    d = _hist()
+    d["facts"]["pdl1"]["boxes"] = [[0.1, 0.4, 0.5, 0.43]]
+    util.add(unit_case, d, _ct())
+    need = next(n for n in util.req(rules.evaluate(unit_case), "pdl1")["needs"] if n["type"] == "confirm_value")
+    assert need["boxes"] == [[0.1, 0.4, 0.5, 0.43]]
+
+
+def test_aadhaar_boxes_and_masked_preview(tmp_path):
+    from PIL import Image
+    words = _words("Aadhaar: XXXX XXXX 2200")
+    doc = {"pages": [_engine_page("Aadhaar: XXXX XXXX 2200", words)]}
+    boxes = scanned.aadhaar_boxes(doc, 0)
+    assert len(boxes) == 2  # the two masked groups; the last four digits stay visible, as in the text
+    p = tmp_path / "scan.png"; Image.new("RGB", (1000, 500), "white").save(p)
+    data, kind = scanned.preview_bytes(p, doc)
+    assert kind == "image/png"
+    im = Image.open(__import__("io").BytesIO(data))
+    x0, y0, x1, y1 = boxes[0]
+    assert im.getpixel((int((x0 + x1) / 2 * 1000), int((y0 + y1) / 2 * 500))) == (0, 0, 0)
+    assert im.getpixel((5, 5)) == (255, 255, 255)
+    assert scanned.preview_bytes(p, {"pages": [_engine_page()]}) is None  # nothing to mask: the file is served as stored
+    assert scanned.aadhaar_boxes({"pages": [{"text": "x"}]}, 0) == [] and scanned.aadhaar_boxes({}, 3) == []

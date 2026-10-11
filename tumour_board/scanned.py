@@ -5,8 +5,11 @@ non-medical); a value's quote is then checked against that transcription, not ag
 quote found in a PDF text layer. Every fact and citation therefore carries the method of the page its quote sits on
 (`source_method`), and the UI shows "from scan (OCR)" wherever it is "vision-transcription".
 
-No model here and nothing is changed in the documents' text: this only reads the page records.
+No model here and nothing is changed in the documents' text: this only reads the page records. The one image change is the page
+preview: Aadhaar groups the independent OCR engine read (item 8.3) are blacked out on it (item 8.4), never on the stored original.
 """
+
+from . import ocr_boxes
 
 SCAN_METHOD = "vision-transcription"  # ingest.ocr_page: a page read by the vision reader from an image
 SCAN_LABEL = "from scan (OCR)"
@@ -74,3 +77,58 @@ def citation_source_method(pages, page_index) -> dict:
     """{"source_method": ...} for a citation located on page_index of a document's pages, {} when unknown."""
     m = page_method(pages, page_index)
     return {"source_method": m} if m else {}
+
+
+def aadhaar_boxes(doc, page_index=0) -> list:
+    """V1 item 8.4: boxes of the Aadhaar groups the independent OCR engine read and masked on this page ("XXXX" words; the last four
+    digits stay visible, as in the text), for blacking them out on the page preview. [] when the page has no engine words."""
+    pages = (doc or {}).get("pages") or []
+    if not isinstance(page_index, int) or not 0 <= page_index < len(pages) or not isinstance(pages[page_index], dict):
+        return []
+    eng = pages[page_index].get("ocr_engine")
+    return ocr_boxes.masked_boxes(eng["words"]) if isinstance(eng, dict) and eng.get("words") else []
+
+
+def masked_png(im, boxes) -> bytes:
+    """The image as PNG with each box (fractions of the image) filled black. The caller's image is not changed."""
+    import io
+    from PIL import ImageDraw
+    im = im.convert("RGB")
+    dr = ImageDraw.Draw(im)
+    w, h = im.size
+    for x0, y0, x1, y1 in boxes or []:
+        dr.rectangle([int(x0 * w), int(y0 * h), int(x1 * w + 0.999), int(y1 * h + 0.999)], fill=(0, 0, 0))
+    buf = io.BytesIO(); im.save(buf, "PNG")
+    return buf.getvalue()
+
+
+def preview_bytes(path, doc, render=False, page=0):
+    """(bytes, media type) for the document preview with Aadhaar blacked out (V1 item 8.4), or None when nothing needs masking (the
+    caller then serves the file as before): a PDF page rendered at scale 1.6, or an image file read as stored (no EXIF rotation, the
+    orientation the engine read)."""
+    from pathlib import Path
+    from PIL import Image
+    ext = Path(path).suffix.lower()
+    if render and ext == ".pdf":
+        import pypdfium2 as pdfium
+        pdf = pdfium.PdfDocument(str(path))
+        try:
+            n = max(0, min(int(page), len(pdf) - 1))
+            boxes = aadhaar_boxes(doc, n)
+            im = pdf[n].render(scale=1.6).to_pil()
+        finally:
+            pdf.close()
+        import io
+        if not boxes:
+            buf = io.BytesIO(); im.save(buf, "PNG"); return buf.getvalue(), "image/png"
+        return masked_png(im, boxes), "image/png"
+    if ext not in (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"):
+        return None
+    boxes = aadhaar_boxes(doc, 0)
+    pages = (doc or {}).get("pages") or []
+    engine = bool(pages) and isinstance(pages[0], dict) and isinstance(pages[0].get("ocr_engine"), dict)
+    with Image.open(path) as im:
+        rotated = im.getexif().get(274) not in (None, 1)  # a browser would turn it by its EXIF orientation; the engine's boxes are not turned
+        if boxes or (engine and rotated):
+            return masked_png(im, boxes), "image/png"
+    return None

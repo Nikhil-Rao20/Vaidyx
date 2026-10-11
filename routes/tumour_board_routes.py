@@ -305,14 +305,10 @@ def setup_tumour_board_routes():
     async def intake_file(doc_id: str, request: Request, render: int = 0, page: int = 0):
         _intake(doc_id, _roles(request))
         p = store.intake_original_path(doc_id)
-        if render and p.suffix.lower() == ".pdf":
-            import io
-            import pypdfium2 as pdfium
+        out = scanned.preview_bytes(p, store.get_intake(doc_id) or {}, bool(render), page)  # Aadhaar blacked out on the preview (V1 item 8.4)
+        if out:
             from fastapi.responses import Response
-            pdf = pdfium.PdfDocument(str(p))
-            im = pdf[max(0, min(page, len(pdf) - 1))].render(scale=1.6).to_pil()
-            buf = io.BytesIO(); im.save(buf, "PNG")
-            return Response(buf.getvalue(), media_type="image/png")
+            return Response(out[0], media_type=out[1])
         return FileResponse(p)
 
     @r.post("/intake/{doc_id}/file-to-case")
@@ -436,14 +432,11 @@ def setup_tumour_board_routes():
     async def doc_file(case_id: str, doc_id: str, request: Request, render: int = 0, page: int = 0):
         _user(request); _case(case_id)
         p = store.original_path(case_id, doc_id)
-        if render and p.suffix.lower() == ".pdf":  # page preview as PNG (keeps the strict CSP: no PDF iframes needed)
-            import io
-            import pypdfium2 as pdfium
+        # page preview as PNG (keeps the strict CSP: no PDF iframes needed); Aadhaar groups read by the OCR engine blacked out (V1 item 8.4)
+        out = scanned.preview_bytes(p, store.get_doc(case_id, doc_id) or {}, bool(render), page)
+        if out:
             from fastapi.responses import Response
-            pdf = pdfium.PdfDocument(str(p))
-            im = pdf[max(0, min(page, len(pdf) - 1))].render(scale=1.6).to_pil()
-            buf = io.BytesIO(); im.save(buf, "PNG")
-            return Response(buf.getvalue(), media_type="image/png")
+            return Response(out[0], media_type=out[1])
         return FileResponse(p)
 
     @r.post("/cases/{case_id}/recheck")
