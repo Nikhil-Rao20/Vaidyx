@@ -79,7 +79,7 @@
       "title_only": []
     },
     "operative_note": {
-      "patterns": ["operative note", "operative notes", "operation note", "operation notes", "operative record", "surgery note", "surgical note", "OT note", "OT notes", "procedure note", "operative findings"],
+      "patterns": ["operative note", "operative notes", "operation note", "operation notes", "operative record", "surgery note", "surgical note", "OT note", "OT notes", "procedure note", "operative findings", "examination under anaesthesia", "examination under anesthesia", "EUA"],
       "title_only": [],
       "beats": ["histopathology"]
     },

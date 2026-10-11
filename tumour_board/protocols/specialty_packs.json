@@ -92,9 +92,28 @@
             {"text": "Nodal disease and levels", "page": 39, "quote": "Presence of nodal disease: Metastatic/ Benign (reactive) / Indeterminate"},
             {"text": "Extracapsular spread of nodes", "page": 39, "quote": "Perinodal extension/extracapsular spread: Absent/ Present"}
           ]
+        },
+        "cervix": {
+          "title": "ICRI / IRIA reporting checklist, carcinoma cervix (baseline CT / MRI pelvis)",
+          "file": "iria/ICRI-IRIA-onco-imaging-protocols-and-reporting-checklists-2020.pdf",
+          "items": [
+            {"text": "Clinical background", "page": 132, "quote": "Clinical background- Presenting complaints and clinical suspicion"},
+            {"text": "Procedure details", "page": 132, "quote": "Procedure details- CECT with oral contrast"},
+            {"text": "Size of the cervical mass", "page": 132, "quote": "Mass in the region of cervix measuring approx. .… cms in largest dimension"},
+            {"text": "Extension into the uterus", "page": 132, "quote": "with extension into uterus (+/-)"},
+            {"text": "Endocervical canal obliteration, hydro/pyometra", "page": 132, "quote": "Obliterating the endocervical canal with resultant hydro/pyometra (+/-)"},
+            {"text": "Parametrial infiltration and pelvic wall extension", "page": 132, "quote": "Infiltrating parametrium right or left (+/-) with extension to lateral pelvic walls (+/-)"},
+            {"text": "Ureters, bladder, rectum, vessels", "page": 132, "quote": "Infiltration of lower ureters (+/-), urinary bladder (+/-), rectum (+/-), vessels (+/-)"},
+            {"text": "Upstream hydroureteronephrosis", "page": 132, "quote": "Upstream hydroureteronephrosis (+/-)"},
+            {"text": "Lymph nodes by station, size, necrosis", "page": 132, "quote": "Size, discrete/ conglomerate, necrosis (+/-)"},
+            {"text": "Ascites and pleural effusion", "page": 132, "quote": "Ascites and pleural effusion (+/-)"},
+            {"text": "Bone and lung metastases", "page": 132, "quote": "Bones and lungs: Metastases (+/-)"},
+            {"text": "Comparison with previous study", "page": 133, "quote": "Comparison: if available"},
+            {"text": "Impression documented in the report", "page": 133, "quote": "Impression: Mass in the cervix with infiltration"}
+          ]
         }
       },
-      "checklist_note": "From the ICRI / IRIA onco-imaging reporting checklists (India). The NCG-KCDO radiology synoptic template has rectal and colon templates but none for lung or breast. Oral cavity: the radiology synoptic reporting format of the NCG head and neck guideline (Annexure 1, India)."
+      "checklist_note": "From the ICRI / IRIA onco-imaging reporting checklists (India). The NCG-KCDO radiology synoptic template has rectal and colon templates but none for lung or breast. Oral cavity: the radiology synoptic reporting format of the NCG head and neck guideline (Annexure 1, India). Cervix: the ICRI / IRIA carcinoma cervix reporting format (CECT, the pelvis items also for MRI; the NCG gynaecological guideline has no radiology template)."
     },
     "pathology": {
       "label": "Pathology",
@@ -188,7 +207,7 @@
           ]
         }
       },
-      "checklist_note": "Oral cavity: the NCG head and neck pathology synoptic format (Annexure 2, India; core items only). Other cancers: Indian sources (NCG, ICMR, TMC) define no pathology reporting dataset, so the checklists come from the international CAP protocols (resection specimens)."
+      "checklist_note": "Oral cavity: the NCG head and neck pathology synoptic format (Annexure 2, India; core items only). Other cancers: Indian sources (NCG, ICMR, TMC) define no pathology reporting dataset, so the checklists come from the international CAP protocols (resection specimens). Cervix: none (no CAP, ICCR or RCPath cervix dataset on disk; NCG lists only tumour type, grade, depth of invasion and LVSI, which the Pre-Authorization already checks)."
     },
     "medical_oncology": {
       "label": "Medical Oncology",

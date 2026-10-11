@@ -26,7 +26,8 @@ SOURCES = {  # folder -> (organisation label, region tag, boost)
     "tmc": ("Tata Memorial Centre Evidence Based Management, India", "India", 1.3),
 }
 CANCER_WORDS = {"lung_nsclc": ["lung", "nsclc", "thoracic"], "breast": ["breast"], "colorectal_rectum": ["rect", "colorectal", "colon"],
-                "oral_cavity": ["oral", "head neck", "head-neck", "head and neck", "buccal", "tongue", "mouth"]}
+                "oral_cavity": ["oral", "head neck", "head-neck", "head and neck", "buccal", "tongue", "mouth"],
+                "cervix": ["cervix", "carcinoma cervix", "cervical cancer", "cervical carcinoma", "gyn"]}  # not "cervical" alone: neck nodes
 INDEX_VERSION = 5  # bump when chunking or filtering changes: the cached index is rebuilt, embeddings of unchanged chunks reused
 _lock = threading.Lock()
 _IDX = None
@@ -374,5 +375,7 @@ def queries_for_case(case_id):
             "breast": ["breast cancer ER PR HER2 Ki-67 testing and reporting", "breast cancer staging work-up imaging locally advanced"],
             "colorectal_rectum": ["rectal cancer restaging MRI after chemoradiotherapy response assessment", "rectal cancer MRI reporting mesorectal fascia EMVI"],
             "oral_cavity": ["oral cancer work-up imaging of the primary and neck chest X-ray dental evaluation",
-                            "oral cavity carcinoma pathology reporting depth of invasion perineural invasion margins extranodal extension"]}
+                            "oral cavity carcinoma pathology reporting depth of invasion perineural invasion margins extranodal extension"],
+            "cervix": ["carcinoma cervix staging work-up FIGO imaging MRI CECT abdomen pelvis cystoscopy",
+                       "cervix cancer pathology tumour type grade depth of invasion LVSI"]}
     return (qs + base.get(prot["id"], []))[:6]

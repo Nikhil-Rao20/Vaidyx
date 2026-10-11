@@ -166,7 +166,7 @@ def test_phase9_fabrication_makes_the_run_red(runs):
 def test_first_wave_is_exactly_the_33_old_probes():
     assert qa_eval.PROBES == OLD_PROBES
     assert sum(len(v) for v in qa_eval.PROBES.values()) == 33
-    assert set(qa_eval.PROBES_V9) == {"TB-007"} and not set(qa_eval.PROBES_V9) & set(qa_eval.PROBES)
+    assert "TB-007" in qa_eval.PROBES_V9 and not set(qa_eval.PROBES_V9) & set(qa_eval.PROBES)
     p7 = qa_eval.PROBES_V9["TB-007"]
     assert len(p7) == 12 and [k for _, k, _ in p7].count("absent") == 3 and [k for _, k, _ in p7].count("scope") == 2
 
@@ -206,7 +206,7 @@ def test_qa_eval_two_waves(tmp_path, monkeypatch, with_v9):
 
 # ---- summary_eval / prepare_cases --------------------------------------------------------------------------------
 def test_summary_eval_cases_and_tb007_fields_are_catalogue_ids():
-    assert summary_eval.CASES == list(OLD) and summary_eval.CASES_V9 == ["TB-007"]
+    assert summary_eval.CASES == list(OLD) and summary_eval.CASES_V9[0] == "TB-007"
     cat = protocol.facts()
     missing = [f for f in TB007_FIELDS if summary_eval.KEYMAP.get(f, f) not in cat]
     assert not missing, missing

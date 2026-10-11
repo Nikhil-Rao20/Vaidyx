@@ -91,7 +91,7 @@ def test_opd_note_has_no_dental_record():
 def test_board_decision():
     rec = ARRIVALS[0]
     assert rec["truth"]["board_decision"] is ic.BOARD_DECISION_7
-    assert ic.BOARD_DECISIONS == {"TB-005": ic.BOARD_DECISION, "TB-007": ic.BOARD_DECISION_7}
+    assert ic.BOARD_DECISIONS["TB-005"] is ic.BOARD_DECISION and ic.BOARD_DECISIONS["TB-007"] is ic.BOARD_DECISION_7
     bd = ic.BOARD_DECISION_7
     assert bd["text"] == ic.DECISION_TEXT_7 and bd["document"] == rec["path"] and bd["board_date"] == rec["truth"]["event_date"]
     assert set(ic.BOARD_DECISION) <= set(bd) and bd["dose_slips"] == [] and bd["absent_specialties"] == []

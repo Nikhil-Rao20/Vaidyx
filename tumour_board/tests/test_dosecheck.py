@@ -118,7 +118,7 @@ def test_parse_stage_needs_a_stage_not_a_sequence_name():
 
 # ---------------------------------------------------------------- the reference table
 
-CANCERS = ("breast", "lung_nsclc", "colorectal_rectum", "oral_cavity")
+CANCERS = ("breast", "lung_nsclc", "colorectal_rectum", "oral_cavity", "cervix")
 
 
 def test_table_validates():
@@ -604,3 +604,26 @@ def test_oral_cavity_references_are_indian_and_curated():
     assert any(r["drug"] == "celecoxib" and r["dose"] == 200 for r in oc) and not any(r["drug"] == "methotrexate" and r["unit"] == "mg" for r in oc)
     assert dosecheck.compare_dose("cisplatin", 40, "mg/m2", "oral_cavity")[0] == "consistent"
     assert dosecheck.compare_dose("cisplatin", 400, "mg/m2", "oral_cavity")[0] == "possible_transcription_error"
+
+
+def test_rt_fraction_range_is_read():
+    """V1 item 9.2: NCG cervix brachytherapy '7 Gy * 2-3 Fr' is 14-21 Gy in 2-3 fractions; a single fraction count and a weekly schedule
+    read as before."""
+    r = dosecheck.parse_rt("EBRT dose of 45-50 Gy/25 Fr followed by BT dose of 7 Gy * 2-3 Fr high dose rate.")
+    assert [(x["total_gy"], x["total_gy_max"], x["fractions"], x["fractions_max"]) for x in r] == [(45, 50, 25, None), (14, 21, 2, 3)]
+    assert [(x["total_gy"], x["fractions"], x["fractions_max"]) for x in dosecheck.parse_rt("HDR brachytherapy 7 Gy x 3 fractions")] == [(21, 3, None)]
+    assert [(x["total_gy"], x["total_gy_max"], x["fractions"]) for x in dosecheck.parse_rt("8-10 Gy x 3")] == [(24, 30, 3)]
+    assert dosecheck.parse_rt("2 Gy x 5 a week") == []
+
+
+def test_cervix_references_are_indian_and_check_the_demo_decision():
+    """V1 item 9.2: NCG gynaecological 2019 (Word file, parts 1-5 = the cervix chapter). TB-008's decision: weekly cisplatin 40 mg/m2, EBRT
+    50 Gy / 25, HDR brachytherapy 7 Gy x 3 all consistent with an Indian line; a tenfold slip is a possible transcription error."""
+    cx = dosecheck.references("cervix")
+    assert cx and all(r["region"] == "India" and r["file"] == "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx" and 1 <= r["page"] <= 5 for r in cx)
+    assert dosecheck.compare_dose("cisplatin", 40, "mg/m2", "cervix")[0] == "consistent"
+    assert dosecheck.compare_dose("cisplatin", 400, "mg/m2", "cervix")[0] == "possible_transcription_error"
+    for text in ("external beam radiotherapy 50 Gy in 25 fractions", "HDR intracavitary brachytherapy 7 Gy x 3 fractions to point A"):
+        rt = dosecheck.parse_rt(text)[0]
+        assert dosecheck.compare_rt(rt, "cervix")[0] == "consistent", text
+    assert dosecheck.compare_rt(dosecheck.parse_rt("5 Gy x 3 fractions")[0], "cervix")[0] != "consistent"

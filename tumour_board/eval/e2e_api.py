@@ -801,24 +801,40 @@ def phase8(c):
         c.delete("/api/tb/cases/TB-TEST8")
 
 
-try:  # the corpus generator owns the decision text; the copy below is used only when it cannot be imported
+try:  # the corpus generator owns the decision texts; the copies below are used only when they cannot be imported
     from tumour_board.demo_data.india_corpus import DECISION_TEXT_7
 except Exception:
     DECISION_TEXT_7 = ("Composite resection: wide local excision of the left buccal mucosa lesion with segmental mandibulectomy, left modified neck "
                        "dissection (levels I to V) and reconstruction with a pectoralis major myocutaneous flap. Adjuvant radiotherapy 60 Gy in 30 "
                        "fractions to the tumour bed and neck, with concurrent Inj. Cisplatin 40 mg/m2 IV weekly if the final histopathology shows a "
                        "positive margin or extranodal extension. Stage as recorded: cT4a N1 M0.")
+try:
+    from tumour_board.demo_data.india_corpus import DECISION_TEXT_8
+except Exception:
+    DECISION_TEXT_8 = ("Radical concurrent chemoradiation: external beam radiotherapy 50 Gy in 25 fractions to the pelvis with concurrent Inj. Cisplatin "
+                       "40 mg/m2 IV weekly, followed by HDR intracavitary brachytherapy 7 Gy x 3 fractions to point A. FIGO 2018 Stage IIB as recorded.")
 
-# V1 Phase 9: one entry per new demo Case File; phase9() walks each through the whole workflow. TB-008 (cervix, item 9.2) is one more entry.
+# V1 Phase 9: one entry per new demo Case File; phase9() walks each through the whole workflow. Spec keys:
+#   counted          records the gate counts at import (setting not recorded yet: strictest tier); each must be counted
+#   shown            {record: NCG tier} shown at import, never counted
+#   confirm_type     optional: a document whose type is disputed by design (V1 item 3.2) and the records waiting for it
+#   gap              optional: the one counted record open at import {record, status, level, department, inbox (department id)}; the
+#                    arrivals close it. Without a gap the gate passes at import.
+#   listing          the listing payload; listed: {"counted": exact counted set after listing or None, "shown": {record: tier or None}}
+#   intake, ask, refuse, brief_role, checklist   department upload matched on the UHID, Ask, the specialty brief's checklist title
+#   decision, drug, dose, slip, guideline_file, members, action, inbox   the board record, its dose check and the board action's inbox
+# A document the reader mistypes (a confirm_doc_type need on a counted record) is confirmed with its title-keyword type, as a clinician
+# would in the UI, and reported in the details, so one reader slip does not fail the run.
 V9_CASES = {
     "TB-007": {
         "site": "oral cavity", "protocol": "oral_cavity",
         "counted": ["clinical_history", "histopathology", "primary_neck_imaging", "chest_imaging", "dental_evaluation"],  # NCG records that count
-        "optional": ["pet_ct", "cect_thorax"],  # NCG Optional (c): shown, never counted
+        "shown": {"pet_ct": "c", "cect_thorax": "c"},  # NCG Optional (c): shown, never counted
         # V1 item 3.2 safeguard, intended: the reader types the dental Word file "other" while its title keywords say clinical_note, so the two
         # records it could satisfy wait for one clinician confirmation of its type (as the UI does), then the gate passes
         "confirm_type": {"rel_path": "surgical_oncology/dental_evaluation_2026-09-17.docx", "doc_type": "clinical_note", "records": ["clinical_history", "dental_evaluation"]},
         "listing": {"protocol": "oral_cavity", "setting": "locally_advanced", "board_date": "18/10/2026", "hospital_level": "essential"},
+        "listed": {"counted": None, "shown": {"pet_ct": None}},
         "intake": {"department": "Radio-diagnosis", "filename": "usg_neck_2026-09-30.txt", "text":
                    "SAHYADRI CANCER INSTITUTE (SYNTHETIC)\nDEPARTMENT OF RADIO-DIAGNOSIS\nULTRASOUND NECK\nPatient: Manjunath Gowda  UHID: SYN-700352  54 Y / M\n"
                    "Study date: 30/09/2026\nFindings: left level IB lymph node 2.0 x 1.7 cm. No other enlarged cervical lymph node. Both lobes of the thyroid normal.\n"
@@ -832,7 +848,60 @@ V9_CASES = {
                     {"name": "Dr. A. Kulkarni (synthetic)", "department": "Medical Oncology"}],
         "action": {"department": "Surgical Oncology", "task": "Schedule surgery"}, "inbox": "surgical_oncology",
     },
+    "TB-008": {
+        "site": "cervix", "protocol": "cervix",
+        "counted": ["clinical_history", "histopathology", "baseline_labs", "abdomen_pelvis_imaging", "cect_abdomen_pelvis", "chest_xray", "cystoscopy_proctoscopy"],
+        "shown": {"mri_pelvis": "b", "ct_thorax": "c", "ihc": "c", "pet_ct": "c"},
+        # cystoscopy / proctoscopy arrives later: at import it is the one Level 1 gap, routed to Surgical Oncology
+        "gap": {"record": "cystoscopy_proctoscopy", "status": "missing_record", "level": 1, "department": "Surgical Oncology", "inbox": "surgical_oncology"},
+        "listing": {"protocol": "cervix", "setting": "locally_advanced", "board_date": "20/10/2026", "hospital_level": "essential"},
+        "listed": {"counted": ["clinical_history", "histopathology", "baseline_labs", "cect_abdomen_pelvis", "cystoscopy_proctoscopy"],
+                   "shown": {"abdomen_pelvis_imaging": "none", "chest_xray": "b"}},
+        "intake": {"department": "Radio-diagnosis", "filename": "usg_abdomen_2026-09-29.txt", "text":
+                   "SAHYADRI CANCER INSTITUTE (SYNTHETIC)\nDEPARTMENT OF RADIO-DIAGNOSIS\nULTRASOUND ABDOMEN AND PELVIS\nPatient: Parvathi Naik  UHID: SYN-800415  46 Y / F\n"
+                   "Study date: 29/09/2026\nFindings: liver, gall bladder, pancreas and spleen normal. Both kidneys normal in size; no hydronephrosis. "
+                   "Bulky cervix, as described on MRI.\nImpression: no hydronephrosis.\nReport status: FINAL\nSd/- Dr. Shalini Rao, MD (Radio-diagnosis), KMC Reg. No. 66310\n"
+                   "Reported on 29/09/2026\n"},
+        "ask": ("What FIGO stage is recorded?", "IIB"),
+        "refuse": "Should she get chemoradiation or surgery?",
+        "brief_role": "radiology", "checklist": "cervix",
+        "decision": DECISION_TEXT_8, "drug": "cisplatin", "dose": "40 mg/m2", "slip": "400 mg/m2", "guideline_file": "ncg-guidelines-for-gynecological-cancer",
+        "members": [{"name": "Dr. A. Deshpande (synthetic)", "department": "Surgical Oncology"}, {"name": "Dr. M. Iyer (synthetic)", "department": "Radiation Oncology"},
+                    {"name": "Dr. A. Kulkarni (synthetic)", "department": "Medical Oncology"}],
+        "action": {"department": "Radiation Oncology", "task": "Start chemoradiation"}, "inbox": "radiation_oncology",
+    },
 }
+
+
+def _confirm_disputed(c, cid, d, g):
+    """Confirm the type of every document a counted record waits for (a confirm_doc_type need) with the type its title keywords say, as a
+    clinician would in the UI; returns [(file, read as, confirmed as or None)]. Nothing to do when the reader typed every document right."""
+    out, seen = [], set()
+    docs = {x["doc_id"]: x for x in d["documents"]}
+    for r in g.get("requirements") or []:
+        for n in r.get("needs") or []:
+            if n.get("type") != "confirm_doc_type" or n.get("doc_id") in seen:
+                continue
+            seen.add(n["doc_id"]); x = docs.get(n["doc_id"], {}); cls = x.get("classification") or {}
+            kw = cls.get("doc_type_keyword")
+            if kw:
+                rr = c.post(f"/api/tb/cases/{cid}/confirmations", json={"type": "confirm_doc_type", "key": n["doc_id"], "fields": {"doc_type": kw},
+                                                                         "reason": "e2e: type read on the document (title keywords)"})
+                if rr.status_code == 200 and rr.json().get("job"):
+                    wait_job(c, rr.json()["job"])
+                kw = kw if rr.status_code == 200 else None
+            out.append((x.get("rel_path", n["doc_id"]), cls.get("doc_type"), kw))
+    if out:
+        c.post(f"/api/tb/cases/{cid}/recheck")
+        print(f"INFO 9 {cid}: reader slip, document type confirmed: {out}", flush=True)
+    return out
+
+
+def _open_rows(c, dept, cid, requirement):
+    """Inbox rows of a department for one Case File's Pre-Authorization request."""
+    ib = c.get("/api/tb/inbox").json()
+    return [q for dd in ib["departments"] if dd["id"] == dept for q in dd["requests"] if q["case_id"] == cid and q.get("requirement") == requirement
+            and q.get("source", "pre_authorization") == "pre_authorization"]
 
 
 def _brief(c, cid, role):
@@ -847,9 +916,22 @@ def _brief(c, cid, role):
     return brief, tools
 
 
+def protocol_tier(t):
+    return {"a": "NCG Essential", "b": "NCG Optimal", "c": "NCG Optional", "none": "not applicable"}.get(t, t)
+
+
+def _summary_check(c, cid, tag, when=""):
+    sm = c.post(f"/api/tb/cases/{cid}/summary", json={}).json()
+    sents = [x for p in sm.get("paragraphs") or [] for x in p]
+    stale = c.get(f"/api/tb/cases/{cid}").json()["stale"].get("summary")
+    check(f"{tag}: Case File summary compiled{' ' + when if when else ''}, every sentence cited, not stale",
+          sm.get("status") == "ready" and sents and all(x.get("citations") for x in sents) and stale == "",
+          f"{len(sents)} sentences, {sum(not x.get('citations') for x in sents)} uncited, {sm.get('seconds')} s, stale {stale!r}"[:200])
+
+
 def phase9_case(c, cid, spec):
     """One Phase 9 demo Case File end to end through the HTTP API: import and gate under its NCG protocol (a disputed document type is
-    confirmed as the UI does), listing with the NCG setting, a department upload matched on the UHID, Ask, the Case File summary, the
+    confirmed as the UI does; a gap at import is routed to its department and closed by the arrivals), listing with the NCG setting, a department upload matched on the UHID, Ask, the Case File summary, the
     specialty brief with its reporting checklist, the arrivals and the board decision (PM-JAY composition, Indian guideline dose check, recorded stage, a planted dose slip, the board action in the
     department inbox). The Case File is re-imported at the end, so it stays as the corpus defines it."""
     import datetime
@@ -869,8 +951,9 @@ def phase9_case(c, cid, spec):
     miss = [k for k in spec["counted"] if k not in req]
     check(f"{tag}: gate under {spec['protocol']} counts the NCG records", g.get("protocol") == spec["protocol"] and not miss,
           f"protocol {g.get('protocol')}; expected {', '.join(spec['counted'])}; the gate counts {', '.join(sorted(req)) or 'nothing'}" + (f"; missing {', '.join(miss)}" if miss else ""))
-    opt = {k: (shown.get(k) or {}) for k in spec["optional"]}
-    check(f"{tag}: {', '.join(spec['optional'])} shown as NCG Optional, not counted", all(v.get("tier") == "c" and v.get("required") is False and k not in req for k, v in opt.items()),
+    opt = {k: (shown.get(k) or {}) for k in spec["shown"]}
+    check(f"{tag}: {', '.join(f'{k} ({protocol_tier(t)})' for k, t in spec['shown'].items())} shown, not counted",
+          all(v.get("tier") == spec["shown"][k] and v.get("required") is False and k not in req for k, v in opt.items()),
           json.dumps({k: (v.get("tier"), v.get("required")) if v else ("counted" if k in req else "absent") for k, v in opt.items()}))
     ct = spec.get("confirm_type")
     if ct:  # a disputed document type: the records it could satisfy wait for one confirmation naming that document; the others are satisfied
@@ -892,20 +975,42 @@ def phase9_case(c, cid, spec):
             check(f"{tag}: document type confirmed as {ct['doc_type']}", r.status_code == 200, f"HTTP {r.status_code} {r.text[:100] if r.status_code != 200 else ''}")
             c.post(f"/api/tb/cases/{cid}/recheck")
             d = c.get(f"/api/tb/cases/{cid}").json(); g = d["state"]["gate"] or {}; req = {x["id"]: x for x in g.get("requirements") or []}
+    fixed = _confirm_disputed(c, cid, d, g)
+    if fixed:
+        d = c.get(f"/api/tb/cases/{cid}").json(); g = d["state"]["gate"] or {}; req = {x["id"]: x for x in g.get("requirements") or []}
     unsat = {k: f"{v['status']}: {'; '.join(v.get('problems') or [])[:80]}" for k, v in req.items() if v["status"] != "satisfied"}
-    check(f"{tag}: every counted record satisfied, gate passed", g.get("passed") is True and not unsat and g.get("total") == len(spec["counted"]),
-          f"{g.get('satisfied')}/{g.get('total')} " + json.dumps(unsat)[:200])
+    gap = spec.get("gap")
+    if not gap:
+        check(f"{tag}: every counted record satisfied, gate passed", g.get("passed") is True and not unsat and g.get("total") == len(spec["counted"]),
+              f"{g.get('satisfied')}/{g.get('total')} " + json.dumps(unsat)[:200] + (f"; reader slips confirmed {fixed}" if fixed else ""))
+    else:
+        gr = req.get(gap["record"]) or {}
+        check(f"{tag}: gate not passed: {gap['record']} the only open record ({gap['status']}, Level {gap['level']}), every other counted record satisfied",
+              g.get("passed") is False and list(unsat) == [gap["record"]] and gr.get("status") == gap["status"] and gr.get("level") == gap["level"]
+              and g.get("total") == len(spec["counted"]),
+              f"{g.get('satisfied')}/{g.get('total')} " + json.dumps(unsat)[:200] + f"; L{gr.get('level')}" + (f"; reader slips confirmed {fixed}" if fixed else ""))
+        act = [a for a in d["state"].get("actions") or [] if a.get("requirement") == gap["record"] and a.get("source", "pre_authorization") == "pre_authorization"
+               and a.get("status") != "completed"]
+        rows = [q for q in _open_rows(c, gap["inbox"], cid, gap["record"]) if q["status"] != "completed"]
+        check(f"{tag}: {gap['record']} routed to {gap['department']}: an open request in its inbox", bool(act) and act[0].get("department") == gap["department"] and bool(rows),
+              f"actions {[(a.get('department'), a.get('status'), a.get('level')) for a in act]}; inbox {[(q.get('label'), q.get('status')) for q in rows]}")
     # b. listing with the NCG setting
     r = c.post(f"/api/tb/cases/{cid}/listing", json=spec["listing"])
     if r.status_code == 200 and r.json().get("total"):
         wait_job(c, r.json()["job"])
     d = c.get(f"/api/tb/cases/{cid}").json(); g = d["state"]["gate"] or {}; shown = {x["id"]: x for x in g.get("shown") or []}
-    lst = spec["listing"]
-    check(f"{tag}: listed with the NCG setting {lst['setting']}; gate still passes; PET-CT shown, not required",
+    req = {x["id"]: x for x in g.get("requirements") or []}
+    lst, lsd = spec["listing"], spec.get("listed") or {}
+    unsat = [k for k, v in req.items() if v["status"] != "satisfied"]
+    cnt_ok = lsd.get("counted") is None or set(req) == set(lsd["counted"])
+    sh_ok = all(k in shown and shown[k].get("required") is False and (t is None or shown[k].get("tier") == t) for k, t in (lsd.get("shown") or {}).items())
+    gate_ok = (g.get("passed") is True) if not gap else (g.get("passed") is False and unsat == [gap["record"]] and (req.get(gap["record"]) or {}).get("status") == gap["status"])
+    check(f"{tag}: listed with the NCG setting {lst['setting']}" + ("; counted records as the setting says" if lsd.get("counted") else "")
+          + f"; {', '.join(lsd.get('shown') or {})} shown, not required; " + (f"the {gap['record']} gap unchanged" if gap else "gate still passes"),
           r.status_code == 200 and d["case"].get("setting") == lst["setting"] and g.get("setting") == lst["setting"] and g.get("hospital_level") == lst["hospital_level"]
-          and g.get("passed") is True and (shown.get("pet_ct") or {}).get("required") is False,
+          and cnt_ok and sh_ok and gate_ok,
           f"HTTP {r.status_code} {r.text[:80] if r.status_code != 200 else ''} setting {g.get('setting')}, {g.get('satisfied')}/{g.get('total')} passed {g.get('passed')}, "
-          f"PET-CT {(shown.get('pet_ct') or {}).get('tier')}")
+          f"counted {sorted(req)}, open {unsat}, shown {json.dumps({k: (shown.get(k) or {}).get('tier') for k in lsd.get('shown') or {}})}")
     # c. patient matching: a department upload without a Case File lands in this Case File on the UHID; then removed again
     it = spec["intake"]
     r = c.post("/api/tb/intake/documents", files=[("files", (it["filename"], it["text"].encode()))], data={"paths": json.dumps([it["filename"]]), "department": it["department"]})
@@ -931,12 +1036,15 @@ def phase9_case(c, cid, spec):
           f"{a.get('status')} {a.get('seconds')} s: {[s['text'][:80] for s in a.get('statements') or []][:2]}")
     a = c.post(f"/api/tb/cases/{cid}/ask", json={"question": spec["refuse"]}).json()
     check(f"{tag}: '{spec['refuse']}' refused", a.get("status") == "out_of_scope" and not a.get("statements"), f"{a.get('status')} {a.get('category', '')}")
-    # e. Case File summary: every sentence cited, current
-    sm = c.post(f"/api/tb/cases/{cid}/summary", json={}).json()
-    sents = [x for p in sm.get("paragraphs") or [] for x in p]
-    stale = c.get(f"/api/tb/cases/{cid}").json()["stale"].get("summary")
-    check(f"{tag}: Case File summary compiled, every sentence cited, not stale", sm.get("status") == "ready" and sents and all(x.get("citations") for x in sents) and stale == "",
-          f"{len(sents)} sentences, {sum(not x.get('citations') for x in sents)} uncited, {sm.get('seconds')} s, stale {stale!r}"[:200])
+    # e. Case File summary: compiled once every Pre-Authorization check is met (workflow), so a Case File with a gap is refused here and
+    #    compiled after the arrivals close the gap (below)
+    if spec.get("gap"):
+        sm = c.post(f"/api/tb/cases/{cid}/summary", json={}).json()
+        rl = next((x["label"] for x in (c.get(f"/api/tb/cases/{cid}").json()["state"]["gate"] or {}).get("requirements") or [] if x["id"] == spec["gap"]["record"]), "")
+        check(f"{tag}: Case File summary waits for the open Pre-Authorization record (gate not met)", sm.get("status") == "gate_not_met" and rl and rl in (sm.get("open") or []),
+              f"{sm.get('status')}: {sm.get('open')}")
+    else:
+        _summary_check(c, cid, tag)
     # f. specialty brief with the reporting checklist of the site
     t0 = time.time(); brief, tools = _brief(c, cid, spec["brief_role"])
     items = [it2 for sec in (brief or {}).get("sections") or [] for it2 in sec.get("items") or []]
@@ -948,10 +1056,26 @@ def phase9_case(c, cid, spec):
     r = c.post(f"/api/tb/cases/{cid}/demo-arrivals")
     if r.status_code == 200:
         wait_job(c, r.json()["job"])
-    docs = c.get(f"/api/tb/cases/{cid}").json()["documents"]
+    d = c.get(f"/api/tb/cases/{cid}").json()
+    fixed = _confirm_disputed(c, cid, d, d["state"]["gate"] or {})
+    if fixed:
+        d = c.get(f"/api/tb/cases/{cid}").json()
+    docs = d["documents"]
     tbr = [x for x in docs if (x.get("classification") or {}).get("doc_type") == "tumour_board_record"]
     check(f"{tag}: arrivals: the board record document arrives and is read", r.status_code == 200 and bool(tbr) and all(x["state"] == "ready" for x in tbr),
           f"HTTP {r.status_code}; {[(x['rel_path'], x['state']) for x in tbr] or [x['rel_path'] for x in docs][-3:]}")
+    if gap:  # the record that arrived closes the gap: the gate passes and the department's request is closed
+        g = d["state"]["gate"] or {}; req = {x["id"]: x for x in g.get("requirements") or []}
+        unsat = {k: v["status"] for k, v in req.items() if v["status"] != "satisfied"}
+        n = len(lsd.get("counted") or spec["counted"])
+        check(f"{tag}: arrivals close the {gap['record']} gap: gate passed {n}/{n}", g.get("passed") is True and not unsat and g.get("total") == n,
+              f"{g.get('satisfied')}/{g.get('total')} open {json.dumps(unsat)}" + (f"; reader slips confirmed {fixed}" if fixed else ""))
+        acts = [a for a in d["state"].get("actions") or [] if a.get("requirement") == gap["record"] and a.get("source", "pre_authorization") == "pre_authorization"]
+        rows = _open_rows(c, gap["inbox"], cid, gap["record"])
+        check(f"{tag}: the {gap['department']} request for {gap['record']} closed (inbox shows it completed)",
+              bool(acts) and all(a.get("status") == "completed" for a in acts) and bool(rows) and all(q["status"] == "completed" for q in rows),
+              f"actions {[a.get('status') for a in acts]}; inbox {[(q.get('label'), q.get('status')) for q in rows]}")
+        _summary_check(c, cid, tag, "once the gap is closed")
     due = (datetime.date.today() + datetime.timedelta(days=14)).isoformat()
     body = {"board_date": "2026-10-18", "recorded_by": "Dr. Tumour Board Coordinator (synthetic)", "decision_text": spec["decision"],
             "members": spec["members"], "actions": [{**spec["action"], "due": due}]}
@@ -967,6 +1091,8 @@ def phase9_case(c, cid, spec):
           bool(drug) and all(x["result"] == "consistent" for x in drug) and any(rr.get("region") == "India" and spec["guideline_file"] in (rr.get("file") or "") for rr in refs) and not dose_er,
           f"{[(x['recorded'], x['result']) for x in drug]}; refs {[(rr.get('org'), rr.get('file'), rr.get('page')) for rr in refs][:2]}; "
           f"flags {[f['text'][:80] for f in dose_er]}; RT {[(x.get('recorded'), x['result']) for x in checks if x.get('kind') == 'rt']}")
+    rt = [(x.get("recorded"), x["result"]) for x in checks if x.get("kind") == "rt"]
+    print(f"INFO {tag}: radiotherapy checks (reported, not a pass / fail): {rt or 'none'}; all consistent: {'yes' if rt and all(r2 == 'consistent' for _, r2 in rt) else 'no'}", flush=True)
     stage = [x for x in checks if x.get("kind") == "stage"]
     check(f"{tag}: stage check reads the recorded stage (no 'differs')", any(x["result"] == "stage_consistent" for x in stage)
           and not any(x["result"] == "stage_differs" for x in stage) and not [f for f in flags if f.get("check") == "stage"],

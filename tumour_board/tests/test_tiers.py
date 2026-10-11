@@ -6,9 +6,9 @@ import pytest
 
 from tumour_board import config, org, protocol
 
-PIDS = ("lung_nsclc", "breast", "colorectal_rectum", "oral_cavity")
+PIDS = ("lung_nsclc", "breast", "colorectal_rectum", "oral_cavity", "cervix")
 # research notes holding every quoted NCG line: 4.1 (lung, breast, rectum), 9.1 / 9.2 (oral cavity, cervix)
-NOTES = {"ncg_tiers_4.1.md": ("lung_nsclc", "breast", "colorectal_rectum"), "ncg_tiers_9.md": ("oral_cavity",)}
+NOTES = {"ncg_tiers_4.1.md": ("lung_nsclc", "breast", "colorectal_rectum"), "ncg_tiers_9.md": ("oral_cavity", "cervix")}
 
 
 def _rec(pid, rid):
@@ -175,3 +175,34 @@ def test_oral_cavity_fields_and_extraction():
     assert {"depth_of_invasion", "lesion_size", "nodal_findings", "ene"} <= set(protocol.facts_for_doc("oral_cavity", "ct"))
     assert "dental_evaluation" not in protocol.facts_for_doc("breast", "clinical_note")  # other protocols unchanged
     assert protocol.setting_label("oral_cavity", "locally_advanced") == "Locally advanced (Stage III to IVB), as recorded"
+
+
+def test_cervix_tiers_by_setting():
+    """V1 item 9.2: NCG gynaecological 2019, cervix summary table ((a) / (b) / (c) columns for early and locally advanced disease, FIGO 2018);
+    conditional items (CT thorax for IIIC2, IHC as indicated, PET-CT) are shown, never counted."""
+    req = lambda setting, level="essential": {r["id"] for r in protocol.records("cervix") if protocol.required(r, setting, level)}
+    base = {"clinical_history", "histopathology", "baseline_labs"}
+    assert req("early") == base | {"abdomen_pelvis_imaging", "chest_xray"}
+    assert req("early", "optimal") == base | {"abdomen_pelvis_imaging", "chest_xray", "mri_pelvis"}
+    assert req("locally_advanced") == base | {"cect_abdomen_pelvis", "cystoscopy_proctoscopy"}
+    assert req("locally_advanced", "optimal") == base | {"cect_abdomen_pelvis", "cystoscopy_proctoscopy", "chest_xray"}  # MRI: "MRI OR CECT", CECT already required
+    assert req("metastatic") == req("locally_advanced")  # IVB has no NCG work-up row: the locally advanced row applies
+    assert req(None) == base | {"abdomen_pelvis_imaging", "cect_abdomen_pelvis", "chest_xray", "cystoscopy_proctoscopy"}  # not recorded: the strictest
+    for s in ("early", "locally_advanced", "metastatic", None):
+        assert not req(s, "optimal") & {"ct_thorax", "ihc", "pet_ct"}, s
+    hp = _rec("cervix", "histopathology")
+    assert hp["required_facts"] == ["histologic_type", "grade", "depth_of_invasion", "lvi"]
+    assert "figo_stage" in _rec("cervix", "clinical_history")["required_facts"] and "hiv_status" in _rec("cervix", "baseline_labs")["required_facts"]
+    for r in protocol.records("cervix"):
+        for src in r["sources"]:
+            assert src["guideline"] == "NCG Guidelines for Gynaecological Cancers (2019)" and src["page"] == "n/a" and src["where"], r["id"]
+
+
+def test_cervix_fields_and_extraction():
+    cat = protocol.facts()
+    assert cat["figo_stage"]["critical"] is True and "never derive" in cat["figo_stage"]["desc"]
+    for f in ("figo_stage", "parametrial_involvement", "hiv_status"):
+        assert f in cat and "—" not in cat[f]["desc"], f
+    assert {"figo_stage", "parametrial_involvement"} <= set(protocol.facts_for_doc("cervix", "mri"))
+    assert "hiv_status" in protocol.facts_for_doc("cervix", "lab") and "hiv_status" not in protocol.facts_for_doc("breast", "lab")
+    assert protocol.setting_label("cervix", "early") == "Early (FIGO 2018 IA1 to IIA1), as recorded"

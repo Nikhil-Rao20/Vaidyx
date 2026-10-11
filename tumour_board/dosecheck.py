@@ -103,8 +103,9 @@ _TOT = r"(?P<a>\d+(?:\.\d+)?)(?:\s*(?:-|–|to)\s*(?P<b>\d+(?:\.\d+)?))?"
 RT_RX = [
     ("full", re.compile(rf"{_TOT}\s*(?P<u>{_GY})\s*(?:in|/|,|over)?\s*{_FNUM}\s*(?:once[- ]daily\s*|daily\s*)?(?:fractions?(?![a-z])|fr(?![a-z])|#)", re.I)),
     ("nxp", re.compile(rf"(?<![\d.])(?P<f>\d+)\s*[x×*]\s*(?P<p>\d+(?:\.\d+)?)\s*(?P<u>{_GY})(?![a-z])", re.I)),
+    # '7 Gy x 3', '7 Gy * 2-3 Fr' (a range of fractions: NCG cervix brachytherapy, V1 item 9.2); never 'x 5 a week' (a schedule)
     ("pxn", re.compile(rf"(?<![\d.])(?P<p>\d+(?:\.\d+)?)(?:\s*(?:Gy)?\s*(?:-|–|to)\s*(?P<q>\d+(?:\.\d+)?))?\s*(?P<u>{_GY})\s*[x×*]\s*(?P<f>\d+)(?!\d)"
-                       r"(?!\s*(?:-|–)\s*\d)(?!\s*(?:days?|d|times|fractions?|#)?\s*(?:a|per|/|each|every|in\s+a)\s*(?:week|wk))(?:\s*fractions?)?", re.I)),
+                       r"(?:\s*(?:-|–)\s*(?P<g>\d+)(?!\d))?(?!\s*(?:-|–)\s*\d)(?!\s*(?:days?|d|times|fractions?|fr|#)?\s*(?:a|per|/|each|every|in\s+a)\s*(?:week|wk))(?:\s*(?:fractions?|fr(?![a-z])|#))?", re.I)),
     ("single", re.compile(rf"{_TOT}\s*(?P<u>{_GY})\s*(?:in\s+a\s+|as\s+a\s+)?single\s+(?:fraction|#)", re.I)),
 ]
 _TOTAL_ONLY = re.compile(rf"(?<![\d.]){_TOT}\s*(?P<u>{_GY})(?![a-z])", re.I)
@@ -137,14 +138,20 @@ def parse_rt(text, require_fractions=False):
             if kind in ("nxp", "pxn"):
                 f, p = int(m.group("f")), float(m.group("p")) * k
                 q = float(m.group("q")) * k if kind == "pxn" and m.group("q") else None
-                tot, tmax, fr, fmax = round(f * p, 3), (round(f * q, 3) if q else None), f, None
+                g = int(m.group("g")) if kind == "pxn" and m.group("g") and int(m.group("g")) > f else None  # fractions range '2-3'
+                tot, tmax, fr, fmax = round(f * p, 3), (round((g or f) * (q or p), 3) if (q or g) else None), f, g
             elif kind == "single":
                 tot, tmax, fr, fmax = _num(m.group("a")) * k, (_num(m.group("b")) * k if m.group("b") else None), 1, None
             else:
                 tot, tmax = _num(m.group("a")) * k, (_num(m.group("b")) * k if m.group("b") else None)
                 fr, fmax = _fr(m.group("f")), _fr(m.group("g"))
-            out.append({"total_gy": tot, "total_gy_max": tmax, "fractions": fr, "fractions_max": fmax, "written": m.group(0).strip(),
-                        "start": m.start(), "end": m.end()})
+            e = {"total_gy": tot, "total_gy_max": tmax, "fractions": fr, "fractions_max": fmax, "written": m.group(0).strip(),
+                 "start": m.start(), "end": m.end()}
+            if kind == "pxn" and fmax:  # '7 Gy * 2-3 Fr': the dose per fraction is fixed while the count varies (compare_rt checks it)
+                e["gy_per_fraction"] = p
+                if q:
+                    e["gy_per_fraction_max"] = q
+            out.append(e)
     if not require_fractions:
         for m in _TOTAL_ONLY.finditer(text):
             if taken(m.start(), m.end()) or _PER_FRACTION_AFTER.match(text, m.end()) or _PER_FRACTION_BEFORE.search(text[max(0, m.start() - 12):m.start()]):
@@ -431,8 +438,16 @@ def compare_rt(rt, cancer):
         return r.get("fractions") is not None and _within(rt["fractions"], r["fractions"], r.get("fractions_max")) and \
             _within(rt.get("fractions_max") or rt["fractions"], r["fractions"], r.get("fractions_max"))
 
+    def pf_ok(r):  # a reference written per fraction with a range of fractions ('7 Gy * 2-3 Fr'): the dose per fraction must agree too
+        if not r.get("gy_per_fraction") or not rt["fractions"]:
+            return True
+        per = rt["total_gy"] / rt["fractions"]
+        per_max = (rt.get("total_gy_max") or rt["total_gy"]) / (rt.get("fractions_max") or rt["fractions"])
+        return _within(per, r["gy_per_fraction"], r.get("gy_per_fraction_max")) and _within(per_max, r["gy_per_fraction"], r.get("gy_per_fraction_max"))
+
     t, tmax = rt["total_gy"], rt.get("total_gy_max") or rt["total_gy"]
-    match = [r for r in refs if _within(t, r["total_gy"], r.get("total_gy_max")) and _within(tmax, r["total_gy"], r.get("total_gy_max")) and fr_ok(r)]
+    match = [r for r in refs if _within(t, r["total_gy"], r.get("total_gy_max")) and _within(tmax, r["total_gy"], r.get("total_gy_max")) and fr_ok(r)
+             and pf_ok(r)]
     if any(not _trial(r) for r in match):
         return "consistent", [r for r in match if not _trial(r)]
     slip = [r for r in refs if fr_ok(r) and (_within(t * 10, r["total_gy"], r.get("total_gy_max")) or _within(t / 10, r["total_gy"], r.get("total_gy_max")))]
@@ -459,6 +474,10 @@ def fmt_dose(r):
 
 
 def fmt_rt(r):
+    if r.get("gy_per_fraction") and r.get("fractions"):  # '7 Gy x 2-3 fractions (14-21 Gy)'
+        n = str(r["fractions"]) + (("-" + str(r["fractions_max"])) if r.get("fractions_max") else "")
+        return (_g(r["gy_per_fraction"]) + (("-" + _g(r["gy_per_fraction_max"])) if r.get("gy_per_fraction_max") else "") + f" Gy x {n} fractions ("
+                + _g(r["total_gy"]) + (("-" + _g(r["total_gy_max"])) if r.get("total_gy_max") else "") + " Gy)")
     s = _g(r["total_gy"]) + (("-" + _g(r["total_gy_max"])) if r.get("total_gy_max") else "") + " Gy"
     if r.get("fractions") is not None:
         n = str(r["fractions"]) + (("-" + str(r["fractions_max"])) if r.get("fractions_max") else "")

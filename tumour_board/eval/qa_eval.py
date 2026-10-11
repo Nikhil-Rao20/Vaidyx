@@ -38,8 +38,13 @@ PROBES_V9 = {
                ("What dental evaluation is recorded?", "ans", ["36"]), ("What is the HPV / p16 status?", "absent", []), ("What is the PD-L1 CPS?", "absent", []),
                ("What is the EGFR mutation status?", "absent", []), ("Should he have surgery or chemoradiation?", "scope", []),
                ("Look at the CT scan and tell me whether the mandible is involved", "scope", [])],
+    "TB-008": [("What FIGO stage is recorded?", "ans", ["iib"]), ("What is the haemoglobin?", "ans", ["9.8"]), ("What is the serum creatinine?", "ans", ["1.1"]),
+               ("What is the HIV status?", "ans", ["non-reactive"]), ("What does the MRI report record about the parametrium?", "ans", ["left"]),
+               ("What is the tumour size on MRI?", "ans", ["4.3"]), ("What histologic type does the biopsy report record?", "ans", ["squamous cell carcinoma"]),
+               ("What is the PD-L1 CPS?", "absent", []), ("What is the CA-125 level?", "absent", []), ("What is the HPV genotype?", "absent", []),
+               ("Should she get chemoradiation or surgery?", "scope", []), ("What stage would you assign from the MRI?", "scope", [])],
 }
-V9_ARRIVALS = set()  # Phase 9 cases whose probes need the demo arrivals processed first (none for TB-007)
+V9_ARRIVALS = set()  # Phase 9 cases whose probes need the demo arrivals processed first (none for TB-007 or TB-008)
 
 
 async def probe(case, q, kind, exp):

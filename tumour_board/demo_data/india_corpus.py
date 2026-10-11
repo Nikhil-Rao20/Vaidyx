@@ -1,6 +1,6 @@
 """Indian-format SYNTHETIC test material for plan item V1-0.5 (imported by make_corpus.py).
 
-Adds Case Files TB-004 (lung), TB-005 (breast), TB-006 (rectum), TB-007 (oral cavity, V1-9.1) and a mixed department intake batch.
+Adds Case Files TB-004 (lung), TB-005 (breast), TB-006 (rectum), TB-007 (oral cavity, V1-9.1), TB-008 (cervix, V1-9.2) and a mixed department intake batch.
 Every person, hospital, doctor, council registration number and ID here is invented. Every document carries the
 "SYNTHETIC - DEMO ONLY" watermark (or the word SYNTHETIC in the header for Word / Excel / text files).
 The schema of the answer key is documented in make_corpus.py.
@@ -53,6 +53,7 @@ P5 = dict(name="Sunita Devi", uhid="SYN-500263", abha="91-6730-2245-9018", age_s
 P5B = dict(name="Sunita Devi", uhid="SYN-500911", age_sex="67 Y / F", dob="11/07/1959", relation="W/o Late Ram Prakash", aadhaar=AADHAAR_SD2)
 P6 = dict(name="Mohammed Irfan Shaikh", mrn="SYN-600744", ip_no="IP/26/18832", age_sex="61 Y / M", outside_id="DGH-26-071134")
 P7 = dict(name="Manjunath Gowda", uhid="SYN-700352", abha="91-5512-0846-2271", age_sex="54 Y / M", relation="S/o Late Ningappa Gowda")
+P8 = dict(name="Parvathi Naik", uhid="SYN-800415", abha="91-7283-5519-0634", age_sex="46 Y / F", relation="W/o Ramesh Naik")
 # patients of the original demo cases, as their records would arrive in an intake batch
 P1 = dict(name="Ramesh Kumar", uhid="SYN-100231", age_sex="62 Y / M")
 P2 = dict(name="Lakshmi Iyer", uhid="SYN-200417", age_sex="48 Y / F")
@@ -910,12 +911,131 @@ A7 = [
                             "all three oncologists present (PM-JAY composition met)"])),
 ]
 
+# =================================================================================================================
+# CASE TB-008: cervix (plan item V1-9.2). FIGO 2018 Stage IIB recorded by the gynaecologic oncologist and the radiologist,
+# a phone photo of the chest X-ray, LVSI not identified, HIV non-reactive, cystoscopy / proctoscopy arriving later, and a
+# board record with concurrent weekly cisplatin, EBRT and HDR brachytherapy.
+# =================================================================================================================
+_pn_rows, _pn_id = ident(P8, "Parvathi Naik", ["uhid", "age_sex"])
+_pn_opd_rows, _pn_opd_id = ident(P8, "Parvathi Naik", ["uhid", "age_sex", "relation"])
+_pn_hp_rows, _pn_hp_id = ident(P8, "Parvathi Naik", ["uhid", "abha", "age_sex"])
+_pn_lab_rows, _pn_lab_id = ident(P8, "Smt. Parvathi Naik", ["uhid", "age_sex"], labels={"name": "Name"})
+_ANJALI = "Dr. Anjali Deshpande, MS (OBG), MCh (Gynaecologic Oncology), KMC Reg. No. 84512"
+DECISION_TEXT_8 = ("Radical concurrent chemoradiation: external beam radiotherapy 50 Gy in 25 fractions to the pelvis with concurrent Inj. Cisplatin "
+                   "40 mg/m2 IV weekly, followed by HDR intracavitary brachytherapy 7 Gy x 3 fractions to point A. FIGO 2018 Stage IIB as recorded.")
+BOARD_DECISION_8 = {"document": "tumour_board/tumour_board_record_2026-09-26.pdf", "board_date": "2026-09-26", "text": DECISION_TEXT_8,
+                    "dose_slips": [], "absent_specialties": [],
+                    "note": "No planted error: doses as in the references and all three oncologists present; the board record is fictional."}
+
+C8 = [
+ dict(path="surgical_oncology/gynae_onc_opd_2026-09-15.pdf", fmt="pdf", dept="Department of Surgical Oncology (Gynaecologic Oncology)",
+      title="GYNAECOLOGIC ONCOLOGY OPD", id_rows=_pn_opd_rows, meta=[("Visit date", "15/09/2026")],
+      sections=[("Presenting complaints", "Post-coital bleeding and foul-smelling vaginal discharge for 4 months."),
+                ("History", "P3 L3, all normal deliveries; tubal ligation 15 years ago. No known comorbidities."),
+                ("Examination", "Per speculum: ulceroproliferative growth replacing the cervix, about 4 cm, bleeds on touch.\n"
+                                "Per vaginal: growth 4 x 4 cm; upper third of the vagina involved, lower two thirds free; left parametrium involved, "
+                                "not reaching the lateral pelvic wall; right parametrium free.\n"
+                                "Per rectal: left parametrial thickening; rectal mucosa free."),
+                ("Performance status", "ECOG performance status: 1"),
+                ("FIGO stage as recorded by the treating gynaecologic oncologist", "FIGO 2018 Stage IIB"),
+                ("Question for the Tumour Board", "Definitive treatment plan and its sequence.")],
+      footer=signed("FINAL", _ANJALI, "15/09/2026 12:40"), stamp="FINAL / SIGNED",
+      truth=dict(doc_type="clinical_note", status="FINAL", signed=True,
+                 fields={"ecog": "1", "figo_stage": "IIB", "clinical_question": "Definitive treatment plan",
+                         "parametrial_involvement": "left parametrium involved", "presenting_complaint": "Post-coital bleeding"},
+                 report_date="2026-09-15", event_date="2026-09-15", event_label="visit date", identity=_pn_opd_id,
+                 exercises=["FIGO stage recorded by the treating clinician (never derived)", "clinical parametrial assessment (per vaginal, per rectal)",
+                            "relation W/o", "obstetric history P3 L3"])),
+ dict(path="pathology/cervical_biopsy_2026-09-12.pdf", fmt="pdf", dept="Department of Pathology", title="HISTOPATHOLOGY REPORT",
+      id_rows=_pn_hp_rows, meta=[("Specimen", "Punch biopsy, cervix"), ("Received on", "10/09/2026"), ("Lab No.", "HP/2026/8377")],
+      sections=[("Diagnosis", "Squamous cell carcinoma, non-keratinising, moderately differentiated (grade 2)."),
+                ("Additional findings", "Depth of invasion: at least 5 mm in this biopsy (base of the lesion not included).\n"
+                                        "Lymphovascular space invasion (LVSI): Not identified.")],
+      footer=signed("FINAL", "Dr. Fatima Begum, MD (Pathology), KMC Reg. No. 62290", "12/09/2026 15:55"), stamp="FINAL / SIGNED",
+      truth=dict(doc_type="histopathology", status="FINAL", signed=True,
+                 fields={"histologic_type": "Squamous cell carcinoma", "grade": "moderately differentiated", "depth_of_invasion": "5 mm", "lvi": "Not identified"},
+                 report_date="2026-09-12", event_date="2026-09-10", event_label="received on", identity=_pn_hp_id,
+                 negated=["Lymphovascular space invasion (LVSI): Not identified"],
+                 exercises=["ABHA number printed", "negated value 'Not identified' is a real result",
+                            "depth of invasion is a minimum ('at least 5 mm') in a biopsy without the base of the lesion"])),
+ dict(path="radio_diagnosis/mri_pelvis_2026-09-17.pdf", fmt="pdf", dept="Department of Radio-diagnosis", title="MRI PELVIS (CARCINOMA CERVIX PROTOCOL)",
+      id_rows=_pn_rows, meta=[("Study date", "17/09/2026"), ("Ref. by", "Dr. Anjali Deshpande")],
+      sections=[("Findings", "Cervical mass 4.3 x 3.8 x 3.5 cm involving the upper third of the vagina. Left parametrial invasion (disrupted stromal ring "
+                             "with a spiculated interface), not reaching the pelvic side wall; right parametrium free. Urinary bladder and rectum free, fat "
+                             "planes preserved. No hydroureteronephrosis. No enlarged pelvic lymph node."),
+                ("Impression (reporting radiologist)", "Carcinoma cervix with left parametrial invasion. FIGO stage on imaging, as recorded by the "
+                                                       "reporting radiologist: IIB.")],
+      footer=signed("FINAL", _SHALINI, "17/09/2026 18:05"), stamp="FINAL / SIGNED",
+      truth=dict(doc_type="mri", status="FINAL", signed=True,
+                 fields={"lesion_size": "4.3 x 3.8 x 3.5 cm", "parametrial_involvement": "Left parametrial invasion",
+                         "nodal_findings": "No enlarged pelvic lymph node", "figo_stage": "IIB"},
+                 report_date="2026-09-17", event_date="2026-09-17", event_label="study date", identity=_pn_id,
+                 negated=["Pelvic lymph nodes: No enlarged pelvic lymph node"],
+                 exercises=["parametrial invasion on MRI agrees with the clinical examination", "FIGO stage recorded by the radiologist (never derived)",
+                            "negated nodal finding is a real result"])),
+ dict(path="radio_diagnosis/cect_abdomen_pelvis_2026-09-18.pdf", fmt="pdf", dept="Department of Radio-diagnosis", title="CECT ABDOMEN AND PELVIS",
+      id_rows=_pn_rows, meta=[("Study date", "18/09/2026"), ("Ref. by", "Dr. Anjali Deshpande")],
+      sections=[("Findings", "Known cervical mass. No pelvic or para-aortic lymphadenopathy. No hydronephrosis; both kidneys normal. Liver, spleen and "
+                             "adrenals normal. No ascites. No lytic or sclerotic bone lesion in the scanned skeleton."),
+                ("Impression (reporting radiologist)", "No nodal or distant disease in the abdomen and pelvis.")],
+      footer=signed("FINAL", _SHALINI, "18/09/2026 16:50"), stamp="FINAL / SIGNED",
+      truth=dict(doc_type="ct", status="FINAL", signed=True,
+                 fields={"nodal_findings": "No pelvic or para-aortic lymphadenopathy", "distant_findings": "No nodal or distant disease in the abdomen and pelvis"},
+                 report_date="2026-09-18", event_date="2026-09-18", event_label="study date", identity=_pn_id,
+                 negated=["Pelvic and para-aortic nodes: No pelvic or para-aortic lymphadenopathy"],
+                 exercises=["para-aortic nodes and hydronephrosis assessed (FIGO IIIB / IIIC would change the plan; stage is never derived)"])),
+ dict(path="radio_diagnosis/xray_chest_pa_2026-09-16_phone_photo.png", fmt="photo", dept="Department of Radio-diagnosis", title="X-RAY CHEST PA VIEW",
+      id_rows=_pn_rows, meta=[("Study date", "16/09/2026")],
+      sections=[("Findings", "Both lung fields clear. No nodule. Costophrenic angles clear. Cardiac silhouette normal."),
+                ("Impression", "No radiological evidence of metastasis.")],
+      footer=signed("FINAL", _SHALINI, "16/09/2026 15:30"), stamp="FINAL / SIGNED",
+      truth=dict(doc_type="xray", status="FINAL", signed=True, fields={"distant_findings": "No radiological evidence of metastasis"},
+                 report_date="2026-09-16", event_date="2026-09-16", event_label="study date", identity=_pn_id,
+                 exercises=["phone photo (tilted, shadowed, on a desk)", "chest X-ray as the distant work-up"])),
+ dict(path="laboratory_medicine/cbc_lft_rft_hiv_2026-09-15.pdf", fmt="pdf", dept="Department of Laboratory Medicine", title="LABORATORY INVESTIGATION REPORT",
+      grid=lab_grid(_pn_lab_rows, "15/09/2026 08:40", "15/09/2026 08:50", "15/09/2026 15:10", "Dr. Anjali Deshpande", "LAB/26/121377"),
+      sections=[("Haematology", [["Investigation", "Result", "Units", "Biological ref. interval"], ["Haemoglobin", "9.8", "gm%", "12.0 - 15.0"],
+                                  ["Total leucocyte count (TLC)", "7,600", "cells/cumm", "4,000 - 11,000"], ["Platelet count", "3.4", "lakhs/cumm", "1.5 - 4.1"]]),
+                ("Biochemistry", [["Investigation", "Result", "Units", "Biological ref. interval"], ["S. Creatinine", "1.1", "mg/dl", "0.5 - 1.1"],
+                                   ["Blood urea", "32", "mg/dl", "15 - 40"], ["Total bilirubin", "0.5", "mg/dl", "0.2 - 1.2"], ["SGPT (ALT)", "24", "U/L", "< 35"]]),
+                ("Serology", [["Investigation", "Result", "Method"], ["HIV I and II antibodies", "Non-reactive", "CLIA"], ["HBsAg", "Non-reactive", "CLIA"]])],
+      footer=sd("Dr. Suresh Babu, MD (Pathology)", "KMC Reg. No. 69021"), nabl=NABL,
+      truth=dict(doc_type="lab", status="FINAL", signed=True,
+                 fields={"haemoglobin": "9.8", "wbc": "7,600", "platelets": "3.4", "creatinine": "1.1", "bilirubin": "0.5", "hiv_status": "Non-reactive"},
+                 report_date="2026-09-15", event_date="2026-09-15", event_label="collected on", identity=_pn_lab_id,
+                 other_values={"hbsag": "Non-reactive"}, not_negations=["HIV I and II antibodies: Non-reactive", "HBsAg: Non-reactive"],
+                 exercises=["'HIV non-reactive' is a result, not a negation", "name with the title Smt.", "gm%, TLC, lakhs/cumm", "NABL footer"])),
+]
+A8 = [
+ dict(path="surgical_oncology/cystoscopy_proctoscopy_2026-09-22.pdf", fmt="pdf", dept="Department of Surgical Oncology (Gynaecologic Oncology)",
+      title="CYSTOSCOPY AND PROCTO-SIGMOIDOSCOPY", id_rows=_pn_rows, meta=[("Procedure date", "22/09/2026")],
+      sections=[("Findings", "Cystoscopy: bladder mucosa normal; no bullous oedema; both ureteric orifices normal.\n"
+                             "Procto-sigmoidoscopy up to 20 cm: rectal mucosa free; no growth."),
+                ("Impression", "No bladder or rectal mucosal involvement.")],
+      footer=signed("FINAL", _ANJALI, "22/09/2026 13:15"), stamp="FINAL / SIGNED",
+      truth=dict(doc_type="endoscopy", status="FINAL", signed=True, fields={}, report_date="2026-09-22", event_date="2026-09-22", event_label="procedure date",
+                 identity=_pn_id,
+                 exercises=["arrives later and closes the Level 1 gap of the cystoscopy / proctoscopy record (locally advanced work-up)"])),
+ dict(path="tumour_board/tumour_board_record_2026-09-26.pdf", fmt="pdf", dept="Multidisciplinary Tumour Board", title="TUMOUR BOARD RECORD",
+      id_rows=_pn_rows, meta=[("Board date", "26/09/2026")],
+      sections=[("Present", "Surgical oncology, gynaecologic oncology (Dr. Anjali Deshpande), radiation oncology (Dr. Meera Iyer), medical oncology "
+                            "(Dr. Anand Kulkarni), radio-diagnosis (Dr. Shalini Rao), pathology (Dr. Fatima Begum)."),
+                ("Decision recorded by the board", DECISION_TEXT_8),
+                ("Actions", "Radiation Oncology: start chemoradiation within two weeks. Laboratory Medicine: weekly CBC and serum creatinine during chemoradiation.")],
+      footer=["Record status: FINAL", "Recorded by: Dr. Anand Kulkarni, Tumour Board coordinator (electronically signed)", "Signed: 26/09/2026 18:20"], stamp="FINAL / SIGNED",
+      truth=dict(doc_type="tumour_board_record", status="FINAL", signed=True, fields={}, report_date="2026-09-26", event_date="2026-09-26", event_label="board date",
+                 identity=_pn_id, board_decision=BOARD_DECISION_8,
+                 exercises=["board decision with concurrent weekly cisplatin, EBRT and HDR brachytherapy (guideline check against NCG cervix)",
+                            "all three oncologists present (PM-JAY composition met)"])),
+]
+
 V1_CASES = [("TB-004", "lung_nsclc", dict(name="Ramesh Kumar", mrn=P4["uhid"], agesex=P4["age_sex"]), C4, A4),
             ("TB-005", "breast", dict(name="Sunita Devi", mrn=P5["uhid"], agesex=P5["age_sex"]), C5, A5),
             ("TB-006", "colorectal_rectum", dict(name="Mohammed Irfan Shaikh", mrn=P6["mrn"], agesex=P6["age_sex"]), C6, A6),
-            ("TB-007", "oral_cavity", dict(name="Manjunath Gowda", mrn=P7["uhid"], agesex=P7["age_sex"]), C7, A7)]
-V1_PATIENTS = {"TB-004": P4, "TB-005": P5, "TB-006": P6, "TB-007": P7}
-BOARD_DECISIONS = {"TB-005": BOARD_DECISION, "TB-007": BOARD_DECISION_7}  # truth["board_decision"] per case
+            ("TB-007", "oral_cavity", dict(name="Manjunath Gowda", mrn=P7["uhid"], agesex=P7["age_sex"]), C7, A7),
+            ("TB-008", "cervix", dict(name="Parvathi Naik", mrn=P8["uhid"], agesex=P8["age_sex"]), C8, A8)]
+V1_PATIENTS = {"TB-004": P4, "TB-005": P5, "TB-006": P6, "TB-007": P7, "TB-008": P8}
+BOARD_DECISIONS = {"TB-005": BOARD_DECISION, "TB-007": BOARD_DECISION_7, "TB-008": BOARD_DECISION_8}  # truth["board_decision"] per case
 
 # =================================================================================================================
 # INTAKE: department batches without a Case File, mixing several patients (patient matching, item 2.4)
@@ -1064,7 +1184,7 @@ def build_v1(out, weasyprint, to_scan, only=None):
     if only is not None:
         return
     intake = {"note": "Department batches without a Case File. Each file must reach expected_case; null means it must NOT be filed into any existing Case File.",
-              "patients": {"TB-001": P1, "TB-002": P2, "TB-004": P4, "TB-005": P5, "TB-006": P6, "TB-007": P7, "no Case File (second Sunita Devi)": P5B},
+              "patients": {"TB-001": P1, "TB-002": P2, "TB-004": P4, "TB-005": P5, "TB-006": P6, "TB-007": P7, "TB-008": P8, "no Case File (second Sunita Devi)": P5B},
               "files": {}}
     for dept, items in INTAKE.items():
         for d in items:

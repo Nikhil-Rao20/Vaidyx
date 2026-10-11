@@ -19,7 +19,7 @@ CORPUS = config.DEMO_CORPUS
 KEYMAP = {"mrf": "mrf_status", "dose": "treatment_received", "emvi": "emvi"}  # answer-key names -> fact catalogue ids
 NOT_FACTS = {"iv_antibiotics"}  # answer-key items that are not catalogue fields (checked in the summary text only)
 CASES = ["TB-001", "TB-002", "TB-003"]  # the original cases: the gate rules and timings are computed on these only
-CASES_V9 = ["TB-007"]  # Phase 9 cases (oral cavity; TB-008 cervix is added here). Their answer-key fields are fact catalogue ids already.
+CASES_V9 = ["TB-007", "TB-008"]  # Phase 9 cases (oral cavity, cervix). Their answer-key fields are fact catalogue ids already.
 
 
 def _present(value, haystacks):

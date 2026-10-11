@@ -85,6 +85,9 @@ def test_checklists_and_text():
         assert oc["region"] == "India" and oc["file"] == "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf" and 10 <= len(oc["items"]) <= 14
         assert part in packs.pack(role)["checklist_note"]
     assert "Depth of invasion" in packs.checklist_text("radiology", "oral_cavity") and "Perineural invasion" in packs.checklist_text("pathology", "oral_cavity")
+    cx = packs.checklist("radiology", "cervix")  # V1 item 9.2: ICRI / IRIA carcinoma cervix format (India); no cervix pathology dataset on disk
+    assert cx["region"] == "India" and cx["file"].startswith("iria/") and any("arametri" in it["text"] for it in cx["items"])
+    assert packs.checklist("pathology", "cervix") is None and "Cervix: none" in packs.pack("pathology")["checklist_note"]
 
 
 def test_checklist_items_are_reporting_elements_not_actions():

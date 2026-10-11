@@ -1,6 +1,6 @@
 {
  "_note": "Primary fields the extractor looks for. Values are always copied as written in the source document, with a verbatim quote. doc_types are hints for which documents to search.",
- "_critical_note": "critical: true (V1 item 8.2, proposal for clinical sign-off): read from a scanned page (vision reader transcription), the value needs one clinician confirmation against the image (confirm_value) before it counts for the Pre-Authorization; a value read from a PDF text layer, or the same value in a non-scanned verified record, needs none. Proposal: PD-L1, EGFR, ALK, ROS1, ER, PR, HER2, Ki-67, MMR, RAS / BRAF, stage as recorded.",
+ "_critical_note": "critical: true (V1 item 8.2, proposal for clinical sign-off): read from a scanned page (vision reader transcription), the value needs one clinician confirmation against the image (confirm_value) before it counts for the Pre-Authorization; a value read from a PDF text layer, or the same value in a non-scanned verified record, needs none. Proposal: PD-L1, EGFR, ALK, ROS1, ER, PR, HER2, Ki-67, MMR, RAS / BRAF, stage as recorded (also the FIGO stage as recorded, V1 item 9.2).",
  "doc_types": [
   "clinical_note",
   "referral",
@@ -89,6 +89,22 @@
    ],
    "critical": true
   },
+  "figo_stage": {
+   "label": "FIGO stage as recorded",
+   "desc": "FIGO stage exactly as written by the clinician or the reporting doctor, with the FIGO version if stated (for example 'FIGO 2018 Stage IIB'); never derive",
+   "doc_types": [
+    "clinical_note",
+    "referral",
+    "operative_note",
+    "mri",
+    "ct",
+    "pet_ct",
+    "histopathology",
+    "tumour_board_record",
+    "discharge_summary"
+   ],
+   "critical": true
+  },
   "lesion_size": {
    "label": "Primary lesion size",
    "desc": "size of the primary lesion as written in the imaging report",
@@ -107,6 +123,18 @@
     "histopathology",
     "ct",
     "mri"
+   ]
+  },
+  "parametrial_involvement": {
+   "label": "Parametrial involvement",
+   "desc": "parametrial involvement as written (for example 'left parametrium involved, not reaching the lateral pelvic wall')",
+   "doc_types": [
+    "clinical_note",
+    "referral",
+    "mri",
+    "ct",
+    "operative_note",
+    "histopathology"
    ]
   },
   "nodal_findings": {
@@ -362,6 +390,13 @@
   "bilirubin": {
    "label": "Total bilirubin",
    "desc": "total bilirubin with unit",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "hiv_status": {
+   "label": "HIV status",
+   "desc": "HIV test result as written (for example 'HIV I and II antibodies: Non-reactive')",
    "doc_types": [
     "lab"
    ]

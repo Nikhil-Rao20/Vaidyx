@@ -109,6 +109,12 @@ SOURCES = {
         ("ncg_india/ncg-guidelines-manual-2021.pdf", r"\b(oral (cavity|cancer)|buccal|head and neck)\b"),
         ("icmr/ICMR-STW-oncology-all-2020.pdf", r"\b(oral (cavity|cancer)|buccal|head and neck)\b"),
     ],
+    # V1 item 9.2: Indian sources only on disk for cervix (no ESMO, NICE or NCI PDQ cervix file)
+    "cervix": [
+        ("ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx", "all"),
+        ("ncg_india/ncg-guidelines-manual-2021.pdf", r"\b(cervix|carcinoma cervix|cervical (cancer|carcinoma))\b"),
+        ("icmr/ICMR-STW-oncology-all-2020.pdf", r"\b(cervix|carcinoma cervix|cervical (cancer|carcinoma))\b"),
+    ],
 }
 
 # Curation (step 2), recorded after reading the candidates. Pages of a file kept for a cancer (others are another cancer).
@@ -119,6 +125,9 @@ PAGES = {
     # NCG head and neck 2019: p4-9 oral cancer (work-up, surgery, adjuvant therapy, NACT and palliative regimens); p10 onwards are other
     # head and neck sites (oropharynx, larynx ...), the recurrent / metastatic chart (p36) repeats the oral p8-9 regimens.
     ("oral_cavity", "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf"): {4, 5, 6, 7, 8, 9},
+    # NCG gynaecological 2019 (Word file, 6,000-character parts): parts 1-5 hold the cervix chapter (part 1 opens with the front matter,
+    # part 5 ends the cervix table and opens the ovarian chapter: its ovarian lines are dropped below); 6 onwards ovary, endometrium, vulva.
+    ("cervix", "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx"): {1, 2, 3, 4, 5},
 }
 # Lines that are not a dosing statement: dose reductions, caps, cumulative limits, HDR boosts.
 DROP_QUOTE = [r"reduce[sd]? (the )?(starting )?dose|dose reduces|reduced starting dose|use starting dose|reduce the \w+ dose",
@@ -272,6 +281,7 @@ def scan_rt(text):
     for r in dosecheck.parse_rt(text, require_fractions=True):
         a, b = _line_bounds(text, r["start"], r["end"])
         out.append({"total_gy": r["total_gy"], "total_gy_max": r["total_gy_max"], "fractions": r["fractions"], "fractions_max": r["fractions_max"],
+                    **{k: r[k] for k in ("gy_per_fraction", "gy_per_fraction_max") if r.get(k) is not None},
                     "schedule": ws(r["written"]), "quote": ws(text[a:b]), "context": _context(text, a, b)})
     return out
 
@@ -339,7 +349,7 @@ def entry(c):
             if c.get(k):
                 e[k] = c[k]
     else:
-        for k in ("total_gy", "total_gy_max", "fractions", "fractions_max", "schedule"):
+        for k in ("total_gy", "total_gy_max", "fractions", "fractions_max", "gy_per_fraction", "gy_per_fraction_max", "schedule"):
             if c.get(k) is not None:
                 e[k] = c[k]
     e["source_kind"] = c.get("source_kind") or "regimen"

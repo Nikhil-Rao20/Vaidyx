@@ -415,3 +415,19 @@ def test_a_failing_closing_suggestion_never_breaks_the_recheck(unit_case, monkey
     assert service.suggest_followups(unit_case, "tester") == []
     service.recheck(unit_case, "tester")  # does not raise
     assert any(e["kind"] == "error" and e["where"] == "board_action_suggestions" for e in store.read_audit(unit_case))
+
+
+def test_recorded_stage_reads_the_figo_stage_too():
+    """V1 item 9.2: the FIGO stage as recorded (cervix) is a stage as recorded for the guideline check; newest by date across both fields,
+    never from a board record or an unverified value."""
+    e = lambda v, date, **k: {"value": v, "quote": v, "doc_id": "D" + date, "doc_title": "t", "verification": "verified", "doc_final": True,
+                              "state": "present", "doc_type": k.get("doc_type", "mri"), "date": date, "report_date": date}
+    figo = {"figo_stage": {"history": [e("FIGO 2018 Stage IIB", "2026-09-15", doc_type="clinical_note"), e("IIB", "2026-09-17")]}}
+    assert postboard.recorded_stage(figo)["value"] == "IIB"
+    both = {**figo, "recorded_stage": {"history": [e("cT3 N0", "2026-09-10")]}}
+    assert postboard.recorded_stage(both)["value"] == "IIB"
+    later = {**figo, "recorded_stage": {"history": [e("Stage IIIB", "2026-09-20")]}}
+    assert postboard.recorded_stage(later)["value"] == "Stage IIIB"
+    board = {"figo_stage": {"history": [e("IIB", "2026-09-15"), e("IIIA", "2026-09-26", doc_type="tumour_board_record")]}}
+    assert postboard.recorded_stage(board)["value"] == "IIB"
+    assert postboard.recorded_stage({"recorded_stage": {"history": [e("cT2 N1", "2026-09-01")]}})["value"] == "cT2 N1"  # other cancers unchanged

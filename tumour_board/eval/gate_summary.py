@@ -9,8 +9,8 @@ RUNS = config.DATA_ROOT / "eval" / "v1"
 ORIGINAL_CASES = ("TB-001", "TB-002", "TB-003")  # the existing rules and the timing comparison use these cases only (like with like)
 # V1 Phase 9 (oral cavity TB-007, cervix TB-008): minimum passes of their Q&A probes and minimum key fields found by the summary eval.
 # None = rule "0 fabrications, recorded" until the first measurement; the orchestrator then sets the numbers.
-V9_QA_MIN = 11  # TB-007: 12 probes, measured 11/12 (the miss was rephrased with the report named: answered 3 of 3); 0 fabrications always
-V9_SUM_MIN = 18  # TB-007: 18 of 19 key fields (miss: ENE "no perinodal extension", a negated imaging finding)
+V9_QA_MIN = 23  # TB-007 + TB-008: 24 probes, measured 24/24 (session 11; one miss allowed for model variance); 0 fabrications always
+V9_SUM_MIN = 36  # TB-007 18/19 (miss: ENE "no perinodal extension", a negated imaging finding) + TB-008 18/18, measured twice for TB-007
 
 
 def numbers(d):

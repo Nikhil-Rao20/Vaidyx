@@ -12,13 +12,14 @@ Every document is fictional and watermarked "SYNTHETIC". Output layout:
                                                 lines carry the answer-key text (pdfium garbles Devanagari, the image is correct)
 
 Cases: TB-001 lung, TB-002 breast, TB-003 rectum (original demo cases, documents unchanged); TB-004 lung, TB-005 breast,
-TB-006 rectum (Indian-format test material for plan item V1-0.5), TB-007 oral cavity (V1-9.1), defined in india_corpus.py.
+TB-006 rectum (Indian-format test material for plan item V1-0.5), TB-007 oral cavity (V1-9.1), TB-008 cervix (V1-9.2),
+defined in india_corpus.py.
 --only TB-007[,TB-008] builds just those V1 cases into an existing corpus (no full rebuild, other cases and intake untouched).
 
 Answer key schema (truth/<CASE_ID>.json):
   case_id, protocol, patient {name, mrn, agesex}       as in case.json
   registered_identity                                  TB-004 onwards: every identifier the hospital holds for the patient
-  board_decision                                       TB-005, TB-007: {document, board_date, text, dose_slips [{drug, regimen,
+  board_decision                                       TB-005, TB-007, TB-008: {document, board_date, text, dose_slips [{drug, regimen,
                                                        written, reference, kind}], absent_specialties, note (why the slip is there,
                                                        or that there is none)}
   documents / arrivals: {<relative path>: {

@@ -84,8 +84,12 @@ def _piece_departments(piece):
 
 def recorded_stage(facts):
     """The stage as recorded by a reporting clinician in a signed report (V1 item 7.2): the newest verified value from a final document,
-    never from an earlier board record; a clinician-confirmed value stands on its own. None when no signed report records a stage."""
+    never from an earlier board record; a clinician-confirmed value stands on its own. None when no signed report records a stage.
+    The FIGO stage as recorded (cervix, V1 item 9.2) is a stage as recorded too: both fields are read, newest by event / report date."""
     hist = ((facts or {}).get("recorded_stage") or {}).get("history") or []
+    figo = ((facts or {}).get("figo_stage") or {}).get("history") or []
+    if figo:
+        hist = sorted(hist + figo, key=lambda e: (e.get("date") or "", e.get("report_date") or ""))
     ok = [e for e in hist if e.get("verification") in rules.VERIFIED and e.get("doc_final") and e.get("state", "present") == "present"
           and e.get("doc_type") != "tumour_board_record"]
     if not ok:
