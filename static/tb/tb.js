@@ -58,7 +58,7 @@ async function loadCases() {
 async function openCase(id, keepTab) {
   if (id !== S.caseId) { S.tab = "ready"; S.chat = []; }
   S.caseId = id; S.data = await api("/cases/" + encodeURIComponent(id));
-  $("#welcome").classList.add("hidden"); $("#intake").classList.add("hidden"); $("#case").classList.remove("hidden");
+  $("#welcome").classList.add("hidden"); $("#intake").classList.add("hidden"); $("#inbox").classList.add("hidden"); $("#case").classList.remove("hidden");
   const c = S.data.case, p = c.patient || {};
   $("#c-protocol").textContent = (S.protocols?.find((x) => x.id === c.protocol)?.label || c.protocol) + " · Tumour Board Case File";
   $("#c-title").textContent = p.name || c.case_id;
@@ -393,7 +393,7 @@ async function watchJob(id) {
     if (j.state === "finished") {
       const extra = [j.skipped_duplicates?.length ? `${j.skipped_duplicates.length} identical file(s) already in the Case File were skipped` : "", j.unsupported?.length ? `${j.unsupported.length} file(s) not read: ` + j.unsupported.map(u => `${u.file} (${u.reason})`).join(", ") : "", (j.warnings || []).map((w) => w.message).join("; ")].filter(Boolean).join("; ");
       toast(`Processed ${j.total} documents in ${j.seconds} s. Pre-Authorization re-checked: ${j.gate.satisfied}/${j.gate.total} satisfied.${extra ? " " + extra + "." : ""}`, 7000);
-      await openCase(S.caseId, true); break;
+      await openCase(S.caseId, true); loadNotifications(); refreshInboxCount(); break;
     }
     await new Promise((r) => setTimeout(r, 700));
   }
@@ -818,7 +818,7 @@ async function watchIntakeJob(id) {
 }
 async function showIntake() {
   const q = await api("/intake"); S.queue = q;
-  $("#welcome").classList.add("hidden"); $("#case").classList.add("hidden"); $("#intake").classList.remove("hidden");
+  $("#welcome").classList.add("hidden"); $("#case").classList.add("hidden"); $("#inbox").classList.add("hidden"); $("#intake").classList.remove("hidden");
   $$(".citem").forEach((el) => el.classList.remove("on"));
   const caseLabel = (cid) => { const c = q.cases.find((x) => x.case_id === cid); return c ? `${c.patient?.name || cid} (${cid}${c.listing?.status === "awaiting_listing" ? ", awaiting listing" : ""})` : cid; };
   const caseOpts = (sel) => q.cases.map((c) => `<option value="${esc(c.case_id)}" ${c.case_id === sel ? "selected" : ""}>${esc(caseLabel(c.case_id))}</option>`).join("");
@@ -852,6 +852,49 @@ async function showIntake() {
   $$("[data-retry]").forEach((b) => (b.onclick = async () => { try { const r = await api(`/intake/${b.dataset.retry}/reprocess`, { method: "POST" }); watchIntakeJob(r.job); } catch (e) { toast(e.message, 7000); } }));
 }
 
+// ------------------------------------------------------------------ notifications (bell) and the department inbox · V1 item 4.4
+const NKIND = { request: ["c-warn", "Request"], request_closed: ["c-ok", "Request closed"], case_ready: ["c-ok", "Case File ready"] };
+async function loadNotifications() {
+  if (!S.me) return;
+  try { const r = await api("/notifications?limit=80"); S.notifications = r.notifications; S.unread = r.unread;
+    $("#btn-bell").classList.remove("hidden"); $("#bell-count").textContent = r.unread; $("#bell-count").classList.toggle("hidden", !r.unread); } catch (e) {}
+}
+function showNotifications() {
+  const list = S.notifications || [];
+  const row = (n) => { const k = NKIND[n.kind] || ["c-mute", n.kind]; return `<div class="ntf ${n.read ? "read" : ""}" data-ntf="${esc(n.id)}" data-case="${esc(n.case_id || "")}" title="Open the Case File">
+      <div class="h"><span class="chip ${k[0]}">${esc(k[1])}</span> <b>${esc(n.title)}</b>${n.level_label ? ` <span class="chip c-lvl">${esc(n.level_label)}</span>` : ""}${n.read ? "" : ' <span class="chip c-info">new</span>'}</div>
+      ${n.text ? `<div class="small">${esc(n.text)}</div>` : ""}<div class="small muted">${esc((n.ts || "").slice(0, 16).replace("T", " "))}${n.due ? " · due " + fmtDate(n.due) : ""}${n.to?.department ? " · to " + esc(deptName(n.to.department)) : n.to?.role ? " · to the coordinator" : ""}</div></div>`; };
+  $("#modal-body").innerHTML = `<h3 style="color:#1f2933;margin-top:0">Notifications <span class="muted small" style="font-weight:400">${S.unread || 0} unread</span></h3>
+    <div class="small muted">In-app only. The Pre-Authorization check sends each gap to the Responsible Department (Level 1) or to the department that uploaded the record (Level 2); a request closes by itself when the record arrives; the coordinator hears when a Case File is ready for the board.</div>
+    <div style="margin:8px 0;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">${(S.org?.inbox_departments || []).length ? `<button class="ghost sm" id="nt-inbox">Open the department inbox</button>` : ""}${list.some((n) => !n.read) ? `<button class="ghost sm" id="nt-readall">Mark all read</button>` : ""}<button class="ghost sm" data-closemodal>Close</button></div>
+    ${list.length ? list.map(row).join("") : `<div class="muted">Nothing yet.</div>`}`;
+  $("#modal").classList.remove("hidden");
+  if ($("#nt-readall")) $("#nt-readall").onclick = async () => { await api("/notifications/read", { json: { all: true } }); await loadNotifications(); showNotifications(); };
+  if ($("#nt-inbox")) $("#nt-inbox").onclick = () => { $("#modal").classList.add("hidden"); showInbox(); };
+  $$("[data-ntf]").forEach((el) => (el.onclick = async () => { try { await api("/notifications/read", { json: { ids: [el.dataset.ntf] } }); } catch (e) {} $("#modal").classList.add("hidden"); loadNotifications(); if (el.dataset.case) { S.tab = "ready"; openCase(el.dataset.case); } }));
+}
+async function refreshInboxCount() {
+  const show = (S.org?.inbox_departments || []).length > 0;
+  $("#btn-inbox").classList.toggle("hidden", !show);
+  if (!show) return;
+  try { const ib = await api("/inbox"); $("#inbox-count").textContent = ib.open; $("#inbox-count").classList.toggle("hidden", !ib.open); } catch (e) {}
+}
+async function showInbox() {
+  const ib = await api("/inbox"); S.inbox = ib;
+  $("#welcome").classList.add("hidden"); $("#case").classList.add("hidden"); $("#intake").classList.add("hidden"); $("#inbox").classList.remove("hidden");
+  $$(".citem").forEach((el) => el.classList.remove("on"));
+  const chip = (q) => q.status === "completed" ? `<span class="chip c-ok">Closed</span>` : q.overdue ? `<span class="chip c-bad">Overdue ${q.days_overdue} d</span>` : `<span class="chip c-warn">Pending</span>`;
+  const row = (q) => `<tr class="click" data-case="${esc(q.case_id)}"><td><b>${esc(q.patient?.name || q.case_id)}</b><div class="small muted">${esc(q.case_id)}${q.patient?.mrn ? " · UHID / MRN " + esc(q.patient.mrn) : ""}${q.patient?.agesex ? " · " + esc(q.patient.agesex) : ""}${q.board_date ? " · board " + fmtDate(q.board_date) : ""}</div></td>
+      <td><b>${esc(q.label)}</b>${q.level_label ? `<div><span class="chip c-lvl">${esc(q.level_label)}</span></div>` : ""}</td><td class="small">${esc(q.what)}</td><td class="small">${fmtDate(q.due)}</td><td>${chip(q)}${q.completed ? `<div class="small muted">${esc(q.completed.slice(0, 16).replace("T", " "))}</div>` : ""}</td></tr>`;
+  $("#inbox").innerHTML = `<div class="case-head"><div><div class="eyebrow">Department inbox</div><h1>Requests to ${ib.departments.length === 1 ? esc(ib.departments[0].name) : "my departments"}</h1>
+      <div class="muted">Every gap the Pre-Authorization check routed to your department across the Tumour Board Case Files: the Case File, the record needed, what is missing, the due date and the status. A request closes by itself when the record arrives and the Case File is re-checked; requests closed in the last 7 days stay listed. Overdue is worked out when this page is shown.</div></div>
+      <div class="readiness"><div class="rtext"><b>${ib.open} open</b><span>${ib.overdue} overdue</span></div></div></div>
+    ${ib.departments.map((d) => `<div class="card"><h3>${esc(d.name)} <span class="muted small">${d.open} open · ${d.overdue} overdue</span></h3>
+      ${d.requests.length ? `<table class="t"><thead><tr><th>Case File</th><th>Record needed</th><th>What is missing</th><th>Due</th><th>Status</th></tr></thead><tbody>${d.requests.map(row).join("")}</tbody></table>` : `<div class="muted small">No requests.</div>`}</div>`).join("") || `<div class="card"><div class="muted">Your account is not placed in a department with an inbox.</div></div>`}`;
+  $$("#inbox tr[data-case]").forEach((tr) => (tr.onclick = () => { S.tab = "ready"; openCase(tr.dataset.case); }));
+  $("#inbox-count").textContent = ib.open; $("#inbox-count").classList.toggle("hidden", !ib.open);
+}
+
 // ------------------------------------------------------------------ Case File listing (coordinator) · V1 item 2.5
 async function listCase() {
   const c = S.data.case, ps = S.protocols || [];
@@ -872,10 +915,12 @@ $("#btn-new").onclick = newCase;
 $("#btn-cards").onclick = showCards;
 $("#btn-org").onclick = showOrg;
 $("#btn-queue").onclick = showIntake;
+$("#btn-inbox").onclick = showInbox;
+$("#btn-bell").onclick = showNotifications;
 (async () => {
   const pr = await api("/protocols"); S.protocols = pr.protocols; S.facts = pr.facts;
-  await loadOrg(); bindIntakeUpload(); refreshQueueCount();
-  await loadCases(); loadModels(); setInterval(loadModels, 30000);
+  await loadOrg(); bindIntakeUpload(); refreshQueueCount(); refreshInboxCount(); loadNotifications();
+  await loadCases(); loadModels(); setInterval(loadModels, 30000); setInterval(() => { loadNotifications(); refreshInboxCount(); }, 30000);
   const m = location.hash.match(/case=([\w.-]+)/); if (m) openCase(m[1]);
 })();
 

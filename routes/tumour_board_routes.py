@@ -6,7 +6,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
 from src.auth_helpers import require_user
-from tumour_board import agents, config, guidelines, llm, org, postboard, protocol, qa, rules, search, service, store, summary
+from tumour_board import notify, agents, config, guidelines, llm, org, postboard, protocol, qa, rules, search, service, store, summary
 from tumour_board import confirm  # clinician confirmations (V1 item 2.2)
 from tumour_board import intake  # department uploads and patient matching (V1 items 2.3, 2.4)
 
@@ -135,7 +135,8 @@ def setup_tumour_board_routes():
         """The hospital, its departments and the caller's own roles. The user map and the Vaidyx account list are returned to admins only."""
         rl = _roles(request)
         o = org.load()
-        out = {"hospital": o["hospital"], "departments": o["departments"], "me": rl, "my_departments": org.my_departments(rl)}
+        out = {"hospital": o["hospital"], "departments": o["departments"], "me": rl, "my_departments": org.my_departments(rl),
+               "inbox_departments": org.visible_departments_for_inbox(rl)}  # whose department inbox this user may open (V1 item 4.4)
         if rl["admin"]:
             mgr = getattr(request.app.state, "auth_manager", None)
             out["users"], out["admins"] = o["users"], o["admins"]
@@ -357,6 +358,26 @@ def setup_tumour_board_routes():
         if not j:
             raise HTTPException(404, "job not found")
         return j
+
+    # ---- department inbox and in-app notifications (V1 item 4.4) -------------------------------------------------------
+    @r.get("/inbox")
+    async def inbox(request: Request):
+        """Every open Pre-Authorization request across the Case Files for the departments this user may see (members and heads
+        their own, admins all), with overdue worked out on display; requests closed in the last 7 days are listed too."""
+        rl = _roles(request)
+        return notify.inbox(rl)
+
+    @r.get("/notifications")
+    async def notifications(request: Request, unread: int = 0, limit: int = 100):
+        rl = _roles(request)
+        return {"notifications": notify.for_roles(rl, limit=max(1, min(limit, 500)), unread_only=bool(unread)), "unread": notify.unread_count(rl)}
+
+    @r.post("/notifications/read")
+    async def notifications_read(request: Request):
+        """{"ids": [...]} marks those read for this user; {"all": true} marks every notification addressed to the user read."""
+        rl = _roles(request); b = await request.json() if (await request.body()) else {}
+        ids = None if b.get("all") else [str(x) for x in (b.get("ids") or [])]
+        return {"changed": notify.mark_read(rl, ids), "unread": notify.unread_count(rl)}
 
     @r.get("/cases/{case_id}/export")
     async def export(case_id: str, request: Request):

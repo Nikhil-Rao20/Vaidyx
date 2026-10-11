@@ -410,6 +410,17 @@ def set_override(case_id, kind, key, value: dict, by=""):
     store.audit(case_id, {"kind": "override", "target": kind, "key": key, "value": value, "by": by})
 
 
+def _notify(*a, **kw):
+    """In-app notification (V1 item 4.4); never lets a notification problem break the gate."""
+    try:
+        from . import notify
+        return notify.notify(*a, **kw)
+    except ImportError:
+        return None
+    except Exception as e:  # unknown department, disk problem: the gate result still stands
+        return {"error": f"{e.__class__.__name__}: {e}"}
+
+
 def _route(r, case_id):
     """Where a gap goes (V1 items 4.2 / 4.4): a Level 1 gap to the department that owns the record type (the protocol's Responsible
     Department); a Level 2 gap to the department that uploaded the record the value should be in, when a department uploaded it
@@ -424,7 +435,8 @@ def _route(r, case_id):
 
 def sync_actions(case_id, gate, by=""):
     """Open an action (request) for every unmet requirement; complete actions whose requirement is now satisfied. Each request
-    carries its level and goes to the department that can act on it (V1 item 4.2)."""
+    carries its level and goes to the department that can act on it (V1 item 4.2); the department is notified when a request opens
+    or closes and the coordinator when the Case File is ready (V1 item 4.4)."""
     st = store.get_state(case_id)
     if gate is None:  # not listed yet
         st["gate"] = None
@@ -433,6 +445,7 @@ def sync_actions(case_id, gate, by=""):
     actions = st.get("actions", [])
     today = date.today()
     case = store.get_case(case_id); prot = protocol.get(case["protocol"])
+    patient = (case.get("patient") or {}).get("name") or case_id
     sla = {r["id"]: r.get("sla_days", 3) for r in protocol.records(prot)}
     by_req = {a["requirement"]: a for a in actions if a.get("source") == "pre_authorization" and a["status"] != "completed"}
     required_ids = {r["id"] for r in gate["requirements"]}
@@ -454,6 +467,9 @@ def sync_actions(case_id, gate, by=""):
                 a["status"] = "completed"; a["completed"] = store.now_iso()
                 a["history"].append({"ts": store.now_iso(), "event": "Re-check: requirement met", "evidence": [e["doc_id"] for e in r["evidence"]]})
                 store.audit(case_id, {"kind": "action_completed", "action": a["id"], "requirement": r["id"]})
+                if a.get("department_id"):
+                    _notify({"department": a["department_id"]}, "request_closed", case_id, f"{r['label']} received for {patient} ({case_id})",
+                            "The request closed automatically: the Case File re-check found the requirement met.", action_id=a["id"], requirement=r["id"], level=a.get("level"))
             continue
         what = "; ".join(r["problems"]) or r["label"]
         dept, dept_id, doc_id = _route(r, case_id)
@@ -464,6 +480,9 @@ def sync_actions(case_id, gate, by=""):
                 if moved:
                     a["history"].append({"ts": store.now_iso(), "event": f"Re-check: {LEVEL_LABEL.get(r.get('level'), 'gap')} routed to {dept}", "detail": what})
                     a["level"], a["level_label"], a["department"], a["department_id"], a["source_doc_id"] = r.get("level"), r.get("level_label", ""), dept, dept_id, doc_id
+                    if dept_id:
+                        _notify({"department": dept_id}, "request", case_id, f"{r['label']} needed for {patient} ({case_id})", what,
+                                action_id=a["id"], requirement=r["id"], due=a.get("due"), level=r.get("level"), level_label=r.get("level_label", ""))
                 else:
                     a["history"].append({"ts": store.now_iso(), "event": "Re-check: gap updated", "detail": what})
             continue
@@ -473,9 +492,17 @@ def sync_actions(case_id, gate, by=""):
              "due": (today + timedelta(days=sla.get(r["id"], 3))).isoformat(), "history": [{"ts": store.now_iso(), "event": f"Gap detected ({LEVEL_LABEL.get(r.get('level'), 'gap')}), routed to " + dept}]}
         actions.append(a)
         store.audit(case_id, {"kind": "action_created", "action": a["id"], "requirement": r["id"], "department": dept, "level": r.get("level"), "what": what})
+        if dept_id:
+            _notify({"department": dept_id}, "request", case_id, f"{r['label']} needed for {patient} ({case_id})", what,
+                    action_id=a["id"], requirement=r["id"], due=a["due"], level=r.get("level"), level_label=r.get("level_label", ""))
     for a in actions:
         if a["status"] == "pending" and a.get("due") and a["due"] < today.isoformat():
             a["status"] = "overdue"
+    before = st.get("gate") or {}
+    if gate.get("passed") and not before.get("passed"):  # the coordinator hears once, when the Case File becomes ready (V1 item 4.4)
+        n = _notify({"role": "coordinator"}, "case_ready", case_id, f"Case File ready: {patient} ({case_id})",
+                    f"Every Pre-Authorization check is met ({gate['satisfied']} of {gate['total']} records). The Case File summary can be compiled.", by=by)
+        store.audit(case_id, {"kind": "case_ready", "by": by, "satisfied": gate["satisfied"], "total": gate["total"], "notified": bool(n and not n.get("error"))})
     st["actions"] = actions
     st["gate"] = gate
     store.save_state(case_id, st)

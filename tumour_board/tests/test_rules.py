@@ -386,3 +386,44 @@ def test_sync_marks_overdue(unit_case):
     st["actions"][0]["due"] = (date.today() - timedelta(days=1)).isoformat()
     store.save_state(unit_case, st)
     assert _sync(unit_case)["actions"][0]["status"] == "overdue"
+
+
+# ---- notifications from the gate (V1 item 4.4) --------------------------------------------------------------
+def _notes():
+    import json
+    from tumour_board import notify
+    p = notify.path()
+    return [json.loads(x) for x in p.read_text().splitlines()] if p.exists() else []
+
+
+def test_sync_notifies_the_department_and_the_coordinator(unit_case):
+    """A new request notifies the department that must act; the closing upload tells it the request closed; the coordinators hear
+    once when the Case File becomes ready, not again on the next re-check."""
+    add(unit_case, hist())
+    a = _sync(unit_case)["actions"][0]
+    n = [x for x in _notes() if x["kind"] == "request"]
+    assert len(n) == 1 and n[0]["to"] == {"department": "radio_diagnosis"} and n[0]["case_id"] == unit_case and n[0]["action_id"] == a["id"]
+    assert n[0]["level"] == 1 and n[0]["title"].startswith("Diagnostic CT thorax report needed for SYNTHETIC, Test Patient")
+    _sync(unit_case)
+    assert len([x for x in _notes() if x["kind"] == "request"]) == 1  # nothing changed: no second notification
+    add(unit_case, ct())
+    st = _sync(unit_case)
+    assert st["gate"]["passed"]
+    closed = [x for x in _notes() if x["kind"] == "request_closed"]
+    assert len(closed) == 1 and closed[0]["to"] == {"department": "radio_diagnosis"} and closed[0]["action_id"] == a["id"]
+    ready = [x for x in _notes() if x["kind"] == "case_ready"]
+    assert len(ready) == 1 and ready[0]["to"] == {"role": "coordinator"} and "3 of 3" in ready[0]["text"]
+    assert any(e["kind"] == "case_ready" and e["notified"] for e in store.read_audit(unit_case))
+    _sync(unit_case)
+    assert len([x for x in _notes() if x["kind"] == "case_ready"]) == 1
+
+
+def test_a_notification_problem_never_breaks_the_gate(unit_case, monkeypatch):
+    from tumour_board import notify
+
+    def broken(*a, **kw):
+        raise OSError("disk full")
+    monkeypatch.setattr(notify, "notify", broken)
+    add(unit_case, hist())
+    st = _sync(unit_case)
+    assert st["actions"][0]["status"] == "pending" and st["gate"]["satisfied"] == 2

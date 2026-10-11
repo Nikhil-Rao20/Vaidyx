@@ -15,6 +15,7 @@
   <a class="brand" href="/tb"><img src="/static/vaidyx-wordmark.svg" alt="Vaidyx"><span class="divider"></span><span class="product">AI Agent for Tumour Board</span></a>
   <div class="models" id="models"></div>
   <nav class="topnav">
+    <button class="ghost bell hidden" id="btn-bell" title="Notifications: requests to your department, Case Files ready for the board" aria-label="Notifications">Notifications <span class="chip c-warn hidden" id="bell-count">0</span></button>
     <button class="ghost hidden" id="btn-org" title="Departments, users and roles (admin)">Hospital and departments</button>
     <button class="ghost" id="btn-cards">Model and data cards</button>
     <a class="ghost" href="/">Vaidyx chat</a>
@@ -30,6 +31,7 @@
     <div id="case-list" class="case-list"></div>
     <div class="side-intake hidden" id="side-intake">
       <h4>Department uploads</h4>
+      <button class="ghost sm hidden" id="btn-inbox" title="Requests the Pre-Authorization check routed to your department across the Case Files">Department inbox <span class="chip c-warn hidden" id="inbox-count">0</span></button>
       <button class="ghost sm" id="btn-queue" title="Records that could not be matched to a patient automatically">Needs matching <span class="chip c-warn hidden" id="queue-count">0</span></button>
       <div class="card intake-card" id="intake-upload">
         <label class="small" for="up-dept">Upload for my department</label>
@@ -58,6 +60,7 @@
     </section>
 
     <section id="intake" class="hidden"></section>
+    <section id="inbox" class="hidden"></section>
 
     <section id="case" class="hidden">
       <div class="case-head">
