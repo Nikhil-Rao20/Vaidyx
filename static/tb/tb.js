@@ -108,9 +108,14 @@ function removedHTML(list) {
     <div class="small muted">What the model wrote that was taken out before display, with the reason. Not facts: never rely on them.</div>
     <ul>${list.map((x) => `<li class="small"><span class="chip c-mute">${esc(x.reason_label || x.reason)}</span> <s>${esc(x.text)}</s>${x.detail ? ` <span class="muted">(${esc(x.detail)})</span>` : ""}${x.where ? ` <span class="muted">· ${esc(WHERE[x.where] || x.where)}</span>` : ""}</li>`).join("")}</ul></details>`;
 }
+// V1 item 8.1: a quote on a scanned page was checked against the vision reader's transcription, not against the image
+const SCAN_TITLE = "Read from a scanned page by the vision reader (Qwen3.5-4B, Chinese, non-medical). The quote was checked against that transcription, not against the image: open the source and compare with the scan.";
+const scanPage = (id, page) => page !== undefined && page !== null && page !== "" && !!(S.data?.documents || []).find((d) => d.doc_id === id)?.scan_pages?.includes(+page);
+const isScan = (c) => !!c && (c.source_method ? c.source_method === "vision-transcription" : scanPage(c.doc_id, c.page));
+const scanChip = (c) => (isScan(c) ? ` <span class="chip c-scan" title="${SCAN_TITLE}">from scan (OCR)</span>` : "");
 function citeHTML(c) {
   const label = `${c.doc_title || c.doc_id}${c.date ? " · " + fmtDate(c.date) : ""}`;
-  return `<span class="cite" data-doc="${esc(c.doc_id)}" data-page="${c.page ?? ""}" data-start="${c.start ?? ""}" data-end="${c.end ?? ""}" title="&quot;${esc(c.quote)}&quot;">${esc(label)}</span>`;
+  return `<span class="cite" data-doc="${esc(c.doc_id)}" data-page="${c.page ?? ""}" data-start="${c.start ?? ""}" data-end="${c.end ?? ""}" title="&quot;${esc(c.quote)}&quot;${isScan(c) ? " (" + SCAN_TITLE + ")" : ""}">${esc(label)}${isScan(c) ? '<span class="scan-tag">from scan (OCR)</span>' : ""}</span>`;
 }
 document.addEventListener("click", (e) => {
   const c = e.target.closest(".cite");
@@ -146,7 +151,7 @@ function reqRow(r, shown) {
   const s = STATUS[r.status] || STATUS.needs_review;
   const ev = r.evidence.filter((e) => e.doc_id).map((e) => {
     const d = S.data.documents.find((x) => x.doc_id === e.doc_id); const cl = d?.classification || {};
-    return `<span class="cite" data-doc="${esc(e.doc_id)}" title="${esc(e.quote || "")}">${esc(e.value ? `${S.facts?.[e.fact]?.label || e.fact}: ${e.value}` : (cl.title || e.doc_id))}${docDates(cl).event ? " · " + fmtDate(docDates(cl).event) : ""}</span>`;
+    return `<span class="cite" data-doc="${esc(e.doc_id)}" title="${esc(e.quote || "")}${e.value && isScan(e) ? " (" + SCAN_TITLE + ")" : ""}">${esc(e.value ? `${S.facts?.[e.fact]?.label || e.fact}: ${e.value}` : (cl.title || e.doc_id))}${docDates(cl).event ? " · " + fmtDate(docDates(cl).event) : ""}${e.value && isScan(e) ? '<span class="scan-tag">from scan (OCR)</span>' : ""}</span>`;
   }).join("");
   const needs = r.needs || (r.status === "needs_confirmation" && r.evidence[0]?.doc_id ? [{ type: "attest_final", doc_id: r.evidence[0].doc_id }] : []);
   const attest = needs.filter((n) => can("confirm", n.doc_id)).map((n) => n.type === "attest_final" ? `<button class="ghost sm" data-attest="${esc(n.doc_id)}">Attest: final, signed</button>`
@@ -452,7 +457,7 @@ function renderDocs() {
   <table class="t"><thead><tr><th>Field</th><th>Current value</th><th>Source</th><th>History</th></tr></thead><tbody>
   ${Object.entries(S.data.facts).map(([k, f]) => { const c = f.current;
     return `<tr><td>${esc(f.label)}</td><td><b>${esc(c.value)}</b> ${c.state === "pending" ? '<span class="chip c-warn">pending</span>' : ""}${c.verification !== "verified" ? '<span class="chip c-rev">' + esc(c.verification) + "</span>" : ""}${!c.doc_final ? '<span class="chip c-bad">non-final doc</span>' : ""}</td>
-      <td>${c.verification === "confirmed" ? `<span class="chip c-ok" title="Read by the clinician in the source document; no model quote">confirmed by ${esc(c.confirmed_by || "clinician")}</span> <span class="cite" data-doc="${esc(c.doc_id)}">${esc(c.doc_title || c.doc_id)}</span>` : citeHTML({ ...c.location, doc_id: c.doc_id, doc_title: c.doc_title, date: c.date, quote: c.quote })}</td>
+      <td>${c.verification === "confirmed" ? `<span class="chip c-ok" title="Read by the clinician in the source document; no model quote">confirmed by ${esc(c.confirmed_by || "clinician")}</span> <span class="cite" data-doc="${esc(c.doc_id)}">${esc(c.doc_title || c.doc_id)}</span>` : citeHTML({ ...c.location, doc_id: c.doc_id, doc_title: c.doc_title, date: c.date, quote: c.quote, source_method: c.source_method })}</td>
       <td class="small muted">${f.history.length > 1 ? f.history.map((h) => `${esc(h.value)} (${fmtDate(h.date)})`).join(" → ") : ""}</td></tr>`; }).join("")}
   </tbody></table></div>`;
   $$("tr[data-doc]").forEach((tr) => (tr.onclick = (e) => { if (!e.target.closest("button")) openDoc(tr.dataset.doc); }));
@@ -501,7 +506,7 @@ async function openDoc(docId, focus, base) {
       <div class="doctext" id="doctext">${marks(pg)}</div>
       <h4 style="color:#1f2933">Fields found in this document</h4>
       <table class="t"><tbody>${Object.entries(d.facts || {}).map(([k, f]) => `<tr><td>${esc(k)}</td><td><b>${esc(f.value)}</b>${f.state === "pending" ? ' <span class="chip c-warn">pending</span>' : ""}</td>
-        <td><span class="chip ${f.verification === "verified" ? "c-ok" : "c-rev"}" title="${esc(f.reason || "")}">${esc(f.verification)}</span>${f.polarity === "negated" ? ' <span class="chip c-mute" title="The value is a negative finding (no / not / negative / absent)">negated</span>' : ""}</td><td class="small muted">"${esc(f.quote)}"</td></tr>`).join("") || '<tr><td class="muted">None</td></tr>'}</tbody></table>
+        <td><span class="chip ${f.verification === "verified" ? "c-ok" : "c-rev"}" title="${esc(f.reason || "")}">${esc(f.verification)}</span>${f.polarity === "negated" ? ' <span class="chip c-mute" title="The value is a negative finding (no / not / negative / absent)">negated</span>' : ""}${f.verification === "confirmed" ? "" : scanChip({ ...f, doc_id: d.doc_id })}</td><td class="small muted">"${esc(f.quote)}"</td></tr>`).join("") || '<tr><td class="muted">None</td></tr>'}</tbody></table>
       ${pages.some((p) => p.flags?.length) ? `<div class="flag review" style="margin-top:8px"><div class="k">Hindi / regional text or handwriting</div>${esc([...new Set(pages.flatMap((p) => p.flags || []))].join("; "))}. Flagged lines: ${pages.map((p, i) => (p.flagged_lines || []).map((l) => `page ${i + 1}: "${esc(l.line.slice(0, 80))}"`).join("; ")).filter(Boolean).join("; ")}. The text is transcribed as written and never translated; values taken from these lines are marked for a person's check.</div>` : ""}
       ${pages.some((p) => p.ocr_uncertain_numbers?.length) ? `<div class="flag review" style="margin-top:8px"><div class="k">OCR disagreement</div>The two reads of this scanned page differ on these numbers: ${esc(pages.flatMap((p) => p.ocr_uncertain_numbers || []).join(", "))}. Values containing them are marked for expert review; read the scan image.</div>` : ""}
     </div></div>`;

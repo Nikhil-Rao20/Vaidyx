@@ -11,6 +11,7 @@ from tumour_board import confirm  # clinician confirmations (V1 item 2.2)
 from tumour_board import intake  # department uploads and patient matching (V1 items 2.3, 2.4)
 from tumour_board import board  # board sessions, attendance, agent log (V1 items 6.1 to 6.3)
 from tumour_board import followup  # Tumour Board actions in department inboxes, closing suggestions (V1 item 7.4)
+from tumour_board import scanned  # values and citations read from scans (V1 items 8.1, 8.2)
 
 log = logging.getLogger("tumour_board")
 
@@ -229,6 +230,7 @@ def setup_tumour_board_routes():
         for d in rules.case_docs(case_id, st):  # as the clinicians confirmed them (type, dates, values; V1 items 2.2, 3.1, 3.2)
             docs.append({k: d.get(k) for k in ("doc_id", "filename", "rel_path", "ext", "state", "error", "dismissed", "classification", "identity", "identity_read", "added", "department", "uploaded_by")} |
                         {"facts": d.get("facts", {}), "pages": len(d.get("pages") or []), "methods": sorted({p["method"] for p in d.get("pages") or []}),
+                         "scan_pages": scanned.scan_pages(d.get("pages")),  # pages read from an image: "from scan (OCR)" (V1 item 8.1)
                          "page_flags": sorted({f for p in d.get("pages") or [] for f in p.get("flags") or []})})  # Hindi / regional text, illegible parts (V1 item 3.6)
         facts = rules.resolve_facts(rules.case_docs(case_id, st), st.get("overrides"))  # confirmations overlaid (V1 item 2.2)
         cat = protocol.facts()
@@ -428,7 +430,7 @@ def setup_tumour_board_routes():
         d = store.get_doc(case_id, doc_id)
         if not d:
             raise HTTPException(404, "document not found")
-        return d
+        return scanned.with_source_methods(d)  # facts say whether they were read from a scan (V1 item 8.1)
 
     @r.get("/cases/{case_id}/documents/{doc_id}/file")
     async def doc_file(case_id: str, doc_id: str, request: Request, render: int = 0, page: int = 0):

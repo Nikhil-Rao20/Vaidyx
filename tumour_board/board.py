@@ -582,7 +582,8 @@ def _uses_model(e) -> bool:
 
 
 def _cite(c) -> str:
-    return f"[{_h(c.get('doc_title') or c.get('doc_id'))}, {_verbatim(c.get('quote'))}]"
+    scan = ", from scan (OCR)" if c.get("source_method") == "vision-transcription" else ""  # V1 item 8.1
+    return f"[{_h(c.get('doc_title') or c.get('doc_id'))}, {_verbatim(c.get('quote'))}{scan}]"
 
 
 def _ref(r) -> str:

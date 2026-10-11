@@ -50,7 +50,8 @@ def fill_from_facts(sections, facts, cat):
             loc = cur["location"]
             sec["sentences"].append({"text": f"{label}: {cur['value']} (as recorded in the {cur['doc_title']}, {cur['date'] or 'date not stated'}).",
                                      "citations": [{"doc_id": cur["doc_id"], "quote": cur["quote"], "page": loc["page"], "start": loc["start"], "end": loc["end"],
-                                                    "doc_title": cur["doc_title"], "date": cur["date"], "status": cur.get("doc_status")}], "from_fields": True})
+                                                    "doc_title": cur["doc_title"], "date": cur["date"], "status": cur.get("doc_status"),
+                                                    **({"source_method": cur["source_method"]} if cur.get("source_method") else {})}], "from_fields": True})
             have += " " + cur["value"]; added += 1
     return added
 

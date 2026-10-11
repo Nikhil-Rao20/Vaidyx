@@ -2,7 +2,7 @@
 then deterministic grounding. Nothing the model says is trusted until its quote is found in the source text."""
 import asyncio, re
 
-from . import confirm, dates, docstatus, doctype, grounding, identity, ingest, llm, negation, protocol, store
+from . import confirm, dates, docstatus, doctype, grounding, identity, ingest, llm, negation, protocol, scanned, store
 
 STATUS = ["FINAL", "AMENDED", "CORRECTED", "PRELIMINARY", "DRAFT", "CANCELLED", "UNKNOWN"]
 # Negation cues shared with qa and postboard (see negation.py).
@@ -376,11 +376,13 @@ async def process_document(case_id, doc_id, protocol_id, case_patient=None, prog
                           "model_quote": main["quote"], "verification": v["status"], "reason": v.get("reason"),
                           "location": v["location"], "state": "pending" if pending else "present",
                           "polarity": "negated" if NEGATED_RE.search(main["value"]) else "affirmed"}
+            facts[fid]["source_method"] = scanned.fact_source_method(pages, facts[fid])  # "vision-transcription": read from a scan (V1 item 8.1)
             ev = {"kind": "fact_verification", "doc_id": doc_id, "fact": fid, "value": main["value"], "result": v["status"], "reason": v.get("reason")}
             if others:
                 facts[fid].update(verification="needs_review", reason="different values in different parts of the document",
                                   alternatives=[{"value": cd["value"].strip(), "quote": (w["location"] or {}).get("matched") or cd["quote"],
-                                                 "location": w["location"], "verification": w["status"]} for cd, w in others])
+                                                 "location": w["location"], "verification": w["status"],
+                                                 "source_method": scanned.fact_source_method(pages, {"location": w["location"]})} for cd, w in others])
                 ev.update(result="needs_review", reason=facts[fid]["reason"], alternatives=[cd["value"] for cd, _ in others])
             if len(cands) > 1:
                 ev["alternatives_dropped"] = len(cands) - len(ok) - (0 if ok else 1)

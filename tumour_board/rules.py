@@ -9,7 +9,7 @@ import re
 import uuid
 from datetime import date, datetime, timedelta
 
-from . import confirm, dates, doctype, grounding, protocol, store
+from . import confirm, dates, doctype, grounding, protocol, scanned, store
 
 FINAL_OK = {"FINAL", "AMENDED", "CORRECTED"}
 VERIFIED = {"verified", "confirmed"}  # a value counts when code found its quote, or a clinician confirmed it against the source (V1 item 2.2)
@@ -17,8 +17,9 @@ VERIFIED = {"verified", "confirmed"}  # a value counts when code found its quote
 
 def case_docs(case_id, state=None):
     """The Case File's documents as the clinicians confirmed them: confirmations (document type, dates, values) are overlaid
-    on the model's reading at read time, so they win and survive a re-process (V1 item 2.2)."""
-    return confirm.apply_to_docs(store.list_docs(case_id), store.get_state(case_id) if state is None else state)
+    on the model's reading at read time, so they win and survive a re-process (V1 item 2.2). Every fact carries the method of the page
+    its quote sits on (`source_method`, V1 item 8.1), filled in from the pages for documents processed before it existed."""
+    return [scanned.with_source_methods(d) for d in confirm.apply_to_docs(store.list_docs(case_id), store.get_state(case_id) if state is None else state)]
 STATUS_RANK = {"CORRECTED": 4, "AMENDED": 4, "FINAL": 3, "PRELIMINARY": 1, "DRAFT": 0, "CANCELLED": -1, "UNKNOWN": 0}
 
 
@@ -235,7 +236,8 @@ def _evaluate_record(req, ready, facts, overrides, cat):
             good = [h for h in good if (h["date"] or "") > r["postdate_reference"]]
         if good:
             g = sorted(good, key=lambda h: h["date"] or "")[-1]
-            r["evidence"].append({"doc_id": g["doc_id"], "fact": fid, "value": g["value"], "quote": g["quote"]})
+            scan = g["verification"] != "confirmed" and g.get("source_method") == scanned.SCAN_METHOD  # read from a scan (V1 item 8.1); a confirmed value is the clinician's reading
+            r["evidence"].append({"doc_id": g["doc_id"], "fact": fid, "value": g["value"], "quote": g["quote"], **({"source_method": scanned.SCAN_METHOD} if scan else {})})
             if len({h["doc_id"] for h in good}) > 1 and len({grounding.norm(h["value"]) for h in good}) > 1:  # which value is current depends on the dates
                 seen = set()
                 for h in good:

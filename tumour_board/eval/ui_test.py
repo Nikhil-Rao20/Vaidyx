@@ -50,6 +50,8 @@ def run_flow(b, base, pw, out, size, sfx, errors):
     # document drawer with highlights (select the tab explicitly: re-clicking the same case keeps the current tab by design)
     pick("TB-001"); pg.click("#tabs button[data-tab='ready']"); pg.wait_for_selector("#tab-ready .req")
     pg.click("#tabs button[data-tab='docs']"); pg.wait_for_selector("tr[data-doc]")
+    if pg.locator("#tab-docs .scan-tag").count() == 0:  # V1 item 8.1: TB-001's PET-CT and CBC are scans; their values say "from scan (OCR)"
+        errors.append("no 'from scan (OCR)' tag on TB-001's values (V1 8.1)")
     pg.locator("tr[data-doc]").nth(3).click(); pg.wait_for_selector("#doctext", timeout=15000); pg.wait_for_timeout(1200)
     shot("TB-001_doc_drawer"); pg.keyboard.press("Escape")
     # ask + instant search

@@ -155,6 +155,9 @@ table.t tr.click { cursor: pointer; } table.t tr.click:hover td { background: va
 .answer p { margin: 0 0 8px; }
 .cite { display: inline-flex; align-items: center; font-size: 12px; font-weight: 700; background: var(--tint); color: var(--link); border-radius: 6px; padding: 1px 6px; margin: 0 2px; cursor: pointer; vertical-align: 1px; }
 .cite:hover { background: #cfe8ef; }
+/* V1 item 8.1: values and citations read from a scanned page */
+.c-scan { background: #eef2f6; color: var(--ink); border: 1px dashed var(--line-2); font-weight: 400; }
+.cite .scan-tag { font-weight: 400; color: var(--ink); background: #ffffff; border: 1px dashed var(--line-2); border-radius: 4px; padding: 0 4px; margin-left: 5px; font-size: 11px; }
 .qbox { border-left: 3px solid var(--accent); background: var(--tint-2); padding: 10px 14px; border-radius: 0 var(--radius) var(--radius) 0; margin: 14px 0 6px; font-weight: 700; }
 .refusal { border-left: 3px solid var(--rev); background: var(--rev-s); padding: 10px 14px; border-radius: 0 var(--radius) var(--radius) 0; }
 

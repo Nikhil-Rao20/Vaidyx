@@ -6,7 +6,7 @@ statements without a verified quote are dropped -> output guardrail -> "Not docu
 """
 import asyncio, re, time
 
-from . import dates, grounding, guardrails, llm, negation, rules, search, store, units
+from . import dates, grounding, guardrails, llm, negation, rules, scanned, search, store, units
 from rapidfuzz.distance import Levenshtein
 
 ANSWER_SCHEMA = {"type": "object", "additionalProperties": False, "properties": {
@@ -168,11 +168,12 @@ def verify(case_id, statements, near_match=False):
             locs = _locate_quote(c.get("quote") or "", pages)
             for loc in locs:
                 cites.append({"doc_id": d["doc_id"], "quote": loc["matched"], "page": loc["page"], "start": loc["start"], "end": loc["end"], **meta,
+                              **scanned.citation_source_method(d.get("pages"), loc["page"]),  # "from scan (OCR)" (V1 item 8.1)
                               **({"negated_before": True} if negated_before(pages[loc["page"]], loc["start"]) else {})})
             loc = _approx_quote(c.get("quote") or "", pages) if near_match and not locs else None
             if loc:
                 approx.append({"doc_id": d["doc_id"], "quote": loc["matched"], "page": loc["page"], "start": loc["start"], "end": loc["end"], **meta,
-                               "approximate": True, "score": loc["score"]})
+                               **scanned.citation_source_method(d.get("pages"), loc["page"]), "approximate": True, "score": loc["score"]})
         # number guard: every number in the statement must appear in a verified quote (or the cited document's title/date)
         shown = _shown_text(st.get("text", ""), docs)
         if shown != st.get("text", ""):
