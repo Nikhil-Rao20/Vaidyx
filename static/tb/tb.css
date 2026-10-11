@@ -178,6 +178,7 @@ table.t tr.click { cursor: pointer; } table.t tr.click:hover td { background: va
 .flag.review .k { color: var(--rev); }
 .flag.info { border-color: var(--line-2); background: var(--panel); }
 .flag.info .k { color: var(--muted); }
+.flag.resolved { opacity: .8; border-style: dashed; }
 .form label { display: block; font-size: 13px; font-weight: 700; color: var(--muted); margin: 10px 0 4px; }
 .form input, .form textarea, .form select { width: 100%; padding: 8px 10px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--panel); color: var(--ink); }
 .form input:focus, .form textarea:focus, .form select:focus, .reviewbar input:focus { outline: 2px solid var(--tint-line); border-color: var(--accent); }

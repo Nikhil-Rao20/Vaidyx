@@ -192,3 +192,131 @@ def test_a_failing_guideline_check_never_stops_the_adjudication(monkeypatch):
     adj = asyncio.run(postboard.adjudicate(cid, {"decision_text": TB005, "participants": "Dr A (Med Onc), Dr B (Surg Onc), Dr C (Rad Onc)"}))
     assert any(f["kind"] == "system" and "Guideline checks unavailable" in f["text"] for f in adj["flags"])
     assert adj["guideline_checks"]["ran"] is False and adj["status"] == "flag_for_expert_review"
+
+
+# ---- 7.3 flag resolution: corrected (amended decision, versions kept) / intentional deviation / false alarm -------------
+def _record_with_slip(unit_case, monkeypatch):
+    """A board record whose PD-L1 is written as 6% where the signed report says 60%: one transcription flag, plus the composition
+    flag (no oncologist named) and the missing 'recorded by' field."""
+    from tumour_board import protocol
+    from tumour_board.tests import util
+    from tumour_board.tests.util import add, fact, make_doc
+    unit = {**util.unit_protocol(), "post_board": {"required_record_fields": ["decision_text", "recorded_by", "participants", "actions"]}}
+    real = protocol.get
+    monkeypatch.setattr(protocol, "get", lambda pid: unit if pid == "unit" else real(pid))
+    add(unit_case, make_doc("Dihc00000", "ihc", date="2026-09-05", facts={"pdl1": fact("TPS 60%", quote="PD-L1 (22C3) TPS 60%")},
+                            text="SYNTHETIC\nIHC REPORT\nPD-L1 (22C3) TPS 60%\nReport status: FINAL"))
+
+    async def fake_chat(role, msgs, **kw):
+        return {"claims": [{"fact": "pdl1", "value_as_written": "TPS 6%", "span": "PD-L1 TPS 6%"}]}
+    monkeypatch.setattr(llm, "chat", fake_chat)
+    rec = asyncio.run(postboard.record_decision(unit_case, {"decision_text": "PD-L1 TPS 6% noted. Plan as discussed.", "participants": "Dr A, Dr B",
+                                                            "actions": [{"department": "Medical Oncology", "task": "Counsel", "due": "2026-12-01"}]}, "coordinator"))
+    flags = {f["kind"] if f["kind"] != "documentation" else f["field"]: f for f in rec["adjudication"]["flags"]}
+    return rec, flags
+
+
+def _rec(unit_case, rid):
+    from tumour_board import store
+    return next(b for b in store.get_state(unit_case)["board_records"] if b["id"] == rid)
+
+
+def test_flags_have_ids_and_the_decision_is_not_final_until_resolved(unit_case, monkeypatch):
+    rec, flags = _record_with_slip(unit_case, monkeypatch)
+    assert [f["id"] for f in rec["adjudication"]["flags"]] == [f"F{i + 1}" for i in range(len(rec["adjudication"]["flags"]))]
+    assert set(flags) >= {"transcription", "composition", "recorded_by"}
+    assert rec["resolution"]["final"] is False and rec["resolution"]["open"] == rec["resolution"]["total"] == len(rec["adjudication"]["flags"])
+    assert rec["version"] == 1 and rec["versions"][0]["decision_text"] == rec["decision_text"]
+
+
+def test_corrected_flag_amends_the_decision_as_version_2_with_history(unit_case, monkeypatch):
+    from tumour_board import confirm, store
+    rec, flags = _record_with_slip(unit_case, monkeypatch)
+    t = flags["transcription"]
+    out = postboard.resolve_flag(unit_case, rec["id"], t["id"], "corrected", "TPS 60%", "", "Dr. Rao")
+    assert out["decision_text"] == "PD-L1 TPS 60% noted. Plan as discussed." and out["version"] == 2
+    assert [v["version"] for v in out["versions"]] == [1, 2] and out["versions"][0]["decision_text"] == "PD-L1 TPS 6% noted. Plan as discussed."
+    assert out["versions"][1]["by"] == "Dr. Rao" and out["versions"][1]["change"] == {"flag": t["id"], "field": "decision_text", "from": "PD-L1 TPS 6%", "to": "PD-L1 TPS 60%"}
+    f = next(x for x in out["adjudication"]["flags"] if x["id"] == t["id"])
+    assert f["resolution"]["resolution"] == "corrected" and f["resolution"]["version"] == 2
+    assert _rec(unit_case, rec["id"])["decision_text"] == out["decision_text"]  # saved
+    c = confirm.latest(unit_case, "resolve_flag", f"{rec['id']}:{t['id']}")
+    assert c and c["fields"] == {"resolution": "corrected", "value": "TPS 60%"} and c["by"] == "Dr. Rao"
+    assert any(e["kind"] == "board_flag_resolved" and e["version"] == 2 for e in store.read_audit(unit_case))
+
+
+def test_intentional_deviation_needs_a_reason_and_all_resolved_makes_the_decision_final(unit_case, monkeypatch):
+    rec, flags = _record_with_slip(unit_case, monkeypatch)
+    with pytest.raises(ValueError, match="reason"):
+        postboard.resolve_flag(unit_case, rec["id"], flags["composition"]["id"], "intentional_deviation", "", "", "Dr. Rao")
+    postboard.resolve_flag(unit_case, rec["id"], flags["composition"]["id"], "intentional_deviation", "", "Radiation Oncology reviewed the case file separately", "Dr. Rao")
+    postboard.resolve_flag(unit_case, rec["id"], flags["transcription"]["id"], "false_alarm", "", "", "Dr. Rao")
+    left = [f for f in _rec(unit_case, rec["id"])["adjudication"]["flags"] if postboard.needs_resolution(f) and not f.get("resolution")]
+    for f in left:
+        postboard.resolve_flag(unit_case, rec["id"], f["id"], "false_alarm", "", "", "Dr. Rao")
+    r = _rec(unit_case, rec["id"])
+    assert r["resolution"]["final"] is True and r["resolution"]["open"] == 0 and r["version"] == 1  # nothing corrected: same version
+
+
+def test_undo_takes_the_correction_back_as_a_new_version(unit_case, monkeypatch):
+    from tumour_board import confirm
+    rec, flags = _record_with_slip(unit_case, monkeypatch)
+    t = flags["transcription"]
+    out = postboard.resolve_flag(unit_case, rec["id"], t["id"], "corrected", "TPS 60%", "", "Dr. Rao")
+    conf = next(x for x in out["adjudication"]["flags"] if x["id"] == t["id"])["resolution"]["confirmation"]
+    back = postboard.undo_resolution(unit_case, conf, "Dr. Rao")
+    assert back["decision_text"] == "PD-L1 TPS 6% noted. Plan as discussed." and back["version"] == 3 and len(back["versions"]) == 3
+    f = next(x for x in back["adjudication"]["flags"] if x["id"] == t["id"])
+    assert "resolution" not in f and f["resolution_history"][0]["undone_by"] == "Dr. Rao"
+    assert confirm.latest(unit_case, "resolve_flag", f"{rec['id']}:{t['id']}") is None and back["resolution"]["final"] is False
+
+
+def test_a_new_resolution_supersedes_and_takes_a_correction_back_first(unit_case, monkeypatch):
+    rec, flags = _record_with_slip(unit_case, monkeypatch)
+    t = flags["transcription"]
+    postboard.resolve_flag(unit_case, rec["id"], t["id"], "corrected", "TPS 60%", "", "Dr. Rao")
+    out = postboard.resolve_flag(unit_case, rec["id"], t["id"], "false_alarm", "", "6% is the value the board discussed", "Dr. Iyer")
+    assert out["decision_text"] == "PD-L1 TPS 6% noted. Plan as discussed." and out["version"] == 3
+    f = next(x for x in out["adjudication"]["flags"] if x["id"] == t["id"])
+    assert f["resolution"]["resolution"] == "false_alarm" and f["resolution_history"][0]["resolution"] == "corrected"
+
+
+def test_a_later_correction_survives_undoing_an_earlier_one(unit_case, monkeypatch):
+    rec, flags = _record_with_slip(unit_case, monkeypatch)
+    c1 = postboard.resolve_flag(unit_case, rec["id"], flags["transcription"]["id"], "corrected", "TPS 60%", "", "Dr. Rao")
+    postboard.resolve_flag(unit_case, rec["id"], flags["recorded_by"]["id"], "corrected", "Dr. K. Menon, coordinator", "", "Dr. Rao")
+    conf = next(x for x in c1["adjudication"]["flags"] if x["id"] == flags["transcription"]["id"])["resolution"]["confirmation"]
+    back = postboard.undo_resolution(unit_case, conf, "Dr. Rao")
+    assert back["decision_text"] == "PD-L1 TPS 6% noted. Plan as discussed." and back["recorded_by"] == "Dr. K. Menon, coordinator"
+
+
+def test_composition_and_missing_field_corrections_amend_those_fields(unit_case, monkeypatch):
+    rec, flags = _record_with_slip(unit_case, monkeypatch)
+    out = postboard.resolve_flag(unit_case, rec["id"], flags["composition"]["id"], "corrected", "Dr. P. Iyer (Radiation Oncology)", "", "Dr. Rao")
+    assert out["participants"] == "Dr A, Dr B; Dr. P. Iyer (Radiation Oncology)" and out["decision_text"] == rec["decision_text"] and out["version"] == 2
+    out = postboard.resolve_flag(unit_case, rec["id"], flags["recorded_by"]["id"], "corrected", "Dr. K. Menon", "", "Dr. Rao")
+    assert out["recorded_by"] == "Dr. K. Menon" and out["version"] == 3 and out["versions"][2]["recorded_by"] == "Dr. K. Menon"
+
+
+def test_information_only_items_and_unknown_flags_are_refused(unit_case, monkeypatch):
+    from tumour_board import store
+    rec, flags = _record_with_slip(unit_case, monkeypatch)
+    st = store.get_state(unit_case)
+    b = next(x for x in st["board_records"] if x["id"] == rec["id"])
+    b["adjudication"]["flags"].append({"id": "F99", "kind": "guideline", "severity": "info", "text": "No guideline reference found"})
+    store.save_state(unit_case, st)
+    with pytest.raises(ValueError, match="information only"):
+        postboard.resolve_flag(unit_case, rec["id"], "F99", "false_alarm", "", "", "Dr. Rao")
+    with pytest.raises(KeyError):
+        postboard.resolve_flag(unit_case, rec["id"], "F42", "false_alarm", "", "", "Dr. Rao")
+    with pytest.raises(KeyError):
+        postboard.resolve_flag(unit_case, "Bnope", "F1", "false_alarm", "", "", "Dr. Rao")
+    with pytest.raises(ValueError, match="corrected value"):
+        postboard.resolve_flag(unit_case, rec["id"], flags["transcription"]["id"], "corrected", "", "", "Dr. Rao")
+
+
+def test_records_from_before_7_3_get_flag_ids_in_order(unit_case, monkeypatch):
+    old = {"id": "Bold000", "decision_text": "x", "adjudication": {"flags": [{"kind": "documentation", "severity": "review", "text": "a"},
+                                                                          {"kind": "system", "severity": "info", "text": "b"}]}}
+    s = postboard.resolution_status(old)
+    assert [f["id"] for f in old["adjudication"]["flags"]] == ["F1", "F2"] and s == {"final": False, "open": 1, "resolved": 0, "total": 1, "open_flags": ["F1"]}

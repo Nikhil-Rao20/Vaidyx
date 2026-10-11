@@ -515,3 +515,16 @@ def test_check_cases_uses_safe_id(cases, monkeypatch):
             board.create(DATE, "coord", case_ids=[bad])
     with pytest.raises(ValueError, match="^Invalid Case File id 'TB A'$"):  # another spelling of TB-A is not silently accepted
         board.create(DATE, "coord", case_ids=["TB A"])
+
+
+# ---- V1 item 7.3: an amended decision shows in the session and its export -------------------------------------------------
+def test_decision_amended_updates_the_session_and_the_export(cases):
+    sid = _decided_session(cases)
+    rec = {"id": "Babc123", "decision_text": "Doxorubicin 60 mg/m2 as decided.", "version": 2, "resolution": {"final": True}}
+    s = board.decision_amended(sid, "TB-A", rec, "Dr. Rao")
+    d = s["decisions"]["TB-A"]
+    assert d["decision_text"] == "Doxorubicin 60 mg/m2 as decided." and d["version"] == 2 and d["final"] is True and d["amended_by"] == "Dr. Rao"
+    html = board.export_html(sid)
+    assert "Doxorubicin 60 mg/m2 as decided." in html and "amended: version 2" in html
+    assert board.decision_amended(sid, "TB-A", {**rec, "id": "Bother1"}, "Dr. Rao") is None  # not the record linked to this agenda item
+    assert any(e["kind"] == "decision_amended" and e.get("version") == 2 for e in board.read_audit())

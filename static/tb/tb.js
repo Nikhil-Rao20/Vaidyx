@@ -713,6 +713,38 @@ function guidelineOkHTML(b) {
 // PM-JAY board composition (V1 item 7.1): which of the three oncologists the record shows present; an agent never counts
 const compHTML = (c) => !c ? "" : `<div class="small" style="margin-top:6px"><b>PM-JAY board composition</b> ${c.checked ? Object.keys(PMJAY).map((d) => `<span class="chip ${c.present.includes(d) ? "c-ok" : "c-rev"}">${PMJAY[d]}: ${c.present.includes(d) ? "present" : "not recorded"}</span>`).join(" ")
   : `<span class="chip c-rev">Not checked: specialties not recorded</span>`}${c.how ? ` <span class="muted">(${c.how === "attendance" ? "from the attendance" : "read from the participants text"})</span>` : ""}</div>`;
+// human over the loop (V1 item 7.3): each flag corrected (the decision is amended, a new version), intentional deviation or false alarm
+const RESOLUTION = { corrected: ["c-ok", "Corrected"], intentional_deviation: ["c-info", "Intentional deviation"], false_alarm: ["c-mute", "False alarm"] };
+const needsRes = (f) => f.severity === "review" || f.severity === "expert_review";
+function recordStatusChip(b) {
+  const r = b.resolution;
+  if (b.adjudication.status === "consistent" && (!r || r.final)) return `<span class="chip c-ok">Consistent</span>`;
+  if (r && r.total && r.final) return `<span class="chip c-ok" title="Every flag was resolved by a person">Final: ${r.total} flag(s) resolved</span>`;
+  return `<span class="chip c-rev">${r && r.total ? `${r.open} of ${r.total} flag(s) awaiting resolution` : "Flag for expert review"}</span>`;
+}
+function resolutionHTML(b, f) {
+  if (!needsRes(f)) return "";
+  const r = f.resolution;
+  if (r) { const k = RESOLUTION[r.resolution] || ["c-mute", r.resolution];
+    return `<div class="small" style="margin-top:6px"><span class="chip ${k[0]}">${k[1]}</span> by ${esc(r.by)} · ${esc((r.at || "").replace("T", " ").slice(0, 16))}${r.value ? ` · corrected value "${esc(r.value)}"` : ""}${r.version ? ` · decision version ${r.version}` : ""}${r.reason ? `<div class="muted">${esc(r.reason)}</div>` : ""}
+      ${can("board_record") ? ` <button class="ghost sm" data-undores="${esc(r.confirmation)}">Undo</button>` : ""}</div>`; }
+  if (!can("board_record")) return `<div class="small muted" style="margin-top:6px">Awaiting resolution by the Tumour Board coordinator.</div>`;
+  return `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${Object.entries(RESOLUTION).map(([k, [, l]]) => `<button class="ghost sm" data-resolve="${esc(b.id)}|${esc(f.id)}|${k}">${l}</button>`).join("")}</div>`;
+}
+const versionsHTML = (b) => (b.versions || []).length < 2 ? "" : `<details class="small" style="margin-top:6px"><summary>Version history (${b.versions.length} versions; the current one is shown above)</summary>
+  ${b.versions.slice().reverse().map((v) => `<div style="margin-top:6px"><b>Version ${v.version}</b> · ${esc((v.at || "").replace("T", " ").slice(0, 16))} · ${esc(v.by || "")} · ${esc(v.reason || "")}<div style="white-space:pre-wrap" class="muted">${esc(v.decision_text)}</div></div>`).join("")}</details>`;
+async function resolveFlag(rid, fid, kind) {
+  const f = ((S.data.state.board_records || []).find((x) => x.id === rid)?.adjudication.flags || []).find((x) => x.id === fid) || {};
+  const fields = kind === "corrected" ? [{ id: "value", label: f.recorded ? `Corrected value (replaces "${f.recorded}" in the decision)` : "Corrected value (added to the record as an amendment)", value: f.recorded || "", required: true },
+      { id: "reason", label: "Note", type: "textarea" }]
+    : kind === "intentional_deviation" ? [{ id: "reason", label: "Reason for the intentional deviation", type: "textarea", required: true, placeholder: "Deviating from a guideline is not an error; record why" }]
+    : [{ id: "reason", label: "Why this is a false alarm", type: "textarea" }];
+  const v = await confirmDialog({ title: `${RESOLUTION[kind][1]}: ${FLAGKIND[f.kind] || "flag"}`, intro: f.text, fields, submit: "Record resolution" });
+  if (!v) return;
+  try { await api(`/cases/${S.caseId}/board-records/${rid}/flags/${fid}/resolve`, { json: { resolution: kind, value: v.value || "", reason: v.reason || "" } });
+    toast(kind === "corrected" ? "Corrected: the decision is amended (new version, history kept)" : "Resolution recorded in the audit log"); await openCase(S.caseId, true); }
+  catch (e) { toast(e.message, 7000); }
+}
 function renderBoard() {
   const st = S.data.state;
   const depts = BOARD_DEPTS;
@@ -731,13 +763,14 @@ function renderBoard() {
       <label>Actions (Responsible Department · task · due)</label><div id="b-acts"></div><button class="ghost sm" id="b-add">+ Action</button>
       <label>Next Tumour Board review</label><input type="date" id="b-next">
       <div style="margin-top:12px"><button class="primary" id="b-save">Save record and run adjudication</button></div></div>`}
-    ${records.map((b) => `<div class="card"><h3>Tumour Board record · ${fmtDate(b.board_date)} <span class="chip ${b.adjudication.status === "consistent" ? "c-ok" : "c-rev"}">${b.adjudication.status === "consistent" ? "Consistent" : "Flag for expert review"}</span>${b.session ? ` <span class="chip c-info click" data-open-session="${esc(b.session)}" title="Recorded in the Board room; open the session">Board session</span>` : ""}</h3>
+    ${records.map((b) => `<div class="card"><h3>Tumour Board record · ${fmtDate(b.board_date)} ${recordStatusChip(b)}${(b.version || 1) > 1 ? ` <span class="chip c-info">Amended: version ${b.version}</span>` : ""}${b.session ? ` <span class="chip c-info click" data-open-session="${esc(b.session)}" title="Recorded in the Board room; open the session">Board session</span>` : ""}</h3>
       <div class="small muted">Recorded by ${esc(b.recorded_by)} · entered ${esc(b.recorded_at.replace("T", " ").slice(0, 16))} by ${esc(b.entered_by)}</div>
       <p style="white-space:pre-wrap">${esc(b.decision_text)}</p>
       <div class="kv small">${b.participants ? `<div>Participants</div><div>${esc(b.participants)}</div>` : ""}${b.report_corrections_raised ? `<div>Report corrections raised</div><div>${esc(b.report_corrections_raised)}</div>` : ""}${b.divergent_opinions ? `<div>Divergent opinions</div><div>${esc(b.divergent_opinions)}</div>` : ""}</div>
       ${compHTML(b.adjudication.composition)}
-      ${b.adjudication.flags.map((f) => `<div class="flag ${f.severity === "expert_review" ? "" : f.severity === "info" ? "info" : "review"}"><div class="k">${f.kind === "guideline" ? GCHECK[f.check] || FLAGKIND.guideline : FLAGKIND[f.kind] || "Documentation"}${f.severity === "info" ? ` <span class="chip c-mute">Info only, not a pass</span>` : ""}</div>
-        <div>${esc(f.text)}</div>${f.reference && f.kind === "composition" ? refHTML(f.reference) : ""}${f.kind === "guideline" ? gRefHTML(f) : ""}${f.source_quote ? `<div class="small" style="margin-top:4px">Source: ${citeHTML({ doc_id: f.source_doc, doc_title: f.source_title, quote: f.source_quote })} "${esc(f.source_quote)}"</div><div class="small muted">Expert review required. The agent flags the difference; it does not decide which value is correct.</div>` : ""}</div>`).join("")}
+      ${versionsHTML(b)}
+      ${b.adjudication.flags.map((f) => `<div class="flag ${f.severity === "expert_review" ? "" : f.severity === "info" ? "info" : "review"}${f.resolution ? " resolved" : ""}"><div class="k">${f.kind === "guideline" ? GCHECK[f.check] || FLAGKIND.guideline : FLAGKIND[f.kind] || "Documentation"}${f.severity === "info" ? ` <span class="chip c-mute">Info only, not a pass</span>` : ""}</div>
+        <div>${esc(f.text)}</div>${f.reference && f.kind === "composition" ? refHTML(f.reference) : ""}${f.kind === "guideline" ? gRefHTML(f) : ""}${f.source_quote ? `<div class="small" style="margin-top:4px">Source: ${citeHTML({ doc_id: f.source_doc, doc_title: f.source_title, quote: f.source_quote })} "${esc(f.source_quote)}"</div><div class="small muted">Expert review required. The agent flags the difference; it does not decide which value is correct.</div>` : ""}${resolutionHTML(b, f)}</div>`).join("")}
       ${b.adjudication.value_checks.filter((v) => v.result === "consistent").map((v) => `<div class="small"><span class="chip c-ok">✓</span> ${esc(v.value_as_written)} matches the source</div>`).join("")}${guidelineOkHTML(b)}</div>`).join("")}
   </div><div>
     <div class="card"><h3>Follow-up tracker <span class="muted small">${allActs.filter((a) => a.status !== "completed").length} open</span></h3>
@@ -761,6 +794,11 @@ function renderBoard() {
     S.data = await api("/cases/" + S.caseId); renderBoard(); toast("Tumour Board record saved and checked");
   };
   bindActions($("#tab-board"));
+  $$("[data-resolve]", $("#tab-board")).forEach((x) => (x.onclick = () => { const [rid, fid, kind] = x.dataset.resolve.split("|"); resolveFlag(rid, fid, kind); }));
+  $$("[data-undores]", $("#tab-board")).forEach((x) => (x.onclick = async () => {
+    try { await api(`/cases/${S.caseId}/confirmations/${x.dataset.undores}/undo`, { json: {} }); toast("Resolution undone (kept in the audit log); a correction is taken back as a new version"); await openCase(S.caseId, true); }
+    catch (e) { toast(e.message, 7000); }
+  }));
 }
 
 // ------------------------------------------------------------------ tab: audit
@@ -1192,7 +1230,7 @@ function decisionHTML() {
   const r = S.room, s = r.session, d = (s.decisions || {})[S.roomCase], c = roomCase();
   if (d) { const rec = (c.board_records || []).find((x) => x.id === d.board_record) || {};
     return `<p style="white-space:pre-wrap;margin-top:0">${esc(d.decision_text || "")}</p><div class="small muted">Recorded by ${esc(d.recorded_by || "")} · ${esc((d.recorded_at || "").replace("T", " ").slice(0, 16))} ·
-      <span class="chip ${rec.status === "consistent" ? "c-ok" : "c-rev"}">${rec.status === "consistent" ? "Adjudication: consistent" : `Adjudication: ${rec.flags || 0} flag(s) for expert review`}</span> <button class="ghost sm" id="r-board">Open on the Case File</button></div>${compHTML(rec.composition)}
+      <span class="chip ${rec.status === "consistent" || rec.resolution?.final ? "c-ok" : "c-rev"}">${rec.status === "consistent" ? "Adjudication: consistent" : rec.resolution?.total && rec.resolution.final ? `Final: ${rec.resolution.total} flag(s) resolved` : `Adjudication: ${rec.resolution?.open ?? rec.flags ?? 0} flag(s) awaiting resolution`}</span>${(rec.version || 1) > 1 ? ` <span class="chip c-info">Amended: version ${rec.version}</span>` : ""} <button class="ghost sm" id="r-board">Open on the Case File</button></div>${compHTML(rec.composition)}
       <div class="small muted" style="margin-top:6px">Mark each agent point below: discussed, accepted or not relevant.</div>`; }
   if (!r.can_manage) return `<div class="muted small">The decision is recorded by the Tumour Board coordinator.</div>`;
   const depts = BOARD_DEPTS;

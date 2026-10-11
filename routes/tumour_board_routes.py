@@ -495,6 +495,10 @@ def setup_tumour_board_routes():
         if ctype not in confirm.TYPES:
             raise HTTPException(400, f"Unknown confirmation type: {ctype}")
         _confirmation_permission(_roles(request), case_id, c, ctype, key)
+        if ctype == "resolve_flag":  # a board record's flag (V1 item 7.3): "<record id>:<flag id>"; a correction amends the decision
+            rid, _, fid = key.partition(":")
+            out = await _resolve_flag(case_id, rid, fid, b.get("fields") or {}, b.get("reason", ""), u)
+            return {"confirmation": confirm.latest(case_id, "resolve_flag", key), "state": store.get_state(case_id), "record": out["record"]}
         async with store.lock(case_id):
             if ctype == "dismiss_failed":  # only a document that failed to read can be dismissed (V1 item 4.3, review M9)
                 d = store.get_doc(case_id, key)
@@ -517,6 +521,16 @@ def setup_tumour_board_routes():
         _confirmation_permission(_roles(request), case_id, c, rec["type"], rec["key"])
         if rec.get("undone"):
             raise HTTPException(409, "already undone")
+        if rec["type"] == "resolve_flag":  # V1 item 7.3: a correction is taken back as a new version of the decision
+            async with store.lock(case_id):
+                try:
+                    record = postboard.undo_resolution(case_id, conf_id, u)
+                except KeyError:
+                    raise HTTPException(409, "already undone")
+            if record and record.get("session"):
+                _session_call(board.decision_amended, record["session"], case_id, record, u)
+            return {"confirmation": next((x for x in store.get_state(case_id).get("confirmations", []) if x["id"] == conf_id), rec),
+                    "state": store.get_state(case_id), "record": record}
         async with store.lock(case_id):
             if rec["type"] == "confirm_match" and (rec.get("fields") or {}).get("case_id") and store.get_doc(case_id, rec["key"]):
                 # undoing a match (a person's or the matcher's) moves the document back to the Needs matching queue
@@ -668,6 +682,25 @@ def setup_tumour_board_routes():
         b = await request.json() if (await request.body()) else {}
         return await summary.build(case_id, force=bool(b.get("force")))
 
+    async def _resolve_flag(case_id, record_id, flag_id, fields, reason, u):
+        async with store.lock(case_id):
+            try:
+                rec = postboard.resolve_flag(case_id, record_id, flag_id, str(fields.get("resolution", "")), str(fields.get("value", "") or ""), str(reason or ""), u)
+            except KeyError as e:
+                raise HTTPException(404, str(e).strip("'"))
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+        if rec.get("session"):  # the Board room and the session export show the current version
+            _session_call(board.decision_amended, rec["session"], case_id, rec, u)
+        return {"record": rec}
+
+    @r.post("/cases/{case_id}/board-records/{record_id}/flags/{flag_id}/resolve")
+    async def resolve_board_flag(case_id: str, record_id: str, flag_id: str, request: Request):
+        """Human over the loop (V1 item 7.3): {"resolution": corrected | intentional_deviation | false_alarm, "value" (corrected), "reason"
+        (required for an intentional deviation)}. A correction amends the decision (new version, history kept). Audited, undoable."""
+        u = _user(request); _need(_roles(request), "board_record"); _case(case_id); b = await request.json()
+        return await _resolve_flag(case_id, record_id, flag_id, b if isinstance(b, dict) else {}, (b or {}).get("reason", ""), u)
+
     @r.post("/cases/{case_id}/board-records")
     async def board_records(case_id: str, request: Request):
         u = _user(request); _need(_roles(request), "board_record"); _case(case_id); b = await request.json()
@@ -755,7 +788,8 @@ def setup_tumour_board_routes():
                           "briefs": {r_: arts.get(f"brief_{r_}") for r_ in absent if arts.get(f"brief_{r_}")},
                           "briefs_stale": {r_: stale(arts.get(f"brief_{r_}")) for r_ in absent if arts.get(f"brief_{r_}")},
                           "board_records": [{"id": b_["id"], "board_date": b_.get("board_date"), "session": b_.get("session"), "status": b_["adjudication"]["status"],
-                                             "flags": len(b_["adjudication"]["flags"]), "composition": b_["adjudication"].get("composition")} for b_ in st.get("board_records", [])]}
+                                             "flags": len(b_["adjudication"]["flags"]), "composition": b_["adjudication"].get("composition"),
+                                             "resolution": b_.get("resolution"), "version": b_.get("version", 1)} for b_ in st.get("board_records", [])]}
         return {"session": s, "specialties": board.specialties(), "absent_roles": absent, "participants": board.participants(s),
                 "roles": {k: {"label": v["label"], "department": agents.department_of(k)} for k, v in agents.ROLES.items()},
                 "cases": cases, "can_manage": org.can(rl, "session"), "can_ask": bool(rl.get("admin") or rl.get("known")), "can_review": org.can(rl, "review"),

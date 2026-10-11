@@ -63,7 +63,8 @@ def test_board_decision_stored_with_not_listed_flag(unlisted, monkeypatch):
     stored = store.get_state(unlisted)["board_records"]
     assert [r["id"] for r in stored] == [rec["id"]]
     adj = rec["adjudication"]
-    assert {"kind": "consistency", "severity": "review", "text": "Case File not listed: no Pre-Authorization check to compare with"} in adj["flags"]
+    assert {"kind": "consistency", "severity": "review", "text": "Case File not listed: no Pre-Authorization check to compare with"} in [
+        {k: v for k, v in f.items() if k != "id"} for f in adj["flags"]]  # flags carry an id since V1 item 7.3
     assert not any("Pre-Authorization items were open" in f["text"] or f["text"].startswith("Decision record is missing") for f in adj["flags"])
     assert [c["result"] for c in adj["value_checks"]] == ["consistent"]  # the value check needs no protocol
     assert adj["status"] == "flag_for_expert_review"

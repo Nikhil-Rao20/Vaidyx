@@ -95,7 +95,7 @@ def validate(ctype, key, fields=None, reason=""):
         if res == "intentional_deviation" and not reason:
             raise ValueError("A reason is required for an intentional deviation")
         if res == "corrected" and not raw.get("value"):
-            raise ValueError("Type the corrected value as written in the source document")
+            raise ValueError("Type the corrected value, as the board decided it")
         out = {"resolution": res, "value": raw.get("value", "")}
     if spec["reason_required"] and not reason:
         raise ValueError("A reason is required for this decision")

@@ -469,6 +469,20 @@ def link_decision(sid, case_id, record, by) -> dict:
     return s
 
 
+def decision_amended(sid, case_id, record, by) -> dict | None:
+    """The board's decision was amended after a flag was corrected (V1 item 7.3): the session shows the current version. None when the
+    session no longer exists or the record is not the one linked to this agenda item."""
+    s = get(sid)
+    d = (s or {}).get("decisions", {}).get(case_id) if s else None
+    if not d or d.get("board_record") != (record or {}).get("id"):
+        return None
+    d.update({"decision_text": record.get("decision_text"), "version": record.get("version", 1), "final": bool((record.get("resolution") or {}).get("final")),
+              "amended_at": store.now_iso(), "amended_by": by or ""})
+    _save(s)
+    _audit(sid, "decision_amended", by, case_id, "decision", record=record["id"], version=record.get("version", 1))
+    return s
+
+
 def mark(sid, case_id, entry_id, mark, by, note="") -> dict:
     """Mark one agent point discussed / accepted / not relevant (None clears). Only once the board's decision is linked; allowed after
     close (documenting the meeting)."""
@@ -648,7 +662,8 @@ def export_html(sid) -> str:
         d = c["decision"]
         dec = (f"<b>Board decision</b><div>{_h(d.get('decision_text'))}</div><div class='meta'>Record {_h(d.get('board_record'))}"
                f"{', recorded by ' + _h(d['recorded_by']) if d.get('recorded_by') else ''}"
-               f"{', ' + _h(_ddmmyyyy(d['recorded_at'])) if d.get('recorded_at') else ''}</div>") if d else "<i>No board decision linked yet</i>"
+               f"{', ' + _h(_ddmmyyyy(d['recorded_at'])) if d.get('recorded_at') else ''}"
+               f"{', amended: version ' + _h(d['version']) + ' (' + _h(_ddmmyyyy(d.get('amended_at'))) + ')' if (d.get('version') or 1) > 1 else ''}</div>") if d else "<i>No board decision linked yet</i>"
         m = c["marks"]
         out.append(f"<tr class='decision'><td class='said'><span class='meta'>{len(c['agent_log'])} agent log entries. Discussed {m['discussed']}, "
                    f"accepted {m['accepted']}, not relevant {m['not_relevant']}, not marked {m['unmarked']}.</span></td><td>{dec}</td></tr>")
