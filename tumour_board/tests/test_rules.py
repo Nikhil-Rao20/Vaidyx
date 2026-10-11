@@ -434,7 +434,7 @@ def test_case_signature_changes_with_the_case_file(unit_case):
     from tumour_board import confirm
     add(unit_case, hist())
     s1 = rules.case_signature(unit_case)
-    assert s1 == {**s1, "documents": 1, "ready": 1, "confirmations": 0, "protocol": "unit", "protocol_version": "0.0", "setting": "", "hospital_level": ""}
+    assert s1 == {**s1, "documents": 1, "ready": 1, "confirmations": 0, "protocol": "unit", "protocol_version": "0.0", "setting": "", "hospital_level": "essential"}  # the effective level (org.json default)
     assert rules.case_signature(unit_case)["hash"] == s1["hash"] and rules.stale_reason(s1, rules.case_signature(unit_case)) == ""
     add(unit_case, ct())
     s2 = rules.case_signature(unit_case)
@@ -447,3 +447,71 @@ def test_case_signature_changes_with_the_case_file(unit_case):
     d = store.get_doc(unit_case, "Dct000001"); d["processed"] = "2026-10-11T07:00:00"; store.save_doc(unit_case, d)  # re-processed
     assert rules.stale_reason(s3, rules.case_signature(unit_case)).startswith("The Case File changed since this was generated")
     assert rules.stale_reason(None, s3) == ""  # nothing stored: nothing to compare (the export treats a missing signature as stale itself)
+
+
+# ---- review fixes (Phase 4) ---------------------------------------------------------------------------------
+def test_level2_gap_goes_to_the_department_that_uploaded_the_record(unit_case):
+    """V1 item 4.2 (review M6): the CT uploaded by Nuclear Medicine lacks the lesion size: the Level 2 request moves from Radiology
+    (Level 1, the record's owner) to Nuclear Medicine, both departments are told, and the history says so."""
+    add(unit_case, hist())
+    a = _sync(unit_case)["actions"][0]
+    assert (a["requirement"], a["level"], a["department_id"]) == ("ct_thorax", 1, "radio_diagnosis")
+    add(unit_case, {**ct(facts={}), "department": "nuclear_medicine"})
+    a = _sync(unit_case)["actions"][0]
+    assert (a["level"], a["department"], a["department_id"], a["source_doc_id"]) == (2, "Nuclear Medicine", "nuclear_medicine", "Dct000001")
+    assert a["history"][-1]["event"] == "Re-check: Level 2: Records routed to Nuclear Medicine"
+    n = _notes()
+    assert [x["to"] for x in n if x["kind"] == "request"] == [{"department": "radio_diagnosis"}, {"department": "nuclear_medicine"}]
+    moved = [x for x in n if x["kind"] == "request_closed"]
+    assert len(moved) == 1 and moved[0]["to"] == {"department": "radio_diagnosis"} and "moved to Nuclear Medicine" in moved[0]["title"]
+
+
+def test_missing_value_of_a_facts_only_record_goes_to_its_responsible_department(unit_case):
+    """Review M1: PD-L1 (facts only, Responsible Department Pathology) missing from a histopathology filed by another department:
+    nobody uploaded a record "it should be in", so the Responsible Department is asked, not the uploader of the carrier."""
+    add(unit_case, {**hist(facts={"histologic_type": fact("Adenocarcinoma")}), "department": "surgical_oncology"}, ct())
+    g = rules.evaluate(unit_case)
+    r = req(g, "pdl1")
+    assert r["status"] == "missing_field" and r["level"] == 2 and r["source_doc_id"] is None
+    a = rules.sync_actions(unit_case, g)["actions"][0]
+    assert (a["requirement"], a["department"], a["department_id"]) == ("pdl1", "Pathology", "pathology")
+    add(unit_case, {**hist(facts={"histologic_type": fact("Adenocarcinoma"), "pdl1": fact("Pending", state="pending")}), "department": "surgical_oncology"})
+    a = _sync(unit_case)["actions"][0]  # a pending value sits in that report: its uploader is asked
+    assert (a["department_id"], a["source_doc_id"]) == ("surgical_oncology", "Dhist0001")
+
+
+def test_a_department_that_no_longer_exists_is_not_a_routing_target(unit_case):
+    add(unit_case, hist(), {**ct(facts={}), "department": "closed_department"})
+    a = _sync(unit_case)["actions"][0]
+    assert (a["level"], a["department"], a["department_id"]) == (2, "Radiology", "radio_diagnosis")
+
+
+def test_waivers_on_records_the_protocol_no_longer_lists_are_shown(unit_case):
+    """Review M4: a waiver recorded for a renamed or removed record never silently disappears."""
+    add(unit_case, hist(), ct())
+    rules.set_override(unit_case, "requirements", "old_record", {"waived": True, "reason": "done at the referring hospital"}, by="Dr. Rao")
+    g = rules.evaluate(unit_case)
+    assert g["orphaned_waivers"] == [{"requirement": "old_record", "by": "Dr. Rao", "reason": "done at the referring hospital", "at": g["orphaned_waivers"][0]["at"]}]
+    rules.set_override(unit_case, "requirements", "ct_thorax", {"waived": True, "reason": "x"}, by="Dr. Rao")
+    assert [w["requirement"] for w in rules.evaluate(unit_case)["orphaned_waivers"]] == ["old_record"]
+
+
+def test_a_request_opened_before_the_two_levels_is_classified_without_a_notification(unit_case):
+    add(unit_case, hist())
+    st = _sync(unit_case)
+    for k in ("level", "level_label", "department_id", "source_doc_id"):
+        st["actions"][0].pop(k)  # as stored before V1 item 4.2
+    store.save_state(unit_case, st)
+    before = len(_notes())
+    a = _sync(unit_case)["actions"][0]
+    assert (a["level"], a["department_id"]) == (1, "radio_diagnosis") and a["history"][-1]["event"] == "Re-check: Level 1: Case File"
+    assert len(_notes()) == before
+
+
+def test_closing_for_a_waiver_says_waived(unit_case):
+    add(unit_case, hist())
+    _sync(unit_case)
+    rules.set_override(unit_case, "requirements", "ct_thorax", {"waived": True, "reason": "not needed"}, by="Dr. Rao")
+    _sync(unit_case)
+    closed = [x for x in _notes() if x["kind"] == "request_closed"]
+    assert len(closed) == 1 and " waived for " in closed[0]["title"] and "waived" in closed[0]["text"]

@@ -15,7 +15,7 @@ def test_lung_and_breast_notes_name_indian_sources_first():
         assert note.index("NCG") < note.index("ESMO") and "ICMR" in note
         assert "to be rebuilt" not in note and "clinical review" in note
     assert {pid: protocol.get(pid)["version"] for pid in ("lung_nsclc", "breast", "colorectal_rectum")} == {
-        "lung_nsclc": "0.6", "breast": "0.6", "colorectal_rectum": "0.5"}
+        "lung_nsclc": "0.7", "breast": "0.6", "colorectal_rectum": "0.5"}
 
 
 def test_every_protocol_parses():

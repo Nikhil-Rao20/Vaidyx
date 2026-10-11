@@ -159,6 +159,7 @@
   {
    "id": "metastatic_workup",
    "label": "Metastatic work-up (chest X-ray, USG abdomen and pelvis; or CECT; bone scan)",
+   "note": "NCG lists X-ray chest, USG abdomen and pelvis and LFT (a); V1 counts this record when any one listed study is present (the LFT is checked under baseline blood tests): check that both the chest and the abdomen and pelvis were imaged (clinical review)",
    "tier": "a",
    "tiers": {
     "early": "none",

@@ -102,12 +102,13 @@ def tier_for(rec, setting) -> str:
     With a setting the record names in `tiers`, that tier. When the coordinator has not recorded the setting yet and the
     record's tier varies by setting, the strictest of its settings applies (a > b > c > none): a record that is
     Essential in any setting is then still asked for, so nothing is silently dropped because a field was left empty;
-    once the setting is recorded the record relaxes to that setting's tier. Otherwise the record's own `tier` ("a" when
-    a legacy file gives none)."""
+    once the setting is recorded the record relaxes to that setting's tier. A setting the record's `tiers` does not name
+    (a renamed or unknown setting id) is treated like an unrecorded one. Otherwise the record's own `tier` ("a" when a
+    legacy file gives none)."""
     tiers = rec.get("tiers") or {}
     if setting and setting in tiers:
         return tiers[setting]
-    if not setting and tiers:
+    if tiers:
         return max(tiers.values(), key=lambda t: STRICTNESS.get(t, 0))
     return rec.get("tier", "a")
 

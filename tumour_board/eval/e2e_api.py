@@ -1,6 +1,6 @@
 """End-to-end test through the HTTP API of the running app (same calls as the UI). Usage:
   python -m tumour_board.eval.e2e_api --base http://127.0.0.1:7000 --password <admin password>"""
-import argparse, json, os, sys, time
+import argparse, json, os, re, sys, time
 
 import httpx
 
@@ -82,9 +82,9 @@ def phase2(c, base):
     dd = c.get("/api/tb/cases/TB-P2C").json()
     ctdoc = next((x for x in dd["documents"] if "cect" in x["rel_path"]), None); hpdoc = next((x for x in dd["documents"] if "hpe" in x["rel_path"]), None)
     st0 = {x["id"]: x["status"] for x in dd["state"]["gate"]["requirements"]}
-    check("dedicated case: CT read as final, lesion size missing, histopathology draft", st0.get("ct_thorax") == "missing_field" and st0.get("histopathology") == "not_final", json.dumps({k: st0.get(k) for k in ("ct_thorax", "histopathology")}))
+    check("dedicated case: CT read as final, lesion size missing, histopathology draft", st0.get("cect_tap") == "missing_field" and st0.get("histopathology") == "not_final", json.dumps({k: st0.get(k) for k in ("cect_tap", "histopathology")}))
     r = c.post("/api/tb/cases/TB-P2C/confirmations", json={"type": "confirm_value", "key": f"{ctdoc['doc_id']}:lesion_size", "fields": {"value": "4.6 x 3.8 cm"}}).json() if ctdoc else {}
-    ev = next((x for x in r.get("state", {}).get("gate", {}).get("requirements", []) if x["id"] == "ct_thorax"), {})
+    ev = next((x for x in r.get("state", {}).get("gate", {}).get("requirements", []) if x["id"] == "cect_tap"), {})
     check("confirmed value counts for the gate with the clinician named", ev.get("status") == "satisfied" and any(e.get("fact") == "lesion_size" and e.get("value") == "4.6 x 3.8 cm" and e.get("quote") == "" for e in ev.get("evidence", [])), ev.get("status"))
     d2 = c.get("/api/tb/cases/TB-P2C").json()
     cur = d2["facts"].get("lesion_size", {}).get("current", {})
@@ -367,7 +367,7 @@ def phase4(c, base):
               json.dumps({k: (shown.get(k) or {}).get("tier") for k in ("pet_ct", "brain_mri", "pdl1", "met")}))
         check("4.1 every required record cites its NCG line (guideline, page, quote)", all(r.get("source", {}).get("quote") and r["source"].get("page") for r in g["requirements"]),
               req["cect_tap"].get("source", {}).get("quote", ""))
-        check("4.1 gate records the setting and hospital level", g["setting"] == "non_metastatic" and g["hospital_level"] == "essential" and g["setting_label"] and g["protocol_version"] == "0.6",
+        check("4.1 gate records the setting and hospital level", g["setting"] == "non_metastatic" and g["hospital_level"] == "essential" and g["setting_label"] and g["protocol_version"] == "0.7",
               f"{g['setting']} / {g['hospital_level']} / v{g['protocol_version']}")
         # 4.2 Level 1 gap: the CECT is missing, routed to Radiology (owner of the record type)
         check("4.2 missing CECT is a Level 1 gap", req["cect_tap"]["status"] == "missing_record" and req["cect_tap"]["level"] == 1 and req["cect_tap"]["level1"]["status"] == "missing_record",
@@ -388,7 +388,9 @@ def phase4(c, base):
               json.dumps(mine)[:160])
         nt = m.get("/api/tb/notifications").json()
         check("4.4 radiology member has an unread request notification", nt["unread"] >= 1 and any(n["kind"] == "request" and n["case_id"] == "TB-TEST4" and not n["read"] for n in nt["notifications"]), f"{nt['unread']} unread")
-        check("4.4 admin sees no request addressed to radiology in the inbox of pathology only", "pathology" in [dd["id"] for dd in c.get("/api/tb/inbox").json()["departments"]])
+        adm = c.get("/api/tb/inbox").json()
+        check("4.4 admin sees every department's inbox, the request under Radio-diagnosis only", "pathology" in [dd["id"] for dd in adm["departments"]]
+              and [dd["id"] for dd in adm["departments"] if any(q["case_id"] == "TB-TEST4" and q["status"] != "completed" for q in dd["requests"])] == ["radio_diagnosis"])
         # the member uploads a CECT for the department: it files itself on the exact UHID; the lesion size is missing -> a Level 2 gap routed to the uploader
         ct1 = (head.format(dept="DEPARTMENT OF RADIO-DIAGNOSIS", title="CECT THORAX, ABDOMEN AND PELVIS") + "Study date: 24/09/2026\nFindings: spiculated mass in the right upper lobe; right hilar node.\n"
                "Abdomen and pelvis: no focal lesion.\nImpression: right upper lobe mass with right hilar adenopathy.\nReport status: FINAL\nSd/- Dr. S. Rao, Consultant Radiologist, Reg. No. KMC 12345\n").encode()
@@ -432,6 +434,9 @@ def phase4(c, base):
         check("4.3 dismissal with a reason lets the gate pass", st["gate"]["passed"] and st["gate"]["blockers"] == [] and st["gate"]["documents"]["dismissed"][0]["doc_id"] == badid, json.dumps(st["gate"]["documents"].get("dismissed"))[:120])
         check("4.3 dismissal shown on the document and audited", next(x for x in c.get("/api/tb/cases/TB-TEST4").json()["documents"] if x["doc_id"] == badid).get("dismissed", {}).get("by") == "admin"
               and any(e["kind"] == "confirmation" and e["type"] == "dismiss_failed" for e in c.get("/api/tb/cases/TB-TEST4/audit").json()["events"]))
+        okdoc = next(x["doc_id"] for x in d["documents"] if x["state"] == "ready")
+        r = c.post("/api/tb/cases/TB-TEST4/confirmations", json={"type": "dismiss_failed", "key": okdoc, "reason": "e2e: must be refused"})
+        check("4.3 a document that read cannot be dismissed (409)", r.status_code == 409, f"HTTP {r.status_code}: {r.text[:80]}")
         j = c.post("/api/tb/cases/TB-TEST4/reprocess", json={"which": [badid]}).json(); wait_job(c, j["job"])
         g = c.get("/api/tb/cases/TB-TEST4").json()["state"]["gate"]
         check("4.3 re-processing a dismissed document withdraws the dismissal; still unreadable, it blocks again", not g["passed"] and [b["doc_id"] for b in g["blockers"]] == [badid])
@@ -442,19 +447,21 @@ def phase4(c, base):
         check("4.5 summary stores the Case File signature and is current", sm.get("signature", {}).get("hash") == d["signature"]["hash"] and d["stale"].get("summary") == "", json.dumps(d.get("stale"))[:120])
         r = c.get("/api/tb/cases/TB-TEST4/export/vtb")
         ok = r.status_code == 200 and r.headers.get("content-type", "").startswith("application/vnd.openxmlformats-officedocument.presentationml")
-        slides = []
+        slides, bodies = [], []
         if ok:
             try:
                 from pptx import Presentation
                 prs = Presentation(io.BytesIO(r.content))
                 for s in prs.slides:
-                    txt = " ".join(sh.text_frame.text for sh in s.shapes if sh.has_text_frame)
-                    slides.append(txt)
+                    slides.append(" ".join(sh.text_frame.text for sh in s.shapes if sh.has_text_frame))
+                    ph = next((sh for sh in s.placeholders if sh.placeholder_format.idx == 1 and sh.has_text_frame), None)  # the section body (not the footer)
+                    bodies.append(ph.text_frame.text if ph is not None else "")
             except Exception as e:
                 slides = [f"error: {e}"]
-        filled = [i for i, t in enumerate(slides) if len(t.strip()) > 40]
-        check("4.6 NCG VTB export opens with all six sections filled", ok and len(slides) == 6 and len(filled) == 6 and "Tumour Board Case File TB-TEST4" in slides[0] and "Vaidyx" in slides[1],
-              f"HTTP {r.status_code}, {len(slides)} slides, {len(filled)} filled, {len(r.content)} bytes")
+        cited = [i for i, t in enumerate(bodies) if i in (1, 2, 3) and re.search(r"\[[^\]]+, \d{2}/\d{2}/\d{4}\]", t) and "Not documented" not in t]
+        check("4.6 NCG VTB export opens with six slides; presentation, investigations and imaging carry cited sentences", ok and len(slides) == 6
+              and all(len(b.strip()) > 20 for b in bodies[1:]) and cited == [1, 2, 3] and "Tumour Board Case File TB-TEST4" in slides[0] and "Human oversight" in slides[1],
+              f"HTTP {r.status_code}, {len(slides)} slides, cited bodies {cited}, {len(r.content)} bytes")
         check("4.6 export audited", any(e["kind"] == "export_vtb" for e in c.get("/api/tb/cases/TB-TEST4/audit").json()["events"]))
         extra = (head.format(dept="DEPARTMENT OF GENERAL MEDICINE", title="DISCHARGE SUMMARY") + "Date of admission: 27/09/2026\nDate of discharge: 29/09/2026\nCourse: admitted for bronchoscopy; uneventful.\nReport status: FINAL\nSd/- Dr. K. Das, Reg. No. KMC 77889\n").encode()
         j = c.post("/api/tb/cases/TB-TEST4/documents", files=[("files", ("discharge.txt", extra))], data={"paths": json.dumps(["medicine/discharge.txt"])}).json(); wait_job(c, j["job"])
@@ -462,6 +469,10 @@ def phase4(c, base):
         check("4.5 adding a document marks the summary stale with the reason", (d["stale"].get("summary") or "").startswith("The Case File changed since this was generated") and "1 document added" in d["stale"]["summary"], d["stale"].get("summary", "")[:120])
         r = c.get("/api/tb/cases/TB-TEST4/export/vtb")
         check("4.6 export refused while the summary is stale (409)", r.status_code == 409 and "regenerate" in r.text.lower(), f"HTTP {r.status_code}: {r.text[:100]}")
+        r = c.delete("/api/tb/cases/TB-TEST4")
+        left = [n for n in c.get("/api/tb/notifications").json()["notifications"] if n["case_id"] == "TB-TEST4"]
+        check("4.4 deleting the Case File removes its notifications (patient details)", r.status_code == 200 and r.json().get("notifications_removed", 0) >= 1 and not left,
+              f"{r.json().get('notifications_removed') if r.status_code == 200 else r.status_code} removed, {len(left)} left")
     finally:
         c.delete("/api/tb/cases/TB-TEST4")
         o = c.get("/api/tb/org").json(); users = dict(o.get("users") or {}); users.pop(user, None)

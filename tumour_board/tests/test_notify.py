@@ -185,6 +185,59 @@ def test_notify_prunes_occasionally(people, monkeypatch):
     assert len(calls) == 2
 
 
+# --- purge_case ------------------------------------------------------------------------------------------------------
+
+def _stored(data_root):
+    return [json.loads(l) for l in (data_root / "notifications.jsonl").read_text().splitlines()]
+
+
+def test_purge_case_removes_only_that_case(people, data_root):
+    a = notify.notify({"department": "radio_diagnosis"}, "request", "TB-1", "CT needed")["id"]
+    b = notify.notify({"role": "coordinator"}, "case_ready", "TB-1", "ready")["id"]
+    c = notify.notify({"department": "radio_diagnosis"}, "request", "TB-10", "MRI needed")["id"]  # TB-1 is a prefix
+    d = notify.notify({"user": "ravi"}, "request_closed", "TB-SYN-1", "closed")["id"]
+    assert notify.purge_case("TB-1") == 2
+    assert {r["id"] for r in _stored(data_root)} == {c, d}
+    assert a not in _ids(notify.for_roles(people["admin"])) and b not in _ids(notify.for_roles(people["coord"]))
+
+
+def test_purge_case_idempotent_and_no_rewrite_when_nothing_matches(people, data_root):
+    notify.notify({"role": "coordinator"}, "case_ready", "TB-1", "ready")
+    notify.notify({"role": "coordinator"}, "case_ready", "TB-2", "ready")
+    assert notify.purge_case("TB-1") == 1
+    p = data_root / "notifications.jsonl"
+    before = (p.read_text(), p.stat().st_mtime_ns)
+    assert notify.purge_case("TB-1") == 0
+    assert notify.purge_case("tb-2") == 0 and notify.purge_case("") == 0  # exact match only
+    assert (p.read_text(), p.stat().st_mtime_ns) == before
+
+
+def test_purge_case_missing_file(people, data_root):
+    assert notify.purge_case("TB-1") == 0
+    assert not (data_root / "notifications.jsonl").exists()
+
+
+def test_purge_case_keeps_read_marks(people, data_root):
+    keep = notify.notify({"department": "radio_diagnosis"}, "request", "TB-2", "CT needed")["id"]
+    notify.notify({"department": "radio_diagnosis"}, "request", "TB-1", "MRI needed")
+    assert notify.mark_read(people["radio"], [keep]) == 1
+    assert notify.purge_case("TB-1") == 1
+    items = notify.for_roles(people["radio"])
+    assert _ids(items) == [keep] and items[0]["read"] is True
+    assert notify.unread_count(people["head"]) == 1  # read is still per user
+    assert set(_stored(data_root)[0]["read_by"]) == {"ravi"}
+
+
+def test_purge_case_drops_malformed_lines_on_rewrite(people, data_root):
+    keep = notify.notify({"role": "coordinator"}, "case_ready", "TB-2", "ready")["id"]
+    p = data_root / "notifications.jsonl"
+    with open(p, "a") as f:
+        f.write("{not json\n")
+    notify.notify({"role": "coordinator"}, "case_ready", "TB-1", "ready")
+    assert notify.purge_case("TB-1") == 1
+    assert [r["id"] for r in _stored(data_root)] == [keep]
+
+
 # --- inbox -----------------------------------------------------------------------------------------------------------
 
 def _action(aid, dept, due, status="pending", created="2026-10-05T10:00:00", completed=None, **kw):

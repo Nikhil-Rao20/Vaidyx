@@ -1,7 +1,7 @@
 {
  "id": "lung_nsclc",
  "label": "Lung cancer (NSCLC)",
- "version": "0.6",
+ "version": "0.7",
  "note": "Configurable by the clinical team. The required records are rebuilt from the NCG Essential / Optimal / Optional tiers per setting (NCG thoracic cancer guidelines 2019, quoted with page on every record), then informed by ICMR, ESMO and CAP as before; to be confirmed by the hospital Tumour Board (clinical review before real use).",
  "settings_note": "NCG setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes stage). Item 4.1 derives the required records per setting from the NCG tiers.",
  "settings": [
@@ -238,7 +238,7 @@
    "tier": "b",
    "tiers": {
     "non_metastatic": "b",
-    "metastatic": "c"
+    "metastatic": "b"
    },
    "doc_types": [
     "endoscopy",
@@ -260,7 +260,8 @@
      "page": 5,
      "quote": "Mediastinal staging with PET(a)/ EBUS(b)/ Mediastinoscopy(b)"
     }
-   ]
+   ],
+   "tier_basis": "metastatic: NCG lists mediastinal staging (PET a, EBUS b, mediastinoscopy b) for oligometastatic disease (T p5); EBUS / mediastinoscopy kept Optimal in the metastatic setting (the stricter reading; the PET part is the PET-CT record), for clinical review"
   },
   {
    "id": "mri_thorax_superior_sulcus",

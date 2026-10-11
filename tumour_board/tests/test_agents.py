@@ -115,6 +115,21 @@ def test_summary_facts_fallback_uses_confirmed_value(unit_case, monkeypatch):
     assert "TPS 6%" not in str(out["sections"])
 
 
+def test_summary_signature_is_taken_before_the_model_call(unit_case, monkeypatch):
+    """V1 item 4.5 (review S2): a document that arrives while the model writes the summary is not in the text, so the stored
+    signature must not include it: the summary shows as stale and the export refuses it."""
+    _pdl1_doc(unit_case)
+    rules.evaluate(unit_case)
+
+    async def fake_chat(role, msgs, **kw):
+        add(unit_case, make_doc("Dlate0001", "ct", region="chest", date="2026-09-20"))  # uploaded and processed during the call
+        return {"sentences": [], "points_for_review": []}
+    monkeypatch.setattr(llm, "chat", fake_chat)
+    out = asyncio.run(summary.build(unit_case, force=True))
+    assert out["signature"]["documents"] == 1
+    assert rules.stale_reason(out["signature"], rules.case_signature(unit_case)).startswith("The Case File changed since this was generated: 1 document added")
+
+
 def _adjudicate_pdl1(unit_case, monkeypatch, written):
     async def fake_chat(role, msgs, **kw):
         return {"claims": [{"fact": "pdl1", "value_as_written": written, "span": written}]}

@@ -128,11 +128,13 @@ def _dept_id(name):
 
 
 def _dept_name(dept_id):
+    """The department's name, or "" when the id is not (or no longer) a department of org.json."""
     try:
         from . import org
-        return org.department_name(dept_id) if dept_id else ""
+        d = org.department(dept_id) if dept_id else None
+        return d["name"] if d else ""
     except Exception:
-        return dept_id or ""
+        return ""
 
 
 def _title(x):
@@ -305,7 +307,12 @@ def _evaluate_record(req, ready, facts, overrides, cat):
     r["level"] = 1 if l1["status"] != "satisfied" else 2 if l2["status"] != "satisfied" else None
     r["level_label"] = LEVEL_LABEL.get(r["level"], "")
     r["level1"], r["level2"] = l1, l2
-    src = open_doc if (r["level"] == 2 and open_doc) else source_doc
+    if r["level"] == 2 and open_doc:
+        src = open_doc  # the document the pending, approximate or non-final value sits in
+    elif r["level"] == 2 and req.get("facts_only"):
+        src = None  # a value missing from every carrier (e.g. EGFR with only the histopathology filed): the department that owns the test is asked
+    else:
+        src = source_doc
     r["source_doc_id"] = (src or {}).get("doc_id")
     return r
 
@@ -371,6 +378,9 @@ def evaluate(case_id):
                                   if h["verification"] in VERIFIED and h["state"] == "present"][:3]})
     applicable = [r for r in results if r["status"] not in ("not_applicable", "waived")]
     ok = [r for r in applicable if r["status"] == "satisfied"]
+    listed = {r["id"] for r in protocol.records(prot)}
+    orphaned = [{"requirement": k, "by": w.get("by") or "", "reason": w.get("reason") or "", "at": w.get("at") or ""}
+                for k, w in sorted((overrides.get("requirements") or {}).items()) if w and w.get("waived") and k not in listed]
     failed = [d for d in docs if d.get("state") == "error" and not d.get("dismissed")]  # V1 item 4.3: re-process or dismiss before the gate can pass
     dismissed = [d for d in docs if d.get("state") == "error" and d.get("dismissed")]
     blockers = [{"doc_id": d["doc_id"], "filename": d.get("rel_path") or d.get("filename") or d["doc_id"], "error": d.get("error") or "could not be read",
@@ -388,6 +398,7 @@ def evaluate(case_id):
                        "2": {"label": LEVEL_LABEL[2], "what": LEVEL_WHAT[2], "open": sum(1 for r in applicable if r.get("level") == 2)}},
             "requirements": results, "shown": shown, "optional": optional, "core_data": core, "core_data_source": prot.get("core_data_source"), "policy_basis": prot.get("policy_basis"),
             "blockers": blockers,
+            "orphaned_waivers": orphaned,  # recorded for a record this protocol version no longer lists (renamed or removed): review
             "documents": {"total": len(docs), "ready": len(ready), "processing": len(processing),
                           "errors": len([d for d in docs if d.get("state") == "error"]),
                           "failed": [d["doc_id"] for d in failed], "dismissed": [{"doc_id": d["doc_id"], **(d.get("dismissed") or {})} for d in dismissed],
@@ -410,8 +421,9 @@ def case_signature(case_id, state=None):
     parts = sorted(f"{d['doc_id']}:{d.get('state')}:{d.get('processed') or ''}:{d.get('extracted_under') or ''}" for d in docs)
     confs = sorted(c["id"] for c in confirm.active(st))
     prot = protocol.get(case["protocol"]) if case.get("protocol") else {}
+    level = case.get("hospital_level") or _hospital().get("level") or "essential"  # as the gate uses it
     basis = {"documents": parts, "confirmations": confs, "protocol": case.get("protocol") or "", "protocol_version": prot.get("version") or "",
-             "setting": case.get("setting") or "", "hospital_level": case.get("hospital_level") or ""}
+             "setting": case.get("setting") or "", "hospital_level": level}
     return {"hash": hashlib.sha256(json.dumps(basis, sort_keys=True).encode()).hexdigest()[:16],
             "documents": len(docs), "ready": sum(1 for d in docs if d.get("state") == "ready"), "confirmations": len(confs),
             "protocol": basis["protocol"], "protocol_version": basis["protocol_version"], "setting": basis["setting"], "hospital_level": basis["hospital_level"],
@@ -497,6 +509,9 @@ def sync_actions(case_id, gate, by=""):
             a["status"] = "completed"; a["completed"] = store.now_iso()
             a["history"].append({"ts": store.now_iso(), "event": event})
             store.audit(case_id, {"kind": "action_completed", "action": a["id"], "requirement": rid, "reason": reason})
+            if a.get("department_id"):
+                _notify({"department": a["department_id"]}, "request_closed", case_id, f"{a.get('label') or rid} no longer needed for {patient} ({case_id})",
+                        event.replace("Closed: ", "The request closed: ") + ".", action_id=a["id"], requirement=rid, level=a.get("level"))
             by_req.pop(rid)
     for r in gate["requirements"]:
         a = by_req.get(r["id"])
@@ -506,21 +521,32 @@ def sync_actions(case_id, gate, by=""):
                 a["history"].append({"ts": store.now_iso(), "event": "Re-check: requirement met", "evidence": [e["doc_id"] for e in r["evidence"]]})
                 store.audit(case_id, {"kind": "action_completed", "action": a["id"], "requirement": r["id"]})
                 if a.get("department_id"):
-                    _notify({"department": a["department_id"]}, "request_closed", case_id, f"{r['label']} received for {patient} ({case_id})",
-                            "The request closed automatically: the Case File re-check found the requirement met.", action_id=a["id"], requirement=r["id"], level=a.get("level"))
+                    why = {"waived": ("waived", "The request closed: the requirement was waived for this Case File (audited)."),
+                           "not_applicable": ("no longer applicable", "The request closed: the requirement does not apply to this Case File any more.")}
+                    head, text = why.get(r["status"], ("received", "The request closed automatically: the Case File re-check found the requirement met."))
+                    _notify({"department": a["department_id"]}, "request_closed", case_id, f"{r['label']} {head} for {patient} ({case_id})",
+                            text, action_id=a["id"], requirement=r["id"], level=a.get("level"))
             continue
         what = "; ".join(r["problems"]) or r["label"]
         dept, dept_id, doc_id = _route(r, case_id)
         if a:
-            moved = (a.get("level") != r.get("level")) or (a.get("department") != dept)
-            if a["what"] != what or moved:
+            legacy = "level" not in a  # a request opened before the two levels existed: classified once, not a move
+            moved = (a.get("department") != dept) or (not legacy and a.get("level") != r.get("level"))
+            if a["what"] != what or moved or legacy:
                 a["what"] = what
                 if moved:
+                    old_dept = a.get("department_id")
                     a["history"].append({"ts": store.now_iso(), "event": f"Re-check: {LEVEL_LABEL.get(r.get('level'), 'gap')} routed to {dept}", "detail": what})
                     a["level"], a["level_label"], a["department"], a["department_id"], a["source_doc_id"] = r.get("level"), r.get("level_label", ""), dept, dept_id, doc_id
+                    if old_dept and old_dept != dept_id:  # the department it left is told, so its inbox makes sense
+                        _notify({"department": old_dept}, "request_closed", case_id, f"{r['label']} request for {patient} ({case_id}) moved to {dept}",
+                                f"The request now sits with {dept} ({LEVEL_LABEL.get(r.get('level'), 'gap')}).", action_id=a["id"], requirement=r["id"], level=r.get("level"))
                     if dept_id:
                         _notify({"department": dept_id}, "request", case_id, f"{r['label']} needed for {patient} ({case_id})", what,
                                 action_id=a["id"], requirement=r["id"], due=a.get("due"), level=r.get("level"), level_label=r.get("level_label", ""))
+                elif legacy:
+                    a["history"].append({"ts": store.now_iso(), "event": f"Re-check: {LEVEL_LABEL.get(r.get('level'), 'gap')}", "detail": what})
+                    a["level"], a["level_label"], a["department_id"], a["source_doc_id"] = r.get("level"), r.get("level_label", ""), dept_id, doc_id
                 else:
                     a["history"].append({"ts": store.now_iso(), "event": "Re-check: gap updated", "detail": what})
             continue

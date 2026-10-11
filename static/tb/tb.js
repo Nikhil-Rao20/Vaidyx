@@ -154,7 +154,7 @@ function renderReady() {
     const l1 = g.requirements.filter((r) => r.level === 1), l2 = g.requirements.filter((r) => r.level === 2), met = g.requirements.filter((r) => !r.level);
     reqs = group(`Level 1 · Case File <span class="chip c-lvl">${l1.length} open</span>`, "each required record present, final and signed, right patient", l1)
       + group(`Level 2 · Records <span class="chip c-lvl">${l2.length} open</span>`, "required values present, verified, not pending", l2)
-      + group("Met", `${met.length} of ${g.requirements.length} required records`, met)
+      + group("Met, waived or not applicable", `${met.filter((r) => r.status === "satisfied").length} of ${g.total} counted records met`, met)
       + group("Shown, not counted", "NCG Optimal records at an Essential hospital, Optional records, and records not applicable in this setting", g.shown || [], true);
     if (!g.requirements.length && !(g.shown || []).length) reqs = `<div class="muted">This protocol lists no records.</div>`;
   } else reqs = `<div class="muted">Not evaluated yet. Add documents to start.</div>`;
@@ -169,7 +169,7 @@ function renderReady() {
     <div class="card"><h3>Pre-Authorization check <span><button class="ghost sm" id="btn-recheck">Re-check now</button></span></h3>
       <div class="muted small" style="margin-bottom:6px">Required records from the NCG Essential / Optimal / Optional tiers for this cancer and setting (clinical review before real use). A record counts only when it is the final, signed version and its required primary fields are found with a verified source quote. Document exists ≠ Document is ready.</div>
       ${setting ? `<div class="small" style="margin-bottom:4px">${setting}</div>` : ""}${g?.tiers_note ? `<div class="muted small" style="margin-bottom:6px">${esc(g.tiers_note)}</div>` : ""}
-      ${blockers}${reqs}</div>
+      ${blockers}${orphanHTML(g)}${reqs}</div>
     ${g?.core_data?.length ? `<div class="card"><h3>MDT minimum core data <span class="muted small">${g.core_data.filter((c) => c.present).length} of ${g.core_data.length} documented</span></h3>
       <div class="muted small" style="margin-bottom:6px">Informational checklist (not part of the gate). Source: ${esc(g.core_data_source || "")}.</div>
       <div style="display:flex;flex-wrap:wrap;gap:4px">${g.core_data.map((c) => c.present ? `<span class="cite" data-doc="${esc(c.evidence[0]?.doc_id || "")}" title="${esc((c.evidence[0]?.value || "") + " | " + (c.evidence[0]?.quote || ""))}">✓ ${esc(c.label)}</span>` : `<span class="chip c-mute">– ${esc(c.label)}</span>`).join("")}</div></div>` : ""}
@@ -205,6 +205,12 @@ function renderReady() {
   const arr = $("#btn-arrivals");
   if (arr) arr.onclick = async () => { try { const j = await api(`/cases/${S.caseId}/demo-arrivals`, { method: "POST" }); watchJob(j.job); } catch (e) { toast(e.message); } };
   bindActions($("#tab-ready"));
+}
+function orphanHTML(g) {
+  // waivers recorded for a record this protocol version no longer lists (renamed or removed): shown, never silently lost (review M4)
+  const o = g?.orphaned_waivers || [];
+  return o.length ? `<div class="banner warn"><b>${o.length} waiver${o.length > 1 ? "s" : ""} no longer match${o.length > 1 ? "" : "es"} a record</b> of protocol ${esc(g.protocol)} v${esc(g.protocol_version || "")} (the record was renamed or removed). Review whether the decision applies to the current records and waive again if so.
+    ${o.map((w) => `<div class="row"><span><b>${esc(w.requirement)}</b>: waived by ${esc(w.by || "clinician")}${w.reason ? ` (${esc(w.reason)})` : ""}</span></div>`).join("")}</div>` : "";
 }
 async function dismissDoc(docId) {
   // V1 item 4.3: a document that failed to read blocks the gate until it is re-processed or dismissed with a reason (audited, undoable)
@@ -880,7 +886,7 @@ function showNotifications() {
   $("#modal").classList.remove("hidden");
   if ($("#nt-readall")) $("#nt-readall").onclick = async () => { await api("/notifications/read", { json: { all: true } }); await loadNotifications(); showNotifications(); };
   if ($("#nt-inbox")) $("#nt-inbox").onclick = () => { $("#modal").classList.add("hidden"); showInbox(); };
-  $$("[data-ntf]").forEach((el) => (el.onclick = async () => { try { await api("/notifications/read", { json: { ids: [el.dataset.ntf] } }); } catch (e) {} $("#modal").classList.add("hidden"); loadNotifications(); if (el.dataset.case) { S.tab = "ready"; openCase(el.dataset.case); } }));
+  $$("[data-ntf]").forEach((el) => (el.onclick = async () => { try { await api("/notifications/read", { json: { ids: [el.dataset.ntf] } }); } catch (e) {} $("#modal").classList.add("hidden"); loadNotifications(); if (el.dataset.case) { S.tab = "ready"; try { await openCase(el.dataset.case); } catch (e) { toast("That Case File no longer exists", 6000); } } }));
 }
 async function refreshInboxCount() {
   const show = (S.org?.inbox_departments || []).length > 0;
@@ -900,7 +906,7 @@ async function showInbox() {
       <div class="readiness"><div class="rtext"><b>${ib.open} open</b><span>${ib.overdue} overdue</span></div></div></div>
     ${ib.departments.map((d) => `<div class="card"><h3>${esc(d.name)} <span class="muted small">${d.open} open · ${d.overdue} overdue</span></h3>
       ${d.requests.length ? `<table class="t"><thead><tr><th>Case File</th><th>Record needed</th><th>What is missing</th><th>Due</th><th>Status</th></tr></thead><tbody>${d.requests.map(row).join("")}</tbody></table>` : `<div class="muted small">No requests.</div>`}</div>`).join("") || `<div class="card"><div class="muted">Your account is not placed in a department with an inbox.</div></div>`}`;
-  $$("#inbox tr[data-case]").forEach((tr) => (tr.onclick = () => { S.tab = "ready"; openCase(tr.dataset.case); }));
+  $$("#inbox tr[data-case]").forEach((tr) => (tr.onclick = async () => { S.tab = "ready"; try { await openCase(tr.dataset.case); } catch (e) { toast("That Case File no longer exists", 6000); } }));
   $("#inbox-count").textContent = ib.open; $("#inbox-count").classList.toggle("hidden", !ib.open);
 }
 

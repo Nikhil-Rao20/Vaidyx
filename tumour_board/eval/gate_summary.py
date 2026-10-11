@@ -24,7 +24,10 @@ def numbers(d):
     f = d / "e2e_api.log"
     if f.exists() or "e2e_api" in rc:
         t = f.read_text() if f.exists() else ""; m = re.search(r"(\d+) passed, (\d+) failed", t)
-        n["e2e_passed"], n["e2e_failed"] = (int(m.group(1)), int(m.group(2))) if m and rc.get("e2e_api", 1) == 0 else (int(m.group(1)) if m else 0, -1)
+        if m and rc.get("e2e_api", 1) == 0:
+            n["e2e_passed"], n["e2e_failed"] = int(m.group(1)), int(m.group(2))
+        else:  # a non-zero exit is never green: the printed failure count when there is one, else at least 1
+            n["e2e_passed"], n["e2e_failed"] = (int(m.group(1)) if m else 0), max(int(m.group(2)) if m else 0, 1)
         m = re.search(r"ingest \+ gate.*?\[(\d+) docs in ([\d.]+)s", t); n["ingest_seconds"] = float(m.group(2)) if m else None
         m = re.search(r"ask answered with citation\s+\[([\d.]+) s", t); n["ask_single_seconds"] = float(m.group(1)) if m else None
     f = d / "ui_test.log"

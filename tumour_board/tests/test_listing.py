@@ -108,7 +108,7 @@ def test_changing_only_setting_or_date_rechecks_without_extracting_again(fakes):
     n = fakes["extract"]
     job = _run(go("lung_nsclc", "metastatic", "2026-10-25", "optimal", "coord"))
     c = store.get_case("TB-2026-0001")
-    assert fakes["extract"] == n and job["total"] == 0 and job["gate"]["total"] == 8 and c["setting"] == "metastatic" and c["board_date"] == "2026-10-25"  # Optimal hospital: + PD-L1, MET, PET-CT
+    assert fakes["extract"] == n and job["total"] == 0 and job["gate"]["total"] == 9 and c["setting"] == "metastatic" and c["board_date"] == "2026-10-25"  # Optimal hospital: + PD-L1, MET, PET-CT, mediastinal staging
     job = _run(go("breast", "", "", "", "coord"))  # another protocol: fields extracted again under it
     assert job["total"] == 1 and fakes["extract"] == n + 1 and store.get_state("TB-2026-0001")["gate"]["protocol"] == "breast"
 

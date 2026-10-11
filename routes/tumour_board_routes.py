@@ -1,14 +1,16 @@
 """HTTP API for Vaidyx-TB (AI agent for the Tumour Board). All routes require a logged-in Vaidyx user; actions that change a Case File
 are checked against the hospital's departments and roles in org.json through org.can() (V1 item 2.1)."""
-import asyncio, json
+import asyncio, json, logging
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
 from src.auth_helpers import require_user
-from tumour_board import notify, agents, config, guidelines, llm, org, postboard, protocol, qa, rules, search, service, store, summary
+from tumour_board import agents, config, guidelines, llm, notify, org, postboard, protocol, qa, rules, search, service, store, summary
 from tumour_board import confirm  # clinician confirmations (V1 item 2.2)
 from tumour_board import intake  # department uploads and patient matching (V1 items 2.3, 2.4)
+
+log = logging.getLogger("tumour_board")
 
 
 from fastapi.routing import APIRoute
@@ -192,7 +194,10 @@ def setup_tumour_board_routes():
     @r.delete("/cases/{case_id}")
     async def delete(case_id: str, request: Request):
         u = _user(request); _need(_roles(request), "delete_case"); _case(case_id)
-        store.audit(case_id, {"kind": "case_deleted", "by": u}); store.delete_case(case_id); return {"ok": True}
+        n = notify.purge_case(case_id)  # its notifications carry the patient's name: they go with the Case File (V1 item 4.4)
+        store.audit(case_id, {"kind": "case_deleted", "by": u, "notifications_removed": n}); store.delete_case(case_id)
+        log.info("case %s deleted by %s; %d notification(s) removed", case_id, u, n)
+        return {"ok": True, "notifications_removed": n}
 
     @r.post("/demo/{case_id}")
     async def demo(case_id: str, request: Request):
@@ -221,7 +226,9 @@ def setup_tumour_board_routes():
         facts = rules.resolve_facts(rules.case_docs(case_id, st), st.get("overrides"))  # confirmations overlaid (V1 item 2.2)
         cat = protocol.facts()
         sig = rules.case_signature(case_id, st)  # what a summary or brief would be generated from now (V1 item 4.5)
-        stale = {name: rules.stale_reason(a.get("signature"), sig) if isinstance(a, dict) else "" for name, a in (st.get("artefacts") or {}).items()}
+        stale = {name: (rules.stale_reason(a["signature"], sig) if a.get("signature") else
+                        "Compiled before the Case File signature was kept, so changes since then cannot be checked")  # pre-4.5 artefacts (review)
+                 for name, a in (st.get("artefacts") or {}).items() if isinstance(a, dict) and (name == "summary" or name.startswith("brief_"))}
         return {"case": c, "state": st, "documents": docs, "facts": {k: {"label": cat.get(k, {}).get("label", k), **v} for k, v in facts.items()},
                 "timeline": postboard.timeline(case_id), "permissions": _case_permissions(rl, c, st, all_docs), "signature": sig, "stale": stale}
 
@@ -378,6 +385,8 @@ def setup_tumour_board_routes():
     async def notifications_read(request: Request):
         """{"ids": [...]} marks those read for this user; {"all": true} marks every notification addressed to the user read."""
         rl = _roles(request); b = await request.json() if (await request.body()) else {}
+        if not isinstance(b, dict) or not isinstance(b.get("ids") or [], list):
+            raise HTTPException(400, 'Send {"ids": [...]} or {"all": true}')
         ids = None if b.get("all") else [str(x) for x in (b.get("ids") or [])]
         return {"changed": notify.mark_read(rl, ids), "unread": notify.unread_count(rl)}
 
@@ -438,7 +447,8 @@ def setup_tumour_board_routes():
     async def reprocess(case_id: str, request: Request):
         u = _user(request); _need(_roles(request), "upload_to_case"); _case(case_id)
         b = await request.json() if (await request.body()) else {}
-        job = service.reprocess(case_id, b.get("which", "errors"), u)
+        async with store.lock(case_id):  # withdraws dismissals: never alongside a confirmation being recorded
+            job = service.reprocess(case_id, (b if isinstance(b, dict) else {}).get("which", "errors"), u)
         return {"job": job["id"], "total": job["total"]}
 
     @r.delete("/cases/{case_id}/documents/{doc_id}")
@@ -479,6 +489,10 @@ def setup_tumour_board_routes():
             raise HTTPException(400, f"Unknown confirmation type: {ctype}")
         _confirmation_permission(_roles(request), case_id, c, ctype, key)
         async with store.lock(case_id):
+            if ctype == "dismiss_failed":  # only a document that failed to read can be dismissed (V1 item 4.3, review M9)
+                d = store.get_doc(case_id, key)
+                if not d or d.get("state") != "error":
+                    raise HTTPException(409, "Only a document that failed to read can be dismissed" + (f" (this one is {d.get('state')})" if d else ""))
             try:
                 rec = confirm.record(case_id, ctype, key, b.get("fields") or {}, b.get("reason", ""), u)
             except ValueError as e:

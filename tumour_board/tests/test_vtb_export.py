@@ -1,5 +1,6 @@
 """NCG Virtual Tumour Board / RCC export (V1 item 4.6): the NCG VTB case template filled from a synthetic, verified Case File summary.
 Reads the NCG template from the guideline library (read-only); no model calls."""
+import re
 from io import BytesIO
 from pathlib import Path
 
@@ -19,7 +20,7 @@ def _cite(doc_id, quote):
     return {"doc_id": doc_id, "page": 0, "start": 0, "end": len(quote), "quote": quote}
 
 
-def _summary(case_id, sections=None, points=True, stage=True, review=None, status="ready"):
+def _summary(case_id, sections=None, points=True, stage=True, review=None, status="ready", model="reasoner"):
     sec = {"presentation": [{"text": "The clinic note records cough for 3 months and weight loss.", "citations": [_cite("D1", "cough for 3 months")]}],
            "treatment_history": [],
            "investigations": [{"text": "The histopathology report records adenocarcinoma.", "citations": [_cite("D1", "Adenocarcinoma"), _cite("D1", "Adenocarcinoma")]}],
@@ -32,7 +33,7 @@ def _summary(case_id, sections=None, points=True, stage=True, review=None, statu
     summ = {"status": status, "sections": [{"id": k, "title": titles[k], "sentences": sec[k]} for k in titles],
             "points_for_review": [{"text": "The PD-L1 result is awaited.", "citations": [_cite("D1", "PD-L1 awaited")]}] if points else [],
             "stage_as_recorded": {"value": "cT2a N0 M0", "quote": "cT2a N0 M0", "doc_id": "D2", "doc_title": CT_TITLE, "date": "2026-09-03"} if stage else None,
-            "review": review or {"status": "ai_draft"}, "generated": "2026-10-11T09:30:00", "model": "reasoner",
+            "review": review or {"status": "ai_draft"}, "generated": "2026-10-11T09:30:00", "model": model,
             "signature": rules.case_signature(case_id)}
     st = store.get_state(case_id)
     st.setdefault("artefacts", {})["summary"] = summ
@@ -84,6 +85,43 @@ def test_build_fills_all_six_slides(case):
     assert vtb_export.filename(case) == "TB-UNIT_ncg_vtb_case.pptx"
 
 
+def test_sections_are_really_filled(case):
+    """Slides 2 to 4 carry cited sentences in their content placeholder (not the footer, not the template title, not the
+    not-documented line)."""
+    _summary(case)
+    prs = _deck(case)
+    for i in (1, 2, 3):
+        sl = prs.slides[i]
+        body = sl.placeholders[1].text_frame.text
+        assert body.strip() and vtb_export.NOT_DOCUMENTED not in body
+        assert re.search(r"\[[^\]]+, \d{2}/\d{2}/\d{4}\]", body), f"slide {i + 1} has a cited sentence"
+        assert vtb_export.SLIDES[i][2] not in body and "Human oversight" not in body
+
+
+def test_intro_box_with_two_paragraphs_drops_nothing(case, monkeypatch, tmp_path):
+    prs = Presentation(str(vtb_export.template_path()))
+    box = next(s for s in prs.slides[0].shapes if not s.is_placeholder and s.has_text_frame and "presenter" in s.text_frame.text.lower())
+    txBody = box.text_frame._txBody
+    for p in list(txBody.p_lst)[2:]:
+        txBody.remove(p)
+    assert len(box.text_frame.paragraphs) == 2
+    short = tmp_path / "two_para_template.pptx"
+    prs.save(str(short))
+    monkeypatch.setenv("TB_VTB_TEMPLATE", str(short))
+    add(case, make_doc("D1", "histopathology", date="2026-09-01", title=HPE_TITLE, facts={"histologic_type": fact("Adenocarcinoma", verification="needs_review")}))
+    _summary(case, status="incomplete_gate")
+    s1 = _deck(case).slides[0]
+    box = next(s for s in s1.shapes if not s.is_placeholder and s.has_text_frame and "presenter" in s.text_frame.text)
+    assert [p.text for p in box.text_frame.paragraphs] == [
+        "Name of the presenter: Tumour Board coordinator (test)", "Name of the centre: (hospital name not set)",
+        "Diagnosis: not verified in a final report yet (see the investigations slide)", vtb_export.INCOMPLETE,
+        "Date of presentation: 20/10/2026"]
+    # complete gate: the four lines, no incomplete line
+    _summary(case)
+    box = next(s for s in _deck(case).slides[0].shapes if not s.is_placeholder and s.has_text_frame and "presenter" in s.text_frame.text)
+    assert len(box.text_frame.paragraphs) == 4 and vtb_export.INCOMPLETE not in box.text_frame.text
+
+
 def test_slide1_identity_and_intro_lines(case):
     _summary(case)
     s1 = _deck(case).slides[0]
@@ -109,7 +147,7 @@ def test_incomplete_gate_line_and_unverified_diagnosis(case):
     s1 = _deck(case).slides[0]
     box = next(s for s in s1.shapes if not s.is_placeholder and s.has_text_frame and "presenter" in s.text_frame.text)
     lines = [p.text for p in box.text_frame.paragraphs]
-    assert lines[2] == "Diagnosis: as recorded in the attached records"
+    assert lines[2] == "Diagnosis: not verified in a final report yet (see the investigations slide)"
     assert lines[3] == "INCOMPLETE: Pre-Authorization not met"
     assert lines[4] == "Date of presentation: to be fixed"
 
@@ -168,6 +206,59 @@ def test_footer_on_every_slide_ai_draft_and_reviewed(case):
     assert all("Human oversight: reviewed by dr_rao." in _shape(sl, FOOT).text_frame.text for sl in _deck(case).slides)
     _summary(case, review={"status": "flagged", "by": "dr_rao", "comment": "x"})
     assert "flagged for correction" in vtb_export.content(case)["footer"]
+
+
+def test_footer_names_the_model_as_non_medical(case):
+    _summary(case, model="Gemma-4-31B")
+    for sl in _deck(case).slides:
+        f = _shape(sl, FOOT)
+        assert "compiled by Gemma-4-31B (non-medical) from verified records" in f.text_frame.text
+        assert f.top + f.height <= 6858000  # inside the 4:3 slide
+    for model in ("reasoner", "", None):
+        _summary(case, model=model)
+        assert "compiled by the reasoner model (non-medical)" in vtb_export.content(case)["footer"]
+    _summary(case, model="Gemma-4-31B (USA; non-medical)")
+    foot = vtb_export.content(case)["footer"]
+    assert "Gemma-4-31B (USA; non-medical) from" in foot and foot.count("non-medical") == 1
+
+
+def test_footer_stays_within_two_lines(case):
+    long_label = "Gemma-4-31B (Google DeepMind, USA, Apache-2.0; non-medical)"
+    for model in ("Gemma-4-31B", long_label):
+        _summary(case, model=model, review={"status": "reviewed", "by": "dr_ramanathan_subramaniam"})
+        foot = vtb_export.content(case)["footer"]
+        assert vtb_export.footer_lines(foot) <= 2 and vtb_export.footer_fits(foot)
+        assert "Human oversight: reviewed by dr_ramanathan_subramaniam." in foot and "\u2014" not in foot
+    assert foot.startswith("Vaidyx: compiled by " + long_label)  # the long product name gives way
+    _summary(case, model="Gemma-4-31B")
+    assert vtb_export.content(case)["footer"].startswith("Vaidyx Tumour Board assistant: compiled by Gemma-4-31B (non-medical)")
+
+
+def test_flagged_summary_is_refused_but_content_is_shown(case):
+    _summary(case, review={"status": "flagged", "by": "dr_rao", "comment": "Wrong laterality in imaging"})
+    data = vtb_export.content(case)
+    msg = ("The Case File summary is flagged for correction: Wrong laterality in imaging; "
+           "correct it and mark it reviewed, or regenerate it, before exporting")
+    assert data["blocked"] == msg and len(data["slides"]) == 6
+    with pytest.raises(vtb_export.ExportNotReady) as e:
+        vtb_export.build(case)
+    assert str(e.value) == msg
+    _summary(case, review={"status": "flagged", "by": "dr_rao"})
+    assert vtb_export.content(case)["blocked"] == ("The Case File summary is flagged for correction; "
+                                                    "correct it and mark it reviewed, or regenerate it, before exporting")
+    _summary(case, review={"status": "reviewed", "by": "dr_rao"})
+    assert vtb_export.content(case)["blocked"] == ""
+    assert vtb_export.build(case)
+
+
+def test_refusal_order_stale_then_flagged_then_template(case, monkeypatch, tmp_path):
+    _summary(case, review={"status": "flagged", "by": "dr_rao", "comment": "x"})
+    monkeypatch.setenv("TB_VTB_TEMPLATE", str(tmp_path / "missing.pptx"))
+    with pytest.raises(vtb_export.ExportNotReady, match="flagged for correction"):  # flagged before a missing template
+        vtb_export.build(case)
+    add(case, make_doc("D3", "xray", date="2026-09-05"))
+    with pytest.raises(vtb_export.ExportNotReady, match="regenerate the summary before exporting"):  # stale before flagged
+        vtb_export.build(case)
 
 
 def test_no_summary_raises(case):

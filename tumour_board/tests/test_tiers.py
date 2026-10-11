@@ -69,7 +69,7 @@ def test_tier_for_with_and_without_a_setting():
     assert protocol.tier_for(mmr, "non_metastatic") == "c"
     assert protocol.tier_for(_rec("lung_nsclc", "pdl1"), "metastatic") == "b"  # no per-setting tiers: the record's tier
     assert protocol.tier_for({"id": "x"}, "metastatic") == "a"
-    assert protocol.tier_for({"tier": "c", "tiers": {"early": "b"}}, "unknown") == "c"
+    assert protocol.tier_for({"tier": "c", "tiers": {"early": "b"}}, "unknown") == "b"  # an unknown setting id is treated like an unrecorded one (review)
     assert protocol.tier_for({"tiers": {"x": "none", "y": "c"}}, None) == "c"
 
 

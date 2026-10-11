@@ -122,9 +122,30 @@ def _review_words(review) -> str:
     return "AI draft, awaiting expert review"
 
 
+def _model_words(summary) -> str:
+    """The reasoner's configured label with "(non-medical)" (CLAUDE.md model labelling); a generic name when no label was recorded."""
+    label = _clean(summary.get("model"))
+    if not label or label.lower() == "reasoner":
+        return "the reasoner model (non-medical)"
+    return label if "non-medical" in label.lower() else f"{label} (non-medical)"
+
+
 def footer_text(summary) -> str:
-    return ("Vaidyx Tumour Board assistant: compiled from verified records, every sentence cites its source document; stage only as recorded; "
+    """At most two lines at 9 pt: the long product name gives way to "Vaidyx" when a long model label or reviewer name needs the room."""
+    rest = (f"compiled by {_model_words(summary)} from verified records, every sentence cites its source; stage only as recorded; "
             f"no treatment recommendation. Human oversight: {_review_words(summary.get('review'))}. Generated {_when(summary.get('generated'))}.")
+    text = "Vaidyx Tumour Board assistant: " + rest
+    return text if footer_fits(text) else "Vaidyx: " + rest
+
+
+def footer_lines(text) -> int:
+    """Estimated wrapped lines of the footer at 9 pt in its box (no bullet indent)."""
+    usable_pt = (FOOTER["width"] - INSETS) / 12700
+    return max(1, math.ceil(len(text) / max(20, int(usable_pt / (PT_FOOTER * 0.5)))))
+
+
+def footer_fits(text) -> bool:
+    return footer_lines(text) * PT_FOOTER * 1.2 <= (FOOTER["height"] - 91440) / 12700  # top + bottom insets 0.05 in each
 
 
 # ---- fitting: readable font sizes, never a silent overflow ----------------------------------------------------------
@@ -183,7 +204,7 @@ def _diagnosis(st, docs_list) -> str:
     """The histologic type as recorded: the current verified (or clinician-confirmed) value from a final report, with its source."""
     cur = (rules.resolve_facts(docs_list, st.get("overrides")).get("histologic_type") or {}).get("current")
     if not cur or cur.get("verification") not in rules.VERIFIED or cur.get("state") != "present" or not cur.get("doc_final") or not _clean(cur.get("value")):
-        return "as recorded in the attached records"
+        return "not verified in a final report yet (see the investigations slide)"
     return f"{_clean(cur['value'])} [{_clean(cur.get('doc_title'))}, {_ddmmyyyy(cur.get('date')) or 'date not stated'}]"
 
 
@@ -200,13 +221,24 @@ def _stage_line(summ) -> str:
     return line + (f" (confirmed by {_clean(sr['confirmed_by'])})" if sr.get("confirmed_by") else "")
 
 
+def _blocked(summ) -> str:
+    """Why build() refuses a summary that an expert flagged for correction; "" otherwise."""
+    review = summ.get("review") or {}
+    if review.get("status") != "flagged":
+        return ""
+    comment = _clean(review.get("comment"))
+    return ("The Case File summary is flagged for correction" + (f": {comment}" if comment else "")
+            + "; correct it and mark it reviewed, or regenerate it, before exporting")
+
+
 def _width_height(top, height, width):
     return width, min(top + height, FOOTER["top"]) - top
 
 
 def content(case_id: str) -> dict:
     """What build() puts on each slide, as text: {"slides": [{"n", "title", "items", "extra"}], "stale", "review", "footer", ...}.
-    Raises ExportNotReady when there is no summary; a stale summary is reported in "stale" (build() refuses it)."""
+    Raises ExportNotReady when there is no summary; a stale summary is reported in "stale" and one flagged for correction in
+    "blocked" (build() refuses both)."""
     case, st, summ = _summary(case_id)
     docs_list = rules.case_docs(case_id, st)
     docs = {d["doc_id"]: d for d in docs_list}
@@ -255,7 +287,8 @@ def content(case_id: str) -> dict:
             extra.update(treatment_history=th_items, treatment_pt=th_pt, treatment_cut=th_cut)
         slides.append({"n": n, "title": title, "items": items, "extra": extra})
 
-    return {"case_id": case_id, "slides": slides, "stale": _stale(case_id, st, summ), "review": summ.get("review") or {"status": "ai_draft"},
+    return {"case_id": case_id, "slides": slides, "stale": _stale(case_id, st, summ), "blocked": _blocked(summ),
+            "review": summ.get("review") or {"status": "ai_draft"},
             "status": summ.get("status"), "generated": summ.get("generated"), "footer": footer_text(summ), "filename": filename(case_id)}
 
 
@@ -297,11 +330,26 @@ def _write(tf, lines, pt, bullets=True, bold=()):
             r.font.italic = True
 
 
+def _clone_after(para, tf):
+    """A copy of `para` (its formatting kept) inserted right after it, holding one run."""
+    new = copy.deepcopy(para._p)
+    para._p.addnext(new)
+    out = _Paragraph(new, tf)
+    for r in out.runs[1:]:
+        new.remove(r._r)
+    if not out.runs:
+        out.add_run()
+    return out
+
+
 def _fill_intro_box(shape, lines, incomplete):
-    """The slide 1 text box: rewrite its four lines in place (first run's formatting kept), the incomplete line after the diagnosis."""
+    """The slide 1 text box: rewrite its lines in place (first run's formatting kept), the incomplete line after the diagnosis.
+    A box with fewer paragraphs than lines gets copies of its last paragraph, so no line is ever dropped."""
     tf = shape.text_frame
-    paras = list(tf.paragraphs)
     values = [l for l in lines if l != INCOMPLETE]
+    paras = list(tf.paragraphs) or [tf.add_paragraph()]
+    while len(paras) < len(values):
+        paras.append(_clone_after(paras[-1], tf))
     pt = 16 if sum(_est_lines(l, shape.width, 16) for l in lines) <= 6 else 14
     for para, text in zip(paras, values):
         runs = para.runs
@@ -310,12 +358,12 @@ def _fill_intro_box(shape, lines, incomplete):
         r = runs[0] if runs else para.add_run()
         r.text = text
         r.font.size = Pt(pt)
-    if incomplete and len(paras) >= 3:
-        new = copy.deepcopy(paras[2]._p)
-        paras[2]._p.addnext(new)
-        para = _Paragraph(new, tf)
-        r = para.runs[0]
+    if incomplete:
+        diag = [i for i, v in enumerate(values) if v.startswith("Diagnosis")]
+        at = diag[-1] if diag else min(2, len(values) - 1)
+        r = _clone_after(paras[at], tf).runs[0]
         r.text = INCOMPLETE
+        r.font.size = Pt(pt)
         r.font.bold = True
         r.font.color.rgb = RGBColor(0xB0, 0x00, 0x20)
 
@@ -337,10 +385,13 @@ def _fit_above_footer(shape):
 
 
 def build(case_id: str) -> bytes:
-    """The filled NCG VTB case template (.pptx bytes). Raises ExportNotReady (no summary, stale summary, template missing)."""
+    """The filled NCG VTB case template (.pptx bytes). Raises ExportNotReady (no summary, stale summary, summary flagged for
+    correction, template missing), in that order."""
     data = content(case_id)
     if data["stale"]:
         raise ExportNotReady(data["stale"] + "; regenerate the summary before exporting")
+    if data["blocked"]:
+        raise ExportNotReady(data["blocked"])
     path = template_path()
     if not path.is_file():
         raise ExportNotReady(f"The NCG Virtual Tumour Board template is missing: {path}")

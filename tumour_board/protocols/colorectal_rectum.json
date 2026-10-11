@@ -165,7 +165,7 @@
     }
    ],
    "tier_basis": "NCG GI guidelines carry no tier letters; the listed work-up is treated as Essential (assumption, for clinical review)",
-   "note": "PET-CT does not satisfy this record (NCG: select indications only)"
+   "note": "PET-CT does not satisfy this record (NCG: select indications only). NCG lists CECT abdomen with CECT thorax or a chest X-ray; V1 counts this record when one of these studies is present: check that both the chest and the abdomen were imaged (clinical review)"
   },
   {
    "id": "pet_ct",

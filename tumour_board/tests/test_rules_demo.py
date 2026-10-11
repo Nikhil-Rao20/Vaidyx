@@ -18,7 +18,7 @@ def test_tb001_lung_gate(demo_cases):
         "bronchoscopy": ("b", "missing_record"), "mediastinal_staging": ("b", "missing_record"), "mri_thorax_superior_sulcus": ("c", "missing_record")}
     assert all(r["required"] for r in g["requirements"]) and not any(r["required"] for r in g["shown"])
     assert not g["passed"] and g["readiness"] == 40 and (g["satisfied"], g["total"]) == (2, 5)
-    assert g["hospital_level"] == "essential" and g["setting"] == "" and g["protocol_version"] == "0.6"
+    assert g["hospital_level"] == "essential" and g["setting"] == "" and g["protocol_version"] == "0.7"
     assert req(g, "histopathology")["problems"][0] == "HISTOPATHOLOGY REPORT is DRAFT and unsigned: a final, signed version is required"
     assert req(g, "baseline_labs")["problems"] == ['Pending: WBC count: "Not reported" in HAEMATOLOGY REPORT (CBC)']
     assert req(g, "cect_tap")["source"]["quote"] == "CECT Thorax, abdomen and Pelvis(a)" and req(g, "cect_tap")["source"]["page"] == 4
@@ -39,9 +39,9 @@ def test_tb001_optimal_hospital_requires_the_optimal_records(demo_cases):
     assert set(_statuses(g)) == {"clinical_history", "cect_tap", "histopathology", "driver_mutations", "baseline_labs", "pdl1", "met", "pet_ct", "brain_mri", "bronchoscopy", "mediastinal_staging"}
     assert [r["id"] for r in g["shown"]] == ["mri_thorax_superior_sulcus"] and g["total"] == 11
     c["setting"] = "metastatic"; store.save_case(c)
-    g = rules.evaluate("TB-001")  # metastatic: brain imaging is Optional (c), bronchoscopy not applicable, mediastinal staging Optional
-    assert set(_statuses(g)) == {"clinical_history", "cect_tap", "histopathology", "driver_mutations", "baseline_labs", "pdl1", "met", "pet_ct"}
-    assert {r["id"]: r["tier"] for r in g["shown"]} == {"brain_mri": "c", "bronchoscopy": "none", "mediastinal_staging": "c", "mri_thorax_superior_sulcus": "c"}
+    g = rules.evaluate("TB-001")  # metastatic: brain imaging is Optional (c), bronchoscopy not applicable, mediastinal staging stays Optimal (review M2)
+    assert set(_statuses(g)) == {"clinical_history", "cect_tap", "histopathology", "driver_mutations", "baseline_labs", "pdl1", "met", "pet_ct", "mediastinal_staging"}
+    assert {r["id"]: r["tier"] for r in g["shown"]} == {"brain_mri": "c", "bronchoscopy": "none", "mri_thorax_superior_sulcus": "c"}
     assert next(r for r in g["shown"] if r["id"] == "bronchoscopy")["status"] == "not_applicable"
 
 

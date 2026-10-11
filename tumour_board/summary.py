@@ -80,6 +80,7 @@ async def build(case_id, force=False):
     au = store.auditor(case_id)
     st = store.get_state(case_id)
     case = store.get_case(case_id)
+    sig = rules.case_signature(case_id, st)  # taken before reading anything: a change during the model call marks the summary stale (V1 item 4.5)
     gate = (st.get("gate") or rules.evaluate(case_id)) if case.get("protocol") else None
     if gate is None:  # an unlisted Case File (V1 item 2.5): no protocol, so nothing to compile against and no model call
         return {"status": "not_listed", "message": NOT_LISTED}
@@ -122,7 +123,7 @@ async def build(case_id, force=False):
                                  if stage and stage["verification"] in rules.VERIFIED else None),
            "dropped_unverified": dropped, "guardrail_removed": len(removed), "filled_from_fields": filled, "generated": store.now_iso(), "seconds": round(time.time() - t0, 1),
            "model": config.models()["reasoner"].get("label") or "reasoner", "review": {"status": "ai_draft"}, "gate_passed": gate.get("passed"), "context": mode,
-           "signature": rules.case_signature(case_id)}  # what it was compiled from; a changed Case File marks it stale (V1 item 4.5)
+           "signature": sig}  # what it was compiled from; a changed Case File marks it stale (V1 item 4.5)
     if removed:
         au({"kind": "guardrail_output", "where": "summary", "issues": removed})
     st = store.get_state(case_id); st.setdefault("artefacts", {})["summary"] = out; store.save_state(case_id, st)

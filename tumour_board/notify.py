@@ -1,7 +1,7 @@
 """In-app notifications and the department inbox (plan item 4.4).
 
 Notifications: data/tumour_board/notifications.jsonl, one JSON object per line, appended on notify(); rewritten on
-mark_read() and prune(). Each one is addressed to a department ({"department": "<id>"}), to the coordinators
+mark_read(), prune() and purge_case() (a deleted Case File). Each one is addressed to a department ({"department": "<id>"}), to the coordinators
 ({"role": "coordinator"}) or to one user ({"user": "<username>"}), and remembers who has read it ({user: ts}). Every
 notification is a stored record: that is its audit trail (the gate side is audited in the Case File).
 
@@ -220,6 +220,25 @@ def prune(max_age_days: int = 90, keep: int = 5000) -> int:
         if dropped or lines != len(recs):  # also clears malformed lines
             _rewrite(kept)
     return dropped
+
+
+def purge_case(case_id: str) -> int:
+    """Remove every notification for this Case File (exact case_id match). Returns how many were removed.
+
+    A deleted Case File's patient details (name, case id in titles and texts) must not linger in the notification file
+    for up to 90 days, and the UI must not offer to open a Case File that no longer exists. Called by the delete route,
+    which audits the count. Malformed lines are dropped on the rewrite, as prune() does; nothing is rewritten when no
+    notification matches."""
+    cid = str(case_id or "")
+    if not cid:
+        return 0
+    with _lock:
+        recs = _load()
+        kept = [rec for rec in recs if str(rec.get("case_id") or "") != cid]
+        removed = len(recs) - len(kept)
+        if removed:
+            _rewrite(kept)
+    return removed
 
 
 # ---- department inbox -----------------------------------------------------------------------------------------------
