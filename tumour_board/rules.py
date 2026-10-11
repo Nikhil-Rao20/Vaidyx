@@ -279,7 +279,7 @@ def _evaluate_record(req, ready, facts, overrides, cat):
             r["status"] = "missing_field" if r["status"] == "satisfied" else r["status"]
         elif review and r["status"] == "satisfied":
             r["status"] = "needs_review"
-    if scan_needs and r["status"] != "not_applicable":  # a clinician reads each critical value on the scan image (V1 item 8.2)
+    if scan_needs and r["status"] != "not_applicable" and l1["status"] == "satisfied":  # a clinician reads each critical value on the scan image (V1 item 8.2); not while the record itself is open at Level 1
         for h, fid in scan_needs:
             loc = h.get("location") or {}
             p = (f"Confirm {cat[fid]['label']} against the scan image: \"{h['value']}\" was read from a scanned page of {h['doc_title']} "

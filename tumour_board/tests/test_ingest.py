@@ -669,3 +669,47 @@ def test_scan_warning_threshold_and_env_overrides(monkeypatch, tmp_path):
     assert ingest.scan_warning(f) == "scan.pdf has 51 scanned pages: reading it will take about 26 seconds"  # filename defaults to the file's name
     monkeypatch.setenv("TB_SCAN_SECONDS_PER_PAGE", "not a number")
     assert ingest.scan_estimate(f)["seconds"] == 62
+
+
+# ---- EXIF orientation of phone photos (V1 item 8.3 review, M3) -------------------------------------------------------
+def _captured_pages(monkeypatch):
+    seen = []
+
+    async def fake(png, audit=None):
+        seen.append(png)
+        return {"text": "", "method": "vision-transcription"}
+    monkeypatch.setattr(ingest, "ocr_page", fake)
+    return seen
+
+
+def _photo(path, orientation=None):
+    """A synthetic 'phone photo' 200 x 100 stored as taken, with a black block at its top left; EXIF orientation if given."""
+    from PIL import Image
+    im = Image.new("RGB", (200, 100), "white")
+    im.paste((0, 0, 0), (0, 0, 40, 20))
+    kw = {}
+    if orientation:
+        ex = Image.Exif(); ex[0x0112] = orientation; kw["exif"] = ex.tobytes()
+    im.save(path, "JPEG", quality=95, **kw)
+    return path
+
+
+def test_exif_orientation_6_photo_is_read_upright(monkeypatch, tmp_path):
+    import io
+    from PIL import Image
+    seen = _captured_pages(monkeypatch)
+    f = _photo(tmp_path / "phone.jpg", orientation=6)
+    asyncio.run(ingest._read_pages(f))
+    (png,) = seen
+    im = Image.open(io.BytesIO(png))
+    assert im.format == "PNG" and im.size == (100, 200)  # turned 90 degrees as the tag says (the reader gets it upright)
+    assert im.getpixel((90, 5))[0] < 60 and im.getpixel((5, 5))[0] > 200  # the block is now at the top right
+    assert ingest._orientation(im) == 1
+
+
+def test_photo_without_orientation_is_passed_as_stored(monkeypatch, tmp_path):
+    seen = _captured_pages(monkeypatch)
+    for name, orient in (("plain.jpg", None), ("upright.jpg", 1)):
+        f = _photo(tmp_path / name, orientation=orient)
+        asyncio.run(ingest._read_pages(f))
+        assert seen[-1] == f.read_bytes()  # no change for an image without a turning tag

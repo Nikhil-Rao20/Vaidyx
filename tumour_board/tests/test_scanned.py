@@ -254,3 +254,95 @@ def test_aadhaar_boxes_and_masked_preview(tmp_path):
     assert im.getpixel((5, 5)) == (255, 255, 255)
     assert scanned.preview_bytes(p, {"pages": [_engine_page()]}) is None  # nothing to mask: the file is served as stored
     assert scanned.aadhaar_boxes({"pages": [{"text": "x"}]}, 0) == [] and scanned.aadhaar_boxes({}, 3) == []
+
+
+# ---- review fixes (Phase 8) ----
+
+def test_undoing_the_confirmation_asks_again(unit_case):
+    util.add(unit_case, _hist(), _ct())
+    rec = confirm.record(unit_case, "confirm_value", "Dhist0001:pdl1", {"value": "TPS 60%"}, "", by="Dr. Rao")
+    assert util.req(rules.evaluate(unit_case), "pdl1")["status"] == "satisfied"
+    confirm.undo(unit_case, rec["id"], "Dr. Rao")
+    assert util.req(rules.evaluate(unit_case), "pdl1")["status"] == "needs_confirmation"
+
+
+def test_a_waiver_beats_the_scan_request(unit_case):
+    util.add(unit_case, _hist(), _ct())
+    confirm.record(unit_case, "waive", "pdl1", {}, "e2e: not needed for this Case File", by="Dr. Rao")
+    r = util.req(rules.evaluate(unit_case), "pdl1")
+    assert r["status"] == "waived" and not r.get("needs")
+
+
+def test_no_scan_request_while_the_record_is_open_at_level_1(unit_case):
+    d = util.make_doc("Dhist0001", "histopathology", facts={"histologic_type": util.fact("Adenocarcinoma"), "recorded_stage": util.fact("pT2 N1")})
+    d["pages"][0]["method"] = SCAN
+    d["identity"] = "mismatch_or_missing"  # Level 1: the record may not be this patient's
+    util.add(unit_case, d, _ct())
+    real = protocol.get
+    p = util.unit_protocol(); p["mandatory"][0]["required_facts"] = ["histologic_type", "recorded_stage"]
+    import pytest
+    mp = pytest.MonkeyPatch(); mp.setattr(protocol, "get", lambda pid: p if pid == "unit" else real(pid))
+    try:
+        r = util.req(rules.evaluate(unit_case), "histopathology")
+    finally:
+        mp.undo()
+    assert r["level"] == 1 and not [n for n in r.get("needs") or [] if n["type"] == "confirm_value"]
+
+
+def _masked_doc(n_pages=1, page=0):
+    words = _words("Aadhaar: XXXX-XXXX-2200 UHID SYN-1")
+    pages = [{"text": "x", "method": SCAN} for _ in range(n_pages)]
+    pages[page] = _engine_page("Aadhaar: XXXX-XXXX-2200 UHID SYN-1", words)
+    pages[page]["ocr_engine"]["masked_words"] = [1]
+    return {"pages": pages}, words[1]
+
+
+def _pixel(data, box, frac=(0.5, 0.5)):
+    import io
+    from PIL import Image
+    im = Image.open(io.BytesIO(data)).convert("RGB")
+    return im.getpixel((int((box[1] + (box[3] - box[1]) * frac[0]) * im.size[0]), int((box[2] + (box[4] - box[2]) * frac[1]) * im.size[1])))
+
+
+def test_pdf_page_preview_is_masked(tmp_path):
+    from PIL import Image
+    p = tmp_path / "scan.pdf"
+    Image.new("RGB", (800, 1100), "white").save(p, save_all=True, append_images=[Image.new("RGB", (800, 1100), "white")])
+    doc, w = _masked_doc(2, page=1)
+    data, kind = scanned.preview_bytes(p, doc, render=True, page=1)
+    assert kind == "image/png" and _pixel(data, w) == (0, 0, 0)
+    data, _ = scanned.preview_bytes(p, doc, render=True, page=0)  # the other page has nothing to mask
+    assert _pixel(data, w) == (255, 255, 255)
+    assert scanned.preview_bytes(p, doc, render=True, page="x")[1] == "image/png"  # a bad page number is page 1, never a crash
+
+
+def test_tiff_frames_are_rendered_and_masked(tmp_path):
+    from PIL import Image
+    p = tmp_path / "scan.tif"
+    Image.new("RGB", (800, 1100), "white").save(p, save_all=True, append_images=[Image.new("RGB", (800, 1100), "white")])
+    doc, w = _masked_doc(2, page=1)
+    data, kind = scanned.preview_bytes(p, doc, render=True, page=1)
+    assert kind == "image/png" and _pixel(data, w) == (0, 0, 0)
+    data, kind = scanned.preview_bytes(p, {"pages": []})  # a TIFF is always served as PNG (browsers cannot show TIFF)
+    assert kind == "image/png"
+
+
+def test_exif_rotated_photo_is_served_upright(tmp_path):
+    import io
+    from PIL import Image
+    p = tmp_path / "photo.jpg"
+    im = Image.new("RGB", (400, 300), "white"); ex = im.getexif(); ex[274] = 6
+    im.save(p, exif=ex)
+    data, kind = scanned.preview_bytes(p, {"pages": [{"text": "x", "method": SCAN}]})
+    assert kind == "image/png" and Image.open(io.BytesIO(data)).size == (300, 400)
+
+
+def test_a_pdf_with_no_pages_is_served_as_stored(tmp_path, monkeypatch):
+    import pypdfium2 as pdfium
+
+    class Empty:
+        def __len__(self): return 0
+        def close(self): pass
+    monkeypatch.setattr(pdfium, "PdfDocument", lambda path: Empty())
+    p = tmp_path / "empty.pdf"; p.write_bytes(b"%PDF-1.4")
+    assert scanned.preview_bytes(p, {}, render=True) is None

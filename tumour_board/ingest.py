@@ -155,12 +155,22 @@ async def ocr_page(png_bytes: bytes, audit=None) -> dict:
     Independent OCR engine (V1 item 8.3): Tesseract reads the same page image at the same time, on the CPU. Both model
     reads can 'correct' a digit the same way; a line where the engine reads a different number is an uncertain span too
     ("source": "engine"). The engine's reading is kept as "ocr_engine" (text and word boxes); it never changes the
-    transcription. Without the engine (not installed, turned off) the page is read exactly as before, with a note."""
-    (full, second), engine = await asyncio.gather(
+    transcription. Without the engine (not installed, turned off) the page is read exactly as before, with a note.
+
+    Aadhaar (V1 item 2.4) is masked at the source: never in the text, the engine's reading, the uncertain numbers or the
+    audit. The raw reads tell which numbers were an Aadhaar; those numbers are masked in every reading of the page (a read
+    can write the same number in a form the masking rule misses: "22O0", split over two lines), the engine's reading is
+    masked with looser rules too (ocr_engine), and a last safety net leaves no 4-digit group of them in the engine's
+    reading or the uncertain spans."""
+    (raw_full, raw_second), engine = await asyncio.gather(
         asyncio.gather(ocr_image(png_bytes, audit), ocr_image(png_bytes, audit, max_side=int(0.7 * config.OCR_MAX_SIDE))),
         ocr_engine.read_page(png_bytes, audit))
-    full, n_masked = identity.mask_aadhaar(full)  # Aadhaar masked at the source: never in the text, the uncertain numbers or the audit (V1 item 2.4)
-    second, _ = identity.mask_aadhaar(second)
+    aadhaar = sorted(set(ocr_engine.aadhaar_numbers(raw_full)) | set(ocr_engine.aadhaar_numbers(raw_second)))  # never stored
+    full, n_masked = identity.mask_aadhaar(raw_full)
+    second, _ = identity.mask_aadhaar(raw_second)
+    full, n_more = ocr_engine.mask_text_count(full, aadhaar, engine=False)  # looser rules, and the other read's numbers
+    second, _ = ocr_engine.mask_text_count(second, aadhaar, engine=False)
+    n_masked += n_more
     spans = ocr_line_check(full, second)
     uncertain = sorted({n for s in spans for n in s["numbers"]})
     page = {"text": full, "second_read": second, "method": "vision-transcription", "ocr_reads": 2}
@@ -171,26 +181,48 @@ async def ocr_page(png_bytes: bytes, audit=None) -> dict:
         page["ocr_uncertain_spans"] = spans
         page["ocr_uncertain_numbers"] = uncertain
         if audit:
-            audit({"kind": "ocr_disagreement", "numbers": uncertain, "lines": len(spans)})
-    await _engine_check(page, png_bytes, engine, audit)
+            audit({"kind": "ocr_disagreement", "numbers": ocr_engine.scrub(uncertain, aadhaar), "lines": len(spans)})
+    await _engine_check(page, png_bytes, engine, audit, aadhaar)
+    _aadhaar_safety_net(page, aadhaar)
     return page
 
 
-async def _engine_check(page: dict, png_bytes: bytes, engine, audit=None) -> None:
-    """Store the engine's reading (or why there is none) and merge its uncertain spans into the page."""
+async def _engine_check(page: dict, png_bytes: bytes, engine, audit=None, aadhaar=()) -> None:
+    """Store the engine's reading (or why there is none), with the reader's Aadhaar numbers masked in it, and merge its
+    uncertain spans into the page. The spans' numbers are the transcription's numbers in doubt (never the engine's)."""
     if engine is None:
         page["ocr_engine_note"] = ocr_engine.unavailable_note() or ocr_engine.FAILED
         return
+    ocr_engine.cross_mask(engine, aadhaar)
     page["ocr_engine"] = engine
-    espans = await ocr_engine.check_page(png_bytes, page["text"], engine, audit)
+    espans = await ocr_engine.check_page(png_bytes, page["text"], engine, audit,
+                                         mask=(lambda t: ocr_engine.mask_text(t, aadhaar)) if aadhaar else None)
     seen = {(s["start"], s["end"], s["reason"]) for s in page.get("ocr_uncertain_spans") or []}
-    espans = [s for s in espans if (s["start"], s["end"], s["reason"]) not in seen]
+    espans = ocr_engine.scrub([s for s in espans if (s["start"], s["end"], s["reason"]) not in seen], aadhaar)
     if not espans:
         return
     page["ocr_uncertain_spans"] = sorted((page.get("ocr_uncertain_spans") or []) + espans, key=lambda s: (s["start"], s["end"]))
     page["ocr_uncertain_numbers"] = sorted(set(page.get("ocr_uncertain_numbers") or []) | {n for s in espans for n in s["numbers"]})
     if audit:
         audit({"kind": "ocr_engine_disagreement", "numbers": sorted({n for s in espans for n in s["numbers"]}), "lines": len(espans)})
+
+
+def _aadhaar_safety_net(page: dict, aadhaar) -> None:
+    """No 4-digit group of the reader's Aadhaar numbers (all but the last group) may remain in the engine's reading or in
+    the uncertain spans and numbers: masked again (look-alikes included in the engine's reading), then every exact group
+    left anywhere becomes XXXX (an engine word that changes is added to "masked_words")."""
+    if not aadhaar:
+        return
+    eng = page.get("ocr_engine")
+    if isinstance(eng, dict):
+        ocr_engine.cross_mask(eng, aadhaar)
+        hit = set()
+        page["ocr_engine"] = eng = ocr_engine.scrub(eng, aadhaar, hit)
+        if hit:
+            eng["masked_words"] = sorted(set(eng.get("masked_words") or []) | hit)
+    for key in ("ocr_uncertain_spans", "ocr_uncertain_numbers"):
+        if page.get(key):
+            page[key] = ocr_engine.scrub(page[key], aadhaar)
 
 
 def uncertain_overlap(page: dict, start: int, end: int) -> dict | None:
@@ -461,6 +493,26 @@ async def _read_in_batches(images, audit=None) -> list[dict]:
     return out
 
 
+def _orientation(im) -> int:
+    """The EXIF orientation tag of an image (1 = upright, 2..8 = mirrored / turned), 1 when absent or unreadable."""
+    try:
+        v = int(im.getexif().get(0x0112) or 1)
+    except Exception:
+        return 1
+    return v if 1 <= v <= 8 else 1
+
+
+def _upright(im):
+    """The image turned as its EXIF orientation says (PIL.ImageOps.exif_transpose), unchanged without the tag."""
+    if _orientation(im) <= 1:
+        return im
+    from PIL import ImageOps
+    try:
+        return ImageOps.exif_transpose(im)
+    except Exception:
+        return im
+
+
 def _img_bytes(im) -> bytes:
     buf = io.BytesIO(); im.convert("RGB").save(buf, "PNG"); return buf.getvalue()
 
@@ -502,7 +554,9 @@ async def _read_pages(path: Path, audit=None) -> list[dict]:
         from PIL import Image, ImageSequence
         im = Image.open(path)
         if getattr(im, "n_frames", 1) > 1:  # multi-frame TIFF: frames rendered and read in batches like PDF pages
-            return await _read_in_batches((_img_bytes(f.copy()) for f in ImageSequence.Iterator(im)), audit)
+            return await _read_in_batches((_img_bytes(_upright(f) if _orientation(f) > 1 else f.copy()) for f in ImageSequence.Iterator(im)), audit)
+        if _orientation(im) > 1:  # a phone photo stored sideways with an EXIF orientation: read the turned image
+            return [await ocr_page(_img_bytes(_upright(im)), audit)]
         return [await ocr_page(path.read_bytes(), audit)]
     if ext in OFFICE_EXT:
         if ext == ".docx":

@@ -316,13 +316,16 @@ def span_coverage(tmap, text, start, end):
     return covered / total if total else 0.0
 
 
-def masked_boxes(words, pad=0.003):
-    """Boxes of the engine's masked Aadhaar groups (word text exactly "XXXX"), padded, for blacking out the page preview."""
-    out = []
-    for w in words or ():
+def masked_boxes(words, pad=0.003, indices=None):
+    """Boxes of the words that held masked Aadhaar digits, padded, for blacking out the page preview: the words at `indices` (the
+    engine records which words it masked, item 8.3), else, for pages read before it did, every word containing "XXXX" ("XXXX",
+    "(XXXX", "XXXX-XXXX-2200", "Aadhaar:XXXX"). The whole word box is filled: over-masking is safe, under-masking is not."""
+    out, words = [], list(words or ())
+    pick = sorted({i for i in indices if isinstance(i, int) and 0 <= i < len(words)}) if indices is not None else \
+        [i for i, w in enumerate(words) if isinstance(w, (list, tuple)) and w and MASK_TEXT in str(w[0])]
+    for i in pick:
         try:
-            if str(w[0]) == MASK_TEXT:
-                out.append(_padded(_box(w), pad))
+            out.append(_padded(_box(words[i]), pad))
         except (TypeError, ValueError, IndexError):
             continue
     return out

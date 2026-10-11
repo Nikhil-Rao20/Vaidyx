@@ -66,6 +66,8 @@ def main(label, baseline):
         ("Summary omission", f"{run.get('sum_hit')}/{run.get('sum_total')} key fields" if "sum_hit" in run else None,
          f"{base.get('sum_hit')}/{base.get('sum_total')}" if "sum_hit" in base else "n/a", ">= 47/48 (>= baseline)",
          run.get("sum_hit", 0) >= max(47, base.get("sum_hit", 0)) if "sum_hit" in run else None),
+        ("Independent OCR engine (8.3)", (((d := RUNS / label / "ocr_engine.log").exists() and d.read_text().strip()[:60]) or "not found") if "ocr_engine" in run["rc"] else None,
+         "n/a", "installed, or TB_OCR_ENGINE=off", run["rc"]["ocr_engine"] == 0 if "ocr_engine" in run["rc"] else None),
         ("Browser UI", f"{run.get('ui_errors')} errors recorded" if "ui_errors" in run else None, f"{base.get('ui_errors')} errors recorded" if "ui_errors" in base else "n/a",
          "no JS errors on /tb", run.get("ui_errors") == 0 if "ui_errors" in run else None),
         ("Timings", ", ".join(f"{k.replace('_seconds', '')} {fmt(run.get(k))} s" for k in ("ingest_seconds", "ask_single_seconds", "qa_median_seconds", "sum_mean_seconds") if run.get(k) is not None) or None,

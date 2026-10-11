@@ -426,7 +426,9 @@ def setup_tumour_board_routes():
         d = store.get_doc(case_id, doc_id)
         if not d:
             raise HTTPException(404, "document not found")
-        return scanned.with_source_methods(d)  # facts say whether they were read from a scan (V1 item 8.1)
+        # as the clinicians confirmed it (V1 item 2.2; review M1: a confirmed value no longer shows as the model's reading), facts saying
+        # whether they were read from a scan (V1 item 8.1)
+        return scanned.with_source_methods(confirm.apply_to_doc(d, store.get_state(case_id)))
 
     @r.get("/cases/{case_id}/documents/{doc_id}/file")
     async def doc_file(case_id: str, doc_id: str, request: Request, render: int = 0, page: int = 0):

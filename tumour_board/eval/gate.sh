@@ -23,6 +23,8 @@ step() {  # name, command...
   "$@" > "$OUT/$name.log" 2>&1; local rc=$?
   echo "=== $name finished rc=$rc in $(( $(date +%s) - t0 )) s" | tee -a "$OUT/run_timings.txt"
 }
+# V1 item 8.3: the Tesseract unit tests skip without the binary, so its presence is a check of its own (passes when TB_OCR_ENGINE=off)
+step ocr_engine "$PY" -c "from tumour_board import ocr_engine as o; import sys; print(o.engine_info() or o.unavailable_note()); sys.exit(0 if o.available() or o.turned_off() else 1)"
 [ -d tumour_board/tests ] && step unit "$PY" -m pytest tumour_board/tests -q
 step e2e_api "$PY" -m tumour_board.eval.e2e_api --password "$PW"
 [ $SKIP_UI = 1 ] || step ui_test env LD_LIBRARY_PATH=/data/vaidyx/venv/pdf/lib "$PY" -m tumour_board.eval.ui_test --password "$PW" --viewports "${TB_GATE_VIEWPORTS:-desktop,tablet,phone}" --out "$OUT/ui_shots"

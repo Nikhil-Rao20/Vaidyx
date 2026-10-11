@@ -44,6 +44,20 @@ def no_guideline_index(monkeypatch):
     monkeypatch.setattr(guidelines, "index", lambda: _NoGuidelines())
 
 
+class _NoCaseIndex:
+    def search(self, q, k=60):
+        return []
+
+
+@pytest.fixture(autouse=True)
+def no_case_index(monkeypatch):
+    """The Case File search index (chunk embeddings on CPU, about 14 s to load the model) is never built in the unit suite: every
+    ingestion job ends by warming it (service.process_docs), which made whichever test first awaited a job take 14 to 17 s.
+    search.index() is an empty stub; no unit test reaches the embedding search (context_for fits the whole Case File)."""
+    from tumour_board import search
+    monkeypatch.setattr(search, "index", lambda case_id: _NoCaseIndex())
+
+
 @pytest.fixture
 def demo_cases(data_root):
     """TB-001 (lung), TB-002 (breast), TB-003 (rectum) copied into the temporary data root."""

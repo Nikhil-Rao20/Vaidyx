@@ -86,7 +86,9 @@ def aadhaar_boxes(doc, page_index=0) -> list:
     if not isinstance(page_index, int) or not 0 <= page_index < len(pages) or not isinstance(pages[page_index], dict):
         return []
     eng = pages[page_index].get("ocr_engine")
-    return ocr_boxes.masked_boxes(eng["words"]) if isinstance(eng, dict) and eng.get("words") else []
+    if not (isinstance(eng, dict) and eng.get("words")):
+        return []
+    return ocr_boxes.masked_boxes(eng["words"], indices=eng.get("masked_words") if isinstance(eng.get("masked_words"), list) else None)
 
 
 def masked_png(im, boxes) -> bytes:
@@ -102,33 +104,42 @@ def masked_png(im, boxes) -> bytes:
     return buf.getvalue()
 
 
+IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff")
+
+
 def preview_bytes(path, doc, render=False, page=0):
-    """(bytes, media type) for the document preview with Aadhaar blacked out (V1 item 8.4), or None when nothing needs masking (the
-    caller then serves the file as before): a PDF page rendered at scale 1.6, or an image file read as stored (no EXIF rotation, the
-    orientation the engine read)."""
+    """(bytes, media type) for the document preview with Aadhaar blacked out (V1 item 8.4), or None when the file can be served as
+    stored: a PDF page rendered at scale 1.6 (render); an image as PNG when it has Aadhaar boxes, an EXIF rotation (turned upright,
+    as ingest turns it before the reads, so the engine's boxes fit), or is a TIFF (browsers cannot show it; render picks the frame,
+    one page per frame). A PDF with no pages gives None."""
     from pathlib import Path
-    from PIL import Image
+    from PIL import Image, ImageOps
     ext = Path(path).suffix.lower()
+    try:
+        page = max(0, int(page))
+    except (TypeError, ValueError):
+        page = 0
     if render and ext == ".pdf":
         import pypdfium2 as pdfium
         pdf = pdfium.PdfDocument(str(path))
         try:
-            n = max(0, min(int(page), len(pdf) - 1))
+            if len(pdf) == 0:
+                return None
+            n = min(page, len(pdf) - 1)
             boxes = aadhaar_boxes(doc, n)
             im = pdf[n].render(scale=1.6).to_pil()
         finally:
             pdf.close()
-        import io
-        if not boxes:
-            buf = io.BytesIO(); im.save(buf, "PNG"); return buf.getvalue(), "image/png"
         return masked_png(im, boxes), "image/png"
-    if ext not in (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"):
+    if ext not in IMAGE_EXT:
         return None
-    boxes = aadhaar_boxes(doc, 0)
-    pages = (doc or {}).get("pages") or []
-    engine = bool(pages) and isinstance(pages[0], dict) and isinstance(pages[0].get("ocr_engine"), dict)
     with Image.open(path) as im:
-        rotated = im.getexif().get(274) not in (None, 1)  # a browser would turn it by its EXIF orientation; the engine's boxes are not turned
-        if boxes or (engine and rotated):
-            return masked_png(im, boxes), "image/png"
+        frames = getattr(im, "n_frames", 1)
+        n = min(page, frames - 1) if render else 0
+        if n:
+            im.seek(n)
+        boxes = aadhaar_boxes(doc, n)
+        rotated = im.getexif().get(274) not in (None, 1)
+        if boxes or rotated or ext in (".tif", ".tiff"):
+            return masked_png(ImageOps.exif_transpose(im) if rotated else im, boxes), "image/png"
     return None

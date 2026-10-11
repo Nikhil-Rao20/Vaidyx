@@ -17,11 +17,13 @@ Per engine:
   false alarms of the check (ocr_engine.engine_spans): (a) with the reference text as the transcription (any flagged line
       is a false alarm), (b) with the reader's real stored transcriptions (data/tumour_board/cases/TB-00{1..6}/docs/*/doc.json,
       pages read by "vision-transcription"; flagged lines are reported, a flag there may be a real reader slip)
-  injected single-digit errors: for each reference line with a compared number, one digit changed (seeded): is that line
-      flagged? (lines already flagged in (a) are counted separately)
+  injected single-digit errors: for each reference line with a compared number, one digit changed (substitution), one digit
+      added to a number (insertion) and one digit removed from a number of two or more digits (deletion), each seeded and
+      scored separately: is that line flagged? (lines already flagged in (a) are counted separately)
   review load: flagged lines per page in (b)
 
-Engine outputs are cached in <out>/cache/<engine>/ (synthetic text only); --fresh reads again. docTR runs in its own
+Engine outputs are cached in <out>/cache/<engine>/ (synthetic text only); --fresh reads again (--fresh tesseract: that
+engine only). docTR runs in its own
 environment (/data/vaidyx/venv/doctr, CPU torch, weights in DOCTR_CACHE_DIR inside that environment) through the
 --doctr-worker mode of this file, which imports nothing from the app.
 """
@@ -182,8 +184,8 @@ def run_doctr(pages: list, cache: Path, fresh: bool) -> dict:
         subprocess.run([DOCTR_PY, "-I", str(Path(__file__).resolve()), "--doctr-worker", str(tmp / "todo.json"), str(tmp / "out.json")],
                        check=True, env=env)
         for pid, r in json.loads((tmp / "out.json").read_text()).items():
-            text, words, n = ocr_engine.mask_words(r["text"], r["words"])
-            r.update(text=text, words=words, engine="doctr")
+            text, words, n, idx = ocr_engine.mask_words(r["text"], r["words"])
+            r.update(text=text, words=words, engine="doctr", masked_words=idx)
             if n:
                 r["aadhaar_masked"] = n
             _cache_file(cache, pid).write_text(json.dumps(r))
@@ -237,18 +239,37 @@ def number_scores(ref: str, eng: str) -> dict:
     return {"ref_numbers": nref, "engine_numbers": neng, "hit_strict": strict, "hit_digits": digits}
 
 
-def inject(line: str, seed: str):
-    """The line with one digit of a compared number changed, or None when the line has no compared number."""
+KINDS = ("substitution", "insertion", "deletion")
+
+
+def inject(line: str, seed: str, kind: str = "substitution"):
+    """The line with one digit of a compared number changed (substitution), one digit added next to a digit of a compared
+    number (insertion) or one digit of a compared number of two or more digits removed (deletion); None when the line has
+    no such number. The change must change the line's numbers as digits (a moved decimal point is not an error)."""
     import random
-    rng = random.Random(seed)
+    rng = random.Random(seed if kind == "substitution" else f"{seed}:{kind}")  # substitutions as in the first run of 8.3
     base = ingest._ocr_line_numbers(line)
     if not base:
         return None
-    pos = [k for k, ch in enumerate(line) if ch.isdigit()]
+    digits = lambda t: sorted(ocr_engine._digits(n) for n in ingest._ocr_line_numbers(t))
+    if kind == "deletion":
+        spans = [m.span() for m in ingest._NUM.finditer(line) if len(ocr_engine._digits(m.group(0))) >= 2]
+        pos = [k for a, b in spans for k in range(a, b) if line[k].isdigit()]
+    else:
+        pos = [k for k, ch in enumerate(line) if ch.isdigit()]
     rng.shuffle(pos)
     for k in pos:
-        new = line[:k] + rng.choice([d for d in "0123456789" if d != line[k]]) + line[k + 1:]
-        if ingest._ocr_line_numbers(new) != base:
+        if kind == "substitution":
+            new = line[:k] + rng.choice([d for d in "0123456789" if d != line[k]]) + line[k + 1:]
+            if ingest._ocr_line_numbers(new) != base:
+                return new
+            continue
+        if kind == "insertion":
+            at = k + rng.choice((0, 1))
+            new = line[:at] + rng.choice("0123456789") + line[at:]
+        else:
+            new = line[:k] + line[k + 1:]
+        if digits(new) != digits(line) and sum(map(len, digits(new))) - sum(map(len, digits(line))) == (1 if kind == "insertion" else -1):
             return new
     return None
 
@@ -266,15 +287,23 @@ def naive_spans(full: str, eng: str) -> list:
 
 CHECKS = {  # name -> spans(transcription, engine read dict)
     "naive (3.3 rule as is)": lambda full, r: naive_spans(full, r["text"]),
-    "engine_spans, one read": lambda full, r: ocr_engine.engine_spans(full, r["text"]),
-    "engine_spans + confirming re-read (shipped)": lambda full, r: (
+    "substitution, one read": lambda full, r: ocr_engine.engine_spans(full, r["text"]),
+    "substitution + insertion / deletion, one read": lambda full, r: sorted(
+        {(s["start"], s["end"]): s for s in ocr_engine.engine_spans(full, r["text"]) + ocr_engine.indel_spans(full, r["text"], r.get("words"))}.values(),
+        key=lambda s: s["start"]),
+    "substitution, confirming re-read" + (" (8.3 rule)" if ocr_engine.CHECK_INDELS else " (shipped)"): lambda full, r: (
         ocr_engine.confirm_spans(s, full, r["recheck"]["text"]) if (s := ocr_engine.engine_spans(full, r["text"])) else []),
+    "substitution + insertion / deletion, confirming re-read" + (" (shipped)" if ocr_engine.CHECK_INDELS else " (not shipped)"): lambda full, r: (
+        ocr_engine.confirmed_spans(full, r["text"], r["recheck"]["text"], indels=True, words=r.get("words"))
+        if ocr_engine.engine_spans(full, r["text"]) or ocr_engine.indel_spans(full, r["text"], r.get("words")) else []),
 }
+SHIPPED = next(k for k in CHECKS if k.endswith("(shipped)"))
 
 
 def check_measures(pages: list, reads: dict, spans_fn) -> dict:
-    fa_a = fa_b = b_pages = inj = det = inj_clean = det_clean = 0
-    fa_a_lines, fa_b_lines, missed, re_a, re_b = [], [], [], 0, 0
+    fa_a = fa_b = b_pages = 0
+    fa_a_lines, fa_b_lines, re_a, re_b = [], [], 0, 0
+    kinds = {k: {"injected": 0, "detected": 0, "injected_clean": 0, "detected_clean": 0, "missed": []} for k in KINDS}
     for p in pages:
         r = reads.get(p["id"])
         if r is None:
@@ -282,31 +311,41 @@ def check_measures(pages: list, reads: dict, spans_fn) -> dict:
         ref = p["reference"]
         sa = spans_fn(ref, r)
         fa_a += len(sa)
-        re_a += bool(ocr_engine.engine_spans(ref, r["text"]))
+        re_a += bool(ocr_engine.candidates(ref, r["text"], r.get("words")))
         fa_a_lines += [(p["id"], s["line"], s["numbers"]) for s in sa]
         if p.get("stored") is not None:
             sb = spans_fn(p["stored"], r)
             fa_b += len(sb); b_pages += 1
-            re_b += bool(ocr_engine.engine_spans(p["stored"], r["text"]))
+            re_b += bool(ocr_engine.candidates(p["stored"], r["text"], r.get("words")))
             fa_b_lines += [(p["id"], s["line"], s["numbers"]) for s in sb]
         flagged_a = {s["start"] for s in sa}
         for k, (start, end, line, _) in enumerate(ingest._ocr_lines(ref)):
-            new = inject(line, f"{p['id']}:{k}")
-            if new is None:
-                continue
-            full = ref[:start] + new + ref[end:]
-            hit = any(s["start"] == start for s in spans_fn(full, r))
-            inj += 1; det += hit
-            if start not in flagged_a:
-                inj_clean += 1; det_clean += hit
-                if not hit:
-                    missed.append((p["id"], line, new))
-    return {"false_alarms_reference": fa_a, "false_alarm_lines_reference": fa_a_lines,
-            "flagged_stored": fa_b, "stored_pages": b_pages, "flagged_lines_per_page_stored": round(fa_b / b_pages, 3) if b_pages else None,
-            "flagged_lines_stored": fa_b_lines, "pages_needing_reread_reference": re_a, "pages_needing_reread_stored": re_b,
-            "injected": inj, "injected_detected": det, "injected_rate": round(det / inj, 4) if inj else None,
-            "injected_clean": inj_clean, "injected_clean_detected": det_clean,
-            "injected_clean_rate": round(det_clean / inj_clean, 4) if inj_clean else None, "missed_examples": missed[:30]}
+            for kind, c in kinds.items():
+                new = inject(line, f"{p['id']}:{k}", kind)
+                if new is None:
+                    continue
+                full = ref[:start] + new + ref[end:]
+                hit = any(s["start"] == start for s in spans_fn(full, r))
+                c["injected"] += 1; c["detected"] += hit
+                if start not in flagged_a:
+                    c["injected_clean"] += 1; c["detected_clean"] += hit
+                    if not hit:
+                        c["missed"].append((p["id"], line, new))
+    sub = kinds["substitution"]
+    out = {"false_alarms_reference": fa_a, "false_alarm_lines_reference": fa_a_lines,
+           "flagged_stored": fa_b, "stored_pages": b_pages, "flagged_lines_per_page_stored": round(fa_b / b_pages, 3) if b_pages else None,
+           "flagged_lines_stored": fa_b_lines, "pages_needing_reread_reference": re_a, "pages_needing_reread_stored": re_b,
+           "injected": sub["injected"], "injected_detected": sub["detected"],
+           "injected_rate": round(sub["detected"] / sub["injected"], 4) if sub["injected"] else None,
+           "injected_clean": sub["injected_clean"], "injected_clean_detected": sub["detected_clean"],
+           "injected_clean_rate": round(sub["detected_clean"] / sub["injected_clean"], 4) if sub["injected_clean"] else None,
+           "missed_examples": sub["missed"][:30], "by_kind": {}}
+    for kind, c in kinds.items():
+        out["by_kind"][kind] = {"injected": c["injected"], "detected": c["detected"],
+                                "rate": round(c["detected"] / c["injected"], 4) if c["injected"] else None,
+                                "injected_clean": c["injected_clean"], "detected_clean": c["detected_clean"],
+                                "missed_examples": c["missed"][:30]}
+    return out
 
 
 def _q(xs: list, f: float) -> float:
@@ -350,16 +389,23 @@ def report(results: dict) -> str:
     L += ["", "Recall: reference numbers found on the aligned engine line; precision: engine numbers found on the aligned reference "
           "line. 'Digits only' ignores decimal points and commas (Tesseract often drops a decimal point).", "",
           "## The check", "",
-          "| Engine | Check | False alarms (a) reference as transcription | Flagged (b) stored reader transcriptions | Flagged lines per page (b) | Injected one-digit errors caught | Caught, lines not already flagged |",
-          "|---|---|---|---|---|---|---|"]
+          "| Engine | Check | False alarms (a) reference as transcription | Flagged (b) stored reader transcriptions | Flagged lines per page (b) | Substitutions caught | Insertions caught | Deletions caught |",
+          "|---|---|---|---|---|---|---|---|"]
+
+    def kind(c, k):
+        b = (c.get("by_kind") or {}).get(k)
+        return f"{b['detected']} / {b['injected']} ({_pct(b['rate'])})" if b else ""
     for name, m in results["engines"].items():
         for cname, c in m["checks"].items():
             L.append(f"| {name} | {cname} | {c['false_alarms_reference']} | {c['flagged_stored']} ({c['stored_pages']} pages) | "
-                     f"{c['flagged_lines_per_page_stored']} | {c['injected_detected']} / {c['injected']} ({_pct(c['injected_rate'])}) | "
-                     f"{c['injected_clean_detected']} / {c['injected_clean']} ({_pct(c['injected_clean_rate'])}) |")
+                     f"{c['flagged_lines_per_page_stored']} | {kind(c, 'substitution')} | {kind(c, 'insertion')} | {kind(c, 'deletion')} |")
+    L += ["", "Injected errors: one per reference line with a compared number and kind (substitution: one digit changed; insertion: one "
+          "digit added to a number; deletion: one digit removed from a number of two or more digits), the line then used as the "
+          "transcription; caught when that line is flagged. docTR rows: from the cached docTR reads of the first 8.3 run (docTR "
+          "was not run again); docTR has no confirming re-read in this evaluation."]
     t = results["engines"].get("tesseract")
     if t:
-        c = t["checks"]["engine_spans + confirming re-read (shipped)"]
+        c = t["checks"][SHIPPED]
         L += ["", f"Re-read (Tesseract at {t.get('reread_scale', 1.5)}x): {t['reread_seconds_median']} s median, {t['reread_seconds_p90']} s p90; "
               f"needed on {c['pages_needing_reread_reference']} of {t['pages']} pages in (a) and {c['pages_needing_reread_stored']} of "
               f"{c['stored_pages']} in (b)."]
@@ -369,9 +415,11 @@ def report(results: dict) -> str:
         for cname, c in m["checks"].items():
             if c["false_alarm_lines_reference"]:
                 L += [f"### False alarms (a): {name}, {cname}", ""] + [f"- `{pid}`: `{line}` {nums}" for pid, line, nums in c["false_alarm_lines_reference"][:15]] + [""]
-    sh = t["checks"]["engine_spans + confirming re-read (shipped)"] if t else None
-    if sh and sh["missed_examples"]:
-        L += ["### Injected errors the shipped check misses (examples)", ""] + [f"- `{pid}`: `{a}` -> `{b}`" for pid, a, b in sh["missed_examples"][:15]] + [""]
+    sh = t["checks"][SHIPPED] if t else None
+    for k in KINDS:
+        ex = ((sh or {}).get("by_kind") or {}).get(k, {}).get("missed_examples") or []
+        if ex:
+            L += [f"### Injected {k}s the shipped check misses (examples)", ""] + [f"- `{pid}`: `{a}` -> `{b}`" for pid, a, b in ex[:15]] + [""]
     return "\n".join(L)
 
 
@@ -398,19 +446,29 @@ RULE = ("Transcription lines and engine lines are aligned like the two model rea
         "that the line does not have (a substituted digit); a number the engine misses, cuts or merges is not evidence. Transcription "
         "lines without a partner are compared as a group with the unpaired engine lines of the same stretch. A flagged line is kept "
         "only when a second Tesseract read of the page at 1.5x scale doubts the same number of that line (run only on pages with a "
-        "flagged line); if that "
-        "re-read fails the flag is kept.")
+        "flagged line); if that re-read fails the flag is kept. A span's numbers are the transcription's numbers in doubt only, never "
+        "the engine's reading.\n\n"
+        "Insertion / deletion (V1 8.3 review, M2; ocr_engine.CHECK_INDELS): a line whose number the engine reads with one digit more "
+        "or less (not two numbers run together, not a digit next to a letter of the line, the decimal point not counted), kept only "
+        "when the 1.5x re-read reads the same other number on that line. " + (
+            f"Also required: the engine word holding the other number has a confidence of {ocr_engine.INDEL_MIN_CONF:.0f} or more (first read); without that floor 4 false alarms in (a) and (b), Tesseract cutting the leading digit of a small number in the TB-006 vitals table (\"17\" read as \"7\", confidence 34 to 66) the same way at 1.5x; with it 0 (floors 70 and 90 also 0; 80 shipped for margin). The floor is tuned on this same synthetic corpus. Shipped: no false alarm in (a) or (b)." if ocr_engine.CHECK_INDELS else
+            "Not shipped: on this corpus it raises false alarms in (a) and (b) (see the table: Tesseract cuts the leading digit of a "
+            "small number in the TB-006 vitals table, \"17\" read as \"7\", and does so again at 1.5x). An inserted or deleted digit "
+            "that both model reads share is therefore not caught by the engine (only the two-read check of 3.3 can catch it, when "
+            "the reads differ)."))
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--engines", default="tesseract,doctr")
     ap.add_argument("--doctr-pages", type=int, default=0, help="read only this many pages of the 100-page scan with docTR (0 = all)")
-    ap.add_argument("--fresh", action="store_true", help="read again instead of using the cache")
+    ap.add_argument("--fresh", nargs="?", const="all", default="",
+                    help="read again instead of using the cache (optionally only these engines, comma separated)")
     ap.add_argument("--out", default=None, help="output folder (default <data root>/eval/v1/phase8/ocr_engines)")
     args = ap.parse_args()
     out = Path(args.out) if args.out else config.DATA_ROOT / "eval" / "v1" / "phase8" / "ocr_engines"
     out.mkdir(parents=True, exist_ok=True)
+    fresh = lambda eng: args.fresh == "all" or eng in args.fresh.split(",")
     pages = corpus_pages()
     results = {"pages": len(pages), "stored_pages": sum(p["stored"] is not None for p in pages), "engines": {}, "rule": RULE}
     print(f"{results['pages']} scanned pages, {results['stored_pages']} with a stored transcription")
@@ -418,7 +476,7 @@ def main():
         if eng == "tesseract":
             info = ocr_engine.engine_info() or {}
             info["psm"] = ocr_engine.PSM
-            reads = run_tesseract(pages, out / "cache" / f"tesseract-psm{ocr_engine.PSM}", args.fresh)
+            reads = run_tesseract(pages, out / "cache" / f"tesseract-psm{ocr_engine.PSM}", fresh(eng))
             sub, checks = pages, CHECKS
         else:
             sub = pages
@@ -427,7 +485,7 @@ def main():
                 keep = {p["id"] for p in big[::max(1, len(big) // args.doctr_pages)][:args.doctr_pages]}
                 sub = [p for p in pages if not p["rel"].endswith(".pdf") or p["id"] in keep]
             info = {"name": "doctr", "version": "python-doctr 1.1.0, fast_base + crnn_vgg16_bn, CPU torch", "lines": "words regrouped into visual rows"}
-            native = run_doctr(sub, out / "cache" / "doctr", args.fresh)
+            native = run_doctr(sub, out / "cache" / "doctr", fresh(eng))
             reads = {pid: {**r, "text": rows(r["words"])} for pid, r in native.items()}
             results["engines"]["doctr (native block lines)"] = {**engine_measures(sub, native), "checks": {}, "info": info}
             checks = {k: v for k, v in CHECKS.items() if "re-read" not in k}

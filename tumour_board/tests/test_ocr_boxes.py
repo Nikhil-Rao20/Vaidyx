@@ -231,7 +231,7 @@ def test_small_differing_stretch_pairs_repeated_tokens_in_order():
 
 
 def test_aadhaar_masked_words():
-    words = layout([["Aadhaar", "XXXX", "XXXX", "4821", "UHID", "XXXXX"]])
+    words = layout([["Aadhaar", "XXXX", "XXXX", "4821", "UHID", "XXL"]])
     m = ob.masked_boxes(words)
     assert len(m) == 2
     for r, w in zip(m, [w for w in words if w[0] == "XXXX"]):
@@ -325,3 +325,11 @@ def test_quote_coverage_against_suggested_threshold():
     assert ob.span_coverage(tmap, text, *q) >= ob.SUGGESTED_COVERAGE
     assert ob.span_coverage(tmap, text, *span(text, "2.1")) == 0.0
     digits_safe(text, words, tmap)
+
+
+def test_masked_boxes_cover_every_masked_form_and_follow_the_engine_indices():
+    """Review S2: hyphenated, run-together and punctuation-attached groups are blacked out too; the engine's masked word indices win."""
+    words = layout([["Aadhaar:XXXX", "XXXX", "2200"], ["(XXXX", "XXXX-XXXX-2200", "XXXXXXXX2200", "UHID", "SYN-1"]])
+    assert len(ob.masked_boxes(words)) == 5  # every word containing XXXX (pages read before the engine kept indices)
+    assert len(ob.masked_boxes(words, indices=[0, 1, 6, 99, "x"])) == 3  # exactly the listed words; out-of-range and malformed indices ignored
+    assert ob.masked_boxes(words, indices=[]) == []

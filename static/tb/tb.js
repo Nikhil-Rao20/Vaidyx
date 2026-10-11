@@ -114,7 +114,8 @@ const scanPage = (id, page) => page !== undefined && page !== null && page !== "
 const isScan = (c) => !!c && (c.source_method ? c.source_method === "vision-transcription" : scanPage(c.doc_id, c.page));
 const scanChip = (c) => (isScan(c) ? ` <span class="chip c-scan" title="${SCAN_TITLE}">from scan (OCR)</span>` : "");
 // V1 item 8.2: a critical value (biomarkers, stage as recorded) read from a scan counts for the gate only once a clinician confirmed it on the image
-const critChip = (fid, f) => (S.facts?.[fid]?.critical && f && f.verification === "verified" && isScan(f) ? ` <span class="chip c-warn" title="Critical value read from a scan: it counts for the Pre-Authorization only after a clinician confirms it against the image">confirm on the scan</span>` : "");
+const scanNeeds = () => [...(S.data?.state?.gate?.requirements || []), ...(S.data?.state?.gate?.shown || [])].flatMap((r) => (r.needs || []).filter((n) => n.type === "confirm_value"));
+const critChip = (fid, f, docId) => (f && f.verification === "verified" && scanNeeds().some((n) => n.fact === fid && n.doc_id === (docId || f.doc_id)) ? ` <span class="chip c-warn" title="Critical value read from a scan: the Pre-Authorization asks a clinician to confirm it against the image">confirm on the scan</span>` : "");
 function citeHTML(c) {
   const label = `${c.doc_title || c.doc_id}${c.date ? " · " + fmtDate(c.date) : ""}`;
   return `<span class="cite" data-doc="${esc(c.doc_id)}" data-page="${c.page ?? ""}" data-start="${c.start ?? ""}" data-end="${c.end ?? ""}" title="&quot;${esc(c.quote)}&quot;${isScan(c) ? " (" + SCAN_TITLE + ")" : ""}">${esc(label)}${isScan(c) ? '<span class="scan-tag">from scan (OCR)</span>' : ""}</span>`;
@@ -122,7 +123,7 @@ function citeHTML(c) {
 document.addEventListener("click", (e) => {
   const c = e.target.closest(".cite");
   const roomCase = c && c.closest("#sessions") ? S.roomCase : null;  // a citation in the Board room opens the room's Case File
-  if (c) openDoc(c.dataset.doc, c.dataset.page !== "" ? { page: +c.dataset.page, start: +c.dataset.start, end: +c.dataset.end } : null,
+  if (c) openDoc(c.dataset.doc, c.dataset.page !== undefined && c.dataset.page !== "" ? { page: +c.dataset.page, start: +c.dataset.start, end: +c.dataset.end } : null,
     roomCase ? `/cases/${encodeURIComponent(roomCase)}/documents/${encodeURIComponent(c.dataset.doc)}` : undefined);
   if (e.target.id === "drawer" || e.target.closest("[data-close]")) $("#drawer").classList.add("hidden");
   if (e.target.id === "modal" || e.target.closest("[data-closemodal]")) $("#modal").classList.add("hidden");
@@ -335,10 +336,10 @@ async function confirmDocType(docId) {
   await recordConfirmation("confirm_doc_type", docId, { doc_type: v.doc_type }, v.reason);
 }
 // V1 item 8.2: a critical value read from a scan counts only after a clinician has read it on the image
-const IMG_EXT = [".png", ".jpg", ".jpeg", ".webp", ".bmp"];
+const IMG_EXT = [".png", ".jpg", ".jpeg", ".webp", ".bmp"], PAGED_EXT = [".pdf", ".tif", ".tiff"];  // PDF pages and TIFF frames are rendered by the server
 function scanImageURL(caseId, d, page) {
   const base = `/api/tb/cases/${encodeURIComponent(caseId)}/documents/${encodeURIComponent(d.doc_id)}/file`;
-  return d.ext === ".pdf" ? `${base}?render=1&page=${+page || 0}` : IMG_EXT.includes(d.ext) ? base : "";
+  return PAGED_EXT.includes(d.ext) ? `${base}?render=1&page=${+page || 0}` : IMG_EXT.includes(d.ext) ? base : "";
 }
 async function confirmValue(n) {
   const d = S.data.documents.find((x) => x.doc_id === n.doc_id) || { doc_id: n.doc_id }; const c = d.classification || {};
@@ -347,9 +348,12 @@ async function confirmValue(n) {
   const v = await confirmDialog({ title: `Confirm ${label} against the scan`,
     intro: `"${n.value}" was read from page ${page} of ${title}, a scanned page, by the vision reader (Qwen3.5-4B, Chinese, non-medical). Read ${label} on the image and record it exactly as written there; correct it if the transcription is wrong. It counts for the Pre-Authorization once you confirm it.`,
     html: img ? `<div class="confscan"><div class="scanwrap"><img src="${esc(img)}" alt="${esc(`Page ${page} of ${title}`)}">${(n.boxes || []).map((r) => boxDiv(r, "focus", `${label} as read`)).join("")}</div></div>${(n.boxes || []).length ? '<div class="small muted">Highlighted: where the value was read on the image (independent OCR engine word positions).</div>' : ""}` : `<div class="small muted">No image preview for this format: open the original from the Documents tab.</div>`,
-    fields: [{ id: "value", label: `${label} as written on the scan`, type: "text", required: true, value: n.value }], submit: "Confirm value" });
+    fields: [{ id: "match", label: "What the image shows", type: "select", required: true, value: "",
+      options: [["", "Choose after reading the image"], ["same", `The same as transcribed: "${n.value}"`], ["differs", "Something else: I type it below"]] },
+      { id: "value", label: `${label} as written on the image (only if it differs)`, type: "text", required: false, value: "" }], submit: "Confirm value" });
   if (!v) return;
-  await recordConfirmation("confirm_value", `${n.doc_id}:${n.fact}`, { value: v.value });
+  if (v.match === "differs" && !v.value) { toast("Type the value as written on the image"); return; }
+  await recordConfirmation("confirm_value", `${n.doc_id}:${n.fact}`, { value: v.match === "same" ? n.value : v.value });
 }
 async function waiveReq(reqId) {
   const r = S.data.state.gate?.requirements?.find((x) => x.id === reqId);
@@ -522,7 +526,7 @@ async function openDoc(docId, focus, base) {
     return out + esc(t.slice(pos));
   };
   const isImg = [".png", ".jpg", ".jpeg", ".webp", ".bmp"].includes(d.ext);
-  const isPdf = d.ext === ".pdf";
+  const isPdf = [".pdf", ".tif", ".tiff"].includes(d.ext);  // pages rendered by the server (TIFF: one frame per page)
   const preview = isImg ? `<div class="scanwrap"><img class="orig" src="/api/tb${base}/file" alt="Original document"><div id="ocrboxes"></div></div><div class="small muted" id="boxnote"></div>` :
     isPdf ? `<div class="scanwrap"><img class="orig" id="pdfimg" src="/api/tb${base}/file?render=1&page=${pg}" alt="Page preview"><div id="ocrboxes"></div></div><div class="small muted" id="boxnote"></div>` : `<div class="muted">No image preview for this format.</div>`;
   const drawBoxes = (pi) => {  // V1 item 8.4: the cited quote (strong) and this page's fields (light) on the scan image
@@ -544,15 +548,15 @@ async function openDoc(docId, focus, base) {
     ${datesKV(c)}
     ${d.department ? `<div>Uploaded by</div><div>${esc(deptName(d.department))}${d.uploaded_by ? " (" + esc(d.uploaded_by) + ")" : ""} · ${esc((d.added || "").slice(0, 16).replace("T", " "))}</div>` : ""}${idHTML}
     ${d.intake ? "" : `<div>Patient ID check</div><div>${d.identity === "match" ? "An identifier on the document matches the Case File patient" : d.identity === "name_match" ? "Patient name matches (no identifier agrees)" : d.identity === "id_differs" ? "The document prints an identifier this Case File does not know: verify it belongs to this patient" : "Not found in document: verify it belongs to this patient"}</div>`}
-    <div>Read by</div><div>${esc([...new Set(pages.map((p) => p.method))].join(", "))}${pages.some((p) => p.ocr_reads) ? " (two independent reads per scanned page; numbers compared)" : ""}</div></div>
+    <div>Read by</div><div>${esc([...new Set(pages.map((p) => p.method))].join(", "))}${pages.some((p) => p.ocr_reads) ? ` (two reads per scanned page by the vision reader${pages.some((p) => p.ocr_engine) ? " and one by the independent OCR engine (Tesseract)" : ""}; numbers compared)` : ""}</div></div>
     <div class="docview"><div>${preview}</div><div>
       ${pages.length > 1 ? `<div style="margin-bottom:6px">${pages.map((p, i) => `<button class="ghost sm" data-pg="${i}">Page ${i + 1}</button>`).join(" ")}</div>` : ""}
       <div class="doctext" id="doctext">${marks(pg)}</div>
       <h4 style="color:#1f2933">Fields found in this document</h4>
       <table class="t"><tbody>${Object.entries(d.facts || {}).map(([k, f]) => `<tr><td>${esc(k)}</td><td><b>${esc(f.value)}</b>${f.state === "pending" ? ' <span class="chip c-warn">pending</span>' : ""}</td>
-        <td><span class="chip ${f.verification === "verified" ? "c-ok" : "c-rev"}" title="${esc(f.reason || "")}">${esc(f.verification)}</span>${f.polarity === "negated" ? ' <span class="chip c-mute" title="The value is a negative finding (no / not / negative / absent)">negated</span>' : ""}${f.verification === "confirmed" ? "" : scanChip({ ...f, doc_id: d.doc_id })}${critChip(k, f)}</td><td class="small muted">"${esc(f.quote)}"</td></tr>`).join("") || '<tr><td class="muted">None</td></tr>'}</tbody></table>
+        <td><span class="chip ${f.verification === "verified" ? "c-ok" : "c-rev"}" title="${esc(f.reason || "")}">${esc(f.verification)}</span>${f.polarity === "negated" ? ' <span class="chip c-mute" title="The value is a negative finding (no / not / negative / absent)">negated</span>' : ""}${f.verification === "confirmed" ? ` <span class="chip c-ok" title="Read by the clinician in the source document; no model quote">confirmed by ${esc(f.confirmed_by || "clinician")}</span>` : scanChip({ ...f, doc_id: d.doc_id })}${critChip(k, f, d.doc_id)}</td><td class="small muted">"${esc(f.quote)}"</td></tr>`).join("") || '<tr><td class="muted">None</td></tr>'}</tbody></table>
       ${pages.some((p) => p.flags?.length) ? `<div class="flag review" style="margin-top:8px"><div class="k">Hindi / regional text or handwriting</div>${esc([...new Set(pages.flatMap((p) => p.flags || []))].join("; "))}. Flagged lines: ${pages.map((p, i) => (p.flagged_lines || []).map((l) => `page ${i + 1}: "${esc(l.line.slice(0, 80))}"`).join("; ")).filter(Boolean).join("; ")}. The text is transcribed as written and never translated; values taken from these lines are marked for a person's check.</div>` : ""}
-      ${pages.some((p) => p.ocr_uncertain_numbers?.length) ? `<div class="flag review" style="margin-top:8px"><div class="k">OCR disagreement</div>The two reads of this scanned page differ on these numbers: ${esc(pages.flatMap((p) => p.ocr_uncertain_numbers || []).join(", "))}. Values containing them are marked for expert review; read the scan image.</div>` : ""}
+      ${pages.some((p) => p.ocr_uncertain_numbers?.length) ? `<div class="flag review" style="margin-top:8px"><div class="k">OCR disagreement</div>The reads of this scanned page (vision reader twice${pages.some((p) => p.ocr_engine) ? ", independent OCR engine" : ""}) differ on these numbers: ${esc(pages.flatMap((p) => p.ocr_uncertain_numbers || []).join(", "))}. Values containing them are marked for expert review; read the scan image.</div>` : ""}
     </div></div>`;
   $("#drawer").classList.remove("hidden");
   drawBoxes(pg);
