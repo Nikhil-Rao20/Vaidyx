@@ -102,6 +102,8 @@ def run_flow(b, base, pw, out, size, sfx, errors):
         if "Amended: version 2" not in pg.inner_text("#tab-board") or "Doxorubicin 60 mg/m2" not in pg.inner_text("#tab-board"):
             errors.append("Board tab: the corrected dose did not show as the amended version 2")
         shot("TB-002_board_resolved", full_page=True)
+        if pg.locator("#btn-side").is_visible() and not pg.evaluate("document.body.classList.contains('side-open')"):
+            pg.click("#btn-side"); pg.wait_for_timeout(350)  # narrow screens: the inbox button sits in the slide-over side panel
         if pg.locator("#btn-inbox").is_visible():
             pg.click("#btn-inbox"); pg.wait_for_selector("#inbox .card", timeout=20000); pg.wait_for_timeout(500); shot("inbox_board_action", full_page=True)
     pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
