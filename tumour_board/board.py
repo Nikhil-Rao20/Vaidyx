@@ -342,3 +342,15 @@ def _role(role) -> str:
     return role
 
 
+def set_agent(sid, case_id, role, status, **info) -> dict:
+    s = _need(sid); _open(s)
+    _item(s, case_id); _role(role)
+    if status not in AGENT_STATUSES:
+        raise ValueError(f"Agent status must be one of: {', '.join(AGENT_STATUSES)}")
+    s["agents"].setdefault(case_id, {})[role] = {"status": status, "at": store.now_iso(), **info}
+    _save(s)
+    msg = {"message": str(info["message"])[:300]} if info.get("message") else {}
+    _audit(sid, "agent", "system", case_id, "agent" if status in ("ready", "error", "no_documents") else None, role=role, status=status, **msg)
+    return s
+
+

@@ -138,11 +138,32 @@ def test_members_and_participants(cases):
         board.remove_member(sid, "M000000", "coord")
 
 
+def test_set_agent(cases):
+    sid = _session(cases)["id"]
+    board.set_agent(sid, "TB-A", "pathology", "running")
+    s = board.set_agent(sid, "TB-A", "pathology", "ready", generated="2026-10-20T09:00:00", seconds=12.5, reused=False)
+    a = s["agents"]["TB-A"]["pathology"]
+    assert a["status"] == "ready" and a["seconds"] == 12.5 and a["at"]
+    with pytest.raises(ValueError, match="Unknown agent role"):
+        board.set_agent(sid, "TB-A", "cardiology", "ready")
+    with pytest.raises(ValueError, match="status"):
+        board.set_agent(sid, "TB-A", "pathology", "done")
+    with pytest.raises(ValueError, match="not on the agenda"):
+        board.set_agent(sid, "TB-OTHER", "pathology", "ready")
+    assert [e["kind"] for e in store.read_audit("TB-A") if e["kind"] == "board_session_agent"] == ["board_session_agent"]  # ready only
+
+
 def test_audit_session_public_writer(cases, data_root):
     sid = _session(cases)["id"]
     board.audit_session(sid, {"kind": "agents_prepare", "by": "coord", "roles": ["pathology"], "session": "ignored"})
     ev = _jsonl(data_root / "sessions" / "audit.jsonl")[-1]
     assert ev["kind"] == "agents_prepare" and ev["session"] == sid and ev["roles"] == ["pathology"] and ev["ts"]
     assert board.read_audit()[-1] == ev
+
+
+def test_set_agent_creates_missing_entry(cases):
+    sid = _session(cases)["id"]
+    s = board.set_agent(sid, "TB-C", "radiation_oncology", "queued")
+    assert s["agents"]["TB-C"]["radiation_oncology"]["status"] == "queued" and board.get(sid)["agents"] == s["agents"]
 
 

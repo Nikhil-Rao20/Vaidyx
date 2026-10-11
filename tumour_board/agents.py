@@ -567,3 +567,84 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
         "approximate": brief["approximate"], "seconds": brief["seconds"], "references": sum(len(p["references"]) for p in pts2),
         "points_with_indian_reference": sum(any(x["region"] == "India" for x in p["references"]) for p in pts2), "references_dropped": refs_dropped})
     yield {"type": "brief", "brief": brief}
+
+
+# V1 item 6.2: the agent of an absent specialty answers the board's questions live, from the Case File records and its guideline pack
+LIVE_LABEL = "AI support (role-specific)"
+LIVE_SCHEMA = {"type": "object", "additionalProperties": False, "properties": {
+    "answer_found": {"type": "boolean"},
+    "statements": qa.ANSWER_SCHEMA["properties"]["statements"],
+    "references": POINT["properties"]["references"]}, "required": ["answer_found", "statements", "references"]}
+
+
+def _live_system(role):
+    return (_system(role).replace("You prepare a specialty-specific brief", "You answer the board's questions")
+            + " Now the board asks you a question during the meeting. Answer ONLY from the documents provided, in short factual statements; "
+            "copy values exactly; every statement cites the document id and an exact quote copied character for character. If the documents "
+            "do not contain the answer, set answer_found=false and return no statements. Guideline passages (G1, G2 ...) go under 'references' "
+            "only when they say what a report or record should contain, never as an answer about this patient.")
+
+
+async def ask(case_id, role, question, history=None):
+    """One live question to the agent of `role` (V1 item 6.2): scope check first (a refused question gets no answer), the Case File
+    records and the specialty pack as context, every statement verified against its quote (exact only, like Ask the Case File), the scope
+    guardrail on the output, references verified verbatim and limited to record and report contents. Returns the answer record."""
+    if role not in ROLES:
+        raise ValueError("unknown role")
+    t0, au, r = time.time(), store.auditor(case_id), ROLES[role]
+    case = store.get_case(case_id)
+    base = {"role": role, "label": r["label"], "kind": LIVE_LABEL, "question": question, "statements": [], "references": [], "removed": [],
+            "dropped_unverified": 0, "model": config.models()["reasoner"].get("label") or "reasoner"}
+    if not case.get("protocol"):
+        return {**base, "status": "not_listed", "message": NOT_LISTED, "seconds": round(time.time() - t0, 2)}
+    au({"kind": "agent_question", "role": role, "question": question})
+    hit = guardrails.rule_check(question)
+    scope_task = asyncio.create_task(guardrails.check_input(question, au))
+    if hit:  # refused by rule: no retrieval and no answer call
+        gate = await scope_task
+        au({"kind": "guardrail_input", "where": f"agent {role}", "category": gate["category"], "layer": gate["layer"]})
+        return {**base, "status": "out_of_scope", "category": gate["category"], "message": gate["message"], "seconds": round(time.time() - t0, 2)}
+    values = await asyncio.to_thread(search.find_values, case_id, question)
+    context, mode = await asyncio.to_thread(search.context_for, case_id, question, 40000)
+    if values["hits"]:
+        context += "\n\n=== LINES MATCHING THE QUESTION (for convenience; cite the document) ===\n" + \
+                   "\n".join(f"[{h['doc_id']} | {h['date'] or '?'}] {h['text']}" for h in values["hits"][:25])
+    refs = {}
+    if guidelines.ready():  # never wait for a guideline index rebuild; the records alone still answer
+        try:
+            gl = await asyncio.to_thread(_search_guidelines, role, case, question, refs)
+            context += f"\n\n=== GUIDELINE REFERENCES ({r['label'].lower()} pack, Indian sources first; reference text, never a fact about this patient) ===\n{gl}"
+        except Exception as e:
+            au({"kind": "agent_guidelines_unavailable", "role": role, "error": str(e)[:200]})
+    msgs = [{"role": "system", "content": _live_system(role)}]
+    for h in (history or [])[-4:]:
+        if h.get("role") in ("user", "assistant") and isinstance(h.get("content"), str):
+            msgs.append({"role": h["role"], "content": h["content"][:2000]})
+    msgs.append({"role": "user", "content": f"DOCUMENTS:\n{context}\n\nQUESTION FROM THE BOARD: {question}"})
+    answer_task = asyncio.create_task(llm.chat("reasoner", msgs, json_schema=LIVE_SCHEMA, max_tokens=1200, purpose=f"agent {role} live answer", audit=au))
+    gate = await scope_task
+    if not gate["allowed"]:
+        answer_task.cancel()
+        au({"kind": "guardrail_input", "where": f"agent {role}", "category": gate["category"], "layer": gate["layer"]})
+        return {**base, "status": "out_of_scope", "category": gate["category"], "message": gate["message"], "seconds": round(time.time() - t0, 2)}
+    a = await answer_task
+    stmts, drop = qa.verify(case_id, a.get("statements"))  # exact quotes only, as in Ask the Case File
+    removed = [{**x, "where": "answer"} for x in drop]
+    kept = []
+    for st_ in stmts:
+        iss = guardrails.scan_output(st_["text"])
+        if iss:
+            removed.append(_removed(st_, "guardrail", "; ".join(i["reason"] for i in iss), "answer"))
+        else:
+            kept.append(st_)
+    if any(x["reason"] == "guardrail" for x in removed):
+        au({"kind": "guardrail_output", "where": f"agent {role} live answer", "issues": [x["text"] for x in removed if x["reason"] == "guardrail"]})
+    references, refs_dropped = _verify_references(a.get("references"), refs, case["protocol"]) if kept else ([], len(a.get("references") or []))
+    references.sort(key=lambda x: x["region"] != "India")  # references only beside a verified answer: never guideline text as the answer
+    out = {**base, "status": "answered" if kept else "not_documented", "statements": kept, "references": references, "removed": removed,
+           "dropped_unverified": len(drop), "references_dropped": refs_dropped, "mode": mode, "answered_at": store.now_iso(),
+           "message": "" if kept else "Not documented in the Case File. No statement could be verified against the source documents.",
+           "seconds": round(time.time() - t0, 2)}
+    au({"kind": "agent_answer", "role": role, "status": out["status"], "statements": len(kept), "dropped_unverified": len(drop),
+        "guardrail_removed": sum(x["reason"] == "guardrail" for x in removed), "references": len(references), "seconds": out["seconds"]})
+    return out

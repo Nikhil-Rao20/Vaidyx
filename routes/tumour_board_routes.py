@@ -599,6 +599,16 @@ def setup_tumour_board_routes():
                 yield json.dumps(ev) + "\n"
         return StreamingResponse(gen(), media_type="application/x-ndjson")
 
+    @r.post("/cases/{case_id}/agents/{role}/ask")
+    async def agent_ask(case_id: str, role: str, request: Request):
+        """A question to one specialty's agent outside a board session (V1 item 6.2): {"question", "history"?}."""
+        _need_known(_roles(request)); _case(case_id); b = await request.json()
+        if role not in agents.ROLES:
+            raise HTTPException(404, "unknown role")
+        if not str(b.get("question", "")).strip():
+            raise HTTPException(400, "Ask a question")
+        return await agents.ask(case_id, role, str(b["question"])[:1000], b.get("history"))
+
     @r.post("/cases/{case_id}/summary")
     async def make_summary(case_id: str, request: Request):
         _need_known(_roles(request)); _case(case_id)
@@ -646,7 +656,7 @@ def setup_tumour_board_routes():
             raise HTTPException(404, "not found")
         return FileResponse(p)
 
-    # ---- board sessions: agenda, attendance (V1 item 6.1) --------------------------------------------------------------------
+    # ---- board sessions: agenda, attendance, agents for absent specialties, agent log vs decision (V1 items 6.1 to 6.3) ----------
     def _session(sid):
         try:
             s = board.get(sid)
@@ -711,7 +721,7 @@ def setup_tumour_board_routes():
     @r.get("/sessions/{sid}")
     async def session_get(sid: str, request: Request):
         rl = _roles(request); _session(sid)
-        return _room(board.get(sid), rl)
+        return _room(service.session_interrupted(sid), rl)
 
     @r.put("/sessions/{sid}/agenda")
     async def session_agenda(sid: str, request: Request):
@@ -720,9 +730,13 @@ def setup_tumour_board_routes():
 
     @r.post("/sessions/{sid}/attendance")
     async def session_attendance(sid: str, request: Request):
-        """{"department": id, "status": present | absent | not_marked}."""
+        """{"department": id, "status": present | absent | not_marked}. Marking a specialty absent during the session starts its agent."""
         u = _user(request); _need(_roles(request), "session"); _session(sid); b = await request.json()
-        return _session_call(board.set_attendance, sid, str(b.get("department", "")), str(b.get("status", "")), u)
+        s = _session_call(board.set_attendance, sid, str(b.get("department", "")), str(b.get("status", "")), u)
+        role = next((k for k, v in board.ROLE_DEPARTMENT.items() if v == b.get("department")), None)
+        if s["status"] == "in_session" and role and b.get("status") == "absent":
+            service.prepare_session_agents(sid, u, roles=[role])
+        return board.get(sid)
 
     @r.post("/sessions/{sid}/members")
     async def session_member(sid: str, request: Request):
@@ -736,8 +750,23 @@ def setup_tumour_board_routes():
 
     @r.post("/sessions/{sid}/start")
     async def session_start(sid: str, request: Request):
+        """The session starts: the agents of the absent specialties prepare their briefs for every Case File on the agenda, in parallel (V1 item 6.2)."""
         u = _user(request); _need(_roles(request), "session"); _session(sid)
-        return _session_call(board.start, sid, u)
+        _session_call(board.start, sid, u)
+        pairs = service.prepare_session_agents(sid, u)
+        return {**board.get(sid), "preparing": len(pairs)}
+
+    @r.post("/sessions/{sid}/agents/prepare")
+    async def session_prepare(sid: str, request: Request):
+        """Prepare again: {"case_id"?, "role"?, "refresh"?: true}. Without refresh a brief still current for the Case File is reused."""
+        u = _user(request); _need(_roles(request), "session"); s = _session(sid); b = await request.json() if (await request.body()) else {}
+        if s["status"] == "closed":
+            raise HTTPException(409, "The session is closed")
+        roles = [b["role"]] if b.get("role") else None
+        if roles and roles[0] not in board.ROLE_DEPARTMENT:
+            raise HTTPException(404, "unknown role")
+        pairs = service.prepare_session_agents(sid, u, roles=roles, case_ids=[b["case_id"]] if b.get("case_id") else None, refresh=bool(b.get("refresh")))
+        return {**board.get(sid), "preparing": len(pairs)}
 
     @r.post("/sessions/{sid}/current")
     async def session_current(sid: str, request: Request):
@@ -748,6 +777,19 @@ def setup_tumour_board_routes():
     async def session_close(sid: str, request: Request):
         u = _user(request); _need(_roles(request), "session"); _session(sid)
         return _session_call(board.close, sid, u)
+
+    @r.post("/sessions/{sid}/cases/{case_id}/agents/{role}/ask")
+    async def session_ask(sid: str, case_id: str, role: str, request: Request):
+        """The board asks an absent specialty's agent (V1 item 6.2)."""
+        rl = _roles(request); _need_known(rl); s = _session(sid); _on_agenda(s, case_id); b = await request.json()
+        if role not in agents.ROLES:
+            raise HTTPException(404, "unknown role")
+        if s["status"] == "closed":
+            raise HTTPException(409, "The session is closed")
+        q = str(b.get("question", "")).strip()[:1000]
+        if not q:
+            raise HTTPException(400, "Ask a question")
+        return await agents.ask(case_id, role, q, b.get("history"))
 
     @r.get("/models")
     async def model_cards(request: Request):

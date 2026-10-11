@@ -461,3 +461,78 @@ def review(case_id, artefact, status, comment, user):
     store.save_state(case_id, st)
     store.audit(case_id, {"kind": "expert_review", "artefact": artefact, "status": status, "by": user, "comment": comment})
     return a["review"]
+
+
+# ---- board sessions (V1 items 6.1 to 6.3) -------------------------------------------------------------------------------
+SESSION_TASKS: dict[str, set] = {}  # running brief preparations per session (kept referenced; a restart leaves "queued" / "running" behind)
+AGENT_WAITING = ("queued", "running")
+
+
+def _brief_status(brief):
+    return "no_documents" if brief.get("no_documents") else "ready"
+
+
+async def _prepare_one(sid, case_id, role, refresh, user):
+    """One absent specialty's brief for one Case File on the agenda: a brief still current for the Case File (same signature) is reused
+    unless refresh; otherwise the agent runs (no model call when the specialty has no documents, V1 item 6.6)."""
+    from . import agents, board
+    try:
+        st = store.get_state(case_id)
+        art = (st.get("artefacts") or {}).get(f"brief_{role}")
+        if art and not refresh and art.get("signature") and not rules.stale_reason(art["signature"], rules.case_signature(case_id, st)):
+            board.set_agent(sid, case_id, role, _brief_status(art), generated=art.get("generated"), reused=True, message=art.get("message") or "")
+            return
+        board.set_agent(sid, case_id, role, "running")
+        brief, err = None, None
+        async for ev in agents.run_agent(case_id, role):
+            if ev["type"] == "brief":
+                brief = ev["brief"]
+            elif ev["type"] == "error":
+                err = ev.get("message")
+        if brief:
+            board.set_agent(sid, case_id, role, _brief_status(brief), generated=brief.get("generated"), seconds=brief.get("seconds"), reused=False,
+                            message=brief.get("message") or "")
+        else:
+            board.set_agent(sid, case_id, role, "error", message=err or "The agent wrote no brief")
+    except Exception as e:  # one failing brief never stops the others; the board sees the error and can prepare it again
+        log.exception("session %s: %s brief for %s failed", sid, role, case_id)
+        try:
+            board.set_agent(sid, case_id, role, "error", message=f"{e.__class__.__name__}: {str(e)[:200]}")
+        except Exception:
+            pass
+
+
+def prepare_session_agents(sid, user, roles=None, case_ids=None, refresh=False):
+    """When the session starts (or a specialty is marked absent, or the board asks again), the agent of every absent specialty prepares
+    its brief for every Case File on the agenda, all in parallel; the reasoner's queue spaces the model calls (V1 item 6.2).
+    Returns the (case, role) pairs started."""
+    from . import board
+    s = board.get(sid)
+    roles = [r for r in (roles or board.absent_roles(s)) if r in board.ROLE_DEPARTMENT]
+    cases = [a["case_id"] for a in s["agenda"] if (case_ids is None or a["case_id"] in case_ids) and a["case_id"] not in config.PROTECTED_CASES]
+    busy = {(c, r) for c, by_role in (s.get("agents") or {}).items() for r, x in by_role.items()
+            if x.get("status") in AGENT_WAITING and SESSION_TASKS.get(sid)}
+    pairs = [(c, r) for c in cases for r in roles if (c, r) not in busy]
+    for c, r in pairs:
+        board.set_agent(sid, c, r, "queued")
+    if pairs:
+        board.audit_session(sid, {"kind": "agents_prepare", "by": user, "pairs": [f"{c}:{r}" for c, r in pairs], "refresh": refresh})
+        async def _all():
+            await asyncio.gather(*[_prepare_one(sid, c, r, refresh, user) for c, r in pairs])
+        task = asyncio.get_running_loop().create_task(_all())
+        tasks = SESSION_TASKS.setdefault(sid, set()); tasks.add(task)
+        task.add_done_callback(lambda t: (tasks.discard(t), SESSION_TASKS.pop(sid, None) if not tasks else None))
+    return pairs
+
+
+def session_interrupted(sid):
+    """Agents left "queued" / "running" with no preparation running (a server restart): marked as errors the board can prepare again."""
+    from . import board
+    s = board.get(sid)
+    if not s or SESSION_TASKS.get(sid):
+        return s
+    for cid, by_role in (s.get("agents") or {}).items():
+        for role, x in by_role.items():
+            if x.get("status") in AGENT_WAITING:
+                s = board.set_agent(sid, cid, role, "error", message="Interrupted by a server restart: prepare it again")
+    return s

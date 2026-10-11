@@ -78,3 +78,86 @@ def test_a_document_uploaded_by_the_department_counts_for_its_agent(monkeypatch)
     b = _run(case_id, "radiology")[-1]["brief"]
     assert not b.get("no_documents") and seen  # the model ran
     assert _run(case_id, "nuclear_medicine")[-1]["brief"]["message"] == "No Nuclear Medicine documents in this Case File"
+
+
+# ---- 6.2: live answers ----------------------------------------------------------------------------------------------------
+@pytest.fixture
+def pack(monkeypatch):
+    monkeypatch.setattr(agents.packs, "search", lambda role, q, cancer=None, india=3, intl=2: {"india": [NCG][:india], "international": [ASCO][:intl]})
+    monkeypatch.setattr(agents.guidelines, "ready", lambda: True)
+
+
+def _live(monkeypatch, answer, category="in_scope"):
+    prompts = []
+
+    async def fake_chat(role, msgs, json_schema=None, **kw):
+        if json_schema is guardrails.CLASSIFIER_SCHEMA:
+            return {"category": category, "reason": "test"}
+        prompts.append(msgs)
+        return answer
+    monkeypatch.setattr(agents.llm, "chat", fake_chat)
+    monkeypatch.setattr(guardrails.llm, "chat", fake_chat)
+    return prompts
+
+
+def test_live_answer_is_cited_and_unverified_statements_are_kept_aside(monkeypatch, pack):
+    case_id = _case(make_doc("Dct000001", "ct", text=CT))
+    prompts = _live(monkeypatch, {"answer_found": True, "statements": [
+        {"text": "The CECT thorax records a spiculated mass of 3.2 cm in the right upper lobe.", "citations": [{"doc_id": "Dct000001", "quote": "Spiculated mass 3.2 cm in the right upper lobe"}]},
+        {"text": "The mass measures 4.1 cm.", "citations": [{"doc_id": "Dct000001", "quote": "Spiculated mass 3.2 cm in the right upper lobe"}]},
+        {"text": "A PET-CT was done.", "citations": [{"doc_id": "Dnope0000", "quote": "PET-CT"}]}],
+        "references": [{"ref_id": "G1", "quote": "Molecular testing for EGFR(a) and ALK(a) on the biopsy specimen"}]})
+    a = asyncio.run(agents.ask(case_id, "radiology", "What size is the lung mass on the CT?"))
+    assert a["status"] == "answered" and a["kind"] == "AI support (role-specific)" and a["label"] == "Radiology support"
+    assert [s["text"] for s in a["statements"]] == ["The CECT thorax records a spiculated mass of 3.2 cm in the right upper lobe."]
+    assert a["statements"][0]["citations"][0]["doc_id"] == "Dct000001"
+    assert sorted(x["reason"] for x in a["removed"]) == ["document_not_found", "number_not_in_quote"] and a["dropped_unverified"] == 2
+    assert [r["region"] for r in a["references"]] == ["India"] and a["references"][0]["by"] == "agent"
+    ctx = prompts[0][-1]["content"]
+    assert "Spiculated mass" in ctx and "[G1 | National Cancer Grid (NCG), India" in ctx and "QUESTION FROM THE BOARD" in ctx
+    assert "Radiology support agent" in prompts[0][0]["content"]
+    ev = store.read_audit(case_id)
+    assert any(e["kind"] == "agent_answer" and e["status"] == "answered" and e["statements"] == 1 for e in ev)
+
+
+def test_out_of_scope_question_refused_by_rule_without_a_model_call(monkeypatch, pack):
+    case_id = _case(make_doc("Dct000001", "ct", text=CT))
+    calls = _no_model(monkeypatch)
+    a = asyncio.run(agents.ask(case_id, "radiology", "Which chemotherapy regimen should we start?"))
+    assert a["status"] == "out_of_scope" and a["category"] == "treatment_recommendation" and a["statements"] == [] and calls == []
+    a = asyncio.run(agents.ask(case_id, "radiology", "Please look at the CT images and tell me what you see"))
+    assert a["status"] == "out_of_scope" and a["category"] == "scan_interpretation"
+
+
+def test_out_of_scope_question_refused_by_the_classifier(monkeypatch, pack):
+    case_id = _case(make_doc("Dct000001", "ct", text=CT))
+    _live(monkeypatch, {"answer_found": True, "statements": [{"text": "x", "citations": []}], "references": []}, category="prognosis")
+    a = asyncio.run(agents.ask(case_id, "radiology", "Tell me about the outlook"))
+    assert a["status"] == "out_of_scope" and a["category"] == "prognosis" and a["statements"] == []
+
+
+def test_not_documented_answer_shows_no_guideline_text(monkeypatch, pack):
+    case_id = _case(make_doc("Dct000001", "ct", text=CT))
+    _live(monkeypatch, {"answer_found": False, "statements": [], "references": [{"ref_id": "G1", "quote": "Molecular testing for EGFR(a) and ALK(a)"}]})
+    a = asyncio.run(agents.ask(case_id, "radiology", "Is there a brain MRI report?"))
+    assert a["status"] == "not_documented" and a["references"] == [] and a["references_dropped"] == 1
+    assert a["message"].startswith("Not documented in the Case File")
+
+
+def test_live_answer_output_guardrail(monkeypatch, pack):
+    case_id = _case(make_doc("Dct000001", "ct", text=CT))
+    _live(monkeypatch, {"answer_found": True, "references": [], "statements": [
+        {"text": "The patient should receive surgery for the 3.2 cm mass.", "citations": [{"doc_id": "Dct000001", "quote": "Spiculated mass 3.2 cm in the right upper lobe"}]},
+        {"text": "The CECT records no pleural effusion.", "citations": [{"doc_id": "Dct000001", "quote": "No pleural effusion."}]}]})
+    a = asyncio.run(agents.ask(case_id, "radiology", "Is there a pleural effusion?"))
+    assert [s["text"] for s in a["statements"]] == ["The CECT records no pleural effusion."]
+    assert [x["reason"] for x in a["removed"]] == ["guardrail"] and a["dropped_unverified"] == 0
+
+
+def test_live_answer_on_an_unlisted_case_file(monkeypatch):
+    calls = _no_model(monkeypatch)
+    store.create_case("TB-UNL", {"name": "SYNTHETIC, X"}, "", created_by="test")
+    a = asyncio.run(agents.ask("TB-UNL", "radiology", "What does the CT say?"))
+    assert a["status"] == "not_listed" and calls == []
+    with pytest.raises(ValueError):
+        asyncio.run(agents.ask("TB-UNL", "cardiology", "x"))
