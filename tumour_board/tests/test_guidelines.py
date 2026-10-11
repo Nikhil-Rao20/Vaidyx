@@ -82,3 +82,54 @@ def test_india_boost_ranks_indian_source_first(lib):
     idx = guidelines.GuidelineIndex()
     hits = idx.search("staging lung cancer CT thorax", 3)
     assert hits[0]["region"] == "India" and hits[0]["file"].startswith("ncg_india/")
+
+
+# ---------------------------------------------------------------- bibliography filter (V1 item 5.2)
+REFERENCES = [  # entries the filter of V1 item 5.1 let through (from the library)
+    "9. Eisenhauer EA, Therasse P , Bogaerts J, et al. New response evaluation\ncriteria in solid tumours: revised RECIST guideline (version 1.1). Eur J\n"
+    "Cancer. 2009;45(2):228-247 .",
+    "45. Dhillon S. Lazertinib: ﬁrst approval. Drugs. 2021;81(9):1107-1113 .",
+    "27 . Huo L. A practical approach to grossing breast specimens. Ann  \nDiagn Pathol 2011;1 5:291–301.",
+    "Reck M, Heigener DF, Mok T, Soria JC, Rabe KF. Management of non-small-cell lung cancer: recent developments. [Review]. Lancet. "
+    "382(9893):709-19, 2013 Aug 24.",
+    "Fitzgerald TL, Brinkley J, Zervos EE. “Pushing the envelope beyond a centimeter in rectal cancer: 48.  \noncologic implications of close, "
+    "but negative margins.” J Am Coll Surg 213(5) (2011): 589-595.",
+    "16. Loch T. Urologic imaging for localised prostate cancer in 2007. World J Urol 2007; 25:121–9",
+    "Rosselli Del Turco M, Palli D, Cariddi A et al. Intensive diagnostic follow-up after treatment of primary breast cancer. A 49.  \n"
+    "randomized trial. National Research Council Project on Breast Cancer follow-up. JAMA. 1994;271(20):1593-7.",
+]
+PROSE = [  # guideline text with inline citations or links: kept
+    "*****Tamoxifen for five years in pre-menopausal women is standard adjuvant endocrine therapy. Aromatase \ninhibitor (AI) containing regimens "
+    "(Tam-AI switch or 5 years of AI) constitute standard adjuvant endocrine \ntherapy in post-menopausal patients. The ATLAS trial has now established "
+    "the role of tamoxifen beyond \n5 years and this option should be offered to those with high recurrence risk (Lancet. 2013;381:805–\n816). "
+    "Consider extended adjuvant therapy with letrozole after 5 years of tamoxifen in node positive post-\nmenopausal women.",
+    "Axilla: It is a common practice in many Indian centres to treat axilla for all node +ve cases, possibly due \nto sub-optimal axillary surgery "
+    "or histopathological evaluation in practice settings. Recently the \nEORTC-AMAROS trial (Donker et al, Lancet Oncol. 2014) shows that in T1-2 "
+    "clinically node negative \nwith sentinel node biopsy +ve, axillary RT results in excellent disease control.",
+    "RESULTS\nA. Scienti ﬁc adaptations of the ESMO recommendations\nIn the initial pre-meeting survey, the 20 voting Asian experts\nreported on "
+    "the ‘acceptability’ of the 97 recommendations\nfor the diagnosis, treatment and follow-up of patients with\nearly breast cancer from the "
+    "most recent ESMO Clinical\nPractice Guidelines 20 (Supplementary Table S2 , available at\nhttps://doi.org/10.1016/j.esmoop.2024.102974), in the\n"
+    "eight categories outlined in the text below and in Table 1.",
+    "aA chest X-ray is an acceptable alternative to CT chest since there is no clear evidence to favour the latter. Optional- MRI can be problem "
+    "solving for \nhepatic metastases if CT is equivocal; adding DWI improves accuracy (evidence from meta-analysis).",
+    PARA,
+]
+
+
+@pytest.mark.parametrize("text", REFERENCES)
+def test_bibliography_entries_are_removed(text):
+    assert guidelines._is_reference_list(text)
+
+
+@pytest.mark.parametrize("text", PROSE)
+def test_guideline_prose_with_citations_is_kept(text):
+    assert not guidelines._is_reference_list(text)
+    assert guidelines._citation_coverage(text) < 0.5
+
+
+def test_reference_paragraphs_are_dropped_at_build(lib):
+    root, calls = lib
+    (root / "esmo" / "nsclc.txt").write_text("Molecular testing for EGFR, ALK and ROS1 is recommended in advanced non-squamous NSCLC.\n\n" + REFERENCES[0])
+    idx = guidelines.GuidelineIndex()
+    esmo = [c["text"] for c in idx.chunks if c["file"].startswith("esmo/")]
+    assert esmo and all("Eisenhauer" not in t for t in esmo) and "EGFR" in esmo[0]

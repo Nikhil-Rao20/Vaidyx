@@ -26,7 +26,7 @@ SOURCES = {  # folder -> (organisation label, region tag, boost)
     "tmc": ("Tata Memorial Centre Evidence Based Management, India", "India", 1.3),
 }
 CANCER_WORDS = {"lung_nsclc": ["lung", "nsclc", "thoracic"], "breast": ["breast"], "colorectal_rectum": ["rect", "colorectal", "colon"]}
-INDEX_VERSION = 2  # bump when chunking or filtering changes: the cached index is rebuilt, embeddings of unchanged chunks reused
+INDEX_VERSION = 3  # bump when chunking or filtering changes: the cached index is rebuilt, embeddings of unchanged chunks reused
 _lock = threading.Lock()
 _IDX = None
 
@@ -38,12 +38,32 @@ def _title(p: Path):
 _REF_LINE = re.compile(r"(^|\n|\.\s)[A-Z][A-Za-z'\-]+ [A-Z]{1,3}[,.]\s")
 
 
+# One bibliography entry (V1 item 5.2): an author start ('9. Eisenhauer EA,', 'Therasse P ,', 'Rosselli Del Turco M,', 'N.S. Nair,')
+# followed within a few lines by a citation tail ('2009;45(2):228-247', '365(5):395-409', ':1596-1606' with any dash, doi, PMID,
+# '(2003): 2912', 'Abstract LBA38'). Inline citations in guideline prose cover little of a passage; a reference list covers most of it.
+_L = r"[^\W\d_]"
+_DASH = "\\-\u2010\u2011\u2012\u2013\u2014\u2015"
+_SUR = r"[A-Z]'?[a-z\u00df-\u024f]" + _L + r"*(?:[" + _DASH + r"' ][A-Z]?" + _L + r"+){0,2}"
+_INI = r"[A-Z]{1,3}"
+_START = (r"(?:\[\d{1,3}\]\s?|\d{1,3}[a-z]?\s?[.)]\s?)?(?:" + _SUR + r" " + _INI + r"\s?[,.;:]|" + _SUR + r",? (?:" + _INI + r"\.? ?){1,3}(?:,|et\s?al)"
+          r"|[A-Z]\.\s?(?:[A-Z]\.\s?)?" + _SUR + r",)")
+_TAIL = (r"(?:\b(?:19|20)\d{2}\s?(?:[A-Z][a-z]{2}(?:\s?\d{1,2})?\s?)?;\s?\d+|\b\d{1,4}\s?\(\s?(?:Suppl\.?\s?)?\d{1,4}\s?\)\s?:\s?[eE]?\d+"
+         r"|:\s?[eE]?\d{1,6}\s?[" + _DASH + r"]\s?[eE]?\d{1,6}|\bdoi\b|doi\.org|\bPMID\b|\((?:19|20)\d{2}\)\s?:\s?\d+|\b(?:19|20)\d{2}\.\s*$"
+         r"|\bAbstract\s+[A-Z]*\d+|\bet\s?al\.?\s?\(?(?:19|20)\d{2})")
+_ENTRY = re.compile(r"(?:^|(?<=[\n.;\]]))[ ,]*(?:[^\n]{0,80}?, )?" + _START + r"[\s\S]{0,420}?" + _TAIL, re.M)
+
+
+def _citation_coverage(t):
+    """Share of the text inside bibliography entries."""
+    return sum(m.end() - m.start() for m in _ENTRY.finditer(t)) / max(len(t), 1)
+
+
 def _is_reference_list(t):
     """Bibliography text (author lists, journal citations) is not guideline content."""
     hits = len(re.findall(r"et al\.|\bdoi\b|\d{4};\s?\d+|\bPMID\b|\d{4}\.\s?\d+\(|\b\d{1,3}\(\d{1,2}\):\s?\d+|\b\d{1,4}:\d{1,4}-\d{1,4}\b", t))
     authors = len(re.findall(r"\b[A-Z][a-z]+ [A-Z]{1,3}\b(?=[,.])", t))  # 'Lee HJ,' 'Chung WS,' style author tokens
     return hits >= 3 or (hits >= 1 and (len(_REF_LINE.findall(t)) >= 2 or authors >= 3)) or authors >= 6 \
-        or bool(re.match(r"\s*[A-Z][a-z]+ [A-Z]{1,2}[,.] .{0,120}(et al|\d{4})", t))
+        or bool(re.match(r"\s*[A-Z][a-z]+ [A-Z]{1,2}[,.] .{0,120}(et al|\d{4})", t)) or _citation_coverage(t) >= 0.5
 
 
 def _read(p: Path):
