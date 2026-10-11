@@ -3,6 +3,8 @@
 No model is involved here. For every mandatory record it decides: satisfied / missing record / not final-signed /
 missing or pending field / needs expert review, names the Responsible Department, and keeps the action list in sync
 (new gaps open actions, resolved gaps close them with the evidence document)."""
+import hashlib
+import json
 import re
 import uuid
 from datetime import date, datetime, timedelta
@@ -396,6 +398,42 @@ def evaluate(case_id):
                           "date_flags": {d["doc_id"]: dates.doc_dates(d)["flags"] for d in ready if dates.doc_dates(d)["flags"]},
                           "identity_flags": [d["doc_id"] for d in ready if d.get("identity") in ("mismatch_or_missing", "id_differs")]}}
     return gate
+
+
+def case_signature(case_id, state=None):
+    """What a summary or brief was generated from (V1 item 4.5): the processed documents (id, state, processed time, protocol they
+    were extracted under), the active clinician confirmations, the protocol and its version, the NCG setting and the hospital level.
+    Stored with every artefact; a different hash on load means the Case File changed since it was generated."""
+    st = store.get_state(case_id) if state is None else state
+    case = store.get_case(case_id) or {}
+    docs = store.list_docs(case_id)
+    parts = sorted(f"{d['doc_id']}:{d.get('state')}:{d.get('processed') or ''}:{d.get('extracted_under') or ''}" for d in docs)
+    confs = sorted(c["id"] for c in confirm.active(st))
+    prot = protocol.get(case["protocol"]) if case.get("protocol") else {}
+    basis = {"documents": parts, "confirmations": confs, "protocol": case.get("protocol") or "", "protocol_version": prot.get("version") or "",
+             "setting": case.get("setting") or "", "hospital_level": case.get("hospital_level") or ""}
+    return {"hash": hashlib.sha256(json.dumps(basis, sort_keys=True).encode()).hexdigest()[:16],
+            "documents": len(docs), "ready": sum(1 for d in docs if d.get("state") == "ready"), "confirmations": len(confs),
+            "protocol": basis["protocol"], "protocol_version": basis["protocol_version"], "setting": basis["setting"], "hospital_level": basis["hospital_level"],
+            "at": store.now_iso()}
+
+
+def stale_reason(then, now):
+    """Plain words for why an artefact is stale, from its stored signature and the current one; "" when they agree."""
+    if not then or then.get("hash") == now.get("hash"):
+        return ""
+    why = []
+    for k, what in (("documents", "document"), ("ready", "processed document"), ("confirmations", "clinician confirmation")):
+        d = (now.get(k) or 0) - (then.get(k) or 0)
+        if d:
+            why.append(f"{abs(d)} {what}{'s' if abs(d) != 1 else ''} {'added' if d > 0 else 'removed'}")
+    if then.get("protocol") != now.get("protocol") or then.get("protocol_version") != now.get("protocol_version"):
+        why.append(f"protocol {then.get('protocol') or '?'} v{then.get('protocol_version') or '?'} is now {now.get('protocol') or '?'} v{now.get('protocol_version') or '?'}")
+    if then.get("setting") != now.get("setting"):
+        why.append("the NCG setting changed")
+    if then.get("hospital_level") != now.get("hospital_level"):
+        why.append("the hospital level changed")
+    return "The Case File changed since this was generated" + (": " + ", ".join(why) if why else " (documents were re-processed or confirmations changed)")
 
 
 def set_override(case_id, kind, key, value: dict, by=""):

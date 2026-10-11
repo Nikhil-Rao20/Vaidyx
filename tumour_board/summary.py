@@ -121,7 +121,8 @@ async def build(case_id, force=False):
                                   "doc_title": stage["doc_title"], "date": stage["date"], **({"confirmed_by": stage["confirmed_by"]} if stage.get("confirmed_by") else {})}
                                  if stage and stage["verification"] in rules.VERIFIED else None),
            "dropped_unverified": dropped, "guardrail_removed": len(removed), "filled_from_fields": filled, "generated": store.now_iso(), "seconds": round(time.time() - t0, 1),
-           "model": config.models()["reasoner"].get("label") or "reasoner", "review": {"status": "ai_draft"}, "gate_passed": gate.get("passed"), "context": mode}
+           "model": config.models()["reasoner"].get("label") or "reasoner", "review": {"status": "ai_draft"}, "gate_passed": gate.get("passed"), "context": mode,
+           "signature": rules.case_signature(case_id)}  # what it was compiled from; a changed Case File marks it stale (V1 item 4.5)
     if removed:
         au({"kind": "guardrail_output", "where": "summary", "issues": removed})
     st = store.get_state(case_id); st.setdefault("artefacts", {})["summary"] = out; store.save_state(case_id, st)

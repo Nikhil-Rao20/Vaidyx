@@ -427,3 +427,23 @@ def test_a_notification_problem_never_breaks_the_gate(unit_case, monkeypatch):
     add(unit_case, hist())
     st = _sync(unit_case)
     assert st["actions"][0]["status"] == "pending" and st["gate"]["satisfied"] == 2
+
+
+# ---- Case File signature: stale summary and briefs (V1 item 4.5) ------------------------------------------
+def test_case_signature_changes_with_the_case_file(unit_case):
+    from tumour_board import confirm
+    add(unit_case, hist())
+    s1 = rules.case_signature(unit_case)
+    assert s1 == {**s1, "documents": 1, "ready": 1, "confirmations": 0, "protocol": "unit", "protocol_version": "0.0", "setting": "", "hospital_level": ""}
+    assert rules.case_signature(unit_case)["hash"] == s1["hash"] and rules.stale_reason(s1, rules.case_signature(unit_case)) == ""
+    add(unit_case, ct())
+    s2 = rules.case_signature(unit_case)
+    assert s2["hash"] != s1["hash"] and rules.stale_reason(s1, s2) == "The Case File changed since this was generated: 1 document added, 1 processed document added"
+    confirm.record(unit_case, "attest_final", "Dct000001", {}, "", by="Dr. Rao")
+    s3 = rules.case_signature(unit_case)
+    assert rules.stale_reason(s2, s3) == "The Case File changed since this was generated: 1 clinician confirmation added"
+    c = store.get_case(unit_case); c["setting"] = "metastatic"; store.save_case(c)
+    assert rules.stale_reason(s3, rules.case_signature(unit_case)) == "The Case File changed since this was generated: the NCG setting changed"
+    d = store.get_doc(unit_case, "Dct000001"); d["processed"] = "2026-10-11T07:00:00"; store.save_doc(unit_case, d)  # re-processed
+    assert rules.stale_reason(s3, rules.case_signature(unit_case)).startswith("The Case File changed since this was generated")
+    assert rules.stale_reason(None, s3) == ""  # nothing stored: nothing to compare (the export treats a missing signature as stale itself)

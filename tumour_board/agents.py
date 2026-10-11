@@ -288,7 +288,8 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
     brief = {"role": role, "label": r["label"], "sections": sections, "points_for_review": pts2, "not_documented": nd,
              "dropped_unverified": dropped, "guardrail_removed": len(issues), "not_documented_rejected": nd_dropped, "generated": store.now_iso(),
              "model": __import__("tumour_board.config", fromlist=["models"]).models()["reasoner"].get("label") or "reasoner",
-             "seconds": round(time.time() - t0, 1), "review": {"status": "ai_draft"}}
+             "seconds": round(time.time() - t0, 1), "review": {"status": "ai_draft"},
+             "signature": rules.case_signature(case_id)}  # what it was written from; a changed Case File marks it stale (V1 item 4.5)
     st = store.get_state(case_id); st.setdefault("artefacts", {})[f"brief_{role}"] = brief; store.save_state(case_id, st)
     au({"kind": "agent_brief", "role": role, "items": sum(len(s["items"]) for s in sections), "points": len(pts2), "dropped_unverified": dropped,
         "guardrail_removed": len(issues), "seconds": brief["seconds"]})

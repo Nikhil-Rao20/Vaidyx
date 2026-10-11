@@ -220,8 +220,10 @@ def setup_tumour_board_routes():
                          "page_flags": sorted({f for p in d.get("pages") or [] for f in p.get("flags") or []})})  # Hindi / regional text, illegible parts (V1 item 3.6)
         facts = rules.resolve_facts(rules.case_docs(case_id, st), st.get("overrides"))  # confirmations overlaid (V1 item 2.2)
         cat = protocol.facts()
+        sig = rules.case_signature(case_id, st)  # what a summary or brief would be generated from now (V1 item 4.5)
+        stale = {name: rules.stale_reason(a.get("signature"), sig) if isinstance(a, dict) else "" for name, a in (st.get("artefacts") or {}).items()}
         return {"case": c, "state": st, "documents": docs, "facts": {k: {"label": cat.get(k, {}).get("label", k), **v} for k, v in facts.items()},
-                "timeline": postboard.timeline(case_id), "permissions": _case_permissions(rl, c, st, all_docs)}
+                "timeline": postboard.timeline(case_id), "permissions": _case_permissions(rl, c, st, all_docs), "signature": sig, "stale": stale}
 
     @r.post("/cases/{case_id}/documents")
     async def upload(case_id: str, request: Request, files: list[UploadFile] = File(...), paths: str = Form("[]")):

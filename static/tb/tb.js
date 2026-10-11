@@ -562,7 +562,9 @@ async function runAgent(role) {
 function showBrief(role, b) {
   const box = briefBox(role);
   const rv = b.review || {};
+  const stale = S.data.stale?.["brief_" + role];
   box.innerHTML = `<h3>${esc(b.label)} <span>${rv.status === "reviewed" ? `<span class="chip c-ok">Reviewed by ${esc(rv.by)}</span>` : rv.status === "flagged" ? `<span class="chip c-bad">Flagged for correction</span>` : `<span class="chip c-rev">AI draft · awaiting expert review</span>`}</span></h3>
+    ${stale ? `<div class="banner warn stale"><b>${esc(stale)}.</b> Prepare the brief again (Refresh) before the board relies on it.</div>` : ""}
     <div class="small muted">${esc(b.generated?.replace("T", " "))} · ${b.seconds} s · ${esc(b.model)}${b.dropped_unverified ? ` · ${b.dropped_unverified} unverified item(s) removed` : ""}${b.guardrail_removed ? ` · ${b.guardrail_removed} removed by scope guardrail` : ""}</div>
     ${b.sections.map((s) => `<h4>${esc(s.heading)}</h4><ul>${s.items.map((it) => `<li>${esc(it.text)} ${it.citations.map(citeHTML).join("")}${flagHTML(it)}</li>`).join("")}</ul>`).join("")}
     ${b.points_for_review.length ? `<h4>Points for review (not treatment recommendations)</h4><ul>${b.points_for_review.map((it) => `<li>${esc(it.text)} ${it.citations.map(citeHTML).join("")}</li>`).join("")}</ul>` : ""}
@@ -588,7 +590,8 @@ function renderSummary() {
   const gate = g?.passed ? `<span class="chip c-ok">Readiness criteria met</span>` : `<span class="chip c-warn">Pre-Authorization pending (${g ? g.satisfied + "/" + g.total : "not evaluated"})</span>`;
   $("#tab-summary").innerHTML = `<div class="card"><h3>Case File summary ${gate}</h3>
     <div class="muted small">Compiled once every Pre-Authorization check is met. Each sentence links to its source quote; the stage appears only as recorded in a signed report. Points for review, not treatment recommendations.</div>
-    <div style="margin-top:10px;display:flex;gap:8px"><button class="primary" id="sum" ${g?.passed ? "" : "disabled"}>${s ? "Regenerate" : "Compile Case File summary"}</button>
+    ${s && S.data.stale?.summary ? `<div class="banner warn stale"><b>${esc(S.data.stale.summary)}.</b> Regenerate it before the board relies on it or exports it.</div>` : ""}
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="primary" id="sum" ${g?.passed ? "" : "disabled"}>${s ? "Regenerate" : "Compile Case File summary"}</button>
     ${g?.passed ? "" : `<button class="ghost" id="sum-force">Compile draft anyway (marked incomplete)</button>`}${s ? `<button class="ghost" id="sum-print">Print</button>` : ""}</div></div>
     <div id="sumout" class="card summary ${s ? "" : "hidden"}"></div>
     <div class="card"><h3>Guideline references for this Case File <button class="ghost sm" id="gl-case">Find relevant sections</button></h3>
@@ -605,7 +608,8 @@ function renderSummary() {
 function showSummary(s) {
   const p = S.data.case.patient || {};
   const rv = s.review || {};
-  $("#sumout").innerHTML = `<div class="eyebrow">Automated Case File summary${s.status !== "ready" ? " · INCOMPLETE: Pre-Authorization not met" : ""}</div>
+  const stale = S.data.stale?.summary;
+  $("#sumout").innerHTML = `${stale ? `<div class="banner warn stale"><b>${esc(stale)}.</b> This summary may no longer reflect the Case File: regenerate it.</div>` : ""}<div class="eyebrow">Automated Case File summary${s.status !== "ready" ? " · INCOMPLETE: Pre-Authorization not met" : ""}</div>
     <h2 style="color:#1f2933;margin:4px 0 12px">${esc(p.name)} · ${esc(p.agesex || "")}</h2>
     ${s.structure ? `<div class="muted small" style="margin-bottom:8px">Structure: ${esc(s.structure)}</div>` : ""}
     ${(s.sections || []).length ? s.sections.map((sec) => `<h4 style="color:#1f2933;margin:12px 0 4px">${esc(sec.title)}</h4>${sec.sentences.length ? `<p>${sec.sentences.map((x) => `<span ${x.from_fields ? 'title="Added from the verified primary fields (no model text)" style="color:#334155"' : ""}>${esc(x.text)}</span> ${x.citations.map(citeHTML).join("")}${flagHTML(x)}`).join(" ")}</p>` : `<p class="muted small">Nothing verified for this section in the Case File.</p>`}`).join("")

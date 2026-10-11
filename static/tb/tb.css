@@ -118,6 +118,7 @@ button.sm { padding: 5px 10px; font-size: 13px; }
 .ntf.read { border-left-color: var(--line-2); opacity: .8; } .ntf:hover { background: var(--tint-2); }
 .ntf .h { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .inbox-sum { display: flex; gap: 14px; align-items: center; }
+@media print { body.print-summary .banner.warn { display: block !important; border: 2px solid #8a5300; } }
 .icon { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; margin-top: 1px; }
 .i-ok { background: var(--ok-s); color: var(--ok); } .i-warn { background: var(--warn-s); color: var(--warn); } .i-bad { background: var(--bad-s); color: var(--bad); } .i-rev { background: var(--rev-s); color: var(--rev); } .i-na { background: #eef2f6; color: var(--muted); }
 
