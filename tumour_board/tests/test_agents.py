@@ -266,6 +266,7 @@ def fake_pack(monkeypatch):
         calls.append((role, q, cancer))
         return {"india": [NCG][:india], "international": [ASCO][:intl]}
     monkeypatch.setattr(agents.packs, "search", fake_search)
+    monkeypatch.setattr(agents.guidelines, "ready", lambda: True)
     return calls
 
 
@@ -294,7 +295,7 @@ def test_references_need_a_verbatim_quote():
         {"ref_id": "G9", "quote": "anything"}], refs)  # unknown id
     assert dropped == 2 and len(kept) == 1
     assert kept[0] == {"file": NCG["file"], "title": NCG["title"], "org": NCG["org"], "region": "India", "page": 4, "page_end": 4,
-                       "quote": "Molecular testing for EGFR(a) and ALK(a)", "by": "agent"}
+                       "page_kind": "page", "quote": "Molecular testing for EGFR(a) and ALK(a)", "by": "agent"}
 
 
 def test_indian_reference_found_by_search_when_relevant(fake_pack):
@@ -319,7 +320,7 @@ def test_brief_points_carry_verified_references_india_first(fake_pack, monkeypat
         if json_schema is agents.STEP_SCHEMA:
             return {"thought": "done", "tool": "finish", "input": ""}
         return {"sections": [], "not_documented": [], "points_for_review": [
-            {"text": "EGFR mutation analysis is awaited on the histopathology report.",
+            {"text": "EGFR molecular testing on the biopsy specimen is awaited.",
              "citations": [{"doc_id": "Dhist0009", "quote": "EGFR mutation analysis: awaited"}],
              "references": [{"ref_id": "G2", "quote": "Laboratories should use EGFR mutation testing"},
                             {"ref_id": "G1", "quote": "not in the passage"}]}]}
@@ -376,3 +377,106 @@ def test_references_from_another_cancer_are_never_attached(monkeypatch):
     kept, dropped = agents._verify_references([{"ref_id": "G1", "quote": "ECOG performance 0-1"}], {"G1": HN}, "lung_nsclc")
     assert kept == [] and dropped == 1  # the agent cited a head & neck guideline on a lung Case File
     assert agents._cancer_fit(NCG, "lung_nsclc") == "same" and agents._cancer_fit(GALL, "breast") == "" and agents._cancer_fit(HN, "lung_nsclc") == "other"
+
+
+
+# ---------------------------------------------------------------- Phase 5 review: scope of references and points, quote quality, fail-soft
+@pytest.mark.parametrize("quote", [
+    "They recommend that surgery should be offered to patients with stage IIIA NSCLC diagnosed as cT3 N1, cT1-2 N2 single-station disease",
+    "Watch and wait (non-operative management) can be offered to low-lying locally-advanced rectal cancers that achieve clinical complete response",
+    "In the absence of rectal MRI, ideally treatment for rectal cancer should not be offered.",
+    "MRI brain is indicated in patients with neurological symptoms and stage IIIb and above",
+    "Staging investigations not indicated in cT1-2, N0-1, M0",
+    "N2 Lung resection with SMLND(a) followed by adjuvant chemotherapy",
+    "Concurrent CTRT(a) with weekly cisplatin 40 mg/m2"])
+def test_treatment_and_indication_quotes_are_not_references(quote):
+    assert not agents._in_scope(quote)
+
+
+@pytest.mark.parametrize("quote", ["Molecular tests for adenocarcinoma: EGFR, ALK, ROS-1",
+                                   "PD-L1 status % age of tumour cells positive Antibody used Not assessed",
+                                   "CECT Thorax, abdomen and Pelvis(a)", "Comparison to the previous study and date"])
+def test_reporting_and_work_up_quotes_are_references(quote):
+    assert agents._in_scope(quote)
+
+
+def test_agent_reference_with_a_directive_is_dropped():
+    esmo = {**ASCO, "file": "esmo/ESMO_2025_early_locally_advanced_NSCLC.pdf", "title": "ESMO 2025 early locally advanced NSCLC",
+            "text": "They recommend that surgery should be offered to patients with stage IIIA NSCLC diagnosed as cT3 N1 disease."}
+    kept, dropped = agents._verify_references([{"ref_id": "G1", "quote": "surgery should be offered to patients with stage IIIA NSCLC"}],
+                                              {"G1": esmo}, "lung_nsclc")
+    assert kept == [] and dropped == 1
+
+
+@pytest.mark.parametrize("text", [
+    "Is a brain MRI indicated given the recorded stage IIIB?",
+    "Is a PET/CT indicated for this patient given the current staging and lack of metastatic work-up in the records?",
+    "Confirmation of N2 status (single vs multi-station) to determine surgical approach/resectability.",
+    "Clarify the treatment sequencing (NACT vs Surgery) for this patient."])
+def test_points_asking_for_a_decision_are_out_of_scope(text):
+    assert agents._POINT_SCOPE.search(text)
+
+
+@pytest.mark.parametrize("text", ["EGFR mutation analysis is awaited on the histopathology report.",
+                                  "The histopathology report is a draft and unsigned; is a final version available?",
+                                  "The ECOG performance status differs between the OPD note (PS 1) and the discharge summary (PS 2)."])
+def test_points_about_the_records_stay(text):
+    assert not agents._POINT_SCOPE.search(text)
+
+
+@pytest.mark.parametrize("quote", ["Surgery is recommended for every patient with N2 disease ... the", "Unrelated words ...\nfor",
+                                   "Molecular ... EGFR"])
+def test_short_or_partial_quote_segments_do_not_verify(quote):
+    kept, dropped = agents._verify_references([{"ref_id": "G1", "quote": quote}], {"G1": NCG}, "lung_nsclc")
+    assert kept == [] and dropped == 1
+
+
+def test_search_reference_needs_a_whole_sentence(monkeypatch):
+    frag = {**NCG, "file": "icmr/Breast_Cancer.pdf", "title": "Breast Cancer",
+            "text": "^Not required if CT Thorax & Abdomen is being\nbreast cancer CECT thorax"}
+    monkeypatch.setattr(agents.packs, "search", lambda role, q, cancer=None, india=3, intl=0: {"india": [frag], "international": []})
+    assert agents._indian_reference("radiology", {"protocol": "breast"}, "Confirm the CECT thorax and abdomen report is final.") is None
+
+
+def test_word_and_text_parts_are_not_pages():
+    docx = {**NCG, "file": "ncg_india/ncg-rectal-cancer.docx", "title": "ncg rectal cancer", "page": 1, "page_end": 1}
+    assert agents._page_kind(docx) == "part" and "| part 1 |" in agents._ref_label(docx)
+    assert agents._page_kind(NCG) == "page" and "| p. 4 |" in agents._ref_label(NCG)
+    assert agents._reference(docx, "x", "agent")["page_kind"] == "part"
+
+
+def test_cancer_fit_word_starts_and_unmapped_protocols():
+    direct = {**NCG, "file": "pmjay/direct-claims.pdf", "title": "direct claims"}
+    assert agents._cancer_fit(direct, "colorectal_rectum") == ""  # 'rect' is not 'direct'
+    assert agents._cancer_fit(HN, "head_neck") == ""  # a protocol with no cancer words yet never drops a guideline as another cancer's
+    rectal = {**NCG, "file": "esmo/ESMO_2025_localised_rectal_cancer.pdf", "title": "ESMO 2025 localised rectal cancer"}
+    assert agents._cancer_fit(rectal, "colorectal_rectum") == "same" and agents._cancer_fit(rectal, "lung_nsclc") == "other"
+
+
+def test_brief_is_written_without_pack_or_index(monkeypatch):
+    case_id = _lung_case()
+
+    def broken(*a, **k):
+        raise ValueError("pack radiology: unknown guideline folder 'xyz'")
+    monkeypatch.setattr(agents.packs, "checklist_text", broken)
+    monkeypatch.setattr(agents.packs, "pack", broken)
+    monkeypatch.setattr(agents.guidelines, "ready", lambda: False)
+    searched = []
+    monkeypatch.setattr(agents.packs, "search", lambda *a, **k: searched.append(a) or {"india": [], "international": []})
+
+    async def fake_chat(role, msgs, json_schema=None, **kw):
+        if json_schema is agents.STEP_SCHEMA:
+            return {"thought": "x", "tool": "search_guidelines", "input": "EGFR"}
+        return {"sections": [], "not_documented": [], "points_for_review": [
+            {"text": "EGFR mutation analysis is awaited.", "citations": [{"doc_id": "Dhist0009", "quote": "EGFR mutation analysis: awaited"}], "references": []},
+            {"text": "Is a brain MRI indicated given the recorded stage IIIB?", "citations": [{"doc_id": "Dhist0009", "quote": "EGFR mutation analysis: awaited"}],
+             "references": []}]}
+    monkeypatch.setattr(agents.llm, "chat", fake_chat)
+
+    async def go():
+        return [e async for e in agents.run_agent(case_id, "radiology", max_steps=1)]
+    ev = asyncio.run(go())
+    brief = ev[-1]["brief"]
+    assert brief["pack"] is None and searched == []  # no pack, no search while the index is loading
+    assert any("still loading" in (e.get("observation") or "") for e in ev)
+    assert [p["text"] for p in brief["points_for_review"]] == ["EGFR mutation analysis is awaited."] and brief["guardrail_removed"] == 1

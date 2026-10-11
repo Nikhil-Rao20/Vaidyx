@@ -516,9 +516,13 @@ def phase5(c):
     check("5.5 guideline references labelled and India first on every point", all(r.get("quote") and r.get("page") and r.get("org") for r in refs)
           and all([x["region"] != "India" for x in p.get("references") or []] == sorted(x["region"] != "India" for x in p.get("references") or []) for p in pts),
           f"{len(pts)} points, {len(refs)} references, {sum(any(x['region'] == 'India' for x in p.get('references') or []) for p in pts)} points with an Indian source")
+    check("5.5 no reference states a treatment, indication or eligibility; no point asks for a decision for this patient",
+          all(agents._in_scope(r["quote"]) for r in refs) and not any(agents._POINT_SCOPE.search(p["text"]) for p in pts),
+          "; ".join([r["quote"][:80] for r in refs if not agents._in_scope(r["quote"])] + [p["text"][:80] for p in pts if agents._POINT_SCOPE.search(p["text"])]))
     case = c.get("/api/tb/cases/TB-001").json()["case"]
     missing = [p["text"] for p in pts if not any(x["region"] == "India" for x in p.get("references") or []) and agents._indian_reference("radiology", case, p["text"])]
-    check("5.5 every point cites an Indian source whenever the pack has a relevant one", not missing, "; ".join(missing)[:200])
+    check("5.5 a point without an Indian reference has no fitting Indian passage (the agents' own rule: two shared words or an acronym, same cancer)",
+          not missing, "; ".join(missing)[:200])
 
 
 def main(base, pw, only=None):

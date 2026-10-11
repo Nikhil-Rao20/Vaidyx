@@ -12,7 +12,7 @@ the record citations; it is never a fact about the patient and never a recommend
 """
 import asyncio, json, re, time
 
-from . import dates, guardrails, guidelines, llm, packs, protocol, qa, rules, search, store
+from . import dates, grounding, guardrails, guidelines, llm, packs, protocol, qa, rules, search, store
 
 ROLES = {
     "radiology": {"label": "Radiology support", "department": "Radiology",
@@ -91,8 +91,9 @@ def _system(role):
             "as recorded); do not recommend, suggest or choose any treatment or management; do not predict prognosis. Points for review are "
             "questions or clarifications for the board about the records (for example a pending result, a draft report, two reports that differ), "
             "never recommendations. Guideline passages (ids G1, G2 ...) are reference text: cite them only under 'references' of a point for "
-            "review, prefer Indian sources (NCG, ICMR, Tata Memorial Centre, PM-JAY, ICRI / IRIA), never present guideline text as a fact about "
-            "the patient or as advice for this patient. Your output is a draft for expert review.")
+            "review, and only passages about what reports and records should document or which records a work-up lists, never treatment "
+            "options, indications, eligibility or management; prefer Indian sources (NCG, ICMR, Tata Memorial Centre, PM-JAY, ICRI / IRIA); never "
+            "present guideline text as a fact about the patient or apply it to this patient. Your output is a draft for expert review.")
 
 
 def _overrides(case_id):
@@ -190,10 +191,27 @@ def _read_document(case_id, arg):
 
 
 # V1 item 5.5: guideline references of the specialty pack
-ROLE_QUERY = {  # the pack search run before the first step, with the protocol label in front
-    "radiology": "imaging work-up and imaging report contents", "pathology": "pathology reporting and biomarker testing",
-    "medical_oncology": "work-up and fitness assessment before systemic therapy", "surgical_oncology": "work-up and assessment of resectability",
-    "radiation_oncology": "work-up before radiotherapy and response assessment", "nuclear_medicine": "PET-CT and bone scan indications in staging"}
+ROLE_QUERY = {  # the pack search run before the first step, with the protocol label in front: records and reporting, never treatment
+    "radiology": "imaging report contents and reporting checklist", "pathology": "pathology report contents and biomarker reporting",
+    "medical_oncology": "baseline investigations, performance status and laboratory records in the work-up",
+    "surgical_oncology": "documentation of tumour extent and prior procedures in the work-up records",
+    "radiation_oncology": "documentation of radiotherapy delivered and restaging imaging reports",
+    "nuclear_medicine": "PET-CT and bone scan report contents in the work-up"}
+# a reference quote that states a treatment, an indication or eligibility is never shown under a patient's point (V1 Phase 5 review):
+# only passages about what reports and work-up records contain are references
+_DIRECTIVE = re.compile(
+    r"\b(?:offer(?:ed|s)?|recommend\w*|indicat\w*|should (?:not )?be (?:offered|treated|given|considered|performed|done|started)|should (?:receive|undergo)"
+    r"|consider\w*|prefer\w*|treatment of choice|standard (?:of care|treatment|operation|option)"
+    r"|advis\w*|candidates?|eligib\w*|benefit\w*|surg\w*|resect\w*|lobectomy|pneumonectomy|mastectomy|lumpectomy|dissection|excision|chemo\w*"
+    r"|radiotherap\w*|radiation therapy|irradiation|\bRT\b|SBRT|SABR|brachytherap\w*|CTRT|\bCRT\b|NACT|\bTNT\b|immunotherap\w*|targeted therap\w*|TKIs?"
+    r"|\w+(?:mab|nib|platin|taxel|rubicin)\b|tamoxifen|letrozole|anastrozole|capecitabine|5-?FU|dose|\bGy\b|fractions?|watch and wait|non-operative"
+    r"|palliat\w*|adjuvant|neoadjuvant|systemic therap\w*|endocrine therap\w*|hormon\w* therap\w*|treatment options?|treated with|first[- ]line"
+    r"|second[- ]line|maintenance|regimens?|cycles?)\b", re.I)
+# a point for review that asks for a treatment or work-up decision for this patient is dropped like any other scope breach
+_POINT_SCOPE = re.compile(
+    r"\bindicated\b[^.?]{0,60}\b(?:for (?:this|the) patient|given)\b|\bis (?:an? |the )?[\w/\- ]{1,30} (?:indicated|required|needed) (?:for|in) (?:this|the) patient"
+    r"|\bto (?:determine|decide|assess|plan|guide)\b[^.?]{0,40}\b(?:surgical approach|resectab\w*|treatment|management|therapy|surgery)"
+    r"|surgical approach|treatment sequencing|\bsequenc\w*[^.?]{0,30}\b(?:surgery|chemo\w*|NACT|radio\w*)\b|\bcandidate for\b|\beligib\w* for\b", re.I)
 _GENERIC = set("the and for with from that this which there their these those into about after before between within without also only "
                "not any are was were been has have had can may should would will report reports reported patient case file documented document "
                "documents board clarify clarification whether confirm please result results date dated available stated state status".split())
@@ -205,22 +223,35 @@ _SITES = ("lung", "nsclc", "thoracic", "breast", "rect", "colorectal", "colon", 
           "glioma", "lymphoma", "sarcoma")
 
 
+def _word_start(words, text):
+    """Whether any of the words starts a word of the text ('rect' matches 'rectal', never 'direct'); file names count _ - . / as spaces."""
+    return bool(words) and bool(re.search(r"\b(?:" + "|".join(map(re.escape, words)) + ")", re.sub(r"[_\-./]+", " ", text.lower())))
+
+
 def _cancer_fit(h, protocol_id):
     """'same' when the passage's guideline is about this Case File's cancer, 'other' when it is about another cancer, '' otherwise
-    (a guideline for many cancers, such as ICRI / IRIA or the PM-JAY manual)."""
-    name = (h["file"] + " " + h["title"]).lower()
+    (a guideline for many cancers, such as ICRI / IRIA or the PM-JAY manual, or a protocol with no cancer words yet)."""
     words = guidelines.CANCER_WORDS.get(protocol_id or "", [])
-    if any(w in name for w in words):
+    if not words:
+        return ""
+    name = h["file"] + " " + h["title"]
+    if _word_start(words, name):
         return "same"
-    return "other" if any(x in name for x in _SITES) else ""
+    return "other" if _word_start(_SITES, name) else ""
 
 
 def _content_words(text):
     return {t for t in search.tokenize(text or "") if len(t) >= 3 and t not in _GENERIC and not t.isdigit()}
 
 
+def _page_kind(h):
+    """'page' for a PDF page; 'part' for a 6,000-character block of a Word or text file (no real page number)."""
+    return "page" if h["file"].lower().endswith(".pdf") else "part"
+
+
 def _ref_label(h):
-    return f"{h['org']} | {h['title']} | p. {h['page']}" + (f"-{h['page_end']}" if h.get("page_end") and h["page_end"] != h["page"] else "") + f" | {h['region']}"
+    span = f"{h['page']}" + (f"-{h['page_end']}" if h.get("page_end") and h["page_end"] != h["page"] else "")
+    return f"{h['org']} | {h['title']} | {'p.' if _page_kind(h) == 'page' else 'part'} {span} | {h['region']}"
 
 
 def _search_guidelines(role, case, arg, refs):
@@ -237,7 +268,12 @@ def _search_guidelines(role, case, arg, refs):
 
 def _reference(h, quote, by):
     return {"file": h["file"], "title": h["title"], "org": h["org"], "region": h["region"], "page": h["page"],
-            "page_end": h.get("page_end") or h["page"], "quote": quote, "by": by}
+            "page_end": h.get("page_end") or h["page"], "page_kind": _page_kind(h), "quote": quote, "by": by}
+
+
+def _in_scope(quote):
+    """A reference quote may be shown under a patient's point only when it states no treatment, indication or eligibility."""
+    return not _DIRECTIVE.search(quote or "") and not guardrails.scan_output(quote or "")
 
 
 def _verify_references(point_refs, refs, protocol_id=None):
@@ -247,7 +283,11 @@ def _verify_references(point_refs, refs, protocol_id=None):
     for r in point_refs or []:
         h = refs.get((r.get("ref_id") or "").strip())
         locs = qa._locate_quote(r.get("quote") or "", [h["text"]]) if h else []
-        if not locs or (protocol_id and _cancer_fit(h, protocol_id) == "other"):
+        # every kept segment must be substantial and together they must make up most of the quote: 'the' or 'for' never verify one
+        locs = [l for l in locs if len(grounding.norm(l["matched"])) >= 20 or len(l["matched"].split()) >= 4]
+        covered = sum(len(grounding.norm(l["matched"])) for l in locs) / max(len(grounding.norm(r.get("quote") or "")), 1)
+        if not locs or covered < 0.6 or (protocol_id and _cancer_fit(h, protocol_id) == "other") \
+                or not _in_scope(" ".join(l["matched"] for l in locs)):
             dropped += 1; continue
         ref = _reference(h, " ... ".join(l["matched"] for l in locs), "agent")
         if not any((x["file"], x["page"]) == (ref["file"], ref["page"]) for x in out):
@@ -262,8 +302,8 @@ def _relevance(words, acronyms, text):
 
 
 def _indian_reference(role, case, text):
-    """When a point cites no Indian source: the best Indian passage of the pack for the point, if it shares at least two content words
-    (or one acronym such as EGFR) with it and comes from a guideline for this cancer (or a general one whose passage names the cancer);
+    """When a point cites no Indian source: the best Indian passage of the pack for the point, if it shares at least three content words
+    (an acronym such as EGFR counts twice) with it and comes from a guideline for this cancer (or a general one whose passage names the cancer);
     the quote is its most overlapping sentence, verbatim. None when the pack has no such passage."""
     cwords = guidelines.CANCER_WORDS.get(case.get("protocol") or "", [])
     words = _content_words(text)
@@ -272,14 +312,17 @@ def _indian_reference(role, case, text):
         return None
     for h in packs.search(role, text, case.get("protocol"), india=3, intl=0)["india"]:
         fit = _cancer_fit(h, case.get("protocol"))
-        if fit == "other" or (fit == "" and not any(w in h["text"].lower() for w in cwords)):
+        if fit == "other" or (fit == "" and not _word_start(cwords, h["text"])):
             continue
-        if _relevance(words, acronyms, h["text"]) < 2:
+        if _relevance(words, acronyms, h["text"]) < 3:
             continue
-        sents = [x.strip() for x in re.split(r"(?<=[.;:])\s+|\n", h["text"]) if len(x.strip()) >= 20]
-        best = max(sents, key=lambda x: _relevance(words, acronyms, x), default="")
-        if best and _relevance(words, acronyms, best) >= 1:
-            return _reference(h, best[:400], "search")
+        # a whole sentence (40 characters or 6 words), not a table cell or a bullet fragment, sharing three content words (an acronym
+        # counts twice), in scope; two shared words attached unrelated lines half the time in the Phase 5 measurement
+        sents = [x.strip() for x in re.split(r"(?<=[.;:])\s+|\n", h["text"])]
+        sents = [x for x in sents if (len(x) >= 40 or len(x.split()) >= 6) and x[:1].isalnum() and _in_scope(x)
+                 and _relevance(words, acronyms, x) >= 3]
+        if sents:
+            return _reference(h, max(sents, key=lambda x: _relevance(words, acronyms, x))[:400], "search")
     return None
 
 
@@ -287,6 +330,8 @@ async def _tool(case_id, tool, arg, role=None, refs=None):
     if tool == "search_guidelines":
         if role is None or refs is None:
             return "Guideline search is not available here."
+        if not guidelines.ready():
+            return "The guideline library is still loading; continue with the records."
         return await asyncio.to_thread(_search_guidelines, role, store.get_case(case_id), arg, refs)
     if tool == "list_documents":
         return _doc_list(case_id)
@@ -306,8 +351,12 @@ async def _tool(case_id, tool, arg, role=None, refs=None):
 
 
 def _pack_summary(role, protocol_id):
-    """What the brief drew on: the pack's sources (India first) and the reporting checklist used, for the reader."""
-    pk = packs.pack(role)
+    """What the brief drew on: the pack's sources (India first) and the reporting checklist used, for the reader; None when the pack
+    file cannot be read (the brief is still written from the records)."""
+    try:
+        pk = packs.pack(role)
+    except Exception:
+        return None
     cl = packs.checklist(role, protocol_id)
     return {"label": pk["label"], "sources": [{"org": s["org"], "region": s["region"]} for s in pk["sources"]],
             "checklist": {"title": cl["title"], "org": cl["org"], "region": cl["region"], "pages": cl["pages"], "file": cl["file"]} if cl else None}
@@ -338,15 +387,23 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
                "VERIFIED FIELDS:\n" + _facts_text(case_id),
                "PRE-AUTHORIZATION GAPS:\n" + _gaps_text(case_id)]
     refs = {}  # guideline passages seen in this run, by id (V1 item 5.5)
-    checklist = packs.checklist_text(role, case["protocol"])
+    try:
+        checklist = packs.checklist_text(role, case["protocol"])
+    except Exception as e:  # an unreadable pack file never stops a brief: the records still are the source
+        checklist = ""
+        au({"kind": "agent_pack_unavailable", "role": role, "error": str(e)[:200]})
     if checklist:
         scratch.append(checklist)
     prot_label = (protocol.get(case["protocol"]) or {}).get("label") or case["protocol"]
     gq = f"{prot_label}: {ROLE_QUERY.get(role, r['focus'][:80])}"
     try:
+        if not guidelines.ready():  # never wait for a guideline index rebuild (minutes on CPU)
+            raise RuntimeError("guideline library still loading")
         gl = await asyncio.to_thread(_search_guidelines, role, case, gq, refs)
         scratch.append(f"GUIDELINE REFERENCES (reference text from the {r['label'].lower()} pack, Indian sources first; cite by id under "
-                       f"'references' of a point for review; never a fact about this patient or a recommendation for this patient):\n{gl}")
+                       f"'references' of a point for review, only for what records and reports should contain; never a fact about this patient, "
+                       f"never a treatment option or a recommendation for this patient):\n{gl}")
+        au({"kind": "agent_tool", "role": role, "tool": "search_guidelines", "input": gq, "auto": True})
         yield {"type": "step", "tool": "search_guidelines", "input": gq, "thought": "Guideline pack, Indian sources first", "auto": True}
     except Exception as e:  # the guideline index is optional for a brief: the records still are the source
         au({"kind": "agent_guidelines_unavailable", "role": role, "error": str(e)[:200]})
@@ -382,7 +439,8 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
     msgs = [{"role": "system", "content": _system(role)},
             {"role": "user", "content": "\n\n".join(scratch) + f"\n\nTASK: {task}\nWrite the brief now: 3 to 5 sections with short factual items "
              "(each with citations), points for review (questions about the records for the board, each with citations, and with references "
-             "to the guideline passages above that bear on the point, by id with an exact quote, Indian sources first; an empty list when none "
+             "to guideline passages above about what the records or reports should contain, by id with an exact quote of at least a full "
+             "phrase, Indian sources first; never a passage about treatment, indications or eligibility; an empty list when none "
              "applies), and anything relevant to this specialty that is not documented."}]
     try:
         b = await llm.chat("reasoner", msgs, json_schema=BRIEF_SCHEMA, max_tokens=2200, purpose=f"agent {role} brief", audit=au)
@@ -409,12 +467,14 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
             dropped += 1; continue
         p = v[0]
         iss = guardrails.scan_output(p["text"])
+        if not iss and _POINT_SCOPE.search(p["text"]):
+            iss = [{"sentence": p["text"], "reason": "asks for a treatment or work-up decision for this patient"}]
         issues += iss
         if iss:
             continue
         p["references"], nd_refs = _verify_references(raw.get("references"), refs, case["protocol"])
         refs_dropped += nd_refs
-        if not any(x["region"] == "India" for x in p["references"]):  # an Indian source whenever the pack has one for this point
+        if not any(x["region"] == "India" for x in p["references"]) and guidelines.ready():  # an Indian source whenever one fits
             try:
                 ind = await asyncio.to_thread(_indian_reference, role, case, p["text"])
             except Exception:

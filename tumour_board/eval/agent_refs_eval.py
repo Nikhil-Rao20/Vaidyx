@@ -47,8 +47,10 @@ def summarise(rows):
             "points_with_indian_reference": sum(1 for p in pts if p["indian"]),
             "indian_by_agent": sum(1 for p in pts if p["indian"] == "agent"), "indian_by_search": sum(1 for p in pts if p["indian"] == "search"),
             "points_without_indian_reference": sum(1 for p in pts if not p["indian"]),
-            "of_which_a_relevant_indian_passage_exists": sum(1 for p in pts if not p["indian"] and p.get("indian_relevant")),
-            "references_dropped": sum(r["references_dropped"] for r in rows)}
+            "of_which_fitting_by_the_agents_rule": sum(1 for p in pts if not p["indian"] and p.get("indian_relevant")),
+            "references_dropped": sum(r["references_dropped"] for r in rows),
+            "references_out_of_scope": sum(1 for p in pts for x in p["references"] if not x["in_scope"]),
+            "points_out_of_scope": sum(1 for p in pts if p["out_of_scope"])}
 
 
 def main():
@@ -75,12 +77,14 @@ def main():
             for p in (brief or {}).get("points_for_review") or []:
                 refs = p.get("references") or []
                 ind = next((r for r in refs if r["region"] == "India"), None)
-                item = {"text": p["text"], "references": [{k: r[k] for k in ("org", "title", "page", "region", "by", "quote")} for r in refs],
-                        "indian": ind["by"] if ind else None}
+                item = {"text": p["text"], "references": [{**{k: r[k] for k in ("org", "title", "page", "region", "by", "quote")},
+                                                           "in_scope": agents._in_scope(r["quote"])} for r in refs],
+                        "indian": ind["by"] if ind else None, "out_of_scope": bool(agents._POINT_SCOPE.search(p["text"]))}
                 if not ind:
                     hits = packs.search(role, p["text"], protocol_id, india=3, intl=0)["india"]
                     item["pack_indian_hits"] = [{"org": h["org"], "title": h["title"], "page": h["page"], "text": h["text"][:300]} for h in hits]
-                    # the agents' own relevance rule (two shared content words or an acronym): a hit here means an Indian source existed
+                    # the agents' own rule (two shared content words or an acronym, same cancer): by construction this is the rule the brief
+                    # applied, so it checks the wiring, not relevance; relevance is judged by a person from the list at the end of the report
                     item["indian_relevant"] = bool(agents._indian_reference(role, {"protocol": protocol_id}, p["text"]))
                 row["points"].append(item)
             rows.append(row)
@@ -101,6 +105,11 @@ def main():
                 found = "; ".join(f"{h['org']} p. {h['page']}" for h in p.get("pack_indian_hits") or []) or "none"
                 md.append(f"- {r['case']} {r['role']}: {p['text']} (relevant Indian passage: {'yes' if p.get('indian_relevant') else 'no'}; "
                           f"top Indian pack passages: {found})")
+    md += ["", "## Every reference, for a person to judge (relevant to the point? about records, not treatment?)", ""]
+    for r in rows:
+        for p in r["points"]:
+            for x in p["references"]:
+                md.append(f"- {r['case']} {r['role']} | {p['text']} | {x['region']}, {x['org']}, {x['title']} {x['page']} ({x['by']}): \"{x['quote']}\"")
     (out / "agent_refs_eval.md").write_text("\n".join(md) + "\n")
     print(json.dumps(summary, indent=1))
 

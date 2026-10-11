@@ -5,7 +5,7 @@ India first (National Cancer Grid incl. head & neck and gynaecological 2019, ICM
 Management 2024, PM-JAY HBP 2.2, ICRI / IRIA), then international (ESMO incl. Pan-Asian adaptations, CAP / ASCO-CAP,
 ACR, RECIST) and US public-domain summaries (NCI PDQ). Hybrid BM25 + embeddings, with an India-first boost.
 NCCN content is not ingested (licence restricts AI use)."""
-import hashlib, json, math, re, threading
+import hashlib, json, math, os, re, threading
 from collections import Counter
 from pathlib import Path
 
@@ -26,7 +26,7 @@ SOURCES = {  # folder -> (organisation label, region tag, boost)
     "tmc": ("Tata Memorial Centre Evidence Based Management, India", "India", 1.3),
 }
 CANCER_WORDS = {"lung_nsclc": ["lung", "nsclc", "thoracic"], "breast": ["breast"], "colorectal_rectum": ["rect", "colorectal", "colon"]}
-INDEX_VERSION = 4  # bump when chunking or filtering changes: the cached index is rebuilt, embeddings of unchanged chunks reused
+INDEX_VERSION = 5  # bump when chunking or filtering changes: the cached index is rebuilt, embeddings of unchanged chunks reused
 _lock = threading.Lock()
 _IDX = None
 
@@ -35,7 +35,9 @@ def _title(p: Path):
     return re.sub(r"[_\-]+", " ", p.stem).strip()
 
 
-_REF_LINE = re.compile(r"(^|\n|\.\s)[A-Z][A-Za-z'\-]+ [A-Z]{1,3}[,.]\s")
+_REF_LINE = re.compile(r"(^|\n|\.\s)(?!Any\b)[A-Z][A-Za-z'\-]+ [A-Z]{1,3}[,.]\s")
+# journal running footers ("https://doi.org/10.1016/j.annonc... Volume 36 - Issue 9 - 2025") are not citations: removed before counting
+_FOOTER = re.compile(r"https?://(?:dx\.)?doi\.org/\S+|\bVolume \d+\s?[\-\u2013]\s?Issue \d+\s?[\-\u2013]\s?\d{4}")
 
 
 # One bibliography entry (V1 item 5.2): an author start ('9. Eisenhauer EA,', 'Therasse P ,', 'Rosselli Del Turco M,', 'N.S. Nair,')
@@ -43,7 +45,7 @@ _REF_LINE = re.compile(r"(^|\n|\.\s)[A-Z][A-Za-z'\-]+ [A-Z]{1,3}[,.]\s")
 # '(2003): 2912', 'Abstract LBA38'). Inline citations in guideline prose cover little of a passage; a reference list covers most of it.
 _L = r"[^\W\d_]"
 _DASH = "\\-\u2010\u2011\u2012\u2013\u2014\u2015"
-_SUR = r"[A-Z]'?[a-z\u00df-\u024f]" + _L + r"*(?:[" + _DASH + r"' ][A-Z]?" + _L + r"+){0,2}"
+_SUR = r"(?!Any\b)[A-Z]'?[a-z\u00df-\u024f]" + _L + r"*(?:[" + _DASH + r"' ][A-Z]?" + _L + r"+){0,2}"
 _INI = r"[A-Z]{1,3}"
 _START = (r"(?:\[\d{1,3}\]\s?|\d{1,3}[a-z]?\s?[.)]\s?)?(?:" + _SUR + r" " + _INI + r"\s?[,.;:]|" + _SUR + r",? (?:" + _INI + r"\.? ?){1,3}(?:,|et\s?al)"
           r"|[A-Z]\.\s?(?:[A-Z]\.\s?)?" + _SUR + r",)")
@@ -59,11 +61,15 @@ def _citation_coverage(t):
 
 
 def _is_reference_list(t):
-    """Bibliography text (author lists, journal citations) is not guideline content."""
+    """Bibliography text (author lists, journal citations) is not guideline content. Journal footers and TNM table cells ('Any T,
+    Any N') are not counted (V1 Phase 5 review)."""
+    if _citation_coverage(t) >= 0.5:
+        return True
+    t = _FOOTER.sub(" ", t)
     hits = len(re.findall(r"et al\.|\bdoi\b|\d{4};\s?\d+|\bPMID\b|\d{4}\.\s?\d+\(|\b\d{1,3}\(\d{1,2}\):\s?\d+|\b\d{1,4}:\d{1,4}-\d{1,4}\b", t))
-    authors = len(re.findall(r"\b[A-Z][a-z]+ [A-Z]{1,3}\b(?=[,.])", t))  # 'Lee HJ,' 'Chung WS,' style author tokens
+    authors = len(re.findall(r"\b(?!Any\b)[A-Z][a-z]+ [A-Z]{1,3}\b(?=[,.])", t))  # 'Lee HJ,' 'Chung WS,' style author tokens
     return hits >= 3 or (hits >= 1 and (len(_REF_LINE.findall(t)) >= 2 or authors >= 3)) or authors >= 6 \
-        or bool(re.match(r"\s*[A-Z][a-z]+ [A-Z]{1,2}[,.] .{0,120}(et al|\d{4})", t)) or _citation_coverage(t) >= 0.5
+        or bool(re.match(r"\s*(?!Any\b)[A-Z][a-z]+ [A-Z]{1,2}[,.] .{0,120}(et al|\d{4})", t))
 
 
 def _read(p: Path):
@@ -91,6 +97,11 @@ def _read(p: Path):
 def _chunk_key(c):
     """Identity of a chunk's embedding input (title + text, the embedding model): equal keys can share one vector."""
     return hashlib.sha1((search.EMBED_MODEL + "\n" + c["title"] + "\n" + c["text"]).encode()).hexdigest()
+
+
+def _sources_sig():
+    """Organisation, region and boost are stored in each cached passage: a SOURCES or embedding model change rebuilds the index."""
+    return hashlib.sha1((json.dumps(SOURCES, sort_keys=True) + search.EMBED_MODEL).encode()).hexdigest()
 
 
 def _files_sig(root):
@@ -240,7 +251,7 @@ class GuidelineIndex:
         old = []
         if cached.exists():
             d = json.loads(cached.read_text())
-            if d.get("files_sig") == fsig and d.get("version") == INDEX_VERSION and self._npz.exists():
+            if d.get("files_sig") == fsig and d.get("version") == INDEX_VERSION and d.get("sources_sig") == _sources_sig() and self._npz.exists():
                 self.chunks = d["chunks"]; self._finish(cdir, d["emb_sig"]); return
             old = d.get("chunks") or []  # rows of the cached vectors: unchanged chunks keep their embedding
         self.chunks = []
@@ -253,7 +264,10 @@ class GuidelineIndex:
             self.chunks += [{"text": t, **meta, "page": a, "page_end": b} for a, b, t in CHUNKERS[self.chunking](_read(p))]
         sig = hashlib.sha1(json.dumps([c["file"] + str(c["page"]) + c["text"][:50] for c in self.chunks]).encode()).hexdigest()
         self._finish(cdir, sig, old)
-        cached.write_text(json.dumps({"files_sig": fsig, "version": INDEX_VERSION, "chunking": self.chunking, "emb_sig": sig, "chunks": self.chunks}))
+        tmp = cached.with_name(cached.name + f".{os.getpid()}.tmp")  # written whole, then renamed: a reader never sees half a file
+        tmp.write_text(json.dumps({"files_sig": fsig, "version": INDEX_VERSION, "sources_sig": _sources_sig(), "chunking": self.chunking,
+                                   "emb_sig": sig, "chunks": self.chunks}))
+        os.replace(tmp, cached)
 
     def _finish(self, cdir, sig, old=()):
         self.tok = [search.tokenize(c["title"] + " " + c["text"]) for c in self.chunks]
@@ -278,7 +292,9 @@ class GuidelineIndex:
             self.emb = np.array([new[i] if i in new else reuse[k] for i, k in enumerate(keys)], np.float32).reshape(len(keys), -1) \
                 if keys else np.zeros((0, 768), np.float32)
             self.reused = len(keys) - len(todo)
-            cache.parent.mkdir(parents=True, exist_ok=True); np.savez(cache, emb=self.emb, sig=np.array(sig), keys=np.array(keys))
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            tmp = cache.with_name(f"{cache.stem}.{os.getpid()}.tmp.npz")
+            np.savez(tmp, emb=self.emb, sig=np.array(sig), keys=np.array(keys)); os.replace(tmp, cache)
 
     def _source_mask(self, sources):
         """Chunks inside the given sources: [(folder, file names or None)] (a specialty pack, V1 item 5.5); cached per pack."""
@@ -325,6 +341,11 @@ def search_grouped(q, cancer=None, india=3, intl=4):
     """India-first presentation: top Indian (NCG / ICMR) passages, then international ones. Reference lists excluded."""
     hits = [h for h in index().search(q, 60, cancer) if not _is_reference_list(h["text"])]
     return {"india": [h for h in hits if h["region"] == "India"][:india], "international": [h for h in hits if h["region"] != "India"][:intl]}
+
+
+def ready():
+    """Whether the shared index is loaded (the agents never wait for a rebuild, V1 Phase 5 review)."""
+    return _IDX is not None
 
 
 def index():

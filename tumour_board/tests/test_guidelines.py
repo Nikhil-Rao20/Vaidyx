@@ -199,3 +199,29 @@ def test_search_limited_to_pack_sources(lib):
     assert [h["file"] for h in tpl] == ["ncg_india/synoptic-reporting-radiology-template.txt"]
     assert idx.search("lung", 5, sources=[("rcr", None)]) == []
     assert len(idx.search("lung cancer", 5)) == len(idx.chunks) == 3  # no filter: every passage
+
+
+# ---------------------------------------------------------------- Phase 5 review: query-time false positives, cache validity
+@pytest.mark.parametrize("text", [
+    "STAGING AND RISK ASSESSMENT\nStaging is based on the ninth edition of the Union for International Cancer Control TNM classification.\n"
+    "R.-D. Hofheinz et al. Annals of Oncology\nVolume 36 - Issue 9 - 2025 https://doi.org/10.1016/j.annonc.2025.05.528 1009\n"
+    "https://doi.org/10.1016/j.annonc.2025.05.528 Volume 36 - Issue 9 - 2025",
+    "IVB\nAny T, Any N, M1b\nAny T = See T descriptions above in Any T, Any N, M1a TNM stage group.\nAny N = See N descriptions above."])
+def test_journal_footers_and_tnm_tables_are_not_references(text):
+    assert not guidelines._is_reference_list(text)
+
+
+def test_sources_change_rebuilds_with_reuse(lib, monkeypatch):
+    root, calls = lib
+    guidelines.GuidelineIndex()
+    calls.clear()
+    monkeypatch.setitem(guidelines.SOURCES, "esmo", ("ESMO", "International", 0.9))
+    b = guidelines.GuidelineIndex()
+    assert calls == [] and b.reused == len(b.chunks)
+    assert next(c for c in b.chunks if c["file"].startswith("esmo/"))["boost"] == 0.9  # the new boost, not the cached one
+
+
+def test_cache_files_written_whole(lib):
+    guidelines.GuidelineIndex()
+    cdir = config.DATA_ROOT / "embed_cache"
+    assert not list(cdir.glob("*.tmp*")) and json.loads((cdir / "guidelines_index.json").read_text())["sources_sig"] == guidelines._sources_sig()

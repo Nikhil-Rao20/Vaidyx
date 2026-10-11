@@ -581,10 +581,17 @@ function showBrief(role, b) {
   bindReview(box);
 }
 // guideline references of a brief's point for review (V1 item 5.5): labelled "Reference", separate from the record citations
+// a PDF has real page numbers; a Word or text guideline is read in parts of 6,000 characters, so it shows "part N" and opens at the start
+function glPlace(h) {
+  const pdf = /\.pdf$/i.test(h.file || "");
+  const span = h.page_end && h.page_end !== h.page ? `${h.page}-${h.page_end}` : `${h.page}`;
+  return { label: pdf ? (span.includes("-") ? `pp. ${span}` : `p. ${span}`) : `part ${span}`,
+           href: `/api/tb/guidelines/file?path=${encodeURIComponent(h.file)}${pdf ? `#page=${h.page}` : ""}` };
+}
 function refHTML(r) {
-  const pages = r.page_end && r.page_end !== r.page ? `pp. ${r.page}-${r.page_end}` : `p. ${r.page}`;
-  return `<div class="gref small"><span class="chip ${r.region === "India" ? "c-ok" : "c-info"}">${esc(r.region)}</span> <b>Reference</b> · ${esc(r.org)} · ${esc(r.title)}, ${pages}
-    <a href="/api/tb/guidelines/file?path=${encodeURIComponent(r.file)}#page=${r.page}" target="_blank">open</a>${r.by === "search" ? ` <span class="muted">(found by guideline search)</span>` : ""}<div class="gq">"${esc(r.quote)}"</div></div>`;
+  const at = glPlace(r);
+  return `<div class="gref small"><span class="chip ${r.region === "India" ? "c-ok" : "c-info"}">${esc(r.region)}</span> <b>Reference</b> · ${esc(r.org)} · ${esc(r.title)}, ${at.label}
+    <a href="${at.href}" target="_blank">open</a>${r.by === "search" ? ` <span class="muted">(found by guideline search)</span>` : ""}<div class="gq">"${esc(r.quote)}"</div></div>`;
 }
 function packLine(pk) {
   const names = (reg) => [...new Set(pk.sources.filter((x) => (x.region === "India") === reg).map((x) => x.org))].map(esc).join(", ");
@@ -646,8 +653,8 @@ function showSummary(s) {
 }
 
 function glHTML(r) {
-  const one = (h) => `<div class="hit"><div class="small"><span class="chip ${h.region === "India" ? "c-ok" : h.region === "US" ? "c-mute" : "c-info"}">${esc(h.region)}</span> <b>${esc(h.org)}</b> · ${esc(h.title)} · page ${h.page}
-    <a href="/api/tb/guidelines/file?path=${encodeURIComponent(h.file)}#page=${h.page}" target="_blank">open</a></div><div style="margin-top:4px">${esc(h.text.slice(0, 520))}${h.text.length > 520 ? "..." : ""}</div></div>`;
+  const one = (h) => `<div class="hit"><div class="small"><span class="chip ${h.region === "India" ? "c-ok" : h.region === "US" ? "c-mute" : "c-info"}">${esc(h.region)}</span> <b>${esc(h.org)}</b> · ${esc(h.title)} · ${glPlace(h).label}
+    <a href="${glPlace(h).href}" target="_blank">open</a></div><div style="margin-top:4px">${esc(h.text.slice(0, 520))}${h.text.length > 520 ? "..." : ""}</div></div>`;
   return (r.india.length ? r.india.map(one).join("") : `<div class="small muted">No Indian guideline passage matched.</div>`) + r.international.map(one).join("");
 }
 
