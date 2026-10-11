@@ -2,9 +2,11 @@
 
 Indexes the freely available guideline documents in TB_GUIDELINE_DIR (see docs/tumour-board/RESOURCES.md):
 India first (National Cancer Grid incl. head & neck and gynaecological 2019, ICMR, Tata Memorial Centre Evidence Based
-Management 2024, PM-JAY HBP 2.2, ICRI / IRIA), then international (ESMO incl. Pan-Asian adaptations, CAP / ASCO-CAP,
-ACR, RECIST) and US public-domain summaries (NCI PDQ). Hybrid BM25 + embeddings, with an India-first boost.
-NCCN content is not ingested (licence restricts AI use)."""
+Management 2024, PM-JAY HBP 2.2, ICRI / IRIA, MoHFW Standard Treatment Guidelines 2017 cancer chapters, DHR / DGHS
+evidence-based lung cancer guidelines 2025), then international (ESMO incl. Pan-Asian adaptations, ASCO resource-stratified,
+ASTRO, ESGO / ESTRO, CAP / ASCO-CAP, ICCR, RCPath, ACR, RECIST, AJCC 8th edition chapters for the protocol cancers) and US
+public-domain summaries (NCI PDQ). Hybrid BM25 + embeddings, with an India-first boost. NCCN content is not ingested (licence restricts AI use). Folders whose name starts
+with "_" (full licensed books, reading lists) are kept beside the library and never indexed."""
 import hashlib, json, math, os, re, threading
 from collections import Counter
 from pathlib import Path
@@ -24,11 +26,19 @@ SOURCES = {  # folder -> (organisation label, region tag, boost)
     "iccr": ("ICCR dataset", "International", 1.0), "eusoma": ("EUSOMA / ESMO", "International", 0.95),
     "victoria_au": ("Victorian Cancer MDM quality framework", "Australia", 0.9),
     "tmc": ("Tata Memorial Centre Evidence Based Management, India", "India", 1.3),
+    "ajcc": ("AJCC Cancer Staging Manual, 8th edition", "International", 0.9),
+    # MoHFW STGs 2017 (Clinical Establishments Act minimum standards): Indian, ranked after NCG, ICMR, PM-JAY, TMC and IRIA
+    "mohfw_stg": ("MoHFW Standard Treatment Guidelines 2017, India", "India", 1.0),
+    # DHR / DGHS 2025 lung guidelines: India, but each PICO chapter repeats a generic NSCLC background and asks treatment
+    # questions, so at full India weight they crowded out NCG / ICMR / IRIA on every lung query (guideline_eval, 2026-10-11)
+    "dhr_dghs": ("DHR / DGHS evidence-based guidelines (MoHFW), India", "India", 1.0),
+    "asco": ("ASCO guidelines (incl. resource-stratified)", "International", 1.0),
+    "astro": ("ASTRO radiotherapy guideline", "International", 0.95), "estro": ("ESGO / ESTRO / GEC-ESTRO", "International", 0.95),
 }
 CANCER_WORDS = {"lung_nsclc": ["lung", "nsclc", "thoracic"], "breast": ["breast"], "colorectal_rectum": ["rect", "colorectal", "colon"],
                 "oral_cavity": ["oral cavity", "oral cancer", "head neck", "head-neck", "head and neck", "buccal", "tongue", "floor of mouth"],
                 "cervix": ["cervix", "carcinoma cervix", "cervical cancer", "cervical carcinoma", "gynaecolog", "gynecolog"]}  # not "cervical" alone: neck nodes
-INDEX_VERSION = 5  # bump when chunking or filtering changes: the cached index is rebuilt, embeddings of unchanged chunks reused
+INDEX_VERSION = 6  # bump when chunking or filtering changes: the cached index is rebuilt, embeddings of unchanged chunks reused
 _lock = threading.Lock()
 _IDX = None
 
@@ -74,6 +84,21 @@ def _is_reference_list(t):
         or bool(re.match(r"\s*(?!Any\b)[A-Z][a-z]+ [A-Z]{1,2}[,.] .{0,120}(et al|\d{4})", t))
 
 
+def _ocr_clean(t):
+    """The AJCC manual copy is an OCR scan read with a Spanish dictionary ("Cáncer", "invasión", "¡"): English text has no
+    accented letters, so accents are dropped and "¡" read as "i" (words then match searches and quotes)."""
+    import unicodedata
+    t = t.replace("\u00a1", "i").replace("\u00ad\n", "").replace("\u00ad", "")
+    t = "".join(ch for ch in unicodedata.normalize("NFKD", t) if not unicodedata.combining(ch))
+    # TNM codes read as letters in the tables: "NO" N0, "MO" M0, "NI" / "Tl" N1 / T1, "M ia" M1a, "M 1" M1
+    t = re.sub(r"\b(c|p|yp|r|a)?([TNM])O\b", r"\1\g<2>0", t)
+    t = re.sub(r"\b(c|p|yp|r|a)?([TNM])[Il1]([a-d])([Il1-4])\b",  # "Tlbl" T1b1, "TIb2" T1b2
+               lambda m: f"{m.group(1) or ''}{m.group(2)}1{m.group(3)}{'1' if m.group(4) in 'Il' else m.group(4)}", t)
+    t = re.sub(r"\b(c|p|yp|r|a)?([TNM])[Il]([a-d]?)\b", r"\1\g<2>1\3", t)
+    t = re.sub(r"\bM ?i([a-d])\b", r"M1\1", t)
+    return re.sub(r"\b([TNM]) (\d[a-d]?)\b", r"\1\2", t)
+
+
 def _read(p: Path):
     if p.suffix.lower() == ".docx":
         import zipfile
@@ -87,9 +112,10 @@ def _read(p: Path):
     if p.suffix.lower() == ".pdf":
         from pypdf import PdfReader
         try:
-            return [(i, pg.extract_text() or "") for i, pg in enumerate(PdfReader(str(p)).pages)]
+            pages = [(i, pg.extract_text() or "") for i, pg in enumerate(PdfReader(str(p)).pages)]
         except Exception:
             return []
+        return [(i, _ocr_clean(t)) for i, t in pages] if "ajcc" in p.parts else pages
     if p.suffix.lower() in (".txt", ".md"):
         t = p.read_text(errors="replace")
         return [(i, t[i * 6000:(i + 1) * 6000]) for i in range(math.ceil(len(t) / 6000))]
@@ -260,6 +286,8 @@ class GuidelineIndex:
         for p in sorted(root.rglob("*")):
             if not p.is_file() or p.suffix.lower() not in (".pdf", ".txt", ".md", ".docx") or "cap_protocols" in str(p) and p.suffix.lower() == ".docx":
                 continue
+            if any(part.startswith("_") for part in p.relative_to(root).parts[:-1]):
+                continue  # full licensed books and reading lists are kept beside the library, not indexed
             folder = p.relative_to(root).parts[0]
             org, region, boost = SOURCES.get(folder, (folder, "International", 1.0))
             meta = {"file": str(p.relative_to(root)), "title": _title(p), "org": org, "region": region, "boost": boost}
