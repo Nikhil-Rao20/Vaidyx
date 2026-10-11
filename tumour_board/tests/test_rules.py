@@ -171,11 +171,30 @@ def test_processing_document_blocks_passed(unit_case):
     assert g["readiness"] == 100 and not g["passed"] and g["documents"]["processing"] == 1
 
 
-def test_failed_document_does_not_block_today(unit_case):
-    """Characterisation: a document that failed to read does not block the gate (V1 item 4.3 changes this)."""
-    add(unit_case, hist(), ct(), make_doc("Dbad00001", "other", state="error"))
+def test_failed_document_blocks_the_gate_until_dismissed(unit_case):
+    """V1 item 4.3: a document that failed to read blocks the gate until it is re-processed or dismissed (audited, with a reason)."""
+    add(unit_case, hist(), ct(), {**make_doc("Dbad00001", "other", state="error"), "error": "PdfStreamError: Stream has ended unexpectedly", "rel_path": "radiology/mri_brain.pdf"})
     g = rules.evaluate(unit_case)
-    assert g["passed"] and g["documents"]["errors"] == 1 and g["documents"]["processing"] == 0
+    assert g["readiness"] == 100 and not g["passed"] and g["documents"]["errors"] == 1 and g["documents"]["processing"] == 0
+    assert g["blockers"] == [{"doc_id": "Dbad00001", "filename": "radiology/mri_brain.pdf", "error": "PdfStreamError: Stream has ended unexpectedly", "department": None}]
+    assert g["documents"]["failed"] == ["Dbad00001"] and g["documents"]["dismissed"] == []
+    from tumour_board import confirm
+    confirm.record(unit_case, "dismiss_failed", "Dbad00001", {}, "duplicate of the CECT already filed; original requested from Radiology", by="Dr. Rao")
+    g = rules.evaluate(unit_case)
+    assert g["passed"] and g["blockers"] == [] and g["documents"]["failed"] == [] and g["documents"]["errors"] == 1
+    assert g["documents"]["dismissed"][0]["doc_id"] == "Dbad00001" and g["documents"]["dismissed"][0]["by"] == "Dr. Rao" and "duplicate" in g["documents"]["dismissed"][0]["reason"]
+    rec = confirm.active(unit_case, "dismiss_failed", "Dbad00001")[0]
+    confirm.undo(unit_case, rec["id"], by="Dr. Rao")
+    assert not rules.evaluate(unit_case)["passed"]
+
+
+def test_dismissal_of_a_document_that_now_reads_is_harmless(unit_case):
+    from tumour_board import confirm
+    add(unit_case, hist(), ct(), make_doc("Dbad00001", "other", state="error"))
+    confirm.record(unit_case, "dismiss_failed", "Dbad00001", {}, "unreadable copy", by="Dr. Rao")
+    add(unit_case, make_doc("Dbad00001", "lab", state="ready"))  # re-processed and read
+    g = rules.evaluate(unit_case)
+    assert g["passed"] and g["documents"]["dismissed"] == [] and g["documents"]["errors"] == 0
 
 
 def test_optional_and_core_data(unit_case):

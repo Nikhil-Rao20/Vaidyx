@@ -3,7 +3,7 @@ demo case import, expert reviews."""
 import asyncio, json, logging, time, uuid
 from pathlib import Path
 
-from . import config, extract, ingest, intake, org, protocol, rules, store
+from . import confirm, config, extract, ingest, intake, org, protocol, rules, store
 
 log = logging.getLogger("tumour_board")
 
@@ -181,6 +181,8 @@ def reprocess(case_id, which="errors", user=""):
         ids = [d for d in which if any(x["doc_id"] == d for x in docs)]
     for i in ids:
         d = store.get_doc(case_id, i); d["state"] = "queued"; d.pop("error", None); store.save_doc(case_id, d)
+        for c in confirm.active(case_id, "dismiss_failed", i):  # a new attempt to read it withdraws the dismissal (V1 item 4.3): it must read, or be dismissed again
+            confirm.undo(case_id, c["id"], user)
     store.audit(case_id, {"kind": "reprocess", "documents": ids, "by": user})
     job = _job(case_id, len(ids), ids)
     job["task"] = asyncio.get_event_loop().create_task(process_docs(case_id, ids, job))
@@ -412,7 +414,7 @@ def recheck(case_id, user=""):
         return st
     changed = [r["label"] for r in gate["requirements"] if {x["id"]: x["status"] for x in before.get("requirements", [])}.get(r["id"]) not in (None, r["status"])]
     st["recheck"] = {"documents_checked": gate["documents"]["ready"], "processing": gate["documents"]["processing"], "errors": gate["documents"]["errors"],
-                     "level1_open": gate["levels"]["1"]["open"], "level2_open": gate["levels"]["2"]["open"],
+                     "blockers": len(gate.get("blockers") or []), "level1_open": gate["levels"]["1"]["open"], "level2_open": gate["levels"]["2"]["open"],
                      "satisfied": gate["satisfied"], "total": gate["total"], "passed": gate["passed"], "changed": changed,
                      "open_actions": sum(1 for a in st.get("actions", []) if a["status"] != "completed")}
     store.audit(case_id, {"kind": "recheck", "by": user, "passed": gate["passed"], "readiness": gate["readiness"], "changed": changed})

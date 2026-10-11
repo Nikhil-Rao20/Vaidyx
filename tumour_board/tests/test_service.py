@@ -216,3 +216,26 @@ def test_no_warning_for_small_files(unit_case, monkeypatch):
     monkeypatch.setattr(service.extract, "process_document", fake_process)
     job = _add(unit_case, [("lab/cbc.txt", b"SYNTHETIC Hb 11.8")])
     assert job["warnings"] == []
+
+
+def test_reprocess_withdraws_a_dismissal(unit_case, monkeypatch):
+    """V1 item 4.3: re-processing a dismissed document withdraws the dismissal (audited); if it still cannot be read it blocks the gate again."""
+    from tumour_board import confirm, extract, rules
+    from tumour_board.tests.util import add, fact, make_doc
+    add(unit_case, make_doc("Dhist0001", "histopathology", facts={"histologic_type": fact("Adenocarcinoma"), "pdl1": fact("TPS 60%")}),
+        make_doc("Dct000001", "ct", region="chest", facts={"lesion_size": fact("3.2 cm")}), make_doc("Dbad00001", "other", state="error"))
+    confirm.record(unit_case, "dismiss_failed", "Dbad00001", {}, "unreadable copy, original requested", by="Dr. Rao")
+    assert rules.evaluate(unit_case)["passed"]
+
+    async def still_unreadable(case_id, doc_id, protocol_id, patient, progress=None, **kw):
+        d = store.get_doc(case_id, doc_id); d.update(state="error", error="PdfStreamError: Stream has ended unexpectedly"); store.save_doc(case_id, d)
+        progress and progress(doc_id, "error"); return d
+    monkeypatch.setattr(extract, "process_document", still_unreadable)
+
+    async def go():
+        job = service.reprocess(unit_case, ["Dbad00001"], "Dr. Rao"); await job["task"]; return job
+    job = asyncio.run(go())
+    assert job["state"] == "finished" and confirm.active(unit_case, "dismiss_failed", "Dbad00001") == []
+    g = store.get_state(unit_case)["gate"]
+    assert not g["passed"] and g["blockers"][0]["doc_id"] == "Dbad00001"
+    assert any(e["kind"] == "confirmation_undone" and e["type"] == "dismiss_failed" and e["by"] == "Dr. Rao" for e in store.read_audit(unit_case))

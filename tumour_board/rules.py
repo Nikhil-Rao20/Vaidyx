@@ -318,7 +318,8 @@ def evaluate(case_id):
     V1 item 4.1: every record of the protocol carries its NCG tier for the Case File's setting (a Essential, b Optimal, c Optional, none =
     not applicable in that setting); a record counts (is in `requirements`) when it is Essential, or Optimal at an Optimal hospital; the
     others are evaluated the same way and listed under `shown` (never counted, never routed). V1 item 4.2: each result carries its Level 1
-    (Case File) and Level 2 (Records) verdicts."""
+    (Case File) and Level 2 (Records) verdicts. V1 item 4.3: a document that failed to read and was neither re-processed nor dismissed
+    blocks `passed` (`blockers`)."""
     case = store.get_case(case_id)
     if not case.get("protocol"):
         return None
@@ -368,6 +369,10 @@ def evaluate(case_id):
                                   if h["verification"] in VERIFIED and h["state"] == "present"][:3]})
     applicable = [r for r in results if r["status"] not in ("not_applicable", "waived")]
     ok = [r for r in applicable if r["status"] == "satisfied"]
+    failed = [d for d in docs if d.get("state") == "error" and not d.get("dismissed")]  # V1 item 4.3: re-process or dismiss before the gate can pass
+    dismissed = [d for d in docs if d.get("state") == "error" and d.get("dismissed")]
+    blockers = [{"doc_id": d["doc_id"], "filename": d.get("rel_path") or d.get("filename") or d["doc_id"], "error": d.get("error") or "could not be read",
+                 "department": d.get("department")} for d in failed]
     processing = [d for d in docs if d.get("state") not in ("ready", "error")]
     gate = {"evaluated": store.now_iso(), "protocol": prot["id"], "protocol_version": prot.get("version"), "setting": setting,
             "setting_label": protocol.setting_label(prot["id"], setting) if setting else "",
@@ -375,13 +380,15 @@ def evaluate(case_id):
             "pmjay_note": "PM-JAY mandatory document lists per package are not available yet (pendings); the hospital type ("
                           + (hospital.get("type") or "not set") + ") changes only that paperwork, never this check.",
             "tiers_note": "NCG tiers: a = Essential (required everywhere), b = Optimal (required at an Optimal hospital, otherwise shown), c = Optional (shown only). Clinical review before real use.",
-            "passed": len(ok) == len(applicable) and not processing,
+            "passed": len(ok) == len(applicable) and not processing and not blockers,
             "readiness": round(100 * len(ok) / max(len(applicable), 1)), "satisfied": len(ok), "total": len(applicable),
             "levels": {"1": {"label": LEVEL_LABEL[1], "what": LEVEL_WHAT[1], "open": sum(1 for r in applicable if r.get("level") == 1)},
                        "2": {"label": LEVEL_LABEL[2], "what": LEVEL_WHAT[2], "open": sum(1 for r in applicable if r.get("level") == 2)}},
             "requirements": results, "shown": shown, "optional": optional, "core_data": core, "core_data_source": prot.get("core_data_source"), "policy_basis": prot.get("policy_basis"),
+            "blockers": blockers,
             "documents": {"total": len(docs), "ready": len(ready), "processing": len(processing),
                           "errors": len([d for d in docs if d.get("state") == "error"]),
+                          "failed": [d["doc_id"] for d in failed], "dismissed": [{"doc_id": d["doc_id"], **(d.get("dismissed") or {})} for d in dismissed],
                           "non_final": [d["doc_id"] for d in ready if not _is_final(d, overrides)],
                           "unconfirmed": [d["doc_id"] for d in ready if _needs_confirmation(d) and not _is_final(d, overrides)],
                           "date_unconfirmed": [d["doc_id"] for d in ready if dates.doc_dates(d)["unconfirmed"]],

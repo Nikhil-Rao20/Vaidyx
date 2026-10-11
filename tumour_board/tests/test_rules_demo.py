@@ -28,7 +28,8 @@ def test_tb001_lung_gate(demo_cases):
     assert g["levels"] == {"1": {"label": "Level 1: Case File", "what": rules.LEVEL_WHAT[1], "open": 2}, "2": {"label": "Level 2: Records", "what": rules.LEVEL_WHAT[2], "open": 1}}
     assert req(g, "baseline_labs")["source_doc_id"] == "Dedaf7100" and req(g, "baseline_labs")["level2"]["status"] == "missing_field"
     assert req(g, "driver_mutations")["level1"]["problems"][0].startswith("No final, signed histopathology / ihc / molecular report in the Case File to carry: EGFR, ALK, ROS1")
-    assert g["documents"] == {"total": 8, "ready": 8, "processing": 0, "errors": 0, "non_final": ["D67977cf8"], "unconfirmed": [], "date_unconfirmed": [],
+    assert g["blockers"] == []
+    assert g["documents"] == {"total": 8, "ready": 8, "processing": 0, "errors": 0, "failed": [], "dismissed": [], "non_final": ["D67977cf8"], "unconfirmed": [], "date_unconfirmed": [],
                               "date_flags": {}, "type_disagreements": [], "identity_flags": []}
 
 
