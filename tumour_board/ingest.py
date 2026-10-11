@@ -7,7 +7,7 @@ Order of preference (most faithful first):
 import asyncio, io, re, shutil, subprocess, tempfile
 from pathlib import Path
 
-from . import config, identity, llm, store
+from . import config, identity, llm, ocr_engine, store
 
 TEXT_EXT = {".txt", ".md", ".csv", ".json", ".xml", ".hl7"}
 IMG_EXT = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
@@ -150,8 +150,15 @@ async def ocr_page(png_bytes: bytes, audit=None) -> dict:
     numbers differ from its partner line in the other read, or a line with numbers found in one read only, is an
     uncertain span (generative OCR can silently 'correct' a digit, and lab values are where that matters most). Single
     digits count (ECOG 1 vs 2, TPS 6% vs 8%); list markers, page markers and table pipes do not. The full-resolution
-    read is the transcription used downstream; the second read is kept as "second_read"."""
-    full, second = await asyncio.gather(ocr_image(png_bytes, audit), ocr_image(png_bytes, audit, max_side=int(0.7 * config.OCR_MAX_SIDE)))
+    read is the transcription used downstream; the second read is kept as "second_read".
+
+    Independent OCR engine (V1 item 8.3): Tesseract reads the same page image at the same time, on the CPU. Both model
+    reads can 'correct' a digit the same way; a line where the engine reads a different number is an uncertain span too
+    ("source": "engine"). The engine's reading is kept as "ocr_engine" (text and word boxes); it never changes the
+    transcription. Without the engine (not installed, turned off) the page is read exactly as before, with a note."""
+    (full, second), engine = await asyncio.gather(
+        asyncio.gather(ocr_image(png_bytes, audit), ocr_image(png_bytes, audit, max_side=int(0.7 * config.OCR_MAX_SIDE))),
+        ocr_engine.read_page(png_bytes, audit))
     full, n_masked = identity.mask_aadhaar(full)  # Aadhaar masked at the source: never in the text, the uncertain numbers or the audit (V1 item 2.4)
     second, _ = identity.mask_aadhaar(second)
     spans = ocr_line_check(full, second)
@@ -165,7 +172,25 @@ async def ocr_page(png_bytes: bytes, audit=None) -> dict:
         page["ocr_uncertain_numbers"] = uncertain
         if audit:
             audit({"kind": "ocr_disagreement", "numbers": uncertain, "lines": len(spans)})
+    await _engine_check(page, png_bytes, engine, audit)
     return page
+
+
+async def _engine_check(page: dict, png_bytes: bytes, engine, audit=None) -> None:
+    """Store the engine's reading (or why there is none) and merge its uncertain spans into the page."""
+    if engine is None:
+        page["ocr_engine_note"] = ocr_engine.unavailable_note() or ocr_engine.FAILED
+        return
+    page["ocr_engine"] = engine
+    espans = await ocr_engine.check_page(png_bytes, page["text"], engine, audit)
+    seen = {(s["start"], s["end"], s["reason"]) for s in page.get("ocr_uncertain_spans") or []}
+    espans = [s for s in espans if (s["start"], s["end"], s["reason"]) not in seen]
+    if not espans:
+        return
+    page["ocr_uncertain_spans"] = sorted((page.get("ocr_uncertain_spans") or []) + espans, key=lambda s: (s["start"], s["end"]))
+    page["ocr_uncertain_numbers"] = sorted(set(page.get("ocr_uncertain_numbers") or []) | {n for s in espans for n in s["numbers"]})
+    if audit:
+        audit({"kind": "ocr_engine_disagreement", "numbers": sorted({n for s in espans for n in s["numbers"]}), "lines": len(espans)})
 
 
 def uncertain_overlap(page: dict, start: int, end: int) -> dict | None:

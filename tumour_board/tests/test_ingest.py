@@ -324,6 +324,8 @@ def test_doc_with_soffice_conversion_fails(monkeypatch, tmp_path):
 
 # ---- two-read OCR check, line by line (V1 item 3.3) -----------------------------------------------------------
 def _two_reads(monkeypatch, full, second, events=None):
+    monkeypatch.setenv("TB_OCR_ENGINE", "off")  # the two-read check alone (the independent engine: test_ocr_engine.py)
+
     async def fake(png, audit=None, max_side=None):
         return second if max_side else full
     monkeypatch.setattr(ingest, "ocr_image", fake)
@@ -413,6 +415,13 @@ def test_ocr_identical_reads_have_no_spans(monkeypatch):
 ])
 def test_ocr_markers_pipes_and_spacing_are_not_disagreements(monkeypatch, full, second):
     assert "ocr_uncertain_spans" not in _two_reads(monkeypatch, full, second)
+
+
+def test_ocr_engine_off_changes_nothing_but_a_note(monkeypatch):
+    p = _two_reads(monkeypatch, "Hb 11.8 g/dL\nECOG 1", "Hb 11.8 g/dL\nECOG 2")
+    assert p.pop("ocr_engine_note") == "independent OCR engine turned off" and "ocr_engine" not in p
+    assert set(p) == {"text", "second_read", "method", "ocr_reads", "ocr_uncertain_spans", "ocr_uncertain_numbers"}
+    assert all("source" not in s for s in p["ocr_uncertain_spans"])
 
 
 def test_ocr_disagreement_audit_event(monkeypatch):
