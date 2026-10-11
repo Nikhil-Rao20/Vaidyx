@@ -332,9 +332,12 @@ async function waiveReq(reqId) {
   if (!v) return;
   await recordConfirmation("waive", reqId, {}, v.reason);
 }
+// a new document may answer a Tumour Board action (V1 item 7.4): suggested, a person closes it or says it does not
+const suggestionHTML = (a, inbox) => !a.suggested_close || a.status === "completed" ? "" : `<div class="stagebox small" style="margin-top:6px"><span class="chip c-ok">May be complete</span> ${esc(a.suggested_close.reason)}.
+  ${!inbox && can("update_action", a.id) ? ` <button class="ghost sm" data-sugclose="${esc(a.id)}" data-doc="${esc(a.suggested_close.doc_id)}">Close with this document</button> <button class="ghost sm" data-sugdismiss="${esc(a.id)}">Not this document</button>` : inbox ? ` <span class="muted">Open the Case File to close it.</span>` : ""}</div>`;
 function actionHTML(a) {
-  return `<div class="action ${a.status}"><div class="h"><span>${esc(a.label)}${a.level ? ` <span class="chip c-lvl" title="${esc((LEVEL[a.level] || [])[1] || "")}">${esc(a.level_label || (LEVEL[a.level] || [])[0] || "")}</span>` : ""}</span><span class="chip ${a.status === "completed" ? "c-ok" : a.status === "overdue" ? "c-bad" : "c-warn"}">${a.status === "completed" ? "Completed" : a.status === "overdue" ? "Overdue" : "Pending"}</span></div>
-    <div class="w">${esc(a.what)}</div>
+  return `<div class="action ${a.status}"><div class="h"><span>${a.source === "board" ? `<span class="chip c-info" title="From the Tumour Board record ${esc(a.board_record || "")}">Tumour Board action</span> ` : ""}${esc(a.label)}${a.level ? ` <span class="chip c-lvl" title="${esc((LEVEL[a.level] || [])[1] || "")}">${esc(a.level_label || (LEVEL[a.level] || [])[0] || "")}</span>` : ""}</span><span class="chip ${a.status === "completed" ? "c-ok" : a.status === "overdue" ? "c-bad" : "c-warn"}">${a.status === "completed" ? "Completed" : a.status === "overdue" ? "Overdue" : "Pending"}</span></div>
+    <div class="w">${esc(a.what)}</div>${suggestionHTML(a)}
     <div class="f"><span>Responsible Department: <b>${esc(a.department)}</b> · due ${fmtDate(a.due)}</span>
     ${a.status !== "completed" ? `<span><button class="ghost sm" data-req="${a.id}">Request message</button> ${can("update_action", a.id) ? `<button class="ghost sm" data-act="${a.id}" data-st="completed">Mark completed</button>` : ""}</span>` : `<span>${a.completed ? "closed " + esc(a.completed.slice(0, 16).replace("T", " ")) : ""}</span>`}</div>
     ${a.history?.length > 1 ? `<details class="small muted"><summary>History</summary>${a.history.map((h) => `<div>${esc(h.ts.slice(0, 16).replace("T", " "))} ${esc(h.event)}</div>`).join("")}</details>` : ""}</div>`;
@@ -360,6 +363,14 @@ function bindActions(root) {
     const note = prompt("Note for the record (optional):") ?? "";
     await api(`/cases/${S.caseId}/actions/${b.dataset.act}`, { json: { status: b.dataset.st, note } });
     await openCase(S.caseId, true);
+  }));
+  $$("[data-sugclose]", root).forEach((b) => (b.onclick = async () => {
+    try { await api(`/cases/${S.caseId}/actions/${b.dataset.sugclose}/close`, { json: { doc_id: b.dataset.doc } }); toast("Action closed with the document (audited)"); await openCase(S.caseId, true); }
+    catch (e) { toast(e.message, 7000); }
+  }));
+  $$("[data-sugdismiss]", root).forEach((b) => (b.onclick = async () => {
+    try { await api(`/cases/${S.caseId}/actions/${b.dataset.sugdismiss}/dismiss-suggestion`, { json: {} }); toast("Suggestion dismissed: that document will not be suggested again for this action"); await openCase(S.caseId, true); }
+    catch (e) { toast(e.message, 7000); }
   }));
 }
 
@@ -926,7 +937,8 @@ async function showIntake() {
 }
 
 // ------------------------------------------------------------------ notifications (bell) and the department inbox · V1 item 4.4
-const NKIND = { request: ["c-warn", "Request"], request_closed: ["c-ok", "Request closed"], case_ready: ["c-ok", "Case File ready"] };
+const NKIND = { request: ["c-warn", "Request"], request_closed: ["c-ok", "Request closed"], case_ready: ["c-ok", "Case File ready"],
+  board_action: ["c-info", "Tumour Board action"], board_action_suggestion: ["c-ok", "Action may be complete"] };
 async function loadNotifications() {
   if (!S.me) return;
   try { const r = await api("/notifications?limit=80"); S.notifications = r.notifications; S.unread = r.unread;
@@ -958,9 +970,9 @@ async function showInbox() {
   $$(".citem").forEach((el) => el.classList.remove("on"));
   const chip = (q) => q.status === "completed" ? `<span class="chip c-ok">Closed</span>` : q.overdue ? `<span class="chip c-bad">Overdue ${q.days_overdue} d</span>` : `<span class="chip c-warn">Pending</span>`;
   const row = (q) => `<tr class="click" data-case="${esc(q.case_id)}"><td><b>${esc(q.patient?.name || q.case_id)}</b><div class="small muted">${esc(q.case_id)}${q.patient?.mrn ? " · UHID / MRN " + esc(q.patient.mrn) : ""}${q.patient?.agesex ? " · " + esc(q.patient.agesex) : ""}${q.board_date ? " · board " + fmtDate(q.board_date) : ""}</div></td>
-      <td><b>${esc(q.label)}</b>${q.level_label ? `<div><span class="chip c-lvl">${esc(q.level_label)}</span></div>` : ""}</td><td class="small">${esc(q.what)}</td><td class="small">${fmtDate(q.due)}</td><td>${chip(q)}${q.completed ? `<div class="small muted">${esc(q.completed.slice(0, 16).replace("T", " "))}</div>` : ""}</td></tr>`;
+      <td>${q.source === "board" ? `<span class="chip c-info">${esc(q.source_label)}</span> ` : ""}<b>${esc(q.label)}</b>${q.level_label ? `<div><span class="chip c-lvl">${esc(q.level_label)}</span></div>` : ""}</td><td class="small">${esc(q.what)}${suggestionHTML(q, true)}</td><td class="small">${fmtDate(q.due)}</td><td>${chip(q)}${q.completed ? `<div class="small muted">${esc(q.completed.slice(0, 16).replace("T", " "))}</div>` : ""}</td></tr>`;
   $("#inbox").innerHTML = `<div class="case-head"><div><div class="eyebrow">Department inbox</div><h1>Requests to ${ib.departments.length === 1 ? esc(ib.departments[0].name) : "my departments"}</h1>
-      <div class="muted">Every gap the Pre-Authorization check routed to your department across the Tumour Board Case Files: the Case File, the record needed, what is missing, the due date and the status. A request closes by itself when the record arrives and the Case File is re-checked; requests closed in the last 7 days stay listed. Overdue is worked out when this page is shown.</div></div>
+      <div class="muted">Every gap the Pre-Authorization check routed to your department across the Tumour Board Case Files, and every action the Tumour Board gave your department: the Case File, what is needed, the due date and the status. A Pre-Authorization request closes by itself when the record arrives; a Tumour Board action is closed by a person (a newly arrived matching document is suggested). Requests closed in the last 7 days stay listed. Overdue is worked out when this page is shown.</div></div>
       <div class="readiness"><div class="rtext"><b>${ib.open} open</b><span>${ib.overdue} overdue</span></div></div></div>
     ${ib.departments.map((d) => `<div class="card"><h3>${esc(d.name)} <span class="muted small">${d.open} open · ${d.overdue} overdue</span></h3>
       ${d.requests.length ? `<table class="t"><thead><tr><th>Case File</th><th>Record needed</th><th>What is missing</th><th>Due</th><th>Status</th></tr></thead><tbody>${d.requests.map(row).join("")}</tbody></table>` : `<div class="muted small">No requests.</div>`}</div>`).join("") || `<div class="card"><div class="muted">Your account is not placed in a department with an inbox.</div></div>`}`;

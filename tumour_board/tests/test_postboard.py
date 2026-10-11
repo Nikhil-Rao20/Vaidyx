@@ -104,3 +104,28 @@ def test_pmjay_reference_quote_is_on_its_page_of_the_hbp_manual():
     norm = lambda t: re.sub(r"\s+", " ", t)
     pages = [c for c in json.loads(f.read_text())["chunks"] if c["file"] == ref["file"] and c["page"] == ref["page"]]
     assert any(norm(ref["quote"]) in norm(c["text"]) for c in pages)
+
+
+# ---- 7.4 board actions go to department inboxes; a new matching document suggests closing --------------------------
+def test_board_actions_reach_the_department_and_a_new_mri_suggests_closing(unit_case, monkeypatch):
+    from tumour_board import notify, service, store
+    from tumour_board.tests.util import add, make_doc
+    _no_claims(monkeypatch)
+    rec = asyncio.run(postboard.record_decision(unit_case, {"decision_text": "Plan agreed.", "participants": "Dr A (Med Onc)",
+                                                            "actions": [{"department": "Radiology", "task": "MRI pelvis after neoadjuvant chemoradiation", "due": "2026-12-01"},
+                                                                        {"department": "Medical Oncology", "task": "Counsel the patient"}]}, "coordinator"))
+    acts = [a for a in store.get_state(unit_case)["actions"] if a.get("source") == "board"]
+    assert [(a["department_id"], a["board_record"]) for a in acts] == [("radio_diagnosis", rec["id"]), ("medical_oncology", rec["id"])]
+    sent = [n for n in notify._load() if n["kind"] == "board_action"]
+    assert sorted(n["to"]["department"] for n in sent) == ["medical_oncology", "radio_diagnosis"]
+    d = make_doc("Dmri00001", "mri", title="MRI PELVIS (SYNTHETIC)")
+    d["added"] = "2999-01-01T00:00:00"  # arrived after the actions were created
+    add(unit_case, d)
+    service.recheck(unit_case, "tester")
+    mri, counsel = [a for a in store.get_state(unit_case)["actions"] if a.get("source") == "board"]
+    assert mri["suggested_close"]["doc_id"] == "Dmri00001" and mri["status"] != "completed" and "suggested_close" not in counsel
+    au = [e for e in store.read_audit(unit_case) if e["kind"] == "board_action_suggested"]
+    assert len(au) == 1 and au[0]["action_id"] == mri["id"] and au[0]["by"] == "tester"
+    service.recheck(unit_case, "tester")  # the same suggestion found again: no new audit event or notification
+    assert len([e for e in store.read_audit(unit_case) if e["kind"] == "board_action_suggested"]) == 1
+    assert len([n for n in notify._load() if n["kind"] == "board_action_suggestion"]) == 1

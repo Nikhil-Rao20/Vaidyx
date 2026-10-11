@@ -3,7 +3,7 @@ demo case import, expert reviews."""
 import asyncio, json, logging, time, uuid
 from pathlib import Path
 
-from . import confirm, config, extract, ingest, intake, org, protocol, rules, store
+from . import confirm, config, extract, followup, ingest, intake, org, protocol, rules, store
 
 log = logging.getLogger("tumour_board")
 
@@ -100,6 +100,7 @@ async def process_docs(case_id, doc_ids, job, from_stored=False):
         async with store.lock(case_id):
             gate = rules.evaluate(case_id)  # None while the Case File is not listed (V1 item 2.5)
             rules.sync_actions(case_id, gate)
+            suggest_followups(case_id)  # a new document may answer a Tumour Board action (V1 item 7.4)
     except Exception as e:  # the UI polls this job: it must reach a terminal state
         job["state"] = "failed"; job["error"] = f"{e.__class__.__name__}: {str(e)[:300]}"; job["seconds"] = round(time.time() - job["started"], 1)
         _save_job(job)
@@ -402,12 +403,28 @@ def delete_document(case_id, doc_id, user=""):
     return recheck(case_id, user)
 
 
+def suggest_followups(case_id, user=""):
+    """Suggest closing a Tumour Board action that a newly arrived document may answer (V1 item 7.4); a person decides. Audited.
+    The caller holds the Case File lock."""
+    st = store.get_state(case_id)
+    if not any(isinstance(a, dict) and a.get("source") == "board" for a in st.get("actions") or []):
+        return []
+    changes = followup.suggest_closures(case_id, st, rules.case_docs(case_id, st), by=user)
+    if changes:
+        store.save_state(case_id, st)
+        for ch in changes:
+            store.audit(case_id, {**ch, "kind": "board_action_" + ch["event"], "by": user})  # board_action_suggested / _withdrawn
+    return changes
+
+
 def recheck(case_id, user=""):
     """Re-evaluate the Pre-Authorization rules over the already-processed documents (deterministic, milliseconds) and
     re-sync the routed actions. Documents are NOT re-read here: use reprocess() for that."""
     before = store.get_state(case_id).get("gate") or {}
     gate = rules.evaluate(case_id)
     st = rules.sync_actions(case_id, gate, by=user)
+    if suggest_followups(case_id, user):
+        st = store.get_state(case_id)
     if gate is None:  # not listed yet (V1 item 2.5): nothing to check
         st["recheck"] = {"listed": False, "documents_checked": 0, "processing": 0, "errors": 0, "satisfied": 0, "total": 0, "passed": None, "changed": [], "open_actions": 0}
         store.audit(case_id, {"kind": "recheck", "by": user, "listed": False})

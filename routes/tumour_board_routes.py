@@ -10,6 +10,7 @@ from tumour_board import agents, config, guidelines, llm, notify, org, postboard
 from tumour_board import confirm  # clinician confirmations (V1 item 2.2)
 from tumour_board import intake  # department uploads and patient matching (V1 items 2.3, 2.4)
 from tumour_board import board  # board sessions, attendance, agent log (V1 items 6.1 to 6.3)
+from tumour_board import followup  # Tumour Board actions in department inboxes, closing suggestions (V1 item 7.4)
 
 log = logging.getLogger("tumour_board")
 
@@ -569,6 +570,11 @@ def setup_tumour_board_routes():
             if a["id"] == action_id:
                 _need(_roles(request), "update_action", a.get("department") or None)
                 if b.get("status") in ("pending", "completed", "overdue"):
+                    if b["status"] == "completed" and a.get("status") != "completed":  # the inbox shows a closed request for 7 days from this time
+                        a["completed"], a["closed_by"] = store.now_iso(), u
+                        a.pop("suggested_close", None)
+                    elif b["status"] != "completed":
+                        a.pop("completed", None)
                     a["status"] = b["status"]
                 if b.get("note"):
                     a["history"].append({"ts": store.now_iso(), "event": f"Note by {u}: {b['note']}"})
@@ -578,6 +584,48 @@ def setup_tumour_board_routes():
                 store.save_state(case_id, st); store.audit(case_id, {"kind": "action_updated", "action": action_id, "by": u, **b})
                 return a
         raise HTTPException(404, "action not found")
+
+    def _board_action(case_id, action_id, request):
+        a = next((x for x in store.get_state(case_id).get("actions", []) if x.get("id") == action_id), None)
+        if not a:
+            raise HTTPException(404, "action not found")
+        _need(_roles(request), "update_action", a.get("department") or None)
+        return a
+
+    @r.post("/cases/{case_id}/actions/{action_id}/close")
+    async def close_action(case_id: str, action_id: str, request: Request):
+        """A person closes a Tumour Board action, optionally with the document that answers it (V1 item 7.4): {"doc_id"?, "note"?}."""
+        u = _user(request); _case(case_id); b = await request.json() if (await request.body()) else {}
+        _board_action(case_id, action_id, request)
+        async with store.lock(case_id):
+            st = store.get_state(case_id)
+            doc_id = str((b or {}).get("doc_id") or "")
+            if doc_id and not store.get_doc(case_id, doc_id):
+                raise HTTPException(404, "document not found")
+            try:
+                ev = followup.close_action(st, action_id, u, doc_id or None, str((b or {}).get("note") or "")[:500])
+            except KeyError:
+                raise HTTPException(404, "action not found")
+            except ValueError as e:
+                raise HTTPException(409, str(e))
+            store.save_state(case_id, st); store.audit(case_id, ev)
+        return next(x for x in st["actions"] if x["id"] == action_id)
+
+    @r.post("/cases/{case_id}/actions/{action_id}/dismiss-suggestion")
+    async def dismiss_suggestion(case_id: str, action_id: str, request: Request):
+        """The suggested document does not answer the Tumour Board action (V1 item 7.4): it is never suggested again for it."""
+        u = _user(request); _case(case_id)
+        _board_action(case_id, action_id, request)
+        async with store.lock(case_id):
+            st = store.get_state(case_id)
+            try:
+                ev = followup.dismiss_suggestion(st, action_id, u)
+            except KeyError:
+                raise HTTPException(404, "action not found")
+            except ValueError as e:
+                raise HTTPException(409, str(e))
+            store.save_state(case_id, st); store.audit(case_id, ev)
+        return next(x for x in st["actions"] if x["id"] == action_id)
 
     @r.post("/cases/{case_id}/search")
     async def do_search(case_id: str, request: Request):

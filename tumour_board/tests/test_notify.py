@@ -258,7 +258,7 @@ def cases(people):
         _action("A2", "Pathology", "2026-10-09", created="2026-10-06T09:00:00", level=2, level_label="Level 2 · Records"),
         _action("A3", "Radiology", "2026-10-01", status="completed", completed="2026-10-02T12:00:00"),  # closed 9 days ago
         _action("A4", "Cardiology", "2026-10-01"),  # does not resolve
-        {**_action("A5", "Radiology", "2026-10-01"), "source": "board"},  # not a Pre-Authorization request
+        {**_action("A5", "Radiology", "2026-10-01"), "source": "other"},  # neither a Pre-Authorization request nor a board action
     ]
     store.save_state("TB-SYN-A", st)
     st = store.get_state("TB-SYN-B")
@@ -361,3 +361,67 @@ def test_inbox_skips_unreadable_case(cases, people, today, data_root):
     (bad / "case.json").write_text("{broken")
     (data_root / "cases" / "stray.txt").write_text("x")
     assert _dept(notify.inbox(people["radio"]), "radio_diagnosis")["open"] == 4
+
+
+def test_inbox_rows_carry_source(cases, people, today):
+    reqs = _dept(notify.inbox(people["radio"]), "radio_diagnosis")["requests"]
+    assert all(q["source"] == "pre_authorization" and q["source_label"] == "Pre-Authorization request" for q in reqs)
+    assert all("board_record" not in q and "suggested_close" not in q for q in reqs)
+
+
+# --- inbox: Tumour Board follow-up actions (item 7.4) ----------------------------------------------------------------
+
+def _board(aid, dept, due, status="pending", created="2026-10-09T18:00:00", **kw):
+    return {"id": aid, "source": "board", "board_record": "B1a2b3c", "label": "MRI pelvis after neoadjuvant chemoradiation",
+            "department": dept, "department_id": org.department_id(dept), "requirement": None,
+            "what": "MRI pelvis after neoadjuvant chemoradiation", "status": status, "created": created, "due": due,
+            "history": [{"ts": created, "event": "Created from Tumour Board record B1a2b3c"}], **kw}
+
+
+def test_inbox_lists_board_actions(cases, people, today):
+    st = store.get_state("TB-SYN-B")
+    st["actions"] += [_board("C1", "Radiology", "2026-10-08"),  # overdue on display, stored pending
+                      _board("C2", "Medical Oncology", "2026-10-25", created="2026-10-09T18:01:00"),
+                      _board("C3", "Radiology", "2026-10-20", created="2026-10-09T18:02:00",
+                             suggested_close={"doc_id": "Dx", "title": "MRI PELVIS", "doc_type": "mri", "at": "2026-10-10T09:00:00",
+                                              "reason": "MRI PELVIS (mri) added on 10/10/2026 after the action was created"})]
+    store.save_state("TB-SYN-B", st)
+    box = notify.inbox(people["admin"])
+    radio = {q["action_id"]: q for q in _dept(box, "radio_diagnosis")["requests"]}
+    c1 = radio["C1"]
+    assert c1["source"] == "board" and c1["source_label"] == "Tumour Board action" and c1["board_record"] == "B1a2b3c"
+    assert c1["status"] == "overdue" and c1["overdue"] and c1["days_overdue"] == 3 and c1["requirement"] is None
+    assert c1["suggested_close"] is None
+    assert radio["C3"]["suggested_close"]["doc_id"] == "Dx" and radio["C3"]["status"] == "pending"
+    assert [q["action_id"] for q in _dept(box, "medical_oncology")["requests"]] == ["C2"]
+    assert _dept(box, "radio_diagnosis")["open"] == 6 and _dept(box, "radio_diagnosis")["overdue"] == 2
+    # Pre-Authorization rows are unchanged next to them
+    assert radio["A1"]["source"] == "pre_authorization" and radio["A1"]["status"] == "pending"
+    # the radiology member sees the radiology board actions, the pathology member none
+    assert {"C1", "C3"} <= {q["action_id"] for q in _dept(notify.inbox(people["radio"]), "radio_diagnosis")["requests"]}
+    assert not any(q["source"] == "board" for q in _dept(notify.inbox(people["path"]), "pathology")["requests"])
+
+
+def test_inbox_board_action_completed_window_and_unknown_department(cases, people, today):
+    st = store.get_state("TB-SYN-B")
+    st["actions"] += [_board("C4", "Radiology", "2026-10-08", status="completed", completed="2026-10-10T10:00:00",
+                             suggested_close={"doc_id": "Dx"}),
+                      _board("C5", "Radiology", "2026-10-08", status="completed"),  # closed at an unknown time
+                      _board("C6", "Cardiology", "2026-10-08")]
+    store.save_state("TB-SYN-B", st)
+    box = notify.inbox(people["admin"])
+    ids = {q["action_id"]: q for d in box["departments"] for q in d["requests"]}
+    assert ids["C4"]["status"] == "completed" and ids["C4"]["suggested_close"] is None
+    assert "C5" not in ids and "C6" not in ids
+
+
+def test_inbox_board_action_by_department_name_alias(cases, people, today):
+    st = store.get_state("TB-SYN-B")
+    st["actions"].append({**_board("C7", "Imaging", "2026-10-30"), "department_id": None})
+    store.save_state("TB-SYN-B", st)
+    assert "C7" in {q["action_id"] for q in _dept(notify.inbox(people["radio"]), "radio_diagnosis")["requests"]}
+
+
+def test_notify_board_kinds(people):
+    assert notify.notify({"department": "Medical Oncology"}, "board_action", "TB-SYN-1", "t", board_record="B1")["to"] == {"department": "medical_oncology"}
+    assert notify.notify({"department": "radio_diagnosis"}, "board_action_suggestion", "TB-SYN-1", "t")["kind"] == "board_action_suggestion"

@@ -8,9 +8,8 @@ The board's decision is entered by a clinician. The agent never decides; it chec
 Flags go to expert review; the agent does not decide which value is clinically correct."""
 import re
 import uuid
-from datetime import date, timedelta
 
-from . import dates, grounding, llm, negation, org, protocol, rules, store, units
+from . import dates, followup, grounding, llm, negation, org, protocol, rules, store, units
 
 NOT_LISTED = "Case File not listed: no Pre-Authorization check to compare with"
 
@@ -210,11 +209,8 @@ async def record_decision(case_id, record, user=""):
     record["adjudication"] = await adjudicate(case_id, record)
     st = store.get_state(case_id)
     st.setdefault("board_records", []).append(record)
-    for a in record.get("actions") or []:  # board actions become tracked follow-up actions
-        st.setdefault("actions", []).append({"id": "A" + uuid.uuid4().hex[:6], "source": "board", "board_record": record["id"], "label": a.get("task") or "Board action",
-                                             "department": a.get("department") or "", "what": a.get("task") or "", "status": "pending",
-                                             "created": store.now_iso(), "due": a.get("due") or (date.today() + timedelta(days=14)).isoformat(),
-                                             "history": [{"ts": store.now_iso(), "event": "Created from Tumour Board record " + record["id"]}]})
+    # board actions become follow-up requests in the Responsible Department's inbox, the department notified (V1 item 7.4)
+    st.setdefault("actions", []).extend(followup.board_actions(case_id, record, by=user))
     if record.get("next_review"):
         st["next_review"] = {"date": record["next_review"], "from_record": record["id"]}
     store.save_state(case_id, st)

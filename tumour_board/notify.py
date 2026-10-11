@@ -5,9 +5,11 @@ mark_read(), prune() and purge_case() (a deleted Case File). Each one is address
 ({"role": "coordinator"}) or to one user ({"user": "<username>"}), and remembers who has read it ({user: ts}). Every
 notification is a stored record: that is its audit trail (the gate side is audited in the Case File).
 
-Inbox: every open Pre-Authorization request (an action with source "pre_authorization" in a Case File's state) for the
-departments the user may see, grouped by Responsible Department. Overdue is worked out on display from the due date;
-requests closed in the last 7 days are shown too, so a department sees what closed.
+Inbox: every open request for the departments the user may see, grouped by Responsible Department: Pre-Authorization
+requests (actions with source "pre_authorization") and Tumour Board follow-up actions (source "board", item 7.4, with the
+board record they came from and any closing suggestion from a newly arrived document). Each row says which it is
+(source, source_label). Overdue is worked out on display from the due date; requests closed in the last 7 days are shown
+too, so a department sees what closed.
 
 No model calls. A missing file means no notifications; a malformed line is skipped, never fatal.
 """
@@ -19,11 +21,14 @@ from . import config, org, store
 
 log = logging.getLogger(__name__)
 
-KINDS = ("request", "request_closed", "case_ready")  # a gap routed to a department; a request closed; the Case File is ready
+# a gap routed to a department; a request closed; the Case File is ready; a Tumour Board action sent to a department (item 7.4);
+# a new document may complete a Tumour Board action (a person decides)
+KINDS = ("request", "request_closed", "case_ready", "board_action", "board_action_suggestion")
 ROLES = ("coordinator",)
 CORE = ("id", "ts", "to", "kind", "case_id", "title", "text", "read_by")
 OPEN_STATUSES = ("pending", "overdue")
 RECENT_COMPLETED_DAYS = 7
+SOURCES = {"pre_authorization": "Pre-Authorization request", "board": "Tumour Board action"}  # inbox rows, with their plain label
 PRUNE_EVERY = 200
 
 _lock = threading.Lock()
@@ -277,7 +282,12 @@ def _request(case: dict, a: dict, today: date) -> dict | None:
         elif status == "overdue":
             overdue = True
     p = case.get("patient") if isinstance(case.get("patient"), dict) else {}
-    return {"case_id": case.get("case_id"),
+    source = a.get("source") or "pre_authorization"
+    extra = {}
+    if source == "board":
+        sug = a.get("suggested_close") if status != "completed" and isinstance(a.get("suggested_close"), dict) else None
+        extra = {"board_record": a.get("board_record"), "suggested_close": dict(sug) if sug else None}
+    return {"case_id": case.get("case_id"), "source": source, "source_label": SOURCES.get(source, source), **extra,
             "patient": {"name": p.get("name", ""), "mrn": p.get("mrn", ""), "agesex": p.get("agesex", "")},
             "protocol": case.get("protocol", ""), "board_date": case.get("board_date", ""),
             "action_id": a.get("id"), "requirement": a.get("requirement"), "label": a.get("label", ""),
@@ -305,14 +315,15 @@ def _cases():
 
 
 def inbox(r: dict) -> dict:
-    """Open Pre-Authorization requests (and those closed in the last 7 days) for every department the user may see."""
+    """Open Pre-Authorization requests and Tumour Board actions (and those closed in the last 7 days) for every department
+    the user may see."""
     today = _today()
     visible = org.visible_departments_for_inbox(r)
     rows: dict[str, list] = {did: [] for did in visible}
     if rows:
         for case, st in _cases():
             for a in st.get("actions") or []:
-                if not isinstance(a, dict) or a.get("source") != "pre_authorization":
+                if not isinstance(a, dict) or a.get("source") not in SOURCES:
                     continue
                 did = _action_department(a)
                 if did not in rows:
