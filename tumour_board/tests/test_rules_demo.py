@@ -95,8 +95,8 @@ def test_tb001_pending_values_are_current_from_the_draft(demo_cases):
 
 def test_tb001_actions_routed_by_department(demo_cases):
     st = rules.sync_actions("TB-001", rules.evaluate("TB-001"))
-    assert {a["requirement"]: a["department"] for a in st["actions"]} == {
-        "histopathology": "Pathology", "driver_mutations": "Molecular Pathology", "baseline_labs": "Laboratory Medicine"}
+    assert {a["requirement"]: (a["department"], a["level"]) for a in st["actions"]} == {
+        "histopathology": ("Pathology", 1), "driver_mutations": ("Molecular Pathology", 1), "baseline_labs": ("Laboratory Medicine", 2)}
 
 
 def test_tb001_attesting_does_not_rescue_the_draft(demo_cases):

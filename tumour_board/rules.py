@@ -117,6 +117,22 @@ def _hospital():
         return {}
 
 
+def _dept_id(name):
+    try:
+        from . import org
+        return org.department_id(name) if name else None
+    except Exception:
+        return None
+
+
+def _dept_name(dept_id):
+    try:
+        from . import org
+        return org.department_name(dept_id) if dept_id else ""
+    except Exception:
+        return dept_id or ""
+
+
 def _title(x):
     return x.get("doc_title") or (x.get("classification") or {}).get("title") or x.get("filename") or x.get("doc_id") or ""
 
@@ -387,8 +403,21 @@ def set_override(case_id, kind, key, value: dict, by=""):
     store.audit(case_id, {"kind": "override", "target": kind, "key": key, "value": value, "by": by})
 
 
+def _route(r, case_id):
+    """Where a gap goes (V1 items 4.2 / 4.4): a Level 1 gap to the department that owns the record type (the protocol's Responsible
+    Department); a Level 2 gap to the department that uploaded the record the value should be in, when a department uploaded it
+    (otherwise the Responsible Department). Returns (department name, department id or None, doc id or None)."""
+    name, doc_id = r["department"], r.get("source_doc_id")
+    if r.get("level") == 2 and doc_id:
+        d = store.get_doc(case_id, doc_id) or {}
+        if d.get("department") and _dept_name(d["department"]):
+            return _dept_name(d["department"]), d["department"], doc_id
+    return name, _dept_id(name), doc_id
+
+
 def sync_actions(case_id, gate, by=""):
-    """Open an action for every unmet requirement; complete actions whose requirement is now satisfied."""
+    """Open an action (request) for every unmet requirement; complete actions whose requirement is now satisfied. Each request
+    carries its level and goes to the department that can act on it (V1 item 4.2)."""
     st = store.get_state(case_id)
     if gate is None:  # not listed yet
         st["gate"] = None
@@ -420,15 +449,23 @@ def sync_actions(case_id, gate, by=""):
                 store.audit(case_id, {"kind": "action_completed", "action": a["id"], "requirement": r["id"]})
             continue
         what = "; ".join(r["problems"]) or r["label"]
+        dept, dept_id, doc_id = _route(r, case_id)
         if a:
-            if a["what"] != what:
-                a["what"] = what; a["history"].append({"ts": store.now_iso(), "event": "Re-check: gap updated", "detail": what})
+            moved = (a.get("level") != r.get("level")) or (a.get("department") != dept)
+            if a["what"] != what or moved:
+                a["what"] = what
+                if moved:
+                    a["history"].append({"ts": store.now_iso(), "event": f"Re-check: {LEVEL_LABEL.get(r.get('level'), 'gap')} routed to {dept}", "detail": what})
+                    a["level"], a["level_label"], a["department"], a["department_id"], a["source_doc_id"] = r.get("level"), r.get("level_label", ""), dept, dept_id, doc_id
+                else:
+                    a["history"].append({"ts": store.now_iso(), "event": "Re-check: gap updated", "detail": what})
             continue
         a = {"id": "A" + uuid.uuid4().hex[:6], "source": "pre_authorization", "requirement": r["id"], "label": r["label"],
-             "department": r["department"], "what": what, "status": "pending", "created": store.now_iso(),
-             "due": (today + timedelta(days=sla.get(r["id"], 3))).isoformat(), "history": [{"ts": store.now_iso(), "event": "Gap detected, routed to " + r["department"]}]}
+             "department": dept, "department_id": dept_id, "level": r.get("level"), "level_label": r.get("level_label", ""), "source_doc_id": doc_id,
+             "what": what, "status": "pending", "created": store.now_iso(),
+             "due": (today + timedelta(days=sla.get(r["id"], 3))).isoformat(), "history": [{"ts": store.now_iso(), "event": f"Gap detected ({LEVEL_LABEL.get(r.get('level'), 'gap')}), routed to " + dept}]}
         actions.append(a)
-        store.audit(case_id, {"kind": "action_created", "action": a["id"], "requirement": r["id"], "department": r["department"], "what": what})
+        store.audit(case_id, {"kind": "action_created", "action": a["id"], "requirement": r["id"], "department": dept, "level": r.get("level"), "what": what})
     for a in actions:
         if a["status"] == "pending" and a.get("due") and a["due"] < today.isoformat():
             a["status"] = "overdue"

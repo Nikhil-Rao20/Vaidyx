@@ -118,41 +118,67 @@ const statusChip = (c) => { if (!c || !c.status) return ""; const ok = FINALISH(
   return `<span class="chip ${ok || (un && c.signed === "yes") ? "c-ok" : un ? "c-warn" : "c-bad"}" title="${esc((c.status_notes || []).join("; "))}">${un ? (c.signed === "yes" ? "Signed, status not stated" : "Status not stated") : esc(c.status)}${c.signed === "no" ? " · unsigned" : c.signed === "yes" && !un ? " · signed" : ""}</span>`; };
 
 // ------------------------------------------------------------------ tab: Pre-Authorization
+const TIER = { a: ["c-ok", "NCG Essential"], b: ["c-info", "NCG Optimal"], c: ["c-mute", "NCG Optional"], none: ["c-mute", "Not applicable"] };
+const LEVEL = { 1: ["Level 1 · Case File", "The record is missing, not final or not this patient"], 2: ["Level 2 · Records", "A required value is missing, pending or not verified in the record"] };
+function ncgLine(r) {
+  // the NCG line each record rests on (V1 item 4.1): guideline, page and verbatim quote; then the basis / caveat texts
+  const src = r.sources && r.sources.length ? r.sources : r.source ? [r.source] : [];
+  const cites = src.map((x) => `${esc(x.guideline || "NCG")}${x.page !== undefined && x.page !== "n/a" ? ", p. " + esc(x.page) : x.where ? ", " + esc(x.where) : ""}: "${esc(x.quote || "")}"`).join("; ");
+  const extra = [r.tier_basis, r.note, r.setting_note].filter(Boolean).map(esc).join(" · ");
+  return cites || extra ? `<div class="ncg muted">${cites}${extra ? `<div>${extra}</div>` : ""}</div>` : "";
+}
+function reqRow(r, shown) {
+  const s = STATUS[r.status] || STATUS.needs_review;
+  const ev = r.evidence.filter((e) => e.doc_id).map((e) => {
+    const d = S.data.documents.find((x) => x.doc_id === e.doc_id); const cl = d?.classification || {};
+    return `<span class="cite" data-doc="${esc(e.doc_id)}" title="${esc(e.quote || "")}">${esc(e.value ? `${S.facts?.[e.fact]?.label || e.fact}: ${e.value}` : (cl.title || e.doc_id))}${docDates(cl).event ? " · " + fmtDate(docDates(cl).event) : ""}</span>`;
+  }).join("");
+  const needs = r.needs || (r.status === "needs_confirmation" && r.evidence[0]?.doc_id ? [{ type: "attest_final", doc_id: r.evidence[0].doc_id }] : []);
+  const attest = needs.filter((n) => can("confirm", n.doc_id)).map((n) => n.type === "attest_final" ? `<button class="ghost sm" data-attest="${esc(n.doc_id)}">Attest: final, signed</button>`
+    : n.type === "confirm_dates" ? `<button class="ghost sm" data-confdate="${esc(n.doc_id)}">Confirm date</button>`
+    : n.type === "confirm_doc_type" ? `<button class="ghost sm" data-conftype="${esc(n.doc_id)}">Confirm document type</button>` : "").join("");
+  const waive = shown || !can("waive", r.id) ? "" : r.status === "waived" ? `<button class="ghost sm" data-unwaive="${esc(r.id)}">Remove waiver</button>` : (r.status !== "satisfied" && r.status !== "not_applicable") ? `<button class="ghost sm" data-waive="${esc(r.id)}" title="Clinical decision that this record is not required for this Case File (audited)">Waive</button>` : "";
+  const tier = TIER[r.tier] || TIER.a;
+  const lvl = r.level && !shown ? ` <span class="chip c-lvl" title="${esc(LEVEL[r.level][1])}">${LEVEL[r.level][0]}</span>` : "";
+  const chip = shown && r.status !== "satisfied" && r.status !== "not_applicable" ? `<span class="chip c-mute" title="Shown for information: not counted at this hospital level or in this setting">${esc(s[1])} (not counted)</span>` : `<span class="chip ${s[0]}">${s[1]}</span>`;
+  return `<div class="req ${shown ? "shown" : ""}"><div class="icon ${s[2]}">${s[3]}</div><div style="flex:1">
+    <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><span class="lbl">${esc(r.label)} <span class="chip ${tier[0]}" title="${esc(r.tier_note || r.tier_label || "")}">${tier[1]}</span>${lvl}</span><span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${attest}${waive}${chip}</span></div>
+    <div class="dept">Responsible Department: ${esc(r.department)}${r.tier_note ? " · " + esc(r.tier_note) : ""}</div>
+    ${r.problems.map((p) => `<div class="prob">${esc(p)}</div>`).join("")}${(r.notes || []).map((p) => `<div class="prob muted">${esc(p)}</div>`).join("")}${ncgLine(r)}<div class="ev">${ev}</div></div></div>`;
+}
 function renderReady() {
   const { state } = S.data, g = state.gate;
-  const reqs = g ? g.requirements.map((r) => {
-    const s = STATUS[r.status] || STATUS.needs_review;
-    const ev = r.evidence.filter((e) => e.doc_id).map((e) => {
-      const d = S.data.documents.find((x) => x.doc_id === e.doc_id); const cl = d?.classification || {};
-      return `<span class="cite" data-doc="${esc(e.doc_id)}" title="${esc(e.quote || "")}">${esc(e.value ? `${S.facts?.[e.fact]?.label || e.fact}: ${e.value}` : (cl.title || e.doc_id))}${docDates(cl).event ? " · " + fmtDate(docDates(cl).event) : ""}</span>`;
-    }).join("");
-    const needs = r.needs || (r.status === "needs_confirmation" && r.evidence[0]?.doc_id ? [{ type: "attest_final", doc_id: r.evidence[0].doc_id }] : []);
-    const attest = needs.filter((n) => can("confirm", n.doc_id)).map((n) => n.type === "attest_final" ? `<button class="ghost sm" data-attest="${esc(n.doc_id)}">Attest: final, signed</button>`
-      : n.type === "confirm_dates" ? `<button class="ghost sm" data-confdate="${esc(n.doc_id)}">Confirm date</button>`
-      : n.type === "confirm_doc_type" ? `<button class="ghost sm" data-conftype="${esc(n.doc_id)}">Confirm document type</button>` : "").join("");
-    const waive = !can("waive", r.id) ? "" : r.status === "waived" ? `<button class="ghost sm" data-unwaive="${esc(r.id)}">Remove waiver</button>` : (r.status !== "satisfied" && r.status !== "not_applicable") ? `<button class="ghost sm" data-waive="${esc(r.id)}" title="Clinical decision that this record is not required for this Case File (audited)">Waive</button>` : "";
-    return `<div class="req"><div class="icon ${s[2]}">${s[3]}</div><div style="flex:1">
-      <div style="display:flex;justify-content:space-between;gap:8px"><span class="lbl">${esc(r.label)}</span><span style="display:flex;gap:4px;align-items:center">${attest}${waive}<span class="chip ${s[0]}">${s[1]}</span></span></div>
-      <div class="dept">Responsible Department: ${esc(r.department)}</div>
-      ${r.problems.map((p) => `<div class="prob">${esc(p)}</div>`).join("")}${(r.notes || []).map((p) => `<div class="prob muted">${esc(p)}</div>`).join("")}<div class="ev">${ev}</div></div></div>`;
-  }).join("") : `<div class="muted">Not evaluated yet. Add documents to start.</div>`;
+  const group = (title, sub, list, shown) => list.length ? `<div class="lvlhead"><b>${title}</b><span class="small muted">${sub}</span></div>${list.map((r) => reqRow(r, shown)).join("")}` : "";
+  let reqs;
+  if (g) {
+    const l1 = g.requirements.filter((r) => r.level === 1), l2 = g.requirements.filter((r) => r.level === 2), met = g.requirements.filter((r) => !r.level);
+    reqs = group(`Level 1 · Case File <span class="chip c-lvl">${l1.length} open</span>`, "each required record present, final and signed, right patient", l1)
+      + group(`Level 2 · Records <span class="chip c-lvl">${l2.length} open</span>`, "required values present, verified, not pending", l2)
+      + group("Met", `${met.length} of ${g.requirements.length} required records`, met)
+      + group("Shown, not counted", "NCG Optimal records at an Essential hospital, Optional records, and records not applicable in this setting", g.shown || [], true);
+    if (!g.requirements.length && !(g.shown || []).length) reqs = `<div class="muted">This protocol lists no records.</div>`;
+  } else reqs = `<div class="muted">Not evaluated yet. Add documents to start.</div>`;
+  const blockers = g?.blockers?.length ? `<div class="banner bad"><b>${g.blockers.length} document${g.blockers.length > 1 ? "s" : ""} failed to read</b> and block the Pre-Authorization until re-processed or dismissed (a dismissal needs a reason and is audited; the Case File can then pass without that document).
+    ${g.blockers.map((b) => `<div class="row"><span>${esc(b.filename)}: <span class="muted">${esc(b.error)}</span></span>${can("reprocess") ? `<button class="ghost sm" data-reproc-doc="${esc(b.doc_id)}">Re-process</button>` : ""}${can("confirm", b.doc_id) ? `<button class="ghost sm" data-dismiss="${esc(b.doc_id)}">Dismiss</button>` : ""}</div>`).join("")}</div>` : "";
   const opt = g ? g.optional.map((o) => `<span class="chip ${o.available ? "c-info" : "c-mute"}" style="margin:2px">${o.available ? "✓ " : ""}${esc(o.label)}</span>`).join("") : "";
   const acts = (state.actions || []).filter((a) => a.source === "pre_authorization");
   const actHTML = acts.length ? acts.sort((a, b) => (a.status === "completed") - (b.status === "completed")).map(actionHTML).join("") : `<div class="muted small">No gaps routed.</div>`;
   const docs = g?.documents || {};
+  const setting = g ? `NCG setting: <b>${esc(g.setting_label || "not recorded (the strictest tier of each record applies until the coordinator records it)")}</b> · Hospital level: <b>${esc(g.hospital_level || "essential")}</b> · Protocol ${esc(g.protocol)} v${esc(g.protocol_version || "")}` : "";
   $("#tab-ready").innerHTML = `<div class="grid2"><div>
     <div class="card"><h3>Pre-Authorization check <span><button class="ghost sm" id="btn-recheck">Re-check now</button></span></h3>
-      <div class="muted small" style="margin-bottom:6px">Mandatory records for this protocol (configurable per Case File). A record counts only when it is the final, signed version and its required primary fields are found with a verified source quote. Document exists ≠ Document is ready.</div>
-      ${reqs}</div>
+      <div class="muted small" style="margin-bottom:6px">Required records from the NCG Essential / Optimal / Optional tiers for this cancer and setting (clinical review before real use). A record counts only when it is the final, signed version and its required primary fields are found with a verified source quote. Document exists ≠ Document is ready.</div>
+      ${setting ? `<div class="small" style="margin-bottom:4px">${setting}</div>` : ""}${g?.tiers_note ? `<div class="muted small" style="margin-bottom:6px">${esc(g.tiers_note)}</div>` : ""}
+      ${blockers}${reqs}</div>
     ${g?.core_data?.length ? `<div class="card"><h3>MDT minimum core data <span class="muted small">${g.core_data.filter((c) => c.present).length} of ${g.core_data.length} documented</span></h3>
       <div class="muted small" style="margin-bottom:6px">Informational checklist (not part of the gate). Source: ${esc(g.core_data_source || "")}.</div>
       <div style="display:flex;flex-wrap:wrap;gap:4px">${g.core_data.map((c) => c.present ? `<span class="cite" data-doc="${esc(c.evidence[0]?.doc_id || "")}" title="${esc((c.evidence[0]?.value || "") + " | " + (c.evidence[0]?.quote || ""))}">✓ ${esc(c.label)}</span>` : `<span class="chip c-mute">– ${esc(c.label)}</span>`).join("")}</div></div>` : ""}
     <div class="card"><h3>Optional records available</h3><div>${opt || '<span class="muted small">None</span>'}</div></div>
     ${confirmationsHTML()}
-    ${g?.policy_basis ? `<div class="card"><h3>Why a Pre-Authorization gate</h3><div class="small" style="color:#475569">${esc(g.policy_basis)}</div></div>` : ""}
+    ${g?.policy_basis ? `<div class="card"><h3>Why a Pre-Authorization gate</h3><div class="small" style="color:#475569">${esc(g.policy_basis)}</div>${g.pmjay_note ? `<div class="small muted" style="margin-top:6px">${esc(g.pmjay_note)}</div>` : ""}</div>` : ""}
   </div><div>
-    <div class="card"><h3>Routed actions <span class="muted small">${acts.filter((a) => a.status !== "completed").length} open</span></h3>
-      <div class="muted small" style="margin-bottom:8px">The agent identifies and routes the gap. It does not perform the missing clinical task.</div>${actHTML}</div>
+    <div class="card"><h3>Routed requests <span class="muted small">${acts.filter((a) => a.status !== "completed").length} open</span></h3>
+      <div class="muted small" style="margin-bottom:8px">Every gap becomes a request to the department that can act on it: a Level 1 gap to the department that owns the record, a Level 2 gap to the department that uploaded the record. Requests close by themselves when the record arrives; the department sees them in its inbox and the bell. The agent routes the gap; it does not perform the missing clinical task.</div>${actHTML}</div>
     <div class="card"><h3>${can("upload") ? "Add documents" : "Documents"}</h3>
       ${can("upload") ? `<div class="drop" id="drop">Drop files or a whole folder here<br><span class="small">PDF, scanned images (PNG / JPG / TIFF), text and Office files</span><br>
       <button class="ghost sm" id="pick-files" style="margin-top:8px">Choose files</button> <button class="ghost sm" id="pick-folder">Choose folder</button></div>
@@ -276,7 +302,7 @@ async function waiveReq(reqId) {
   await recordConfirmation("waive", reqId, {}, v.reason);
 }
 function actionHTML(a) {
-  return `<div class="action ${a.status}"><div class="h"><span>${esc(a.label)}</span><span class="chip ${a.status === "completed" ? "c-ok" : a.status === "overdue" ? "c-bad" : "c-warn"}">${a.status === "completed" ? "Completed" : a.status === "overdue" ? "Overdue" : "Pending"}</span></div>
+  return `<div class="action ${a.status}"><div class="h"><span>${esc(a.label)}${a.level ? ` <span class="chip c-lvl" title="${esc((LEVEL[a.level] || [])[1] || "")}">${esc(a.level_label || (LEVEL[a.level] || [])[0] || "")}</span>` : ""}</span><span class="chip ${a.status === "completed" ? "c-ok" : a.status === "overdue" ? "c-bad" : "c-warn"}">${a.status === "completed" ? "Completed" : a.status === "overdue" ? "Overdue" : "Pending"}</span></div>
     <div class="w">${esc(a.what)}</div>
     <div class="f"><span>Responsible Department: <b>${esc(a.department)}</b> · due ${fmtDate(a.due)}</span>
     ${a.status !== "completed" ? `<span><button class="ghost sm" data-req="${a.id}">Request message</button> ${can("update_action", a.id) ? `<button class="ghost sm" data-act="${a.id}" data-st="completed">Mark completed</button>` : ""}</span>` : `<span>${a.completed ? "closed " + esc(a.completed.slice(0, 16).replace("T", " ")) : ""}</span>`}</div>
@@ -286,7 +312,7 @@ function requestText(a) {
   const c = S.data.case, p = c.patient || {};
   return `Tumour Board Case File ${c.case_id}: ${p.name || ""}${p.mrn ? ", UHID " + p.mrn : ""}${p.agesex ? ", " + p.agesex : ""}
 To: ${a.department}
-Required before the Tumour Board${c.board_date ? " on " + fmtDate(c.board_date) : ""}: ${a.label}
+Required before the Tumour Board${c.board_date ? " on " + fmtDate(c.board_date) : ""}: ${a.label}${a.level_label ? " (" + a.level_label + ")" : ""}
 Details: ${a.what}
 Please upload the final, signed report to the Case File by ${fmtDate(a.due)}. The Case File is re-checked automatically when it arrives.
 (Generated by Vaidyx Tumour Board assistant, action ${a.id})`;

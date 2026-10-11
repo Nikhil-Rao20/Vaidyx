@@ -299,7 +299,8 @@ def test_sync_opens_action_routed_to_department(unit_case):
     assert (a["requirement"], a["department"], a["status"], a["source"]) == ("ct_thorax", "Radiology", "pending", "pre_authorization")
     assert a["what"] == "No diagnostic ct thorax report in the Case File"
     assert a["due"] == (date.today() + timedelta(days=3)).isoformat()
-    assert a["history"][0]["event"] == "Gap detected, routed to Radiology"
+    assert a["history"][0]["event"] == "Gap detected (Level 1: Case File), routed to Radiology"
+    assert (a["level"], a["level_label"], a["department_id"], a["source_doc_id"]) == (1, "Level 1: Case File", "radio_diagnosis", None)
     assert store.get_state(unit_case)["gate"]["requirements"][1]["id"] == "ct_thorax"
     assert [e for e in store.read_audit(unit_case) if e["kind"] == "action_created"][0]["department"] == "Radiology"
 
@@ -319,7 +320,9 @@ def test_sync_is_idempotent_and_updates_the_gap(unit_case):
     st = _sync(unit_case)
     a = st["actions"][0]
     assert len(st["actions"]) == 1 and a["what"] == "Required field not documented: Primary lesion size"
-    assert a["history"][-1]["event"] == "Re-check: gap updated"
+    assert a["history"][-1]["event"] == "Re-check: Level 2: Records routed to Radiology" and a["level"] == 2 and a["source_doc_id"] == "Dct000001"
+    st = _sync(unit_case)
+    assert len(st["actions"][0]["history"]) == 2  # nothing changed: no new history entry
 
 
 def test_sync_auto_completes_with_evidence(unit_case):

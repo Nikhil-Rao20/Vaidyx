@@ -412,6 +412,7 @@ def recheck(case_id, user=""):
         return st
     changed = [r["label"] for r in gate["requirements"] if {x["id"]: x["status"] for x in before.get("requirements", [])}.get(r["id"]) not in (None, r["status"])]
     st["recheck"] = {"documents_checked": gate["documents"]["ready"], "processing": gate["documents"]["processing"], "errors": gate["documents"]["errors"],
+                     "level1_open": gate["levels"]["1"]["open"], "level2_open": gate["levels"]["2"]["open"],
                      "satisfied": gate["satisfied"], "total": gate["total"], "passed": gate["passed"], "changed": changed,
                      "open_actions": sum(1 for a in st.get("actions", []) if a["status"] != "completed")}
     store.audit(case_id, {"kind": "recheck", "by": user, "passed": gate["passed"], "readiness": gate["readiness"], "changed": changed})
