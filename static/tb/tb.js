@@ -684,9 +684,15 @@ function glHTML(r) {
 }
 
 // ------------------------------------------------------------------ tab: board & follow-up
+const BOARD_DEPTS = ["Medical Oncology", "Surgical Oncology", "Radiation Oncology", "Radio-diagnosis", "Pathology", "Molecular Pathology", "Nuclear Medicine", "Laboratory Medicine", "Gastroenterology", "Pulmonary Medicine", "Tumour Board coordination"];
+const PMJAY = { surgical_oncology: "Surgical Oncologist", radiation_oncology: "Radiation Oncologist", medical_oncology: "Medical Oncologist" };
+const FLAGKIND = { transcription: "Possible transcription discrepancy", consistency: "Documentation consistency", composition: "PM-JAY board composition", documentation: "Documentation" };
+// PM-JAY board composition (V1 item 7.1): which of the three oncologists the record shows present; an agent never counts
+const compHTML = (c) => !c ? "" : `<div class="small" style="margin-top:6px"><b>PM-JAY board composition</b> ${c.checked ? Object.keys(PMJAY).map((d) => `<span class="chip ${c.present.includes(d) ? "c-ok" : "c-rev"}">${PMJAY[d]}: ${c.present.includes(d) ? "present" : "not recorded"}</span>`).join(" ")
+  : `<span class="chip c-rev">Not checked: specialties not recorded</span>`}${c.how ? ` <span class="muted">(${c.how === "attendance" ? "from the attendance" : "read from the participants text"})</span>` : ""}</div>`;
 function renderBoard() {
   const st = S.data.state;
-  const depts = ["Medical Oncology", "Surgical Oncology", "Radiation Oncology", "Radiology", "Pathology", "Molecular Pathology", "Nuclear Medicine", "Laboratory Medicine", "GI Oncology", "Gastroenterology", "Pulmonology", "Tumour Board coordinator"];
+  const depts = BOARD_DEPTS;
   const records = (st.board_records || []).slice().reverse();
   const allActs = (st.actions || []).slice().sort((a, b) => (a.status === "completed") - (b.status === "completed") || a.due.localeCompare(b.due));
   $("#tab-board").innerHTML = `<div class="grid2"><div>
@@ -694,7 +700,9 @@ function renderBoard() {
       <label>Board date</label><input type="date" id="b-date" value="${new Date().toISOString().slice(0, 10)}">
       <label>Decision recorded by the board</label><textarea id="b-text" placeholder="As decided and dictated by the board"></textarea>
       <label>Recorded by</label><input id="b-by" placeholder="Name, role">
-      <label>Participants present (names and specialties)</label><input id="b-part" placeholder="e.g. Dr A (Med Onc), Dr B (Surg Onc), Dr C (Radiology), Dr D (Pathology)">
+      <label>Members present (name · department)</label><div id="b-mems"></div><button class="ghost sm" id="b-addm">+ Member</button>
+      <div class="small muted">PM-JAY asks for a Surgical, a Radiation and a Medical Oncologist on the board; the check reads the members' departments. An AI support agent is never a member.</div>
+      <label>Participants as written (optional: built from the members when empty)</label><input id="b-part" placeholder="e.g. Dr A (Med Onc), Dr B (Surg Onc), Dr C (Rad Onc), Dr D (Pathology)">
       <label>Report corrections or discrepancies raised at the meeting (if any)</label><input id="b-corr" placeholder="e.g. Pathology to issue addendum correcting PD-L1 TPS">
       <label>Divergent opinions / dissenting clinicians (if any)</label><input id="b-div" placeholder="Recorded verbatim, with names">
       <label>Actions (Responsible Department · task · due)</label><div id="b-acts"></div><button class="ghost sm" id="b-add">+ Action</button>
@@ -704,8 +712,9 @@ function renderBoard() {
       <div class="small muted">Recorded by ${esc(b.recorded_by)} · entered ${esc(b.recorded_at.replace("T", " ").slice(0, 16))} by ${esc(b.entered_by)}</div>
       <p style="white-space:pre-wrap">${esc(b.decision_text)}</p>
       <div class="kv small">${b.participants ? `<div>Participants</div><div>${esc(b.participants)}</div>` : ""}${b.report_corrections_raised ? `<div>Report corrections raised</div><div>${esc(b.report_corrections_raised)}</div>` : ""}${b.divergent_opinions ? `<div>Divergent opinions</div><div>${esc(b.divergent_opinions)}</div>` : ""}</div>
-      ${b.adjudication.flags.map((f) => `<div class="flag ${f.severity === "expert_review" ? "" : "review"}"><div class="k">${f.kind === "transcription" ? "Possible transcription discrepancy" : f.kind === "consistency" ? "Documentation consistency" : "Documentation"}</div>
-        <div>${esc(f.text)}</div>${f.source_quote ? `<div class="small" style="margin-top:4px">Source: ${citeHTML({ doc_id: f.source_doc, doc_title: f.source_title, quote: f.source_quote })} "${esc(f.source_quote)}"</div><div class="small muted">Expert review required. The agent flags the difference; it does not decide which value is correct.</div>` : ""}</div>`).join("")}
+      ${compHTML(b.adjudication.composition)}
+      ${b.adjudication.flags.map((f) => `<div class="flag ${f.severity === "expert_review" ? "" : "review"}"><div class="k">${FLAGKIND[f.kind] || "Documentation"}</div>
+        <div>${esc(f.text)}</div>${f.reference && f.kind === "composition" ? refHTML(f.reference) : ""}${f.source_quote ? `<div class="small" style="margin-top:4px">Source: ${citeHTML({ doc_id: f.source_doc, doc_title: f.source_title, quote: f.source_quote })} "${esc(f.source_quote)}"</div><div class="small muted">Expert review required. The agent flags the difference; it does not decide which value is correct.</div>` : ""}</div>`).join("")}
       ${b.adjudication.value_checks.filter((v) => v.result === "consistent").map((v) => `<div class="small"><span class="chip c-ok">✓</span> ${esc(v.value_as_written)} matches the source</div>`).join("")}</div>`).join("")}
   </div><div>
     <div class="card"><h3>Follow-up tracker <span class="muted small">${allActs.filter((a) => a.status !== "completed").length} open</span></h3>
@@ -716,9 +725,13 @@ function renderBoard() {
   const addRow = (d = "", t = "", due = "") => $("#b-acts").insertAdjacentHTML("beforeend", `<div class="arow"><select>${depts.map((x) => `<option ${x === d ? "selected" : ""}>${x}</option>`).join("")}</select><input placeholder="Task" value="${esc(t)}"><input type="date" value="${due}"><button class="ghost sm" data-rmrow>×</button></div>`);
   if ($("#b-acts")) addRow();
   if ($("#b-add")) $("#b-add").onclick = () => addRow();
+  const addMember = () => $("#b-mems").insertAdjacentHTML("beforeend", `<div class="arow"><input placeholder="Name (e.g. Dr. A. Rao)" aria-label="Member name"><select aria-label="Department">${depts.map((x) => `<option>${x}</option>`).join("")}</select><button class="ghost sm" data-rmrow>×</button></div>`);
+  if ($("#b-mems")) addMember();
+  if ($("#b-addm")) $("#b-addm").onclick = () => addMember();
   if ($("#b-save")) $("#b-save").onclick = async () => {
     const actions = $$("#b-acts .arow").map((r) => ({ department: r.children[0].value, task: r.children[1].value, due: r.children[2].value })).filter((a) => a.task);
-    const body = { board_date: $("#b-date").value, decision_text: $("#b-text").value, recorded_by: $("#b-by").value, participants: $("#b-part").value,
+    const members = $$("#b-mems .arow").map((r) => ({ name: r.children[0].value.trim(), department: r.children[1].value })).filter((m) => m.name);
+    const body = { board_date: $("#b-date").value, decision_text: $("#b-text").value, recorded_by: $("#b-by").value, participants: $("#b-part").value, members,
       report_corrections_raised: $("#b-corr").value, divergent_opinions: $("#b-div").value, actions, next_review: $("#b-next").value };
     $("#b-save").innerHTML = `<span class="spin"></span> Adjudicating...`;
     await api(`/cases/${S.caseId}/board-records`, { json: body });
@@ -1155,10 +1168,10 @@ function decisionHTML() {
   const r = S.room, s = r.session, d = (s.decisions || {})[S.roomCase], c = roomCase();
   if (d) { const rec = (c.board_records || []).find((x) => x.id === d.board_record) || {};
     return `<p style="white-space:pre-wrap;margin-top:0">${esc(d.decision_text || "")}</p><div class="small muted">Recorded by ${esc(d.recorded_by || "")} · ${esc((d.recorded_at || "").replace("T", " ").slice(0, 16))} ·
-      <span class="chip ${rec.status === "consistent" ? "c-ok" : "c-rev"}">${rec.status === "consistent" ? "Adjudication: consistent" : `Adjudication: ${rec.flags || 0} flag(s) for expert review`}</span> <button class="ghost sm" id="r-board">Open on the Case File</button></div>
+      <span class="chip ${rec.status === "consistent" ? "c-ok" : "c-rev"}">${rec.status === "consistent" ? "Adjudication: consistent" : `Adjudication: ${rec.flags || 0} flag(s) for expert review`}</span> <button class="ghost sm" id="r-board">Open on the Case File</button></div>${compHTML(rec.composition)}
       <div class="small muted" style="margin-top:6px">Mark each agent point below: discussed, accepted or not relevant.</div>`; }
   if (!r.can_manage) return `<div class="muted small">The decision is recorded by the Tumour Board coordinator.</div>`;
-  const depts = ["Medical Oncology", "Surgical Oncology", "Radiation Oncology", "Radio-diagnosis", "Pathology", "Molecular Pathology", "Nuclear Medicine", "Laboratory Medicine", "Gastroenterology", "Pulmonary Medicine", "Tumour Board coordination"];
+  const depts = BOARD_DEPTS;
   return `<div class="form"><div class="muted small">Entered by the clinical team. The agent then checks the record (documentation, values against the signed sources, open Pre-Authorization items); it does not judge the clinical decision.</div>
     <label for="d-text">Decision recorded by the board</label><textarea id="d-text" placeholder="As decided and dictated by the board"></textarea>
     <label for="d-by">Recorded by</label><input id="d-by" placeholder="Name, role">

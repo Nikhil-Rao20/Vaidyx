@@ -707,7 +707,7 @@ def setup_tumour_board_routes():
                           "briefs": {r_: arts.get(f"brief_{r_}") for r_ in absent if arts.get(f"brief_{r_}")},
                           "briefs_stale": {r_: stale(arts.get(f"brief_{r_}")) for r_ in absent if arts.get(f"brief_{r_}")},
                           "board_records": [{"id": b_["id"], "board_date": b_.get("board_date"), "session": b_.get("session"), "status": b_["adjudication"]["status"],
-                                             "flags": len(b_["adjudication"]["flags"])} for b_ in st.get("board_records", [])]}
+                                             "flags": len(b_["adjudication"]["flags"]), "composition": b_["adjudication"].get("composition")} for b_ in st.get("board_records", [])]}
         return {"session": s, "specialties": board.specialties(), "absent_roles": absent, "participants": board.participants(s),
                 "roles": {k: {"label": v["label"], "department": agents.department_of(k)} for k, v in agents.ROLES.items()},
                 "cases": cases, "can_manage": org.can(rl, "session"), "can_ask": bool(rl.get("admin") or rl.get("known")), "can_review": org.can(rl, "review"),

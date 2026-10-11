@@ -3,15 +3,30 @@
 The board's decision is entered by a clinician. The agent never decides; it checks the RECORD:
   1. documentation rules from the protocol (decision text, recorded by, actions with a Responsible Department and due date);
   2. values quoted in the decision vs the verified source values (possible transcription discrepancy, e.g. 6% vs 60%);
-  3. decision recorded while Pre-Authorization items were still open (documentation consistency).
+  3. decision recorded while Pre-Authorization items were still open (documentation consistency);
+  4. board composition: PM-JAY HBP 2.2 asks for surgical, radiation and medical oncologists (V1 item 7.1); an agent never counts.
 Flags go to expert review; the agent does not decide which value is clinically correct."""
 import re
 import uuid
 from datetime import date, timedelta
 
-from . import dates, grounding, llm, negation, protocol, rules, store, units
+from . import dates, grounding, llm, negation, org, protocol, rules, store, units
 
 NOT_LISTED = "Case File not listed: no Pre-Authorization check to compare with"
+
+# PM-JAY HBP 2.2 (s 3.9 Medical Oncology, p 27; repeated in the radiation oncology section, p 33): the tumour board "should include a highly trained team of Surgical, Radiation and Medical
+# Oncologist" (V1 item 7.1). Present means marked present in the attendance or named as a member; an AI support agent never counts.
+PMJAY_BOARD = ("surgical_oncology", "radiation_oncology", "medical_oncology")
+PMJAY_SPECIALIST = {"surgical_oncology": "Surgical Oncologist", "radiation_oncology": "Radiation Oncologist", "medical_oncology": "Medical Oncologist"}
+PMJAY_REFERENCE = {"org": "PM-JAY / National Health Authority, India", "region": "India", "title": "NHA HBP 2.2 manual 2021",
+                   "file": "pmjay/NHA-HBP-2.2-manual-2021.pdf", "page": 27,
+                   "quote": "that should include a highly trained team of Surgical, Radiation and Medical Oncologist"}
+_SPECIALTY_WORDS = {  # free-text participants ("Dr A (Med Onc), Dr B (Surg Onc)"); a bare "Oncology" is not enough to tell which
+    "medical_oncology": re.compile(r"\bmed(?:ical)?\.?\s*onc(?:o|ology|ologist)?\b", re.I),
+    "surgical_oncology": re.compile(r"\bsurg(?:ical)?\.?\s*onc(?:o|ology|ologist)?\b|\bonco[- ]?surg(?:eon|ery)\b", re.I),
+    "radiation_oncology": re.compile(r"\brad(?:iation)?\.?\s*onc(?:o|ology|ologist)?\b|\bradiotherap(?:y|ist)\b", re.I)}
+_AGENT_WORDS = re.compile(r"\bagents?\b|\bAI\b|\bartificial intelligence\b")
+_ABSENT_PART = re.compile(r"^\s*(?:absent|apologies|not present|not attended)\b", re.I)
 
 CLAIMS_SCHEMA = {"type": "object", "additionalProperties": False, "properties": {"claims": {"type": "array", "items": {
     "type": "object", "additionalProperties": False, "properties": {
@@ -38,6 +53,72 @@ def _nums(s):
     return [float(x) for x in grounding.numbers(s)]
 
 
+def attendance_from_members(members):
+    """{"present", "members"} from members typed on the Board tab ([{"name", "department"}]), the same shape a board session gives."""
+    out = []
+    for m in members or []:
+        if not isinstance(m, dict) or not str(m.get("name", "")).strip():
+            continue
+        did = org.department_id(str(m.get("department", "")))
+        out.append({"name": str(m["name"]).strip()[:120], "department": did or "", "department_name": org.department_name(did) if did else str(m.get("department", ""))[:80]})
+    present = list(dict.fromkeys(m["department_name"] for m in out if m["department"]))
+    return {"present": present, "absent": [], "members": out}
+
+
+def _piece_departments(piece):
+    """Department ids one participant entry names: "Dr B (Surg Onc)", "Dr C (Radiology)", "Pathology"."""
+    out = {did for did, rx in _SPECIALTY_WORDS.items() if rx.search(piece)}
+    for chunk in [*re.findall(r"\(([^)]*)\)", piece), re.sub(r"\([^)]*\)", " ", piece)]:
+        did = org.department_id(chunk.strip())
+        if did and not re.fullmatch(r"(?:gi\s+)?oncology", chunk.strip(), re.I):  # a bare "Oncology" does not say which oncologist
+            out.add(did)
+    return out
+
+
+def composition(record):
+    """Which of PM-JAY's three oncology specialties were present (V1 item 7.1). From the structured attendance when the record has one
+    (Board room session, or members typed with their department), else from the participants text. Returns {"checked", "how",
+    "present", "missing", "reference"}; "checked" is False when nothing says which specialties were there."""
+    att = record.get("attendance") if isinstance(record.get("attendance"), dict) else {}
+    present, how = set(), None
+    if att.get("present") or att.get("members"):
+        how = "attendance"
+        for name in att.get("present") or []:
+            present.add(org.department_id(str(name)))
+        for m in att.get("members") or []:
+            if isinstance(m, dict) and not _AGENT_WORDS.search(str(m.get("name", ""))):
+                present.add(org.department_id(str(m.get("department") or "")) or org.department_id(str(m.get("department_name") or "")))
+    else:
+        named_any = False
+        for part in re.split(r"[;\n]", str(record.get("participants") or "")):
+            if _ABSENT_PART.search(part):
+                continue  # "absent: Radiation Oncology" (the session's participants text)
+            for piece in part.split(","):
+                depts = _piece_departments(piece)
+                named_any = named_any or bool(depts)
+                if not _AGENT_WORDS.search(piece):  # "Radiation Oncology (AI support agent)": an agent is never a member
+                    present |= depts
+        how = "participants text" if named_any else None
+    present.discard(None)
+    found = [d for d in PMJAY_BOARD if d in present]
+    return {"checked": how is not None, "how": how, "present": found, "missing": [d for d in PMJAY_BOARD if d not in present] if how else [],
+            "reference": PMJAY_REFERENCE}
+
+
+def _composition_flag(comp):
+    ref = PMJAY_REFERENCE
+    cite = f"PM-JAY HBP 2.2 (p {ref['page']}): the tumour board \"{ref['quote'].removeprefix('that ')}\""
+    if not comp["checked"]:
+        return {"kind": "composition", "severity": "review", "missing": list(PMJAY_BOARD), "reference": ref,
+                "text": f"PM-JAY board composition not checked: the record does not say which specialties were present. {cite}. "
+                        "Add the members present with their departments."}
+    if comp["missing"]:
+        who = ", ".join(PMJAY_SPECIALIST[d] for d in comp["missing"])
+        return {"kind": "composition", "severity": "review", "missing": comp["missing"], "reference": ref,
+                "text": f"PM-JAY board composition: no {who} recorded as present at this board. {cite}. An AI support agent does not count as a member."}
+    return None
+
+
 async def adjudicate(case_id, record):
     au = store.auditor(case_id)
     case = store.get_case(case_id)
@@ -56,6 +137,9 @@ async def adjudicate(case_id, record):
             flags.append({"kind": "documentation", "severity": "review", "text": f"Action {i + 1} has no Responsible Department"})
         if not a.get("due"):
             flags.append({"kind": "documentation", "severity": "review", "text": f"Action {i + 1} has no due date"})
+    comp = composition(record)  # PM-JAY: surgical, radiation and medical oncologist (V1 item 7.1)
+    if _composition_flag(comp):
+        flags.append(_composition_flag(comp))
     gate = (store.get_state(case_id).get("gate") or {}) if listed else {}
     open_items = [r["label"] for r in gate.get("requirements", []) if r["status"] not in ("satisfied", "not_applicable")]
     if open_items:
@@ -113,11 +197,16 @@ async def adjudicate(case_id, record):
         checks.append({**c, "result": res, "source": {"value": src["value"], "doc_id": src["doc_id"], "quote": src["quote"],
                                                        **({"confirmed_by": src["confirmed_by"]} if src.get("confirmed_by") else {})}})
     au({"kind": "adjudication", "flags": len(flags), "claims": len(claims)})
-    return {"flags": flags, "value_checks": checks, "status": "flag_for_expert_review" if flags else "consistent", "evaluated": store.now_iso()}
+    return {"flags": flags, "value_checks": checks, "composition": comp, "status": "flag_for_expert_review" if flags else "consistent", "evaluated": store.now_iso()}
 
 
 async def record_decision(case_id, record, user=""):
     record = {**record, "id": "B" + uuid.uuid4().hex[:6], "recorded_at": store.now_iso(), "entered_by": user}
+    if record.get("members") and not record.get("attendance"):  # members typed with their departments on the Board tab (V1 item 7.1)
+        record["attendance"] = attendance_from_members(record.pop("members"))
+        if not str(record.get("participants") or "").strip():
+            record["participants"] = ", ".join(f"{m['name']} ({m['department_name']})" if m["department_name"] else m["name"] for m in record["attendance"]["members"])
+    record.pop("members", None)
     record["adjudication"] = await adjudicate(case_id, record)
     st = store.get_state(case_id)
     st.setdefault("board_records", []).append(record)
