@@ -113,6 +113,8 @@ const SCAN_TITLE = "Read from a scanned page by the vision reader (Qwen3.5-4B, C
 const scanPage = (id, page) => page !== undefined && page !== null && page !== "" && !!(S.data?.documents || []).find((d) => d.doc_id === id)?.scan_pages?.includes(+page);
 const isScan = (c) => !!c && (c.source_method ? c.source_method === "vision-transcription" : scanPage(c.doc_id, c.page));
 const scanChip = (c) => (isScan(c) ? ` <span class="chip c-scan" title="${SCAN_TITLE}">from scan (OCR)</span>` : "");
+// V1 item 8.2: a critical value (biomarkers, stage as recorded) read from a scan counts for the gate only once a clinician confirmed it on the image
+const critChip = (fid, f) => (S.facts?.[fid]?.critical && f && f.verification === "verified" && isScan(f) ? ` <span class="chip c-warn" title="Critical value read from a scan: it counts for the Pre-Authorization only after a clinician confirms it against the image">confirm on the scan</span>` : "");
 function citeHTML(c) {
   const label = `${c.doc_title || c.doc_id}${c.date ? " · " + fmtDate(c.date) : ""}`;
   return `<span class="cite" data-doc="${esc(c.doc_id)}" data-page="${c.page ?? ""}" data-start="${c.start ?? ""}" data-end="${c.end ?? ""}" title="&quot;${esc(c.quote)}&quot;${isScan(c) ? " (" + SCAN_TITLE + ")" : ""}">${esc(label)}${isScan(c) ? '<span class="scan-tag">from scan (OCR)</span>' : ""}</span>`;
@@ -156,7 +158,8 @@ function reqRow(r, shown) {
   const needs = r.needs || (r.status === "needs_confirmation" && r.evidence[0]?.doc_id ? [{ type: "attest_final", doc_id: r.evidence[0].doc_id }] : []);
   const attest = needs.filter((n) => can("confirm", n.doc_id)).map((n) => n.type === "attest_final" ? `<button class="ghost sm" data-attest="${esc(n.doc_id)}">Attest: final, signed</button>`
     : n.type === "confirm_dates" ? `<button class="ghost sm" data-confdate="${esc(n.doc_id)}">Confirm date</button>`
-    : n.type === "confirm_doc_type" ? `<button class="ghost sm" data-conftype="${esc(n.doc_id)}">Confirm document type</button>` : "").join("");
+    : n.type === "confirm_doc_type" ? `<button class="ghost sm" data-conftype="${esc(n.doc_id)}">Confirm document type</button>`
+    : n.type === "confirm_value" ? `<button class="ghost sm" data-confval="${esc(JSON.stringify(n))}" title="Read the value on the scan image and record it (V1 8.2)">Confirm ${esc(S.facts?.[n.fact]?.label || n.fact)} on the scan</button>` : "").join("");
   const waive = shown || !can("waive", r.id) ? "" : r.status === "waived" ? `<button class="ghost sm" data-unwaive="${esc(r.id)}">Remove waiver</button>` : (r.status !== "satisfied" && r.status !== "not_applicable") ? `<button class="ghost sm" data-waive="${esc(r.id)}" title="Clinical decision that this record is not required for this Case File (audited)">Waive</button>` : "";
   const tier = TIER[r.tier] || TIER.a;
   const lvl = r.level && !shown ? ` <span class="chip c-lvl" title="${esc(LEVEL[r.level][1])}">${LEVEL[r.level][0]}</span>` : "";
@@ -220,6 +223,7 @@ function renderReady() {
   bindConfirmations($("#tab-ready"));
   $$("[data-confdate]", $("#tab-ready")).forEach((b) => (b.onclick = () => confirmDates(b.dataset.confdate)));
   $$("[data-conftype]", $("#tab-ready")).forEach((b) => (b.onclick = () => confirmDocType(b.dataset.conftype)));
+  $$("[data-confval]", $("#tab-ready")).forEach((b) => (b.onclick = () => confirmValue(JSON.parse(b.dataset.confval))));
   $$("[data-attest]", $("#tab-ready")).forEach((b) => (b.onclick = () => attestDoc(b.dataset.attest)));
   if ($("#drop")) bindUpload();
   const arr = $("#btn-arrivals");
@@ -246,13 +250,13 @@ async function dismissDoc(docId) {
 const CONF_LABEL = { attest_final: "Attested final, signed", waive: "Requirement waived", confirm_dates: "Dates confirmed", confirm_doc_type: "Document type confirmed",
   confirm_match: "Patient match confirmed", dismiss_failed: "Failed document dismissed", confirm_value: "Value confirmed", resolve_flag: "Flag resolved" };
 const confLabel = (c) => c.type === "confirm_match" ? (c.fields?.case_id ? (c.by === "system:matching" ? "Filed by the matcher (exact identifier)" : "Patient match confirmed") : "Not this patient") : CONF_LABEL[c.type] || c.type;
-function confirmDialog({ title, intro, fields = [], submit = "Record" }) {
+function confirmDialog({ title, intro, html = "", fields = [], submit = "Record" }) {
   // Returns a promise of {field: value} or null. Every field: {id, label, type: text|textarea|select|date, options: [[value, label]], required, value, placeholder}
   return new Promise((resolve) => {
     const f = (x) => x.type === "textarea" ? `<textarea id="cd-${x.id}" placeholder="${esc(x.placeholder || "")}">${esc(x.value || "")}</textarea>`
       : x.type === "select" ? `<select id="cd-${x.id}">${(x.options || []).map(([v, l]) => `<option value="${esc(v)}" ${v === x.value ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`
       : `<input id="cd-${x.id}" type="${x.type === "date" ? "date" : "text"}" value="${esc(x.value || "")}" placeholder="${esc(x.placeholder || "")}">`;
-    $("#modal-body").innerHTML = `<h3 style="color:#1f2933;margin-top:0">${esc(title)}</h3>${intro ? `<div class="small muted">${esc(intro)}</div>` : ""}
+    $("#modal-body").innerHTML = `<h3 style="color:#1f2933;margin-top:0">${esc(title)}</h3>${intro ? `<div class="small muted">${esc(intro)}</div>` : ""}${html}
       <div class="form">${fields.map((x) => `<label>${esc(x.label)}${x.required ? "" : ' <span class="muted" style="font-weight:400">(optional)</span>'}</label>${f(x)}`).join("")}</div>
       <div class="small muted" style="margin-top:10px">Recorded with your name and the time in the audit log. It can be undone; the record of both stays.</div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button class="ghost" id="cd-cancel">Cancel</button><button class="primary" id="cd-ok">${esc(submit)}</button></div>`;
@@ -329,6 +333,23 @@ async function confirmDocType(docId) {
   const v = await confirmDialog({ title: "Confirm the document type", intro, fields: [{ id: "doc_type", label: "Document type", type: "select", options: opts, value: dis?.keyword_type || c.doc_type }, { id: "reason", label: "Note", type: "text" }], submit: "Confirm type" });
   if (!v) return;
   await recordConfirmation("confirm_doc_type", docId, { doc_type: v.doc_type }, v.reason);
+}
+// V1 item 8.2: a critical value read from a scan counts only after a clinician has read it on the image
+const IMG_EXT = [".png", ".jpg", ".jpeg", ".webp", ".bmp"];
+function scanImageURL(caseId, d, page) {
+  const base = `/api/tb/cases/${encodeURIComponent(caseId)}/documents/${encodeURIComponent(d.doc_id)}/file`;
+  return d.ext === ".pdf" ? `${base}?render=1&page=${+page || 0}` : IMG_EXT.includes(d.ext) ? base : "";
+}
+async function confirmValue(n) {
+  const d = S.data.documents.find((x) => x.doc_id === n.doc_id) || { doc_id: n.doc_id }; const c = d.classification || {};
+  const label = S.facts?.[n.fact]?.label || n.fact, title = c.title || d.filename || n.doc_id, page = (+n.page || 0) + 1;
+  const img = scanImageURL(S.caseId, d, n.page);
+  const v = await confirmDialog({ title: `Confirm ${label} against the scan`,
+    intro: `"${n.value}" was read from page ${page} of ${title}, a scanned page, by the vision reader (Qwen3.5-4B, Chinese, non-medical). Read ${label} on the image and record it exactly as written there; correct it if the transcription is wrong. It counts for the Pre-Authorization once you confirm it.`,
+    html: img ? `<div class="confscan"><img src="${esc(img)}" alt="${esc(`Page ${page} of ${title}`)}"></div>` : `<div class="small muted">No image preview for this format: open the original from the Documents tab.</div>`,
+    fields: [{ id: "value", label: `${label} as written on the scan`, type: "text", required: true, value: n.value }], submit: "Confirm value" });
+  if (!v) return;
+  await recordConfirmation("confirm_value", `${n.doc_id}:${n.fact}`, { value: v.value });
 }
 async function waiveReq(reqId) {
   const r = S.data.state.gate?.requirements?.find((x) => x.id === reqId);
@@ -456,7 +477,7 @@ function renderDocs() {
   <div class="card"><h3>Primary fields across the Case File</h3><div class="muted small" style="margin-bottom:8px">Current value = most recent verified value from a final, signed document. Every value links to its source quote.</div>
   <table class="t"><thead><tr><th>Field</th><th>Current value</th><th>Source</th><th>History</th></tr></thead><tbody>
   ${Object.entries(S.data.facts).map(([k, f]) => { const c = f.current;
-    return `<tr><td>${esc(f.label)}</td><td><b>${esc(c.value)}</b> ${c.state === "pending" ? '<span class="chip c-warn">pending</span>' : ""}${c.verification !== "verified" ? '<span class="chip c-rev">' + esc(c.verification) + "</span>" : ""}${!c.doc_final ? '<span class="chip c-bad">non-final doc</span>' : ""}</td>
+    return `<tr><td>${esc(f.label)}</td><td><b>${esc(c.value)}</b> ${c.state === "pending" ? '<span class="chip c-warn">pending</span>' : ""}${critChip(k, c)}${c.verification !== "verified" ? '<span class="chip c-rev">' + esc(c.verification) + "</span>" : ""}${!c.doc_final ? '<span class="chip c-bad">non-final doc</span>' : ""}</td>
       <td>${c.verification === "confirmed" ? `<span class="chip c-ok" title="Read by the clinician in the source document; no model quote">confirmed by ${esc(c.confirmed_by || "clinician")}</span> <span class="cite" data-doc="${esc(c.doc_id)}">${esc(c.doc_title || c.doc_id)}</span>` : citeHTML({ ...c.location, doc_id: c.doc_id, doc_title: c.doc_title, date: c.date, quote: c.quote, source_method: c.source_method })}</td>
       <td class="small muted">${f.history.length > 1 ? f.history.map((h) => `${esc(h.value)} (${fmtDate(h.date)})`).join(" → ") : ""}</td></tr>`; }).join("")}
   </tbody></table></div>`;
@@ -506,7 +527,7 @@ async function openDoc(docId, focus, base) {
       <div class="doctext" id="doctext">${marks(pg)}</div>
       <h4 style="color:#1f2933">Fields found in this document</h4>
       <table class="t"><tbody>${Object.entries(d.facts || {}).map(([k, f]) => `<tr><td>${esc(k)}</td><td><b>${esc(f.value)}</b>${f.state === "pending" ? ' <span class="chip c-warn">pending</span>' : ""}</td>
-        <td><span class="chip ${f.verification === "verified" ? "c-ok" : "c-rev"}" title="${esc(f.reason || "")}">${esc(f.verification)}</span>${f.polarity === "negated" ? ' <span class="chip c-mute" title="The value is a negative finding (no / not / negative / absent)">negated</span>' : ""}${f.verification === "confirmed" ? "" : scanChip({ ...f, doc_id: d.doc_id })}</td><td class="small muted">"${esc(f.quote)}"</td></tr>`).join("") || '<tr><td class="muted">None</td></tr>'}</tbody></table>
+        <td><span class="chip ${f.verification === "verified" ? "c-ok" : "c-rev"}" title="${esc(f.reason || "")}">${esc(f.verification)}</span>${f.polarity === "negated" ? ' <span class="chip c-mute" title="The value is a negative finding (no / not / negative / absent)">negated</span>' : ""}${f.verification === "confirmed" ? "" : scanChip({ ...f, doc_id: d.doc_id })}${critChip(k, f)}</td><td class="small muted">"${esc(f.quote)}"</td></tr>`).join("") || '<tr><td class="muted">None</td></tr>'}</tbody></table>
       ${pages.some((p) => p.flags?.length) ? `<div class="flag review" style="margin-top:8px"><div class="k">Hindi / regional text or handwriting</div>${esc([...new Set(pages.flatMap((p) => p.flags || []))].join("; "))}. Flagged lines: ${pages.map((p, i) => (p.flagged_lines || []).map((l) => `page ${i + 1}: "${esc(l.line.slice(0, 80))}"`).join("; ")).filter(Boolean).join("; ")}. The text is transcribed as written and never translated; values taken from these lines are marked for a person's check.</div>` : ""}
       ${pages.some((p) => p.ocr_uncertain_numbers?.length) ? `<div class="flag review" style="margin-top:8px"><div class="k">OCR disagreement</div>The two reads of this scanned page differ on these numbers: ${esc(pages.flatMap((p) => p.ocr_uncertain_numbers || []).join(", "))}. Values containing them are marked for expert review; read the scan image.</div>` : ""}
     </div></div>`;

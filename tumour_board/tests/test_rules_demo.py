@@ -14,8 +14,11 @@ def test_tb001_lung_gate(demo_cases):
     assert _statuses(g) == {"clinical_history": "satisfied", "cect_tap": "satisfied", "histopathology": "not_final", "driver_mutations": "missing_field",
                             "baseline_labs": "missing_field"}
     assert {r["id"]: (r["tier"], r["status"]) for r in g["shown"]} == {
-        "pdl1": ("b", "missing_field"), "met": ("b", "missing_field"), "pet_ct": ("b", "satisfied"), "brain_mri": ("b", "missing_record"),
+        "pdl1": ("b", "missing_field"), "met": ("b", "missing_field"), "pet_ct": ("b", "needs_confirmation"), "brain_mri": ("b", "missing_record"),
         "bronchoscopy": ("b", "missing_record"), "mediastinal_staging": ("b", "missing_record"), "mri_thorax_superior_sulcus": ("c", "missing_record")}
+    # V1 item 8.2: the PET-CT is a scan and the stage as recorded is a critical value: a clinician confirms it on the image
+    pet = next(r for r in g["shown"] if r["id"] == "pet_ct")
+    assert [(n["type"], n["fact"]) for n in pet["needs"]] == [("confirm_value", "recorded_stage")] and pet["level"] == 2
     assert all(r["required"] for r in g["requirements"]) and not any(r["required"] for r in g["shown"])
     assert not g["passed"] and g["readiness"] == 40 and (g["satisfied"], g["total"]) == (2, 5)
     assert g["hospital_level"] == "essential" and g["setting"] == "" and g["protocol_version"] == "0.7"

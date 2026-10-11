@@ -62,6 +62,14 @@ def with_source_methods(doc):
     return {**doc, "facts": out}
 
 
+def needs_scan_confirmation(entry, spec) -> bool:
+    """V1 item 8.2: a critical value (facts.json "critical": true) whose quote was verified on a scanned page counts for the
+    Pre-Authorization only after a clinician has confirmed it against the image (confirm_value turns it "confirmed"). A value
+    found in a PDF text layer, or one already confirmed, needs nothing; a value not verified never counts anyway."""
+    entry = entry or {}
+    return bool((spec or {}).get("critical")) and entry.get("verification") == "verified" and entry.get("source_method") == SCAN_METHOD
+
+
 def citation_source_method(pages, page_index) -> dict:
     """{"source_method": ...} for a citation located on page_index of a document's pages, {} when unknown."""
     m = page_method(pages, page_index)

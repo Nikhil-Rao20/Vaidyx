@@ -98,3 +98,77 @@ def test_session_export_citation_names_the_scan():
     assert "from scan (OCR)" in board._cite({"doc_title": "PET-CT", "quote": "SUVmax 8.2", "source_method": SCAN})
     assert "from scan" not in board._cite({"doc_title": "PET-CT", "quote": "SUVmax 8.2", "source_method": "text-layer"})
     assert "from scan" not in board._cite({"doc_title": "PET-CT", "quote": "SUVmax 8.2"})
+
+
+# ---- V1 item 8.2: critical values from scans need one confirmation against the image ----
+
+from tumour_board import confirm, protocol  # noqa: E402
+
+
+def _ct():
+    return util.make_doc("Dct000001", "ct", region="chest", facts={"lesion_size": util.fact("3.2 cm")})
+
+
+def _hist(doc_id="Dhist0001", pdl1="TPS 60%", method=SCAN, date="2026-09-01"):
+    d = util.make_doc(doc_id, "histopathology", date=date, facts={"histologic_type": util.fact("Adenocarcinoma"), "pdl1": util.fact(pdl1)})
+    d["pages"][0]["method"] = method
+    return d
+
+
+def test_the_proposed_fields_are_critical():
+    crit = sorted(k for k, v in protocol.facts().items() if v.get("critical"))
+    assert crit == sorted(["recorded_stage", "pdl1", "egfr", "alk", "ros1", "er", "pr", "her2", "ki67", "mmr", "ras_braf"])
+
+
+def test_needs_scan_confirmation_rule():
+    spec = {"critical": True}
+    assert scanned.needs_scan_confirmation({"verification": "verified", "source_method": SCAN}, spec)
+    assert not scanned.needs_scan_confirmation({"verification": "confirmed", "source_method": SCAN}, spec)
+    assert not scanned.needs_scan_confirmation({"verification": "verified", "source_method": "text-layer"}, spec)
+    assert not scanned.needs_scan_confirmation({"verification": "verified", "source_method": SCAN}, {})
+    assert not scanned.needs_scan_confirmation({"verification": "needs_review", "source_method": SCAN}, spec)
+
+
+def test_scanned_pdl1_needs_confirmation_then_confirm_satisfies(unit_case):
+    util.add(unit_case, _hist(), _ct())
+    g = rules.evaluate(unit_case)
+    r = util.req(g, "pdl1")
+    assert r["status"] == "needs_confirmation" and r["level"] == 2 and not g["passed"]
+    assert r["level2"]["status"] == "needs_confirmation"
+    need = [n for n in r["needs"] if n["type"] == "confirm_value"]
+    assert need == [{"type": "confirm_value", "doc_id": "Dhist0001", "fact": "pdl1", "value": "TPS 60%", "page": 0, "start": 0, "end": 7}]
+    assert any(p.startswith('Confirm PD-L1 against the scan image: "TPS 60%"') for p in r["problems"])
+    assert r["source_doc_id"] == "Dhist0001"  # the request goes to the department that uploaded the scan
+    assert util.req(g, "histopathology")["status"] == "satisfied"  # histologic type is not a critical field
+    confirm.record(unit_case, "confirm_value", "Dhist0001:pdl1", {"value": "TPS 60%"}, "", by="Dr. Rao")
+    g = rules.evaluate(unit_case)
+    r = util.req(g, "pdl1")
+    assert r["status"] == "satisfied" and g["passed"]
+    assert r["evidence"] == [{"doc_id": "Dhist0001", "fact": "pdl1", "value": "TPS 60%", "quote": ""}]
+
+
+def test_confirmation_survives_reprocess(unit_case):
+    util.add(unit_case, _hist(), _ct())
+    confirm.record(unit_case, "confirm_value", "Dhist0001:pdl1", {"value": "TPS 60%"}, "", by="Dr. Rao")
+    util.add(unit_case, _hist())  # the document written again, as a re-process does
+    assert util.req(rules.evaluate(unit_case), "pdl1")["status"] == "satisfied"
+
+
+def test_text_layer_pdl1_needs_no_confirmation(unit_case):
+    util.add(unit_case, _hist(method="text-layer"), _ct())
+    r = util.req(rules.evaluate(unit_case), "pdl1")
+    assert r["status"] == "satisfied" and not [n for n in r.get("needs") or [] if n["type"] == "confirm_value"]
+
+
+def test_same_value_in_a_digital_record_corroborates_the_scan(unit_case):
+    util.add(unit_case, _hist(), _ct(), _hist("Dihc00001", method="text-layer", date="2026-08-30"))
+    r = util.req(rules.evaluate(unit_case), "pdl1")
+    assert r["status"] == "satisfied"
+    assert [e["doc_id"] for e in r["evidence"] if e.get("fact") == "pdl1"] == ["Dihc00001"]
+
+
+def test_a_newer_different_scanned_value_still_needs_confirmation(unit_case):
+    util.add(unit_case, _hist(pdl1="TPS 80%", date="2026-09-05"), _ct(), _hist("Dihc00001", method="text-layer", date="2026-08-30"))
+    r = util.req(rules.evaluate(unit_case), "pdl1")
+    assert r["status"] == "needs_confirmation"
+    assert [n["value"] for n in r["needs"] if n["type"] == "confirm_value"] == ["TPS 80%"]

@@ -226,7 +226,8 @@ def _evaluate_record(req, ready, facts, overrides, cat):
                                   + ", ".join(cat[f]["label"] for f in req.get("required_facts", []) if f in cat))
     # required fields (Level 2)
     missing, pending, review = [], [], []
-    open_doc = None  # the document the open value sits in (pending, approximate or non-final)
+    scan_needs = []  # (history entry, field): critical values read from a scan, not yet confirmed against the image (V1 item 8.2)
+    open_doc = None  # the document the open value sits in (pending, approximate, non-final or awaiting confirmation against the scan)
     for fid in req.get("required_facts", []):
         hist = [h for h in facts.get(fid, {}).get("history", []) if not allowed or set(h["doc_types"]) & allowed]
         type_needs += [(h, 2) for h in hist if allowed and len(h["doc_types"]) > 1 and len(set(h["doc_types"]) & allowed) == 1
@@ -236,6 +237,12 @@ def _evaluate_record(req, ready, facts, overrides, cat):
             good = [h for h in good if (h["date"] or "") > r["postdate_reference"]]
         if good:
             g = sorted(good, key=lambda h: h["date"] or "")[-1]
+            if scanned.needs_scan_confirmation(g, cat.get(fid)):  # the current value rests on a scan transcription alone (V1 item 8.2)
+                same = [h for h in good if not scanned.needs_scan_confirmation(h, cat.get(fid)) and grounding.norm(h["value"]) == grounding.norm(g["value"])]
+                if same:  # the same value in a verified record not read from a scan (or already confirmed): it stands
+                    g = sorted(same, key=lambda h: h["date"] or "")[-1]
+                else:
+                    scan_needs.append((g, fid)); open_doc = open_doc or g
             scan = g["verification"] != "confirmed" and g.get("source_method") == scanned.SCAN_METHOD  # read from a scan (V1 item 8.1); a confirmed value is the clinician's reading
             r["evidence"].append({"doc_id": g["doc_id"], "fact": fid, "value": g["value"], "quote": g["quote"], **({"source_method": scanned.SCAN_METHOD} if scan else {})})
             if len({h["doc_id"] for h in good}) > 1 and len({grounding.norm(h["value"]) for h in good}) > 1:  # which value is current depends on the dates
@@ -272,6 +279,19 @@ def _evaluate_record(req, ready, facts, overrides, cat):
             r["status"] = "missing_field" if r["status"] == "satisfied" else r["status"]
         elif review and r["status"] == "satisfied":
             r["status"] = "needs_review"
+    if scan_needs and r["status"] != "not_applicable":  # a clinician reads each critical value on the scan image (V1 item 8.2)
+        for h, fid in scan_needs:
+            loc = h.get("location") or {}
+            p = (f"Confirm {cat[fid]['label']} against the scan image: \"{h['value']}\" was read from a scanned page of {h['doc_title']} "
+                 "(critical value: the transcription alone does not count)")
+            need = {"type": "confirm_value", "doc_id": h["doc_id"], "fact": fid, "value": h["value"],
+                    **({k: loc[k] for k in ("page", "start", "end") if k in loc} if loc else {})}
+            r["problems"].append(p); l2["problems"].append(p)
+            r.setdefault("needs", []).append(need); l2["needs"].append(need)
+        if l2["status"] == "satisfied":
+            l2["status"] = "needs_confirmation"
+        if r["status"] == "satisfied":
+            r["status"] = "needs_confirmation"
     if type_needs and r["status"] != "not_applicable":  # the document type decides whether this record counts: a clinician confirms it
         r["status"] = "needs_confirmation"
         seen = set()

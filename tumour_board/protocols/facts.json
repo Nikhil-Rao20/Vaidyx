@@ -1,5 +1,6 @@
 {
  "_note": "Primary fields the extractor looks for. Values are always copied as written in the source document, with a verbatim quote. doc_types are hints for which documents to search.",
+ "_critical_note": "critical: true (V1 item 8.2, proposal for clinical sign-off): read from a scanned page (vision reader transcription), the value needs one clinician confirmation against the image (confirm_value) before it counts for the Pre-Authorization; a value read from a PDF text layer, or the same value in a non-scanned verified record, needs none. Proposal: PD-L1, EGFR, ALK, ROS1, ER, PR, HER2, Ki-67, MMR, RAS / BRAF, stage as recorded.",
  "doc_types": [
   "clinical_note",
   "referral",
@@ -76,7 +77,8 @@
     "clinical_note",
     "histopathology",
     "tumour_board_record"
-   ]
+   ],
+   "critical": true
   },
   "lesion_size": {
    "label": "Primary lesion size",
@@ -165,7 +167,8 @@
     "histopathology",
     "ihc",
     "molecular"
-   ]
+   ],
+   "critical": true
   },
   "egfr": {
    "label": "EGFR",
@@ -173,7 +176,8 @@
    "doc_types": [
     "molecular",
     "histopathology"
-   ]
+   ],
+   "critical": true
   },
   "alk": {
    "label": "ALK",
@@ -182,7 +186,8 @@
     "molecular",
     "ihc",
     "histopathology"
-   ]
+   ],
+   "critical": true
   },
   "ros1": {
    "label": "ROS1",
@@ -191,7 +196,8 @@
     "molecular",
     "ihc",
     "histopathology"
-   ]
+   ],
+   "critical": true
   },
   "met": {
    "label": "MET",
@@ -216,7 +222,8 @@
    "doc_types": [
     "ihc",
     "histopathology"
-   ]
+   ],
+   "critical": true
   },
   "pr": {
    "label": "Progesterone receptor (PR)",
@@ -224,7 +231,8 @@
    "doc_types": [
     "ihc",
     "histopathology"
-   ]
+   ],
+   "critical": true
   },
   "her2": {
    "label": "HER2",
@@ -233,7 +241,8 @@
     "ihc",
     "histopathology",
     "molecular"
-   ]
+   ],
+   "critical": true
   },
   "ki67": {
    "label": "Ki-67",
@@ -241,7 +250,8 @@
    "doc_types": [
     "ihc",
     "histopathology"
-   ]
+   ],
+   "critical": true
   },
   "mmr": {
    "label": "MMR / MSI status",
@@ -250,7 +260,8 @@
     "histopathology",
     "ihc",
     "molecular"
-   ]
+   ],
+   "critical": true
   },
   "ras_braf": {
    "label": "RAS / BRAF",
@@ -258,7 +269,8 @@
    "doc_types": [
     "molecular",
     "histopathology"
-   ]
+   ],
+   "critical": true
   },
   "distance_from_anal_verge": {
    "label": "Distance from anal verge",

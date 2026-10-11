@@ -726,6 +726,62 @@ def phase7(c):
     c.delete("/api/tb/cases/TB-TEST7")
 
 
+SCAN_FONT = "/usr/share/fonts/urw-base35/NimbusSans-Regular.otf"
+
+
+def scan_png(lines, size=34):
+    """A clean synthetic scan (PNG bytes) of the given text lines, for the scanned-document checks of Phase 8."""
+    import io
+    from PIL import Image, ImageDraw, ImageFont
+    font = ImageFont.truetype(SCAN_FONT, size)
+    im = Image.new("RGB", (1700, 140 + int(size * 1.7) * len(lines)), "white"); dr = ImageDraw.Draw(im)
+    for i, line in enumerate(lines):
+        dr.text((90, 70 + i * int(size * 1.7)), line, fill=(20, 20, 20), font=font)
+    buf = io.BytesIO(); im.save(buf, "PNG"); return buf.getvalue()
+
+
+PDL1_SCAN = ["SAHYADRI CANCER INSTITUTE (SYNTHETIC)", "DEPARTMENT OF PATHOLOGY", "IMMUNOHISTOCHEMISTRY REPORT",
+             "Patient: SYNTHETIC, Test Patient    UHID: SYN-996    63 Y / M", "Specimen: FFPE block of the lung biopsy",
+             "Date of report: 27/09/2026", "PD-L1 (22C3) Tumour Proportion Score: 60%", "Report status: FINAL",
+             "Sd/- Dr. A. Menon, Consultant Pathologist, Reg. No. KMC 11223"]
+
+
+def phase8(c):
+    """V1 Phase 8 on its own synthetic Case File TB-TEST8 (lung, Optimal hospital, so PD-L1 is required): a PD-L1 report uploaded as a
+    scan says "from scan" (8.1), needs one confirmation against the image before it counts, then counts (8.2)."""
+    c.delete("/api/tb/cases/TB-TEST8")
+    try:
+        r = c.post("/api/tb/cases", json={"case_id": "TB-TEST8", "protocol": "lung_nsclc", "setting": "metastatic", "hospital_level": "optimal", "board_date": "2026-10-21",
+                                          "patient": {"name": "SYNTHETIC, Test Patient", "mrn": "SYN-996", "agesex": "63 Y / M"}})
+        check("phase8: synthetic lung Case File created (Optimal hospital)", r.status_code == 200, r.text[:80])
+        j = c.post("/api/tb/cases/TB-TEST8/documents", files=[("files", ("pdl1_ihc_scan.png", scan_png(PDL1_SCAN)))],
+                   data={"paths": json.dumps(["pathology/pdl1_ihc_scan.png"])}).json()
+        wait_job(c, j["job"])
+        d = c.get("/api/tb/cases/TB-TEST8").json()
+        doc = next((x for x in d["documents"] if x["rel_path"] == "pathology/pdl1_ihc_scan.png"), {})
+        full = c.get(f"/api/tb/cases/TB-TEST8/documents/{doc.get('doc_id')}").json() if doc else {}
+        f = (full.get("facts") or {}).get("pdl1") or {}
+        check("8.1 scanned page listed and the PD-L1 value says from scan", doc.get("scan_pages") == [0] and f.get("source_method") == "vision-transcription"
+              and f.get("verification") == "verified", f"{doc.get('scan_pages')} {f.get('value')!r} {f.get('verification')} {f.get('source_method')}")
+        allr = {x["id"]: x for x in d["state"]["gate"]["requirements"] + d["state"]["gate"]["shown"]}
+        pd = allr.get("pdl1") or {}
+        need = next((n for n in pd.get("needs") or [] if n["type"] == "confirm_value" and n.get("fact") == "pdl1"), None)
+        check("8.2 scanned PD-L1 needs a confirmation against the image (Level 2)", pd.get("status") == "needs_confirmation" and pd.get("level") == 2 and need is not None
+              and need["doc_id"] == doc.get("doc_id") and pd.get("required") is True, f"{pd.get('status')} L{pd.get('level')} {need}")
+        ev = [e for e in pd.get("evidence") or [] if e.get("fact") == "pdl1"]
+        check("8.1 Pre-Authorization evidence says from scan", bool(ev) and ev[0].get("source_method") == "vision-transcription", json.dumps(ev)[:160])
+        if need:
+            st = c.post("/api/tb/cases/TB-TEST8/confirmations", json={"type": "confirm_value", "key": f"{need['doc_id']}:pdl1", "fields": {"value": need["value"]},
+                                                                    "reason": "e2e: read on the scan image"}).json()["state"]
+            g = st["gate"]; pd2 = next((x for x in g["requirements"] + g["shown"] if x["id"] == "pdl1"), {})
+            check("8.2 confirmed against the image: PD-L1 satisfied", pd2.get("status") == "satisfied" and not [n for n in pd2.get("needs") or [] if n["type"] == "confirm_value"],
+                  pd2.get("status", ""))
+            au = c.get("/api/tb/cases/TB-TEST8/audit").json()["events"]
+            check("8.2 confirmation audited", any(e["kind"] == "confirmation" and e.get("type") == "confirm_value" for e in au))
+    finally:
+        c.delete("/api/tb/cases/TB-TEST8")
+
+
 def main(base, pw, only=None):
     c = httpx.Client(base_url=base, timeout=600)
     check("login", c.post("/api/auth/login", json={"username": "admin", "password": pw}).status_code == 200)
@@ -754,6 +810,10 @@ def main(base, pw, only=None):
         return 0 if not FAIL else 1
     if only == "phase7":
         phase7(c)
+        print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
+        return 0 if not FAIL else 1
+    if only == "phase8":
+        phase8(c)
         print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
         return 0 if not FAIL else 1
     # 1. import lung case (incomplete)
@@ -892,6 +952,8 @@ def main(base, pw, only=None):
     phase6(c)
     # 14. V1 Phase 7: PM-JAY board composition, guideline checks, flag resolution and amended decision, board actions in inboxes
     phase7(c)
+    # 15. V1 Phase 8: scanned documents (from-scan badge, critical values from scans need a confirmation against the image)
+    phase8(c)
     # leave the demo Case Files in their fresh state for the next user / test
     for cid in ("TB-001", "TB-002", "TB-003"):
         wait_job(c, c.post(f"/api/tb/demo/{cid}").json()["job"])
@@ -902,5 +964,5 @@ def main(base, pw, only=None):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--base", default="http://127.0.0.1:7000"); ap.add_argument("--password", required=True)
-    ap.add_argument("--only", default=None, help="run one section only (phase2 | phase3 | phase4 | phase5 | phase6 | phase7)")
+    ap.add_argument("--only", default=None, help="run one section only (phase2 | phase3 | phase4 | phase5 | phase6 | phase7 | phase8)")
     a = ap.parse_args(); sys.exit(main(a.base, a.password, a.only))
