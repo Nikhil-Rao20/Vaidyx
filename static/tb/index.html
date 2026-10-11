@@ -7,7 +7,7 @@
 <link rel="icon" href="/static/vaidyx-icon.svg">
 <link rel="preload" href="/static/tb/fonts/AtkinsonHyperlegible-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/static/tb/fonts/AtkinsonHyperlegible-Bold.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/static/tb/tb.css?v=2.1">
+<link rel="stylesheet" href="/static/tb/tb.css?v=2.3">
 </head>
 <body>
 <header class="top">
@@ -16,6 +16,7 @@
   <div class="models" id="models"></div>
   <nav class="topnav">
     <button class="ghost bell hidden" id="btn-bell" title="Notifications: requests to your department, Case Files ready for the board" aria-label="Notifications">Notifications <span class="chip c-warn hidden" id="bell-count">0</span></button>
+    <button class="ghost" id="btn-sessions" title="Board sessions: agenda, attendance, AI support for absent specialties, decisions">Board sessions</button>
     <button class="ghost hidden" id="btn-org" title="Departments, users and roles (admin)">Hospital and departments</button>
     <button class="ghost" id="btn-cards">Model and data cards</button>
     <a class="ghost" href="/">Vaidyx chat</a>
@@ -61,6 +62,7 @@
 
     <section id="intake" class="hidden"></section>
     <section id="inbox" class="hidden"></section>
+    <section id="sessions" class="hidden"></section>
 
     <section id="case" class="hidden">
       <div class="case-head">
@@ -97,6 +99,6 @@
 <div class="drawer hidden" id="drawer"><div class="drawer-body" id="drawer-body"></div></div>
 <div class="modal hidden" id="modal"><div class="modal-body" id="modal-body"></div></div>
 <div class="toast hidden" id="toast"></div>
-<script type="module" src="/static/tb/tb.js?v=2.1"></script>
+<script type="module" src="/static/tb/tb.js?v=2.3"></script>
 </body>
 </html>

@@ -474,13 +474,15 @@ def _brief_status(brief):
 
 async def _prepare_one(sid, case_id, role, refresh, user):
     """One absent specialty's brief for one Case File on the agenda: a brief still current for the Case File (same signature) is reused
-    unless refresh; otherwise the agent runs (no model call when the specialty has no documents, V1 item 6.6)."""
+    unless refresh; otherwise the agent runs (no model call when the specialty has no documents, V1 item 6.6). The brief's items and
+    points go to the session's agent log (V1 item 6.3)."""
     from . import agents, board
     try:
         st = store.get_state(case_id)
         art = (st.get("artefacts") or {}).get(f"brief_{role}")
         if art and not refresh and art.get("signature") and not rules.stale_reason(art["signature"], rules.case_signature(case_id, st)):
             board.set_agent(sid, case_id, role, _brief_status(art), generated=art.get("generated"), reused=True, message=art.get("message") or "")
+            board.log_brief(sid, case_id, role, art)
             return
         board.set_agent(sid, case_id, role, "running")
         brief, err = None, None
@@ -492,6 +494,7 @@ async def _prepare_one(sid, case_id, role, refresh, user):
         if brief:
             board.set_agent(sid, case_id, role, _brief_status(brief), generated=brief.get("generated"), seconds=brief.get("seconds"), reused=False,
                             message=brief.get("message") or "")
+            board.log_brief(sid, case_id, role, brief)
         else:
             board.set_agent(sid, case_id, role, "error", message=err or "The agent wrote no brief")
     except Exception as e:  # one failing brief never stops the others; the board sees the error and can prepare it again

@@ -354,3 +354,230 @@ def set_agent(sid, case_id, role, status, **info) -> dict:
     return s
 
 
+def _entry(s, case_id, role, label, kind, text, citations, source, model, **extra) -> dict:
+    return {"id": f"P{len(s['log']) + 1}", "case_id": case_id, "role": role, "label": label, "kind": kind, "text": text,
+            "citations": list(citations or []), **extra, "source": source, "model": model, "at": store.now_iso(),
+            "mark": None, "mark_by": None, "mark_at": None, "note": ""}
+
+
+def log_brief(sid, case_id, role, brief) -> int:
+    """One entry per brief item, per point for review (with its references), or one 'no_documents' entry. Entries of an older brief for
+    the same Case File and role are kept and flagged superseded. A brief already logged (same 'generated' time) is not logged twice."""
+    s = _need(sid); _open(s)
+    _item(s, case_id); _role(role)
+    gen = brief.get("generated")
+    old = [e for e in s["log"] if e["case_id"] == case_id and e["role"] == role and e["source"] == "brief" and not e.get("superseded")]
+    if gen and old and all(e.get("brief_generated") == gen for e in old):
+        return 0
+    label, model = brief.get("label"), brief.get("model")
+    common = {"source": "brief", "model": model}
+    new = []
+
+    def add(kind, text, citations=(), **extra):
+        e = _entry(s, case_id, role, label, kind, text, citations, **common, **extra)
+        e["brief_generated"] = gen
+        s["log"].append(e); new.append(e)
+    if brief.get("no_documents"):  # the department's open requests travel with the message (V1 item 6.6)
+        items = [f"{x.get('label')}: {x.get('what')}" if x.get("what") else str(x.get("label") or "") for x in brief.get("open_items") or []]
+        add("no_documents", str(brief.get("message") or "") + (". Open requests: " + "; ".join(items) if items else ""))
+    else:
+        for sec in brief.get("sections") or []:
+            for it in sec.get("items") or []:
+                add("brief_item", it.get("text", ""), it.get("citations"), heading=sec.get("heading", ""), flags=list(it.get("flags") or []))
+        for p in brief.get("points_for_review") or []:
+            add("point_for_review", p.get("text", ""), p.get("citations"), references=list(p.get("references") or []), flags=list(p.get("flags") or []))
+        for x in brief.get("not_documented") or []:  # gaps the agent names (checked against the Case File before they were kept)
+            add("not_documented", str(x))
+    for e in old:
+        e["superseded"] = True
+    _save(s)
+    _audit(sid, "brief_logged", "system", case_id, role=role, entries=len(new), superseded=len(old), generated=gen)
+    return len(new)
+
+
+def log_answer(sid, case_id, role, question, answer) -> dict:
+    """One 'answer' entry for a live question to an agent: the verified statements joined, or the refusal / not documented message."""
+    s = _need(sid); _open(s)
+    _item(s, case_id); _role(role)
+    stmts = list(answer.get("statements") or [])
+    status = answer.get("status") or ("answered" if stmts else "not_documented")
+    text = " ".join(x.get("text", "") for x in stmts) if stmts else str(answer.get("message") or "")
+    e = _entry(s, case_id, role, answer.get("label"), "answer", text, [c for x in stmts for c in x.get("citations") or []],
+               "live", answer.get("model"), question=str(question or ""), status=status, statements=stmts, references=list(answer.get("references") or []))
+    s["log"].append(e)
+    _save(s)
+    _audit(sid, "answer_logged", "system", case_id, "answer", role=role, entry=e["id"], status=status, question=str(question or "")[:300])
+    return e
+
+
+def entries(session, case_id) -> list[dict]:
+    return [e for e in (session or {}).get("log") or [] if e["case_id"] == case_id]
+
+
+def link_decision(sid, case_id, record, by) -> dict:
+    """Link the board's recorded decision (postboard.record_decision) to the Case File's agenda item. Allowed after close: documenting."""
+    s = _need(sid)
+    it = _item(s, case_id)
+    if not record or not record.get("id"):
+        raise ValueError("The board decision record has no id")
+    s["decisions"][case_id] = {"board_record": record["id"], "decision_text": record.get("decision_text"),
+                               "recorded_by": record.get("recorded_by") or record.get("entered_by"), "recorded_at": record.get("recorded_at"),
+                               "linked_by": by or "", "at": store.now_iso()}
+    it["status"] = "decided"
+    _save(s)
+    _audit(sid, "decision_linked", by, case_id, "decision", record=record["id"])
+    return s
+
+
+def mark(sid, case_id, entry_id, mark, by, note="") -> dict:
+    """Mark one agent point discussed / accepted / not relevant (None clears). Only once the board's decision is linked; allowed after
+    close (documenting the meeting)."""
+    s = _need(sid)
+    _item(s, case_id)
+    if mark is not None and mark not in MARKS:
+        raise ValueError(f"Mark must be one of: {', '.join(MARKS)}")
+    if case_id not in s["decisions"]:
+        raise ValueError("Record the board decision first")
+    e = next((x for x in s["log"] if x["id"] == entry_id and x["case_id"] == case_id), None)
+    if not e:
+        raise ValueError(f"Agent log entry {entry_id} not found for Case File {case_id}")
+    note = str(note or "").strip()
+    if len(note) > MAX_NOTE:
+        raise ValueError(f"Note is too long (at most {MAX_NOTE} characters)")
+    e["mark"], e["note"] = mark, note if mark else ""
+    e["mark_by"], e["mark_at"] = (by or "", store.now_iso()) if mark else (None, None)
+    _save(s)
+    _audit(sid, "mark", by, case_id, "mark", entry=entry_id, mark=mark, note=note[:300] if mark else "")
+    return s
+
+
+# ---- export: what the agents said vs what the board decided (V1 item 6.3) ---------------------------------------------
+
+def _patient(case_id) -> dict:
+    p = (store.get_case(case_id) or {}).get("patient") or {}
+    return {k: p[k] for k in ("name", "mrn", "uhid", "agesex") if p.get(k)}
+
+
+def _marks(log) -> dict:
+    """Counts over the current entries; a superseded entry counts only when it was marked."""
+    out = {k: 0 for k in MARKS} | {"unmarked": 0}
+    for e in log:
+        if e.get("mark") in MARKS:
+            out[e["mark"]] += 1
+        elif not e.get("superseded"):
+            out["unmarked"] += 1
+    return out
+
+
+def export(sid) -> dict:
+    s = _need(sid)
+    names = {d["id"]: d["name"] for d in specialties()}
+    att = s.get("attendance") or {}
+    members = s.get("members") or []
+    attendance = [{"department": d, "name": names.get(d) or org.department_name(d), "status": v,
+                   "members": [m["name"] for m in members if m["department"] == d]} for d, v in att.items()]
+    cases = []
+    for a in s["agenda"]:
+        c = store.get_case(a["case_id"]) or {}
+        log = entries(s, a["case_id"])
+        cases.append({"case_id": a["case_id"], "status": a["status"], "patient": _patient(a["case_id"]), "protocol": c.get("protocol"),
+                      "agents": (s.get("agents") or {}).get(a["case_id"], {}),
+                      "agent_log": [e for e in log if not e.get("superseded")] + [e for e in log if e.get("superseded")],
+                      "decision": (s.get("decisions") or {}).get(a["case_id"]), "marks": _marks(log)})
+    return {"session": {k: s.get(k) for k in ("id", "date", "title", "status", "created", "created_by", "started_at", "started_by", "closed_at", "closed_by")},
+            "attendance": attendance, "participants": participants(s), "absent_roles": absent_roles(s), "cases": cases, "note": NOTE}
+
+
+def _h(x) -> str:
+    return html.escape(str(x if x is not None else ""), quote=True)
+
+
+def _cite(c) -> str:
+    return f"[{_h(c.get('doc_title') or c.get('doc_id'))}, {_h(c.get('quote'))}]"
+
+
+def _ref(r) -> str:
+    page = r.get("page")
+    page = f"page {page}" if page not in (None, "") else ""
+    return "Reference: " + ", ".join(_h(x) for x in (r.get("org"), r.get("title"), page, r.get("quote")) if x)
+
+
+def _said(e) -> str:
+    kind = _h(KIND_LABELS.get(e["kind"], e["kind"])) + (f" ({_h(e['heading'])})" if e.get("heading") else "")
+    out = [f"<div class='meta'><b>{_h(e.get('label') or e['role'])}</b> &middot; {kind}"
+           f" &middot; {_h(e['id'])}{' &middot; superseded by a newer brief' if e.get('superseded') else ''}</div>"]
+    if e["kind"] == "answer":
+        out.append(f"<div class='q'>Question: {_h(e.get('question'))}</div>")
+    out.append(f"<div>{_h(e.get('text'))}</div>")
+    if e.get("flags"):  # approximate source match, negation check (V1 items 6.5, 1.1)
+        out.append("<div class='meta'>Check: " + "; ".join(_h(f) for f in e["flags"]) + "</div>")
+    if e.get("citations"):
+        out.append("<div class='cite'>" + " ".join(_cite(c) for c in e["citations"]) + "</div>")
+    for r in e.get("references") or []:
+        out.append(f"<div class='ref'>{_ref(r)}</div>")
+    return "".join(out)
+
+
+def _decided(e) -> str:
+    out = f"<b>{_h(MARKS.get(e.get('mark'), 'Not marked'))}</b>"
+    if e.get("note"):
+        out += f"<div>{_h(e['note'])}</div>"
+    if e.get("mark_by"):
+        out += f"<div class='meta'>{_h(e['mark_by'])}, {_h(_ddmmyyyy(e.get('mark_at')))}</div>"
+    return out
+
+
+CSS = """body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1a1a;background:#fff;margin:24px}
+h1{font-size:18px;margin:0 0 4px}h2{font-size:14px;margin:22px 0 6px}.meta{color:#555;font-size:11px}
+table{border-collapse:collapse;width:100%;margin:6px 0}th,td{border:1px solid #bbb;padding:5px 7px;vertical-align:top;text-align:left}
+th{background:#eef2f5}td.said{width:62%}.cite{color:#2c4a6b;font-size:11px;margin-top:3px}.ref{color:#4b4b4b;font-size:11px;margin-top:3px}
+.q{font-style:italic;margin-bottom:2px}.decision{background:#f7f7ef}.super{color:#777}footer{margin-top:24px;font-size:11px;color:#444}
+@media print{body{margin:10mm}tr{page-break-inside:avoid}}"""
+
+
+def export_html(sid) -> str:
+    """Printable page: attendance, then per Case File the agent log beside the board's decision and marks. Inline CSS, no scripts."""
+    x = export(sid)
+    se = x["session"]
+    title = f"Board session {_ddmmyyyy(se['date'])}: agent log and board decision"
+    out = [f"<!doctype html><html lang='en'><head><meta charset='utf-8'><title>{_h(title)}</title><style>{CSS}</style></head><body>",
+           f"<h1>{_h(title)}</h1>"]
+    status = {"planned": "Planned", "in_session": "In session", "closed": "Closed"}.get(se.get("status"), se.get("status"))
+    info = [f"Session {se['id']}"] + ([se["title"]] if se.get("title") else []) + [f"Status: {status}"]
+    if se.get("started_at"):
+        info.append(f"Started {_ddmmyyyy(se['started_at'])}")
+    if se.get("closed_at"):
+        info.append(f"Closed {_ddmmyyyy(se['closed_at'])}")
+    out.append(f"<div class='meta'>{_h(' | '.join(info))}</div>")
+    out.append("<h2>Attendance</h2><table><tr><th>Department</th><th>Attendance</th><th>Members present</th></tr>")
+    att_label = {"present": "Present", "absent": "Absent", "not_marked": "Not marked"}
+    for a in x["attendance"]:
+        out.append(f"<tr><td>{_h(a['name'])}</td><td>{_h(att_label.get(a['status'], a['status']))}</td><td>{_h(', '.join(a['members']))}</td></tr>")
+    out.append("</table>")
+    if x["absent_roles"]:
+        out.append(f"<div class='meta'>AI support agents prepared briefs for the absent specialties: {_h(', '.join(r.replace('_', ' ') for r in x['absent_roles']))}</div>")
+    models = []
+    for c in x["cases"]:
+        p = c["patient"]
+        ident = ", ".join(v for v in (p.get("name"), (f"UHID/MRN {p.get('mrn') or p.get('uhid')}" if p.get("mrn") or p.get("uhid") else ""),
+                                       p.get("agesex"), c.get("protocol")) if v)
+        out.append(f"<h2>{_h(c['case_id'])}: {_h(ident)}</h2>")
+        out.append("<table><tr><th>What the AI support agents said (role-specific, AI draft)</th><th>What the board decided</th></tr>")
+        d = c["decision"]
+        dec = (f"<b>Board decision</b><div>{_h(d.get('decision_text'))}</div><div class='meta'>Record {_h(d.get('board_record'))}"
+               f"{', recorded by ' + _h(d['recorded_by']) if d.get('recorded_by') else ''}"
+               f"{', ' + _h(_ddmmyyyy(d['recorded_at'])) if d.get('recorded_at') else ''}</div>") if d else "<i>No board decision linked yet</i>"
+        m = c["marks"]
+        out.append(f"<tr class='decision'><td class='said'><span class='meta'>{len(c['agent_log'])} agent log entries. Discussed {m['discussed']}, "
+                   f"accepted {m['accepted']}, not relevant {m['not_relevant']}, not marked {m['unmarked']}.</span></td><td>{dec}</td></tr>")
+        if not c["agent_log"]:
+            out.append("<tr><td class='said'><i>No agent points logged</i></td><td></td></tr>")
+        for e in c["agent_log"]:
+            if e.get("model") and e["model"] not in models:
+                models.append(e["model"])
+            out.append(f"<tr{' class=super' if e.get('superseded') else ''}><td class='said'>{_said(e)}</td><td>{_decided(e)}</td></tr>")
+        out.append("</table>")
+    out.append(f"<footer><p>{_h(x['note'])}</p>"
+               + (f"<p>AI support agents' model: {_h(', '.join(models))}</p>" if models else "")
+               + f"<p>Exported {_h(_ddmmyyyy(store.now_iso()))}</p></footer></body></html>")
+    return "".join(out).replace("\u2014", "-")  # no em dashes in reports, whatever the source text holds

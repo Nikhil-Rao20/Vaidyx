@@ -780,7 +780,7 @@ def setup_tumour_board_routes():
 
     @r.post("/sessions/{sid}/cases/{case_id}/agents/{role}/ask")
     async def session_ask(sid: str, case_id: str, role: str, request: Request):
-        """The board asks an absent specialty's agent (V1 item 6.2)."""
+        """The board asks an absent specialty's agent (V1 item 6.2); the answer goes to the session's agent log (6.3)."""
         rl = _roles(request); _need_known(rl); s = _session(sid); _on_agenda(s, case_id); b = await request.json()
         if role not in agents.ROLES:
             raise HTTPException(404, "unknown role")
@@ -789,7 +789,40 @@ def setup_tumour_board_routes():
         q = str(b.get("question", "")).strip()[:1000]
         if not q:
             raise HTTPException(400, "Ask a question")
-        return await agents.ask(case_id, role, q, b.get("history"))
+        a = await agents.ask(case_id, role, q, b.get("history"))
+        entry = _session_call(board.log_answer, sid, case_id, role, q, a)
+        return {**a, "log_entry": entry["id"]}
+
+    @r.post("/sessions/{sid}/cases/{case_id}/decision")
+    async def session_decision(sid: str, case_id: str, request: Request):
+        """The board's decision for a Case File on the agenda: recorded and checked like any board record (adjudication), with the session's
+        attendance as participants, and linked to the session's agent log (V1 item 6.3)."""
+        u = _user(request); _need(_roles(request), "board_record"); s = _session(sid); _on_agenda(s, case_id); _case(case_id); b = await request.json()
+        if not str(b.get("decision_text", "")).strip():
+            raise HTTPException(400, "Write the board's decision")
+        part = board.participants(s)
+        rec = {k: b.get(k) for k in ("decision_text", "recorded_by", "report_corrections_raised", "divergent_opinions", "actions", "next_review") if b.get(k) is not None}
+        rec.update({"board_date": s["date"], "session": sid, "participants": b.get("participants") or part["text"],
+                    "attendance": {"present": part["present"], "absent": part["absent"], "members": part["members"]}})
+        record = await postboard.record_decision(case_id, rec, u)
+        _session_call(board.link_decision, sid, case_id, record, u)
+        return {"record": record, "session": board.get(sid)}
+
+    @r.post("/sessions/{sid}/cases/{case_id}/log/{entry_id}/mark")
+    async def session_mark(sid: str, case_id: str, entry_id: str, request: Request):
+        """{"mark": discussed | accepted | not_relevant | null, "note"?}: what the board made of an agent point, once the decision is recorded."""
+        u = _user(request); _need(_roles(request), "board_record"); s = _session(sid); _on_agenda(s, case_id); b = await request.json()
+        return _session_call(board.mark, sid, case_id, entry_id, b.get("mark"), u, str(b.get("note", ""))[:500])
+
+    @r.get("/sessions/{sid}/export")
+    async def session_export(sid: str, request: Request, format: str = "html"):
+        """What the agents said vs what the board decided, side by side (V1 item 6.3). Reporting only. Audited."""
+        u = _user(request); _session(sid)
+        board.audit_session(sid, {"kind": "export", "by": u, "format": format})
+        if format == "json":
+            return JSONResponse(board.export(sid), headers={"Content-Disposition": f'attachment; filename="{sid}_agent_log_and_decisions.json"'})
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(board.export_html(sid), headers={"Content-Disposition": f'attachment; filename="{sid}_agent_log_and_decisions.html"'})
 
     @r.get("/models")
     async def model_cards(request: Request):

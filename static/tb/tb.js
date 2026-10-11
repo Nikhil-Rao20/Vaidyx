@@ -58,7 +58,7 @@ async function loadCases() {
 async function openCase(id, keepTab) {
   if (id !== S.caseId) { S.tab = "ready"; S.chat = []; }
   S.caseId = id; S.data = await api("/cases/" + encodeURIComponent(id));
-  $("#welcome").classList.add("hidden"); $("#intake").classList.add("hidden"); $("#inbox").classList.add("hidden"); $("#case").classList.remove("hidden");
+  $("#welcome").classList.add("hidden"); $("#sessions").classList.add("hidden"); stopRoomPoll(); $("#intake").classList.add("hidden"); $("#inbox").classList.add("hidden"); $("#case").classList.remove("hidden");
   const c = S.data.case, p = c.patient || {};
   $("#c-protocol").textContent = (S.protocols?.find((x) => x.id === c.protocol)?.label || c.protocol) + " · Tumour Board Case File";
   $("#c-title").textContent = p.name || c.case_id;
@@ -696,7 +696,7 @@ function renderBoard() {
       <label>Actions (Responsible Department · task · due)</label><div id="b-acts"></div><button class="ghost sm" id="b-add">+ Action</button>
       <label>Next Tumour Board review</label><input type="date" id="b-next">
       <div style="margin-top:12px"><button class="primary" id="b-save">Save record and run adjudication</button></div></div>`}
-    ${records.map((b) => `<div class="card"><h3>Tumour Board record · ${fmtDate(b.board_date)} <span class="chip ${b.adjudication.status === "consistent" ? "c-ok" : "c-rev"}">${b.adjudication.status === "consistent" ? "Consistent" : "Flag for expert review"}</span></h3>
+    ${records.map((b) => `<div class="card"><h3>Tumour Board record · ${fmtDate(b.board_date)} <span class="chip ${b.adjudication.status === "consistent" ? "c-ok" : "c-rev"}">${b.adjudication.status === "consistent" ? "Consistent" : "Flag for expert review"}</span>${b.session ? ` <span class="chip c-info click" data-open-session="${esc(b.session)}" title="Recorded in the Board room; open the session">Board session</span>` : ""}</h3>
       <div class="small muted">Recorded by ${esc(b.recorded_by)} · entered ${esc(b.recorded_at.replace("T", " ").slice(0, 16))} by ${esc(b.entered_by)}</div>
       <p style="white-space:pre-wrap">${esc(b.decision_text)}</p>
       <div class="kv small">${b.participants ? `<div>Participants</div><div>${esc(b.participants)}</div>` : ""}${b.report_corrections_raised ? `<div>Report corrections raised</div><div>${esc(b.report_corrections_raised)}</div>` : ""}${b.divergent_opinions ? `<div>Divergent opinions</div><div>${esc(b.divergent_opinions)}</div>` : ""}</div>
@@ -874,7 +874,7 @@ async function watchIntakeJob(id) {
 }
 async function showIntake() {
   const q = await api("/intake"); S.queue = q;
-  $("#welcome").classList.add("hidden"); $("#case").classList.add("hidden"); $("#inbox").classList.add("hidden"); $("#intake").classList.remove("hidden");
+  $("#welcome").classList.add("hidden"); $("#sessions").classList.add("hidden"); stopRoomPoll(); $("#case").classList.add("hidden"); $("#inbox").classList.add("hidden"); $("#intake").classList.remove("hidden");
   $$(".citem").forEach((el) => el.classList.remove("on"));
   const caseLabel = (cid) => { const c = q.cases.find((x) => x.case_id === cid); return c ? `${c.patient?.name || cid} (${cid}${c.listing?.status === "awaiting_listing" ? ", awaiting listing" : ""})` : cid; };
   const caseOpts = (sel) => q.cases.map((c) => `<option value="${esc(c.case_id)}" ${c.case_id === sel ? "selected" : ""}>${esc(caseLabel(c.case_id))}</option>`).join("");
@@ -937,7 +937,7 @@ async function refreshInboxCount() {
 }
 async function showInbox() {
   const ib = await api("/inbox"); S.inbox = ib;
-  $("#welcome").classList.add("hidden"); $("#case").classList.add("hidden"); $("#intake").classList.add("hidden"); $("#inbox").classList.remove("hidden");
+  $("#welcome").classList.add("hidden"); $("#sessions").classList.add("hidden"); stopRoomPoll(); $("#case").classList.add("hidden"); $("#intake").classList.add("hidden"); $("#inbox").classList.remove("hidden");
   $$(".citem").forEach((el) => el.classList.remove("on"));
   const chip = (q) => q.status === "completed" ? `<span class="chip c-ok">Closed</span>` : q.overdue ? `<span class="chip c-bad">Overdue ${q.days_overdue} d</span>` : `<span class="chip c-warn">Pending</span>`;
   const row = (q) => `<tr class="click" data-case="${esc(q.case_id)}"><td><b>${esc(q.patient?.name || q.case_id)}</b><div class="small muted">${esc(q.case_id)}${q.patient?.mrn ? " · UHID / MRN " + esc(q.patient.mrn) : ""}${q.patient?.agesex ? " · " + esc(q.patient.agesex) : ""}${q.board_date ? " · board " + fmtDate(q.board_date) : ""}</div></td>
@@ -965,6 +965,239 @@ async function listCase() {
   catch (e) { toast(e.message, 7000); }
 }
 
+// ------------------------------------------------------------------ board sessions and the Board room · V1 items 6.1 to 6.3
+const SSTATUS = { planned: ["c-mute", "Planned"], in_session: ["c-info", "In session"], closed: ["c-ok", "Closed"] };
+const ASTATUS = { waiting: ["c-mute", "Waiting"], current: ["c-info", "Current"], decided: ["c-ok", "Decided"] };
+const AGSTATUS = { queued: ["c-mute", "Waiting to start"], running: ["c-info", "Preparing the brief"], ready: ["c-ok", "Brief ready"], no_documents: ["c-mute", "No documents"], error: ["c-bad", "Error"] };
+const KIND = { brief_item: "Brief item", point_for_review: "Point for review", not_documented: "Not documented", no_documents: "No documents", answer: "Answer" };
+let roomTimer = null;
+function stopRoomPoll() { clearTimeout(roomTimer); roomTimer = null; }
+function showOnly(id) {
+  ["welcome", "case", "intake", "inbox", "sessions"].forEach((x) => $("#" + x).classList.toggle("hidden", x !== id));
+  $$(".citem").forEach((el) => el.classList.remove("on"));
+}
+async function showSessions() {
+  stopRoomPoll(); S.roomId = null;
+  const r = await api("/sessions"); showOnly("sessions");
+  const today = new Date().toISOString().slice(0, 10);
+  $("#sessions").innerHTML = `<div class="case-head"><div><div class="eyebrow">During the board</div><h1>Board sessions</h1>
+      <div class="muted">A board session takes the Case Files listed for its date, in agenda order. Mark each specialty present or absent and record the members present by name. When the session starts, the AI support agent of every absent specialty prepares its brief from the Case File records and its guideline pack (Indian sources first) and answers the board's questions. The board decides.</div></div></div>
+    ${r.can_manage ? `<div class="card form"><h3>New board session</h3>
+      <label for="s-date">Board date</label><input type="date" id="s-date" value="${today}">
+      <label for="s-title">Title (optional)</label><input id="s-title" placeholder="e.g. Thoracic Tumour Board">
+      <label>Case Files listed for that date (agenda order)</label><div id="s-cands" class="small muted"></div>
+      <div style="margin-top:12px"><button class="primary" id="s-create">Create board session</button></div></div>` : ""}
+    <div class="card"><h3>Sessions <span class="muted small">${r.sessions.length}</span></h3>
+      ${r.sessions.length ? `<table class="t"><thead><tr><th>Date</th><th>Title</th><th>Case Files</th><th>Status</th></tr></thead><tbody>${r.sessions.map((x) => `<tr class="click" data-sid="${esc(x.id)}"><td><b>${fmtDate(x.date)}</b></td><td>${esc(x.title || "Tumour Board")}<div class="small muted">${esc(x.id)} · created by ${esc(x.created_by || "")}</div></td><td>${x.cases}</td><td><span class="chip ${(SSTATUS[x.status] || SSTATUS.planned)[0]}">${(SSTATUS[x.status] || SSTATUS.planned)[1]}</span></td></tr>`).join("")}</tbody></table>` : `<div class="muted small">No board sessions yet.</div>`}</div>`;
+  $$("#sessions tr[data-sid]").forEach((tr) => (tr.onclick = () => openSession(tr.dataset.sid)));
+  if (!r.can_manage) return;
+  const cands = async () => {
+    const c = await api("/sessions/candidates?date=" + encodeURIComponent($("#s-date").value));
+    $("#s-cands").innerHTML = c.cases.length ? c.cases.map((x, i) => `<label class="small" style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" data-cand="${esc(x.case_id)}" checked style="width:auto"> ${i + 1}. <b>${esc(x.patient?.name || x.case_id)}</b> <span class="muted">${esc(x.case_id)} · ${esc(x.protocol || "")}</span></label>`).join("")
+      : `No Case File is listed for the board on ${fmtDate($("#s-date").value)}. List Case Files with this board date first (open a Case File, Change listing).`;
+  };
+  $("#s-date").onchange = cands; cands();
+  $("#s-create").onclick = async () => {
+    const ids = $$("[data-cand]").filter((x) => x.checked).map((x) => x.dataset.cand);
+    try { const s = await api("/sessions", { json: { date: $("#s-date").value, title: $("#s-title").value, case_ids: ids } }); toast("Board session created"); openSession(s.id); }
+    catch (e) { toast(e.message, 7000); }
+  };
+}
+async function openSession(sid, caseId) {
+  const r = await api("/sessions/" + encodeURIComponent(sid));
+  const first = S.roomId !== sid;
+  S.room = r; S.roomId = sid; showOnly("sessions");
+  const ids = r.session.agenda.map((a) => a.case_id);
+  if (caseId && ids.includes(caseId)) S.roomCase = caseId;
+  else if (first || !ids.includes(S.roomCase)) S.roomCase = r.session.current || ids[0];
+  renderRoom(); pollRoom();
+}
+function pollRoom() {
+  stopRoomPoll();
+  const busy = Object.values(S.room?.session.agents || {}).some((by) => Object.values(by).some((x) => ["queued", "running"].includes(x.status)));
+  if (busy) roomTimer = setTimeout(async () => {
+    if (!S.roomId || $("#sessions").classList.contains("hidden")) return;
+    try { S.room = await api("/sessions/" + encodeURIComponent(S.roomId)); refreshRoom(); } catch (e) { /* the next open shows the error */ }
+    pollRoom();
+  }, 3000);
+}
+// re-render the parts that change while agents work, keeping what the user is typing
+function keepInputs(root, fn) {
+  const vals = {}; let focus = document.activeElement?.id;
+  $$("input[id], textarea[id], select[id]", root).forEach((el) => (vals[el.id] = el.value));
+  fn();
+  Object.entries(vals).forEach(([id, v]) => { const el = document.getElementById(id); if (el && el.type !== "checkbox") el.value = v; });
+  if (focus && document.getElementById(focus)) document.getElementById(focus).focus();
+}
+function refreshRoom() {
+  keepInputs($("#room-agents"), () => { $("#room-agents").innerHTML = agentsHTML(); bindAgents(); });
+  $("#room-agenda").innerHTML = agendaHTML(); bindAgenda();
+  $("#room-log").innerHTML = logHTML(); bindLog();
+}
+function roomCase() { return S.room.cases[S.roomCase] || {}; }
+function renderRoom() {
+  const r = S.room, s = r.session, st = SSTATUS[s.status] || SSTATUS.planned, c = roomCase();
+  S.caseId = S.roomCase;  // citations in the room open the current Case File's documents
+  const m = r.can_manage;
+  $("#sessions").innerHTML = `<div class="case-head"><div><div class="eyebrow">Board room · ${esc(s.id)}</div><h1>${esc(s.title || "Tumour Board")} · ${fmtDate(s.date)} <span class="chip ${st[0]}">${st[1]}</span></h1>
+      <div class="muted">${s.agenda.length} Case File${s.agenda.length === 1 ? "" : "s"} · created by ${esc(s.created_by || "")}${s.started_at ? ` · started ${esc(s.started_at.replace("T", " ").slice(0, 16))}` : ""}${s.closed_at ? ` · closed ${esc(s.closed_at.replace("T", " ").slice(0, 16))}` : ""}</div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">${m && s.status === "planned" ? `<button class="primary sm" id="r-start" title="The AI support agents of the absent specialties prepare their briefs for every Case File on the agenda">Start session</button>` : ""}
+        ${m && s.status === "in_session" ? `<button class="ghost sm" id="r-close">Close session</button>` : ""}
+        <button class="ghost sm" id="r-export" title="What the agents said and what the board decided, side by side (reporting only)">Export agent log and decisions</button>
+        <button class="ghost sm" id="r-back">All board sessions</button></div></div></div>
+    <div class="room"><div>
+      <div class="card"><h3>Agenda</h3><div id="room-agenda">${agendaHTML()}</div></div>
+      <div class="card"><h3>Attendance</h3><div id="room-att">${attendanceHTML()}</div></div>
+    </div><div>
+      ${c.missing ? `<div class="card"><div class="refusal">This Case File no longer exists.</div></div>` : `
+      <div class="card"><div class="eyebrow">${esc(S.protocols?.find((x) => x.id === c.protocol)?.label || c.protocol || "")}</div><h2 style="margin:4px 0">${esc(c.patient?.name || S.roomCase)}</h2>
+        <div class="muted small">${esc(S.roomCase)}${c.patient?.mrn ? " · UHID / MRN " + esc(c.patient.mrn) : ""}${c.patient?.agesex ? " · " + esc(c.patient.agesex) : ""} ·
+          ${c.gate?.passed ? `<span class="chip c-ok">Readiness criteria met</span>` : `<span class="chip c-warn">Pre-Authorization ${c.gate?.total ? c.gate.satisfied + "/" + c.gate.total : "not evaluated"}</span>`}
+          <button class="ghost sm" id="r-open">Open Case File</button></div></div>
+      <div class="card summary"><h3>Case File summary</h3>${roomSummaryHTML(c)}</div>
+      <div class="card"><h3>AI support for absent specialties <span class="muted small">role-specific, AI draft; the board decides</span></h3><div id="room-agents">${agentsHTML()}</div></div>
+      <div class="card"><h3>Board decision</h3><div id="room-decision">${decisionHTML()}</div></div>
+      <div class="card"><h3>What the agents said and what the board decided <span class="muted small">reporting only</span></h3><div id="room-log">${logHTML()}</div></div>`}
+    </div></div>`;
+  if ($("#r-start")) $("#r-start").onclick = async () => { try { const x = await api(`/sessions/${s.id}/start`, { method: "POST" }); toast(x.preparing ? `Session started. ${x.preparing} brief(s) being prepared for the absent specialties.` : "Session started. No specialty is marked absent: no agent to prepare.", 7000); openSession(s.id); } catch (e) { toast(e.message, 7000); } };
+  if ($("#r-close")) $("#r-close").onclick = async () => { if (!confirm("Close this board session? Decisions and marks can still be recorded afterwards.")) return; try { await api(`/sessions/${s.id}/close`, { method: "POST" }); openSession(s.id); } catch (e) { toast(e.message, 7000); } };
+  $("#r-back").onclick = showSessions;
+  $("#r-export").onclick = async () => {
+    const x = await fetch(`/api/tb/sessions/${encodeURIComponent(s.id)}/export?format=html`, { credentials: "same-origin" });
+    if (!x.ok) { toast(x.statusText, 7000); return; }
+    const blob = await x.blob(); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${s.id}_agent_log_and_decisions.html`; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000); toast("Exported; recorded in the audit log");
+  };
+  if ($("#r-open")) $("#r-open").onclick = () => openCase(S.roomCase);
+  bindAgenda(); bindAttendance(); bindAgents(); bindDecision(); bindLog();
+}
+function agendaHTML() {
+  const s = S.room.session, m = S.room.can_manage && s.status === "in_session";
+  return s.agenda.map((a, i) => { const c = S.room.cases[a.case_id] || {}, st = ASTATUS[a.status] || ASTATUS.waiting;
+    return `<div class="agenda ${a.case_id === S.roomCase ? "on" : ""}" data-rc="${esc(a.case_id)}"><div class="t"><span>${i + 1}. ${esc(c.patient?.name || a.case_id)}</span><span class="chip ${st[0]}">${st[1]}</span></div>
+      <div class="small muted">${esc(a.case_id)} · ${esc(c.protocol || "")}${m && s.current !== a.case_id ? ` · <button class="ghost sm" data-cur="${esc(a.case_id)}">Make current</button>` : ""}</div></div>`; }).join("");
+}
+function bindAgenda() {
+  $$("#room-agenda [data-rc]").forEach((el) => (el.onclick = (e) => { if (e.target.closest("[data-cur]")) return; S.roomCase = el.dataset.rc; renderRoom(); }));
+  $$("#room-agenda [data-cur]").forEach((b) => (b.onclick = async () => { try { await api(`/sessions/${S.roomId}/current`, { json: { case_id: b.dataset.cur } }); openSession(S.roomId, b.dataset.cur); } catch (e) { toast(e.message, 7000); } }));
+}
+function attendanceHTML() {
+  const r = S.room, s = r.session, m = r.can_manage && s.status !== "closed";
+  const roleOf = (d) => d.role ? r.roles[d.role]?.label : "";
+  const att = (d) => s.attendance?.[d.id] || "not_marked";
+  return `<table class="t att"><thead><tr><th>Specialty</th><th>Attendance</th></tr></thead><tbody>${r.specialties.map((d) => `<tr><td>${esc(d.name)}${d.role ? `<div class="small muted">${esc(roleOf(d))}${att(d) === "absent" ? ' · <span class="chip c-info">AI support active</span>' : ""}</div>` : ""}</td>
+      <td>${m ? `<select data-att="${esc(d.id)}" aria-label="Attendance of ${esc(d.name)}">${[["not_marked", "Not marked"], ["present", "Present"], ["absent", "Absent"]].map(([v, l]) => `<option value="${v}" ${att(d) === v ? "selected" : ""}>${l}</option>`).join("")}</select>`
+        : `<span class="chip ${att(d) === "present" ? "c-ok" : att(d) === "absent" ? "c-warn" : "c-mute"}">${att(d) === "present" ? "Present" : att(d) === "absent" ? "Absent" : "Not marked"}</span>`}</td></tr>`).join("")}</tbody></table>
+    <h4 style="margin:12px 0 6px">Members present</h4>
+    <div>${(s.members || []).map((x) => `<span class="chip c-lvl" style="margin:2px">${esc(x.name)} (${esc(deptName(x.department))})${m ? ` <button class="x" data-rmm="${esc(x.id)}" aria-label="Remove ${esc(x.name)}">×</button>` : ""}</span>`).join("") || `<span class="small muted">None recorded.</span>`}</div>
+    ${m ? `<div class="arow" style="margin-top:8px"><input id="m-name" placeholder="Name, e.g. Dr. A. Rao" aria-label="Member name"><select id="m-dept" aria-label="Department">${[...r.specialties, { id: "tumour_board", name: deptName("tumour_board") || "Tumour Board coordination" }].map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join("")}</select><button class="ghost sm" id="m-add">Add</button></div>` : ""}
+    <div class="small muted" style="margin-top:8px">An AI support agent stands in for an absent specialty only as role-specific support; it is never counted as a member.</div>`;
+}
+function bindAttendance() {
+  const sid = S.roomId;
+  $$("[data-att]").forEach((sel) => (sel.onchange = async () => { try { await api(`/sessions/${sid}/attendance`, { json: { department: sel.dataset.att, status: sel.value } }); openSession(sid, S.roomCase); } catch (e) { toast(e.message, 7000); } }));
+  $$("[data-rmm]").forEach((b) => (b.onclick = async () => { try { await api(`/sessions/${sid}/members/${b.dataset.rmm}`, { method: "DELETE" }); openSession(sid, S.roomCase); } catch (e) { toast(e.message, 7000); } }));
+  if ($("#m-add")) $("#m-add").onclick = async () => { if (!$("#m-name").value.trim()) return; try { await api(`/sessions/${sid}/members`, { json: { name: $("#m-name").value, department: $("#m-dept").value } }); openSession(sid, S.roomCase); } catch (e) { toast(e.message, 7000); } };
+}
+function roomSummaryHTML(c) {
+  const sm = c.summary;
+  if (!sm) return `<div class="muted small">No Case File summary yet. Compile it on the Case File (Case File summary tab) before the board.</div>`;
+  const rv = sm.review || {};
+  return `${c.summary_stale ? `<div class="banner warn stale"><b>${esc(c.summary_stale)}.</b> Regenerate it on the Case File before the board relies on it.</div>` : ""}
+    <div class="small muted">${rv.status === "reviewed" ? `Reviewed by ${esc(rv.by)}` : "AI draft · awaiting expert review"} · ${esc((sm.generated || "").replace("T", " "))}</div>
+    ${(sm.sections || []).filter((x) => x.sentences.length).map((sec) => `<h4 style="margin:10px 0 2px">${esc(sec.title)}</h4><p style="margin:0">${sec.sentences.map((x) => `<span class="${approxCls(x, rv)}">${esc(x.text)} ${x.citations.map(citeHTML).join("")}${flagHTML(x)}</span>`).join(" ")}</p>`).join("")}
+    ${sm.stage_as_recorded ? `<div class="stagebox"><b>Stage, as recorded in the ${esc(sm.stage_as_recorded.doc_title)}:</b> ${esc(sm.stage_as_recorded.value)}</div>` : ""}`;
+}
+function answersFor(role) { return (S.room.session.log || []).filter((e) => e.case_id === S.roomCase && e.role === role && e.kind === "answer").reverse(); }
+function agentsHTML() {
+  const r = S.room, s = r.session, c = roomCase();
+  if (!r.absent_roles.length) return `<div class="muted small">No specialty with an AI support agent is marked absent. Mark absent specialties under Attendance: their agents prepare a brief${s.status === "in_session" ? " at once" : " when the session starts"}.</div>`;
+  return r.absent_roles.map((role) => {
+    const ag = (s.agents?.[S.roomCase] || {})[role], b = (c.briefs || {})[role], label = r.roles[role]?.label || role, st = ag ? AGSTATUS[ag.status] || ["c-mute", ag.status] : ["c-mute", s.status === "planned" ? "Prepared when the session starts" : "Not prepared"];
+    const stale = (c.briefs_stale || {})[role];
+    const brief = !b ? "" : b.no_documents ? noDocsHTML(b) : `${b.points_for_review.length ? `<h4>Points for review (not treatment recommendations)</h4><ul>${b.points_for_review.map((it) => `<li class="${approxCls(it, b.review)}">${esc(it.text)} ${it.citations.map(citeHTML).join("")}${flagHTML(it)}${(it.references || []).length ? `<div class="grefs">${it.references.map(refHTML).join("")}</div>` : ""}</li>`).join("")}</ul>` : `<div class="small muted">No points for review.</div>`}
+      <details><summary class="small">Brief: ${b.sections.reduce((n, x) => n + x.items.length, 0)} cited item(s)${b.not_documented.length ? `, ${b.not_documented.length} not documented` : ""}</summary>${b.sections.map((x) => `<h4>${esc(x.heading)}</h4><ul>${x.items.map((it) => `<li class="${approxCls(it, b.review)}">${esc(it.text)} ${it.citations.map(citeHTML).join("")}${flagHTML(it)}</li>`).join("")}</ul>`).join("")}${b.not_documented.length ? `<h4>Not documented</h4><ul>${b.not_documented.map((x) => `<li class="muted">${esc(x)}</li>`).join("")}</ul>` : ""}</details>
+      ${r.can_ask ? removedHTML(b.removed) : ""}<div class="small muted">${esc((b.generated || "").replace("T", " "))} · ${esc(b.model || "")}${b.review?.status === "reviewed" ? ` · reviewed by ${esc(b.review.by)}` : " · AI draft"}</div>`;
+    const ans = answersFor(role).map((e) => `<div class="qbox">${esc(e.question)}</div>${e.status === "answered" ? `<div class="answer">${(e.statements || []).map((x) => `<p>${esc(x.text)} ${(x.citations || []).map(citeHTML).join("")}${flagHTML(x)}</p>`).join("")}${(e.references || []).length ? `<div class="grefs">${e.references.map(refHTML).join("")}</div>` : ""}</div>`
+      : `<div class="refusal"><b>${e.status === "out_of_scope" ? "Outside the agent's scope." : "Not documented in the Case File."}</b> ${esc(e.text)}</div>`}`).join("");
+    const pending = (S.asking || {})[S.roomCase + ":" + role];
+    return `<div class="agent" id="ag-${role}"><h4>${esc(label)} <span class="chip ${st[0]}">${["queued", "running"].includes(ag?.status) ? '<span class="spin"></span> ' : ""}${esc(st[1])}</span>${ag?.reused ? ' <span class="small muted">(brief still current, reused)</span>' : ""}
+        ${r.can_manage && s.status === "in_session" && !["queued", "running"].includes(ag?.status) ? `<button class="ghost sm" data-prep="${role}">Prepare again</button>` : ""}</h4>
+      ${ag?.status === "error" ? `<div class="refusal">${esc(ag.message || "The brief could not be prepared")}</div>` : ""}
+      ${stale && !["queued", "running"].includes(ag?.status) ? `<div class="banner warn stale"><b>${esc(stale)}.</b> Prepare the brief again before the board relies on it.</div>` : ""}
+      ${brief}
+      ${r.can_ask && s.status !== "closed" && c.protocol ? `<div class="search" style="margin-top:10px"><input id="ask-${role}" placeholder="Ask the ${esc(label.replace(" support", ""))} agent about the records" autocomplete="off"><button class="primary sm" data-ask="${role}" ${pending ? "disabled" : ""}>${pending ? '<span class="spin"></span>' : "Ask"}</button></div>` : ""}
+      <div class="small muted" style="margin-top:4px">AI support (role-specific): answers only from the Case File records and the specialty's guideline pack, every statement with a verified quote. No image reading, diagnosis or treatment advice.</div>
+      ${ans}</div>`;
+  }).join("");
+}
+function bindAgents() {
+  $$("[data-prep]").forEach((b) => (b.onclick = async () => { try { const x = await api(`/sessions/${S.roomId}/agents/prepare`, { json: { case_id: S.roomCase, role: b.dataset.prep, refresh: true } }); toast(`${x.preparing} brief(s) being prepared`); openSession(S.roomId, S.roomCase); } catch (e) { toast(e.message, 7000); } }));
+  $$("[data-ask]").forEach((b) => {
+    const role = b.dataset.ask, inp = $("#ask-" + role);
+    const go = async () => {
+      const q = inp.value.trim(); if (!q) return;
+      const key = S.roomCase + ":" + role, cid = S.roomCase, sid = S.roomId;
+      const hist = answersFor(role).filter((e) => e.status === "answered").slice(0, 2).reverse().flatMap((e) => [{ role: "user", content: e.question }, { role: "assistant", content: e.text }]);
+      S.asking = S.asking || {}; S.asking[key] = true; refreshRoom(); $("#ask-" + role).value = q;
+      try { await api(`/sessions/${sid}/cases/${cid}/agents/${role}/ask`, { json: { question: q, history: hist } }); if ($("#ask-" + role)) $("#ask-" + role).value = ""; }
+      catch (e) { toast(e.message, 7000); }
+      delete S.asking[key];
+      if (S.roomId === sid) { S.room = await api("/sessions/" + encodeURIComponent(sid)); if (S.roomCase === cid) { refreshRoom(); if ($("#ask-" + role)) $("#ask-" + role).value = ""; } }
+    };
+    b.onclick = go; if (inp) inp.onkeydown = (e) => { if (e.key === "Enter") go(); };
+  });
+}
+function decisionHTML() {
+  const r = S.room, s = r.session, d = (s.decisions || {})[S.roomCase], c = roomCase();
+  if (d) { const rec = (c.board_records || []).find((x) => x.id === d.board_record) || {};
+    return `<p style="white-space:pre-wrap;margin-top:0">${esc(d.decision_text || "")}</p><div class="small muted">Recorded by ${esc(d.recorded_by || "")} · ${esc((d.recorded_at || "").replace("T", " ").slice(0, 16))} ·
+      <span class="chip ${rec.status === "consistent" ? "c-ok" : "c-rev"}">${rec.status === "consistent" ? "Adjudication: consistent" : `Adjudication: ${rec.flags || 0} flag(s) for expert review`}</span> <button class="ghost sm" id="r-board">Open on the Case File</button></div>
+      <div class="small muted" style="margin-top:6px">Mark each agent point below: discussed, accepted or not relevant.</div>`; }
+  if (!r.can_manage) return `<div class="muted small">The decision is recorded by the Tumour Board coordinator.</div>`;
+  const depts = ["Medical Oncology", "Surgical Oncology", "Radiation Oncology", "Radio-diagnosis", "Pathology", "Molecular Pathology", "Nuclear Medicine", "Laboratory Medicine", "Gastroenterology", "Pulmonary Medicine", "Tumour Board coordination"];
+  return `<div class="form"><div class="muted small">Entered by the clinical team. The agent then checks the record (documentation, values against the signed sources, open Pre-Authorization items); it does not judge the clinical decision.</div>
+    <label for="d-text">Decision recorded by the board</label><textarea id="d-text" placeholder="As decided and dictated by the board"></textarea>
+    <label for="d-by">Recorded by</label><input id="d-by" placeholder="Name, role">
+    <label for="d-part">Participants (from the attendance)</label><input id="d-part" value="${esc(r.participants?.text || "")}">
+    <label for="d-corr">Report corrections or discrepancies raised (if any)</label><input id="d-corr">
+    <label for="d-div">Divergent opinions (if any)</label><input id="d-div">
+    <label>Actions (Responsible Department · task · due)</label><div id="d-acts"><div class="arow"><select>${depts.map((x) => `<option>${x}</option>`).join("")}</select><input placeholder="Task"><input type="date"></div></div>
+    <label for="d-next">Next Tumour Board review</label><input type="date" id="d-next">
+    <div style="margin-top:12px"><button class="primary" id="d-save">Record decision and run adjudication</button></div></div>`;
+}
+function bindDecision() {
+  if ($("#r-board")) $("#r-board").onclick = async () => { S.tab = "board"; await openCase(S.roomCase, true); showTab("board"); };
+  if (!$("#d-save")) return;
+  $("#d-save").onclick = async () => {
+    if (!$("#d-text").value.trim()) { toast("Write the board's decision first"); return; }
+    const actions = $$("#d-acts .arow").map((x) => ({ department: x.children[0].value, task: x.children[1].value, due: x.children[2].value })).filter((a) => a.task);
+    $("#d-save").innerHTML = `<span class="spin"></span> Adjudicating...`; $("#d-save").disabled = true;
+    try { await api(`/sessions/${S.roomId}/cases/${S.roomCase}/decision`, { json: { decision_text: $("#d-text").value, recorded_by: $("#d-by").value, participants: $("#d-part").value,
+        report_corrections_raised: $("#d-corr").value, divergent_opinions: $("#d-div").value, actions, next_review: $("#d-next").value } });
+      toast("Decision recorded, checked and linked to the agent log"); openSession(S.roomId, S.roomCase); }
+    catch (e) { toast(e.message, 7000); $("#d-save").disabled = false; $("#d-save").textContent = "Record decision and run adjudication"; }
+  };
+}
+function logHTML() {
+  const r = S.room, s = r.session, decided = !!(s.decisions || {})[S.roomCase], m = r.can_manage && decided;
+  const log = (s.log || []).filter((e) => e.case_id === S.roomCase && !e.superseded);
+  if (!log.length) return `<div class="muted small">Nothing yet. The agents' briefs and their answers to the board's questions are kept here, with what the board made of each.</div>`;
+  return `${decided ? "" : `<div class="small muted" style="margin-bottom:6px">Marks open once the board's decision is recorded.</div>`}<table class="t"><thead><tr><th>What the agent said</th><th>The board</th></tr></thead><tbody>${log.map((e) => `<tr><td>
+      <div class="small muted">${esc(e.label || e.role)} · ${esc(KIND[e.kind] || e.kind)}${e.heading ? ` (${esc(e.heading)})` : ""}</div>${e.kind === "answer" ? `<div class="small"><b>Q:</b> ${esc(e.question)}</div>` : ""}
+      <div>${esc(e.text)} ${(e.citations || []).map(citeHTML).join("")}${flagHTML(e)}</div></td>
+      <td>${m ? Object.entries(r.marks).map(([k, l]) => `<button class="${e.mark === k ? "primary" : "ghost"} sm" data-mark="${esc(e.id)}" data-v="${k}" aria-pressed="${e.mark === k}">${esc(l)}</button>`).join(" ") : `<span class="chip ${e.mark ? "c-ok" : "c-mute"}">${esc(r.marks[e.mark] || "Not marked")}</span>`}
+        ${e.mark_by ? `<div class="small muted">${esc(e.mark_by)}</div>` : ""}</td></tr>`).join("")}</tbody></table>`;
+}
+function bindLog() {
+  $$("[data-mark]").forEach((b) => (b.onclick = async () => {
+    const e = (S.room.session.log || []).find((x) => x.id === b.dataset.mark);
+    try { await api(`/sessions/${S.roomId}/cases/${S.roomCase}/log/${b.dataset.mark}/mark`, { json: { mark: e?.mark === b.dataset.v ? null : b.dataset.v } }); S.room = await api("/sessions/" + encodeURIComponent(S.roomId)); refreshRoom(); }
+    catch (err) { toast(err.message, 7000); }
+  }));
+}
+document.addEventListener("click", (e) => { const x = e.target.closest("[data-open-session]"); if (x) openSession(x.dataset.openSession); });
+
 // ------------------------------------------------------------------ boot
 $$("#tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 $("#btn-new").onclick = newCase;
@@ -973,6 +1206,7 @@ $("#btn-org").onclick = showOrg;
 $("#btn-queue").onclick = showIntake;
 $("#btn-inbox").onclick = showInbox;
 $("#btn-bell").onclick = showNotifications;
+$("#btn-sessions").onclick = showSessions;
 (async () => {
   const pr = await api("/protocols"); S.protocols = pr.protocols; S.facts = pr.facts;
   await loadOrg(); bindIntakeUpload(); refreshQueueCount(); refreshInboxCount(); loadNotifications();

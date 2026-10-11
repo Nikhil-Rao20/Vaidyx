@@ -79,6 +79,22 @@ def run_flow(b, base, pw, out, size, sfx, errors):
     pg.keyboard.press("Escape"); pg.wait_for_timeout(300)  # narrow screens: the side panel must be closed before the top bar is clickable
     if pg.locator("#btn-org").is_visible():
         pg.click("#btn-org"); pg.wait_for_selector("#o-depts tr", timeout=20000); pg.wait_for_timeout(500); shot("org_admin"); pg.keyboard.press("Escape")
+    # board sessions and the Board room (V1 6.1 to 6.3): a planned session on TB-001 with Radio-diagnosis absent (no model call), removed afterwards
+    from tumour_board import board
+    sid = None
+    try:
+        r = pg.request.post(base + "/api/tb/sessions", data={"date": "2026-12-11", "title": "UI test", "case_ids": ["TB-001"]})
+        sid = r.json().get("id") if r.ok else None
+        if sid:
+            pg.request.post(base + f"/api/tb/sessions/{sid}/attendance", data={"department": "radio_diagnosis", "status": "absent"})
+            pg.request.post(base + f"/api/tb/sessions/{sid}/members", data={"name": "Dr. UI Test (synthetic)", "department": "medical_oncology"})
+        pg.click("#btn-sessions"); pg.wait_for_selector("#sessions .card", timeout=20000); pg.wait_for_timeout(500); shot("board_sessions", full_page=True)
+        if sid:
+            pg.click(f"#sessions tr[data-sid='{sid}']"); pg.wait_for_selector("#room-agenda .agenda", timeout=20000); pg.wait_for_selector("#room-agents")
+            pg.wait_for_timeout(800); shot("board_room", full_page=True)
+    finally:
+        if sid:
+            board._path(sid).unlink(missing_ok=True); board.audit_session(sid, {"kind": "ui_test_removed", "by": "ui_test"})
     pg.close()
 
 

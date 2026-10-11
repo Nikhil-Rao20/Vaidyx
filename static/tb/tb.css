@@ -270,6 +270,17 @@ table.t tr.click { cursor: pointer; } table.t tr.click:hover td { background: va
   body.print-summary .cite::after { content: " \201C" attr(title) "\201D"; font-weight: 400; color: #52606d; }
 }
 
+/* board sessions and the Board room (V1 items 6.1 to 6.3) */
+.room { display: grid; grid-template-columns: minmax(260px, 1fr) 2.2fr; gap: 16px; align-items: start; }
+.room .card { margin-bottom: 14px; }
+.agenda { border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; margin-bottom: 6px; cursor: pointer; background: var(--panel); }
+.agenda.on { border-color: var(--accent); background: var(--tint); box-shadow: inset 3px 0 0 var(--accent); }
+.agenda .t { font-weight: 700; display: flex; justify-content: space-between; gap: 6px; } .agenda .t > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+table.att select { padding: 4px 6px; font-size: 13px; }
+.agent { border-top: 1px solid var(--line); padding: 10px 0 6px; } .agent:first-child { border-top: 0; padding-top: 0; }
+.agent h4 { margin: 0 0 6px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.agent li { margin: 4px 0; line-height: 1.5; }
 details.removed { margin: 8px 0; } details.removed summary { cursor: pointer; color: var(--link); } details.removed s { color: var(--muted); }
-@media print { .noprint { display: none !important; } }
 .approx { outline: 1px dashed #d9a441; outline-offset: 1px; }
+@media (max-width: 1100px) { .room { grid-template-columns: 1fr; } }
+@media print { .noprint { display: none !important; } }

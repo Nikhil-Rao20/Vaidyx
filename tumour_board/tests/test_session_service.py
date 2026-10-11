@@ -50,6 +50,7 @@ def test_start_prepares_every_absent_specialty_for_every_case_in_parallel(monkey
     ag = board.get(sid)["agents"]
     assert ag["TB-S1"]["radiology"]["status"] == "ready" and ag["TB-S2"]["pathology"]["status"] == "error"
     assert ag["TB-S2"]["pathology"]["message"] == "model server unreachable"
+    assert sum(e["kind"] == "brief_item" for e in board.get(sid)["log"]) == 3
 
 
 def test_a_current_brief_is_reused_and_refresh_runs_again(monkeypatch):
@@ -59,6 +60,7 @@ def test_a_current_brief_is_reused_and_refresh_runs_again(monkeypatch):
     n = len(runs)
     _start(sid, roles=["radiology"], case_ids=["TB-S1"])  # the brief is still current: reused, not logged twice
     assert len(runs) == n and board.get(sid)["agents"]["TB-S1"]["radiology"]["reused"] is True
+    assert sum(e["kind"] == "brief_item" and e["role"] == "radiology" and e["case_id"] == "TB-S1" for e in board.get(sid)["log"]) == 1
     _start(sid, roles=["radiology"], case_ids=["TB-S1"], refresh=True)
     assert runs[-1] == ("TB-S1", "radiology") and board.get(sid)["agents"]["TB-S1"]["radiology"]["reused"] is False
     add("TB-S1", make_doc("Dmri000001", "mri"))  # the Case File changed: the brief is stale and runs again
