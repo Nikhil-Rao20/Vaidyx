@@ -204,7 +204,7 @@ def _best_match(a: dict, docs, case_id: str):
         if (d.get("classification") or {}).get("doc_type") not in wanted:
             continue
         at = _arrived(d, case_id)
-        if at is None or at <= created:
+        if at is None or at < created:  # same second counts: timestamps have one-second resolution; a person still decides
             continue
         if best is None or at > best_at:
             best, best_at = d, at

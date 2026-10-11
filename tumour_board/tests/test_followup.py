@@ -319,3 +319,13 @@ def test_inbox_shows_board_action_with_suggestion_then_closed(case, people, toda
     assert row["status"] == "completed" and row["completed"] == "2026-10-11T10:00:00" and row["suggested_close"] is None
     assert box["open"] == 0
     assert notify.inbox(people["onco"])["departments"][0]["requests"] == []
+
+
+def test_document_added_in_the_same_second_as_the_action_is_suggested(case, today, data_root):
+    # timestamps have one-second resolution: a report filed in the same second as the board record is not "before" it (e2e, 7.4)
+    st = {"actions": [_act(created="2026-10-09T18:00:00")]}
+    followup.suggest_closures(case, st, [_doc("D1", "mri", "2026-10-09T18:00:00", title="MRI BREAST")])
+    assert st["actions"][0]["suggested_close"]["doc_id"] == "D1"
+    st = {"actions": [_act(created="2026-10-09T18:00:00")]}
+    followup.suggest_closures(case, st, [_doc("D2", "mri", "2026-10-09T17:59:59", title="MRI BREAST")])
+    assert "suggested_close" not in st["actions"][0]
