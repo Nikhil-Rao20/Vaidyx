@@ -243,7 +243,7 @@ def test_agent_scratchpad_keeps_12000_characters_of_a_tool_result(unit_case, mon
     monkeypatch.setattr(agents.llm, "chat", fake_chat)
 
     async def go():
-        return [e async for e in agents.run_agent(unit_case, "pathology", max_steps=2)]
+        return [e async for e in agents.run_agent(unit_case, "medical_oncology", max_steps=2)]
     ev = asyncio.run(go())
     assert ev[-1]["type"] == "brief"
     obs = asyncio.run(agents._tool(unit_case, "read_document", "Dlong0001 pages 1-8"))
@@ -307,7 +307,8 @@ def test_indian_reference_found_by_search_when_relevant(fake_pack):
 
 def _lung_case():
     store.create_case("TB-LUNG", {"name": "SYNTHETIC, Lung Patient", "mrn": "SYN-900009", "agesex": "61 Y / M"}, "lung_nsclc", created_by="test")
-    add("TB-LUNG", make_doc("Dhist0009", "histopathology", text="SYNTHETIC\nHISTOPATHOLOGY REPORT\nEGFR mutation analysis: awaited\nReport status: FINAL"))
+    add("TB-LUNG", make_doc("Dhist0009", "histopathology", text="SYNTHETIC\nHISTOPATHOLOGY REPORT\nEGFR mutation analysis: awaited\nReport status: FINAL"),
+        make_doc("Dct000009", "ct", text="SYNTHETIC\nCECT THORAX REPORT\nSpiculated mass 3.2 cm in the right upper lobe\nReport status: FINAL"))  # radiology runs only with imaging (V1 item 6.6)
     return "TB-LUNG"
 
 

@@ -565,10 +565,18 @@ async function runAgent(role) {
     }
   }
 }
+function noDocsHTML(b) {  // V1 item 6.6: no documents of the specialty, no model call; the department's open requests
+  return `<div class="refusal"><b>${esc(b.message)}.</b> The agent did not run (no model call).</div>
+    ${(b.open_items || []).length ? `<h4>Open requests to ${esc(b.department)}</h4><ul>${b.open_items.map((x) => `<li>${esc(x.label)}${x.what ? `: <span class="muted">${esc(x.what)}</span>` : ""}${x.due ? ` <span class="small muted">· due ${fmtDate(x.due)}</span>` : ""}</li>`).join("")}</ul>` : `<div class="small muted">No open Pre-Authorization request to ${esc(b.department)}.</div>`}`;
+}
 function showBrief(role, b) {
   const box = briefBox(role);
   const rv = b.review || {};
   const stale = S.data.stale?.["brief_" + role];
+  if (b.no_documents) {
+    box.innerHTML = `<h3>${esc(b.label)} <span class="chip c-mute">No documents</span></h3>${stale ? `<div class="banner warn stale"><b>${esc(stale)}.</b> Prepare the brief again (Refresh).</div>` : ""}${noDocsHTML(b)}`;
+    return;
+  }
   box.innerHTML = `<h3>${esc(b.label)} <span>${rv.status === "reviewed" ? `<span class="chip c-ok">Reviewed by ${esc(rv.by)}</span>` : rv.status === "flagged" ? `<span class="chip c-bad">Flagged for correction</span>` : `<span class="chip c-rev">AI draft · awaiting expert review</span>`}</span></h3>
     ${stale ? `<div class="banner warn stale"><b>${esc(stale)}.</b> Prepare the brief again (Refresh) before the board relies on it.</div>` : ""}
     <div class="small muted">${esc(b.generated?.replace("T", " "))} · ${b.seconds} s · ${esc(b.model)}${b.dropped_unverified ? ` · ${b.dropped_unverified} unverified item(s) removed` : ""}${b.guardrail_removed ? ` · ${b.guardrail_removed} removed by scope guardrail` : ""}</div>

@@ -12,7 +12,7 @@ the record citations; it is never a fact about the patient and never a recommend
 """
 import asyncio, json, re, time
 
-from . import dates, grounding, guardrails, guidelines, llm, packs, protocol, qa, rules, search, store
+from . import config, dates, grounding, guardrails, guidelines, llm, org, packs, protocol, qa, rules, search, store
 
 ROLES = {
     "radiology": {"label": "Radiology support", "department": "Radiology",
@@ -362,6 +362,46 @@ def _pack_summary(role, protocol_id):
             "checklist": {"title": cl["title"], "org": cl["org"], "region": cl["region"], "pages": cl["pages"], "file": cl["file"]} if cl else None}
 
 
+def department_of(role):
+    """The hospital's name for the agent's specialty (Indian names from org.json: Radiology support speaks for Radio-diagnosis)."""
+    r = ROLES[role]
+    return org.department_name(org.department_id(r["department"])) if org.department_id(r["department"]) else r["department"]
+
+
+def specialty_documents(case_id, role):
+    """(ready, waiting, failed) documents of the agent's specialty: its document types, or uploaded by its department (V1 item 6.6)."""
+    r, dept = ROLES[role], org.department_id(ROLES[role]["department"])
+    mine = [d for d in rules.case_docs(case_id) if (d.get("classification") or {}).get("doc_type") in r["doc_types"]
+            or (dept and d.get("department") == dept)]
+    return ([d for d in mine if d.get("state") == "ready"], [d for d in mine if d.get("state") not in ("ready", "error")],
+            [d for d in mine if d.get("state") == "error"])
+
+
+def open_department_items(case_id, role):
+    """The Pre-Authorization requests still open for the agent's department in this Case File (V1 item 6.6)."""
+    dept = org.department_id(ROLES[role]["department"])
+    out = []
+    for a in store.get_state(case_id).get("actions") or []:
+        if a.get("source") != "pre_authorization" or a.get("status") == "completed":
+            continue
+        if (a.get("department_id") or org.department_id(a.get("department") or "")) == dept:
+            out.append({"label": a.get("label") or "", "what": a.get("what") or "", "level": a.get("level_label") or "", "due": a.get("due") or "",
+                        "status": a.get("status") or ""})
+    return out
+
+
+def no_documents_brief(case_id, role, sig, t0):
+    """A specialty with no documents in the Case File: no model call, the message and the department's open requests (V1 item 6.6)."""
+    _, waiting, failed = specialty_documents(case_id, role)
+    dept = department_of(role)
+    extra = ([f"{len(waiting)} still being read"] if waiting else []) + ([f"{len(failed)} failed to read"] if failed else [])
+    return {"role": role, "label": ROLES[role]["label"], "no_documents": True, "department": dept,
+            "message": f"No {dept} documents in this Case File" + (f" ({', '.join(extra)})" if extra else ""),
+            "open_items": open_department_items(case_id, role), "sections": [], "points_for_review": [], "not_documented": [],
+            "dropped_unverified": 0, "guardrail_removed": 0, "not_documented_rejected": 0, "references_dropped": 0,
+            "generated": store.now_iso(), "model": "", "seconds": round(time.time() - t0, 1), "review": {"status": "no_model_call"}, "signature": sig}
+
+
 async def run_agent(case_id, role, focus_question="", max_steps=5):
     """Async generator of events: {"type": "start"|"step"|"brief"|"error", ...}."""
     if role not in ROLES:
@@ -374,14 +414,18 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
         yield {"type": "error", "message": NOT_LISTED}; return
     r = ROLES[role]
     sig = rules.case_signature(case_id)  # taken before reading the records: a change during the run marks the brief stale (V1 item 4.5)
+    if not specialty_documents(case_id, role)[0]:  # nothing of this specialty to read: return at once, no model call (V1 item 6.6)
+        brief = no_documents_brief(case_id, role, sig, t0)
+        st = store.get_state(case_id); st.setdefault("artefacts", {})[f"brief_{role}"] = brief; store.save_state(case_id, st)
+        au({"kind": "agent_no_documents", "role": role, "department": brief["department"], "open_items": len(brief["open_items"])})
+        yield {"type": "brief", "brief": brief}; return
     au({"kind": "agent_start", "role": role, "focus": focus_question})
     yield {"type": "start", "role": role, "label": r["label"]}
     if focus_question:
         g = await guardrails.check_input(focus_question, au)
         if not g["allowed"]:
             yield {"type": "error", "message": g["message"], "category": g["category"]}; return
-    relevant = sorted([d for d in rules.case_docs(case_id) if d.get("state") == "ready" and (d.get("classification") or {}).get("doc_type") in r["doc_types"]],
-                      key=lambda d: dates.doc_dates(d)["sort"], reverse=True)
+    relevant = sorted(specialty_documents(case_id, role)[0], key=lambda d: dates.doc_dates(d)["sort"], reverse=True)
     scratch = [f"Patient: {case['patient'].get('name')} ({case['patient'].get('mrn')}). Protocol: {case['protocol']}.",
                "DOCUMENTS:\n" + _doc_list(case_id),
                "VERIFIED FIELDS:\n" + _facts_text(case_id),
