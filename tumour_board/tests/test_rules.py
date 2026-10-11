@@ -333,6 +333,24 @@ def test_sync_auto_completes_with_evidence(unit_case):
     assert len(_sync(unit_case)["actions"]) == 1  # completed actions stay completed, no new one
 
 
+def test_sync_closes_a_request_when_the_record_is_no_longer_required(unit_case, monkeypatch):
+    """V1 item 4.1: the CT is Essential only in the metastatic setting; once the coordinator records the non-metastatic setting at an
+    Essential hospital the CT is shown, not counted, and its open request closes (audited) instead of staying open forever."""
+    from tumour_board import protocol
+    from tumour_board.tests.util import unit_protocol
+    p = unit_protocol(); p["mandatory"][1]["tiers"] = {"metastatic": "a", "non_metastatic": "b"}
+    monkeypatch.setattr(protocol, "get", lambda pid: protocol._normalise(p) if pid == "unit" else None)
+    add(unit_case, hist())
+    a = _sync(unit_case)["actions"][0]  # no setting recorded: the strictest tier (a) applies
+    assert a["requirement"] == "ct_thorax" and a["status"] == "pending"
+    c = store.get_case(unit_case); c["setting"] = "non_metastatic"; c["hospital_level"] = "essential"; store.save_case(c)
+    st = _sync(unit_case)
+    assert [r["id"] for r in st["gate"]["shown"]] == ["ct_thorax"] and st["gate"]["shown"][0]["tier"] == "b"
+    a = st["actions"][0]
+    assert a["status"] == "completed" and a["history"][-1]["event"].startswith("Closed: no longer required for this Case File")
+    assert any(e["kind"] == "action_completed" and e["reason"] == "requirement no longer required (NCG tier)" for e in store.read_audit(unit_case))
+
+
 def test_sync_waiver_completes_action(unit_case):
     add(unit_case, hist())
     _sync(unit_case)

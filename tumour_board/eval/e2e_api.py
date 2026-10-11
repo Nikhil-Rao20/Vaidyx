@@ -340,13 +340,14 @@ def main(base, pw, only=None):
     # 1. import lung case (incomplete)
     j, s = wait_job(c, c.post("/api/tb/demo/TB-001").json()["job"])
     g = c.get("/api/tb/cases/TB-001").json()["state"]["gate"]
-    check("TB-001 ingest + gate", not g["passed"] and g["satisfied"] == 3, f"{j['total']} docs in {s}s, gate {g['satisfied']}/{g['total']}")
+    check("TB-001 ingest + gate", not g["passed"] and g["satisfied"] == 2 and g["total"] == 5, f"{j['total']} docs in {s}s, gate {g['satisfied']}/{g['total']} (NCG Essential records, V1 item 4.1)")
     st = {r["id"]: r["status"] for r in g["requirements"]}
+    shown = {r["id"]: r for r in g.get("shown", [])}
     check("draft histopathology blocked as not final", st["histopathology"] == "not_final")
-    check("brain MRI missing", st["brain_mri"] == "missing_record")
-    check("PD-L1 pending", st["pdl1"] == "missing_field")
+    check("brain MRI is NCG Optimal: shown as missing, not required at an Essential hospital", shown.get("brain_mri", {}).get("status") == "missing_record" and shown["brain_mri"]["tier"] == "b" and not shown["brain_mri"]["required"])
+    check("PD-L1 pending (NCG Optimal, shown)", shown.get("pdl1", {}).get("status") == "missing_field")
     acts = c.get("/api/tb/cases/TB-001").json()["state"]["actions"]
-    check("gaps routed to departments", {a["department"] for a in acts} >= {"Pathology", "Radiology", "Molecular Pathology", "Laboratory Medicine"}, ", ".join(sorted({a["department"] for a in acts})))
+    check("gaps routed to departments", {a["department"] for a in acts} >= {"Pathology", "Molecular Pathology", "Laboratory Medicine"}, ", ".join(sorted({a["department"] for a in acts})))
     # 2. search + ask
     t0 = time.time(); r = c.post("/api/tb/cases/TB-001/search", json={"query": "PD-L1"}).json()
     check("instant value search", any("PD-L1" in h["text"] for h in r["values"]["hits"]), f"{r['ms_values']} ms values, {round((time.time() - t0) * 1000)} ms round trip")
@@ -438,9 +439,9 @@ def main(base, pw, only=None):
     jj, secs = wait_job(c, j["job"])
     g2 = c.get("/api/tb/cases/TB-TEST").json()["state"]["gate"]
     check("re-process all re-reads documents and keeps the attestation", jj["state"] == "finished" and jj["total"] == 1 and {r["id"]: r["status"] for r in g2["requirements"]}["clinical_history"] == "satisfied", f"{secs}s")
-    st = c.post("/api/tb/cases/TB-TEST/overrides", json={"kind": "requirements", "key": "brain_mri", "value": {"waived": True, "reason": "not indicated per treating team"}}).json()
+    st = c.post("/api/tb/cases/TB-TEST/overrides", json={"kind": "requirements", "key": "driver_mutations", "value": {"waived": True, "reason": "not indicated per treating team"}}).json()
     req = {r["id"]: r for r in st["gate"]["requirements"]}
-    check("waived requirement excluded from the gate", req["brain_mri"]["status"] == "waived" and st["gate"]["total"] == 7)
+    check("waived requirement excluded from the gate", req["driver_mutations"]["status"] == "waived" and st["gate"]["total"] == 4, f"{req['driver_mutations']['status']} {st['gate']['total']}")
     # 7. expert review + audit
     rv = c.post("/api/tb/cases/TB-001/review", json={"artefact": "summary", "status": "reviewed", "comment": "Checked against source reports"}).json()
     check("expert review recorded", rv["status"] == "reviewed")

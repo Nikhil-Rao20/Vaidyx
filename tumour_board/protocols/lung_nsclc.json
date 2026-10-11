@@ -1,8 +1,8 @@
 {
  "id": "lung_nsclc",
  "label": "Lung cancer (NSCLC)",
- "version": "0.5",
- "note": "Configurable by the clinical team. Prototype defaults informed by NCG, ICMR, ESMO and CAP; to be rebuilt from the NCG Essential / Optimal tiers (V1 item 4.1); to be confirmed by the hospital Tumour Board.",
+ "version": "0.6",
+ "note": "Configurable by the clinical team. The required records are rebuilt from the NCG Essential / Optimal / Optional tiers per setting (NCG thoracic cancer guidelines 2019, quoted with page on every record), then informed by ICMR, ESMO and CAP as before; to be confirmed by the hospital Tumour Board (clinical review before real use).",
  "settings_note": "NCG setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes stage). Item 4.1 derives the required records per setting from the NCG tiers.",
  "settings": [
   {
@@ -14,10 +14,11 @@
    "label": "Metastatic (distant disease recorded)"
   }
  ],
- "mandatory": [
+ "records": [
   {
    "id": "clinical_history",
    "label": "Clinical history and performance status",
+   "tier": "a",
    "doc_types": [
     "clinical_note",
     "referral"
@@ -27,11 +28,18 @@
     "ecog",
     "clinical_question"
    ],
-   "sla_days": 2
+   "sla_days": 2,
+   "source": {
+    "guideline": "NCG Guidelines for Thoracic Cancers (2019)",
+    "page": 4,
+    "quote": "Performance status; General and systemic examination"
+   },
+   "tier_basis": "listed in the NCG work-up at diagnosis without a tier letter; treated as Essential (the board needs the question and the performance status)"
   },
   {
-   "id": "ct_thorax",
-   "label": "Diagnostic CT thorax report",
+   "id": "cect_tap",
+   "label": "CECT thorax, abdomen and pelvis",
+   "tier": "a",
    "doc_types": [
     "ct"
    ],
@@ -40,34 +48,18 @@
    "required_facts": [
     "lesion_size"
    ],
-   "sla_days": 3
-  },
-  {
-   "id": "pet_ct",
-   "label": "PET/CT staging report",
-   "doc_types": [
-    "pet_ct"
-   ],
-   "department": "Nuclear Medicine",
-   "required_facts": [
-    "recorded_stage"
-   ],
-   "sla_days": 5
-  },
-  {
-   "id": "brain_mri",
-   "label": "Brain MRI (staging)",
-   "doc_types": [
-    "mri"
-   ],
-   "region": "brain|head|cranial",
-   "department": "Radiology",
-   "required_facts": [],
-   "sla_days": 5
+   "sla_days": 3,
+   "source": {
+    "guideline": "NCG Guidelines for Thoracic Cancers (2019)",
+    "page": 4,
+    "quote": "CECT Thorax, abdomen and Pelvis(a)"
+   },
+   "note": "NCG asks for thorax, abdomen and pelvis in one study; a report that names only the thorax counts here and the clinician checks its coverage"
   },
   {
    "id": "histopathology",
    "label": "Histopathology report",
+   "tier": "a",
    "doc_types": [
     "histopathology"
    ],
@@ -75,26 +67,17 @@
    "required_facts": [
     "histologic_type"
    ],
-   "sla_days": 5
-  },
-  {
-   "id": "pdl1",
-   "label": "PD-L1 result",
-   "facts_only": true,
-   "fact_doc_types": [
-    "histopathology",
-    "ihc",
-    "molecular"
-   ],
-   "department": "Pathology",
-   "required_facts": [
-    "pdl1"
-   ],
-   "sla_days": 7
+   "sla_days": 5,
+   "source": {
+    "guideline": "NCG Guidelines for Thoracic Cancers (2019)",
+    "page": 4,
+    "quote": "Biopsy and histopathology report(a)"
+   }
   },
   {
    "id": "driver_mutations",
    "label": "Molecular results (EGFR / ALK / ROS1)",
+   "tier": "a",
    "facts_only": true,
    "fact_doc_types": [
     "molecular",
@@ -107,11 +90,18 @@
     "alk",
     "ros1"
    ],
-   "sla_days": 10
+   "sla_days": 10,
+   "source": {
+    "guideline": "NCG Guidelines for Thoracic Cancers (2019)",
+    "page": 4,
+    "quote": "EGFR(a), ALK(a), ROS1(a), MET(b), PDL1(b)"
+   },
+   "note": "NCG p5 rates ROS-1 (c) in the metastatic chart and EGFR (b) for squamous histology; the p4 work-up list is followed (clinical review)"
   },
   {
    "id": "baseline_labs",
    "label": "Baseline blood tests",
+   "tier": "a",
    "doc_types": [
     "lab"
    ],
@@ -120,9 +110,175 @@
     "haemoglobin",
     "wbc",
     "platelets",
-    "creatinine"
+    "creatinine",
+    "bilirubin"
    ],
-   "sla_days": 2
+   "sla_days": 2,
+   "source": {
+    "guideline": "NCG Guidelines for Thoracic Cancers (2019)",
+    "page": 4,
+    "quote": "CBC, LFT, RFT, Coagulation profile, Viral markers(a)"
+   },
+   "note": "coagulation profile and viral markers are listed by NCG but are not checked as fields in V1 (no field in the catalogue)"
+  },
+  {
+   "id": "pdl1",
+   "label": "PD-L1 result",
+   "tier": "b",
+   "facts_only": true,
+   "fact_doc_types": [
+    "histopathology",
+    "ihc",
+    "molecular"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "pdl1"
+   ],
+   "sla_days": 7,
+   "source": {
+    "guideline": "NCG Guidelines for Thoracic Cancers (2019)",
+    "page": 4,
+    "quote": "EGFR(a), ALK(a), ROS1(a), MET(b), PDL1(b)"
+   },
+   "note": "PD-L1 is a gate for pembrolizumab at >50% (T p5), Optimal in NCG"
+  },
+  {
+   "id": "met",
+   "label": "MET (exon 14 skipping / amplification)",
+   "tier": "b",
+   "facts_only": true,
+   "fact_doc_types": [
+    "molecular",
+    "histopathology",
+    "ihc"
+   ],
+   "department": "Molecular Pathology",
+   "required_facts": [
+    "met"
+   ],
+   "sla_days": 10,
+   "source": {
+    "guideline": "NCG Guidelines for Thoracic Cancers (2019)",
+    "page": 4,
+    "quote": "EGFR(a), ALK(a), ROS1(a), MET(b), PDL1(b)"
+   }
+  },
+  {
+   "id": "pet_ct",
+   "label": "PET/CT staging report",
+   "tier": "b",
+   "doc_types": [
+    "pet_ct"
+   ],
+   "department": "Nuclear Medicine",
+   "required_facts": [
+    "recorded_stage"
+   ],
+   "sla_days": 5,
+   "source": {
+    "guideline": "NCG Guidelines for Thoracic Cancers (2019)",
+    "page": 4,
+    "quote": "PET-Scan(b) and MRI brain(b)"
+   }
+  },
+  {
+   "id": "brain_mri",
+   "label": "MRI brain",
+   "tier": "b",
+   "tiers": {
+    "non_metastatic": "b",
+    "metastatic": "c"
+   },
+   "doc_types": [
+    "mri"
+   ],
+   "region": "brain|head|cranial",
+   "department": "Radiology",
+   "required_facts": [],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Thoracic Cancers (2019)",
+     "page": 4,
+     "quote": "PET-Scan(b) and MRI brain(b)"
+    },
+    {
+     "guideline": "NCG Guidelines for Thoracic Cancers (2019)",
+     "page": 5,
+     "quote": "Brain Imaging(c)"
+    }
+   ],
+   "note": "Peripheral T1N0 (PET node negative) does not require brain imaging (T p4)"
+  },
+  {
+   "id": "bronchoscopy",
+   "label": "Bronchoscopy (patients planned for surgery)",
+   "tier": "b",
+   "tiers": {
+    "non_metastatic": "b",
+    "metastatic": "none"
+   },
+   "doc_types": [
+    "endoscopy"
+   ],
+   "region": "bronch",
+   "department": "Pulmonology",
+   "required_facts": [],
+   "sla_days": 5,
+   "source": {
+    "guideline": "NCG Guidelines for Thoracic Cancers (2019)",
+    "page": 4,
+    "quote": "Bronchoscopy in patients planned for surgery(b)"
+   }
+  },
+  {
+   "id": "mediastinal_staging",
+   "label": "Mediastinal staging (EBUS / EUS, mediastinoscopy)",
+   "tier": "b",
+   "tiers": {
+    "non_metastatic": "b",
+    "metastatic": "c"
+   },
+   "doc_types": [
+    "endoscopy",
+    "cytology",
+    "histopathology"
+   ],
+   "region": "ebus|eus|mediastin",
+   "department": "Pulmonology",
+   "required_facts": [],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Thoracic Cancers (2019)",
+     "page": 4,
+     "quote": "EBUS/EUS + Mediastinoscopy(b)"
+    },
+    {
+     "guideline": "NCG Guidelines for Thoracic Cancers (2019)",
+     "page": 5,
+     "quote": "Mediastinal staging with PET(a)/ EBUS(b)/ Mediastinoscopy(b)"
+    }
+   ]
+  },
+  {
+   "id": "mri_thorax_superior_sulcus",
+   "label": "MRI thorax (superior sulcus tumour only)",
+   "tier": "c",
+   "doc_types": [
+    "mri"
+   ],
+   "region": "thorax|chest",
+   "department": "Radiology",
+   "required_facts": [],
+   "sla_days": 5,
+   "source": {
+    "guideline": "NCG Guidelines for Thoracic Cancers (2019)",
+    "page": 4,
+    "quote": "MRI Thorax for Superior sulcus tumour(b)"
+   },
+   "tier_basis": "conditional on a superior sulcus tumour, which the system never judges: shown only"
   }
  ],
  "optional": [
@@ -178,6 +334,7 @@
   "egfr",
   "alk",
   "ros1",
+  "met",
   "kras",
   "haemoglobin",
   "wbc",
@@ -242,7 +399,8 @@
     "pdl1",
     "egfr",
     "alk",
-    "ros1"
+    "ros1",
+    "met"
    ]
   },
   {

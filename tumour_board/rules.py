@@ -105,8 +105,204 @@ def resolve_facts(docs, overrides=None):
     return out
 
 
+LEVEL_LABEL = {1: "Level 1: Case File", 2: "Level 2: Records"}  # V1 item 4.2: records present, final, signed, right patient; then the values in them
+LEVEL_WHAT = {1: "the record is missing, not final or not this patient", 2: "a required value is missing, pending or not verified in the record"}
+
+
+def _hospital():
+    try:
+        from . import org
+        return org.load().get("hospital") or {}
+    except Exception:
+        return {}
+
+
+def _title(x):
+    return x.get("doc_title") or (x.get("classification") or {}).get("title") or x.get("filename") or x.get("doc_id") or ""
+
+
+def _evaluate_record(req, ready, facts, overrides, cat):
+    """One record of the protocol against the Case File: the verdict (status, problems, evidence, needs) as before, now split into
+    Level 1 (the record: present, final and signed, right patient, its type and date settled) and Level 2 (the required values in it:
+    present, verified, not pending) with the document a Level 2 gap sits in (V1 item 4.2). `problems` keeps its order: confirmations
+    first, then the record's status, then the fields."""
+    r = {"id": req["id"], "label": req["label"], "department": req["department"], "status": "satisfied", "problems": [], "evidence": []}
+    l1 = {"status": "satisfied", "problems": [], "needs": []}
+    l2 = {"status": "satisfied", "problems": [], "needs": []}
+    source_doc = None  # the document a Level 2 gap sits in (routing: the department that uploaded it)
+    w = (overrides.get("requirements") or {}).get(req["id"])
+    if w and w.get("waived"):
+        r["status"] = "waived"; r["waiver"] = w
+        r["problems"].append(f"Waived for this Case File by {w.get('by') or 'clinician'}: {w.get('reason') or 'no reason given'}")
+        r["level"] = None; r["level1"] = l1; r["level2"] = l2
+        return r
+    date_needs = []  # (doc or history entry, why, level): a clinician confirms the date that decides this requirement (V1 item 3.1)
+    type_needs = []  # (doc or history entry, level): documents that match under only one of their two possible types (V1 item 3.2)
+    if req.get("applies_if_doc_type_present"):
+        present = [d for d in ready if req["applies_if_doc_type_present"] in _doc_types(d)]
+        if not present:
+            r["status"] = "not_applicable"; r["level"] = None; r["level1"] = l1; r["level2"] = l2
+            return r
+        type_needs += [(d, 1) for d in present if len(_doc_types(d)) > 1]  # whether this requirement applies rests on a disputed type
+    allowed = set(req.get("fact_doc_types") or req.get("doc_types") or [])
+    if not req.get("facts_only"):
+        want = set(req["doc_types"])
+        cands = [d for d in ready if _doc_types(d) & want and _region_ok(d, req.get("region"))]
+        type_needs += [(d, 1) for d in cands if len(_doc_types(d)) > 1 and len(_doc_types(d) & want) == 1]
+        if req.get("must_postdate_doc_type"):
+            refs = [x for x in ready if req["must_postdate_doc_type"] in _doc_types(x)]
+            type_needs += [(x, 1) for x in refs if len(_doc_types(x)) > 1]  # the end-of-treatment reference rests on a disputed type
+            ref = max([dates.doc_dates(x)["event"] for x in refs if dates.doc_dates(x)["event"] and not dates.doc_dates(x)["questionable"]], default="")
+            for x in refs:  # the reference event (end of treatment) has no trusted date: nothing can be placed after it
+                if dates.doc_dates(x)["questionable"]:
+                    date_needs.append((x, f"the {req['label'].lower()} must be dated after it", 1))
+            if ref:  # "after treatment" compares event dates (V1 item 3.1)
+                undated = [d for d in cands if dates.doc_dates(d)["questionable"]]
+                cands = [d for d in cands if not dates.doc_dates(d)["questionable"] and dates.doc_dates(d)["event"] > ref]
+                r["postdate_reference"] = ref
+                if not cands:  # only undated or flagged candidates: ask for their date instead of calling the record missing
+                    date_needs += [(d, f"it must be dated after {ref}", 1) for d in undated]
+        cands.sort(key=_doc_sort_key, reverse=True)
+        finals = [d for d in cands if _is_final(d, overrides)]
+        if not cands:
+            r["status"] = l1["status"] = "missing_record"
+            p = f"No {req['label'].lower()} in the Case File" + (f" dated after {r['postdate_reference']}" if r.get("postdate_reference") else "")
+            r["problems"].append(p); l1["problems"].append(p)
+        elif not finals:
+            d = cands[0]; c = d["classification"]; source_doc = d
+            if _needs_confirmation(d):
+                r["status"] = l1["status"] = "needs_confirmation"
+                p = (f"{c.get('title') or d['filename']} has no explicit status or signature line: confirm it is the final, signed version"
+                     + ("; " + "; ".join(c.get("status_notes") or []) if c.get("status_notes") else ""))
+                r["problems"].append(p); l1["problems"].append(p)
+                r.setdefault("needs", []).append({"type": "attest_final", "doc_id": d["doc_id"]}); l1["needs"].append({"type": "attest_final", "doc_id": d["doc_id"]})
+            else:
+                r["status"] = l1["status"] = "not_final"
+                p = (f"{c.get('title') or d['filename']} is {c.get('status', 'UNKNOWN')}" + (" and unsigned" if c.get("signed") == "no" else "")
+                     + ": a final, signed version is required")
+                r["problems"].append(p); l1["problems"].append(p)
+            r["evidence"].append({"doc_id": d["doc_id"], "quote": c.get("status_quote") or c.get("signature_quote")})
+        else:
+            d = finals[0]; c = d["classification"]; source_doc = d
+            r["evidence"].append({"doc_id": d["doc_id"], "quote": c.get("status_quote") or c.get("signature_quote")})
+            if c.get("status") == "UNSTATED":
+                att = (overrides.get("documents") or {}).get(d["doc_id"], {})
+                r["notes"] = [f"status not explicit in {c.get('title') or d['filename']}; " + ("attested final by " + att.get("by", "clinician") if att.get("attested_final") else "signature line present")]
+            if d.get("identity") == "mismatch_or_missing":
+                p = f"Patient identifier not found in {c.get('title') or d['filename']}: check the document belongs to this patient"
+                r["problems"].append(p); l1["problems"].append(p); r["status"] = l1["status"] = "needs_review"
+            elif d.get("identity") == "id_differs":
+                p = f"{c.get('title') or d['filename']} prints an identifier this Case File does not know: check the document belongs to this patient"
+                r["problems"].append(p); l1["problems"].append(p); r["status"] = l1["status"] = "needs_review"
+    else:  # facts_only: Level 1 is a final document of a type that can carry the values (the record that should document them)
+        carriers = [d for d in ready if _doc_types(d) & allowed and _is_final(d, overrides)]
+        carriers.sort(key=_doc_sort_key, reverse=True)
+        if carriers:
+            source_doc = carriers[0]
+        else:
+            l1["status"] = "missing_record"
+            l1["problems"].append("No final, signed " + " / ".join(allowed_label(cat, t) for t in sorted(allowed)) + " report in the Case File to carry: "
+                                  + ", ".join(cat[f]["label"] for f in req.get("required_facts", []) if f in cat))
+    # required fields (Level 2)
+    missing, pending, review = [], [], []
+    open_doc = None  # the document the open value sits in (pending, approximate or non-final)
+    for fid in req.get("required_facts", []):
+        hist = [h for h in facts.get(fid, {}).get("history", []) if not allowed or set(h["doc_types"]) & allowed]
+        type_needs += [(h, 2) for h in hist if allowed and len(h["doc_types"]) > 1 and len(set(h["doc_types"]) & allowed) == 1
+                       and h["doc_id"] not in {x["doc_id"] for x, _ in type_needs}]
+        good = [h for h in hist if h["verification"] in VERIFIED and h["doc_final"] and h["state"] == "present"]
+        if req.get("must_postdate_doc_type") and r.get("postdate_reference"):
+            good = [h for h in good if (h["date"] or "") > r["postdate_reference"]]
+        if good:
+            g = sorted(good, key=lambda h: h["date"] or "")[-1]
+            r["evidence"].append({"doc_id": g["doc_id"], "fact": fid, "value": g["value"], "quote": g["quote"]})
+            if len({h["doc_id"] for h in good}) > 1 and len({grounding.norm(h["value"]) for h in good}) > 1:  # which value is current depends on the dates
+                seen = set()
+                for h in good:
+                    if h.get("date_questionable") and h["doc_id"] not in seen:
+                        seen.add(h["doc_id"]); date_needs.append((h, f"{cat[fid]['label'].lower()} is documented more than once and the current value depends on the dates", 2))
+        elif any(h["state"] == "pending" for h in hist):
+            h = [h for h in hist if h["state"] == "pending"][-1]; open_doc = open_doc or h
+            pending.append(f"{cat[fid]['label']}: \"{h['value']}\" in {h['doc_title']}")
+        elif any(h["verification"] == "needs_review" for h in hist):
+            open_doc = open_doc or [h for h in hist if h["verification"] == "needs_review"][-1]
+            review.append(cat[fid]["label"])
+        elif hist and not any(h["doc_final"] for h in hist):
+            open_doc = open_doc or hist[-1]
+            pending.append(f"{cat[fid]['label']}: only in a non-final document ({hist[-1]['doc_title']})")
+        else:
+            missing.append(cat[fid]["label"])
+    if missing and r["status"] == "missing_record":
+        r.setdefault("notes", []).append("That record must document: " + ", ".join(missing))
+        l2["problems"].append("Required field not documented: " + ", ".join(missing))
+    elif missing:
+        p = "Required field not documented: " + ", ".join(missing); r["problems"].append(p); l2["problems"].append(p)
+    if pending:
+        r["problems"] += ["Pending: " + p for p in pending]; l2["problems"] += ["Pending: " + p for p in pending]
+    if review:
+        p = "Needs expert review (approximate source match): " + ", ".join(review); r["problems"].append(p); l2["problems"].append(p)
+    if missing or pending:
+        l2["status"] = "missing_field"
+    elif review:
+        l2["status"] = "needs_review"
+    if r["status"] in ("satisfied", "needs_confirmation"):
+        if missing or pending:
+            r["status"] = "missing_field" if r["status"] == "satisfied" else r["status"]
+        elif review and r["status"] == "satisfied":
+            r["status"] = "needs_review"
+    if type_needs and r["status"] != "not_applicable":  # the document type decides whether this record counts: a clinician confirms it
+        r["status"] = "needs_confirmation"
+        seen = set()
+        for x, lvl in type_needs:
+            did = x["doc_id"]
+            if did in seen:
+                continue
+            seen.add(did)
+            p = f"Confirm the document type of {_title(x)}: {x.get('type_note') or _type_note(x)}"
+            r["problems"].insert(0, p)
+            r.setdefault("needs", []).append({"type": "confirm_doc_type", "doc_id": did})
+            lv = l1 if lvl == 1 else l2
+            lv["status"] = "needs_confirmation"; lv["problems"].insert(0, p); lv["needs"].append({"type": "confirm_doc_type", "doc_id": did})
+            if not any(e.get("doc_id") == did for e in r["evidence"]):
+                r["evidence"].append({"doc_id": did, "quote": ""})
+    if date_needs and r["status"] != "not_applicable":  # confirmation first (like an attestation): the date decides the check
+        r["status"] = "needs_confirmation"
+        seen = set()
+        for x, why, lvl in date_needs:
+            did = x["doc_id"]
+            if did in seen:
+                continue
+            seen.add(did)
+            dd = dates.doc_dates(x) if "classification" in x else None
+            cause = "no document date was found in its text" if (dd is None or dd["unconfirmed"]) else "its date is flagged (" + "; ".join(dd["flags"]) + ")"
+            if dd is None and x.get("date_flags"):
+                cause = "its date is flagged (" + "; ".join(x["date_flags"]) + ")"
+            p = f"Confirm the date of {_title(x)}: {cause} and {why}"
+            r["problems"].insert(0, p)
+            r.setdefault("needs", []).append({"type": "confirm_dates", "doc_id": did})
+            lv = l1 if lvl == 1 else l2
+            lv["status"] = "needs_confirmation"; lv["problems"].insert(0, p); lv["needs"].append({"type": "confirm_dates", "doc_id": did})
+            if not any(e.get("doc_id") == did for e in r["evidence"]):
+                r["evidence"].append({"doc_id": did, "quote": ""})
+    r["level"] = 1 if l1["status"] != "satisfied" else 2 if l2["status"] != "satisfied" else None
+    r["level_label"] = LEVEL_LABEL.get(r["level"], "")
+    r["level1"], r["level2"] = l1, l2
+    src = open_doc if (r["level"] == 2 and open_doc) else source_doc
+    r["source_doc_id"] = (src or {}).get("doc_id")
+    return r
+
+
+def allowed_label(cat, doc_type):
+    return doc_type.replace("_", " ")
+
+
 def evaluate(case_id):
-    """The Pre-Authorization gate, or None for a Case File that is not listed yet (no protocol: records are shown but nothing is checked)."""
+    """The Pre-Authorization gate, or None for a Case File that is not listed yet (no protocol: records are shown but nothing is checked).
+
+    V1 item 4.1: every record of the protocol carries its NCG tier for the Case File's setting (a Essential, b Optimal, c Optional, none =
+    not applicable in that setting); a record counts (is in `requirements`) when it is Essential, or Optimal at an Optimal hospital; the
+    others are evaluated the same way and listed under `shown` (never counted, never routed). V1 item 4.2: each result carries its Level 1
+    (Case File) and Level 2 (Records) verdicts."""
     case = store.get_case(case_id)
     if not case.get("protocol"):
         return None
@@ -117,140 +313,33 @@ def evaluate(case_id):
     ready = [d for d in docs if d.get("state") == "ready"]
     overrides = state.get("overrides") or {}
     facts = resolve_facts(docs, overrides)
-    results = []
-    for req in prot["mandatory"]:
-        r = {"id": req["id"], "label": req["label"], "department": req["department"], "status": "satisfied", "problems": [], "evidence": []}
-        w = (overrides.get("requirements") or {}).get(req["id"])
-        if w and w.get("waived"):
-            r["status"] = "waived"; r["waiver"] = w
-            r["problems"].append(f"Waived for this Case File by {w.get('by') or 'clinician'}: {w.get('reason') or 'no reason given'}")
-            results.append(r); continue
-        date_needs = []  # documents whose unconfirmed or flagged date decides this requirement: a clinician confirms it (V1 item 3.1)
-        type_needs = []  # documents that match this requirement under only one of their two possible types (V1 item 3.2)
-        if req.get("applies_if_doc_type_present"):
-            present = [d for d in ready if req["applies_if_doc_type_present"] in _doc_types(d)]
-            if not present:
-                r["status"] = "not_applicable"; results.append(r); continue
-            type_needs += [d for d in present if len(_doc_types(d)) > 1]  # whether this requirement applies rests on a disputed type
-        if not req.get("facts_only"):
-            want = set(req["doc_types"])
-            cands = [d for d in ready if _doc_types(d) & want and _region_ok(d, req.get("region"))]
-            type_needs += [d for d in cands if len(_doc_types(d)) > 1 and len(_doc_types(d) & want) == 1]
-            if req.get("must_postdate_doc_type"):
-                refs = [x for x in ready if req["must_postdate_doc_type"] in _doc_types(x)]
-                type_needs += [x for x in refs if len(_doc_types(x)) > 1]  # the end-of-treatment reference rests on a disputed type
-                ref = max([dates.doc_dates(x)["event"] for x in refs if dates.doc_dates(x)["event"] and not dates.doc_dates(x)["questionable"]], default="")
-                for x in refs:  # the reference event (end of treatment) has no trusted date: nothing can be placed after it
-                    if dates.doc_dates(x)["questionable"]:
-                        date_needs.append((x, f"the {req['label'].lower()} must be dated after it"))
-                if ref:  # "after treatment" compares event dates (V1 item 3.1)
-                    undated = [d for d in cands if dates.doc_dates(d)["questionable"]]
-                    cands = [d for d in cands if not dates.doc_dates(d)["questionable"] and dates.doc_dates(d)["event"] > ref]
-                    r["postdate_reference"] = ref
-                    if not cands:  # only undated or flagged candidates: ask for their date instead of calling the record missing
-                        date_needs += [(d, f"it must be dated after {ref}") for d in undated]
-            cands.sort(key=_doc_sort_key, reverse=True)
-            finals = [d for d in cands if _is_final(d, overrides)]
-            if not cands:
-                r["status"] = "missing_record"
-                r["problems"].append(f"No {req['label'].lower()} in the Case File" + (f" dated after {r['postdate_reference']}" if r.get("postdate_reference") else ""))
-            elif not finals:
-                d = cands[0]; c = d["classification"]
-                if _needs_confirmation(d):
-                    r["status"] = "needs_confirmation"
-                    r["problems"].append(f"{c.get('title') or d['filename']} has no explicit status or signature line: confirm it is the final, signed version"
-                                         + ("; " + "; ".join(c.get("status_notes") or []) if c.get("status_notes") else ""))
-                    r.setdefault("needs", []).append({"type": "attest_final", "doc_id": d["doc_id"]})
-                else:
-                    r["status"] = "not_final"
-                    r["problems"].append(f"{c.get('title') or d['filename']} is {c.get('status', 'UNKNOWN')}" + (" and unsigned" if c.get("signed") == "no" else "")
-                                         + ": a final, signed version is required")
-                r["evidence"].append({"doc_id": d["doc_id"], "quote": c.get("status_quote") or c.get("signature_quote")})
-            else:
-                d = finals[0]; c = d["classification"]
-                r["evidence"].append({"doc_id": d["doc_id"], "quote": c.get("status_quote") or c.get("signature_quote")})
-                if c.get("status") == "UNSTATED":
-                    att = (overrides.get("documents") or {}).get(d["doc_id"], {})
-                    r["notes"] = [f"status not explicit in {c.get('title') or d['filename']}; " + ("attested final by " + att.get("by", "clinician") if att.get("attested_final") else "signature line present")]
-                if d.get("identity") == "mismatch_or_missing":
-                    r["problems"].append(f"Patient identifier not found in {c.get('title') or d['filename']}: check the document belongs to this patient")
-                    r["status"] = "needs_review"
-                elif d.get("identity") == "id_differs":
-                    r["problems"].append(f"{c.get('title') or d['filename']} prints an identifier this Case File does not know: check the document belongs to this patient")
-                    r["status"] = "needs_review"
-        # required fields
-        allowed = set(req.get("fact_doc_types") or req.get("doc_types") or [])
-        missing, pending, review = [], [], []
-        for fid in req.get("required_facts", []):
-            hist = [h for h in facts.get(fid, {}).get("history", []) if not allowed or set(h["doc_types"]) & allowed]
-            type_needs += [h for h in hist if allowed and len(h["doc_types"]) > 1 and len(set(h["doc_types"]) & allowed) == 1
-                           and h["doc_id"] not in {x["doc_id"] for x in type_needs}]
-            good = [h for h in hist if h["verification"] in VERIFIED and h["doc_final"] and h["state"] == "present"]
-            if req.get("must_postdate_doc_type") and r.get("postdate_reference"):
-                good = [h for h in good if (h["date"] or "") > r["postdate_reference"]]
-            if good:
-                g = sorted(good, key=lambda h: h["date"] or "")[-1]
-                r["evidence"].append({"doc_id": g["doc_id"], "fact": fid, "value": g["value"], "quote": g["quote"]})
-                if len({h["doc_id"] for h in good}) > 1 and len({grounding.norm(h["value"]) for h in good}) > 1:  # which value is current depends on the dates
-                    seen = set()
-                    for h in good:
-                        if h.get("date_questionable") and h["doc_id"] not in seen:
-                            seen.add(h["doc_id"]); date_needs.append((h, f"{cat[fid]['label'].lower()} is documented more than once and the current value depends on the dates"))
-            elif any(h["state"] == "pending" for h in hist):
-                h = [h for h in hist if h["state"] == "pending"][-1]
-                pending.append(f"{cat[fid]['label']}: \"{h['value']}\" in {h['doc_title']}")
-            elif any(h["verification"] == "needs_review" for h in hist):
-                review.append(cat[fid]["label"])
-            elif hist and not any(h["doc_final"] for h in hist):
-                pending.append(f"{cat[fid]['label']}: only in a non-final document ({hist[-1]['doc_title']})")
-            else:
-                missing.append(cat[fid]["label"])
-        if missing and r["status"] == "missing_record":
-            r.setdefault("notes", []).append("That record must document: " + ", ".join(missing))
-        elif missing:
-            r["problems"].append("Required field not documented: " + ", ".join(missing))
-        if pending:
-            r["problems"] += ["Pending: " + p for p in pending]
-        if review:
-            r["problems"].append("Needs expert review (approximate source match): " + ", ".join(review))
-        if r["status"] in ("satisfied", "needs_confirmation"):
-            if missing or pending:
-                r["status"] = "missing_field" if r["status"] == "satisfied" else r["status"]
-                if r["status"] == "needs_confirmation":
-                    pass  # confirmation first; field problems are listed with it
-            elif review and r["status"] == "satisfied":
-                r["status"] = "needs_review"
-        if type_needs and r["status"] != "not_applicable":  # the document type decides whether this record counts: a clinician confirms it
-            r["status"] = "needs_confirmation"
-            seen = set()
-            for x in type_needs:
-                did = x["doc_id"]
-                if did in seen:
-                    continue
-                seen.add(did)
-                title = x.get("doc_title") or (x.get("classification") or {}).get("title") or x.get("filename") or did
-                r["problems"].insert(0, f"Confirm the document type of {title}: {x.get('type_note') or _type_note(x)}")
-                r.setdefault("needs", []).append({"type": "confirm_doc_type", "doc_id": did})
-                if not any(e.get("doc_id") == did for e in r["evidence"]):
-                    r["evidence"].append({"doc_id": did, "quote": ""})
-        if date_needs and r["status"] != "not_applicable":  # confirmation first (like an attestation): the date decides the check
-            r["status"] = "needs_confirmation"
-            seen = set()
-            for x, why in date_needs:
-                did = x["doc_id"]
-                if did in seen:
-                    continue
-                seen.add(did)
-                title = x.get("doc_title") or (x.get("classification") or {}).get("title") or x.get("filename") or did
-                dd = dates.doc_dates(x) if "classification" in x else None
-                cause = "no document date was found in its text" if (dd is None or dd["unconfirmed"]) else "its date is flagged (" + "; ".join(dd["flags"]) + ")"
-                if dd is None and x.get("date_flags"):
-                    cause = "its date is flagged (" + "; ".join(x["date_flags"]) + ")"
-                r["problems"].insert(0, f"Confirm the date of {title}: {cause} and {why}")
-                r.setdefault("needs", []).append({"type": "confirm_dates", "doc_id": did})
-                if not any(e.get("doc_id") == did for e in r["evidence"]):
-                    r["evidence"].append({"doc_id": did, "quote": ""})
-        results.append(r)
+    setting = case.get("setting") or ""
+    hospital = _hospital()
+    level = case.get("hospital_level") or hospital.get("level") or "essential"
+    results, shown = [], []
+    for req in protocol.records(prot):
+        tier = protocol.tier_for(req, setting)
+        is_required = tier != "none" and protocol.required(req, setting, level)
+        if tier == "none":
+            r = {"id": req["id"], "label": req["label"], "department": req["department"], "status": "not_applicable", "problems": [], "evidence": [],
+                 "level": None, "level1": {"status": "satisfied", "problems": [], "needs": []}, "level2": {"status": "satisfied", "problems": [], "needs": []}}
+        else:
+            r = _evaluate_record(req, ready, facts, overrides, cat)
+        r["tier"] = tier; r["tier_label"] = protocol.TIER_LABEL.get(tier, tier); r["required"] = is_required
+        for k in ("source", "sources", "note", "tier_basis"):
+            if req.get(k):
+                r[k] = req[k]
+        if req.get("tiers") and not setting:
+            r["setting_note"] = "NCG setting not recorded for this Case File: the strictest tier applies until the coordinator records it"
+        elif req.get("tiers") and setting:
+            r["setting_note"] = f"tier {tier} in the {protocol.setting_label(prot['id'], setting) or setting} setting"
+        if tier == "b" and not is_required:
+            r["tier_note"] = "NCG Optimal: shown; required at an Optimal hospital"
+        elif tier == "c":
+            r["tier_note"] = "NCG Optional: shown only"
+        elif tier == "none":
+            r["tier_note"] = "not applicable in this NCG setting"
+        (results if is_required else shown).append(r)
     optional = []
     for opt in prot.get("optional", []):
         hit = [d for d in ready if _doc_types(d) & set(opt["doc_types"])]
@@ -263,12 +352,19 @@ def evaluate(case_id):
                                   if h["verification"] in VERIFIED and h["state"] == "present"][:3]})
     applicable = [r for r in results if r["status"] not in ("not_applicable", "waived")]
     ok = [r for r in applicable if r["status"] == "satisfied"]
-    gate = {"evaluated": store.now_iso(), "protocol": prot["id"], "protocol_version": prot.get("version"), "setting": case.get("setting") or "",
-            "hospital_level": case.get("hospital_level") or "",
-            "passed": len(ok) == len(applicable) and not [d for d in docs if d.get("state") not in ("ready", "error")],
+    processing = [d for d in docs if d.get("state") not in ("ready", "error")]
+    gate = {"evaluated": store.now_iso(), "protocol": prot["id"], "protocol_version": prot.get("version"), "setting": setting,
+            "setting_label": protocol.setting_label(prot["id"], setting) if setting else "",
+            "hospital_level": level, "hospital_type": hospital.get("type") or "",
+            "pmjay_note": "PM-JAY mandatory document lists per package are not available yet (pendings); the hospital type ("
+                          + (hospital.get("type") or "not set") + ") changes only that paperwork, never this check.",
+            "tiers_note": "NCG tiers: a = Essential (required everywhere), b = Optimal (required at an Optimal hospital, otherwise shown), c = Optional (shown only). Clinical review before real use.",
+            "passed": len(ok) == len(applicable) and not processing,
             "readiness": round(100 * len(ok) / max(len(applicable), 1)), "satisfied": len(ok), "total": len(applicable),
-            "requirements": results, "optional": optional, "core_data": core, "core_data_source": prot.get("core_data_source"), "policy_basis": prot.get("policy_basis"),
-            "documents": {"total": len(docs), "ready": len(ready), "processing": len([d for d in docs if d.get("state") not in ("ready", "error")]),
+            "levels": {"1": {"label": LEVEL_LABEL[1], "what": LEVEL_WHAT[1], "open": sum(1 for r in applicable if r.get("level") == 1)},
+                       "2": {"label": LEVEL_LABEL[2], "what": LEVEL_WHAT[2], "open": sum(1 for r in applicable if r.get("level") == 2)}},
+            "requirements": results, "shown": shown, "optional": optional, "core_data": core, "core_data_source": prot.get("core_data_source"), "policy_basis": prot.get("policy_basis"),
+            "documents": {"total": len(docs), "ready": len(ready), "processing": len(processing),
                           "errors": len([d for d in docs if d.get("state") == "error"]),
                           "non_final": [d["doc_id"] for d in ready if not _is_final(d, overrides)],
                           "unconfirmed": [d["doc_id"] for d in ready if _needs_confirmation(d) and not _is_final(d, overrides)],
@@ -301,8 +397,20 @@ def sync_actions(case_id, gate, by=""):
     actions = st.get("actions", [])
     today = date.today()
     case = store.get_case(case_id); prot = protocol.get(case["protocol"])
-    sla = {r["id"]: r.get("sla_days", 3) for r in prot["mandatory"]}
+    sla = {r["id"]: r.get("sla_days", 3) for r in protocol.records(prot)}
     by_req = {a["requirement"]: a for a in actions if a.get("source") == "pre_authorization" and a["status"] != "completed"}
+    required_ids = {r["id"] for r in gate["requirements"]}
+    shown_ids = {r["id"] for r in gate.get("shown", [])}
+    for rid, a in list(by_req.items()):  # nothing left to request: the protocol no longer lists the record, or no longer requires it here
+        if rid not in required_ids:
+            if rid in shown_ids:  # the NCG setting or the hospital level changed: the record is now shown, not counted
+                event, reason = "Closed: no longer required for this Case File (NCG tier for its setting and hospital level)", "requirement no longer required (NCG tier)"
+            else:
+                event, reason = f"Closed: the protocol ({prot['id']} v{prot.get('version')}) no longer lists this record", "requirement removed from the protocol"
+            a["status"] = "completed"; a["completed"] = store.now_iso()
+            a["history"].append({"ts": store.now_iso(), "event": event})
+            store.audit(case_id, {"kind": "action_completed", "action": a["id"], "requirement": rid, "reason": reason})
+            by_req.pop(rid)
     for r in gate["requirements"]:
         a = by_req.get(r["id"])
         if r["status"] in ("satisfied", "not_applicable", "waived"):

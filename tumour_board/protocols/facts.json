@@ -107,7 +107,9 @@
     "ct",
     "pet_ct",
     "bone_scan",
-    "mri"
+    "mri",
+    "xray",
+    "ultrasound"
    ]
   },
   "comparison_prior": {
@@ -189,6 +191,15 @@
     "molecular",
     "ihc",
     "histopathology"
+   ]
+  },
+  "met": {
+   "label": "MET",
+   "desc": "MET result (exon 14 skipping / amplification) as written, including 'Pending'; if the report says the test is pending, sent out or awaited, copy that statement as the value",
+   "doc_types": [
+    "molecular",
+    "histopathology",
+    "ihc"
    ]
   },
   "kras": {
