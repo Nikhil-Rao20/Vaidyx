@@ -384,6 +384,13 @@ def evaluate(case_id):
             r["setting_note"] = f"tier {tier} in the {protocol.setting_label(prot['id'], setting) or setting} setting"
         if tier == "b" and not is_required:
             r["tier_note"] = "NCG Optimal: shown; required at an Optimal hospital"
+        elif tier == "c" and (req.get("condition") or {}).get("ncg_tier") in protocol.TIERS:
+            # NCG gives this record another tier under a condition the system never judges (a stage, an indication, a finding): shown,
+            # never counted, labelled with NCG's own tier (review of V1 Phase 9)
+            cond = req["condition"]
+            r["ncg_tier"] = cond["ncg_tier"]
+            r["tier_note"] = (f"NCG {protocol.TIER_LABEL[cond['ncg_tier']]} {cond.get('text') or 'under a condition'}: shown, not counted; "
+                              "the system does not judge this condition")
         elif tier == "c":
             r["tier_note"] = "NCG Optional: shown only"
         elif tier == "none":

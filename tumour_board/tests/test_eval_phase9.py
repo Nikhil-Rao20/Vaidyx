@@ -83,6 +83,7 @@ def runs(tmp_path, monkeypatch):
     monkeypatch.setattr(gate_summary, "RUNS", root)
     monkeypatch.setattr(gate_summary, "V9_QA_MIN", None)
     monkeypatch.setattr(gate_summary, "V9_SUM_MIN", None)
+    monkeypatch.setattr(config, "DEMO_CORPUS", tmp_path / "corpus")  # no Phase 9 Case File in this corpus unless a test adds one
     _run(root, "baseline", _qa(), _summary(v9=None))
     return root
 
@@ -230,3 +231,21 @@ def test_e2e_phase9_spec():
     assert {m["department"] for m in sp["members"]} == {"Surgical Oncology", "Radiation Oncology", "Medical Oncology"}
     assert all("(synthetic)" in m["name"] for m in sp["members"])
     assert "—" not in json.dumps(e2e_api.V9_CASES, ensure_ascii=False)
+
+
+def test_missing_phase9_numbers_fail_when_the_corpus_holds_the_cases(runs, tmp_path):
+    """Review M9: once TB-007 / TB-008 are in the demo corpus, evals that report nothing (or not every case) for them make the run RED."""
+    for cid in ("TB-007", "TB-008"):
+        (tmp_path / "corpus" / "cases" / cid).mkdir(parents=True)
+        (tmp_path / "corpus" / "cases" / cid / "case.json").write_text("{}")
+    _run(runs, "r9", _qa(p9=None), _summary(v9=None))
+    assert gate_summary.main("r9", "baseline") == 1
+    md, rows = _table(runs, "r9")
+    assert rows["Ask the Case File, oral cavity / cervix (Phase 9)"][-1] == "NO" and "missing" in rows["Ask the Case File, oral cavity / cervix (Phase 9)"][0]
+    assert rows["Summary omission, Phase 9 cases"][-1] == "NO"
+    _run(runs, "r10", _qa(), _summary())  # a Phase 9 block for TB-007 only: TB-008 not reported
+    assert gate_summary.main("r10", "baseline") == 1 and "TB-008" in _table(runs, "r10")[1]["Ask the Case File, oral cavity / cervix (Phase 9)"][0]
+
+
+def test_phase9_case_lists_agree():
+    assert list(gate_summary.V9_CASES) == summary_eval.CASES_V9 == list(qa_eval.PROBES_V9)

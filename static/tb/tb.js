@@ -162,7 +162,8 @@ function reqRow(r, shown) {
     : n.type === "confirm_doc_type" ? `<button class="ghost sm" data-conftype="${esc(n.doc_id)}">Confirm document type</button>`
     : n.type === "confirm_value" ? `<button class="ghost sm" data-confval="${esc(JSON.stringify(n))}" title="Read the value on the scan image and record it (V1 8.2)">Confirm ${esc(S.facts?.[n.fact]?.label || n.fact)} on the scan</button>` : "").join("");
   const waive = shown || !can("waive", r.id) ? "" : r.status === "waived" ? `<button class="ghost sm" data-unwaive="${esc(r.id)}">Remove waiver</button>` : (r.status !== "satisfied" && r.status !== "not_applicable") ? `<button class="ghost sm" data-waive="${esc(r.id)}" title="Clinical decision that this record is not required for this Case File (audited)">Waive</button>` : "";
-  const tier = TIER[r.tier] || TIER.a;
+  // a record NCG tiers under a condition the system never judges: NCG's own tier, marked conditional, never counted
+  const tier = r.ncg_tier ? ["c-mute", (TIER[r.ncg_tier] || TIER.c)[1] + " (conditional)"] : TIER[r.tier] || TIER.a;
   const lvl = r.level && !shown ? ` <span class="chip c-lvl" title="${esc(LEVEL[r.level][1])}">${LEVEL[r.level][0]}</span>` : "";
   const chip = shown && r.status !== "satisfied" && r.status !== "not_applicable" ? `<span class="chip c-mute" title="Shown for information: not counted at this hospital level or in this setting">${esc(s[1])} (not counted)</span>` : `<span class="chip ${s[0]}">${s[1]}</span>`;
   return `<div class="req ${shown ? "shown" : ""}"><div class="icon ${s[2]}">${s[3]}</div><div style="flex:1">

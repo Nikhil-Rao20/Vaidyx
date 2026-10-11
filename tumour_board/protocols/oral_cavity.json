@@ -1,7 +1,7 @@
 {
  "id": "oral_cavity",
  "label": "Oral cavity cancer (head and neck)",
- "version": "0.1",
+ "version": "0.2",
  "note": "Configurable by the clinical team. Required records derived from the NCG work-up for oral cancer (NCG Guidelines for Head and Neck Cancer 2019, quoted with page on every record). NCG lists the oral cancer work-up without Essential / Optimal / Optional letters (letters appear only for the imaging modality, neck ultrasound, chest X-ray and PET-CT / CECT thorax), so the listed records are treated as Essential. Squamous cell carcinoma of the oral cavity; HPV / p16 testing is an NCG item for oropharynx only. To be confirmed by the hospital Tumour Board (clinical review before real use).",
  "settings_note": "NCG setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes stage). Item 4.1 derives the required records per setting from the NCG tiers.",
  "settings": [
@@ -80,7 +80,7 @@
     "mri",
     "ultrasound"
    ],
-   "region": "face|neck|oral|tongue|buccal|mandib|maxill|lip|cheek|alveol|gingiv|palat|retromolar",
+   "region": "face|neck(?! of)|oral cavity|tongue|buccal|mandib|maxill|lips?\\b|cheek|alveol|gingiv|palat|retromolar|floor of (?:the )?mouth",
    "department": "Radiology",
    "required_facts": [
     "lesion_size",
@@ -183,7 +183,11 @@
      "quote": "(N3 node (size > 6 cm), multiple bilateral neck nodes, Lower cervical neck nodes, large primary (T4b) and in patients who have symptoms suggestive of distant metastasis."
     }
    ],
-   "tier_basis": "NCG Optimal (b) only for patients at high risk of distant metastasis (N3, multiple bilateral or lower neck nodes, T4b, symptoms); the system never judges that risk, so it is shown, not counted (clinical review)"
+   "tier_basis": "NCG Optimal (b) only for patients at high risk of distant metastasis (N3, multiple bilateral or lower neck nodes, T4b, symptoms); the system never judges that risk, so it is shown, not counted (clinical review)",
+   "condition": {
+    "ncg_tier": "b",
+    "text": "for patients considered for curative treatment at high risk of distant metastasis"
+   }
   },
   {
    "id": "cect_thorax",

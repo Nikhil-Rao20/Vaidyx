@@ -28,10 +28,10 @@ SYNONYMS = {
     # V1 item 9.1 (oral cavity)
     "doi": ["depth of invasion", r"\bdoi\b"], "pni": ["perineural", r"\bpni\b"],
     "ene": ["extranodal", "extra nodal", "extracapsular", "perinodal", r"\bene\b", r"\bece\b"],
-    "tobacco": ["tobacco", "gutka", "gutkha", "khaini", "mawa", "betel", "paan", "areca", r"\bbidi\b", r"\bbeedi\b"],
-    "dental": ["dental", r"\bopg\b", "orthopantomogram"],
+    "tobacco": ["tobacco", "gutka", "gutkha", "khaini", r"\bmawa\b", "betel", r"\bpaan\b", r"\bareca\b", r"\bbidi\b", r"\bbeedi\b"],
+    "dental": [r"\bdental\b", r"\bopg\b", "orthopantomogram"],
     # V1 item 9.2 (cervix)
-    "figo": [r"\bfigo\b"], "parametrium": ["parametri"], "hiv": [r"\bhiv\b", "retroviral", r"\bict\b"],
+    "figo": [r"\bfigo\b"], "parametrium": [r"\bparametri"], "hiv": [r"\bhiv\b", "retroviral"],
 }
 _TOKEN = re.compile(r"[a-z0-9]+(?:[.\-/][a-z0-9]+)*")
 

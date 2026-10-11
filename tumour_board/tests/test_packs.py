@@ -57,7 +57,7 @@ def test_known_indian_folders_are_tagged_india():
 def test_allowed_sources_shape():
     src = packs.allowed_sources("radiology")
     assert src[0] == ("iria", None)
-    assert src[1] == ("ncg_india", frozenset({"synoptic-reporting-radiology-template.pdf", "ncg-guidelines-for-head-neck-cancer-2019.pdf"}))
+    assert src[1] == ("ncg_india", frozenset({"synoptic-reporting-radiology-template.pdf"}))  # not the whole NCG head and neck file (review M7)
     assert all(isinstance(f, str) and (files is None or isinstance(files, frozenset)) for f, files in src)
     with pytest.raises(KeyError):
         packs.allowed_sources("cardiology")

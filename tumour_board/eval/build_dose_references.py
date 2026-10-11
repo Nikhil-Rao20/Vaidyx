@@ -126,7 +126,7 @@ PAGES = {
     # head and neck sites (oropharynx, larynx ...), the recurrent / metastatic chart (p36) repeats the oral p8-9 regimens.
     ("oral_cavity", "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf"): {4, 5, 6, 7, 8, 9},
     # NCG gynaecological 2019 (Word file, 6,000-character parts): parts 1-5 hold the cervix chapter (part 1 opens with the front matter,
-    # part 5 ends the cervix table and opens the ovarian chapter: its ovarian lines are dropped below); 6 onwards ovary, endometrium, vulva.
+    # part 5 ends the cervix table and opens the ovarian chapter, which has no dose line in that part); 6 onwards ovary, endometrium, vulva.
     ("cervix", "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx"): {1, 2, 3, 4, 5},
 }
 # Lines that are not a dosing statement: dose reductions, caps, cumulative limits, HDR boosts.
@@ -354,6 +354,10 @@ def entry(c):
                 e[k] = c[k]
     e["source_kind"] = c.get("source_kind") or "regimen"
     e.update({k: c[k] for k in ("file", "title", "org", "region", "page", "quote")})
+    if "\u2014" in e["quote"]:  # no em dash in what the UI shows: the verbatim part after it, when that part still holds the dose
+        tail = e["quote"].rsplit("\u2014", 1)[1].strip()
+        if _fmt(e.get("dose") if e["kind"] == "drug" else e.get("total_gy")) in tail.replace(",", ""):
+            e["quote"] = tail
     return e
 
 

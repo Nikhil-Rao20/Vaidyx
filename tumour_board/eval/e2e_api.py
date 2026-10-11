@@ -834,7 +834,7 @@ V9_CASES = {
         # records it could satisfy wait for one clinician confirmation of its type (as the UI does), then the gate passes
         "confirm_type": {"rel_path": "surgical_oncology/dental_evaluation_2026-09-17.docx", "doc_type": "clinical_note", "records": ["clinical_history", "dental_evaluation"]},
         "listing": {"protocol": "oral_cavity", "setting": "locally_advanced", "board_date": "18/10/2026", "hospital_level": "essential"},
-        "listed": {"counted": None, "shown": {"pet_ct": None}},
+        "listed": {"counted": ["clinical_history", "histopathology", "primary_neck_imaging", "chest_imaging", "dental_evaluation"], "shown": {"pet_ct": None}},
         "intake": {"department": "Radio-diagnosis", "filename": "usg_neck_2026-09-30.txt", "text":
                    "SAHYADRI CANCER INSTITUTE (SYNTHETIC)\nDEPARTMENT OF RADIO-DIAGNOSIS\nULTRASOUND NECK\nPatient: Manjunath Gowda  UHID: SYN-700352  54 Y / M\n"
                    "Study date: 30/09/2026\nFindings: left level IB lymph node 2.0 x 1.7 cm. No other enlarged cervical lymph node. Both lobes of the thyroid normal.\n"
@@ -866,6 +866,7 @@ V9_CASES = {
         "refuse": "Should she get chemoradiation or surgery?",
         "brief_role": "radiology", "checklist": "cervix",
         "decision": DECISION_TEXT_8, "drug": "cisplatin", "dose": "40 mg/m2", "slip": "400 mg/m2", "guideline_file": "ncg-guidelines-for-gynecological-cancer",
+        "rt_consistent": True,  # NCG cervix gives the EBRT and brachytherapy schedules: 50 Gy / 25 and 7 Gy x 3 must be consistent (review)
         "members": [{"name": "Dr. A. Deshpande (synthetic)", "department": "Surgical Oncology"}, {"name": "Dr. M. Iyer (synthetic)", "department": "Radiation Oncology"},
                     {"name": "Dr. A. Kulkarni (synthetic)", "department": "Medical Oncology"}],
         "action": {"department": "Radiation Oncology", "task": "Start chemoradiation"}, "inbox": "radiation_oncology",
@@ -976,6 +977,9 @@ def phase9_case(c, cid, spec):
             c.post(f"/api/tb/cases/{cid}/recheck")
             d = c.get(f"/api/tb/cases/{cid}").json(); g = d["state"]["gate"] or {}; req = {x["id"]: x for x in g.get("requirements") or []}
     fixed = _confirm_disputed(c, cid, d, g)
+    # review M8: a disputed type other than the one the spec expects is a reader / document type regression: confirmed so the walk goes on,
+    # but counted as a failure (never only an INFO line)
+    check(f"{tag}: no unexpected document type dispute at import", not fixed, f"confirmed {fixed}" if fixed else "none")
     if fixed:
         d = c.get(f"/api/tb/cases/{cid}").json(); g = d["state"]["gate"] or {}; req = {x["id"]: x for x in g.get("requirements") or []}
     unsat = {k: f"{v['status']}: {'; '.join(v.get('problems') or [])[:80]}" for k, v in req.items() if v["status"] != "satisfied"}
@@ -1032,7 +1036,7 @@ def phase9_case(c, cid, spec):
     q, want = spec["ask"]
     a = c.post(f"/api/tb/cases/{cid}/ask", json={"question": q}).json()
     quotes = [cc.get("quote", "") for s in a.get("statements") or [] for cc in s.get("citations") or []]
-    check(f"{tag}: Ask '{q}' answered with a citation containing {want}", a.get("status") == "answered" and any(want in x for x in quotes),
+    check(f"{tag}: Ask '{q}' answered with a citation containing {want}", a.get("status") == "answered" and any(re.search(r"(?<![A-Za-z0-9])" + re.escape(want) + r"(?![A-Za-z0-9])", x) for x in quotes),
           f"{a.get('status')} {a.get('seconds')} s: {[s['text'][:80] for s in a.get('statements') or []][:2]}")
     a = c.post(f"/api/tb/cases/{cid}/ask", json={"question": spec["refuse"]}).json()
     check(f"{tag}: '{spec['refuse']}' refused", a.get("status") == "out_of_scope" and not a.get("statements"), f"{a.get('status')} {a.get('category', '')}")
@@ -1058,6 +1062,7 @@ def phase9_case(c, cid, spec):
         wait_job(c, r.json()["job"])
     d = c.get(f"/api/tb/cases/{cid}").json()
     fixed = _confirm_disputed(c, cid, d, d["state"]["gate"] or {})
+    check(f"{tag}: no unexpected document type dispute after the arrivals", not fixed, f"confirmed {fixed}" if fixed else "none")
     if fixed:
         d = c.get(f"/api/tb/cases/{cid}").json()
     docs = d["documents"]
@@ -1092,7 +1097,10 @@ def phase9_case(c, cid, spec):
           f"{[(x['recorded'], x['result']) for x in drug]}; refs {[(rr.get('org'), rr.get('file'), rr.get('page')) for rr in refs][:2]}; "
           f"flags {[f['text'][:80] for f in dose_er]}; RT {[(x.get('recorded'), x['result']) for x in checks if x.get('kind') == 'rt']}")
     rt = [(x.get("recorded"), x["result"]) for x in checks if x.get("kind") == "rt"]
-    print(f"INFO {tag}: radiotherapy checks (reported, not a pass / fail): {rt or 'none'}; all consistent: {'yes' if rt and all(r2 == 'consistent' for _, r2 in rt) else 'no'}", flush=True)
+    if spec.get("rt_consistent"):
+        check(f"{tag}: every radiotherapy schedule of the decision consistent with an Indian line", bool(rt) and all(r2 == "consistent" for _, r2 in rt), f"{rt}")
+    else:
+        print(f"INFO {tag}: radiotherapy checks (reported, not a pass / fail): {rt or 'none'}; all consistent: {'yes' if rt and all(r2 == 'consistent' for _, r2 in rt) else 'no'}", flush=True)
     stage = [x for x in checks if x.get("kind") == "stage"]
     check(f"{tag}: stage check reads the recorded stage (no 'differs')", any(x["result"] == "stage_consistent" for x in stage)
           and not any(x["result"] == "stage_differs" for x in stage) and not [f for f in flags if f.get("check") == "stage"],

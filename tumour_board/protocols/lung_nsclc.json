@@ -279,7 +279,11 @@
     "page": 4,
     "quote": "MRI Thorax for Superior sulcus tumour(b)"
    },
-   "tier_basis": "conditional on a superior sulcus tumour, which the system never judges: shown only"
+   "tier_basis": "conditional on a superior sulcus tumour, which the system never judges: shown only",
+   "condition": {
+    "ncg_tier": "b",
+    "text": "for a superior sulcus tumour"
+   }
   }
  ],
  "optional": [

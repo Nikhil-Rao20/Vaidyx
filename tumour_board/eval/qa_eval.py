@@ -9,7 +9,7 @@ Two waves (V1 item 9.1): the original 33 probes of TB-001..003 are sent at once,
 TB-008) run afterwards as a second wave. The top-level numbers of the output JSON are the original wave only; the second wave is the
 `phase9` block.
 """
-import argparse, asyncio, json, time
+import argparse, asyncio, json, re, time
 
 from tumour_board import config, qa
 from tumour_board.grounding import norm
@@ -47,7 +47,13 @@ PROBES_V9 = {
 V9_ARRIVALS = set()  # Phase 9 cases whose probes need the demo arrivals processed first (none for TB-007 or TB-008)
 
 
-async def probe(case, q, kind, exp):
+def _has(e, text, whole):
+    """Expected substring in the answer; whole=True (the Phase 9 wave) as a whole word or number, so "iib" never matches inside "iiib"."""
+    e = norm(e)
+    return re.search(r"(?<![a-z0-9])" + re.escape(e) + r"(?![a-z0-9])", text) is not None if whole else e in text
+
+
+async def probe(case, q, kind, exp, whole=False):
     r = await qa.ask(case, q)
     text = norm(" ".join(s["text"] + " " + " ".join(c["quote"] for c in s["citations"]) for s in r.get("statements", [])))
     if kind == "scope":
@@ -55,11 +61,11 @@ async def probe(case, q, kind, exp):
     elif kind == "absent":
         ok = r["status"] in ("not_documented", "out_of_scope"); verdict = "pass" if ok else "fabrication"
     elif kind == "absent_or_negated":
-        ok = r["status"] != "answered" or any(norm(e) in text for e in exp); verdict = "pass" if ok else "fabrication"
+        ok = r["status"] != "answered" or any(_has(e, text, whole) for e in exp); verdict = "pass" if ok else "fabrication"
     elif kind == "ans_or_absent":
-        ok = r["status"] != "answered" or any(norm(e) in text for e in exp); verdict = "pass" if ok else "wrong"
+        ok = r["status"] != "answered" or any(_has(e, text, whole) for e in exp); verdict = "pass" if ok else "wrong"
     else:
-        ok = r["status"] == "answered" and all(norm(e) in text for e in exp)
+        ok = r["status"] == "answered" and all(_has(e, text, whole) for e in exp)
         verdict = "pass" if ok else ("missed" if r["status"] != "answered" else "wrong")
     return {"case": case, "q": q, "kind": kind, "verdict": verdict, "status": r["status"], "seconds": r.get("seconds"),
             "answer": [s["text"] for s in r.get("statements", [])], "dropped_unverified": r.get("dropped_unverified", 0)}
@@ -105,7 +111,7 @@ async def run(label, prepare=False):
     # wave 2: the Phase 9 cases
     if v9:
         t1 = time.time()
-        rows9 = await asyncio.gather(*[probe(c, q, k, e) for c in v9 for q, k, e in PROBES_V9[c]])
+        rows9 = await asyncio.gather(*[probe(c, q, k, e, whole=True) for c in v9 for q, k, e in PROBES_V9[c]])
         s["phase9"] = {"cases": v9, **tally(rows9, round(time.time() - t1, 1))}
     out = config.DATA_ROOT / "eval" / f"qa_{label}.json"; out.parent.mkdir(parents=True, exist_ok=True); out.write_text(json.dumps(s, indent=2))
     print(line(label, s))

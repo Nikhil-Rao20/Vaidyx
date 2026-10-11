@@ -6,7 +6,7 @@
       "label": "Radiology",
       "sources": [
         {"folder": "iria"},
-        {"folder": "ncg_india", "files": ["synoptic-reporting-radiology-template.pdf", "ncg-guidelines-for-head-neck-cancer-2019.pdf"]},
+        {"folder": "ncg_india", "files": ["synoptic-reporting-radiology-template.pdf"]},
         {"folder": "acr_appropriateness"},
         {"folder": "acr_rads"},
         {"folder": "rcr"},

@@ -105,7 +105,7 @@ RT_RX = [
     ("nxp", re.compile(rf"(?<![\d.])(?P<f>\d+)\s*[x×*]\s*(?P<p>\d+(?:\.\d+)?)\s*(?P<u>{_GY})(?![a-z])", re.I)),
     # '7 Gy x 3', '7 Gy * 2-3 Fr' (a range of fractions: NCG cervix brachytherapy, V1 item 9.2); never 'x 5 a week' (a schedule)
     ("pxn", re.compile(rf"(?<![\d.])(?P<p>\d+(?:\.\d+)?)(?:\s*(?:Gy)?\s*(?:-|–|to)\s*(?P<q>\d+(?:\.\d+)?))?\s*(?P<u>{_GY})\s*[x×*]\s*(?P<f>\d+)(?!\d)"
-                       r"(?:\s*(?:-|–)\s*(?P<g>\d+)(?!\d))?(?!\s*(?:-|–)\s*\d)(?!\s*(?:days?|d|times|fractions?|fr|#)?\s*(?:a|per|/|each|every|in\s+a)\s*(?:week|wk))(?:\s*(?:fractions?|fr(?![a-z])|#))?", re.I)),
+                       r"(?:\s*(?:-|–)\s*(?P<g>\d+)(?!\d)(?=\s*(?:fractions?(?![a-z])|fr(?![a-z])|#)))?(?!\s*(?:-|–)\s*\d)(?!\s*(?:days?|d|times|fractions?|fr|#)?\s*(?:a|per|/|each|every|in\s+a)\s*(?:week|wk))(?:\s*(?:fractions?|fr(?![a-z])|#))?", re.I)),
     ("single", re.compile(rf"{_TOT}\s*(?P<u>{_GY})\s*(?:in\s+a\s+|as\s+a\s+)?single\s+(?:fraction|#)", re.I)),
 ]
 _TOTAL_ONLY = re.compile(rf"(?<![\d.]){_TOT}\s*(?P<u>{_GY})(?![a-z])", re.I)
@@ -138,7 +138,9 @@ def parse_rt(text, require_fractions=False):
             if kind in ("nxp", "pxn"):
                 f, p = int(m.group("f")), float(m.group("p")) * k
                 q = float(m.group("q")) * k if kind == "pxn" and m.group("q") else None
-                g = int(m.group("g")) if kind == "pxn" and m.group("g") and int(m.group("g")) > f else None  # fractions range '2-3'
+                g = int(m.group("g")) if kind == "pxn" and m.group("g") else None  # fractions range '2-3'
+                if g is not None and not f < g <= min(2 * f, 40):  # '1-30 fractions' is not a schedule written per fraction: not read
+                    continue
                 tot, tmax, fr, fmax = round(f * p, 3), (round((g or f) * (q or p), 3) if (q or g) else None), f, g
             elif kind == "single":
                 tot, tmax, fr, fmax = _num(m.group("a")) * k, (_num(m.group("b")) * k if m.group("b") else None), 1, None
@@ -165,8 +167,11 @@ def parse_rt(text, require_fractions=False):
 # ---------------------------------------------------------------- stage parsing
 
 _ARABIC = {"0": "0", "1": "I", "2": "II", "3": "III", "4": "IV"}
-_GROUP_RX = re.compile(r"\bstage\s*(?:group(?:ing)?\s*)?[:\-]?\s*(?P<r>IV|I{1,3}|0|[1-4])(?P<l>[ABC]\d?)?(?![A-Za-z0-9])", re.I)
-_BARE_GROUP_RX = re.compile(r"^\s*(?P<r>IV|I{1,3})(?P<l>[ABC]\d?)?(?![A-Za-z0-9])", re.I)
+# 'Stage IIIA', and the FIGO forms of cervix (V1 item 9.2, review): 'FIGO IIB', 'FIGO 2018: IIB', 'FIGO (2018) stage IIIC1r'; the FIGO 2018
+# r / p suffix (how nodes were assessed: radiology, pathology) is kept in what is written but never compared
+_GROUP_RX = re.compile(r"\b(?:FIGO(?:\s*\(?20\d\d\)?)?\s*(?:stage\s*)?|stage\s*(?:group(?:ing)?\s*)?)[:\-]?\s*(?P<r>IV|I{1,3}|0|[1-4])(?P<l>[ABC]\d?)?"
+                       r"(?:[rp](?![A-Za-z0-9]))?(?![A-Za-z0-9])", re.I)
+_BARE_GROUP_RX = re.compile(r"^\s*(?P<r>IV|I{1,3})(?P<l>[ABC]\d?)?(?:[rp](?![A-Za-z0-9]))?(?![A-Za-z0-9])", re.I)
 _TNM_RX = re.compile(r"(?<![A-Za-z0-9])(?P<pre>yp|yc|p|c|r|a)?\s?T(?P<t>is|[0-4X][a-d]?(?:mi)?)(?![a-z0-9])"
                      r"(?:\s*,?\s*(?:yp|yc|p|c)?\s?N(?P<n>[0-3X][a-c]?(?:mi)?)(?![a-z0-9]))?"
                      r"(?:\s*,?\s*(?:yp|yc|p|c)?\s?M(?P<m>[01X][a-d]?)(?![a-z0-9]))?")

@@ -216,7 +216,11 @@
      "where": "Cervix cancer, summary table of imaging investigations"
     }
    ],
-   "tier_basis": "early disease: NCG Optimal. Locally advanced disease: NCG's Optimal column reads 'MRI Abdomen and pelvis OR CECT abdomen and pelvis' and the CECT is already required, so MRI is shown only"
+   "tier_basis": "early disease: NCG Optimal. Locally advanced disease: NCG's Optimal column reads 'MRI Abdomen and pelvis OR CECT abdomen and pelvis' and the CECT is already required, so MRI is shown only",
+   "condition": {
+    "ncg_tier": "b",
+    "text": "as an alternative to the CECT abdomen and pelvis, which is already required"
+   }
   },
   {
    "id": "chest_xray",
@@ -294,7 +298,11 @@
     "quote": "CT Thorax in patients with Para-aortic nodes (IIIC2) for adequate systemic staging",
     "where": "Cervix cancer, summary table of imaging investigations"
    },
-   "tier_basis": "NCG Essential for patients with para-aortic nodes (FIGO IIIC2) only; the system never judges the stage, so it is shown, not counted (clinical review)"
+   "tier_basis": "NCG Essential for patients with para-aortic nodes (FIGO IIIC2) only; the system never judges the stage, so it is shown, not counted (clinical review)",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "for patients with para-aortic nodes (FIGO IIIC2)"
+   }
   },
   {
    "id": "ihc",
@@ -312,7 +320,11 @@
     "quote": "IHC as Indicated",
     "where": "Cervix cancer, summary table of imaging investigations"
    },
-   "tier_basis": "NCG Optimal 'as indicated': the system never judges the indication, so it is shown, not counted"
+   "tier_basis": "NCG Optimal 'as indicated': the system never judges the indication, so it is shown, not counted",
+   "condition": {
+    "ncg_tier": "b",
+    "text": "as indicated"
+   }
   },
   {
    "id": "pet_ct",

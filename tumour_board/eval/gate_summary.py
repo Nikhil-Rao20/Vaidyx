@@ -9,6 +9,7 @@ RUNS = config.DATA_ROOT / "eval" / "v1"
 ORIGINAL_CASES = ("TB-001", "TB-002", "TB-003")  # the existing rules and the timing comparison use these cases only (like with like)
 # V1 Phase 9 (oral cavity TB-007, cervix TB-008): minimum passes of their Q&A probes and minimum key fields found by the summary eval.
 # None = rule "0 fabrications, recorded" until the first measurement; the orchestrator then sets the numbers.
+V9_CASES = ("TB-007", "TB-008")  # the Phase 9 demo Case Files (same list as summary_eval.CASES_V9 and qa_eval.PROBES_V9; a test keeps them equal)
 V9_QA_MIN = 23  # TB-007 + TB-008: 24 probes, measured 24/24 (session 11; one miss allowed for model variance); 0 fabrications always
 V9_SUM_MIN = 36  # TB-007 18/19 (miss: ENE "no perinodal extension", a negated imaging finding) + TB-008 18/18, measured twice for TB-007
 
@@ -65,19 +66,33 @@ def numbers(d):
     return n
 
 
+def v9_in_corpus():
+    """The Phase 9 Case Files the demo corpus holds: the evals must report on every one of them (review M9)."""
+    return [c for c in V9_CASES if (config.DEMO_CORPUS / "cases" / c / "case.json").exists()]
+
+
 def phase9_rows(run, base):
-    """The two Phase 9 rows (oral cavity / cervix Case Files): never mixed into the original rules. A run whose evals did not produce the
-    Phase 9 numbers shows "not run" and the row is skipped (never counted as a pass); fabrications make the gate RED."""
+    """The two Phase 9 rows (oral cavity / cervix Case Files): never mixed into the original rules. Fabrications make the gate RED. When the
+    evals ran but did not report on every Phase 9 Case File the demo corpus holds, the row fails (a broken case list or corpus path must not
+    pass silently); a run from before Phase 9 (no such Case File in the corpus) shows "not run" and the row is skipped, never a pass."""
+    want = v9_in_corpus()
     qa_rule = "0 fabrications, recorded" if V9_QA_MIN is None else f"0 fabrications, >= {V9_QA_MIN} pass"
     if "qa9_pass" in run:
-        qa_this = f"{run['qa9_pass']}/{run['qa9_n']} pass, {run['qa9_fabrication']} fabrications ({', '.join(run['qa9_cases'])})"
-        qa_ok = run["qa9_fabrication"] == 0 and (V9_QA_MIN is None or run["qa9_pass"] >= V9_QA_MIN)
+        miss = [c for c in want if c not in run["qa9_cases"]]
+        qa_this = f"{run['qa9_pass']}/{run['qa9_n']} pass, {run['qa9_fabrication']} fabrications ({', '.join(run['qa9_cases'])})" + (
+            f"; no probes run for {', '.join(miss)}" if miss else "")
+        qa_ok = run["qa9_fabrication"] == 0 and (V9_QA_MIN is None or run["qa9_pass"] >= V9_QA_MIN) and not miss
+    elif "qa_pass" in run and want:
+        qa_this, qa_ok = f"missing: the demo corpus holds {', '.join(want)} but the Q&A eval wrote no Phase 9 block", False
     else:
         qa_this, qa_ok = ("not run (no Phase 9 block)" if "qa_pass" in run else None), None
     sum_rule = "recorded" if V9_SUM_MIN is None else f">= {V9_SUM_MIN} key fields"
     if "sum9_hit" in run:
-        sum_this = f"{run['sum9_hit']}/{run['sum9_total']} key fields ({', '.join(run['sum9_cases'])})"
-        sum_ok = V9_SUM_MIN is None or run["sum9_hit"] >= V9_SUM_MIN
+        miss = [c for c in want if c not in run["sum9_cases"]]
+        sum_this = f"{run['sum9_hit']}/{run['sum9_total']} key fields ({', '.join(run['sum9_cases'])})" + (f"; not evaluated: {', '.join(miss)}" if miss else "")
+        sum_ok = (V9_SUM_MIN is None or run["sum9_hit"] >= V9_SUM_MIN) and not miss
+    elif "sum_hit" in run and want:
+        sum_this, sum_ok = f"missing: the demo corpus holds {', '.join(want)} but the summary eval did not evaluate them", False
     else:
         sum_this, sum_ok = ("not run (no Phase 9 cases)" if "sum_hit" in run else None), None
     return [("Ask the Case File, oral cavity / cervix (Phase 9)", qa_this,

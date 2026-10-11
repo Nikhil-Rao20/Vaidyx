@@ -40,6 +40,9 @@ def test_every_record_has_tier_source_and_valid_fields(pid):
         assert org.department_id(r["department"]), (r["id"], r["department"])
         for k in ("tier_basis", "note"):
             assert "—" not in r.get(k, ""), r["id"]
+        if r.get("condition"):  # NCG's own tier under a condition the system never judges: the record itself is shown only
+            assert r["condition"]["ncg_tier"] in protocol.TIERS and r["condition"]["text"] and "—" not in r["condition"]["text"], r["id"]
+            assert "c" in {r["tier"], *(r.get("tiers") or {}).values()}, r["id"]
 
 
 @pytest.mark.parametrize("name", sorted(NOTES))
@@ -206,3 +209,18 @@ def test_cervix_fields_and_extraction():
     assert {"figo_stage", "parametrial_involvement"} <= set(protocol.facts_for_doc("cervix", "mri"))
     assert "hiv_status" in protocol.facts_for_doc("cervix", "lab") and "hiv_status" not in protocol.facts_for_doc("breast", "lab")
     assert protocol.setting_label("cervix", "early") == "Early (FIGO 2018 IA1 to IIA1), as recorded"
+
+
+def test_conditional_records_show_the_ncg_tier(tmp_path):
+    """Review of Phase 9: a record NCG tiers under a condition (CT thorax Essential for FIGO IIIC2, IHC Optimal as indicated, PET-CT Optimal for
+    high-risk oral cancer, superior sulcus MRI) is shown with NCG's tier and the condition, never counted, never labelled Optional."""
+    from tumour_board import rules
+    conds = {(pid, r["id"]): r["condition"]["ncg_tier"] for pid in PIDS for r in protocol.records(pid) if r.get("condition")}
+    assert conds == {("lung_nsclc", "mri_thorax_superior_sulcus"): "b", ("oral_cavity", "pet_ct"): "b", ("cervix", "ct_thorax"): "a",
+                     ("cervix", "ihc"): "b", ("cervix", "mri_pelvis"): "b"}
+    for pid, rid in conds:
+        for setting in [None] + [s["id"] for s in protocol.settings(pid)]:
+            for level in ("essential", "optimal"):
+                rec = _rec(pid, rid)
+                if protocol.tier_for(rec, setting) == "c":
+                    assert not protocol.required(rec, setting, level), (pid, rid, setting, level)

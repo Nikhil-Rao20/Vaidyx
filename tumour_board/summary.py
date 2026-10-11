@@ -7,11 +7,13 @@ from . import config, grounding, guardrails, llm, protocol, qa, rules, search, s
 # Verified facts that belong to each NCG section. If the model's sentences for a section are dropped (or it wrote none), these
 # facts are added as plain, cited sentences, so a section only says "not documented" when nothing verified exists for it.
 SECTION_FACTS = {
-    "presentation": ["presenting_complaint", "diagnosis_date_mode", "smoking_history", "menopausal_status", "comorbidities"],
+    "presentation": ["presenting_complaint", "diagnosis_date_mode", "smoking_history", "tobacco_use", "menopausal_status", "comorbidities"],
     "treatment_history": ["treatment_received", "treatment_completion_date"],
-    "investigations": ["histologic_type", "grade", "lvi", "margins", "pdl1", "egfr", "alk", "ros1", "kras", "er", "pr", "her2", "ki67", "mmr", "ras_braf", "cea"],
-    "imaging": ["lesion_size", "nodal_findings", "distant_findings", "comparison_prior", "suv_max", "recorded_stage", "distance_from_anal_verge", "mrf_status", "emvi"],
-    "fitness": ["ecog", "comorbidities", "haemoglobin", "wbc", "platelets", "creatinine", "bilirubin"],
+    "investigations": ["histologic_type", "grade", "lvi", "margins", "depth_of_invasion", "pni", "ene", "pdl1", "egfr", "alk", "ros1", "kras", "er", "pr", "her2",
+                       "ki67", "mmr", "ras_braf", "cea"],
+    "imaging": ["lesion_size", "nodal_findings", "distant_findings", "comparison_prior", "suv_max", "recorded_stage", "figo_stage", "parametrial_involvement",
+                "distance_from_anal_verge", "mrf_status", "emvi"],
+    "fitness": ["ecog", "comorbidities", "haemoglobin", "wbc", "platelets", "creatinine", "bilirubin", "hiv_status", "dental_evaluation"],
     "questions": ["clinical_question", "patient_preference"],
 }
 
@@ -91,7 +93,9 @@ async def build(case_id, force=False):
                 "open": [r["label"] for r in gate["requirements"] if r["status"] not in ("satisfied", "not_applicable")]}
     full, mode = search.context_for(case_id, "clinical history performance status imaging findings pathology biomarkers stage as recorded treatment", 60000)
     facts = rules.resolve_facts(rules.case_docs(case_id, st), st.get("overrides"))  # clinician confirmations win (V1 item 2.2)
-    stage = facts.get("recorded_stage", {}).get("current")
+    # the stage as recorded, or the FIGO stage as recorded (cervix, V1 item 9.2): the newest verified of the two, copied, never derived
+    stage = max([c for c in (facts.get(f, {}).get("current") for f in ("recorded_stage", "figo_stage")) if c and c["verification"] in rules.VERIFIED],
+                key=lambda c: (c.get("date") or "", c.get("report_date") or ""), default=None)
     msgs = [{"role": "system", "content": SYS},
             {"role": "user", "content": f"Patient: {case['patient'].get('name')}, {case['patient'].get('agesex', '')}.\n\nDOCUMENTS:\n{full}\n\n"
              "Write the Case File summary in the National Cancer Grid Virtual Tumour Board structure: " + "; ".join(f"{k} = {t}" for k, t in SECTIONS) +

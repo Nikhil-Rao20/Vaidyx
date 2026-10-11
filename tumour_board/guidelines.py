@@ -26,8 +26,8 @@ SOURCES = {  # folder -> (organisation label, region tag, boost)
     "tmc": ("Tata Memorial Centre Evidence Based Management, India", "India", 1.3),
 }
 CANCER_WORDS = {"lung_nsclc": ["lung", "nsclc", "thoracic"], "breast": ["breast"], "colorectal_rectum": ["rect", "colorectal", "colon"],
-                "oral_cavity": ["oral", "head neck", "head-neck", "head and neck", "buccal", "tongue", "mouth"],
-                "cervix": ["cervix", "carcinoma cervix", "cervical cancer", "cervical carcinoma", "gyn"]}  # not "cervical" alone: neck nodes
+                "oral_cavity": ["oral cavity", "oral cancer", "head neck", "head-neck", "head and neck", "buccal", "tongue", "floor of mouth"],
+                "cervix": ["cervix", "carcinoma cervix", "cervical cancer", "cervical carcinoma", "gynaecolog", "gynecolog"]}  # not "cervical" alone: neck nodes
 INDEX_VERSION = 5  # bump when chunking or filtering changes: the cached index is rebuilt, embeddings of unchanged chunks reused
 _lock = threading.Lock()
 _IDX = None

@@ -202,7 +202,7 @@ def test_tb008_walk_passes_offline(walk, capsys):
     assert fail == [] and len(ok) >= 18, fail
     out = capsys.readouterr().out
     assert "gap unchanged" in out and "arrivals close the cystoscopy_proctoscopy gap: gate passed 5/5" in out
-    assert "radiotherapy checks (reported, not a pass / fail)" in out and "\u2014" not in out
+    assert "every radiotherapy schedule of the decision consistent with an Indian line" in out and "\u2014" not in out  # asserted for cervix (review)
     urls = [u for u, _ in fake.posts]
     assert urls[0] == "/api/tb/demo/TB-008" and urls[-1] == "/api/tb/demo/TB-008"  # re-imported at the end
     assert sum(u.endswith("/board-records") for u in urls) == 2 and "400 mg/m2" in fake.board[1]["decision_text"]
@@ -212,10 +212,11 @@ def test_tb008_walk_passes_offline(walk, capsys):
     assert "Case File summary waits for the open Pre-Authorization record" in out and "summary compiled once the gap is closed" in out and fake.summaries == 1
 
 
-def test_tb008_reader_slip_is_confirmed_not_failed(walk, capsys):
+def test_tb008_reader_slip_is_confirmed_and_counted_as_a_failure(walk, capsys):
+    """Review M8: an unexpected type dispute is confirmed so the walk goes on, but it fails the run (a reader regression is never only INFO)."""
     fake = FakeTB(slip=True)
     ok, fail = walk(fake)
-    assert fail == [], fail
+    assert fail == ["9 TB-008 (cervix): no unexpected document type dispute at import"], fail
     conf = [j for u, j in fake.posts if u.endswith("/confirmations")]
     assert len(conf) == 1 and conf[0]["fields"] == {"doc_type": "histopathology"}
     assert "reader slip, document type confirmed" in capsys.readouterr().out
