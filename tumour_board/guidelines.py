@@ -1,7 +1,8 @@
 """Guideline library retrieval (reference text for the board, never a recommendation for this patient).
 
 Indexes the freely available guideline documents in TB_GUIDELINE_DIR (see docs/tumour-board/RESOURCES.md):
-India first (National Cancer Grid, ICMR), then international (ESMO incl. Pan-Asian adaptations, CAP / ASCO-CAP,
+India first (National Cancer Grid incl. head & neck and gynaecological 2019, ICMR, Tata Memorial Centre Evidence Based
+Management 2024, PM-JAY HBP 2.2, ICRI / IRIA), then international (ESMO incl. Pan-Asian adaptations, CAP / ASCO-CAP,
 ACR, RECIST) and US public-domain summaries (NCI PDQ). Hybrid BM25 + embeddings, with an India-first boost.
 NCCN content is not ingested (licence restricts AI use)."""
 import hashlib, json, math, re, threading
@@ -22,8 +23,10 @@ SOURCES = {  # folder -> (organisation label, region tag, boost)
     "rcr": ("Royal College of Radiologists imaging recommendations", "UK", 0.95), "nice": ("NICE guideline", "UK", 0.95),
     "iccr": ("ICCR dataset", "International", 1.0), "eusoma": ("EUSOMA / ESMO", "International", 0.95),
     "victoria_au": ("Victorian Cancer MDM quality framework", "Australia", 0.9),
+    "tmc": ("Tata Memorial Centre Evidence Based Management, India", "India", 1.3),
 }
 CANCER_WORDS = {"lung_nsclc": ["lung", "nsclc", "thoracic"], "breast": ["breast"], "colorectal_rectum": ["rect", "colorectal", "colon"]}
+INDEX_VERSION = 2  # bump when chunking or filtering changes: the cached index is rebuilt, embeddings of unchanged chunks reused
 _lock = threading.Lock()
 _IDX = None
 
@@ -65,6 +68,11 @@ def _read(p: Path):
     return []
 
 
+def _chunk_key(c):
+    """Identity of a chunk's embedding input (title + text, the embedding model): equal keys can share one vector."""
+    return hashlib.sha1((search.EMBED_MODEL + "\n" + c["title"] + "\n" + c["text"]).encode()).hexdigest()
+
+
 def _files_sig(root):
     fs = sorted((str(p.relative_to(root)), p.stat().st_size, int(p.stat().st_mtime)) for p in root.rglob("*") if p.is_file())
     return hashlib.sha1(json.dumps(fs).encode()).hexdigest()
@@ -76,10 +84,12 @@ class GuidelineIndex:
         cdir = config.DATA_ROOT / "embed_cache"; cdir.mkdir(parents=True, exist_ok=True)
         fsig = _files_sig(root) if root.exists() else "none"
         cached = cdir / "guidelines_index.json"
+        old = []
         if cached.exists():
             d = json.loads(cached.read_text())
-            if d.get("files_sig") == fsig and (cdir / "guidelines.npz").exists():
+            if d.get("files_sig") == fsig and d.get("version") == INDEX_VERSION and (cdir / "guidelines.npz").exists():
                 self.chunks = d["chunks"]; self._finish(cdir, d["emb_sig"]); return
+            old = d.get("chunks") or []  # rows of the cached vectors: unchanged chunks keep their embedding
         self.chunks = []
         for p in sorted(root.rglob("*")):
             if not p.is_file() or p.suffix.lower() not in (".pdf", ".txt", ".md", ".docx") or "cap_protocols" in str(p) and p.suffix.lower() == ".docx":
@@ -97,22 +107,33 @@ class GuidelineIndex:
                 if buf.strip():
                     self.chunks.append({"text": buf.strip(), "file": str(p.relative_to(root)), "title": _title(p), "org": org, "region": region, "boost": boost, "page": page + 1})
         sig = hashlib.sha1(json.dumps([c["file"] + str(c["page"]) + c["text"][:50] for c in self.chunks]).encode()).hexdigest()
-        self._finish(cdir, sig)
-        cached.write_text(json.dumps({"files_sig": fsig, "emb_sig": sig, "chunks": self.chunks}))
+        self._finish(cdir, sig, old)
+        cached.write_text(json.dumps({"files_sig": fsig, "version": INDEX_VERSION, "emb_sig": sig, "chunks": self.chunks}))
 
-    def _finish(self, cdir, sig):
+    def _finish(self, cdir, sig, old=()):
         self.tok = [search.tokenize(c["title"] + " " + c["text"]) for c in self.chunks]
         self.df = Counter(t for ts in self.tok for t in set(ts))
         self.avgdl = sum(map(len, self.tok)) / max(len(self.tok), 1)
         cache = cdir / "guidelines.npz"
-        if cache.exists() and np.load(cache)["sig"].item() == sig:
-            self.emb = np.load(cache)["emb"]
+        z = dict(np.load(cache)) if cache.exists() else None
+        if z is not None and z["sig"].item() == sig:
+            self.emb = z["emb"]; self.reused = len(self.chunks)
         else:
+            keys = [_chunk_key(c) for c in self.chunks]
+            reuse = {}
+            if z is not None:  # vectors of the previous build, by chunk key (older caches: keyed through the previous chunk list)
+                prev = list(z["keys"]) if "keys" in z else ([_chunk_key(c) for c in old] if len(old) == len(z["emb"]) else [])
+                reuse = dict(zip(prev, z["emb"]))
+            todo = [i for i, k in enumerate(keys) if k not in reuse]
+            texts = [self.chunks[i]["title"] + "\n" + self.chunks[i]["text"] for i in todo]
             # embed in batches so a long rebuild never holds the embedder lock continuously (Case File searches interleave)
-            texts = [c["title"] + "\n" + c["text"] for c in self.chunks]
             m = np.concatenate([search._embed(texts[i:i + 128]) for i in range(0, len(texts), 128)]) if texts else np.zeros((0, 768), np.float32)
-            self.emb = m / np.maximum(np.linalg.norm(m, axis=1, keepdims=True), 1e-9)
-            cache.parent.mkdir(parents=True, exist_ok=True); np.savez(cache, emb=self.emb, sig=np.array(sig))
+            m = m / np.maximum(np.linalg.norm(m, axis=1, keepdims=True), 1e-9)
+            new = dict(zip(todo, m))
+            self.emb = np.array([new[i] if i in new else reuse[k] for i, k in enumerate(keys)], np.float32).reshape(len(keys), -1) \
+                if keys else np.zeros((0, 768), np.float32)
+            self.reused = len(keys) - len(todo)
+            cache.parent.mkdir(parents=True, exist_ok=True); np.savez(cache, emb=self.emb, sig=np.array(sig), keys=np.array(keys))
 
     def search(self, q, k=8, cancer=None):
         if not self.chunks:
