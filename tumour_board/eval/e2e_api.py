@@ -525,6 +525,123 @@ def phase5(c):
           not missing, "; ".join(missing)[:200])
 
 
+def phase6(c):
+    """V1 Phase 6: board session and attendance (6.1), agents for absent specialties with live answers (6.2), agent log vs decision (6.3),
+    removed items with reasons (6.4), near-match off by default (6.5), no documents -> no run (6.6). TB-001 and a throw-away TB-TEST6."""
+    from tumour_board import board
+    D = "2026-12-04"
+    j = c.post("/api/tb/cases/TB-001/listing", json={"protocol": "lung_nsclc", "board_date": D, "hospital_level": "essential"}).json()
+    if j.get("total"):
+        wait_job(c, j["job"])
+    c.delete("/api/tb/cases/TB-TEST6")
+    c.post("/api/tb/cases", json={"case_id": "TB-TEST6", "protocol": "lung_nsclc", "board_date": D,
+                                  "patient": {"name": "SYNTHETIC, Session Patient", "mrn": "SYN-996", "agesex": "57 Y / M"}})
+    note = ("SAHYADRI CANCER INSTITUTE (SYNTHETIC)\nMEDICAL ONCOLOGY OPD NOTE\nPatient: SYNTHETIC, Session Patient  UHID: SYN-996  57 Y / M\nVisit date: 21-Sep-2026\n"
+            "History: cough for 3 months.\nECOG performance status: 1\nQuestion for the Tumour Board: work-up review.\nSd/- Dr. M. Iyer, Medical Oncology\n").encode()
+    wait_job(c, c.post("/api/tb/cases/TB-TEST6/documents", files=[("files", ("opd_note.txt", note))], data={"paths": json.dumps(["opd_note.txt"])}).json()["job"])
+    cand = [x["case_id"] for x in c.get("/api/tb/sessions/candidates", params={"date": D}).json()["cases"]]
+    check("6.1 session candidates are the Case Files listed for that date, the real case never", {"TB-001", "TB-TEST6"} <= set(cand) and "TB-2026-bharath" not in cand, ", ".join(cand))
+    s = c.post("/api/tb/sessions", json={"date": D, "title": "E2E Thoracic Tumour Board", "case_ids": ["TB-001", "TB-TEST6"]}).json()
+    sid = s.get("id")
+    check("6.1 board session created from listed Case Files, in agenda order", sid and [a["case_id"] for a in s["agenda"]] == ["TB-001", "TB-TEST6"] and s["status"] == "planned",
+          f"{sid}")
+    for dept, status in (("radio_diagnosis", "absent"), ("medical_oncology", "present"), ("surgical_oncology", "present"), ("radiation_oncology", "present"), ("pathology", "present")):
+        c.post(f"/api/tb/sessions/{sid}/attendance", json={"department": dept, "status": status})
+    c.post(f"/api/tb/sessions/{sid}/members", json={"name": "Dr. A. Rao (synthetic)", "department": "medical_oncology"})
+    c.post(f"/api/tb/sessions/{sid}/members", json={"name": "Dr. B. Shah (synthetic)", "department": "surgical_oncology"})
+    room = c.get(f"/api/tb/sessions/{sid}").json()
+    att = room["session"]["attendance"]
+    check("6.1 attendance and members present by name saved", att.get("radio_diagnosis") == "absent" and att.get("medical_oncology") == "present"
+          and [m["name"] for m in room["session"]["members"]] == ["Dr. A. Rao (synthetic)", "Dr. B. Shah (synthetic)"] and room["absent_roles"] == ["radiology"],
+          f"absent roles {room['absent_roles']}, participants: {room['participants']['text'][:120]}")
+    r = c.post(f"/api/tb/sessions/{sid}/cases/TB-001/log/P1/mark", json={"mark": "accepted"})
+    check("6.3 points cannot be marked before the decision is recorded", r.status_code in (400, 404), f"{r.status_code} {r.text[:100]}")
+    def wait_agents():
+        t = time.time()
+        while True:
+            rm = c.get(f"/api/tb/sessions/{sid}").json()
+            if all(x.get("status") not in ("queued", "running") for by in (rm["session"].get("agents") or {}).values() for x in by.values()) or time.time() - t > 900:
+                return rm
+            time.sleep(3)
+    t0 = time.time(); st = c.post(f"/api/tb/sessions/{sid}/start").json()
+    room = wait_agents()
+    started = (room["session"].get("agents") or {}).get("TB-001", {}).get("radiology", {}).get("status")
+    # "Prepare again" runs the agent afresh (a brief still current for the Case File would otherwise be reused, as at the start)
+    pr = c.post(f"/api/tb/sessions/{sid}/agents/prepare", json={"case_id": "TB-001", "role": "radiology", "refresh": True}).json()
+    room = wait_agents()
+    ag = room["session"].get("agents") or {}
+    rb = (room["cases"]["TB-001"].get("briefs") or {}).get("radiology") or {}
+    items = sum(len(x["items"]) for x in rb.get("sections") or [])
+    check("6.2 session start: the Radiology agent of the absent Radio-diagnosis prepared its brief, every item cited",
+          st.get("preparing") == 2 and started == "ready" and pr.get("preparing") == 1 and (ag.get("TB-001") or {}).get("radiology", {}).get("status") == "ready" and items > 0
+          and all(it["citations"] for x in rb["sections"] for it in x["items"]),
+          f"{round(time.time() - t0, 1)} s, {items} items, {len(rb.get('points_for_review') or [])} points, reused {(ag.get('TB-001') or {}).get('radiology', {}).get('reused')}")
+    nb = (room["cases"]["TB-TEST6"].get("briefs") or {}).get("radiology") or {}
+    au6 = c.get("/api/tb/cases/TB-TEST6/audit").json()["events"]
+    check("6.6 no Radio-diagnosis documents: the agent returns at once with the department's open requests, no model call",
+          (ag.get("TB-TEST6") or {}).get("radiology", {}).get("status") == "no_documents" and nb.get("message") == "No Radio-diagnosis documents in this Case File"
+          and any(e["kind"] == "agent_no_documents" for e in au6) and not any(e["kind"] == "llm_call" and str(e.get("purpose", "")).startswith("agent radiology") for e in au6),
+          f"{nb.get('message')}; open requests {[x['label'] for x in nb.get('open_items') or []]}")
+    qs = ["What does the CT report record about the primary lung lesion and its size?", "What does the PET-CT report record about the mediastinal lymph nodes?",
+          "Which imaging reports are in the Case File and on what dates?"]
+    ans = []
+    for q in qs:
+        t1 = time.time(); a = c.post(f"/api/tb/sessions/{sid}/cases/TB-001/agents/radiology/ask", json={"question": q}).json(); a["_s"] = round(time.time() - t1, 1); ans.append(a)
+    check("6.2 three live answers from the Radiology agent, every statement cited",
+          all(a.get("status") == "answered" and a["statements"] and all(x["citations"] for x in a["statements"]) and a.get("kind") == "AI support (role-specific)" for a in ans),
+          "; ".join(f"{a.get('status')} {len(a.get('statements') or [])} st {a['_s']} s" for a in ans))
+    bad = [c.post(f"/api/tb/sessions/{sid}/cases/TB-001/agents/radiology/ask", json={"question": q}).json()
+           for q in ("Which chemotherapy regimen should the patient receive?", "Look at the CT images and tell us whether the lesion is malignant")]
+    check("6.2 out-of-scope questions refused", all(a.get("status") == "out_of_scope" and not a.get("statements") for a in bad), ", ".join(a.get("category", "") for a in bad))
+    check("6.4 live answers: removed items match the unverified count", all(a["dropped_unverified"] == sum(x["reason"] != "guardrail" for x in a["removed"]) for a in ans),
+          ", ".join(f"{a['dropped_unverified']}/{len(a['removed'])}" for a in ans))
+    room = c.get(f"/api/tb/sessions/{sid}").json()
+    log = [e for e in room["session"]["log"] if e["case_id"] == "TB-001" and not e.get("superseded")]
+    check("6.3 the session keeps every agent point: brief and live answers", sum(e["kind"] == "answer" for e in log) == 5 and any(e["kind"] in ("brief_item", "point_for_review") for e in log),
+          f"{len(log)} entries: {sum(e['kind'] == 'answer' for e in log)} answers")
+    dec = c.post(f"/api/tb/sessions/{sid}/cases/TB-001/decision", json={"decision_text": "Discussed at the Tumour Board. Plan as per board discussion; re-discuss after review.",
+                                                                       "recorded_by": "Dr. Tumour Board Coordinator (synthetic)"}).json()
+    rec = dec.get("record") or {}
+    check("6.3 decision recorded from the Board room: adjudicated, participants from the attendance, linked to the session",
+          rec.get("session") == sid and "Dr. A. Rao (synthetic)" in (rec.get("participants") or "") and "adjudication" in rec
+          and (dec.get("session") or {}).get("decisions", {}).get("TB-001", {}).get("board_record") == rec.get("id"), f"{rec.get('id')}, {rec.get('adjudication', {}).get('status')}")
+    marks = {}
+    for e, m in zip(log, ("accepted", "discussed", "not_relevant")):
+        rr = c.post(f"/api/tb/sessions/{sid}/cases/TB-001/log/{e['id']}/mark", json={"mark": m, "note": "e2e"})
+        marks[e["id"]] = (m, rr.status_code)
+    ex = c.get(f"/api/tb/sessions/{sid}/export", params={"format": "json"}).json()
+    case1 = next((x for x in ex.get("cases", []) if x["case_id"] == "TB-001"), {})
+    html = c.get(f"/api/tb/sessions/{sid}/export", params={"format": "html"}).text
+    check("6.3 export shows what the agents said and what the board decided side by side",
+          all(code == 200 for _, code in marks.values()) and (case1.get("decision") or {}).get("board_record") == rec.get("id")
+          and case1["marks"]["accepted"] == 1 and case1["marks"]["discussed"] == 1 and case1["marks"]["not_relevant"] == 1
+          and "What the board decided" in html and "Plan as per board discussion" in html and "Accepted" in html and "\u2014" not in html,
+          f"{len(case1.get('agent_log') or [])} entries, marks {case1.get('marks')}")
+    c.post(f"/api/tb/sessions/{sid}/close")
+    r = c.post(f"/api/tb/sessions/{sid}/cases/TB-001/agents/radiology/ask", json={"question": "What does the CT report record?"})
+    check("6.1 a closed session takes no more questions", r.status_code == 409, str(r.status_code))
+    # 6.4: Q&A, brief and summary keep their removed items with the reason; counts match
+    a = c.post("/api/tb/cases/TB-001/ask", json={"question": "List every haemoglobin, WBC and platelet value with its date"}).json()
+    sm = c.post("/api/tb/cases/TB-001/summary", json={"force": True}).json()
+    check("6.4 removed items kept with the reason; counts match (Q&A, brief, summary)",
+          isinstance(a.get("removed"), list) and a["dropped_unverified"] == sum(x["reason"] != "guardrail" for x in a["removed"])
+          and rb.get("dropped_unverified") == sum(x["reason"] in ("document_not_found", "quote_not_found", "number_not_in_quote") for x in rb.get("removed") or [])
+          and rb.get("guardrail_removed") == sum(x["reason"] == "guardrail" for x in rb.get("removed") or [])
+          and sm.get("dropped_unverified") == sum(x["reason"] != "guardrail" for x in sm.get("removed") or [])
+          and all(x.get("reason_label") and x.get("text") is not None for x in (a["removed"] + (rb.get("removed") or []) + (sm.get("removed") or []))),
+          f"Q&A {a['dropped_unverified']}/{len(a['removed'])}, brief {rb.get('dropped_unverified')}+{rb.get('guardrail_removed')}/{len(rb.get('removed') or [])}, "
+          f"summary {sm.get('dropped_unverified')}+{sm.get('guardrail_removed')}/{len(sm.get('removed') or [])}")
+    check("6.5 near-match is off by default: no approximate item in the brief or the summary", sm.get("near_match") is False and not sm.get("approximate")
+          and not rb.get("approximate") and not any(x.get("approximate") for sec in sm.get("sections") or [] for x in sec["sentences"]),
+          f"summary approximate {sm.get('approximate')}, brief approximate {rb.get('approximate')}")
+    c.delete("/api/tb/cases/TB-TEST6")
+    try:  # the e2e session is a test artefact: its file goes, its history stays in sessions/audit.jsonl
+        board._path(sid).unlink()
+        board.audit_session(sid, {"kind": "e2e_removed", "by": "e2e"})
+    except Exception:
+        pass
+
+
 def main(base, pw, only=None):
     c = httpx.Client(base_url=base, timeout=600)
     check("login", c.post("/api/auth/login", json={"username": "admin", "password": pw}).status_code == 200)
@@ -545,6 +662,10 @@ def main(base, pw, only=None):
         return 0 if not FAIL else 1
     if only == "phase5":
         phase5(c)
+        print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
+        return 0 if not FAIL else 1
+    if only == "phase6":
+        phase6(c)
         print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
         return 0 if not FAIL else 1
     # 1. import lung case (incomplete)
@@ -679,6 +800,8 @@ def main(base, pw, only=None):
     phase4(c, base)
     # 12. V1 Phase 5: Indian guideline library, specialty packs
     phase5(c)
+    # 13. V1 Phase 6: board session, agents for absent specialties, agent log vs decision, removed items, no-documents agents
+    phase6(c)
     # leave the demo Case Files in their fresh state for the next user / test
     for cid in ("TB-001", "TB-002", "TB-003"):
         wait_job(c, c.post(f"/api/tb/demo/{cid}").json()["job"])
@@ -689,5 +812,5 @@ def main(base, pw, only=None):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--base", default="http://127.0.0.1:7000"); ap.add_argument("--password", required=True)
-    ap.add_argument("--only", default=None, help="run one section only (phase2 | phase3 | phase4 | phase5)")
+    ap.add_argument("--only", default=None, help="run one section only (phase2 | phase3 | phase4 | phase5 | phase6)")
     a = ap.parse_args(); sys.exit(main(a.base, a.password, a.only))
