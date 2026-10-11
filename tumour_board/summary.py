@@ -100,32 +100,44 @@ async def build(case_id, force=False):
     grouped = {k: [] for k, _ in SECTIONS}
     for x in r.get("sentences") or []:
         grouped.setdefault(x.get("section") if x.get("section") in grouped else "investigations", []).append(x)
-    sections, paras, dropped, removed = [], [], 0, []
-    for key, title in SECTIONS:
-        p = grouped.get(key, [])
-        ok = qa.verify_statements(case_id, p)
-        dropped += len(p) - len(ok)
+    sections, paras, removed, issues = [], [], [], []
+
+    def _check(items, where):
+        """Verified items that pass the output guardrail; every removal is kept with its reason and place (V1 item 6.4)."""
+        ok, drops = qa.verify(case_id, items)
+        removed.extend({**x, "where": where} for x in drops)
         keep = []
         for s in ok:
             iss = guardrails.scan_output(s["text"])
-            (removed.extend(iss) if iss else keep.append(s))
+            if iss:
+                issues.extend(iss)
+                removed.append({**qa.removed_item(s, "guardrail", "; ".join(dict.fromkeys(i["reason"] for i in iss))), "where": where})
+            else:
+                keep.append(s)
+        return keep
+    for key, title in SECTIONS:
+        keep = _check(grouped.get(key, []), key)
         sections.append({"id": key, "title": title, "sentences": keep})
         if keep:
             paras.append(keep)
     cat = protocol.facts()
     filled = fill_from_facts(sections, facts, cat)
     paras = [sec["sentences"] for sec in sections if sec["sentences"]]
-    pts = [s for s in qa.verify_statements(case_id, r.get("points_for_review")) if not guardrails.scan_output(s["text"])]
+    pts = _check(r.get("points_for_review"), "points_for_review")
+    # verification drops of sections AND points for review (before V1 item 6.4 dropped points were not counted)
+    dropped = sum(1 for x in removed if x["reason"] != "guardrail")
+    by_reason = {k: n for k in qa.REASONS if (n := sum(1 for x in removed if x["reason"] == k))}
     out = {"status": "ready" if gate.get("passed") else "incomplete_gate", "sections": sections, "structure": "NCG Virtual Tumour Board case template",
            "paragraphs": paras, "points_for_review": pts,
            "stage_as_recorded": ({"value": stage["value"], "quote": "" if stage.get("confirmed_by") else stage["quote"], "doc_id": stage["doc_id"],
                                   "doc_title": stage["doc_title"], "date": stage["date"], **({"confirmed_by": stage["confirmed_by"]} if stage.get("confirmed_by") else {})}
                                  if stage and stage["verification"] in rules.VERIFIED else None),
-           "dropped_unverified": dropped, "guardrail_removed": len(removed), "filled_from_fields": filled, "generated": store.now_iso(), "seconds": round(time.time() - t0, 1),
+           "dropped_unverified": dropped, "guardrail_removed": by_reason.get("guardrail", 0), "removed": removed,
+           "filled_from_fields": filled, "generated": store.now_iso(), "seconds": round(time.time() - t0, 1),
            "model": config.models()["reasoner"].get("label") or "reasoner", "review": {"status": "ai_draft"}, "gate_passed": gate.get("passed"), "context": mode,
            "signature": sig}  # what it was compiled from; a changed Case File marks it stale (V1 item 4.5)
-    if removed:
-        au({"kind": "guardrail_output", "where": "summary", "issues": removed})
+    if issues:
+        au({"kind": "guardrail_output", "where": "summary", "issues": issues})
     st = store.get_state(case_id); st.setdefault("artefacts", {})["summary"] = out; store.save_state(case_id, st)
-    au({"kind": "summary", "sentences": sum(len(p) for p in paras), "dropped_unverified": dropped, "seconds": out["seconds"]})
+    au({"kind": "summary", "sentences": sum(len(p) for p in paras), "dropped_unverified": dropped, "removed": by_reason, "seconds": out["seconds"]})
     return out

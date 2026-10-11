@@ -51,38 +51,130 @@ def polarity_flag(text, quotes):
     return bool(quotes) and any(NEGATION.search(q) for q in quotes) and not NEGATION.search(text or "")
 
 
-def verify_statements(case_id, statements):
+# Why an AI statement was removed (V1 item 6.4): kept with the reason so a reviewer can open "N removed items" (failed verification, not facts).
+REASONS = {"document_not_found": "cited document not found", "quote_not_found": "quote not found in the cited document",
+           "number_not_in_quote": "a number is not in the quoted source", "guardrail": "removed by the clinical scope guardrail"}
+APPROXIMATE = "approximate source match: check source"
+
+
+def removed_item(st, reason, detail):
+    """A removed statement as shown to reviewers (V1 item 6.4): its text, the reason and the citations as the model gave them."""
+    return {"text": (st or {}).get("text") or "", "reason": reason, "reason_label": REASONS[reason], "detail": detail,
+            "citations": [{"doc_id": c.get("doc_id") or "", "quote": (c.get("quote") or "")[:400]} for c in (st or {}).get("citations") or []]}
+
+
+def _approx_quote(quote, pages):
+    """V1 item 6.5: an approximate location (score >= 92) for a quote with no exact one, only when the quote has >= 12 normalised
+    characters and exactly the same numbers as the matched source text. Never used by Q&A."""
+    if len(grounding.norm(quote)) < 12:
+        return None
+    loc = grounding.locate(quote, pages)
+    if not loc or loc["score"] >= 100 or set(grounding.numbers(quote)) != set(grounding.numbers(loc["matched"])):
+        return None
+    return loc
+
+
+def _missing_numbers(text, cites):
+    """Numbers of the statement not supported by the located quotes (or the cited documents' titles and dates); [] = supported."""
+    allowed = set(n for c in cites for n in grounding.numbers(c["quote"] + " " + (c["doc_title"] or "") + " " + (c["date"] or "")))
+    allowed |= {n.lstrip("0") or "0" for n in allowed}
+    nums = {n.lstrip("0") or "0" for n in grounding.numbers(text)}
+    if nums - allowed:  # a statement number may also be a quoted quantity in other units ('2,45,000/µL' for '2.45 lakhs/cumm'; V1 item 3.5)
+        nums = {n.lstrip("0") or "0" for n in units.unmatched_numbers(text, "\n".join(c["quote"] for c in cites))}
+    miss = nums - allowed
+    return list(dict.fromkeys(n for n in (x.lstrip("0") or "0" for x in grounding.numbers(text)) if n in miss)) or sorted(miss)
+
+
+_DOC_ID = re.compile(r"\bD[0-9a-f]{8}\b")
+_ID_GROUP = re.compile(r"\s*[\[(]\s*(?:(?:doc(?:ument)?\s*)?D[0-9a-f]{8}\s*[,;]?\s*)+[\])]")
+
+
+def _without_doc_ids(text, ids):
+    """The statement text with this Case File's document ids taken out: an id the model wrote inline ("[D75dbac7c]") is not a value, so its
+    digits never fail the number guard (V1 item 6.4: found through the removed items, it emptied whole briefs)."""
+    return _DOC_ID.sub(lambda m: " " if m.group(0) in ids else m.group(0), text or "")
+
+
+def _shown_text(text, ids):
+    """Bracketed document ids of this Case File removed from the text shown: the citation chip names the document."""
+    out = _ID_GROUP.sub(lambda m: "" if all(i in ids for i in _DOC_ID.findall(m.group(0))) else m.group(0), text or "")
+    return re.sub(r"\s+([.,;:])", r"\1", out).strip() or (text or "")
+
+
+def _kept(st, cites):
+    merged = {}
+    for c in cites:  # one citation chip per document; quotes from the same document are joined
+        m = merged.get(c["doc_id"])
+        if m is None:
+            merged[c["doc_id"]] = dict(c)
+        elif c["quote"] not in m["quote"]:
+            m["quote"] += " ... " + c["quote"]
+            if c.get("approximate"):
+                m["approximate"], m["score"] = True, min(m.get("score", 100.0), c["score"])
+    item = {"text": st["text"], "citations": list(merged.values())}
+    if polarity_flag(st["text"], [c["quote"] for c in cites]):
+        item["flags"] = ["check negation against the source"]
+    return item
+
+
+def verify(case_id, statements, near_match=False):
+    """Verify AI statements against the Case File. Returns (kept, dropped): kept statements carry located citations; each dropped
+    one carries the reason (V1 item 6.4). near_match=True (briefs and the summary behind config.near_match(), never Q&A) also keeps a
+    statement whose quote matches its source only approximately, flagged for the reader (V1 item 6.5)."""
     docs = {d["doc_id"]: d for d in rules.case_docs(case_id)}  # citations carry the confirmed date and type (V1 item 2.2)
-    out = []
+    kept, dropped = [], []
     for st in statements or []:
-        cites = []
+        cites, approx, missing_docs, found_docs = [], [], [], 0
         for c in st.get("citations") or []:
-            d = docs.get((c.get("doc_id") or "").strip())
+            did = (c.get("doc_id") or "").strip()
+            d = docs.get(did)
             if not d:
+                missing_docs.append(did)
                 continue
+            found_docs += 1
             cl = d.get("classification") or {}
-            for loc in _locate_quote(c.get("quote") or "", [p["text"] for p in d.get("pages") or []]):
-                cites.append({"doc_id": d["doc_id"], "quote": loc["matched"], "page": loc["page"], "start": loc["start"], "end": loc["end"],
-                              "doc_title": cl.get("title") or d["filename"], "date": dates.doc_dates(d)["event"] or None, "status": cl.get("status")})
+            pages = [p["text"] for p in d.get("pages") or []]
+            meta = {"doc_title": cl.get("title") or d["filename"], "date": dates.doc_dates(d)["event"] or None, "status": cl.get("status")}
+            locs = _locate_quote(c.get("quote") or "", pages)
+            for loc in locs:
+                cites.append({"doc_id": d["doc_id"], "quote": loc["matched"], "page": loc["page"], "start": loc["start"], "end": loc["end"], **meta})
+            loc = _approx_quote(c.get("quote") or "", pages) if near_match and not locs else None
+            if loc:
+                approx.append({"doc_id": d["doc_id"], "quote": loc["matched"], "page": loc["page"], "start": loc["start"], "end": loc["end"], **meta,
+                               "approximate": True, "score": loc["score"]})
         # number guard: every number in the statement must appear in a verified quote (or the cited document's title/date)
-        allowed = set(n for c in cites for n in grounding.numbers(c["quote"] + " " + (c["doc_title"] or "") + " " + (c["date"] or "")))
-        allowed |= {n.lstrip("0") or "0" for n in allowed}
-        nums = {n.lstrip("0") or "0" for n in grounding.numbers(st.get("text", ""))}
-        if nums - allowed:  # a statement number may also be a quoted quantity in other units ('2,45,000/µL' for '2.45 lakhs/cumm'; V1 item 3.5)
-            nums = {n.lstrip("0") or "0" for n in units.unmatched_numbers(st.get("text", ""), "\n".join(c["quote"] for c in cites))}
-        if cites and nums <= allowed:
-            merged = {}
-            for c in cites:  # one citation chip per document; quotes from the same document are joined
-                m = merged.get(c["doc_id"])
-                if m is None:
-                    merged[c["doc_id"]] = dict(c)
-                elif c["quote"] not in m["quote"]:
-                    m["quote"] += " ... " + c["quote"]
-            item = {"text": st["text"], "citations": list(merged.values())}
-            if polarity_flag(st["text"], [c["quote"] for c in cites]):
-                item["flags"] = ["check negation against the source"]
-            out.append(item)
-    return out
+        text = _without_doc_ids(st.get("text", ""), docs)
+        if text != st.get("text", ""):
+            st = {**st, "text": _shown_text(st.get("text", ""), docs)}
+        miss = _missing_numbers(text, cites) if cites else None
+        if cites and not miss:
+            kept.append(_kept(st, cites))
+            continue
+        if approx:  # supported only with the approximate locations: kept, flagged (V1 item 6.5)
+            miss = _missing_numbers(text, cites + approx)
+            if not miss:
+                item = _kept(st, cites + approx)
+                item["approximate"] = True
+                item["flags"] = item.get("flags", []) + [APPROXIMATE]
+                kept.append(item)
+                continue
+        if miss:
+            dropped.append(removed_item(st, "number_not_in_quote", ("numbers " if len(miss) > 1 else "number ") + ", ".join(miss) + " not in the quoted source"))
+        elif not st.get("citations"):
+            dropped.append(removed_item(st, "quote_not_found", "no quote given"))
+        elif not found_docs:
+            dropped.append(removed_item(st, "document_not_found", ", ".join(x or "(no id)" for x in dict.fromkeys(missing_docs)) + " not in this Case File"))
+        elif not any((c.get("quote") or "").strip() for c in st.get("citations") or []):
+            dropped.append(removed_item(st, "quote_not_found", "no quote given"))
+        else:
+            dropped.append(removed_item(st, "quote_not_found", "quote not found in " + ", ".join(dict.fromkeys(
+                (c.get("doc_id") or "").strip() for c in st.get("citations") or [] if (c.get("doc_id") or "").strip() in docs))))
+    return kept, dropped
+
+
+def verify_statements(case_id, statements):
+    """Exact verification only (Q&A and every caller before V1 item 6.5): the kept statements of verify()."""
+    return verify(case_id, statements)[0]
 
 
 async def ask(case_id, question, history=None):
@@ -117,14 +209,22 @@ async def ask(case_id, question, history=None):
         return {"status": "out_of_scope", "category": gate["category"], "message": gate["message"], "value_hits": values["hits"][:12],
                 "seconds": round(time.time() - t0, 2)}
     r = await answer_task
-    stmts = verify_statements(case_id, r.get("statements"))
-    dropped = len(r.get("statements") or []) - len(stmts)
+    stmts, removed = verify(case_id, r.get("statements"))  # Q&A stays exact-only (V1 item 6.5)
+    dropped = len(removed)
     text = " ".join(s["text"] for s in stmts)
     clean, issues = guardrails.enforce(text, au, "ask")
     if issues:
-        stmts = [s for s in stmts if not guardrails.scan_output(s["text"])]
-    res = {"status": "answered" if stmts else "not_documented", "statements": stmts, "dropped_unverified": dropped,
+        keep = []
+        for s in stmts:
+            iss = guardrails.scan_output(s["text"])
+            if iss:  # kept for reviewers with the reason (V1 item 6.4)
+                removed.append(removed_item(s, "guardrail", "; ".join(dict.fromkeys(i["reason"] for i in iss))))
+            else:
+                keep.append(s)
+        stmts = keep
+    res = {"status": "answered" if stmts else "not_documented", "statements": stmts, "dropped_unverified": dropped, "removed": removed,
            "message": "" if stmts else "Not documented in the Case File. No statement could be verified against the source documents.",
            "value_hits": values["hits"][:12], "mode": mode, "guardrail_issues": issues, "seconds": round(time.time() - t0, 2)}
-    au({"kind": "answer", "status": res["status"], "statements": len(stmts), "dropped_unverified": dropped, "seconds": res["seconds"]})
+    au({"kind": "answer", "status": res["status"], "statements": len(stmts), "dropped_unverified": dropped, "seconds": res["seconds"],
+        "removed": [{"reason": x["reason"], "text": x["text"][:200]} for x in removed]})
     return res

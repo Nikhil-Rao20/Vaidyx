@@ -95,6 +95,15 @@ function showTab(t) {
 
 // ------------------------------------------------------------------ citations / evidence
 const flagHTML = (x) => (x.flags || []).map((f) => `<span class="chip c-warn" title="The cited source contains a negation (no / not / negative / absent) that this sentence does not; read the source before relying on it.">${esc(f)}</span>`).join("");
+// V1 item 6.4: what the model wrote but verification or the scope guardrail took out, kept with the reason for reviewers
+const WHERE = { presentation: "Presenting complaints", treatment_history: "Treatment history", investigations: "Investigations", imaging: "Imaging", fitness: "Fitness for treatment",
+  questions: "Questions for the board", points_for_review: "Points for review", not_documented: "Not documented", answer: "Answer" };
+function removedHTML(list) {
+  if (!list || !list.length) return "";
+  return `<details class="removed noprint"><summary class="small">${list.length} removed item${list.length === 1 ? "" : "s"} (failed verification, not facts)</summary>
+    <div class="small muted">What the model wrote that was taken out before display, with the reason. Not facts: never rely on them.</div>
+    <ul>${list.map((x) => `<li class="small"><span class="chip c-mute">${esc(x.reason_label || x.reason)}</span> <s>${esc(x.text)}</s>${x.detail ? ` <span class="muted">(${esc(x.detail)})</span>` : ""}${x.where ? ` <span class="muted">· ${esc(WHERE[x.where] || x.where)}</span>` : ""}</li>`).join("")}</ul></details>`;
+}
 function citeHTML(c) {
   const label = `${c.doc_title || c.doc_id}${c.date ? " · " + fmtDate(c.date) : ""}`;
   return `<span class="cite" data-doc="${esc(c.doc_id)}" data-page="${c.page ?? ""}" data-start="${c.start ?? ""}" data-end="${c.end ?? ""}" title="&quot;${esc(c.quote)}&quot;">${esc(label)}</span>`;
@@ -523,9 +532,9 @@ function renderAnswers() {
   const el = $("#answers"); if (!el) return;
   el.innerHTML = S.chat.slice().reverse().map((c) => `<div class="qbox">${esc(c.q)}</div>` + (c.pending ? `<div class="muted"><span class="spin"></span> Reading the Case File...</div>` :
     c.a.status === "answered" ? `<div class="answer">${c.a.statements.map((s) => `<p>${esc(s.text)} ${s.citations.map(citeHTML).join("")}${flagHTML(s)}</p>`).join("")}</div>
-      <div class="small muted">${c.a.seconds} s · ${esc(c.a.mode)}${c.a.dropped_unverified ? ` · ${c.a.dropped_unverified} unverified statement(s) removed` : ""}</div>` :
+      <div class="small muted">${c.a.seconds} s · ${esc(c.a.mode)}${c.a.dropped_unverified ? ` · ${c.a.dropped_unverified} unverified statement(s) removed` : ""}</div>${can("review") ? removedHTML(c.a.removed) : ""}` :
     c.a.status === "out_of_scope" ? `<div class="refusal"><b>Outside the assistant's scope.</b> ${esc(c.a.message)}</div>` :
-    `<div class="refusal"><b>${c.a.status === "error" ? "Error" : "Not documented in the Case File."}</b> ${esc(c.a.message)}</div>`)).join("");
+    `<div class="refusal"><b>${c.a.status === "error" ? "Error" : "Not documented in the Case File."}</b> ${esc(c.a.message)}</div>${can("review") ? removedHTML(c.a.removed) : ""}`)).join("");
 }
 
 // ------------------------------------------------------------------ tab: specialty support (agents)
@@ -585,6 +594,7 @@ function showBrief(role, b) {
     ${b.points_for_review.length ? `<h4>Points for review (not treatment recommendations)</h4><ul>${b.points_for_review.map((it) => `<li>${esc(it.text)} ${it.citations.map(citeHTML).join("")}${(it.references || []).length ? `<div class="grefs">${it.references.map(refHTML).join("")}</div>` : ""}</li>`).join("")}</ul>
       ${b.points_for_review.some((it) => (it.references || []).length) ? `<div class="small muted">References are guideline text for the board to consult, Indian sources first; they are not facts about this patient and not a recommendation for this patient.</div>` : ""}` : ""}
     ${b.not_documented.length ? `<h4>Not documented</h4><ul>${b.not_documented.map((x) => `<li class="muted">${esc(x)}</li>`).join("")}</ul>` : ""}
+    ${can("review") ? removedHTML(b.removed) : ""}
     ${reviewBar("brief_" + role, rv)}`;
   bindReview(box);
 }
@@ -656,6 +666,7 @@ function showSummary(s) {
     ${s.stage_as_recorded ? `<div class="stagebox"><b>Stage, as recorded in the ${esc(s.stage_as_recorded.doc_title)}:</b> ${esc(s.stage_as_recorded.value)} ${citeHTML({ ...s.stage_as_recorded, quote: s.stage_as_recorded.quote })}<div class="small muted">Extracted from the signed source report. The agent does not derive or assign stage.</div></div>` : ""}
     ${s.points_for_review.length ? `<h4 style="color:#1f2933">Points for review</h4><ul>${s.points_for_review.map((x) => `<li>${esc(x.text)} ${x.citations.map(citeHTML).join("")}</li>`).join("")}</ul>` : ""}
     <div class="small muted">${esc(s.generated?.replace("T", " "))} · ${s.seconds} s · ${esc(s.model)}${s.dropped_unverified ? ` · ${s.dropped_unverified} unverified sentence(s) removed` : ""}${s.filled_from_fields ? ` · ${s.filled_from_fields} sentence(s) added from verified fields` : ""}</div>
+    ${can("review") ? removedHTML(s.removed) : ""}
     ${reviewBar("summary", rv)}`;
   bindReview($("#sumout"));
 }

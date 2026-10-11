@@ -397,9 +397,19 @@ def no_documents_brief(case_id, role, sig, t0):
     extra = ([f"{len(waiting)} still being read"] if waiting else []) + ([f"{len(failed)} failed to read"] if failed else [])
     return {"role": role, "label": ROLES[role]["label"], "no_documents": True, "department": dept,
             "message": f"No {dept} documents in this Case File" + (f" ({', '.join(extra)})" if extra else ""),
-            "open_items": open_department_items(case_id, role), "sections": [], "points_for_review": [], "not_documented": [],
+            "open_items": open_department_items(case_id, role), "sections": [], "points_for_review": [], "not_documented": [], "removed": [],
             "dropped_unverified": 0, "guardrail_removed": 0, "not_documented_rejected": 0, "references_dropped": 0,
             "generated": store.now_iso(), "model": "", "seconds": round(time.time() - t0, 1), "review": {"status": "no_model_call"}, "signature": sig}
+
+
+def _removed(item, reason, detail, where):
+    """An item taken out after the model wrote it, kept with the reason for reviewers: failed verification, not a fact (V1 item 6.4)."""
+    return {"text": item.get("text") if isinstance(item, dict) else str(item), "reason": reason,
+            "reason_label": qa.REASONS.get(reason) or REMOVED_REASONS.get(reason, reason), "detail": detail, "where": where,
+            "citations": [{"doc_id": c.get("doc_id"), "quote": (c.get("quote") or "")[:400]} for c in ((item.get("citations") or []) if isinstance(item, dict) else [])]}
+
+
+REMOVED_REASONS = {"found_in_case_file": "said to be not documented, but found in the Case File"}
 
 
 async def run_agent(case_id, role, focus_question="", max_steps=5):
@@ -490,31 +500,32 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
         b = await llm.chat("reasoner", msgs, json_schema=BRIEF_SCHEMA, max_tokens=2200, purpose=f"agent {role} brief", audit=au)
     except Exception as e:
         yield {"type": "error", "message": str(e)[:200]}; return
-    dropped = 0; issues = []
+    dropped = 0; issues = []; removed = []  # removed: every item taken out, with the reason (V1 item 6.4)
     sections = []
     for sec in b.get("sections") or []:
-        items = qa.verify_statements(case_id, sec.get("items"))
-        dropped += len(sec.get("items") or []) - len(items)
+        items, drop = qa.verify(case_id, sec.get("items"))
+        dropped += len(drop); removed += [{**x, "where": sec.get("heading", "")} for x in drop]
         kept = []
         for it in items:
             iss = guardrails.scan_output(it["text"])
             if iss:
-                issues += iss
+                issues += iss; removed.append(_removed(it, "guardrail", "; ".join(i["reason"] for i in iss), sec.get("heading", "")))
             else:
                 kept.append(it)
         if kept:
             sections.append({"heading": sec.get("heading", ""), "items": kept})
     pts2, refs_dropped = [], 0
     for raw in b.get("points_for_review") or []:
-        v = qa.verify_statements(case_id, [raw])  # one at a time: each kept point keeps its own references
+        v, drop = qa.verify(case_id, [raw])  # one at a time: each kept point keeps its own references
         if not v:
-            dropped += 1; continue
+            dropped += 1; removed += [{**x, "where": "points_for_review"} for x in drop]; continue
         p = v[0]
         iss = guardrails.scan_output(p["text"])
         if not iss and _POINT_SCOPE.search(p["text"]):
             iss = [{"sentence": p["text"], "reason": "asks for a treatment or work-up decision for this patient"}]
         issues += iss
         if iss:
+            removed.append(_removed(p, "guardrail", "; ".join(i["reason"] for i in iss), "points_for_review"))
             continue
         p["references"], nd_refs = _verify_references(raw.get("references"), refs, case["protocol"])
         refs_dropped += nd_refs
@@ -529,24 +540,28 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
         pts2.append(p)
     nd, nd_dropped = [], 0
     for x in (b.get("not_documented") or []):
-        if guardrails.scan_output(x):
-            continue
+        iss = guardrails.scan_output(x)
+        if iss:
+            removed.append(_removed({"text": x}, "guardrail", "; ".join(i["reason"] for i in iss), "not_documented")); continue
         hits = search.find_values(case_id, x, 5)["hits"]  # the claim 'X is not documented' is checked against the Case File
         if hits:
             nd_dropped += 1
+            removed.append(_removed({"text": x}, "found_in_case_file", "a line mentions it in " + ", ".join(sorted({h["doc_id"] for h in hits[:3]})), "not_documented"))
             au({"kind": "not_documented_claim_rejected", "role": role, "claim": x, "found_in": [h["doc_id"] for h in hits[:3]]})
         else:
             nd.append(x)
     if issues:
         au({"kind": "guardrail_output", "where": f"agent {role}", "issues": issues})
     brief = {"role": role, "label": r["label"], "sections": sections, "points_for_review": pts2, "not_documented": nd,
-             "dropped_unverified": dropped, "guardrail_removed": len(issues), "not_documented_rejected": nd_dropped, "generated": store.now_iso(),
+             "dropped_unverified": dropped, "guardrail_removed": sum(x["reason"] == "guardrail" for x in removed), "not_documented_rejected": nd_dropped,
+             "removed": removed, "generated": store.now_iso(),
              "references_dropped": refs_dropped, "pack": _pack_summary(role, case["protocol"]),
-             "model": __import__("tumour_board.config", fromlist=["models"]).models()["reasoner"].get("label") or "reasoner",
+             "model": config.models()["reasoner"].get("label") or "reasoner",
              "seconds": round(time.time() - t0, 1), "review": {"status": "ai_draft"},
              "signature": sig}  # what it was written from; a changed Case File marks it stale (V1 item 4.5)
     st = store.get_state(case_id); st.setdefault("artefacts", {})[f"brief_{role}"] = brief; store.save_state(case_id, st)
     au({"kind": "agent_brief", "role": role, "items": sum(len(s["items"]) for s in sections), "points": len(pts2), "dropped_unverified": dropped,
-        "guardrail_removed": len(issues), "seconds": brief["seconds"], "references": sum(len(p["references"]) for p in pts2),
+        "guardrail_removed": brief["guardrail_removed"], "removed": {k: sum(x["reason"] == k for x in removed) for k in sorted({x["reason"] for x in removed})},
+        "seconds": brief["seconds"], "references": sum(len(p["references"]) for p in pts2),
         "points_with_indian_reference": sum(any(x["region"] == "India" for x in p["references"]) for p in pts2), "references_dropped": refs_dropped})
     yield {"type": "brief", "brief": brief}

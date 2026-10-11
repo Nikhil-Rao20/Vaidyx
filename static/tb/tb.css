@@ -269,3 +269,6 @@ table.t tr.click { cursor: pointer; } table.t tr.click:hover td { background: va
   body.print-summary .cite { border: 1px solid #cbd5e1; background: #fff; color: #334155; }
   body.print-summary .cite::after { content: " \201C" attr(title) "\201D"; font-weight: 400; color: #52606d; }
 }
+
+details.removed { margin: 8px 0; } details.removed summary { cursor: pointer; color: var(--link); } details.removed s { color: var(--muted); }
+@media print { .noprint { display: none !important; } }
