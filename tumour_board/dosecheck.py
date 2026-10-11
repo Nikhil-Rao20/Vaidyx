@@ -8,16 +8,21 @@ hospital's brand names from DATA_ROOT/formulary.json when provided) runs as well
 
 Compared with:
   - protocols/dose_references.json: guideline dose and radiotherapy lines for the cancer, Indian first (NCG, ICMR, TMC), then
-    international (ESMO), UK (NICE), US (NCI PDQ); built from the guideline text by eval/build_dose_references.py. Coverage is
-    limited to the doses our guideline files state: a drug with no reference is info only, not a pass.
+    international (ESMO), UK (NICE), US (NCI PDQ); built from the guideline text by eval/build_dose_references.py. Each line is a
+    regimen / schedule line (source_kind "regimen") or a trial summary (source_kind "trial_summary": what a trial gave its patients).
+    Coverage is limited to the doses our guideline files state: a drug with no reference is info only, not a pass.
   - the stage as recorded in the signed reports (passed in by the caller): like with like only (stage group with stage group, TNM
-    categories with TNM categories of the same c / p / yp prefix). No stage is ever computed from TNM.
+    categories with TNM categories), and only for the same stage: a known c / p / yp difference (from the TNM prefix or the words
+    clinical / pathological / post-NACT) is not compared. No stage is ever computed from TNM.
 
-Results per item: consistent; possible_transcription_error (same drug, dose x10 or /10, or the same number in another unit, vs every
-reference: expert review); differs_from_reference (review; deviating from a guideline can be intentional); no_reference (info);
-stage_consistent / stage_differs (review) / stage_not_compared. Units are normalised for comparison only (mg/m², mg /m2, mg/sqm,
-mg per m2 -> mg/m2; g/m2 = 1000 mg/m2; "@AUC5" = AUC 5); the dose shown is always the dose as written. Lab units live in units.py
-(item 3.5); dose units are here because units.json has no dose families.
+Results per drug or schedule, in this order: consistent (equal to a regimen line); possible_transcription_error (dose x10 or /10, or
+the same number in another unit, vs any reference: expert review); trial_dose_only (equal only to a dose in a trial summary: info, not
+a pass); differs_from_reference (review; deviating from a guideline can be intentional; every dose shown carries its own citation);
+no_reference (info). drug_not_identified (info): a dose in a model span with no drug name the code can read before it (never shown
+under a name the text does not hold). computed_dose_not_compared: the actual dose in brackets after a per-area / per-weight dose
+('175 mg/m2 (300 mg)'). Stage: stage_consistent / stage_differs (review) / stage_not_compared. Units are normalised for
+comparison only (mg/m², mg /m2, mg/sqm, mg per m2 -> mg/m2; g/m2 = 1000 mg/m2; "@AUC5" = AUC 5); the dose shown is always the dose
+as written. Lab units live in units.py (item 3.5); dose units are here because units.json has no dose families.
 """
 import json
 import math
@@ -98,8 +103,8 @@ _TOT = r"(?P<a>\d+(?:\.\d+)?)(?:\s*(?:-|–|to)\s*(?P<b>\d+(?:\.\d+)?))?"
 RT_RX = [
     ("full", re.compile(rf"{_TOT}\s*(?P<u>{_GY})\s*(?:in|/|,|over)?\s*{_FNUM}\s*(?:once[- ]daily\s*|daily\s*)?(?:fractions?(?![a-z])|fr(?![a-z])|#)", re.I)),
     ("nxp", re.compile(rf"(?<![\d.])(?P<f>\d+)\s*[x×*]\s*(?P<p>\d+(?:\.\d+)?)\s*(?P<u>{_GY})(?![a-z])", re.I)),
-    ("pxn", re.compile(rf"(?<![\d.])(?P<p>\d+(?:\.\d+)?)(?:\s*(?:Gy)?\s*(?:-|–|to)\s*(?P<q>\d+(?:\.\d+)?))?\s*(?P<u>{_GY})\s*[x×*]\s*(?P<f>\d+)"
-                       r"(?!\s*(?:-|–)\s*\d)(?:\s*fractions?)?", re.I)),
+    ("pxn", re.compile(rf"(?<![\d.])(?P<p>\d+(?:\.\d+)?)(?:\s*(?:Gy)?\s*(?:-|–|to)\s*(?P<q>\d+(?:\.\d+)?))?\s*(?P<u>{_GY})\s*[x×*]\s*(?P<f>\d+)(?!\d)"
+                       r"(?!\s*(?:-|–)\s*\d)(?!\s*(?:days?|d|times|fractions?|#)?\s*(?:a|per|/|each|every|in\s+a)\s*(?:week|wk))(?:\s*fractions?)?", re.I)),
     ("single", re.compile(rf"{_TOT}\s*(?P<u>{_GY})\s*(?:in\s+a\s+|as\s+a\s+)?single\s+(?:fraction|#)", re.I)),
 ]
 _TOTAL_ONLY = re.compile(rf"(?<![\d.]){_TOT}\s*(?P<u>{_GY})(?![a-z])", re.I)
@@ -159,6 +164,56 @@ _TNM_RX = re.compile(r"(?<![A-Za-z0-9])(?P<pre>yp|yc|p|c|r|a)?\s?T(?P<t>is|[0-4X
                      r"(?:\s*,?\s*(?:yp|yc|p|c)?\s?N(?P<n>[0-3X][a-c]?(?:mi)?)(?![a-z0-9]))?"
                      r"(?:\s*,?\s*(?:yp|yc|p|c)?\s?M(?P<m>[01X][a-d]?)(?![a-z0-9]))?")
 _NM_RX = re.compile(r"(?<![A-Za-z0-9])(?P<pre>yp|yc|p|c)?\s?N(?P<n>[0-3X][a-c]?)(?![a-z0-9])\s*,?\s*(?:yp|yc|p|c)?\s?M(?P<m>[01X][a-d]?)(?![a-z0-9])")
+# 'Stage 1: surgery' / 'stage 2 of the plan' is a step of the plan, not a stage group: an arabic group needs a letter ('Stage 3A'),
+# the word 'group' ('stage group 2') or staging words just before it ('clinical stage 2', 'AJCC stage 3').
+_STAGE_CONTEXT = re.compile(r"\b(?:clinical(?:ly)?|patholog\w*|AJCC|UICC|TNM|staged?\s+as|[cp]-?stage)\b[^.;:\n]{0,20}$", re.I)
+# Words that say which stage a group is: clinical (c), pathological (p), after neoadjuvant therapy (yp)
+_PREFIX_WORDS = (("yp", re.compile(r"\bpost[- ]?(?:nact|neo[- ]?adjuvant)|\bafter\s+(?:nact|neo[- ]?adjuvant)|\byp-?stage\b", re.I)),
+                 ("p", re.compile(r"\bpatholog\w*|\bp-?stage\b", re.I)),
+                 ("c", re.compile(r"\bclinical(?:ly)?\b|\bc-?stage\b", re.I)))
+
+
+def _groups(text, bare=False, before=""):
+    """Stage group matches in text (see _STAGE_CONTEXT; `before`: the text just before `text`, for the staging words); bare=True
+    (a value known to be a stage) also takes 'Stage 2'."""
+    for g in _GROUP_RX.finditer(text or ""):
+        r = g.group("r")
+        if (r.isdigit() and r != "0" and not g.group("l") and not bare and "group" not in g.group(0).lower()
+                and not _STAGE_CONTEXT.search((before + text[:g.start()])[-40:])):
+            continue
+        yield g
+
+
+def _word_prefix(text):
+    """'yp' / 'p' / 'c' from the words in text ('post-NACT', 'pathological', 'clinical'), '' when none or when they disagree."""
+    found = {p for p, rx in _PREFIX_WORDS if rx.search(text or "")}
+    if "yp" in found and "c" not in found:
+        return "yp"
+    return found.pop() if len(found) == 1 else ""
+
+
+def _text_prefix(text):
+    """The one c / p / yp prefix a text states (its TNM prefixes and staging words), '' when none or more than one."""
+    found = {(m.group("pre") or "").lower() for m in _TNM_RX.finditer(text or "") if m.group("pre") and (m.group("n") or m.group("m"))}
+    w = _word_prefix(text)
+    if w:
+        found.add(w)
+    return found.pop() if len(found) == 1 else ""
+
+
+def _context_prefix(text, s, e):
+    """The c / p / yp prefix stated by the staging word nearest to text[s:e] in the same sentence ('Stage IIIA (clinical)',
+    'post-NACT stage IA'), '' when none."""
+    a = max(max(text.rfind(ch, 0, s) for ch in ".;\n") + 1, s - 40)
+    ends = [k for k in (text.find(ch, e) for ch in ".;\n") if k >= 0]
+    b = min(min(ends) if ends else len(text), e + 20)
+    best = None
+    for p, rx in _PREFIX_WORDS:
+        for m in rx.finditer(text, a, b):
+            d = s - m.end() if m.end() <= s else (m.start() - e if m.start() >= e else 0)
+            if best is None or d < best[0]:
+                best = (d, p)
+    return best[1] if best else ""
 
 
 def _cat(letter, v):
@@ -168,14 +223,18 @@ def _cat(letter, v):
     return letter + (v if v.lower() in ("is",) else v[0].upper() + v[1:].lower())
 
 
-def parse_stage(text, bare=False):
-    """Stage as written: {"group": "IIIB" | None, "roman", "letter", "prefix": "c" | "p" | "yp" | "", "t", "n", "m", "written",
-    "start", "end"} or None. Stage group needs the word 'stage' (bare=True also takes a value that is only a group, 'IIA'); TNM needs
-    a prefix or at least two categories ('cT2', 'T2 N1', 'N0 M0'), so 'T2-weighted' is not a stage. Never derives a group from TNM."""
+def parse_stage(text, bare=False, before=""):
+    """Stage as written: {"group": "IIIB" | None, "roman", "letter", "prefix": "c" | "p" | "yp" | "" (as written on the TNM),
+    "group_prefix" (the prefix the stage is read with: the TNM prefix, else the staging words in text), "t", "n", "m", "written",
+    "start", "end"} or None. Stage group needs the word 'stage' and a roman group, a letter or staging words ('Stage 1: surgery' is a
+    plan step; bare=True also takes a value that is only a group, 'IIA', or 'Stage 2'); TNM needs a prefix or at least two categories
+    ('cT2', 'T2 N1', 'N0 M0'), so 'T2-weighted' is not a stage. `before`: the text just before `text` (staging words for an arabic
+    group). Never derives a group from TNM."""
     text = text or ""
-    res = {"group": None, "roman": None, "letter": "", "prefix": "", "t": None, "n": None, "m": None, "written": None, "start": None, "end": None}
+    res = {"group": None, "roman": None, "letter": "", "prefix": "", "group_prefix": "", "t": None, "n": None, "m": None, "written": None,
+           "start": None, "end": None}
     spans = []
-    g = _GROUP_RX.search(text) or (_BARE_GROUP_RX.search(text) if bare else None)
+    g = next(_groups(text, bare, before), None) or (_BARE_GROUP_RX.search(text) if bare else None)
     if g:
         r = g.group("r").upper()
         res["roman"] = _ARABIC.get(r, r)
@@ -197,6 +256,7 @@ def parse_stage(text, bare=False):
         return None
     res["start"], res["end"] = min(s for s, _ in spans), max(e for _, e in spans)
     res["written"] = text[res["start"]:res["end"]].strip()
+    res["group_prefix"] = res["prefix"] or _word_prefix(text)
     return res
 
 
@@ -211,22 +271,25 @@ def _cat_equal(a, b):
 
 
 def compare_stage(written, recorded):
-    """(result, compared parts): like with like only; a c / p / yp prefix difference is not compared."""
+    """(result, compared parts): like with like only; a c / p / yp prefix difference is not compared, for the stage group as for
+    the TNM categories ('cT3N1M0, Stage IIIA' vs 'ypT1N0M0 Stage IA': two different stages, both correct)."""
     if not written or not recorded:
         return "stage_not_compared", []
     parts, differs = [], False
+    wp, rp = written.get("group_prefix") or written["prefix"], recorded.get("group_prefix") or recorded["prefix"]
+    if wp and rp and wp != rp:
+        return "stage_not_compared", []
     if written["group"] and recorded["group"]:
         same = written["roman"] == recorded["roman"] and (not written["letter"] or not recorded["letter"]
                                                             or written["letter"].startswith(recorded["letter"]) or recorded["letter"].startswith(written["letter"]))
         parts.append("group")
         differs |= not same
-    if (written["prefix"] == recorded["prefix"]) or not written["prefix"] or not recorded["prefix"]:
-        for c in ("t", "n", "m"):
-            eq = _cat_equal(written[c], recorded[c])
-            if eq is None:
-                continue
-            parts.append(c)
-            differs |= not eq
+    for c in ("t", "n", "m"):  # prefixes equal or one unknown (a known difference is returned above)
+        eq = _cat_equal(written[c], recorded[c])
+        if eq is None:
+            continue
+        parts.append(c)
+        differs |= not eq
     if not parts:
         return "stage_not_compared", []
     return ("stage_differs" if differs else "stage_consistent"), parts
@@ -304,9 +367,26 @@ def _closeness(v, lo, hi):
     return 0.0 if lo <= v <= hi else min(abs(math.log(v / lo)), abs(math.log(v / hi)))
 
 
+def _trial(r):
+    """True for a reference line that describes a trial arm (source_kind "trial_summary"), not a regimen or schedule line."""
+    return r.get("source_kind") == "trial_summary"
+
+
+def _distinct(refs, key, n=3):
+    """The first reference per distinct value of key(r), at most n (refs already in the order to show)."""
+    out, seen = [], set()
+    for r in refs:
+        if key(r) not in seen:
+            seen.add(key(r))
+            out.append(r)
+    return out[:n]
+
+
 def compare_dose(drug, dose, unit, cancer, dose_max=None):
-    """(result, references): consistent / possible_transcription_error / differs_from_reference / no_reference. references: the
-    matching ones (consistent), the ones the slip matches (transcription), else the closest of the same unit; Indian first."""
+    """(result, references), in this order: (1) consistent: equal to a regimen line; (2) possible_transcription_error: x10 / /10 in
+    the same unit, or the same number in another unit, against any reference (trial summaries included); (3) trial_dose_only: equal
+    only to doses described in trial summaries (info, not a pass); (4) differs_from_reference: else, with the closest regimen doses
+    (distinct doses, at most 3); no_reference when the drug has none. Indian sources first throughout."""
     refs = [r for r in references(cancer, "drug") if r["drug"] == drug]
     if not refs:
         return "no_reference", []
@@ -317,8 +397,8 @@ def compare_dose(drug, dose, unit, cancer, dose_max=None):
         lo, hi, rcu = _ref_bounds(r)
         if rcu == cu and _within(v, lo, hi) and _within(vmax, lo, hi):
             match.append(r)
-    if match:
-        return "consistent", match
+    if any(not _trial(r) for r in match):
+        return "consistent", [r for r in match if not _trial(r)]
     slip = []
     for r in refs:
         lo, hi, rcu = _ref_bounds(r)
@@ -328,14 +408,19 @@ def compare_dose(drug, dose, unit, cancer, dose_max=None):
         elif rcu != cu and (_within(dose, raw_lo, raw_hi) or _within(dose * 10, raw_lo, raw_hi) or _within(dose / 10, raw_lo, raw_hi)):
             slip.append(r)  # the same number (or x10 / /10) in another unit: '6 mg/m2' for 6 mg/kg, '6 mg' for 60 mg/m2
     if slip:
-        return "possible_transcription_error", slip
-    same = [r for r in refs if _ref_bounds(r)[2] == cu] or refs
-    return "differs_from_reference", sorted(same, key=lambda r: (REGION_ORDER.get(r["region"], 9), _closeness(v, *_ref_bounds(r)[:2])))[:3]
+        return "possible_transcription_error", sorted(slip, key=lambda r: (REGION_ORDER.get(r["region"], 9), _trial(r)))
+    if match:
+        return "trial_dose_only", match
+    regimen = [r for r in refs if not _trial(r)]
+    pool = [r for r in regimen if _ref_bounds(r)[2] == cu] or regimen or [r for r in refs if _ref_bounds(r)[2] == cu] or refs
+    pool = sorted(pool, key=lambda r: (REGION_ORDER.get(r["region"], 9), _closeness(v, *_ref_bounds(r)[:2])))
+    return "differs_from_reference", _distinct(pool, lambda r: fmt_dose(r))
 
 
 def compare_rt(rt, cancer):
-    """(result, references) for one schedule: total Gy and fractions both compared (a total without fractions: the total only);
-    x10 / /10 on the total Gy -> possible transcription error."""
+    """(result, references) for one schedule, in the order of compare_dose: total Gy and fractions both compared (a total without
+    fractions: the total only); x10 / /10 on the total Gy -> possible transcription error; a schedule equal only to trial summaries
+    -> trial_dose_only (info)."""
     refs = references(cancer, "rt")
     if not refs:
         return "no_reference", []
@@ -348,14 +433,17 @@ def compare_rt(rt, cancer):
 
     t, tmax = rt["total_gy"], rt.get("total_gy_max") or rt["total_gy"]
     match = [r for r in refs if _within(t, r["total_gy"], r.get("total_gy_max")) and _within(tmax, r["total_gy"], r.get("total_gy_max")) and fr_ok(r)]
-    if match:
-        return "consistent", match
+    if any(not _trial(r) for r in match):
+        return "consistent", [r for r in match if not _trial(r)]
     slip = [r for r in refs if fr_ok(r) and (_within(t * 10, r["total_gy"], r.get("total_gy_max")) or _within(t / 10, r["total_gy"], r.get("total_gy_max")))]
     if slip:
-        return "possible_transcription_error", slip
-    same = [r for r in refs if fr_ok(r)] or refs
-    return "differs_from_reference", sorted(same, key=lambda r: (REGION_ORDER.get(r["region"], 9),
-                                                                 _closeness(t, r["total_gy"], r.get("total_gy_max") or r["total_gy"])))[:3]
+        return "possible_transcription_error", sorted(slip, key=lambda r: (REGION_ORDER.get(r["region"], 9), _trial(r)))
+    if match:
+        return "trial_dose_only", match
+    regimen = [r for r in refs if not _trial(r)] or refs
+    same = [r for r in regimen if fr_ok(r)] or regimen
+    same = sorted(same, key=lambda r: (REGION_ORDER.get(r["region"], 9), _closeness(t, r["total_gy"], r.get("total_gy_max") or r["total_gy"])))
+    return "differs_from_reference", _distinct(same, fmt_rt)
 
 
 # ---------------------------------------------------------------- flag text
@@ -378,13 +466,15 @@ def fmt_rt(r):
     return s
 
 
-def _cite(r):
+def _cite(r, mark_trial=False):
+    """'National Cancer Grid (NCG), India, p 11'; mark_trial: 'trial summary, NCI PDQ (US), p 34' for a trial summary line."""
     org = r["org"] if r["region"] in r["org"] else f"{r['org']}, {r['region']}"
-    return f"{org}, p {r['page']}"
+    return ("trial summary, " if mark_trial and _trial(r) else "") + f"{org}, p {r['page']}"
 
 
 def _ref_out(r):
     out = {k: r.get(k) for k in ("org", "region", "file", "title", "page", "quote")}
+    out["source_kind"] = r.get("source_kind") or "regimen"
     if r["kind"] == "drug":
         out.update({"dose": r["dose"], "dose_max": r.get("dose_max"), "unit": r["unit"]})
     else:
@@ -397,45 +487,56 @@ def _brief(r):
             **({"schedule": r["schedule"]} if r.get("schedule") else {})}
 
 
+def _states(shown, fmt):
+    """'the guideline reference states 60 mg/m2 (NCG, India, p 11)' or, for several, 'the guideline references state 1000 mg/m2
+    (NCG, India, p 22) or 650-825 mg/m2 (ICMR consensus, India, p 30)': every value carries its own citation."""
+    parts = [f"{fmt(r)} ({_cite(r, mark_trial=True)})" for r in shown]
+    return ("the guideline reference states " if len(parts) == 1 else "the guideline references state ") + " or ".join(parts)
+
+
+def _guide_flag(check, c, sev, text, shown):
+    return {"kind": "guideline", "check": check, "severity": sev, "text": text, "recorded": c["recorded"], "span": c["span"],
+            "reference": _ref_out(shown[0]) if shown else None, "references": [_ref_out(r) for r in shown]}
+
+
 def _dose_flag(c, refs):
-    name = c["drug"][:1].upper() + c["drug"][1:]
     rec = c["recorded"]
+    if c["result"] == "drug_not_identified":
+        return _guide_flag("dose", c, "info", f"Drug not identified in the decision text: dose recorded as \"{rec}\"; no drug name the check "
+                                              f"can read stands before it, so it was not compared with a guideline reference. Info only, not a pass.", [])
+    name = c["drug"][:1].upper() + c["drug"][1:]
     if c["result"] == "no_reference":
-        return {"kind": "guideline", "check": "dose", "severity": "info", "span": c["span"], "recorded": rec, "reference": None,
-                "text": f"No guideline reference found: {name} recorded as \"{rec}\"; the dose references for this cancer do not cover "
-                        f"this drug. Info only, not a pass."}
-    r = refs[0]
+        return _guide_flag("dose", c, "info", f"No guideline reference found: {name} recorded as \"{rec}\"; the dose references for this "
+                                              f"cancer do not cover this drug. Info only, not a pass.", [])
+    if c["result"] == "trial_dose_only":
+        shown = _distinct(refs, fmt_dose, n=1)
+        return _guide_flag("dose", c, "info", f"Trial dose only: {name} recorded as \"{rec}\" matches only a dose described in a trial summary "
+                                              f"({_cite(shown[0])}), not a regimen line. Info only, not a pass.", shown)
     if c["result"] == "possible_transcription_error":
-        text = (f"Possible transcription error: {name} recorded as \"{rec}\"; the guideline reference states {fmt_dose(r)} ({_cite(r)}). "
-                f"Expert review: the check flags the difference, it does not decide which dose is correct.")
-        sev = "expert_review"
-    else:
-        doses = []
-        for x in refs:
-            if fmt_dose(x) not in doses:
-                doses.append(fmt_dose(x))
-        text = (f"Differs from guideline reference: {name} recorded as \"{rec}\"; the guideline reference states {' or '.join(doses[:3])} "
-                f"({_cite(r)}). Review: a deviation from a guideline can be intentional; the check does not decide which dose is correct.")
-        sev = "review"
-    return {"kind": "guideline", "check": "dose", "severity": sev, "text": text, "recorded": rec, "span": c["span"], "reference": _ref_out(r)}
+        shown = refs[:1]
+        return _guide_flag("dose", c, "expert_review", f"Possible transcription error: {name} recorded as \"{rec}\"; {_states(shown, fmt_dose)}. "
+                                                       f"Expert review: the check flags the difference, it does not decide which dose is correct.", shown)
+    shown = _distinct(refs, fmt_dose)
+    return _guide_flag("dose", c, "review", f"Differs from guideline reference: {name} recorded as \"{rec}\"; {_states(shown, fmt_dose)}. "
+                                            f"Review: a deviation from a guideline can be intentional; the check does not decide which dose is correct.", shown)
 
 
 def _rt_flag(c, refs):
     rec = c["recorded"]
     if c["result"] == "no_reference":
-        return {"kind": "guideline", "check": "rt", "severity": "info", "span": c["span"], "recorded": rec, "reference": None,
-                "text": f"No guideline reference found: radiotherapy recorded as \"{rec}\"; the radiotherapy references for this cancer "
-                        f"do not cover it. Info only, not a pass."}
-    r = refs[0]
+        return _guide_flag("rt", c, "info", f"No guideline reference found: radiotherapy recorded as \"{rec}\"; the radiotherapy references "
+                                            f"for this cancer do not cover it. Info only, not a pass.", [])
+    if c["result"] == "trial_dose_only":
+        shown = refs[:1]
+        return _guide_flag("rt", c, "info", f"Trial schedule only: radiotherapy recorded as \"{rec}\" matches only a schedule described in a "
+                                            f"trial summary ({_cite(shown[0])}), not a regimen line. Info only, not a pass.", shown)
     if c["result"] == "possible_transcription_error":
-        text = (f"Possible transcription error: radiotherapy recorded as \"{rec}\"; the guideline reference states {fmt_rt(r)} ({_cite(r)}). "
-                f"Expert review: the check flags the difference, it does not decide which schedule is correct.")
-        sev = "expert_review"
-    else:
-        text = (f"Differs from guideline reference: radiotherapy recorded as \"{rec}\"; the guideline reference states {fmt_rt(r)} "
-                f"({_cite(r)}). Review: a deviation from a guideline can be intentional; the check does not decide which schedule is correct.")
-        sev = "review"
-    return {"kind": "guideline", "check": "rt", "severity": sev, "text": text, "recorded": rec, "span": c["span"], "reference": _ref_out(r)}
+        shown = refs[:1]
+        return _guide_flag("rt", c, "expert_review", f"Possible transcription error: radiotherapy recorded as \"{rec}\"; {_states(shown, fmt_rt)}. "
+                                                     f"Expert review: the check flags the difference, it does not decide which schedule is correct.", shown)
+    shown = _distinct(refs, fmt_rt)
+    return _guide_flag("rt", c, "review", f"Differs from guideline reference: radiotherapy recorded as \"{rec}\"; {_states(shown, fmt_rt)}. "
+                                          f"Review: a deviation from a guideline can be intentional; the check does not decide which schedule is correct.", shown)
 
 
 # ---------------------------------------------------------------- model listing + code scan
@@ -468,9 +569,10 @@ def _messages(decision_text):
 
 
 # Words allowed between a drug name and its dose ("Inj. Doxorubicin hydrochloride at 60 mg/m2"), and between two doses of one drug
-# ("8 mg/kg loading dose followed by 6 mg/kg"). Any other word (another drug's name, even one not in the table) breaks the link.
+# ("8 mg/kg loading dose followed by 6 mg/kg", "f/b"). Any other word (another drug's name, even one not in the table) breaks the link.
 _FILL_FIRST = {"inj", "injection", "tab", "tablet", "tabs", "cap", "capsule", "caps", "iv", "po", "sc", "im", "oral", "at", "dose", "of",
-               "a", "the", "hydrochloride", "hcl", "sodium", "infusion", "bolus", "loading", "weekly", "day", "days", "d", "q", "dl"}
+               "a", "the", "hydrochloride", "hcl", "sodium", "infusion", "bolus", "loading", "weekly", "day", "days", "d", "q", "dl",
+               "biosimilar"}
 _FILL_NEXT = _FILL_FIRST | {"followed", "by", "then", "or", "and", "from", "cycle", "cycles", "in", "every", "wk", "wks", "week", "weeks",
                             "onwards", "once", "twice", "daily", "od", "bd", "bid", "as", "with", "fb", "f", "maintenance", "x", "h",
                             "hours", "over", "min", "minutes", "subsequent", "doses", "thereafter", "each"}
@@ -480,44 +582,93 @@ def _only(gap, allowed):
     return all(w.lower() in allowed for w in re.findall(r"[A-Za-z]+", gap))
 
 
-def _drug_items(text, base, names, rx, model_drug=None):
-    """Drug-dose items in text (offsets made absolute with `base`): each dose belongs to the last known drug name before it, the
-    first dose within 40 characters with only route / form words in between ('Inj. Doxorubicin 60 mg/m2'), later doses joined by
-    or / then / followed by ('8 mg/kg loading followed by 6 mg/kg'). When no known name holds a dose, the model's drug name (from a
-    located model span) does; otherwise the dose is left out (the model listing covers drugs the table does not name)."""
-    out = []
-    ms = list(rx.finditer(text)) if rx else []
-    doses = parse_doses(text)
-    for d in doses:
+_FB = re.compile(r"\bf\s*/\s*by?\b", re.I)  # 'f/b': the common Indian shorthand for 'followed by'
+_JOIN = re.compile(r"\b(or|then|followed|f by|fb|and)\b|,|\(", re.I)
+_PER_SIZE = {"mg/m2", "mg/m2/day", "g/m2", "g/m2/day", "mg/kg", "AUC"}
+
+
+def _owners(text, doses, ms, known=None):
+    """For each dose in doses: the name match (from ms) it belongs to, or None. The first dose after a name: within 40 characters,
+    only route / form words between, no sentence break ('Inj. Doxorubicin 60 mg/m2'); a later dose: the dose before it belongs to
+    the same name and the gap joins them (or / then / followed by / f/b / a comma / a bracket) with only schedule words between
+    ('8 mg/kg loading f/b 6 mg/kg'). known: owners already found (a dose with one keeps it and is not re-linked)."""
+    own = []
+    for i, d in enumerate(doses):
+        if known and known[i] is not None:
+            own.append(known[i])
+            continue
         prev = [m for m in ms if m.end() <= d["start"]]
         m = prev[-1] if prev else None
         if m is not None:
-            between = [x for x in doses if m.end() <= x["start"] < d["start"]]
-            if not between:
+            if i == 0 or doses[i - 1]["start"] < m.end():  # no dose between the name and this dose
                 gap = text[m.end():d["start"]]
                 if len(gap) > 40 or re.search(r"[.;]\s|\n", gap) or not _only(gap, _FILL_FIRST):
                     m = None
             else:
-                gap = text[between[-1]["end"]:d["start"]]
-                if len(gap) > 60 or not re.search(r"\b(or|then|followed|f by|fb|and)\b|,|\(", gap, re.I) or not _only(gap, _FILL_NEXT):
+                gap = _FB.sub(" followed by ", text[doses[i - 1]["end"]:d["start"]])
+                if own[i - 1] is not m or len(gap) > 60 or not _JOIN.search(gap) or not _only(gap, _FILL_NEXT):
                     m = None
-        if m is not None:
-            drug, s = names[m.group(1).lower()], m.start()
-        elif model_drug and model_drug.strip():
-            mk = re.sub(r"^(?:(?:inj|injection|tab|tablet|cap|capsule)\b\.?\s*)+", "", model_drug.strip().lower()).strip() or model_drug.strip().lower()
-            drug = names.get(mk, mk)
-            k = text.lower().rfind(mk, 0, d["start"])
-            s = k if k >= 0 else 0
+        own.append(m)
+    return own
+
+
+def _computed(text, doses, own, i):
+    """True for the actual dose computed from a per-area / per-weight dose, written in brackets right after it: 'Paclitaxel
+    175 mg/m2 (300 mg)', 'Carboplatin AUC 5 (450 mg)'."""
+    if i == 0 or own[i] is None or own[i - 1] is not own[i]:
+        return False
+    a, d = doses[i - 1], doses[i]
+    return (a["unit"] in _PER_SIZE and d["unit"] == "mg"
+            and re.fullmatch(r"\s*\(\s*(?:i\.?e\.?|=|~|approx\.?|approximately)?\s*", text[a["end"]:d["start"]], re.I) is not None
+            and re.match(r"\s*(?:total|flat|approx\.?)?\s*\)", text[d["end"]:], re.I) is not None)
+
+
+def _model_labels(model_drug, names):
+    """(generic, the names that may stand for it in the text) for the model's drug label: the label itself (route words and
+    brackets left out) plus every table name, alias and formulary brand of the same generic."""
+    mk = re.sub(r"\([^)]*\)", " ", (model_drug or "").strip().lower())
+    mk = re.sub(r"^(?:(?:inj|injection|tab|tablet|tabs|cap|capsule)\b\.?\s*)+", "", mk.strip())
+    mk = re.sub(r"\s+", " ", mk).strip(" .,:;-")
+    if not mk:
+        return None, set()
+    g = names.get(mk, mk)
+    return g, {mk} | {n for n, x in names.items() if x == g}
+
+
+def _drug_items(text, base, names, rx, model_drug=None):
+    """Drug-dose items in text (offsets made absolute with `base`): each dose belongs to the last known drug name before it (see
+    _owners). In a located model span (model_drug not None), a dose no known name holds belongs to the model's drug label only when
+    that label (or a table alias / formulary brand of the same generic) stands before the dose in the span under the same rules;
+    otherwise it is kept with drug None ("drug not identified in the decision text"), never under a name the text does not show.
+    Outside model spans such a dose is left out. A bracketed actual dose after a per-area / per-weight dose is marked computed."""
+    out = []
+    ms = list(rx.finditer(text)) if rx else []
+    doses = parse_doses(text)
+    own = _owners(text, doses, ms)
+    label_own, generic = [None] * len(doses), None
+    if model_drug is not None:
+        generic, labels = _model_labels(model_drug, names)
+        lrx = _name_rx(labels)
+        if lrx is not None:
+            label_own = _owners(text, doses, list(lrx.finditer(text)), known=own)
+    for i, d in enumerate(doses):
+        if own[i] is not None:
+            drug, s, o = names[own[i].group(1).lower()], own[i].start(), own
+        elif label_own[i] is not None:
+            drug, s, o = generic, label_own[i].start(), label_own
+        elif model_drug is not None:
+            drug, s, o = None, 0, None
         else:
             continue
         out.append({"drug": drug, "dose": d["dose"], "dose_max": d["dose_max"], "unit": d["unit"], "recorded": d["written"],
-                    "span": text[s:d["end"]].strip(), "start": base + s, "end": base + d["end"], "dose_start": base + d["start"]})
+                    "span": text[s:d["end"]].strip(), "start": base + s, "end": base + d["end"], "dose_start": base + d["start"],
+                    "computed": bool(o) and _computed(text, doses, o, i)})
     return out
 
 
 def _stage_scan(text):
     out = []
-    for m in list(_GROUP_RX.finditer(text)) + list(_TNM_RX.finditer(text)) + list(_NM_RX.finditer(text)):
+    for m in list(_groups(text)) + list(_TNM_RX.finditer(text)) + list(_NM_RX.finditer(text)):
         if m.re is _TNM_RX and not (m.group("pre") or m.group("n") or m.group("m")):
             continue
         out.append((m.start(), m.end()))
@@ -552,17 +703,22 @@ async def check_decision(decision_text, cancer, recorded_stage=None, audit=None)
     for it in listed.get("drugs") or []:
         loc = located(it.get("span"))
         if loc:
-            items += _drug_items(loc["matched"], loc["start"], names, rx, model_drug=it.get("drug"))
-    seen = []
-    for it in items:
+            items += _drug_items(loc["matched"], loc["start"], names, rx, model_drug=it.get("drug") or "")
+    seen = []  # identified items first: a dose a name in the text holds is never reported as unidentified
+    for it in [i for i in items if i["drug"]] + [i for i in items if not i["drug"]]:
         if it["dose"] and not any(s["dose_start"] < it["end"] and it["dose_start"] < s["end"] for s in seen):
             seen.append(it)
     for it in sorted(seen, key=lambda x: x["dose_start"]):
-        res, refs = compare_dose(it["drug"], it["dose"], it["unit"], cancer, it["dose_max"])
+        if not it["drug"]:
+            res, refs = "drug_not_identified", []
+        elif it["computed"]:
+            res, refs = "computed_dose_not_compared", []  # 'Paclitaxel 175 mg/m2 (300 mg)': the actual dose for this patient
+        else:
+            res, refs = compare_dose(it["drug"], it["dose"], it["unit"], cancer, it["dose_max"])
         c = {"kind": "drug", "span": it["span"], "drug": it["drug"], "dose": it["dose"], "dose_max": it["dose_max"], "unit": it["unit"],
              "recorded": it["recorded"], "result": res, "references": [_brief(r) for r in refs[:5]]}
         checks.append(c)
-        if res != "consistent":
+        if res not in ("consistent", "computed_dose_not_compared"):
             flags.append(_dose_flag(c, refs))
 
     # radiotherapy: model spans (located) + code scan of the whole text
@@ -590,7 +746,7 @@ async def check_decision(decision_text, cancer, recorded_stage=None, audit=None)
     spans = []
     for it in listed.get("stage") or []:
         loc = located(it.get("span"))
-        if loc and parse_stage(loc["matched"]):
+        if loc and parse_stage(loc["matched"], before=text[max(0, loc["start"] - 40):loc["start"]]):
             spans.append((loc["start"], loc["end"]))
     spans += _stage_scan(text)
     merged = []
@@ -600,10 +756,14 @@ async def check_decision(decision_text, cancer, recorded_stage=None, audit=None)
         else:
             merged.append((s, e))
     rec = parse_stage(recorded_stage.get("value"), bare=True) if recorded_stage and recorded_stage.get("value") else None
+    if rec and not rec["group_prefix"]:
+        rec["group_prefix"] = _text_prefix(recorded_stage.get("quote") or "")  # 'Pathological stage: Stage IIA (pT2 N0 M0)'
     for s, e in merged:
-        w = parse_stage(text[s:e])
+        w = parse_stage(text[s:e], before=text[max(0, s - 40):s])
         if not w:
             continue
+        if not w["group_prefix"]:
+            w["group_prefix"] = _context_prefix(text, s, e)  # 'Stage IIIA (clinical)', 'post-NACT stage IA'
         res, parts = compare_stage(w, rec)
         src = {k: recorded_stage.get(k) for k in ("value", "quote", "doc_id", "doc_title")} if recorded_stage else None
         c = {"kind": "stage", "span": text[s:e].strip(), "recorded": w["written"], "result": res, "compared": parts, "references": [],

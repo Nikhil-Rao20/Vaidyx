@@ -17,15 +17,18 @@ cancer) are scanned for
   in the chunk text apart from whitespace. --candidates writes every candidate with its id for reading.
 Step 2, curate (by reading the candidates, recorded below): PAGES limits a file to the pages of the right cancer (NCG thoracic
 also covers SCLC, thymoma, mesothelioma and oesophagus); DROP_QUOTE drops lines that are not a dosing statement (dose
-reductions, cumulative limits, HDR boosts); DROP lists candidate ids dropped by reading (trial comparisons and arm details,
-other cancers, a unit misprint). The same dose (or schedule) is kept once per file, at its first page. The parsers are the
-checker's own (dosecheck.parse_doses / parse_rt), so the table and the check read doses and units the same way.
+reductions, cumulative limits, HDR boosts); DROP lists candidate ids dropped by reading (dose comparisons, some trial arm details,
+other cancers, a unit misprint). Every kept line gets a source_kind: "regimen" (a regimen or schedule line) or "trial_summary" (a
+line describing what a trial gave its patients: trial names, arms, "(n = ...)", "randomly assigned", "patients received"); the code
+reads the trial wording in the quote and the sentence before it (TRIAL_RX) and SOURCE_KIND records the corrections made by reading
+every row. The same dose (or schedule) is kept once per file: its first regimen line, else its first trial summary line. The
+parsers are the checker's own (dosecheck.parse_doses / parse_rt), so the table and the check read doses and units the same way.
 --write writes tumour_board/protocols/dose_references.json, Indian sources first. --unknown prints words written just before a
 dose that are not in the drug lexicon (to extend DRUGS when a new guideline file is added).
 
 The table is a reference for the clinical team to review before real use; coverage is limited to the doses our guideline files
 state. Rebuild after adding a guideline file: rebuild the guideline index, run with --candidates, read the new candidates, update
-PAGES / DROP_QUOTE / DROP, then --write. A DROP id that is no longer produced is printed.
+PAGES / DROP_QUOTE / DROP / SOURCE_KIND, then --write. A DROP or SOURCE_KIND id that is no longer produced is printed.
 """
 import argparse
 import json
@@ -138,6 +141,41 @@ DROP = {
 }
 
 
+# Source kind (step 2): every kept line is either a regimen / schedule line ("regimen") or a line describing what a trial gave its
+# patients ("trial_summary": trial arms, "patients received", "(n = ...)", "randomly assigned"). The code reads the trial wording in the
+# quote and the sentence before it (TRIAL_RX); SOURCE_KIND records the corrections made by reading every row. The checker treats a dose
+# that matches only a trial summary as info, never as a pass.
+TRIAL_RX = re.compile(r"\btrials?\b|\bRCT\b|\bstud(?:y|ies)\b|\brandomi[sz]ed\b|\brandomly\b|\barms?\b|\(\s*n\s*=|\bNCT\d|"
+                      r"\bphase\s+(?:I{1,3}|[123])\b|\bversus\b|\bvs\b|\bcompared\b|\bpatients\s+(?:were\s+)?(?:received|treated)\b|"
+                      r"\bwas given at\b|\bcontrol group\b|\bevaluated\b|\binvestigated\b|\bfollow-up\b|\benrolled\b|\baccrued\b|\bplacebo\b|"
+                      r"\bparticipants\b|\bcohort\b|\bto either\b|\bwere treated with\b|\bin abstract form\b|\breceived\b", re.I)
+SOURCE_KIND = {
+    # regimen / schedule lines that sit next to trial wording
+    "breast:breast-cancer:p30:rt:50Gy/25": "regimen", "breast:breast-cancer:p35:rt:12Gy/2": "regimen",  # ICMR recommendations
+    "breast:tata-memorial-centre-evidenc:p13:rt:40-42.5Gy/15-16": "regimen",  # the standard moderate hypofractionation schedule
+    "lung_nsclc:non-small-cell-lung-treatmen:p14:rt:*": "regimen",  # "Commonly used regimens include 18 Gy x 3 ..."
+    "colorectal_rectum:tata-memorial-centre-evidenc:p5:*": "regimen",  # FOLFOX-4 and modified FOLFOX-6 regimen lines
+    # trial descriptions with no trial word in the quote or the sentence before it
+    "breast:tata-memorial-centre-evidenc:p13:rt:26Gy/5": "trial_summary", "breast:tata-memorial-centre-evidenc:p13:rt:28.5Gy/5": "trial_summary",  # FAST-Forward, FAST
+    "breast:breast-treatment-pdq:p18:rt:*": "trial_summary",  # APBI trial arms
+    "breast:breast-treatment-pdq:p70:tamoxifen:*": "trial_summary",  # NSABP B-24
+    "lung_nsclc:non-small-cell-lung-treatmen:p55:bevacizumab:*": "trial_summary", "lung_nsclc:non-small-cell-lung-treatmen:p55:paclitaxel:*": "trial_summary",  # IMpower150
+    "colorectal_rectum:tata-memorial-centre-evidenc:p26:*": "trial_summary",  # table of immunotherapy trials (KEYNOTE-177, CheckMate-142)
+    "colorectal_rectum:rectal-treatment-pdq:p14:*": "trial_summary", "colorectal_rectum:rectal-treatment-pdq:p15:*": "trial_summary",  # CAO/ARO/AIO-94, Polish, NSABP R-03
+    "colorectal_rectum:rectal-treatment-pdq:p18:*": "trial_summary",  # ACCORD 12/0405
+}
+
+
+def source_kind(c):
+    """("regimen" | "trial_summary", the trial words read) for a candidate: SOURCE_KIND (by reading) first, else TRIAL_RX on the
+    quote and the sentence before it."""
+    words = sorted({m.group(0).lower() for m in TRIAL_RX.finditer(c.get("context") or c["quote"])})
+    for k, v in SOURCE_KIND.items():
+        if c["id"] == k or (k.endswith("*") and c["id"].startswith(k[:-1])):
+            return v, words
+    return ("trial_summary" if words else "regimen"), words
+
+
 def dropped(c):
     if any(re.search(rx, c["quote"], re.I) for rx in DROP_QUOTE):
         return True
@@ -177,6 +215,14 @@ def _line_bounds(text, start, end):
     return a, b
 
 
+def _context(text, a, b):
+    """The quote [a, b) with the sentence before it (at most 400 characters back): where a trial line names its trial."""
+    k = text.rfind(". ", max(0, a - 400), a)
+    k2 = text.rfind(". ", max(0, a - 400), k) if k > 0 else -1
+    start = k2 + 2 if k2 >= 0 else (max(0, a - 400) if k >= 0 else a)
+    return ws(text[start:b])
+
+
 def ws(s):
     """Whitespace collapsed; a leading list bullet (PDF private-use bullet, '•', '-') is left out (the rest stays verbatim)."""
     return re.sub(r"\s+", " ", s).strip().lstrip("\uf0b7\uf0a7\uf0d8•●▪◦- ").strip()
@@ -195,7 +241,7 @@ def scan_drugs(text):
             gap = seg[pos:d["start"]]
             if first and (len(gap) > 30 or re.search(r"[.;]\s", gap)):
                 break
-            if not first and (len(gap) > 70 or not re.search(r"\b(or|followed|then|f by|fb|and)\b|,|\(", gap, re.I)):
+            if not first and (len(gap) > 70 or not re.search(r"\b(or|followed|then|f by|fb|f/b|and)\b|,|\(", gap, re.I)):
                 break
             s_abs, e_abs = m.end() + d["start"], m.end() + d["end"]
             a, b = _line_bounds(text, m.start(), e_abs)
@@ -203,7 +249,8 @@ def scan_drugs(text):
             sched = ws(seg[d["end"]: d["end"] + (nxt.start() if nxt else 60)])[:80].strip(" ,.()")
             reg = re.match(r"[^A-Za-z0-9]*([A-Z][A-Z0-9]{1,6}(?: with \w+)?)\s*[–\-:]", text[a:m.start()])
             out.append({"drug": NAMES[m.group(1).lower()], "as_written": m.group(1), "dose": d["dose"], "dose_max": d["dose_max"],
-                        "unit": d["unit"], "schedule": sched, "quote": ws(text[a:b]), "regimen": reg.group(1) if reg else None})
+                        "unit": d["unit"], "schedule": sched, "quote": ws(text[a:b]), "regimen": reg.group(1) if reg else None,
+                        "context": _context(text, a, b)})
             first, pos = False, d["end"]
     return out
 
@@ -213,7 +260,7 @@ def scan_rt(text):
     for r in dosecheck.parse_rt(text, require_fractions=True):
         a, b = _line_bounds(text, r["start"], r["end"])
         out.append({"total_gy": r["total_gy"], "total_gy_max": r["total_gy_max"], "fractions": r["fractions"], "fractions_max": r["fractions_max"],
-                    "schedule": ws(r["written"]), "quote": ws(text[a:b])})
+                    "schedule": ws(r["written"]), "quote": ws(text[a:b]), "context": _context(text, a, b)})
     return out
 
 
@@ -241,10 +288,12 @@ def candidates(chunks):
                     key = f"{cancer}:{stem}:p{c['page']}:{d['drug'].replace(' ', '-')}:{_fmt(d['dose'])}{('-' + _fmt(d['dose_max'])) if d['dose_max'] else ''}{d['unit']}"
                     seen[key] += 1
                     out.append({"id": key + (f"#{seen[key]}" if seen[key] > 1 else ""), "kind": "drug", **base, **d})
+                    out[-1]["source_kind"], out[-1]["trial_words"] = source_kind(out[-1])
                 for r in scan_rt(c["text"]):
                     key = f"{cancer}:{stem}:p{c['page']}:rt:{_fmt(r['total_gy'])}{('-' + _fmt(r['total_gy_max'])) if r['total_gy_max'] else ''}Gy/{r['fractions']}{('-' + str(r['fractions_max'])) if r['fractions_max'] else ''}"
                     seen[key] += 1
                     out.append({"id": key + (f"#{seen[key]}" if seen[key] > 1 else ""), "kind": "rt", **base, **r})
+                    out[-1]["source_kind"], out[-1]["trial_words"] = source_kind(out[-1])
     return out
 
 
@@ -281,16 +330,19 @@ def entry(c):
         for k in ("total_gy", "total_gy_max", "fractions", "fractions_max", "schedule"):
             if c.get(k) is not None:
                 e[k] = c[k]
+    e["source_kind"] = c.get("source_kind") or "regimen"
     e.update({k: c[k] for k in ("file", "title", "org", "region", "page", "quote")})
     return e
 
 
 def build(chunks):
     keep, seen = [], set()
-    for c in sorted((c for c in candidates(chunks) if not dropped(c)), key=lambda c: (c["cancer"], c["file"], c["page"])):
+    # one entry per dose (or schedule) per file: its first regimen line, else its first trial summary line
+    for c in sorted((c for c in candidates(chunks) if not dropped(c)),
+                    key=lambda c: (c["cancer"], c["file"], c["source_kind"] != "regimen", c["page"])):
         key = (c["cancer"], c["file"], c["kind"]) + ((c["drug"], c["dose"], c.get("dose_max"), c["unit"]) if c["kind"] == "drug"
                                                      else (c["total_gy"], c.get("total_gy_max"), c["fractions"], c.get("fractions_max")))
-        if key not in seen:  # one entry per dose (or schedule) per file: its first page
+        if key not in seen:
             seen.add(key)
             keep.append(c)
     order = {f: i for fs in SOURCES.values() for i, (f, _) in enumerate(fs)}
@@ -299,12 +351,14 @@ def build(chunks):
     aliases["5-fu"] = "fluorouracil"  # standard abbreviation
     return {"_note": ("Guideline dose and radiotherapy references for the guideline checks (V1 item 7.2). Built by "
                       "tumour_board/eval/build_dose_references.py from the guideline index text (every quote is a verbatim line of the file "
-                      "and page cited, apart from whitespace), then curated by reading the candidates: regimen and schedule lines kept; "
-                      "cumulative dose limits, dose reductions, renal adjustments, trial descriptions and other cancers dropped. Indian "
-                      "sources first (NCG, ICMR, TMC), then international (ESMO), UK (NICE) and US (NCI PDQ). Coverage is limited to the "
-                      "doses our guideline files state. For review by the clinical team before real use. Rebuild: "
-                      "python -m tumour_board.eval.build_dose_references --candidates /tmp/c.json, read the candidates, update PAGES / "
-                      "DROP in the script, then --write."),
+                      "and page cited, apart from whitespace), then curated by reading the candidates: cumulative dose limits, dose "
+                      "reductions, renal adjustments, dose comparisons, some trial arm details and other cancers dropped. Regimen and "
+                      "schedule lines are kept with source_kind \"regimen\"; lines describing what a trial gave its patients (trial arms, "
+                      "\"patients received\", \"(n = ...)\", mostly NCI PDQ) are kept with source_kind \"trial_summary\": the check counts "
+                      "a dose that matches only a trial summary as info, not a pass. Indian sources first (NCG, ICMR, TMC), then "
+                      "international (ESMO), UK (NICE) and US (NCI PDQ). Coverage is limited to the doses our guideline files state. For "
+                      "review by the clinical team before real use. Rebuild: python -m tumour_board.eval.build_dose_references "
+                      "--candidates /tmp/c.json, read the candidates, update PAGES / DROP / SOURCE_KIND in the script, then --write."),
             "aliases": dict(sorted(aliases.items())),
             "references": [entry(c) for c in keep]}
 
@@ -328,9 +382,10 @@ def main(argv=None):
         OUT.write_text(json.dumps(t, indent=1, ensure_ascii=False) + "\n")
         print(f"wrote {OUT}: {len(t['references'])} references")
     ids = {c["id"] for c in cands}
-    stale = {d for d in DROP if not (d in ids or (d.endswith("*") and any(i.startswith(d[:-1]) for i in ids)))}
-    if stale:
-        print("DROP ids no longer produced:", sorted(stale))
+    for name, keys in (("DROP", DROP), ("SOURCE_KIND", SOURCE_KIND)):
+        stale = {d for d in keys if not (d in ids or (d.endswith("*") and any(i.startswith(d[:-1]) for i in ids)))}
+        if stale:
+            print(f"{name} ids no longer produced:", sorted(stale))
     return 0
 
 

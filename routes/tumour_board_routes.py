@@ -527,6 +527,8 @@ def setup_tumour_board_routes():
                     record = postboard.undo_resolution(case_id, conf_id, u)
                 except KeyError:
                     raise HTTPException(409, "already undone")
+                except ValueError as e:  # a later correction changed the same words: nothing was undone
+                    raise HTTPException(409, str(e))
             if record and record.get("session"):
                 _session_call(board.decision_amended, record["session"], case_id, record, u)
             return {"confirmation": next((x for x in store.get_state(case_id).get("confirmations", []) if x["id"] == conf_id), rec),
@@ -588,7 +590,8 @@ def setup_tumour_board_routes():
                         a["completed"], a["closed_by"] = store.now_iso(), u
                         a.pop("suggested_close", None)
                     elif b["status"] != "completed":
-                        a.pop("completed", None)
+                        for k in ("completed", "closed_by", "closed_doc_id"):  # reopened
+                            a.pop(k, None)
                     a["status"] = b["status"]
                 if b.get("note"):
                     a["history"].append({"ts": store.now_iso(), "event": f"Note by {u}: {b['note']}"})

@@ -31,8 +31,9 @@ _SPECIALTY_WORDS = {  # free-text participants ("Dr A (Med Onc), Dr B (Surg Onc)
     "medical_oncology": re.compile(r"\bmed(?:ical)?\.?\s*onc(?:o|ology|ologist)?\b", re.I),
     "surgical_oncology": re.compile(r"\bsurg(?:ical)?\.?\s*onc(?:o|ology|ologist)?\b|\bonco[- ]?surg(?:eon|ery)\b", re.I),
     "radiation_oncology": re.compile(r"\brad(?:iation)?\.?\s*onc(?:o|ology|ologist)?\b|\bradiotherap(?:y|ist)\b", re.I)}
-_AGENT_WORDS = re.compile(r"\bagents?\b|\bAI\b|\bartificial intelligence\b")
-_ABSENT_PART = re.compile(r"^\s*(?:absent|apologies|not present|not attended)\b", re.I)
+_AGENT_WORDS = re.compile(r"(?i:\bagents?\b|\bartificial intelligence\b)|\bAI\b")  # "Agent", "agent", "AI support" (AI in capitals only)
+_ABSENT_WORDS = re.compile(r"\b(?:absent|apologies|not present|not attended|did not attend|on leave|unavailable|excused)\b", re.I)
+_HEADING = re.compile(r"\b(absent|apologies|not present|present|in attendance|attended|attending)\s*:", re.I)  # "Present: ... Absent: ..."
 
 CLAIMS_SCHEMA = {"type": "object", "additionalProperties": False, "properties": {"claims": {"type": "array", "items": {
     "type": "object", "additionalProperties": False, "properties": {
@@ -90,7 +91,30 @@ def recorded_stage(facts):
     if not ok:
         return None
     e = ok[-1]
-    return {"value": e["value"], "quote": "" if e.get("confirmed_by") else (e.get("quote") or ""), "doc_id": e["doc_id"], "doc_title": e.get("doc_title") or e["doc_id"]}
+    return {"value": e["value"], "quote": "" if e.get("confirmed_by") else (e.get("quote") or ""), "doc_id": e["doc_id"], "doc_title": e.get("doc_title") or e["doc_id"],
+            **({"confirmed_by": e["confirmed_by"]} if e.get("confirmed_by") else {})}
+
+
+def _text_present(text):
+    """(department ids present, any specialty named) from a participants text. Parts are cut at commas, semicolons, line ends and
+    headings ("Present:", "Absent:"); a part is absent when it says so anywhere ("absent: Dr C (Rad Onc)", "Rad Onc not present",
+    "Dr C (Rad Onc) on leave") or sits under an absent heading; a part naming an agent never counts; a specialty that is both present
+    and absent somewhere in the text is not counted as present (a person checks it)."""
+    heads = [(m.start(), m.group(1).lower()) for m in _HEADING.finditer(text)]
+    cuts = sorted({0, len(text)} | {p for p, _ in heads} | {m.end() for m in re.finditer(r"[,;\n]", text)})
+    present, absent, named = set(), set(), False
+    for a, b in zip(cuts, cuts[1:]):
+        piece = text[a:b]
+        depts = _piece_departments(piece)
+        if not depts:
+            continue
+        named = True
+        head = next((h for p, h in reversed(heads) if p <= a), "present")
+        if _ABSENT_WORDS.search(piece) or head in ("absent", "apologies", "not present"):
+            absent |= depts
+        elif not _AGENT_WORDS.search(piece):  # "Radiation Oncology (AI support agent)": an agent is never a member
+            present |= depts
+    return present - absent, named
 
 
 def composition(record):
@@ -107,15 +131,7 @@ def composition(record):
             if isinstance(m, dict) and not _AGENT_WORDS.search(str(m.get("name", ""))):
                 present.add(org.department_id(str(m.get("department") or "")) or org.department_id(str(m.get("department_name") or "")))
     else:
-        named_any = False
-        for part in re.split(r"[;\n]", str(record.get("participants") or "")):
-            if _ABSENT_PART.search(part):
-                continue  # "absent: Radiation Oncology" (the session's participants text)
-            for piece in part.split(","):
-                depts = _piece_departments(piece)
-                named_any = named_any or bool(depts)
-                if not _AGENT_WORDS.search(piece):  # "Radiation Oncology (AI support agent)": an agent is never a member
-                    present |= depts
+        present, named_any = _text_present(str(record.get("participants") or ""))
         how = "participants text" if named_any else None
     present.discard(None)
     found = [d for d in PMJAY_BOARD if d in present]
@@ -275,10 +291,14 @@ def _flags(record):
 
 
 def resolution_status(record) -> dict:
-    """{"final", "open", "resolved", "total", "open_flags"}: the decision counts as final when every flag needing a person is resolved."""
-    need = [f for f in _flags(record) if needs_resolution(f)]
+    """{"final", "open", "resolved", "total", "open_flags", "checks_complete"}: the decision counts as final when every flag needing a
+    person is resolved and every check ran (a check that could not run leaves the record not final: review finding M8)."""
+    flags = _flags(record)
+    need = [f for f in flags if needs_resolution(f)]
     open_ids = [f["id"] for f in need if not f.get("resolution")]
-    return {"final": not open_ids, "open": len(open_ids), "resolved": len(need) - len(open_ids), "total": len(need), "open_flags": open_ids}
+    complete = not any(f.get("kind") == "system" for f in flags)
+    return {"final": not open_ids and complete, "open": len(open_ids), "resolved": len(need) - len(open_ids), "total": len(need),
+            "open_flags": open_ids, "checks_complete": complete}
 
 
 def _versions(record):
@@ -299,12 +319,21 @@ def _new_version(record, by, reason, change):
     return v
 
 
-def _amend(record, flag, value, by):
-    """Apply a correction; returns the change {"field", "from", "to"} kept with the new version (and used to undo it).
-    A value written in the decision text (the flag's span) is replaced inside that span; a missing record field is filled in; a board
-    composition correction is added to the participants; anything else is added to the decision as an amendment line."""
+def _token_at(text, token, lo=0, hi=None):
+    """Positions of `token` in text[lo:hi] as a whole value: never inside a longer number or word ("40 mg/m2" is not in "140 mg/m2")."""
+    hi = len(text) if hi is None else hi
+    rx = re.compile(r"(?<![\w.])" + re.escape(token) + r"(?!\w)")
+    return [m.start() for m in rx.finditer(text, lo, hi)]
+
+
+def _amend(record, flag, value):
+    """Apply a correction; returns the change kept with the new version (and used to undo it).
+    Decision text: the recorded value is replaced where it stands, inside the flag's span when the decision holds the span once and the
+    value once in it, else where the value stands once in the whole decision ({"field", "at", "from", "to"}); the rest of the decision is
+    never rewritten. A missing record field is filled in; a composition correction is added to the participants; anything else becomes an
+    amendment line at the end of the decision."""
     text = record.get("decision_text", "")
-    span, recorded = flag.get("span") or "", flag.get("recorded") or ""
+    span, recorded = flag.get("span") or "", (flag.get("recorded") or "").strip()
     if flag.get("field") and flag["field"] not in ("decision_text", "actions"):  # actions are a list: their correction is an amendment line
         old = record.get(flag["field"])
         new = value if not old else f"{old}; {value}"
@@ -315,31 +344,35 @@ def _amend(record, flag, value, by):
         new = f"{old}; {value}" if old else value
         record["participants"] = new
         return {"field": "participants", "from": old, "to": new}
-    if span and text.count(span) == 1:
-        new_span = span.replace(recorded, value, 1) if recorded and recorded in span else value
-        record["decision_text"] = text.replace(span, new_span, 1)
-        return {"field": "decision_text", "from": span, "to": new_span}
-    if recorded and text.count(recorded) == 1:
-        record["decision_text"] = text.replace(recorded, value, 1)
-        return {"field": "decision_text", "from": recorded, "to": value}
+    at = None
+    if recorded:
+        spans = _token_at(text, span) if span else []
+        inside = _token_at(text, recorded, spans[0], spans[0] + len(span)) if len(spans) == 1 else []
+        anywhere = _token_at(text, recorded)
+        at = inside[0] if len(inside) == 1 else anywhere[0] if len(anywhere) == 1 else None
+    if at is not None:
+        record["decision_text"] = text[:at] + value + text[at + len(recorded):]
+        return {"field": "decision_text", "at": at, "from": recorded, "to": value}
     line = f"Amendment ({flag['id']}): {value}"
     record["decision_text"] = text.rstrip() + "\n" + line
-    return {"field": "decision_text", "from": "", "to": "\n" + line}
+    return {"field": "decision_text", "at": len(text.rstrip()), "from": text[len(text.rstrip()):], "to": "\n" + line}
 
 
-def _revert(record, change) -> bool:
-    """Take one correction back without touching later ones; False when the corrected text is no longer there as written."""
+def _revert_plan(record, change):
+    """How to take one correction back without touching later ones: (field, new value) or None when the corrected text is no longer
+    there as written (a later correction changed it: that one is undone first)."""
     field, old, new = change.get("field"), change.get("from", ""), change.get("to", "")
-    if field == "decision_text":
-        text = record.get("decision_text", "")
-        if not new or text.count(new) != 1:
-            return False
-        record["decision_text"] = text.replace(new, old, 1)
-        return True
-    if record.get(field) != new:
-        return False
-    record[field] = old
-    return True
+    cur = record.get(field) if field != "decision_text" else record.get("decision_text", "")
+    if field != "decision_text":
+        return (field, old) if cur == new else None
+    at = change.get("at")
+    if isinstance(at, int) and cur[at:at + len(new)] == new and (not new.strip() or at in _token_at(cur, new) or new.startswith("\n")):
+        return field, cur[:at] + old + cur[at + len(new):]
+    hits = [k for k in _token_at(cur, new.strip()) if new.strip()] if new.strip() else []
+    if len(hits) == 1:  # moved by an earlier change of different length
+        k = hits[0] - (len(new) - len(new.lstrip()))
+        return field, cur[:k] + old + cur[k + len(new):]
+    return None
 
 
 def _find_record(st, record_id):
@@ -349,15 +382,21 @@ def _find_record(st, record_id):
     return rec
 
 
+def _check_undoable(record, flag):
+    """ValueError when the flag's correction can no longer be taken back as written (a later correction changed the same words)."""
+    res = flag.get("resolution") or {}
+    if res.get("resolution") == "corrected" and res.get("change") and _revert_plan(record, res["change"]) is None:
+        raise ValueError(f"The correction of {flag['id']} was changed again by a later correction; undo that one first")
+
+
 def _undo_correction(record, flag, by, why):
-    """If the flag's current resolution amended the decision, take that amendment back (a new version)."""
+    """If the flag's current resolution amended the decision, take that amendment back (a new version). Call _check_undoable first."""
     res = flag.get("resolution") or {}
     if res.get("resolution") != "corrected" or not res.get("change"):
         return None
-    ok = _revert(record, res["change"])
-    if not ok:  # the text changed since: say so in the decision rather than guess
-        record["decision_text"] = record.get("decision_text", "").rstrip() + f"\nAmendment withdrawn ({flag['id']}): {res['change'].get('to', '').strip()}"
-    return _new_version(record, by, f"{why}: correction of {flag['id']} taken back", {"flag": flag["id"], "undo_of": res.get("version"), "reverted": ok})
+    field, value = _revert_plan(record, res["change"])
+    record[field] = value
+    return _new_version(record, by, f"{why}: correction of {flag['id']} taken back", {"flag": flag["id"], "undo_of": res.get("version")})
 
 
 def resolve_flag(case_id, record_id, flag_id, resolution, value="", reason="", by=""):
@@ -374,6 +413,9 @@ def resolve_flag(case_id, record_id, flag_id, resolution, value="", reason="", b
         raise ValueError("This item is information only; it needs no resolution")
     from . import confirm
     clean = confirm.validate("resolve_flag", f"{record_id}:{flag_id}", {"resolution": resolution, "value": value}, reason)
+    if clean["fields"]["resolution"] == "corrected" and flag.get("recorded") and clean["fields"]["value"] == flag["recorded"].strip():
+        raise ValueError("The corrected value is the same as the recorded one: choose False alarm or Intentional deviation instead")
+    _check_undoable(rec, flag)  # before anything is recorded
     conf = confirm.record(case_id, "resolve_flag", clean["key"], clean["fields"], clean["reason"], by)  # saves the confirmation
     st = store.get_state(case_id)
     rec = _find_record(st, record_id)
@@ -384,8 +426,8 @@ def resolve_flag(case_id, record_id, flag_id, resolution, value="", reason="", b
         flag.setdefault("resolution_history", []).append({**flag["resolution"], "superseded_by": conf["id"]})
     res = {"resolution": clean["fields"]["resolution"], "value": clean["fields"]["value"], "reason": clean["reason"], "by": by, "at": conf["at"], "confirmation": conf["id"]}
     if res["resolution"] == "corrected":
-        change = _amend(rec, flag, res["value"], by)
-        v = _new_version(rec, by, f"{flag['id']} corrected: \"{flag.get('recorded') or change['from'].strip() or flag['text'][:60]}\" to \"{res['value']}\"", {"flag": flag_id, **change})
+        change = _amend(rec, flag, res["value"])
+        v = _new_version(rec, by, f"{flag['id']} corrected: \"{flag.get('recorded') or flag['text'][:60]}\" to \"{res['value']}\"", {"flag": flag_id, **change})
         res.update({"change": change, "version": v["version"]})
     flag["resolution"] = res
     rec["resolution"] = resolution_status(rec)
@@ -397,18 +439,23 @@ def resolve_flag(case_id, record_id, flag_id, resolution, value="", reason="", b
 
 def undo_resolution(case_id, conf_id, by=""):
     """Undo one flag resolution (the resolve_flag confirmation is marked undone, kept); a correction is taken back as a new version.
-    Returns the record, or None when the confirmation belongs to no flag any more. Caller holds the Case File lock."""
+    Returns the record, or None when the confirmation belongs to no flag any more. ValueError (nothing changed) when a later correction
+    changed the same words. Caller holds the Case File lock."""
     from . import confirm
-    rec_c = confirm.undo(case_id, conf_id, by)
-    record_id, _, flag_id = rec_c["key"].partition(":")
+    rec_c = next((c for c in store.get_state(case_id).get("confirmations") or [] if c["id"] == conf_id), None)
+    record_id, _, flag_id = (rec_c or {}).get("key", "").partition(":")
     st = store.get_state(case_id)
-    try:
-        rec = _find_record(st, record_id)
-    except KeyError:
+    rec = next((b for b in st.get("board_records") or [] if b.get("id") == record_id), None)
+    flag = next((f for f in _flags(rec) if f["id"] == flag_id), None) if rec else None
+    mine = bool(flag and (flag.get("resolution") or {}).get("confirmation") == conf_id)
+    if mine:
+        _check_undoable(rec, flag)  # before the confirmation is marked undone
+    confirm.undo(case_id, conf_id, by)
+    if not mine:
         return None
-    flag = next((f for f in _flags(rec) if f["id"] == flag_id), None)
-    if not flag or (flag.get("resolution") or {}).get("confirmation") != conf_id:
-        return None
+    st = store.get_state(case_id)
+    rec = _find_record(st, record_id)
+    flag = next(f for f in _flags(rec) if f["id"] == flag_id)
     _versions(rec)
     _undo_correction(rec, flag, by, "Resolution undone")
     flag.setdefault("resolution_history", []).append({**flag.pop("resolution"), "undone_by": by, "undone_at": store.now_iso()})

@@ -236,7 +236,7 @@ def test_corrected_flag_amends_the_decision_as_version_2_with_history(unit_case,
     out = postboard.resolve_flag(unit_case, rec["id"], t["id"], "corrected", "TPS 60%", "", "Dr. Rao")
     assert out["decision_text"] == "PD-L1 TPS 60% noted. Plan as discussed." and out["version"] == 2
     assert [v["version"] for v in out["versions"]] == [1, 2] and out["versions"][0]["decision_text"] == "PD-L1 TPS 6% noted. Plan as discussed."
-    assert out["versions"][1]["by"] == "Dr. Rao" and out["versions"][1]["change"] == {"flag": t["id"], "field": "decision_text", "from": "PD-L1 TPS 6%", "to": "PD-L1 TPS 60%"}
+    assert out["versions"][1]["by"] == "Dr. Rao" and out["versions"][1]["change"] == {"flag": t["id"], "field": "decision_text", "at": 6, "from": "TPS 6%", "to": "TPS 60%"}
     f = next(x for x in out["adjudication"]["flags"] if x["id"] == t["id"])
     assert f["resolution"]["resolution"] == "corrected" and f["resolution"]["version"] == 2
     assert _rec(unit_case, rec["id"])["decision_text"] == out["decision_text"]  # saved
@@ -319,4 +319,99 @@ def test_records_from_before_7_3_get_flag_ids_in_order(unit_case, monkeypatch):
     old = {"id": "Bold000", "decision_text": "x", "adjudication": {"flags": [{"kind": "documentation", "severity": "review", "text": "a"},
                                                                           {"kind": "system", "severity": "info", "text": "b"}]}}
     s = postboard.resolution_status(old)
-    assert [f["id"] for f in old["adjudication"]["flags"]] == ["F1", "F2"] and s == {"final": False, "open": 1, "resolved": 0, "total": 1, "open_flags": ["F1"]}
+    assert [f["id"] for f in old["adjudication"]["flags"]] == ["F1", "F2"] and s == {"final": False, "open": 1, "resolved": 0, "total": 1, "open_flags": ["F1"], "checks_complete": False}
+
+
+# ---- review fixes (Phase 7): composition read from free text, amendments by position, safe undo, checks that did not run --------
+@pytest.mark.parametrize("text", [
+    "Dr A (Med Onc), Dr B (Surg Onc), absent: Dr C (Rad Onc)",
+    "Present: Dr A (Med Onc), Dr B (Surg Onc). Absent: Dr C (Rad Onc)",
+    "Dr A (Med Onc), Dr B (Surg Onc), Dr C (Rad Onc) - on leave",
+    "Dr A (Med Onc), Dr B (Surg Onc), Rad Onc not present",
+    "Dr A (Med Onc), Dr B (Surg Onc), Rad Onc (Agent)",
+    "Dr A (Med Onc), Dr B (Surg Onc), Radiation Oncology Agent",
+    "Absent: Dr C (Rad Onc); present: Dr A (Med Onc), Dr B (Surg Onc), Dr E (Radiotherapy)",  # both: a person checks it
+])
+def test_an_absent_or_agent_radiation_oncologist_is_never_read_as_present(text):
+    assert postboard.composition({"participants": text})["missing"] == ["radiation_oncology"]
+
+
+def test_a_member_named_as_an_agent_never_counts():
+    att = {"present": ["Medical Oncology", "Surgical Oncology"], "members": [{"name": "Radiation Oncology Agent", "department": "radiation_oncology"}]}
+    assert postboard.composition({"attendance": att})["missing"] == ["radiation_oncology"]
+
+
+def test_present_heading_with_all_three_passes():
+    assert postboard.composition({"participants": "Present: Dr A (Med Onc), Dr B (Surg Onc), Dr C (Rad Onc)"})["missing"] == []
+
+
+def _flag(fid, recorded, span=""):
+    return {"id": fid, "kind": "guideline", "severity": "expert_review", "recorded": recorded, "span": span, "text": "x"}
+
+
+def test_correction_replaces_only_the_whole_value_never_inside_a_longer_number():
+    rec = {"decision_text": "Paclitaxel 140 mg/m2 then Docetaxel 40 mg/m2."}
+    ch = postboard._amend(rec, _flag("F1", "40 mg/m2", "Docetaxel 40 mg/m2"), "75 mg/m2")
+    assert rec["decision_text"] == "Paclitaxel 140 mg/m2 then Docetaxel 75 mg/m2." and ch["from"] == "40 mg/m2"
+
+
+def test_correction_never_replaces_a_whole_span_when_the_value_is_not_in_it():
+    rec = {"decision_text": "PD-L1 TPS 6% noted. Plan as discussed."}
+    postboard._amend(rec, _flag("F1", "6 %", "PD-L1 TPS 6% noted"), "60%")
+    assert rec["decision_text"] == "PD-L1 TPS 6% noted. Plan as discussed.\nAmendment (F1): 60%"
+
+
+def test_overlapping_corrections_undo_in_any_order_or_refuse(unit_case, monkeypatch):
+    from tumour_board import store
+    text = "Inj. Trastuzumab 8 mg/kg loading followed by 60 mg/kg q 3 weekly."
+    st = store.get_state(unit_case)
+    st["board_records"] = [{"id": "Btz0001", "decision_text": text, "recorded_at": "2026-10-11T10:00:00", "entered_by": "c", "adjudication": {"flags": [
+        _flag("F1", "8 mg/kg", "Trastuzumab 8 mg/kg"), _flag("F2", "60 mg/kg", "Trastuzumab 8 mg/kg loading followed by 60 mg/kg")]}}]
+    store.save_state(unit_case, st)
+    r = postboard.resolve_flag(unit_case, "Btz0001", "F2", "corrected", "6 mg/kg", "", "Dr. Rao")
+    r = postboard.resolve_flag(unit_case, "Btz0001", "F1", "corrected", "8.0 mg/kg", "", "Dr. Rao")
+    assert r["decision_text"] == "Inj. Trastuzumab 8.0 mg/kg loading followed by 6 mg/kg q 3 weekly."
+    c2 = next(f for f in r["adjudication"]["flags"] if f["id"] == "F2")["resolution"]["confirmation"]
+    back = postboard.undo_resolution(unit_case, c2, "Dr. Rao")  # the earlier correction, after a later one moved its position
+    assert back["decision_text"] == "Inj. Trastuzumab 8.0 mg/kg loading followed by 60 mg/kg q 3 weekly." and "Amendment" not in back["decision_text"]
+
+
+def test_undo_is_refused_when_a_later_correction_changed_the_same_words(unit_case, monkeypatch):
+    from tumour_board import confirm, store
+    st = store.get_state(unit_case)
+    st["board_records"] = [{"id": "Bsame01", "decision_text": "Doxorubicin 6 mg/m2 IV.", "recorded_at": "2026-10-11T10:00:00", "entered_by": "c",
+                            "adjudication": {"flags": [_flag("F1", "6 mg/m2", "Doxorubicin 6 mg/m2"), {**_flag("F2", "60 mg/m2"), "kind": "transcription"}]}}]
+    store.save_state(unit_case, st)
+    r = postboard.resolve_flag(unit_case, "Bsame01", "F1", "corrected", "60 mg/m2", "", "Dr. Rao")
+    r = postboard.resolve_flag(unit_case, "Bsame01", "F2", "corrected", "50 mg/m2", "", "Dr. Rao")
+    c1 = next(f for f in r["adjudication"]["flags"] if f["id"] == "F1")["resolution"]["confirmation"]
+    with pytest.raises(ValueError, match="undo that one first"):
+        postboard.undo_resolution(unit_case, c1, "Dr. Rao")
+    assert confirm.latest(unit_case, "resolve_flag", "Bsame01:F1")["id"] == c1  # nothing was marked undone
+    assert next(b for b in store.get_state(unit_case)["board_records"])["decision_text"] == "Doxorubicin 50 mg/m2 IV."
+
+
+def test_a_correction_with_the_recorded_value_unchanged_is_refused(unit_case, monkeypatch):
+    rec, flags = _record_with_slip(unit_case, monkeypatch)
+    with pytest.raises(ValueError, match="same as the recorded one"):
+        postboard.resolve_flag(unit_case, rec["id"], flags["transcription"]["id"], "corrected", "TPS 6%", "", "Dr. Rao")
+
+
+def test_a_record_whose_check_did_not_run_is_never_final():
+    rec = {"adjudication": {"flags": [{"kind": "system", "severity": "info", "text": "Guideline checks unavailable: timeout"}]}}
+    s = postboard.resolution_status(rec)
+    assert s["final"] is False and s["checks_complete"] is False and s["open"] == 0
+
+
+def test_a_failing_closing_suggestion_never_breaks_the_recheck(unit_case, monkeypatch):
+    from tumour_board import followup, service, store
+    st = store.get_state(unit_case)
+    st["actions"] = [{"id": "A1", "source": "board", "status": "pending", "what": "MRI pelvis", "created": "2026-10-01T10:00:00", "due": "2026-12-01", "history": []}]
+    store.save_state(unit_case, st)
+
+    def boom(*a, **k):
+        raise RuntimeError("disk")
+    monkeypatch.setattr(followup, "suggest_closures", boom)
+    assert service.suggest_followups(unit_case, "tester") == []
+    service.recheck(unit_case, "tester")  # does not raise
+    assert any(e["kind"] == "error" and e["where"] == "board_action_suggestions" for e in store.read_audit(unit_case))

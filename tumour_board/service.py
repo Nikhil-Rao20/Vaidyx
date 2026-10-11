@@ -409,7 +409,12 @@ def suggest_followups(case_id, user=""):
     st = store.get_state(case_id)
     if not any(isinstance(a, dict) and a.get("source") == "board" for a in st.get("actions") or []):
         return []
-    changes = followup.suggest_closures(case_id, st, rules.case_docs(case_id, st), by=user)
+    try:  # a suggestion problem never fails an ingestion job or a re-check (the gate result is already saved)
+        changes = followup.suggest_closures(case_id, st, rules.case_docs(case_id, st), by=user)
+    except Exception as e:
+        log.warning("closing suggestions failed for %s (%s: %s)", case_id, e.__class__.__name__, e)
+        store.audit(case_id, {"kind": "error", "where": "board_action_suggestions", "error": f"{e.__class__.__name__}: {str(e)[:200]}"})
+        return []
     if changes:
         store.save_state(case_id, st)
         for ch in changes:

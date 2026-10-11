@@ -336,6 +336,8 @@ async function waiveReq(reqId) {
 const suggestionHTML = (a, inbox) => !a.suggested_close || a.status === "completed" ? "" : `<div class="stagebox small" style="margin-top:6px"><span class="chip c-ok">May be complete</span> ${esc(a.suggested_close.reason)}.
   ${!inbox && can("update_action", a.id) ? ` <button class="ghost sm" data-sugclose="${esc(a.id)}" data-doc="${esc(a.suggested_close.doc_id)}">Close with this document</button> <button class="ghost sm" data-sugdismiss="${esc(a.id)}">Not this document</button>` : inbox ? ` <span class="muted">Open the Case File to close it.</span>` : ""}</div>`;
 function actionHTML(a) {
+  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);  // local date
+  if (a.status === "pending" && a.due && a.due < today) a = { ...a, status: "overdue" };  // worked out on display, like the inbox
   return `<div class="action ${a.status}"><div class="h"><span>${a.source === "board" ? `<span class="chip c-info" title="From the Tumour Board record ${esc(a.board_record || "")}">Tumour Board action</span> ` : ""}${esc(a.label)}${a.level ? ` <span class="chip c-lvl" title="${esc((LEVEL[a.level] || [])[1] || "")}">${esc(a.level_label || (LEVEL[a.level] || [])[0] || "")}</span>` : ""}</span><span class="chip ${a.status === "completed" ? "c-ok" : a.status === "overdue" ? "c-bad" : "c-warn"}">${a.status === "completed" ? "Completed" : a.status === "overdue" ? "Overdue" : "Pending"}</span></div>
     <div class="w">${esc(a.what)}</div>${suggestionHTML(a)}
     <div class="f"><span>Responsible Department: <b>${esc(a.department)}</b> · due ${fmtDate(a.due)}</span>
@@ -701,8 +703,8 @@ const FLAGKIND = { transcription: "Possible transcription discrepancy", consiste
   guideline: "Guideline check", system: "Check not run" };
 // guideline checks (V1 item 7.2): doses and RT schedules vs the cancer's dose references (Indian first), stage as written vs the signed report
 const GCHECK = { dose: "Guideline check: dose", rt: "Guideline check: radiotherapy schedule", stage: "Stage as recorded" };
-const gRefHTML = (f) => f.check === "stage" && f.source ? `<div class="small" style="margin-top:4px">Signed report: ${f.source.doc_id ? citeHTML({ doc_id: f.source.doc_id, doc_title: f.source.doc_title, quote: f.source.quote || f.source.value }) : esc(f.source.doc_title || "")} "${esc(f.source.quote || f.source.value)}"</div>`
-  : f.reference ? refHTML(f.reference) : "";
+const gRefHTML = (f) => f.check === "stage" && f.source ? `<div class="small" style="margin-top:4px">Signed report: ${f.source.doc_id ? citeHTML({ doc_id: f.source.doc_id, doc_title: f.source.doc_title, quote: f.source.quote || f.source.value }) : esc(f.source.doc_title || "")} ${f.source.quote ? `"${esc(f.source.quote)}"` : `value confirmed by ${esc(f.source.confirmed_by || "a clinician")}: ${esc(f.source.value)}`}</div>`
+  : (f.references || (f.reference ? [f.reference] : [])).map((r) => refHTML(r) + (r.source_kind === "trial_summary" ? `<div class="small muted" style="margin-left:14px">A dose described in a trial summary, not a regimen line.</div>` : "")).join("");
 function guidelineOkHTML(b) {
   const g = b.adjudication.guideline_checks;
   if (!g || !g.checks) return "";
@@ -718,23 +720,25 @@ const RESOLUTION = { corrected: ["c-ok", "Corrected"], intentional_deviation: ["
 const needsRes = (f) => f.severity === "review" || f.severity === "expert_review";
 function recordStatusChip(b) {
   const r = b.resolution;
+  if (r && r.checks_complete === false) return `<span class="chip c-rev" title="A check could not run (see below); record the decision again to re-run it">A check did not run: review</span>`;
   if (b.adjudication.status === "consistent" && (!r || r.final)) return `<span class="chip c-ok">Consistent</span>`;
   if (r && r.total && r.final) return `<span class="chip c-ok" title="Every flag was resolved by a person">Final: ${r.total} flag(s) resolved</span>`;
   return `<span class="chip c-rev">${r && r.total ? `${r.open} of ${r.total} flag(s) awaiting resolution` : "Flag for expert review"}</span>`;
 }
-function resolutionHTML(b, f) {
+function resolutionHTML(b, f, i) {
   if (!needsRes(f)) return "";
+  const fid = f.id || `F${i + 1}`;  // records from before 7.3 carry no ids: the server numbers them in the same order
   const r = f.resolution;
   if (r) { const k = RESOLUTION[r.resolution] || ["c-mute", r.resolution];
     return `<div class="small" style="margin-top:6px"><span class="chip ${k[0]}">${k[1]}</span> by ${esc(r.by)} · ${esc((r.at || "").replace("T", " ").slice(0, 16))}${r.value ? ` · corrected value "${esc(r.value)}"` : ""}${r.version ? ` · decision version ${r.version}` : ""}${r.reason ? `<div class="muted">${esc(r.reason)}</div>` : ""}
       ${can("board_record") ? ` <button class="ghost sm" data-undores="${esc(r.confirmation)}">Undo</button>` : ""}</div>`; }
   if (!can("board_record")) return `<div class="small muted" style="margin-top:6px">Awaiting resolution by the Tumour Board coordinator.</div>`;
-  return `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${Object.entries(RESOLUTION).map(([k, [, l]]) => `<button class="ghost sm" data-resolve="${esc(b.id)}|${esc(f.id)}|${k}">${l}</button>`).join("")}</div>`;
+  return `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${Object.entries(RESOLUTION).map(([k, [, l]]) => `<button class="ghost sm" data-resolve="${esc(b.id)}|${esc(fid)}|${k}">${l}</button>`).join("")}</div>`;
 }
 const versionsHTML = (b) => (b.versions || []).length < 2 ? "" : `<details class="small" style="margin-top:6px"><summary>Version history (${b.versions.length} versions; the current one is shown above)</summary>
   ${b.versions.slice().reverse().map((v) => `<div style="margin-top:6px"><b>Version ${v.version}</b> · ${esc((v.at || "").replace("T", " ").slice(0, 16))} · ${esc(v.by || "")} · ${esc(v.reason || "")}<div style="white-space:pre-wrap" class="muted">${esc(v.decision_text)}</div></div>`).join("")}</details>`;
 async function resolveFlag(rid, fid, kind) {
-  const f = ((S.data.state.board_records || []).find((x) => x.id === rid)?.adjudication.flags || []).find((x) => x.id === fid) || {};
+  const f = ((S.data.state.board_records || []).find((x) => x.id === rid)?.adjudication.flags || []).find((x, i) => (x.id || `F${i + 1}`) === fid) || {};
   const fields = kind === "corrected" ? [{ id: "value", label: f.recorded ? `Corrected value (replaces "${f.recorded}" in the decision)` : "Corrected value (added to the record as an amendment)", value: f.recorded || "", required: true },
       { id: "reason", label: "Note", type: "textarea" }]
     : kind === "intentional_deviation" ? [{ id: "reason", label: "Reason for the intentional deviation", type: "textarea", required: true, placeholder: "Deviating from a guideline is not an error; record why" }]
@@ -763,14 +767,14 @@ function renderBoard() {
       <label>Actions (Responsible Department · task · due)</label><div id="b-acts"></div><button class="ghost sm" id="b-add">+ Action</button>
       <label>Next Tumour Board review</label><input type="date" id="b-next">
       <div style="margin-top:12px"><button class="primary" id="b-save">Save record and run adjudication</button></div></div>`}
-    ${records.map((b) => `<div class="card"><h3>Tumour Board record · ${fmtDate(b.board_date)} ${recordStatusChip(b)}${(b.version || 1) > 1 ? ` <span class="chip c-info">Amended: version ${b.version}</span>` : ""}${b.session ? ` <span class="chip c-info click" data-open-session="${esc(b.session)}" title="Recorded in the Board room; open the session">Board session</span>` : ""}</h3>
+    ${records.map((b) => `<div class="card"><h3>Tumour Board record · ${fmtDate(b.board_date || (b.recorded_at || "").slice(0, 10))} ${recordStatusChip(b)}${(b.version || 1) > 1 ? ` <span class="chip c-info">Amended: version ${b.version}</span>` : ""}${b.session ? ` <span class="chip c-info click" data-open-session="${esc(b.session)}" title="Recorded in the Board room; open the session">Board session</span>` : ""}</h3>
       <div class="small muted">Recorded by ${esc(b.recorded_by)} · entered ${esc(b.recorded_at.replace("T", " ").slice(0, 16))} by ${esc(b.entered_by)}</div>
       <p style="white-space:pre-wrap">${esc(b.decision_text)}</p>
       <div class="kv small">${b.participants ? `<div>Participants</div><div>${esc(b.participants)}</div>` : ""}${b.report_corrections_raised ? `<div>Report corrections raised</div><div>${esc(b.report_corrections_raised)}</div>` : ""}${b.divergent_opinions ? `<div>Divergent opinions</div><div>${esc(b.divergent_opinions)}</div>` : ""}</div>
       ${compHTML(b.adjudication.composition)}
       ${versionsHTML(b)}
-      ${b.adjudication.flags.map((f) => `<div class="flag ${f.severity === "expert_review" ? "" : f.severity === "info" ? "info" : "review"}${f.resolution ? " resolved" : ""}"><div class="k">${f.kind === "guideline" ? GCHECK[f.check] || FLAGKIND.guideline : FLAGKIND[f.kind] || "Documentation"}${f.severity === "info" ? ` <span class="chip c-mute">Info only, not a pass</span>` : ""}</div>
-        <div>${esc(f.text)}</div>${f.reference && f.kind === "composition" ? refHTML(f.reference) : ""}${f.kind === "guideline" ? gRefHTML(f) : ""}${f.source_quote ? `<div class="small" style="margin-top:4px">Source: ${citeHTML({ doc_id: f.source_doc, doc_title: f.source_title, quote: f.source_quote })} "${esc(f.source_quote)}"</div><div class="small muted">Expert review required. The agent flags the difference; it does not decide which value is correct.</div>` : ""}${resolutionHTML(b, f)}</div>`).join("")}
+      ${b.adjudication.flags.map((f, i) => `<div class="flag ${f.severity === "expert_review" ? "" : f.severity === "info" ? "info" : "review"}${f.resolution ? " resolved" : ""}"><div class="k">${f.kind === "guideline" ? GCHECK[f.check] || FLAGKIND.guideline : FLAGKIND[f.kind] || "Documentation"}${f.severity === "info" ? ` <span class="chip c-mute">Info only, not a pass</span>` : ""}</div>
+        <div>${esc(f.text)}</div>${f.reference && f.kind === "composition" ? refHTML(f.reference) : ""}${f.kind === "guideline" ? gRefHTML(f) : ""}${f.source_quote ? `<div class="small" style="margin-top:4px">Source: ${citeHTML({ doc_id: f.source_doc, doc_title: f.source_title, quote: f.source_quote })} "${esc(f.source_quote)}"</div><div class="small muted">Expert review required. The agent flags the difference; it does not decide which value is correct.</div>` : ""}${resolutionHTML(b, f, i)}</div>`).join("")}
       ${b.adjudication.value_checks.filter((v) => v.result === "consistent").map((v) => `<div class="small"><span class="chip c-ok">✓</span> ${esc(v.value_as_written)} matches the source</div>`).join("")}${guidelineOkHTML(b)}</div>`).join("")}
   </div><div>
     <div class="card"><h3>Follow-up tracker <span class="muted small">${allActs.filter((a) => a.status !== "completed").length} open</span></h3>
@@ -1230,7 +1234,7 @@ function decisionHTML() {
   const r = S.room, s = r.session, d = (s.decisions || {})[S.roomCase], c = roomCase();
   if (d) { const rec = (c.board_records || []).find((x) => x.id === d.board_record) || {};
     return `<p style="white-space:pre-wrap;margin-top:0">${esc(d.decision_text || "")}</p><div class="small muted">Recorded by ${esc(d.recorded_by || "")} · ${esc((d.recorded_at || "").replace("T", " ").slice(0, 16))} ·
-      <span class="chip ${rec.status === "consistent" || rec.resolution?.final ? "c-ok" : "c-rev"}">${rec.status === "consistent" ? "Adjudication: consistent" : rec.resolution?.total && rec.resolution.final ? `Final: ${rec.resolution.total} flag(s) resolved` : `Adjudication: ${rec.resolution?.open ?? rec.flags ?? 0} flag(s) awaiting resolution`}</span>${(rec.version || 1) > 1 ? ` <span class="chip c-info">Amended: version ${rec.version}</span>` : ""} <button class="ghost sm" id="r-board">Open on the Case File</button></div>${compHTML(rec.composition)}
+      <span class="chip ${rec.resolution?.checks_complete !== false && (rec.status === "consistent" || rec.resolution?.final) ? "c-ok" : "c-rev"}">${rec.resolution?.checks_complete === false ? "Adjudication: a check did not run (open on the Case File)" : rec.status === "consistent" ? "Adjudication: consistent" : rec.resolution?.total && rec.resolution.final ? `Final: ${rec.resolution.total} flag(s) resolved` : `Adjudication: ${rec.resolution?.open ?? rec.flags ?? 0} flag(s) awaiting resolution`}</span>${(rec.version || 1) > 1 ? ` <span class="chip c-info">Amended: version ${rec.version}</span>` : ""} <button class="ghost sm" id="r-board">Open on the Case File</button></div>${compHTML(rec.composition)}
       <div class="small muted" style="margin-top:6px">Mark each agent point below: discussed, accepted or not relevant.</div>`; }
   if (!r.can_manage) return `<div class="muted small">The decision is recorded by the Tumour Board coordinator.</div>`;
   const depts = BOARD_DEPTS;

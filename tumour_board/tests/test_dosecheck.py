@@ -126,6 +126,7 @@ def test_table_validates():
     assert len({r["id"] for r in refs}) == len(refs)
     for r in refs:
         assert r["cancer"] in ("breast", "lung_nsclc", "colorectal_rectum")
+        assert r["source_kind"] in ("regimen", "trial_summary")
         assert r["region"] in dosecheck.REGION_ORDER
         assert r["file"] and r["org"] and isinstance(r["page"], int) and r["quote"].strip()
         if r["kind"] == "drug":
@@ -385,3 +386,204 @@ def test_flag_text_plain(no_items):
     out = run(TB005 + " Inj. Paclitaxel 100 mg/m2. Inj. Zolbetuximab 800 mg/m2. RT 4 Gy in 15 fractions.", recorded_stage=REC)
     for f in out["flags"]:
         assert "—" not in f["text"] and "–" not in f["text"]
+
+
+# ---------------------------------------------------------------- review fixes (phase 7 review: S2, M4 to M7, minor)
+
+def test_differs_cites_every_dose_with_its_own_source(no_items):
+    # S2: oxaliplatin 110 mg/m2: two ICMR doses and one NCI PDQ dose; every dose carries its own citation, Indian first
+    out = run("Inj. Oxaliplatin 110 mg/m2 IV", cancer="colorectal_rectum")
+    [f] = out["flags"]
+    assert f["severity"] == "review"
+    assert ("the guideline references state 130 mg/m2 (ICMR consensus, India, p 66) or 85 mg/m2 (ICMR consensus, India, p 66) or "
+            "85-100 mg/m2 (NCI PDQ (US), p 9)") in f["text"]
+    assert [(r["org"], r["page"], r["dose"]) for r in f["references"]] == [
+        ("ICMR consensus, India", 66, 130), ("ICMR consensus, India", 66, 85), ("NCI PDQ (US)", 9, 85)]
+    assert all(r["quote"] for r in f["references"]) and f["reference"] == f["references"][0]
+    for r in f["references"]:  # each quote holds the dose it is cited for
+        assert ("%g" % r["dose"]) in r["quote"].replace(",", "")
+
+
+def test_every_flag_carries_references(no_items):
+    out = run(TB005 + " Inj. Paclitaxel 100 mg/m2. RT 35 Gy in 15 fractions. Inj. Pembrolizumab 200 mg.")
+    for f in out["flags"]:
+        assert isinstance(f["references"], list)
+        assert f["reference"] == (f["references"][0] if f["references"] else None)
+    rt = next(f for f in out["flags"] if f["check"] == "rt")
+    assert len(rt["references"]) == 3 and rt["text"].count("(National Cancer Grid (NCG), India, p ") == 2
+    assert "40 Gy in 15 fractions (National Cancer Grid (NCG), India, p 15)" in rt["text"]
+
+
+def test_differs_marks_a_trial_summary_citation(no_items):
+    # durvalumab: the lung references are trial summaries only; a dose shown from one says so
+    out = run("Inj. Durvalumab 20 mg/kg every 2 weeks", cancer="lung_nsclc")
+    [f] = out["flags"]
+    assert f["severity"] == "review" and "10 mg/kg (trial summary, NCI PDQ (US), p 29)" in f["text"]
+    assert f["references"][0]["source_kind"] == "trial_summary"
+
+
+def test_stage_group_not_compared_across_clinical_and_pathological(no_items):
+    def stage(text, value, quote=""):
+        out = run(text, recorded_stage={"value": value, "quote": quote, "doc_id": "D1", "doc_title": "Histopathology report"})
+        return [c["result"] for c in out["checks"] if c["kind"] == "stage"], out["flags"]
+    assert stage("cT3N1M0, Stage IIIA: neoadjuvant chemotherapy", "ypT1N0M0 Stage IA") == (["stage_not_compared"], [])
+    assert stage("ypT1N0M0 Stage IA after NACT: adjuvant RT", "cT3N1M0, Stage IIIA") == (["stage_not_compared"], [])
+    assert stage("Stage IIIA (clinical): neoadjuvant chemotherapy", "pT2N0 Stage IIA") == (["stage_not_compared"], [])
+    assert stage("pT2N0 Stage IIA: adjuvant chemotherapy", "Stage IIIA (clinical)") == (["stage_not_compared"], [])
+    # the recorded prefix may come from the signed report's quote; the decision's from words such as post-NACT
+    assert stage("Post-NACT stage IA: adjuvant RT", "Stage IIIA", "Clinical stage: Stage IIIA (cT3 N1 M0)") == (["stage_not_compared"], [])
+    # same or unknown prefix: still compared
+    res, flags = stage("Stage IIIA: neoadjuvant chemotherapy", "Stage IIA")
+    assert res == ["stage_differs"] and flags[0]["check"] == "stage"
+    res, flags = stage("Pathological stage IIIA", "pT2N0 Stage IIA")
+    assert res == ["stage_differs"]
+
+
+def test_parse_stage_group_prefix():
+    assert dosecheck.parse_stage("cT3N1M0, Stage IIIA")["group_prefix"] == "c"
+    assert dosecheck.parse_stage("Stage IIIA (clinical)")["group_prefix"] == "c"
+    assert dosecheck.parse_stage("Pathological stage: Stage IIA")["group_prefix"] == "p"
+    assert dosecheck.parse_stage("post-NACT Stage IA")["group_prefix"] == "yp"
+    assert dosecheck.parse_stage("Stage IIA")["group_prefix"] == ""
+
+
+def test_f_slash_b_chains_doses(no_items):
+    out = run("Inj Trastuzumab 8 mg/kg loading f/b 60 mg/kg q3w")
+    assert [(c["drug"], c["recorded"], c["result"]) for c in out["checks"]] == [
+        ("trastuzumab", "8 mg/kg", "consistent"), ("trastuzumab", "60 mg/kg", "possible_transcription_error")]
+    [f] = out["flags"]
+    assert f["severity"] == "expert_review" and "6 mg/kg (National Cancer Grid (NCG), India, p 11)" in f["text"]
+    out = run("5-FU 400mg/m2 bolus f/b 2400 mg/m2 over 46 h", cancer="colorectal_rectum")
+    assert [(c["drug"], c["recorded"], c["result"]) for c in out["checks"]] == [
+        ("fluorouracil", "400mg/m2", "consistent"), ("fluorouracil", "2400 mg/m2", "consistent")]
+
+
+def test_dose_chain_never_crosses_an_unlinked_dose(no_items):
+    # 800 is not doxorubicin's (another drug name between), so 900 joined to 800 by 'or' is not doxorubicin's either
+    assert run("Doxorubicin and Inj. Zolbetuximab 800 mg/m2 or 900 mg/m2")["checks"] == []
+
+
+def test_model_label_must_stand_in_the_text(monkeypatch, data_root):
+    # M6: the model calls the span's drug trastuzumab, but the text says Herceptin (not in the table, no formulary): not compared
+    monkeypatch.setattr(llm, "chat", model(drugs=[("trastuzumab", "Herceptin 6 mg/kg")]))
+    out = run("Inj Herceptin 6 mg/kg every 3 weeks")
+    assert not any(c.get("drug") == "trastuzumab" for c in out["checks"])
+    [c] = out["checks"]
+    assert (c["drug"], c["recorded"], c["result"], c["references"]) == (None, "6 mg/kg", "drug_not_identified", [])
+    [f] = out["flags"]
+    assert f["severity"] == "info" and f["text"].startswith("Drug not identified in the decision text") and "trastuzumab" not in f["text"].lower()
+    # with the hospital formulary naming the brand, the dose is checked as trastuzumab
+    (data_root / "formulary.json").write_text(json.dumps({"Herceptin": "Trastuzumab"}))
+    out = run("Inj Herceptin 6 mg/kg every 3 weeks")
+    assert [(c["drug"], c["result"]) for c in out["checks"]] == [("trastuzumab", "consistent")] and out["flags"] == []
+
+
+def test_model_label_accepted_when_in_span_before_dose(monkeypatch):
+    monkeypatch.setattr(llm, "chat", model(drugs=[("Trastuzumab", "Trastuzumab biosimilar 6 mg/kg"), ("Zolbetuximab", "Zolbetuximab 800 mg/m2")]))
+    out = run("Inj. Trastuzumab biosimilar 6 mg/kg q3w; Inj. Zolbetuximab 800 mg/m2")
+    assert [(c["drug"], c["result"]) for c in out["checks"]] == [("trastuzumab", "consistent"), ("zolbetuximab", "no_reference")]
+    # a label the span holds only after the dose, or with another word between, is not accepted
+    monkeypatch.setattr(llm, "chat", model(drugs=[("Zolbetuximab", "800 mg/m2 of Zolbetuximab")]))
+    assert [c["result"] for c in run("Inj. 800 mg/m2 of Zolbetuximab")["checks"]] == ["drug_not_identified"]
+    monkeypatch.setattr(llm, "chat", model(drugs=[("Zolbetuximab", "Zolbetuximab plus Herceptin 800 mg/m2")]))
+    assert [c["result"] for c in run("Zolbetuximab plus Herceptin 800 mg/m2")["checks"]] == ["drug_not_identified"]
+
+
+def test_trial_summary_dose_is_info_not_a_pass(no_items):
+    # M7: pembrolizumab 200 mg in colorectal: only trial summaries state it (TMC trial table, NCI PDQ)
+    out = run("Inj. Pembrolizumab 200 mg every 3 weeks", cancer="colorectal_rectum")
+    [c] = out["checks"]
+    assert c["result"] == "trial_dose_only" and all(r["source_kind"] == "trial_summary" for r in c["references"])
+    [f] = out["flags"]
+    assert f["severity"] == "info"
+    assert f["text"] == ("Trial dose only: Pembrolizumab recorded as \"200 mg\" matches only a dose described in a trial summary "
+                         "(Tata Memorial Centre Evidence Based Management, India, p 26), not a regimen line. Info only, not a pass.")
+    # a regimen line wins over a trial summary of the same dose
+    out = run("Inj. Docetaxel 75 mg/m2 every 3 weeks", cancer="lung_nsclc")
+    assert out["checks"][0]["result"] == "consistent" and all(r["source_kind"] == "regimen" for r in out["checks"][0]["references"])
+    # radiotherapy too: 28.5 Gy in 5 fractions (FAST) appears only in a trial summary
+    out = run("Whole breast RT 28.5 Gy in 5 fractions once weekly")
+    assert out["checks"][0]["result"] == "trial_dose_only" and out["flags"][0]["severity"] == "info"
+
+
+def test_tenfold_slip_onto_a_trial_dose_is_flagged(no_items):
+    # infusional 5-FU 2250 mg/m2 written 225: 225 matches only a trial summary (Intergroup 86-47-51), so the x10 slip is flagged
+    out = run("Inj. 5-FU 225 mg/m2 over 48 h", cancer="colorectal_rectum")
+    [f] = out["flags"]
+    assert f["severity"] == "expert_review" and "2250 mg/m2" in f["text"]
+
+
+def test_table_trial_summaries_tagged():
+    refs = dosecheck.table()["references"]
+    by_id = {r["id"]: r for r in refs}
+    assert by_id["breast:breast-treatment-pdq:p17:rt:38.5Gy/10"]["source_kind"] == "trial_summary"  # RAPID APBI
+    assert by_id["colorectal_rectum:rectal-treatment-pdq:p16:fluorouracil:225mg/m2/day"]["source_kind"] == "trial_summary"  # Intergroup
+    assert by_id["breast:breast-treatment-pdq:p34:capecitabine:650mg/m2"]["source_kind"] == "trial_summary"
+    assert by_id["lung_nsclc:non-small-cell-lung-treatmen:p42:bevacizumab:7.5mg/kg"]["source_kind"] == "trial_summary"
+    assert by_id["breast:breast-treatment-pdq:p53:fulvestrant:500mg"]["source_kind"] == "trial_summary"  # FALCON
+    assert by_id["colorectal_rectum:colon-treatment-pdq:p21:encorafenib:300mg"]["source_kind"] == "trial_summary"  # BEACON (n = 224)
+    assert by_id["breast:ncg-guidelines-for-breast-ca:p11:doxorubicin:60mg/m2"]["source_kind"] == "regimen"
+    assert by_id["colorectal_rectum:rectal-treatment-pdq:p9:leucovorin:20mg/m2"]["source_kind"] == "regimen"  # PDQ regimen table
+    t = dosecheck.table()
+    assert "trial_summary" in t["_note"] and "trial descriptions" not in t["_note"]
+    assert sum(r["source_kind"] == "trial_summary" for r in refs) >= 60
+
+
+def test_every_reference_dose_checks_clean(no_items):
+    # self-check: each drug reference written back as a decision is consistent (regimen line) or trial_dose_only (trial summary),
+    # never a review flag; the one expected exception is a trial dose that is a tenfold slip of a regimen dose (5-FU 225 vs 2250)
+    expected = {"colorectal_rectum:rectal-treatment-pdq:p16:fluorouracil:225mg/m2/day"}
+    bad = []
+    for r in dosecheck.table()["references"]:
+        if r["kind"] != "drug" or r["id"] in expected:
+            continue
+        dose = ("AUC %g" % r["dose"]) if r["unit"] == "AUC" else ("%g" % r["dose"])
+        if r.get("dose_max"):
+            dose += "-%g" % r["dose_max"]
+        text = f"Inj. {r['as_written']} {dose}{'' if r['unit'] == 'AUC' else ' ' + r['unit']} IV."
+        out = run(text, cancer=r["cancer"])
+        got = [c["result"] for c in out["checks"]]
+        ok = got == ["consistent"] or (r["source_kind"] == "trial_summary" and got == ["trial_dose_only"])
+        if not ok or any(f["severity"] in ("review", "expert_review") for f in out["flags"]):
+            bad.append((r["id"], got))
+    assert bad == []
+
+
+def test_bracketed_computed_dose_not_compared(no_items):
+    out = run("Inj. Paclitaxel 175 mg/m2 (300 mg) IV every 3 weeks; Carboplatin AUC 5 (450 mg)")
+    assert [(c["drug"], c["recorded"], c["result"]) for c in out["checks"]] == [
+        ("paclitaxel", "175 mg/m2", "consistent"), ("paclitaxel", "300 mg", "computed_dose_not_compared"),
+        ("carboplatin", "AUC 5", "consistent"), ("carboplatin", "450 mg", "computed_dose_not_compared")]
+    assert out["flags"] == []
+    # a bracketed dose with another unit, or one not right after the dose, is still compared
+    out = run("Inj. Paclitaxel 175 mg/m2 then (80 mg/m2 weekly)")
+    assert [c["result"] for c in out["checks"]] == ["consistent", "consistent"]
+
+
+@pytest.mark.parametrize("text", ["1.8 Gy x 5 days a week", "2 Gy x 5 days/week", "1.8 Gy x 5 days per week", "2 Gy × 5 times a week"])
+def test_rt_per_fraction_times_days_a_week_is_not_a_course(text):
+    assert dosecheck.parse_rt(text) == []
+
+
+def test_rt_course_with_dose_per_fraction_still_parses():
+    [r] = dosecheck.parse_rt("45 Gy in 25 fractions of 1.8 Gy, 5 days a week")
+    assert (r["total_gy"], r["fractions"]) == (45, 25)
+    [r] = dosecheck.parse_rt("4 Gy x 5 days")
+    assert (r["total_gy"], r["fractions"]) == (20, 5)
+
+
+@pytest.mark.parametrize("text", ["Plan: Stage 1: surgery; stage 2 of the plan: adjuvant RT", "Stage 2 of treatment: chemotherapy"])
+def test_plan_steps_are_not_stage_groups(text):
+    assert dosecheck.parse_stage(text) is None
+
+
+@pytest.mark.parametrize("text,group", [("Stage 2B", "IIB"), ("Clinical stage 2", "II"), ("AJCC stage 3", "III"), ("stage group 2", "II"),
+                                         ("Stage II", "II"), ("Stage 0", "0")])
+def test_arabic_stage_groups_with_letter_or_staging_words(text, group):
+    assert dosecheck.parse_stage(text)["group"] == group
+
+
+def test_plan_step_not_compared_with_recorded_stage(no_items):
+    out = run("Stage 1: surgery. Stage 2: adjuvant chemotherapy.", recorded_stage=REC)
+    assert [c for c in out["checks"] if c["kind"] == "stage"] == [] and out["flags"] == []
+    assert dosecheck.parse_stage("Stage 2", bare=True)["group"] == "II"  # a recorded value is known to be a stage

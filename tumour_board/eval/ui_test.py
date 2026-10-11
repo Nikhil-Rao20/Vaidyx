@@ -79,6 +79,32 @@ def run_flow(b, base, pw, out, size, sfx, errors):
     pg.keyboard.press("Escape"); pg.wait_for_timeout(300)  # narrow screens: the side panel must be closed before the top bar is clickable
     if pg.locator("#btn-org").is_visible():
         pg.click("#btn-org"); pg.wait_for_selector("#o-depts tr", timeout=20000); pg.wait_for_timeout(500); shot("org_admin"); pg.keyboard.press("Escape")
+    # after the board (V1 Phase 7): a decision with a dose slip and no radiation oncologist on TB-002 (adjudicated through the API: one
+    # reasoner call); the Board tab renders the composition, the guideline flag with its reference and the resolution buttons; one flag
+    # corrected through the dialog (version 2); the department inbox shows the board action. TB-002 is reset by the next e2e run.
+    r = pg.request.post(base + "/api/tb/cases/TB-002/board-records", data={
+        "board_date": "2026-12-11", "recorded_by": "Dr. UI Test (synthetic)",
+        "decision_text": "Neoadjuvant chemotherapy: 4 cycles of AC (Inj. Doxorubicin 6 mg/m2 IV and Inj. Cyclophosphamide 600 mg/m2 IV, every 21 days).",
+        "members": [{"name": "Dr. UI Test (synthetic)", "department": "Medical Oncology"}, {"name": "Dr. UI Surgeon (synthetic)", "department": "Surgical Oncology"}],
+        "actions": [{"department": "Radio-diagnosis", "task": "MRI breast after chemotherapy", "due": "2026-12-20"}]}, timeout=300000)
+    if not r.ok:  # never a silent pass: the Phase 7 Board tab must be rendered with flags
+        errors.append(f"board record for the Phase 7 check could not be recorded: HTTP {r.status}")
+    else:
+        pick("TB-002"); pg.click("#tabs button[data-tab='ready']"); pg.wait_for_selector("#tab-ready .req", timeout=20000)
+        pg.click("#tabs button[data-tab='board']"); pg.wait_for_selector("#tab-board [data-resolve]", timeout=20000); pg.wait_for_timeout(500)
+        if not pg.locator("#tab-board .gref").count():
+            errors.append("Board tab: no guideline reference shown under the flags")
+        shot("TB-002_board_flags", full_page=True)
+        btn = pg.locator("#tab-board .flag:has-text('Doxorubicin') [data-resolve$='|corrected']").first  # the dose flag, not the composition one
+        btn.click(); pg.wait_for_selector("#cd-value", timeout=10000)
+        pg.fill("#cd-value", "60 mg/m2"); pg.click("#cd-ok")
+        pg.wait_for_selector("#tab-board [data-undores]", timeout=20000); pg.wait_for_timeout(600)
+        if "Amended: version 2" not in pg.inner_text("#tab-board") or "Doxorubicin 60 mg/m2" not in pg.inner_text("#tab-board"):
+            errors.append("Board tab: the corrected dose did not show as the amended version 2")
+        shot("TB-002_board_resolved", full_page=True)
+        if pg.locator("#btn-inbox").is_visible():
+            pg.click("#btn-inbox"); pg.wait_for_selector("#inbox .card", timeout=20000); pg.wait_for_timeout(500); shot("inbox_board_action", full_page=True)
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
     # board sessions and the Board room (V1 6.1 to 6.3): a planned session on TB-001 with Radio-diagnosis absent (no model call), removed afterwards
     from tumour_board import board
     sid = None
