@@ -136,3 +136,24 @@ def test_fill_from_facts_adds_the_exact_sentence_beside_an_approximate_one():
                                   "location": {"page": 0, "start": 0, "end": 26}, "doc_id": "D1", "doc_title": "OPD NOTE", "date": "2026-09-01"}}}
     assert summary.fill_from_facts(sec, facts, {"ecog": {"label": "ECOG performance status"}}) == 1
     assert sec[0]["sentences"][-1]["from_fields"] and not sec[0]["sentences"][-1].get("approximate")
+
+
+@pytest.mark.parametrize("quote,source,kept", [
+    ("RAS / BRAF: Not performed", "NRAS / BRAF\nNot performed", False),        # one letter changes the gene (Phase 6 measurement)
+    ("Lymphovascular invasion: Not identified.", "Lymphovascular invasion\nNot identified.", True),  # line break and colon only
+    ("PD-L1: Awaited in the lab", "(PD-L1 awaited in the lab", True),             # punctuation only
+    ("Total bilirubin 0.7 mg/dL", "T otal bilirubin 0.7 mg/dL", True),          # an OCR split
+    ("Haemoglobin 11.8 g/dL measured", "Haemoglobln 11.8 g/dL measured", True),  # one OCR letter in a long word
+    ("ER positive, PR negative", "ER positive, PR positive", False),            # a whole word differs
+    ("HER2 not amplified on ISH", "HER2 now amplified on ISH", False),           # a short word differs
+])
+def test_near_match_letters_and_digits_must_agree(quote, source, kept):
+    """V1 item 6.5 (after the measurement): approximate only for punctuation, spacing, line breaks or a small edit inside long words."""
+    assert (qa._approx_quote(quote, ["Report\n" + source + "\nEnd of report"]) is not None) is kept
+
+
+@pytest.mark.parametrize("quote", ["No metastatic deposits seen in the right lobe of liver", "Mediastinal lymph nodes are not enlarged"])
+def test_near_match_never_flips_a_negation(quote):
+    """Phase 6 review: a negation added to or taken from the source never matches approximately."""
+    src = "CT REPORT\nMetastatic deposits seen in the right lobe of liver. Mediastinal lymph nodes are enlarged.\nEnd of report"
+    assert qa._approx_quote(quote, [src]) is None

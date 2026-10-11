@@ -597,6 +597,10 @@ def phase6(c):
           ", ".join(f"{a['dropped_unverified']}/{len(a['removed'])}" for a in ans))
     room = c.get(f"/api/tb/sessions/{sid}").json()
     log = [e for e in room["session"]["log"] if e["case_id"] == "TB-001" and not e.get("superseded")]
+    check("6.2 who asked is kept with every live answer", all(e.get("asked_by") == "admin" for e in log if e["kind"] == "answer"),
+          ", ".join(str(e.get("asked_by")) for e in log if e["kind"] == "answer"))
+    r = c.post(f"/api/tb/sessions/{sid}/agents/prepare", json={"case_id": "TB-001", "role": "pathology"})
+    check("6.2 no agent for a specialty that is present", r.status_code == 400, f"{r.status_code} {r.text[:80]}")
     check("6.3 the session keeps every agent point: brief and live answers", sum(e["kind"] == "answer" for e in log) == 5 and any(e["kind"] in ("brief_item", "point_for_review") for e in log),
           f"{len(log)} entries: {sum(e['kind'] == 'answer' for e in log)} answers")
     dec = c.post(f"/api/tb/sessions/{sid}/cases/TB-001/decision", json={"decision_text": "Discussed at the Tumour Board. Plan as per board discussion; re-discuss after review.",

@@ -28,6 +28,9 @@ ATTENDANCE = ("present", "absent", "not_marked")
 AGENT_STATUSES = ("queued", "running", "ready", "no_documents", "error")
 KIND_LABELS = {"brief_item": "Brief item", "point_for_review": "Point for review", "no_documents": "No documents", "not_documented": "Not documented",
                "answer": "Answer to the board's question"}
+ANSWER_STATUS_LABELS = {"out_of_scope": "Outside the agent's scope (refused)", "not_documented": "Not documented in the Case File"}
+NOT_PRINTED = "Approximate source match: not printed until an expert reviews the brief."
+CLOSED_EARLY = "The session was closed before the brief was ready"
 NOTE = "Reporting only: what the AI support agents said and what the board decided. It does not measure accuracy."
 MAX_NAME, MAX_TITLE, MAX_NOTE = 120, 200, 2000
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -115,14 +118,16 @@ def _check_cases(case_ids) -> list[str]:
     if not isinstance(case_ids, (list, tuple)):
         raise ValueError("The agenda must be a list of Case File ids")
     out = []
-    for cid in case_ids:
-        cid = str(cid or "").strip()
+    for raw in case_ids:
+        raw = str(raw or "").strip()
+        try:
+            cid = store.safe_id(raw)  # the id as stored on disk: the protected check below cannot be dodged by spelling
+        except ValueError:
+            raise ValueError(f"Invalid Case File id {raw!r}") from None
         if cid in config.PROTECTED_CASES:  # checked before anything is read from it
             raise ValueError(f"Case File {cid} holds real patient data and cannot join a board session")
-        try:
-            store.safe_id(cid)
-        except ValueError:
-            raise ValueError(f"Invalid Case File id {cid!r}") from None
+        if cid != raw:
+            raise ValueError(f"Invalid Case File id {raw!r}")
         c = store.get_case(cid)
         if not c:
             raise ValueError(f"Case File {cid} not found")
@@ -168,9 +173,14 @@ def _item(s, case_id) -> dict:
 
 def create(date: str, by: str, case_ids: list[str] | None = None, title: str = "") -> dict:
     date = _check_date(date)
-    ids = [c["case_id"] for c in listed_for_date(date)] if case_ids is None else _check_cases(case_ids)
-    if not ids:
-        raise ValueError(f"No Case File is listed for the board on {_ddmmyyyy(date)}")
+    if case_ids is None:
+        ids = [c["case_id"] for c in listed_for_date(date)]
+        if not ids:
+            raise ValueError(f"No Case File is listed for the board on {_ddmmyyyy(date)}")
+    else:
+        ids = _check_cases(case_ids)
+        if not ids:
+            raise ValueError("Choose at least one Case File for the agenda")
     title = str(title or "").strip()
     if len(title) > MAX_TITLE:
         raise ValueError(f"Session title is too long (at most {MAX_TITLE} characters)")
@@ -326,8 +336,34 @@ def set_current(sid, case_id, by) -> dict:
     return s
 
 
+def _fail_waiting(s, message) -> list[list[str]]:
+    """Turn every agent still "queued" or "running" into an error with this message; returns the [case_id, role] pairs changed."""
+    now, pairs = store.now_iso(), []
+    for case_id, roles in (s.get("agents") or {}).items():
+        for role, a in roles.items():
+            if (a or {}).get("status") in ("queued", "running"):
+                roles[role] = {"status": "error", "message": message, "at": now}
+                pairs.append([case_id, role])
+    return pairs
+
+
+def fail_waiting(sid, message) -> dict:
+    """Agents left queued / running (briefs still preparing when the session closed or the service stopped) become errors, so a
+    later load never waits on them. Works on a closed session too."""
+    s = _need(sid)
+    pairs = _fail_waiting(s, str(message or ""))
+    if pairs:
+        _save(s)
+        _audit(sid, "agents_failed", "system", pairs=pairs, message=str(message or "")[:300])
+    return s
+
+
 def close(sid, by) -> dict:
     s = _need(sid); _open(s)
+    pairs = _fail_waiting(s, CLOSED_EARLY)
+    if pairs:
+        _save(s)
+        _audit(sid, "agents_failed", "system", pairs=pairs, message=CLOSED_EARLY)
     s["status"], s["closed_at"], s["closed_by"] = "closed", store.now_iso(), by or ""
     _save(s)
     _audit(sid, "closed", by)
@@ -383,9 +419,11 @@ def log_brief(sid, case_id, role, brief) -> int:
     else:
         for sec in brief.get("sections") or []:
             for it in sec.get("items") or []:
-                add("brief_item", it.get("text", ""), it.get("citations"), heading=sec.get("heading", ""), flags=list(it.get("flags") or []))
+                add("brief_item", it.get("text", ""), it.get("citations"), heading=sec.get("heading", ""), flags=list(it.get("flags") or []),
+                    approximate=bool(it.get("approximate")))
         for p in brief.get("points_for_review") or []:
-            add("point_for_review", p.get("text", ""), p.get("citations"), references=list(p.get("references") or []), flags=list(p.get("flags") or []))
+            add("point_for_review", p.get("text", ""), p.get("citations"), references=list(p.get("references") or []), flags=list(p.get("flags") or []),
+                approximate=bool(p.get("approximate")))
         for x in brief.get("not_documented") or []:  # gaps the agent names (checked against the Case File before they were kept)
             add("not_documented", str(x))
     for e in old:
@@ -395,18 +433,20 @@ def log_brief(sid, case_id, role, brief) -> int:
     return len(new)
 
 
-def log_answer(sid, case_id, role, question, answer) -> dict:
-    """One 'answer' entry for a live question to an agent: the verified statements joined, or the refusal / not documented message."""
+def log_answer(sid, case_id, role, question, answer, by="") -> dict:
+    """One 'answer' entry for a live question to an agent: the verified statements joined, or the refusal / not documented message.
+    by: who asked (kept on the entry and audited); the answer's removed statements (V1 item 6.4) are kept on the entry."""
     s = _need(sid); _open(s)
     _item(s, case_id); _role(role)
     stmts = list(answer.get("statements") or [])
     status = answer.get("status") or ("answered" if stmts else "not_documented")
     text = " ".join(x.get("text", "") for x in stmts) if stmts else str(answer.get("message") or "")
     e = _entry(s, case_id, role, answer.get("label"), "answer", text, [c for x in stmts for c in x.get("citations") or []],
-               "live", answer.get("model"), question=str(question or ""), status=status, statements=stmts, references=list(answer.get("references") or []))
+               "live", answer.get("model"), question=str(question or ""), status=status, statements=stmts, references=list(answer.get("references") or []),
+               asked_by=by or "", removed=list(answer.get("removed") or []))
     s["log"].append(e)
     _save(s)
-    _audit(sid, "answer_logged", "system", case_id, "answer", role=role, entry=e["id"], status=status, question=str(question or "")[:300])
+    _audit(sid, "answer_logged", by or "system", case_id, "answer", role=role, entry=e["id"], status=status, question=str(question or "")[:300])
     return e
 
 
@@ -469,6 +509,22 @@ def _marks(log) -> dict:
     return out
 
 
+def _printable_rule(case_id):
+    """entry -> bool: an approximate (near-match) entry is printable only when the brief it came from is the Case File's current brief
+    for that role and an expert has reviewed it (V1 item 6.5)."""
+    arts = None
+
+    def ok(e) -> bool:
+        nonlocal arts
+        if not e.get("approximate"):
+            return True
+        if arts is None:
+            arts = (store.get_state(case_id) or {}).get("artefacts") or {}
+        b = arts.get(f"brief_{e.get('role')}") or {}
+        return bool(e.get("brief_generated")) and b.get("generated") == e.get("brief_generated") and (b.get("review") or {}).get("status") == "reviewed"
+    return ok
+
+
 def export(sid) -> dict:
     s = _need(sid)
     names = {d["id"]: d["name"] for d in specialties()}
@@ -479,7 +535,8 @@ def export(sid) -> dict:
     cases = []
     for a in s["agenda"]:
         c = store.get_case(a["case_id"]) or {}
-        log = entries(s, a["case_id"])
+        printable = _printable_rule(a["case_id"])
+        log = [{**e, "printable": printable(e)} for e in entries(s, a["case_id"])]
         cases.append({"case_id": a["case_id"], "status": a["status"], "patient": _patient(a["case_id"]), "protocol": c.get("protocol"),
                       "agents": (s.get("agents") or {}).get(a["case_id"], {}),
                       "agent_log": [e for e in log if not e.get("superseded")] + [e for e in log if e.get("superseded")],
@@ -488,26 +545,51 @@ def export(sid) -> dict:
             "attendance": attendance, "participants": participants(s), "absent_roles": absent_roles(s), "cases": cases, "note": NOTE}
 
 
-def _h(x) -> str:
+def _verbatim(x) -> str:
+    """A verified quote (citation or guideline reference): escaped, otherwise exactly as stored."""
     return html.escape(str(x if x is not None else ""), quote=True)
 
 
+def _h(x) -> str:
+    """Any other text: escaped, an em dash printed as '-' (no em dashes in reports)."""
+    return _verbatim(str(x if x is not None else "").replace("\u2014", "-"))
+
+
+def model_words(label) -> str:
+    """How a model is named in a report: always with "(non-medical)" (CLAUDE.md model labels)."""
+    label = str(label or "").strip()
+    if not label or label == "reasoner":
+        return "the reasoner model (non-medical)"
+    return label if "non-medical" in label.lower() else f"{label} (non-medical)"
+
+
+def _uses_model(e) -> bool:
+    return e.get("kind") != "no_documents"  # a no-documents entry involved no model call
+
+
 def _cite(c) -> str:
-    return f"[{_h(c.get('doc_title') or c.get('doc_id'))}, {_h(c.get('quote'))}]"
+    return f"[{_h(c.get('doc_title') or c.get('doc_id'))}, {_verbatim(c.get('quote'))}]"
 
 
 def _ref(r) -> str:
     page = r.get("page")
     page = f"page {page}" if page not in (None, "") else ""
-    return "Reference: " + ", ".join(_h(x) for x in (r.get("org"), r.get("title"), page, r.get("quote")) if x)
+    parts = [_h(x) for x in (r.get("org"), r.get("title"), page) if x] + ([_verbatim(r["quote"])] if r.get("quote") else [])
+    return "Reference: " + ", ".join(parts)
 
 
 def _said(e) -> str:
     kind = _h(KIND_LABELS.get(e["kind"], e["kind"])) + (f" ({_h(e['heading'])})" if e.get("heading") else "")
-    out = [f"<div class='meta'><b>{_h(e.get('label') or e['role'])}</b> &middot; {kind}"
+    if e["kind"] == "answer" and e.get("status") in ANSWER_STATUS_LABELS:
+        kind += " &middot; " + _h(ANSWER_STATUS_LABELS[e["status"]])
+    model = f" &middot; {_h(model_words(e.get('model')))}" if _uses_model(e) else ""
+    out = [f"<div class='meta'><b>{_h(e.get('label') or e['role'])}</b> &middot; {kind}{model}"
            f" &middot; {_h(e['id'])}{' &middot; superseded by a newer brief' if e.get('superseded') else ''}</div>"]
     if e["kind"] == "answer":
         out.append(f"<div class='q'>Question: {_h(e.get('question'))}</div>")
+    if not e.get("printable", True):  # near-match item of a brief no expert has reviewed (V1 item 6.5)
+        out.append(f"<div><i>{_h(NOT_PRINTED)}</i></div>")
+        return "".join(out)
     out.append(f"<div>{_h(e.get('text'))}</div>")
     if e.get("flags"):  # approximate source match, negation check (V1 items 6.5, 1.1)
         out.append("<div class='meta'>Check: " + "; ".join(_h(f) for f in e["flags"]) + "</div>")
@@ -555,7 +637,7 @@ def export_html(sid) -> str:
         out.append(f"<tr><td>{_h(a['name'])}</td><td>{_h(att_label.get(a['status'], a['status']))}</td><td>{_h(', '.join(a['members']))}</td></tr>")
     out.append("</table>")
     if x["absent_roles"]:
-        out.append(f"<div class='meta'>AI support agents prepared briefs for the absent specialties: {_h(', '.join(r.replace('_', ' ') for r in x['absent_roles']))}</div>")
+        out.append(f"<div class='meta'>AI support agents prepared briefs for the absent specialties: {_h(', '.join(org.department_name(ROLE_DEPARTMENT[r]) for r in x['absent_roles']))}</div>")
     models = []
     for c in x["cases"]:
         p = c["patient"]
@@ -573,11 +655,11 @@ def export_html(sid) -> str:
         if not c["agent_log"]:
             out.append("<tr><td class='said'><i>No agent points logged</i></td><td></td></tr>")
         for e in c["agent_log"]:
-            if e.get("model") and e["model"] not in models:
-                models.append(e["model"])
+            if _uses_model(e) and model_words(e.get("model")) not in models:
+                models.append(model_words(e.get("model")))
             out.append(f"<tr{' class=super' if e.get('superseded') else ''}><td class='said'>{_said(e)}</td><td>{_decided(e)}</td></tr>")
         out.append("</table>")
     out.append(f"<footer><p>{_h(x['note'])}</p>"
                + (f"<p>AI support agents' model: {_h(', '.join(models))}</p>" if models else "")
                + f"<p>Exported {_h(_ddmmyyyy(store.now_iso()))}</p></footer></body></html>")
-    return "".join(out).replace("\u2014", "-")  # no em dashes in reports, whatever the source text holds
+    return "".join(out)  # em dashes are replaced in _h; verified quotes (_verbatim) stay exactly as stored

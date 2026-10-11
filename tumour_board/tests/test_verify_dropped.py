@@ -140,3 +140,21 @@ def test_document_ids_written_in_the_text_are_not_numbers(unit_case):
     assert [k["text"] for k in kept] == ["CT thorax: solid nodule measuring 2.1 cm.", "The CT report records a nodule of 2.1 cm."]
     assert [(d["reason"], d["detail"]) for d in dropped] == [("number_not_in_quote", "number 3.1 not in the quoted source"),
                                                             ("number_not_in_quote", "number 99999999 not in the quoted source")]  # an id of no document here stays a number
+
+
+def test_a_quote_cut_after_a_negation_is_flagged(unit_case):
+    """Phase 6 review: "Metastatic deposits seen in the liver" verifies inside "No metastatic deposits seen in the liver"; the statement
+    keeps its citation but carries the negation check flag, unless it states the negation itself."""
+    add(unit_case, make_doc("Dct000077", "ct", text="SYNTHETIC\nCT ABDOMEN\nNo metastatic deposits seen in the liver.\nReport status: FINAL"))
+    kept, _ = qa.verify(unit_case, [
+        {"text": "Metastatic deposits are seen in the liver.", "citations": [{"doc_id": "Dct000077", "quote": "Metastatic deposits seen in the liver"}]},
+        {"text": "No metastatic deposits are seen in the liver.", "citations": [{"doc_id": "Dct000077", "quote": "metastatic deposits seen in the liver"}]}])
+    assert kept[0]["flags"] == ["check negation against the source"] and "flags" not in kept[1]
+    assert "negated_before" not in kept[0]["citations"][0]
+
+
+def test_shown_text_and_number_guard_agree(unit_case):
+    """Phase 6 review: removing a document id changes nothing else in the text, so '3 .5' is never shown as '3.5'."""
+    add(unit_case, make_doc("D75dbac7c", "ct", text="SYNTHETIC\nCT THORAX\n3 cm lesion in segment 5.\nReport status: FINAL"))
+    kept, dropped = qa.verify(unit_case, [{"text": "Size 3 .5 cm [D75dbac7c].", "citations": [{"doc_id": "D75dbac7c", "quote": "3 cm lesion in segment 5"}]}])
+    assert [k["text"] for k in kept] == ["Size 3 .5 cm."] and not dropped  # shown exactly as checked

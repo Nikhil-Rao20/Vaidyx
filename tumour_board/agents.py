@@ -43,6 +43,9 @@ ROLES = {
 }
 
 NOT_LISTED = "This Case File is not listed yet: list it before preparing a brief"
+# the brief's format: a board session reuses a stored brief only when it has this version (2: removed items and document ids not read as
+# numbers, V1 item 6.4), no focus question and the same near-match setting (Phase 6 review)
+BRIEF_VERSION = 2
 
 TOOLS_DOC = """Tools (all read-only):
 - list_documents: no input. Lists every document with id, title, type, date, status (and clinician attestations).
@@ -399,7 +402,8 @@ def no_documents_brief(case_id, role, sig, t0):
             "message": f"No {dept} documents in this Case File" + (f" ({', '.join(extra)})" if extra else ""),
             "open_items": open_department_items(case_id, role), "sections": [], "points_for_review": [], "not_documented": [], "removed": [],
             "dropped_unverified": 0, "guardrail_removed": 0, "not_documented_rejected": 0, "references_dropped": 0, "approximate": 0,
-            "generated": store.now_iso(), "model": "", "seconds": round(time.time() - t0, 1), "review": {"status": "no_model_call"}, "signature": sig}
+            "generated": store.now_iso(), "model": "", "seconds": round(time.time() - t0, 1), "review": {"status": "no_model_call"}, "signature": sig,
+            "version": BRIEF_VERSION, "focus": "", "near_match": config.near_match()}
 
 
 def _removed(item, reason, detail, where):
@@ -560,7 +564,8 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
              "references_dropped": refs_dropped, "pack": _pack_summary(role, case["protocol"]),
              "model": config.models()["reasoner"].get("label") or "reasoner",
              "seconds": round(time.time() - t0, 1), "review": {"status": "ai_draft"},
-             "signature": sig}  # what it was written from; a changed Case File marks it stale (V1 item 4.5)
+             "signature": sig,  # what it was written from; a changed Case File marks it stale (V1 item 4.5)
+             "version": BRIEF_VERSION, "focus": focus_question}
     st = store.get_state(case_id); st.setdefault("artefacts", {})[f"brief_{role}"] = brief; store.save_state(case_id, st)
     au({"kind": "agent_brief", "role": role, "items": sum(len(s["items"]) for s in sections), "points": len(pts2), "dropped_unverified": dropped,
         "guardrail_removed": brief["guardrail_removed"], "removed": {k: sum(x["reason"] == k for x in removed) for k in sorted({x["reason"] for x in removed})},
@@ -578,14 +583,16 @@ LIVE_SCHEMA = {"type": "object", "additionalProperties": False, "properties": {
 
 
 def _live_system(role):
-    return (_system(role).replace("You prepare a specialty-specific brief", "You answer the board's questions")
+    sys_ = _system(role)
+    brief = "you prepare a specialty-specific brief from the Case File records for the multidisciplinary team"
+    return (sys_.replace(brief, "you answer the multidisciplinary team's questions from the Case File records")
             + " Now the board asks you a question during the meeting. Answer ONLY from the documents provided, in short factual statements; "
             "copy values exactly; every statement cites the document id and an exact quote copied character for character. If the documents "
             "do not contain the answer, set answer_found=false and return no statements. Guideline passages (G1, G2 ...) go under 'references' "
             "only when they say what a report or record should contain, never as an answer about this patient.")
 
 
-async def ask(case_id, role, question, history=None):
+async def ask(case_id, role, question, history=None, user=""):
     """One live question to the agent of `role` (V1 item 6.2): scope check first (a refused question gets no answer), the Case File
     records and the specialty pack as context, every statement verified against its quote (exact only, like Ask the Case File), the scope
     guardrail on the output, references verified verbatim and limited to record and report contents. Returns the answer record."""
@@ -597,7 +604,7 @@ async def ask(case_id, role, question, history=None):
             "dropped_unverified": 0, "model": config.models()["reasoner"].get("label") or "reasoner"}
     if not case.get("protocol"):
         return {**base, "status": "not_listed", "message": NOT_LISTED, "seconds": round(time.time() - t0, 2)}
-    au({"kind": "agent_question", "role": role, "question": question})
+    au({"kind": "agent_question", "role": role, "question": question, "by": user})
     hit = guardrails.rule_check(question)
     scope_task = asyncio.create_task(guardrails.check_input(question, au))
     if hit:  # refused by rule: no retrieval and no answer call
@@ -645,6 +652,6 @@ async def ask(case_id, role, question, history=None):
            "dropped_unverified": len(drop), "references_dropped": refs_dropped, "mode": mode, "answered_at": store.now_iso(),
            "message": "" if kept else "Not documented in the Case File. No statement could be verified against the source documents.",
            "seconds": round(time.time() - t0, 2)}
-    au({"kind": "agent_answer", "role": role, "status": out["status"], "statements": len(kept), "dropped_unverified": len(drop),
+    au({"kind": "agent_answer", "role": role, "by": user, "status": out["status"], "statements": len(kept), "dropped_unverified": len(drop),
         "guardrail_removed": sum(x["reason"] == "guardrail" for x in removed), "references": len(references), "seconds": out["seconds"]})
     return out

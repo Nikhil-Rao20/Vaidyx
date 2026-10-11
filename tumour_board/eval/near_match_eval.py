@@ -27,7 +27,9 @@ def _paired(log, where):
     def verify(case_id, statements, near_match=False):
         off = _orig(case_id, statements, near_match=False)
         on = _orig(case_id, statements, near_match=True)
-        raw = {s.get("text"): s for s in statements or []}
+        raw = {}  # the model's statement by its text, also as shown (document ids taken out by qa.verify)
+        for s in statements or []:
+            raw[s.get("text")] = raw[qa._ID_GROUP.sub("", s.get("text") or "").strip()] = s
         approx = [{"text": k["text"], "model_quotes": [c.get("quote") for c in (raw.get(k["text"]) or {}).get("citations") or []],
                    "matched_source": [{"doc_id": c["doc_id"], "quote": c["quote"], "score": c.get("score")} for c in k["citations"] if c.get("approximate")]}
                   for k in on[0] if k.get("approximate")]

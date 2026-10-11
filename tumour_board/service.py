@@ -480,7 +480,9 @@ async def _prepare_one(sid, case_id, role, refresh, user):
     try:
         st = store.get_state(case_id)
         art = (st.get("artefacts") or {}).get(f"brief_{role}")
-        if art and not refresh and art.get("signature") and not rules.stale_reason(art["signature"], rules.case_signature(case_id, st)):
+        # reused only when it is what the agent would write now: same Case File, current format, no focus question, same near-match setting
+        if art and not refresh and art.get("signature") and not rules.stale_reason(art["signature"], rules.case_signature(case_id, st)) \
+                and art.get("version") == agents.BRIEF_VERSION and not art.get("focus") and bool(art.get("near_match")) == config.near_match():
             board.set_agent(sid, case_id, role, _brief_status(art), generated=art.get("generated"), reused=True, message=art.get("message") or "")
             board.log_brief(sid, case_id, role, art)
             return
@@ -529,13 +531,21 @@ def prepare_session_agents(sid, user, roles=None, case_ids=None, refresh=False):
 
 
 def session_interrupted(sid):
-    """Agents left "queued" / "running" with no preparation running (a server restart): marked as errors the board can prepare again."""
+    """Agents left "queued" / "running" with no preparation running (a server restart): marked as errors the board can prepare again,
+    also on a closed session (Phase 6 review: a session closed mid-preparation failed every later load)."""
     from . import board
     s = board.get(sid)
     if not s or SESSION_TASKS.get(sid):
         return s
-    for cid, by_role in (s.get("agents") or {}).items():
-        for role, x in by_role.items():
-            if x.get("status") in AGENT_WAITING:
-                s = board.set_agent(sid, cid, role, "error", message="Interrupted by a server restart: prepare it again")
+    if any(x.get("status") in AGENT_WAITING for by_role in (s.get("agents") or {}).values() for x in by_role.values()):
+        s = board.fail_waiting(sid, "Interrupted by a server restart: prepare it again")
     return s
+
+
+def close_session(sid, user):
+    """Close the session: briefs still being prepared are cancelled (no model work for a closed session) and shown as not ready."""
+    from . import board
+    for t in list(SESSION_TASKS.get(sid) or ()):
+        t.cancel()
+    SESSION_TASKS.pop(sid, None)
+    return board.close(sid, user)

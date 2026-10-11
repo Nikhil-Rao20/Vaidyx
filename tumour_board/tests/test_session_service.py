@@ -25,6 +25,7 @@ def _fake_agent(monkeypatch, fail=()):
         if (case_id, role) in fail:
             yield {"type": "error", "message": "model server unreachable"}; return
         brief = {"role": role, "label": agents.ROLES[role]["label"], "generated": f"2026-12-04T09:00:{len(runs):02d}", "model": "fake", "seconds": 0.1,
+                 "version": agents.BRIEF_VERSION, "focus": focus, "near_match": False,
                  "sections": [{"heading": "Imaging", "items": [{"text": "CT done.", "citations": []}]}], "points_for_review": [], "not_documented": [],
                  "signature": rules.case_signature(case_id)}
         st = store.get_state(case_id); st.setdefault("artefacts", {})[f"brief_{role}"] = brief; store.save_state(case_id, st)
@@ -82,3 +83,45 @@ def test_protected_case_never_prepared(monkeypatch):
     board.start(sid, "coord")
     _start(sid)
     assert {c for c, _ in runs} == {"TB-S1"}
+
+
+def test_only_a_brief_the_agent_would_write_now_is_reused(monkeypatch):
+    """Phase 6 review: a brief written with a focus question, with near-match on, or in an older format is prepared again."""
+    sid = _session(); runs = _fake_agent(monkeypatch)
+    board.start(sid, "coord")
+    _start(sid, roles=["radiology"], case_ids=["TB-S1"])
+    n = len(runs)
+    for change in ({"focus": "only the nodes"}, {"near_match": True}, {"version": 1}):
+        st = store.get_state("TB-S1"); st["artefacts"]["brief_radiology"].update(change); store.save_state("TB-S1", st)
+        _start(sid, roles=["radiology"], case_ids=["TB-S1"])
+        assert len(runs) == n + 1, change
+        n = len(runs)
+
+
+def test_closing_while_briefs_are_prepared_cancels_them_and_the_room_still_loads(monkeypatch):
+    """Phase 6 review S3: close during preparation -> the waiting agents show an error, no task keeps running, and loading the session
+    (session_interrupted) never raises."""
+    sid = _session()
+    started = []
+
+    async def slow(case_id, role, focus="", max_steps=5):
+        started.append((case_id, role))
+        await asyncio.sleep(30)
+        yield {"type": "brief", "brief": {}}
+    monkeypatch.setattr(agents, "run_agent", slow)
+    board.start(sid, "coord")
+
+    async def go():
+        service.prepare_session_agents(sid, "coord")
+        await asyncio.sleep(0.05)
+        service.close_session(sid, "coord")
+        await asyncio.sleep(0.05)
+    asyncio.run(go())
+    s = service.session_interrupted(sid)
+    assert started and s["status"] == "closed" and not service.SESSION_TASKS.get(sid)
+    assert {x["status"] for by in s["agents"].values() for x in by.values()} == {"error"}
+
+
+def test_live_prompt_says_the_agent_answers_questions():
+    p = agents._live_system("radiology")
+    assert "prepare a specialty-specific brief" not in p and "answer the multidisciplinary team's questions" in p

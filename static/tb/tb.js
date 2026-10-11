@@ -56,7 +56,8 @@ async function loadCases() {
 }
 
 async function openCase(id, keepTab) {
-  if (id !== S.caseId) { S.tab = "ready"; S.chat = []; }
+  if (id !== S.caseId) { S.tab = "ready"; }
+  if (id !== S.chatCase) { S.chat = []; S.chatCase = id; }  // questions and answers never follow into another patient's Case File (Phase 6 review)
   S.caseId = id; S.data = await api("/cases/" + encodeURIComponent(id));
   $("#welcome").classList.add("hidden"); $("#sessions").classList.add("hidden"); stopRoomPoll(); $("#intake").classList.add("hidden"); $("#inbox").classList.add("hidden"); $("#case").classList.remove("hidden");
   const c = S.data.case, p = c.patient || {};
@@ -95,6 +96,7 @@ function showTab(t) {
 
 // ------------------------------------------------------------------ citations / evidence
 const flagHTML = (x) => (x.flags || []).map((f) => `<span class="chip c-warn" title="${/approximate/.test(f) ? "The quote matches the source only approximately (a character or word differs). Open the source and check it before relying on this item. Left out of the print view until an expert reviews it." : "The cited source contains a negation (no / not / negative / absent) that this sentence does not; read the source before relying on it."}">${esc(f)}</span>`).join("");
+const modelLabel = (m) => (!m ? "" : /non-medical/i.test(m) ? m : `${m} (non-medical)`);
 // an item kept on an approximate source match (V1 item 6.5) is left out of the print view until an expert has reviewed the artefact
 const approxCls = (x, rv) => (x.approximate && (rv || {}).status !== "reviewed" ? "noprint approx" : "");
 // V1 item 6.4: what the model wrote but verification or the scope guardrail took out, kept with the reason for reviewers
@@ -112,7 +114,9 @@ function citeHTML(c) {
 }
 document.addEventListener("click", (e) => {
   const c = e.target.closest(".cite");
-  if (c) openDoc(c.dataset.doc, c.dataset.page !== "" ? { page: +c.dataset.page, start: +c.dataset.start, end: +c.dataset.end } : null);
+  const roomCase = c && c.closest("#sessions") ? S.roomCase : null;  // a citation in the Board room opens the room's Case File
+  if (c) openDoc(c.dataset.doc, c.dataset.page !== "" ? { page: +c.dataset.page, start: +c.dataset.start, end: +c.dataset.end } : null,
+    roomCase ? `/cases/${encodeURIComponent(roomCase)}/documents/${encodeURIComponent(c.dataset.doc)}` : undefined);
   if (e.target.id === "drawer" || e.target.closest("[data-close]")) $("#drawer").classList.add("hidden");
   if (e.target.id === "modal" || e.target.closest("[data-closemodal]")) $("#modal").classList.add("hidden");
   if (e.target.closest("[data-rmrow]")) e.target.closest(".arow").remove();
@@ -590,7 +594,7 @@ function showBrief(role, b) {
   }
   box.innerHTML = `<h3>${esc(b.label)} <span>${rv.status === "reviewed" ? `<span class="chip c-ok">Reviewed by ${esc(rv.by)}</span>` : rv.status === "flagged" ? `<span class="chip c-bad">Flagged for correction</span>` : `<span class="chip c-rev">AI draft · awaiting expert review</span>`}</span></h3>
     ${stale ? `<div class="banner warn stale"><b>${esc(stale)}.</b> Prepare the brief again (Refresh) before the board relies on it.</div>` : ""}
-    <div class="small muted">${esc(b.generated?.replace("T", " "))} · ${b.seconds} s · ${esc(b.model)}${b.dropped_unverified ? ` · ${b.dropped_unverified} unverified item(s) removed` : ""}${b.guardrail_removed ? ` · ${b.guardrail_removed} removed by scope guardrail` : ""}</div>
+    <div class="small muted">${esc(b.generated?.replace("T", " "))} · ${b.seconds} s · ${esc(modelLabel(b.model))}${b.dropped_unverified ? ` · ${b.dropped_unverified} unverified item(s) removed` : ""}${b.guardrail_removed ? ` · ${b.guardrail_removed} removed by scope guardrail` : ""}</div>
     ${b.sections.map((s) => `<h4>${esc(s.heading)}</h4><ul>${s.items.map((it) => `<li class="${approxCls(it, rv)}">${esc(it.text)} ${it.citations.map(citeHTML).join("")}${flagHTML(it)}</li>`).join("")}</ul>`).join("")}
     ${b.pack ? `<div class="small muted">Guideline pack: ${packLine(b.pack)}${b.pack.checklist ? ` · Reporting checklist: ${esc(b.pack.checklist.title)} (${esc(b.pack.checklist.region)}, ${esc(b.pack.checklist.pages)})` : ""}</div>` : ""}
     ${b.points_for_review.length ? `<h4>Points for review (not treatment recommendations)</h4><ul>${b.points_for_review.map((it) => `<li class="${approxCls(it, rv)}">${esc(it.text)} ${it.citations.map(citeHTML).join("")}${flagHTML(it)}${(it.references || []).length ? `<div class="grefs">${it.references.map(refHTML).join("")}</div>` : ""}</li>`).join("")}</ul>
@@ -667,7 +671,7 @@ function showSummary(s) {
       : s.paragraphs.map((para) => `<p>${para.map((x) => `${esc(x.text)} ${x.citations.map(citeHTML).join("")}${flagHTML(x)}`).join(" ")}</p>`).join("")}
     ${s.stage_as_recorded ? `<div class="stagebox"><b>Stage, as recorded in the ${esc(s.stage_as_recorded.doc_title)}:</b> ${esc(s.stage_as_recorded.value)} ${citeHTML({ ...s.stage_as_recorded, quote: s.stage_as_recorded.quote })}<div class="small muted">Extracted from the signed source report. The agent does not derive or assign stage.</div></div>` : ""}
     ${s.points_for_review.length ? `<h4 style="color:#1f2933">Points for review</h4><ul>${s.points_for_review.map((x) => `<li class="${approxCls(x, rv)}">${esc(x.text)} ${x.citations.map(citeHTML).join("")}${flagHTML(x)}</li>`).join("")}</ul>` : ""}
-    <div class="small muted">${esc(s.generated?.replace("T", " "))} · ${s.seconds} s · ${esc(s.model)}${s.dropped_unverified ? ` · ${s.dropped_unverified} unverified sentence(s) removed` : ""}${s.filled_from_fields ? ` · ${s.filled_from_fields} sentence(s) added from verified fields` : ""}${s.approximate ? ` · ${s.approximate} on an approximate source match (left out of the print view until reviewed)` : ""}</div>
+    <div class="small muted">${esc(s.generated?.replace("T", " "))} · ${s.seconds} s · ${esc(modelLabel(s.model))}${s.dropped_unverified ? ` · ${s.dropped_unverified} unverified sentence(s) removed` : ""}${s.filled_from_fields ? ` · ${s.filled_from_fields} sentence(s) added from verified fields` : ""}${s.approximate ? ` · ${s.approximate} on an approximate source match (left out of the print view until reviewed)` : ""}</div>
     ${can("review") ? removedHTML(s.removed) : ""}
     ${reviewBar("summary", rv)}`;
   bindReview($("#sumout"));
@@ -1037,7 +1041,6 @@ function refreshRoom() {
 function roomCase() { return S.room.cases[S.roomCase] || {}; }
 function renderRoom() {
   const r = S.room, s = r.session, st = SSTATUS[s.status] || SSTATUS.planned, c = roomCase();
-  S.caseId = S.roomCase;  // citations in the room open the current Case File's documents
   const m = r.can_manage;
   $("#sessions").innerHTML = `<div class="case-head"><div><div class="eyebrow">Board room · ${esc(s.id)}</div><h1>${esc(s.title || "Tumour Board")} · ${fmtDate(s.date)} <span class="chip ${st[0]}">${st[1]}</span></h1>
       <div class="muted">${s.agenda.length} Case File${s.agenda.length === 1 ? "" : "s"} · created by ${esc(s.created_by || "")}${s.started_at ? ` · started ${esc(s.started_at.replace("T", " ").slice(0, 16))}` : ""}${s.closed_at ? ` · closed ${esc(s.closed_at.replace("T", " ").slice(0, 16))}` : ""}</div>
@@ -1117,9 +1120,9 @@ function agentsHTML() {
     const stale = (c.briefs_stale || {})[role];
     const brief = !b ? "" : b.no_documents ? noDocsHTML(b) : `${b.points_for_review.length ? `<h4>Points for review (not treatment recommendations)</h4><ul>${b.points_for_review.map((it) => `<li class="${approxCls(it, b.review)}">${esc(it.text)} ${it.citations.map(citeHTML).join("")}${flagHTML(it)}${(it.references || []).length ? `<div class="grefs">${it.references.map(refHTML).join("")}</div>` : ""}</li>`).join("")}</ul>` : `<div class="small muted">No points for review.</div>`}
       <details><summary class="small">Brief: ${b.sections.reduce((n, x) => n + x.items.length, 0)} cited item(s)${b.not_documented.length ? `, ${b.not_documented.length} not documented` : ""}</summary>${b.sections.map((x) => `<h4>${esc(x.heading)}</h4><ul>${x.items.map((it) => `<li class="${approxCls(it, b.review)}">${esc(it.text)} ${it.citations.map(citeHTML).join("")}${flagHTML(it)}</li>`).join("")}</ul>`).join("")}${b.not_documented.length ? `<h4>Not documented</h4><ul>${b.not_documented.map((x) => `<li class="muted">${esc(x)}</li>`).join("")}</ul>` : ""}</details>
-      ${r.can_ask ? removedHTML(b.removed) : ""}<div class="small muted">${esc((b.generated || "").replace("T", " "))} · ${esc(b.model || "")}${b.review?.status === "reviewed" ? ` · reviewed by ${esc(b.review.by)}` : " · AI draft"}</div>`;
+      ${r.can_review ? removedHTML(b.removed) : ""}<div class="small muted">${esc((b.generated || "").replace("T", " "))} · ${esc(modelLabel(b.model))}${b.review?.status === "reviewed" ? ` · reviewed by ${esc(b.review.by)}` : " · AI draft"}</div>`;
     const ans = answersFor(role).map((e) => `<div class="qbox">${esc(e.question)}</div>${e.status === "answered" ? `<div class="answer">${(e.statements || []).map((x) => `<p>${esc(x.text)} ${(x.citations || []).map(citeHTML).join("")}${flagHTML(x)}</p>`).join("")}${(e.references || []).length ? `<div class="grefs">${e.references.map(refHTML).join("")}</div>` : ""}</div>`
-      : `<div class="refusal"><b>${e.status === "out_of_scope" ? "Outside the agent's scope." : "Not documented in the Case File."}</b> ${esc(e.text)}</div>`}`).join("");
+      : `<div class="refusal"><b>${e.status === "out_of_scope" ? "Outside the agent's scope." : "Not documented in the Case File."}</b> ${esc(e.text)}</div>`}${r.can_review ? removedHTML(e.removed) : ""}`).join("");
     const pending = (S.asking || {})[S.roomCase + ":" + role];
     return `<div class="agent" id="ag-${role}"><h4>${esc(label)} <span class="chip ${st[0]}">${["queued", "running"].includes(ag?.status) ? '<span class="spin"></span> ' : ""}${esc(st[1])}</span>${ag?.reused ? ' <span class="small muted">(brief still current, reused)</span>' : ""}
         ${r.can_manage && s.status === "in_session" && !["queued", "running"].includes(ag?.status) ? `<button class="ghost sm" data-prep="${role}">Prepare again</button>` : ""}</h4>
@@ -1127,7 +1130,7 @@ function agentsHTML() {
       ${stale && !["queued", "running"].includes(ag?.status) ? `<div class="banner warn stale"><b>${esc(stale)}.</b> Prepare the brief again before the board relies on it.</div>` : ""}
       ${brief}
       ${r.can_ask && s.status !== "closed" && c.protocol ? `<div class="search" style="margin-top:10px"><input id="ask-${role}" placeholder="Ask the ${esc(label.replace(" support", ""))} agent about the records" autocomplete="off"><button class="primary sm" data-ask="${role}" ${pending ? "disabled" : ""}>${pending ? '<span class="spin"></span>' : "Ask"}</button></div>` : ""}
-      <div class="small muted" style="margin-top:4px">AI support (role-specific): answers only from the Case File records and the specialty's guideline pack, every statement with a verified quote. No image reading, diagnosis or treatment advice.</div>
+      <div class="small muted" style="margin-top:4px">AI support (role-specific): answers only from the Case File records and the specialty's guideline pack, every statement with a verified quote. No image reading, diagnosis or treatment advice. References are guideline text for the board to consult, Indian sources first; they are not facts about this patient and not a recommendation for this patient.</div>
       ${ans}</div>`;
   }).join("");
 }
@@ -1140,7 +1143,7 @@ function bindAgents() {
       const key = S.roomCase + ":" + role, cid = S.roomCase, sid = S.roomId;
       const hist = answersFor(role).filter((e) => e.status === "answered").slice(0, 2).reverse().flatMap((e) => [{ role: "user", content: e.question }, { role: "assistant", content: e.text }]);
       S.asking = S.asking || {}; S.asking[key] = true; refreshRoom(); $("#ask-" + role).value = q;
-      try { await api(`/sessions/${sid}/cases/${cid}/agents/${role}/ask`, { json: { question: q, history: hist } }); if ($("#ask-" + role)) $("#ask-" + role).value = ""; }
+      try { const a = await api(`/sessions/${sid}/cases/${cid}/agents/${role}/ask`, { json: { question: q, history: hist } }); if ($("#ask-" + role)) $("#ask-" + role).value = ""; if (a.log_warning) toast(a.log_warning, 7000); }
       catch (e) { toast(e.message, 7000); }
       delete S.asking[key];
       if (S.roomId === sid) { S.room = await api("/sessions/" + encodeURIComponent(sid)); if (S.roomCase === cid) { refreshRoom(); if ($("#ask-" + role)) $("#ask-" + role).value = ""; } }
@@ -1183,7 +1186,7 @@ function logHTML() {
   const r = S.room, s = r.session, decided = !!(s.decisions || {})[S.roomCase], m = r.can_manage && decided;
   const log = (s.log || []).filter((e) => e.case_id === S.roomCase && !e.superseded);
   if (!log.length) return `<div class="muted small">Nothing yet. The agents' briefs and their answers to the board's questions are kept here, with what the board made of each.</div>`;
-  return `${decided ? "" : `<div class="small muted" style="margin-bottom:6px">Marks open once the board's decision is recorded.</div>`}<table class="t"><thead><tr><th>What the agent said</th><th>The board</th></tr></thead><tbody>${log.map((e) => `<tr><td>
+  return `${decided ? "" : `<div class="small muted" style="margin-bottom:6px">Marks open once the board's decision is recorded.</div>`}<table class="t"><thead><tr><th>What the agent said</th><th>The board</th></tr></thead><tbody>${log.map((e) => `<tr class="${e.approximate ? "approx noprint" : ""}"><td>
       <div class="small muted">${esc(e.label || e.role)} · ${esc(KIND[e.kind] || e.kind)}${e.heading ? ` (${esc(e.heading)})` : ""}</div>${e.kind === "answer" ? `<div class="small"><b>Q:</b> ${esc(e.question)}</div>` : ""}
       <div>${esc(e.text)} ${(e.citations || []).map(citeHTML).join("")}${flagHTML(e)}</div></td>
       <td>${m ? Object.entries(r.marks).map(([k, l]) => `<button class="${e.mark === k ? "primary" : "ghost"} sm" data-mark="${esc(e.id)}" data-v="${k}" aria-pressed="${e.mark === k}">${esc(l)}</button>`).join(" ") : `<span class="chip ${e.mark ? "c-ok" : "c-mute"}">${esc(r.marks[e.mark] || "Not marked")}</span>`}
