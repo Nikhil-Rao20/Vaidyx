@@ -133,3 +133,57 @@ def test_reference_paragraphs_are_dropped_at_build(lib):
     idx = guidelines.GuidelineIndex()
     esmo = [c["text"] for c in idx.chunks if c["file"].startswith("esmo/")]
     assert esmo and all("Eisenhauer" not in t for t in esmo) and "EGFR" in esmo[0]
+
+
+# ---------------------------------------------------------------- section-aware chunking (V1 item 5.4)
+SECTIONED = [
+    (0, "National Cancer Grid\nOral Cancer Guidelines 2019\nPage 1 of 4\n3 WORK UP\n3.1 Imaging\nMRI or CECT of the primary and neck is essential (a) "
+        "before surgery for all oral cavity cancers.\nChest X-ray is essential (a) for staging of oral cavity cancer.\n"),
+    (1, "National Cancer Grid\nOral Cancer Guidelines 2019\nPage 2 of 4\nPET-CT is optional (c) and is reserved for advanced disease with a high "
+        "risk of distant metastases.\n3.2 Biopsy\nA biopsy from the primary is essential (a) before any definitive treatment is planned.\n"),
+    (2, "National Cancer Grid\nOral Cancer Guidelines 2019\nPage 3 of 4\nWork-up list:\n1. History and clinical examination of the oral cavity\n"
+        "2. Biopsy of the primary lesion with histopathology report\n3. CECT or MRI of the face and neck for local extent\n"),
+    (3, "National Cancer Grid\nOral Cancer Guidelines 2019\nPage 4 of 4\nRECOMMENDATIONS\nNeck dissection is recommended for clinically node "
+        "positive disease and for node negative tumours deeper than 4 mm.\n"),
+]
+
+
+def test_fixed_chunks_stay_on_their_page():
+    out = guidelines._fixed_chunks(SECTIONED)
+    assert all(a == b for a, b, _ in out) and [a for a, _, _ in out] == sorted(a for a, _, _ in out)
+
+
+def test_section_chunks_carry_heading_and_span_pages():
+    out = guidelines._section_chunks(SECTIONED, min_break=50)
+    texts = [t for _, _, t in out]
+    imaging = next((a, b, t) for a, b, t in out if "MRI or CECT" in t)
+    assert imaging[2].startswith("3 WORK UP > 3.1 Imaging\n")
+    assert (imaging[0], imaging[1]) == (1, 2) and "PET-CT is optional" in imaging[2]  # the section continues on the next page
+    assert any(t.startswith("3 WORK UP > 3.2 Biopsy\n") for t in texts)
+    assert any(t.split("\n")[0] == "3.2 Biopsy > RECOMMENDATIONS" and "Neck dissection" in t for t in texts)  # under its numbered parent
+    assert not any("Page 1 of 4" in t or "Oral Cancer Guidelines 2019" in t for t in texts)  # running header dropped
+
+
+def test_numbered_list_items_are_not_headings():
+    lines = ["Work-up list:", "1. History and clinical examination of the oral cavity", "2. Biopsy of the primary lesion with histopathology report",
+             "3. CECT or MRI of the face and neck for local extent"]
+    assert all(guidelines._heading(lines[i], lines[i - 1], lines[i + 1] if i + 1 < len(lines) else "") is None for i in range(1, 4))
+    assert guidelines._heading("3.2 Biopsy", "text", "text") == (2, "3.2 Biopsy")
+    assert guidelines._heading("12. Annexure 2. Pathology synoptic reporting formats 26") is None  # table of contents line
+    assert guidelines._heading("Lobectomy is the standard operation for tumours above 2 cm.") is None
+
+
+def test_section_index_has_its_own_cache(lib):
+    root, calls = lib
+    (root / "ncg_india" / "oral.txt").write_text("\n".join(t for _, t in SECTIONED))
+    fixed = guidelines.GuidelineIndex(chunking="fixed")
+    sec = guidelines.GuidelineIndex(chunking="section")
+    cdir = config.DATA_ROOT / "embed_cache"
+    assert (cdir / "guidelines_index.json").exists() and (cdir / "guidelines_section_index.json").exists()
+    assert json.loads((cdir / "guidelines_section_index.json").read_text())["chunking"] == "section"
+    assert fixed.chunking == "fixed" and sec.chunking == "section"
+    h = sec.search("neck dissection node positive", 1)[0]
+    assert "page_end" in h and h["page_end"] >= h["page"]
+    with pytest.raises(ValueError):
+        guidelines.GuidelineIndex(chunking="semantic")
+

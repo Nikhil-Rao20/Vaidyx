@@ -26,7 +26,7 @@ SOURCES = {  # folder -> (organisation label, region tag, boost)
     "tmc": ("Tata Memorial Centre Evidence Based Management, India", "India", 1.3),
 }
 CANCER_WORDS = {"lung_nsclc": ["lung", "nsclc", "thoracic"], "breast": ["breast"], "colorectal_rectum": ["rect", "colorectal", "colon"]}
-INDEX_VERSION = 3  # bump when chunking or filtering changes: the cached index is rebuilt, embeddings of unchanged chunks reused
+INDEX_VERSION = 4  # bump when chunking or filtering changes: the cached index is rebuilt, embeddings of unchanged chunks reused
 _lock = threading.Lock()
 _IDX = None
 
@@ -98,16 +98,149 @@ def _files_sig(root):
     return hashlib.sha1(json.dumps(fs).encode()).hexdigest()
 
 
+CHUNK_CHARS = 1100
+
+
+def _paragraphs(text):
+    return [x.strip() for x in re.split(r"\n\s*\n|(?<=\.)\n", text) if len(x.strip()) > 40 and not _is_reference_list(x)]
+
+
+def _fixed_chunks(pages):
+    """Paragraphs packed into passages of about CHUNK_CHARS, never across a page: [(page, page_end, text)]."""
+    out = []
+    for i, text in pages:
+        buf = ""
+        for para in _paragraphs(re.sub(r"[ \t]+", " ", text)):
+            if len(buf) + len(para) > CHUNK_CHARS and buf:
+                out.append((i + 1, i + 1, buf.strip())); buf = ""
+            buf += para + "\n"
+        if buf.strip():
+            out.append((i + 1, i + 1, buf.strip()))
+    return out
+
+
+# Section-aware chunking (V1 item 5.4): headings are numbered lines ("3.2 Imaging"), short ALL CAPS lines and "Recommendation"
+# lines; a run of consecutive single-number lines is a list, not headings; table-of-contents lines (ending in a page number) are not
+# headings; lines printed on many pages of a file (running header / footer) are dropped.
+_NUM_HEAD = re.compile(r"^(\d{1,2}(?:\.\d{1,2}){0,3})\.?\s+([A-Z][^\n]{2,90})$")
+_RECOMM = re.compile(r"^(?:Key\s+)?Recommendations?\b[^\n]{0,90}$", re.I)
+
+
+def _caps_line(s):
+    letters = [c for c in s if c.isalpha()]
+    return len(letters) >= 5 and sum(c.isupper() for c in letters) / len(letters) > 0.85 and len(s) <= 90 and len(s.split()) <= 12
+
+
+def _heading(line, prev="", nxt=""):
+    """(level, text) when a line is a section heading: 1 to 4 for numbered ones, 0 for ALL CAPS, 9 for Recommendation."""
+    s = line.strip()
+    if not s or len(s) > 100 or s.endswith((".", ",", ";")) or re.search(r"\s\d{1,3}$", s) or _is_reference_list(s):
+        return None
+    m = _NUM_HEAD.match(s)
+    if m and len(s.split()) <= 14 and not re.search(r"\b[A-Z][a-z]+ [A-Z]{1,3}[,.]", s):
+        level = m.group(1).count(".") + 1
+        if level == 1 and any(_NUM_HEAD.match(x.strip()) and "." not in _NUM_HEAD.match(x.strip()).group(1) for x in (prev, nxt) if x.strip()):
+            return None  # '1. History', '2. CECT thorax', ...: a list
+        return (level, s)
+    if _RECOMM.match(s):
+        return (9, s)
+    if _caps_line(s) and not re.fullmatch(r"[\dA-Z .:/\-]+\d", s):
+        return (0, s)
+    return None
+
+
+def _running_lines(pages):
+    """Lines (digits masked) printed on at least 40 % of a file's pages: running headers and footers."""
+    if len(pages) < 4:
+        return set()
+    cnt = Counter()
+    for _, t in pages:
+        cnt.update({re.sub(r"\d+", "#", ln.strip()) for ln in t.splitlines() if ln.strip()})
+    return {k for k, n in cnt.items() if n >= max(3, 0.4 * len(pages))}
+
+
+def _section_chunks(pages, min_break=400):
+    """Passages within sections, each prefixed with its heading path; a passage may run across pages inside one section, small
+    sections are merged until a passage holds min_break characters: [(page, page_end, text)]."""
+    running = _running_lines(pages)
+    lines = [(i + 1, ln) for i, t in pages for ln in re.sub(r"[ \t]+", " ", t).splitlines() if re.sub(r"\d+", "#", ln.strip()) not in running]
+    sections, cur, stack = [], {"head": [], "lines": []}, []
+    for j, (pg, ln) in enumerate(lines):
+        h = _heading(ln, lines[j - 1][1] if j else "", lines[j + 1][1] if j + 1 < len(lines) else "")
+        if not h:
+            cur["lines"].append((pg, ln)); continue
+        lvl, txt = h
+        if 1 <= lvl <= 4:
+            stack = [x for x in stack if x[0] < lvl] + [(lvl, txt)]
+            path = [x[1] for x in stack]
+        else:
+            path = ([stack[-1][1]] if stack else []) + [txt]
+        sections.append(cur); cur = {"head": path, "lines": []}
+    sections.append(cur)
+    out, st = [], {"buf": "", "a": None, "b": None, "head": []}
+
+    def flush():
+        if st["buf"].strip():
+            prefix = " > ".join(st["head"])
+            out.append((st["a"], st["b"], (prefix + "\n" if prefix else "") + st["buf"].strip()))
+        st.update(buf="", a=None)
+    def close(par, paras):  # a paragraph longer than a passage (tables, flowcharts) is cut at line ends
+        piece = []
+        for pg, ln in par:
+            if piece and sum(len(x) + 1 for _, x in piece) + len(ln) > CHUNK_CHARS:
+                paras.append((piece[0][0], piece[-1][0], "\n".join(x for _, x in piece))); piece = []
+            piece.append((pg, ln))
+        if piece:
+            paras.append((piece[0][0], piece[-1][0], "\n".join(x for _, x in piece)))
+    for sec in sections:
+        paras, cur_p = [], []
+        for pg, ln in sec["lines"]:
+            if not ln.strip():
+                if cur_p:
+                    close(cur_p, paras); cur_p = []
+                continue
+            cur_p.append((pg, ln))
+            if ln.rstrip().endswith("."):
+                close(cur_p, paras); cur_p = []
+        if cur_p:
+            close(cur_p, paras)
+        paras = [(a, b, x.strip()) for a, b, x in paras if len(x.strip()) > 40 and not _is_reference_list(x)]
+        if not paras:
+            continue
+        if len(st["buf"]) >= min_break:
+            flush()
+        if st["a"] is None:
+            st["head"] = sec["head"]
+        for a, b, x in paras:
+            if len(st["buf"]) + len(x) > CHUNK_CHARS and st["buf"]:
+                flush(); st["head"] = sec["head"]
+            if st["a"] is None:
+                st["a"] = a
+            st["buf"] += x + "\n"; st["b"] = b
+    flush()
+    return out
+
+
+CHUNKERS = {"fixed": _fixed_chunks, "section": _section_chunks}
+
+
 class GuidelineIndex:
-    def __init__(self):
+    def __init__(self, chunking=None):
+        """chunking: "fixed" (paragraphs packed per page) or "section" (within detected sections, heading prefixed, V1 item 5.4);
+        default config.GUIDELINE_CHUNKING. Each mode keeps its own cache files."""
+        self.chunking = chunking or config.GUIDELINE_CHUNKING
+        if self.chunking not in CHUNKERS:
+            raise ValueError(f"unknown guideline chunking {self.chunking!r}")
         root = config.GUIDELINE_DIR
         cdir = config.DATA_ROOT / "embed_cache"; cdir.mkdir(parents=True, exist_ok=True)
+        stem = "guidelines" if self.chunking == "fixed" else f"guidelines_{self.chunking}"
+        self._npz = cdir / f"{stem}.npz"
         fsig = _files_sig(root) if root.exists() else "none"
-        cached = cdir / "guidelines_index.json"
+        cached = cdir / f"{stem}_index.json"
         old = []
         if cached.exists():
             d = json.loads(cached.read_text())
-            if d.get("files_sig") == fsig and d.get("version") == INDEX_VERSION and (cdir / "guidelines.npz").exists():
+            if d.get("files_sig") == fsig and d.get("version") == INDEX_VERSION and self._npz.exists():
                 self.chunks = d["chunks"]; self._finish(cdir, d["emb_sig"]); return
             old = d.get("chunks") or []  # rows of the cached vectors: unchanged chunks keep their embedding
         self.chunks = []
@@ -116,25 +249,17 @@ class GuidelineIndex:
                 continue
             folder = p.relative_to(root).parts[0]
             org, region, boost = SOURCES.get(folder, (folder, "International", 1.0))
-            for page, text in _read(p):
-                text = re.sub(r"[ \t]+", " ", text)
-                paras = [x.strip() for x in re.split(r"\n\s*\n|(?<=\.)\n", text) if len(x.strip()) > 40 and not _is_reference_list(x)]
-                buf = ""
-                for para in paras:
-                    if len(buf) + len(para) > 1100 and buf:
-                        self.chunks.append({"text": buf.strip(), "file": str(p.relative_to(root)), "title": _title(p), "org": org, "region": region, "boost": boost, "page": page + 1}); buf = ""
-                    buf += para + "\n"
-                if buf.strip():
-                    self.chunks.append({"text": buf.strip(), "file": str(p.relative_to(root)), "title": _title(p), "org": org, "region": region, "boost": boost, "page": page + 1})
+            meta = {"file": str(p.relative_to(root)), "title": _title(p), "org": org, "region": region, "boost": boost}
+            self.chunks += [{"text": t, **meta, "page": a, "page_end": b} for a, b, t in CHUNKERS[self.chunking](_read(p))]
         sig = hashlib.sha1(json.dumps([c["file"] + str(c["page"]) + c["text"][:50] for c in self.chunks]).encode()).hexdigest()
         self._finish(cdir, sig, old)
-        cached.write_text(json.dumps({"files_sig": fsig, "version": INDEX_VERSION, "emb_sig": sig, "chunks": self.chunks}))
+        cached.write_text(json.dumps({"files_sig": fsig, "version": INDEX_VERSION, "chunking": self.chunking, "emb_sig": sig, "chunks": self.chunks}))
 
     def _finish(self, cdir, sig, old=()):
         self.tok = [search.tokenize(c["title"] + " " + c["text"]) for c in self.chunks]
         self.df = Counter(t for ts in self.tok for t in set(ts))
         self.avgdl = sum(map(len, self.tok)) / max(len(self.tok), 1)
-        cache = cdir / "guidelines.npz"
+        cache = getattr(self, "_npz", cdir / "guidelines.npz")
         z = dict(np.load(cache)) if cache.exists() else None
         if z is not None and z["sig"].item() == sig:
             self.emb = z["emb"]; self.reused = len(self.chunks)
@@ -176,7 +301,8 @@ class GuidelineIndex:
         for i, c in enumerate(self.chunks):
             rr[i] *= c["boost"] * (1.25 if words and any(w in (c["file"] + c["title"]).lower() for w in words) else (0.8 if words else 1.0))
         top = np.argsort(-rr)[:k]
-        return [{**{k2: self.chunks[i][k2] for k2 in ("text", "file", "title", "org", "region", "page")}, "score": round(float(rr[i]), 5)} for i in top]
+        return [{**{k2: self.chunks[i][k2] for k2 in ("text", "file", "title", "org", "region", "page")}, "page_end": self.chunks[i].get("page_end") or self.chunks[i]["page"],
+                 "score": round(float(rr[i]), 5)} for i in top]
 
 
 def search_grouped(q, cancer=None, india=3, intl=4):
