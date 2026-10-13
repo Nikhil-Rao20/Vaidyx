@@ -895,6 +895,17 @@ def setup_tumour_board_routes():
         _user(request); _case(case_id)
         return store.verify_audit(case_id)
 
+    @r.post("/cases/{case_id}/board-records/{record_id}/communication")
+    async def record_communication(case_id: str, record_id: str, request: Request):
+        """Who informed the patient and when, key worker, intent, trial, consent: set after the board (12 Oct); audited, no new version."""
+        rl = _roles(request); _need(rl, "board_record"); _case(case_id); b = await request.json()
+        try:
+            rec = postboard.update_communication(case_id, store.safe_id(record_id), b, user=rl["user"])
+        except KeyError:
+            raise HTTPException(404, "No such Tumour Board record")
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {"ok": True, "record": rec, "state": store.get_state(case_id)}
 
     @r.post("/guidelines/search")
     async def gl_search(request: Request):

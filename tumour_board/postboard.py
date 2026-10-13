@@ -321,6 +321,39 @@ def outcome_flags(record: dict) -> list:
     return flags
 
 
+def update_communication(case_id, record_id, fields: dict, user="") -> dict:
+    """Set the patient-communication fields of a recorded decision later (who informed the patient and when, key worker, intent, trial,
+    consent). Not a change of the decision: no new version; kept in the record's history and audited. Completes the open
+    'Inform the patient' follow-up action when a date is given."""
+    st = store.get_state(case_id)
+    rec = next((b for b in st.get("board_records") or [] if b["id"] == record_id), None)
+    if not rec:
+        raise KeyError(record_id)
+    allowed = {k: v for k, v in (fields or {}).items() if k in COMMUNICATION_FIELDS}
+    clean = clean_record_fields({**rec, **allowed})
+    changed = {k: clean[k] for k in COMMUNICATION_FIELDS if clean.get(k) != rec.get(k)}
+    for k, v in changed.items():
+        rec[k] = v
+    rec.setdefault("communication_history", []).append({"ts": store.now_iso(), "by": user, "changed": changed})
+    adj = rec.get("adjudication") or {}  # the information flags follow the fields; every other flag stays as it is
+    kept = [f for f in adj.get("flags") or [] if f.get("kind") != "communication"]
+    new = [f for f in outcome_flags(rec) if f.get("kind") == "communication"]
+    for i, f in enumerate(new):
+        f["id"] = f"K{i + 1}"
+    adj["flags"] = kept + new
+    rec["resolution"] = resolution_status(rec)
+    closed = []
+    if rec.get("patient_informed_date"):
+        for a in st.get("actions") or []:
+            if a.get("board_record") == record_id and a.get("communication") and a.get("status") != "completed":
+                a["status"] = "completed"; a["completed"] = store.now_iso()
+                a.setdefault("history", []).append({"ts": store.now_iso(), "event": f"Patient recorded as informed on {rec['patient_informed_date']} by {rec.get('informed_by') or user}"})
+                closed.append(a["id"])
+    store.save_state(case_id, st)
+    store.audit(case_id, {"kind": "board_record_communication", "record": record_id, "by": user, "changed": changed, "actions_closed": closed})
+    return rec
+
+
 async def record_decision(case_id, record, user=""):
     record = clean_record_fields(record)
     record = {**record, "id": "B" + uuid.uuid4().hex[:6], "recorded_at": store.now_iso(), "entered_by": user}
@@ -336,6 +369,9 @@ async def record_decision(case_id, record, user=""):
     st.setdefault("board_records", []).append(record)
     # board actions become follow-up requests in the Responsible Department's inbox, the department notified (V1 item 7.4)
     st.setdefault("actions", []).extend(followup.board_actions(case_id, record, by=user))
+    comm = followup.communication_action(case_id, record, by=user)  # the patient must be told; a follow-up until the date is recorded (12 Oct)
+    if comm:
+        st["actions"].append(comm)
     if record.get("next_review"):
         st["next_review"] = {"date": record["next_review"], "from_record": record["id"]}
     store.save_state(case_id, st)
