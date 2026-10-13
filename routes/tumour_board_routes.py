@@ -13,6 +13,7 @@ from tumour_board import board  # board sessions, attendance, agent log (V1 item
 from tumour_board import followup  # Tumour Board actions in department inboxes, closing suggestions (V1 item 7.4)
 from tumour_board import scanned  # values and citations read from scans (V1 items 8.1, 8.2)
 from tumour_board import skills  # agent role definitions as editable SKILL.md files (12 Oct)
+from tumour_board import connectors, mcp_server  # MCP: hospital-system connectors (client) and the read-only server (12 Oct)
 from tumour_board import discord  # discordances between reports, decision watch (12 Oct)
 from tumour_board import fhir_export  # FHIR R4 document bundle and the HBCR registry abstract (12 Oct)
 
@@ -170,6 +171,95 @@ def setup_tumour_board_routes():
         except ValueError as e:
             raise HTTPException(400, str(e))
         return {"ok": True, "skill": {k: s[k] for k in ("name", "label", "department", "doc_types", "focus", "version", "sha", "origin")}}
+
+    # ---- MCP connectors (hospital systems) and the read-only MCP server (12 Oct) ------------------------------------------
+    @r.get("/connectors")
+    async def list_connectors(request: Request):
+        rl = _roles(request); _need_known(rl)
+        cs = [connectors.public(c) for c in connectors.load()]
+        if not org.can(rl, "manage_org"):
+            cs = [{k: c[k] for k in ("id", "label", "department", "enabled", "kind")} for c in cs if c.get("enabled")]
+        return {"connectors": cs, "can_manage": org.can(rl, "manage_org"), "can_fetch": org.can(rl, "list_case"),
+                "protocol": {"tools": list(connectors.REQUIRED_TOOLS), "note": "Every tool must be annotated read-only; fetched files enter the intake pipeline as the connector's department; nothing is written back."}}
+
+    @r.put("/connectors")
+    async def put_connectors(request: Request):
+        rl = _roles(request); _need(rl, "manage_org"); b = await request.json()
+        try:
+            saved = connectors.save(b.get("connectors") or [], by=rl["user"])
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {"ok": True, "connectors": [connectors.public(c) for c in saved]}
+
+    @r.post("/connectors/{cid}/probe")
+    async def probe_connector(cid: str, request: Request):
+        rl = _roles(request); _need_known(rl)
+        c = connectors.get(store.safe_id(cid))
+        if not c:
+            raise HTTPException(404, "No such connector")
+        return await connectors.probe(c)
+
+    @r.get("/cases/{case_id}/connectors/{cid}/records")
+    async def connector_records(case_id: str, cid: str, request: Request):
+        rl = _roles(request); _case(case_id)
+        c = connectors.get(store.safe_id(cid))
+        if not c or not c.get("enabled"):
+            raise HTTPException(404, "No such connector")
+        if not (org.can(rl, "list_case") or org.can(rl, "upload", c["department"])):
+            raise HTTPException(403, "Only a coordinator, or a member of the connector's department, can look up records")
+        pr = await connectors.probe(c)
+        if not pr.get("usable"):
+            raise HTTPException(409, f"Connector not usable: {pr.get('reason') or pr.get('error')}")
+        try:
+            return await connectors.available_records(case_id, c)
+        except Exception as e:
+            raise HTTPException(502, f"The hospital system did not answer: {type(e).__name__}: {str(e)[:160]}")
+
+    @r.post("/cases/{case_id}/connectors/{cid}/fetch")
+    async def connector_fetch(case_id: str, cid: str, request: Request):
+        rl = _roles(request); _case(case_id); b = await request.json()
+        c = connectors.get(store.safe_id(cid))
+        if not c or not c.get("enabled"):
+            raise HTTPException(404, "No such connector")
+        if not (org.can(rl, "list_case") or org.can(rl, "upload", c["department"])):
+            raise HTTPException(403, "Only a coordinator, or a member of the connector's department, can fetch records")
+        ids = [str(x) for x in (b.get("record_ids") or []) if str(x).strip()][:50]
+        if not ids:
+            raise HTTPException(400, "Choose at least one record")
+        pr = await connectors.probe(c)
+        if not pr.get("usable"):
+            raise HTTPException(409, f"Connector not usable: {pr.get('reason') or pr.get('error')}")
+        try:
+            return await connectors.fetch(case_id, c, ids, user=rl["user"])
+        except ValueError as e:
+            raise HTTPException(409, str(e))
+        except Exception as e:
+            raise HTTPException(502, f"The hospital system did not answer: {type(e).__name__}: {str(e)[:160]}")
+
+    @r.get("/mcp-server")
+    async def mcp_server_info(request: Request):
+        """How to connect an outside agent to this Case File store (read-only); the token only for admins."""
+        rl = _roles(request); _need_known(rl)
+        cfg = mcp_server.client_config()
+        import socket
+        running = False
+        try:
+            with socket.create_connection(("127.0.0.1", mcp_server.DEFAULT_PORT), timeout=0.3):
+                running = True
+        except OSError:
+            pass
+        out = {**cfg, "running": running, "tools": [t.name for t in mcp_server.mcp._tool_manager.list_tools()], "scope": mcp_server.SCOPE,
+               "include_protected": mcp_server.include_protected(), "start": "tumour_board/serve_mcp.sh server"}
+        if org.can(rl, "manage_org"):
+            out["token"] = mcp_server.token()
+        return out
+
+    @r.post("/mcp-server/regenerate-token")
+    async def mcp_regenerate(request: Request):
+        rl = _roles(request); _need(rl, "manage_org")
+        t = mcp_server.regenerate_token()
+        skills._audit({"kind": "mcp_token_regenerated", "by": rl["user"]})
+        return {"ok": True, "token": t, "note": "Restart the MCP server (tumour_board/serve_mcp.sh stop; serve_mcp.sh server) so it reads the new token"}
 
     @r.post("/skills/{role}/reset")
     async def reset_skill(role: str, request: Request):

@@ -1145,6 +1145,61 @@ def skills_section(c):
     check("skills: an invalid edit is refused with the reason (400)", broken.status_code == 400 and "description" in broken.text, broken.text[:100])
 
 
+def mcp_section(c, base):
+    """12 Oct: MCP. The read-only server answers an MCP client with the same Case File the API shows; the demo HIS connector is saved by
+    an admin (token hidden from the UI), probed as usable, lists the records the hospital system holds for TB-001 that are not in the Case
+    File, and a fetch sends them through the intake pipeline where patient matching files them into TB-001."""
+    info = c.get("/api/tb/mcp-server").json()
+    check("mcp: server info for admins carries the token and the tool list", info.get("token") and "get_case" in info["tools"] and info["read_only"] is True, f"running={info.get('running')}")
+    if not info.get("running"):
+        check("mcp: server running on 7110 (start with tumour_board/serve_mcp.sh server)", False, "not running"); return
+    import asyncio
+    from tumour_board import connectors as cn
+    async def via_mcp():
+        async with cn.session({"url": info["url"], "token": info["token"]}) as s:
+            tools = (await s.list_tools()).tools
+            d = cn._structured(await s.call_tool("get_case", {"case_id": "TB-001"}))
+            return tools, d
+    tools, d = asyncio.run(via_mcp())
+    api = c.get("/api/tb/cases/TB-001").json()
+    check("mcp: every server tool is annotated read-only", all(t.annotations and t.annotations.readOnlyHint and t.annotations.destructiveHint is False for t in tools), f"{len(tools)} tools")
+    check("mcp: get_case over MCP matches the API (patient, gate count, verified fields)", d["case"]["patient"]["name"] == api["case"]["patient"]["name"]
+          and d["gate"]["satisfied"] == api["state"]["gate"]["satisfied"] and len(d["verified_fields"]) > 5, f"{d['gate']['satisfied']}/{d['gate']['total']}, {len(d['verified_fields'])} fields")
+    check("mcp: the real case is hidden from MCP clients", not any(x["case_id"] == "TB-2026-bharath" for x in cn._structured(asyncio.run(_call(info, "list_cases", {})))["cases"]))
+    au = c.get("/api/tb/cases/TB-001/audit").json()["events"]
+    check("mcp: MCP calls are in the Case File audit log", any(e["kind"] == "mcp_call" and e["tool"] == "get_case" for e in au))
+    # connectors: the demo HIS
+    tok = open(os.path.join(DATA_ROOT_HINT, "demo_his_token")).read().strip() if os.path.exists(os.path.join(DATA_ROOT_HINT, "demo_his_token")) else ""
+    r = c.put("/api/tb/connectors", json={"connectors": [{"id": "demo_his", "label": "Demo hospital system (SYNTHETIC)", "url": "http://127.0.0.1:7111/mcp", "token": tok, "department": "Radio-diagnosis", "enabled": True}]})
+    check("connectors: admin saves the demo HIS connector; token not returned", r.status_code == 200 and r.json()["connectors"][0]["has_token"] is True and "token" not in r.json()["connectors"][0], r.text[:120])
+    bad = c.put("/api/tb/connectors", json={"connectors": [{"id": "x", "label": "x", "url": "ftp://x", "department": "Radio-diagnosis"}]})
+    check("connectors: a bad url is refused (400)", bad.status_code == 400)
+    pr = c.post("/api/tb/connectors/demo_his/probe").json()
+    if not pr.get("ok"):
+        check("connectors: demo HIS reachable on 7111 (start with tumour_board/serve_mcp.sh demo-his)", False, pr.get("error", "")[:100]); return
+    check("connectors: probe says usable, every tool read-only, records protocol present", pr["usable"] and {t["name"] for t in pr["tools"]} >= {"find_patient", "list_records", "fetch_record"}, pr.get("reason", ""))
+    wait_job(c, c.post("/api/tb/demo/TB-001").json()["job"])  # fresh TB-001: the arrivals are not in it yet
+    recs = c.get("/api/tb/cases/TB-001/connectors/demo_his/records").json()
+    new = [x for x in recs.get("records", []) if not x["in_case_file"]]
+    check("connectors: records of TB-001's patient listed, matched on the hospital number, none in the Case File yet", recs.get("patient", {}).get("patient_id") == "SYN-100231" and recs.get("matched_on") == "SYN-100231" and len(new) == len(recs["records"]) >= 3, f"{len(recs.get('records', []))} records")
+    pick = [x["record_id"] for x in new if "cbc" in x["filename"] or "mri_brain" in x["filename"]][:2]
+    f = c.post("/api/tb/cases/TB-001/connectors/demo_his/fetch", json={"record_ids": pick}).json()
+    check("connectors: fetch returns an intake job and the fetched files with checksums", f.get("job") and len(f["fetched"]) == 2 and all(x["sha256"] for x in f["fetched"]) and not f["errors"], json.dumps(f)[:160])
+    j, secs = wait_job(c, f["job"])
+    filed = j.get("filed") or {}
+    check("connectors: patient matching filed the fetched records into TB-001", j["state"] == "finished" and set(filed.values()) == {"TB-001"} and len(filed) == 2, f"{filed} in {secs}s; needs matching {j.get('needs_matching')}")
+    recs2 = c.get("/api/tb/cases/TB-001/connectors/demo_his/records").json()
+    check("connectors: fetched records now show as in the Case File", sum(x["in_case_file"] for x in recs2["records"]) == 2)
+    docs = c.get("/api/tb/cases/TB-001").json()["documents"]
+    conn_docs = [d for d in docs if (d.get("rel_path") or "").startswith("demo_his/")]
+    check("connectors: documents carry the connector's department and the upload user", len(conn_docs) == 2 and all(d.get("department") == "radio_diagnosis" for d in conn_docs) and all("via connector demo_his" in (d.get("uploaded_by") or "") for d in conn_docs), str([(d.get('department'), d.get('uploaded_by')) for d in conn_docs])[:160])
+    au = c.get("/api/tb/cases/TB-001/audit").json()["events"]
+    check("connectors: listing and fetch audited", any(e["kind"] == "connector_records_listed" for e in au) and any(e["kind"] == "connector_fetch" for e in au))
+    m = httpx.Client(base_url=base, timeout=60)
+    check("connectors: anonymous cannot list or fetch (401)", m.get("/api/tb/cases/TB-001/connectors/demo_his/records").status_code == 401)
+    wait_job(c, c.post("/api/tb/demo/TB-001").json()["job"])  # leave TB-001 fresh
+
+
 def discord_section(c):
     """12 Oct: discordances between reports and the decision watch. TB-004: a decision cites the histology of the first report; the amended
     report that arrives later records a different histology: the Case File lists the amendment for review, the record carries a decision-watch
@@ -1183,6 +1238,12 @@ def discord_section(c):
     st6 = [x for x in d6["discordances"]["items"] if x["field"] == "recorded_stage"]
     check("discord: TB-006 draft MRI vs final MRI stage listed", any(x["kind"] in ("non_final_differs", "conflict", "changed") for x in st6), str([(x["kind"], x["severity"]) for x in st6])[:120])
     wait_job(c, c.post("/api/tb/demo/TB-004").json()["job"]); wait_job(c, c.post("/api/tb/demo/TB-006").json()["job"])  # fresh again
+
+
+async def _call(info, tool, args):
+    from tumour_board import connectors as cn
+    async with cn.session({"url": info["url"], "token": info["token"]}) as s:
+        return await s.call_tool(tool, args)
 
 
 DATA_ROOT_HINT = os.environ.get("TB_DATA_ROOT") or os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "tumour_board")
@@ -1234,6 +1295,8 @@ def main(base, pw, only=None):
         return 0 if not FAIL else 1
     if only == "skills":
         skills_section(c); print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}"); return 0 if not FAIL else 1
+    if only == "mcp":
+        mcp_section(c, base); print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}"); return 0 if not FAIL else 1
     if only == "discord":
         discord_section(c); print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}"); return 0 if not FAIL else 1
     if only == "phase9":
@@ -1382,6 +1445,8 @@ def main(base, pw, only=None):
     phase9(c)
     # 17. 12 Oct: agent skills as SKILL.md files
     skills_section(c)
+    # 18. 12 Oct: MCP server and connectors (needs serve_mcp.sh server + demo-his; the checks say so when they are down)
+    mcp_section(c, base)
     # 19. 12 Oct: discordances between reports and the decision watch
     discord_section(c)
     # leave the demo Case Files in their fresh state for the next user / test

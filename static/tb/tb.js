@@ -213,7 +213,9 @@ function renderReady() {
       ${can("upload") && (S.demoList || []).some((x) => x.case_id === S.caseId && x.has_arrivals) ? `<button class="ghost sm" id="btn-arrivals" style="margin-top:10px">Demo: new reports arrive from departments</button>` : ""}
       <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">${can("reprocess") && docs.errors ? `<button class="ghost sm" id="btn-reproc-err">Re-process ${docs.errors} failed</button>` : ""}${can("reprocess") ? `<button class="ghost sm" id="btn-reproc-all" title="Re-read, re-classify and re-extract every document (after a protocol or model change)">Re-process all documents</button>` : ""}<a class="ghost sm" href="/api/tb/cases/${esc(S.caseId)}/export">Export Case File record</a><a class="ghost sm" href="/api/tb/cases/${esc(S.caseId)}/export/fhir" title="FHIR R4 document bundle (mCODE-informed, ABDM-ready shape; values as recorded; codes not assigned)">FHIR bundle</a><a class="ghost sm" href="/api/tb/cases/${esc(S.caseId)}/export/registry?format=csv" title="HBCR (ICMR-NCDIR 2025) registry items as the records state them, with sources">Registry abstract</a></div>
       <div class="muted small" style="margin-top:10px">${docs.total || 0} documents · ${docs.ready || 0} processed${docs.processing ? ` · ${docs.processing} processing` : ""}${docs.errors ? ` · ${docs.errors} failed to read${docs.dismissed?.length ? ` (${docs.dismissed.length} dismissed)` : ""}` : ""}${docs.identity_flags?.length ? ` · <b style="color:#b23a2f">${docs.identity_flags.length} identity flags</b>` : ""}</div>
-    </div></div></div>`;
+    </div>
+    <div id="hs-card"></div></div></div>`;
+  renderHospitalSystems();
   $("#btn-recheck").onclick = async () => { const st = await api(`/cases/${S.caseId}/recheck`, { method: "POST" }); await openCase(S.caseId, true); const r = st.recheck || {};
     toast(`Re-checked ${r.documents_checked} processed document(s) against the protocol: ${r.satisfied}/${r.total} satisfied${r.level1_open ? `, ${r.level1_open} Level 1 gap(s)` : ""}${r.level2_open ? `, ${r.level2_open} Level 2 gap(s)` : ""}${r.processing ? `, ${r.processing} still processing` : ""}${r.blockers ? `, ${r.blockers} failed document(s) block the gate` : ""}. ${r.changed?.length ? "Changed: " + r.changed.join(", ") + "." : "No change."} Documents are not re-read by a re-check; use Re-process for that.`, 9000); };
   const reproc = async (which) => { const j = await api(`/cases/${S.caseId}/reprocess`, { json: { which } }); watchJob(j.job); };
@@ -267,6 +269,84 @@ function decisionWatchHTML(b) {
   const mine = (d?.items || []).filter((x) => x.kind === "decision_watch" && x.record === b.id);
   return mine.length ? `<div style="margin-top:8px">${mine.map(discordItemHTML).join("")}</div>` : "";
 }
+
+// ------------------------------------------------------------------ MCP connectors: records held by hospital systems (12 Oct)
+async function renderHospitalSystems() {
+  const box = $("#hs-card"); if (!box) return;
+  if (!S.connectors) { try { S.connectors = await api("/connectors"); } catch (e) { S.connectors = { connectors: [] }; } }
+  const cs = (S.connectors.connectors || []).filter((c) => c.enabled);
+  if (!cs.length || !S.connectors.can_fetch) { box.innerHTML = ""; return; }
+  box.innerHTML = `<div class="card"><h3>Hospital systems <span class="muted small">MCP connectors</span></h3>
+    <div class="muted small" style="margin-bottom:8px">Records the hospital's systems hold for this patient that are not in the Case File. Fetched files go through the normal intake pipeline (reading, identity matching, verification); nothing is written back to the hospital system.</div>
+    ${cs.map((c) => `<div class="hsrow" data-conn="${esc(c.id)}"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span><b>${esc(c.label)}</b> <span class="muted small">uploads as ${esc(deptName(c.department))}</span></span>
+      <button class="ghost sm" data-hs-check="${esc(c.id)}">Check for new records</button></div><div class="hs-result small" style="margin-top:6px"></div></div>`).join("")}</div>`;
+  $$("[data-hs-check]", box).forEach((b) => (b.onclick = async () => {
+    const row = b.closest(".hsrow"), out = $(".hs-result", row); b.disabled = true; out.innerHTML = `<span class="spin"></span> Asking the hospital system...`;
+    try {
+      const r = await api(`/cases/${S.caseId}/connectors/${b.dataset.hsCheck}/records`);
+      if (!r.patient) { out.innerHTML = `<span class="muted">${esc(r.note || "No matching patient in the hospital system.")}</span>`; b.disabled = false; return; }
+      const fresh = r.records.filter((x) => !x.in_case_file);
+      out.innerHTML = `<div class="muted">Patient <b>${esc(r.patient.name)}</b> (${esc(r.patient.patient_id)}, matched on ${esc(r.matched_on)}): ${r.records.length} record(s), ${fresh.length} not in the Case File.</div>
+        ${r.records.length ? `<table class="t" style="margin-top:6px"><thead><tr><th></th><th>Record</th><th>Type</th><th>Date</th><th>Department</th><th>In Case File</th></tr></thead><tbody>
+        ${r.records.map((x) => `<tr><td>${x.in_case_file ? "" : `<input type="checkbox" data-rec="${esc(x.record_id)}" checked aria-label="fetch ${esc(x.filename)}">`}</td><td>${esc(x.filename)}</td><td>${esc(x.record_type || "")}</td><td>${esc(x.record_date ? fmtDate(x.record_date) : "")}</td><td>${esc(x.department || "")}</td><td>${x.in_case_file ? '<span class="chip c-ok">yes</span>' : '<span class="chip c-warn">no</span>'}</td></tr>`).join("")}</tbody></table>` : ""}
+        ${fresh.length ? `<div style="margin-top:8px"><button class="primary sm" data-hs-fetch="${esc(b.dataset.hsCheck)}">Fetch selected into the intake pipeline</button></div>` : ""}`;
+      const fb = $("[data-hs-fetch]", row);
+      if (fb) fb.onclick = async () => {
+        const ids = $$("input[data-rec]:checked", row).map((x) => x.dataset.rec);
+        if (!ids.length) { toast("Select at least one record"); return; }
+        fb.disabled = true; fb.innerHTML = `<span class="spin"></span> Fetching...`;
+        try {
+          const f = await api(`/cases/${S.caseId}/connectors/${fb.dataset.hsFetch}/fetch`, { json: { record_ids: ids } });
+          toast(`${f.fetched.length} record(s) fetched as ${f.department}${f.errors.length ? `, ${f.errors.length} failed` : ""}; now being read and matched to the patient`);
+          if (f.job) watchJob(f.job);
+        } catch (e) { toast(e.message, 7000); fb.disabled = false; fb.textContent = "Fetch selected into the intake pipeline"; }
+      };
+    } catch (e) { out.innerHTML = `<span class="chip c-bad">not available</span> ${esc(e.message)}`; }
+    b.disabled = false;
+  }));
+}
+
+// ------------------------------------------------------------------ admin: connectors and the read-only MCP server (12 Oct)
+async function showConnectors() {
+  const [r, m] = await Promise.all([api("/connectors"), api("/mcp-server")]);
+  const row = (c) => `<tr class="crow" data-id="${esc(c.id || "")}"><td><input class="c-id" value="${esc(c.id || "")}" placeholder="his_main" ${c.id ? "readonly" : ""}></td><td><input class="c-label" value="${esc(c.label || "")}" placeholder="Hospital information system"></td>
+    <td><input class="c-url" value="${esc(c.url || "")}" placeholder="http://127.0.0.1:7111/mcp"></td><td><input class="c-token" type="password" value="" placeholder="${c.has_token ? "(kept)" : "bearer token"}"></td>
+    <td><select class="c-dept">${(S.org?.departments || []).map((d) => `<option value="${esc(d.id)}" ${d.id === c.department ? "selected" : ""}>${esc(d.name)}</option>`).join("")}</select></td>
+    <td><input type="checkbox" class="c-on" ${c.enabled !== false ? "checked" : ""}></td><td>${c.id ? `<button class="ghost sm" data-probe="${esc(c.id)}">Test</button>` : ""} <button class="ghost sm" data-rmconn>×</button><div class="c-probe small"></div></td></tr>`;
+  $("#modal-body").innerHTML = `<h2 style="color:#1f2933;margin-top:0">Connectors and the MCP server</h2>
+    <h3 style="margin:10px 0 4px">Hospital systems (MCP connectors)</h3>
+    <div class="muted small" style="margin-bottom:6px">An outside MCP server that holds records (HIS, LIS, RIS, archive). It must offer the records protocol (${r.protocol.tools.join(", ")}) with every tool annotated read-only; "Test" checks that. Fetched files are uploaded as the department chosen here and go through patient matching. Tokens are stored on the server and never shown again.</div>
+    <table class="t"><thead><tr><th>Id</th><th>Label</th><th>MCP URL</th><th>Token</th><th>Uploads as</th><th>On</th><th></th></tr></thead><tbody id="c-rows">${(r.connectors || []).map(row).join("")}</tbody></table>
+    <button class="ghost sm" id="c-add" style="margin-top:6px">+ Connector</button>
+    <h3 style="margin:16px 0 4px">This Case File store as an MCP server (read-only)</h3>
+    <div class="kv small">
+      <div>Status</div><div>${m.running ? '<span class="chip c-ok">running</span>' : '<span class="chip c-mute">not running</span>'} start: <code>${esc(m.start)}</code></div>
+      <div>URL</div><div><code>${esc(m.url)}</code> · header <code>${esc(m.header)}</code></div>
+      <div>Token</div><div>${m.token ? `<code id="mcp-tok" class="hidden">${esc(m.token)}</code><button class="ghost sm" id="mcp-show">Show</button> <button class="ghost sm" id="mcp-regen">Regenerate</button>` : '<span class="muted">admins only</span>'}</div>
+      <div>Tools</div><div>${(m.tools || []).map((t) => `<span class="chip c-mute">${esc(t)}</span>`).join(" ")}</div>
+      <div>stdio</div><div><code>${esc((m.stdio_command || []).join(" "))}</code></div>
+      <div>Protocol</div><div>${esc(m.protocol)} · real Case Files hidden: ${m.include_protected ? "no (TB_MCP_INCLUDE_PROTECTED set)" : "yes"}</div>
+    </div>
+    <div class="muted small" style="margin-top:8px">${esc(m.scope)}</div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="ghost" data-closemodal>Close</button>${r.can_manage ? `<button class="primary" id="c-save">Save connectors</button>` : ""}</div>`;
+  $("#modal").classList.remove("hidden");
+  const bind = () => {
+    $$("[data-rmconn]", $("#c-rows")).forEach((x) => (x.onclick = () => x.closest("tr").remove()));
+    $$("[data-probe]", $("#c-rows")).forEach((x) => (x.onclick = async () => { const out = $(".c-probe", x.closest("td")); out.innerHTML = `<span class="spin"></span>`;
+      try { const p = await api(`/connectors/${x.dataset.probe}/probe`, { method: "POST" }); out.innerHTML = p.ok ? `<span class="chip ${p.usable ? "c-ok" : "c-bad"}">${p.usable ? "usable" : "not usable"}</span> ${esc(p.reason || "")} ${p.tools.map((t) => `<span class="chip ${t.read_only ? "c-mute" : "c-bad"}">${esc(t.name)}</span>`).join(" ")}` : `<span class="chip c-bad">unreachable</span> ${esc(p.error || "")}`; }
+      catch (e) { out.textContent = e.message; } }));
+  };
+  bind();
+  $("#c-add").onclick = () => { $("#c-rows").insertAdjacentHTML("beforeend", row({})); bind(); };
+  if ($("#mcp-show")) $("#mcp-show").onclick = () => $("#mcp-tok").classList.toggle("hidden");
+  if ($("#mcp-regen")) $("#mcp-regen").onclick = async () => { if (!confirm("Regenerate the MCP server token? Connected clients must be given the new one and the server restarted.")) return; const t = await api("/mcp-server/regenerate-token", { json: {} }); toast(t.note, 8000); showConnectors(); };
+  if ($("#c-save")) $("#c-save").onclick = async () => {
+    const connectors = $$("#c-rows tr.crow").map((tr) => ({ id: $(".c-id", tr).value.trim(), label: $(".c-label", tr).value.trim(), url: $(".c-url", tr).value.trim(), token: $(".c-token", tr).value, keep_token: !$(".c-token", tr).value, department: $(".c-dept", tr).value, enabled: $(".c-on", tr).checked }));
+    try { await api("/connectors", { method: "PUT", json: { connectors } }); toast("Connectors saved"); S.connectors = null; showConnectors(); if (S.caseId) renderHospitalSystems(); }
+    catch (e) { toast(e.message, 7000); }
+  };
+}
+
 function orphanHTML(g) {
   // waivers recorded for a record this protocol version no longer lists (renamed or removed): shown, never silently lost (review M4)
   const o = g?.orphaned_waivers || [];
@@ -990,6 +1070,7 @@ const deptName = (id) => (S.org?.departments || []).find((d) => d.id === id)?.na
 async function loadOrg() {
   try { S.org = await api("/org"); S.me = S.org.me; } catch (e) { S.org = null; S.me = null; }
   $("#btn-org").classList.toggle("hidden", !S.me?.admin);
+  $("#btn-connectors").classList.toggle("hidden", !S.me?.admin);
   $("#btn-new").classList.toggle("hidden", !meCan("create_case"));
 }
 async function showOrg() {
@@ -1419,6 +1500,7 @@ $$("#tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 $("#btn-new").onclick = newCase;
 $("#btn-cards").onclick = showCards;
 $("#btn-skills").onclick = () => showSkills();
+$("#btn-connectors").onclick = showConnectors;
 $("#btn-org").onclick = showOrg;
 $("#btn-queue").onclick = showIntake;
 $("#btn-inbox").onclick = showInbox;
