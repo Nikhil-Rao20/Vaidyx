@@ -102,6 +102,9 @@ async def process_docs(case_id, doc_ids, job, from_stored=False):
             rules.sync_actions(case_id, gate)
             suggest_followups(case_id)  # a new document may answer a Tumour Board action (V1 item 7.4)
             _decision_watch(case_id)  # a new report may change a value a recorded decision cited (12 Oct)
+            if job.get("refetch"):  # a re-fetch from the HIS: the owning department hears which requests closed (V2 item 3.5)
+                from . import his_case
+                his_case.after_refetch(case_id, job)
     except Exception as e:  # the UI polls this job: it must reach a terminal state
         job["state"] = "failed"; job["error"] = f"{e.__class__.__name__}: {str(e)[:300]}"; job["seconds"] = round(time.time() - job["started"], 1)
         _save_job(job)

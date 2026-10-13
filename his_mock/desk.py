@@ -661,7 +661,7 @@ def desk_report(dept: str, report_id: str, request: Request, hospital: Hospital 
         values = ui.table(["Value", "As printed"], [[f"<span class=mono>{ui.esc(k)}</span>", ui.esc(val)]
                                                     for k, val in v["values"].items()], "No values.")
         forms = ""
-        if r["status"] == "preliminary":
+        if r["status"] == "preliminary" or (r["status"] == "final" and not v.get("signature_id")):  # preliminary, or final awaiting its signature
             forms += _form(f"{base}/orders/{quote(o['id'])}/sign", "sign", "Complete and sign",
                            "<label>Values (prefilled from the preliminary; one per line, key: value)</label>"
                            + _textarea("values", values_text(v["values"])) + "<label>Signing consultant</label>"

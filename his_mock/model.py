@@ -249,8 +249,8 @@ class Store:
         if not d:
             return {"orders": [], "reports": []}
         orders = [o for o in self.orders.values() if o["performing_department"] == d["name"] and o["status"] in OPEN_ORDER]
-        reports = [r for r in self.reports.values() if r["status"] == "preliminary"
-                   and self.orders[r["order_id"]]["performing_department"] == d["name"]]
+        reports = [r for r in self.reports.values() if self.orders[r["order_id"]]["performing_department"] == d["name"]
+                   and (r["status"] == "preliminary" or (r["status"] == "final" and not self.current_version(r).get("signature_id")))]  # awaiting signature too
         return {"orders": orders, "reports": reports}
 
     def imaging_study_for(self, order_id):
@@ -496,8 +496,9 @@ class Store:
                    title=None, apply_signature=True, omitted_values=None, observation_values=None,
                    verification_status="verified"):
         """Verification and digital signature (ORU R01, OBR-25 F). On a preliminary report this adds a new final version
-        (the preliminary stays in history); on an open order it creates the report with a final first version.
-        `apply_signature=False` records a report marked final whose signature was never applied."""
+        (the preliminary stays in history); on an open order it creates the report with a final first version; on a report
+        marked final whose signature was never applied, signing adds a new signed final version (the unsigned one stays in
+        history). `apply_signature=False` records a report marked final whose signature was never applied."""
         r = self.reports.get(order_id_or_report_id)
         o = self.orders[r["order_id"]] if r else self._order(order_id_or_report_id)
         r = r or self.report_for_order(o["id"])
@@ -506,9 +507,10 @@ class Store:
             raise LifecycleError(f"{prac['name']} is a junior resident; a consultant signs the final report")
         t = self._when(when)
         if r:
-            if r["status"] != "preliminary":
-                raise LifecycleError(f"report {r['id']} is {r['status']}; use amend for a signed report")
             prev = self.current_version(r)
+            unsigned_final = r["status"] == "final" and not prev.get("signature_id")  # marked final, never signed: can still be signed
+            if r["status"] != "preliminary" and not (unsigned_final and apply_signature):
+                raise LifecycleError(f"report {r['id']} is {r['status']}; use amend for a signed report")
             _bump(r, t)
             n = prev["version"] + 1
             vals = values if values is not None else prev["values"]

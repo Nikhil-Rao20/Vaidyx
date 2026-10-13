@@ -355,3 +355,18 @@ def test_save_and_load_round_trip(h, tmp_path):
     assert len(lines) == len(h.events) and json.loads(lines[-1]) == h.events[-1]
     back = Store.load(path)
     assert back.data == h.data and back.orders["rad-26-00001"]["accession"] == "RAD/26/00001"
+
+
+def test_unsigned_final_waits_on_the_desk_and_can_be_signed_as_a_new_version(h):
+    """A report marked final whose signature was never applied (the LIS case of V2 scenario unsigned_final_report) sits on the
+    department's desk until a consultant signs it: a new signed final version, the unsigned one kept in history."""
+    o = _order(h, "hpe_biopsy")
+    r = h.sign_final(o["id"], "prac-vxreg-29003", values={"grade": "G2"}, apply_signature=False, when="2026-09-03T17:30:00+05:30")
+    assert r["id"] in {x["id"] for x in h.pending_for_department("PATH")["reports"]}
+    r2 = h.sign_final(r["id"], "prac-vxreg-29003", when="2026-09-04T09:00:00+05:30")
+    assert r2["id"] == r["id"] and r2["status"] == "final" and r2["current_version"] == 2
+    assert r2["versions"][0]["signature_id"] is None and r2["versions"][1]["signature_id"] in h.signatures
+    assert r2["versions"][1]["values"] == {"grade": "G2"}  # the values of the unsigned version are kept
+    assert r["id"] not in {x["id"] for x in h.pending_for_department("PATH")["reports"]}
+    with pytest.raises(LifecycleError):  # a signed report is amended, never signed again
+        h.sign_final(r["id"], "prac-vxreg-29003")
