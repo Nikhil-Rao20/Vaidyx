@@ -862,12 +862,13 @@ function renderBoard() {
 
 // ------------------------------------------------------------------ tab: audit
 async function renderAudit() {
-  const ev = (await api(`/cases/${S.caseId}/audit`)).events.reverse();
+  const au = await api(`/cases/${S.caseId}/audit`); const ev = au.events.reverse(); const ch = au.chain || {};
   const llm = ev.filter((e) => e.kind === "llm_call");
-  $("#tab-audit").innerHTML = `<div class="card"><h3>Audit log <span class="muted small">${ev.length} events · ${llm.length} model calls · ${llm.reduce((a, e) => a + (e.completion_tokens || 0), 0)} tokens generated</span></h3>
+  const chainChip = ch.ok ? `<span class="chip c-ok" title="Every event carries the hash of the previous one; the chain was recomputed and is intact">chain verified · ${ch.chained} linked${ch.unchained ? ` · ${ch.unchained} earlier` : ""}</span>` : `<span class="chip c-bad" title="An event does not match its hash: the file was changed outside the application">chain broken at event ${ch.first_broken}</span>`;
+  $("#tab-audit").innerHTML = `<div class="card"><h3>Audit log <span class="muted small">${ev.length} events · ${llm.length} model calls · ${llm.reduce((a, e) => a + (e.completion_tokens || 0), 0)} tokens generated · ${chainChip}</span></h3>
     <div class="muted small" style="margin-bottom:8px">Append-only record of every AI call (model, purpose, time, prompt hash), every verification and guardrail decision, and every human action.</div>
     <table class="t"><thead><tr><th>Time</th><th>Event</th><th>Detail</th></tr></thead><tbody>
-    ${ev.slice(0, 400).map((e) => { const { ts, kind, ...rest } = e; return `<tr><td class="small">${esc(ts.replace("T", " "))}</td><td><span class="chip ${/guardrail|error|unverified/.test(kind) ? "c-rev" : kind === "llm_call" ? "c-mute" : "c-info"}">${esc(kind)}</span></td><td class="small">${esc(JSON.stringify(rest)).slice(0, 300)}</td></tr>`; }).join("")}
+    ${ev.slice(0, 400).map((e) => { const { ts, kind, prev, hash, ...rest } = e; return `<tr><td class="small">${esc(ts.replace("T", " "))}</td><td><span class="chip ${/guardrail|error|unverified/.test(kind) ? "c-rev" : kind === "llm_call" ? "c-mute" : "c-info"}">${esc(kind)}</span></td><td class="small">${esc(JSON.stringify(rest)).slice(0, 300)}</td></tr>`; }).join("")}
     </tbody></table></div>`;
 }
 

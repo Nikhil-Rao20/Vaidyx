@@ -717,7 +717,13 @@ def setup_tumour_board_routes():
     @r.get("/cases/{case_id}/audit")
     async def audit(case_id: str, request: Request):
         _user(request); _case(case_id)
-        return {"events": store.read_audit(case_id)}
+        return {"events": store.read_audit(case_id), "chain": store.verify_audit(case_id)}  # tamper-evident chain (12 Oct)
+
+    @r.get("/cases/{case_id}/audit/verify")
+    async def audit_verify(case_id: str, request: Request):
+        _user(request); _case(case_id)
+        return store.verify_audit(case_id)
+
 
     @r.post("/guidelines/search")
     async def gl_search(request: Request):

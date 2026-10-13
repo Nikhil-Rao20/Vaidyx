@@ -9,6 +9,7 @@ intake/<doc_id>/                 department uploads before they are matched to a
 intake/audit.jsonl               append-only log of intake events (uploads, matching, filing)
 """
 import asyncio, hashlib, json, os, re, shutil, time, uuid
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -83,6 +84,7 @@ def save_case(case):
 
 
 def delete_case(case_id):
+    _last_hash.pop(str(case_dir(case_id) / "audit.jsonl"), None)  # a re-created Case File starts a fresh audit chain
     shutil.rmtree(case_dir(case_id), ignore_errors=True)
 
 
@@ -152,12 +154,71 @@ def list_docs(case_id):
     return [dict(d) for d in docs]
 
 
+# ---- tamper-evident audit log (12 Oct): every event carries the hash of the previous one and its own hash ------------------
+_chain_lock = threading.Lock()
+_last_hash: dict = {}  # case_id -> hash of the last event written (read from the file's last line on first use)
+
+
+def _canon(ev: dict) -> str:
+    return json.dumps(ev, sort_keys=True, ensure_ascii=False, default=str, separators=(",", ":"))
+
+
+def _event_hash(prev: str, body: dict) -> str:
+    return hashlib.sha256((prev + "\n" + _canon(body)).encode("utf-8")).hexdigest()
+
+
+def _tail_hash(p: Path) -> str:
+    """The hash of the last line of an audit file ('' when the file is empty or its last line predates the chain)."""
+    if not p.exists():
+        return ""
+    with open(p, "rb") as f:
+        f.seek(0, 2); size = f.tell()
+        f.seek(max(0, size - 65536)); tail = f.read().decode("utf-8", "replace")
+    lines = [l for l in tail.splitlines() if l.strip()]
+    if not lines:
+        return ""
+    try:
+        return json.loads(lines[-1]).get("hash") or ""
+    except Exception:
+        return ""
+
+
 def audit(case_id, event: dict):
-    event = {"ts": now_iso(), **event}
+    event = {"ts": now_iso(), **{k: v for k, v in event.items() if k not in ("prev", "hash")}}
     p = case_dir(case_id) / "audit.jsonl"
     p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p, "a") as f:
-        f.write(json.dumps(event, ensure_ascii=False, default=str) + "\n")
+    with _chain_lock:
+        key = str(p)  # by file, not by case id: the same id in another data root (tests, a restored backup) must not inherit a hash
+        cached = _last_hash.get(key)
+        size = p.stat().st_size if p.exists() else 0
+        prev = cached[0] if cached and cached[1] == size else _tail_hash(p)  # a file re-created or written elsewhere: read its tail again
+        h = _event_hash(prev, event)
+        with open(p, "a") as f:
+            f.write(json.dumps({**event, "prev": prev, "hash": h}, ensure_ascii=False, default=str) + "\n")
+        _last_hash[key] = (h, p.stat().st_size)
+
+
+def verify_audit(case_id) -> dict:
+    """Walk the chain: every hashed event must carry the hash of the event before it and its own recomputed hash. Events written
+    before the chain existed count as unchained (the chain starts at the first hashed event)."""
+    p = case_dir(case_id) / "audit.jsonl"
+    if not p.exists():
+        return {"ok": True, "events": 0, "chained": 0, "unchained": 0, "first_broken": None, "last_hash": ""}
+    prev, chained, unchained, broken = "", 0, 0, None
+    lines = [l for l in p.read_text().splitlines() if l.strip()]
+    for i, l in enumerate(lines):
+        try:
+            ev = json.loads(l)
+        except Exception:
+            broken = broken if broken is not None else i; continue
+        h = ev.get("hash")
+        if not h:
+            unchained += 1; continue
+        body = {k: v for k, v in ev.items() if k not in ("prev", "hash")}
+        if ev.get("prev", "") != prev or _event_hash(prev, body) != h:
+            broken = broken if broken is not None else i
+        prev = h; chained += 1
+    return {"ok": broken is None, "events": len(lines), "chained": chained, "unchained": unchained, "first_broken": broken, "last_hash": prev}
 
 
 def read_audit(case_id, limit=500):
