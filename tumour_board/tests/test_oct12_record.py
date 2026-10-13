@@ -92,3 +92,11 @@ def test_session_timing_per_case(unit_case, monkeypatch):
     s = board.close(s["id"], "coord")
     assert s["timing"]["TB-UNIT2"] == 390.0 and s["current_since"] is None
     assert board.export(s["id"])["timing"] == {unit_case: 330.0, "TB-UNIT2": 390.0}
+
+
+def test_trends_list_numeric_values_over_time(unit_case):
+    add(unit_case, make_doc("Dl1", "lab", date="2026-09-01", facts={"haemoglobin": fact("11.8 g/dL"), "cea": fact("12.4 ng/mL")}, text="SYNTHETIC\nLAB\nHaemoglobin 11.8 g/dL\nCEA 12.4 ng/mL\nReport status: FINAL"))
+    add(unit_case, make_doc("Dl2", "lab", date="2026-09-29", facts={"haemoglobin": fact("12.1 g/dL"), "cea": fact("4.1 ng/mL")}, text="SYNTHETIC\nLAB\nHaemoglobin 12.1 g/dL\nCEA 4.1 ng/mL\nReport status: FINAL"))
+    t = {x["field"]: x for x in postboard.trends(unit_case)}
+    assert set(t) == {"haemoglobin", "cea"}
+    assert [r["number"] for r in t["cea"]["rows"]] == [12.4, 4.1] and t["cea"]["max"] == 12.4 and t["cea"]["rows"][0]["doc_id"] == "Dl1" and t["cea"]["rows"][0]["quote"]

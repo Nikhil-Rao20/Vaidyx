@@ -391,7 +391,8 @@ def setup_tumour_board_routes():
                  for name, a in (st.get("artefacts") or {}).items() if isinstance(a, dict) and (name == "summary" or name.startswith("brief_"))}
         return {"case": c, "state": st, "documents": docs, "facts": {k: {"label": cat.get(k, {}).get("label", k), **v} for k, v in facts.items()},
                 "timeline": postboard.timeline(case_id), "permissions": _case_permissions(rl, c, st, all_docs), "signature": sig, "stale": stale,
-                "discordances": discord.summary(case_id, st), "outcomes": postboard.OUTCOMES}
+                "discordances": discord.summary(case_id, st),  # reports that disagree, values a decision cited that later reports changed (12 Oct)
+                "trends": postboard.trends(case_id, st), "outcomes": postboard.OUTCOMES}  # values over time (12 Oct)
 
     @r.post("/cases/{case_id}/documents")
     async def upload(case_id: str, request: Request, files: list[UploadFile] = File(...), paths: str = Form("[]")):

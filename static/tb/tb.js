@@ -322,6 +322,15 @@ function bindDiscord(root) {
     try { await api(`/cases/${S.caseId}/confirmations/${b.dataset.undonote}/undo`, { json: {} }); toast("Undone"); await openCase(S.caseId, true); } catch (e) { toast(e.message, 7000); }
   }));
 }
+function trendsHTML() {
+  const t = S.data.trends || [];
+  if (!t.length) return "";
+  return `<div class="card"><h3>Values over time <span class="muted small">${t.length} field(s)</span></h3>
+    <div class="muted small" style="margin-bottom:6px">Every verified value of a numeric field, oldest first, with its report. A table of what the records say; the board reads the trend.</div>
+    ${t.map((f) => `<div style="margin:8px 0 10px"><b>${esc(f.label)}</b><table class="t" style="margin-top:4px"><tbody>${f.rows.map((r) => `<tr><td class="small" style="width:92px">${esc(r.date ? fmtDate(r.date) : "date not stated")}</td>
+      <td style="width:40%"><div style="display:flex;align-items:center;gap:6px"><div style="height:8px;border-radius:4px;background:${r.final ? "var(--accent)" : "var(--line-2)"};width:${f.max && r.number != null ? Math.max(4, Math.round(100 * r.number / f.max)) : 0}%"></div><span class="small">${esc(r.value)}</span></div></td>
+      <td class="small">${citeHTML(r)}${r.final ? "" : ' <span class="chip c-warn">non-final</span>'}</td></tr>`).join("")}</tbody></table></div>`).join("")}</div>`;
+}
 function outcomeHTML(b) {
   const oc = b.outcome_type || "decision", label = (S.data.outcomes || {})[oc] || oc;
   return `<div class="small" style="margin:6px 0"><span class="chip ${oc === "decision" ? "c-ok" : oc === "not_discussed" ? "c-bad" : "c-warn"}">${esc(label)}</span>${b.deferred_reason ? ` ${esc(b.deferred_reason)}` : ""}${b.referred_to ? ` to ${esc(b.referred_to)}` : ""}</div>`;
@@ -1035,6 +1044,7 @@ function renderBoard() {
     <div class="card"><h3>Follow-up tracker <span class="muted small">${allActs.filter((a) => a.status !== "completed").length} open</span></h3>
       ${allActs.map(actionHTML).join("") || '<div class="muted small">No actions.</div>'}
       ${st.next_review ? `<div class="stagebox"><b>Next Tumour Board review:</b> ${fmtDate(st.next_review.date)}</div>` : ""}</div>
+    ${trendsHTML()}
     <div class="card"><h3>Longitudinal Case File</h3><div class="timeline">${S.data.timeline.map((e) => `<div class="tev ${e.kind}"><div class="d">${fmtDate(e.date)}</div>${e.doc_id ? `<span class="cite" data-doc="${esc(e.doc_id)}">${esc(e.title)}</span> <span class="chip ${["FINAL", "AMENDED", "CORRECTED"].includes(e.status) ? "c-ok" : "c-bad"}">${esc(e.status)}</span>` : esc(e.title)}${e.kind === "action" ? ` <span class="chip c-mute">${esc(e.status)}</span>` : ""}</div>`).join("")}</div></div>
   </div></div>`;
   const addRow = (d = "", t = "", due = "") => $("#b-acts").insertAdjacentHTML("beforeend", `<div class="arow"><select>${depts.map((x) => `<option ${x === d ? "selected" : ""}>${x}</option>`).join("")}</select><input placeholder="Task" value="${esc(t)}"><input type="date" value="${due}"><button class="ghost sm" data-rmrow>×</button></div>`);

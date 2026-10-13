@@ -573,6 +573,41 @@ def undo_resolution(case_id, conf_id, by=""):
     return rec
 
 
+TREND_FIELDS = ["ecog", "haemoglobin", "wbc", "platelets", "creatinine", "bilirubin", "cea", "lesion_size", "suv_max", "depth_of_invasion", "distance_from_anal_verge"]
+
+
+def _first_number(s):
+    for x in grounding.numbers(s or ""):
+        try:
+            return float(x.replace(",", ""))
+        except ValueError:
+            continue
+    return None
+
+
+def trends(case_id, state=None):
+    """Verified values of the numeric fields over time (labs, markers, sizes, performance status): every entry of the history with its
+    document, date and quote, oldest first; the number is the first number written in the value, the units as written. A table for the
+    board, never an interpretation (12 Oct)."""
+    st = state if state is not None else store.get_state(case_id)
+    facts = rules.resolve_facts(rules.case_docs(case_id, st), st.get("overrides"))
+    cat = protocol.facts()
+    out = []
+    for fid in TREND_FIELDS:
+        hist = [e for e in (facts.get(fid) or {}).get("history") or [] if e.get("verification") in rules.VERIFIED and e.get("state", "present") == "present" and e.get("value")]
+        if len(hist) < 2:
+            continue
+        rows = []
+        for e in sorted(hist, key=lambda x: (x.get("date") or "", x.get("report_date") or "")):
+            loc = e.get("location") or {}
+            rows.append({"date": e.get("date"), "value": e["value"], "number": _first_number(e["value"]), "doc_id": e["doc_id"], "doc_title": e.get("doc_title"),
+                         "final": bool(e.get("doc_final")), "status": e.get("doc_status"), "quote": e.get("quote") or "", "page": loc.get("page"), "start": loc.get("start"), "end": loc.get("end"),
+                         **({"source_method": e["source_method"]} if e.get("source_method") else {}), **({"confirmed_by": e["confirmed_by"]} if e.get("confirmed_by") else {})})
+        nums = [r["number"] for r in rows if r["number"] is not None]
+        out.append({"field": fid, "label": cat.get(fid, {}).get("label", fid), "rows": rows, "max": max(nums) if nums else None, "min": min(nums) if nums else None})
+    return out
+
+
 def timeline(case_id):
     ev = []
     for d in rules.case_docs(case_id):  # confirmed dates and document types (V1 item 2.2)

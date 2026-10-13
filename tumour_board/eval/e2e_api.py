@@ -1240,6 +1240,57 @@ def discord_section(c):
     wait_job(c, c.post("/api/tb/demo/TB-004").json()["job"]); wait_job(c, c.post("/api/tb/demo/TB-006").json()["job"])  # fresh again
 
 
+def records_section(c):
+    """12 Oct: outcome type and patient-communication fields, the 'inform the patient' follow-up, the tamper-evident audit chain, values over
+    time, the FHIR bundle and the registry abstract (TB-003, re-imported at the end)."""
+    wait_job(c, c.post("/api/tb/demo/TB-003").json()["job"])
+    d = c.get("/api/tb/cases/TB-003").json()
+    check("records: outcome types offered by the API", set(d.get("outcomes") or {}) == {"decision", "deferred", "referred", "not_discussed"})
+    bad = c.post("/api/tb/cases/TB-003/board-records", json={"decision_text": "x", "recorded_by": "Dr A", "participants": "Dr A (Med Onc)", "outcome_type": "maybe"})
+    check("records: an unknown outcome type is refused (400)", bad.status_code == 400, bad.text[:80])
+    rec = c.post("/api/tb/cases/TB-003/board-records", json={"board_date": "2026-10-01", "decision_text": "Plan agreed by the board.", "recorded_by": "Dr A",
+                                                              "participants": "Dr A (Med Onc), Dr B (Surg Onc), Dr C (Rad Onc)", "actions": [], "outcome_type": "decision", "intent_as_recorded": "curative"}).json()
+    comm = [f for f in rec["adjudication"]["flags"] if f.get("kind") == "communication"]
+    check("records: information flags for the patient-facing items not yet recorded (no resolution needed)", {f["field"] for f in comm} == {"patient_informed_date", "key_worker", "trial_considered", "consent_recorded"}
+          and all(f["severity"] == "info" for f in comm) and not any(f["id"] in rec["resolution"]["open_flags"] for f in comm), str(sorted(f["field"] for f in comm)))
+    st = c.get("/api/tb/cases/TB-003").json()["state"]
+    inform = [a for a in st["actions"] if a.get("communication") and a.get("board_record") == rec["id"]]
+    check("records: an 'inform the patient' follow-up is open, due a week after the board", len(inform) == 1 and inform[0]["due"] == "2026-10-08" and inform[0]["status"] == "pending", str(inform)[:120])
+    r2 = c.post(f"/api/tb/cases/TB-003/board-records/{rec['id']}/communication", json={"patient_informed_date": "03/10/2026", "informed_by": "Dr A", "key_worker": "Sr. Meena, 98450 00000", "trial_considered": "yes", "consent_recorded": "yes"})
+    check("records: communication recorded without a new version; the follow-up closes", r2.status_code == 200 and r2.json()["record"]["patient_informed_date"] == "2026-10-03" and r2.json()["record"].get("version", 1) == 1
+          and not any(f.get("kind") == "communication" for f in r2.json()["record"]["adjudication"]["flags"])
+          and [a for a in r2.json()["state"]["actions"] if a.get("communication")][0]["status"] == "completed", r2.text[:120])
+    deferred = c.post("/api/tb/cases/TB-003/board-records", json={"board_date": "2026-10-01", "decision_text": "Deferred.", "recorded_by": "Dr A", "participants": "Dr A (Med Onc)", "outcome_type": "deferred", "actions": []}).json()
+    check("records: a deferred outcome without an action is flagged for review", any(f.get("field") == "actions" and f["severity"] == "review" for f in deferred["adjudication"]["flags"]))
+    au = c.get("/api/tb/cases/TB-003/audit").json()
+    ch = au.get("chain") or {}
+    check("records: the audit chain verifies (every event linked to the one before)", ch.get("ok") is True and ch.get("chained", 0) > 10 and any(e.get("kind") == "board_record_communication" for e in au["events"]), json.dumps(ch)[:120])
+    v = c.get("/api/tb/cases/TB-003/audit/verify").json()
+    check("records: /audit/verify answers the same", v.get("ok") is True and v["last_hash"] == ch["last_hash"])
+    wait_job(c, c.post("/api/tb/cases/TB-003/demo-arrivals").json()["job"])  # later CEA and MRI
+    d3 = c.get("/api/tb/cases/TB-003").json()
+    cea = next((t for t in d3.get("trends") or [] if t["field"] == "cea"), None)
+    check("records: values over time list CEA across the two reports with quotes", cea and len(cea["rows"]) >= 2 and all(r["quote"] and r["doc_id"] for r in cea["rows"]) and cea["rows"][0]["date"] <= cea["rows"][-1]["date"], str([(r["date"], r["value"]) for r in (cea or {}).get("rows", [])])[:120])
+    f = c.get("/api/tb/cases/TB-003/export/fhir")
+    b = f.json() if f.status_code == 200 else {}
+    kinds = {}
+    for e in b.get("entry") or []:
+        kinds[e["resource"]["resourceType"]] = kinds.get(e["resource"]["resourceType"], 0) + 1
+    check("records: FHIR R4 document bundle with Composition, Patient, DocumentReference, Observation, Condition, Task, CarePlan, Communication",
+          f.status_code == 200 and b.get("type") == "document" and {"Composition", "Patient", "DocumentReference", "Observation", "Condition", "Task", "CarePlan", "Communication"} <= set(kinds), json.dumps(kinds))
+    obs = [e["resource"] for e in b.get("entry") or [] if e["resource"]["resourceType"] == "Observation"]
+    check("records: every Observation carries its quote and its source report; LOINC on the standard ones", obs and all(o.get("note") and o["note"][0]["text"].startswith("Quote from the report") and o.get("derivedFrom") for o in obs)
+          and any((o["code"].get("coding") or [{}])[0].get("code") == "2039-6" for o in obs), f"{len(obs)} observations")
+    cond = [e["resource"] for e in b.get("entry") or [] if e["resource"]["resourceType"] == "Condition"]
+    check("records: the Condition carries the stage as recorded, not derived", cond and cond[0].get("stage") and "copied, never derived" in cond[0]["stage"][0]["type"]["text"], str((cond or [{}])[0].get("stage"))[:100])
+    reg = c.get("/api/tb/cases/TB-003/export/registry").json()
+    items = {i["item"]: i for i in reg.get("items") or []}
+    check("records: registry abstract (HBCR items) as recorded, intention to treat from the board record", items.get("intention_to_treat", {}).get("value") == "curative" and items.get("staging_system_and_stage", {}).get("doc_id") and items.get("topography_morphology", {}).get("value", "").startswith("not coded"), str({k: v['value'][:30] for k, v in items.items()})[:200])
+    csv_ = c.get("/api/tb/cases/TB-003/export/registry?format=csv")
+    check("records: registry abstract as CSV", csv_.status_code == 200 and csv_.text.startswith("case_id,item,label,value") and csv_.text.count("\n") >= 10)
+    wait_job(c, c.post("/api/tb/demo/TB-003").json()["job"])  # fresh again
+
+
 def metrics_section(c, base):
     """12 Oct: agenda readiness and the chase list for a board date; the quality dashboard with reference lines; CSV; permissions."""
     wait_job(c, c.post("/api/tb/demo/TB-001").json()["job"])
@@ -1323,6 +1374,8 @@ def main(base, pw, only=None):
         mcp_section(c, base); print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}"); return 0 if not FAIL else 1
     if only == "discord":
         discord_section(c); print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}"); return 0 if not FAIL else 1
+    if only == "records":
+        records_section(c); print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}"); return 0 if not FAIL else 1
     if only == "metrics":
         metrics_section(c, base); print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}"); return 0 if not FAIL else 1
     if only == "phase9":
@@ -1475,6 +1528,8 @@ def main(base, pw, only=None):
     mcp_section(c, base)
     # 19. 12 Oct: discordances between reports and the decision watch
     discord_section(c)
+    # 20. 12 Oct: outcome and communication fields, audit chain, values over time, FHIR and registry exports
+    records_section(c)
     # 21. 12 Oct: agenda readiness, chase list, quality dashboard
     metrics_section(c, base)
     # leave the demo Case Files in their fresh state for the next user / test
@@ -1487,5 +1542,5 @@ def main(base, pw, only=None):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--base", default="http://127.0.0.1:7000"); ap.add_argument("--password", required=True)
-    ap.add_argument("--only", default=None, help="run one section only (phase2 | phase3 | phase4 | phase5 | phase6 | phase7 | phase8 | phase9)")
+    ap.add_argument("--only", default=None, help="run one section only (phase2 | phase3 | phase4 | phase5 | phase6 | phase7 | phase8 | phase9 | skills | mcp | discord | records | metrics)")
     a = ap.parse_args(); sys.exit(main(a.base, a.password, a.only))
