@@ -153,3 +153,42 @@ rectangle, seeded noise, the burned-in word SYNTHETIC): no real image is used an
   count). Upload is idempotent. `viewer_url(study_uid)` gives `/ohif/viewer?StudyInstanceUIDs=<uid>`.
 - **Tests:** `his_mock/tests/test_dicom.py`. The Orthanc tests run only when `127.0.0.1:8042/system` answers (skipped otherwise);
   they upload a temporary build and delete only the studies they added.
+
+## The web app and the FHIR API (plan item V2-1.3)
+
+`his_mock/serve.sh start|stop|status|restart` runs the mock hospital's FastAPI app (`his_mock/app.py`, uvicorn, app venv) on
+127.0.0.1:7130 only, never tunnelled: one process holds one `model.Store` behind a lock, and the routers below are mounted
+when their module exists. `GET /` and `/health` describe it; `GET /documents/<store path>` serves a report PDF with the
+token; `GET /view/reports/<id>/<version>` serves it inline for the human screens (desk, HIS screens; no token, the port is
+localhost and the demo reaches them through the Vaidyx-TB app's logged-in routes). `his_mock/ui.py` is the shared page shell.
+
+`his_mock/fhir.py` serves the store as a read-only FHIR R4 API at `/fhir` (bearer token from `data/his_mock/token`, also
+`?token=`; `GET /fhir/metadata` needs none), in NRCeS (ABDM) FHIR IG v6.5.0 shapes: Patient (UHID type MR, a temporary
+UHID with `use: temp`, ABHA number and `@sbx` address, PM-JAY ID, never an Aadhaar), Encounter (IP / OP No. type VN, class
+IMP / AMB, ward and bed history as `location[]`, PM-JAY pre-authorisation extension), ServiceRequest (orders with accession
+type ACSN; inter-department referrals with SNOMED 3457005), Specimen, DiagnosticReport (Lab or Imaging profile, versioned:
+`meta.versionId` = report version, `/_history`), Observation (one per printed value; LOINC only where certain, else
+`code.text`; `observation_values` override, `omitted_values` absent; candidates, the PDF wins), DocumentReference (one per
+version, `current` / `superseded`, PDF as base64 with SHA-1 `hash` and the store's sha256 as an extension), Provenance (base
+R4, NRCeS has no profile: the signature block, demo CA, serial, document hash, verification status), ImagingStudy (Study
+UID, series, OHIF viewer and DICOMweb URLs as extensions), Media (base R4, the DICOMweb link), Practitioner (Reg. No. type
+MD), Organization (the hospital and its departments). Clinical notes, referral notes and discharge summaries are
+DocumentReferences only. `$document` returns the NRCeS DocumentBundle (Composition `DiagnosticReportRecord` first, absolute
+synthetic `fullUrl`s so every `Type/id` reference resolves inside); `Patient/$everything` and the custom `Patient/$similar`
+(other registrations to link, never merged). Search by identifier (`value` or `system|value`), patient, encounter, status
+and `_lastUpdated` (`gt` / `ge` / `lt` / `le`: the delta re-fetch, equal to `hl7.changed_since`), `_sort`, `_count` /
+`_offset`; an unknown parameter is a 400 OperationOutcome. Identifier systems are synthetic
+(`https://his.vaidyx-demo.invalid/identifier/...`) except the ABHA system, which carries sandbox values. Ids: Observation
+`obs-<report>-v<n>-<key>`, DocumentReference `doc-<report>-v<n>`, Provenance `sig-<report>-v<n>`, Media `media-<study id>`,
+referral ServiceRequest `ref-<encounter id>-<n>`. Client flow for 3.1: `Patient?identifier=<UHID>` (or Encounter by IP / OP
+No.), `Patient/<id>/$similar`, `Encounter?patient=`, `DocumentReference?patient=&status=current` then `$document` each;
+deltas with `DiagnosticReport?_lastUpdated=gt<watermark>` (`+` encoded as `%2B`).
+
+**Conformance:** `python -m his_mock.eval.conformance [--data DIR] [--url http://127.0.0.1:7130 --token-file DIR/token]`
+checks every resource and every report version's DocumentBundle against our own light schema built from the NRCeS profile
+tables (`fhir.resources` is not used): required elements, statuses, fixed code systems, identifiers and the synthetic id
+patterns, `meta.profile` / `meta.lastUpdated`, no Aadhaar, SYNTHETIC names, signature fields and the viewer URL. It prints
+`CONFORMANCE OK: <n> resources checked` (exit 0), or up to 50 problems and `CONFORMANCE FAILED: <k> problems` (exit 1); the
+V2 gate runs it. Deliberate deviations: Observation and ServiceRequest `code` may be text-only when no code is certain;
+DiagnosticReportImaging `media` is required only when there is an ImagingStudy (endoscopy has none); Provenance and Media
+claim no NRCeS profile. Tests: `his_mock/tests/test_app.py`, `test_fhir.py`, `test_conformance.py`.
