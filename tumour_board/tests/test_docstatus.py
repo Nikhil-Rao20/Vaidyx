@@ -160,6 +160,12 @@ def test_reg_no_without_council_unchanged():
     assert ds.detect_signature("Reg. No. 2026/4411")[0] == "yes"
 
 
+@pytest.mark.parametrize("text", ["Registration No. with State Code", "Reg. No.: ________", "Name of the treating doctor:\nRegistration No. with State Code:\nSignature:"])
+def test_blank_registration_label_is_not_a_signature(text):
+    """A form's empty 'Registration No.' label (claim forms, Pre-Authorization requests) carries no number, so it is not a signature (12 Oct)."""
+    assert ds.detect_signature(text)[0] == "unknown"
+
+
 @pytest.mark.parametrize("s,iso", [
     ("02-Sep-2026", "2026-09-02"),
     ("02/09/2026", "2026-09-02"),  # day first (India)

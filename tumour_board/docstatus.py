@@ -37,7 +37,8 @@ _COUNCIL_NAMED = r"(?-i:TNMC|APMC|TSMC|WBMC|TCMC|OCMC|UPMC|CGMC|MPMC|KMC|MMC|DMC
 _SIG_YES = re.compile(
     r"electronically signed|digitally signed|e-?signed|\bsigned\s*(out\s*)?(by|:|on)\b|\(signed\)|\bsd/-|\(sd\.?\)|\bsd\.\s*-|"
     r"\b(verified|authenticated|validated|approved|released|authori[sz]ed|reported|dictated|checked(?: and verified)?)\s+by\b|"
-    r"\bauthori[sz]ed signatory\b|\breg(n|istration)?\.?\s*no\.?\s*[:#]?\s*[A-Z0-9/-]{4,}|"
+    # a registration number needs a digit: the blank form label 'Registration No. with State Code' is not a signature
+    r"\bauthori[sz]ed signatory\b|\breg(n|istration)?\.?\s*no\.?\s*[:#]?\s*(?=[A-Z0-9/-]*\d)[A-Z0-9/-]{4,}|"
     # medical council registration (V1 item 3.5): 'Reg. No. KMC 45678', 'Reg No: TNMC/12345', 'KMC Reg. No. 45678', 'MCI 12345', 'NMC Reg 123456';
     # a council code right after 'UHID:', 'Sample No.', 'MRN' etc. is an identifier, not a signature
     rf"\breg(n|istration)?\.?\s*(no\.?)?\s*[:#]?\s*\(?{_COUNCIL}\)?\s*[:#/.-]?\s*\d{{3,}}|"
