@@ -319,7 +319,7 @@ def test_sync_opens_action_routed_to_department(unit_case):
     assert a["what"] == "No diagnostic ct thorax report in the Case File"
     assert a["due"] == (date.today() + timedelta(days=3)).isoformat()
     assert a["history"][0]["event"] == "Gap detected (Level 1: Case File), routed to Radiology"
-    assert (a["level"], a["level_label"], a["department_id"], a["source_doc_id"]) == (1, "Level 1: Case File", "radio_diagnosis", None)
+    assert (a["level"], a["level_label"], a["department_id"], a["source_doc_id"]) == (1, "Level 1: Case File", "radiology", None)
     assert store.get_state(unit_case)["gate"]["requirements"][1]["id"] == "ct_thorax"
     assert [e for e in store.read_audit(unit_case) if e["kind"] == "action_created"][0]["department"] == "Radiology"
 
@@ -402,7 +402,7 @@ def test_sync_notifies_the_department_and_the_coordinator(unit_case):
     add(unit_case, hist())
     a = _sync(unit_case)["actions"][0]
     n = [x for x in _notes() if x["kind"] == "request"]
-    assert len(n) == 1 and n[0]["to"] == {"department": "radio_diagnosis"} and n[0]["case_id"] == unit_case and n[0]["action_id"] == a["id"]
+    assert len(n) == 1 and n[0]["to"] == {"department": "radiology"} and n[0]["case_id"] == unit_case and n[0]["action_id"] == a["id"]
     assert n[0]["level"] == 1 and n[0]["title"].startswith("Diagnostic CT thorax report needed for SYNTHETIC, Test Patient")
     _sync(unit_case)
     assert len([x for x in _notes() if x["kind"] == "request"]) == 1  # nothing changed: no second notification
@@ -410,7 +410,7 @@ def test_sync_notifies_the_department_and_the_coordinator(unit_case):
     st = _sync(unit_case)
     assert st["gate"]["passed"]
     closed = [x for x in _notes() if x["kind"] == "request_closed"]
-    assert len(closed) == 1 and closed[0]["to"] == {"department": "radio_diagnosis"} and closed[0]["action_id"] == a["id"]
+    assert len(closed) == 1 and closed[0]["to"] == {"department": "radiology"} and closed[0]["action_id"] == a["id"]
     ready = [x for x in _notes() if x["kind"] == "case_ready"]
     assert len(ready) == 1 and ready[0]["to"] == {"role": "coordinator"} and "3 of 3" in ready[0]["text"]
     assert any(e["kind"] == "case_ready" and e["notified"] for e in store.read_audit(unit_case))
@@ -455,15 +455,15 @@ def test_level2_gap_goes_to_the_department_that_uploaded_the_record(unit_case):
     (Level 1, the record's owner) to Nuclear Medicine, both departments are told, and the history says so."""
     add(unit_case, hist())
     a = _sync(unit_case)["actions"][0]
-    assert (a["requirement"], a["level"], a["department_id"]) == ("ct_thorax", 1, "radio_diagnosis")
+    assert (a["requirement"], a["level"], a["department_id"]) == ("ct_thorax", 1, "radiology")
     add(unit_case, {**ct(facts={}), "department": "nuclear_medicine"})
     a = _sync(unit_case)["actions"][0]
     assert (a["level"], a["department"], a["department_id"], a["source_doc_id"]) == (2, "Nuclear Medicine", "nuclear_medicine", "Dct000001")
     assert a["history"][-1]["event"] == "Re-check: Level 2: Records routed to Nuclear Medicine"
     n = _notes()
-    assert [x["to"] for x in n if x["kind"] == "request"] == [{"department": "radio_diagnosis"}, {"department": "nuclear_medicine"}]
+    assert [x["to"] for x in n if x["kind"] == "request"] == [{"department": "radiology"}, {"department": "nuclear_medicine"}]
     moved = [x for x in n if x["kind"] == "request_closed"]
-    assert len(moved) == 1 and moved[0]["to"] == {"department": "radio_diagnosis"} and "moved to Nuclear Medicine" in moved[0]["title"]
+    assert len(moved) == 1 and moved[0]["to"] == {"department": "radiology"} and "moved to Nuclear Medicine" in moved[0]["title"]
 
 
 def test_missing_value_of_a_facts_only_record_goes_to_its_responsible_department(unit_case):
@@ -483,7 +483,7 @@ def test_missing_value_of_a_facts_only_record_goes_to_its_responsible_department
 def test_a_department_that_no_longer_exists_is_not_a_routing_target(unit_case):
     add(unit_case, hist(), {**ct(facts={}), "department": "closed_department"})
     a = _sync(unit_case)["actions"][0]
-    assert (a["level"], a["department"], a["department_id"]) == (2, "Radiology", "radio_diagnosis")
+    assert (a["level"], a["department"], a["department_id"]) == (2, "Radiology", "radiology")
 
 
 def test_waivers_on_records_the_protocol_no_longer_lists_are_shown(unit_case):
@@ -504,7 +504,7 @@ def test_a_request_opened_before_the_two_levels_is_classified_without_a_notifica
     store.save_state(unit_case, st)
     before = len(_notes())
     a = _sync(unit_case)["actions"][0]
-    assert (a["level"], a["department_id"]) == (1, "radio_diagnosis") and a["history"][-1]["event"] == "Re-check: Level 1: Case File"
+    assert (a["level"], a["department_id"]) == (1, "radiology") and a["history"][-1]["event"] == "Re-check: Level 1: Case File"
     assert len(_notes()) == before
 
 

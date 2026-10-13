@@ -77,8 +77,8 @@ def test_create_from_listed_cases(cases, data_root):
 
 def test_specialties_roles():
     sp = {d["id"]: d for d in board.specialties()}
-    assert sp["radio_diagnosis"]["role"] == "radiology" and sp["radio_diagnosis"]["name"] == "Radio-diagnosis"
-    assert sp["laboratory_medicine"]["role"] is None and "tumour_board" not in sp
+    assert sp["radiology"]["role"] == "radiology" and sp["radiology"]["name"] == "Radiology"
+    assert sp["biochemistry"]["role"] is None and "coordinator" not in sp and sp["radiology"]["group"] == "supporting"
 
 
 def test_create_explicit_order_and_validation(cases):
@@ -121,10 +121,10 @@ def test_set_agenda_keeps_item_state(cases):
 
 def test_attendance_saved_and_reloaded(cases):
     sid = _session(cases)["id"]
-    board.set_attendance(sid, "radio_diagnosis", "absent", "coord")
+    board.set_attendance(sid, "radiology", "absent", "coord")
     board.set_attendance(sid, "Histopathology", "present", "coord")  # alias resolves to Pathology
     s = board.get(sid)
-    assert s["attendance"]["radio_diagnosis"] == "absent" and s["attendance"]["pathology"] == "present"
+    assert s["attendance"]["radiology"] == "absent" and s["attendance"]["pathology"] == "present"
     for bad in ("cardiology", "tumour_board", ""):
         with pytest.raises(ValueError, match="Unknown department"):
             board.set_attendance(sid, bad, "present", "coord")
@@ -141,12 +141,12 @@ def test_members_and_participants(cases):
     board.set_attendance(sid, "surgical_oncology", "absent", "coord")
     s = board.add_member(sid, "Dr Vikram Shah", "surgical_oncology", "coord")
     assert s["attendance"]["surgical_oncology"] == "absent"  # an explicit mark is not overridden
-    board.set_attendance(sid, "radio_diagnosis", "absent", "coord")
+    board.set_attendance(sid, "radiology", "absent", "coord")
     board.set_attendance(sid, "pathology", "present", "coord")
     s = board.remove_member(sid, s["members"][1]["id"], "coord")
     p = board.participants(s)
-    assert p["text"] == "Dr Anita Rao (Medical Oncology), Pathology; absent: Radio-diagnosis, Surgical Oncology"
-    assert p["present"] == ["Pathology", "Medical Oncology"] and p["absent"] == ["Radio-diagnosis", "Surgical Oncology"]
+    assert p["text"] == "Dr Anita Rao (Medical Oncology), Pathology; absent: Surgical Oncology, Radiology"
+    assert p["present"] == ["Medical Oncology", "Pathology"] and p["absent"] == ["Surgical Oncology", "Radiology"]
     assert board.absent_roles(s) == ["radiology", "surgical_oncology"]
     for bad in ("", "   ", "x" * 121):
         with pytest.raises(ValueError):
@@ -474,14 +474,14 @@ def test_model_words():
 def test_export_html_models_statuses_absent_names(cases):
     """M7 / 16: models always printed as non-medical; refusals and not documented answers labelled; absent specialties by name."""
     sid = _session(cases)["id"]
-    board.set_attendance(sid, "radio_diagnosis", "absent", "coord")
+    board.set_attendance(sid, "radiology", "absent", "coord")
     board.set_attendance(sid, "surgical_oncology", "absent", "coord")
     board.log_brief(sid, "TB-A", "radiology", {**BRIEF, "model": "reasoner"})
     board.log_brief(sid, "TB-A", "pathology", {"label": "Pathology support", "no_documents": True, "message": "No pathology documents"})
     board.log_answer(sid, "TB-A", "pathology", "Give chemo?", {"status": "out_of_scope", "message": "Outside the agent's scope.", "model": "Gemma-4-31B-it"})
     board.log_answer(sid, "TB-A", "pathology", "Ki-67?", {"status": "not_documented", "message": "Not in the record.", "model": None})
     h = html.unescape(board.export_html(sid))
-    assert "AI support agents prepared briefs for the absent specialties: Radio-diagnosis, Surgical Oncology</div>" in h
+    assert "AI support agents prepared briefs for the absent specialties: Radiology, Surgical Oncology</div>" in h
     assert "surgical_oncology" not in h and "surgical oncology" not in h  # never role ids
     assert "Answer to the board's question \u00b7 Outside the agent's scope (refused)" in h
     assert "Answer to the board's question \u00b7 Not documented in the Case File" in h

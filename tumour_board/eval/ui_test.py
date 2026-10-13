@@ -123,7 +123,7 @@ def run_flow(b, base, pw, out, size, sfx, errors):
         if not sid:  # never a silent pass: the Board room must be visited
             errors.append(f"board session could not be created for the Board room check: HTTP {r.status}")
         if sid:
-            pg.request.post(base + f"/api/tb/sessions/{sid}/attendance", data={"department": "radio_diagnosis", "status": "absent"})
+            pg.request.post(base + f"/api/tb/sessions/{sid}/attendance", data={"department": "radiology", "status": "absent"})
             pg.request.post(base + f"/api/tb/sessions/{sid}/members", data={"name": "Dr. UI Test (synthetic)", "department": "medical_oncology"})
         pg.click("#btn-sessions"); pg.wait_for_selector("#sessions .card", timeout=20000); pg.wait_for_timeout(500); shot("board_sessions", full_page=True)
         if sid:

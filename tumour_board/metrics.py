@@ -105,7 +105,7 @@ def agenda(board_date: str) -> dict:
             if a.get("status") == "completed":
                 continue
             due = _d(a.get("due"))
-            dept = a.get("department") or "Tumour Board coordination"
+            dept = a.get("department") or org.COORDINATOR_NAME
             chase.setdefault(dept, []).append({"case_id": c["case_id"], "patient": rows[-1]["patient"], "label": a.get("label"), "what": a.get("what"), "due": a.get("due"),
                                                "days_left": (due - today).days if due else None, "overdue": bool(due and due < today), "after_board": bool(due and bd and due > bd),
                                                "source": a.get("source"), "level": a.get("level_label")})

@@ -20,7 +20,7 @@ from pathlib import Path
 
 from . import config, org, store
 
-ROLE_DEPARTMENT = {"radiology": "radio_diagnosis", "pathology": "pathology", "medical_oncology": "medical_oncology",
+ROLE_DEPARTMENT = {"radiology": "radiology", "pathology": "pathology", "medical_oncology": "medical_oncology",
                    "surgical_oncology": "surgical_oncology", "radiation_oncology": "radiation_oncology", "nuclear_medicine": "nuclear_medicine"}
 MARKS = {"discussed": "Discussed", "accepted": "Accepted", "not_relevant": "Not relevant"}
 STATUSES = ("planned", "in_session", "closed")
@@ -94,10 +94,10 @@ def read_audit(limit=500) -> list[dict]:
 # ---- listing and validation -------------------------------------------------------------------------------------------
 
 def specialties() -> list[dict]:
-    """Org departments that attend the board (all but Tumour Board coordination), with the agent role that speaks for each."""
+    """Org departments that attend the board (the MDT Coordinator is a role, not a department), with the agent role that speaks for each."""
     roles = {d: r for r, d in ROLE_DEPARTMENT.items()}
-    return [{"id": d["id"], "name": d.get("name") or d["id"], "role": roles.get(d["id"])}
-            for d in org.departments() if d.get("id") and d.get("id") != "tumour_board"]
+    return [{"id": d["id"], "name": d.get("name") or d["id"], "group": d.get("group"), "role": roles.get(d["id"])}
+            for d in org.departments() if d.get("id")]
 
 
 def _listed(case) -> bool:
@@ -236,9 +236,12 @@ def set_agenda(sid, case_ids, by) -> dict:
 # ---- attendance (V1 item 6.1) -------------------------------------------------------------------------------------------
 
 def _dept(dept_id, attending=True) -> str:
-    """A department id from an id, name or alias; attending=True restricts it to the specialties."""
+    """A department id from an id, name or alias; attending=True restricts it to the specialties (the MDT Coordinator, a role, is
+    accepted only as a member present)."""
+    if not attending and org.is_coordinator_name(dept_id):
+        return org.COORDINATOR_ID
     did = org.department_id(str(dept_id or ""))
-    if not did or (attending and did == "tumour_board"):
+    if not did:
         raise ValueError(f"Unknown department {dept_id!r}")
     return did
 
@@ -264,7 +267,7 @@ def add_member(sid, name, dept_id, by) -> dict:
     did = _dept(dept_id, attending=False)  # a coordinator present at the board is recorded too
     m = {"id": "M" + uuid.uuid4().hex[:6], "name": name, "department": did, "added_by": by or "", "at": store.now_iso()}
     s["members"].append(m)
-    if did != "tumour_board" and s["attendance"].get(did, "not_marked") == "not_marked":
+    if did != org.COORDINATOR_ID and s["attendance"].get(did, "not_marked") == "not_marked":
         s["attendance"][did] = "present"
     _save(s)
     _audit(sid, "member_added", by, member=m["id"], name=name, department=did)

@@ -950,7 +950,7 @@ function glHTML(r) {
 }
 
 // ------------------------------------------------------------------ tab: board & follow-up
-const BOARD_DEPTS = ["Medical Oncology", "Surgical Oncology", "Radiation Oncology", "Radio-diagnosis", "Pathology", "Molecular Pathology", "Nuclear Medicine", "Laboratory Medicine", "Gastroenterology", "Pulmonary Medicine", "Tumour Board coordination"];
+const BOARD_DEPTS = ["Medical Oncology", "Surgical Oncology", "Radiation Oncology", "Radiology", "Pathology", "Nuclear Medicine", "Biochemistry", "Microbiology", "Medical Gastroenterology", "Pulmonology", "MDT Coordinator"];
 const PMJAY = { surgical_oncology: "Surgical Oncologist", radiation_oncology: "Radiation Oncologist", medical_oncology: "Medical Oncologist" };
 const FLAGKIND = { transcription: "Possible transcription discrepancy", consistency: "Documentation consistency", composition: "PM-JAY board composition", documentation: "Documentation",
   guideline: "Guideline check", system: "Check not run" };
@@ -1182,7 +1182,7 @@ async function showOrg() {
   const slug = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
   const users = {}; (o.vaidyx_users || []).forEach((u) => (users[u.username] = { departments: {}, coordinator: false, is_admin: u.is_admin, ...(o.users[u.username] || {}) }));
   Object.entries(o.users || {}).forEach(([u, v]) => { if (!users[u]) users[u] = { departments: {}, coordinator: false, ...v, missing: true }; });
-  const deptRow = (d) => `<tr class="orow" data-id="${esc(d.id)}"><td><input class="o-name" value="${esc(d.name)}"></td><td><input class="o-alias" value="${esc((d.aliases || []).join(", "))}" placeholder="Other names used in protocols and reports"></td><td class="small muted">${esc(d.id)}</td><td><button class="ghost sm" data-rmrow title="Remove department">×</button></td></tr>`;
+  const deptRow = (d) => `<tr class="orow" data-id="${esc(d.id)}"><td><input class="o-name" value="${esc(d.name)}"></td><td><select class="o-group"><option value="treating" ${d.group !== "supporting" ? "selected" : ""}>Treating</option><option value="supporting" ${d.group === "supporting" ? "selected" : ""}>Supporting</option></select></td><td><input class="o-alias" value="${esc((d.aliases || []).join(", "))}" placeholder="Other names used in protocols and reports"></td><td><input class="o-email" value="${esc(d.email || "")}" placeholder="department@hospital.example"></td><td class="small muted">${esc(d.id)}</td><td><button class="ghost sm" data-rmrow title="Remove department">×</button></td></tr>`;
   const roleSel = (u, v) => `<div class="urow" data-user="${esc(u)}"><label class="small"><input type="checkbox" class="u-coord" ${v.coordinator ? "checked" : ""}> Coordinator</label>
       <div class="u-depts">${Object.entries(v.departments || {}).map(([d, r]) => `<span class="chip c-info" data-dept="${esc(d)}" data-role="${esc(r)}">${esc(deptName(d))} · ${esc(r)} <button class="x" data-rmchip aria-label="remove">×</button></span>`).join("")}</div>
       <div class="u-add"><select class="u-dept">${(o.departments || []).map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join("")}</select><select class="u-role"><option value="member">member</option><option value="head">head</option></select><button class="ghost sm" data-addrole>Add</button></div></div>`;
@@ -1193,13 +1193,14 @@ async function showOrg() {
       <div><label>Hospital level (NCG tiers)</label><select id="o-level"><option value="essential" ${o.hospital?.level !== "optimal" ? "selected" : ""}>Essential</option><option value="optimal" ${o.hospital?.level === "optimal" ? "selected" : ""}>Optimal</option></select></div>
       <div><label>Hospital type (PM-JAY paperwork)</label><select id="o-type"><option value="" ${!o.hospital?.type ? "selected" : ""}>Not set</option><option value="public" ${o.hospital?.type === "public" ? "selected" : ""}>Public</option><option value="private" ${o.hospital?.type === "private" ? "selected" : ""}>Private</option></select></div></div></div>
     <h3 style="margin:16px 0 6px">Departments <button class="ghost sm" id="o-adddept">+ Department</button></h3>
-    <table class="t"><thead><tr><th>Name</th><th>Also known as</th><th>Id</th><th></th></tr></thead><tbody id="o-depts">${(o.departments || []).map(deptRow).join("")}</tbody></table>
+    <div class="muted small" style="margin-bottom:6px">Treating departments own Case Files and send requests; supporting departments (Radiology, Pathology, ...) receive and answer them and report in their own systems. The email is used for the mail draft of a request (placeholders until the hospital gives its addresses).</div>
+    <table class="t"><thead><tr><th>Name</th><th>Group</th><th>Also known as</th><th>Email</th><th>Id</th><th></th></tr></thead><tbody id="o-depts">${(o.departments || []).map(deptRow).join("")}</tbody></table>
     <h3 style="margin:16px 0 6px">Users and roles</h3>
     <div class="muted small" style="margin-bottom:6px">Member: upload for the department, see its inbox, confirm its documents. Head: also waive a requirement for the department. Coordinator: list Case Files, run matching, run board sessions.</div>
     <table class="t"><thead><tr><th>Account</th><th>Roles</th></tr></thead><tbody id="o-users">${Object.entries(users).sort().map(([u, v]) => `<tr><td><b>${esc(u)}</b>${v.is_admin ? ' <span class="chip c-ok">Vaidyx admin</span>' : ""}${v.missing ? ' <span class="chip c-warn" title="No Vaidyx account with this name">no account</span>' : ""}</td><td>${roleSel(u, v)}</td></tr>`).join("") || `<tr><td colspan="2" class="muted">No accounts.</td></tr>`}</tbody></table>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="ghost" data-closemodal>Cancel</button><button class="primary" id="o-save">Save</button></div>`;
   $("#modal").classList.remove("hidden");
-  $("#o-adddept").onclick = () => { const name = prompt("Department name (as the hospital calls it):"); if (!name) return; $("#o-depts").insertAdjacentHTML("beforeend", deptRow({ id: slug(name), name, aliases: [] })); };
+  $("#o-adddept").onclick = () => { const name = prompt("Department name (as the hospital calls it):"); if (!name) return; $("#o-depts").insertAdjacentHTML("beforeend", deptRow({ id: slug(name), name, group: "treating", aliases: [], email: "" })); };
   $("#modal-body").addEventListener("click", (e) => {
     if (e.target.closest("[data-rmchip]")) e.target.closest(".chip").remove();
     const add = e.target.closest("[data-addrole]");
@@ -1208,12 +1209,12 @@ async function showOrg() {
       box.insertAdjacentHTML("beforeend", `<span class="chip c-info" data-dept="${esc(d)}" data-role="${esc(r)}">${esc(deptName(d))} · ${esc(r)} <button class="x" data-rmchip aria-label="remove">×</button></span>`); }
   });
   $("#o-save").onclick = async () => {
-    const departments = $$("#o-depts tr.orow").map((tr) => ({ id: tr.dataset.id, name: $(".o-name", tr).value.trim(), aliases: $(".o-alias", tr).value.split(",").map((x) => x.trim()).filter(Boolean) }));
+    const departments = $$("#o-depts tr.orow").map((tr) => ({ id: tr.dataset.id, name: $(".o-name", tr).value.trim(), group: $(".o-group", tr).value, email: $(".o-email", tr).value.trim(), aliases: $(".o-alias", tr).value.split(",").map((x) => x.trim()).filter(Boolean) }));
     const users = {};
     $$("#o-users .urow").forEach((row) => { const deps = {}; $$(".chip[data-dept]", row).forEach((c) => (deps[c.dataset.dept] = c.dataset.role));
       const coord = $(".u-coord", row).checked; if (Object.keys(deps).length || coord) users[row.dataset.user] = { departments: deps, coordinator: coord }; });
     try {
-      await api("/org", { method: "PUT", json: { hospital: { name: $("#o-hname").value.trim(), level: $("#o-level").value, type: $("#o-type").value }, departments, users, admins: o.admins || [] } });
+      await api("/org", { method: "PUT", json: { hospital: { ...(o.hospital || {}), name: $("#o-hname").value.trim(), level: $("#o-level").value, type: $("#o-type").value }, departments, users, admins: o.admins || [], routes: o.routes || {} } });
       $("#modal").classList.add("hidden"); toast("Hospital set-up saved"); await loadOrg(); if (S.caseId) openCase(S.caseId, true);
     } catch (e) { toast(e.message, 7000); }
   };
@@ -1324,7 +1325,7 @@ function showNotifications() {
       ${n.text ? `<div class="small">${esc(n.text)}</div>` : ""}<div class="small muted">${esc((n.ts || "").slice(0, 16).replace("T", " "))}${n.due ? " · due " + fmtDate(n.due) : ""}${n.to?.department ? " · to " + esc(deptName(n.to.department)) : n.to?.role ? " · to the coordinator" : ""}</div></div>`; };
   $("#modal-body").innerHTML = `<h3 style="color:#1f2933;margin-top:0">Notifications <span class="muted small" style="font-weight:400">${S.unread || 0} unread</span></h3>
     <div class="small muted">In-app only. The Pre-Authorization check sends each gap to the Responsible Department (Level 1) or to the department that uploaded the record (Level 2); a request closes by itself when the record arrives; the coordinator hears when a Case File is ready for the board.</div>
-    <div style="margin:8px 0;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">${(S.org?.inbox_departments || []).length ? `<button class="ghost sm" id="nt-inbox">Open the department inbox</button>` : ""}${list.some((n) => !n.read) ? `<button class="ghost sm" id="nt-readall">Mark all read</button>` : ""}<button class="ghost sm" data-closemodal>Close</button></div>
+    <div style="margin:8px 0;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">${(S.org?.inbox_departments || []).length || S.me?.coordinator ? `<button class="ghost sm" id="nt-inbox">Open the department inbox</button>` : ""}${list.some((n) => !n.read) ? `<button class="ghost sm" id="nt-readall">Mark all read</button>` : ""}<button class="ghost sm" data-closemodal>Close</button></div>
     ${list.length ? list.map(row).join("") : `<div class="muted">Nothing yet.</div>`}`;
   $("#modal").classList.remove("hidden");
   if ($("#nt-readall")) $("#nt-readall").onclick = async () => { await api("/notifications/read", { json: { all: true } }); await loadNotifications(); showNotifications(); };
@@ -1332,7 +1333,7 @@ function showNotifications() {
   $$("[data-ntf]").forEach((el) => (el.onclick = async () => { try { await api("/notifications/read", { json: { ids: [el.dataset.ntf] } }); } catch (e) {} $("#modal").classList.add("hidden"); loadNotifications(); if (el.dataset.case) { S.tab = "ready"; try { await openCase(el.dataset.case); } catch (e) { toast("That Case File no longer exists", 6000); } } }));
 }
 async function refreshInboxCount() {
-  const show = (S.org?.inbox_departments || []).length > 0;
+  const show = (S.org?.inbox_departments || []).length > 0 || !!S.me?.coordinator;  // V2 2.1: the MDT Coordinator has an inbox row of its own
   $("#btn-inbox").classList.toggle("hidden", !show);
   if (!show) return;
   try { const ib = await api("/inbox"); $("#inbox-count").textContent = ib.open; $("#inbox-count").classList.toggle("hidden", !ib.open); } catch (e) {}
@@ -1505,7 +1506,7 @@ function attendanceHTML() {
         : `<span class="chip ${att(d) === "present" ? "c-ok" : att(d) === "absent" ? "c-warn" : "c-mute"}">${att(d) === "present" ? "Present" : att(d) === "absent" ? "Absent" : "Not marked"}</span>`}</td></tr>`).join("")}</tbody></table>
     <h4 style="margin:12px 0 6px">Members present</h4>
     <div>${(s.members || []).map((x) => `<span class="chip c-lvl" style="margin:2px">${esc(x.name)} (${esc(deptName(x.department))})${m ? ` <button class="x" data-rmm="${esc(x.id)}" aria-label="Remove ${esc(x.name)}">×</button>` : ""}</span>`).join("") || `<span class="small muted">None recorded.</span>`}</div>
-    ${m ? `<div class="arow" style="margin-top:8px"><input id="m-name" placeholder="Name, e.g. Dr. A. Rao" aria-label="Member name"><select id="m-dept" aria-label="Department">${[...r.specialties, { id: "tumour_board", name: deptName("tumour_board") || "Tumour Board coordination" }].map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join("")}</select><button class="ghost sm" id="m-add">Add</button></div>` : ""}
+    ${m ? `<div class="arow" style="margin-top:8px"><input id="m-name" placeholder="Name, e.g. Dr. A. Rao" aria-label="Member name"><select id="m-dept" aria-label="Department">${[...r.specialties, { id: "coordinator", name: "MDT Coordinator" }].map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join("")}</select><button class="ghost sm" id="m-add">Add</button></div>` : ""}
     <div class="small muted" style="margin-top:8px">An AI support agent stands in for an absent specialty only as role-specific support; it is never counted as a member.</div>`;
 }
 function bindAttendance() {

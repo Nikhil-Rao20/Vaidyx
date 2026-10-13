@@ -41,14 +41,14 @@ def _run(case_id, role, focus=""):
 def test_no_documents_returns_at_once_with_the_departments_open_requests(monkeypatch):
     calls = _no_model(monkeypatch)
     req = {"id": "A1", "source": "pre_authorization", "label": "CECT thorax-abdomen-pelvis", "what": "No final, signed CT report", "department": "Radio-diagnosis",
-           "department_id": "radio_diagnosis", "level_label": "Level 1 · Case File", "status": "pending", "due": "2026-10-20"}
+           "department_id": "radiology", "level_label": "Level 1 · Case File", "status": "pending", "due": "2026-10-20"}
     other = {**req, "id": "A2", "label": "Histopathology", "department": "Pathology", "department_id": "pathology"}
     done = {**req, "id": "A3", "status": "completed"}
     case_id = _case(make_doc("Dlab00001", "lab"), actions=[req, other, done])
     ev = _run(case_id, "radiology", "anything about the CT?")  # the focus question is not even classified: no model call at all
     assert calls == [] and [e["type"] for e in ev] == ["brief"]
     b = ev[0]["brief"]
-    assert b["no_documents"] and b["message"] == "No Radio-diagnosis documents in this Case File" and b["department"] == "Radio-diagnosis"
+    assert b["no_documents"] and b["message"] == "No Radiology documents in this Case File" and b["department"] == "Radiology"
     assert [x["label"] for x in b["open_items"]] == ["CECT thorax-abdomen-pelvis"] and b["sections"] == [] and b["model"] == ""
     assert store.get_state(case_id)["artefacts"]["brief_radiology"]["no_documents"]  # stored like a brief: stale when documents arrive
     assert any(e["kind"] == "agent_no_documents" and e["open_items"] == 1 for e in store.read_audit(case_id))
@@ -59,7 +59,7 @@ def test_documents_still_being_read_or_failed_are_named(monkeypatch):
     _no_model(monkeypatch)
     case_id = _case(make_doc("Dct000001", "ct", state="reading"), make_doc("Dmri00001", "mri", state="error"))
     b = _run(case_id, "radiology")[0]["brief"]
-    assert b["message"] == "No Radio-diagnosis documents in this Case File (1 still being read, 1 failed to read)"
+    assert b["message"] == "No Radiology documents in this Case File (1 still being read, 1 failed to read)"
 
 
 def test_a_document_uploaded_by_the_department_counts_for_its_agent(monkeypatch):
@@ -73,7 +73,7 @@ def test_a_document_uploaded_by_the_department_counts_for_its_agent(monkeypatch)
     monkeypatch.setattr(agents.llm, "chat", fake_chat)
     monkeypatch.setattr(agents.guidelines, "ready", lambda: False)
     d = make_doc("Doth00001", "other", text="SYNTHETIC\nULTRASOUND NECK (uploaded by Radio-diagnosis)\nReport status: FINAL")
-    d["department"] = "radio_diagnosis"
+    d["department"] = "radiology"
     case_id = _case(d)
     b = _run(case_id, "radiology")[-1]["brief"]
     assert not b.get("no_documents") and seen  # the model ran

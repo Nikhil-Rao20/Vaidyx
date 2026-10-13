@@ -134,7 +134,8 @@ def _mine(rec: dict, r: dict) -> bool:
     to = rec.get("to") or {}
     r = r or {}
     if "department" in to:
-        return bool(r.get("admin")) or to["department"] in (r.get("departments") or {})
+        did = org.department_id(to["department"]) or to["department"]  # a V1 id stored before the 2.1 migration resolves to its V2 department
+        return bool(r.get("admin")) or did in (r.get("departments") or {})
     if "role" in to:
         return to["role"] == "coordinator" and bool(r.get("coordinator") or r.get("admin"))
     if "user" in to:
@@ -256,12 +257,20 @@ def _due_date(due):
 
 
 def _action_department(a: dict) -> str | None:
-    """The department id an action belongs to: its department_id when present (and known), else its department name."""
+    """The department id an action belongs to: its department_id when present (and known), else its department name; the MDT
+    Coordinator's row (org.COORDINATOR_ID) for an action addressed to the coordinator role (or to the V1 "Tumour Board coordination")."""
+    if a.get("role") == "coordinator":
+        return org.COORDINATOR_ID
     if a.get("department_id"):
         did = org.department_id(a["department_id"])
         if did:
             return did
-    return org.department_id(a.get("department") or "")
+    did = org.department_id(a.get("department") or "")
+    if did:
+        return did
+    if org.is_coordinator_name(a.get("department_id")) or org.is_coordinator_name(a.get("department")):
+        return org.COORDINATOR_ID
+    return None
 
 
 def _request(case: dict, a: dict, today: date) -> dict | None:
@@ -316,9 +325,11 @@ def _cases():
 
 def inbox(r: dict) -> dict:
     """Open Pre-Authorization requests and Tumour Board actions (and those closed in the last 7 days) for every department
-    the user may see."""
+    the user may see, plus the MDT Coordinator's row for coordinators and admins."""
     today = _today()
     visible = org.visible_departments_for_inbox(r)
+    if (r or {}).get("coordinator") or (r or {}).get("admin"):  # the MDT Coordinator's own row (V2 item 2.1: a role, not a department)
+        visible = visible + [org.COORDINATOR_ID]
     rows: dict[str, list] = {did: [] for did in visible}
     if rows:
         for case, st in _cases():
@@ -336,7 +347,8 @@ def inbox(r: dict) -> dict:
         reqs = sorted(rows[did], key=lambda q: str(q.get("created") or ""), reverse=True)
         n_open = sum(1 for q in reqs if q["status"] != "completed")
         n_over = sum(1 for q in reqs if q["overdue"])
-        out.append({"id": did, "name": org.department_name(did), "requests": reqs, "open": n_open, "overdue": n_over})
+        out.append({"id": did, "name": org.department_name(did), "group": None if did == org.COORDINATOR_ID else org.department_group(did),
+                    "requests": reqs, "open": n_open, "overdue": n_over})
         total_open += n_open
         total_over += n_over
     return {"departments": out, "open": total_open, "overdue": total_over, "generated": store.now_iso()}

@@ -127,7 +127,7 @@ def board_actions(case_id: str, record: dict, by: str = "") -> list[dict]:
 
 
 def communication_action(case_id: str, record: dict, by: str = "") -> dict | None:
-    """A decision the patient has not yet been told about: one follow-up to the Tumour Board coordination, due a week after the board
+    """A decision the patient has not yet been told about: one follow-up to the MDT Coordinator, due a week after the board
     (12 Oct; Victorian MDM framework 2018 8.4 / 8.5: the recommendation reaches the patient and the GP within a week). None when the
     outcome is not a decision or the record already carries the date."""
     if (record.get("outcome_type") or "decision") != "decision" or record.get("patient_informed_date"):
@@ -140,14 +140,13 @@ def communication_action(case_id: str, record: dict, by: str = "") -> dict | Non
         due = (date.fromisoformat(base) + timedelta(days=7)).isoformat() if base else (_today() + timedelta(days=7)).isoformat()
     except ValueError:
         due = (_today() + timedelta(days=7)).isoformat()
-    did = org.department_id("Tumour Board coordination") or org.department_id("tumour_board")
     now = store.now_iso()
+    # V2 item 2.1: the MDT Coordinator is a role, not a department; the action sits in the coordinator's inbox row
     act = {"id": "A" + uuid.uuid4().hex[:6], "source": "board", "board_record": rid, "label": "Inform the patient of the Tumour Board outcome and record the date",
-           "department": org.department_name(did) if did else "Tumour Board coordination", "department_id": did, "requirement": None, "communication": True,
+           "department": org.COORDINATOR_NAME, "department_id": None, "role": "coordinator", "requirement": None, "communication": True,
            "what": "Tell the patient (or carer) the board's outcome through the lead clinician and record the date and who informed them on the board record (within one week).",
            "status": "pending", "created": now, "due": due, "history": [{"ts": now, "event": "Created from Tumour Board record " + rid + " (patient not yet recorded as informed)"}]}
-    if did:
-        _notify({"department": did}, "board_action", case_id, f"Tumour Board action for {patient} ({case_id}): {act['label']}", f"Due {_dmy(due)}.", action_id=act["id"], due=due, board_record=rid, by=by)
+    _notify({"role": "coordinator"}, "board_action", case_id, f"Tumour Board action for {patient} ({case_id}): {act['label']}", f"Due {_dmy(due)}.", action_id=act["id"], due=due, board_record=rid, by=by)
     return act
 
 

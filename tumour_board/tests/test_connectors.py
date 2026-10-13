@@ -67,7 +67,7 @@ def test_connector_validation_and_save_hide_the_token():
     with pytest.raises(ValueError):
         connectors.validate({**CONN, "id": "Demo HIS"})
     saved = connectors.save([CONN], by="admin")
-    assert saved[0]["department"] == "radio_diagnosis" and saved[0]["token"] == TOKEN
+    assert saved[0]["department"] == "radiology" and saved[0]["token"] == TOKEN
     assert connectors.public(saved[0])["has_token"] is True and "token" not in connectors.public(saved[0])
     kept = connectors.save([{**CONN, "token": "", "keep_token": True}], by="admin")  # an edit without retyping the token keeps it
     assert kept[0]["token"] == TOKEN
@@ -116,7 +116,7 @@ def test_fetch_hands_files_to_intake_as_the_connector_department(unit_case, tmp_
     out = asyncio.run(connectors.fetch(unit_case, connectors.validate(CONN), ["r2", "nope"], user="coord", client=_client_for(app)))
     assert out["job"] == "Jfake" and [f["record_id"] for f in out["fetched"]] == ["r2"] and out["errors"][0]["record_id"] == "nope"
     rel, data = seen["files"][0]
-    assert rel == "demo_his/05_lab/cbc_2026-09-14.txt" and b"Haemoglobin 12.4" in data and seen["department"] == "radio_diagnosis" and "via connector demo_his" in seen["user"]
+    assert rel == "demo_his/05_lab/cbc_2026-09-14.txt" and b"Haemoglobin 12.4" in data and seen["department"] == "radiology" and "via connector demo_his" in seen["user"]
     assert hashlib.sha256(data).hexdigest() == out["fetched"][0]["sha256"]
     ev = store.read_audit(unit_case)[-1]
     assert ev["kind"] == "connector_fetch" and ev["by"] == "coord" and ev["job"] == "Jfake"

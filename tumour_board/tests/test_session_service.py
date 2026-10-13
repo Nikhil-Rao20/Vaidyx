@@ -12,7 +12,7 @@ def _session():
         store.create_case(cid, {"name": f"SYNTHETIC, {cid}", "mrn": cid}, "lung_nsclc", board_date="2026-12-04", created_by="test")
         add(cid, make_doc(f"Dct{cid[-1]}00000", "ct"))
     s = board.create("2026-12-04", "coord")
-    board.set_attendance(s["id"], "radio_diagnosis", "absent", "coord")
+    board.set_attendance(s["id"], "radiology", "absent", "coord")
     board.set_attendance(s["id"], "pathology", "absent", "coord")
     return s["id"]
 

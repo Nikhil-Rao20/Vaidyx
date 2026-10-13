@@ -13,7 +13,7 @@ TODAY = date(2026, 10, 11)
 @pytest.fixture
 def people():
     o = copy.deepcopy(org.DEFAULT_ORG)
-    o["users"] = {"ravi": {"departments": {"radio_diagnosis": "member"}}, "meera": {"departments": {"medical_oncology": "member"}},
+    o["users"] = {"ravi": {"departments": {"radiology": "member"}}, "meera": {"departments": {"medical_oncology": "member"}},
                   "anil": {"coordinator": True}}
     org.save(o, by="test")
     return {"radio": org.roles("ravi"), "onco": org.roles("meera"), "coord": org.roles("anil")}
@@ -54,7 +54,7 @@ def test_board_actions_fields_and_department_mapping(case, today, data_root):
     mri, chemo, cardio, blank = acts
     assert mri["source"] == "board" and mri["board_record"] == "B1a2b3c" and mri["requirement"] is None
     assert mri["label"] == mri["what"] == "MRI pelvis after neoadjuvant chemoradiation"
-    assert mri["department"] == "Radiology" and mri["department_id"] == "radio_diagnosis"  # through the alias
+    assert mri["department"] == "Radiology" and mri["department_id"] == "radiology"  # through the alias
     assert mri["status"] == "pending" and mri["due"] == "2026-12-15" and mri["created"]
     assert mri["history"][0]["event"] == "Created from Tumour Board record B1a2b3c"
     assert chemo["department_id"] == "medical_oncology"
@@ -79,7 +79,7 @@ def test_board_actions_unlisted_case_defaults_to_14_days(people, today):
 def test_board_actions_notify_known_departments_only(case, today, data_root):
     acts = followup.board_actions(case, RECORD, by="anil")
     sent = _sent(data_root)
-    assert [n["to"] for n in sent] == [{"department": "radio_diagnosis"}, {"department": "medical_oncology"}]
+    assert [n["to"] for n in sent] == [{"department": "radiology"}, {"department": "medical_oncology"}]
     n = sent[0]
     assert n["kind"] == "board_action" and n["case_id"] == case and n["action_id"] == acts[0]["id"]
     assert n["due"] == "2026-12-15" and n["board_record"] == "B1a2b3c"
@@ -96,7 +96,7 @@ def test_notification_failure_never_breaks_recording(case, today, monkeypatch):
         raise OSError("disk full")
     monkeypatch.setattr(notify, "notify", boom)
     acts = followup.board_actions(case, RECORD)
-    assert len(acts) == 4 and acts[0]["department_id"] == "radio_diagnosis"
+    assert len(acts) == 4 and acts[0]["department_id"] == "radiology"
 
 
 # --- task words -> document types ------------------------------------------------------------------------------------
@@ -157,7 +157,7 @@ def test_suggestion_for_later_mri(case, today, data_root):
     assert out == [{"event": "suggested", "action_id": "A1", **sug}]
     assert a["history"][-1]["event"].startswith("Closing suggested: MRI PELVIS (mri)") and a["history"][-1]["doc_id"] == "D1"
     sent = _sent(data_root)
-    assert len(sent) == 1 and sent[0]["kind"] == "board_action_suggestion" and sent[0]["to"] == {"department": "radio_diagnosis"}
+    assert len(sent) == 1 and sent[0]["kind"] == "board_action_suggestion" and sent[0]["to"] == {"department": "radiology"}
     assert sent[0]["action_id"] == "A1" and sent[0]["doc_id"] == "D1"
     # the same suggestion found again: nothing new, nobody notified twice
     assert followup.suggest_closures(case, st, docs) == [] and len(_sent(data_root)) == 1

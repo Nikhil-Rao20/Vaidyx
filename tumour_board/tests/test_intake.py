@@ -34,7 +34,7 @@ def fakes(monkeypatch):
     monkeypatch.setattr(search, "index", lambda case_id: None)  # the embedding model is not loaded in the unit suite
 
 
-def _upload(files, dept="laboratory_medicine", user="lab.user"):
+def _upload(files, dept="biochemistry", user="lab.user"):
     async def go():
         job = service.add_intake_files(files, dept, user)
         await job["task"]
@@ -56,7 +56,7 @@ def test_upload_lands_in_intake_tagged_with_department_user_and_time(fakes):
     docs = store.list_intake()
     assert job["total"] == 1 and len(docs) == 1
     d = docs[0]
-    assert d["department"] == "laboratory_medicine" and d["uploaded_by"] == "lab.user" and d["added"] and d["intake"] is True
+    assert d["department"] == "biochemistry" and d["uploaded_by"] == "lab.user" and d["added"] and d["intake"] is True
     assert d["state"] == "needs_matching" and d["classification"]["doc_type"] == "lab" and d["classification"]["status"] == "FINAL"
     assert d["identity_read"]["name"]["value"] == "Ramesh Kumar" and d["identity_read"]["ids"] == [] and (d["identity_read"]["age"], d["identity_read"]["sex"]) == (60, "M")
     assert d["match"]["decision"] == "needs_matching" and "no ID printed" in d["match"]["reason"]
@@ -156,16 +156,16 @@ def test_discard_removes_the_file_and_is_audited(fakes):
     intake.discard(d["doc_id"], "head.lab", "wrong hospital")
     assert store.list_intake() == [] and not store.intake_doc_dir(d["doc_id"]).exists()
     ev = [e for e in store.read_intake_audit() if e["kind"] == "discarded"][0]
-    assert ev["by"] == "head.lab" and ev["reason"] == "wrong hospital" and ev["department"] == "laboratory_medicine"
+    assert ev["by"] == "head.lab" and ev["reason"] == "wrong hospital" and ev["department"] == "biochemistry"
 
 
 def test_queue_is_filtered_by_department_for_members(fakes):
-    _upload([("rbs.txt", NOID.encode())], dept="laboratory_medicine")
-    _upload([("xray.txt", NOID.replace("BLOOD SUGAR", "X-RAY").encode())], dept="radio_diagnosis", user="rad.user")
+    _upload([("rbs.txt", NOID.encode())], dept="biochemistry")
+    _upload([("xray.txt", NOID.replace("BLOOD SUGAR", "X-RAY").encode())], dept="radiology", user="rad.user")
     o = org.load()
-    org.save({**o, "users": {"lab.user": {"departments": {"laboratory_medicine": "member"}, "coordinator": False},
+    org.save({**o, "users": {"lab.user": {"departments": {"biochemistry": "member"}, "coordinator": False},
                              "coord": {"departments": {}, "coordinator": True}}}, by="test")
-    assert [d["department"] for d in intake.queue(org.roles("lab.user"))] == ["laboratory_medicine"]
+    assert [d["department"] for d in intake.queue(org.roles("lab.user"))] == ["biochemistry"]
     assert len(intake.queue(org.roles("coord"))) == 2 and len(intake.queue(org.roles("admin", vaidyx_admin=True))) == 2
     assert intake.queue(org.roles("nobody")) == []
     row = intake.queue(org.roles("coord"))[0]
@@ -237,7 +237,7 @@ def test_id_matches_but_name_differs_is_a_conflict_for_a_person(fakes, monkeypat
 
 def test_not_this_patient_blocks_the_link_on_reprocess(fakes):
     store.create_case("TB-006", {"name": "Mohammed Irfan Shaikh", "mrn": "SYN-600744", "agesex": "61 Y / M"}, "lung_nsclc", created_by="t")
-    d = store.add_intake_file("lft.txt", LFT.encode(), "lft.txt", "laboratory_medicine", "lab.user")
+    d = store.add_intake_file("lft.txt", LFT.encode(), "lft.txt", "biochemistry", "lab.user")
     d["rejected_cases"] = ["TB-006"]; store.save_intake(d)
 
     async def go():
@@ -349,7 +349,7 @@ def test_remove_forgets_learned_ids_and_protected_cases_are_never_matched_or_tau
 
 
 def test_intake_record_filed_during_processing_is_not_recreated(fakes, monkeypatch):
-    d = store.add_intake_file("rbs.txt", NOID.encode(), "rbs.txt", "laboratory_medicine", "lab.user")
+    d = store.add_intake_file("rbs.txt", NOID.encode(), "rbs.txt", "biochemistry", "lab.user")
 
     async def slow_classify(t, audit=None):
         intake.discard(d["doc_id"], "coord", "while reading")  # a person acts while the record is being read

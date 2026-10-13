@@ -34,15 +34,15 @@ def phase2(c, base):
         r = c.post("/api/auth/users", json={"username": u, "password": pw, "is_admin": False})
         check(f"create test account {u}", r.status_code == 200, r.text[:80])
     users = dict(o.get("users") or {})
-    users["tb-e2e-radio"] = {"departments": {"radio_diagnosis": "member"}, "coordinator": False}
+    users["tb-e2e-radio"] = {"departments": {"radiology": "member"}, "coordinator": False}
     users["tb-e2e-pathhead"] = {"departments": {"pathology": "head"}, "coordinator": False}
     r = c.put("/api/tb/org", json={**{k: o[k] for k in ("hospital", "departments", "admins")}, "users": users})
-    check("org: admin saves users with department roles", r.status_code == 200 and r.json()["users"]["tb-e2e-radio"]["departments"] == {"radio_diagnosis": "member"}, r.text[:120])
+    check("org: admin saves users with department roles", r.status_code == 200 and r.json()["users"]["tb-e2e-radio"]["departments"] == {"radiology": "member"}, r.text[:120])
     m = httpx.Client(base_url=base, timeout=120); h = httpx.Client(base_url=base, timeout=120)
     check("department users log in", m.post("/api/auth/login", json={"username": "tb-e2e-radio", "password": E2E_USERS["tb-e2e-radio"]}).status_code == 200
           and h.post("/api/auth/login", json={"username": "tb-e2e-pathhead", "password": E2E_USERS["tb-e2e-pathhead"]}).status_code == 200)
     me = m.get("/api/tb/org").json()
-    check("member sees only own roles, no user map", me["me"]["departments"] == {"radio_diagnosis": "member"} and not me["me"]["admin"] and "users" not in me and [d["id"] for d in me["my_departments"]] == ["radio_diagnosis"])
+    check("member sees only own roles, no user map", me["me"]["departments"] == {"radiology": "member"} and not me["me"]["admin"] and "users" not in me and [d["id"] for d in me["my_departments"]] == ["radiology"])
     check("member: PUT /org forbidden", m.put("/api/tb/org", json=o).status_code == 403)
     check("member: create Case File forbidden", m.post("/api/tb/cases", json={"case_id": "TB-FORBID", "protocol": "lung_nsclc"}).status_code == 403)
     check("member: upload straight into a Case File forbidden", m.post("/api/tb/cases/TB-001/documents", files=[("files", ("x.txt", b"synthetic"))], data={"paths": "[]"}).status_code == 403)
@@ -101,12 +101,12 @@ def phase2(c, base):
     note = b"SAHYADRI CANCER INSTITUTE (SYNTHETIC)\nX-RAY CHEST PA VIEW\nPatient name Kumar R\nAge / Sex 62 Y / M\nStudy date 03/09/2026\nFindings: no change.\nReport status: FINAL\nReported by: Dr. Shalini Rao, MD (Radio-diagnosis)\n"
     check("member: upload for another department forbidden (403)", m.post("/api/tb/intake/documents", files=[("files", ("x.txt", note))], data={"paths": "[]", "department": "pathology"}).status_code == 403)
     r = m.post("/api/tb/intake/documents", files=[("files", ("xray_followup.txt", note)), ("files", ("old.doc", b"x"))], data={"paths": json.dumps(["xray_followup.txt", "old.doc"]), "department": "Radio-diagnosis"})
-    check("member: upload for own department accepted", r.status_code == 200 and r.json()["department"] == "radio_diagnosis", r.text[:120])
+    check("member: upload for own department accepted", r.status_code == 200 and r.json()["department"] == "radiology", r.text[:120])
     jj, secs = wait_job(c, r.json()["job"])
     check("intake job read the record and refused the .doc", jj["state"] == "finished" and jj["total"] == 1 and jj["unsupported"] and jj["gate"] is None, f"{secs}s")
     q = m.get("/api/tb/intake").json()
     mine = [d for d in q["documents"] if d.get("uploaded_by") == "tb-e2e-radio"]
-    check("member sees own department's intake records, tagged with department and user", len(mine) >= 1 and mine[0]["department"] == "radio_diagnosis" and mine[0]["added"]
+    check("member sees own department's intake records, tagged with department and user", len(mine) >= 1 and mine[0]["department"] == "radiology" and mine[0]["added"]
           and mine[0]["state"] in ("needs_matching", "filed") and not q["can_match"], json.dumps({k: mine[0].get(k) for k in ("state", "department")}) if mine else "none")
     check("head of another department does not see it", not any(d.get("uploaded_by") == "tb-e2e-radio" for d in h.get("/api/tb/intake").json()["documents"]))
     qa = c.get("/api/tb/intake").json()
@@ -119,7 +119,7 @@ def phase2(c, base):
         jj, secs = wait_job(c, r["job"])
         d1 = c.get("/api/tb/cases/TB-001").json()
         filed = next((x for x in d1["documents"] if x["doc_id"] == rec["doc_id"]), None)
-        check("filed into TB-001 with the uploader's department recorded", filed is not None and filed["department"] == "radio_diagnosis" and filed["uploaded_by"] == "tb-e2e-radio" and filed["state"] == "ready", f"{secs}s")
+        check("filed into TB-001 with the uploader's department recorded", filed is not None and filed["department"] == "radiology" and filed["uploaded_by"] == "tb-e2e-radio" and filed["state"] == "ready", f"{secs}s")
         check("filing recorded as a confirm_match in the Case File", any(x["type"] == "confirm_match" and x["key"] == rec["doc_id"] for x in d1["state"].get("confirmations", [])))
         check("record left the queue", not any(d["doc_id"] == rec["doc_id"] for d in c.get("/api/tb/intake").json()["documents"]))
         c.delete(f"/api/tb/cases/TB-001/documents/{rec['doc_id']}")
@@ -335,7 +335,7 @@ def phase4(c, base):
     user, pw = E2E_RADIO4
     c.request("DELETE", "/api/auth/users", json={"username": user})
     c.post("/api/auth/users", json={"username": user, "password": pw, "is_admin": False})
-    o = c.get("/api/tb/org").json(); users = dict(o.get("users") or {}); users[user] = {"departments": {"radio_diagnosis": "member"}, "coordinator": False}
+    o = c.get("/api/tb/org").json(); users = dict(o.get("users") or {}); users[user] = {"departments": {"radiology": "member"}, "coordinator": False}
     c.put("/api/tb/org", json={**{k: o[k] for k in ("hospital", "departments", "admins")}, "users": users})
     m = httpx.Client(base_url=base, timeout=300)
     check("phase4: radiology member logs in", m.post("/api/auth/login", json={"username": user, "password": pw}).status_code == 200)
@@ -379,34 +379,34 @@ def phase4(c, base):
                 c.post("/api/tb/cases/TB-TEST4/confirmations", json={"type": "waive", "key": k, "reason": "e2e fallback: value not read by the model"})
         acts = {a["requirement"]: a for a in c.get("/api/tb/cases/TB-TEST4").json()["state"]["actions"] if a["source"] == "pre_authorization"}
         a = acts.get("cect_tap") or {}
-        check("4.2 Level 1 request routed to the department that owns the record (Radiology)", a.get("level") == 1 and a.get("department") == "Radiology" and a.get("department_id") == "radio_diagnosis", json.dumps({k: a.get(k) for k in ("level", "department", "department_id")}))
+        check("4.2 Level 1 request routed to the department that owns the record (Radiology)", a.get("level") == 1 and a.get("department") == "Radiology" and a.get("department_id") == "radiology", json.dumps({k: a.get(k) for k in ("level", "department", "department_id")}))
         check("4.2 gate summarises open gaps per level", g["levels"]["1"]["open"] >= 1 and "label" in g["levels"]["2"], json.dumps(g["levels"]))
         # 4.4 the radiology member sees the request in the inbox and the bell
         ib = m.get("/api/tb/inbox").json()
         mine = [q for dd in ib["departments"] for q in dd["requests"] if q["case_id"] == "TB-TEST4"]
-        check("4.4 radiology member sees the request in the department inbox", [dd["id"] for dd in ib["departments"]] == ["radio_diagnosis"] and len(mine) == 1 and mine[0]["label"].startswith("CECT") and mine[0]["status"] == "pending" and mine[0]["level"] == 1,
+        check("4.4 radiology member sees the request in the department inbox", [dd["id"] for dd in ib["departments"]] == ["radiology"] and len(mine) == 1 and mine[0]["label"].startswith("CECT") and mine[0]["status"] == "pending" and mine[0]["level"] == 1,
               json.dumps(mine)[:160])
         nt = m.get("/api/tb/notifications").json()
         check("4.4 radiology member has an unread request notification", nt["unread"] >= 1 and any(n["kind"] == "request" and n["case_id"] == "TB-TEST4" and not n["read"] for n in nt["notifications"]), f"{nt['unread']} unread")
         adm = c.get("/api/tb/inbox").json()
         check("4.4 admin sees every department's inbox, the request under Radio-diagnosis only", "pathology" in [dd["id"] for dd in adm["departments"]]
-              and [dd["id"] for dd in adm["departments"] if any(q["case_id"] == "TB-TEST4" and q["status"] != "completed" for q in dd["requests"])] == ["radio_diagnosis"])
+              and [dd["id"] for dd in adm["departments"] if any(q["case_id"] == "TB-TEST4" and q["status"] != "completed" for q in dd["requests"])] == ["radiology"])
         # the member uploads a CECT for the department: it files itself on the exact UHID; the lesion size is missing -> a Level 2 gap routed to the uploader
         ct1 = (head.format(dept="DEPARTMENT OF RADIO-DIAGNOSIS", title="CECT THORAX, ABDOMEN AND PELVIS") + "Study date: 24/09/2026\nFindings: spiculated mass in the right upper lobe; right hilar node.\n"
                "Abdomen and pelvis: no focal lesion.\nImpression: right upper lobe mass with right hilar adenopathy.\nReport status: FINAL\nSd/- Dr. S. Rao, Consultant Radiologist, Reg. No. KMC 12345\n").encode()
-        r = m.post("/api/tb/intake/documents", files=[("files", ("cect_tap_2026-09-24.txt", ct1))], data={"paths": json.dumps(["cect_tap_2026-09-24.txt"]), "department": "radio_diagnosis"}).json()
+        r = m.post("/api/tb/intake/documents", files=[("files", ("cect_tap_2026-09-24.txt", ct1))], data={"paths": json.dumps(["cect_tap_2026-09-24.txt"]), "department": "radiology"}).json()
         wait_job(m, r["job"])
         d = c.get("/api/tb/cases/TB-TEST4").json(); req = {x["id"]: x for x in d["state"]["gate"]["requirements"]}
         filed = [x for x in d["documents"] if x["rel_path"].endswith("cect_tap_2026-09-24.txt")]
-        check("4.4 department upload filed into the Case File on the exact UHID", bool(filed) and filed[0].get("department") == "radio_diagnosis", json.dumps([(x["rel_path"], x.get("department")) for x in d["documents"]])[:200])
+        check("4.4 department upload filed into the Case File on the exact UHID", bool(filed) and filed[0].get("department") == "radiology", json.dumps([(x["rel_path"], x.get("department")) for x in d["documents"]])[:200])
         check("4.2 CECT without the lesion size is a Level 2 gap", req["cect_tap"]["status"] == "missing_field" and req["cect_tap"]["level"] == 2 and req["cect_tap"]["level1"]["status"] == "satisfied",
               f"{req['cect_tap']['status']} L{req['cect_tap']['level']}: {'; '.join(req['cect_tap']['problems'])[:100]}")
         a = next((x for x in d["state"]["actions"] if x["requirement"] == "cect_tap" and x["status"] != "completed"), {})
-        check("4.2 Level 2 request routed to the department that uploaded the record (Radio-diagnosis)", a.get("level") == 2 and a.get("department_id") == "radio_diagnosis" and a.get("source_doc_id") == (filed[0]["doc_id"] if filed else None)
+        check("4.2 Level 2 request routed to the department that uploaded the record (Radio-diagnosis)", a.get("level") == 2 and a.get("department_id") == "radiology" and a.get("source_doc_id") == (filed[0]["doc_id"] if filed else None)
               and any("Level 2" in h["event"] for h in a.get("history", [])), json.dumps({k: a.get(k) for k in ("level", "department", "department_id", "source_doc_id")}))
         # the corrected CECT arrives: the request closes by itself and the coordinator is told the Case File is ready
         ct2 = ct1.decode().replace("Study date: 24/09/2026", "Study date: 25/09/2026 (repeat read with measurements)").replace("Findings: spiculated mass in the right upper lobe;", "Findings: spiculated mass in the right upper lobe measuring 4.2 x 3.1 cm;").encode()
-        r = m.post("/api/tb/intake/documents", files=[("files", ("cect_tap_2026-09-25_measured.txt", ct2))], data={"paths": json.dumps(["cect_tap_2026-09-25_measured.txt"]), "department": "radio_diagnosis"}).json()
+        r = m.post("/api/tb/intake/documents", files=[("files", ("cect_tap_2026-09-25_measured.txt", ct2))], data={"paths": json.dumps(["cect_tap_2026-09-25_measured.txt"]), "department": "radiology"}).json()
         wait_job(m, r["job"])
         d = c.get("/api/tb/cases/TB-TEST4").json(); g = d["state"]["gate"]; req = {x["id"]: x for x in g["requirements"]}
         check("4.4 upload with the value closes the request", req["cect_tap"]["status"] == "satisfied" and all(x["status"] == "completed" for x in d["state"]["actions"] if x["requirement"] == "cect_tap"),
@@ -545,13 +545,13 @@ def phase6(c):
     sid = s.get("id")
     check("6.1 board session created from listed Case Files, in agenda order", sid and [a["case_id"] for a in s["agenda"]] == ["TB-001", "TB-TEST6"] and s["status"] == "planned",
           f"{sid}")
-    for dept, status in (("radio_diagnosis", "absent"), ("medical_oncology", "present"), ("surgical_oncology", "present"), ("radiation_oncology", "present"), ("pathology", "present")):
+    for dept, status in (("radiology", "absent"), ("medical_oncology", "present"), ("surgical_oncology", "present"), ("radiation_oncology", "present"), ("pathology", "present")):
         c.post(f"/api/tb/sessions/{sid}/attendance", json={"department": dept, "status": status})
     c.post(f"/api/tb/sessions/{sid}/members", json={"name": "Dr. A. Rao (synthetic)", "department": "medical_oncology"})
     c.post(f"/api/tb/sessions/{sid}/members", json={"name": "Dr. B. Shah (synthetic)", "department": "surgical_oncology"})
     room = c.get(f"/api/tb/sessions/{sid}").json()
     att = room["session"]["attendance"]
-    check("6.1 attendance and members present by name saved", att.get("radio_diagnosis") == "absent" and att.get("medical_oncology") == "present"
+    check("6.1 attendance and members present by name saved", att.get("radiology") == "absent" and att.get("medical_oncology") == "present"
           and [m["name"] for m in room["session"]["members"]] == ["Dr. A. Rao (synthetic)", "Dr. B. Shah (synthetic)"] and room["absent_roles"] == ["radiology"],
           f"absent roles {room['absent_roles']}, participants: {room['participants']['text'][:120]}")
     r = c.post(f"/api/tb/sessions/{sid}/cases/TB-001/log/P1/mark", json={"mark": "accepted"})
@@ -579,7 +579,7 @@ def phase6(c):
     nb = (room["cases"]["TB-TEST6"].get("briefs") or {}).get("radiology") or {}
     au6 = c.get("/api/tb/cases/TB-TEST6/audit").json()["events"]
     check("6.6 no Radio-diagnosis documents: the agent returns at once with the department's open requests, no model call",
-          (ag.get("TB-TEST6") or {}).get("radiology", {}).get("status") == "no_documents" and nb.get("message") == "No Radio-diagnosis documents in this Case File"
+          (ag.get("TB-TEST6") or {}).get("radiology", {}).get("status") == "no_documents" and nb.get("message") == "No Radiology documents in this Case File"
           and any(e["kind"] == "agent_no_documents" for e in au6) and not any(e["kind"] == "llm_call" and str(e.get("purpose", "")).startswith("agent radiology") for e in au6),
           f"{nb.get('message')}; open requests {[x['label'] for x in nb.get('open_items') or []]}")
     qs = ["What does the CT report record about the primary lung lesion and its size?", "What does the PET-CT report record about the mediastinal lymph nodes?",
@@ -705,7 +705,7 @@ def phase7(c):
           "participants": "Dr A (Med Onc), Dr B (Surg Onc), Dr C (Rad Onc)", "actions": [{"department": "Radio-diagnosis", "task": "MRI breast after chemotherapy", "due": yday}]}).json()
     act = next((a for a in c.get("/api/tb/cases/TB-TEST7").json()["state"]["actions"] if a.get("source") == "board"), {})
     ib = c.get("/api/tb/inbox").json()
-    row = next((q for d in ib["departments"] if d["id"] == "radio_diagnosis" for q in d["requests"] if q["action_id"] == act.get("id")), {})
+    row = next((q for d in ib["departments"] if d["id"] == "radiology" for q in d["requests"] if q["action_id"] == act.get("id")), {})
     check("7.4 board action in the Radio-diagnosis inbox: labelled, overdue worked out on display, department notified",
           row.get("source") == "board" and row.get("source_label") == "Tumour Board action" and row.get("overdue") and row.get("board_record") == r7.get("id")
           and any(n["kind"] == "board_action" and n.get("action_id") == act.get("id") for n in c.get("/api/tb/notifications", params={"limit": 200}).json()["notifications"]),
@@ -719,7 +719,7 @@ def phase7(c):
     check("7.4 the MRI that arrived later suggests closing the action (never closed by itself)", bool(sug.get("doc_id")) and act.get("status") != "completed", sug.get("reason", "no suggestion"))
     cl = c.post(f"/api/tb/cases/TB-TEST7/actions/{act.get('id')}/close", json={"doc_id": sug.get("doc_id", "")}).json()
     ib = c.get("/api/tb/inbox").json()
-    row = next((q for d in ib["departments"] if d["id"] == "radio_diagnosis" for q in d["requests"] if q["action_id"] == act.get("id")), {})
+    row = next((q for d in ib["departments"] if d["id"] == "radiology" for q in d["requests"] if q["action_id"] == act.get("id")), {})
     au7 = [e["kind"] for e in c.get("/api/tb/cases/TB-TEST7/audit").json()["events"]]
     check("7.4 closed by a person with that document: completed in the inbox, audited", cl.get("status") == "completed" and cl.get("closed_doc_id") == sug.get("doc_id")
           and row.get("status") == "completed" and "board_action_suggested" in au7 and "board_action_closed" in au7, f"{row.get('status')} {row.get('completed')}")
@@ -1192,7 +1192,7 @@ def mcp_section(c, base):
     check("connectors: fetched records now show as in the Case File", sum(x["in_case_file"] for x in recs2["records"]) == 2)
     docs = c.get("/api/tb/cases/TB-001").json()["documents"]
     conn_docs = [d for d in docs if (d.get("rel_path") or "").startswith("demo_his/")]
-    check("connectors: documents carry the connector's department and the upload user", len(conn_docs) == 2 and all(d.get("department") == "radio_diagnosis" for d in conn_docs) and all("via connector demo_his" in (d.get("uploaded_by") or "") for d in conn_docs), str([(d.get('department'), d.get('uploaded_by')) for d in conn_docs])[:160])
+    check("connectors: documents carry the connector's department and the upload user", len(conn_docs) == 2 and all(d.get("department") == "radiology" for d in conn_docs) and all("via connector demo_his" in (d.get("uploaded_by") or "") for d in conn_docs), str([(d.get('department'), d.get('uploaded_by')) for d in conn_docs])[:160])
     au = c.get("/api/tb/cases/TB-001/audit").json()["events"]
     check("connectors: listing and fetch audited", any(e["kind"] == "connector_records_listed" for e in au) and any(e["kind"] == "connector_fetch" for e in au))
     m = httpx.Client(base_url=base, timeout=60)
