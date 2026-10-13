@@ -5,6 +5,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const S = { caseId: null, data: null, tab: "ready", cards: null, roles: null, protocols: null, chat: [], briefs: {}, me: null, org: null };
 // permissions: the server decides (org.can on every route); the UI only hides what the current user may not do (V1 item 2.1)
 const can = (k, id) => { const v = (S.data?.permissions || {})[k]; return v === true || !!(v && typeof v === "object" && id && v[id]); };
+const MAIN_SECTIONS = ["welcome", "case", "intake", "inbox", "sessions", "dashboard", "orgpage", "deptpage"];  // one main section shows at a time
 const meCan = (k) => !!S.me && (S.me.admin || !!(S.org?.can || {})[k]);  // the server says what this user may do (V2 item 2.2)
 
 async function api(path, opts = {}) {
@@ -59,7 +60,7 @@ async function openCase(id, keepTab) {
   if (id !== S.caseId) { S.tab = "ready"; }
   if (id !== S.chatCase) { S.chat = []; S.chatCase = id; }  // questions and answers never follow into another patient's Case File (Phase 6 review)
   S.caseId = id; S.data = await api("/cases/" + encodeURIComponent(id));
-  $("#welcome").classList.add("hidden"); $("#sessions").classList.add("hidden"); stopRoomPoll(); $("#intake").classList.add("hidden"); $("#inbox").classList.add("hidden"); $("#case").classList.remove("hidden");
+  MAIN_SECTIONS.forEach((x) => $("#" + x).classList.toggle("hidden", x !== "case")); stopRoomPoll();
   const c = S.data.case, p = c.patient || {};
   $("#c-protocol").textContent = (S.protocols?.find((x) => x.id === c.protocol)?.label || c.protocol) + " · Tumour Board Case File";
   $("#c-title").textContent = p.name || c.case_id;
@@ -1168,55 +1169,281 @@ async function newCase() {
 }
 
 
-// ------------------------------------------------------------------ hospital, departments, users (admin) · V1 item 2.1
+// ------------------------------------------------------------------ hospital, departments, users (admin) · V1 item 2.1, V2 item 2.3
 const deptName = (id) => (S.org?.departments || []).find((d) => d.id === id)?.name || id || "";
 async function loadOrg() {
   try { S.org = await api("/org"); S.me = S.org.me; } catch (e) { S.org = null; S.me = null; }
   $("#btn-org").classList.toggle("hidden", !S.me?.admin);
+  $("#btn-mydept").classList.toggle("hidden", !(S.org?.admin_departments || []).length);  // V2 2.3: department admins (and admins)
   $("#btn-connectors").classList.toggle("hidden", !S.me?.admin);
   $("#btn-dashboard").classList.toggle("hidden", !(S.me?.admin || S.me?.coordinator));
   $("#btn-new").classList.toggle("hidden", !meCan("create_case"));
 }
-async function showOrg() {
-  const o = await api("/org");
-  const slug = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-  const users = {}; (o.vaidyx_users || []).forEach((u) => (users[u.username] = { departments: {}, coordinator: false, is_admin: u.is_admin, ...(o.users[u.username] || {}) }));
-  Object.entries(o.users || {}).forEach(([u, v]) => { if (!users[u]) users[u] = { departments: {}, coordinator: false, ...v, missing: true }; });
-  const deptRow = (d) => `<tr class="orow" data-id="${esc(d.id)}"><td><input class="o-name" value="${esc(d.name)}"></td><td><select class="o-group"><option value="treating" ${d.group !== "supporting" ? "selected" : ""}>Treating</option><option value="supporting" ${d.group === "supporting" ? "selected" : ""}>Supporting</option></select></td><td><input class="o-alias" value="${esc((d.aliases || []).join(", "))}" placeholder="Other names used in protocols and reports"></td><td><input class="o-email" value="${esc(d.email || "")}" placeholder="department@hospital.example"></td><td class="small muted">${esc(d.id)}</td><td><button class="ghost sm" data-rmrow title="Remove department">×</button></td></tr>`;
-  const roleSel = (u, v) => `<div class="urow" data-user="${esc(u)}"><label class="small"><input type="checkbox" class="u-coord" ${v.coordinator ? "checked" : ""}> Coordinator</label>
-      <div class="u-depts">${Object.entries(v.departments || {}).map(([d, r]) => `<span class="chip c-info" data-dept="${esc(d)}" data-role="${esc(r)}">${esc(deptName(d))} · ${esc(r)} <button class="x" data-rmchip aria-label="remove">×</button></span>`).join("")}</div>
-      <div class="u-add"><select class="u-dept">${(o.departments || []).map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join("")}</select><select class="u-role"><option value="member">member</option><option value="head">head</option></select><button class="ghost sm" data-addrole>Add</button></div></div>`;
-  $("#modal-body").innerHTML = `<h2 style="color:#1f2933;margin-top:0">Hospital and departments</h2>
-    <div class="muted small">One hospital. Logins are the Vaidyx accounts (created under the main app's admin settings); here each account is placed in departments with a role. Vaidyx admins are Tumour Board admins. Saved changes are recorded in the audit log.</div>
-    <div class="form"><div class="grid3">
-      <div><label>Hospital name</label><input id="o-hname" value="${esc(o.hospital?.name || "")}"></div>
-      <div><label>Hospital level (NCG tiers)</label><select id="o-level"><option value="essential" ${o.hospital?.level !== "optimal" ? "selected" : ""}>Essential</option><option value="optimal" ${o.hospital?.level === "optimal" ? "selected" : ""}>Optimal</option></select></div>
-      <div><label>Hospital type (PM-JAY paperwork)</label><select id="o-type"><option value="" ${!o.hospital?.type ? "selected" : ""}>Not set</option><option value="public" ${o.hospital?.type === "public" ? "selected" : ""}>Public</option><option value="private" ${o.hospital?.type === "private" ? "selected" : ""}>Private</option></select></div></div></div>
-    <h3 style="margin:16px 0 6px">Departments <button class="ghost sm" id="o-adddept">+ Department</button></h3>
-    <div class="muted small" style="margin-bottom:6px">Treating departments own Case Files and send requests; supporting departments (Radiology, Pathology, ...) receive and answer them and report in their own systems. The email is used for the mail draft of a request (placeholders until the hospital gives its addresses).</div>
-    <table class="t"><thead><tr><th>Name</th><th>Group</th><th>Also known as</th><th>Email</th><th>Id</th><th></th></tr></thead><tbody id="o-depts">${(o.departments || []).map(deptRow).join("")}</tbody></table>
-    <h3 style="margin:16px 0 6px">Users and roles</h3>
-    <div class="muted small" style="margin-bottom:6px">Member: upload for the department, see its inbox, confirm its documents. Head: also waive a requirement for the department. Coordinator: list Case Files, run matching, run board sessions.</div>
-    <table class="t"><thead><tr><th>Account</th><th>Roles</th></tr></thead><tbody id="o-users">${Object.entries(users).sort().map(([u, v]) => `<tr><td><b>${esc(u)}</b>${v.is_admin ? ' <span class="chip c-ok">Vaidyx admin</span>' : ""}${v.missing ? ' <span class="chip c-warn" title="No Vaidyx account with this name">no account</span>' : ""}</td><td>${roleSel(u, v)}</td></tr>`).join("") || `<tr><td colspan="2" class="muted">No accounts.</td></tr>`}</tbody></table>
-    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="ghost" data-closemodal>Cancel</button><button class="primary" id="o-save">Save</button></div>`;
-  $("#modal").classList.remove("hidden");
-  $("#o-adddept").onclick = () => { const name = prompt("Department name (as the hospital calls it):"); if (!name) return; $("#o-depts").insertAdjacentHTML("beforeend", deptRow({ id: slug(name), name, group: "treating", aliases: [], email: "" })); };
-  $("#modal-body").addEventListener("click", (e) => {
-    if (e.target.closest("[data-rmchip]")) e.target.closest(".chip").remove();
-    const add = e.target.closest("[data-addrole]");
-    if (add) { const row = add.closest(".urow"); const d = row.querySelector(".u-dept").value, r = row.querySelector(".u-role").value;
-      const box = row.querySelector(".u-depts"); const old = box.querySelector(`[data-dept="${d}"]`); if (old) old.remove();
-      box.insertAdjacentHTML("beforeend", `<span class="chip c-info" data-dept="${esc(d)}" data-role="${esc(r)}">${esc(deptName(d))} · ${esc(r)} <button class="x" data-rmchip aria-label="remove">×</button></span>`); }
+// ------------------------------------------------------------------ Organisation (root admin) and My department (department admin) · V2 item 2.3
+// Each card saves only its own edits on top of the organisation as last loaded (PUT /org takes the whole file), then the page reloads.
+const ROLE = { member: "Doctor", head: "Head" };
+const slugOf = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+const tscroll = (html) => `<div class="tscroll">${html}</div>`;
+const deptOpts = (sel = "") => (S.orgPage?.o.departments || S.org?.departments || []).map((d) => `<option value="${esc(d.id)}" ${d.id === sel ? "selected" : ""}>${esc(d.name)}</option>`).join("");
+function rolesList(v, root) {  // [[chip class, text]] for a placement {departments, admin_of, coordinator}
+  v = v || {};
+  return [...(root ? [["c-info", "Root admin"]] : []), ...(v.coordinator ? [["c-info", "MDT Coordinator"]] : []),
+    ...(v.admin_of || []).map((d) => ["c-info", "Admin of " + deptName(d)]),
+    ...Object.entries(v.departments || {}).map(([d, r]) => ["c-mute", `${ROLE[r] || r} of ${deptName(d)}`])];
+}
+const rolesText = (v, root) => rolesList(v, root).map((x) => x[1]).join(", ") || "no roles";
+function orgPayload(edit = {}) {
+  const o = S.orgPage.o;
+  return { hospital: o.hospital, departments: o.departments, users: o.users || {}, admins: o.admins || [], routes: o.routes || {}, ...edit };
+}
+async function saveOrg(edit, what) {
+  try { await api("/org", { method: "PUT", json: orgPayload(edit) }); toast(what + " saved"); await loadOrg(); await showOrgPage(); if (S.caseId && !$("#case").classList.contains("hidden")) openCase(S.caseId, true); }
+  catch (e) { toast(e.message, 7000); }
+}
+
+async function showOrgPage() {
+  stopRoomPoll(); S.roomId = null; showOnly("orgpage");
+  const box = $("#orgpage");
+  if (!S.orgPage) box.innerHTML = `<div class="card"><h3>Organisation</h3><div class="muted small"><span class="spin"></span> Loading...</div></div>`;
+  let o, acc, aud;
+  try { [o, acc, aud] = await Promise.all([api("/org"), api("/org/accounts"), api("/org/audit?limit=50").catch(() => ({ events: [] }))]); }
+  catch (e) { box.innerHTML = `<div class="card">${esc(e.message)}</div>`; return; }
+  S.orgPage = { o, acc, users: JSON.parse(JSON.stringify(o.users || {})), admins: [...(o.admins || [])], editing: null, placed: [] };
+  const h = o.hospital || {};
+  const deptRow = (d, isNew) => `<tr class="orow" data-id="${esc(d.id)}" ${isNew ? "data-new" : ""}><td><input class="o-name" value="${esc(d.name)}" placeholder="Name used in the hospital" aria-label="Department name"></td>
+    <td><select class="o-group" aria-label="Group"><option value="treating" ${d.group !== "supporting" ? "selected" : ""}>Treating</option><option value="supporting" ${d.group === "supporting" ? "selected" : ""}>Supporting</option></select></td>
+    <td><input class="o-alias" value="${esc((d.aliases || []).join(", "))}" placeholder="Other names, comma separated" aria-label="Also known as"></td>
+    <td><input class="o-email" value="${esc(d.email || "")}" placeholder="department@hospital.example" aria-label="Email"></td>
+    <td class="small muted o-id">${esc(d.id) || "(from the name)"}</td><td><button class="ghost sm" data-rmrow title="Remove department" aria-label="Remove department">×</button></td></tr>`;
+  box.innerHTML = `<div class="case-head"><div><div class="eyebrow">Root admin</div><h1>Organisation</h1>
+      <div class="muted">One hospital: its settings, departments, the Tumour Board accounts and their roles. Logins are plain Vaidyx accounts; a Vaidyx admin is never created or placed here. Every saved change is recorded in the audit below.</div></div></div>
+    <div class="card" id="o-hospital"><h3>Hospital settings</h3>
+      <div class="form"><div class="grid3">
+        <div><label for="o-hname">Hospital name</label><input id="o-hname" value="${esc(h.name || "")}"></div>
+        <div><label for="o-level">NCG level</label><select id="o-level"><option value="essential" ${h.level !== "optimal" ? "selected" : ""}>Essential</option><option value="optimal" ${h.level === "optimal" ? "selected" : ""}>Optimal</option></select></div>
+        <div><label for="o-type">Hospital type</label><select id="o-type"><option value="" ${!h.type ? "selected" : ""}>Not set</option><option value="public" ${h.type === "public" ? "selected" : ""}>Public</option><option value="private" ${h.type === "private" ? "selected" : ""}>Private</option></select></div></div>
+        <div class="grid3">
+          <div><label for="o-fetch">HIS fetch window (months)</label><input id="o-fetch" type="number" min="1" max="120" step="1" value="${esc(h.fetch_window_months ?? 12)}"></div>
+          <div class="checkrow"><label class="chk"><input type="checkbox" id="o-pmjay" ${h.pmjay_empanelled !== false ? "checked" : ""}> PM-JAY empanelled</label></div><div></div></div></div>
+      <div class="small muted" style="margin-top:6px">The NCG level decides which tier of the work-up applies. The fetch window is how far back the hospital systems are read for a patient.</div>
+      <div class="actions-row"><button class="primary sm" id="o-save-h">Save hospital settings</button></div></div>
+    <div class="card"><h3>Departments <button class="ghost sm" id="o-adddept">+ Department</button></h3>
+      <div class="muted small" style="margin-bottom:6px">Treating departments own Case Files and send requests; supporting departments receive and answer them. The email is used for the mail draft of a request.</div>
+      ${tscroll(`<table class="t edit"><thead><tr><th>Name</th><th>Group</th><th>Also known as</th><th>Email</th><th>Id</th><th></th></tr></thead><tbody id="o-depts">${(o.departments || []).map((d) => deptRow(d)).join("")}</tbody></table>`)}
+      <div class="actions-row"><button class="primary sm" id="o-save-d">Save departments</button></div></div>
+    <div id="o-routes"></div>
+    <div class="card" id="o-acc"><h3>Accounts and roles</h3>
+      <div class="muted small" style="margin-bottom:6px">Doctor of a treating department: creates Case Files from a UHID, uploads outside reports, confirms, waives, sends requests. Doctor of a supporting department: sees its inbox and answers requests. Head: the same, named as the department's head. Department admin: manages the doctor logins of the department, no clinical rights. MDT Coordinator: lists Case Files, runs matching and board sessions, records decisions. Root admin: this page.</div>
+      ${tscroll(`<table class="t"><thead><tr><th>Login</th><th>Display name</th><th>Roles</th><th>Status</th><th></th></tr></thead><tbody id="o-users"></tbody></table>`)}
+      <div id="o-ued"></div>
+      <div class="actions-row"><span class="small muted" id="o-users-dirty"></span><button class="primary sm" id="o-save-u">Save accounts and roles</button></div>
+      <h4 style="margin:16px 0 4px">New login</h4>
+      <div class="form" id="o-new"><div class="grid3">
+        <div><label for="na-user">Login name</label><input id="na-user" autocomplete="off" placeholder="lower-case, e.g. dr.rao"></div>
+        <div><label for="na-pass">Password</label><input id="na-pass" type="password" autocomplete="new-password" placeholder="at least 8 characters"></div>
+        <div><label for="na-name">Display name</label><input id="na-name" autocomplete="off" placeholder="e.g. Dr. A. Rao"></div></div>
+        <div class="grid3">
+          <div><label for="na-admof">Department admin of</label><select id="na-admof" multiple size="4">${deptOpts()}</select></div>
+          <div><label>Doctor or Head of</label><div class="inline"><select id="na-dept" aria-label="Department">${deptOpts()}</select><select id="na-role" aria-label="Role"><option value="doctor">Doctor</option><option value="head">Head</option></select><button class="ghost sm" id="na-add">Add</button></div><div class="u-depts" id="na-placed"></div></div>
+          <div><label>Other roles</label><label class="chk"><input type="checkbox" id="na-coord"> MDT Coordinator</label><label class="chk"><input type="checkbox" id="na-root"> Root admin</label></div></div></div>
+      <div class="small muted" style="margin-top:6px">An existing plain login is placed without a password. ${esc(acc.reset_note || o.reset_note || "")}</div>
+      <div class="actions-row"><button class="primary sm" id="na-create">Create login</button></div></div>
+    <div class="card"><h3>Audit <span class="muted small">last 50 changes, newest first</span></h3>
+      ${(aud.events || []).length ? tscroll(`<table class="t compact"><thead><tr><th>Time</th><th>By</th><th>Change</th><th>Details</th></tr></thead><tbody>${aud.events.map((e) => `<tr><td class="small nowrap">${esc((e.ts || "").replace("T", " ").slice(0, 16))}</td><td class="small">${esc(e.by)}</td><td class="small">${esc(AUDIT_KIND[e.kind] || e.kind)}</td><td class="small">${esc(auditText(e))}</td></tr>`).join("")}</tbody></table>`) : '<div class="muted small">No changes recorded yet.</div>'}</div>`;
+  renderAccounts();
+  $("#o-save-h").onclick = () => {
+    const n = Number($("#o-fetch").value);
+    if (!Number.isInteger(n) || n < 1 || n > 120) { toast("The HIS fetch window must be 1 to 120 months"); return; }
+    saveOrg({ hospital: { ...h, name: $("#o-hname").value.trim(), level: $("#o-level").value, type: $("#o-type").value, pmjay_empanelled: $("#o-pmjay").checked, fetch_window_months: n } }, "Hospital settings");
+  };
+  $("#o-adddept").onclick = () => { $("#o-depts").insertAdjacentHTML("beforeend", deptRow({ id: "", name: "", group: "treating", aliases: [], email: "" }, true)); $("#o-depts tr:last-child .o-name").focus(); };
+  $("#o-depts").addEventListener("input", (e) => { const tr = e.target.closest("tr[data-new]"); if (tr && e.target.matches(".o-name")) $(".o-id", tr).textContent = slugOf(e.target.value) || "(from the name)"; });
+  $("#o-depts").addEventListener("click", (e) => { if (e.target.closest("[data-rmrow]")) e.target.closest("tr").remove(); });
+  $("#o-save-d").onclick = () => {
+    const departments = $$("#o-depts tr.orow").map((tr) => ({ ...((o.departments || []).find((d) => d.id === tr.dataset.id) || {}),
+      id: tr.hasAttribute("data-new") ? slugOf($(".o-name", tr).value) : tr.dataset.id, name: $(".o-name", tr).value.trim(), group: $(".o-group", tr).value,
+      email: $(".o-email", tr).value.trim(), aliases: $(".o-alias", tr).value.split(",").map((x) => x.trim()).filter(Boolean) }));
+    if (departments.some((d) => !d.name)) { toast("Every department needs a name"); return; }
+    saveOrg({ departments }, "Departments");
+  };
+  $("#o-acc").addEventListener("click", accountsClick);
+  $("#o-ued").addEventListener("change", accountsChange);
+  $("#o-ued").addEventListener("input", (e) => { const ed = e.target.closest("[data-ed]"); if (ed && e.target.matches(".ue-name")) { userOf(ed.dataset.ed).display_name = e.target.value; dirty(); } });
+  $("#o-save-u").onclick = () => {
+    const P = S.orgPage, users = {};
+    Object.entries(P.users).forEach(([u, v]) => { if (Object.keys(v.departments || {}).length || (v.admin_of || []).length || v.coordinator || v.disabled || P.admins.includes(u)) users[u] = v; });
+    P.admins.forEach((u) => { if (!users[u]) users[u] = P.users[u] || { departments: {}, admin_of: [], coordinator: false, display_name: "", disabled: false }; });
+    saveOrg({ users, admins: P.admins }, "Accounts and roles");
+  };
+  $("#na-add").onclick = () => { const d = $("#na-dept").value, r = $("#na-role").value; S.orgPage.placed = [...S.orgPage.placed.filter((x) => x[0] !== d), [d, r]]; renderPlaced(); };
+  $("#na-placed").addEventListener("click", (e) => { const x = e.target.closest("[data-rmplace]"); if (x) { S.orgPage.placed = S.orgPage.placed.filter((p) => p[0] !== x.dataset.rmplace); renderPlaced(); } });
+  $("#na-create").onclick = async () => {
+    const username = $("#na-user").value.trim(), password = $("#na-pass").value;
+    if (!username) { toast("Login name is required"); return; }
+    const body = { username, display_name: $("#na-name").value.trim(), coordinator: $("#na-coord").checked, root_admin: $("#na-root").checked,
+      admin_of: [...$("#na-admof").selectedOptions].map((x) => x.value), departments: Object.fromEntries(S.orgPage.placed) };
+    if (password) body.password = password;
+    $("#na-pass").value = "";
+    try { const r = await api("/org/accounts", { json: body }); toast(r.created ? `Login ${r.username} created with its roles` : `Existing login ${r.username} given its roles`); await loadOrg(); await showOrgPage(); }
+    catch (e) { toast(e.message, 7000); }
+  };
+  renderRoutes();  // V2 item 2.4: the routing table (loaded on its own, saved on its own)
+}
+// ------------------------------------------------------------------ routing map: which department produces each protocol record (V2 item 2.4)
+async function renderRoutes() {
+  const box = $("#o-routes"); if (!box) return;
+  box.innerHTML = `<div class="card"><h3>Routes: who produces each record</h3><div class="muted small"><span class="spin"></span> Loading...</div></div>`;
+  let r;
+  try { r = await api("/org/routes"); } catch (e) { box.innerHTML = `<div class="card"><h3>Routes</h3><div class="muted small">${esc(e.message)}</div></div>`; return; }
+  const targets = r.targets || [];
+  const byProto = {}; (r.routes || []).forEach((x) => (byProto[x.protocol] = byProto[x.protocol] || { label: x.protocol_label, rows: [] }).rows.push(x));
+  const opt = (x) => {
+    const cur = x.override || "";
+    const dflt = x.default === "owner" || x.default === "coordinator" ? x.default : x.default_department;
+    return `<select class="rt-sel" data-key="${esc(x.protocol + "." + x.record)}"><option value="" ${cur ? "" : "selected"}>Protocol default: ${esc(x.default === "owner" ? "owning department (" + x.default_department + " until the Case File has an owner)" : x.default === "coordinator" ? "MDT Coordinator" : x.default_department)}</option>${targets.map((t) => `<option value="${esc(t.id)}" ${cur === t.id ? "selected" : ""}>${esc(t.name)}${t.group ? " (" + t.group + ")" : ""}</option>`).join("")}</select>`;
+  };
+  box.innerHTML = `<div class="card"><h3>Routes: who produces each record</h3>
+    <div class="muted small" style="margin-bottom:6px">A request for a missing or incomplete record goes to the department that produces it. The protocol sets the default (supporting tests by test, procedures by the treating department that does them, clinical records to the Case File's owning department, previous board records to the MDT Coordinator); choose another department here to override it. Saved changes are audited.</div>
+    ${Object.entries(byProto).map(([pid, p]) => `<details ${pid === Object.keys(byProto)[0] ? "open" : ""}><summary><b>${esc(p.label)}</b> <span class="muted small">${p.rows.length} records, ${p.rows.filter((x) => x.override).length} overridden</span></summary>
+      <div class="tscroll"><table class="t"><thead><tr><th>Record</th><th>Tier</th><th>Goes to</th><th>Department</th></tr></thead><tbody>${p.rows.map((x) => `<tr><td>${esc(x.label)}${x.kind === "optional" ? ' <span class="chip c-mute">optional</span>' : ""}</td><td class="small muted">${esc(x.tier ? { a: "Essential", b: "Optimal", c: "Optional" }[x.tier] || x.tier : "")}</td><td>${opt(x)}</td><td class="small">${esc(x.department)}${x.override ? ' <span class="chip c-info">override</span>' : ""}</td></tr>`).join("")}</tbody></table></div></details>`).join("")}
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px"><button class="ghost sm" id="rt-reset">Clear every override</button><button class="primary sm" id="rt-save">Save routes</button></div></div>`;
+  const save = async (routes) => {
+    try { const cur = await api("/org"); await api("/org", { method: "PUT", json: { hospital: cur.hospital, departments: cur.departments, users: cur.users || {}, admins: cur.admins || [], routes } }); toast("Routes saved (audited)"); renderRoutes(); }
+    catch (e) { toast(e.message, 7000); }
+  };
+  $("#rt-save").onclick = () => { const routes = {}; $$("#o-routes .rt-sel").forEach((s) => { if (s.value) routes[s.dataset.key] = s.value; }); save(routes); };
+  $("#rt-reset").onclick = () => { if (confirm("Use the protocol default for every record?")) save({}); };
+}
+
+function renderPlaced() {
+  $("#na-placed").innerHTML = S.orgPage.placed.map(([d, r]) => `<span class="chip c-mute">${esc(r === "head" ? "Head" : "Doctor")} of ${esc(deptName(d))} <button class="x" data-rmplace="${esc(d)}" aria-label="remove">×</button></span>`).join("");
+}
+const AUDIT_KIND = { org_saved: "Organisation saved", org_migrated: "Organisation migrated", account_created: "Login created", account_placed: "Account placed",
+  account_roles_changed: "Roles changed", account_unplaced: "Account removed", account_refused: "Login refused", root_admins_changed: "Root admins changed", routes_changed: "Routes changed" };
+function auditText(e) {
+  const k = e.kind, out = [];
+  if (e.username) out.push(e.username);
+  if (k === "org_saved") out.push(`${e.departments ?? "?"} department(s), ${e.users ?? "?"} account(s) placed`);
+  else if (k === "org_migrated") out.push(`version ${e.from_version ?? "?"} to ${e.to_version ?? "?"}`);
+  else if (k === "root_admins_changed") out.push(`before: ${(e.before || []).join(", ") || "none"}; after: ${(e.after || []).join(", ") || "none"}`);
+  else if (k === "routes_changed") { const b = e.before || {}, a = e.after || {}; out.push(`${[...new Set([...Object.keys(b), ...Object.keys(a)])].filter((x) => b[x] !== a[x]).length} route(s) changed`); }
+  else if (k === "account_roles_changed") {
+    const a = e.roles_before || {}, b = e.roles || {}, parts = [];
+    if (rolesText(a) !== rolesText(b)) parts.push(`before: ${rolesText(a)}; now: ${rolesText(b)}`);
+    if (!!a.disabled !== !!b.disabled) parts.push(b.disabled ? "disabled" : "enabled");
+    if ((a.display_name || "") !== (b.display_name || "")) parts.push(`display name: ${b.display_name || "none"}`);
+    out.push(parts.join("; ") || rolesText(b));
+  }
+  else if (k === "account_placed") out.push(rolesText(e.roles));
+  else if (k === "account_unplaced") out.push(`had: ${rolesText(e.roles_before)}`);
+  else if (e.reason) out.push(e.reason);
+  return out.join(": ");
+}
+function userOf(u) { const P = S.orgPage; return (P.users[u] = P.users[u] || { departments: {}, admin_of: [], coordinator: false, display_name: "", disabled: false }); }
+function dirty() { $("#o-users-dirty").textContent = "Unsaved changes"; }
+function renderAccounts() {
+  const P = S.orgPage, acc = P.acc, info = {};
+  (acc.accounts || []).forEach((a) => (info[a.username] = a));
+  (acc.vaidyx_users || []).forEach((v) => { info[v.username] = { account: true, ...(info[v.username] || {}), vaidyx_admin: !!v.is_admin || !!info[v.username]?.vaidyx_admin }; });
+  const names = [...new Set([...Object.keys(P.users), ...P.admins, ...Object.keys(info)])].sort();
+  const row = (u) => {
+    const a = info[u] || {}, v = P.users[u], root = P.admins.includes(u);
+    const status = [a.vaidyx_admin ? '<span class="chip c-ok" title="Server administrator: a Tumour Board admin by default, never placed here">Vaidyx admin</span>' : "",
+      v?.disabled ? '<span class="chip c-bad">Disabled</span>' : "", a.account === false ? '<span class="chip c-warn" title="No Vaidyx login with this name">no Vaidyx login</span>' : "",
+      !v && !root && !a.vaidyx_admin ? '<span class="chip c-mute">not placed</span>' : ""].join(" ");
+    const roles = rolesList(v, root).map(([c, t]) => `<span class="chip ${c}">${esc(t)}</span>`).join(" ");
+    const open = P.editing === u;
+    return `<tr data-user="${esc(u)}" class="${open ? "on" : ""}"><td><b>${esc(u)}</b></td><td class="small">${esc(v?.display_name || a.display_name || "")}</td>
+      <td><div class="chips">${roles || (a.vaidyx_admin ? '<span class="muted small">every Tumour Board action (server administrator)</span>' : '<span class="muted small">none</span>')}</div></td><td><div class="chips">${status}</div></td>
+      <td>${a.vaidyx_admin ? "" : `<button class="ghost sm" data-edit="${esc(u)}" aria-expanded="${open}">${open ? "Close" : "Edit"}</button>`}</td></tr>`;
+  };
+  $("#o-users").innerHTML = names.map(row).join("") || `<tr><td colspan="5" class="muted">No accounts.</td></tr>`;
+  $("#o-ued").innerHTML = P.editing ? editorHTML(P.editing) : "";
+}
+function editorHTML(u) {
+  const P = S.orgPage, v = userOf(u), root = P.admins.includes(u);
+  return `<div class="u-ed" data-ed="${esc(u)}"><div class="small b" style="margin-bottom:6px">Editing <span style="color:var(--ink)">${esc(u)}</span>: the changes apply when you save accounts and roles</div><div class="ued">
+    <div><label class="small b" for="ue-name-${esc(u)}">Display name</label><input class="ue-name" id="ue-name-${esc(u)}" value="${esc(v.display_name || "")}"></div>
+    <div><div class="small b">Doctor or Head of</div><div class="u-depts">${Object.entries(v.departments || {}).map(([d, r]) => `<span class="chip c-mute">${esc(ROLE[r] || r)} of ${esc(deptName(d))} <button class="x" data-rmdept="${esc(d)}" aria-label="remove">×</button></span>`).join("") || '<span class="muted small">none</span>'}</div>
+      <div class="inline"><select class="ue-dept" aria-label="Department">${deptOpts()}</select><select class="ue-role" aria-label="Role"><option value="member">Doctor</option><option value="head">Head</option></select><button class="ghost sm" data-adddept>Add</button></div></div>
+    <div><div class="small b">Department admin of</div><div class="u-depts">${(v.admin_of || []).map((d) => `<span class="chip c-info">Admin of ${esc(deptName(d))} <button class="x" data-rmadm="${esc(d)}" aria-label="remove">×</button></span>`).join("") || '<span class="muted small">none</span>'}</div>
+      <div class="inline"><select class="ue-adm" aria-label="Department">${deptOpts()}</select><button class="ghost sm" data-addadm>Add</button></div></div>
+    <div><div class="small b">Other</div><label class="chk"><input type="checkbox" data-flag="coordinator" ${v.coordinator ? "checked" : ""}> MDT Coordinator</label>
+      <label class="chk"><input type="checkbox" data-flag="root" ${root ? "checked" : ""}> Root admin</label><label class="chk"><input type="checkbox" data-flag="disabled" ${v.disabled ? "checked" : ""}> Disabled</label>
+      <button class="ghost sm" data-unplace>Remove from the Tumour Board</button> <button class="ghost sm" data-edit="${esc(u)}">Close</button></div></div></div>`;
+}
+function accountsClick(e) {
+  const P = S.orgPage, b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.edit !== undefined) { const u = b.dataset.edit; P.editing = P.editing === u ? null : u; renderAccounts(); if (P.editing) $("#o-ued").scrollIntoView({ block: "nearest", behavior: "smooth" }); return; }
+  const ed = b.closest("[data-ed]"); if (!ed) return;
+  const u = ed.dataset.ed, v = userOf(u);
+  if (b.dataset.rmdept) { delete v.departments[b.dataset.rmdept]; }
+  else if (b.dataset.rmadm) { v.admin_of = (v.admin_of || []).filter((d) => d !== b.dataset.rmadm); }
+  else if (b.hasAttribute("data-adddept")) { v.departments = { ...(v.departments || {}), [$(".ue-dept", ed).value]: $(".ue-role", ed).value }; }
+  else if (b.hasAttribute("data-addadm")) { const d = $(".ue-adm", ed).value; v.admin_of = [...new Set([...(v.admin_of || []), d])]; }
+  else if (b.hasAttribute("data-unplace")) { delete P.users[u]; P.admins = P.admins.filter((x) => x !== u); P.editing = null; }
+  else return;
+  dirty(); renderAccounts();
+}
+function accountsChange(e) {
+  const P = S.orgPage, f = e.target.dataset.flag, ed = e.target.closest("[data-ed]"); if (!f || !ed) return;
+  const u = ed.dataset.ed, on = e.target.checked;
+  if (f === "root") P.admins = on ? [...new Set([...P.admins, u])] : P.admins.filter((x) => x !== u);
+  else userOf(u)[f] = on;
+  dirty(); renderAccounts();
+}
+
+async function showMyDept(dept) {
+  const ads = S.org?.admin_departments || [];
+  if (!ads.length) return;
+  dept = ads.some((d) => d.id === dept) ? dept : ads.some((d) => d.id === S.myDept) ? S.myDept : ads[0].id; S.myDept = dept;
+  stopRoomPoll(); S.roomId = null; showOnly("deptpage");
+  const box = $("#deptpage");
+  let r;
+  try { r = await api(`/org/departments/${encodeURIComponent(dept)}/doctors`); } catch (e) { box.innerHTML = `<div class="card">${esc(e.message)}</div>`; return; }
+  const d = r.department || {}, base = `/org/departments/${encodeURIComponent(dept)}/doctors`;
+  const chips = (x) => [x.admin ? '<span class="chip c-info">Department admin</span>' : "", x.coordinator ? '<span class="chip c-info">MDT Coordinator</span>' : "",
+    x.root_admin ? '<span class="chip c-info">Root admin</span>' : "", x.disabled ? '<span class="chip c-bad">Disabled</span>' : "",
+    (x.other_departments || []).length ? `<span class="chip c-mute">also in ${esc(x.other_departments.map((o) => o.name).join(", "))}</span>` : "",
+    (x.admin_of_others || []).length ? `<span class="chip c-mute">also admin of ${esc(x.admin_of_others.map(deptName).join(", "))}</span>` : "",
+    x.account === false ? '<span class="chip c-warn" title="No Vaidyx login with this name">no Vaidyx login</span>' : "",
+    x.vaidyx_admin ? '<span class="chip c-ok">Vaidyx admin</span>' : ""].filter(Boolean).join(" ");
+  const row = (x) => `<tr data-user="${esc(x.username)}"><td><b>${esc(x.display_name || x.username)}</b></td><td class="small">${esc(x.username)}</td>
+    <td>${x.role ? `<select class="dp-role" aria-label="Role"><option value="doctor" ${x.role !== "head" ? "selected" : ""}>Doctor</option><option value="head" ${x.role === "head" ? "selected" : ""}>Head</option></select>` : '<span class="muted small">Department admin only</span>'}</td>
+    <td><div class="chips">${chips(x) || '<span class="chip c-ok">Active</span>'}</div></td>
+    <td class="nowrap">${x.disabled ? '<button class="ghost sm" data-dis="0">Enable</button>' : '<button class="ghost sm" data-dis="1">Disable</button>'}${x.role ? ' <button class="ghost sm" data-rm>Remove</button>' : ""}</td></tr>`;
+  box.innerHTML = `<div class="case-head"><div><div class="eyebrow">Department admin</div><h1>${esc(d.name || dept)} <span class="chip c-mute">${d.group === "supporting" ? "Supporting" : "Treating"}</span></h1>
+      <div class="muted">The doctor logins of this department: create, set Doctor or Head, disable or enable, remove from the department. Removing takes the placement away; the Vaidyx login stays. Every change is recorded in the audit.</div></div>
+      ${ads.length > 1 ? `<div class="form dp-switch"><label for="dp-dept">Department</label><select id="dp-dept">${ads.map((a) => `<option value="${esc(a.id)}" ${a.id === dept ? "selected" : ""}>${esc(a.name)}</option>`).join("")}</select></div>` : ""}</div>
+    <div class="card"><h3>Doctors <span class="muted small">${(r.doctors || []).filter((x) => x.role).length} placed</span></h3>
+      ${tscroll(`<table class="t"><thead><tr><th>Name</th><th>Login</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody id="dp-doctors">${(r.doctors || []).map(row).join("") || `<tr><td colspan="5" class="muted">No one is placed in this department yet.</td></tr>`}</tbody></table>`)}
+      <div class="small muted" style="margin-top:8px">${esc(r.reset_note || "")}</div></div>
+    <div class="card"><h3>New doctor login</h3>
+      <div class="form"><div class="grid4">
+        <div><label for="nd-user">Login name</label><input id="nd-user" autocomplete="off" placeholder="lower-case, e.g. dr.rao"></div>
+        <div><label for="nd-pass">Password</label><input id="nd-pass" type="password" autocomplete="new-password" placeholder="at least 8 characters"></div>
+        <div><label for="nd-name">Display name</label><input id="nd-name" autocomplete="off" placeholder="e.g. Dr. A. Rao"></div>
+        <div><label for="nd-role">Role</label><select id="nd-role"><option value="doctor">Doctor</option><option value="head">Head</option></select></div></div></div>
+      <div class="small muted" style="margin-top:6px">An existing plain login is placed in the department without a password.</div>
+      <div class="actions-row"><button class="primary sm" id="nd-create">Create and place</button></div></div>`;
+  // reload the table after every action; a refused new login keeps the form as typed (the password field is cleared either way)
+  const act = async (fn, ok, keepOnError) => { try { const out = await fn(); toast(typeof ok === "function" ? ok(out) : ok); } catch (e) { toast(e.message, 8000); if (keepOnError) return; } await showMyDept(dept); };
+  if ($("#dp-dept")) $("#dp-dept").onchange = () => showMyDept($("#dp-dept").value);
+  $$("#dp-doctors tr[data-user]").forEach((tr) => {
+    const u = tr.dataset.user, url = `${base}/${encodeURIComponent(u)}`;
+    const sel = $(".dp-role", tr); if (sel) sel.onchange = () => act(() => api(url, { method: "PUT", json: { role: sel.value } }), `${u} is now ${sel.value === "head" ? "Head" : "Doctor"}`);
+    const dis = $("[data-dis]", tr); if (dis) dis.onclick = () => act(() => api(url, { method: "PUT", json: { disabled: dis.dataset.dis === "1" } }), `${u} ${dis.dataset.dis === "1" ? "disabled" : "enabled"}`);
+    const rm = $("[data-rm]", tr); if (rm) rm.onclick = async () => {
+      const v = await confirmDialog({ title: `Remove ${u} from ${d.name || dept}?`, intro: "The doctor placement in this department is taken away. The Vaidyx login and any other roles stay.", submit: "Remove" });
+      if (v) act(() => api(url, { method: "DELETE" }), (out) => `${u} removed from ${d.name || dept}${out.kept ? "; other roles kept" : ""}`);
+    };
   });
-  $("#o-save").onclick = async () => {
-    const departments = $$("#o-depts tr.orow").map((tr) => ({ id: tr.dataset.id, name: $(".o-name", tr).value.trim(), group: $(".o-group", tr).value, email: $(".o-email", tr).value.trim(), aliases: $(".o-alias", tr).value.split(",").map((x) => x.trim()).filter(Boolean) }));
-    const users = {};
-    $$("#o-users .urow").forEach((row) => { const deps = {}; $$(".chip[data-dept]", row).forEach((c) => (deps[c.dataset.dept] = c.dataset.role));
-      const coord = $(".u-coord", row).checked; if (Object.keys(deps).length || coord) users[row.dataset.user] = { departments: deps, coordinator: coord }; });
-    try {
-      await api("/org", { method: "PUT", json: { hospital: { ...(o.hospital || {}), name: $("#o-hname").value.trim(), level: $("#o-level").value, type: $("#o-type").value }, departments, users, admins: o.admins || [], routes: o.routes || {} } });
-      $("#modal").classList.add("hidden"); toast("Hospital set-up saved"); await loadOrg(); if (S.caseId) openCase(S.caseId, true);
-    } catch (e) { toast(e.message, 7000); }
+  $("#nd-create").onclick = () => {
+    const username = $("#nd-user").value.trim(), password = $("#nd-pass").value;
+    if (!username) { toast("Login name is required"); return; }
+    const body = { username, display_name: $("#nd-name").value.trim(), role: $("#nd-role").value }; if (password) body.password = password;
+    $("#nd-pass").value = "";
+    act(() => api(base, { json: body }), (out) => out.created ? `Login ${out.username} created and placed` : `Existing login ${out.username} placed`, true);
   };
 }
 
@@ -1276,7 +1503,7 @@ async function watchIntakeJob(id) {
 }
 async function showIntake() {
   const q = await api("/intake"); S.queue = q;
-  $("#welcome").classList.add("hidden"); $("#sessions").classList.add("hidden"); stopRoomPoll(); $("#case").classList.add("hidden"); $("#inbox").classList.add("hidden"); $("#intake").classList.remove("hidden");
+  MAIN_SECTIONS.forEach((x) => $("#" + x).classList.toggle("hidden", x !== "intake")); stopRoomPoll();
   $$(".citem").forEach((el) => el.classList.remove("on"));
   const caseLabel = (cid) => { const c = q.cases.find((x) => x.case_id === cid); return c ? `${c.patient?.name || cid} (${cid}${c.listing?.status === "awaiting_listing" ? ", awaiting listing" : ""})` : cid; };
   const caseOpts = (sel) => q.cases.map((c) => `<option value="${esc(c.case_id)}" ${c.case_id === sel ? "selected" : ""}>${esc(caseLabel(c.case_id))}</option>`).join("");
@@ -1340,7 +1567,7 @@ async function refreshInboxCount() {
 }
 async function showInbox() {
   const ib = await api("/inbox"); S.inbox = ib;
-  $("#welcome").classList.add("hidden"); $("#sessions").classList.add("hidden"); stopRoomPoll(); $("#case").classList.add("hidden"); $("#intake").classList.add("hidden"); $("#inbox").classList.remove("hidden");
+  MAIN_SECTIONS.forEach((x) => $("#" + x).classList.toggle("hidden", x !== "inbox")); stopRoomPoll();
   $$(".citem").forEach((el) => el.classList.remove("on"));
   const chip = (q) => q.status === "completed" ? `<span class="chip c-ok">Closed</span>` : q.overdue ? `<span class="chip c-bad">Overdue ${q.days_overdue} d</span>` : `<span class="chip c-warn">Pending</span>`;
   const row = (q) => `<tr class="click" data-case="${esc(q.case_id)}"><td><b>${esc(q.patient?.name || q.case_id)}</b><div class="small muted">${esc(q.case_id)}${q.patient?.mrn ? " · UHID / MRN " + esc(q.patient.mrn) : ""}${q.patient?.agesex ? " · " + esc(q.patient.agesex) : ""}${q.board_date ? " · board " + fmtDate(q.board_date) : ""}</div></td>
@@ -1376,7 +1603,7 @@ const KIND = { brief_item: "Brief item", point_for_review: "Point for review", n
 let roomTimer = null;
 function stopRoomPoll() { clearTimeout(roomTimer); roomTimer = null; }
 function showOnly(id) {
-  ["welcome", "case", "intake", "inbox", "sessions", "dashboard"].forEach((x) => $("#" + x).classList.toggle("hidden", x !== id));
+  MAIN_SECTIONS.forEach((x) => $("#" + x).classList.toggle("hidden", x !== id));
   $$(".citem").forEach((el) => el.classList.remove("on"));
 }
 async function showSessions() {
@@ -1625,7 +1852,8 @@ $("#btn-cards").onclick = showCards;
 $("#btn-skills").onclick = () => showSkills();
 $("#btn-connectors").onclick = showConnectors;
 $("#btn-dashboard").onclick = () => showDashboard();
-$("#btn-org").onclick = showOrg;
+$("#btn-org").onclick = () => showOrgPage();
+$("#btn-mydept").onclick = () => showMyDept();
 $("#btn-queue").onclick = showIntake;
 $("#btn-inbox").onclick = showInbox;
 $("#btn-bell").onclick = showNotifications;

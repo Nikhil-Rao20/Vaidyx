@@ -7,7 +7,7 @@
 <link rel="icon" href="/static/vaidyx-icon.svg">
 <link rel="preload" href="/static/tb/fonts/AtkinsonHyperlegible-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/static/tb/fonts/AtkinsonHyperlegible-Bold.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/static/tb/tb.css?v=2.3">
+<link rel="stylesheet" href="/static/tb/tb.css?v=2.5">
 </head>
 <body>
 <header class="top">
@@ -18,7 +18,8 @@
     <button class="ghost bell hidden" id="btn-bell" title="Notifications: requests to your department, Case Files ready for the board" aria-label="Notifications">Notifications <span class="chip c-warn hidden" id="bell-count">0</span></button>
     <button class="ghost" id="btn-sessions" title="Board sessions: agenda, attendance, AI support for absent specialties, decisions">Board sessions</button>
     <button class="ghost hidden" id="btn-dashboard" title="Tumour Board quality dashboard: readiness, requests, attendance, decisions and follow-up against published standards">Quality dashboard</button>
-    <button class="ghost hidden" id="btn-org" title="Departments, users and roles (admin)">Hospital and departments</button>
+    <button class="ghost hidden" id="btn-mydept" title="The doctor logins of the department you administer (Department admin)">My department</button>
+    <button class="ghost hidden" id="btn-org" title="Hospital settings, departments, accounts and roles (Root admin)">Organisation</button>
     <button class="ghost" id="btn-skills" title="What each specialty support agent looks for (SKILL.md files; admins edit)">Agent skills</button>
     <button class="ghost hidden" id="btn-connectors" title="Hospital-system connectors (MCP) and this store's read-only MCP server (admin)">Connectors</button>
     <button class="ghost" id="btn-cards">Model and data cards</button>
@@ -67,6 +68,8 @@
     <section id="inbox" class="hidden"></section>
     <section id="sessions" class="hidden"></section>
     <section id="dashboard" class="hidden"></section>
+    <section id="orgpage" class="hidden"></section>
+    <section id="deptpage" class="hidden"></section>
 
     <section id="case" class="hidden">
       <div class="case-head">
@@ -103,6 +106,6 @@
 <div class="drawer hidden" id="drawer"><div class="drawer-body" id="drawer-body"></div></div>
 <div class="modal hidden" id="modal"><div class="modal-body" id="modal-body"></div></div>
 <div class="toast hidden" id="toast"></div>
-<script type="module" src="/static/tb/tb.js?v=2.4"></script>
+<script type="module" src="/static/tb/tb.js?v=2.5"></script>
 </body>
 </html>

@@ -326,3 +326,39 @@ details.removed { margin: 8px 0; } details.removed summary { cursor: pointer; co
 .approx { outline: 1px dashed #d9a441; outline-offset: 1px; }
 @media (max-width: 1100px) { .room { grid-template-columns: 1fr; } }
 @media print { .noprint { display: none !important; } }
+
+/* Organisation (root admin) and My department (department admin) · V2 item 2.3 */
+.tscroll { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tscroll > table.t { display: table; }
+table.t.edit td { vertical-align: middle; }
+table.t.edit input, table.t.edit select, table.t select.dp-role, .ued input, .inline select { padding: 5px 8px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--panel); color: var(--ink); min-width: 0; }
+table.t.edit input.o-name { min-width: 170px; } table.t.edit input.o-alias { min-width: 220px; } table.t.edit input.o-email { min-width: 210px; }
+table.t.compact td { padding: 5px 8px; }
+.nowrap { white-space: nowrap; }
+.b { font-weight: 700; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.inline { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 4px; }
+.inline select { flex: 1 1 140px; min-width: 0; max-width: 100%; }
+.form label.chk, label.chk { display: flex; align-items: center; gap: 6px; font-weight: 400; color: var(--ink); font-size: 14px; margin: 6px 0; }
+.form label.chk input, label.chk input { width: auto; }
+.checkrow { display: flex; align-items: flex-end; padding-bottom: 6px; }
+.actions-row { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+#o-new .grid3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#o-new select[multiple] { padding: 4px; }
+.u-ed { margin-top: 10px; padding: 12px; background: var(--tint-2); border: 1px solid var(--line); border-radius: 8px; }
+table.t tr.on td { background: var(--tint-2); }
+.form .inline select { width: auto; flex: 1 1 140px; }
+.ued { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1.2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.ued > div { min-width: 0; }
+.ued input.ue-name { width: 100%; margin-top: 4px; }
+.ued .u-depts { margin-top: 4px; }
+.dp-switch { min-width: 220px; } .dp-switch label { margin-top: 0; }
+@media (max-width: 1100px) { .ued, .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 860px) { #o-new .grid3 { grid-template-columns: minmax(0, 1fr); } .tscroll > table.t { display: table; } .dp-switch { min-width: 0; align-self: stretch; } }
+@media (max-width: 520px) { .ued, .grid4 { grid-template-columns: minmax(0, 1fr); } }
+/* the top bar holds up to ten buttons for an admin: they wrap, and the model pills take their own row before they would overlap */
+.topnav { flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; }
+@media (max-width: 1760px) { .models { order: 5; flex-basis: 100%; } }
+table.t.compact td:last-child { min-width: 240px; } table.t.compact td:nth-child(3) { min-width: 120px; }
+#orgpage > .case-head, #deptpage > .case-head { margin-bottom: 14px; }
