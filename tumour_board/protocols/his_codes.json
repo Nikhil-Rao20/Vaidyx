@@ -1,0 +1,97 @@
+{
+  "_note": "HIS code tables for tumour_board/his_client.py (plan item V2-3.1). Vendor-extensible: add a hospital's own LOINC / SNOMED codes, DICOM modalities or printed labels here, no code change needed. A structured HIS value is only a candidate: the report text wins, and in 3.3 the V1 keyword rule (doctype.keyword_type over the PDF header and filename) cross-checks the document type decided here. doc_type_by_loinc: report or document LOINC -> our document type (facts.json doc_types). pathology_family: these LOINC codes name the pathology family; the title keywords pick the member, else the default. imaging: these LOINC codes name imaging; the modality comes from the category (SNOMED), then the DICOM modality of the ImagingStudy, then the title keywords. order_category_snomed: an order (ServiceRequest) category that names a type when neither its code nor its text does. fact_by_loinc: Observation LOINC -> fact id (facts.json). fact_by_label: ordered [case-insensitive regex, fact id] pairs tried on the Observation's printed label (code.text) when no LOINC maps; the first match wins, so specific patterns come before general ones; anything else maps to no fact.",
+  "doc_type_by_loinc": {
+    "11488-4": "clinical_note",
+    "57133-1": "referral",
+    "18842-5": "discharge_summary",
+    "18751-8": "endoscopy",
+    "58410-2": "lab",
+    "24325-3": "lab",
+    "24362-6": "lab",
+    "2039-6": "lab",
+    "18725-2": "lab"
+  },
+  "pathology_family": {
+    "loinc": ["11526-1"],
+    "types": ["histopathology", "ihc", "molecular", "cytology"],
+    "default": "histopathology"
+  },
+  "imaging": {
+    "loinc": ["18748-4"],
+    "types": ["mammogram", "ultrasound", "mri", "xray", "pet_ct", "bone_scan", "ct"],
+    "category_snomed": {
+      "310128004": "ct"
+    },
+    "dicom_modality": {
+      "CT": "ct",
+      "MR": "mri",
+      "MG": "mammogram",
+      "US": "ultrasound",
+      "CR": "xray",
+      "DX": "xray",
+      "PT": "pet_ct",
+      "NM": "bone_scan"
+    },
+    "default": ""
+  },
+  "order_category_snomed": {
+    "108252007": "lab"
+  },
+  "fact_by_loinc": {
+    "718-7": "haemoglobin",
+    "6690-2": "wbc",
+    "777-3": "platelets",
+    "2160-0": "creatinine",
+    "1975-2": "bilirubin",
+    "2039-6": "cea",
+    "16112-5": "er",
+    "16113-3": "pr",
+    "48676-1": "her2"
+  },
+  "fact_by_label": [
+    ["h(a)?emoglobin|\\bhb\\b", "haemoglobin"],
+    ["leu[ck]ocyte|\\bwbc\\b|\\btlc\\b", "wbc"],
+    ["platelet", "platelets"],
+    ["creatinine", "creatinine"],
+    ["bilirubin", "bilirubin"],
+    ["carcinoembryonic|\\bcea\\b", "cea"],
+    ["o?estrogen receptor|\\ber\\b", "er"],
+    ["progesterone receptor|\\bpr\\b", "pr"],
+    ["\\bher-?2", "her2"],
+    ["ki-?67", "ki67"],
+    ["pd-?l1", "pdl1"],
+    ["\\begfr\\b", "egfr"],
+    ["\\balk\\b", "alk"],
+    ["\\bros-?1\\b", "ros1"],
+    ["\\bmet\\b", "met"],
+    ["\\bk-?ras\\b", "kras"],
+    ["\\bmmr\\b|mismatch repair|\\bmsi\\b|microsatellite", "mmr"],
+    ["\\bras\\b|\\bbraf\\b", "ras_braf"],
+    ["\\bhiv\\b", "hiv_status"],
+    ["\\becog\\b|performance status", "ecog"],
+    ["figo", "figo_stage"],
+    ["\\bstag(e|ing)\\b", "recorded_stage"],
+    ["histolog\\w*\\s+type|^histology$|histological diagnosis", "histologic_type"],
+    ["\\bgrade\\b", "grade"],
+    ["\\blvi\\b|lymphovascular|lympho-vascular", "lvi"],
+    ["\\bpni\\b|perineural", "pni"],
+    ["\\bmrf\\b|mesorectal fascia|circumferential resection margin|\\bcrm\\b", "mrf_status"],
+    ["margin", "margins"],
+    ["distance from (the )?anal verge|anal verge", "distance_from_anal_verge"],
+    ["\\bemvi\\b|extramural venous", "emvi"],
+    ["\\bsuv\\b", "suv_max"],
+    ["depth of invasion|\\bdoi\\b", "depth_of_invasion"],
+    ["parametri", "parametrial_involvement"],
+    ["\\bene\\b|extranodal|extra-nodal|extracapsular", "ene"],
+    ["lymph nodes?|nodal", "nodal_findings"],
+    ["distant", "distant_findings"],
+    ["menopaus", "menopausal_status"],
+    ["comorbid", "comorbidities"],
+    ["smoking", "smoking_history"],
+    ["tobacco", "tobacco_use"],
+    ["dental", "dental_evaluation"],
+    ["presenting complaint|chief complaint", "presenting_complaint"],
+    ["clinical question|question for the (tumour )?board", "clinical_question"],
+    ["lesion size|tumou?r size|\\bsize\\b", "lesion_size"]
+  ]
+}
