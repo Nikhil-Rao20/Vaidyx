@@ -2,7 +2,7 @@
 then deterministic grounding. Nothing the model says is trusted until its quote is found in the source text."""
 import asyncio, re
 
-from . import confirm, dates, docstatus, doctype, grounding, identity, ingest, llm, negation, ocr_boxes, protocol, scanned, store
+from . import confirm, dates, docstatus, doctype, grounding, his_overlay, identity, ingest, llm, negation, ocr_boxes, protocol, scanned, store
 
 STATUS = ["FINAL", "AMENDED", "CORRECTED", "PRELIMINARY", "DRAFT", "CANCELLED", "UNKNOWN"]
 # Negation cues shared with qa and postboard (see negation.py).
@@ -363,6 +363,8 @@ async def process_document(case_id, doc_id, protocol_id, case_patient=None, prog
             doc["state"] = "classifying"; store.save_doc(case_id, doc); progress and progress(doc_id, "classifying")
             c = await classify(full, au)
             doc["classification"] = finish_classification(c, full, texts, doc["filename"], identity.patient_record(case_patient or {}).get("dob") or "", pages)
+        if doc.get("his"):  # a record fetched from the hospital system: its status, signature and order code fill the fields (V2 item 3.3)
+            his_overlay.apply(doc)
         c = doc["classification"]
         # identity as printed (rules first; V1 item 2.4) and the check that the document belongs to this Case File's patient
         if not doc.get("identity_read"):
@@ -420,6 +422,11 @@ async def process_document(case_id, doc_id, protocol_id, case_patient=None, prog
                 ev["alternatives_dropped"] = len(cands) - len(ok) - (0 if ok else 1)
             au(ev)
         doc["facts"] = facts
+        if doc.get("his"):  # the HIS Observations are candidates checked against the report text (V2 item 3.3)
+            his_overlay.check_observations(doc)
+            for row in doc.get("his_checks") or []:
+                if row.get("result") != "agrees":
+                    au({"kind": "his_value_check", "doc_id": doc_id, "fact": row["fact"], "his_value": row["his_value"], "text_value": row.get("text_value"), "result": row["result"]})
         doc["state"] = "ready"; doc["processed"] = store.now_iso()
         store.save_doc(case_id, doc); progress and progress(doc_id, "ready")
         return doc

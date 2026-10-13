@@ -187,8 +187,12 @@ def index(case_id):
 
 def _doc_block(d, text):
     c = d.get("classification") or {}
+    h = d.get("his") or {}
+    enc = f" | {'IP admission' if h.get('encounter_kind') == 'IP' else 'OP visit'} {h['encounter_number']}" if h.get("encounter_number") else ""  # the HIS encounter (V2 item 3.4)
+    sup = f" | SUPERSEDED by version {d['superseded'].get('version')} of the same report (history only)" if d.get("superseded") else ""  # an earlier version (V2 item 3.5)
+    outside = " | OUTSIDE REPORT (uploaded)" if d.get("outside") else ""
     return (f"=== DOCUMENT {d['doc_id']} | {c.get('title') or d['filename']} | type {c.get('doc_type')} | date {dates.doc_dates(d)['event'] or c.get('report_date') or '?'} "
-            f"| status {c.get('status')}{' | UNSIGNED' if c.get('signed') == 'no' else ''} ===\n{text}")
+            f"| status {c.get('status')}{' | UNSIGNED' if c.get('signed') == 'no' else ''}{enc}{sup}{outside} ===\n{text}")
 
 
 def context_for(case_id, question, budget=48000, doc_types=None):

@@ -34,7 +34,7 @@ def test_tb001_lung_gate(demo_cases):
     assert req(g, "driver_mutations")["level1"]["problems"][0].startswith("No final, signed histopathology / ihc / molecular report in the Case File to carry: EGFR, ALK, ROS1")
     assert g["blockers"] == []
     assert g["documents"] == {"total": 8, "ready": 8, "processing": 0, "errors": 0, "failed": [], "dismissed": [], "non_final": ["D67977cf8"], "unconfirmed": [], "date_unconfirmed": [],
-                              "date_flags": {}, "type_disagreements": [], "identity_flags": []}
+                              "date_flags": {}, "type_disagreements": [], "identity_flags": [], "superseded": [], "outside_unconfirmed": [], "his_flags": 0}
 
 
 def test_tb001_optimal_hospital_requires_the_optimal_records(demo_cases):

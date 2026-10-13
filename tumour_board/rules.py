@@ -51,6 +51,49 @@ def _needs_confirmation(d):
     return c.get("status") == "UNSTATED" and c.get("signed") != "no"
 
 
+def _unconfirmed_outside(d) -> bool:
+    """An outside report (V2 item 3.6) matched to the patient by name only, which no person has confirmed yet."""
+    return bool(d.get("outside")) and d.get("identity") == "name_match" and not d.get("identity_confirmed_by")
+
+
+ORDER_STAGE_RANK = {"sample_collected": 3, "scheduled": 2, "ordered": 1, "cancelled": 0}
+
+
+def _order_for(req, orders):
+    """The open HIS order (no report yet) that would produce this record, if any (V2 item 3.3): same document type, the region
+    words of the record on the order's label; the most advanced stage wins."""
+    want = set(req.get("doc_types") or req.get("fact_doc_types") or [])
+    best = None
+    for o in orders or []:
+        if not isinstance(o, dict) or o.get("doc_type") not in want:
+            continue
+        if req.get("region") and not re.search(r"\b(?:" + req["region"] + ")", (o.get("test") or "").lower().replace("_", " ")):
+            continue
+        rank = ORDER_STAGE_RANK.get(o.get("stage"), 0)
+        if best is None or rank > best[0]:
+            best = (rank, o)
+    return best[1] if best else None
+
+
+def _order_line(o) -> str:
+    acc = o.get("accession") or "no accession No."
+    test = o.get("test") or o.get("doc_type") or "the test"
+    stage = o.get("stage")
+    if stage == "sample_collected":
+        when = (o.get("specimen") or {}).get("collected") or ""
+        return f"Sample collected{' on ' + str(when)[:10] if when else ''} ({acc}): {test}, result awaited in the HIS"
+    if stage == "scheduled":
+        return f"Ordered in the HIS ({acc}): {test} scheduled for {str(o.get('scheduled_for') or '')[:10] or 'a date to be fixed'}, no report yet"
+    if stage == "cancelled":
+        return f"Order cancelled in the HIS ({acc}): {test}" + (f"; {o['note']}" if o.get("note") else "")
+    return f"Ordered in the HIS ({acc}): {test}, no report yet"
+
+
+def _pending_order_view(o) -> dict:
+    return {k: o.get(k) for k in ("id", "accession", "test", "doc_type", "stage", "status", "scheduled_for", "authored_on", "performer_department", "encounter_number", "encounter_kind", "note")} | {
+        "collected": ((o.get("specimen") or {}).get("collected") if o.get("specimen") else None)}
+
+
 def _study_lines(d):
     """The header lines that name the study ("CECT THORAX", "MRI BRAIN"): the title keyword hits of the first lines of page 1 (V1 item
     3.2). Department, hospital, patient and signature lines carry no study keyword and never count ("Head: Dr. Rao" is not a brain study)."""
@@ -99,7 +142,8 @@ def resolve_facts(docs, overrides=None):
                                              "date": dates.doc_dates(d)["event"] or None, "report_date": dates.doc_dates(d)["report"] or None,
                                              "date_unconfirmed": dates.doc_dates(d)["unconfirmed"], "date_questionable": dates.doc_dates(d)["questionable"],
                                              "date_flags": dates.doc_dates(d)["flags"],
-                                             "doc_final": _is_final(d, overrides), "doc_status": c.get("status")})
+                                             "doc_final": _is_final(d, overrides), "doc_status": c.get("status"),
+                                             "superseded": bool(d.get("superseded")), "unconfirmed_outside": _unconfirmed_outside(d)})
     out = {}
     for fid, h in hist.items():
         tiers = [[e for e in h if e["verification"] in VERIFIED and e["doc_final"] and e["state"] == "present"],
@@ -150,7 +194,7 @@ def _title(x):
     return x.get("doc_title") or (x.get("classification") or {}).get("title") or x.get("filename") or x.get("doc_id") or ""
 
 
-def _evaluate_record(req, ready, facts, overrides, cat):
+def _evaluate_record(req, ready, facts, overrides, cat, orders=()):
     """One record of the protocol against the Case File: the verdict (status, problems, evidence, needs) as before, now split into
     Level 1 (the record: present, final and signed, right patient, its type and date settled) and Level 2 (the required values in it:
     present, verified, not pending) with the document a Level 2 gap sits in (V1 item 4.2). `problems` keeps its order: confirmations
@@ -167,6 +211,8 @@ def _evaluate_record(req, ready, facts, overrides, cat):
         return r
     date_needs = []  # (doc or history entry, why, level): a clinician confirms the date that decides this requirement (V1 item 3.1)
     type_needs = []  # (doc or history entry, level): documents that match under only one of their two possible types (V1 item 3.2)
+    match_needs = []  # (doc or history entry, level): outside reports matched by name only; the treating doctor confirms the patient (V2 item 3.6)
+    unconfirmed = {d["doc_id"] for d in ready if _unconfirmed_outside(d)}
     if req.get("applies_if_doc_type_present"):
         present = [d for d in ready if req["applies_if_doc_type_present"] in _doc_types(d)]
         if not present:
@@ -174,6 +220,7 @@ def _evaluate_record(req, ready, facts, overrides, cat):
             return r
         type_needs += [(d, 1) for d in present if len(_doc_types(d)) > 1]  # whether this requirement applies rests on a disputed type
     allowed = set(req.get("fact_doc_types") or req.get("doc_types") or [])
+    carrier_ids = []
     if not req.get("facts_only"):
         want = set(req["doc_types"])
         cands = [d for d in ready if _doc_types(d) & want and _region_ok(d, req.get("region"))]
@@ -192,6 +239,7 @@ def _evaluate_record(req, ready, facts, overrides, cat):
                 if not cands:  # only undated or flagged candidates: ask for their date instead of calling the record missing
                     date_needs += [(d, f"it must be dated after {ref}", 1) for d in undated]
         cands.sort(key=_doc_sort_key, reverse=True)
+        match_needs += [(d, 1) for d in cands if d["doc_id"] in unconfirmed]
         finals = [d for d in cands if _is_final(d, overrides)]
         if not cands:
             r["status"] = l1["status"] = "missing_record"
@@ -207,8 +255,9 @@ def _evaluate_record(req, ready, facts, overrides, cat):
                 r.setdefault("needs", []).append({"type": "attest_final", "doc_id": d["doc_id"]}); l1["needs"].append({"type": "attest_final", "doc_id": d["doc_id"]})
             else:
                 r["status"] = l1["status"] = "not_final"
+                his_why = [n[len("HIS: "):] for n in (c.get("status_notes") or []) if n.startswith("HIS: ")]  # the hospital system's reason (V2 item 3.3)
                 p = (f"{c.get('title') or d['filename']} is {c.get('status', 'UNKNOWN')}" + (" and unsigned" if c.get("signed") == "no" else "")
-                     + ": a final, signed version is required")
+                     + ": a final, signed version is required" + (" (" + "; ".join(his_why) + ")" if his_why else ""))
                 r["problems"].append(p); l1["problems"].append(p)
             r["evidence"].append({"doc_id": d["doc_id"], "quote": c.get("status_quote") or c.get("signature_quote")})
         else:
@@ -226,6 +275,8 @@ def _evaluate_record(req, ready, facts, overrides, cat):
     else:  # facts_only: Level 1 is a final document of a type that can carry the values (the record that should document them)
         carriers = [d for d in ready if _doc_types(d) & allowed and _is_final(d, overrides)]
         carriers.sort(key=_doc_sort_key, reverse=True)
+        match_needs += [(d, 1) for d in carriers if d["doc_id"] in unconfirmed]
+        carrier_ids = [d["doc_id"] for d in carriers]
         if carriers:
             source_doc = carriers[0]
         else:
@@ -234,6 +285,7 @@ def _evaluate_record(req, ready, facts, overrides, cat):
                                   + ", ".join(cat[f]["label"] for f in req.get("required_facts", []) if f in cat))
     # required fields (Level 2)
     missing, pending, review = [], [], []
+    documenting = []  # carrier documents that hold at least one of the required values (the record the verdict rests on, V2 item 3.3)
     scan_needs = []  # (history entry, field): critical values read from a scan, not yet confirmed against the image (V1 item 8.2)
     open_doc = None  # the document the open value sits in (pending, approximate, non-final or awaiting confirmation against the scan)
     for fid in req.get("required_facts", []):
@@ -241,6 +293,8 @@ def _evaluate_record(req, ready, facts, overrides, cat):
         type_needs += [(h, 2) for h in hist if allowed and len(h["doc_types"]) > 1 and len(set(h["doc_types"]) & allowed) == 1
                        and h["doc_id"] not in {x["doc_id"] for x, _ in type_needs}]
         good = [h for h in hist if h["verification"] in VERIFIED and h["doc_final"] and h["state"] == "present"]
+        documenting += [h["doc_id"] for h in good if h["doc_id"] in carrier_ids]
+        match_needs += [(h, 2) for h in good if h["doc_id"] in unconfirmed and h["doc_id"] not in {x["doc_id"] for x, _ in match_needs}]
         if req.get("must_postdate_doc_type") and r.get("postdate_reference"):
             good = [h for h in good if (h["date"] or "") > r["postdate_reference"]]
         if good:
@@ -316,6 +370,21 @@ def _evaluate_record(req, ready, facts, overrides, cat):
             lv["status"] = "needs_confirmation"; lv["problems"].insert(0, p); lv["needs"].append({"type": "confirm_doc_type", "doc_id": did})
             if not any(e.get("doc_id") == did for e in r["evidence"]):
                 r["evidence"].append({"doc_id": did, "quote": ""})
+    if match_needs and r["status"] != "not_applicable":  # an outside report matched by name only: a person confirms the patient before it counts (V2 item 3.6)
+        r["status"] = "needs_confirmation"
+        seen = set()
+        for x, lvl in match_needs:
+            did = x["doc_id"]
+            if did in seen:
+                continue
+            seen.add(did)
+            p = f"Confirm the patient of {_title(x)}: an outside report matched by name only (no hospital identifier printed)"
+            r["problems"].insert(0, p)
+            r.setdefault("needs", []).append({"type": "confirm_match", "doc_id": did})
+            lv = l1 if lvl == 1 else l2
+            lv["status"] = "needs_confirmation"; lv["problems"].insert(0, p); lv["needs"].append({"type": "confirm_match", "doc_id": did})
+            if not any(e.get("doc_id") == did for e in r["evidence"]):
+                r["evidence"].append({"doc_id": did, "quote": ""})
     if date_needs and r["status"] != "not_applicable":  # confirmation first (like an attestation): the date decides the check
         r["status"] = "needs_confirmation"
         seen = set()
@@ -336,6 +405,30 @@ def _evaluate_record(req, ready, facts, overrides, cat):
             if not any(e.get("doc_id") == did for e in r["evidence"]):
                 r["evidence"].append({"doc_id": did, "quote": ""})
     r["level"] = 1 if l1["status"] != "satisfied" else 2 if l2["status"] != "satisfied" else None
+    if r["level"] == 2 and open_doc:
+        acc_doc = next((d for d in ready if d["doc_id"] == open_doc["doc_id"]), None)  # the document the open value sits in
+    elif r["level"] == 2 and req.get("facts_only"):
+        # a value missing from a carrier that documents the others (HER2 omitted from the IHC): that report; missing from every
+        # carrier (no CEA in any lab report): no accession, the carrier's is not the test's
+        acc_doc = next((d for d in ready if d["doc_id"] in documenting), None) if documenting else None
+    else:
+        acc_doc = source_doc
+    if acc_doc and ((acc_doc.get("his") or {}).get("accession")):
+        r["accession"] = acc_doc["his"]["accession"]  # the HIS accession / Lab No. of the record the verdict rests on (V2 item 3.3)
+    order = _order_for(req, orders) if orders and r["level"] else None
+    if order:  # the HIS holds an open order for this record: the gap names the accession No. and the stage (V2 item 3.3)
+        r["pending_order"] = _pending_order_view(order)
+        r["accession"] = order.get("accession") or r.get("accession")
+        line = _order_line(order)
+        if r["level"] == 2 and missing and order.get("stage") in ("sample_collected", "scheduled", "ordered"):
+            old_p = "Required field not documented: " + ", ".join(missing)
+            new_p = "Pending: " + ", ".join(missing) + ": " + line.lower()[:1] + line[1:]
+            r["problems"] = [new_p if x == old_p else x for x in r["problems"]]
+            l2["problems"] = [new_p if x == old_p else x for x in l2["problems"]]
+            r["pending_from_order"] = True
+        else:
+            r["problems"].append(line)
+            (l1 if r["level"] == 1 else l2)["problems"].append(line)
     r["level_label"] = LEVEL_LABEL.get(r["level"], "")
     r["level1"], r["level2"] = l1, l2
     if r["level"] == 2 and open_doc:
@@ -367,9 +460,12 @@ def evaluate(case_id):
     cat = protocol.facts()
     state = store.get_state(case_id)
     docs = case_docs(case_id, state)
-    ready = [d for d in docs if d.get("state") == "ready"]
+    ready = [d for d in docs if d.get("state") == "ready" and not d.get("superseded")]  # an earlier version of an amended HIS report is history (V2 item 3.5)
     overrides = state.get("overrides") or {}
     facts = resolve_facts(docs, overrides)
+    his = case.get("his") or {}
+    orders = list(his.get("orders") or []) + [o for os_ in (his.get("linked_orders") or {}).values() for o in os_]  # open HIS orders (V2 item 3.3)
+    unlinked = [x.get("uhid") for x in his.get("similar") or [] if isinstance(x, dict) and x.get("uhid") and not x.get("linked")]
     setting = case.get("setting") or ""
     hospital = _hospital()
     level = case.get("hospital_level") or hospital.get("level") or "essential"
@@ -382,7 +478,13 @@ def evaluate(case_id):
             r = {"id": req["id"], "label": req["label"], "department": req["routed_department"], "status": "not_applicable", "problems": [], "evidence": [],
                  "level": None, "level1": {"status": "satisfied", "problems": [], "needs": []}, "level2": {"status": "satisfied", "problems": [], "needs": []}}
         else:
-            r = _evaluate_record(req, ready, facts, overrides, cat)
+            r = _evaluate_record(req, ready, facts, overrides, cat, orders)
+            if unlinked and r.get("level") == 1 and r["status"] == "missing_record":
+                # a registration that may be this patient is not linked yet (temporary or duplicate UHID, V2 item 3.2): the record may sit there;
+                # a person links it before anything is requested of a department
+                r["unlinked_registrations"] = unlinked
+                p = f"A registration that may be this patient is not linked ({', '.join(unlinked)}): check and link it before requesting the record"
+                r["problems"].append(p); r["level1"]["problems"].append(p)
         r["tier"] = tier; r["tier_label"] = protocol.TIER_LABEL.get(tier, tier); r["required"] = is_required
         for k in ("source", "sources", "note", "tier_basis"):
             if req.get(k):
@@ -446,7 +548,11 @@ def evaluate(case_id):
                           "date_unconfirmed": [d["doc_id"] for d in ready if dates.doc_dates(d)["unconfirmed"]],
                           "type_disagreements": [d["doc_id"] for d in ready if len(_doc_types(d)) > 1],
                           "date_flags": {d["doc_id"]: dates.doc_dates(d)["flags"] for d in ready if dates.doc_dates(d)["flags"]},
-                          "identity_flags": [d["doc_id"] for d in ready if d.get("identity") in ("mismatch_or_missing", "id_differs")]}}
+                          "identity_flags": [d["doc_id"] for d in ready if d.get("identity") in ("mismatch_or_missing", "id_differs")],
+                          "superseded": [d["doc_id"] for d in docs if d.get("superseded")],  # earlier versions kept as history (V2 item 3.5)
+                          "outside_unconfirmed": [d["doc_id"] for d in ready if _unconfirmed_outside(d)],  # outside reports awaiting the patient confirmation (3.6)
+                          "his_flags": sum(len(d.get("his_flags") or []) for d in ready)},  # HIS values the report text does not carry (3.3)
+            "his": {"open_orders": len(orders), "source": his.get("label")} if his else None}
     return gate
 
 
@@ -611,6 +717,7 @@ def sync_actions(case_id, gate, by=""):
             moved = (a.get("department") != dept) or (not legacy and a.get("level") != r.get("level"))
             if a["what"] != what or moved or legacy:
                 a["what"] = what
+                a["accession"], a["pending_order"] = r.get("accession"), r.get("pending_order")  # the HIS order behind the gap (V2 item 3.3)
                 if moved:
                     old_dept = a.get("department_id")
                     a["history"].append({"ts": store.now_iso(), "event": f"Re-check: {LEVEL_LABEL.get(r.get('level'), 'gap')} routed to {dept}", "detail": what})
@@ -630,6 +737,7 @@ def sync_actions(case_id, gate, by=""):
             continue
         a = {"id": "A" + uuid.uuid4().hex[:6], "source": "pre_authorization", "requirement": r["id"], "label": r["label"],
              "department": dept, "department_id": dept_id, "level": r.get("level"), "level_label": r.get("level_label", ""), "source_doc_id": doc_id,
+             "accession": r.get("accession"), "pending_order": r.get("pending_order"),  # the HIS order or record behind the gap (V2 item 3.3)
              "what": what, "status": "pending", "created": store.now_iso(),
              "due": (today + timedelta(days=sla.get(r["id"], 3))).isoformat(), "history": [{"ts": store.now_iso(), "event": f"Gap detected ({LEVEL_LABEL.get(r.get('level'), 'gap')}), routed to " + dept}]}
         if to_coord:
