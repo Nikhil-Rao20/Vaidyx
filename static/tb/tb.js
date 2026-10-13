@@ -199,6 +199,7 @@ function renderReady() {
       <div class="muted small" style="margin-bottom:6px">Informational checklist (not part of the gate). Source: ${esc(g.core_data_source || "")}.</div>
       <div style="display:flex;flex-wrap:wrap;gap:4px">${g.core_data.map((c) => c.present ? `<span class="cite" data-doc="${esc(c.evidence[0]?.doc_id || "")}" title="${esc((c.evidence[0]?.value || "") + " | " + (c.evidence[0]?.quote || ""))}">✓ ${esc(c.label)}</span>` : `<span class="chip c-mute">– ${esc(c.label)}</span>`).join("")}</div></div>` : ""}
     <div class="card"><h3>Optional records available</h3><div>${opt || '<span class="muted small">None</span>'}</div></div>
+    ${discordHTML()}
     ${confirmationsHTML()}
     ${g?.policy_basis ? `<div class="card"><h3>Why a Pre-Authorization gate</h3><div class="small" style="color:#475569">${esc(g.policy_basis)}</div>${g.pmjay_note ? `<div class="small muted" style="margin-top:6px">${esc(g.pmjay_note)}</div>` : ""}</div>` : ""}
   </div><div>
@@ -231,6 +232,40 @@ function renderReady() {
   const arr = $("#btn-arrivals");
   if (arr) arr.onclick = async () => { try { const j = await api(`/cases/${S.caseId}/demo-arrivals`, { method: "POST" }); watchJob(j.job); } catch (e) { toast(e.message); } };
   bindActions($("#tab-ready"));
+  bindDiscord($("#tab-ready"));
+}
+
+// ------------------------------------------------------------------ discordances between reports, decision watch (12 Oct)
+function discordItemHTML(it) {
+  const sev = it.noted ? "c-mute" : it.severity === "review" ? "c-rev" : "c-info";
+  return `<div class="flag ${it.severity === "review" ? "review" : "info"}${it.noted ? " resolved" : ""}"><div class="k">${esc(it.kind_label)} <span class="chip ${sev}">${it.noted ? "noted" : it.severity === "review" ? "review" : "information"}</span></div>
+    <div>${esc(it.text)}</div><div style="margin-top:4px">${it.citations.map(citeHTML).join(" ")}</div>
+    ${it.noted ? `<div class="small muted">Noted by ${esc(it.noted.by)} on ${esc((it.noted.at || "").slice(0, 10))}${it.noted.note ? `: ${esc(it.noted.note)}` : ""}${it.noted.confirmation && can("list_case") ? ` <button class="ghost sm" data-undonote="${esc(it.noted.confirmation)}">Undo</button>` : ""}</div>`
+      : (can("list_case") ? `<div style="margin-top:6px"><button class="ghost sm" data-notedisc="${esc(it.key)}">Mark as noted</button></div>` : "")}</div>`;
+}
+function discordHTML() {
+  const d = S.data.discordances;
+  if (!d || !d.items.length) return "";
+  const open = d.items.filter((x) => !x.noted), noted = d.items.filter((x) => x.noted);
+  return `<div class="card"><h3>Reports that disagree <span class="muted small">${d.open_review} for review · ${d.info} informational${noted.length ? ` · ${noted.length} noted` : ""}</span></h3>
+    <div class="muted small" style="margin-bottom:6px">The same primary field verified in two reports with different values, both quoted. The system never chooses which is right: the board does. A value that changed between reports of different dates is information (the newest counts); the same field differing between two final reports, an amendment, or a draft that disagrees with the final report is for review.</div>
+    ${open.map(discordItemHTML).join("")}${noted.length ? `<details class="small"><summary>${noted.length} noted</summary>${noted.map(discordItemHTML).join("")}</details>` : ""}</div>`;
+}
+function bindDiscord(root) {
+  $$("[data-notedisc]", root).forEach((b) => (b.onclick = async () => {
+    const note = prompt("Mark this discordance as noted (optional note, for example 'discussed at the board'):", "");
+    if (note === null) return;
+    try { await api(`/cases/${S.caseId}/confirmations`, { json: { type: "note_discordance", key: b.dataset.notedisc, reason: note } }); toast("Noted (audited; can be undone)"); await openCase(S.caseId, true); }
+    catch (e) { toast(e.message, 7000); }
+  }));
+  $$("[data-undonote]", root).forEach((b) => (b.onclick = async () => {
+    try { await api(`/cases/${S.caseId}/confirmations/${b.dataset.undonote}/undo`, { json: {} }); toast("Undone"); await openCase(S.caseId, true); } catch (e) { toast(e.message, 7000); }
+  }));
+}
+function decisionWatchHTML(b) {
+  const d = S.data.discordances;
+  const mine = (d?.items || []).filter((x) => x.kind === "decision_watch" && x.record === b.id);
+  return mine.length ? `<div style="margin-top:8px">${mine.map(discordItemHTML).join("")}</div>` : "";
 }
 function orphanHTML(g) {
   // waivers recorded for a record this protocol version no longer lists (renamed or removed): shown, never silently lost (review M4)
@@ -828,6 +863,7 @@ function renderBoard() {
       <div class="kv small">${b.participants ? `<div>Participants</div><div>${esc(b.participants)}</div>` : ""}${b.report_corrections_raised ? `<div>Report corrections raised</div><div>${esc(b.report_corrections_raised)}</div>` : ""}${b.divergent_opinions ? `<div>Divergent opinions</div><div>${esc(b.divergent_opinions)}</div>` : ""}</div>
       ${compHTML(b.adjudication.composition)}
       ${versionsHTML(b)}
+      ${decisionWatchHTML(b)}
       ${b.adjudication.flags.map((f, i) => `<div class="flag ${f.severity === "expert_review" ? "" : f.severity === "info" ? "info" : "review"}${f.resolution ? " resolved" : ""}"><div class="k">${f.kind === "guideline" ? GCHECK[f.check] || FLAGKIND.guideline : FLAGKIND[f.kind] || "Documentation"}${f.severity === "info" ? ` <span class="chip c-mute">Info only, not a pass</span>` : ""}</div>
         <div>${esc(f.text)}</div>${f.reference && f.kind === "composition" ? refHTML(f.reference) : ""}${f.kind === "guideline" ? gRefHTML(f) : ""}${f.source_quote ? `<div class="small" style="margin-top:4px">Source: ${citeHTML({ doc_id: f.source_doc, doc_title: f.source_title, quote: f.source_quote })} "${esc(f.source_quote)}"</div><div class="small muted">Expert review required. The agent flags the difference; it does not decide which value is correct.</div>` : ""}${resolutionHTML(b, f, i)}</div>`).join("")}
       ${b.adjudication.value_checks.filter((v) => v.result === "consistent").map((v) => `<div class="small"><span class="chip c-ok">✓</span> ${esc(v.value_as_written)} matches the source</div>`).join("")}${guidelineOkHTML(b)}</div>`).join("")}
@@ -853,6 +889,7 @@ function renderBoard() {
     S.data = await api("/cases/" + S.caseId); renderBoard(); toast("Tumour Board record saved and checked");
   };
   bindActions($("#tab-board"));
+  bindDiscord($("#tab-board"));
   $$("[data-resolve]", $("#tab-board")).forEach((x) => (x.onclick = () => { const [rid, fid, kind] = x.dataset.resolve.split("|"); resolveFlag(rid, fid, kind); }));
   $$("[data-undores]", $("#tab-board")).forEach((x) => (x.onclick = async () => {
     try { await api(`/cases/${S.caseId}/confirmations/${x.dataset.undores}/undo`, { json: {} }); toast("Resolution undone (kept in the audit log); a correction is taken back as a new version"); await openCase(S.caseId, true); }

@@ -1121,6 +1121,46 @@ def phase9_case(c, cid, spec):
     print(f"INFO {tag}: section took {round(time.time() - t_case)} s (re-imported at the end)", flush=True)
 
 
+def discord_section(c):
+    """12 Oct: discordances between reports and the decision watch. TB-004: a decision cites the histology of the first report; the amended
+    report that arrives later records a different histology: the Case File lists the amendment for review, the record carries a decision-watch
+    flag, the coordinators are notified once, a person notes it (audited, undoable). TB-006: the final MRI differs from the draft (stage)."""
+    wait_job(c, c.post("/api/tb/demo/TB-004").json()["job"])
+    d = c.get("/api/tb/cases/TB-004").json()
+    hist = (d["facts"].get("histologic_type") or {}).get("current") or {}
+    check("discord: fresh TB-004 has no review discordance", d["discordances"]["open_review"] == 0, json.dumps(d["discordances"])[:160])
+    rec = c.post("/api/tb/cases/TB-004/board-records", json={"board_date": "2026-09-17", "decision_text": f"Histology: {hist.get('value', '')}. Plan agreed by the board.",
+                                                              "recorded_by": "Dr. A", "participants": "Dr. A (Med Onc), Dr. B (Surg Onc), Dr. C (Rad Onc)", "actions": []}).json()
+    vc = [v for v in rec["adjudication"]["value_checks"] if v["fact"] == "histologic_type"]
+    check("discord: the decision's histology value is checked consistent against the first report", bool(vc) and vc[0]["result"] == "consistent", json.dumps(vc)[:160])
+    wait_job(c, c.post("/api/tb/cases/TB-004/demo-arrivals").json()["job"])  # the amended histopathology arrives
+    d = c.get("/api/tb/cases/TB-004").json()
+    items = d["discordances"]["items"]
+    am = [x for x in items if x["kind"] == "amended" and x["field"] == "histologic_type"]
+    dw = [x for x in items if x["kind"] == "decision_watch"]
+    check("discord: the amendment is listed for review with both reports quoted", len(am) == 1 and am[0]["severity"] == "review" and len(am[0]["citations"]) == 2 and all(x["quote"] for x in am[0]["citations"]), (am[0]["text"] if am else "none")[:160])
+    check("discord: the decision watch names the record and the later report", len(dw) == 1 and dw[0]["record"] == rec["id"] and "later final report" in dw[0]["text"], (dw[0]["text"] if dw else "none")[:160])
+    n = c.get("/api/tb/notifications?limit=80").json()
+    ns = [x for x in (n.get("notifications") or n.get("items") or []) if x.get("kind") == "decision_value_changed" and x.get("case_id") == "TB-004" and x.get("record") == rec["id"]]
+    check("discord: coordinators notified once for this record", len(ns) == 1, f"{len(ns)} notifications")
+    j = c.post("/api/tb/cases/TB-004/confirmations", json={"type": "note_discordance", "key": dw[0]["key"], "reason": "e2e: discussed"}).json()
+    d2 = c.get("/api/tb/cases/TB-004").json()
+    noted = [x for x in d2["discordances"]["items"] if x["kind"] == "decision_watch"][0]
+    check("discord: noting is a confirmation, the item stays listed as noted", noted.get("noted", {}).get("note") == "e2e: discussed" and d2["discordances"]["decision_watch"] == 0, json.dumps(noted.get("noted"))[:120])
+    conf_id = (j.get("confirmation") or j.get("record") or {}).get("id") or next((x["id"] for x in d2["state"].get("confirmations", []) if x["type"] == "note_discordance" and not x.get("undone")), None)
+    u = c.post(f"/api/tb/cases/TB-004/confirmations/{conf_id}/undo", json={})
+    d3 = c.get("/api/tb/cases/TB-004").json()
+    check("discord: undo brings the item back", u.status_code == 200 and d3["discordances"]["decision_watch"] == 1, u.text[:100])
+    au = [e["kind"] for e in c.get("/api/tb/cases/TB-004/audit").json()["events"]]
+    check("discord: notification and confirmation audited", "decision_watch_notified" in au and "confirmation" in au and "confirmation_undone" in au)
+    # TB-006: the final MRI arrives after a draft and records a different stage
+    wait_job(c, c.post("/api/tb/demo/TB-006").json()["job"]); wait_job(c, c.post("/api/tb/cases/TB-006/demo-arrivals").json()["job"])
+    d6 = c.get("/api/tb/cases/TB-006").json()
+    st6 = [x for x in d6["discordances"]["items"] if x["field"] == "recorded_stage"]
+    check("discord: TB-006 draft MRI vs final MRI stage listed", any(x["kind"] in ("non_final_differs", "conflict", "changed") for x in st6), str([(x["kind"], x["severity"]) for x in st6])[:120])
+    wait_job(c, c.post("/api/tb/demo/TB-004").json()["job"]); wait_job(c, c.post("/api/tb/demo/TB-006").json()["job"])  # fresh again
+
+
 def phase9(c):
     """V1 Phase 9 (items 9.1 / 9.2): every new demo Case File (oral cavity TB-007, later cervix TB-008) runs the full workflow end to end."""
     have = {x.get("case_id") for x in c.get("/api/tb/cases").json().get("demo") or []}
@@ -1165,6 +1205,8 @@ def main(base, pw, only=None):
         phase8(c)
         print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
         return 0 if not FAIL else 1
+    if only == "discord":
+        discord_section(c); print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}"); return 0 if not FAIL else 1
     if only == "phase9":
         phase9(c)
         print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
@@ -1309,6 +1351,8 @@ def main(base, pw, only=None):
     phase8(c)
     # 16. V1 Phase 9: the oral cavity (and later cervix) demo Case Files through the whole workflow (re-imported at the end of the section)
     phase9(c)
+    # 19. 12 Oct: discordances between reports and the decision watch
+    discord_section(c)
     # leave the demo Case Files in their fresh state for the next user / test
     for cid in ("TB-001", "TB-002", "TB-003"):
         wait_job(c, c.post(f"/api/tb/demo/{cid}").json()["job"])

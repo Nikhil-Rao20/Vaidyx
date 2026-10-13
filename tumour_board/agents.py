@@ -452,6 +452,13 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
         au({"kind": "agent_pack_unavailable", "role": role, "error": str(e)[:200]})
     if checklist:
         scratch.append(checklist)
+    try:
+        from . import discord
+        dtext = discord.text(case_id)  # reports that disagree (code-found; the brief still needs quotes to restate one; 12 Oct)
+        if dtext:
+            scratch.append(dtext)
+    except Exception as e:
+        au({"kind": "agent_discordances_unavailable", "role": role, "error": str(e)[:200]})
     prot_label = (protocol.get(case["protocol"]) or {}).get("label") or case["protocol"]
     gq = f"{prot_label}: {ROLE_QUERY.get(role, r['focus'][:80])}"
     try:

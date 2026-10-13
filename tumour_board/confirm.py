@@ -24,6 +24,7 @@ TYPES = {
     "dismiss_failed":   {"target": "document",    "fields": [],                            "reason_required": True,  "action": "dismiss_failed"},
     "confirm_value":    {"target": "fact",        "fields": ["value"],                     "reason_required": False, "action": "confirm"},
     "resolve_flag":     {"target": "flag",        "fields": ["resolution", "value"],       "reason_required": False, "action": "resolve_flag"},
+    "note_discordance": {"target": "discordance", "fields": [],                            "reason_required": False, "action": "confirm"},  # 12 Oct
 }
 RESOLUTIONS = ("corrected", "intentional_deviation", "false_alarm")
 LEGACY = {"documents": ("attest_final", "attested_final"), "requirements": ("waive", "waived")}
@@ -49,6 +50,8 @@ def _key(target, key):
             raise ValueError("A value confirmation needs the document and the field (document id:field id)")
     if target == "flag" and len(key) > 128:
         raise ValueError("Flag id is too long")
+    if target == "discordance" and (len(key) > 200 or key.count(":") < 3):
+        raise ValueError("Not a discordance key")
     return key
 
 
@@ -119,6 +122,9 @@ def latest(state_or_case_id, ctype, key):
 
 
 def _mirror_set(st, rec):
+    if rec["type"] == "note_discordance":  # a noted discordance stays listed, greyed (12 Oct)
+        st.setdefault("discordance_notes", {})[rec["key"]] = {"by": rec["by"], "at": rec["at"], "note": rec["reason"], "confirmation": rec["id"]}
+        return
     kind = _LEGACY_KIND.get(rec["type"])
     if not kind:
         return
@@ -129,6 +135,11 @@ def _mirror_set(st, rec):
 
 
 def _mirror_drop(st, rec):
+    if rec["type"] == "note_discordance":
+        notes = st.get("discordance_notes") or {}
+        if (notes.get(rec["key"]) or {}).get("confirmation") == rec["id"]:
+            notes.pop(rec["key"])
+        return
     kind = _LEGACY_KIND.get(rec["type"])
     ov = ((st.get("overrides") or {}).get(kind) or {}) if kind else {}
     if (ov.get(rec["key"]) or {}).get("confirmation") == rec["id"]:

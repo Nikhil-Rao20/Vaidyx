@@ -12,6 +12,7 @@ from tumour_board import intake  # department uploads and patient matching (V1 i
 from tumour_board import board  # board sessions, attendance, agent log (V1 items 6.1 to 6.3)
 from tumour_board import followup  # Tumour Board actions in department inboxes, closing suggestions (V1 item 7.4)
 from tumour_board import scanned  # values and citations read from scans (V1 items 8.1, 8.2)
+from tumour_board import discord  # discordances between reports, decision watch (12 Oct)
 
 log = logging.getLogger("tumour_board")
 
@@ -239,7 +240,8 @@ def setup_tumour_board_routes():
                         "Compiled before the Case File signature was kept, so changes since then cannot be checked")  # pre-4.5 artefacts (review)
                  for name, a in (st.get("artefacts") or {}).items() if isinstance(a, dict) and (name == "summary" or name.startswith("brief_"))}
         return {"case": c, "state": st, "documents": docs, "facts": {k: {"label": cat.get(k, {}).get("label", k), **v} for k, v in facts.items()},
-                "timeline": postboard.timeline(case_id), "permissions": _case_permissions(rl, c, st, all_docs), "signature": sig, "stale": stale}
+                "timeline": postboard.timeline(case_id), "permissions": _case_permissions(rl, c, st, all_docs), "signature": sig, "stale": stale,
+                "discordances": discord.summary(case_id, st)}
 
     @r.post("/cases/{case_id}/documents")
     async def upload(case_id: str, request: Request, files: list[UploadFile] = File(...), paths: str = Form("[]")):

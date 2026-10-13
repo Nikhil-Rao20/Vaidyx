@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 
 # a gap routed to a department; a request closed; the Case File is ready; a Tumour Board action sent to a department (item 7.4);
 # a new document may complete a Tumour Board action (a person decides)
-KINDS = ("request", "request_closed", "case_ready", "board_action", "board_action_suggestion")
+KINDS = ("request", "request_closed", "case_ready", "board_action", "board_action_suggestion", "decision_value_changed")
 ROLES = ("coordinator",)
 CORE = ("id", "ts", "to", "kind", "case_id", "title", "text", "read_by")
 OPEN_STATUSES = ("pending", "overdue")

@@ -2,7 +2,7 @@
 Every sentence carries verified quotes; stage appears only as recorded in a signed report (copied, never derived)."""
 import time
 
-from . import config, grounding, guardrails, llm, protocol, qa, rules, search, store, units
+from . import config, discord, grounding, guardrails, llm, protocol, qa, rules, search, store, units
 
 # Verified facts that belong to each NCG section. If the model's sentences for a section are dropped (or it wrote none), these
 # facts are added as plain, cited sentences, so a section only says "not documented" when nothing verified exists for it.
@@ -131,6 +131,11 @@ async def build(case_id, force=False):
     filled = fill_from_facts(sections, facts, cat)
     paras = [sec["sentences"] for sec in sections if sec["sentences"]]
     pts = _check(r.get("points_for_review"), "points_for_review")
+    # the system's own findings: reports that disagree, each citing both reports (code, no model; 12 Oct)
+    have = " ".join(grounding.norm(p["text"]) for p in pts)
+    for dp in discord.points(case_id, st):
+        if grounding.norm(dp["text"])[:60] not in have:
+            pts.append(dp)
     # verification drops of sections AND points for review (before V1 item 6.4 dropped points were not counted)
     dropped = sum(1 for x in removed if x["reason"] != "guardrail")
     by_reason = {k: n for k in qa.REASONS if (n := sum(1 for x in removed if x["reason"] == k))}
