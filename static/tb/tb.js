@@ -1729,7 +1729,8 @@ async function refreshQueueCount() {
 function bindIntakeUpload() {
   const my = S.org?.my_departments || [];
   $("#side-intake").classList.toggle("hidden", !my.length);
-  if (!my.length) return;
+  $("#intake-upload").classList.toggle("hidden", !S.me?.admin);  // V2 item 3.7: records come from the hospital system; the API path stays
+  if (!my.length || !S.me?.admin) return;
   $("#up-dept").innerHTML = my.map((d) => `<option value="${esc(d.id)}">${esc(d.name)}${d.role ? " (" + esc(d.role) + ")" : ""}</option>`).join("");
   const send = async (list) => {
     if (!list.length) return;
