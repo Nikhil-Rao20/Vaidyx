@@ -106,3 +106,22 @@ by: Dr X (preliminary, verification awaited)" (preliminary) or "Signature pendin
   layer, printed omitted values, signed versions without the block, hash mismatches, and any "Sahyadri", `SYN-`, em dash or
   Aadhaar-like number; `--render` re-renders into an existing store.
 
+## The event feed (plan item V2-1.4)
+
+`his_mock/hl7.py` renders every store event as one HL7 v2.5-style message (segments split by `\r`, pipe-delimited) and
+`generator.build()` writes them to `data/his_mock/events.hl7` in event order, each followed by a blank line (`\r\n\r\n`).
+MSH names `VXHIS` / `VXDEMO`, the event time (`YYYYMMDDHHMMSS+0530`) and the event id as control id.
+
+| Event | Message | Segments |
+|---|---|---|
+| Registration, OP visit, admission, ward transfer, discharge | `ADT^A28` / `A04` / `A01` / `A02` / `A03` | MSH, EVN, PID, PV1 |
+| Referral requested / accepted | `REF^I12` / `I13` | MSH, RF1 (status P / A, from^to department, reason), PRD RP / RT, PID, PV1 |
+| Order placed, scheduled, sample collected, cancelled | `ORM^O01` | MSH, PID, PV1, ORC (NW / SC / CA, ORC-5 IP / SC / CA), OBR (OBR-25 O / S / I / X) |
+| Preliminary, final signed, amended, cancelled report | `ORU^R01` | MSH, PID, PV1, ORC, OBR (OBR-22 reported, OBR-25 P / F / C / X, OBR-32 signer), one OBX per printed value (OBX-11 P / F / C), NTE with the signature block and the amendment note |
+
+PID-3 holds the UHID (`VXH`, MR), the ABHA number (NH) and the PM-JAY ID when present; never an Aadhaar number. The name is
+`SURNAME^GIVEN` with "(SYNTHETIC)" kept. `hl7.append()` adds one message after a transition (the reporting desk, 1.5),
+`hl7.read_feed()` / `hl7.parse()` read it back. Deltas: `hl7.changed_since(store, since)` returns the reports whose
+`meta.lastUpdated` is after the watermark, `hl7.events_since()` the events behind them (plus ADT / REF / ORM changes) and
+`hl7.last_event_time()` the next watermark; the FHIR `_lastUpdated` search (1.3) gives the same reports.
+
