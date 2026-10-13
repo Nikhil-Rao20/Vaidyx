@@ -210,3 +210,23 @@ writes one line to `desk_audit.jsonl` ({time, department, action, order_id, repo
 JSON for tests and the e2e: `GET /desk/api/<code>/pending`, `POST /desk/api/<code>/orders/<order id>/schedule | collect |
 preliminary | sign | cancel` and `/desk/api/<code>/reports/<report id>/addendum` (409 on a lifecycle error, 400 on bad input,
 404 for another department's order). `TB_HIS_MOCK_ORTHANC` overrides the Orthanc URL. Tests: `his_mock/tests/test_desk.py`.
+
+## The HIS screens (plan item V2-1.6)
+
+`his_mock/screens.py` (mounted at `/his`) stands in for the hospital's registration, OPD and IPD screens. `GET /his` searches
+by UHID (permanent or temporary), IP / OP No., ABHA number or address, accession / Lab No. (an exact hit opens the patient)
+or by name (each registration with its kind, age / sex, ABHA and "n similar registration(s)"). It also lists the last 10
+registrations and has a new registration form (the name must end with "(SYNTHETIC)"; ABHA only on a permanent
+registration). The patient page shows demographics (UHID and kind, ABHA, PM-JAY ID; never an Aadhaar) and the other
+registrations with the same name, sex and age, linked in Vaidyx-TB and never merged here. Its timeline is grouped by OP visit
+and IP admission, newest first, each with its orders and reports (accession / Lab No., order and report status, scheduled
+date or sample barcode, signed, a PDF link per version, "v2 (amended)"), plus the New OP visit and Admit forms. The encounter
+page adds ward history and referrals and the Refer, Accept referral, Transfer ward and Discharge forms. Every form runs one
+`model.Store` transition under the lock, appends its HL7 message (`hl7.append`) and saves; a refused transition shows as a
+red flash. The same functions are JSON under `/his/api` (`search`, `patients/{id}`, `encounters`, `encounters/{id}`, and
+POST `registrations`, `patients/{id}/visits | admissions`, `encounters/{id}/refer | accept | transfer | discharge`; 409
+refused, 422 invalid, 404 unknown). Browser check: `LD_LIBRARY_PATH=/data/vaidyx/venv/pdf/lib python -m his_mock.eval.ui_test
+[--base http://127.0.0.1:7130] [--out DIR] [--viewports desktop,tablet,phone]` (app venv; it starts nothing, so run
+`his_mock/serve.sh start` first). It visits the HIS screens and the reporting desk at three widths, fails on any page error,
+missing SYNTHETIC banner, em dash or sideways scroll, submits one no-move ward transfer on an open admission, and writes
+`<page>-<viewport>.png` to `data/his_mock/ui_shots/`. Tests: `his_mock/tests/test_screens.py`.
