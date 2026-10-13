@@ -1,11 +1,17 @@
-"""Summarise one regression-gate run (written by eval/gate.sh) and compare it with the baseline (item 0.2).
-Usage: python -m tumour_board.eval.gate_summary <label> [--baseline baseline]   -> prints and writes <run>/gate_summary.md"""
+"""Summarise one regression-gate run (written by eval/gate.sh) and compare it with the baseline (V1 item 0.2; V2 item 0.2 adds the
+version root and the mock-hospital rows).
+Usage: python -m tumour_board.eval.gate_summary <label> [--baseline baseline] [--version v1|v2]   -> prints and writes <run>/gate_summary.md"""
 import argparse, json, re, statistics
 from pathlib import Path
 
 from tumour_board import config
 
-RUNS = config.DATA_ROOT / "eval" / "v1"
+RUNS = config.DATA_ROOT / "eval" / "v1"  # the V1 root (default); gate.sh --v2 passes --version v2
+
+
+def runs_dir(version):
+    """The folder that holds every gate run of a plan version (eval/v1, eval/v2): each version compares with its own baseline."""
+    return config.DATA_ROOT / "eval" / version
 ORIGINAL_CASES = ("TB-001", "TB-002", "TB-003")  # the existing rules and the timing comparison use these cases only (like with like)
 # V1 Phase 9 (oral cavity TB-007, cervix TB-008): minimum passes of their Q&A probes and minimum key fields found by the summary eval.
 # None = rule "0 fabrications, recorded" until the first measurement; the orchestrator then sets the numbers.
@@ -40,7 +46,18 @@ def numbers(d):
     if f.exists():
         m = re.search(r"JS errors: (.*)", f.read_text(), re.S)
         n["ui_errors"] = 0 if m and m.group(1).strip().startswith("none") and rc.get("ui_test", 1) == 0 else (len(re.findall(r"console: |pageerror: |re-check toast|summary does not", m.group(1))) or -1 if m else -1)
-    qa = next(d.glob("qa_v1-*.json"), None)
+    f = d / "unit_his_mock.log"  # the mock Indian hospital's unit tests (V2 Phase 1; gate.sh --v2 runs them once his_mock/tests exists)
+    if f.exists() or "unit_his_mock" in rc:
+        t = f.read_text() if f.exists() else ""; m = re.search(r"(\d+) passed", t); fl = re.search(r"(\d+) failed", t); er = re.search(r"(\d+) errors?", t)
+        n["mock_unit_passed"] = int(m.group(1)) if m else 0; n["mock_unit_failed"] = (int(fl.group(1)) if fl else 0) + (int(er.group(1)) if er else 0)
+        if rc.get("unit_his_mock", 1) != 0 or not m:
+            n["mock_unit_failed"] = max(n["mock_unit_failed"], 1)
+    if "conformance" in rc:  # his_mock.eval.conformance (V2 item 1.3) prints "CONFORMANCE OK: <n> resources checked" and exits non-zero on any failure
+        t = (d / "conformance.log").read_text() if (d / "conformance.log").exists() else ""
+        m = re.search(r"CONFORMANCE (OK|FAILED)(?::\s*(\d+) resources)?", t)
+        n["conformance_ok"] = rc["conformance"] == 0 and bool(m and m.group(1) == "OK")
+        n["conformance_resources"] = int(m.group(2)) if m and m.group(2) else None
+    qa = next(d.glob("qa_*.json"), None)  # qa_v1-<label>.json or qa_v2-<label>.json (one per run folder)
     if qa:
         j = json.loads(qa.read_text())  # top level = the original wave (TB-001..003); the Phase 9 wave is the `phase9` block
         secs = [r["seconds"] for r in j["rows"] if r.get("seconds") and r.get("case", ORIGINAL_CASES[0]) in ORIGINAL_CASES]
@@ -51,7 +68,7 @@ def numbers(d):
             secs = [r["seconds"] for r in p9.get("rows") or [] if r.get("seconds")]
             n.update(qa9_pass=p9["pass"], qa9_n=p9["n"], qa9_fabrication=p9["fabrication"], qa9_cases=p9.get("cases") or sorted({r["case"] for r in p9.get("rows") or []}),
                      qa9_median_seconds=round(statistics.median(secs), 1) if secs else None)
-    sm = next(d.glob("summary_eval_v1-*.json"), None)
+    sm = next(d.glob("summary_eval_*.json"), None)
     if sm:
         j = json.loads(sm.read_text())
         cs = [c for cid, c in j["cases"].items() if cid in ORIGINAL_CASES]
@@ -104,8 +121,9 @@ def fmt(v):
     return "n/a" if v is None else str(v)
 
 
-def main(label, baseline):
-    run, base = numbers(RUNS / label), numbers(RUNS / baseline) if (RUNS / baseline).exists() else {}
+def main(label, baseline, runs=None):
+    runs = runs or RUNS  # the version root (V2 item 0.2): every run is compared with the baseline of its own version
+    run, base = numbers(runs / label), numbers(runs / baseline) if (runs / baseline).exists() else {}
     slower = lambda k: run.get(k) is not None and base.get(k) and run[k] > 1.2 * base[k]
     rows = [  # (check, this run, baseline, rule, ok or None when the step was skipped)
         ("Unit tests", f"{run.get('unit_passed')} passed, {run.get('unit_failed')} failed in {fmt(run.get('unit_seconds'))} s" if "unit_passed" in run else "not run",
@@ -120,10 +138,15 @@ def main(label, baseline):
         ("Summary omission", f"{run.get('sum_hit')}/{run.get('sum_total')} key fields" if "sum_hit" in run else None,
          f"{base.get('sum_hit')}/{base.get('sum_total')}" if "sum_hit" in base else "n/a", ">= 47/48 (>= baseline)",
          run.get("sum_hit", 0) >= max(47, base.get("sum_hit", 0)) if "sum_hit" in run else None),
-        ("Independent OCR engine (8.3)", (((d := RUNS / label / "ocr_engine.log").exists() and d.read_text().strip()[:60]) or "not found") if "ocr_engine" in run["rc"] else None,
+        ("Independent OCR engine (8.3)", (((d := runs / label / "ocr_engine.log").exists() and d.read_text().strip()[:60]) or "not found") if "ocr_engine" in run["rc"] else None,
          "n/a", "installed, or TB_OCR_ENGINE=off", run["rc"]["ocr_engine"] == 0 if "ocr_engine" in run["rc"] else None),
         ("Browser UI", f"{run.get('ui_errors')} errors recorded" if "ui_errors" in run else None, f"{base.get('ui_errors')} errors recorded" if "ui_errors" in base else "n/a",
          "no JS errors on /tb", run.get("ui_errors") == 0 if "ui_errors" in run else None),
+        ("Mock hospital unit tests (V2)", f"{run.get('mock_unit_passed')} passed, {run.get('mock_unit_failed')} failed" if "mock_unit_passed" in run else None,
+         f"{base.get('mock_unit_passed')} passed" if "mock_unit_passed" in base else "n/a", "100 % pass once his_mock/tests exists",
+         (run["mock_unit_passed"] > 0 and run["mock_unit_failed"] == 0) if "mock_unit_passed" in run else None),
+        ("Mock HIS conformance (NRCeS v6.5.0 basics)", (("OK" if run["conformance_ok"] else "FAILED") + (f", {run['conformance_resources']} resources" if run.get("conformance_resources") else "")) if "conformance_ok" in run else None,
+         ("OK" if base.get("conformance_ok") else "FAILED") if "conformance_ok" in base else "n/a", "every resource passes", run["conformance_ok"] if "conformance_ok" in run else None),
         ("Timings", ", ".join(f"{k.replace('_seconds', '')} {fmt(run.get(k))} s" for k in ("ingest_seconds", "ask_single_seconds", "qa_median_seconds", "sum_mean_seconds") if run.get(k) is not None) or None,
          ", ".join(f"{k.replace('_seconds', '')} {fmt(base.get(k))} s" for k in ("ingest_seconds", "ask_single_seconds", "qa_median_seconds", "sum_mean_seconds") if base.get(k) is not None) or "n/a",
          "no more than 20 % slower", (not any(slower(k) for k in ("ingest_seconds", "qa_median_seconds", "sum_mean_seconds"))) if any(run.get(k) is not None for k in ("ingest_seconds", "qa_median_seconds", "sum_mean_seconds")) else None),
@@ -139,10 +162,11 @@ def main(label, baseline):
     lines += ["", f"**Gate: {verdict}** (unit tests and the end-to-end API are never optional; the other checks may be skipped when their code did not change, and a skipped check is never counted as a pass).", "",
               f"Timings note: the Q&A eval sends the {run.get('qa_n') or 33} questions of TB-001..003 at once, so its median includes queueing; the Phase 9 questions run "
               "afterwards as a second wave and are timed separately. The Q&A median and the summary mean in the 20 % rule are TB-001..003 only; compare like with like."]
-    out = "\n".join(lines) + "\n"; (RUNS / label / "gate_summary.md").write_text(out); print(out)
+    out = "\n".join(lines) + "\n"; (runs / label / "gate_summary.md").write_text(out); print(out)
     return 0 if verdict == "GREEN" else 1
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("label"); ap.add_argument("--baseline", default="baseline")
-    a = ap.parse_args(); raise SystemExit(main(a.label, a.baseline))
+    ap.add_argument("--version", default=None, help="plan version root under data/tumour_board/eval (v1 by default, v2 for gate.sh --v2)")
+    a = ap.parse_args(); raise SystemExit(main(a.label, a.baseline, runs_dir(a.version) if a.version else None))
