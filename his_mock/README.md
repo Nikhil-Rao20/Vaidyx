@@ -192,3 +192,21 @@ patterns, `meta.profile` / `meta.lastUpdated`, no Aadhaar, SYNTHETIC names, sign
 V2 gate runs it. Deliberate deviations: Observation and ServiceRequest `code` may be text-only when no code is certain;
 DiagnosticReportImaging `media` is required only when there is an ImagingStudy (endoscopy has none); Provenance and Media
 claim no NRCeS profile. Tests: `his_mock/tests/test_app.py`, `test_fhir.py`, `test_conformance.py`.
+
+## The reporting desk (plan item V2-1.5)
+
+`his_mock/desk.py` (mounted at `/desk` on 127.0.0.1:7130) stands in for the supporting departments' own reporting systems
+(RIS, LIS, Pathology). `/desk` lists the supporting departments with their counts of pending orders and preliminary reports;
+`/desk/<code>` (RAD, PATH, MIC, BIO, NM, ...) shows Pending orders, Preliminary reports (oldest first, patient name and UHID
+prominent, the identifiers used to find the patient in the department's own PACS / LIS) and the last 10 signed reports with
+their PDF. Actions, each on the order or report page: Schedule (imaging), Collect sample (laboratory / pathology; barcode
+and block No. optional), Enter preliminary (any practitioner of the department), Complete and sign (a consultant; junior
+residents are listed but cannot sign), Addendum (new values, note, consultant) and Cancel (reason). Values are typed one
+`key: value` per line and printed exactly as typed. Every action runs a Store transition under the hospital lock, renders
+the new version's PDF (`documents.render_versions`; on failure the change is still saved and the desk says "PDF not
+rendered"), builds the synthetic DICOM of an imaging order that is now reported and has no images, uploading it when Orthanc
+answers ("images not uploaded" otherwise, never a failed sign), appends the HL7 message to `events.hl7`, saves the store and
+writes one line to `desk_audit.jsonl` ({time, department, action, order_id, report_id, by, outcome}; refused actions too).
+JSON for tests and the e2e: `GET /desk/api/<code>/pending`, `POST /desk/api/<code>/orders/<order id>/schedule | collect |
+preliminary | sign | cancel` and `/desk/api/<code>/reports/<report id>/addendum` (409 on a lifecycle error, 400 on bad input,
+404 for another department's order). `TB_HIS_MOCK_ORTHANC` overrides the Orthanc URL. Tests: `his_mock/tests/test_desk.py`.
