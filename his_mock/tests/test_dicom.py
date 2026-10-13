@@ -204,7 +204,8 @@ def test_store_study_carries_series_counts_and_orthanc_id(built, store, fx):
     saved = Store.load(out / "store.json")
     for s in live(store):
         n = EXPECTED_INSTANCES[s["modality"]]
-        assert s["status"] == "available" and s["number_of_series"] == 1 and s["number_of_instances"] == n
+        assert s["status"] == "registered" and s["uploaded"] is False   # built; available once uploaded
+        assert s["number_of_series"] == 1 and s["number_of_instances"] == n
         assert s["path"] == f"dicom/{ids.slug(s['accession'])}" and (out / s["path"]).is_dir()
         [series] = s["series"]
         assert series["uid"] == _uid(f"{s['accession']}|series|1") and series["number"] == 1
@@ -239,7 +240,7 @@ def test_cli_build_on_a_data_dir(tmp_path, fx, capsys):
     assert dicom_studies.main(["--build", "--data", str(tmp_path)]) == 0
     assert "synthetic studies" in capsys.readouterr().out
     after = Store.load(tmp_path / "store.json")
-    assert all(s["status"] == "available" and s["orthanc_id"] for s in after.imaging_studies.values()
+    assert all(s["status"] == "registered" and s["series"] and s["orthanc_id"] for s in after.imaging_studies.values()
                if dicom_studies.performed(after, s))
     assert any(s["status"] == "registered" for s in after.imaging_studies.values())  # the scheduled, unperformed study
     with pytest.raises(SystemExit):

@@ -123,7 +123,9 @@ def test_provenance_and_imaging_faults_are_found(store, files):
     bad = copy.deepcopy(prov)
     bad["meta"]["profile"] = [fhir.NRCES + "Provenance"]
     assert any("no Provenance" in p or "none for this type" in p for p in conformance.check_resource(bad))
-    study = next(s for s in store.imaging_studies.values() if s["status"] == "available")
+    study = copy.deepcopy(next(s for s in store.imaging_studies.values() if fhir.has_images(s)))
+    assert conformance.check_resource(fhir.imaging_study(store, study)) == []
+    study["status"], study["uploaded"] = "available", True
     im = fhir.imaging_study(store, study)
     assert conformance.check_resource(im) == []
     im.pop("extension")

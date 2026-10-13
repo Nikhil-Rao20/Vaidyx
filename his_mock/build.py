@@ -15,7 +15,7 @@ from .paths import DATA_DIR, layout
 
 def summary(store, out_dir):
     docs = sum(1 for r in store.reports.values() for v in r["versions"] if (v.get("document") or {}).get("path"))
-    studies = sum(1 for s in store.imaging_studies.values() if s.get("status") == "available")
+    studies = sum(1 for s in store.imaging_studies.values() if s.get("series"))
     return (f"his_mock built into {out_dir} (seed {store.meta['seed']}, fixtures {store.meta['fixture_version']}): "
             f"{len(store.patients)} patients, {len(store.encounters)} encounters, {len(store.orders)} orders, "
             f"{len(store.reports)} reports, {len(store.events)} events, {docs} report PDFs, {studies} DICOM studies")
@@ -42,7 +42,9 @@ def main(argv=None):
             print("orthanc not answering on 127.0.0.1:8042; DICOM not uploaded (his_mock/orthanc.sh start, then "
                   "python -m his_mock.dicom_studies --upload)")
             return 1
-        result = dicom_studies.upload_all(store, layout(args.out)["dicom"])
+        files = layout(args.out)
+        result = dicom_studies.upload_all(store, files["dicom"])
+        store.save(files["store"], files["events"])   # the studies are now available (uploaded)
         problems = dicom_studies.verify(store)
         print(f"orthanc: {result.get('stored', 0)} instances stored, {result.get('already_stored', 0)} already there, "
               f"{len(result.get('studies', []))} studies; verify: {'OK' if not problems else '; '.join(problems[:3])}")

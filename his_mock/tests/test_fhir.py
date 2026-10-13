@@ -378,26 +378,32 @@ def test_cancelled_report_is_cancelled_and_entered_in_error(store):
     assert fhir.diagnostic_report(s, r)["status"] == "cancelled"
     assert {o["status"] for o in fhir.observations(s, r)} == {"cancelled"}
     doc = fhir.document_reference(s, r)
-    assert doc["docStatus"] == "entered-in-error" and doc["status"] == "current"
+    assert doc["docStatus"] == "entered-in-error" and doc["status"] == "entered-in-error"
+    assert r["current_version"] == 2 and r["versions"][0]["status"] == "preliminary"   # history kept on cancel
+    assert fhir.diagnostic_report(s, r)["meta"]["versionId"] == "2"
     assert fhir.composition(s, r)["status"] == "entered-in-error"
     assert fhir.service_request(s, s.orders[r["order_id"]])["status"] == "revoked"
 
 
 # ------------------------------------------------------------------ imaging
 def test_imaging_study_and_report_links(client, auth, store):
-    study = next(x for x in store.imaging_studies.values() if x["status"] == "available"
-                 and store.report_for_order(x["order_id"]))
+    study = next(x for x in store.imaging_studies.values() if fhir.has_images(x) and store.report_for_order(x["order_id"]))
     r = store.report_for_order(study["order_id"])
     res = resources(get(client, auth, f"/fhir/ImagingStudy?identifier={study['accession']}"))
     assert [x["id"] for x in res] == [study["id"]]
     im = res[0]
-    assert im["meta"]["profile"] == [NRCES + "ImagingStudy"] and im["status"] == "available"
+    assert im["meta"]["profile"] == [NRCES + "ImagingStudy"] and im["status"] == "registered"  # built, not uploaded
     assert {"system": "urn:dicom:uid", "value": "urn:oid:" + study["study_uid"]} in im["identifier"]
     assert im["numberOfSeries"] == study["number_of_series"] and im["series"][0]["uid"] == study["series"][0]["uid"]
     assert im["series"][0]["instance"][0]["sopClass"]["code"] == "urn:oid:" + study["series"][0]["instances"][0]["sop_class"]
     ext = {e["url"]: e["valueUrl"] for e in im["extension"]}
-    assert ext[fhir.EXT["viewer_url"]].endswith("StudyInstanceUIDs=" + study["study_uid"])
+    assert fhir.EXT["viewer_url"] not in ext      # the viewer link appears once the study is in the PACS
     assert ext[fhir.EXT["dicomweb_url"]] == "/dicom-web/studies/" + study["study_uid"]
+    study["status"], study["uploaded"] = "available", True   # as upload_all marks it
+    im2 = fhir.imaging_study(store, study)
+    assert {e["url"]: e["valueUrl"] for e in im2["extension"]}[fhir.EXT["viewer_url"]].endswith(
+        "StudyInstanceUIDs=" + study["study_uid"])
+    study["status"], study["uploaded"] = "registered", False
     dr = get(client, auth, f"/fhir/DiagnosticReport/{r['id']}")
     assert dr["meta"]["profile"] == [NRCES + "DiagnosticReportImaging"]
     assert dr["imagingStudy"] == [{"reference": f"ImagingStudy/{study['id']}"}]
@@ -484,7 +490,8 @@ def test_paging(client, auth):
     assert "_offset=5" in nxt and "token" not in nxt
     b2 = get(client, auth, "/fhir/Observation?_count=5&_offset=5")
     assert {e["resource"]["id"] for e in b2["entry"]}.isdisjoint({e["resource"]["id"] for e in b["entry"]})
-    q = client.get(f"/fhir/Patient?_count=1&token={auth['Authorization'][7:]}")
+    assert client.get(f"/fhir/Patient?_count=1&token={auth['Authorization'][7:]}").status_code == 401  # header only
+    q = client.get("/fhir/Patient?_count=1&token=x", headers=auth)
     assert q.status_code == 200 and "token=" not in q.json()["link"][0]["url"]
 
 

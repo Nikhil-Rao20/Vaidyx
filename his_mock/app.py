@@ -17,6 +17,7 @@ import os
 import secrets
 import threading
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -69,7 +70,7 @@ def get_hospital(request: Request) -> Hospital:
 def require_token(request: Request, hospital: Hospital = Depends(get_hospital)) -> Hospital:
     """Bearer token of the FHIR API (data/his_mock/token, mode 600). Constant-time comparison."""
     auth = request.headers.get("authorization") or ""
-    given = auth[7:].strip() if auth.lower().startswith("bearer ") else request.query_params.get("token", "")
+    given = auth[7:].strip() if auth.lower().startswith("bearer ") else ""   # header only: never in a URL or a log
     if not hospital.token or not given or not secrets.compare_digest(given, hospital.token):
         raise AuthError("a bearer token is required (data/his_mock/token)")
     return hospital
@@ -93,6 +94,17 @@ def mounted():
 def create_app(data_dir=None) -> FastAPI:
     app = FastAPI(title=NAME, version=VERSION, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.hospital = Hospital(data_dir)
+    @app.middleware("http")
+    async def same_origin_writes(request, call_next):
+        """A browser page from another origin cannot post to the desk or the HIS screens (the forms carry no login:
+        the port is localhost-only and the demo reaches them through the Vaidyx-TB app). curl and tests send no Origin."""
+        if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+            origin = request.headers.get("origin") or ""
+            if origin and urlparse(origin).netloc.lower() != (request.headers.get("host") or "").lower():
+                return JSONResponse(operation_outcome("error", "forbidden", "cross-origin writes are refused"),
+                                    status_code=403)
+        return await call_next(request)
+
     modules = []
     for name, prefix in mounted():
         module = __import__(f"his_mock.{name}", fromlist=["router"])

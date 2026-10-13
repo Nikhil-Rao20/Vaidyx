@@ -43,8 +43,16 @@ def test_document_needs_token(client, data_dir):
     r = client.get("/documents/sub/demo.pdf", headers={"Authorization": f"Bearer {token(data_dir)}"})
     assert r.status_code == 200 and r.headers["content-type"].startswith("application/pdf")
     assert r.content.startswith(b"%PDF")
-    # the store path form `documents/<name>` works too, and the token may come as a query parameter
-    assert client.get(f"/documents/documents/sub/demo.pdf?token={token(data_dir)}").status_code == 200
+    # the store path form `documents/<name>` works too; a token in the query string is never accepted
+    assert client.get("/documents/documents/sub/demo.pdf", headers={"Authorization": f"Bearer {token(data_dir)}"}).status_code == 200
+    assert client.get(f"/documents/sub/demo.pdf?token={token(data_dir)}").status_code == 401
+
+
+def test_cross_origin_writes_are_refused(client):
+    r = client.post("/his/api/registrations", json={}, headers={"Origin": "http://evil.example"})
+    assert r.status_code == 403 and r.json()["resourceType"] == "OperationOutcome"
+    same = client.post("/his/api/registrations", json={}, headers={"Origin": "http://testserver"})
+    assert same.status_code != 403
 
 
 def test_document_never_leaves_documents_dir(client, data_dir):

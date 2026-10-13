@@ -63,7 +63,7 @@ SYS = {
     "bundle": DEMO + "/bundle",
     # ABHA: the real ABDM system URI with SANDBOX values only (99-2600-..., addresses ending @sbx)
     "abha": "https://healthid.ndhm.gov.in",
-    "abha_address": "https://healthid.ndhm.gov.in/abha-address",
+    "abha_address": DEMO + "/identifier/abha-address",   # invented path: never under the real ABDM domain
     "dicom_uid": "urn:dicom:uid",
 }
 EXT = {
@@ -566,6 +566,9 @@ def service_request(store, o):
     if o.get("accession"):
         res["identifier"] = [identifier("accession", o["accession"], "ACSN")]
     res["status"] = ORDER_STATUS[o["status"]]
+    rep = store.report_for_order(o["id"])
+    if res["status"] == "completed" and rep and rep["status"] == "preliminary":
+        res["status"] = "active"   # results in progress: the order completes with the signed report
     res["intent"] = "order"
     kind = _order_kind(o)
     if kind:
@@ -635,10 +638,18 @@ def imaging_study(store, s):
                                                                    "code": "urn:oid:" + i["sop_class"]},
                                      "number": i["number"]} for i in se.get("instances") or []]})
     _set(res, "series", series)
-    if s["status"] == "available":
-        res["extension"] = [{"url": EXT["viewer_url"], "valueUrl": viewer_url(s["study_uid"])},
-                            {"url": EXT["dicomweb_url"], "valueUrl": dicomweb_url(s["study_uid"])}]
+    ext = []
+    if s["status"] == "available":        # in the PACS: the viewer opens it
+        ext.append({"url": EXT["viewer_url"], "valueUrl": viewer_url(s["study_uid"])})
+    if has_images(s):                     # images exist (built; uploaded when available)
+        ext.append({"url": EXT["dicomweb_url"], "valueUrl": dicomweb_url(s["study_uid"])})
+    _set(res, "extension", ext or None)
     return res
+
+
+def has_images(study):
+    """True when the study's synthetic images exist (series built), whether or not they are in the PACS yet."""
+    return bool(study.get("series")) and study.get("status") != "cancelled"
 
 
 def media_id(s):
@@ -710,7 +721,7 @@ def conclusion(report, v):
     keys = [k for k in vals if documents.IMPRESSION_KEY.search(k)]
     if not keys and report["doc_type"] in PATHOLOGY_DOC_TYPES:
         keys = [k for k in vals if k in documents.HPE_DIAGNOSIS_KEYS]
-    return "; ".join(str(vals[k]) for k in keys) if keys else report["title"]
+    return "; ".join(str(vals[k]) for k in keys) if keys else "See report"
 
 
 def observation_id(report, v, key):
@@ -803,7 +814,7 @@ def diagnostic_report(store, r, version=None, files=None):
     study = store.imaging_study_for(o["id"]) if o else None
     if study:
         res["imagingStudy"] = [ref("ImagingStudy", study["id"])]
-        if study["status"] == "available":
+        if has_images(study):
             res["media"] = [{"link": ref("Media", media_id(study))}]
     res["conclusion"] = conclusion(r, v)
     data = _document_bytes(files, v)
@@ -848,7 +859,7 @@ def document_reference(store, r, version=None, files=None):
     res["masterIdentifier"] = {"system": SYS["document"], "value": f"{r['id']}-v{v['version']}"}
     if o.get("accession"):
         res["identifier"] = [identifier("accession", o["accession"], "ACSN")]
-    res["status"] = "current" if current else "superseded"
+    res["status"] = "entered-in-error" if v["status"] == "cancelled" else ("current" if current else "superseded")
     res["docStatus"] = COMPOSITION_STATUS[status]
     res["type"] = _report_code(r)
     res["subject"] = _patient_ref(store, r["patient_id"])
@@ -982,7 +993,7 @@ def document_bundle(store, r, version=None, files=None):
     study = store.imaging_study_for(o["id"]) if o else None
     if study:
         main.append(imaging_study(store, study))
-        if study["status"] == "available":
+        if has_images(study):
             main.append(media(store, study))
     main.append(document_reference(store, r, v, files))
     prov = provenance(store, r, v)
@@ -1414,7 +1425,6 @@ def capability_statement(store):
             "software": {"name": NAME, "version": VERSION},
             "implementation": {"description": "SYNTHETIC mock"},
             "fhirVersion": FHIR_VERSION, "format": ["json"],
-            "implementationGuide": ["https://nrces.in/ndhm/fhir/r4/ImplementationGuide/ndhm.in"],
             "rest": [{"mode": "server",
                       "documentation": "Read only (no create, update or delete). Bearer token from data/his_mock/token.",
                       "security": {"description": "HTTP bearer token (Authorization: Bearer <token>); localhost only."},

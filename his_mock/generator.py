@@ -62,6 +62,13 @@ def build(out_dir=None, seed=DEFAULT_SEED, fixtures=None, clock=None, documents=
     files = layout(out_dir or DATA_DIR)
     d = files["data_dir"]
     d.mkdir(parents=True, exist_ok=True)
+    if files["store"].exists():
+        try:
+            marker = json.loads(files["store"].read_text(encoding="utf-8")).get("meta", {}).get("marker")
+        except (ValueError, OSError):
+            marker = None
+        if marker != "SYNTHETIC":
+            raise ValueError(f"{files['store']} is not a mock-hospital store (no SYNTHETIC marker): refusing to wipe {d}")
     for k in ("store", "fixture_index", "events", "hl7"):
         if files[k].exists():
             files[k].unlink()
@@ -204,7 +211,7 @@ def _plan_patient(store, p, seed, actions, index, today):
             when = first - _REGISTRATION_LEAD if first else _at("2026-01-01", (8, 0))
         pid = ids.patient_id(uhid)
         entry["patient_ids"].append(pid)
-        kw = dict(uhid=uhid, kind=kind, dob=dob, address=address, phone=f"+91 90000 0{slot_no:02d}{i:02d}",
+        kw = dict(uhid=uhid, kind=kind, dob=dob, address=address, phone=f"+91 55500 0{slot_no:02d}{i:02d}",
                   note=(extra or {}).get("note"), when=when,
                   abha=p.get("abha") if kind == "permanent" else None,
                   pmjay_id=p.get("pmjay_id") if kind == "permanent" else None)

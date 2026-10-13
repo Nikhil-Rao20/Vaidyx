@@ -111,7 +111,7 @@ def test_patient_demographics(client):
     html = client.get("/his/patients/vxh-26-004201").text
     demo = text_of(html.split("id=demographics>", 1)[1].split("</div>", 1)[0])
     for s in ("VXH/26/004201", "permanent", "Anitha Reddy (SYNTHETIC)", "46 Y / F", "18/01/1980", "99-2600-0000-0101",
-              "anitha.reddy@sbx", "PMJAY-VX-26000101", "+91 90000 00100", "PIN 556225"):
+              "anitha.reddy@sbx", "PMJAY-VX-26000101", "+91 55500 00100", "PIN 556225"):
         assert s in demo, s
 
 

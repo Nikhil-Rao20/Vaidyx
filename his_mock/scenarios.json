@@ -1,5 +1,5 @@
 {
- "version": "0.3.2",
+ "version": "0.3.3",
  "note": "SYNTHETIC only. Fixtures for the V2 mock Indian hospital (his_mock, plan item 1.1) and the outcomes Vaidyx-TB must show (e2e in Phases 3 to 6). Every patient, doctor, number, laboratory, hospital and certifying authority here is invented; nothing comes from a real patient or the real case. Aadhaar appears only once, masked, on one scanned outside report, to test masking.",
  "hospital": {
   "name": "Vaidyx Demo Hospital (SYNTHETIC)",

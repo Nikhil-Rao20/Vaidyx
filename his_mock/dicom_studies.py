@@ -35,6 +35,7 @@ from pydicom.uid import PYDICOM_IMPLEMENTATION_UID, ExplicitVRLittleEndian
 
 from . import ids
 from .ids import IST, parse_time
+from .model import _bump
 
 ORTHANC_URL = "http://127.0.0.1:8042"
 INSTITUTION = "Vaidyx Demo Hospital (SYNTHETIC)"
@@ -369,8 +370,11 @@ def series_plan(study):
     return [(1, SPECS[study["modality"]]["n"])]
 
 
-def build_study(store, study, dicom_dir):
-    """Write one study's files under dicom_dir/<accession slug>/ (replacing what was there) and update the store study."""
+def build_study(store, study, dicom_dir, when=None):
+    """Write one study's files under dicom_dir/<accession slug>/ (replacing what was there) and update the store study:
+    series, counts, path and the Orthanc id. The study stays `registered` (images exist in the mock, not yet in the PACS)
+    until upload_all / upload_study marks it `available`. `when` (ISO) bumps meta.lastUpdated (the desk passes its
+    clock; the initial build leaves the clinical time)."""
     d = Path(dicom_dir) / study_dirname(study)
     if d.exists():
         shutil.rmtree(d)
@@ -385,12 +389,15 @@ def build_study(store, study, dicom_dir):
         series.append({"uid": series_uid(study_key(study), series_no), "number": series_no, "modality": study["modality"],
                        "instances": instances})
     patient = store.patients[study["patient_id"]]
-    study["status"] = "available"
+    study["status"] = "registered"
+    study["uploaded"] = False
     study["number_of_series"] = len(series)
     study["number_of_instances"] = sum(len(s["instances"]) for s in series)
     study["series"] = series
     study["path"] = f"{Path(dicom_dir).name}/{d.name}"
     study["orthanc_id"] = orthanc_study_id(patient["uhid"], study["study_uid"])
+    if when:
+        _bump(study, when)
     return study
 
 
@@ -438,17 +445,20 @@ def study_files(dicom_dir, study=None):
     return sorted(root.rglob("*.dcm"))
 
 
-def upload_all(store, dicom_dir, orthanc_url=ORTHANC_URL, studies=None):
-    """POST every .dcm of the available studies (or of `studies`) to <orthanc>/instances. Idempotent: Orthanc keeps one
-    copy per SOP Instance UID. Returns {"files", "stored", "already_stored", "failed", "studies"} (Orthanc study ids)."""
+def upload_all(store, dicom_dir, orthanc_url=ORTHANC_URL, studies=None, when=None):
+    """POST every .dcm of the built studies (or of `studies`) to <orthanc>/instances. Idempotent: Orthanc keeps one copy
+    per SOP Instance UID. A study whose files all went in is marked `available` / `uploaded` (meta bumped when `when` is
+    given). Returns {"files", "stored", "already_stored", "failed", "studies"} (Orthanc study ids)."""
     base = orthanc_url.rstrip("/")
     counts = {"files": 0, "stored": 0, "already_stored": 0, "failed": 0, "studies": []}
     seen = set()
     todo = studies if studies is not None else sorted(store.imaging_studies.values(), key=lambda s: s["id"])
     for study in todo:
-        if study.get("status") != "available":
+        if study.get("status") == "cancelled" or not study.get("series"):
             continue
-        for f in study_files(dicom_dir, study):
+        failed_before = counts["failed"]
+        files = study_files(dicom_dir, study)
+        for f in files:
             counts["files"] += 1
             try:
                 reply = _request(base + "/instances", data=f.read_bytes(), method="POST",
@@ -468,12 +478,16 @@ def upload_all(store, dicom_dir, orthanc_url=ORTHANC_URL, studies=None):
             if parent and parent not in seen:
                 seen.add(parent)
                 counts["studies"].append(parent)
+        if files and counts["failed"] == failed_before:
+            study["status"], study["uploaded"] = "available", True
+            if when:
+                _bump(study, when)
     return counts
 
 
-def upload_study(store, dicom_dir, study, orthanc_url=ORTHANC_URL):
+def upload_study(store, dicom_dir, study, orthanc_url=ORTHANC_URL, when=None):
     """Upload one study (the reporting desk, after an imaging report is entered on a scheduled order)."""
-    return upload_all(store, dicom_dir, orthanc_url, studies=[study])
+    return upload_all(store, dicom_dir, orthanc_url, studies=[study], when=when)
 
 
 def _qido(params, orthanc_url):
@@ -504,12 +518,13 @@ def find_by_accession(accession, orthanc_url=ORTHANC_URL):
 
 
 def verify(store, orthanc_url=ORTHANC_URL):
-    """Problems (empty when fine): every available study is found by Study UID, with the store's accession number and
-    number of instances."""
+    """Problems (empty when fine): every available (uploaded) study is found by Study UID, with the store's accession
+    number, the UHID as PatientID and the number of instances."""
     problems = []
     for study in sorted(store.imaging_studies.values(), key=lambda s: s["id"]):
         if study.get("status") != "available":
             continue
+        uhid = store.patients[study["patient_id"]]["uhid"]
         try:
             e = find_study(study["study_uid"], orthanc_url)
         except (urllib.error.URLError, OSError, ValueError) as exc:
@@ -520,6 +535,8 @@ def verify(store, orthanc_url=ORTHANC_URL):
             continue
         if _tag(e, "00080050") != study.get("accession"):
             problems.append(f"{study['id']}: accession {_tag(e, '00080050')!r} != {study.get('accession')!r}")
+        if _tag(e, "00100020") != uhid:
+            problems.append(f"{study['id']}: PatientID {_tag(e, '00100020')!r} != UHID {uhid!r}")
         n = _tag(e, "00201208")
         if n is None or int(n) != study["number_of_instances"]:
             problems.append(f"{study['id']}: {n} instances in Orthanc, {study['number_of_instances']} in the store")
@@ -555,6 +572,7 @@ def main(argv=None):
         return 0
     if args.upload:
         c = upload_all(store, files["dicom"], args.orthanc)
+        store.save(files["store"], files["events"])   # the studies are now available (uploaded)
         print(f"uploaded {c['files']} files: {c['stored']} stored, {c['already_stored']} already stored, "
               f"{c['failed']} failed, {len(c['studies'])} studies")
         return 1 if c["failed"] else 0

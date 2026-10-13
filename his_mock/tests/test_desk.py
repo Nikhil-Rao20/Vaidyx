@@ -341,7 +341,7 @@ def test_imaging_sign_builds_dicom(client, monkeypatch):
     order = next((o for d in s.departments.values() if d["group"] == "supporting"
                   for o in desk.worklist(s, d)["orders"]
                   if o["status"] == "scheduled" and desk.is_imaging(o) and s.imaging_study_for(o["id"])
-                  and s.imaging_study_for(o["id"])["status"] != "available"), None)
+                  and not s.imaging_study_for(o["id"]).get("series")), None)
     assert order, "the fixtures hold a scheduled imaging order with no images (the bone scan)"
     dept = s.department(order["performing_department"])
     study = s.imaging_study_for(order["id"])
@@ -358,7 +358,8 @@ def test_imaging_sign_builds_dicom(client, monkeypatch):
                            json={"signer": consultant["reg_no"], "values": {"impression": "Synthetic test impression"}})
         assert resp.status_code == 200, resp.text
         assert resp.json()["status"] == "final"
-        assert dicom_studies.performed(s, study) and study["status"] == "available"
+        assert dicom_studies.performed(s, study) and study["series"]
+        assert study["status"] == ("available" if alive else "registered") and study["uploaded"] is alive
         assert target.is_dir() and len(list(target.glob("*.dcm"))) == study["number_of_instances"] > 0
         texts = [m["text"] for m in resp.json()["desk_messages"]]
         if alive:

@@ -316,7 +316,7 @@ def test_patients_carry_demographics(store, fx):
         dob = date.fromisoformat(p["dob_iso"])
         assert p["dob"] == dob.strftime("%d/%m/%Y")
         assert today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day)) == p["age"]
-        assert re.match(r"^\+91 90000 0\d{4}$", p["phone"])
+        assert re.match(r"^\+91 55500 0\d{4}$", p["phone"])
         assert set(p["address"]) == {"line", "town", "district", "state", "pin"} and re.match(r"^5\d{5}$", p["address"]["pin"])
         first = min((e.get("date") or e["admitted"]) for e in store.encounters_for(p["id"]))
         assert p["registered_on"] <= first

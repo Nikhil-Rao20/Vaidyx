@@ -390,7 +390,7 @@ def _body_hpe(store, report, version, vals, spec=None, **_):
     body = _specimen_block(spec, "Outside slides and paraffin blocks received for review." if review
                            else "Biopsy received in 10% buffered formalin, labelled with the patient's name and UHID.")
     body += _section("Gross", "<p>" + ("Slides and blocks as received, labelled with the outside laboratory's numbers."
-                                       if review else "Received grey-white soft tissue bits. Entirely submitted.") + "</p>")
+                                       if review else "Specimen received as labelled and submitted for processing.") + "</p>")
     micro = [k for k in vals if k not in HPE_DIAGNOSIS_KEYS]
     diag = [k for k in vals if k in HPE_DIAGNOSIS_KEYS]
     body += _section("Microscopy", _rows(vals, micro) or "<p>Sections studied.</p>")
@@ -406,7 +406,7 @@ def _body_ihc(store, report, version, vals, spec=None, **_):
 
 
 def _body_molecular(store, report, version, vals, spec=None, **_):
-    body = _specimen_block(spec, "Formalin-fixed paraffin-embedded (FFPE) tissue block; tumour content adequate for testing.")
+    body = _specimen_block(spec, "Formalin-fixed paraffin-embedded (FFPE) tissue block received for testing.")
     rows = [(label(k), MOLECULAR_METHOD.get(k, "As per the laboratory protocol"), v) for k, v in vals.items()]
     body += _section("Results", _table(("Test", "Method", "Result"), rows))
     return body
@@ -422,7 +422,7 @@ def _body_cytology(store, report, version, vals, spec=None, **_):
 def _body_endoscopy(store, report, version, vals, **_):
     find, imp = _split_impression(vals)
     proc = str(report.get("title") or report["test"])
-    body = _section("Procedure", f"<p>{_e(proc)}, performed after informed consent under local anaesthesia and sedation.</p>")
+    body = _section("Procedure", f"<p>{_e(proc)}, performed as recorded in the procedure register.</p>")
     body += _section("Findings", _rows(vals, find) or "<p>Described in the impression below.</p>")
     body += _section("Impression", _rows(vals, imp) or "<p>As described in the findings above.</p>")
     return body

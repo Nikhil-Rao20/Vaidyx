@@ -299,7 +299,8 @@ def _oru_segments(store, event, patient, encounter):
     reported = ts(version["reported_on"]) if version else ""
     reason = escape(order.get("cancel_reason")) if status == "X" else ""
     segs = [_pid(patient), _pv1(store, encounter, event),
-            _orc(store, order, encounter, "CA" if status == "X" else "RE", "CA" if status == "X" else "CM", event, reason),
+            _orc(store, order, encounter, "CA" if status == "X" else "RE",
+                 "CA" if status == "X" else ("A" if status == "P" else "CM"), event, reason),
             _obr(store, order, event, reported=reported, interpreter=interpreter)]
     nte = 0
     if status == "X":

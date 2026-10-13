@@ -574,7 +574,11 @@ class Store:
             study["status"] = "cancelled"
             _bump(study, t)
         if r:
-            r["status"] = "cancelled"
+            prev = self.current_version(r)
+            v = _version(prev["version"] + 1, "cancelled", t, None, prev["values"], prev["sections"])
+            v["amendment_note"] = reason
+            r["versions"].append(v)                      # the preliminary stays in history
+            r["current_version"], r["status"] = v["version"], "cancelled"
             _bump(r, t)
             self._result_event("cancelled", r, t, f"Report {r['id']} cancelled: {reason}")
         else:

@@ -138,7 +138,7 @@ def run_viewport(browser, base, out, vp, size, errors, notes, do_form):
     return count
 
 
-def main(base, out, viewports):
+def main(base, out, viewports, allow_writes=False):
     from playwright.sync_api import sync_playwright
 
     base = base.rstrip("/")
@@ -156,7 +156,8 @@ def main(base, out, viewports):
         browser = p.chromium.launch(env={**os.environ})
         for i, vp in enumerate(viewports):
             try:
-                pages += run_viewport(browser, base, out, vp, VIEWPORTS[vp], errors, notes, do_form=(i == 0))
+                pages += run_viewport(browser, base, out, vp, VIEWPORTS[vp], errors, notes,
+                                      do_form=(allow_writes and i == 0))
             except Exception as e:  # a step that cannot be done at this width fails this viewport, not the whole run
                 waiting = [l.strip() for l in str(e).splitlines() if "waiting for" in l][:1]
                 errors.append(f"[{vp}] flow failed: {type(e).__name__}: {str(e).splitlines()[0][:200]} "
@@ -188,5 +189,8 @@ if __name__ == "__main__":
     ap.add_argument("--out", default=str(DEFAULT_OUT))
     ap.add_argument("--viewports", type=parse_viewports, default=list(VIEWPORTS),
                     help="comma list of desktop,tablet,phone (default: all three)")
+    ap.add_argument("--allow-writes", action="store_true",
+                    help="also submit the no-move ward transfer form (adds an ADT A02 event to the store behind --base; "
+                         "use it against a throwaway instance, never the live demo data)")
     a = ap.parse_args()
-    sys.exit(main(a.base, a.out, a.viewports))
+    sys.exit(main(a.base, a.out, a.viewports, a.allow_writes))

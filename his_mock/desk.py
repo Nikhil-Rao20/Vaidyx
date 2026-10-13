@@ -209,21 +209,23 @@ def _images(hospital, order, notes):
     when Orthanc answers. Never fails the action."""
     store = hospital.store
     study = store.imaging_study_for(order["id"])
-    if not study or study.get("status") == "available":
+    if not study or study.get("uploaded") or study.get("status") == "cancelled":
         return
+    now = store.now()
     try:
         from . import dicom_studies  # pydicom / numpy, loaded only when an imaging study is built
         if not dicom_studies.performed(store, study):
             return
-        dicom_studies.build_study(store, study, hospital.files["dicom"])
+        if not study.get("series"):
+            dicom_studies.build_study(store, study, hospital.files["dicom"], when=now)
     except Exception as exc:
         notes.append(("bad", f"images not built: {str(exc)[:200]}"))
         return
     if not dicom_studies.orthanc_alive(ORTHANC_URL):
-        notes.append(("bad", "images built; images not uploaded (PACS not reachable)"))
+        notes.append(("bad", "images built; images not uploaded (PACS not reachable); the next action retries"))
         return
     try:
-        counts = dicom_studies.upload_study(store, hospital.files["dicom"], study, orthanc_url=ORTHANC_URL)
+        counts = dicom_studies.upload_study(store, hospital.files["dicom"], study, orthanc_url=ORTHANC_URL, when=now)
     except Exception as exc:
         notes.append(("bad", f"images built; images not uploaded: {str(exc)[:200]}"))
         return
