@@ -12,7 +12,7 @@ the record citations; it is never a fact about the patient and never a recommend
 """
 import asyncio, json, re, time
 
-from . import config, dates, grounding, guardrails, guidelines, llm, org, packs, protocol, qa, rules, search, store
+from . import config, dates, grounding, guardrails, guidelines, llm, org, packs, protocol, qa, rules, search, skills, store
 
 ROLES = {
     "radiology": {"label": "Radiology support", "department": "Radiology",
@@ -41,6 +41,23 @@ ROLES = {
                                   "report, comparison with other imaging as documented",
                          "doc_types": ["pet_ct", "bone_scan"]},
 }
+
+
+
+def spec(role):
+    """The role as the agent runs it: the code defaults of ROLES under the role's skill file (label, department, doc_types, focus,
+    guideline query and guidance from tumour_board/skills/<role>/SKILL.md, or the hospital's edit of it). The hard rules never
+    come from the skill (see _system). KeyError for an unknown role: skills cannot add roles."""
+    r = dict(ROLES[role])
+    s = skills.get(role)
+    if s:
+        r.update(label=s["label"], department=s["department"], doc_types=list(s["doc_types"]), focus=s["focus_text"],
+                 guideline_query=s["guideline_query"] or ROLE_QUERY.get(role, ""), guidance=s["guidance"], skill_origin=s["origin"], skill_sha=s["sha"],
+                 allowed_tools=s.get("allowed_tools"))  # a skill may only restrict the fixed tool list
+    else:
+        r.update(guideline_query=ROLE_QUERY.get(role, ""), guidance=[], skill_origin="code", skill_sha="", allowed_tools=None)
+    return r
+
 
 NOT_LISTED = "This Case File is not listed yet: list it before preparing a brief"
 # the brief's format: a board session reuses a stored brief only when it has this version (2: removed items and document ids not read as
@@ -84,11 +101,19 @@ BRIEF_SCHEMA = {"type": "object", "additionalProperties": False, "properties": {
     "required": ["sections", "points_for_review", "not_documented"]}
 
 
+def _guidance_text(r):
+    """The skill's optional guidance sections ('What to look for in the records', 'Points for review to raise') as prompt lines."""
+    out = []
+    for heading, items in r.get("guidance") or []:
+        out.append(heading.replace("_", " ").capitalize() + ": " + "; ".join(items))
+    return (" ".join(out) + "\n") if out else ""
+
+
 def _system(role):
-    r = ROLES[role]
+    r = spec(role)
     return (f"You are the {r['label']} agent for a cancer Tumour Board. You act as a physician assistant: you prepare a specialty-specific "
             f"brief from the Case File records for the multidisciplinary team, for use when the {r['department']} specialist is unavailable. "
-            f"Focus: {r['focus']}.\n"
+            f"Focus: {r['focus']}.\n" + _guidance_text(r) +
             "Strict rules: use only what is written in the documents; copy values exactly; cite every statement with the document id and an exact "
             "quote; do not interpret images or scans (only what reports state); do not diagnose; do not derive or assign stage (only quote the stage "
             "as recorded); do not recommend, suggest or choose any treatment or management; do not predict prognosis. Points for review are "
@@ -367,13 +392,13 @@ def _pack_summary(role, protocol_id):
 
 def department_of(role):
     """The hospital's name for the agent's specialty (Indian names from org.json: Radiology support speaks for Radio-diagnosis)."""
-    r = ROLES[role]
+    r = spec(role)
     return org.department_name(org.department_id(r["department"])) if org.department_id(r["department"]) else r["department"]
 
 
 def specialty_documents(case_id, role):
     """(ready, waiting, failed) documents of the agent's specialty: its document types, or uploaded by its department (V1 item 6.6)."""
-    r, dept = ROLES[role], org.department_id(ROLES[role]["department"])
+    r = spec(role); dept = org.department_id(r["department"])
     mine = [d for d in rules.case_docs(case_id) if (d.get("classification") or {}).get("doc_type") in r["doc_types"]
             or (dept and d.get("department") == dept)]
     return ([d for d in mine if d.get("state") == "ready"], [d for d in mine if d.get("state") not in ("ready", "error")],
@@ -382,7 +407,7 @@ def specialty_documents(case_id, role):
 
 def open_department_items(case_id, role):
     """The Pre-Authorization requests still open for the agent's department in this Case File (V1 item 6.6)."""
-    dept = org.department_id(ROLES[role]["department"])
+    dept = org.department_id(spec(role)["department"])
     out = []
     for a in store.get_state(case_id).get("actions") or []:
         if a.get("source") != "pre_authorization" or a.get("status") == "completed":
@@ -398,7 +423,7 @@ def no_documents_brief(case_id, role, sig, t0):
     _, waiting, failed = specialty_documents(case_id, role)
     dept = department_of(role)
     extra = ([f"{len(waiting)} still being read"] if waiting else []) + ([f"{len(failed)} failed to read"] if failed else [])
-    return {"role": role, "label": ROLES[role]["label"], "no_documents": True, "department": dept,
+    return {"role": role, "label": spec(role)["label"], "no_documents": True, "department": dept,
             "message": f"No {dept} documents in this Case File" + (f" ({', '.join(extra)})" if extra else ""),
             "open_items": open_department_items(case_id, role), "sections": [], "points_for_review": [], "not_documented": [], "removed": [],
             "dropped_unverified": 0, "guardrail_removed": 0, "not_documented_rejected": 0, "references_dropped": 0, "approximate": 0,
@@ -426,7 +451,7 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
     if not case.get("protocol"):  # an unlisted Case File (V1 item 2.5): no brief, no model call
         au({"kind": "agent_not_listed", "role": role})
         yield {"type": "error", "message": NOT_LISTED}; return
-    r = ROLES[role]
+    r = spec(role)
     sig = rules.case_signature(case_id)  # taken before reading the records: a change during the run marks the brief stale (V1 item 4.5)
     if not specialty_documents(case_id, role)[0]:  # nothing of this specialty to read: return at once, no model call (V1 item 6.6)
         brief = no_documents_brief(case_id, role, sig, t0)
@@ -460,7 +485,7 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
     except Exception as e:
         au({"kind": "agent_discordances_unavailable", "role": role, "error": str(e)[:200]})
     prot_label = (protocol.get(case["protocol"]) or {}).get("label") or case["protocol"]
-    gq = f"{prot_label}: {ROLE_QUERY.get(role, r['focus'][:80])}"
+    gq = f"{prot_label}: {r.get('guideline_query') or r['focus'][:80]}"
     try:
         if not guidelines.ready():  # never wait for a guideline index rebuild (minutes on CPU)
             raise RuntimeError("guideline library still loading")
@@ -495,7 +520,10 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
             yield {"type": "step", "tool": "finish", "input": "", "thought": s.get("thought", "")}
             break
         try:
-            obs = await _tool(case_id, tool, arg, role, refs)
+            if r.get("allowed_tools") and tool not in r["allowed_tools"]:  # the skill restricted this tool
+                obs = f"The tool {tool} is not available to this skill (allowed: {', '.join(r['allowed_tools'])}); continue with the records."
+            else:
+                obs = await _tool(case_id, tool, arg, role, refs)
         except Exception as e:  # a failing tool (e.g. the guideline index not built) is an observation, not the end of the brief
             obs = f"The tool failed ({type(e).__name__}); continue with the records."
         scratch.append(f"TOOL {tool}({arg}) RESULT:\n{obs[:READ_CAP]}")
@@ -572,7 +600,8 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
              "model": config.models()["reasoner"].get("label") or "reasoner",
              "seconds": round(time.time() - t0, 1), "review": {"status": "ai_draft"},
              "signature": sig,  # what it was written from; a changed Case File marks it stale (V1 item 4.5)
-             "version": BRIEF_VERSION, "focus": focus_question}
+             "version": BRIEF_VERSION, "focus": focus_question,
+             "skill": {"origin": r.get("skill_origin", "code"), "sha": r.get("skill_sha", "")}}  # which role definition wrote it
     st = store.get_state(case_id); st.setdefault("artefacts", {})[f"brief_{role}"] = brief; store.save_state(case_id, st)
     au({"kind": "agent_brief", "role": role, "items": sum(len(s["items"]) for s in sections), "points": len(pts2), "dropped_unverified": dropped,
         "guardrail_removed": brief["guardrail_removed"], "removed": {k: sum(x["reason"] == k for x in removed) for k in sorted({x["reason"] for x in removed})},
@@ -605,7 +634,7 @@ async def ask(case_id, role, question, history=None, user=""):
     guardrail on the output, references verified verbatim and limited to record and report contents. Returns the answer record."""
     if role not in ROLES:
         raise ValueError("unknown role")
-    t0, au, r = time.time(), store.auditor(case_id), ROLES[role]
+    t0, au, r = time.time(), store.auditor(case_id), spec(role)
     case = store.get_case(case_id)
     base = {"role": role, "label": r["label"], "kind": LIVE_LABEL, "question": question, "statements": [], "references": [], "removed": [],
             "dropped_unverified": 0, "model": config.models()["reasoner"].get("label") or "reasoner"}

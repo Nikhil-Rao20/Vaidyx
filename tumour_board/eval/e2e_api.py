@@ -1121,6 +1121,30 @@ def phase9_case(c, cid, spec):
     print(f"INFO {tag}: section took {round(time.time() - t_case)} s (re-imported at the end)", flush=True)
 
 
+def skills_section(c):
+    """12 Oct: agent skills as SKILL.md files: listed for a known account, validated, a hospital edit saved (audited), the role label
+    and department follow it, reset restores the default."""
+    r = c.get("/api/tb/skills").json()
+    roles = {x["role"]: x for x in r["skills"]}
+    check("skills: every agent role listed with an active default skill", set(roles) >= {"radiology", "pathology", "medical_oncology", "surgical_oncology", "radiation_oncology", "nuclear_medicine"}
+          and all(x["active"] and x["active"]["origin"] == "default" and x["text"].startswith("---") for x in roles.values()) and r["can_edit"] is True)
+    bad = c.post("/api/tb/skills/validate", json={"text": roles["radiology"]["text"].replace("doc_types: [ct", "doc_types: [selfie")}).json()
+    check("skills: validation refuses an unknown document type", bad["ok"] is False and "catalogue" in bad["error"], bad.get("error", "")[:80])
+    bad2 = c.post("/api/tb/skills/validate", json={"text": roles["radiology"]["text"].replace("name: radiology", "name: cardiology")}).json()
+    check("skills: a skill cannot add a role", bad2["ok"] is False and "not a known agent role" in bad2["error"])
+    edited = roles["radiology"]["text"].replace("label: Radiology support", "label: Radio-diagnosis support (e2e)").replace("- modality and date of each study", "- modality and date of each study\n- contrast phase stated (e2e)")
+    r2 = c.put("/api/tb/skills/radiology", json={"text": edited})
+    check("skills: admin saves a hospital edit", r2.status_code == 200 and r2.json()["skill"]["origin"] == "hospital" and r2.json()["skill"]["label"] == "Radio-diagnosis support (e2e)", r2.text[:120])
+    rl = c.get("/api/tb/roles").json()
+    check("skills: /roles follows the hospital edit", rl["radiology"]["label"] == "Radio-diagnosis support (e2e)" and "contrast phase stated (e2e)" in rl["radiology"]["focus"] and rl["radiology"]["skill_origin"] == "hospital")
+    au = [l for l in open(os.path.join(DATA_ROOT_HINT, "org_audit.jsonl")).read().splitlines()] if os.path.exists(os.path.join(DATA_ROOT_HINT, "org_audit.jsonl")) else []
+    check("skills: the save is in org_audit.jsonl", any('"skill_saved"' in l and '"radiology"' in l for l in au[-5:]), f"{len(au)} entries")
+    r3 = c.post("/api/tb/skills/radiology/reset", json={})
+    check("skills: reset removes the hospital edit", r3.status_code == 200 and r3.json()["removed"] is True and c.get("/api/tb/roles").json()["radiology"]["label"] == "Radiology support")
+    broken = c.put("/api/tb/skills/radiology", json={"text": "---\nname: radiology\n---\nno focus"})
+    check("skills: an invalid edit is refused with the reason (400)", broken.status_code == 400 and "description" in broken.text, broken.text[:100])
+
+
 def discord_section(c):
     """12 Oct: discordances between reports and the decision watch. TB-004: a decision cites the histology of the first report; the amended
     report that arrives later records a different histology: the Case File lists the amendment for review, the record carries a decision-watch
@@ -1159,6 +1183,9 @@ def discord_section(c):
     st6 = [x for x in d6["discordances"]["items"] if x["field"] == "recorded_stage"]
     check("discord: TB-006 draft MRI vs final MRI stage listed", any(x["kind"] in ("non_final_differs", "conflict", "changed") for x in st6), str([(x["kind"], x["severity"]) for x in st6])[:120])
     wait_job(c, c.post("/api/tb/demo/TB-004").json()["job"]); wait_job(c, c.post("/api/tb/demo/TB-006").json()["job"])  # fresh again
+
+
+DATA_ROOT_HINT = os.environ.get("TB_DATA_ROOT") or os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "tumour_board")
 
 
 def phase9(c):
@@ -1205,6 +1232,8 @@ def main(base, pw, only=None):
         phase8(c)
         print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
         return 0 if not FAIL else 1
+    if only == "skills":
+        skills_section(c); print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}"); return 0 if not FAIL else 1
     if only == "discord":
         discord_section(c); print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}"); return 0 if not FAIL else 1
     if only == "phase9":
@@ -1351,6 +1380,8 @@ def main(base, pw, only=None):
     phase8(c)
     # 16. V1 Phase 9: the oral cavity (and later cervix) demo Case Files through the whole workflow (re-imported at the end of the section)
     phase9(c)
+    # 17. 12 Oct: agent skills as SKILL.md files
+    skills_section(c)
     # 19. 12 Oct: discordances between reports and the decision watch
     discord_section(c)
     # leave the demo Case Files in their fresh state for the next user / test

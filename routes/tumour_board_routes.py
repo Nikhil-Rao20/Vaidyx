@@ -12,6 +12,7 @@ from tumour_board import intake  # department uploads and patient matching (V1 i
 from tumour_board import board  # board sessions, attendance, agent log (V1 items 6.1 to 6.3)
 from tumour_board import followup  # Tumour Board actions in department inboxes, closing suggestions (V1 item 7.4)
 from tumour_board import scanned  # values and citations read from scans (V1 items 8.1, 8.2)
+from tumour_board import skills  # agent role definitions as editable SKILL.md files (12 Oct)
 from tumour_board import discord  # discordances between reports, decision watch (12 Oct)
 from tumour_board import fhir_export  # FHIR R4 document bundle and the HBCR registry abstract (12 Oct)
 
@@ -140,7 +141,44 @@ def setup_tumour_board_routes():
     @r.get("/roles")
     async def roles(request: Request):
         _user(request)
-        return {k: {"label": v["label"], "department": v["department"], "focus": v["focus"]} for k, v in agents.ROLES.items()}
+        return {k: {"label": v["label"], "department": v["department"], "focus": v["focus"], "skill_origin": v.get("skill_origin", "code")}
+                for k, v in ((k, agents.spec(k)) for k in agents.ROLES)}
+
+    # ---- agent skills: the role definitions as SKILL.md files; read by any account placed in a department, edited by admins ----
+    @r.get("/skills")
+    async def list_skills(request: Request):
+        rl = _roles(request); _need_known(rl)
+        return {"skills": skills.describe(), "can_edit": org.can(rl, "manage_org"), "hospital_dir": str(skills.hospital_dir()),
+                "note": "A skill says who an agent is and what it looks for. The tools, the hard rules (every sentence needs a verified quote; "
+                        "no diagnosis, staging, treatment or image interpretation) and the output checks are in code and apply to every skill."}
+
+    @r.post("/skills/validate")
+    async def validate_skill(request: Request):
+        rl = _roles(request); _need_known(rl); b = await request.json()
+        try:
+            s = skills.parse(str(b.get("text") or ""))
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}
+        return {"ok": True, "skill": {k: s[k] for k in ("name", "label", "department", "doc_types", "guideline_query", "focus", "version", "sha")},
+                "guidance": [h for h, _ in s["guidance"]]}
+
+    @r.put("/skills/{role}")
+    async def put_skill(role: str, request: Request):
+        rl = _roles(request); _need(rl, "manage_org"); b = await request.json()
+        try:
+            s = skills.save(store.safe_id(role), str(b.get("text") or ""), by=rl["user"])
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {"ok": True, "skill": {k: s[k] for k in ("name", "label", "department", "doc_types", "focus", "version", "sha", "origin")}}
+
+    @r.post("/skills/{role}/reset")
+    async def reset_skill(role: str, request: Request):
+        rl = _roles(request); _need(rl, "manage_org")
+        try:
+            removed = skills.reset(store.safe_id(role), by=rl["user"])
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {"ok": True, "removed": removed}
 
     @r.get("/org")
     async def get_org(request: Request):
@@ -816,7 +854,7 @@ def setup_tumour_board_routes():
                                              "flags": len(b_["adjudication"]["flags"]), "composition": b_["adjudication"].get("composition"),
                                              "resolution": b_.get("resolution"), "version": b_.get("version", 1)} for b_ in st.get("board_records", [])]}
         return {"session": s, "specialties": board.specialties(), "absent_roles": absent, "participants": board.participants(s),
-                "roles": {k: {"label": v["label"], "department": agents.department_of(k)} for k, v in agents.ROLES.items()},
+                "roles": {k: {"label": agents.spec(k)["label"], "department": agents.department_of(k)} for k in agents.ROLES},
                 "cases": cases, "can_manage": org.can(rl, "session"), "can_ask": bool(rl.get("admin") or rl.get("known")), "can_review": org.can(rl, "review"),
                 "marks": board.MARKS}
 

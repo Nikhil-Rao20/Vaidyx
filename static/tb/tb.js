@@ -920,6 +920,47 @@ async function showCards() {
   $("#modal").classList.remove("hidden");
 }
 
+// ------------------------------------------------------------------ agent skills (12 Oct): role definitions as SKILL.md files
+async function showSkills(role) {
+  const r = await api("/skills");
+  const cur = r.skills.find((x) => x.role === role) || r.skills[0];
+  const act = cur.active || {};
+  $("#modal-body").innerHTML = `<h2 style="color:#1f2933;margin-top:0">Agent skills</h2>
+    <p class="muted small">${esc(r.note)} ${r.can_edit ? "Admins edit a skill here; the edit is saved as the hospital's version, audited, and can be reset to the default." : "Editing is for Tumour Board admins."}</p>
+    <div class="form"><label>Specialty support agent</label><select id="sk-role">${r.skills.map((x) => `<option value="${esc(x.role)}" ${x.role === cur.role ? "selected" : ""}>${esc((x.active || {}).label || x.role)}${x.hospital_edit ? " (hospital edit)" : ""}</option>`).join("")}</select></div>
+    <div class="kv small" style="margin:10px 0">
+      <div>In use</div><div>${act.origin === "hospital" ? '<span class="chip c-info">hospital edit</span>' : '<span class="chip c-mute">default</span>'} ${esc(act.sha || "")}${cur.problem ? ` <span class="chip c-bad">hospital edit ignored</span> <span class="muted">${esc(cur.problem)}</span>` : ""}</div>
+      <div>Department</div><div>${esc(act.department || "")}</div>
+      <div>Reads first</div><div>${(act.doc_types || []).map((t) => `<span class="chip c-mute">${esc(t)}</span>`).join(" ")}</div>
+      <div>Focus</div><div>${(act.focus || []).map(esc).join("; ")}</div>
+      <div>Guideline query</div><div>${esc(act.guideline_query || "")}</div>
+    </div>
+    <div class="form"><label>SKILL.md ${r.can_edit ? "(edit, then Validate and Save)" : "(read only)"}</label>
+      <textarea id="sk-text" style="min-height:320px;font-family:var(--mono);font-size:12.5px" ${r.can_edit ? "" : "readonly"}>${esc(cur.text)}</textarea></div>
+    <div id="sk-msg" class="small" style="margin-top:6px"></div>
+    <div class="muted small" style="margin-top:8px">Never in a skill file: the tools, the quote rule, the scope rules (no diagnosis, staging, treatment or image interpretation). Those are in code and apply to every skill.</div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;flex-wrap:wrap">
+      ${r.can_edit ? `<button class="ghost" id="sk-default">Show default</button><button class="ghost" id="sk-reset" ${cur.hospital_edit ? "" : "disabled"}>Reset to default</button><button class="ghost" id="sk-validate">Validate</button><button class="primary" id="sk-save">Save as hospital version</button>` : ""}
+      <button class="ghost" data-closemodal>Close</button></div>`;
+  $("#modal").classList.remove("hidden");
+  $("#sk-role").onchange = () => showSkills($("#sk-role").value);
+  const msg = (t, ok) => { $("#sk-msg").innerHTML = `<span class="chip ${ok ? "c-ok" : "c-bad"}">${ok ? "valid" : "not valid"}</span> ${esc(t)}`; };
+  if (!r.can_edit) return;
+  $("#sk-default").onclick = () => { $("#sk-text").value = cur.default_text; msg("default text loaded (not saved)", true); };
+  $("#sk-validate").onclick = async () => {
+    const v = await api("/skills/validate", { json: { text: $("#sk-text").value } });
+    msg(v.ok ? `${v.skill.label} · ${v.skill.department} · reads ${v.skill.doc_types.join(", ")} · focus ${v.skill.focus.length} items` : v.error, v.ok);
+  };
+  $("#sk-save").onclick = async () => {
+    try { const v = await api(`/skills/${cur.role}`, { method: "PUT", json: { text: $("#sk-text").value } }); toast(`Skill saved for ${v.skill.label} (hospital version)`); S.roles = null; showSkills(cur.role); }
+    catch (e) { msg(e.message, false); }
+  };
+  $("#sk-reset").onclick = async () => {
+    if (!confirm("Remove the hospital edit and use the default skill again?")) return;
+    await api(`/skills/${cur.role}/reset`, { json: {} }); toast("Skill reset to default"); S.roles = null; showSkills(cur.role);
+  };
+}
+
 // ------------------------------------------------------------------ new case
 async function newCase() {
   const ps = S.protocols;
@@ -1377,6 +1418,7 @@ document.addEventListener("click", (e) => { const x = e.target.closest("[data-op
 $$("#tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 $("#btn-new").onclick = newCase;
 $("#btn-cards").onclick = showCards;
+$("#btn-skills").onclick = () => showSkills();
 $("#btn-org").onclick = showOrg;
 $("#btn-queue").onclick = showIntake;
 $("#btn-inbox").onclick = showInbox;
