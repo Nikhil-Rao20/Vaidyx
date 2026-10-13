@@ -71,6 +71,30 @@ SCHEMA = {"type": "object", "additionalProperties": False, "properties": {
                           "description": "items to clarify at the board: pending results, superseded or discordant reports (not recommendations)"}},
     "required": ["sentences", "points_for_review"]}
 
+def encounter_lines(case_id, case=None):
+    """Which records came from which OP visit or IP admission (V2 item 3.4), plain code: each HIS encounter with its records, OP
+    visits before the first admission labelled pre-admission OPD. [] for a Case File not created from the HIS."""
+    from . import his_case
+    case = case or store.get_case(case_id) or {}
+    if not case.get("his"):
+        return []
+    docs = [d for d in rules.case_docs(case_id) if d.get("state") == "ready" and not d.get("superseded")]
+    by_id = {d["doc_id"]: d for d in docs}
+    out = []
+    for g in his_case.encounter_groups(case, docs):
+        if g.get("kind") not in ("OP", "IP") or not g["docs"]:
+            continue
+        titles = [((by_id[i].get("classification") or {}).get("title") or by_id[i].get("filename")) for i in g["docs"] if i in by_id]
+        when = g.get("start") or ""
+        if g.get("kind") == "IP" and g.get("end"):
+            when += f" to {g['end']}"
+        out.append({"kind": g["kind"], "number": g["number"], "department": g.get("department"), "unit": g.get("unit"), "when": when, "pre_admission": bool(g.get("pre_admission")),
+                    "records": titles, "doc_ids": [i for i in g["docs"] if i in by_id],
+                    "text": f"{g['label']} ({g.get('department') or ''}{', ' + g['unit'] if g.get('unit') else ''}; {when})" + (" [pre-admission OPD]" if g.get("pre_admission") else "")
+                            + ": " + "; ".join(titles)})
+    return out
+
+
 NOT_LISTED = "This Case File is not listed yet: list it (cancer protocol, NCG setting, board date) before compiling the summary"
 
 SYS = ("You compile the Case File summary for a Tumour Board from signed clinical records. Write like a careful registrar presenting "
@@ -136,6 +160,11 @@ async def build(case_id, force=False):
     for dp in discord.points(case_id, st):
         if grounding.norm(dp["text"])[:60] not in have:
             pts.append(dp)
+    from . import his_case  # HIS values the report text does not carry (V2 item 3.3), and the OP / IP context of the records (3.4)
+    for hp in his_case.points(case_id, st):
+        if grounding.norm(hp["text"])[:60] not in have:
+            pts.append(hp)
+    encounters = encounter_lines(case_id, case)
     # verification drops of sections AND points for review (before V1 item 6.4 dropped points were not counted)
     dropped = sum(1 for x in removed if x["reason"] != "guardrail")
     by_reason = {k: n for k in qa.REASONS if (n := sum(1 for x in removed if x["reason"] == k))}
@@ -146,7 +175,7 @@ async def build(case_id, force=False):
                                   "doc_title": stage["doc_title"], "date": stage["date"], **({"confirmed_by": stage["confirmed_by"]} if stage.get("confirmed_by") else {})}
                                  if stage and stage["verification"] in rules.VERIFIED else None),
            "dropped_unverified": dropped, "guardrail_removed": by_reason.get("guardrail", 0), "removed": removed, "approximate": approximate,
-           "near_match": near, "filled_from_fields": filled, "generated": store.now_iso(), "seconds": round(time.time() - t0, 1),
+           "near_match": near, "filled_from_fields": filled, "encounters": encounters, "generated": store.now_iso(), "seconds": round(time.time() - t0, 1),
            "model": config.models()["reasoner"].get("label") or "reasoner", "review": {"status": "ai_draft"}, "gate_passed": gate.get("passed"), "context": mode,
            "signature": sig}  # what it was compiled from; a changed Case File marks it stale (V1 item 4.5)
     if issues:

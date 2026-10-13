@@ -616,6 +616,11 @@ def timeline(case_id):
         if dd["event"]:
             ev.append({"date": dd["event"], "kind": "document", "doc_type": c.get("doc_type"), "title": c.get("title") or d["filename"],
                        "status": c.get("status"), "doc_id": d["doc_id"], "report_date": dd["report"], "date_assumed": dd["event_assumed"]})
+    for e in ((store.get_case(case_id) or {}).get("his") or {}).get("encounters") or []:  # OP visits and IP admissions from the HIS (V2 item 3.4)
+        if e.get("start"):
+            title = ("IP admission " if e.get("kind") == "IP" else "OP visit ") + str(e.get("number") or "") + (f", {e['department']}" if e.get("department") else "") + (f", {e['unit']}" if e.get("unit") else "")
+            ev.append({"date": str(e["start"])[:10], "kind": "encounter", "encounter_kind": e.get("kind"), "number": e.get("number"), "title": title, "end": str(e.get("end") or "")[:10],
+                       "ward_history": e.get("ward_history") or [], "status": e.get("status")})
     st = store.get_state(case_id)
     for b in st.get("board_records", []):
         ev.append({"date": (b.get("board_date") or b["recorded_at"])[:10], "kind": "board", "title": "Tumour Board decision recorded", "record": b["id"]})
