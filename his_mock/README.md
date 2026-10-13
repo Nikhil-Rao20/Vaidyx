@@ -125,3 +125,31 @@ PID-3 holds the UHID (`VXH`, MR), the ABHA number (NH) and the PM-JAY ID when pr
 `meta.lastUpdated` is after the watermark, `hl7.events_since()` the events behind them (plus ADT / REF / ORM changes) and
 `hl7.last_event_time()` the next watermark; the FHIR `_lastUpdated` search (1.3) gives the same reports.
 
+## The PACS images (plan item V2-1.7)
+
+`his_mock/dicom_studies.py` (app venv; pydicom, numpy) writes one synthetic DICOM study per imaging study that is not cancelled,
+under `dicom/<accession slug>/<series>-<instance>.dcm` (Explicit VR Little Endian). `generator.build()` calls `build_all()`
+after the store is built; uploading is a separate step. Pixels are abstract test patterns only (gradient, concentric rings, a
+rectangle, seeded noise, the burned-in word SYNTHETIC): no real image is used and nothing looks like anatomy or a finding.
+
+| Modality | SOP class | Instances | Matrix |
+|---|---|---|---|
+| CT / MR | CT / MR Image Storage | 8 slices (image plane, frame of reference; CT 12 bits stored, rescale -1024) | 256 x 256 |
+| CR / MG | CR / Digital Mammography For Presentation | 1 / 2 (MG: R and L cranio-caudal) | 512 x 512 |
+| US | Ultrasound Image Storage | 4 frames as separate instances, 8 bits | 256 x 256 |
+| PT / NM | PET / NM Image Storage | 6 slices / 2 images | 128 / 256 |
+
+- **Links:** StudyInstanceUID = the store's `study_uid` (`ids.study_uid(accession)`), AccessionNumber = the order's accession,
+  PatientID = the UHID (a temporary UHID when the study was done under one), ReferringPhysicianName = the encounter consultant.
+  PatientName keeps `(SYNTHETIC)` on the family name; ImageComments "SYNTHETIC image, no clinical content".
+- **Deterministic:** series, instance and frame-of-reference UIDs are `2.25.<uuid5>` of `<accession>|series|<n>[|instance|<m>]`
+  in `ids.STUDY_UID_NAMESPACE`; the study time lies on the study's day, after the order and before the first report. The same
+  store gives byte-identical files.
+- **Store:** each built study gets `status: available`, `number_of_series`, `number_of_instances`, `series` (uid, number,
+  modality, instances with uid, SOP class, number), `path` and `orthanc_id` (SHA-1 of `UHID|StudyInstanceUID` as Orthanc
+  prints it), so 6.3 links without a query. `meta` is not touched.
+- **Orthanc:** `python -m his_mock.dicom_studies --build | --upload | --verify [--data DIR] [--orthanc URL]`, or
+  `his_mock/orthanc.sh load` (upload, then verify: every study found by Study UID through QIDO-RS with its accession and instance
+  count). Upload is idempotent. `viewer_url(study_uid)` gives `/ohif/viewer?StudyInstanceUIDs=<uid>`.
+- **Tests:** `his_mock/tests/test_dicom.py`. The Orthanc tests run only when `127.0.0.1:8042/system` answers (skipped otherwise);
+  they upload a temporary build and delete only the studies they added.

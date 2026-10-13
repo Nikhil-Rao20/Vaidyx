@@ -5,9 +5,12 @@
 #   his_mock/orthanc.sh stop     # stop by the PID that holds port 8042
 #   his_mock/orthanc.sh status   # version, plugins, study count
 #   his_mock/orthanc.sh reset    # delete every study (synthetic data only; the next his_mock build re-uploads them)
+#   his_mock/orthanc.sh load     # upload data/his_mock/dicom/ (python -m his_mock.dicom_studies --upload), then --verify
 ORTHANC_HOME=${ORTHANC_HOME:-/data/vaidyx/tools/orthanc}
 PORT=${ORTHANC_PORT:-8042}
 URL="http://127.0.0.1:$PORT"
+REPO=$(cd "$(dirname "$0")/.." && pwd)
+PY=${VAIDYX_PY:-/data/vaidyx/venv/app/bin/python}
 pid_on_port() { ss -ltnp 2>/dev/null | awk -v p="127.0.0.1:$PORT " '$0 ~ p {print $NF}' | grep -oE "pid=[0-9]+" | cut -d= -f2 | head -1; }
 case "$1" in
   start)
@@ -26,5 +29,7 @@ case "$1" in
   reset)
     for s in $(curl -s -m 10 "$URL/studies" | tr -d '[]", ' ); do curl -s -m 30 -o /dev/null -X DELETE "$URL/studies/$s"; done
     echo "studies left: $(curl -s -m 5 "$URL/studies" | grep -c '"')" ;;
-  *) echo "usage: his_mock/orthanc.sh start|stop|status|reset"; exit 2 ;;
+  load)
+    (cd "$REPO" && "$PY" -m his_mock.dicom_studies --upload --orthanc "$URL" && "$PY" -m his_mock.dicom_studies --verify --orthanc "$URL") ;;
+  *) echo "usage: his_mock/orthanc.sh start|stop|status|reset|load"; exit 2 ;;
 esac
