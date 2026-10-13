@@ -1,5 +1,5 @@
 {
- "version": "0.3.1",
+ "version": "0.3.2",
  "note": "SYNTHETIC only. Fixtures for the V2 mock Indian hospital (his_mock, plan item 1.1) and the outcomes Vaidyx-TB must show (e2e in Phases 3 to 6). Every patient, doctor, number, laboratory, hospital and certifying authority here is invented; nothing comes from a real patient or the real case. Aadhaar appears only once, masked, on one scanned outside report, to test masking.",
  "hospital": {
   "name": "Vaidyx Demo Hospital (SYNTHETIC)",
@@ -6535,6 +6535,23 @@
    "encounters": [
     {
      "kind": "OP",
+     "number": "OP/25/104211",
+     "registration": "VXH/26/004212",
+     "department": "Pulmonology",
+     "unit": "Unit I",
+     "consultant": {
+      "name": "Dr Rohit Bhattacharya",
+      "qualification": "MD (Pulmonary Medicine)",
+      "reg_no": "VXREG-20108"
+     },
+     "visit_type": "new",
+     "date": {
+      "display": "14/07/2025",
+      "value": "2025-07-14"
+     }
+    },
+    {
+     "kind": "OP",
      "number": "OP/26/118716",
      "registration": "VXH/26/004212",
      "department": "Medical Oncology",
@@ -7275,6 +7292,57 @@
      "scenarios": [
       "entry_by_ip_or_op_no"
      ]
+    },
+    {
+     "id": "P12-R14",
+     "test": "opd_note",
+     "type": "clinical_note",
+     "title": "OPD consultation note",
+     "source": "his",
+     "producing_department": "Pulmonology",
+     "encounter": "OP/25/104211",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "14/07/2025",
+      "value": "2025-07-14"
+     },
+     "reported_on": {
+      "display": "14/07/2025 12:10",
+      "value": "2025-07-14T12:10:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Rohit Bhattacharya",
+      "qualification": "MD (Pulmonary Medicine)",
+      "reg_no": "VXREG-20108"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Rohit Bhattacharya",
+       "qualification": "MD (Pulmonary Medicine)",
+       "reg_no": "VXREG-20108"
+      },
+      "signed_at": {
+       "display": "14/07/2025 12:10",
+       "value": "2025-07-14T12:10:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B25F",
+      "block": "Digitally signed by Dr Rohit Bhattacharya, MD (Pulmonary Medicine), Reg. No. VXREG-20108, 14/07/2025 12:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B25F",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "presenting_complaint": "Cough for 6 weeks",
+      "ecog": "0",
+      "clinical_question": "Evaluation of chronic cough"
+     },
+     "serves": {},
+     "scenarios": [
+      "entry_by_ip_or_op_no"
+     ],
+     "note": "Older than the 12-month fetch window (hospital today 13/10/2026): exercises 3.2 Fetch older records"
     }
    ]
   },

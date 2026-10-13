@@ -57,3 +57,23 @@ reproduce region keywords or document-type disputes. The Phase 3 and 4 e2e is th
 
 Signatures: one certificate serial per signer (the DSC belongs to the person); `document_hash` is filled by 1.2 from the rendered PDF
 and `verification_status` is `verified` unless a scenario says otherwise.
+
+## The hospital store (plan item V2-1.1)
+
+`python -m his_mock.build [--out DIR] [--seed N]` (app venv) replays every fixture patient through the lifecycle
+transitions of `model.Store` (register, OP visit, admission, ward transfer, referral, order, schedule, sample, preliminary,
+final signed, amendment, cancellation) in time order and writes `data/his_mock/` (gitignored):
+
+| File | What |
+|---|---|
+| `store.json` | Tables keyed by deterministic ids (`vxh-26-004201`, `op-26-118701`, `rad-26-00981`): departments, practitioners, tests, patients (one per registration; a temporary or duplicate UHID is a separate, unlinked patient), encounters, orders, specimens, reports (every version kept), signatures, imaging studies; `hospital` settings (NCG level optimal, PM-JAY empanelled, fetch window) and `meta` (seed, fixture version, counters) |
+| `events.jsonl` | One HL7 v2-style event per state change (ADT A28 / A04 / A01 / A02 / A03, REF I12 / I13, ORM O01, ORU R01 with OBR-25 O / S / I / P / F / C / X), the source of `meta.lastUpdated` (1.4 renders them) |
+| `fixture_index.json` | Fixture slot (`P03`, `P03-R07`) to store id, plus the never-ordered and outside-report records the store must not hold |
+| `documents/`, `dicom/` | Report PDFs (1.2) and synthetic DICOM (1.7) |
+| `token` | The API token for 1.3 (mode 600, kept on rebuild) |
+
+`model.py` is pure stdlib and never imports `tumour_board`. Allocation of new UHIDs, OP / IP Nos., accession Nos. and barcodes
+starts above the fixture numbers, so the reporting desk (1.5) and the HIS screens (1.6) never collide with them. Store ids
+are the identifier slugs; `Store.patient_by_identifier()` resolves a UHID, IP / OP No., ABHA number or address, and
+`Store.similar_registrations()` lists the other registrations with the same name, sex and age (a person links them; nothing
+is merged). The hospital's `today` is 13/10/2026; P12 has an OPD note from 14/07/2025, older than the 12-month window.
