@@ -21,7 +21,7 @@ def wait_job(c, jid):
         time.sleep(0.5)
 
 
-E2E_USERS = {"tb-e2e-radio": "Radio-e2e-2026!", "tb-e2e-pathhead": "Path-e2e-2026!"}  # throw-away Vaidyx accounts, created and deleted by this script
+E2E_USERS = {"tb-e2e-radio": "Radio-e2e-2026!", "tb-e2e-pathhead": "Path-e2e-2026!", "tb-e2e-surgdoc": "Surg-e2e-2026!"}  # throw-away Vaidyx accounts, created and deleted by this script
 
 
 def phase2(c, base):
@@ -36,11 +36,13 @@ def phase2(c, base):
     users = dict(o.get("users") or {})
     users["tb-e2e-radio"] = {"departments": {"radiology": "member"}, "coordinator": False}
     users["tb-e2e-pathhead"] = {"departments": {"pathology": "head"}, "coordinator": False}
+    users["tb-e2e-surgdoc"] = {"departments": {"surgical_oncology": "member"}, "coordinator": False}  # a treating doctor (V2 item 2.2)
     r = c.put("/api/tb/org", json={**{k: o[k] for k in ("hospital", "departments", "admins")}, "users": users})
     check("org: admin saves users with department roles", r.status_code == 200 and r.json()["users"]["tb-e2e-radio"]["departments"] == {"radiology": "member"}, r.text[:120])
-    m = httpx.Client(base_url=base, timeout=120); h = httpx.Client(base_url=base, timeout=120)
+    m = httpx.Client(base_url=base, timeout=120); h = httpx.Client(base_url=base, timeout=120); t = httpx.Client(base_url=base, timeout=120)
     check("department users log in", m.post("/api/auth/login", json={"username": "tb-e2e-radio", "password": E2E_USERS["tb-e2e-radio"]}).status_code == 200
-          and h.post("/api/auth/login", json={"username": "tb-e2e-pathhead", "password": E2E_USERS["tb-e2e-pathhead"]}).status_code == 200)
+          and h.post("/api/auth/login", json={"username": "tb-e2e-pathhead", "password": E2E_USERS["tb-e2e-pathhead"]}).status_code == 200
+          and t.post("/api/auth/login", json={"username": "tb-e2e-surgdoc", "password": E2E_USERS["tb-e2e-surgdoc"]}).status_code == 200)
     me = m.get("/api/tb/org").json()
     check("member sees only own roles, no user map", me["me"]["departments"] == {"radiology": "member"} and not me["me"]["admin"] and "users" not in me and [d["id"] for d in me["my_departments"]] == ["radiology"])
     check("member: PUT /org forbidden", m.put("/api/tb/org", json=o).status_code == 403)
@@ -55,18 +57,21 @@ def phase2(c, base):
     rad = next((r for r in d["state"]["gate"]["requirements"] if r["department"] == "Radiology"), None)
     path_req = next((r for r in d["state"]["gate"]["requirements"] if r["department"] == "Pathology"), None)
     check("member: waive forbidden (403) even in own department", m.post("/api/tb/cases/TB-001/confirmations", json={"type": "waive", "key": rad["id"], "reason": "e2e"}).status_code == 403 if rad else False)
+    # V2 item 2.2: a supporting department (even its head) receives and answers requests; waivers belong to the treating doctor
     hd = h.get("/api/tb/cases/TB-001").json()["permissions"]
-    check("head: may waive only own department's requirements", hd["waive"].get(path_req["id"]) is True and hd["waive"].get(rad["id"]) is False, json.dumps(hd["waive"]))
-    check("head: waive outside own department forbidden (403)", h.post("/api/tb/cases/TB-001/confirmations", json={"type": "waive", "key": rad["id"], "reason": "e2e"}).status_code == 403)
-    check("head: waive without a reason refused (400)", h.post("/api/tb/cases/TB-001/confirmations", json={"type": "waive", "key": path_req["id"], "reason": ""}).status_code == 400)
-    r = h.post("/api/tb/cases/TB-001/confirmations", json={"type": "waive", "key": path_req["id"], "reason": "e2e: slides reviewed outside"}).json()
+    check("supporting head: may not waive any requirement (V2 2.2)", hd["waive"].get(path_req["id"]) is False and hd["waive"].get(rad["id"]) is False, json.dumps(hd["waive"]))
+    check("supporting head: waive forbidden (403)", h.post("/api/tb/cases/TB-001/confirmations", json={"type": "waive", "key": path_req["id"], "reason": "e2e"}).status_code == 403)
+    td = t.get("/api/tb/cases/TB-001").json()["permissions"]
+    check("treating doctor: may waive every requirement, not delete the Case File", all(td["waive"].get(k) is True for k in req_ids) and td.get("delete_case") is False and td.get("upload") is True, json.dumps({k: v for k, v in td.items() if not isinstance(v, dict)}))
+    check("treating doctor: waive without a reason refused (400)", t.post("/api/tb/cases/TB-001/confirmations", json={"type": "waive", "key": path_req["id"], "reason": ""}).status_code == 400)
+    r = t.post("/api/tb/cases/TB-001/confirmations", json={"type": "waive", "key": path_req["id"], "reason": "e2e: slides reviewed outside"}).json()
     st = {x["id"]: x["status"] for x in r["state"]["gate"]["requirements"]}
-    check("head: waive in own department recorded and applied", st[path_req["id"]] == "waived" and r["confirmation"]["by"] == "tb-e2e-pathhead" and r["confirmation"]["type"] == "waive", st.get(path_req["id"]))
-    r2 = h.post(f"/api/tb/cases/TB-001/confirmations/{r['confirmation']['id']}/undo").json()
-    check("head: undo restores the requirement", {x["id"]: x["status"] for x in r2["state"]["gate"]["requirements"]}[path_req["id"]] != "waived" and r2["confirmation"]["undone"]["by"] == "tb-e2e-pathhead")
+    check("treating doctor: waive recorded and applied", st[path_req["id"]] == "waived" and r["confirmation"]["by"] == "tb-e2e-surgdoc" and r["confirmation"]["type"] == "waive", st.get(path_req["id"]))
+    r2 = t.post(f"/api/tb/cases/TB-001/confirmations/{r['confirmation']['id']}/undo").json()
+    check("treating doctor: undo restores the requirement", {x["id"]: x["status"] for x in r2["state"]["gate"]["requirements"]}[path_req["id"]] != "waived" and r2["confirmation"]["undone"]["by"] == "tb-e2e-surgdoc")
     au = c.get("/api/tb/cases/TB-001/audit").json()["events"]
-    check("confirmation and undo audited with the user", any(e["kind"] == "confirmation" and e["by"] == "tb-e2e-pathhead" for e in au) and any(e["kind"] == "confirmation_undone" for e in au))
-    check("undo twice refused (409)", h.post(f"/api/tb/cases/TB-001/confirmations/{r['confirmation']['id']}/undo").status_code == 409)
+    check("confirmation and undo audited with the user", any(e["kind"] == "confirmation" and e["by"] == "tb-e2e-surgdoc" for e in au) and any(e["kind"] == "confirmation_undone" for e in au))
+    check("undo twice refused (409)", t.post(f"/api/tb/cases/TB-001/confirmations/{r['confirmation']['id']}/undo").status_code == 409)
     check("unknown confirmation type refused (400)", c.post("/api/tb/cases/TB-001/confirmations", json={"type": "bless", "key": "x"}).status_code == 400)
     # value confirmation on a dedicated Case File (independent of the demo Case File's state): a FINAL CT without a lesion size, then a
     # clinician records the size read in the source; it counts for the gate, is shown as "confirmed by", and a value confirmed on a
@@ -246,6 +251,119 @@ def phase2_cleanup(c):
     except Exception as e:
         print("cleanup org failed:", e)
     for u in E2E_USERS:
+        c.request("DELETE", "/api/auth/users", json={"username": u})
+
+
+V2_USERS = {"tb-e2e-root": "Root-e2e-2026!", "tb-e2e-radadmin": "RadAdm-e2e-2026!", "tb-e2e-raddoc": "RadDoc-e2e-2026!", "tb-e2e-mdt": "Mdt-e2e-2026!",
+            "tb-e2e-breastdoc": "Breast-e2e-2026!"}  # throw-away accounts of the V2 Phase 2 section (created through the Tumour Board, deleted by the Vaidyx admin)
+
+
+def v2_phase2(c, base):
+    """V2 Phase 2 (2.1 departments, 2.2 roles and accounts): the Vaidyx admin names a root admin; the root admin creates a Radiology
+    department admin, an MDT Coordinator and a Breast Surgery doctor; the department admin creates a Radiology doctor who sees only the
+    Radiology inbox; forbidden actions answer 403; disable / enable / remove; everything audited and nobody becomes a Vaidyx admin."""
+    pw = V2_USERS
+    for u in pw:
+        c.request("DELETE", "/api/auth/users", json={"username": u})
+    o = c.get("/api/tb/org").json()
+    check("2.1 organisation: 22 treating and 8 supporting departments with emails", sum(1 for d in o["departments"] if d["group"] == "treating") == 22
+          and sum(1 for d in o["departments"] if d["group"] == "supporting") == 8 and all(d.get("email") for d in o["departments"]) and o["hospital"].get("pmjay_empanelled") is True
+          and o["hospital"].get("fetch_window_months") == 12, f"{len(o['departments'])} departments")
+    check("2.1 V1 names still resolve (Radio-diagnosis, Laboratory Medicine)", any("Radio-diagnosis" in d["aliases"] and d["id"] == "radiology" for d in o["departments"])
+          and any("Laboratory Medicine" in d["aliases"] and d["id"] == "biochemistry" for d in o["departments"]))
+    r = c.post("/api/tb/org/accounts", json={"username": "tb-e2e-root", "password": pw["tb-e2e-root"], "root_admin": True, "display_name": "Root admin (e2e)", "is_admin": True})
+    check("2.2 Vaidyx admin names a root admin: a plain login, never a Vaidyx admin", r.status_code == 200 and r.json()["created"] and r.json()["root_admin"], r.text[:120])
+    vu = {x["username"]: x for x in c.get("/api/auth/users").json()["users"]}
+    check("2.2 root admin has no Vaidyx admin role and no shell", vu.get("tb-e2e-root", {}).get("is_admin") is False and not (vu.get("tb-e2e-root", {}).get("privileges") or {}).get("can_use_bash"),
+          json.dumps({k: vu.get("tb-e2e-root", {}).get(k) for k in ("is_admin",)}))
+    root = httpx.Client(base_url=base, timeout=120); ra = httpx.Client(base_url=base, timeout=120); rd = httpx.Client(base_url=base, timeout=120)
+    md = httpx.Client(base_url=base, timeout=120); bd = httpx.Client(base_url=base, timeout=120)
+    check("2.2 root admin logs in and sees the organisation", root.post("/api/auth/login", json={"username": "tb-e2e-root", "password": pw["tb-e2e-root"]}).status_code == 200
+          and root.get("/api/tb/org").json()["me"]["root_admin"] and "users" in root.get("/api/tb/org").json())
+    check("2.2 root admin cannot create a Vaidyx account through the main app (403)", root.post("/api/auth/users", json={"username": "tb-e2e-evil", "password": "Evil-e2e-2026!", "is_admin": True}).status_code == 403)
+    r1 = root.post("/api/tb/org/accounts", json={"username": "tb-e2e-radadmin", "password": pw["tb-e2e-radadmin"], "admin_of": ["Radiology"], "display_name": "Radiology admin (e2e)"})
+    r2 = root.post("/api/tb/org/accounts", json={"username": "tb-e2e-mdt", "password": pw["tb-e2e-mdt"], "coordinator": True, "display_name": "MDT Coordinator (e2e)"})
+    r3 = root.post("/api/tb/org/accounts", json={"username": "tb-e2e-breastdoc", "password": pw["tb-e2e-breastdoc"], "departments": {"breast_surgery": "doctor"}, "display_name": "Breast surgeon (e2e)"})
+    check("2.2 root admin creates a department admin, a coordinator and a treating doctor", r1.status_code == 200 and r1.json()["admin_of"] == ["radiology"] and r2.status_code == 200 and r2.json()["coordinator"]
+          and r3.status_code == 200 and r3.json()["departments"] == {"breast_surgery": "member"}, (r1.text + r2.text + r3.text)[:200])
+    check("2.2 root admin: an account without a role is refused (400)", root.post("/api/tb/org/accounts", json={"username": "tb-e2e-norole", "password": "NoRole-e2e-2026!"}).status_code == 400)
+    check("2.2 root admin: a Vaidyx admin is never placed (409)", root.post("/api/tb/org/accounts", json={"username": "admin", "coordinator": True}).status_code == 409)
+    # the department admin
+    check("2.2 department admin logs in", ra.post("/api/auth/login", json={"username": "tb-e2e-radadmin", "password": pw["tb-e2e-radadmin"]}).status_code == 200)
+    oa = ra.get("/api/tb/org").json()
+    check("2.2 department admin sees its department only, no user map, no clinical rights", [d["id"] for d in oa["admin_departments"]] == ["radiology"] and "users" not in oa and not oa["me"]["admin"]
+          and not oa["me"]["known"] and not oa["can"]["create_case"], json.dumps({k: oa["me"].get(k) for k in ("admin", "known", "admin_of")}))
+    check("2.2 department admin: organisation edit forbidden (403)", ra.put("/api/tb/org", json=o).status_code == 403)
+    check("2.2 department admin: root-admin account creation forbidden (403)", ra.post("/api/tb/org/accounts", json={"username": "tb-e2e-x", "password": "X-e2e-2026!!", "coordinator": True}).status_code == 403)
+    check("2.2 department admin: another department forbidden (403)", ra.post("/api/tb/org/departments/pathology/doctors", json={"username": "tb-e2e-x", "password": "X-e2e-2026!!"}).status_code == 403
+          and ra.get("/api/tb/org/departments/pathology/doctors").status_code == 403)
+    check("2.2 department admin: short password refused (400)", ra.post("/api/tb/org/departments/radiology/doctors", json={"username": "tb-e2e-x", "password": "short"}).status_code == 400)
+    check("2.2 department admin: a Vaidyx admin is never placed (409)", ra.post("/api/tb/org/departments/radiology/doctors", json={"username": "admin"}).status_code == 409)
+    r = ra.post("/api/tb/org/departments/Radio-diagnosis/doctors", json={"username": "tb-e2e-raddoc", "password": pw["tb-e2e-raddoc"], "display_name": "Dr Radio (e2e)", "role": "doctor"})
+    check("2.2 department admin creates a doctor login of its department", r.status_code == 200 and r.json()["created"] and r.json()["departments"] == {"radiology": "member"} and r.json()["display_name"] == "Dr Radio (e2e)", r.text[:160])
+    vu = {x["username"]: x for x in c.get("/api/auth/users").json()["users"]}
+    check("2.2 the new doctor is a plain Vaidyx account: no admin, no shell", vu.get("tb-e2e-raddoc", {}).get("is_admin") is False and not (vu.get("tb-e2e-raddoc", {}).get("privileges") or {}).get("can_use_bash"))
+    lst = ra.get("/api/tb/org/departments/radiology/doctors").json()
+    row = next((x for x in lst["doctors"] if x["username"] == "tb-e2e-raddoc"), {})
+    check("2.2 department list shows the doctor with an existing account; password reset goes to the Vaidyx admin", row.get("role") == "member" and row.get("account") is True and lst["can_reset"] is False
+          and "Vaidyx admin" in lst["reset_note"], json.dumps(row)[:160])
+    # the supporting doctor
+    check("2.2 doctor logs in", rd.post("/api/auth/login", json={"username": "tb-e2e-raddoc", "password": pw["tb-e2e-raddoc"]}).status_code == 200)
+    me = rd.get("/api/tb/org").json()
+    check("2.2 doctor sees own roles only (supporting, Radiology)", me["me"]["departments"] == {"radiology": "member"} and me["me"]["supporting"] == {"radiology": "member"} and me["me"]["treating"] == {}
+          and "users" not in me and me["admin_departments"] == [] and not me["can"]["create_case"], json.dumps(me["me"])[:160])
+    ib = rd.get("/api/tb/inbox").json()
+    check("2.2 doctor sees only the Radiology inbox", [d["id"] for d in ib["departments"]] == ["radiology"], json.dumps([d["id"] for d in ib["departments"]]))
+    d1 = rd.get("/api/tb/cases/TB-001").json()
+    rad_req = next((x for x in d1["state"]["gate"]["requirements"] if x["department"] == "Radiology"), None)
+    check("2.2 supporting doctor: forbidden actions answer 403 (create, waive, organisation, accounts, listing, sessions)",
+          rd.post("/api/tb/cases", json={"case_id": "TB-FORBID2", "protocol": "lung_nsclc"}).status_code == 403 and rd.put("/api/tb/org", json=o).status_code == 403
+          and rd.post("/api/tb/org/departments/radiology/doctors", json={"username": "tb-e2e-x", "password": "X-e2e-2026!!"}).status_code == 403
+          and rd.post("/api/tb/org/accounts", json={"username": "tb-e2e-x", "password": "X-e2e-2026!!", "coordinator": True}).status_code == 403
+          and (rd.post("/api/tb/cases/TB-001/confirmations", json={"type": "waive", "key": rad_req["id"], "reason": "e2e"}).status_code == 403 if rad_req else False)
+          and rd.post("/api/tb/cases/TB-001/listing", json={"protocol": "lung_nsclc"}).status_code == 403 and rd.post("/api/tb/sessions", json={"date": "2026-10-20"}).status_code == 403)
+    # the treating doctor and the coordinator
+    check("2.2 treating doctor and coordinator log in", bd.post("/api/auth/login", json={"username": "tb-e2e-breastdoc", "password": pw["tb-e2e-breastdoc"]}).status_code == 200
+          and md.post("/api/auth/login", json={"username": "tb-e2e-mdt", "password": pw["tb-e2e-mdt"]}).status_code == 200)
+    r = bd.post("/api/tb/cases", json={"case_id": "TB-V2P2", "protocol": "breast", "setting": "early", "patient": {"name": "SYNTHETIC, Test Patient", "mrn": "VXH/26/999001", "agesex": "52 Y / F"}})
+    check("2.2 treating doctor creates a Case File", r.status_code == 200, r.text[:120])
+    c.delete("/api/tb/cases/TB-V2P2")
+    pb = bd.get("/api/tb/cases/TB-002").json()["permissions"]
+    check("2.2 treating doctor may waive and upload, not delete the Case File or run sessions", all(pb["waive"].values()) and pb["upload"] is True and pb["delete_case"] is False
+          and bd.post("/api/tb/sessions", json={"date": "2026-10-20"}).status_code == 403 and [d["id"] for d in bd.get("/api/tb/inbox").json()["departments"]] == ["breast_surgery"])
+    d2 = md.get("/api/tb/cases/TB-001").json()
+    hp = next((x for x in d2["documents"] if (x.get("classification") or {}).get("doc_type") == "histopathology"), None)
+    check("2.2 coordinator cannot confirm or waive (403), may run sessions", not any(d2["permissions"]["waive"].values()) and (md.post("/api/tb/cases/TB-001/confirmations", json={"type": "attest_final", "key": hp["doc_id"]}).status_code == 403 if hp else False)
+          and md.post("/api/tb/cases/TB-001/confirmations", json={"type": "waive", "key": rad_req["id"], "reason": "e2e"}).status_code == 403 and md.get("/api/tb/sessions").json()["can_manage"] is True
+          and [d["id"] for d in md.get("/api/tb/inbox").json()["departments"]] == ["coordinator"])
+    # disable, enable, remove
+    r = ra.put("/api/tb/org/departments/radiology/doctors/tb-e2e-raddoc", json={"disabled": True})
+    check("2.2 department admin disables the doctor", r.status_code == 200 and r.json()["disabled"] is True, r.text[:120])
+    check("2.2 disabled doctor is refused on every Tumour Board route (403)", rd.get("/api/tb/org").status_code == 403 and rd.get("/api/tb/inbox").status_code == 403 and rd.get("/api/tb/cases").status_code == 403
+          and rd.get("/api/tb/cases/TB-001").status_code == 403)
+    check("2.2 department admin cannot disable a doctor placed elsewhere too (409)", ra.put("/api/tb/org/departments/radiology/doctors/tb-e2e-raddoc", json={"disabled": False}).status_code == 200
+          and (lambda cur: root.put("/api/tb/org", json={**{k: cur[k] for k in ("hospital", "departments", "admins", "routes")}, "users": {**cur["users"], "tb-e2e-raddoc": {"departments": {"radiology": "member", "pathology": "member"}}}}).status_code == 200)(root.get("/api/tb/org").json())
+          and ra.put("/api/tb/org/departments/radiology/doctors/tb-e2e-raddoc", json={"disabled": True}).status_code == 409 and rd.get("/api/tb/org").status_code == 200)
+    r = ra.request("DELETE", "/api/tb/org/departments/radiology/doctors/tb-e2e-raddoc")
+    check("2.2 department admin removes the doctor from Radiology (the account and the other placement stay)", r.status_code == 200 and r.json()["kept"] is True
+          and rd.get("/api/tb/org").json()["me"]["departments"] == {"pathology": "member"}, r.text[:120])
+    au = root.get("/api/tb/org/audit").json()["events"]
+    kinds = {e["kind"] for e in au}
+    check("2.2 every account change is audited, never a password", {"account_created", "account_placed", "account_roles_changed", "root_admins_changed"} <= kinds
+          and not any(v in json.dumps(au) for v in pw.values()), json.dumps(sorted(kinds)))
+    check("2.2 audit is for the root admin only (403 for others)", ra.get("/api/tb/org/audit").status_code == 403 and rd.get("/api/tb/org/audit").status_code == 403)
+
+
+def v2_phase2_cleanup(c):
+    """Remove the V2 throw-away placements and delete their Vaidyx accounts (the Vaidyx admin's job)."""
+    try:
+        o = c.get("/api/tb/org").json()
+        users = {k: v for k, v in (o.get("users") or {}).items() if k not in V2_USERS}
+        admins = [a for a in (o.get("admins") or []) if a not in V2_USERS]
+        c.put("/api/tb/org", json={**{k: o[k] for k in ("hospital", "departments", "routes")}, "users": users, "admins": admins})
+    except Exception as e:
+        print("cleanup org failed:", e)
+    for u in V2_USERS:
         c.request("DELETE", "/api/auth/users", json={"username": u})
 
 
@@ -1344,6 +1462,13 @@ def main(base, pw, only=None):
             phase2_cleanup(c)
         print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
         return 0 if not FAIL else 1
+    if only == "v2p2":
+        try:
+            v2_phase2(c, base)
+        finally:
+            v2_phase2_cleanup(c)
+        print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
+        return 0 if not FAIL else 1
     if only == "phase3":
         phase3(c)
         print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
@@ -1508,6 +1633,11 @@ def main(base, pw, only=None):
         phase2(c, base)
     finally:
         phase2_cleanup(c)
+    # 9b. V2 Phase 2: treating / supporting departments, roles and accounts
+    try:
+        v2_phase2(c, base)
+    finally:
+        v2_phase2_cleanup(c)
     # 10. V1 Phase 3: dates, document type, flags, big scans
     phase3(c)
     # 11. V1 Phase 4: NCG tiers, two-level gate, failed documents, inbox and notifications, stale summary, NCG VTB export
@@ -1542,5 +1672,5 @@ def main(base, pw, only=None):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--base", default="http://127.0.0.1:7000"); ap.add_argument("--password", required=True)
-    ap.add_argument("--only", default=None, help="run one section only (phase2 | phase3 | phase4 | phase5 | phase6 | phase7 | phase8 | phase9 | skills | mcp | discord | records | metrics)")
+    ap.add_argument("--only", default=None, help="run one section only (phase2 | v2p2 | phase3 | phase4 | phase5 | phase6 | phase7 | phase8 | phase9 | skills | mcp | discord | records | metrics)")
     a = ap.parse_args(); sys.exit(main(a.base, a.password, a.only))

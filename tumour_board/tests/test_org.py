@@ -23,6 +23,8 @@ def people():
         suresh={"departments": {"radiology": "head"}},
         kavya={"departments": {"pathology": "member"}},
         anil={"coordinator": True},
+        priya={"departments": {"breast_surgery": "member"}},  # a treating doctor
+        deepak={"admin_of": ["radiology"]},  # a department admin who is not a doctor
     ), by="test")
     return {
         "member": org.roles("ravi"),
@@ -30,6 +32,8 @@ def people():
         "head": org.roles("suresh"),
         "path_member": org.roles("kavya"),
         "coordinator": org.roles("anil"),
+        "treating": org.roles("priya"),
+        "dept_admin": org.roles("deepak"),
         "admin": org.roles("tbadmin"),
         "vaidyx_admin": org.roles("root", vaidyx_admin=True),
         "unknown": org.roles("stranger"),
@@ -96,12 +100,13 @@ def test_save_writes_audit_and_keeps_unknown_keys(data_root):
     assert saved["future_setting"] == {"keep": True}
     assert json.loads(org.path().read_text())["future_setting"] == {"keep": True}
     lines = (data_root / "org_audit.jsonl").read_text().splitlines()
-    ev = json.loads(lines[-1])
+    ev = json.loads(lines[0])
     assert ev["by"] == "admin1" and ev["kind"] == "org_saved" and ev["departments"] == len(org.DEFAULT_DEPARTMENTS) and ev["users"] == 1
     assert ev["ts"]
+    assert [json.loads(l)["kind"] for l in lines] == ["org_saved", "account_placed", "root_admins_changed"]  # the first save placed ravi and named tbadmin
     org.save(saved, by="admin2")
-    assert len((data_root / "org_audit.jsonl").read_text().splitlines()) == 2
-    assert [e["by"] for e in org.read_audit()] == ["admin2", "admin1"]
+    assert len((data_root / "org_audit.jsonl").read_text().splitlines()) == 4  # an unchanged save adds only org_saved
+    assert [e["by"] for e in org.read_audit()] == ["admin2", "admin1", "admin1", "admin1"]
 
 
 def test_save_rejects_invalid_and_writes_nothing(data_root):
@@ -330,54 +335,63 @@ def test_disabled_user_can_do_nothing(data_root):
 
 # --- can(): table-driven ----------------------------------------------------------------------------------------------------
 
-USERS = ("member", "head", "coordinator", "admin", "unknown")
-# action, department, expected for (member of radiology, head of radiology, coordinator, admin, unknown)
+USERS = ("member", "head", "coordinator", "treating", "dept_admin", "admin", "unknown")
+# action, department, expected for (member of radiology, head of radiology, coordinator, treating doctor of breast surgery,
+# department admin of radiology, root admin, unknown). V2 plan section 4: supporting doctors receive and answer requests only;
+# treating doctors create Case Files, confirm and waive; the coordinator never confirms or waives; a department admin has no
+# clinical rights; nobody but the root admin edits the organisation.
 CAN = [
-    ("view", None, (1, 1, 1, 1, 1)),
-    ("upload", "radiology", (1, 1, 1, 1, 0)),
-    ("upload", "pathology", (0, 0, 1, 1, 0)),
-    ("upload", None, (0, 0, 1, 1, 0)),
-    ("upload", "", (0, 0, 1, 1, 0)),
-    ("upload_to_case", None, (0, 0, 1, 1, 0)),
-    ("inbox", "radiology", (1, 1, 0, 1, 0)),
-    ("inbox", "Radiology", (1, 1, 0, 1, 0)),
-    ("inbox", "pathology", (0, 0, 0, 1, 0)),
-    ("inbox", None, (0, 0, 0, 1, 0)),
-    ("confirm", "radiology", (1, 1, 1, 1, 0)),
-    ("confirm", "pathology", (0, 0, 1, 1, 0)),
-    ("confirm", None, (0, 0, 1, 1, 0)),
-    ("dismiss_failed", "radiology", (1, 1, 1, 1, 0)),
-    ("dismiss_failed", "pathology", (0, 0, 1, 1, 0)),
-    ("dismiss_failed", None, (0, 0, 1, 1, 0)),
-    ("waive", "radiology", (0, 1, 0, 1, 0)),
-    ("waive", "pathology", (0, 0, 0, 1, 0)),
-    ("waive", None, (0, 0, 0, 1, 0)),
-    ("list_case", None, (0, 0, 1, 1, 0)),
-    ("match", None, (0, 0, 1, 1, 0)),
-    ("session", None, (0, 0, 1, 1, 0)),
-    ("create_case", None, (0, 0, 1, 1, 0)),
-    ("delete_case", None, (0, 0, 1, 1, 0)),
-    ("board_record", None, (0, 0, 1, 1, 0)),
-    ("delete_document", "radiology", (0, 1, 1, 1, 0)),
-    ("delete_document", "pathology", (0, 0, 1, 1, 0)),
-    ("delete_document", "Radiology", (0, 1, 1, 1, 0)),
-    ("delete_document", None, (0, 0, 1, 1, 0)),
-    ("delete_document", "  ", (0, 0, 1, 1, 0)),
-    ("update_action", "radiology", (1, 1, 1, 1, 0)),
-    ("update_action", "Radiology", (1, 1, 1, 1, 0)),
-    ("update_action", "pathology", (0, 0, 1, 1, 0)),
-    ("update_action", None, (0, 0, 1, 1, 0)),
-    ("review", None, (1, 1, 1, 1, 0)),
-    ("manage_org", None, (0, 0, 0, 1, 0)),
-    ("format_disk", None, (0, 0, 0, 0, 0)),
-    ("upload", "Cardiology", (0, 0, 1, 1, 0)),
-    ("upload", "Radiology", (1, 1, 1, 1, 0)),
-    ("inbox", "Cardiology", (0, 0, 0, 1, 0)),
-    ("confirm", "Cardiology", (0, 0, 1, 1, 0)),
-    ("waive", "Cardiology", (0, 0, 0, 1, 0)),
-    ("delete_document", "Cardiology", (0, 0, 1, 1, 0)),
-    ("update_action", "Cardiology", (0, 0, 1, 1, 0)),
-    ("dismiss_failed", "Cardiology", (0, 0, 1, 1, 0)),
+    ("view", None, (1, 1, 1, 1, 1, 1, 1)),
+    ("upload", "radiology", (1, 1, 1, 0, 0, 1, 0)),
+    ("upload", "pathology", (0, 0, 1, 0, 0, 1, 0)),
+    ("upload", None, (0, 0, 1, 0, 0, 1, 0)),
+    ("upload", "", (0, 0, 1, 0, 0, 1, 0)),
+    ("upload_to_case", None, (0, 0, 1, 1, 0, 1, 0)),
+    ("inbox", "radiology", (1, 1, 0, 0, 0, 1, 0)),
+    ("inbox", "Radiology", (1, 1, 0, 0, 0, 1, 0)),
+    ("inbox", "pathology", (0, 0, 0, 0, 0, 1, 0)),
+    ("inbox", "breast_surgery", (0, 0, 0, 1, 0, 1, 0)),
+    ("inbox", None, (0, 0, 0, 0, 0, 1, 0)),
+    ("confirm", "radiology", (1, 1, 0, 1, 0, 1, 0)),
+    ("confirm", "pathology", (0, 0, 0, 1, 0, 1, 0)),
+    ("confirm", None, (0, 0, 0, 1, 0, 1, 0)),
+    ("dismiss_failed", "radiology", (1, 1, 0, 1, 0, 1, 0)),
+    ("dismiss_failed", "pathology", (0, 0, 0, 1, 0, 1, 0)),
+    ("dismiss_failed", None, (0, 0, 0, 1, 0, 1, 0)),
+    ("waive", "radiology", (0, 0, 0, 1, 0, 1, 0)),
+    ("waive", "pathology", (0, 0, 0, 1, 0, 1, 0)),
+    ("waive", None, (0, 0, 0, 1, 0, 1, 0)),
+    ("list_case", None, (0, 0, 1, 0, 0, 1, 0)),
+    ("match", None, (0, 0, 1, 0, 0, 1, 0)),
+    ("session", None, (0, 0, 1, 0, 0, 1, 0)),
+    ("create_case", None, (0, 0, 1, 1, 0, 1, 0)),
+    ("delete_case", None, (0, 0, 1, 0, 0, 1, 0)),
+    ("board_record", None, (0, 0, 1, 0, 0, 1, 0)),
+    ("delete_document", "radiology", (0, 1, 1, 1, 0, 1, 0)),
+    ("delete_document", "pathology", (0, 0, 1, 1, 0, 1, 0)),
+    ("delete_document", "Radiology", (0, 1, 1, 1, 0, 1, 0)),
+    ("delete_document", None, (0, 0, 1, 1, 0, 1, 0)),
+    ("delete_document", "  ", (0, 0, 1, 1, 0, 1, 0)),
+    ("update_action", "radiology", (1, 1, 1, 0, 0, 1, 0)),
+    ("update_action", "Radiology", (1, 1, 1, 0, 0, 1, 0)),
+    ("update_action", "pathology", (0, 0, 1, 0, 0, 1, 0)),
+    ("update_action", None, (0, 0, 1, 0, 0, 1, 0)),
+    ("review", None, (1, 1, 1, 1, 0, 1, 0)),
+    ("manage_org", None, (0, 0, 0, 0, 0, 1, 0)),
+    ("manage_department", "radiology", (0, 0, 0, 0, 1, 1, 0)),
+    ("manage_department", "Radio-diagnosis", (0, 0, 0, 0, 1, 1, 0)),
+    ("manage_department", "pathology", (0, 0, 0, 0, 0, 1, 0)),
+    ("manage_department", None, (0, 0, 0, 0, 0, 1, 0)),
+    ("manage_department", "Cardiology", (0, 0, 0, 0, 0, 1, 0)),
+    ("format_disk", None, (0, 0, 0, 0, 0, 0, 0)),
+    ("upload", "Cardiology", (0, 0, 1, 0, 0, 1, 0)),
+    ("upload", "Radiology", (1, 1, 1, 0, 0, 1, 0)),
+    ("inbox", "Cardiology", (0, 0, 0, 0, 0, 1, 0)),
+    ("confirm", "Cardiology", (0, 0, 0, 1, 0, 1, 0)),
+    ("waive", "Cardiology", (0, 0, 0, 1, 0, 1, 0)),
+    ("delete_document", "Cardiology", (0, 0, 1, 1, 0, 1, 0)),
+    ("update_action", "Cardiology", (0, 0, 1, 0, 0, 1, 0)),
+    ("dismiss_failed", "Cardiology", (0, 0, 0, 1, 0, 1, 0)),
 ]
 DEPT_ACTIONS = sorted(a for a, rule in org.ACTIONS.items() if rule["dept"])
 
@@ -392,11 +406,11 @@ def test_every_department_action_has_a_none_row_and_a_no_dept_rule():
     assert all("no_dept" in org.ACTIONS[a] for a in DEPT_ACTIONS)
 
 
-def test_no_department_is_coordinator_business_not_any_head(people):
-    """Review finding S2: a document or action with no department (uploaded straight into a Case File, pre-Phase-2,
-    or an empty / unresolved Responsible Department) belongs to the coordinator. A head or member of any department
-    must not delete, update or upload it."""
-    h, m, c, a = people["head"], people["member"], people["coordinator"], people["admin"]
+def test_no_department_is_coordinator_or_treating_business_not_any_head(people):
+    """Review finding S2 (V1), kept in V2: a document or action with no department (uploaded straight into a Case File, pre-Phase-2,
+    or an empty / unresolved Responsible Department) belongs to the coordinator (and, for clinical confirmations, to the treating
+    doctors). A head or member of a supporting department must not delete, update or upload it."""
+    h, m, c, a, t = people["head"], people["member"], people["coordinator"], people["admin"], people["treating"]
     for action in ("delete_document", "update_action", "upload"):
         assert org.can(h, action, None) is False, action
         assert org.can(m, action, None) is False, action
@@ -406,39 +420,53 @@ def test_no_department_is_coordinator_business_not_any_head(people):
         with pytest.raises(PermissionError):
             org.require(h, action, None)
     # an inbox always has a department: none named is admin only
-    assert [org.can(people[u], "inbox", None) for u in ("member", "head", "coordinator", "admin")] == [False, False, False, True]
-    # the rules that already had a no-department case keep it
-    assert [org.can(people[u], "confirm", None) for u in USERS] == [False, False, True, True, False]
-    assert [org.can(people[u], "dismiss_failed", None) for u in USERS] == [False, False, True, True, False]
-    assert [org.can(people[u], "waive", None) for u in USERS] == [False, False, False, True, False]
+    assert [org.can(people[u], "inbox", None) for u in ("member", "head", "coordinator", "treating", "admin")] == [False, False, False, False, True]
+    # clinical confirmations without a department: treating doctors (V2), no longer the coordinator
+    assert [org.can(people[u], "confirm", None) for u in USERS] == [False, False, False, True, False, True, False]
+    assert [org.can(people[u], "dismiss_failed", None) for u in USERS] == [False, False, False, True, False, True, False]
+    assert [org.can(people[u], "waive", None) for u in USERS] == [False, False, False, True, False, True, False]
 
 
-def test_unresolvable_department_matches_no_membership_and_coordinator_keeps_listed_rights(people):
-    """"Cardiology" is not a department: a head of Radiology gets nothing for it; the coordinator gets exactly
-    what "who" lists for the action (upload, confirm, dismiss_failed, delete_document, update_action; not inbox or
-    waive); admins keep everything."""
-    h, c, a = people["head"], people["coordinator"], people["admin"]
+def test_unresolvable_department_matches_no_membership_and_hospital_wide_roles_keep_listed_rights(people):
+    """"Cardiology" is not a department: a head of Radiology gets nothing for it; the coordinator and a treating doctor get exactly
+    what "who" lists for the action; admins keep everything."""
+    h, c, t, a = people["head"], people["coordinator"], people["treating"], people["admin"]
     for action in DEPT_ACTIONS:
         assert org.can(h, action, "Cardiology") is False, action
         assert org.can(c, action, "Cardiology") is ("coordinator" in org.ACTIONS[action]["who"]), action
+        assert org.can(t, action, "Cardiology") is ("treating" in org.ACTIONS[action]["who"]), action
         assert org.can(a, action, "Cardiology") is True, action
-    assert {x for x in DEPT_ACTIONS if org.can(c, x, "Cardiology")} == {"upload", "confirm", "dismiss_failed", "delete_document", "update_action"}
+    assert {x for x in DEPT_ACTIONS if org.can(c, x, "Cardiology")} == {"upload", "delete_document", "update_action"}
+    assert {x for x in DEPT_ACTIONS if org.can(t, x, "Cardiology")} == {"confirm", "dismiss_failed", "waive", "delete_document"}
 
 
 def test_raw_alias_names_resolve_like_ids(people):
     """Routes pass the raw department name ("Radiology", "Department of Radio-diagnosis", a V1 id); it resolves like the id."""
     h = people["head"]
     for name in ("radiology", "radio_diagnosis", "Radiology", "Department of Radio-diagnosis", "radiodiagnosis", " Imaging "):
-        assert org.can(h, "delete_document", name) and org.can(h, "waive", name) and org.can(h, "inbox", name), name
+        assert org.can(h, "delete_document", name) and org.can(h, "inbox", name) and org.can(h, "confirm", name), name
     assert not org.can(h, "delete_document", "Histopathology")
     assert org.can(people["path_member"], "update_action", "Histopathology")
     assert org.can(people["path_member"], "update_action", "Molecular Pathology")  # merged into Pathology
 
 
+def test_supporting_departments_never_waive_or_create(people):
+    """V2 plan section 4: a supporting doctor (even a head) receives and answers notifications; the treating doctor waives and creates."""
+    for u in ("member", "head", "two_dept", "path_member"):
+        assert not org.can(people[u], "waive", "radiology") and not org.can(people[u], "create_case") and not org.can(people[u], "upload_to_case"), u
+    t = people["treating"]
+    assert org.can(t, "waive", "radiology") and org.can(t, "create_case") and org.can(t, "upload_to_case") and org.can(t, "confirm", "pathology")
+    assert not org.can(t, "inbox", "radiology") and not org.can(t, "session") and not org.can(t, "list_case")
+    assert not org.can(people["coordinator"], "waive", "radiology") and not org.can(people["coordinator"], "confirm", "radiology")
+    d = people["dept_admin"]
+    assert org.can(d, "manage_department", "radiology") and not org.can(d, "manage_department", "pathology") and not org.can(d, "manage_org")
+    assert not org.can(d, "inbox", "radiology") and not org.can(d, "confirm", "radiology") and not d["known"] and org.can(d, "view")
+
+
 def test_department_action_without_no_dept_rule_is_admin_only(people, monkeypatch):
     """Fail closed: a future department-scoped action that forgets "no_dept" is admin only when no department is given."""
     monkeypatch.setitem(org.ACTIONS, "future_dept_action", {"who": ("member", "head", "coordinator"), "dept": True, "doc": ""})
-    assert [org.can(people[u], "future_dept_action", None) for u in USERS] == [False, False, False, True, False]
+    assert [org.can(people[u], "future_dept_action", None) for u in USERS] == [False, False, False, False, False, True, False]
     assert org.can(people["member"], "future_dept_action", "radiology")
 
 
@@ -451,7 +479,7 @@ def test_can(people, action, dept, expected):
 def test_can_specific_cases(people):
     m, h, c = people["member"], people["head"], people["coordinator"]
     assert not org.can(m, "inbox", "pathology") and not org.can(m, "waive", "radiology") and not org.can(m, "list_case")
-    assert org.can(h, "waive", "radiology") and org.can(h, "waive", "Radiology") and not org.can(h, "waive", "pathology")
+    assert org.can(h, "delete_document", "radiology") and org.can(h, "delete_document", "Radiology") and not org.can(h, "delete_document", "pathology")
     assert org.can(c, "list_case") and org.can(c, "match") and org.can(c, "create_case")
     assert not org.can(c, "inbox", "radiology") and not org.can(c, "manage_org")
     assert org.can(people["vaidyx_admin"], "manage_org") and org.can(org.roles(""), "manage_org")
@@ -462,9 +490,9 @@ def test_can_specific_cases(people):
 
 
 def test_require(people):
-    org.require(people["head"], "waive", "radiology")
+    org.require(people["treating"], "waive", "radiology")
     with pytest.raises(PermissionError, match="waive") as e:
-        org.require(people["member"], "waive", "radiology")
+        org.require(people["head"], "waive", "radiology")
     assert "Radiology" in str(e.value) and "—" not in str(e.value)
     with pytest.raises(PermissionError, match="list_case"):
         org.require(people["member"], "list_case")
@@ -479,6 +507,7 @@ def test_visible_departments_for_inbox(people):
     assert org.visible_departments_for_inbox(people["two_dept"]) == ["radiology", "pathology"]
     assert org.visible_departments_for_inbox(people["path_member"]) == ["pathology"]
     assert org.visible_departments_for_inbox(people["coordinator"]) == []
+    assert org.visible_departments_for_inbox(people["treating"]) == ["breast_surgery"] and org.visible_departments_for_inbox(people["dept_admin"]) == []
     assert org.visible_departments_for_inbox(people["admin"]) == all_ids
     assert org.visible_departments_for_inbox(people["vaidyx_admin"]) == all_ids
     assert org.visible_departments_for_inbox(people["unknown"]) == []
@@ -492,6 +521,19 @@ def test_my_departments_and_admin_departments(people, data_root):
     org.save(_org(asha={"admin_of": ["radiology"]}), by="test")
     assert [d["id"] for d in org.admin_departments(org.roles("asha"))] == ["radiology"] and org.my_departments(org.roles("asha")) == []
     assert len(org.admin_departments(org.roles("tbadmin"))) == len(org.DEFAULT_DEPARTMENTS)
+
+
+def test_save_audits_every_account_change(data_root):
+    org.save(_org(ravi={"departments": {"radiology": "member"}}), by="root")
+    org.save(_org(ravi={"departments": {"radiology": "head"}, "disabled": True}, asha={"coordinator": True}), by="root")
+    o = copy.deepcopy(org.load()); o["admins"] = ["tbadmin", "asha"]; o["routes"] = {"breast.cbc": "pathology"}; del o["users"]["ravi"]
+    org.save(o, by="root")
+    kinds = [(e["kind"], e.get("username")) for e in org.read_audit()]
+    assert kinds == [("routes_changed", None), ("root_admins_changed", None), ("account_unplaced", "ravi"), ("org_saved", None),
+                     ("account_roles_changed", "ravi"), ("account_placed", "asha"), ("org_saved", None),
+                     ("root_admins_changed", None), ("account_placed", "ravi"), ("org_saved", None)]
+    ev = next(e for e in org.read_audit() if e["kind"] == "account_roles_changed")
+    assert ev["roles_before"]["departments"] == {"radiology": "member"} and ev["roles"]["disabled"] is True
 
 
 def test_audit_never_stores_a_password(data_root):

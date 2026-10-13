@@ -5,7 +5,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const S = { caseId: null, data: null, tab: "ready", cards: null, roles: null, protocols: null, chat: [], briefs: {}, me: null, org: null };
 // permissions: the server decides (org.can on every route); the UI only hides what the current user may not do (V1 item 2.1)
 const can = (k, id) => { const v = (S.data?.permissions || {})[k]; return v === true || !!(v && typeof v === "object" && id && v[id]); };
-const meCan = (k) => !!S.me && (S.me.admin || (k === "create_case" ? S.me.coordinator : false));
+const meCan = (k) => !!S.me && (S.me.admin || !!(S.org?.can || {})[k]);  // the server says what this user may do (V2 item 2.2)
 
 async function api(path, opts = {}) {
   const o = { credentials: "same-origin", ...opts };

@@ -121,27 +121,30 @@ OWNER_NAME = "Owning department"
 ACTIONS = {
     "view": {"who": ("any",), "dept": False, "doc": "Open the Tumour Board pages (any logged-in user)"},
     "upload": {"who": ("member", "head", "coordinator"), "dept": True, "no_dept": ("coordinator",),
-               "doc": "Upload a document for a department (no department: coordinator)"},
-    "upload_to_case": {"who": ("coordinator",), "dept": False, "doc": "Upload straight into a Case File"},
+               "doc": "Upload a document for a department (no department: coordinator); the V1 path, kept for tests and outside-report intake (V2 item 3.7)"},
+    "upload_to_case": {"who": ("coordinator", "treating"), "dept": False, "doc": "Upload straight into a Case File (outside reports: treating doctors)"},
     "inbox": {"who": ("member", "head"), "dept": True, "no_dept": (),
               "doc": "See a department's inbox (no department: admin; an inbox always has a department)"},
-    "confirm": {"who": ("member", "head", "coordinator"), "dept": True, "no_dept": ("coordinator",),
-                "doc": "Confirm a department's document (no department: coordinator)"},
-    "waive": {"who": ("head",), "dept": True, "no_dept": (), "doc": "Waive a requirement for a department (no department: admin)"},
-    "dismiss_failed": {"who": ("member", "head", "coordinator"), "dept": True, "no_dept": ("coordinator",),
+    "confirm": {"who": ("member", "head", "treating"), "dept": True, "no_dept": ("treating",),
+                "doc": "Confirm a document: a treating doctor, or the department that uploaded it (no department: treating doctors)"},
+    "waive": {"who": ("treating",), "dept": True, "no_dept": ("treating",),
+              "doc": "Waive a requirement: treating doctors (the owning department from V2 item 5.1); never a supporting department or the coordinator"},
+    "dismiss_failed": {"who": ("member", "head", "treating"), "dept": True, "no_dept": ("treating",),
                        "doc": "Dismiss a failed document (same as confirm)"},
-    "list_case": {"who": ("coordinator",), "dept": False, "doc": "List Case Files"},
+    "list_case": {"who": ("coordinator",), "dept": False, "doc": "List Case Files for the board"},
     "match": {"who": ("coordinator",), "dept": False, "doc": "Run the matching queue"},
     "session": {"who": ("coordinator",), "dept": False, "doc": "Run board sessions"},
-    "create_case": {"who": ("coordinator",), "dept": False, "doc": "Create a Case File"},
+    "create_case": {"who": ("coordinator", "treating"), "dept": False, "doc": "Create a Case File (treating doctors; the coordinator for the V1 path)"},
     "delete_case": {"who": ("coordinator",), "dept": False, "doc": "Delete a Case File"},
     "board_record": {"who": ("coordinator",), "dept": False, "doc": "Record the board discussion"},
-    "delete_document": {"who": ("head", "coordinator"), "dept": True, "no_dept": ("coordinator",),
-                        "doc": "Delete a department's document (no department: coordinator)"},
+    "delete_document": {"who": ("head", "coordinator", "treating"), "dept": True, "no_dept": ("coordinator", "treating"),
+                        "doc": "Delete a document: a treating doctor, the uploading department's head or the coordinator"},
     "update_action": {"who": ("member", "head", "coordinator"), "dept": True, "no_dept": ("coordinator",),
                       "doc": "Update a pending action for a department (no department: coordinator)"},
     "review": {"who": ("known",), "dept": False, "doc": "Expert review of an AI artefact (human oversight)"},
-    "manage_org": {"who": (), "dept": False, "doc": "Edit the hospital, departments, routes and users (root admin only)"},
+    "manage_org": {"who": (), "dept": False, "doc": "Edit the hospital, departments, routes, root admins, coordinators and department admins (root admin only)"},
+    "manage_department": {"who": ("dept_admin",), "dept": True, "no_dept": (),
+                          "doc": "Create, disable and remove the doctor logins of a department (its department admins; no department: admin)"},
 }
 
 _SLUG = re.compile(r"^[a-z0-9_]+$")
@@ -323,12 +326,30 @@ def load() -> dict:
 
 
 def save(org: dict, by: str) -> dict:
-    """Validate, write org.json atomically and append an org_saved entry to org_audit.jsonl."""
+    """Validate, write org.json atomically and append an org_saved entry to org_audit.jsonl, plus one entry per account whose roles
+    changed (account_placed / account_roles_changed / account_unplaced), one when the root admins change and one when the routes change:
+    every account change is audited whichever screen made it (V2 item 2.2)."""
     clean = validate(org)
     p = path()
+    before = load() if p.exists() else _filled(DEFAULT_ORG)
     _write_json(p, clean)
-    audit("org_saved", by, departments=len(clean["departments"]), users=len(clean["users"]))
     _cache.update(key=_stat_key(p), org=clean)
+    audit("org_saved", by, departments=len(clean["departments"]), users=len(clean["users"]))
+    old_users, new_users = before.get("users") or {}, clean["users"]
+    for u in sorted(set(old_users) | set(new_users)):
+        a, b = old_users.get(u), new_users.get(u)
+        if a == b:
+            continue
+        if a is None:
+            audit("account_placed", by, username=u, roles=b)
+        elif b is None:
+            audit("account_unplaced", by, username=u, roles_before=a)
+        else:
+            audit("account_roles_changed", by, username=u, roles_before=a, roles=b)
+    if (before.get("admins") or []) != clean["admins"]:
+        audit("root_admins_changed", by, before=before.get("admins") or [], after=clean["admins"])
+    if (before.get("routes") or {}) != clean["routes"]:
+        audit("routes_changed", by, before=before.get("routes") or {}, after=clean["routes"])
     return clean
 
 

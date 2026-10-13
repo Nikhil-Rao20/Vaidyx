@@ -5,7 +5,7 @@ import asyncio, json, logging
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
-from src.auth_helpers import require_user
+from src.auth_helpers import get_current_user, require_user
 from tumour_board import agents, config, guidelines, llm, notify, org, postboard, protocol, qa, rules, search, service, store, summary
 from tumour_board import confirm  # clinician confirmations (V1 item 2.2)
 from tumour_board import intake  # department uploads and patient matching (V1 items 2.3, 2.4)
@@ -17,6 +17,7 @@ from tumour_board import connectors, mcp_server  # MCP: hospital-system connecto
 from tumour_board import discord  # discordances between reports, decision watch (12 Oct)
 from tumour_board import fhir_export  # FHIR R4 document bundle and the HBCR registry abstract (12 Oct)
 from tumour_board import metrics  # agenda readiness, chase list, quality dashboard (12 Oct)
+from tumour_board import accounts  # department admins create / disable / remove doctor logins; root admin accounts (V2 item 2.2)
 
 log = logging.getLogger("tumour_board")
 
@@ -26,11 +27,18 @@ from fastapi.responses import JSONResponse
 
 
 class _ModelErrorRoute(APIRoute):
-    """Model-server problems become a clear 502 for the UI instead of a 500 stack trace."""
+    """Model-server problems become a clear 502 for the UI instead of a 500 stack trace. A login whose Tumour Board access is disabled
+    (org.json `disabled`, V2 item 2.2) is refused on every Tumour Board route, whatever the route checks itself."""
     def get_route_handler(self):
         h = super().get_route_handler()
 
         async def handler(request):
+            try:
+                u = get_current_user(request)
+                if u and org.roles(u).get("disabled"):  # the flag is read from the user map alone: a Vaidyx admin is never in it
+                    return JSONResponse({"detail": "Your Tumour Board access is disabled. Ask your department admin or the root admin."}, status_code=403)
+            except Exception as e:  # the organisation file is unreadable: the route's own checks still apply
+                log.warning("disabled-user check skipped (%s)", e)
             try:
                 return await h(request)
             except llm.LLMError as e:
@@ -60,8 +68,36 @@ def _need(r, action, department=None):
 
 def _need_known(r):
     """Model calls and re-checks are for users the hospital set-up knows (a department member, head, coordinator or admin)."""
+    if r.get("disabled"):
+        raise HTTPException(403, "Your Tumour Board access is disabled. Ask your department admin or the root admin.")
     if not (r.get("admin") or r.get("known")):
         raise HTTPException(403, "Your account is not placed in any department yet. Ask a Tumour Board admin.")
+
+
+def _auth_manager(request):
+    mgr = getattr(request.app.state, "auth_manager", None)
+    if mgr is None:
+        raise HTTPException(503, "The Vaidyx login system is not available; accounts cannot be managed right now.")
+    return mgr
+
+
+def _account_limits():
+    """The main app's password rule and reserved names (read here, never changed)."""
+    try:
+        from src.constants import PASSWORD_MIN_LENGTH
+        from core.auth import RESERVED_USERNAMES
+        return {"reserved": RESERVED_USERNAMES, "min_length": PASSWORD_MIN_LENGTH}
+    except Exception:
+        return {"reserved": ("api", "demo", "system", "internal-tool"), "min_length": accounts.PASSWORD_MIN}
+
+
+def _account_call(fn, *a, **kw):
+    try:
+        return fn(*a, **kw)
+    except accounts.AccountError as e:
+        raise HTTPException(e.status, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 def _doc_department(d):
@@ -296,12 +332,17 @@ def setup_tumour_board_routes():
     async def get_org(request: Request):
         """The hospital, its departments and the caller's own roles. The user map and the Vaidyx account list are returned to admins only."""
         rl = _roles(request)
+        if rl.get("disabled"):
+            raise HTTPException(403, "Your Tumour Board access is disabled. Ask your department admin or the root admin.")
         o = org.load()
         out = {"hospital": o["hospital"], "departments": o["departments"], "me": rl, "my_departments": org.my_departments(rl),
-               "inbox_departments": org.visible_departments_for_inbox(rl)}  # whose department inbox this user may open (V1 item 4.4)
+               "inbox_departments": org.visible_departments_for_inbox(rl),  # whose department inbox this user may open (V1 item 4.4)
+               "admin_departments": org.admin_departments(rl) if (rl["admin"] or rl.get("admin_of")) else [],  # V2 item 2.2
+               "can": {k: org.can(rl, k) for k in ("create_case", "list_case", "session", "upload_to_case", "match", "manage_org", "board_record")},
+               "reset_note": accounts.RESET_NOTE}
         if rl["admin"]:
             mgr = getattr(request.app.state, "auth_manager", None)
-            out["users"], out["admins"] = o["users"], o["admins"]
+            out["users"], out["admins"], out["routes"] = o["users"], o["admins"], o["routes"]
             try:
                 out["vaidyx_users"] = [{"username": x["username"], "is_admin": bool(x.get("is_admin"))} for x in mgr.list_users()] if mgr else []
             except Exception:
@@ -315,7 +356,81 @@ def setup_tumour_board_routes():
             o = org.save(b, by=rl["user"])
         except ValueError as e:
             raise HTTPException(400, str(e))
-        return {"ok": True, "hospital": o["hospital"], "departments": o["departments"], "users": o["users"], "admins": o["admins"]}
+        return {"ok": True, "hospital": o["hospital"], "departments": o["departments"], "users": o["users"], "admins": o["admins"], "routes": o["routes"]}
+
+    # ---- accounts (V2 item 2.2): plain Vaidyx logins placed in Tumour Board roles; never a Vaidyx admin ----
+    @r.get("/org/audit")
+    async def org_audit(request: Request, limit: int = 200):
+        rl = _roles(request); _need(rl, "manage_org")
+        return {"events": org.read_audit(max(1, min(limit, 1000)))}
+
+    @r.get("/org/accounts")
+    async def org_accounts(request: Request):
+        """Root admin: every Tumour Board placement with whether its Vaidyx account exists; Vaidyx admins listed as such, never placeable."""
+        rl = _roles(request); _need(rl, "manage_org")
+        mgr = getattr(request.app.state, "auth_manager", None)
+        o = org.load()
+        rows = []
+        for u, v in sorted(o["users"].items()):
+            rows.append({"username": u, **v, "root_admin": u in o["admins"], "account": accounts.account_exists(mgr, u) if mgr else None,
+                         "vaidyx_admin": accounts.is_vaidyx_admin(mgr, u)})
+        try:
+            vaidyx = [{"username": x["username"], "is_admin": bool(x.get("is_admin")), "placed": x["username"] in o["users"]} for x in mgr.list_users()] if mgr else []
+        except Exception:
+            vaidyx = []
+        return {"accounts": rows, "vaidyx_users": vaidyx, "admins": o["admins"], "reset_note": accounts.RESET_NOTE}
+
+    @r.post("/org/accounts")
+    async def create_account(request: Request):
+        """Root admin: create (or find) a plain login and give it roles: coordinator, root admin, department admin, doctor."""
+        rl = _roles(request); _need(rl, "manage_org"); b = await request.json()
+        mgr = _auth_manager(request)
+        out = _account_call(accounts.create_account, mgr, rl["user"], b.get("username"), b.get("password"), display_name=b.get("display_name") or "",
+                            coordinator=bool(b.get("coordinator", False)), admin_of=b.get("admin_of") or [], departments=b.get("departments") or {},
+                            root_admin=bool(b.get("root_admin", False)), **_account_limits())
+        return {"ok": True, **out}
+
+    @r.get("/org/departments/{dept}/doctors")
+    async def department_doctors(dept: str, request: Request):
+        rl = _roles(request)
+        did = org.department_id(dept)
+        if not did:
+            raise HTTPException(404, "Unknown department")
+        _need(rl, "manage_department", did)
+        mgr = getattr(request.app.state, "auth_manager", None)
+        return {"department": org.department(did), "doctors": accounts.department_doctors(did, mgr), "can_reset": False, "reset_note": accounts.RESET_NOTE}
+
+    @r.post("/org/departments/{dept}/doctors")
+    async def create_doctor(dept: str, request: Request):
+        """Department admin: a new doctor login of this department (or an existing plain account placed here). Never a Vaidyx admin."""
+        rl = _roles(request); b = await request.json()
+        did = org.department_id(dept)
+        if not did:
+            raise HTTPException(404, "Unknown department")
+        _need(rl, "manage_department", did)
+        mgr = _auth_manager(request)
+        made = _account_call(accounts.ensure_account, mgr, b.get("username"), b.get("password"), rl["user"], **_account_limits())
+        placed = _account_call(accounts.place_doctor, rl["user"], did, made["username"], role=b.get("role") or "member", display_name=b.get("display_name"))
+        return {"ok": True, "created": made["created"], **placed}
+
+    @r.put("/org/departments/{dept}/doctors/{username}")
+    async def update_doctor(dept: str, username: str, request: Request):
+        rl = _roles(request); b = await request.json()
+        did = org.department_id(dept)
+        if not did:
+            raise HTTPException(404, "Unknown department")
+        _need(rl, "manage_department", did)
+        out = _account_call(accounts.update_doctor, rl["user"], rl, did, username, role=b.get("role"), disabled=b.get("disabled"))
+        return {"ok": True, **out}
+
+    @r.delete("/org/departments/{dept}/doctors/{username}")
+    async def remove_doctor(dept: str, username: str, request: Request):
+        rl = _roles(request)
+        did = org.department_id(dept)
+        if not did:
+            raise HTTPException(404, "Unknown department")
+        _need(rl, "manage_department", did)
+        return {"ok": True, **_account_call(accounts.remove_doctor, rl["user"], rl, did, username)}
 
     @r.get("/cases")
     async def cases(request: Request):
