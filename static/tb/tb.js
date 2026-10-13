@@ -38,7 +38,7 @@ async function loadModels() {
 
 // ------------------------------------------------------------------ cases
 async function loadCases() {
-  const d = await api("/cases"); S.demoList = d.demo;
+  const d = await api("/cases"); S.demoList = d.demo; S.cases = d.cases;  // listed board dates feed the agenda panel (12 Oct)
   const awaiting = d.cases.filter((c) => c.listing?.status === "awaiting_listing");
   $("#case-list").innerHTML = (awaiting.length ? `<div class="small muted" style="margin:2px 0 6px">${awaiting.length} awaiting listing</div>` : "") + (d.cases.length ? d.cases.slice().sort((a, b) => (b.listing?.status === "awaiting_listing") - (a.listing?.status === "awaiting_listing")).map((c) => `
     <div class="citem ${c.case_id === S.caseId ? "on" : ""}" data-case="${esc(c.case_id)}">
@@ -235,6 +235,64 @@ function renderReady() {
   if (arr) arr.onclick = async () => { try { const j = await api(`/cases/${S.caseId}/demo-arrivals`, { method: "POST" }); watchJob(j.job); } catch (e) { toast(e.message); } };
   bindActions($("#tab-ready"));
   bindDiscord($("#tab-ready"));
+}
+
+// ------------------------------------------------------------------ quality dashboard and agenda readiness (12 Oct)
+const FORECAST = { ready: ["✓", "Ready"], on_track: ["→", "On track"], at_risk: ["!", "At risk"], blocked: ["×", "Blocked"], not_listed: ["…", "Awaiting listing"] };
+const fcChip = (f) => `<span class="chip fc-${esc(f)}">${esc((FORECAST[f] || ["", f])[0])} ${esc((FORECAST[f] || ["", f])[1])}</span>`;
+const tile = (label, value, unit = "", sub = "") => `<div class="tile"><div class="lbl">${esc(label)}</div><div class="val">${value == null ? '<span class="muted">n/a</span>' : esc(String(value))}${unit && value != null ? `<small>${esc(unit)}</small>` : ""}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}</div>`;
+const barRow = (label, value, max, text, target = null, muted = false) => `<div class="barrow"><div>${esc(label)}</div><div class="bar"><i class="${muted ? "muted" : ""}" style="width:${max ? Math.max(value ? 2 : 0, Math.round(100 * (value || 0) / max)) : 0}%"></i>${target != null && max ? `<b style="left:${Math.round(100 * target / max)}%" title="target ${target}"></b>` : ""}</div><div class="num">${esc(text)}</div></div>`;
+
+function readinessHTML(a) {
+  if (!a || !a.cases.length) return `<div class="muted small">No Case File is listed for this board date.</div>`;
+  const c = a.counts;
+  return `<div class="tiles">${tile("Days to the board", a.days_to_board, "", a.board_date ? fmtDate(a.board_date) : "")}${tile("Ready", c.ready, "", `of ${a.cases.length} Case Files`)}${tile("On track", c.on_track)}${tile("At risk", c.at_risk, "", "requests due after the board or overdue")}${tile("Blocked", c.blocked, "", "documents failed to read")}${tile("Open requests", a.requests_open, "", `${a.requests_overdue} overdue`)}</div>
+    <table class="t" style="margin-top:8px"><thead><tr><th>Case File</th><th>Forecast</th><th>Readiness</th><th>Open gaps</th><th>Summary</th></tr></thead><tbody>
+    ${a.cases.map((r) => `<tr class="click" data-open="${esc(r.case_id)}"><td><b>${esc(r.patient)}</b><div class="small muted">${esc(r.case_id)} · ${esc(r.protocol || "not listed")}</div></td><td>${fcChip(r.forecast)}<div class="small muted">${esc(r.why)}</div></td>
+      <td><div class="bar" style="min-width:90px"><i style="width:${r.readiness || 0}%"></i></div><div class="small">${r.satisfied ?? 0} of ${r.total ?? 0}${r.level1_open ? ` · L1 ${r.level1_open}` : ""}${r.level2_open ? ` · L2 ${r.level2_open}` : ""}</div></td>
+      <td class="small">${r.gaps.slice(0, 4).map((g) => `${esc(g.label)} <span class="muted">(${esc(g.department)})</span>`).join("<br>")}${r.gaps.length > 4 ? `<br><span class="muted">+${r.gaps.length - 4} more</span>` : ""}${r.discordances_open ? `<br><span class="chip c-rev">${r.discordances_open} report(s) disagree</span>` : ""}</td>
+      <td class="small">${r.summary === "ready" ? '<span class="chip c-ok">ready</span>' : r.summary === "stale" ? '<span class="chip c-warn">stale</span>' : '<span class="chip c-mute">none</span>'}${Object.keys(r.briefs).length ? `<div class="muted">${Object.keys(r.briefs).length} brief(s)</div>` : ""}</td></tr>`).join("")}</tbody></table>
+    <h4 style="margin:14px 0 4px">Chase list: what to ask which department before the board</h4>
+    ${a.chase.length ? a.chase.map((g) => `<div style="margin:6px 0"><b>${esc(g.department)}</b> <span class="muted small">${g.items.length} request(s)${g.overdue ? `, ${g.overdue} overdue` : ""}</span>
+      <table class="t"><tbody>${g.items.map((x) => `<tr><td class="small" style="width:160px"><b>${esc(x.patient)}</b><div class="muted">${esc(x.case_id)}</div></td><td class="small">${esc(x.label)}${x.what ? `<div class="muted">${esc(x.what).slice(0, 160)}</div>` : ""}</td>
+        <td class="small" style="width:150px">${x.due ? fmtDate(x.due) : "no due date"}<div>${x.overdue ? '<span class="chip c-bad">overdue</span>' : x.after_board ? '<span class="chip c-warn">due after the board</span>' : x.days_left != null ? `<span class="muted">${x.days_left} day(s) left</span>` : ""}</div></td></tr>`).join("")}</tbody></table></div>`).join("") : '<div class="muted small">Nothing to chase.</div>'}`;
+}
+
+async function showDashboard(start = "", end = "") {
+  stopRoomPoll(); S.roomId = null; showOnly("dashboard");
+  $("#dashboard").innerHTML = `<div class="card"><h3>Tumour Board quality dashboard</h3><div class="muted small"><span class="spin"></span> Counting...</div></div>`;
+  let d;
+  try { d = await api(`/metrics/dashboard?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`); } catch (e) { $("#dashboard").innerHTML = `<div class="card">${esc(e.message)}</div>`; return; }
+  const b = d.kpis.before, du = d.kpis.during, af = d.kpis.after;
+  const att = Object.values(du.attendance || {});
+  const outcomes = Object.entries(af.outcomes || {});
+  const flags = Object.entries(af.flags_by_kind || {});
+  const maxOpen = Math.max(1, ...b.by_department.map((x) => x.open + x.closed));
+  $("#dashboard").innerHTML = `<div class="card"><h3>Tumour Board quality dashboard <span class="muted small">counts of what the records and the system's events show · no clinical judgement</span></h3>
+    <div class="dash-filters"><div><label>From</label><input type="date" id="dash-from" value="${esc(start)}"></div><div><label>To</label><input type="date" id="dash-to" value="${esc(end)}"></div>
+      <button class="ghost sm" id="dash-apply">Apply</button><button class="ghost sm" id="dash-clear">All time</button><a class="ghost sm" href="/api/tb/metrics/dashboard?format=csv&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}">Export CSV</a></div>
+    <div class="hero">${b.ready_now_pct == null ? "n/a" : b.ready_now_pct + "%"}</div><div class="muted small" style="margin-bottom:8px">of listed Case Files are ready now (Pre-Authorization met): ${b.ready_now} of ${b.listed}</div></div>
+
+    <div class="card"><h3>Before the board</h3>
+    <div class="tiles">${tile("Case Files", b.cases, "", `${b.listed} listed, ${b.awaiting_listing} awaiting listing`)}${tile("Readiness (median)", b.readiness_median, "%")}${tile("Ready before the board date", b.ready_before_board_pct, "%", `${b.ready_before_board_n} of ${b.ready_before_board_d} past boards · target 80% (Victorian 4.4)`)}${tile("Days listed to ready (median)", b.days_listed_to_ready_median)}${tile("Documents", b.documents, "", `${b.final_signed_pct ?? 0}% final and signed · ${b.scanned_pct ?? 0}% from scans`)}${tile("Reports that disagree", b.discordances_open, "", "open for review")}${tile("Identity flags", b.identity_flags, "", "documents needing a patient check")}${tile("Requests open", b.requests_open, "", `${b.requests_overdue} overdue · ${b.requests_closed} closed · median ${b.hours_to_close_median ?? "n/a"} h to close`)}</div>
+    <h4 style="margin:12px 0 4px">Requests by department</h4><div class="muted small" style="margin-bottom:4px">Bar = open requests; number = open (overdue) · closed · median hours to close.</div>
+    ${b.by_department.length ? b.by_department.map((x) => barRow(x.department, x.open, maxOpen, `${x.open}${x.overdue ? ` (${x.overdue})` : ""} · ${x.closed} · ${x.hours_to_close_median ?? "n/a"} h`)).join("") : '<div class="muted small">No requests yet.</div>'}</div>
+
+    <div class="card"><h3>During the board</h3>
+    <div class="tiles">${tile("Board sessions", du.sessions, "", `${du.closed} closed`)}${tile("Cases discussed", du.cases_discussed)}${tile("Quorate sessions", du.quorate_pct, "%", `${du.quorate_n} of ${du.closed} · surgical, radiation and medical oncologist present (PM-JAY) · target 95% (NHS 2020)`)}${tile("Minutes per case (median)", du.minutes_per_case_median, "", du.minutes_per_case_max != null ? `max ${du.minutes_per_case_max}` : "")}${tile("AI briefs for absent specialties", du.agent_briefs)}${tile("Questions to AI support", du.agent_questions)}</div>
+    <h4 style="margin:12px 0 4px">Attendance per specialty <span class="muted small">closed sessions · target line 90% (Victorian 3.3)</span></h4>
+    ${att.length && du.closed ? att.map((x) => barRow(x.department, x.rate ?? 0, 100, x.rate == null ? "not marked" : `${x.rate}% · ${x.present} of ${x.sessions}`, 90, x.rate == null)).join("") : '<div class="muted small">No closed session yet.</div>'}</div>
+
+    <div class="card"><h3>After the board</h3>
+    <div class="tiles">${tile("Decisions recorded", af.decisions, "", outcomes.map(([k, v]) => `${k} ${v}`).join(" · "))}${tile("Records final (every flag resolved)", af.final_pct, "%", `${af.final} of ${af.decisions}`)}${tile("Flags open / resolved", `${af.flags_open} / ${af.flags_resolved}`)}${tile("PM-JAY composition complete", af.composition_complete_pct, "%", `${af.composition_checked} records checked`)}${tile("Recorded on the board day", af.decision_recorded_same_day_pct, "%", "target 80% (Victorian 8.4, within 24 h)")}${tile("Patient informed within 7 days", af.patient_informed_7d_pct, "%", `${af.patient_informed_7d_n} of ${af.patient_informed_7d_d} · target 80% (Victorian 8.4 / 8.5)`)}${tile("Follow-up actions open", af.board_actions_open, "", `${af.board_actions_overdue} overdue · ${af.board_actions_closed} closed · median ${af.days_to_close_action_median ?? "n/a"} days`)}${tile("Decisions with a changed value", af.decision_watch_open, "", "a later report changed a value the decision cited")}</div>
+    ${flags.length ? `<h4 style="margin:12px 0 4px">Adjudication flags by kind</h4><table class="t"><thead><tr><th>Kind</th><th>Open</th><th>Resolved</th><th>Information only</th></tr></thead><tbody>${flags.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${v.open}</td><td>${v.resolved}</td><td>${v.info}</td></tr>`).join("")}</tbody></table>` : ""}</div>
+
+    <div class="card"><h3>Against the published standards</h3><div class="muted small" style="margin-bottom:4px">Each line names its source; a target is a reference, not a judgement of the hospital.</div>
+    ${d.references.map((r) => `<div class="refrow"><div class="m"><b>${esc(r.label)}</b></div><div class="num"><b>${r.value == null ? "n/a" : r.value + r.unit}</b> <span class="muted">target ${r.target}${esc(r.unit)}</span></div>
+      <div>${r.met == null ? '<span class="chip c-mute">… no data</span>' : r.met ? '<span class="chip c-ok">✓ met</span>' : '<span class="chip c-warn">! below target</span>'}</div><div class="src">${esc(r.source)}</div></div>`).join("")}
+    <div class="muted small" style="margin-top:8px">${esc(d.note)} Generated ${esc((d.generated || "").replace("T", " ").slice(0, 16))}.</div></div>`;
+  $("#dash-apply").onclick = () => showDashboard($("#dash-from").value, $("#dash-to").value);
+  $("#dash-clear").onclick = () => showDashboard();
 }
 
 // ------------------------------------------------------------------ discordances between reports, decision watch (12 Oct)
@@ -1071,6 +1129,7 @@ async function loadOrg() {
   try { S.org = await api("/org"); S.me = S.org.me; } catch (e) { S.org = null; S.me = null; }
   $("#btn-org").classList.toggle("hidden", !S.me?.admin);
   $("#btn-connectors").classList.toggle("hidden", !S.me?.admin);
+  $("#btn-dashboard").classList.toggle("hidden", !(S.me?.admin || S.me?.coordinator));
   $("#btn-new").classList.toggle("hidden", !meCan("create_case"));
 }
 async function showOrg() {
@@ -1271,7 +1330,7 @@ const KIND = { brief_item: "Brief item", point_for_review: "Point for review", n
 let roomTimer = null;
 function stopRoomPoll() { clearTimeout(roomTimer); roomTimer = null; }
 function showOnly(id) {
-  ["welcome", "case", "intake", "inbox", "sessions"].forEach((x) => $("#" + x).classList.toggle("hidden", x !== id));
+  ["welcome", "case", "intake", "inbox", "sessions", "dashboard"].forEach((x) => $("#" + x).classList.toggle("hidden", x !== id));
   $$(".citem").forEach((el) => el.classList.remove("on"));
 }
 async function showSessions() {
@@ -1285,9 +1344,23 @@ async function showSessions() {
       <label for="s-title">Title (optional)</label><input id="s-title" placeholder="e.g. Thoracic Tumour Board">
       <label>Case Files listed for that date (agenda order)</label><div id="s-cands" class="small muted"></div>
       <div style="margin-top:12px"><button class="primary" id="s-create">Create board session</button></div></div>` : ""}
+    <div class="card"><h3>Agenda readiness and chase list <span class="muted small">before the board</span></h3>
+      <div class="muted small" style="margin-bottom:6px">For a board date: which listed Case Files are ready, on track, at risk or blocked (from the Pre-Authorization check and the due dates of the open requests), and what to ask which department before the meeting.</div>
+      <div class="dash-filters"><div><label>Board date</label><input type="date" id="ag-date" value="${today}"></div><button class="ghost sm" id="ag-go">Show</button></div>
+      <div id="ag-out" class="small muted">Choose a board date.</div></div>
     <div class="card"><h3>Sessions <span class="muted small">${r.sessions.length}</span></h3>
       ${r.sessions.length ? `<table class="t"><thead><tr><th>Date</th><th>Title</th><th>Case Files</th><th>Status</th></tr></thead><tbody>${r.sessions.map((x) => `<tr class="click" data-sid="${esc(x.id)}"><td><b>${fmtDate(x.date)}</b></td><td>${esc(x.title || "Tumour Board")}<div class="small muted">${esc(x.id)} · created by ${esc(x.created_by || "")}</div></td><td>${x.cases}</td><td><span class="chip ${(SSTATUS[x.status] || SSTATUS.planned)[0]}">${(SSTATUS[x.status] || SSTATUS.planned)[1]}</span></td></tr>`).join("")}</tbody></table>` : `<div class="muted small">No board sessions yet.</div>`}</div>`;
   $$("#sessions tr[data-sid]").forEach((tr) => (tr.onclick = () => openSession(tr.dataset.sid)));
+  const agendaGo = async () => {
+    $("#ag-out").innerHTML = `<span class="spin"></span>`;
+    try { const a = await api("/metrics/agenda?date=" + encodeURIComponent($("#ag-date").value)); $("#ag-out").innerHTML = readinessHTML(a);
+      $$("#ag-out tr[data-open]").forEach((tr) => (tr.onclick = () => openCase(tr.dataset.open))); }
+    catch (e) { $("#ag-out").textContent = e.message; }
+  };
+  $("#ag-go").onclick = agendaGo;
+  const listedDates = [...new Set((S.cases || []).map((c) => c.board_date).filter(Boolean))].sort();
+  if (listedDates.length) { $("#ag-date").value = listedDates.find((d) => d >= today) || listedDates[listedDates.length - 1]; }
+  agendaGo();
   if (!r.can_manage) return;
   const cands = async () => {
     const c = await api("/sessions/candidates?date=" + encodeURIComponent($("#s-date").value));
@@ -1501,6 +1574,7 @@ $("#btn-new").onclick = newCase;
 $("#btn-cards").onclick = showCards;
 $("#btn-skills").onclick = () => showSkills();
 $("#btn-connectors").onclick = showConnectors;
+$("#btn-dashboard").onclick = () => showDashboard();
 $("#btn-org").onclick = showOrg;
 $("#btn-queue").onclick = showIntake;
 $("#btn-inbox").onclick = showInbox;

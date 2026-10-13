@@ -16,6 +16,7 @@ from tumour_board import skills  # agent role definitions as editable SKILL.md f
 from tumour_board import connectors, mcp_server  # MCP: hospital-system connectors (client) and the read-only server (12 Oct)
 from tumour_board import discord  # discordances between reports, decision watch (12 Oct)
 from tumour_board import fhir_export  # FHIR R4 document bundle and the HBCR registry abstract (12 Oct)
+from tumour_board import metrics  # agenda readiness, chase list, quality dashboard (12 Oct)
 
 log = logging.getLogger("tumour_board")
 
@@ -235,6 +236,26 @@ def setup_tumour_board_routes():
             raise HTTPException(409, str(e))
         except Exception as e:
             raise HTTPException(502, f"The hospital system did not answer: {type(e).__name__}: {str(e)[:160]}")
+
+    @r.get("/metrics/agenda")
+    async def metrics_agenda(request: Request, date: str = ""):
+        """Readiness of the Case Files listed for a board date and the chase list per department (12 Oct)."""
+        rl = _roles(request); _need_known(rl)
+        from tumour_board.docstatus import parse_date
+        iso = parse_date(date) if date else ""
+        if date and not iso:
+            raise HTTPException(400, f"Not a valid date: {date}")
+        return metrics.agenda(iso or store.now_iso()[:10])
+
+    @r.get("/metrics/dashboard")
+    async def metrics_dashboard(request: Request, start: str = "", end: str = "", format: str = "json"):
+        """The hospital's Tumour Board quality dashboard: before, during and after the board, with reference lines (12 Oct)."""
+        rl = _roles(request); _need(rl, "list_case")
+        d = metrics.dashboard(start or None, end or None)
+        if format == "csv":
+            from fastapi.responses import Response
+            return Response(metrics.csv_text(d), media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="tumour_board_quality.csv"'})
+        return d
 
     @r.get("/mcp-server")
     async def mcp_server_info(request: Request):

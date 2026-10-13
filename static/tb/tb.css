@@ -227,6 +227,34 @@ table.t tr.click { cursor: pointer; } table.t tr.click:hover td { background: va
 .modal-body { background: var(--panel); border-radius: 12px; padding: 22px; box-shadow: 0 20px 50px rgba(16, 42, 67, .25); width: min(760px, 94vw); max-height: 88vh; overflow: auto; }
 .toast { position: fixed; bottom: 60px; right: 20px; background: var(--ink); color: #fff; padding: 10px 14px; border-radius: var(--radius); z-index: 40; font-size: 14px; max-width: min(420px, calc(100vw - 40px)); box-shadow: 0 8px 24px rgba(16, 42, 67, .25); }
 .scope { font-size: 13px; color: var(--muted); text-align: center; padding: 8px 20px; border-top: 1px solid var(--line); background: var(--panel); flex-shrink: 0; }
+/* quality dashboard (12 Oct): stat tiles, thin single-hue bars with direct labels, reference lines with icon + label */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 8px 0 4px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; min-width: 0; }
+.tile .lbl { font-size: 12.5px; color: var(--muted); line-height: 1.3; }
+.tile .val { font-size: 26px; font-weight: 700; color: var(--ink); margin-top: 2px; line-height: 1.15; }
+.tile .val small { font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 2px; }
+.tile .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.hero { font-size: 48px; font-weight: 700; color: var(--ink); line-height: 1; }
+.barrow { display: grid; grid-template-columns: minmax(120px, 1.1fr) 3fr minmax(56px, auto); gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.barrow:last-child { border-bottom: 0; }
+.bar { position: relative; height: 10px; background: var(--tint-2); border-radius: 4px; overflow: visible; }
+.bar > i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 4px; }
+.bar > i.muted { background: var(--line-2); }
+.bar > b { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); opacity: .55; }
+.barrow .num { text-align: right; font-variant-numeric: tabular-nums; color: var(--body); }
+.refrow { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; flex-wrap: wrap; }
+.refrow:last-child { border-bottom: 0; }
+.refrow .m { flex: 1 1 260px; min-width: 0; }
+.refrow .src { flex-basis: 100%; font-size: 12px; color: var(--muted); }
+.fc-ready { background: var(--ok-s); color: var(--ok); } .fc-on_track { background: var(--tint); color: var(--link); } .fc-at_risk { background: var(--warn-s); color: var(--warn); }
+.fc-blocked { background: var(--bad-s); color: var(--bad); } .fc-not_listed { background: #eef2f6; color: var(--muted); }
+.dash-filters { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; margin: 6px 0 10px; }
+.dash-filters label { font-size: 12px; color: var(--muted); display: block; }
+.dash-filters input { padding: 6px 8px; border: 1px solid var(--line-2); border-radius: 8px; }
+@media (max-width: 860px) {
+  .topnav { flex-wrap: wrap; justify-content: flex-start; row-gap: 6px; flex-basis: 100%; }
+  .topnav .ghost { padding: 5px 9px; font-size: 12.5px; } .barrow { grid-template-columns: 1fr 2fr auto; } .hero { font-size: 36px; } }
+
 .kv { display: grid; grid-template-columns: 170px 1fr; gap: 4px 10px; font-size: 14px; }
 .kv div:nth-child(odd) { color: var(--muted); }
 .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--tint-line); border-top-color: var(--accent); border-radius: 50%; animation: s 0.8s linear infinite; vertical-align: -2px; }

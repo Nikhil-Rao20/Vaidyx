@@ -1240,6 +1240,30 @@ def discord_section(c):
     wait_job(c, c.post("/api/tb/demo/TB-004").json()["job"]); wait_job(c, c.post("/api/tb/demo/TB-006").json()["job"])  # fresh again
 
 
+def metrics_section(c, base):
+    """12 Oct: agenda readiness and the chase list for a board date; the quality dashboard with reference lines; CSV; permissions."""
+    wait_job(c, c.post("/api/tb/demo/TB-001").json()["job"])
+    d = c.get("/api/tb/cases/TB-001").json()
+    bd = d["case"].get("board_date") or ""
+    if not bd:
+        c.post("/api/tb/cases/TB-001/listing", json={"protocol": "lung_nsclc", "board_date": "2026-10-20"}); bd = "2026-10-20"
+    a = c.get("/api/tb/metrics/agenda", params={"date": bd}).json()
+    row = next((r for r in a["cases"] if r["case_id"] == "TB-001"), None)
+    check("metrics: agenda lists TB-001 with its readiness, gaps and a forecast", row and row["forecast"] in ("ready", "on_track", "at_risk", "blocked") and isinstance(row["gaps"], list) and row["open_requests"] >= 1, json.dumps({k: row.get(k) for k in ("forecast", "why", "readiness", "open_requests")}) if row else "none")
+    check("metrics: the chase list groups open requests by department with days left", a["requests_open"] >= 1 and all("items" in g and all("days_left" in x for x in g["items"]) for g in a["chase"]), f"{len(a['chase'])} departments, {a['requests_open']} requests")
+    bad = c.get("/api/tb/metrics/agenda", params={"date": "not-a-date"})
+    check("metrics: a bad date is refused (400)", bad.status_code == 400)
+    dash = c.get("/api/tb/metrics/dashboard").json()
+    k = dash["kpis"]
+    check("metrics: dashboard has before / during / after KPIs and reference lines with sources", {"before", "during", "after"} <= set(k) and k["before"]["cases"] >= 8 and len(dash["references"]) == 8 and all(r["source"] for r in dash["references"]),
+          f"cases {k['before']['cases']}, decisions {k['after']['decisions']}, sessions {k['during']['sessions']}")
+    check("metrics: requests by department and attendance per specialty present", isinstance(k["before"]["by_department"], list) and isinstance(k["during"]["attendance"], dict) and len(k["during"]["attendance"]) >= 10)
+    csv_ = c.get("/api/tb/metrics/dashboard", params={"format": "csv"})
+    check("metrics: dashboard as CSV", csv_.status_code == 200 and csv_.text.startswith("section,metric,value,target,source") and "reference,quorum" in csv_.text)
+    m = httpx.Client(base_url=base, timeout=60)
+    check("metrics: anonymous cannot read the dashboard (401)", m.get("/api/tb/metrics/dashboard").status_code == 401)
+
+
 async def _call(info, tool, args):
     from tumour_board import connectors as cn
     async with cn.session({"url": info["url"], "token": info["token"]}) as s:
@@ -1299,6 +1323,8 @@ def main(base, pw, only=None):
         mcp_section(c, base); print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}"); return 0 if not FAIL else 1
     if only == "discord":
         discord_section(c); print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}"); return 0 if not FAIL else 1
+    if only == "metrics":
+        metrics_section(c, base); print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}"); return 0 if not FAIL else 1
     if only == "phase9":
         phase9(c)
         print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
@@ -1449,6 +1475,8 @@ def main(base, pw, only=None):
     mcp_section(c, base)
     # 19. 12 Oct: discordances between reports and the decision watch
     discord_section(c)
+    # 21. 12 Oct: agenda readiness, chase list, quality dashboard
+    metrics_section(c, base)
     # leave the demo Case Files in their fresh state for the next user / test
     for cid in ("TB-001", "TB-002", "TB-003"):
         wait_job(c, c.post(f"/api/tb/demo/{cid}").json()["job"])
