@@ -146,12 +146,16 @@ def attach_warnings(job_id, warnings):
     return warnings
 
 
-def add_files(case_id, files, user="", warn=True):
+def add_files(case_id, files, user="", warn=True, outside=False):
     """files: list of (relative_path, bytes). Identical files already in the Case File are skipped (SHA-256); files that cannot be
     read are refused (job["unsupported"]: file + reason, audited) and never stored. Returns a job (processing runs in the background).
-    warn=False leaves the big-scan warnings to the caller (scan_warnings in a thread, attach_warnings)."""
+    warn=False leaves the big-scan warnings to the caller (scan_warnings in a thread, attach_warnings).
+    outside=True (V2 item 3.6): an outside report (another hospital, a private laboratory) uploaded by the treating doctor into an
+    HIS-connected Case File; filed under outside/ and labelled so."""
     ids, skipped, unsupported, warnings = [], [], [], []
     for rel, data in files:
+        if outside and not str(rel).startswith("outside/"):
+            rel = "outside/" + str(rel).lstrip("/")
         reason = ingest.reject_reason(rel)  # .doc / .rtf / .odt without LibreOffice: refused with a clear message (V1 item 1.4)
         if reason is None and (Path(rel).suffix.lower() not in ingest.SUPPORTED or Path(rel).name.startswith(".")):
             reason = "Unsupported file type"
@@ -163,8 +167,11 @@ def add_files(case_id, files, user="", warn=True):
             skipped.append({"file": rel, "same_as": dup["doc_id"]})
             store.audit(case_id, {"kind": "document_duplicate_skipped", "file": rel, "same_as": dup["doc_id"], "by": user}); continue
         d = store.add_document_file(case_id, Path(rel).name, data, rel)
+        if outside:
+            d["outside"] = {"by": user, "at": store.now_iso()}
+            store.save_doc(case_id, d)
         ids.append(d["doc_id"])
-        store.audit(case_id, {"kind": "document_added", "doc_id": d["doc_id"], "file": rel, "by": user})
+        store.audit(case_id, {"kind": "document_added", "doc_id": d["doc_id"], "file": rel, "by": user, **({"outside": True} if outside else {})})
     if warn:
         warnings = scan_warnings(case_id, ids, user)  # a big scan: the user knows the wait (V1 item 3.7)
     job = _job(case_id, len(ids), ids)

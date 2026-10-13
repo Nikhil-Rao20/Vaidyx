@@ -139,7 +139,7 @@ def _can_confirm(r, c, st, ctype, key):
         doc_id = key.partition(":")[0] if spec["target"] == "fact" else key
         d = store.get_doc(c["case_id"], doc_id) if doc_id else None
         if ctype == "confirm_match":
-            return org.can(r, "match")
+            return org.can(r, "confirm", _doc_department(d)) if (d or {}).get("outside") else org.can(r, "match")  # an outside report: the treating doctor confirms the patient (V2 item 3.6)
         return org.can(r, spec["action"], _doc_department(d))
     if ctype == "resolve_flag":
         return org.can(r, "board_record")
@@ -648,7 +648,8 @@ def setup_tumour_board_routes():
             if len(b) > 60 * 1024 * 1024:
                 raise HTTPException(413, f"{f.filename} is larger than 60 MB")
             data.append((rels[i] if i < len(rels) and rels[i] else f.filename, b))
-        job = service.add_files(case_id, data, u, warn=False)
+        is_outside = (str(outside).strip().lower() in ("1", "true", "yes")) or (bool(c.get("his")) and str(outside).strip().lower() not in ("0", "false", "no"))
+        job = service.add_files(case_id, data, u, warn=False, outside=is_outside)
         warnings = service.attach_warnings(job["id"], await asyncio.to_thread(service.scan_warnings, case_id, job["doc_ids"], u))  # page count off the event loop
         return {"job": job["id"], "total": job["total"], "warnings": warnings}
 
@@ -889,7 +890,11 @@ def setup_tumour_board_routes():
             dept = next((q.get("department") for q in protocol.get(c["protocol"]).get("mandatory", []) if q["id"] == key), "") if c.get("protocol") else ""
             _need(rl, "waive", dept or None)
         elif ctype == "confirm_match":
-            _need(rl, "match")
+            d = store.get_doc(case_id, key) if key else None
+            if d and d.get("outside"):  # an outside report matched by name only: the treating doctor confirms the patient (V2 item 3.6)
+                _need(rl, "confirm", _doc_department(d))
+            else:
+                _need(rl, "match")
         elif confirm.TYPES[ctype]["target"] in ("document", "fact"):
             doc_id = key.partition(":")[0] if confirm.TYPES[ctype]["target"] == "fact" else key
             _need(rl, action, _doc_department(store.get_doc(case_id, doc_id) if doc_id else None))

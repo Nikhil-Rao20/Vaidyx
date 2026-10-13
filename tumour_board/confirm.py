@@ -204,7 +204,7 @@ def apply_to_doc(doc, state):
     model's values kept under model_*. Never mutates the input; a document with no confirmations comes back equal."""
     did = doc.get("doc_id")
     mine = [c for c in active(state) if c["key"] == did or (TYPES[c["type"]]["target"] == "fact" and c["key"].partition(":")[0] == did)]
-    mine = [c for c in mine if c["type"] in ("confirm_doc_type", "confirm_dates", "confirm_value", "dismiss_failed")]
+    mine = [c for c in mine if c["type"] in ("confirm_doc_type", "confirm_dates", "confirm_value", "dismiss_failed", "confirm_match")]
     if not mine:
         return dict(doc)
     d = copy.deepcopy(doc)
@@ -242,6 +242,12 @@ def apply_to_doc(doc, state):
             d.setdefault("facts", {})[fid] = fact
         elif c["type"] == "dismiss_failed":
             d["dismissed"] = {"by": c["by"], "at": c["at"], "reason": c["reason"]}
+        elif c["type"] == "confirm_match" and (f.get("case_id") or "") and d.get("identity") == "name_match":
+            # a person said "this patient" for a record matched by name only (an outside report, V2 item 3.6): the match is confirmed;
+            # a printed identifier that contradicts the Case File (id_differs, mismatch_or_missing) keeps its warning even when filed
+            d["model_identity"] = d.get("identity")
+            d["identity"] = "match"
+            d["identity_confirmed_by"] = c["by"]
     d["confirmations"] = [c["id"] for c in mine]
     return d
 
