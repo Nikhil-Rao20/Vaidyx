@@ -45,6 +45,7 @@ async function loadCases() {
     <div class="citem ${c.case_id === S.caseId ? "on" : ""}" data-case="${esc(c.case_id)}">
       <div class="t"><span>${esc(c.patient?.name || c.case_id)}</span>${c.gate_passed ? '<span class="chip c-ok">Ready</span>' : c.readiness != null ? `<span class="chip c-warn">${c.readiness}%</span>` : c.listing?.status === "awaiting_listing" ? '<span class="chip c-mute">Awaiting listing</span>' : ""}</div>
       <div class="s">${esc(c.case_id)} · ${esc(c.protocol || "no protocol yet")} · ${c.documents} documents${c.open_actions ? ` · ${c.open_actions} open actions` : ""}</div>
+      ${c.his ? `<div class="s"><span class="mono" title="${esc(`Created from ${c.his.label || "the hospital system"}; ${c.his.window_label || ""}`)}">HIS ${esc(c.his.uhid || "")}</span>${c.his.unlinked ? ` <span class="chip c-warn">${plural(c.his.unlinked, "registration")} to link</span>` : ""}</div>` : ""}
     </div>`).join("") : `<div class="muted small">No Case Files yet.</div>`);
   $$(".citem").forEach((el) => (el.onclick = () => openCase(el.dataset.case)));
   $("#demo-list").innerHTML = d.demo.map((c) => `<div class="demo"><b>${esc(c.case_id)}</b> ${esc(c.patient?.name)}<br><span class="muted">${esc(c.protocol)} · ${c.files} files${c.has_arrivals ? " · has later arrivals" : ""}</span><br>
@@ -161,14 +162,18 @@ function reqRow(r, shown) {
   const attest = needs.filter((n) => can("confirm", n.doc_id)).map((n) => n.type === "attest_final" ? `<button class="ghost sm" data-attest="${esc(n.doc_id)}">Attest: final, signed</button>`
     : n.type === "confirm_dates" ? `<button class="ghost sm" data-confdate="${esc(n.doc_id)}">Confirm date</button>`
     : n.type === "confirm_doc_type" ? `<button class="ghost sm" data-conftype="${esc(n.doc_id)}">Confirm document type</button>`
-    : n.type === "confirm_value" ? `<button class="ghost sm" data-confval="${esc(JSON.stringify(n))}" title="Read the value on the scan image and record it (V1 8.2)">Confirm ${esc(S.facts?.[n.fact]?.label || n.fact)} on the scan</button>` : "").join("");
+    : n.type === "confirm_value" ? `<button class="ghost sm" data-confval="${esc(JSON.stringify(n))}" title="Read the value on the scan image and record it (V1 8.2)">Confirm ${esc(S.facts?.[n.fact]?.label || n.fact)} on the scan</button>`
+    : n.type === "confirm_match" ? `<button class="ghost sm" data-confmatch="${esc(n.doc_id)}" title="An outside report matched by name only: check the patient on the report and confirm">Confirm patient</button>` : "").join("");
   const waive = shown || !can("waive", r.id) ? "" : r.status === "waived" ? `<button class="ghost sm" data-unwaive="${esc(r.id)}">Remove waiver</button>` : (r.status !== "satisfied" && r.status !== "not_applicable") ? `<button class="ghost sm" data-waive="${esc(r.id)}" title="Clinical decision that this record is not required for this Case File (audited)">Waive</button>` : "";
   // a record NCG tiers under a condition the system never judges: NCG's own tier, marked conditional, never counted
   const tier = r.ncg_tier ? ["c-mute", (TIER[r.ncg_tier] || TIER.c)[1] + " (conditional)"] : TIER[r.tier] || TIER.a;
   const lvl = r.level && !shown ? ` <span class="chip c-lvl" title="${esc(LEVEL[r.level][1])}">${LEVEL[r.level][0]}</span>` : "";
   const chip = shown && r.status !== "satisfied" && r.status !== "not_applicable" ? `<span class="chip c-mute" title="Shown for information: not counted at this hospital level or in this setting">${esc(s[1])} (not counted)</span>` : `<span class="chip ${s[0]}">${s[1]}</span>`;
+  const po = r.pending_order;  // V2 item 3.3: the HIS order behind the gap and its stage; the accession / Lab No. of the record
+  const his = (r.accession ? ` <span class="chip c-mono" title="Accession / Lab No. in the hospital system">${esc(r.accession)}</span>` : "")
+    + (po ? ` <span class="chip ${po.stage === "cancelled" ? "c-bad" : "c-info"}" title="${esc([po.test, po.performer_department && "performed by " + po.performer_department, po.encounter_number].filter(Boolean).join(" · "))}">Ordered in the HIS: ${esc(stageText(po))}</span>` : "");
   return `<div class="req ${shown ? "shown" : ""}"><div class="icon ${s[2]}">${s[3]}</div><div style="flex:1">
-    <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><span class="lbl">${esc(r.label)} <span class="chip ${tier[0]}" title="${esc(r.tier_note || r.tier_label || "")}">${tier[1]}</span>${lvl}</span><span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${attest}${waive}${chip}</span></div>
+    <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><span class="lbl">${esc(r.label)} <span class="chip ${tier[0]}" title="${esc(r.tier_note || r.tier_label || "")}">${tier[1]}</span>${lvl}${his}</span><span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${attest}${waive}${chip}</span></div>
     <div class="dept">Responsible Department: ${esc(r.department)}${r.tier_note ? " · " + esc(r.tier_note) : ""}</div>
     ${r.problems.map((p) => `<div class="prob">${esc(p)}</div>`).join("")}${(r.notes || []).map((p) => `<div class="prob muted">${esc(p)}</div>`).join("")}${ncgLine(r)}<div class="ev">${ev}</div></div></div>`;
 }
@@ -191,11 +196,14 @@ function renderReady() {
   const actHTML = acts.length ? acts.sort((a, b) => (a.status === "completed") - (b.status === "completed")).map(actionHTML).join("") : `<div class="muted small">No gaps routed.</div>`;
   const docs = g?.documents || {};
   const setting = g ? `NCG setting: <b>${esc(g.setting_label || "not recorded (the strictest tier of each record applies until the coordinator records it)")}</b> · Hospital level: <b>${esc(g.hospital_level || "essential")}</b> · Protocol ${esc(g.protocol)} v${esc(g.protocol_version || "")}` : "";
+  const hisCase = !!S.data.his;
   $("#tab-ready").innerHTML = `<div class="grid2"><div>
-    <div class="card"><h3>Pre-Authorization check <span><button class="ghost sm" id="btn-recheck">Re-check now</button></span></h3>
+    ${hisCardHTML()}
+    <div class="card"><h3>Pre-Authorization check <span class="btns">${hisCase && can("refetch") ? `<button class="ghost sm" id="btn-refetch" data-refetch title="Fetch from the hospital system only the records new or changed since the last fetch; the Pre-Authorization then re-checks">Re-fetch from the HIS</button>` : ""}<button class="ghost sm" id="btn-recheck">Re-check now</button></span></h3>
       <div class="muted small" style="margin-bottom:6px">Required records from the NCG Essential / Optimal / Optional tiers for this cancer and setting (clinical review before real use). A record counts only when it is the final, signed version and its required primary fields are found with a verified source quote. Document exists ≠ Document is ready.</div>
       ${setting ? `<div class="small" style="margin-bottom:4px">${setting}</div>` : ""}${g?.tiers_note ? `<div class="muted small" style="margin-bottom:6px">${esc(g.tiers_note)}</div>` : ""}
       ${blockers}${orphanHTML(g)}${reqs}</div>
+    ${hisFlagsHTML()}
     ${g?.core_data?.length ? `<div class="card"><h3>MDT minimum core data <span class="muted small">${g.core_data.filter((c) => c.present).length} of ${g.core_data.length} documented</span></h3>
       <div class="muted small" style="margin-bottom:6px">Informational checklist (not part of the gate). Source: ${esc(g.core_data_source || "")}.</div>
       <div style="display:flex;flex-wrap:wrap;gap:4px">${g.core_data.map((c) => c.present ? `<span class="cite" data-doc="${esc(c.evidence[0]?.doc_id || "")}" title="${esc((c.evidence[0]?.value || "") + " | " + (c.evidence[0]?.quote || ""))}">✓ ${esc(c.label)}</span>` : `<span class="chip c-mute">– ${esc(c.label)}</span>`).join("")}</div></div>` : ""}
@@ -206,14 +214,14 @@ function renderReady() {
   </div><div>
     <div class="card"><h3>Routed requests <span class="muted small">${acts.filter((a) => a.status !== "completed").length} open</span></h3>
       <div class="muted small" style="margin-bottom:8px">Every gap becomes a request to the department that can act on it: a Level 1 gap to the department that owns the record, a Level 2 gap to the department that uploaded the record. Requests close by themselves when the record arrives; the department sees them in its inbox and the bell. The agent routes the gap; it does not perform the missing clinical task.</div>${actHTML}</div>
-    <div class="card"><h3>${can("upload") ? "Add documents" : "Documents"}</h3>
-      ${can("upload") ? `<div class="drop" id="drop">Drop files or a whole folder here<br><span class="small">PDF, scanned images (PNG / JPG / TIFF), text and Office files</span><br>
+    <div class="card"><h3>${can("upload") ? (hisCase ? "Outside reports" : "Add documents") : "Documents"}</h3>
+      ${can("upload") ? `<div class="drop" id="drop">${hisCase ? "Upload an outside report (another hospital, a private laboratory): it is read, matched to the patient and checked like every record" : "Drop files or a whole folder here"}<br><span class="small">PDF, scanned images (PNG / JPG / TIFF), text and Office files</span><br>
       <button class="ghost sm" id="pick-files" style="margin-top:8px">Choose files</button> <button class="ghost sm" id="pick-folder">Choose folder</button></div>
       <input type="file" id="f-files" multiple class="hidden"><input type="file" id="f-folder" webkitdirectory multiple class="hidden">` : `<div class="muted small">Department users upload through "Upload for my department" in the side panel; records are matched to the patient and filed here.</div>`}
       <div id="job"></div>
       ${can("upload") && (S.demoList || []).some((x) => x.case_id === S.caseId && x.has_arrivals) ? `<button class="ghost sm" id="btn-arrivals" style="margin-top:10px">Demo: new reports arrive from departments</button>` : ""}
       <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">${can("reprocess") && docs.errors ? `<button class="ghost sm" id="btn-reproc-err">Re-process ${docs.errors} failed</button>` : ""}${can("reprocess") ? `<button class="ghost sm" id="btn-reproc-all" title="Re-read, re-classify and re-extract every document (after a protocol or model change)">Re-process all documents</button>` : ""}<a class="ghost sm" href="/api/tb/cases/${esc(S.caseId)}/export">Export Case File record</a><a class="ghost sm" href="/api/tb/cases/${esc(S.caseId)}/export/fhir" title="FHIR R4 document bundle (mCODE-informed, ABDM-ready shape; values as recorded; codes not assigned)">FHIR bundle</a><a class="ghost sm" href="/api/tb/cases/${esc(S.caseId)}/export/registry?format=csv" title="HBCR (ICMR-NCDIR 2025) registry items as the records state them, with sources">Registry abstract</a></div>
-      <div class="muted small" style="margin-top:10px">${docs.total || 0} documents · ${docs.ready || 0} processed${docs.processing ? ` · ${docs.processing} processing` : ""}${docs.errors ? ` · ${docs.errors} failed to read${docs.dismissed?.length ? ` (${docs.dismissed.length} dismissed)` : ""}` : ""}${docs.identity_flags?.length ? ` · <b style="color:#b23a2f">${docs.identity_flags.length} identity flags</b>` : ""}</div>
+      <div class="muted small" style="margin-top:10px">${docs.total || 0} documents · ${docs.ready || 0} processed${docs.processing ? ` · ${docs.processing} processing` : ""}${docs.errors ? ` · ${docs.errors} failed to read${docs.dismissed?.length ? ` (${docs.dismissed.length} dismissed)` : ""}` : ""}${docs.identity_flags?.length ? ` · <b style="color:#b23a2f">${docs.identity_flags.length} identity flags</b>` : ""}${docs.superseded?.length ? ` · ${plural(docs.superseded.length, "earlier version")} kept as history` : ""}${docs.outside_unconfirmed?.length ? ` · <b style="color:#8a5300">${plural(docs.outside_unconfirmed.length, "outside report")} awaiting the patient confirmation</b>` : ""}</div>
     </div>
     <div id="hs-card"></div></div></div>`;
   renderHospitalSystems();
@@ -231,6 +239,7 @@ function renderReady() {
   $$("[data-conftype]", $("#tab-ready")).forEach((b) => (b.onclick = () => confirmDocType(b.dataset.conftype)));
   $$("[data-confval]", $("#tab-ready")).forEach((b) => (b.onclick = () => confirmValue(JSON.parse(b.dataset.confval))));
   $$("[data-attest]", $("#tab-ready")).forEach((b) => (b.onclick = () => attestDoc(b.dataset.attest)));
+  bindHIS($("#tab-ready"));
   if ($("#drop")) bindUpload();
   const arr = $("#btn-arrivals");
   if (arr) arr.onclick = async () => { try { const j = await api(`/cases/${S.caseId}/demo-arrivals`, { method: "POST" }); watchJob(j.job); } catch (e) { toast(e.message); } };
@@ -451,7 +460,7 @@ async function dismissDoc(docId) {
 const CONF_LABEL = { attest_final: "Attested final, signed", waive: "Requirement waived", confirm_dates: "Dates confirmed", confirm_doc_type: "Document type confirmed",
   confirm_match: "Patient match confirmed", dismiss_failed: "Failed document dismissed", confirm_value: "Value confirmed", resolve_flag: "Flag resolved" };
 const confLabel = (c) => c.type === "confirm_match" ? (c.fields?.case_id ? (c.by === "system:matching" ? "Filed by the matcher (exact identifier)" : "Patient match confirmed") : "Not this patient") : CONF_LABEL[c.type] || c.type;
-function confirmDialog({ title, intro, html = "", fields = [], submit = "Record" }) {
+function confirmDialog({ title, intro, html = "", fields = [], submit = "Record", note = "Recorded with your name and the time in the audit log. It can be undone; the record of both stays." }) {
   // Returns a promise of {field: value} or null. Every field: {id, label, type: text|textarea|select|date, options: [[value, label]], required, value, placeholder}
   return new Promise((resolve) => {
     const f = (x) => x.type === "textarea" ? `<textarea id="cd-${x.id}" placeholder="${esc(x.placeholder || "")}">${esc(x.value || "")}</textarea>`
@@ -459,7 +468,7 @@ function confirmDialog({ title, intro, html = "", fields = [], submit = "Record"
       : `<input id="cd-${x.id}" type="${x.type === "date" ? "date" : "text"}" value="${esc(x.value || "")}" placeholder="${esc(x.placeholder || "")}">`;
     $("#modal-body").innerHTML = `<h3 style="color:#1f2933;margin-top:0">${esc(title)}</h3>${intro ? `<div class="small muted">${esc(intro)}</div>` : ""}${html}
       <div class="form">${fields.map((x) => `<label>${esc(x.label)}${x.required ? "" : ' <span class="muted" style="font-weight:400">(optional)</span>'}</label>${f(x)}`).join("")}</div>
-      <div class="small muted" style="margin-top:10px">Recorded with your name and the time in the audit log. It can be undone; the record of both stays.</div>
+      <div class="small muted" style="margin-top:10px">${esc(note)}</div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button class="ghost" id="cd-cancel">Cancel</button><button class="primary" id="cd-ok">${esc(submit)}</button></div>`;
     $("#modal").classList.remove("hidden");
     const done = (v) => { $("#modal").classList.add("hidden"); resolve(v); };
@@ -568,7 +577,7 @@ const suggestionHTML = (a, inbox) => !a.suggested_close || a.status === "complet
 function actionHTML(a) {
   const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);  // local date
   if (a.status === "pending" && a.due && a.due < today) a = { ...a, status: "overdue" };  // worked out on display, like the inbox
-  return `<div class="action ${a.status}"><div class="h"><span>${a.source === "board" ? `<span class="chip c-info" title="From the Tumour Board record ${esc(a.board_record || "")}">Tumour Board action</span> ` : ""}${esc(a.label)}${a.level ? ` <span class="chip c-lvl" title="${esc((LEVEL[a.level] || [])[1] || "")}">${esc(a.level_label || (LEVEL[a.level] || [])[0] || "")}</span>` : ""}</span><span class="chip ${a.status === "completed" ? "c-ok" : a.status === "overdue" ? "c-bad" : "c-warn"}">${a.status === "completed" ? "Completed" : a.status === "overdue" ? "Overdue" : "Pending"}</span></div>
+  return `<div class="action ${a.status}"><div class="h"><span>${a.source === "board" ? `<span class="chip c-info" title="From the Tumour Board record ${esc(a.board_record || "")}">Tumour Board action</span> ` : ""}${esc(a.label)}${a.level ? ` <span class="chip c-lvl" title="${esc((LEVEL[a.level] || [])[1] || "")}">${esc(a.level_label || (LEVEL[a.level] || [])[0] || "")}</span>` : ""}${a.accession ? ` <span class="chip c-mono" title="Accession / Lab No. in the hospital system">${esc(a.accession)}</span>` : ""}${a.pending_order ? ` <span class="chip c-info">Ordered in the HIS: ${esc(stageText(a.pending_order))}</span>` : ""}</span><span class="chip ${a.status === "completed" ? "c-ok" : a.status === "overdue" ? "c-bad" : "c-warn"}">${a.status === "completed" ? "Completed" : a.status === "overdue" ? "Overdue" : "Pending"}</span></div>
     <div class="w">${esc(a.what)}</div>${suggestionHTML(a)}
     <div class="f"><span>Responsible Department: <b>${esc(a.department)}</b> · due ${fmtDate(a.due)}</span>
     ${a.status !== "completed" ? `<span><button class="ghost sm" data-req="${a.id}">Request message</button> ${can("update_action", a.id) ? `<button class="ghost sm" data-act="${a.id}" data-st="completed">Mark completed</button>` : ""}</span>` : `<span>${a.completed ? "closed " + esc(a.completed.slice(0, 16).replace("T", " ")) : ""}</span>`}</div>
@@ -634,6 +643,7 @@ async function uploadFiles(list) {
   const fd = new FormData();
   list.forEach(([f]) => fd.append("files", f));
   fd.append("paths", JSON.stringify(list.map(([, p]) => p)));
+  if (S.data?.his) fd.append("outside", "1");  // V2 item 3.6: into an HIS Case File every upload is an outside report
   $("#job").innerHTML = `<div class="small" style="margin-top:8px"><span class="spin"></span> Uploading ${list.length} files...</div>`;
   const r = await fetch(`/api/tb/cases/${S.caseId}/documents`, { method: "POST", body: fd, credentials: "same-origin" });
   if (!r.ok) { toast("Upload failed: " + r.statusText); return; }
@@ -656,28 +666,152 @@ async function watchJob(id) {
     if (j.state === "interrupted") { toast((j.error || "The server restarted; the documents were queued again automatically") + ".", 8000); await openCase(S.caseId, true); break; }
     if (j.state === "finished") {
       const extra = [j.skipped_duplicates?.length ? `${j.skipped_duplicates.length} identical file(s) already in the Case File were skipped` : "", j.unsupported?.length ? `${j.unsupported.length} file(s) not read: ` + j.unsupported.map(u => `${u.file} (${u.reason})`).join(", ") : "", (j.warnings || []).map((w) => w.message).join("; ")].filter(Boolean).join("; ");
-      toast(`Processed ${j.total} documents in ${j.seconds} s. Pre-Authorization re-checked: ${j.gate.satisfied}/${j.gate.total} satisfied.${extra ? " " + extra + "." : ""}`, 7000);
-      await openCase(S.caseId, true); loadNotifications(); refreshInboxCount(); break;
+      const gate = j.gate ? ` Pre-Authorization re-checked: ${j.gate.satisfied}/${j.gate.total} satisfied.` : "";
+      await openCase(S.caseId, true);
+      if (j.his) toast(hisJobText(j) + gate, 10000);
+      else toast(`Processed ${j.total} documents in ${j.seconds} s.${gate}${extra ? " " + extra + "." : ""}`, 7000);
+      loadNotifications(); refreshInboxCount(); break;
     }
     await new Promise((r) => setTimeout(r, 700));
   }
 }
 
+// ------------------------------------------------------------------ HIS-connected Case File (V2 items 3.2 to 3.6): registration, window, re-fetch, links, open orders
+function hisCardHTML() {
+  const h = S.data.his; if (!h) return "";
+  const linked = (h.similar || []).filter((s) => s.linked), last = (h.fetches || []).slice(-1)[0], orders = h.orders || [], unl = h.unlinked || [];
+  return `<div class="card hiscard" id="his-card"><h3><span>Hospital system <span class="chip c-info">${esc(h.label || "HIS")}</span></span><span class="btns">${can("refetch") ? `<button class="ghost sm" data-refetch title="Fetch only the records new or changed in the hospital system since the last fetch; the Pre-Authorization then re-checks">Re-fetch</button>` : ""}${can("refetch") && !h.window?.all ? `<button class="ghost sm" id="btn-older" title="Widen the fetch window without starting over">Fetch older records</button>` : ""}</span></h3>
+    <div class="kv small"><div>UHID</div><div><span class="mono">${esc(h.uhid)}</span> (${esc(regKind(h.registration_kind))})${h.matched_on?.kind && h.matched_on.kind !== "uhid" ? ` · found by ${esc(ID_KIND[h.matched_on.kind] || h.matched_on.kind)} <span class="mono">${esc(h.matched_on.value)}</span>` : ""}</div>
+      <div>Fetch window</div><div>${esc(winLabel(h.window) || h.window_label || "")}${h.window_start && !h.window?.from ? ` (dated from ${dmy(h.window_start)})` : ""}${h.older_available ? ` · <b>${plural(h.older_available, "older record")}</b> in the hospital system` : ""}</div>
+      <div>Fetched</div><div>${h.fetched_at ? esc(dmyt(h.fetched_at)) : "not yet"}${last ? ` · last fetch: ${plural(last.added || 0, "new or changed record")}, ${last.skipped || 0} already here${last.errors ? `, ${last.errors} failed` : ""}` : ""}</div></div>
+    ${unl.length ? `<h4 class="subh">Registrations to link <span class="chip c-warn">${unl.length}</span></h4><div class="small muted">Possible duplicate or temporary registrations of the same person. Never merged automatically: a person checks and links one; its records then join the Case File labelled with that registration.</div>
+      ${unl.map((s) => `<div class="hisrow"><span><b>${esc(s.name || "name not given")}</b> · <span class="mono">${esc(s.uhid)}</span> (${esc(regKind(s.registration_kind))})${ageSex(s) ? " · " + esc(ageSex(s)) : ""}</span>${can("link_registration") ? `<button class="ghost sm" data-link="${esc(s.uhid)}">Link</button>` : ""}</div>`).join("")}` : ""}
+    ${linked.length ? `<div class="chips" style="margin-top:8px">${linked.map((s) => `<span class="chip c-ok" title="${esc(`${s.name || ""} ${s.uhid} (${regKind(s.registration_kind)}) linked ${dmyt(s.linked_at)}`)}"><span class="mono">${esc(s.uhid)}</span> linked by ${esc(s.linked_by || "?")}</span>`).join("")}</div>` : ""}
+    ${orders.length ? `<h4 class="subh">Open orders in the HIS <span class="muted small">${orders.length}</span></h4><div class="small muted">Tests ordered with no report yet, as the hospital system lists them.</div>
+      ${orders.map((o) => `<div class="hisrow"><span><b>${esc(o.test || DT[o.doc_type] || "Order")}</b>${o.accession ? ` <span class="chip c-mono">${esc(o.accession)}</span>` : ""}${o.encounter_number ? ` <span class="small muted mono">${esc(o.encounter_number)}</span>` : ""}</span><span class="small"><span class="chip ${o.stage === "cancelled" ? "c-bad" : "c-info"}">${esc(stageText(o))}</span>${o.performer_department ? " " + esc(o.performer_department) : ""}</span></div>`).join("")}` : ""}
+  </div>`;
+}
+function hisFlagsHTML() {
+  const f = S.data.his_flags || []; if (!f.length) return "";
+  return `<div class="card"><h3>HIS values the report text does not carry <span class="chip c-rev">Points for review</span></h3>
+    <div class="muted small" style="margin-bottom:6px">Structured values the hospital system holds for a report that its signed text does not carry, or carries differently. These are never shown as facts: open the report and check.</div>
+    ${f.map((x) => `<div class="conf"><span><b>${esc(x.label || x.fact)}</b>: ${esc(x.text)}</span> <span class="cite" data-doc="${esc(x.doc_id)}" title="Open the report">${esc(x.doc_title || x.doc_id)}</span>${x.accession ? ` <span class="chip c-mono">${esc(x.accession)}</span>` : ""}</div>`).join("")}</div>`;
+}
+function hisJobText(j) {
+  const h = j.his || {}, r = j.refetch_result, acts = S.data?.state?.actions || [];
+  const name = (id) => acts.find((a) => a.id === id)?.label || id;
+  const what = { first_fetch: "First fetch", refetch: "Re-fetch", older: "Fetch of older records", link: "Fetch of the linked registration" }[h.reason] || "Fetch";
+  return `${what} finished from ${S.data?.his?.label || "the hospital system"}: ${plural(h.added || 0, "new or changed record")} read in ${j.seconds} s, ${h.skipped || 0} already in the Case File${h.outside_window ? `, ${h.outside_window} outside the window` : ""}${(h.errors || []).length ? `, ${h.errors.length} could not be fetched` : ""}.`
+    + (r ? ` Requests closed: ${r.closed?.length ? r.closed.map(name).join("; ") : "none"}. Requests opened: ${r.opened?.length ? r.opened.map(name).join("; ") : "none"}.` : "");
+}
+function bindHIS(root) {
+  $$("[data-refetch]", root).forEach((b) => (b.onclick = refetchHIS));
+  const o = $("#btn-older", root); if (o) o.onclick = fetchOlder;
+  $$("[data-link]", root).forEach((b) => (b.onclick = () => linkReg(b.dataset.link)));
+  $$("[data-confmatch]", root).forEach((b) => (b.onclick = () => confirmMatch(b.dataset.confmatch)));
+}
+async function refetchHIS() {
+  $$("[data-refetch]").forEach((b) => (b.disabled = true));
+  try {
+    const j = await api(`/cases/${S.caseId}/his/refetch`, { method: "POST" });
+    toast(`Re-fetch started: ${plural(j.his?.added ?? j.total ?? 0, "new or changed record")} in ${S.data.his?.label || "the hospital system"}; reading and re-checking...`, 5000);
+    watchJob(j.job);
+  } catch (e) { toast(e.message, 8000); $$("[data-refetch]").forEach((b) => (b.disabled = false)); }
+}
+async function fetchOlder() {
+  const h = S.data.his || {}, cur = h.window || {};
+  const opts = [...(cur.months && +cur.months < 24 ? [["24", "Last 24 months"]] : []), ["all", "All records"], ["from", "From a date (below)"]];
+  const v = await confirmDialog({ title: "Fetch older records", intro: `This Case File holds ${winLabel(cur)}${h.window_start && !cur.from ? ` (dated from ${dmy(h.window_start)})` : ""}.${h.older_available ? ` The hospital system lists ${plural(h.older_available, "older record")}.` : ""} Widening the window fetches only the records dated before the current start; nothing already fetched is read again.`,
+    fields: [{ id: "win", label: "New window", type: "select", options: opts, value: opts[0][0], required: true }, { id: "from", label: "From date (only for From a date)", type: "date" }],
+    submit: "Fetch", note: "Recorded with your name and the time in the audit log." });
+  if (!v) return;
+  if (v.win === "from" && !v.from) { toast("Choose the date to fetch from"); return; }
+  try {
+    const j = await api(`/cases/${S.caseId}/his/fetch-older`, { json: v.win === "all" ? { all: true } : v.win === "from" ? { from: v.from } : { months: +v.win } });
+    await openCase(S.caseId, true); toast(`Fetching older records: ${plural(j.his?.added ?? j.total ?? 0, "record")} to read`, 5000); watchJob(j.job);
+  } catch (e) { toast(e.message, 8000); }
+}
+async function linkReg(uhid) {
+  const s = (S.data.his?.unlinked || []).find((x) => x.uhid === uhid) || { uhid };
+  const v = await confirmDialog({ title: "Link a registration to this Case File", intro: `Link ${s.uhid} (${regKind(s.registration_kind)}; ${s.name || "name not given"}${ageSex(s) ? ", " + ageSex(s) : ""}) as the same person as ${S.data.his?.uhid || "this Case File"}. Registrations are never merged automatically: check the name, age, sex and the registration desk record first. The records of ${s.uhid} are then fetched and labelled with that registration.`,
+    fields: [{ id: "reason", label: "How you checked", type: "textarea", required: true, placeholder: "e.g. temporary registration at casualty; same name, date of birth and phone on the registration desk record" }],
+    submit: "Link", note: "Recorded with your name and the time in the audit log." });
+  if (!v) return;
+  try { const j = await api(`/cases/${S.caseId}/his/link`, { json: { uhid: s.uhid, reason: v.reason } }); await openCase(S.caseId, true); toast(`${s.uhid} linked: ${plural(j.his?.added ?? j.total ?? 0, "record")} of that registration being read`, 6000); watchJob(j.job); }
+  catch (e) { toast(e.message, 8000); }
+}
+async function confirmMatch(docId) {
+  const d = S.data.documents.find((x) => x.doc_id === docId), p = S.data.case.patient || {};
+  const v = await confirmDialog({ title: "Confirm the patient of an outside report", intro: `"${d?.classification?.title || d?.filename || docId}" is an outside report (another hospital or a private laboratory) matched to this Case File by name only: it prints no identifier of this hospital. Open it and check the name, age, sex and any identifier against ${p.name || "the patient"}${p.agesex ? " (" + p.agesex + ")" : ""} before confirming. Once confirmed it counts for the Pre-Authorization like every record.`,
+    fields: [{ id: "reason", label: "How you checked", type: "textarea", required: true, placeholder: "e.g. name, age and the referring hospital's ID match the referral letter" }], submit: "Confirm patient" });
+  if (!v) return;
+  await recordConfirmation("confirm_match", docId, { case_id: S.caseId }, v.reason);
+}
+
 // ------------------------------------------------------------------ tab: documents
-function renderDocs() {
-  const docs = S.data.documents;
-  $("#tab-docs").innerHTML = `<div class="card"><h3>Documents in the Case File <span class="muted small">${docs.length}</span></h3>
-  <table class="t"><thead><tr><th>Document</th><th>Type</th><th>Date</th><th>Status</th><th>Read by</th><th>Fields found</th></tr></thead><tbody>
-  ${docs.map((d) => { const c = d.classification || {}; const nf = Object.values(d.facts || {});
-    const att = (S.data.state.overrides?.documents || {})[d.doc_id];
-    const st = d.state !== "ready" ? `<span class="chip ${d.state === "error" ? "c-bad" : "c-info"}" title="${esc(d.error || "")}">${d.state === "error" ? "failed to read" : esc(d.state)}</span>${d.state === "error" ? `<div class="small muted">${esc(d.error || "")}</div>${d.dismissed ? `<span class="chip c-mute" title="${esc(d.dismissed.reason || "")}">dismissed by ${esc(d.dismissed.by || "")}</span>` : `<span class="chip c-warn" title="A document that failed to read blocks the Pre-Authorization until it is re-processed or dismissed">blocks the gate</span>`}` : ""}` : statusChip(c) + (att?.attested_final ? ` <span class="chip c-ok" title="${esc(att.reason || "")}">attested final by ${esc(att.by)}</span>` : "");
-    const unst = d.state === "ready" && c.status === "UNSTATED" && c.signed !== "no" && !att?.attested_final;
-    return `<tr class="click" data-doc="${esc(d.doc_id)}"><td><b>${esc(c.title || d.filename)}</b><div class="small muted">${esc(d.rel_path)}${d.department ? ` · uploaded by ${esc(deptName(d.department))}${d.uploaded_by ? " (" + esc(d.uploaded_by) + ")" : ""}` : ""}${d.identity === "mismatch_or_missing" ? ' · <span style="color:#b23a2f">patient ID not found</span>' : d.identity === "id_differs" ? ' · <span style="color:#b23a2f">prints an identifier this Case File does not know</span>' : d.identity === "name_match" ? ' · <span style="color:#8a5300">matched by name only</span>' : ""}</div></td>
-      <td>${esc(DT[c.doc_type] || c.doc_type || "")}${c.doc_type_disagreement ? ` <span class="chip c-warn" title="${esc(c.doc_type_disagreement.note || "")}">keywords say ${esc(DT[c.doc_type_disagreement.keyword_type] || c.doc_type_disagreement.keyword_type)}</span>` : ""}</td><td>${dateCell(c)}</td><td>${st}</td>
+const DOC_HEAD = `<thead><tr><th>Document</th><th>Type</th><th>Date</th><th>Status</th><th>Read by</th><th>Fields found</th></tr></thead>`;
+// V2 items 3.3 to 3.6: the HIS status and signature of a report, where it came from, its version history
+const HSTAT = { final: ["c-ok", "Final"], preliminary: ["c-warn", "Preliminary"], partial: ["c-warn", "Preliminary"], registered: ["c-warn", "Registered, no result yet"],
+  amended: ["c-info", "Amended"], corrected: ["c-info", "Corrected"], cancelled: ["c-bad", "Cancelled"] };
+const sigTitle = (g) => [`Signed by ${g.signer?.name || g.signer || "signer not named"}`, g.signed_at && `at ${dmyt(g.signed_at)}`, g.ca && `CA: ${g.ca}`, g.serial && `certificate serial ${g.serial}`,
+  `verification: ${g.verification_status || "not stated"}`].filter(Boolean).join("; ");
+function hisStatusChips(d) {
+  const h = d.his; if (!h) return "";
+  const s = HSTAT[h.status], g = h.signature;
+  return [s ? `<span class="chip ${s[0]}" title="Report status in the hospital system">${s[1]}${(h.status === "amended" || h.status === "corrected") && h.version ? " v" + esc(h.version) : ""}</span>` : "",
+    h.signed ? `<span class="chip c-ok" title="${esc(sigTitle(g))}">Digitally signed</span>` : g ? `<span class="chip c-bad" title="${esc(sigTitle(g))}">Signature failed verification</span>`
+      : ["final", "amended", "corrected"].includes(h.status) ? `<span class="chip c-warn" title="The hospital system holds no verified digital signature for this report">Not signed</span>` : ""].filter(Boolean).join(" ");
+}
+function docChips(d) {
+  const h = d.his;
+  return [h ? `<span class="chip c-info" title="Fetched read-only from ${esc(h.label || "the hospital system")}">from HIS</span>` : "",
+    h?.registration ? `<span class="chip c-warn" title="A record of a linked registration">Registration <span class="mono">${esc(h.registration)}</span></span>` : "",
+    d.outside ? `<span class="chip c-mute" title="${esc(`Uploaded by ${d.outside.by || "?"}${d.outside.at ? " on " + dmyt(d.outside.at) : ""}: another hospital or a private laboratory; read, matched to the patient and checked like every record`)}">Outside report</span>` : "",
+    (d.methods || []).includes("vision-transcription") ? `<span class="chip c-scan" title="${SCAN_TITLE}">Scanned (OCR)</span>` : "",
+    d.identity_confirmed_by ? `<span class="chip c-ok">patient confirmed by ${esc(d.identity_confirmed_by)}</span>` : "",
+    d.superseded ? `<span class="chip c-mute" title="Kept as history; never counted for the Pre-Authorization">History: version ${esc(h?.version || "?")}, superseded by version ${esc(d.superseded.version || "?")}</span>` : "",
+    (d.his_flags || []).length ? `<span class="chip c-rev" title="${esc(d.his_flags.map((f) => f.text).join("; "))}">${plural(d.his_flags.length, "HIS value")} not in the text</span>` : ""].filter(Boolean).join(" ");
+}
+function docRow(d) {
+  const c = d.classification || {}; const nf = Object.values(d.facts || {});
+  const att = (S.data.state.overrides?.documents || {})[d.doc_id];
+  const st = d.state !== "ready" ? `<span class="chip ${d.state === "error" ? "c-bad" : "c-info"}" title="${esc(d.error || "")}">${d.state === "error" ? "failed to read" : esc(d.state)}</span>${d.state === "error" ? `<div class="small muted">${esc(d.error || "")}</div>${d.dismissed ? `<span class="chip c-mute" title="${esc(d.dismissed.reason || "")}">dismissed by ${esc(d.dismissed.by || "")}</span>` : `<span class="chip c-warn" title="A document that failed to read blocks the Pre-Authorization until it is re-processed or dismissed">blocks the gate</span>`}` : ""}` : statusChip(c) + (att?.attested_final ? ` <span class="chip c-ok" title="${esc(att.reason || "")}">attested final by ${esc(att.by)}</span>` : "");
+  const unst = d.state === "ready" && c.status === "UNSTATED" && c.signed !== "no" && !att?.attested_final;
+  const h = d.his, sup = !!d.superseded, ids = h ? [h.encounter_number, h.accession].filter(Boolean) : [], chips = docChips(d), hst = hisStatusChips(d);
+  const btns = sup ? "" : `${d.outside && d.identity === "name_match" && !d.identity_confirmed_by && can("confirm", d.doc_id) ? `<button class="ghost sm" data-confmatch="${esc(d.doc_id)}" title="An outside report matched by name only: check the patient on the report and confirm">Confirm patient</button>` : ""}${d.state === "error" && can("reprocess") ? `<button class="ghost sm" data-reproc-doc="${esc(d.doc_id)}">Re-process</button>` : ""}${d.state === "error" && !d.dismissed && can("confirm", d.doc_id) ? `<button class="ghost sm" data-dismiss="${esc(d.doc_id)}" title="Record, with a reason, that the Case File may pass without this document (audited, undoable)">Dismiss</button>` : ""}${unst && can("confirm", d.doc_id) ? `<button class="ghost sm" data-attest-doc="${esc(d.doc_id)}">Attest final</button>` : ""}${d.state === "ready" && (docDates(c).unconfirmed || docDates(c).flags.length) && can("confirm", d.doc_id) ? `<button class="ghost sm" data-confdate="${esc(d.doc_id)}">Confirm date</button>` : ""}${d.state === "ready" && c.doc_type_disagreement && !c.doc_type_confirmed_by && can("confirm", d.doc_id) ? `<button class="ghost sm" data-conftype="${esc(d.doc_id)}">Confirm type</button>` : ""}${can("unfile", d.doc_id) ? `<button class="ghost sm" data-unfile-doc="${esc(d.doc_id)}" title="Not this patient: move the record back to the Needs matching queue (audited, the Case File forgets what it learned from it)">Back to matching</button>` : ""}${can("delete_document", d.doc_id) ? `<button class="ghost sm" data-del-doc="${esc(d.doc_id)}" title="Remove this document from the Case File (audited)">Remove</button>` : ""}`;
+  return `<tr class="click${sup ? " superseded" : ""}" data-doc="${esc(d.doc_id)}"><td><b>${esc(c.title || d.filename)}</b>${ids.length ? `<div class="mono small" title="OP / IP No. and accession No. in the hospital system">${esc(ids.join(" · "))}</div>` : ""}<div class="small muted">${esc(d.rel_path)}${d.department ? ` · ${h ? "from" : "uploaded by"} ${esc(deptName(d.department))}${d.uploaded_by ? " (" + esc(d.uploaded_by) + ")" : ""}` : ""}${d.identity === "mismatch_or_missing" ? ' · <span style="color:#b23a2f">patient ID not found</span>' : d.identity === "id_differs" ? ' · <span style="color:#b23a2f">prints an identifier this Case File does not know</span>' : d.identity === "name_match" ? ' · <span style="color:#8a5300">matched by name only</span>' : ""}</div>${chips ? `<div class="chips" style="margin-top:4px">${chips}</div>` : ""}</td>
+      <td>${esc(DT[c.doc_type] || c.doc_type || "")}${c.doc_type_disagreement ? ` <span class="chip c-warn" title="${esc(c.doc_type_disagreement.note || "")}">keywords say ${esc(DT[c.doc_type_disagreement.keyword_type] || c.doc_type_disagreement.keyword_type)}</span>` : ""}</td><td>${dateCell(c)}</td><td>${st}${hst ? `<div class="chips" style="margin-top:4px">${hst}</div>` : ""}</td>
       <td class="small">${(d.methods || []).map((m) => (m === "vision-transcription" ? "Vision reader (scan)" : m === "text-layer" ? "PDF text layer" : m)).join(", ")}${(d.page_flags || []).map((f) => ` <span class="chip c-warn" title="Transcribed as is, never translated into facts; values from these lines need a person's check">${esc(f)}</span>`).join("")}</td>
       <td>${nf.filter((f) => f.verification === "verified").length} verified${nf.filter((f) => f.verification !== "verified").length ? ` · <span class="chip c-rev">${nf.filter((f) => f.verification !== "verified").length} not verified</span>` : ""}
-      <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">${d.state === "error" && can("reprocess") ? `<button class="ghost sm" data-reproc-doc="${esc(d.doc_id)}">Re-process</button>` : ""}${d.state === "error" && !d.dismissed && can("confirm", d.doc_id) ? `<button class="ghost sm" data-dismiss="${esc(d.doc_id)}" title="Record, with a reason, that the Case File may pass without this document (audited, undoable)">Dismiss</button>` : ""}${unst && can("confirm", d.doc_id) ? `<button class="ghost sm" data-attest-doc="${esc(d.doc_id)}">Attest final</button>` : ""}${d.state === "ready" && (docDates(c).unconfirmed || docDates(c).flags.length) && can("confirm", d.doc_id) ? `<button class="ghost sm" data-confdate="${esc(d.doc_id)}">Confirm date</button>` : ""}${d.state === "ready" && c.doc_type_disagreement && !c.doc_type_confirmed_by && can("confirm", d.doc_id) ? `<button class="ghost sm" data-conftype="${esc(d.doc_id)}">Confirm type</button>` : ""}${can("unfile", d.doc_id) ? `<button class="ghost sm" data-unfile-doc="${esc(d.doc_id)}" title="Not this patient: move the record back to the Needs matching queue (audited, the Case File forgets what it learned from it)">Back to matching</button>` : ""}${can("delete_document", d.doc_id) ? `<button class="ghost sm" data-del-doc="${esc(d.doc_id)}" title="Remove this document from the Case File (audited)">Remove</button>` : ""}</div></td></tr>`; }).join("")}
-  </tbody></table></div>
+      ${btns ? `<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">${btns}</div>` : ""}</td></tr>`;
+}
+// V2 item 3.4: the records of an HIS Case File grouped by OP visit and IP admission (newest first), then the groups without an encounter
+function groupHTML(g, byId) {
+  const ds = (g.docs || []).map((id) => byId[id]).filter(Boolean), enc = g.kind === "OP" || g.kind === "IP";
+  const when = enc && g.start ? dmyd(g.start) + (g.kind === "IP" && g.end ? " to " + dmyd(g.end) : "") : "";
+  const head = enc ? [g.label, g.department, g.unit, when].filter(Boolean).join(", ") : g.label;
+  const wards = (g.ward_history || []).map(wardText).join("; "), pre = g.pmjay_preauth;
+  const chips = [g.pre_admission ? `<span class="chip c-info" title="An OP visit before the first IP admission">Pre-admission OPD</span>` : "",
+    pre ? `<span class="chip c-mute" title="PM-JAY pre-authorisation as the hospital system records it">PM-JAY pre-authorisation: ${esc(pre.status || "recorded")}${pre.date ? " " + esc(dmyd(pre.date)) : ""}</span>` : "",
+    ...(g.registrations || []).map((u) => `<span class="chip c-warn" title="This encounter holds records of a linked registration">Registration <span class="mono">${esc(u)}</span></span>`),
+    g.status && g.status !== "finished" ? `<span class="chip c-mute">${esc(g.status)}</span>` : ""].filter(Boolean).join(" ");
+  return `<div class="card encgroup" data-group="${esc(g.key || "")}"><h3><span>${esc(head)}</span><span class="muted small">${plural(ds.length, "record")}</span></h3>
+    ${chips ? `<div class="chips" style="margin-bottom:6px">${chips}</div>` : ""}
+    ${g.consultant || wards ? `<div class="small muted" style="margin-bottom:6px">${g.consultant ? "Consultant: " + esc(g.consultant) : ""}${g.consultant && wards ? " · " : ""}${wards ? "Ward: " + esc(wards) : ""}</div>` : ""}
+    ${ds.length ? `<table class="t">${DOC_HEAD}<tbody>${ds.map(docRow).join("")}</tbody></table>` : `<div class="small muted">No record of this encounter in the Case File.</div>`}</div>`;
+}
+function renderDocs() {
+  const docs = S.data.documents, groups = S.data.his ? S.data.groups || [] : [];
+  let list;
+  if (groups.length) {
+    const byId = Object.fromEntries(docs.map((d) => [d.doc_id, d])), seen = new Set(groups.flatMap((g) => g.docs || []));
+    const rest = docs.filter((d) => !seen.has(d.doc_id));  // never lose a document the grouping did not place
+    const gs = rest.length ? [...groups, { key: "rest", kind: "upload", label: "Other documents", docs: rest.map((d) => d.doc_id) }] : groups;
+    list = `<div class="card"><h3>Documents in the Case File <span class="muted small">${docs.length}</span></h3><div class="muted small">Grouped by OP visit and IP admission as ${esc(S.data.his.label || "the hospital system")} records them, newest first; then the hospital records with no encounter, the outside reports and other uploads. An earlier version of an amended report is kept as history and never counted.</div></div>`
+      + gs.map((g) => groupHTML(g, byId)).join("");
+  } else list = `<div class="card"><h3>Documents in the Case File <span class="muted small">${docs.length}</span></h3>
+  <table class="t">${DOC_HEAD}<tbody>${docs.map(docRow).join("")}</tbody></table></div>`;
+  $("#tab-docs").innerHTML = `${list}
   <div class="card"><h3>Primary fields across the Case File</h3><div class="muted small" style="margin-bottom:8px">Current value = most recent verified value from a final, signed document. Every value links to its source quote.</div>
   <table class="t"><thead><tr><th>Field</th><th>Current value</th><th>Source</th><th>History</th></tr></thead><tbody>
   ${Object.entries(S.data.facts).map(([k, f]) => { const c = f.current;
@@ -691,6 +825,7 @@ function renderDocs() {
   $$("[data-dismiss]", $("#tab-docs")).forEach((b) => (b.onclick = () => dismissDoc(b.dataset.dismiss)));
   $$("[data-confdate]", $("#tab-docs")).forEach((b) => (b.onclick = () => confirmDates(b.dataset.confdate)));
   $$("[data-conftype]", $("#tab-docs")).forEach((b) => (b.onclick = () => confirmDocType(b.dataset.conftype)));
+  $$("[data-confmatch]", $("#tab-docs")).forEach((b) => (b.onclick = () => confirmMatch(b.dataset.confmatch)));
   $$("[data-unfile-doc]").forEach((b) => (b.onclick = async () => { const v = await confirmDialog({ title: "Move this record back to matching", intro: "The document leaves this Case File and returns to the Needs matching queue; this Case File will not be suggested for it again, and identifiers learned from it are forgotten. Recorded in both audit logs.", fields: [{ id: "reason", label: "Reason", type: "text", required: true }], submit: "Move back" });
     if (!v) return; try { await api(`/cases/${S.caseId}/documents/${b.dataset.unfileDoc}/unfile`, { json: { reason: v.reason } }); await openCase(S.caseId, true); refreshQueueCount(); toast("Record moved back to the Needs matching queue"); } catch (e) { toast(e.message, 7000); } }));
   $$("[data-del-doc]").forEach((b) => (b.onclick = async () => { if (!confirm("Remove this document from the Case File? The removal is recorded in the audit log.")) return;
@@ -934,6 +1069,7 @@ function showSummary(s) {
   $("#sumout").innerHTML = `${stale ? `<div class="banner warn stale"><b>${esc(stale)}.</b> This summary may no longer reflect the Case File: regenerate it.</div>` : ""}<div class="eyebrow">Automated Case File summary${s.status !== "ready" ? " · INCOMPLETE: Pre-Authorization not met" : ""}</div>
     <h2 style="color:#1f2933;margin:4px 0 12px">${esc(p.name)} · ${esc(p.agesex || "")}</h2>
     ${s.structure ? `<div class="muted small" style="margin-bottom:8px">Structure: ${esc(s.structure)}</div>` : ""}
+    ${encountersHTML(s.encounters)}
     ${(s.sections || []).length ? s.sections.map((sec) => `<h4 style="color:#1f2933;margin:12px 0 4px">${esc(sec.title)}</h4>${sec.sentences.length ? `<p>${sec.sentences.map((x) => `<span class="${approxCls(x, rv)}"><span ${x.from_fields ? 'title="Added from the verified primary fields (no model text)" style="color:#334155"' : ""}>${esc(x.text)}</span> ${x.citations.map(citeHTML).join("")}${flagHTML(x)}</span>`).join(" ")}</p>` : `<p class="muted small">Nothing verified for this section in the Case File.</p>`}`).join("")
       : s.paragraphs.map((para) => `<p>${para.map((x) => `${esc(x.text)} ${x.citations.map(citeHTML).join("")}${flagHTML(x)}`).join(" ")}</p>`).join("")}
     ${s.stage_as_recorded ? `<div class="stagebox"><b>Stage, as recorded in the ${esc(s.stage_as_recorded.doc_title)}:</b> ${esc(s.stage_as_recorded.value)} ${citeHTML({ ...s.stage_as_recorded, quote: s.stage_as_recorded.quote })}<div class="small muted">Extracted from the signed source report. The agent does not derive or assign stage.</div></div>` : ""}
@@ -944,6 +1080,12 @@ function showSummary(s) {
   bindReview($("#sumout"));
 }
 
+function encountersHTML(list) {  // V2 item 3.4: which records came from which OP visit or IP admission, as the hospital system records them
+  if (!(list || []).length) return "";
+  const when = (w) => String(w || "").split(" to ").map(dmyd).join(" to ");
+  return `<div class="encs"><h4 style="color:#1f2933;margin:4px 0 4px">Encounters</h4><div class="small muted">OP visits and IP admissions from the hospital system's records, with the reports filed under each.</div><ul>
+    ${list.map((e) => `<li class="small">${e.kind === "IP" ? "IP admission" : "OP visit"} <span class="mono">${esc(e.number)}</span>${e.department ? ", " + esc(e.department) : ""}${e.unit ? ", " + esc(e.unit) : ""}, ${esc(when(e.when))}${e.pre_admission ? " [pre-admission OPD]" : ""}: ${(e.doc_ids || []).map((id, i) => `<span class="cite" data-doc="${esc(id)}">${esc((e.records || [])[i] || id)}</span>`).join(" ") || esc((e.records || []).join("; "))}</li>`).join("")}</ul></div>`;
+}
 function glHTML(r) {
   const one = (h) => `<div class="hit"><div class="small"><span class="chip ${h.region === "India" ? "c-ok" : h.region === "US" ? "c-mute" : "c-info"}">${esc(h.region)}</span> <b>${esc(h.org)}</b> · ${esc(h.title)} · ${glPlace(h).label}
     <a href="${glPlace(h).href}" target="_blank">open</a></div><div style="margin-top:4px">${esc(h.text.slice(0, 520))}${h.text.length > 520 ? "..." : ""}</div></div>`;
@@ -1046,7 +1188,7 @@ function renderBoard() {
       ${allActs.map(actionHTML).join("") || '<div class="muted small">No actions.</div>'}
       ${st.next_review ? `<div class="stagebox"><b>Next Tumour Board review:</b> ${fmtDate(st.next_review.date)}</div>` : ""}</div>
     ${trendsHTML()}
-    <div class="card"><h3>Longitudinal Case File</h3><div class="timeline">${S.data.timeline.map((e) => `<div class="tev ${e.kind}"><div class="d">${fmtDate(e.date)}</div>${e.doc_id ? `<span class="cite" data-doc="${esc(e.doc_id)}">${esc(e.title)}</span> <span class="chip ${["FINAL", "AMENDED", "CORRECTED"].includes(e.status) ? "c-ok" : "c-bad"}">${esc(e.status)}</span>` : esc(e.title)}${e.kind === "action" ? ` <span class="chip c-mute">${esc(e.status)}</span>` : ""}</div>`).join("")}</div></div>
+    <div class="card"><h3>Longitudinal Case File</h3><div class="timeline">${S.data.timeline.map((e) => e.kind === "encounter" ? `<div class="tev encounter"><div class="d">${fmtDate(e.date)}</div>${esc(e.title)}${e.encounter_kind === "IP" && e.end ? ", " + dmyd(e.date) + " to " + dmyd(e.end) : ""}${(e.ward_history || []).length ? `<div class="small muted">Ward: ${esc(e.ward_history.map(wardText).join("; "))}</div>` : ""}</div>` : `<div class="tev ${e.kind}"><div class="d">${fmtDate(e.date)}</div>${e.doc_id ? `<span class="cite" data-doc="${esc(e.doc_id)}">${esc(e.title)}</span> <span class="chip ${["FINAL", "AMENDED", "CORRECTED"].includes(e.status) ? "c-ok" : "c-bad"}">${esc(e.status)}</span>` : esc(e.title)}${e.kind === "action" ? ` <span class="chip c-mute">${esc(e.status)}</span>` : ""}</div>`).join("")}</div></div>
   </div></div>`;
   const addRow = (d = "", t = "", due = "") => $("#b-acts").insertAdjacentHTML("beforeend", `<div class="arow"><select>${depts.map((x) => `<option ${x === d ? "selected" : ""}>${x}</option>`).join("")}</select><input placeholder="Task" value="${esc(t)}"><input type="date" value="${due}"><button class="ghost sm" data-rmrow>×</button></div>`);
   if ($("#b-acts")) addRow();
@@ -1145,26 +1287,121 @@ async function showSkills(role) {
   };
 }
 
-// ------------------------------------------------------------------ new case
+// ------------------------------------------------------------------ new case: from the hospital system (V2 item 3.2) or entered manually (V1)
 async function newCase() {
-  const ps = S.protocols;
-  $("#modal-body").innerHTML = `<h2 style="color:#1f2933;margin-top:0">New Tumour Board Case File</h2><div class="form">
-    <label>Case File ID</label><input id="n-id" placeholder="e.g. TB-2026-0142">
-    <label>Patient name</label><input id="n-name"><label>UHID / MRN</label><input id="n-mrn"><label>Age / Sex</label><input id="n-agesex" placeholder="62 Y / M">
-    <label>Protocol</label><select id="n-prot">${ps.map((p) => `<option value="${esc(p.id)}">${esc(p.label)} (v${esc(p.version)})</option>`).join("")}</select>
-    <label>NCG setting (as recorded in the signed reports, chosen by the clinician)</label><select id="n-setting"></select>
-    <label>Hospital level (NCG tiers)</label><select id="n-level"><option value="essential">Essential</option><option value="optimal">Optimal</option></select>
-    <label>Board date</label><input type="date" id="n-date">
-    <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end"><button class="ghost" data-closemodal>Cancel</button><button class="primary" id="n-go">Create</button></div></div>`;
+  let his = null;
+  try { his = await api("/his"); } catch (e) { his = null; }
+  const hisOn = !!(his?.status?.ok && his.can_create !== false);
+  const way = hisOn && ((his.treating_departments || []).length || S.me?.admin) ? "his" : "manual";
+  $("#modal-body").innerHTML = `<h2 style="color:#1f2933;margin-top:0">New Tumour Board Case File</h2>
+    ${hisOn ? `<div class="seg" role="tablist" aria-label="How to start the Case File"><button role="tab" data-way="his">From the hospital system</button><button role="tab" data-way="manual">Enter the patient manually</button></div>`
+      : his ? `<div class="small muted" style="margin-bottom:6px">The hospital system does not answer (${esc(his.status?.error || "not configured")}): enter the patient manually.</div>` : ""}
+    <div id="nc-his"></div><div id="nc-manual"></div>`;
   $("#modal").classList.remove("hidden");
-  const fillSettings = () => { const p = ps.find((x) => x.id === $("#n-prot").value); $("#n-setting").innerHTML = `<option value="">Not chosen yet</option>` + (p?.settings || []).map((x) => `<option value="${esc(x.id)}">${esc(x.label)}</option>`).join(""); };
-  fillSettings(); $("#n-prot").onchange = fillSettings; $("#n-level").value = S.org?.hospital?.level || "essential";
+  const setWay = (w) => { $$("[data-way]").forEach((b) => { b.classList.toggle("on", b.dataset.way === w); b.setAttribute("aria-selected", b.dataset.way === w ? "true" : "false"); });
+    $("#nc-his").classList.toggle("hidden", w !== "his"); $("#nc-manual").classList.toggle("hidden", w !== "manual"); };
+  $$("[data-way]").forEach((b) => (b.onclick = () => setWay(b.dataset.way)));
+  if (hisOn) newCaseHIS(his);
+  newCaseManual();
+  setWay(way);
+}
+const protoOpts = () => (S.protocols || []).map((p) => `<option value="${esc(p.id)}">${esc(p.label)} (v${esc(p.version)})</option>`).join("");
+const settingOpts = (pid) => `<option value="">Not chosen yet</option>` + ((S.protocols || []).find((x) => x.id === pid)?.settings || []).map((x) => `<option value="${esc(x.id)}">${esc(x.label)}</option>`).join("");
+const levelOpts = () => `<option value="essential">Essential</option><option value="optimal">Optimal</option>`;
+function newCaseManual() {
+  $("#nc-manual").innerHTML = `<div class="form">
+    <label for="n-id">Case File ID</label><input id="n-id" placeholder="e.g. TB-2026-0142">
+    <label for="n-name">Patient name</label><input id="n-name"><label for="n-mrn">UHID / MRN</label><input id="n-mrn"><label for="n-agesex">Age / Sex</label><input id="n-agesex" placeholder="62 Y / M">
+    <label for="n-prot">Protocol</label><select id="n-prot">${protoOpts()}</select>
+    <label for="n-setting">NCG setting (as recorded in the signed reports, chosen by the clinician)</label><select id="n-setting"></select>
+    <label for="n-level">Hospital level (NCG tiers)</label><select id="n-level">${levelOpts()}</select>
+    <label for="n-date">Board date</label><input type="date" id="n-date">
+    <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end"><button class="ghost" data-closemodal>Cancel</button><button class="primary" id="n-go">Create</button></div></div>`;
+  const fill = () => ($("#n-setting").innerHTML = settingOpts($("#n-prot").value));
+  fill(); $("#n-prot").onchange = fill; $("#n-level").value = S.org?.hospital?.level || "essential";
   $("#n-go").onclick = async () => {
     try {
       const c = await api("/cases", { json: { case_id: $("#n-id").value.trim(), protocol: $("#n-prot").value, board_date: $("#n-date").value, setting: $("#n-setting").value, hospital_level: $("#n-level").value,
         patient: { name: $("#n-name").value, mrn: $("#n-mrn").value, agesex: $("#n-agesex").value } } });
       $("#modal").classList.add("hidden"); S.tab = "ready"; await openCase(c.case_id);
-    } catch (e) { toast(e.message); }
+    } catch (e) { toast(e.message, 7000); }
+  };
+}
+// ---- HIS helpers (V2 items 3.2 to 3.6): dates DD/MM/YYYY, registrations, fetch windows, order stages
+const dmyd = (s) => dmy(String(s || "").slice(0, 10));
+const dmyt = (s) => (s ? dmyd(s) + (String(s).length > 15 ? " " + String(s).slice(11, 16) : "") : "");
+const REGKIND = { permanent: "permanent registration", temporary: "temporary registration", duplicate: "possible duplicate registration" };
+const regKind = (k) => REGKIND[k || "permanent"] || `${k} registration`;
+const ID_KIND = { uhid: "UHID", mrn: "MRN", cr_no: "CR No.", ip_no: "IP No.", op_no: "OP No.", reg_no: "Reg. No.", hospital_no: "Hospital No.", abha: "ABHA", pmjay: "PM-JAY ID" };
+const ageSex = (p) => [p?.age != null && p.age !== "" ? `${p.age} Y` : "", p?.sex || ""].filter(Boolean).join(" / ");
+const winLabel = (w) => (!w ? "" : w.all ? "all records" : w.from ? `records from ${dmy(w.from)}` : `last ${w.months || 12} months`);
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many || one + "s"}`;
+const encCount = (encs) => `${plural(encs.filter((e) => e.kind === "OP").length, "OP visit")}, ${plural(encs.filter((e) => e.kind === "IP").length, "IP admission")}`;
+const stageText = (o) => o.stage === "scheduled" ? `scheduled for ${dmyt(o.scheduled_for) || "a date not given"}`
+  : o.stage === "sample_collected" ? `sample collected${o.specimen?.collected || o.collected ? " on " + dmyt(o.specimen?.collected || o.collected) : ""}` : o.stage === "cancelled" ? "cancelled" : "ordered";
+const wardText = (w) => `${w.ward || "ward not named"}${w.bed ? " bed " + w.bed : ""}${w.from ? " from " + dmyt(w.from) : ""}${w.to ? " to " + dmyt(w.to) : ""}${w.reason ? " (" + w.reason + ")" : ""}`;
+function lookupHTML(r) {
+  if (!r.found) return `<div class="lookbox"><b>Not found.</b> No registration in ${esc(r.his || "the hospital system")} matches ${esc(r.identifier)}. Check the number, or enter the patient manually.</div>`;
+  const p = r.patient || {}, m = p.matched_on || {};
+  return `<div class="lookbox"><div><b>${esc(p.name)}</b> <span class="muted">${esc(ageSex(p))}</span></div>
+    <div class="kv small" style="margin-top:4px"><div>UHID</div><div><span class="mono">${esc(p.uhid)}</span> (${esc(regKind(p.registration_kind))})${m.kind && m.kind !== "uhid" ? ` · found by ${esc(ID_KIND[m.kind] || m.kind)} <span class="mono">${esc(m.value)}</span>` : ""}</div>
+      ${p.abha ? `<div>ABHA number</div><div class="mono">${esc(p.abha)}</div>` : ""}${p.abha_address ? `<div>ABHA address</div><div class="mono">${esc(p.abha_address)}</div>` : ""}${p.pmjay_id ? `<div>PM-JAY ID</div><div class="mono">${esc(p.pmjay_id)}</div>` : ""}
+      <div>Encounters</div><div>${encCount(r.encounters || [])}</div>
+      <div>Records</div><div>${plural(r.reports || 0, "record")} in the window (${esc(winLabel(r.window))}${r.window_start ? ", dated from " + dmy(r.window_start) : ""}), ${r.older || 0} older</div></div>
+    ${(r.similar || []).length ? `<div class="banner warn small" style="margin-bottom:0"><b>Possible duplicate or temporary registration: link it after creating; never merged automatically.</b>
+      ${r.similar.map((s) => `<div class="row"><span>${esc(s.name || "name not given")} · <span class="mono">${esc(s.uhid)}</span> (${esc(regKind(s.registration_kind))})${ageSex(s) ? " · " + esc(ageSex(s)) : ""}${s.registered_on ? " · registered " + dmyd(s.registered_on) : ""}</span></div>`).join("")}</div>` : ""}</div>`;
+}
+function newCaseHIS(his) {
+  const treating = his.treating_departments || [];
+  const depts = treating.length ? treating : (S.org?.departments || []).filter((d) => d.group === "treating");
+  const pickDept = treating.length > 1 || !!S.me?.admin || !!S.me?.coordinator;
+  const dw = his.default_window || { months: 12 };
+  const months = [...new Set([...(his.window_months || [6, 12, 24]), ...(dw.months ? [+dw.months] : [])])].sort((a, b) => a - b);
+  $("#nc-his").innerHTML = `<div class="form">
+    <label for="h-id">Patient identifier in ${esc(his.settings?.label || "the hospital system")}</label>
+    <div class="inline-input"><input id="h-id" placeholder="UHID, IP No. or OP No." autocomplete="off"><button class="ghost" id="h-look">Look up</button></div>
+    <div id="h-res"></div>
+    <div class="grid2f">
+      <div><label for="h-prot">Protocol</label><select id="h-prot">${protoOpts()}</select></div>
+      <div><label for="h-setting">NCG setting (as recorded in the signed reports, chosen by the clinician)</label><select id="h-setting"></select></div>
+      <div><label for="h-level">Hospital level (NCG tiers)</label><select id="h-level">${levelOpts()}</select></div>
+      <div><label for="h-win">Fetch window</label><select id="h-win">${months.map((m) => `<option value="${m}">Last ${m} months</option>`).join("")}<option value="all">All records</option><option value="from">From a date</option></select>
+        <input type="date" id="h-from" class="hidden" aria-label="Fetch records dated from" style="margin-top:6px"></div>
+      <div><label for="h-dept">Owning treating department</label>${pickDept ? `<select id="h-dept"><option value="">Choose the department</option>${depts.map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join("")}</select>`
+        : `<input id="h-dept" readonly value="${esc(depts[0]?.name || "none")}" data-id="${esc(depts[0]?.id || "")}">`}</div>
+      <div><label for="h-date">Board date</label><input type="date" id="h-date"></div></div>
+    <div class="small muted" style="margin-top:10px">Every report of every OP visit and IP admission in the window is fetched read-only (nothing is written to the hospital system), then read, matched to the patient and checked like every record. Older records can be fetched later.</div>
+    <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end"><button class="ghost" data-closemodal>Cancel</button><button class="primary" id="h-go">Create</button></div></div>`;
+  const fill = () => ($("#h-setting").innerHTML = settingOpts($("#h-prot").value));
+  fill(); $("#h-prot").onchange = fill; $("#h-level").value = S.org?.hospital?.level || "essential";
+  $("#h-win").value = dw.all ? "all" : dw.from ? "from" : String(dw.months || 12);
+  if (dw.from) { $("#h-from").value = dw.from; $("#h-from").classList.remove("hidden"); }
+  const win = () => { const v = $("#h-win").value; return v === "all" ? { all: true } : v === "from" ? { from: $("#h-from").value } : { months: +v }; };
+  let looked = "";
+  const look = async () => {
+    const id = $("#h-id").value.trim(); if (!id) { toast("Enter a UHID, IP No. or OP No."); return; }
+    const w = win(); if (w.from === "") { toast("Choose the date to fetch from"); return; }
+    const q = new URLSearchParams({ identifier: id, ...(w.all ? { all: "1" } : w.from ? { from_date: w.from } : { months: String(w.months) }) });
+    $("#h-res").innerHTML = `<div class="small" style="margin-top:6px"><span class="spin"></span> Asking the hospital system...</div>`;
+    try { $("#h-res").innerHTML = lookupHTML(await api("/his/lookup?" + q)); looked = id; }
+    catch (e) { $("#h-res").innerHTML = ""; toast(e.message, 8000); }
+  };
+  $("#h-look").onclick = look;
+  $("#h-id").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); look(); } };
+  $("#h-win").onchange = () => { $("#h-from").classList.toggle("hidden", $("#h-win").value !== "from"); if (looked && $("#h-win").value !== "from") look(); };
+  $("#h-from").onchange = () => { if (looked && $("#h-from").value) look(); };
+  $("#h-go").onclick = async () => {
+    const identifier = $("#h-id").value.trim(); if (!identifier) { toast("Enter a UHID, IP No. or OP No."); return; }
+    const w = win(); if (w.from === "") { toast("Choose the date to fetch from"); return; }
+    const department = $("#h-dept").dataset.id || $("#h-dept").value;
+    if (pickDept && !department) { toast("Choose the treating department that owns this Case File"); return; }
+    const btn = $("#h-go"); btn.disabled = true; btn.innerHTML = `<span class="spin"></span> Creating...`;
+    try {
+      const r = await api("/cases/from-his", { json: { identifier, protocol: $("#h-prot").value, setting: $("#h-setting").value, hospital_level: $("#h-level").value, board_date: $("#h-date").value, window: w, ...(department ? { department } : {}) } });
+      $("#modal").classList.add("hidden"); S.tab = "ready"; await openCase(r.case.case_id);
+      toast(`Case File ${r.case.case_id} created from ${his.settings?.label || "the hospital system"}: ${plural(r.total, "record")} fetched, now being read and checked`, 6000);
+      watchJob(r.job);
+    } catch (e) { toast(e.message, 8000); btn.disabled = false; btn.textContent = "Create"; }
   };
 }
 
@@ -1228,6 +1465,7 @@ async function showOrgPage() {
           <div class="checkrow"><label class="chk"><input type="checkbox" id="o-pmjay" ${h.pmjay_empanelled !== false ? "checked" : ""}> PM-JAY empanelled</label></div><div></div></div></div>
       <div class="small muted" style="margin-top:6px">The NCG level decides which tier of the work-up applies. The fetch window is how far back the hospital systems are read for a patient.</div>
       <div class="actions-row"><button class="primary sm" id="o-save-h">Save hospital settings</button></div></div>
+    <div id="o-his"></div>
     <div class="card"><h3>Departments <button class="ghost sm" id="o-adddept">+ Department</button></h3>
       <div class="muted small" style="margin-bottom:6px">Treating departments own Case Files and send requests; supporting departments receive and answer them. The email is used for the mail draft of a request.</div>
       ${tscroll(`<table class="t edit"><thead><tr><th>Name</th><th>Group</th><th>Also known as</th><th>Email</th><th>Id</th><th></th></tr></thead><tbody id="o-depts">${(o.departments || []).map((d) => deptRow(d)).join("")}</tbody></table>`)}
@@ -1289,6 +1527,32 @@ async function showOrgPage() {
     catch (e) { toast(e.message, 7000); }
   };
   renderRoutes();  // V2 item 2.4: the routing table (loaded on its own, saved on its own)
+  renderHISSettings();  // V2 item 3.1: the hospital information system connection (loaded and saved on its own)
+}
+// ------------------------------------------------------------------ HIS connection (root admin) · V2 item 3.1
+async function renderHISSettings() {
+  const box = $("#o-his"); if (!box) return;
+  box.innerHTML = `<div class="card"><h3>HIS connection</h3><div class="muted small"><span class="spin"></span> Asking the hospital system...</div></div>`;
+  let r;
+  try { r = await api("/his"); } catch (e) { box.innerHTML = `<div class="card"><h3>HIS connection</h3><div class="muted small">${esc(e.message)}</div></div>`; return; }
+  const s = r.settings || {}, st = r.status || {};
+  box.innerHTML = `<div class="card" id="o-his-card"><h3>HIS connection <span>${st.ok ? `<span class="chip c-ok">Answers</span>` : `<span class="chip c-bad">Not answering</span>`}</span></h3>
+    <div class="small" style="margin-bottom:6px">${st.ok ? `Answers: <b>${esc(st.name || s.label || "")}</b>${st.fhir_version ? `, FHIR ${esc(st.fhir_version)}` : ""}${st.token_ok === false ? ` <span class="chip c-bad">token refused</span>` : ""}` : `<span class="muted">${esc(st.error || "No answer")}</span>`}</div>
+    <div class="muted small" style="margin-bottom:6px">The hospital information system Case Files are created from (read-only: nothing is written back). The token is stored on the server and never shown; leave it blank to keep the saved one.</div>
+    <div class="form"><div class="grid2f">
+      <div><label for="hs-label">Label</label><input id="hs-label" value="${esc(s.label || "")}" ${r.can_manage ? "" : "disabled"}></div>
+      <div><label for="hs-url">URL</label><input id="hs-url" value="${esc(s.url || "")}" placeholder="http://127.0.0.1:7130" ${r.can_manage ? "" : "disabled"}></div>
+      <div><label for="hs-token">Token</label><input id="hs-token" type="password" autocomplete="new-password" value="" placeholder="${s.has_token ? "token set (blank keeps it)" : "bearer token"}" ${r.can_manage ? "" : "disabled"}></div>
+      <div><label for="hs-tfile">Token file</label><input id="hs-tfile" value="${esc(s.token_file || "")}" placeholder="path on the server" ${r.can_manage ? "" : "disabled"}></div></div>
+      <label class="chk"><input type="checkbox" id="hs-on" ${s.enabled ? "checked" : ""} ${r.can_manage ? "" : "disabled"}> Enabled</label></div>
+    <div class="small muted">${s.has_token ? "Token set." : "No token set."} Kind: ${esc(s.kind || "fhir")}.</div>
+    ${r.can_manage ? `<div class="actions-row"><button class="primary sm" id="hs-save">Save HIS connection</button></div>` : ""}</div>`;
+  if ($("#hs-save")) $("#hs-save").onclick = async () => {
+    const body = { kind: s.kind || "fhir", connector: s.connector || "", label: $("#hs-label").value.trim(), url: $("#hs-url").value.trim(), token: $("#hs-token").value, token_file: $("#hs-tfile").value.trim(), enabled: $("#hs-on").checked };
+    $("#hs-token").value = "";
+    try { await api("/his", { method: "PUT", json: body }); toast("HIS connection saved"); renderHISSettings(); }
+    catch (e) { toast(e.message, 8000); }
+  };
 }
 // ------------------------------------------------------------------ routing map: which department produces each protocol record (V2 item 2.4)
 async function renderRoutes() {

@@ -18,6 +18,7 @@ from tumour_board import discord  # discordances between reports, decision watch
 from tumour_board import fhir_export  # FHIR R4 document bundle and the HBCR registry abstract (12 Oct)
 from tumour_board import metrics  # agenda readiness, chase list, quality dashboard (12 Oct)
 from tumour_board import accounts  # department admins create / disable / remove doctor logins; root admin accounts (V2 item 2.2)
+from tumour_board import his_case, his_client  # HIS-connected Case Files: create from a UHID, re-fetch, link registrations, outside reports (V2 items 3.1 to 3.6)
 
 log = logging.getLogger("tumour_board")
 
@@ -116,6 +117,7 @@ def _case_permissions(r, c, st, docs):
     """What this user may do on this Case File, so the UI can hide forbidden actions (the routes still enforce them)."""
     prot = protocol.get(c["protocol"]) if c.get("protocol") else {"mandatory": []}
     return {"upload": org.can(r, "upload_to_case"), "reprocess": org.can(r, "upload_to_case"), "delete_case": org.can(r, "delete_case"),
+            "refetch": bool(c.get("his")) and org.can(r, "upload_to_case"), "link_registration": bool(c.get("his")) and org.can(r, "upload_to_case"),  # V2 items 3.2 / 3.5
             "board_record": org.can(r, "board_record"), "review": org.can(r, "review"), "list_case": org.can(r, "list_case"),
             "waive": {q["id"]: org.can(r, "waive", q.get("department") or None) for q in prot.get("mandatory", [])},
             "confirm": {d["doc_id"]: org.can(r, "confirm", _doc_department(d)) for d in docs},
@@ -464,10 +466,98 @@ def setup_tumour_board_routes():
         _need(rl, "manage_department", did)
         return {"ok": True, **_account_call(accounts.remove_doctor, rl["user"], rl, did, username)}
 
+    def _his_brief(c):
+        h = c.get("his")
+        if not h:
+            return c
+        return {**c, "his": {"label": h.get("label"), "uhid": h.get("uhid"), "registration_kind": h.get("registration_kind"), "fetched_at": h.get("fetched_at"),
+                             "window_label": his_case.window_label(h.get("window") or {}), "unlinked": sum(1 for x in h.get("similar") or [] if not x.get("linked"))}}
+
     @r.get("/cases")
     async def cases(request: Request):
         _user(request)
-        return {"cases": store.list_cases(), "demo": service.list_demo()}
+        return {"cases": [_his_brief(c) for c in store.list_cases()], "demo": service.list_demo()}
+
+    # ---- HIS-connected Case Files (V2 items 3.1, 3.2, 3.5): the hospital information system, lookup, create from a UHID, re-fetch ----
+    def _his_call(coro):
+        async def run():
+            try:
+                return await coro
+            except his_case.HISCaseError as e:
+                raise HTTPException(e.status, str(e))
+            except his_client.HISError as e:
+                raise HTTPException(502, f"The hospital system did not answer: {e}")
+        return run()
+
+    @r.get("/his")
+    async def his_info(request: Request):
+        """The configured hospital information system (never its token) and whether it answers; settings for root admins."""
+        rl = _roles(request); _need_known(rl) if not org.can(rl, "manage_org") else None
+        cfg = his_client.settings()
+        out = {"settings": his_client.public(cfg), "can_manage": org.can(rl, "manage_org"), "can_create": org.can(rl, "create_case"),
+               "treating_departments": [{"id": d["id"], "name": d["name"]} for d in org.departments("treating") if rl.get("admin") or d["id"] in (rl.get("treating") or {})],
+               "window_months": list(his_case.WINDOW_MONTHS), "default_window": his_case.default_window()}
+        c = his_client.client()
+        if c is None:
+            out["status"] = {"ok": False, "error": "No hospital information system is configured or it is disabled"}
+        else:
+            try:
+                out["status"] = await c.ping()
+            except Exception as e:
+                out["status"] = {"ok": False, "error": f"{type(e).__name__}: {str(e)[:160]}"}
+        return out
+
+    @r.put("/his")
+    async def his_save(request: Request):
+        rl = _roles(request); _need(rl, "manage_org"); b = await request.json()
+        try:
+            return {"ok": True, "settings": his_client.save_settings(b if isinstance(b, dict) else {}, by=rl["user"])}
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+    @r.get("/his/lookup")
+    async def his_lookup(request: Request, identifier: str = "", months: str = "", all: int = 0, from_date: str = ""):
+        """Before creating: the registration a UHID, IP No. or OP No. resolves to, its encounters, how many records fall inside the
+        window, and the registrations that may be the same person (for a person to link, never merged)."""
+        rl = _roles(request); _need(rl, "create_case")
+        window = {"all": True} if all else ({"from": from_date} if from_date else ({"months": months} if months else None))
+        return await _his_call(his_case.lookup(identifier, window))
+
+    @r.post("/cases/from-his")
+    async def create_from_his(request: Request):
+        """A treating doctor creates a Case File from a UHID (or an IP / OP No.): {"identifier", "protocol", "setting"?, "hospital_level"?,
+        "board_date"?, "window"?: {"months" | "all" | "from"}, "department"? (the owning treating department when the doctor has several
+        or the caller is an admin), "case_id"?}. The first fetch runs as a job."""
+        u = _user(request); rl = _roles(request); _need(rl, "create_case"); b = await request.json()
+        if not isinstance(b, dict):
+            raise HTTPException(400, "Send the identifier and the protocol")
+        out = await _his_call(his_case.create(str(b.get("identifier") or ""), str(b.get("protocol") or ""), str(b.get("setting") or ""), str(b.get("hospital_level") or ""),
+                                              str(b.get("board_date") or ""), b.get("window"), u, rl, department=b.get("department"), case_id=str(b.get("case_id") or "")))
+        job = out["job"]
+        return {"case": out["case"], "job": job["id"], "total": job["total"], "his": job.get("his")}
+
+    @r.post("/cases/{case_id}/his/refetch")
+    async def his_refetch(case_id: str, request: Request):
+        """Re-fetch from the HIS (V2 item 3.5): only records new or changed since the last fetch; the gate re-checks and requests whose
+        record arrived final and signed close themselves."""
+        u = _user(request); rl = _roles(request); _need(rl, "upload_to_case"); _case(case_id)
+        job = await _his_call(his_case.refetch(case_id, u))
+        return {"job": job["id"], "total": job["total"], "his": job.get("his")}
+
+    @r.post("/cases/{case_id}/his/link")
+    async def his_link(case_id: str, request: Request):
+        """A person links a possible duplicate or temporary registration ({"uhid", "reason"?}); its records join the Case File labelled
+        with that registration. Never automatic (plan 3.2)."""
+        u = _user(request); rl = _roles(request); _need(rl, "upload_to_case"); _case(case_id); b = await request.json()
+        job = await _his_call(his_case.link_registration(case_id, str((b or {}).get("uhid") or ""), u, str((b or {}).get("reason") or "")))
+        return {"job": job["id"], "total": job["total"], "his": job.get("his"), "case": store.get_case(case_id)}
+
+    @r.post("/cases/{case_id}/his/fetch-older")
+    async def his_fetch_older(case_id: str, request: Request):
+        """Widen the fetch window ({"months" | "all" | "from"}) without starting over (plan 3.2)."""
+        u = _user(request); rl = _roles(request); _need(rl, "upload_to_case"); _case(case_id); b = await request.json() if (await request.body()) else {}
+        job = await _his_call(his_case.fetch_older(case_id, b if isinstance(b, dict) else {}, u))
+        return {"job": job["id"], "total": job["total"], "his": job.get("his"), "case": store.get_case(case_id)}
 
     @r.post("/cases")
     async def create(request: Request):
@@ -526,11 +616,13 @@ def setup_tumour_board_routes():
         st = store.get_state(case_id)
         all_docs = store.list_docs(case_id)
         docs = []
-        for d in rules.case_docs(case_id, st):  # as the clinicians confirmed them (type, dates, values; V1 items 2.2, 3.1, 3.2)
+        confirmed_docs = rules.case_docs(case_id, st)
+        for d in confirmed_docs:  # as the clinicians confirmed them (type, dates, values; V1 items 2.2, 3.1, 3.2)
             docs.append({k: d.get(k) for k in ("doc_id", "filename", "rel_path", "ext", "state", "error", "dismissed", "classification", "identity", "identity_read", "added", "department", "uploaded_by")} |
                         {"facts": d.get("facts", {}), "pages": len(d.get("pages") or []), "methods": sorted({p["method"] for p in d.get("pages") or []}),
                          "scan_pages": scanned.scan_pages(d.get("pages")),  # pages read from an image: "from scan (OCR)" (V1 item 8.1)
-                         "page_flags": sorted({f for p in d.get("pages") or [] for f in p.get("flags") or []})})  # Hindi / regional text, illegible parts (V1 item 3.6)
+                         "page_flags": sorted({f for p in d.get("pages") or [] for f in p.get("flags") or []})}  # Hindi / regional text, illegible parts (V1 item 3.6)
+                        | his_case.doc_view(d))  # HIS status, signature, encounter, accession, version history; outside reports (V2 items 3.3 to 3.6)
         facts = rules.resolve_facts(rules.case_docs(case_id, st), st.get("overrides"))  # confirmations overlaid (V1 item 2.2)
         cat = protocol.facts()
         sig = rules.case_signature(case_id, st)  # what a summary or brief would be generated from now (V1 item 4.5)
@@ -540,11 +632,15 @@ def setup_tumour_board_routes():
         return {"case": c, "state": st, "documents": docs, "facts": {k: {"label": cat.get(k, {}).get("label", k), **v} for k, v in facts.items()},
                 "timeline": postboard.timeline(case_id), "permissions": _case_permissions(rl, c, st, all_docs), "signature": sig, "stale": stale,
                 "discordances": discord.summary(case_id, st),  # reports that disagree, values a decision cited that later reports changed (12 Oct)
-                "trends": postboard.trends(case_id, st), "outcomes": postboard.OUTCOMES}  # values over time (12 Oct)
+                "trends": postboard.trends(case_id, st), "outcomes": postboard.OUTCOMES,  # values over time (12 Oct)
+                "his": his_case.public(c), "his_flags": his_case.flags(case_id, confirmed_docs),  # the hospital system, its registrations and orders; HIS values the text does not carry (V2 item 3.3)
+                "groups": his_case.encounter_groups(c, confirmed_docs)}  # records grouped by OP visit and IP admission (V2 item 3.4)
 
     @r.post("/cases/{case_id}/documents")
-    async def upload(case_id: str, request: Request, files: list[UploadFile] = File(...), paths: str = Form("[]")):
-        u = _user(request); _need(_roles(request), "upload_to_case"); _case(case_id)
+    async def upload(case_id: str, request: Request, files: list[UploadFile] = File(...), paths: str = Form("[]"), outside: str = Form("")):
+        """Upload into a Case File. Into an HIS-connected Case File every upload is an outside report (another hospital, a private
+        laboratory; V2 item 3.6) unless `outside` is "0"; elsewhere `outside=1` labels it so."""
+        u = _user(request); _need(_roles(request), "upload_to_case"); c = _case(case_id)
         rels = json.loads(paths or "[]")
         data = []
         for i, f in enumerate(files):

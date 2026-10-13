@@ -16,7 +16,7 @@ def wait_job(c, jid):
     t0 = time.time()
     while True:
         j = c.get(f"/api/tb/jobs/{jid}").json()
-        if j["state"] == "finished":
+        if j["state"] in ("finished", "failed", "interrupted"):
             return j, round(time.time() - t0, 1)
         time.sleep(0.5)
 
@@ -379,6 +379,358 @@ def v2_phase2_cleanup(c):
         print("cleanup org failed:", e)
     for u in V2_USERS:
         c.request("DELETE", "/api/auth/users", json={"username": u})
+
+
+# ---- V2 Phase 3: HIS-connected Case Files (3.1 adapter, 3.2 create from a UHID, 3.3 HIS data in the pipeline, 3.4 OP / IP labels,
+# 3.5 re-fetch, 3.6 outside reports). Runs against a throw-away copy of the mock hospital on port 7131 so the desk signs never
+# change the live demo store; the Vaidyx-TB HIS connection is pointed at the copy for the section and restored afterwards.
+import pathlib, shutil, subprocess, tempfile
+
+REPO = pathlib.Path(__file__).resolve().parents[2]
+H_USERS = {"tb-e2e-h-breast": ("Hbreast-e2e-2026!", {"breast_surgery": "doctor"}), "tb-e2e-h-medonc": ("Hmedonc-e2e-2026!", {"medical_oncology": "doctor"}),
+           "tb-e2e-h-gyn": ("Hgyn-e2e-2026!", {"gynaecologic_oncology": "doctor"}), "tb-e2e-h-gi": ("Hgi-e2e-2026!", {"gastrointestinal_surgery": "doctor"}),
+           "tb-e2e-h-surg": ("Hsurg-e2e-2026!", {"surgical_oncology": "doctor"}), "tb-e2e-h-rad": ("Hrad-e2e-2026!", {"radiology": "doctor"})}
+MOCK_PORT = 7131
+LIVE_HIS = {"kind": "fhir", "label": "Vaidyx Demo Hospital HIS (SYNTHETIC)", "url": "http://127.0.0.1:7130", "token_file": str(REPO / "data" / "his_mock" / "token"), "enabled": True}
+
+
+def _mock_copy():
+    """A throw-away copy of data/his_mock (store, events, documents, token; no DICOM) and the mock app on 127.0.0.1:7131 over it."""
+    src = REPO / "data" / "his_mock"
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="tb-e2e-his-"))
+    for name in ("store.json", "events.jsonl", "events.hl7", "fixture_index.json", "token"):
+        if (src / name).exists():
+            shutil.copy2(src / name, tmp / name)
+    shutil.copytree(src / "documents", tmp / "documents")
+    (tmp / "dicom").mkdir()
+    env = {**os.environ, "TB_HIS_MOCK_DATA": str(tmp), "TB_HIS_MOCK_PORT": str(MOCK_PORT), "TB_HIS_MOCK_ORTHANC": "http://127.0.0.1:1"}  # never the live Orthanc
+    log = open(tmp / "mock.log", "w")
+    proc = subprocess.Popen([sys.executable, "-m", "uvicorn", "--factory", "his_mock.app:create_app", "--host", "127.0.0.1", "--port", str(MOCK_PORT), "--log-level", "warning"],
+                            cwd=str(REPO), env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+    for _ in range(60):
+        try:
+            if httpx.get(f"http://127.0.0.1:{MOCK_PORT}/health", timeout=2).status_code == 200:
+                return tmp, proc
+        except Exception:
+            pass
+        time.sleep(0.5)
+    proc.terminate()
+    raise RuntimeError(f"the e2e mock copy did not start (see {tmp}/mock.log)")
+
+
+def _job(c, r):
+    """The job of a from-his / refetch / link / upload answer, waited for; (answer, job, seconds)."""
+    body = r.json()
+    j, secs = wait_job(c, body["job"])
+    return body, j, secs
+
+
+def _req(d, rid):
+    return next((x for x in d["state"]["gate"]["requirements"] if x["id"] == rid), {})
+
+
+def _gaps(d):
+    return sorted((x["id"], x.get("level")) for x in d["state"]["gate"]["requirements"] if x["status"] not in ("satisfied", "not_applicable", "waived"))
+
+
+def v2_phase3(c, base, ctx):
+    """V2 Phase 3 on the fixture patients of his_mock/scenarios.json (SYNTHETIC)."""
+    h = c.get("/api/tb/his").json()
+    check("3.1 the HIS connection is configured, answers and never returns its token", h["status"]["ok"] and h["settings"]["has_token"] and "token" not in h["settings"]
+          and h["status"]["token_ok"] is True, json.dumps({k: h["status"].get(k) for k in ("ok", "name", "fhir_version", "error")}))
+    tmp, proc = _mock_copy(); ctx["tmp"], ctx["proc"] = tmp, proc
+    r = c.put("/api/tb/his", json={"kind": "fhir", "label": "Vaidyx Demo Hospital HIS (SYNTHETIC) e2e copy", "url": f"http://127.0.0.1:{MOCK_PORT}", "token_file": str(tmp / "token"), "enabled": True})
+    check("3.1 the HIS connection can be pointed at another HIS (the e2e copy); the saved settings carry no token", r.status_code == 200 and "token" not in r.json()["settings"]
+          and r.json()["settings"]["url"].endswith(str(MOCK_PORT)), r.text[:160])
+    h = c.get("/api/tb/his").json()
+    check("3.1 the e2e copy answers through the adapter", h["status"]["ok"], json.dumps(h["status"])[:160])
+    au = c.get("/api/tb/org/audit").json()["events"]
+    check("3.1 saving the HIS settings is audited without the token", any(e["kind"] == "his_settings_saved" and "token" not in e for e in au))
+    # throw-away doctor logins through the Tumour Board (never a Vaidyx admin)
+    cl = {}
+    for u, (pw, depts) in H_USERS.items():
+        c.request("DELETE", "/api/auth/users", json={"username": u})
+        r = c.post("/api/tb/org/accounts", json={"username": u, "password": pw, "departments": depts, "display_name": f"{u} (e2e)"})
+        cl[u] = httpx.Client(base_url=base, timeout=600)
+        ok = r.status_code == 200 and cl[u].post("/api/auth/login", json={"username": u, "password": pw}).status_code == 200
+        if not ok:
+            check(f"3.2 e2e login {u}", False, r.text[:120])
+    breast, medonc, gyn, gi, surg, rad = (cl[k] for k in ("tb-e2e-h-breast", "tb-e2e-h-medonc", "tb-e2e-h-gyn", "tb-e2e-h-gi", "tb-e2e-h-surg", "tb-e2e-h-rad"))
+    check("3.2 the treating doctors see the HIS as a way to create (one treating department each)", all(len(x.get("/api/tb/his").json()["treating_departments"]) == 1 for x in (breast, medonc, gyn, gi, surg))
+          and rad.get("/api/tb/his").json()["treating_departments"] == [])
+    # lookup
+    lk = gyn.get("/api/tb/his/lookup", params={"identifier": "VXH/26/004209"}).json()
+    check("3.2 lookup by UHID: registration, encounters, records in the window and the temporary registration to link", lk["found"] and lk["patient"]["uhid"] == "VXH/26/004209"
+          and lk["patient"]["age"] == 50 and lk["patient"]["sex"] == "F" and len(lk["encounters"]) >= 1 and lk["reports"] >= 8
+          and [s["uhid"] for s in lk["similar"]] == ["VXH/T/26/00412"] and lk["similar"][0]["registration_kind"] == "temporary" and "link" in lk["note"].lower(), json.dumps(lk)[:200])
+    lk = medonc.get("/api/tb/his/lookup", params={"identifier": "IP/26/01875"}).json()
+    check("3.2 lookup by IP No. resolves to its UHID", lk["found"] and lk["patient"]["uhid"] == "VXH/26/004212" and lk["patient"]["matched_on"] == {"kind": "ip_no", "value": "IP/26/01875"})
+    lk = surg.get("/api/tb/his/lookup", params={"identifier": "OP/26/118708"}).json()
+    check("3.2 lookup by OP No. resolves to its UHID", lk["found"] and lk["patient"]["uhid"] == "VXH/26/004206" and lk["patient"]["matched_on"]["kind"] == "op_no" and not lk["patient"].get("abha"))
+    check("3.2 lookup of an unknown number: not found, no error", gyn.get("/api/tb/his/lookup", params={"identifier": "VXH/26/999999"}).json()["found"] is False)
+    l4 = surg.get("/api/tb/his/lookup", params={"identifier": "VXH/26/004204"}).json(); l10 = gyn.get("/api/tb/his/lookup", params={"identifier": "VXH/26/004210"}).json()
+    check("3.2 two patients with the same common name (Sunita Devi): each UHID is its own registration, neither offered as a duplicate (ages differ)",
+          l4["patient"]["name"] == l10["patient"]["name"] and l4["patient"]["uhid"] != l10["patient"]["uhid"] and l4["similar"] == [] and l10["similar"] == [] and l4["patient"]["age"] != l10["patient"]["age"])
+    check("3.2 a supporting doctor cannot create a Case File from the HIS (403)", rad.post("/api/tb/cases/from-his", json={"identifier": "VXH/26/004201", "protocol": "breast"}).status_code == 403)
+    check("3.2 a treating doctor cannot own it through a supporting department (400)", breast.post("/api/tb/cases/from-his", json={"identifier": "VXH/26/004201", "protocol": "breast", "department": "Radiology"}).status_code == 400)
+    check("3.2 unknown registration answers 404", breast.post("/api/tb/cases/from-his", json={"identifier": "VXH/26/999999", "protocol": "breast"}).status_code == 404)
+
+    def create(client, ident, protocol, setting, cid, level="optimal", window=None, department=None):
+        t0 = time.time()
+        r = client.post("/api/tb/cases/from-his", json={"identifier": ident, "protocol": protocol, "setting": setting, "hospital_level": level, "case_id": cid, "window": window, "department": department})
+        fetch_secs = round(time.time() - t0, 1)
+        if r.status_code != 200:
+            check(f"3.2 create {cid} from {ident}", False, r.text[:200]); return None, None, fetch_secs
+        ctx["cases"].append(cid)
+        body, j, secs = _job(client, r)
+        return client.get(f"/api/tb/cases/{cid}").json(), j, fetch_secs
+
+    # P01: complete work-up (breast, early): the gate passes on the first fetch, every record final and digitally signed, labelled with its OP No.
+    d, j, fs = create(breast, "VXH/26/004201", "breast", "early", "TB-H-P01")
+    if d:
+        g = d["state"]["gate"]; docs = d["documents"]
+        check("3.2 P01 complete work-up: Case File created from the UHID, owned by the doctor's department, fetched and read", d["case"]["department"] == "breast_surgery" and d["case"]["his"]["uhid"] == "VXH/26/004201"
+              and d["case"]["patient"]["mrn"] == "VXH/26/004201" and d["case"]["hospital_level"] == "optimal" and len(docs) == 8 and all(x["state"] == "ready" for x in docs), f"{len(docs)} docs, job {j['seconds']} s")
+        check("3.2 HIS fetch of the patient within 30 s (plan section 6)", fs <= 30, f"{fs} s")
+        check("3.3 P01 gate passes at both levels on the first fetch; no request open", g["passed"] and g["levels"]["1"]["open"] == 0 and g["levels"]["2"]["open"] == 0
+              and not any(a["status"] != "completed" for a in d["state"]["actions"]), f"{g['satisfied']}/{g['total']}")
+        check("3.3 P01 every record is final and digitally signed from the HIS (verified Provenance), status and signature sources recorded",
+              all(x["his"]["signed"] and x["classification"]["status"] == "FINAL" and x["classification"]["signed"] == "yes" and x["classification"]["signed_source"] == "his" for x in docs)
+              and all(x["his"]["signature"]["ca"] == "Vaidyx Demo CA" for x in docs))
+        check("3.4 P01 every record carries its OP No. and accession; records grouped by encounter", all(x["his"]["encounter_number"] == "OP/26/118701" for x in docs)
+              and sum(1 for x in docs if x["his"].get("accession")) == 7 and [gr["key"] for gr in d["groups"] if gr["kind"] in ("OP", "IP")] and any(gr["pre_admission"] for gr in d["groups"] if gr.get("kind") == "OP"))
+        ids = {(x["kind"], x["value"]) for x in d["case"]["patient"]["ids"]}
+        check("3.2 P01 ABHA number shown as an identifier (optional, never a gap); Aadhaar never present", ("abha", "99-2600-0000-0101") in ids
+              and not any(k == "aadhaar" for k, _ in ids) and not any(re.fullmatch(r"\d{4}[ -]?\d{4}[ -]?\d{4}", v or "") for _, v in ids))
+        check("3.3 P01 values shown as written with a verified quote from the report text", d["facts"]["haemoglobin"]["current"]["verification"] == "verified" and "gm%" in d["facts"]["haemoglobin"]["current"]["value"]
+              and d["facts"]["creatinine"]["current"]["verification"] == "verified", f"{d['facts'].get('haemoglobin', {}).get('current', {}).get('value')}")
+        check("3.2 P01 Case File list carries the HIS brief", any(x["case_id"] == "TB-H-P01" and (x.get("his") or {}).get("uhid") == "VXH/26/004201" for x in breast.get("/api/tb/cases").json()["cases"]))
+        check("3.5 permissions: the treating doctor may re-fetch and link; the supporting doctor may not", d["permissions"]["refetch"] is True and d["permissions"]["link_registration"] is True
+              and rad.post("/api/tb/cases/TB-H-P01/his/refetch").status_code == 403)
+        check("3.7 a supporting doctor cannot upload into a Case File", rad.post("/api/tb/cases/TB-H-P01/documents", files=[("files", ("x.txt", b"synthetic"))], data={"paths": "[]"}).status_code == 403)
+
+    # P12 by IP No.: preliminary CT -> request to Radiology naming the accession -> sign on the desk -> re-fetch -> passes; the 2025 OPD note is outside the window
+    d, j, fs = create(medonc, "IP/26/01875", "lung_nsclc", "non_metastatic", "TB-H-P12")
+    if d:
+        cid = "TB-H-P12"; r12 = _req(d, "cect_tap")
+        check("3.2 P12 entered by IP No.: the Case File is for the UHID and holds every OP visit and IP admission", d["case"]["his"]["uhid"] == "VXH/26/004212" and d["case"]["his"]["matched_on"]["kind"] == "ip_no"
+              and {e["kind"] for e in d["case"]["his"]["encounters"]} == {"OP", "IP"} and len(d["documents"]) == 13)
+        check("3.3 P12 preliminary CT is a Level 1 gap with its accession No.", _gaps(d) == [("cect_tap", 1)] and r12["status"] == "not_final" and r12["accession"] == "RAD/26/01004", json.dumps(_gaps(d)))
+        a = next((x for x in d["state"]["actions"] if x["requirement"] == "cect_tap"), {})
+        check("3.3 P12 request routed to Radiology carries the accession No.", a.get("department") == "Radiology" and a.get("accession") == "RAD/26/01004" and a.get("status") != "completed")
+        rows = _open_rows(rad, "radiology", cid, "cect_tap")
+        check("3.3 P12 Radiology inbox shows the request", len(rows) == 1)
+        check("3.2 P12 the OPD note of 2025 is outside the 12-month window and counted as older", d["case"]["his"]["older_available"] == 1 and d["case"]["his"]["window"] == {"months": 12})
+        ct = next(x for x in d["documents"] if x["his"]["id"] == "p12-r02")
+        check("3.3 P12 preliminary CT: status and signature from the HIS (preliminary, not signed)", ct["classification"]["status"] == "PRELIMINARY" and ct["classification"]["signed"] == "no" and ct["his"]["signed"] is False)
+        op = next((gr for gr in d["groups"] if gr.get("number") == "OP/26/118716"), {})
+        check("3.4 P12 the CT done at the OP visit before admission is grouped under that visit and labelled pre-admission OPD", op.get("pre_admission") is True and ct["doc_id"] in op.get("docs", []))
+        # the radiologist completes and signs on the RIS desk of the e2e copy
+        rs = httpx.post(f"http://127.0.0.1:{MOCK_PORT}/desk/api/RAD/orders/rad-26-01004/sign", json={"signer": "prac-vxreg-20201"}, timeout=60)
+        check("1.5 desk: Complete and sign makes the CT final with a signature (e2e copy)", rs.status_code == 200 and rs.json().get("status") == "final" and rs.json().get("signature"), rs.text[:160])
+        r = medonc.post(f"/api/tb/cases/{cid}/his/refetch")
+        body, jj, secs = _job(medonc, r)
+        d2 = medonc.get(f"/api/tb/cases/{cid}").json()
+        check("3.5 P12 re-fetch brings only the changed report (delta), as a new version; versions at the watermark instant are skipped, not re-read", r.status_code == 200
+              and body["his"]["added"] == 1 and body["his"]["updated"] == 0 and body["his"]["skipped"] == body["his"]["reports"] - 1 and body["his"]["reports"] <= 3 and jj["state"] == "finished", json.dumps(body.get("his")))
+        vs = sorted((x for x in d2["documents"] if x["his"]["id"] == "p12-r02"), key=lambda x: x["his"]["version"])
+        check("3.5 P12 version 1 kept as history (superseded), version 2 final and signed", len(vs) == 2 and vs[0].get("superseded", {}).get("version") == 2 and vs[1]["his"]["signed"] and vs[1]["classification"]["status"] == "FINAL"
+              and vs[0]["doc_id"] in d2["state"]["gate"]["documents"]["superseded"])
+        check("3.5 P12 gate passes after the re-fetch and the request closed itself", d2["state"]["gate"]["passed"] and next(x for x in d2["state"]["actions"] if x["requirement"] == "cect_tap")["status"] == "completed",
+              f"{d2['state']['gate']['satisfied']}/{d2['state']['gate']['total']}")
+        check("3.5 P12 the owning department is told what the re-fetch closed", any(n["case_id"] == cid and n.get("refetch") and n["kind"] == "request_closed" for n in medonc.get("/api/tb/notifications").json()["notifications"])
+              and jj.get("refetch_result", {}).get("closed"))
+        check("3.5 P12 watermark advanced; the fetch is audited", d2["case"]["his"]["watermark"] > d["case"]["his"]["watermark"]
+              and any(e["kind"] == "his_fetch" and e.get("reason") == "refetch" for e in medonc.get(f"/api/tb/cases/{cid}/audit").json()["events"]))
+        r = medonc.post(f"/api/tb/cases/{cid}/his/fetch-older", json={"all": True})
+        body, jj, secs = _job(medonc, r)
+        d3 = medonc.get(f"/api/tb/cases/{cid}").json()
+        check("3.2 P12 Fetch older records widens the window without starting over", r.status_code == 200 and body["his"]["added"] == 1 and d3["case"]["his"]["window"] == {"all": True}
+              and d3["case"]["his"]["older_available"] == 0 and len(d3["documents"]) == 15)
+
+    # P02: an IHC amended after signing
+    d, j, fs = create(breast, "VXH/26/004202", "breast", "locally_advanced", "TB-H-P02")
+    if d:
+        vs = sorted((x for x in d["documents"] if x["his"]["id"] == "p02-r05"), key=lambda x: x["his"]["version"])
+        check("3.3 P02 amended IHC: both versions fetched, version 1 as history, version 2 (amended, signed) current; the gate passes", len(vs) == 2 and vs[0].get("superseded") and not vs[1].get("superseded")
+              and vs[1]["classification"]["status"] == "AMENDED" and vs[1]["his"]["signed"] and d["state"]["gate"]["passed"], json.dumps(_gaps(d)))
+        check("3.3 P02 HER2 current value comes from the amended version; the earlier value stays in the history", "3+" in d["facts"]["her2"]["current"]["value"] and any("2+" in h["value"] for h in d["facts"]["her2"]["history"]))
+        items = d["discordances"].get("items") or d["discordances"].get("review") or []
+        check("3.3 P02 the change from 2+ to 3+ is shown as a discordance for review", any(it.get("kind") == "amended" and it.get("field") == "her2" for it in items), json.dumps([(it.get('kind'), it.get('field')) for it in items])[:160])
+
+    # P15: molecular sample collected, result awaited; a HIS Observation that disagrees with its PDF
+    d, j, fs = create(medonc, "VXH/26/004215", "lung_nsclc", "non_metastatic", "TB-H-P15")
+    if d:
+        dm, met = _req(d, "driver_mutations"), _req(d, "met")
+        check("3.3 P15 driver mutations and MET are pending Level 2 gaps (sample collected, result awaited) with the accession No., routed to Pathology", _gaps(d) == [("driver_mutations", 2), ("met", 2)]
+              and dm["accession"] == "PATH/26/00451" and dm.get("pending_from_order") and "result awaited" in " ".join(dm["problems"]) and met["accession"] == "PATH/26/00451" and dm["department"] == "Pathology", json.dumps(dm.get("problems"))[:200])
+        acts = [x for x in d["state"]["actions"] if x["requirement"] in ("driver_mutations", "met")]
+        check("3.3 P15 the requests carry the accession No. and the order stage", all(x.get("accession") == "PATH/26/00451" and (x.get("pending_order") or {}).get("stage") == "sample_collected" for x in acts) and len(acts) == 2)
+        check("3.3 P15 the HIS haemoglobin (11.2 gm%) differs from the report text (12.1 gm%): flagged for review, never shown as a fact", any(f["fact"] == "haemoglobin" and "11.2" in f["his_value"] and "12.1" in (f.get("text_value") or "") for f in d["his_flags"])
+              and d["facts"]["haemoglobin"]["current"]["value"].startswith("12.1") and d["facts"]["haemoglobin"]["current"]["verification"] == "verified", json.dumps(d["his_flags"])[:200])
+        au = medonc.get("/api/tb/cases/TB-H-P15/audit").json()["events"]
+        check("3.3 P15 the value check is audited", any(e["kind"] == "his_value_check" and e.get("fact") == "haemoglobin" and e.get("result") == "differs" for e in au))
+
+    # P09: a temporary registration holds the CECT; a person links it
+    d, j, fs = create(gyn, "VXH/26/004209", "cervix", "locally_advanced", "TB-H-P09")
+    if d:
+        cid = "TB-H-P09"
+        check("3.2 P09 the temporary registration is listed for a person to link, never merged; its records are not in the Case File", [s["uhid"] for s in d["his"]["unlinked"]] == ["VXH/T/26/00412"]
+              and not any(x["his"].get("registration") for x in d["documents"]) and len(d["documents"]) == 8)
+        rq = _req(d, "cect_abdomen_pelvis")
+        check("3.3 P09 the CECT is a Level 1 gap pointing at the unlinked registration (no accession No. for a re-scan)", _gaps(d) == [("cect_abdomen_pelvis", 1)] and not rq.get("accession")
+              and rq.get("unlinked_registrations") == ["VXH/T/26/00412"] and "link" in " ".join(rq["problems"]).lower(), json.dumps(rq.get("problems"))[:200])
+        check("3.2 P09 a wrong UHID cannot be linked (404)", gyn.post(f"/api/tb/cases/{cid}/his/link", json={"uhid": "VXH/26/000001"}).status_code == 404)
+        r = gyn.post(f"/api/tb/cases/{cid}/his/link", json={"uhid": "VXH/T/26/00412", "reason": "casualty registration of the same person, confirmed with the patient"})
+        body, jj, secs = _job(gyn, r)
+        d2 = gyn.get(f"/api/tb/cases/{cid}").json()
+        lk = next((x for x in d2["documents"] if x["his"].get("registration")), None)
+        check("3.2 P09 after a person links it (audited) the CECT joins the Case File labelled with its registration and the gate passes", r.status_code == 200 and body["his"]["added"] == 1 and lk is not None
+              and lk["his"]["registration"] == "VXH/T/26/00412" and d2["state"]["gate"]["passed"] and d2["his"]["unlinked"] == [] and d2["his"]["linked"][0]["uhid"] == "VXH/T/26/00412"
+              and any(e["kind"] == "registration_linked" for e in gyn.get(f"/api/tb/cases/{cid}/audit").json()["events"]), json.dumps(_gaps(d2)))
+        check("3.2 P09 the Case File learned the temporary UHID; linking twice is refused (409)", ("uhid", "VXH/T/26/00412") in {(x["kind"], x["value"]) for x in d2["case"]["patient"]["ids"]}
+              and gyn.post(f"/api/tb/cases/{cid}/his/link", json={"uhid": "VXH/T/26/00412"}).status_code == 409)
+
+    # P17: a duplicate permanent UHID, and the CEA from a private laboratory uploaded by the doctor
+    d, j, fs = create(gi, "VXH/26/004217", "colorectal_rectum", "non_metastatic", "TB-H-P17")
+    if d:
+        cid = "TB-H-P17"
+        check("3.3 P17 CEA missing from the HIS: a Level 2 gap to Biochemistry; the duplicate UHID is listed to link", _gaps(d) == [("cea", 2)] and _req(d, "cea")["department"] == "Biochemistry"
+              and [s["uhid"] for s in d["his"]["unlinked"]] == ["VXH/26/004317"], json.dumps(_gaps(d)))
+        pdf = (REPO / "data" / "his_mock" / "documents" / "outside" / "P17-R10.pdf").read_bytes()
+        r = gi.post(f"/api/tb/cases/{cid}/documents", files=[("files", ("cea_private_lab.pdf", pdf))], data={"paths": json.dumps(["cea_private_lab.pdf"])})
+        body, jj, secs = _job(gi, r)
+        d2 = gi.get(f"/api/tb/cases/{cid}").json()
+        od = next((x for x in d2["documents"] if x.get("outside")), None)
+        check("3.6 P17 the uploaded private-lab CEA is an outside report, read through the V1 pipeline, matched by name only", od is not None and od["rel_path"].startswith("outside/") and od["state"] == "ready"
+              and od["identity"] == "name_match" and (od["classification"] or {}).get("status") == "FINAL" and od["classification"].get("signed_source") is None, json.dumps({k: od.get(k) for k in ("identity", "rel_path")} if od else {}))
+        cr = _req(d2, "cea")
+        check("3.6 P17 the gate asks the treating doctor to confirm the patient of the outside report", cr["status"] == "needs_confirmation" and {"type": "confirm_match", "doc_id": od["doc_id"]} in cr.get("needs", [])
+              and od["doc_id"] in d2["state"]["gate"]["documents"]["outside_unconfirmed"], json.dumps(cr.get("problems"))[:160])
+        check("3.6 P17 a supporting doctor cannot confirm it (403)", rad.post(f"/api/tb/cases/{cid}/confirmations", json={"type": "confirm_match", "key": od["doc_id"], "fields": {"case_id": cid}}).status_code == 403)
+        st = gi.post(f"/api/tb/cases/{cid}/confirmations", json={"type": "confirm_match", "key": od["doc_id"], "fields": {"case_id": cid}, "reason": "name, age and sex match; confirmed with the patient"}).json()["state"]
+        check("3.6 P17 after the confirmation the CEA counts (verified against the outside report's text) and the gate passes", st["gate"]["passed"] and next(x for x in st["gate"]["requirements"] if x["id"] == "cea")["status"] == "satisfied",
+              json.dumps([(x["id"], x["status"]) for x in st["gate"]["requirements"] if x["status"] != "satisfied"]))
+        d3 = gi.get(f"/api/tb/cases/{cid}").json()
+        check("3.6 P17 the confirmation shows on the document and survives (overlay)", next(x for x in d3["documents"] if x["doc_id"] == od["doc_id"])["identity_confirmed_by"] == "tb-e2e-h-gi"
+              and "6.8" in d3["facts"]["cea"]["current"]["value"], d3["facts"].get("cea", {}).get("current", {}).get("value"))
+        r = gi.post(f"/api/tb/cases/{cid}/his/link", json={"uhid": "VXH/26/004317", "reason": "second UHID issued by mistake"})
+        body, jj, secs = _job(gi, r)
+        d4 = gi.get(f"/api/tb/cases/{cid}").json()
+        check("3.2 P17 linking the duplicate UHID adds its earlier OPD note labelled with that registration", body["his"]["added"] == 1 and any(x["his"].get("registration") == "VXH/26/004317" for x in d4["documents"]) and d4["state"]["gate"]["passed"])
+
+    # P06: a scanned outside biopsy with a masked Aadhaar (OCR path), entered by OP No.
+    d, j, fs = create(surg, "OP/26/118708", "oral_cavity", "locally_advanced", "TB-H-P06")
+    if d:
+        cid = "TB-H-P06"
+        check("3.2 P06 entered by OP No.; no ABHA: nothing flagged, the gate passes", d["case"]["his"]["matched_on"]["kind"] == "op_no" and not d["case"]["patient"].get("abha") and d["state"]["gate"]["passed"], json.dumps(_gaps(d)))
+        png = (REPO / "data" / "his_mock" / "documents" / "outside" / "P06-R06-scan.png").read_bytes()
+        t0 = time.time()
+        r = surg.post(f"/api/tb/cases/{cid}/documents", files=[("files", ("private_lab_biopsy_scan.png", png))], data={"paths": json.dumps(["private_lab_biopsy_scan.png"])})
+        body, jj, secs = _job(surg, r)
+        d2 = surg.get(f"/api/tb/cases/{cid}").json()
+        od = next((x for x in d2["documents"] if x.get("outside")), None)
+        full = surg.get(f"/api/tb/cases/{cid}/documents/{od['doc_id']}").json() if od else {}
+        text = "\n".join(p.get("text", "") for p in full.get("pages") or [])
+        check("3.6 P06 the scanned outside report goes through the OCR path, is labelled outside and matched by name for a person to confirm", od is not None and od["state"] == "ready"
+              and "vision-transcription" in (od.get("methods") or []) and od["identity"] == "name_match", f"{secs} s, methods {od.get('methods') if od else None}")
+        check("3.6 P06 the Aadhaar stays masked: no 12-digit number in the stored text, never an identifier", bool(text) and not re.search(r"(?<!\d)\d{4}[ -]?\d{4}[ -]?\d{4}(?!\d)", text)
+              and not any(i.get("kind") == "aadhaar" for i in (od.get("identity_read") or {}).get("ids") or []) and "aadhaar" not in json.dumps(d2["case"]["patient"]).lower())
+        hp = _req(d2, "histopathology")
+        check("3.6 P06 the HIS histopathology still stands; the outside one waits for the patient confirmation", hp["status"] == "needs_confirmation" and {"type": "confirm_match", "doc_id": od["doc_id"]} in hp.get("needs", []))
+        st = surg.post(f"/api/tb/cases/{cid}/confirmations", json={"type": "confirm_match", "key": od["doc_id"], "fields": {"case_id": cid}, "reason": "e2e: confirmed"}).json()["state"]
+        check("3.6 P06 confirmed: the gate passes again", st["gate"]["passed"])
+
+    # P13: the staging CT done in OPD before admission; the summary says so
+    d, j, fs = create(medonc, "VXH/26/004213", "lung_nsclc", "non_metastatic", "TB-H-P13")
+    if d:
+        cid = "TB-H-P13"
+        ct = next((x for x in d["documents"] if x["his"]["id"] == "p13-r02"), {})
+        op = next((gr for gr in d["groups"] if gr.get("number") == "OP/26/118717"), {})
+        check("3.4 P13 the CECT done at the OP visit is found under the UHID, labelled OP and pre-admission, grouped before the IP admission", ct.get("his", {}).get("encounter_kind") == "OP" and op.get("pre_admission") is True
+              and ct.get("doc_id") in op.get("docs", []) and [gr["kind"] for gr in d["groups"] if gr["kind"] in ("OP", "IP")][0] == "IP")
+        check("3.3 P13 bronchoscopy never ordered: a Level 1 gap whose request names no accession No.", _gaps(d) == [("bronchoscopy", 1)] and not _req(d, "bronchoscopy").get("accession")
+              and not next(x for x in d["state"]["actions"] if x["requirement"] == "bronchoscopy").get("accession"), json.dumps(_gaps(d)))
+        tl = d["timeline"]
+        check("3.4 P13 the timeline shows the OP visit and the IP admission", [e for e in tl if e["kind"] == "encounter" and e.get("encounter_kind") == "OP"] and [e for e in tl if e["kind"] == "encounter" and e.get("encounter_kind") == "IP"])
+        sm = medonc.post(f"/api/tb/cases/{cid}/summary", json={"force": True}).json()
+        enc = [e for e in sm.get("encounters") or [] if e.get("pre_admission")]
+        check("3.4 P13 the summary says which tests were pre-admission OPD", bool(enc) and any("CECT" in rec.upper() for e in enc for rec in e["records"]), json.dumps([e.get("text") for e in sm.get("encounters") or []])[:200])
+
+    # P03: one IP admission with ward transfers; a signature that fails verification
+    d, j, fs = create(breast, "VXH/26/004203", "breast", "early", "TB-H-P03")
+    if d:
+        ip = [gr for gr in d["groups"] if gr["kind"] == "IP"]
+        check("3.4 P03 one IP admission with its ward and bed movements; every record of the stay under the same IP No.", len(ip) == 1 and len(ip[0]["ward_history"]) == 3 and "High Dependency" in json.dumps(ip[0]["ward_history"])
+              and sum(1 for x in d["documents"] if x["his"]["encounter_number"] == "IP/26/01872") == 7, json.dumps(ip[0]["ward_history"] if ip else [])[:200])
+        ds = next((x for x in d["documents"] if x["his"]["id"] == "p03-r10"), {})
+        check("3.3 P03 a signature that fails verification (tampered hash) never counts as signed", ds.get("his", {}).get("signed") is False and ds["his"]["signature"]["verification_status"] == "failed"
+              and ds["classification"]["signed"] == "no" and any("failed verification" in n for n in ds["classification"].get("status_notes") or []), json.dumps(ds.get("classification", {}).get("status_notes")))
+        check("3.3 P03 a value omitted from the signed IHC is a Level 2 gap with the accession No.", _gaps(d) == [("receptor_status", 2)] and _req(d, "receptor_status")["accession"] == "PATH/26/00418", json.dumps(_gaps(d)))
+
+    # P11: final in the LIS without a digital signature -> sign on the desk -> re-fetch
+    d, j, fs = create(gyn, "VXH/26/004211", "cervix", "early", "TB-H-P11")
+    if d:
+        cid = "TB-H-P11"; hp = _req(d, "histopathology")
+        check("3.3 P11 a final report without a digital signature is a Level 1 gap (not signed) with its accession No.", _gaps(d) == [("histopathology", 1)] and hp["accession"] == "PATH/26/00434"
+              and "no digital signature" in " ".join(hp["problems"]), json.dumps(hp.get("problems"))[:200])
+        rs = httpx.post(f"http://127.0.0.1:{MOCK_PORT}/desk/api/PATH/orders/path-26-00434/sign", json={"signer": "prac-vxreg-20204"}, timeout=60)
+        check("1.5 desk: a final report that was never signed can be signed (a new signed version)", rs.status_code == 200 and rs.json().get("status") == "final" and rs.json().get("signature")
+              and rs.json().get("current_version") == 2, rs.text[:160])
+        r = gyn.post(f"/api/tb/cases/{cid}/his/refetch")
+        body, jj, secs = _job(gyn, r)
+        d2 = gyn.get(f"/api/tb/cases/{cid}").json()
+        check("3.5 P11 after Complete and sign on the desk and a re-fetch the request closes and the gate passes", rs.status_code == 200 and d2["state"]["gate"]["passed"]
+              and next(x for x in d2["state"]["actions"] if x["requirement"] == "histopathology")["status"] == "completed", json.dumps(_gaps(d2)))
+
+    # P10 cancelled order, P08 ordered viral markers, P04 scheduled bone scan: gaps name the accession and the stage
+    d, j, fs = create(gyn, "VXH/26/004210", "cervix", "locally_advanced", "TB-H-P10")
+    if d:
+        rq = _req(d, "cect_abdomen_pelvis")
+        check("3.3 P10 a cancelled CT is a Level 1 gap naming the cancelled accession", _gaps(d) == [("cect_abdomen_pelvis", 1)] and rq["accession"] == "RAD/26/01000" and (rq.get("pending_order") or {}).get("stage") == "cancelled", json.dumps(rq.get("problems"))[:200])
+    d, j, fs = create(gyn, "VXH/26/004208", "cervix", "locally_advanced", "TB-H-P08")
+    if d:
+        rq = _req(d, "viral_markers")
+        check("3.3 P08 viral markers ordered, no report: Level 1 gap to Microbiology with the accession", _gaps(d) == [("viral_markers", 1)] and rq["accession"] == "MIC/26/00611" and rq["department"] == "Microbiology"
+              and (rq.get("pending_order") or {}).get("stage") == "ordered", json.dumps(_gaps(d)))
+    d, j, fs = create(surg, "VXH/26/004204", "breast", "locally_advanced", "TB-H-P04")
+    if d:
+        rq = _req(d, "bone_scan")
+        check("3.3 P04 bone scan scheduled, no report: Level 1 gap to Nuclear Medicine with the accession and the date", _gaps(d) == [("bone_scan", 1)] and rq["accession"] == "NM/26/00152"
+              and (rq.get("pending_order") or {}).get("stage") == "scheduled" and d["case"]["department"] == "surgical_oncology", json.dumps(_gaps(d)))
+
+
+def v2_phase3_cleanup(c, ctx):
+    """Delete the Case Files and accounts of the section, restore the live HIS connection, stop the e2e mock copy."""
+    for cid in ctx.get("cases") or []:
+        try:
+            c.delete(f"/api/tb/cases/{cid}")
+        except Exception as e:
+            print("cleanup case failed:", cid, e)
+    try:
+        o = c.get("/api/tb/org").json()
+        users = {k: v for k, v in (o.get("users") or {}).items() if k not in H_USERS}
+        c.put("/api/tb/org", json={"users": users})
+    except Exception as e:
+        print("cleanup org failed:", e)
+    for u in H_USERS:
+        c.request("DELETE", "/api/auth/users", json={"username": u})
+    try:
+        r = c.put("/api/tb/his", json=LIVE_HIS)
+        print("HIS connection restored:", r.status_code, (r.json().get("settings") or {}).get("url") if r.status_code == 200 else r.text[:120])
+    except Exception as e:
+        print("restore HIS failed:", e)
+    proc = ctx.get("proc")
+    if proc:
+        try:
+            proc.terminate(); proc.wait(timeout=10)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+    if ctx.get("tmp"):
+        shutil.rmtree(ctx["tmp"], ignore_errors=True)
 
 
 SCAN_100 = "/data/vaidyx/tb_demo_corpus/cases/TB-006/outside_records/deccan_general_hospital_records_scan.pdf"
@@ -1487,6 +1839,14 @@ def main(base, pw, only=None):
         phase3(c)
         print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
         return 0 if not FAIL else 1
+    if only == "v2p3":
+        ctx = {"cases": []}
+        try:
+            v2_phase3(c, base, ctx)
+        finally:
+            v2_phase3_cleanup(c, ctx)
+        print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
+        return 0 if not FAIL else 1
     if only == "phase4":
         phase4(c, base)
         print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
@@ -1652,6 +2012,12 @@ def main(base, pw, only=None):
         v2_phase2(c, base)
     finally:
         v2_phase2_cleanup(c)
+    # 9c. V2 Phase 3: HIS-connected Case Files on a throw-away copy of the mock hospital
+    ctx = {"cases": []}
+    try:
+        v2_phase3(c, base, ctx)
+    finally:
+        v2_phase3_cleanup(c, ctx)
     # 10. V1 Phase 3: dates, document type, flags, big scans
     phase3(c)
     # 11. V1 Phase 4: NCG tiers, two-level gate, failed documents, inbox and notifications, stale summary, NCG VTB export
@@ -1686,5 +2052,5 @@ def main(base, pw, only=None):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--base", default="http://127.0.0.1:7000"); ap.add_argument("--password", required=True)
-    ap.add_argument("--only", default=None, help="run one section only (phase2 | v2p2 | phase3 | phase4 | phase5 | phase6 | phase7 | phase8 | phase9 | skills | mcp | discord | records | metrics)")
+    ap.add_argument("--only", default=None, help="run one section only (phase2 | v2p2 | v2p3 | phase3 | phase4 | phase5 | phase6 | phase7 | phase8 | phase9 | skills | mcp | discord | records | metrics)")
     a = ap.parse_args(); sys.exit(main(a.base, a.password, a.only))

@@ -2,8 +2,11 @@
 page (path /tb) is open; the main app's login and index pages are outside this module and are not counted. Saves screenshots.
 Usage: LD_LIBRARY_PATH=... python -m tumour_board.eval.ui_test --password <pw> [--out dir] [--viewports desktop,tablet,phone] [--only admin]
 Viewports: desktop 1600x1000, tablet 1024x768, phone 390x844 (screenshots suffixed with the viewport name).
---only admin: log in and run only the Organisation and My department screens (V2 item 2.3), no model calls."""
-import argparse, os, secrets, sys
+--only admin: log in and run only the Organisation and My department screens (V2 item 2.3), no model calls.
+--only his: the HIS-connected Case File screens (V2 items 3.2 to 3.7) against the mock hospital (synthetic data, 127.0.0.1:7130):
+create from a UHID, the HIS card, the Documents tab grouped by encounter, Re-fetch; the side panel as a treating doctor. Every
+Case File it creates is deleted at the end (reader model calls for the fetched records)."""
+import argparse, os, secrets, sys, time
 from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright
@@ -92,6 +95,148 @@ def admin_screens(b, pg, base, pw, shot, errors):
         admin_cleanup(pg, base)
 
 
+DEMO_LOGINS = os.path.expanduser("~/vaidyx/.tb_v2_demo_logins")  # synthetic V2 role logins (tab-separated); passwords never printed
+PROTECTED = {"TB-2026-bharath"}  # real patient data: never touched
+
+
+def page_checks(pg, where, errors):
+    """No em dash in the visible text and no sideways scroll of the page or the main column."""
+    txt = pg.inner_text("body")
+    if "\u2014" in txt:
+        errors.append(f"{where}: an em dash in the visible text")
+    wide = pg.evaluate("""() => { const d = document.documentElement, m = document.getElementById('main');
+        return d.scrollWidth > d.clientWidth + 1 || (m && getComputedStyle(m).overflowX !== 'visible' && m.scrollWidth > m.clientWidth + 1); }""")
+    if wide:
+        errors.append(f"{where}: the page scrolls sideways")
+
+
+def open_side(pg):
+    if pg.locator("#btn-side").is_visible() and not pg.evaluate("document.body.classList.contains('side-open')"):
+        pg.click("#btn-side"); pg.wait_for_timeout(350)
+
+
+def wait_job(pg, base, job, timeout=900):
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        r = pg.request.get(base + f"/api/tb/jobs/{job}")
+        if r.ok and r.json().get("state") in ("finished", "failed", "interrupted"):
+            return r.json()
+        time.sleep(2)
+    return None
+
+
+def demo_login(name):
+    """(username, password) of a demo role login, or None when the file or the row is missing."""
+    try:
+        for line in open(DEMO_LOGINS):
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) >= 2 and parts[0] == name:
+                return parts[0], parts[1]
+    except OSError:
+        return None
+    return None
+
+
+def his_screens(b, pg, base, pw, shot, errors):
+    """V2 items 3.2 to 3.7 against the mock hospital (synthetic): look up a UHID with a temporary registration, create a Case File
+    from another UHID, the HIS card on the Pre-Authorization tab, the Documents tab grouped by encounter, Re-fetch; then the side
+    panel as a treating doctor (no department upload box) and as admin (the box stays). The Case File is deleted in `finally`."""
+    cid = None
+    try:
+        pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
+        open_side(pg); pg.click("#btn-new")
+        pg.wait_for_selector("[data-way='his']", timeout=20000); pg.click("[data-way='his']")
+        pg.fill("#h-id", "VXH/26/004209"); pg.click("#h-look"); pg.wait_for_selector("#h-res .lookbox", timeout=30000)
+        t = pg.inner_text("#h-res")
+        if "VXH/T/26/00412" not in t or "temporary registration" not in t or "never merged automatically" not in t:
+            errors.append("lookup of VXH/26/004209 does not list the temporary registration VXH/T/26/00412 with the link note")
+        page_checks(pg, "lookup", errors); shot("his_1_lookup")
+        pg.fill("#h-id", "VXH/26/004201"); pg.click("#h-look"); pg.wait_for_selector("#h-res .lookbox:has-text('VXH/26/004201')", timeout=30000)
+        if "IP admission" not in pg.inner_text("#h-res"):
+            errors.append("lookup of VXH/26/004201 does not count the IP admission")
+        pg.select_option("#h-prot", "breast"); pg.select_option("#h-setting", "early"); pg.select_option("#h-level", "optimal")
+        pg.select_option("#h-win", "12"); pg.select_option("#h-dept", "breast_surgery")
+        shot("his_2_create_form")
+        with pg.expect_response(lambda r: "/api/tb/cases/from-his" in r.url, timeout=60000) as resp:
+            pg.click("#h-go")
+        if not resp.value.ok:
+            errors.append(f"create from the HIS failed: HTTP {resp.value.status} {resp.value.text()[:160]}"); return
+        res = resp.value.json(); cid = res["case"]["case_id"]
+        if cid in PROTECTED:  # never: the server assigns a fresh id; refuse to go on rather than touch it
+            cid = None; errors.append("create from the HIS returned a protected Case File id"); return
+        pg.wait_for_selector("#his-card", timeout=30000)
+        j = wait_job(pg, base, res["job"])
+        if not j or j.get("state") != "finished":
+            errors.append(f"first fetch job did not finish: {(j or {}).get('state')} {(j or {}).get('error', '')}"); return
+        pg.wait_for_function("() => /finished from/.test(document.getElementById('toast').textContent)", timeout=60000)
+        pg.wait_for_timeout(800)
+        for sel, what in [("#his-card", "HIS card"), ("#btn-refetch", "Re-fetch button next to Re-check"), ("#his-card [data-refetch]", "Re-fetch in the HIS card"), ("#his-card .mono", "UHID")]:
+            if not pg.locator(sel).count():
+                errors.append(f"Pre-Authorization tab: no {what} ({sel})")
+        if "VXH/26/004201" not in pg.inner_text("#his-card"):
+            errors.append("HIS card does not show the UHID")
+        if "outside report" not in pg.inner_text("#tab-ready").lower():
+            errors.append("the upload box of an HIS Case File does not speak of outside reports")
+        page_checks(pg, "Pre-Authorization tab", errors); shot("his_3_ready", full_page=True)
+        pg.click("#tabs button[data-tab='docs']"); pg.wait_for_selector("#tab-docs .encgroup", timeout=20000); pg.wait_for_timeout(500)
+        d = pg.inner_text("#tab-docs")
+        if "Pre-admission OPD" not in d and "OP visit" not in d:
+            errors.append("Documents tab: no OP visit group heading or Pre-admission OPD chip")
+        if "IP admission IP/26/01871" not in d:
+            errors.append("Documents tab: no IP admission group")
+        if pg.locator("#tab-docs .chip:has-text('Digitally signed')").count() == 0:
+            errors.append("Documents tab: no 'Digitally signed' chip on the signed HIS reports")
+        if pg.locator("#tab-docs .chip:has-text('from HIS')").count() == 0:
+            errors.append("Documents tab: no 'from HIS' chip")
+        page_checks(pg, "Documents tab", errors); shot("his_4_documents", full_page=True)
+        pg.click("#tabs button[data-tab='board']"); pg.wait_for_timeout(700)
+        if "IP admission IP/26/01871" not in pg.inner_text("#tab-board"):
+            errors.append("timeline: no IP admission event")
+        page_checks(pg, "Board tab", errors)
+        pg.click("#tabs button[data-tab='ready']"); pg.wait_for_selector("#btn-refetch", timeout=20000)
+        pg.evaluate("document.getElementById('toast').textContent = ''")
+        pg.click("#btn-refetch")
+        pg.wait_for_function("() => /Re-fetch finished/.test(document.getElementById('toast').textContent)", timeout=600000)
+        if "Requests closed" not in pg.inner_text("#toast"):
+            errors.append("Re-fetch toast does not report the requests closed / opened")
+        shot("his_5_refetch")
+        open_side(pg)
+        if pg.locator("#intake-upload").is_hidden() or pg.locator("#side-intake").is_hidden():
+            errors.append("side panel: the department upload box is hidden for the Vaidyx admin")
+        pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
+    finally:
+        if cid and cid not in PROTECTED:
+            r = pg.request.delete(base + f"/api/tb/cases/{cid}")
+            if not r.ok:
+                errors.append(f"could not delete the test Case File {cid}: HTTP {r.status}")
+    cred = demo_login("tb-breast-doc")
+    if not cred:
+        print(f"note: {DEMO_LOGINS} (tb-breast-doc) missing: the treating-doctor side panel check is skipped")
+        return
+    pg2 = b.new_page(viewport=pg.viewport_size, device_scale_factor=1); watch(pg2, errors)
+    try:
+        login(pg2, base, *cred)
+        pg2.goto(base + "/tb"); pg2.wait_for_selector("#side-intake", state="attached", timeout=20000); pg2.wait_for_timeout(1500)
+        if not pg2.locator("#intake-upload").is_hidden():
+            errors.append("side panel: a treating doctor sees the department upload box (plan 3.7)")
+        open_side(pg2)
+        if pg2.locator("#side-intake").is_visible() and "records" not in pg2.inner_text("#side-intake h4").lower():
+            errors.append("side panel: the records block is not titled Records")
+        if pg2.locator("#btn-new").is_visible():
+            pg2.click("#btn-new"); pg2.wait_for_selector("#nc-his", state="attached", timeout=20000)
+            if not pg2.locator("[data-way='his'].on").count():
+                errors.append("+ New: a treating doctor does not start on From the hospital system")
+            if pg2.locator("#h-dept[readonly]").count() and "Breast Surgery" not in (pg2.input_value("#h-dept") or ""):
+                errors.append("+ New: the treating doctor's own department is not shown")
+            page_checks(pg2, "doctor + New", errors); shot("his_6_doctor_new", page=pg2)
+            pg2.keyboard.press("Escape"); pg2.wait_for_timeout(300)
+        else:
+            errors.append("tb-breast-doc sees no + New button")
+        page_checks(pg2, "doctor home", errors); shot("his_7_doctor_side", page=pg2)
+    finally:
+        pg2.close()
+
+
 def run_flow(b, base, pw, out, size, sfx, errors, only=None):
     """The whole UI flow in one fresh page at one viewport size; JS errors go into `errors`, screenshot names end in `sfx`.
     only="admin": log in and run only admin_screens."""
@@ -105,6 +250,14 @@ def run_flow(b, base, pw, out, size, sfx, errors, only=None):
         pg.click(f".citem[data-case='{cid}']")
 
     login(pg, base, "admin", pw)
+    if only == "his":
+        pg.goto(base + "/tb")
+        try:
+            pg.wait_for_selector("#btn-new:not(.hidden)", state="attached", timeout=20000)
+            his_screens(b, pg, base, pw, shot, errors)
+        finally:
+            pg.close()
+        return
     if only == "admin":
         pg.goto(base + "/tb")
         try:
@@ -255,5 +408,6 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--base", default="http://127.0.0.1:7000"); ap.add_argument("--password", required=True)
     ap.add_argument("--out", default="/home/bharath.tangella/vaidyx/Vaidyx/data/tumour_board/ui_shots")
     ap.add_argument("--viewports", type=parse_viewports, default=None, help="comma list of desktop,tablet,phone (default: desktop)")
-    ap.add_argument("--only", choices=["admin"], default=None, help="admin: only the Organisation and My department screens (no model calls)")
+    ap.add_argument("--only", choices=["admin", "his"], default=None, help="admin: only the Organisation and My department screens (no model calls); "
+                    "his: only the HIS-connected Case File screens against the mock hospital (reader model calls; the Case Files it creates are deleted)")
     a = ap.parse_args(); sys.exit(main(a.base, a.password, a.out, a.viewports, a.only))
