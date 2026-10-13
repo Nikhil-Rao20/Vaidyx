@@ -322,6 +322,10 @@ function bindDiscord(root) {
     try { await api(`/cases/${S.caseId}/confirmations/${b.dataset.undonote}/undo`, { json: {} }); toast("Undone"); await openCase(S.caseId, true); } catch (e) { toast(e.message, 7000); }
   }));
 }
+function outcomeHTML(b) {
+  const oc = b.outcome_type || "decision", label = (S.data.outcomes || {})[oc] || oc;
+  return `<div class="small" style="margin:6px 0"><span class="chip ${oc === "decision" ? "c-ok" : oc === "not_discussed" ? "c-bad" : "c-warn"}">${esc(label)}</span>${b.deferred_reason ? ` ${esc(b.deferred_reason)}` : ""}${b.referred_to ? ` to ${esc(b.referred_to)}` : ""}</div>`;
+}
 function decisionWatchHTML(b) {
   const d = S.data.discordances;
   const mine = (d?.items || []).filter((x) => x.kind === "decision_watch" && x.record === b.id);
@@ -994,11 +998,20 @@ function renderBoard() {
       <label>Divergent opinions / dissenting clinicians (if any)</label><input id="b-div" placeholder="Recorded verbatim, with names">
       <label>Actions (Responsible Department · task · due)</label><div id="b-acts"></div><button class="ghost sm" id="b-add">+ Action</button>
       <label>Next Tumour Board review</label><input type="date" id="b-next">
+      <h4 style="margin:14px 0 2px">Outcome and what the board recorded about the patient</h4>
+      <div class="muted small">The outcome type is what happened at the board (CRUK 2017: a case not discussed for missing information is recorded as such). The patient-facing items are recorded as the board stated them; missing ones are information flags, never judgements.</div>
+      <label>Outcome</label><select id="b-outcome">${Object.entries(S.data.outcomes || { decision: "Decision recorded" }).map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join("")}</select>
+      <div class="grid2"><div><label>If deferred: reason / what is awaited</label><input id="b-deferred" placeholder="e.g. final histopathology awaited"></div><div><label>If referred: to which board or centre</label><input id="b-referred" placeholder="e.g. NCG Virtual Tumour Board, Tata Memorial"></div></div>
+      <div class="grid2"><div><label>Intention to treat, as recorded by the board</label><select id="b-intent"><option value="">Not stated</option><option value="curative">Curative / radical</option><option value="palliative">Palliative</option></select></div>
+        <div><label>Clinical trial availability considered</label><select id="b-trial"><option value="">Not recorded</option><option value="yes">Yes</option><option value="no">No</option></select></div></div>
+      <div class="grid2"><div><label>Patient consent to the discussion recorded</label><select id="b-consent"><option value="">Not recorded</option><option value="yes">Yes</option><option value="no">No</option></select></div>
+        <div><label>Key worker (name and contact)</label><input id="b-keyworker" placeholder="e.g. Sr. Meena, 98450 00000"></div></div>
       <div style="margin-top:12px"><button class="primary" id="b-save">Save record and run adjudication</button></div></div>`}
     ${records.map((b) => `<div class="card"><h3>Tumour Board record · ${fmtDate(b.board_date || (b.recorded_at || "").slice(0, 10))} ${recordStatusChip(b)}${(b.version || 1) > 1 ? ` <span class="chip c-info">Amended: version ${b.version}</span>` : ""}${b.session ? ` <span class="chip c-info click" data-open-session="${esc(b.session)}" title="Recorded in the Board room; open the session">Board session</span>` : ""}</h3>
       <div class="small muted">Recorded by ${esc(b.recorded_by)} · entered ${esc(b.recorded_at.replace("T", " ").slice(0, 16))} by ${esc(b.entered_by)}</div>
       <p style="white-space:pre-wrap">${esc(b.decision_text)}</p>
       <div class="kv small">${b.participants ? `<div>Participants</div><div>${esc(b.participants)}</div>` : ""}${b.report_corrections_raised ? `<div>Report corrections raised</div><div>${esc(b.report_corrections_raised)}</div>` : ""}${b.divergent_opinions ? `<div>Divergent opinions</div><div>${esc(b.divergent_opinions)}</div>` : ""}</div>
+      ${outcomeHTML(b)}
       ${compHTML(b.adjudication.composition)}
       ${versionsHTML(b)}
       ${decisionWatchHTML(b)}
@@ -1021,9 +1034,11 @@ function renderBoard() {
     const actions = $$("#b-acts .arow").map((r) => ({ department: r.children[0].value, task: r.children[1].value, due: r.children[2].value })).filter((a) => a.task);
     const members = $$("#b-mems .arow").map((r) => ({ name: r.children[0].value.trim(), department: r.children[1].value })).filter((m) => m.name);
     const body = { board_date: $("#b-date").value, decision_text: $("#b-text").value, recorded_by: $("#b-by").value, participants: $("#b-part").value, members,
-      report_corrections_raised: $("#b-corr").value, divergent_opinions: $("#b-div").value, actions, next_review: $("#b-next").value };
+      report_corrections_raised: $("#b-corr").value, divergent_opinions: $("#b-div").value, actions, next_review: $("#b-next").value,
+      outcome_type: $("#b-outcome").value, deferred_reason: $("#b-deferred").value, referred_to: $("#b-referred").value, intent_as_recorded: $("#b-intent").value,
+      trial_considered: $("#b-trial").value, consent_recorded: $("#b-consent").value, key_worker: $("#b-keyworker").value };
     $("#b-save").innerHTML = `<span class="spin"></span> Adjudicating...`;
-    await api(`/cases/${S.caseId}/board-records`, { json: body });
+    try { await api(`/cases/${S.caseId}/board-records`, { json: body }); } catch (e) { toast(e.message, 7000); $("#b-save").textContent = "Save record and run adjudication"; return; }
     S.data = await api("/cases/" + S.caseId); renderBoard(); toast("Tumour Board record saved and checked");
   };
   bindActions($("#tab-board"));
@@ -1534,6 +1549,9 @@ function decisionHTML() {
     <label for="d-div">Divergent opinions (if any)</label><input id="d-div">
     <label>Actions (Responsible Department · task · due)</label><div id="d-acts"><div class="arow"><select>${depts.map((x) => `<option>${x}</option>`).join("")}</select><input placeholder="Task"><input type="date"></div></div>
     <label for="d-next">Next Tumour Board review</label><input type="date" id="d-next">
+    <label for="d-outcome">Outcome</label><select id="d-outcome">${Object.entries(S.data?.outcomes || { decision: "Decision recorded", deferred: "Deferred: information awaited", referred: "Referred to another board or centre", not_discussed: "Not discussed: information missing" }).map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join("")}</select>
+    <div class="grid2"><div><label for="d-deferred">If deferred: what is awaited</label><input id="d-deferred"></div><div><label for="d-referred">If referred: to which board or centre</label><input id="d-referred"></div></div>
+    <div class="grid2"><div><label for="d-intent">Intention to treat (as recorded)</label><select id="d-intent"><option value="">Not stated</option><option value="curative">Curative / radical</option><option value="palliative">Palliative</option></select></div><div><label for="d-trial">Clinical trial considered</label><select id="d-trial"><option value="">Not recorded</option><option value="yes">Yes</option><option value="no">No</option></select></div></div>
     <div style="margin-top:12px"><button class="primary" id="d-save">Record decision and run adjudication</button></div></div>`;
 }
 function bindDecision() {
@@ -1544,6 +1562,7 @@ function bindDecision() {
     const actions = $$("#d-acts .arow").map((x) => ({ department: x.children[0].value, task: x.children[1].value, due: x.children[2].value })).filter((a) => a.task);
     $("#d-save").innerHTML = `<span class="spin"></span> Adjudicating...`; $("#d-save").disabled = true;
     try { await api(`/sessions/${S.roomId}/cases/${S.roomCase}/decision`, { json: { decision_text: $("#d-text").value, recorded_by: $("#d-by").value, participants: $("#d-part").value,
+        outcome_type: $("#d-outcome").value, deferred_reason: $("#d-deferred").value, referred_to: $("#d-referred").value, intent_as_recorded: $("#d-intent").value, trial_considered: $("#d-trial").value,
         report_corrections_raised: $("#d-corr").value, divergent_opinions: $("#d-div").value, actions, next_review: $("#d-next").value } });
       toast("Decision recorded, checked and linked to the agent log"); openSession(S.roomId, S.roomCase); }
     catch (e) { toast(e.message, 7000); $("#d-save").disabled = false; $("#d-save").textContent = "Record decision and run adjudication"; }

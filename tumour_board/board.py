@@ -313,6 +313,7 @@ def start(sid, by) -> dict:
     first = next((a for a in s["agenda"] if a["status"] != "decided"), None)
     if first:
         first["status"], s["current"] = "current", first["case_id"]
+        s["current_since"] = store.now_iso()
     _save(s)
     _audit(sid, "started", by)
     if first:
@@ -330,10 +331,39 @@ def set_current(sid, case_id, by) -> dict:
         prev["status"] = "decided" if prev["case_id"] in s["decisions"] else "waiting"
     if it["status"] != "decided":
         it["status"] = "current"
+    _tick_timing(s)  # time spent on the case leaving the floor (12 Oct)
     s["current"] = case_id
+    s["current_since"] = store.now_iso()
     _save(s)
     _audit(sid, "current", by, case_id, "current")
     return s
+
+
+def _tick_timing(s) -> None:
+    """Add the time spent on the current case to s["timing"] (seconds per Case File), from current_since to now (12 Oct)."""
+    cur, since = s.get("current"), s.get("current_since")
+    if not cur or not since:
+        return
+    try:
+        from datetime import datetime
+        secs = max(0.0, (datetime.fromisoformat(store.now_iso()) - datetime.fromisoformat(since)).total_seconds())
+    except Exception:
+        return
+    t = s.setdefault("timing", {})
+    t[cur] = round(float(t.get(cur) or 0) + secs, 1)
+
+
+def timing(s) -> dict:
+    """{case_id: seconds} including the case on the floor now."""
+    out = dict(s.get("timing") or {})
+    cur, since = s.get("current"), s.get("current_since")
+    if s.get("status") == "in_session" and cur and since:
+        try:
+            from datetime import datetime
+            out[cur] = round(float(out.get(cur) or 0) + max(0.0, (datetime.fromisoformat(store.now_iso()) - datetime.fromisoformat(since)).total_seconds()), 1)
+        except Exception:
+            pass
+    return out
 
 
 def _fail_waiting(s, message) -> list[list[str]]:
@@ -364,9 +394,11 @@ def close(sid, by) -> dict:
     if pairs:
         _save(s)
         _audit(sid, "agents_failed", "system", pairs=pairs, message=CLOSED_EARLY)
+    _tick_timing(s)
+    s["current_since"] = None
     s["status"], s["closed_at"], s["closed_by"] = "closed", store.now_iso(), by or ""
     _save(s)
-    _audit(sid, "closed", by)
+    _audit(sid, "closed", by, timing=s.get("timing") or {})
     return s
 
 
@@ -556,7 +588,8 @@ def export(sid) -> dict:
                       "agent_log": [e for e in log if not e.get("superseded")] + [e for e in log if e.get("superseded")],
                       "decision": (s.get("decisions") or {}).get(a["case_id"]), "marks": _marks(log)})
     return {"session": {k: s.get(k) for k in ("id", "date", "title", "status", "created", "created_by", "started_at", "started_by", "closed_at", "closed_by")},
-            "attendance": attendance, "participants": participants(s), "absent_roles": absent_roles(s), "cases": cases, "note": NOTE}
+            "attendance": attendance, "participants": participants(s), "absent_roles": absent_roles(s), "cases": cases, "note": NOTE,
+            "timing": timing(s)}  # seconds per Case File on the floor (12 Oct)
 
 
 def _verbatim(x) -> str:

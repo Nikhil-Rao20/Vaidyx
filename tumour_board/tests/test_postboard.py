@@ -225,7 +225,8 @@ def test_flags_have_ids_and_the_decision_is_not_final_until_resolved(unit_case, 
     rec, flags = _record_with_slip(unit_case, monkeypatch)
     assert [f["id"] for f in rec["adjudication"]["flags"]] == [f"F{i + 1}" for i in range(len(rec["adjudication"]["flags"]))]
     assert set(flags) >= {"transcription", "composition", "recorded_by"}
-    assert rec["resolution"]["final"] is False and rec["resolution"]["open"] == rec["resolution"]["total"] == len(rec["adjudication"]["flags"])
+    need = [f for f in rec["adjudication"]["flags"] if postboard.needs_resolution(f)]  # information flags (patient-facing items, 12 Oct) need no resolution
+    assert rec["resolution"]["final"] is False and rec["resolution"]["open"] == rec["resolution"]["total"] == len(need)
     assert rec["version"] == 1 and rec["versions"][0]["decision_text"] == rec["decision_text"]
 
 

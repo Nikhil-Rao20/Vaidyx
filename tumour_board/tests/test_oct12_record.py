@@ -33,3 +33,21 @@ def _fake(monkeypatch):
     async def fake_chat(role, msgs, **kw):
         return {"claims": []}
     monkeypatch.setattr(llm, "chat", fake_chat); monkeypatch.setattr(postboard.llm, "chat", fake_chat)
+
+
+def test_session_timing_per_case(unit_case, monkeypatch):
+    store.create_case("TB-UNIT2", {"name": "SYNTHETIC, Two", "mrn": "SYN-900002", "agesex": "50 Y / F"}, "unit", board_date="2026-09-20", created_by="t")
+    c = store.get_case(unit_case); c["board_date"] = "2026-09-20"; store.save_case(c)
+    s = board.create("2026-09-20", "coord")
+    s = board.start(s["id"], "coord")
+    assert s["current"] == unit_case and s.get("current_since")
+    clock = {"t": "2026-09-20T10:00:00"}
+    monkeypatch.setattr(store, "now_iso", lambda: clock["t"])  # every timestamp in board and store reads this clock
+    s["current_since"] = "2026-09-20T10:00:00"; board._save(s)
+    clock["t"] = "2026-09-20T10:05:30"
+    s = board.set_current(s["id"], "TB-UNIT2", "coord")
+    assert s["timing"][unit_case] == 330.0 and s["current_since"] == "2026-09-20T10:05:30"
+    clock["t"] = "2026-09-20T10:12:00"
+    s = board.close(s["id"], "coord")
+    assert s["timing"]["TB-UNIT2"] == 390.0 and s["current_since"] is None
+    assert board.export(s["id"])["timing"] == {unit_case: 330.0, "TB-UNIT2": 390.0}

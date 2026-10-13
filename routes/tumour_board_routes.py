@@ -391,7 +391,7 @@ def setup_tumour_board_routes():
                  for name, a in (st.get("artefacts") or {}).items() if isinstance(a, dict) and (name == "summary" or name.startswith("brief_"))}
         return {"case": c, "state": st, "documents": docs, "facts": {k: {"label": cat.get(k, {}).get("label", k), **v} for k, v in facts.items()},
                 "timeline": postboard.timeline(case_id), "permissions": _case_permissions(rl, c, st, all_docs), "signature": sig, "stale": stale,
-                "discordances": discord.summary(case_id, st)}
+                "discordances": discord.summary(case_id, st), "outcomes": postboard.OUTCOMES}
 
     @r.post("/cases/{case_id}/documents")
     async def upload(case_id: str, request: Request, files: list[UploadFile] = File(...), paths: str = Form("[]")):
@@ -872,7 +872,10 @@ def setup_tumour_board_routes():
     @r.post("/cases/{case_id}/board-records")
     async def board_records(case_id: str, request: Request):
         u = _user(request); _need(_roles(request), "board_record"); _case(case_id); b = await request.json()
-        return await postboard.record_decision(case_id, b, u)
+        try:
+            return await postboard.record_decision(case_id, b, u)
+        except ValueError as e:  # an outcome or communication field out of range (12 Oct)
+            raise HTTPException(400, str(e))
 
     @r.post("/cases/{case_id}/review")
     async def review(case_id: str, request: Request):
@@ -1076,7 +1079,8 @@ def setup_tumour_board_routes():
         if not str(b.get("decision_text", "")).strip():
             raise HTTPException(400, "Write the board's decision")
         part = board.participants(s)
-        rec = {k: b.get(k) for k in ("decision_text", "recorded_by", "report_corrections_raised", "divergent_opinions", "actions", "next_review") if b.get(k) is not None}
+        rec = {k: b.get(k) for k in ("decision_text", "recorded_by", "report_corrections_raised", "divergent_opinions", "actions", "next_review", "outcome_type", "deferred_reason",
+                                     "referred_to", "intent_as_recorded", "trial_considered", "consent_recorded", "key_worker") if b.get(k) is not None}
         rec.update({"board_date": s["date"], "session": sid, "participants": b.get("participants") or part["text"],
                     "attendance": {"present": part["present"], "absent": part["absent"], "members": part["members"]}})
         record = await postboard.record_decision(case_id, rec, u)

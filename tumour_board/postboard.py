@@ -246,6 +246,7 @@ async def adjudicate(case_id, record):
                                                        **({"confirmed_by": src["confirmed_by"]} if src.get("confirmed_by") else {})}})
     if guide:
         flags += guide["flags"]
+    flags += outcome_flags(record)  # outcome and patient-facing items (12 Oct)
     for i, f in enumerate(flags):
         f["id"] = f"F{i + 1}"  # flags are resolved by id (V1 item 7.3)
     au({"kind": "adjudication", "flags": len(flags), "claims": len(claims)})
@@ -255,7 +256,73 @@ async def adjudicate(case_id, record):
             "status": "flag_for_expert_review" if attention else "consistent", "evaluated": store.now_iso()}
 
 
+# ---- outcome of the discussion and what the board recorded about the patient (12 Oct) ----------------------------------------
+# CRUK 2017: a case not discussed because information was missing must be recorded; Victorian MDM framework 2018 8.4 / 8.5: the
+# recommendation reaches the patient (lead clinician) and the GP within a week; Manual for Cancer Services 13-2N-113: key worker named;
+# NHS England 2020: clinical trial availability and suitability recorded; HBCR 2025: intention to treat as recorded by the board.
+OUTCOMES = {"decision": "Decision recorded", "deferred": "Deferred: information awaited", "referred": "Referred to another board or centre",
+            "not_discussed": "Not discussed: information missing"}
+INTENTS = ("", "curative", "palliative", "not_stated")
+YES_NO = ("", "yes", "no", "not_stated")
+COMMUNICATION_FIELDS = ("patient_informed_date", "informed_by", "key_worker", "intent_as_recorded", "trial_considered", "consent_recorded")
+COMM_SOURCES = {"patient_informed_date": "Victorian MDM framework 2018 (8.5)", "key_worker": "Manual for Cancer Services 2013 (13-2N-113)",
+                "trial_considered": "NHS England, Streamlining MDT meetings 2020 (minimum core data)", "intent_as_recorded": "HBCR procedure manual 2025 (intention to treat)",
+                "consent_recorded": "Victorian MDM framework 2018 (5.2)"}
+
+
+def clean_record_fields(record: dict) -> dict:
+    """The outcome and communication fields as stored: enums checked, text trimmed, dates ISO (ValueError with a plain message)."""
+    from .docstatus import parse_date
+    out = dict(record)
+    oc = str(out.get("outcome_type") or "decision").strip()
+    if oc not in OUTCOMES:
+        raise ValueError(f"outcome_type must be one of {', '.join(OUTCOMES)}")
+    out["outcome_type"] = oc
+    for k in ("deferred_reason", "referred_to", "informed_by", "key_worker"):
+        out[k] = str(out.get(k) or "").strip()[:300]
+    d = str(out.get("patient_informed_date") or "").strip()
+    if d:
+        iso = parse_date(d)
+        if not iso:
+            raise ValueError(f"Not a valid date: {d}")
+        d = iso
+    out["patient_informed_date"] = d
+    for k, allowed in (("intent_as_recorded", INTENTS), ("trial_considered", YES_NO), ("consent_recorded", YES_NO)):
+        v = str(out.get(k) or "").strip()
+        if v not in allowed:
+            raise ValueError(f"{k} must be one of: {', '.join(x or 'empty' for x in allowed)}")
+        out[k] = v
+    return out
+
+
+def outcome_flags(record: dict) -> list:
+    """Documentation flags about the outcome and the patient-facing items. Review: a deferred or not-discussed case with no action saying
+    what is awaited; a referral with no destination. Information only (no resolution needed, counted on the dashboard): patient not yet
+    informed, key worker, trial consideration, intent and consent not recorded."""
+    flags = []
+    oc = record.get("outcome_type") or "decision"
+    if oc in ("deferred", "not_discussed") and not (record.get("actions") or []):
+        flags.append({"kind": "documentation", "severity": "review", "field": "actions",
+                      "text": f"{OUTCOMES[oc]}: add an action saying which record or result is awaited and from which department (CRUK 2017: a case not discussed for missing information must be recorded with the reason)"})
+    if oc == "referred" and not record.get("referred_to"):
+        flags.append({"kind": "documentation", "severity": "review", "field": "referred_to", "text": "Referred: record the board or centre the Case File was referred to"})
+    if oc == "decision":
+        if not record.get("patient_informed_date"):
+            flags.append({"kind": "communication", "severity": "info", "field": "patient_informed_date", "source": COMM_SOURCES["patient_informed_date"],
+                          "text": "Patient not yet recorded as informed of the outcome (record the date once the lead clinician has told the patient; a follow-up action is open)"})
+        if not record.get("key_worker"):
+            flags.append({"kind": "communication", "severity": "info", "field": "key_worker", "source": COMM_SOURCES["key_worker"], "text": "Key worker (name and contact) not recorded"})
+        if not record.get("trial_considered"):
+            flags.append({"kind": "communication", "severity": "info", "field": "trial_considered", "source": COMM_SOURCES["trial_considered"], "text": "Clinical trial availability and suitability not recorded as considered"})
+        if not record.get("intent_as_recorded"):
+            flags.append({"kind": "communication", "severity": "info", "field": "intent_as_recorded", "source": COMM_SOURCES["intent_as_recorded"], "text": "Intention to treat, as the board recorded it, not stated (curative / palliative)"})
+        if not record.get("consent_recorded"):
+            flags.append({"kind": "communication", "severity": "info", "field": "consent_recorded", "source": COMM_SOURCES["consent_recorded"], "text": "Patient consent to the discussion not recorded"})
+    return flags
+
+
 async def record_decision(case_id, record, user=""):
+    record = clean_record_fields(record)
     record = {**record, "id": "B" + uuid.uuid4().hex[:6], "recorded_at": store.now_iso(), "entered_by": user}
     if record.get("members") and not record.get("attendance"):  # members typed with their departments on the Board tab (V1 item 7.1)
         record["attendance"] = attendance_from_members(record.pop("members"))
