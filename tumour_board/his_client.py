@@ -1051,10 +1051,8 @@ class MCPHISClient(HISClient):
     async def reports(self, patient_id: str, since: str | None = None) -> list[dict]:
         recs = (await self._call("list_records", {"patient_id": patient_id})).get("records") or []
         out = []
-        for r in recs:
+        for r in recs:  # `since` is ignored: the demo HIS has no change feed (a record added late with an older date would be missed); the Case File de-duplicates by document_ref
             fn = r.get("filename") or ""
-            if since and r.get("record_date") and r["record_date"] < str(since)[:10]:
-                continue
             doc_type, basis = doc_type_for("", [], "", fn)
             rid = str(r.get("record_id") or "")
             out.append({"id": rid, "version": 1, "kind": "note", "ref": None,
@@ -1138,27 +1136,54 @@ def token(d: dict | None = None) -> str:
     return ""
 
 
-def public(d: dict) -> dict:
-    """Settings without the token (the UI only learns whether one is available)."""
-    return {k: v for k, v in d.items() if k != "token"} | {"has_token": bool(token(d))}
+def public(d: dict, manager: bool = True) -> dict:
+    """Settings without the token (the UI only learns whether one is available); the token file's server path only for a manager."""
+    out = {k: v for k, v in d.items() if k != "token"} | {"has_token": bool(token(d))}
+    if not manager:
+        out["token_file"] = bool(out.get("token_file"))
+    return out
 
 
-def validate_settings(d: dict, existing: dict | None = None) -> dict:
-    """Cleaned settings, or ValueError with a plain message. An empty token keeps the saved one."""
+LOOPBACK = ("127.0.0.1", "localhost", "::1", "[::1]")
+
+
+def _origin(url: str) -> str:
+    sp = urlsplit(url or "")
+    return f"{sp.scheme}://{sp.netloc}".lower()
+
+
+def allowed_hosts() -> set:
+    """Hosts a root admin may point the HIS connection at beside this server: TB_HIS_ALLOW_HOSTS (comma separated host[:port])."""
+    return {h.strip().lower() for h in os.getenv("TB_HIS_ALLOW_HOSTS", "").split(",") if h.strip()}
+
+
+def validate_settings(d: dict, existing: dict | None = None, allow_remote: bool = False) -> dict:
+    """Cleaned settings, or ValueError with a plain message. An empty token keeps the saved one, unless the url's origin changed
+    (the saved token is never sent to a new host). The token file is never taken from the request: it stays what the server
+    has (the environment, the saved file, or the demo default), so no Tumour Board role can make the app read and send an
+    arbitrary server file (review S2). The url may name this server (loopback) or a host in TB_HIS_ALLOW_HOSTS; any other
+    host needs a Vaidyx admin (`allow_remote`)."""
     existing = existing or {}
     kind = str(d.get("kind") or "fhir").strip().lower()
     if kind not in KINDS:
         raise ValueError("kind must be fhir, mcp or none")
     label = str(d.get("label") or "").strip()[:80] or (DEFAULT_LABEL if kind == "fhir" else "")
     url = str(d.get("url") or "").strip().rstrip("/")
-    tok = str(d.get("token") or "").strip() or str(existing.get("token") or "")
-    token_file = str(d.get("token_file") or "").strip()
+    same_origin = bool(existing.get("url")) and _origin(url) == _origin(existing.get("url"))
+    tok = str(d.get("token") or "").strip() or (str(existing.get("token") or "") if same_origin else "")
+    token_file = str(existing.get("token_file") or "").strip() if existing else str(_default_settings().get("token_file") or "")
+    if not same_origin:
+        token_file = ""  # a new host: neither the saved token nor the saved token file follows it (the demo token file belongs to the demo mock)
     connector = str(d.get("connector") or "").strip()
     if kind == "fhir":
         if not _URL.match(url):
             raise ValueError("url must start with http:// or https://")
+        host = (urlsplit(url).hostname or "").lower()
+        hostport = (urlsplit(url).netloc or "").lower()
+        if host not in LOOPBACK and host not in allowed_hosts() and hostport not in allowed_hosts() and not allow_remote:
+            raise ValueError("the HIS connection may point only at this server or at a host listed in TB_HIS_ALLOW_HOSTS; ask the Vaidyx admin for another host")
         if not tok and not token_file:
-            raise ValueError("a FHIR HIS needs a token or a token file")
+            raise ValueError("a FHIR HIS needs a token (saved tokens never follow a change of host)")
     if kind == "mcp":
         from . import connectors
         if not connectors.get(connector):
@@ -1167,7 +1192,7 @@ def validate_settings(d: dict, existing: dict | None = None) -> dict:
             "enabled": bool(d.get("enabled", True))}
 
 
-def save_settings(d: dict, by: str = "") -> dict:
+def save_settings(d: dict, by: str = "", allow_remote: bool = False) -> dict:
     """Validate, write his.json atomically (owner-only), audit `his_settings_saved` without the token, return public()."""
     from . import org
     p = settings_path()
@@ -1177,7 +1202,9 @@ def save_settings(d: dict, by: str = "") -> dict:
             existing = json.loads(p.read_text())
         except (OSError, ValueError):
             existing = {}
-    clean = validate_settings(d, existing)
+    if not existing:
+        existing = {k: v for k, v in _default_settings().items()}  # the demo defaults are the saved state of a fresh server
+    clean = validate_settings(d, existing, allow_remote=allow_remote)
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(".tmp")
     tmp.write_text(json.dumps(clean, indent=1))

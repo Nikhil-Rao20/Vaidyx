@@ -469,13 +469,16 @@ def test_save_settings_validates_and_never_audits_the_token(data_root, monkeypat
     with pytest.raises(ValueError, match="url"):
         his_client.save_settings({"kind": "fhir", "url": "ftp://x", "token": "t"}, by="root")
     with pytest.raises(ValueError, match="token"):
-        his_client.save_settings({"kind": "fhir", "url": "http://10.0.0.5:8080/fhir"}, by="root")
+        his_client.save_settings({"kind": "fhir", "url": "http://127.0.0.1:7999/fhir"}, by="root")  # a new host on this server: the demo token file never follows
     with pytest.raises(ValueError, match="kind"):
         his_client.save_settings({"kind": "hl7", "url": "http://x"}, by="root")
     with pytest.raises(ValueError, match="connector"):
         his_client.save_settings({"kind": "mcp", "connector": "nope"}, by="root")
+    # review S2: a root admin cannot point the connection outside this server; a Vaidyx admin can
+    with pytest.raises(ValueError, match="Vaidyx admin"):
+        his_client.save_settings({"kind": "fhir", "url": "http://10.0.0.5:8080/fhir", "token": "s3cret-token"}, by="root")
     pub = his_client.save_settings({"kind": "fhir", "label": "City HIS", "url": "http://10.0.0.5:8080/fhir",
-                                    "token": "s3cret-token", "enabled": True}, by="root")
+                                    "token": "s3cret-token", "enabled": True}, by="root", allow_remote=True)
     assert "token" not in pub and pub["has_token"] is True and pub["url"] == "http://10.0.0.5:8080/fhir"
     saved = json.loads((data_root / "his.json").read_text())
     assert saved["token"] == "s3cret-token"
@@ -483,9 +486,24 @@ def test_save_settings_validates_and_never_audits_the_token(data_root, monkeypat
     assert ev["kind"] == "his_settings_saved" and ev["by"] == "root" and ev["has_token"] is True
     assert "s3cret-token" not in (data_root / "org_audit.jsonl").read_text()
     assert his_client.settings()["label"] == "City HIS" and his_client.token() == "s3cret-token"
-    # an edit without retyping the token keeps it
-    his_client.save_settings({"kind": "fhir", "label": "City HIS 2", "url": "http://10.0.0.5:8080/fhir"}, by="root")
+    # an edit without retyping the token keeps it (same host)
+    his_client.save_settings({"kind": "fhir", "label": "City HIS 2", "url": "http://10.0.0.5:8080/fhir"}, by="root", allow_remote=True)
     assert his_client.token() == "s3cret-token" and his_client.settings()["label"] == "City HIS 2"
+    # review S2: a change of host never carries the saved token or token file along; the request's token_file is never used
+    with pytest.raises(ValueError, match="token"):
+        his_client.save_settings({"kind": "fhir", "label": "Other", "url": "http://10.0.0.6:8080/fhir", "token_file": "/etc/passwd"}, by="root", allow_remote=True)
+    his_client.save_settings({"kind": "fhir", "label": "Other", "url": "http://10.0.0.6:8080/fhir", "token": "new-token", "token_file": "/etc/passwd"}, by="root", allow_remote=True)
+    saved = json.loads((data_root / "his.json").read_text())
+    assert saved["token"] == "new-token" and saved["token_file"] == "" and his_client.token() == "new-token"
+    his_client.save_settings({"kind": "fhir", "url": "http://10.0.0.6:8080/fhir", "token_file": "/etc/passwd"}, by="root", allow_remote=True)
+    assert json.loads((data_root / "his.json").read_text())["token_file"] == ""  # never taken from the request
+    # TB_HIS_ALLOW_HOSTS lets a root admin name a listed host
+    monkeypatch.setenv("TB_HIS_ALLOW_HOSTS", "his.hospital.example:8443")
+    his_client.save_settings({"kind": "fhir", "url": "https://his.hospital.example:8443/fhir", "token": "t2"}, by="root")
+    assert his_client.settings()["url"] == "https://his.hospital.example:8443/fhir"
+    # the token file's server path is shown to a manager only
+    assert his_client.public(his_client._default_settings(), manager=False)["token_file"] is True
+    assert his_client.public(his_client._default_settings())["token_file"].endswith("token")
     tf = data_root / "tok"
     tf.write_text("file-token\n")
     assert his_client.token({"token": "", "token_file": str(tf)}) == "file-token"
@@ -514,7 +532,7 @@ def test_mcp_transport_against_the_demo_his(tmp_path, monkeypatch):
     d = run(c.document(mri["document_ref"]))
     assert b"MRI BRAIN REPORT" in d["content"] and d["sha256"] == hashlib.sha256(d["content"]).hexdigest()
     assert d["filename"] == "mri_brain_2026_09_14.txt"
-    assert run(c.reports("SYN-900001", since="2026-10-01")) == []
+    assert len(run(c.reports("SYN-900001", since="2026-10-01"))) == len(run(c.reports("SYN-900001")))  # no change feed on the MCP transport: `since` is ignored, the Case File de-duplicates (review)
     assert run(c.encounters("SYN-900001")) == [] and run(c.open_orders("SYN-900001")) == [] and run(c.referrals("SYN-900001")) == []
     assert run(c.imaging_study("x")) is None and run(c.hospital()) == {"name": "Demo HIS", "departments": []}
     with pytest.raises(HISError):

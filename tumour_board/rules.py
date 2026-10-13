@@ -19,7 +19,7 @@ def case_docs(case_id, state=None):
     """The Case File's documents as the clinicians confirmed them: confirmations (document type, dates, values) are overlaid
     on the model's reading at read time, so they win and survive a re-process (V1 item 2.2). Every fact carries the method of the page
     its quote sits on (`source_method`, V1 item 8.1), filled in from the pages for documents processed before it existed."""
-    return [scanned.with_source_methods(d) for d in confirm.apply_to_docs(store.list_docs(case_id), store.get_state(case_id) if state is None else state)]
+    return [scanned.with_source_methods(d) for d in confirm.apply_to_docs(store.list_docs(case_id), store.get_state(case_id) if state is None else state, case_id)]
 STATUS_RANK = {"CORRECTED": 4, "AMENDED": 4, "FINAL": 3, "PRELIMINARY": 1, "DRAFT": 0, "CANCELLED": -1, "UNKNOWN": 0}
 
 
@@ -75,15 +75,21 @@ def _order_for(req, orders):
     return best[1] if best else None
 
 
+def _dmy(s) -> str:
+    """DD/MM/YYYY of an ISO date or date-time (Indian convention), as given when it is not one."""
+    s = str(s or "")[:10]
+    return f"{s[8:10]}/{s[5:7]}/{s[0:4]}" if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s) else s
+
+
 def _order_line(o) -> str:
     acc = o.get("accession") or "no accession No."
     test = o.get("test") or o.get("doc_type") or "the test"
     stage = o.get("stage")
     if stage == "sample_collected":
         when = (o.get("specimen") or {}).get("collected") or ""
-        return f"Sample collected{' on ' + str(when)[:10] if when else ''} ({acc}): {test}, result awaited in the HIS"
+        return f"Sample collected{' on ' + _dmy(when) if when else ''} ({acc}): {test}, result awaited in the HIS"
     if stage == "scheduled":
-        return f"Ordered in the HIS ({acc}): {test} scheduled for {str(o.get('scheduled_for') or '')[:10] or 'a date to be fixed'}, no report yet"
+        return f"Ordered in the HIS ({acc}): {test} scheduled for {_dmy(o.get('scheduled_for')) or 'a date to be fixed'}, no report yet"
     if stage == "cancelled":
         return f"Order cancelled in the HIS ({acc}): {test}" + (f"; {o['note']}" if o.get("note") else "")
     return f"Ordered in the HIS ({acc}): {test}, no report yet"
@@ -146,8 +152,9 @@ def resolve_facts(docs, overrides=None):
                                              "superseded": bool(d.get("superseded")), "unconfirmed_outside": _unconfirmed_outside(d)})
     out = {}
     for fid, h in hist.items():
-        tiers = [[e for e in h if e["verification"] in VERIFIED and e["doc_final"] and e["state"] == "present"],
-                 [e for e in h if e["verification"] in VERIFIED], h]
+        live = [e for e in h if not e.get("superseded")] or h  # an earlier version of an amended report is history, never the current value (review M7)
+        tiers = [[e for e in live if e["verification"] in VERIFIED and e["doc_final"] and e["state"] == "present"],
+                 [e for e in live if e["verification"] in VERIFIED], live]
         out[fid] = {"current": next(t[-1] for t in tiers if t), "history": h}
     return out
 
@@ -292,7 +299,7 @@ def _evaluate_record(req, ready, facts, overrides, cat, orders=()):
         hist = [h for h in facts.get(fid, {}).get("history", []) if not allowed or set(h["doc_types"]) & allowed]
         type_needs += [(h, 2) for h in hist if allowed and len(h["doc_types"]) > 1 and len(set(h["doc_types"]) & allowed) == 1
                        and h["doc_id"] not in {x["doc_id"] for x, _ in type_needs}]
-        good = [h for h in hist if h["verification"] in VERIFIED and h["doc_final"] and h["state"] == "present"]
+        good = [h for h in hist if h["verification"] in VERIFIED and h["doc_final"] and h["state"] == "present" and not h.get("superseded")]  # history never counts (review M7)
         documenting += [h["doc_id"] for h in good if h["doc_id"] in carrier_ids]
         match_needs += [(h, 2) for h in good if h["doc_id"] in unconfirmed and h["doc_id"] not in {x["doc_id"] for x, _ in match_needs}]
         if req.get("must_postdate_doc_type") and r.get("postdate_reference"):
@@ -465,6 +472,8 @@ def evaluate(case_id):
     facts = resolve_facts(docs, overrides)
     his = case.get("his") or {}
     orders = list(his.get("orders") or []) + [o for os_ in (his.get("linked_orders") or {}).values() for o in os_]  # open HIS orders (V2 item 3.3)
+    if his.get("window_start"):  # an order placed before the fetch window (an old cancelled scan) never stands for a gap
+        orders = [o for o in orders if not str(o.get("authored_on") or "")[:10] or str(o.get("authored_on") or "")[:10] >= his["window_start"]]
     unlinked = [x.get("uhid") for x in his.get("similar") or [] if isinstance(x, dict) and x.get("uhid") and not x.get("linked")]
     setting = case.get("setting") or ""
     hospital = _hospital()

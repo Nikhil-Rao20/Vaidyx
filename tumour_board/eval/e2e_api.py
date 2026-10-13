@@ -439,9 +439,14 @@ def v2_phase3(c, base, ctx):
     check("3.1 the HIS connection is configured, answers and never returns its token", h["status"]["ok"] and h["settings"]["has_token"] and "token" not in h["settings"]
           and h["status"]["token_ok"] is True, json.dumps({k: h["status"].get(k) for k in ("ok", "name", "fhir_version", "error")}))
     tmp, proc = _mock_copy(); ctx["tmp"], ctx["proc"] = tmp, proc
-    r = c.put("/api/tb/his", json={"kind": "fhir", "label": "Vaidyx Demo Hospital HIS (SYNTHETIC) e2e copy", "url": f"http://127.0.0.1:{MOCK_PORT}", "token_file": str(tmp / "token"), "enabled": True})
-    check("3.1 the HIS connection can be pointed at another HIS (the e2e copy); the saved settings carry no token", r.status_code == 200 and "token" not in r.json()["settings"]
-          and r.json()["settings"]["url"].endswith(str(MOCK_PORT)), r.text[:160])
+    r0 = c.put("/api/tb/his", json={"kind": "fhir", "label": "e2e copy", "url": f"http://127.0.0.1:{MOCK_PORT}", "token_file": str(tmp / "token"), "enabled": True})
+    check("3.1 a change of host needs the token sent explicitly: the saved token and token file never follow, a token file in the request is ignored (review S2)", r0.status_code == 400 and "token" in r0.text)
+    r = c.put("/api/tb/his", json={"kind": "fhir", "label": "Vaidyx Demo Hospital HIS (SYNTHETIC) e2e copy", "url": f"http://127.0.0.1:{MOCK_PORT}", "token": (tmp / "token").read_text().strip(), "enabled": True})
+    check("3.1 the HIS connection can be pointed at another HIS on this server (the e2e copy); the saved settings carry no token", r.status_code == 200 and "token" not in r.json()["settings"]
+          and r.json()["settings"]["url"].endswith(str(MOCK_PORT)) and r.json()["settings"]["token_file"] == "", r.text[:160])
+    check("3.1 a host outside this server is refused for a root admin (only a Vaidyx admin or TB_HIS_ALLOW_HOSTS)",
+          c.put("/api/tb/his", json={"kind": "fhir", "url": "http://10.0.0.5:8080/fhir", "token": "x"}).status_code == 200  # the Vaidyx admin may
+          and c.put("/api/tb/his", json={"kind": "fhir", "label": "Vaidyx Demo Hospital HIS (SYNTHETIC) e2e copy", "url": f"http://127.0.0.1:{MOCK_PORT}", "token": (tmp / "token").read_text().strip(), "enabled": True}).status_code == 200)
     h = c.get("/api/tb/his").json()
     check("3.1 the e2e copy answers through the adapter", h["status"]["ok"], json.dumps(h["status"])[:160])
     au = c.get("/api/tb/org/audit").json()["events"]
@@ -698,6 +703,48 @@ def v2_phase3(c, base, ctx):
         rq = _req(d, "bone_scan")
         check("3.3 P04 bone scan scheduled, no report: Level 1 gap to Nuclear Medicine with the accession and the date", _gaps(d) == [("bone_scan", 1)] and rq["accession"] == "NM/26/00152"
               and (rq.get("pending_order") or {}).get("stage") == "scheduled" and d["case"]["department"] == "surgical_oncology", json.dumps(_gaps(d)))
+    # the remaining plan 1.1 patients: P05 (reports never ordered), P16 (the second complete work-up), P14 and P18 (creation and first-fetch gate only;
+    # the referral and the second primary are Phase 5), each against scenarios.json first_fetch (review M9)
+    fx = {p["slot"]: p for p in json.load(open(REPO / "his_mock" / "scenarios.json"))["patients"]}
+
+    def first_fetch(slot, protocol):
+        cf = next(c_ for c_ in fx[slot]["case_files"] if c_["protocol"] == protocol)
+        return sorted((x["requirement"], x["level"]) for x in cf["first_fetch"]["gaps"]), cf
+    d, j, fs = create(c, "VXH/26/004205", "oral_cavity", "locally_advanced", "TB-H-P05", department="ENT / Head and Neck Surgery")  # the Vaidyx admin names the owner
+    if d:
+        exp, cf = first_fetch("P05", "oral_cavity")
+        check("3.3 P05 reports never ordered (chest X-ray, dental evaluation): Level 1 gaps whose requests name no accession No.", _gaps(d) == exp and not any(_req(d, g[0]).get("accession") for g in exp)
+              and not any(x.get("accession") for x in d["state"]["actions"] if x["status"] != "completed") and d["case"]["department"] == "ent_head_neck_surgery", json.dumps(_gaps(d)))
+    d, j, fs = create(c, "VXH/26/004216", "colorectal_rectum", "non_metastatic", "TB-H-P16", department="Colorectal Surgery")
+    if d:
+        exp, cf = first_fetch("P16", "colorectal_rectum")
+        check("3.3 P16 complete rectal work-up passes on the first fetch", _gaps(d) == exp == [] and d["state"]["gate"]["passed"], json.dumps(_gaps(d)))
+    d, j, fs = create(c, "VXH/26/004214", "lung_nsclc", "metastatic", "TB-H-P14", department="Pulmonology")
+    if d:
+        exp, cf = first_fetch("P14", "lung_nsclc")
+        check("3.3 P14 lung work-up (later referred, Phase 5): the first-fetch gate matches the fixture; the HIS referral is listed", _gaps(d) == exp and len(d["his"]["referrals"]) >= 1, json.dumps([_gaps(d), exp]))
+    d, j, fs = create(c, "VXH/26/004218", "colorectal_rectum", "non_metastatic", "TB-H-P18", department="Colorectal Surgery")
+    if d:
+        exp, cf = first_fetch("P18", "colorectal_rectum")
+        check("3.3 P18 first primary (rectum) passes on the first fetch; the breast records of the same UHID are fetched too (the second Case File is Phase 5)", _gaps(d) == exp == [] and d["state"]["gate"]["passed"]
+              and any("mammogram" in (x["classification"] or {}).get("doc_type", "") for x in d["documents"]), json.dumps(_gaps(d)))
+    # unlink (review M8) and the undo of an outside-report confirmation (review M5), on P09 / P17
+    if "TB-H-P09" in ctx["cases"]:
+        r = gyn.post("/api/tb/cases/TB-H-P09/his/unlink", json={"uhid": "VXH/T/26/00412", "reason": "e2e: not the same person after all"})
+        d2 = gyn.get("/api/tb/cases/TB-H-P09").json() if r.status_code == 200 else {}
+        check("3.2 P09 a link can be undone: the registration's records leave, its identifiers are forgotten, the gap returns, audited", r.status_code == 200 and r.json()["removed_documents"] == 1
+              and not any(x["his"].get("registration") for x in d2.get("documents", [])) and _gaps(d2) == [("cect_abdomen_pelvis", 1)]
+              and ("uhid", "VXH/T/26/00412") not in {(x["kind"], x["value"]) for x in d2["case"]["patient"]["ids"]} and d2["his"]["unlinked"][0]["uhid"] == "VXH/T/26/00412"
+              and any(e["kind"] == "registration_unlinked" for e in gyn.get("/api/tb/cases/TB-H-P09/audit").json()["events"]), r.text[:160])
+    if "TB-H-P17" in ctx["cases"]:
+        d3 = gi.get("/api/tb/cases/TB-H-P17").json()
+        od = next((x for x in d3["documents"] if x.get("outside")), None)
+        conf = next((x for x in d3["state"].get("confirmations", []) if x["type"] == "confirm_match" and x["key"] == (od or {}).get("doc_id") and not x.get("undone")), None)
+        r = gi.post(f"/api/tb/cases/TB-H-P17/confirmations/{conf['id']}/undo") if conf else None
+        d4 = gi.get("/api/tb/cases/TB-H-P17").json() if r is not None and r.status_code == 200 else {}
+        check("3.6 P17 undoing the patient confirmation of an outside report keeps the record and asks again (no unfile)", r is not None and r.status_code == 200 and not r.json().get("unfiled")
+              and any(x["doc_id"] == od["doc_id"] and x["identity"] == "name_match" and not x.get("identity_confirmed_by") for x in d4.get("documents", []))
+              and _req(d4, "cea").get("status") == "needs_confirmation", (r.text[:160] if r is not None else "no confirmation found"))
 
 
 def v2_phase3_cleanup(c, ctx):
@@ -716,8 +763,10 @@ def v2_phase3_cleanup(c, ctx):
     for u in H_USERS:
         c.request("DELETE", "/api/auth/users", json={"username": u})
     try:
-        r = c.put("/api/tb/his", json=LIVE_HIS)
+        tok = (REPO / "data" / "his_mock" / "token").read_text().strip()
+        r = c.put("/api/tb/his", json={**LIVE_HIS, "token": tok})
         print("HIS connection restored:", r.status_code, (r.json().get("settings") or {}).get("url") if r.status_code == 200 else r.text[:120])
+        (REPO / "data" / "tumour_board" / "his.json").unlink(missing_ok=True)  # back to the pristine default (the demo token file), not a saved copy of the token
     except Exception as e:
         print("restore HIS failed:", e)
     proc = ctx.get("proc")

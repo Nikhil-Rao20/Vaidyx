@@ -494,7 +494,8 @@ def setup_tumour_board_routes():
         """The configured hospital information system (never its token) and whether it answers; settings for root admins."""
         rl = _roles(request); _need_known(rl) if not org.can(rl, "manage_org") else None
         cfg = his_client.settings()
-        out = {"settings": his_client.public(cfg), "can_manage": org.can(rl, "manage_org"), "can_create": org.can(rl, "create_case"),
+        out = {"settings": his_client.public(cfg, manager=org.can(rl, "manage_org")), "can_manage": org.can(rl, "manage_org"), "can_create": org.can(rl, "create_case"),
+               "remote_allowed": bool(rl.get("admin")) or bool(his_client.allowed_hosts()),
                "treating_departments": [{"id": d["id"], "name": d["name"]} for d in org.departments("treating") if rl.get("admin") or d["id"] in (rl.get("treating") or {})],
                "window_months": list(his_case.WINDOW_MONTHS), "default_window": his_case.default_window()}
         c = his_client.client()
@@ -510,8 +511,8 @@ def setup_tumour_board_routes():
     @r.put("/his")
     async def his_save(request: Request):
         rl = _roles(request); _need(rl, "manage_org"); b = await request.json()
-        try:
-            return {"ok": True, "settings": his_client.save_settings(b if isinstance(b, dict) else {}, by=rl["user"])}
+        try:  # only a Vaidyx admin may point the connection outside this server; the token file is never taken from the request (review S2)
+            return {"ok": True, "settings": his_client.save_settings(b if isinstance(b, dict) else {}, by=rl["user"], allow_remote=bool(rl.get("admin")))}
         except ValueError as e:
             raise HTTPException(400, str(e))
 
@@ -521,7 +522,9 @@ def setup_tumour_board_routes():
         window, and the registrations that may be the same person (for a person to link, never merged)."""
         rl = _roles(request); _need(rl, "create_case")
         window = {"all": True} if all else ({"from": from_date} if from_date else ({"months": months} if months else None))
-        return await _his_call(his_case.lookup(identifier, window))
+        out = await _his_call(his_case.lookup(identifier, window))
+        org.audit("his_lookup", rl["user"], identifier=str(identifier or "")[:60], found=bool(out.get("found")), uhid=(out.get("patient") or {}).get("uhid"))  # a patient lookup is a user action (review M11)
+        return out
 
     @r.post("/cases/from-his")
     async def create_from_his(request: Request):
@@ -551,6 +554,18 @@ def setup_tumour_board_routes():
         u = _user(request); rl = _roles(request); _need(rl, "upload_to_case"); _case(case_id); b = await request.json()
         job = await _his_call(his_case.link_registration(case_id, str((b or {}).get("uhid") or ""), u, str((b or {}).get("reason") or "")))
         return {"job": job["id"], "total": job["total"], "his": job.get("his"), "case": store.get_case(case_id)}
+
+    @r.post("/cases/{case_id}/his/unlink")
+    async def his_unlink(case_id: str, request: Request):
+        """Undo a link ({"uhid", "reason"}): the registration's records leave the Case File and the identifiers learned from it are forgotten (audited)."""
+        u = _user(request); rl = _roles(request); _need(rl, "upload_to_case"); _case(case_id); b = await request.json()
+        async with store.lock(case_id):
+            try:
+                out = his_case.unlink_registration(case_id, str((b or {}).get("uhid") or ""), u, str((b or {}).get("reason") or ""))
+            except his_case.HISCaseError as e:
+                raise HTTPException(e.status, str(e))
+            st = service.recheck(case_id, u)
+        return {"ok": True, **out, "state": st, "case": store.get_case(case_id)}
 
     @r.post("/cases/{case_id}/his/fetch-older")
     async def his_fetch_older(case_id: str, request: Request):
@@ -845,7 +860,7 @@ def setup_tumour_board_routes():
             raise HTTPException(404, "document not found")
         # as the clinicians confirmed it (V1 item 2.2; review M1: a confirmed value no longer shows as the model's reading), facts saying
         # whether they were read from a scan (V1 item 8.1)
-        return scanned.with_source_methods(confirm.apply_to_doc(d, store.get_state(case_id)))
+        return scanned.with_source_methods(confirm.apply_to_doc(d, store.get_state(case_id), case_id))
 
     @r.get("/cases/{case_id}/documents/{doc_id}/file")
     async def doc_file(case_id: str, doc_id: str, request: Request, render: int = 0, page: int = 0):
@@ -913,6 +928,8 @@ def setup_tumour_board_routes():
         if ctype not in confirm.TYPES:
             raise HTTPException(400, f"Unknown confirmation type: {ctype}")
         _confirmation_permission(_roles(request), case_id, c, ctype, key)
+        if ctype == "confirm_match" and store.get_doc(case_id, key) and (b.get("fields") or {}).get("case_id") not in ("", case_id):
+            raise HTTPException(400, "A patient confirmation on a document of this Case File names this Case File (or an empty id for not this patient)")  # review M6
         if ctype == "resolve_flag":  # a board record's flag (V1 item 7.3): "<record id>:<flag id>"; a correction amends the decision
             rid, _, fid = key.partition(":")
             out = await _resolve_flag(case_id, rid, fid, b.get("fields") or {}, b.get("reason", ""), u)
@@ -952,10 +969,12 @@ def setup_tumour_board_routes():
             return {"confirmation": next((x for x in store.get_state(case_id).get("confirmations", []) if x["id"] == conf_id), rec),
                     "state": store.get_state(case_id), "record": record}
         async with store.lock(case_id):
-            if rec["type"] == "confirm_match" and (rec.get("fields") or {}).get("case_id") and store.get_doc(case_id, rec["key"]):
+            d_match = store.get_doc(case_id, rec["key"]) if rec["type"] == "confirm_match" and (rec.get("fields") or {}).get("case_id") else None
+            if d_match and d_match.get("intake"):
                 # undoing a match (a person's or the matcher's) moves the document back to the Needs matching queue
                 out = service.unfile_document(case_id, rec["key"], u, "match undone")
                 return {"confirmation": next((x for x in store.get_state(case_id).get("confirmations", []) if x["id"] == conf_id), rec), "state": out["state"], "unfiled": True}
+            # an outside report (V2 item 3.6) or a document uploaded straight into the Case File: the confirmation is undone, the record stays (review M5)
             try:
                 rec = confirm.undo(case_id, conf_id, u)
             except KeyError:

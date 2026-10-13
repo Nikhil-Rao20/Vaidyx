@@ -199,9 +199,10 @@ def legacy_override(case_id, kind, key, value, by=""):
     return rec
 
 
-def apply_to_doc(doc, state):
+def apply_to_doc(doc, state, case_id=None):
     """The document as the clinicians confirmed it: confirmations overlaid on the model's reading (they win), with the
-    model's values kept under model_*. Never mutates the input; a document with no confirmations comes back equal."""
+    model's values kept under model_*. Never mutates the input; a document with no confirmations comes back equal.
+    `case_id`: the Case File the state belongs to; a confirm_match naming another Case File never counts (review M6)."""
     did = doc.get("doc_id")
     mine = [c for c in active(state) if c["key"] == did or (TYPES[c["type"]]["target"] == "fact" and c["key"].partition(":")[0] == did)]
     mine = [c for c in mine if c["type"] in ("confirm_doc_type", "confirm_dates", "confirm_value", "dismiss_failed", "confirm_match")]
@@ -242,7 +243,7 @@ def apply_to_doc(doc, state):
             d.setdefault("facts", {})[fid] = fact
         elif c["type"] == "dismiss_failed":
             d["dismissed"] = {"by": c["by"], "at": c["at"], "reason": c["reason"]}
-        elif c["type"] == "confirm_match" and (f.get("case_id") or "") and d.get("identity") == "name_match":
+        elif c["type"] == "confirm_match" and (f.get("case_id") or "") and (case_id is None or f.get("case_id") == case_id) and d.get("identity") == "name_match":
             # a person said "this patient" for a record matched by name only (an outside report, V2 item 3.6): the match is confirmed;
             # a printed identifier that contradicts the Case File (id_differs, mismatch_or_missing) keeps its warning even when filed
             d["model_identity"] = d.get("identity")
@@ -252,8 +253,8 @@ def apply_to_doc(doc, state):
     return d
 
 
-def apply_to_docs(docs, state):
-    return [apply_to_doc(d, state) for d in docs]
+def apply_to_docs(docs, state, case_id=None):
+    return [apply_to_doc(d, state, case_id) for d in docs]
 
 
 def summary(state):

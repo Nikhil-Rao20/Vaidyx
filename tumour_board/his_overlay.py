@@ -49,14 +49,19 @@ def apply_status(doc: dict) -> dict:
         elif text_status in FINAL_OK and his_status in NEGATIVE:
             notes.append(f"HIS: the hospital system calls this report {h.get('status')} although its text reads {text_status.lower()}: the system's status stands")
         c["status"] = status
-        c["status_quote"] = c.get("text_status_quote") or f"HIS report status: {h.get('status')}"
+        c["status_quote"] = c.get("text_status_quote") if status == text_status else f"[hospital system] report status: {h.get('status')}"  # not a quote from the text: labelled
         c["status_source"] = "his"
     sig = h.get("signature")
     if sig:
-        ok = str(sig.get("verification_status") or "").lower() == "verified"
+        verified = str(sig.get("verification_status") or "").lower() == "verified"
+        # the signed hash must be the hash of the file Vaidyx-TB downloaded (the HIS's verdict alone is not trusted)
+        sha = doc.get("sha256") or h.get("document_sha256") or ""
+        hash_ok = (not sig.get("document_hash")) or (not sha) or str(sig.get("document_hash")).lower() == str(sha).lower()
+        text_unsigned = c.get("text_signed") == "no"  # "Signature pending", "unsigned" printed on the report: the stricter side wins
+        ok = verified and hash_ok and not text_unsigned
         c["signed"] = "yes" if ok else "no"
         c["signed_source"] = "his"
-        c["his_signature"] = {k: sig.get(k) for k in ("signer", "signed_at", "ca", "serial", "verification_status", "document_hash")}
+        c["his_signature"] = {k: sig.get(k) for k in ("signer", "signed_at", "ca", "serial", "verification_status", "document_hash")} | {"hash_matches": hash_ok}
         block = sig.get("block") or ""
         if block and _in_pages(block, doc):
             c["signature_quote"] = block
@@ -64,8 +69,12 @@ def apply_status(doc: dict) -> dict:
             c["signature_quote"] = c.get("text_signature_quote") or block
             if block:
                 notes.append("HIS: the signature block recorded by the hospital system was not found in the report text")
-        if not ok:
+        if not verified:
             notes.append(f"HIS: the digital signature failed verification ({sig.get('verification_status') or 'unverified'}): not counted as signed")
+        elif not hash_ok:
+            notes.append("HIS: the signed document hash does not match the file received from the hospital system: not counted as signed")
+        elif text_unsigned:
+            notes.append("HIS: the hospital system holds a signature but the report text says it is not signed: not counted as signed until the two agree")
     elif his_status:  # the HIS knows the report and holds no signature for this version
         c["signed"] = "no"
         c["signed_source"] = "his"
@@ -121,27 +130,57 @@ def apply_doc_type(doc: dict) -> dict:
 
 
 _COMMA_NUM = re.compile(r"(?<=\d),(?=\d{2,3}\b)")
+_GENERIC = {"count", "total", "serum", "blood", "level", "value", "result", "test", "report", "the", "and", "of", "in", "status", "score", "index", "labelling"}
 
 
 def _plain_numbers(s: str) -> set:
     return set(grounding.numbers(_COMMA_NUM.sub("", s or "")))
 
 
-def _check_value(value: str, texts: list) -> dict:
-    """Where a structured value stands against the report text: verbatim (with its location), by number (Indian commas dropped),
-    or absent."""
+def _label_tokens(*labels) -> list:
+    """The words that identify an Observation on its line, one list per label (its printed label, the fact's catalogue label),
+    generic words dropped. A line is the Observation's when it carries every word of one of the lists."""
+    out = []
+    for lab in labels:
+        toks = []
+        for t in re.findall(r"[a-z0-9]+", grounding.norm(lab or "")):
+            if len(t) >= 2 and t not in _GENERIC and t not in toks:
+                toks.append(t)
+        if toks:
+            out.append(toks)
+    return out
+
+
+def _line_at(text: str, start: int) -> str:
+    a = text.rfind("\n", 0, start) + 1
+    b = text.find("\n", start)
+    return text[a:b if b >= 0 else len(text)]
+
+
+def _labelled(line: str, token_sets: list) -> bool:
+    n = grounding.norm(line)
+    return any(all(re.search(r"(?<![a-z0-9])" + re.escape(t) + r"(?![a-z0-9])", n) for t in toks) for toks in token_sets)
+
+
+def _check_value(value: str, texts: list, tokens: list) -> dict:
+    """Where a structured value stands against the report text, on a line that carries the Observation's label: verbatim (with its
+    location), by number (Indian commas dropped), elsewhere (printed, but not beside its label: never a fact), or absent."""
+    nv = grounding.norm(value)
+    for pi, text in enumerate(texts):
+        for m in re.finditer(r"[^\n]+", text):
+            line = m.group(0)
+            if not _labelled(line, tokens):
+                continue
+            loc = grounding.locate(value, [line])
+            if loc and loc["score"] >= 100:
+                return {"result": "verbatim", "location": {"page": pi, "start": m.start() + loc["start"], "end": m.start() + loc["end"], "score": 100.0, "matched": loc["matched"]}}
+            # the same value once Indian commas are dropped ("6,900 /cumm" for 6900 /cumm): the number with its unit, so a reference interval never counts
+            if nv and grounding.norm(_COMMA_NUM.sub("", value)) in grounding.norm(_COMMA_NUM.sub("", line)):
+                return {"result": "number", "location": None}
     loc = grounding.locate(value, texts)
     if loc and loc["score"] >= 100:
-        return {"result": "verbatim", "location": loc}
-    nums = _plain_numbers(value)
-    if nums:
-        have = set()
-        for t in texts:
-            have |= _plain_numbers(t)
-        if nums <= have:
-            return {"result": "number", "location": loc}
-        return {"result": "absent", "location": None}
-    return {"result": "absent" if not loc else "approximate", "location": loc}
+        return {"result": "elsewhere", "location": loc}
+    return {"result": "absent", "location": None}
 
 
 def check_observations(doc: dict) -> dict:
@@ -163,29 +202,27 @@ def check_observations(doc: dict) -> dict:
             continue
         label = cat[fid]["label"]
         f = facts.get(fid)
+        tokens = _label_tokens(o.get("label") or "", label)
         row = {"fact": fid, "label": label, "his_value": value, "obs_label": o.get("label") or "", "text_value": (f or {}).get("value")}
         if f and f.get("value") and f.get("verification") in ("verified", "confirmed", "needs_review") and f.get("source") != HIS_CANDIDATE:
-            if discord.same(value, f["value"], fid):
-                row["result"] = "agrees"
-            else:
-                chk = _check_value(value, texts)
-                row["result"] = "agrees" if chk["result"] in ("verbatim", "number") else "differs"
-                if row["result"] == "differs":
-                    row["text"] = f"HIS value differs from the report text: {label.lower()} {value} vs {f['value']}"
+            # the reader found the value in the text: the two must say the same; a different reading is flagged whatever else the page prints
+            row["result"] = "agrees" if discord.same(value, f["value"], fid) else "differs"
+            if row["result"] == "differs":
+                row["text"] = f"HIS value differs from the report text: {label.lower()} {value} vs {f['value']}"
         else:
-            chk = _check_value(value, texts)
+            chk = _check_value(value, texts, tokens)
             if chk["result"] == "verbatim":
                 row["result"] = "found"
-                if not f:  # a candidate the model missed, backed by the printed text: a fact with its quote
+                if not f:  # a candidate the reader missed, printed verbatim beside its own label: a fact with that line as its quote
                     loc = chk["location"]
                     facts[fid] = {"value": value, "quote": loc["matched"], "model_quote": "", "verification": "verified", "reason": None, "location": loc,
                                   "state": "present", "polarity": "affirmed", "source": HIS_CANDIDATE}
                     row["added"] = True
             elif chk["result"] == "number":
                 row["result"] = "found"
-            elif chk["result"] == "approximate":
-                row["result"] = "approximate"
-                row["text"] = f"HIS value matched the report text only approximately: {label.lower()} {value}"
+            elif chk["result"] == "elsewhere":
+                row["result"] = "elsewhere"
+                row["text"] = f"HIS value for {label.lower()} ({value}) is printed in the report but not beside its label; the reader did not read it: check the report"
             else:
                 row["result"] = "differs"
                 row["text"] = f"HIS value not found in the report text: {label.lower()} {value}" + (f" (the report reads {f['value']})" if f and f.get("value") else "")

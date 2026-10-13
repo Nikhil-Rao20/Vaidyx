@@ -85,9 +85,9 @@ def encounter_lines(case_id, case=None):
         if g.get("kind") not in ("OP", "IP") or not g["docs"]:
             continue
         titles = [((by_id[i].get("classification") or {}).get("title") or by_id[i].get("filename")) for i in g["docs"] if i in by_id]
-        when = g.get("start") or ""
+        when = his_case.dmy(g.get("start") or "")
         if g.get("kind") == "IP" and g.get("end"):
-            when += f" to {g['end']}"
+            when += f" to {his_case.dmy(g['end'])}"
         out.append({"kind": g["kind"], "number": g["number"], "department": g.get("department"), "unit": g.get("unit"), "when": when, "pre_admission": bool(g.get("pre_admission")),
                     "records": titles, "doc_ids": [i for i in g["docs"] if i in by_id],
                     "text": f"{g['label']} ({g.get('department') or ''}{', ' + g['unit'] if g.get('unit') else ''}; {when})" + (" [pre-admission OPD]" if g.get("pre_admission") else "")

@@ -23,7 +23,7 @@ ENCS = [{"id": "op-26-118701", "ref": "Encounter/op-26-118701", "kind": "OP", "n
          "consultant": None, "start": "2026-09-21", "end": "2026-09-24", "ward_history": [{"ward": "Surgical Ward 2", "bed": "2-07", "from": "2026-09-21", "to": "2026-09-24", "reason": ""}],
          "pmjay_preauth": {"status": "approved", "date": "2026-09-19"}, "last_updated": "2026-09-24T10:00:00+05:30"}]
 SIG = {"ref": "Provenance/sig-p01-r04-v1", "signer": {"ref": "Practitioner/y", "name": "Dr Revathi Krishnan"}, "signed_at": "2026-09-05T11:00:00+05:30", "ca": "Vaidyx Demo CA",
-       "serial": "VXDCA-00A1B204", "document_hash": "abc", "verification_status": "verified",
+       "serial": "VXDCA-00A1B204", "document_hash": None, "verification_status": "verified",
        "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 05/09/2026 11:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B204"}
 HPE_TEXT = ("Vaidyx Demo Hospital (SYNTHETIC)\nDepartment of Pathology\nHISTOPATHOLOGY REPORT\nPatient name : Anitha Reddy (SYNTHETIC) UHID : VXH/26/004201\n"
             "Age / Sex : 46 Y / F OP No. : OP/26/118701\nLab No. : PATH/26/00411\nDiagnosis: Invasive carcinoma of no special type\nReport status: FINAL\n" + SIG["block"] + "\n")
@@ -77,6 +77,9 @@ class FakeHIS:
         return copy.deepcopy(self.similar)
 
     async def encounters(self, patient_id):
+        if patient_id == TEMP["id"]:  # the temporary registration's own casualty visit
+            return [{"id": "op-26-118712", "ref": "Encounter/op-26-118712", "kind": "OP", "number": "OP/26/118712", "status": "finished", "department": "Casualty", "unit": "",
+                     "consultant": None, "start": "2026-08-22", "end": "", "ward_history": [], "pmjay_preauth": None, "last_updated": "2026-08-22T09:00:00+05:30"}]
         return copy.deepcopy(self.encs) if patient_id == PAT["id"] else []
 
     async def reports(self, patient_id, since=None):
@@ -306,7 +309,7 @@ def test_create_from_uhid_fetches_every_record_with_its_his_metadata(fakes, monk
     h = case["his"]
     assert h["uhid"] == UHID and h["matched_on"] == {"kind": "uhid", "value": UHID} and h["window"] == {"months": 12} and h["window_start"]
     assert [s["uhid"] for s in h["similar"]] == ["VXH/T/26/00412"] and h["similar"][0]["linked"] is False and h["linked"] == []
-    assert [e["number"] for e in h["encounters"]] == ["OP/26/118701", "IP/26/01871"] and h["watermark"] == "2026-09-24T10:00:00+05:30"
+    assert [e["number"] for e in h["encounters"]] == ["OP/26/118701", "IP/26/01871"] and h["watermark"] == "2026-09-05T11:00:00+05:30"  # the newest report version, not an encounter
     assert out["job"]["state"] == "finished" and out["job"]["his"]["added"] == 2
     docs = {d["his"]["id"]: d for d in store.list_docs(case["case_id"])}
     hpe, ct = docs["p01-r04"], docs["p01-r02"]
@@ -404,8 +407,8 @@ def test_refetch_brings_only_changed_versions_keeps_history_and_closes_the_reque
     fake.reports_by_patient[PAT["id"]].append(signed)
     calls_before = len(fake.calls)
     job = _await(lambda: his_case.refetch(cid, "dr.breast"))
-    assert job["his"]["reports"] == 1 and job["his"]["added"] == 1  # the delta: only the changed report
-    assert ("reports", PAT["id"], "2026-09-24T10:00:00+05:30") in fake.calls[calls_before:]
+    assert job["his"]["reports"] == 2 and job["his"]["added"] == 1 and job["his"]["skipped"] == 1  # the delta (ge): the changed report and the one at the watermark instant, which is skipped
+    assert ("reports", PAT["id"], "2026-09-05T11:00:00+05:30") in fake.calls[calls_before:]
     docs = sorted((d for d in store.list_docs(cid) if d["his"]["id"] == "p01-r02"), key=lambda d: d["his"]["version"])
     assert len(docs) == 2 and docs[0]["superseded"]["by_doc"] == docs[1]["doc_id"] and "superseded" not in docs[1]
     assert docs[1]["classification"]["status"] == "FINAL" and docs[1]["classification"]["signed"] == "yes"
@@ -492,7 +495,7 @@ def test_open_order_names_the_accession_and_turns_missing_values_into_pending(un
     assert r["pdl1"]["status"] == "missing_field" and "pending_order" not in r["pdl1"]
     # the CT is missing and the HIS holds a scheduled order for it: Level 1 with the accession No.
     assert r["ct_thorax"]["status"] == "missing_record" and r["ct_thorax"]["level"] == 1 and r["ct_thorax"]["accession"] == "RAD/26/01000"
-    assert r["ct_thorax"]["pending_order"]["stage"] == "scheduled" and r["ct_thorax"]["problems"][-1] == "Ordered in the HIS (RAD/26/01000): CECT thorax scheduled for 2026-10-20, no report yet"
+    assert r["ct_thorax"]["pending_order"]["stage"] == "scheduled" and r["ct_thorax"]["problems"][-1] == "Ordered in the HIS (RAD/26/01000): CECT thorax scheduled for 20/10/2026, no report yet"
     assert g["his"] == {"open_orders": 2, "source": "Fake HIS"}
     st = rules.sync_actions(cid, g)
     a = next(x for x in st["actions"] if x["requirement"] == "ct_thorax")
@@ -510,7 +513,7 @@ def test_open_order_names_the_accession_and_turns_missing_values_into_pending(un
         protocol.get = real
     d = next(x for x in g["requirements"] if x["id"] == "driver")
     assert d["status"] == "missing_field" and d["level"] == 2 and d["accession"] == "PATH/26/00451" and d["pending_from_order"] is True
-    assert d["problems"] == ["Pending: EGFR, ALK: sample collected on 2026-09-17 (PATH/26/00451): Molecular panel (EGFR, ALK, ROS1, MET), result awaited in the HIS"]
+    assert d["problems"] == ["Pending: EGFR, ALK: sample collected on 17/09/2026 (PATH/26/00451): Molecular panel (EGFR, ALK, ROS1, MET), result awaited in the HIS"]
     assert d["level2"]["problems"] == d["problems"]
 
 
@@ -640,3 +643,145 @@ def test_refetch_refreshes_a_known_version_whose_signature_arrived_without_a_new
     # nothing changed: nothing refreshed
     job2 = _await(lambda: his_case.refetch(cid, "dr.breast"))
     assert job2["his"]["updated"] == 0 and job2["his"]["skipped"] == 1
+
+
+
+def test_overlay_signature_needs_a_matching_hash_and_a_text_that_does_not_say_unsigned():
+    base = {"status": "FINAL", "signed": "yes", "status_quote": "Report status: FINAL", "signature_quote": "", "doc_type": "histopathology", "doc_type_keyword": "histopathology", "status_notes": []}
+    import hashlib
+    sha = hashlib.sha256(HPE_TEXT.encode()).hexdigest()
+    # the HIS says verified and the signed hash is the hash of the file Vaidyx-TB received: signed
+    d = _doc(HPE_TEXT, {"status": "final", "signature": {**SIG, "document_hash": sha}, "doc_type": "histopathology", "document_sha256": sha}, dict(base)); d["sha256"] = sha
+    his_overlay.apply(d)
+    assert d["classification"]["signed"] == "yes" and d["classification"]["his_signature"]["hash_matches"] is True
+    # the HIS says verified but the signed hash is not the file's: not signed (the HIS verdict alone is not trusted)
+    d = _doc(HPE_TEXT, {"status": "final", "signature": {**SIG, "document_hash": "0" * 64}, "doc_type": "histopathology", "document_sha256": sha}, dict(base)); d["sha256"] = sha
+    his_overlay.apply(d)
+    assert d["classification"]["signed"] == "no" and any("hash does not match" in n for n in d["classification"]["status_notes"])
+    # the HIS holds a verified signature but the report text says "Signature pending": the stricter side wins
+    d = _doc(HPE_TEXT.replace(SIG["block"], "Signature pending"), {"status": "final", "signature": dict(SIG), "doc_type": "histopathology"},
+             {**base, "signed": "no", "signature_quote": "Signature pending"})
+    his_overlay.apply(d)
+    assert d["classification"]["signed"] == "no" and any("report text says it is not signed" in n for n in d["classification"]["status_notes"])
+    assert not rules._is_final({"doc_id": "D1", "classification": d["classification"]})
+
+
+IHC_TEXT = ("IMMUNOHISTOCHEMISTRY REPORT\nUHID : VXH/26/004202\nMarker Result\nOestrogen receptor (ER) Negative (Allred score 0/8)\n"
+            "Progesterone receptor (PR) Positive (Allred score 6/8)\nHER2/neu (IHC score) 3+ (Positive)\nKi-67 labelling index 40 %\n2 blocks examined\nReport status: FINAL\n")
+
+
+def test_overlay_candidate_counts_only_beside_its_own_label():
+    """Review S1: an HIS value found on another field's line (ER and PR print the same words) is never promoted to a fact."""
+    obs = [{"id": "o1", "label": "Progesterone receptor (PR)", "fact": "pr", "value": "Negative (Allred score 0/8)"},   # the HIS is wrong: the PDF prints Positive
+           {"id": "o2", "label": "Oestrogen receptor (ER)", "fact": "er", "value": "Negative (Allred score 0/8)"},      # right, beside its label
+           {"id": "o3", "label": "Ki-67 labelling index", "fact": "ki67", "value": "40 %"},
+           {"id": "o4", "label": "Grade", "fact": "grade", "value": "2"}]                                                # "2 blocks" is not a grade
+    d = _doc(IHC_TEXT, {"status": "final", "signature": SIG, "doc_type": "ihc", "observations": obs}, {"status": "FINAL", "signed": "yes", "doc_type": "ihc", "doc_type_keyword": "ihc", "status_notes": []})
+    his_overlay.check_observations(d)
+    rows = {r["fact"]: r for r in d["his_checks"]}
+    assert rows["pr"]["result"] == "elsewhere" and "pr" not in d["facts"] and any(f["fact"] == "pr" for f in d["his_flags"])
+    assert rows["er"]["result"] == "found" and d["facts"]["er"]["value"] == "Negative (Allred score 0/8)" and d["facts"]["er"]["source"] == his_overlay.HIS_CANDIDATE
+    loc = d["facts"]["er"]["location"]
+    assert "Oestrogen receptor (ER)" in IHC_TEXT[:loc["start"]].splitlines()[-1]  # quoted from the ER line, not the PR line
+    assert rows["ki67"]["result"] == "found" and d["facts"]["ki67"]["quote"].startswith("40")
+    assert rows["grade"]["result"] == "differs" and "grade" not in d["facts"]
+
+
+def test_overlay_number_elsewhere_on_the_page_is_not_agreement():
+    """Review M3: a reference-range number is not the value; a reading that differs from the model's is flagged whatever the page prints."""
+    d = _doc(CBC_TEXT, {"status": "final", "signature": SIG, "doc_type": "lab", "observations": [{"id": "o1", "label": "Haemoglobin (Hb)", "fact": "haemoglobin", "value": "13.0 gm%"}]},
+             {"status": "FINAL", "signed": "yes", "doc_type": "lab", "doc_type_keyword": "lab", "status_notes": []}, facts={"haemoglobin": util.fact("12.1 gm%", quote="Haemoglobin (Hb) 12.1 gm%")})
+    his_overlay.check_observations(d)
+    assert d["his_checks"][0]["result"] == "differs" and d["facts"]["haemoglobin"]["value"] == "12.1 gm%" and "13.0" in d["his_flags"][0]["text"]
+    # the model did not read it and 13.0 appears only in the reference interval: not found beside the label at all
+    d = _doc(CBC_TEXT, {"status": "final", "signature": SIG, "doc_type": "lab", "observations": [{"id": "o1", "label": "Haemoglobin (Hb)", "fact": "haemoglobin", "value": "13.0 gm%"}]},
+             {"status": "FINAL", "signed": "yes", "doc_type": "lab", "doc_type_keyword": "lab", "status_notes": []})
+    his_overlay.check_observations(d)
+    assert d["his_checks"][0]["result"] in ("differs", "elsewhere") and "haemoglobin" not in d["facts"]
+
+
+
+def test_superseded_values_never_become_current_or_count_at_level_two(unit):
+    """Review M7: a value printed only in the superseded version of an amended report is history, not the current value."""
+    v1 = util.make_doc("D1", "histopathology", date="2026-09-03", facts={"histologic_type": util.fact("Adenocarcinoma"), "pdl1": util.fact("TPS 60%")})
+    v1["his"] = {"id": "r1", "version": 1, "status": "final"}; v1["superseded"] = {"by_doc": "D2", "version": 2, "at": "x"}
+    v2 = util.make_doc("D2", "histopathology", status="AMENDED", date="2026-09-16", facts={"histologic_type": util.fact("Squamous cell carcinoma")})  # the amendment omits PD-L1
+    v2["his"] = {"id": "r1", "version": 2, "status": "amended"}
+    cid = _case_with([v1, v2])
+    facts = rules.resolve_facts(rules.case_docs(cid))
+    assert facts["histologic_type"]["current"]["doc_id"] == "D2"
+    assert facts["pdl1"]["current"]["doc_id"] == "D1" and facts["pdl1"]["current"]["superseded"] is True  # shown only as history
+    g = rules.evaluate(cid)
+    p = next(x for x in g["requirements"] if x["id"] == "pdl1")
+    assert p["status"] == "missing_field" and p["level"] == 2  # the amended version does not document it
+
+
+def test_confirm_match_for_another_case_file_never_confirms(unit):
+    """Review M6: a confirm_match naming another Case File does not flip the identity of this Case File's document."""
+    out = util.make_doc("D1", "histopathology", identity="name_match", facts={"histologic_type": util.fact("Adenocarcinoma")})
+    out["outside"] = {"by": "dr", "at": "x"}
+    cid = _case_with([out])
+    confirm.record(cid, "confirm_match", "D1", {"case_id": "TB-OTHER"}, "", "dr")
+    assert rules.case_docs(cid)[0]["identity"] == "name_match"
+    confirm.record(cid, "confirm_match", "D1", {"case_id": cid}, "", "dr")
+    assert rules.case_docs(cid)[0]["identity"] == "match"
+
+
+def test_watermark_never_passes_a_report_that_failed_to_download(fakes, monkeypatch):
+    """Review M1: a version whose download failed (checksum, timeout) is asked for again on the next re-fetch."""
+    fake = _use(monkeypatch, FakeHIS(_two_reports()))
+    orig = fake.document
+
+    async def flaky(ref):
+        if "p01-r04" in ref and not getattr(fake, "recovered", False):
+            raise his_client.HISError("checksum mismatch on p01-r04")
+        return await orig(ref)
+    fake.document = flaky
+    out = _create()
+    cid = out["case"]["case_id"]
+    assert out["job"]["his"]["added"] == 1 and len(out["job"]["his"]["errors"]) == 1 and len(store.list_docs(cid)) == 1
+    assert store.get_case(cid)["his"]["watermark"] == "2026-09-05T11:00:00+05:30"  # the failed report's time, not past it
+    fake.recovered = True
+    job = _await(lambda: his_case.refetch(cid, "dr.breast"))
+    assert job["his"]["added"] == 1 and len(store.list_docs(cid)) == 2  # the delta (ge the watermark) brought it
+
+
+def test_unlink_registration_removes_its_records_and_identifiers(fakes, monkeypatch):
+    """Review M8: a wrong link can be undone (audited); the gap it closed comes back."""
+    temp_ct = report("pt-r01", 1, "CECT abdomen pelvis", "ct", "final", CT_TEXT.replace("VXH/26/004201", "VXH/T/26/00412").replace("Report status: PRELIMINARY", "Report status: FINAL"),
+                     sig=SIG, accession="RAD/26/00997", dept="Radiology", encounter="OP/26/118712", code=("18748-4", "Diagnostic imaging study"))
+    fake = _use(monkeypatch, FakeHIS(_two_reports(), similar=[TEMP], linked_reports={TEMP["id"]: [temp_ct]}))
+    out = _create(); cid = out["case"]["case_id"]
+    _await(lambda: his_case.link_registration(cid, "VXH/T/26/00412", "dr.breast", "same person"))
+    case = store.get_case(cid)
+    assert len(store.list_docs(cid)) == 3 and ("op_no", "OP/26/118712") in {(x["kind"], x["value"]) for x in case["patient"]["ids"]}
+    assert case["his"]["linked_watermarks"].get(TEMP["id"]) == "2026-09-05T11:00:00+05:30"  # the linked registration keeps its own watermark (its report versions only)
+    g = next(x for x in his_case.encounter_groups(case, store.list_docs(cid)) if x.get("number") == "OP/26/118712")
+    assert g["registrations"] == ["VXH/T/26/00412"] and len(g["docs"]) == 1
+    res = his_case.unlink_registration(cid, "VXH/T/26/00412", "dr.breast", "not the same person after all")
+    case = store.get_case(cid)
+    assert res["removed_documents"] == 1 and len(store.list_docs(cid)) == 2
+    ids = {(x["kind"], x["value"]) for x in case["patient"]["ids"]}
+    assert ("uhid", "VXH/T/26/00412") not in ids and ("op_no", "OP/26/118712") not in ids and ("op_no", "OP/26/118701") in ids
+    assert case["his"]["similar"][0]["linked"] is False and case["his"]["linked"] == [] and TEMP["id"] not in (case["his"].get("linked_encounters") or {})
+    assert any(e["kind"] == "registration_unlinked" and e["removed_documents"] for e in store.read_audit(cid))
+    with pytest.raises(his_case.HISCaseError):
+        his_case.unlink_registration(cid, "VXH/T/26/00412", "dr.breast")
+
+
+def test_first_fetch_failure_leaves_no_case_file_and_protected_ids_are_refused(fakes, monkeypatch):
+    fake = _use(monkeypatch, FakeHIS(_two_reports()))
+    orig = fake.reports
+
+    async def down(pid, since=None):
+        raise his_client.HISError("the HIS at 127.0.0.1 did not answer in time")
+    fake.reports = down
+    with pytest.raises(his_case.HISCaseError) as e:
+        _create()
+    assert e.value.status == 502 and store.list_cases() == []  # rolled back
+    fake.reports = orig
+    from tumour_board import config
+    monkeypatch.setattr(config, "PROTECTED_CASES", {"TB-REAL"})
+    with pytest.raises(his_case.HISCaseError) as e:
+        _create(case_id="TB-REAL")
+    assert e.value.status == 409 and "protected" in str(e.value)

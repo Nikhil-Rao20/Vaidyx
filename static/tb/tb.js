@@ -491,7 +491,8 @@ function confirmationsHTML() {
   return `<div class="card"><h3>Clinician confirmations <span class="muted small">${list.length}</span></h3>
     <div class="muted small" style="margin-bottom:6px">Human decisions recorded against the Case File. They are applied after the model, so they win and survive a re-process.</div>
     ${list.map((c) => `<div class="conf"><span class="chip ${c.type === "confirm_match" && !c.fields?.case_id ? "c-mute" : "c-ok"}">${esc(confLabel(c))}</span> ${what(c)}${c.reason ? ` <span class="muted">(${esc(c.reason)})</span>` : ""}
-      <span class="small muted">by ${esc(c.by)} ${esc((c.at || "").slice(0, 16).replace("T", " "))}</span> ${can("undo_confirmation", c.id) ? `<button class="ghost sm" data-undo="${esc(c.id)}" title="${c.type === "confirm_match" && c.fields?.case_id ? "The document goes back to the Needs matching queue" : "Undo this confirmation"}">${c.type === "confirm_match" && c.fields?.case_id ? "Undo: back to matching" : "Undo"}</button>` : ""}</div>`).join("")}</div>`;
+      <span class="small muted">by ${esc(c.by)} ${esc((c.at || "").slice(0, 16).replace("T", " "))}</span> ${can("undo_confirmation", c.id) ? (() => { const intake = c.type === "confirm_match" && c.fields?.case_id && !(S.data.documents.find((d) => d.doc_id === c.key) || {}).outside && !(S.data.documents.find((d) => d.doc_id === c.key) || {}).his;
+        return `<button class="ghost sm" data-undo="${esc(c.id)}" title="${intake ? "The document goes back to the Needs matching queue" : c.type === "confirm_match" ? "The confirmation is undone; the record stays and asks for the patient again" : "Undo this confirmation"}">${intake ? "Undo: back to matching" : "Undo"}</button>`; })() : ""}</div>`).join("")}</div>`;
 }
 function bindConfirmations(root) {
   $$("[data-undo]", root).forEach((b) => (b.onclick = async () => { if (!confirm("Undo this confirmation? Both the confirmation and the undo stay in the audit log.")) return;
@@ -686,7 +687,7 @@ function hisCardHTML() {
       <div>Fetched</div><div>${h.fetched_at ? esc(dmyt(h.fetched_at)) : "not yet"}${last ? ` · last fetch: ${plural(last.added || 0, "new or changed record")}, ${last.skipped || 0} already here${last.errors ? `, ${last.errors} failed` : ""}` : ""}</div></div>
     ${unl.length ? `<h4 class="subh">Registrations to link <span class="chip c-warn">${unl.length}</span></h4><div class="small muted">Possible duplicate or temporary registrations of the same person. Never merged automatically: a person checks and links one; its records then join the Case File labelled with that registration.</div>
       ${unl.map((s) => `<div class="hisrow"><span><b>${esc(s.name || "name not given")}</b> · <span class="mono">${esc(s.uhid)}</span> (${esc(regKind(s.registration_kind))})${ageSex(s) ? " · " + esc(ageSex(s)) : ""}</span>${can("link_registration") ? `<button class="ghost sm" data-link="${esc(s.uhid)}">Link</button>` : ""}</div>`).join("")}` : ""}
-    ${linked.length ? `<div class="chips" style="margin-top:8px">${linked.map((s) => `<span class="chip c-ok" title="${esc(`${s.name || ""} ${s.uhid} (${regKind(s.registration_kind)}) linked ${dmyt(s.linked_at)}`)}"><span class="mono">${esc(s.uhid)}</span> linked by ${esc(s.linked_by || "?")}</span>`).join("")}</div>` : ""}
+    ${linked.length ? `<div class="chips" style="margin-top:8px">${linked.map((s) => `<span class="chip c-ok" title="${esc(`${s.name || ""} ${s.uhid} (${regKind(s.registration_kind)}) linked ${dmyt(s.linked_at)}`)}"><span class="mono">${esc(s.uhid)}</span> linked by ${esc(s.linked_by || "?")}</span>${can("link_registration") ? `<button class="ghost sm" data-unlink="${esc(s.uhid)}" title="Undo the link: the registration's records leave the Case File and the identifiers learned from it are forgotten (audited)">Unlink</button>` : ""}`).join("")}</div>` : ""}
     ${orders.length ? `<h4 class="subh">Open orders in the HIS <span class="muted small">${orders.length}</span></h4><div class="small muted">Tests ordered with no report yet, as the hospital system lists them.</div>
       ${orders.map((o) => `<div class="hisrow"><span><b>${esc(o.test || DT[o.doc_type] || "Order")}</b>${o.accession ? ` <span class="chip c-mono">${esc(o.accession)}</span>` : ""}${o.encounter_number ? ` <span class="small muted mono">${esc(o.encounter_number)}</span>` : ""}</span><span class="small"><span class="chip ${o.stage === "cancelled" ? "c-bad" : "c-info"}">${esc(stageText(o))}</span>${o.performer_department ? " " + esc(o.performer_department) : ""}</span></div>`).join("")}` : ""}
   </div>`;
@@ -708,6 +709,7 @@ function bindHIS(root) {
   $$("[data-refetch]", root).forEach((b) => (b.onclick = refetchHIS));
   const o = $("#btn-older", root); if (o) o.onclick = fetchOlder;
   $$("[data-link]", root).forEach((b) => (b.onclick = () => linkReg(b.dataset.link)));
+  $$("[data-unlink]", root).forEach((b) => (b.onclick = () => unlinkReg(b.dataset.unlink)));
   $$("[data-confmatch]", root).forEach((b) => (b.onclick = () => confirmMatch(b.dataset.confmatch)));
 }
 async function refetchHIS() {
@@ -730,6 +732,13 @@ async function fetchOlder() {
     const j = await api(`/cases/${S.caseId}/his/fetch-older`, { json: v.win === "all" ? { all: true } : v.win === "from" ? { from: v.from } : { months: +v.win } });
     await openCase(S.caseId, true); toast(`Fetching older records: ${plural(j.his?.added ?? j.total ?? 0, "record")} to read`, 5000); watchJob(j.job);
   } catch (e) { toast(e.message, 8000); }
+}
+async function unlinkReg(uhid) {
+  const v = await confirmDialog({ title: "Unlink a registration", intro: `The records fetched for ${uhid} leave this Case File, the identifiers learned from it are forgotten and the Pre-Authorization re-checks. The registration is listed again for linking. Recorded in the audit log.`,
+    fields: [{ id: "reason", label: "Reason", type: "text", required: true }], submit: "Unlink" });
+  if (!v) return;
+  try { await api(`/cases/${S.caseId}/his/unlink`, { json: { uhid, reason: v.reason } }); toast(`Registration ${uhid} unlinked; Pre-Authorization re-checked`); await openCase(S.caseId, true); }
+  catch (e) { toast(e.message, 7000); }
 }
 async function linkReg(uhid) {
   const s = (S.data.his?.unlinked || []).find((x) => x.uhid === uhid) || { uhid };
@@ -759,7 +768,9 @@ function hisStatusChips(d) {
   const h = d.his; if (!h) return "";
   const s = HSTAT[h.status], g = h.signature;
   return [s ? `<span class="chip ${s[0]}" title="Report status in the hospital system">${s[1]}${(h.status === "amended" || h.status === "corrected") && h.version ? " v" + esc(h.version) : ""}</span>` : "",
-    h.signed ? `<span class="chip c-ok" title="${esc(sigTitle(g))}">Digitally signed</span>` : g ? `<span class="chip c-bad" title="${esc(sigTitle(g))}">Signature failed verification</span>`
+    h.signed ? `<span class="chip c-ok" title="${esc(sigTitle(g))}">Digitally signed</span>`
+      : g && g.verification_status && g.verification_status !== "verified" ? `<span class="chip c-bad" title="${esc(sigTitle(g))}">Signature failed verification</span>`
+      : g && g.verification_status === "verified" ? `<span class="chip c-warn" title="${esc(sigTitle(g))}; the signed hash or the report text does not agree with it: not counted as signed">Signature not accepted</span>`
       : ["final", "amended", "corrected"].includes(h.status) ? `<span class="chip c-warn" title="The hospital system holds no verified digital signature for this report">Not signed</span>` : ""].filter(Boolean).join(" ");
 }
 function docChips(d) {
@@ -1543,12 +1554,12 @@ async function renderHISSettings() {
       <div><label for="hs-label">Label</label><input id="hs-label" value="${esc(s.label || "")}" ${r.can_manage ? "" : "disabled"}></div>
       <div><label for="hs-url">URL</label><input id="hs-url" value="${esc(s.url || "")}" placeholder="http://127.0.0.1:7130" ${r.can_manage ? "" : "disabled"}></div>
       <div><label for="hs-token">Token</label><input id="hs-token" type="password" autocomplete="new-password" value="" placeholder="${s.has_token ? "token set (blank keeps it)" : "bearer token"}" ${r.can_manage ? "" : "disabled"}></div>
-      <div><label for="hs-tfile">Token file</label><input id="hs-tfile" value="${esc(s.token_file || "")}" placeholder="path on the server" ${r.can_manage ? "" : "disabled"}></div></div>
+      <div><label>Token file</label><div class="small muted" style="padding:6px 0">${s.token_file ? `set on the server${typeof s.token_file === "string" ? ` (<span class="mono">${esc(s.token_file)}</span>)` : ""}; a change of host drops it` : "none (the token above is used)"}</div></div></div>
       <label class="chk"><input type="checkbox" id="hs-on" ${s.enabled ? "checked" : ""} ${r.can_manage ? "" : "disabled"}> Enabled</label></div>
     <div class="small muted">${s.has_token ? "Token set." : "No token set."} Kind: ${esc(s.kind || "fhir")}.</div>
     ${r.can_manage ? `<div class="actions-row"><button class="primary sm" id="hs-save">Save HIS connection</button></div>` : ""}</div>`;
   if ($("#hs-save")) $("#hs-save").onclick = async () => {
-    const body = { kind: s.kind || "fhir", connector: s.connector || "", label: $("#hs-label").value.trim(), url: $("#hs-url").value.trim(), token: $("#hs-token").value, token_file: $("#hs-tfile").value.trim(), enabled: $("#hs-on").checked };
+    const body = { kind: s.kind || "fhir", connector: s.connector || "", label: $("#hs-label").value.trim(), url: $("#hs-url").value.trim(), token: $("#hs-token").value, enabled: $("#hs-on").checked };  // the token file is never sent: it stays what the server holds (review S2)
     $("#hs-token").value = "";
     try { await api("/his", { method: "PUT", json: body }); toast("HIS connection saved"); renderHISSettings(); }
     catch (e) { toast(e.message, 8000); }

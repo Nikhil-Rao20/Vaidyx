@@ -83,11 +83,17 @@ def window_start(window: dict, today=None) -> str:
     return _months_ago(today, int(window.get("months") or 12)).isoformat()
 
 
+def dmy(s) -> str:
+    """DD/MM/YYYY of an ISO date or date-time (Indian convention); other strings as given."""
+    s = str(s or "")[:10]
+    return f"{s[8:10]}/{s[5:7]}/{s[0:4]}" if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s) else s
+
+
 def window_label(window: dict) -> str:
     if window.get("all"):
         return "all records"
     if window.get("from"):
-        return f"records from {window['from']}"
+        return f"records from {dmy(window['from'])}"
     return f"last {window.get('months', 12)} months"
 
 
@@ -123,7 +129,7 @@ def patient_record(p: dict, encounters=()) -> dict:
             "abha": p.get("abha") or None, "ids": ids, "source": "his", "registration_kind": p.get("registration_kind") or "permanent"}
 
 
-def learn_encounters(case: dict, encounters, source: str = "his") -> list:
+def learn_encounters(case: dict, encounters, source: str = "his", registration: str = "") -> list:
     """The Case File learns the OP / IP numbers of encounters it does not know yet (a new visit since the first fetch, a linked
     registration's visits), so each record's printed number matches on arrival. Returns the identifiers added."""
     pat = case.setdefault("patient", {})
@@ -134,7 +140,7 @@ def learn_encounters(case: dict, encounters, source: str = "his") -> list:
         num = e.get("number")
         kind = "ip_no" if e.get("kind") == "IP" else "op_no"
         if num and (kind, identity.normalise_id(num)) not in have:
-            new.append({"kind": kind, "value": num, "from": source})
+            new.append({"kind": kind, "value": num, "from": source, **({"registration": registration} if registration else {})})
             have.add((kind, identity.normalise_id(num)))
     ids.extend(new)
     return new
@@ -161,7 +167,7 @@ def _owner_department(roles: dict, department) -> str:
         raise HISCaseError(f"Unknown department: {department}")
     if did and org.department_group(did) != "treating":
         raise HISCaseError(f"{org.department_name(did)} is a supporting department; a Case File is owned by a treating department")
-    if did and (did in treating or roles.get("admin")):
+    if did and (did in treating or roles.get("admin") or roles.get("coordinator")):
         return did
     if did:
         raise HISCaseError(f"You are not placed in {org.department_name(did)}", 403)
@@ -250,10 +256,14 @@ async def create(identifier: str, protocol_id: str, setting: str, hospital_level
         raise HISCaseError(f"No registration in the hospital system matches {identifier}", 404)
     if case_id:
         case_id = store.safe_id(case_id)
+        if case_id in config.PROTECTED_CASES:
+            raise HISCaseError("That Case File id is protected", 409)
         if store.get_case(case_id):
             raise HISCaseError("Case already exists", 409)
     else:
         case_id = intake.next_case_id()
+    dup = next((c["case_id"] for c in store.list_cases() if c.get("his") and str((c["his"] or {}).get("uhid") or "").upper() == str(p["uhid"]).upper()
+                and (c.get("protocol") == protocol_id)), None)
     try:
         encs = await client.encounters(p["id"])
     except his_client.HISError as e:
@@ -266,11 +276,19 @@ async def create(identifier: str, protocol_id: str, setting: str, hospital_level
                    "similar": [{**_public_patient(s), "linked": False} for s in p.get("similar") or []], "linked": [],
                    "encounters": encs, "orders": [], "referrals": [], "older_available": 0, "fetches": []}
     store.save_case(case)
+    if dup:
+        case["his"]["same_uhid_case"] = dup  # another Case File of this UHID under the same protocol: shown, never blocked (two primaries are 5.3)
+    store.save_case(case)
     store.audit(case_id, {"kind": "case_created", "by": user, "listing": case["listing"]["status"], "protocol": protocol_id, "setting": setting,
                           "from_his": {"label": client.label, "identifier": identifier, "matched_on": p.get("matched_on"), "uhid": p["uhid"],
                                        "registration_kind": p.get("registration_kind"), "similar": [s.get("uhid") for s in p.get("similar") or []]},
-                          "owner": owner, "window": window})
-    job = await fetch(case_id, client, start=case["his"]["window_start"], user=user, reason=FIRST)
+                          "owner": owner, "window": window, "same_uhid_case": dup})
+    try:
+        job = await fetch(case_id, client, start=case["his"]["window_start"], user=user, reason=FIRST)
+    except HISCaseError:  # the first fetch failed: no half-made Case File stays behind (a retry would make a second one)
+        notify.purge_case(case_id)
+        store.delete_case(case_id)
+        raise
     return {"case": store.get_case(case_id), "job": job}
 
 
@@ -324,27 +342,29 @@ async def fetch(case_id: str, client, *, since: str = "", start: str = "", end: 
     except his_client.HISError as e:
         store.audit(case_id, {"kind": "his_fetch_failed", "reason": reason, "by": user, "error": str(e)[:300]})
         raise HISCaseError(f"The hospital system did not answer: {e}", 502)
-    learned = learn_encounters(case, encs, "his_link" if linked else "his")  # before any record is read: its OP / IP No. must be known
-    if learned:
-        store.save_case(case)
-        store.audit(case_id, {"kind": "patient_ids_learned", "ids": learned, "by": user, "source": "his", "registration": registration or None})
+    async with store.lock(case_id):  # edits made while the HIS answered (listing, board date, another fetch) are not overwritten (review M10)
+        case = store.get_case(case_id)
+        learned = learn_encounters(case, encs, "his_link" if linked else "his", registration)  # before any record is read: its OP / IP No. must be known
+        if learned:
+            store.save_case(case)
+            store.audit(case_id, {"kind": "patient_ids_learned", "ids": learned, "by": user, "source": "his", "registration": registration or None})
     have = _existing_refs(case_id)
     added, updated, skipped, outside_window, errors = [], [], [], [], []
     for r in sorted(reports, key=lambda x: (str(x.get("id")), int(x.get("version") or 1))):
         if not _in_window(r, start, end):
-            outside_window.append(r.get("document_ref")); continue
+            outside_window.append((r.get("document_ref"), _day(r.get("issued") or r.get("effective") or r.get("last_updated")))); continue
         if r.get("document_ref") in have:
             # the same version came back: changed in the HIS since it was fetched (a signature added, a status change, a re-rendered
             # PDF) its metadata and, when the bytes changed, its file are refreshed and it is read again; otherwise nothing to do
             try:
                 changed = await _refresh_doc(case_id, have[r["document_ref"]], r, client)
             except his_client.HISError as e:
-                errors.append({"document_ref": r.get("document_ref"), "error": str(e)[:200]}); continue
+                errors.append({"document_ref": r.get("document_ref"), "error": str(e)[:200], "last_updated": r.get("last_updated")}); continue
             (updated if changed else skipped).append(r["document_ref"]); continue
         try:
             d = await client.document(r["document_ref"])
         except his_client.HISError as e:
-            errors.append({"document_ref": r.get("document_ref"), "error": str(e)[:200]}); continue
+            errors.append({"document_ref": r.get("document_ref"), "error": str(e)[:200], "last_updated": r.get("last_updated")}); continue
         dup = store.find_duplicate(case_id, d["content"])
         if dup:
             skipped.append(r["document_ref"]); continue
@@ -376,32 +396,39 @@ async def fetch(case_id: str, client, *, since: str = "", start: str = "", end: 
     for did in updated:
         store.audit(case_id, {"kind": "document_updated_from_his", "doc_id": have.get(did) or did, "document_ref": did, "by": user, "reason": reason})
     _mark_versions(case_id)
-    case = store.get_case(case_id)
-    his = case.setdefault("his", {})
-    if not linked:
-        his["encounters"] = encs
-        his["orders"] = orders
-        his["referrals"] = refs
-        if reason == FIRST:
-            his["older_available"] = len([x for x in outside_window if x])
-        elif reason == OLDER:
-            his["older_available"] = len([x for x in outside_window if x and _day(x) < start]) if start else 0
-    else:  # a linked registration: its encounters and open orders are kept beside the main registration's, labelled with it
-        his.setdefault("linked_encounters", {})[patient_id] = [{**e, "registration": registration} for e in encs]
-        his.setdefault("linked_orders", {})[patient_id] = orders
-    wm = _max_updated(reports, encs, orders, refs)
-    if wm > (his.get("watermark") or ""):
-        his["watermark"] = wm
-    his["fetched_at"] = store.now_iso()
-    his.setdefault("fetches", []).append({"at": his["fetched_at"], "reason": reason, "by": user, "since": since or None, "start": start or None, "end": end or None,
-                                          "reports": len(reports), "added": len(added), "updated": len(updated), "skipped": len(skipped), "outside_window": len(outside_window),
-                                          "errors": len(errors), "registration": registration or None})
-    his["fetches"] = his["fetches"][-50:]
-    store.save_case(case)
+    # the watermark of this registration: the newest report version seen, never past a version that failed to download (it is asked for again; review M1 / M2)
+    wm = _max_updated(reports)
+    failed_at = [str(e.get("last_updated") or "") for e in errors if e.get("last_updated")]
+    if failed_at:
+        wm = min([wm] + failed_at)
+    async with store.lock(case_id):
+        case = store.get_case(case_id)
+        his = case.setdefault("his", {})
+        if not linked:
+            his["encounters"] = encs
+            his["orders"] = orders
+            his["referrals"] = refs
+            if reason == FIRST:
+                his["older_available"] = len([x for x in outside_window if x[0]])
+            elif reason == OLDER:
+                his["older_available"] = len([x for x in outside_window if x[0] and x[1] and start and x[1] < start]) if start else 0
+            if wm and (wm > (his.get("watermark") or "") or failed_at):
+                his["watermark"] = wm
+        else:  # a linked registration: its encounters, open orders and watermark are kept beside the main registration's, labelled with it
+            his.setdefault("linked_encounters", {})[patient_id] = [{**e, "registration": registration} for e in encs]
+            his.setdefault("linked_orders", {})[patient_id] = orders
+            wms = his.setdefault("linked_watermarks", {})
+            if wm and (wm > (wms.get(patient_id) or "") or failed_at):
+                wms[patient_id] = wm
+        his["fetched_at"] = store.now_iso()
+        his.setdefault("fetches", []).append({"at": his["fetched_at"], "reason": reason, "by": user, "since": since or None, "start": start or None, "end": end or None,
+                                              "reports": len(reports), "added": len(added), "updated": len(updated), "skipped": len(skipped), "outside_window": len(outside_window),
+                                              "errors": len(errors), "registration": registration or None})
+        his["fetches"] = his["fetches"][-50:]
+        store.save_case(case)
     store.audit(case_id, {"kind": "his_fetch", "reason": reason, "by": user, "since": since or None, "start": start or None, "end": end or None, "registration": registration or None,
                           "reports": len(reports), "added": added, "updated": [have.get(x) for x in updated], "skipped": len(skipped), "outside_window": len(outside_window), "errors": errors,
-                          "watermark": his["watermark"],
-                          "open_orders": [o.get("accession") or o.get("id") for o in orders]})
+                          "watermark": wm or None, "open_orders": [o.get("accession") or o.get("id") for o in orders]})
     open_before = [a["id"] for a in store.get_state(case_id).get("actions", []) if a.get("source") == "pre_authorization" and a.get("status") != "completed"]
     todo = added + [have[x] for x in updated]
     job = service._job(case_id, len(todo), todo)
@@ -466,9 +493,10 @@ async def refetch(case_id: str, user: str) -> dict:
     case, his = _his_case(case_id)
     client = _client()
     job = await fetch(case_id, client, since=his.get("watermark") or "", start=his.get("window_start") or "", user=user, reason=REFETCH)
-    for reg in his.get("linked") or []:  # linked registrations move too
+    for reg in his.get("linked") or []:  # linked registrations move too, each from its own watermark
         try:
-            await fetch(case_id, client, since=his.get("watermark") or "", patient_id=reg["id"], registration=reg["uhid"], user=user, reason=REFETCH)
+            await fetch(case_id, client, since=(his.get("linked_watermarks") or {}).get(reg["id"]) or "", start=his.get("window_start") or "",
+                        patient_id=reg["id"], registration=reg["uhid"], user=user, reason=REFETCH)
         except HISCaseError:
             pass
     return job
@@ -481,14 +509,20 @@ async def fetch_older(case_id: str, window, user: str) -> dict:
     new_start = window_start(window)
     old_start = his.get("window_start") or ""
     if old_start and new_start and new_start >= old_start:
-        raise HISCaseError(f"The window already starts at {old_start}; choose an earlier start or all records")
+        raise HISCaseError(f"The window already starts at {dmy(old_start)}; choose an earlier start or all records")
     if not old_start:
         raise HISCaseError("Every record is already fetched (the window has no start)")
     client = _client()
     his["window"], his["window_start"] = window, new_start
     store.save_case(case)
     store.audit(case_id, {"kind": "his_window_widened", "by": user, "from": old_start, "to": new_start or "all", "window": window})
-    return await fetch(case_id, client, start=new_start, end=old_start, user=user, reason=OLDER)
+    job = await fetch(case_id, client, start=new_start, end=old_start, user=user, reason=OLDER)
+    for reg in his.get("linked") or []:  # linked registrations widen too
+        try:
+            await fetch(case_id, client, start=new_start, end=old_start, patient_id=reg["id"], registration=reg["uhid"], user=user, reason=OLDER)
+        except HISCaseError:
+            pass
+    return job
 
 
 async def link_registration(case_id: str, uhid: str, user: str, reason: str = "") -> dict:
@@ -511,6 +545,37 @@ async def link_registration(case_id: str, uhid: str, user: str, reason: str = ""
     store.save_case(case)
     store.audit(case_id, {"kind": "registration_linked", "by": user, "uhid": sim["uhid"], "registration_kind": sim.get("registration_kind"), "reason": reason})
     return await fetch(case_id, client, start=his.get("window_start") or "", patient_id=sim["id"], registration=sim["uhid"], user=user, reason=LINK)
+
+
+def unlink_registration(case_id: str, uhid: str, user: str, reason: str = "") -> dict:
+    """Undo a link (review M8): the registration's records leave the Case File, the identifiers learned from it are forgotten, its
+    encounters, orders and watermark are dropped; audited. The caller re-checks the gate."""
+    case, his = _his_case(case_id)
+    uhid = str(uhid or "").strip()
+    sim = next((s for s in his.get("similar") or [] if s.get("uhid", "").upper() == uhid.upper()), None)
+    if not sim or not sim.get("linked"):
+        raise HISCaseError(f"{uhid} is not linked to this Case File", 404)
+    removed = []
+    for d in store.list_docs(case_id):
+        if (d.get("his") or {}).get("registration", "").upper() == uhid.upper():
+            intake.unlearn_ids(case_id, d["doc_id"], user)
+            store.delete_document(case_id, d["doc_id"])
+            removed.append(d["doc_id"])
+            store.audit(case_id, {"kind": "document_deleted", "doc_id": d["doc_id"], "file": d.get("rel_path"), "by": user, "reason": f"registration {uhid} unlinked"})
+    pat = case.setdefault("patient", {})
+    before = pat.get("ids") or []
+    keep = [x for x in before if not (isinstance(x, dict) and (x.get("registration", "").upper() == uhid.upper()
+                                                             or (x.get("kind") == "uhid" and identity.normalise_id(x.get("value")) == identity.normalise_id(uhid))))]
+    forgotten = [x for x in before if x not in keep]
+    pat["ids"] = keep
+    sim["linked"] = False; sim["unlinked_by"] = user; sim["unlinked_at"] = store.now_iso(); sim["unlink_reason"] = reason
+    pid = sim.get("id")
+    his["linked"] = [x for x in his.get("linked") or [] if x.get("uhid", "").upper() != uhid.upper()]
+    for key in ("linked_encounters", "linked_orders", "linked_watermarks"):
+        (his.get(key) or {}).pop(pid, None)
+    store.save_case(case)
+    store.audit(case_id, {"kind": "registration_unlinked", "by": user, "uhid": uhid, "reason": reason, "removed_documents": removed, "forgotten_ids": forgotten})
+    return {"removed_documents": len(removed), "forgotten_ids": forgotten, "uhid": uhid}
 
 
 def after_refetch(case_id: str, job: dict):
