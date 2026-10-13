@@ -77,3 +77,32 @@ starts above the fixture numbers, so the reporting desk (1.5) and the HIS screen
 are the identifier slugs; `Store.patient_by_identifier()` resolves a UHID, IP / OP No., ABHA number or address, and
 `Store.similar_registrations()` lists the other registrations with the same name, sex and age (a person links them; nothing
 is merged). The hospital's `today` is 13/10/2026; P12 has an OPD note from 14/07/2025, older than the 12-month window.
+
+## Report documents (plan item V2-1.2)
+
+`generator.build()` renders every version of every report to `documents/<report id>-v<n>.pdf` (`documents.render_all`, one
+subprocess of the pdf venv running `render_cli.py` with WeasyPrint 69; byte-for-byte reproducible) and fills
+`versions[].document {path, sha256}` and `signatures[].document_hash`. `documents.html_for(store, report, version)` builds
+the page from the store only: hospital and department, a title that names one document type, an identity grid (patient, UHID,
+Age / Sex, IP No. or OP No., ABHA No., Accession No. or Lab No., Sample ID, Block No., Ordered / Collected / Reported on in
+DD/MM/YYYY HH:MM, Ref. by, Unit), the body in the layout of its type (NABL-style lab table with Biological reference interval;
+radiology Technique / Findings / Impression; HPE Specimen / Block No. / Gross / Microscopy / Diagnosis; IHC and molecular
+tables; cytology; endoscopy; OPD note; referral; discharge summary with ward / bed movements and referrals) and a footer that
+starts with `Report status: FINAL | PRELIMINARY | AMENDED | CANCELLED`, then the signature block verbatim (signed), "Reported
+by: Dr X (preliminary, verification awaited)" (preliminary) or "Signature pending" (final, never signed). Every value of
+`values` is printed as given; `omitted_values` and `observation_values` never are. Every page carries the watermark
+"SYNTHETIC - DEMO ONLY" and a SYNTHETIC footer.
+
+- **Tamper scenario** (`signature_fails_verification`, P03-R10, the discharge summary of IP/26/01872): its signature has
+  `verification_status: failed`; the store keeps the PDF untouched and records as `document_hash` the sha256 of the PDF with its
+  last byte flipped, so a verifier sees the mismatch. Every other signed version's `document_hash` equals its PDF's sha256.
+  `scenarios.json` keeps `document_hash: null` (the store is the source of truth for hashes).
+- **Outside reports** (P06-R06, P17-R10): `documents/outside/<record id>.pdf` with the outside laboratory's name, the printed
+  identifiers (the masked Aadhaar "XXXX XXXX 1234" exactly as given), printed status and signature lines, no demo CA; the
+  scanned one also gets `<record id>-scan.png` (slight rotation, paper tone, noise) for the OCR path (3.6).
+- **Reporting desk (1.5):** `documents.render_versions(store, files, [(report, version)])` renders only those versions with
+  the same naming and hash bookkeeping (well under a second for one).
+- **Check:** `python -m his_mock.documents --check [--data DIR]` (app venv, pypdf) lists missing PDFs, values not in the text
+  layer, printed omitted values, signed versions without the block, hash mismatches, and any "Sahyadri", `SYN-`, em dash or
+  Aadhaar-like number; `--render` re-renders into an existing store.
+

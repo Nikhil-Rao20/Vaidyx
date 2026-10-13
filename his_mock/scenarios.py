@@ -72,7 +72,7 @@ GAP_LEVELS = {1, 2}
 
 MASKED_AADHAAR = "XXXX XXXX 1234"
 # 12 digits in a row, or 4-4-4 with spaces or hyphens, not part of a longer number (so ABHA 2-4-4-4 does not match)
-AADHAAR_LIKE = re.compile(r"(?<![\d-])\d{4}[ -]?\d{4}[ -]?\d{4}(?![\d-])")
+AADHAAR_LIKE = re.compile(r"(?<![\w-])\d{4}[ -]?\d{4}[ -]?\d{4}(?![\w-])")  # word-bounded: a sha256 digest is not one
 DISPLAY_DATE = re.compile(r"^(\d{2})/(\d{2})/(\d{4})( (\d{2}):(\d{2}))?$")
 
 

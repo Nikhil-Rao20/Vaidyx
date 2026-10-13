@@ -46,12 +46,14 @@ _PRIORITY = {"register": 0, "visit": 1, "admit": 1, "transfer": 2, "order": 3, "
              "preliminary": 6, "final": 7, "amend": 8, "cancel": 9, "refer": 10, "accept": 11, "discharge": 12}
 
 
-def build(out_dir=None, seed=DEFAULT_SEED, fixtures=None, clock=None):
+def build(out_dir=None, seed=DEFAULT_SEED, fixtures=None, clock=None, documents=True, dicom=True, hl7=True):
     """Build every scenario patient into `out_dir` (default data/his_mock/) and return the Store.
 
-    Writes store.json, fixture_index.json, events.jsonl, an empty documents/ and dicom/, and a token file (32 hex chars,
-    mode 600) only when none exists. A rebuild wipes store.json, fixture_index.json, events.jsonl and documents/ and keeps
-    the token (and dicom/, which 1.7 fills deterministically)."""
+    Writes store.json, fixture_index.json, events.jsonl, documents/ (1.2), events.hl7 (1.4), dicom/ (1.7) and a token
+    file (32 hex chars, mode 600) only when none exists. A rebuild wipes store.json, fixture_index.json, events.jsonl,
+    events.hl7 and documents/ and keeps the token (and dicom/, which 1.7 fills deterministically). The post-build steps
+    (report PDFs, HL7 feed, DICOM) run only when their module exists; `documents=False` / `dicom=False` / `hl7=False`
+    skip them (fast unit tests)."""
     fixtures = fixtures if fixtures is not None else scenarios.load()
     problems = scenarios.validate(fixtures)
     if problems:
@@ -60,7 +62,7 @@ def build(out_dir=None, seed=DEFAULT_SEED, fixtures=None, clock=None):
     files = layout(out_dir or DATA_DIR)
     d = files["data_dir"]
     d.mkdir(parents=True, exist_ok=True)
-    for k in ("store", "fixture_index", "events"):
+    for k in ("store", "fixture_index", "events", "hl7"):
         if files[k].exists():
             files[k].unlink()
     if files["documents"].exists():
@@ -70,7 +72,23 @@ def build(out_dir=None, seed=DEFAULT_SEED, fixtures=None, clock=None):
     store.save(files["store"], files["events"])
     files["fixture_index"].write_text(json.dumps(index, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     ensure_token(files["token"])
+    # post-build steps, each in its own module (plan items 1.2, 1.4, 1.7); they update the store and save it again
+    if documents and _module("documents"):
+        from . import documents as _documents
+        _documents.render_all(store, files)          # fills versions[].document and signatures[].document_hash
+    if hl7 and _module("hl7"):
+        from . import hl7 as _hl7
+        _hl7.write_feed(store, files["hl7"])         # events.hl7 from store.events
+    if dicom and _module("dicom_studies"):
+        from . import dicom_studies as _dicom
+        _dicom.build_all(store, files["dicom"])      # synthetic DICOM per imaging study (upload is a separate step)
+    store.save(files["store"], files["events"])
     return store
+
+
+def _module(name):
+    """True when his_mock/<name>.py exists (the post-build steps arrive with later items)."""
+    return (Path(__file__).with_name(name + ".py")).exists()
 
 
 def ensure_token(path):

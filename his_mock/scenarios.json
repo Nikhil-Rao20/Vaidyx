@@ -2592,7 +2592,8 @@
       "ca": "Vaidyx Demo CA",
       "certificate_serial": "VXDCA-00A1B201",
       "block": "Digitally signed by Dr Kavitha Raghunathan, MS (General Surgery), MCh (Breast Surgery), Reg. No. VXREG-20104, 03/09/2026 17:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B201",
-      "verification_status": "verified",
+      "verification_status": "failed",
+      "note": "SYNTHETIC tamper for the 4.1 test: the document hash in the signature record does not match the rendered PDF (1.2 stores the hash of the PDF with its last byte flipped), so verification fails.",
       "document_hash": null
      },
      "values": {
@@ -2600,7 +2601,8 @@
      },
      "serves": {},
      "scenarios": [
-      "ip_admission_ward_transfer"
+      "ip_admission_ward_transfer",
+      "signature_fails_verification"
      ]
     }
    ]
@@ -12225,7 +12227,48 @@
     "unsigned_final"
    ],
    "open_questions": [
-    "A second variant, signature present but failing verification (document hash tampered), is added with 1.2 once document hashes exist; 4.1 counts only a verified signature as signed."
+    "The second variant, signature present but failing verification (document hash tampered), is the scenario signature_fails_verification (P03-R10, added by 1.2); 4.1 counts only a verified signature as signed."
+   ]
+  },
+  {
+   "id": "signature_fails_verification",
+   "title": "Signature present but fails verification (document hash does not match)",
+   "plan_1_1": false,
+   "patients": [
+    "P03"
+   ],
+   "setup": "The discharge summary of IP/26/01872 is final and carries a Vaidyx Demo CA signature block, but the signature record's document hash does not match the PDF (SYNTHETIC tamper). The record serves no requirement.",
+   "expected": {
+    "text": "The discharge summary is shown as not signed, with a flag that the signature could not be verified; nothing else changes (P03's first-fetch gate stays as listed: Level 2 gap on receptor_status only).",
+    "gate": [
+     {
+      "patient": "P03",
+      "protocol": "breast",
+      "ncg_setting": "early",
+      "when": "first_fetch",
+      "result": "gaps",
+      "level1": [],
+      "level2": [
+       "receptor_status"
+      ]
+     }
+    ],
+    "labels": [
+     "Final",
+     "Not signed"
+    ],
+    "flags": [
+     "Signature could not be verified"
+    ],
+    "never": [
+     "The discharge summary shown as signed",
+     "A new gap or request caused by this record"
+    ]
+   },
+   "phase": 4,
+   "also_phases": [],
+   "checklist": [
+    "unsigned_final"
    ]
   },
   {

@@ -23,7 +23,8 @@ def fx():
 @pytest.fixture(scope="module")
 def built(tmp_path_factory, fx):
     out = tmp_path_factory.mktemp("his_mock")
-    store = generator.build(out, seed=2026, fixtures=fx)
+    # the store alone: the post-build steps (report PDFs, HL7 feed, DICOM) have their own test modules
+    store = generator.build(out, seed=2026, fixtures=fx, documents=False, hl7=False, dicom=False)
     index = json.loads((out / "fixture_index.json").read_text(encoding="utf-8"))
     return out, store, index
 
@@ -64,6 +65,7 @@ def test_build_writes_every_file(built):
     for name in ("store.json", "fixture_index.json", "events.jsonl", "token"):
         assert (out / name).is_file(), name
     assert (out / "documents").is_dir() and (out / "dicom").is_dir() and not list((out / "documents").iterdir())
+    assert not (out / "events.hl7").exists()  # hl7=False
     assert Store.load(out / "store.json").data == store.data
     lines = (out / "events.jsonl").read_text(encoding="utf-8").splitlines()
     assert len(lines) == len(store.events) > 0
@@ -134,7 +136,7 @@ def test_every_his_record_survives(store, fx, index):
             assert sig["signer_id"] == ids.practitioner_id(s["signer"]["reg_no"])
             assert sig["certificate_serial"] == s["certificate_serial"] and sig["ca"] == s["ca"]
             assert sig["signed_at"] == s["signed_at"]["value"] and sig["verification_status"] == s["verification_status"]
-            assert sig["document_hash"] is None
+            assert sig["document_hash"] is None  # filled by documents.render_all (1.2), not run here
         else:
             assert cur["signature_id"] is None, r["id"]
 
@@ -371,7 +373,7 @@ def test_imaging_study_for_every_imaging_order(store):
             assert st and st["accession"] == o["accession"] and st["order_id"] == o["id"], o["id"]
             assert st["study_uid"] == ids.study_uid(o["accession"]) and len(st["study_uid"]) <= 64
             assert re.match(r"^2\.25\.[1-9]\d*$", st["study_uid"])
-            assert st["modality"] == IMAGING_MODALITY[o["doc_type"]] and st["status"] == "registered"
+            assert st["modality"] == IMAGING_MODALITY[o["doc_type"]] and st["status"] == "registered"  # dicom=False
         elif o["doc_type"] not in IMAGING:
             assert st is None
     uids = [s["study_uid"] for s in store.imaging_studies.values()]
@@ -437,7 +439,7 @@ def test_store_is_synthetic_and_clean(built):
 
 def test_deterministic_rebuild(tmp_path, built, fx):
     out, _, _ = built
-    other = generator.build(tmp_path, seed=2026, fixtures=fx)
+    other = generator.build(tmp_path, seed=2026, fixtures=fx, documents=False, hl7=False, dicom=False)
     a = json.loads((out / "store.json").read_text(encoding="utf-8"))
     b = json.loads((tmp_path / "store.json").read_text(encoding="utf-8"))
     a["meta"].pop("built_at"), b["meta"].pop("built_at")
@@ -450,14 +452,14 @@ def test_deterministic_rebuild(tmp_path, built, fx):
 
 
 def test_token_mode_600_and_kept_on_rebuild(tmp_path, fx):
-    generator.build(tmp_path, fixtures=fx)
+    generator.build(tmp_path, fixtures=fx, documents=False, hl7=False, dicom=False)
     tok = tmp_path / "token"
     first = tok.read_text()
     assert re.match(r"^[0-9a-f]{32}\n$", first)
     assert stat.S_IMODE(os.stat(tok).st_mode) == 0o600
     (tmp_path / "documents" / "old.pdf").write_text("x")
     (tmp_path / "dicom" / "keep.dcm").write_text("x")
-    generator.build(tmp_path, fixtures=fx)
+    generator.build(tmp_path, fixtures=fx, documents=False, hl7=False, dicom=False)
     assert tok.read_text() == first and not (tmp_path / "documents" / "old.pdf").exists()
     assert (tmp_path / "dicom" / "keep.dcm").exists()
 
@@ -466,12 +468,12 @@ def test_build_refuses_inconsistent_fixtures(tmp_path, fx):
     bad = json.loads(json.dumps(fx))
     bad["patients"][0]["uhid"] = "SAH/26/1"
     with pytest.raises(ValueError):
-        generator.build(tmp_path, fixtures=bad)
+        generator.build(tmp_path, fixtures=bad, documents=False, hl7=False, dicom=False)
     assert not (tmp_path / "store.json").exists()
 
 
 def test_cli_prints_summary(tmp_path, capsys):
-    assert build_cli.main(["--out", str(tmp_path), "--seed", "2026"]) == 0
+    assert build_cli.main(["--out", str(tmp_path), "--seed", "2026", "--no-pdf", "--no-hl7", "--no-dicom"]) == 0
     line = capsys.readouterr().out.strip()
     assert "20 patients" in line and "165 orders" in line and "events" in line and "\n" not in line
     with pytest.raises(SystemExit):
