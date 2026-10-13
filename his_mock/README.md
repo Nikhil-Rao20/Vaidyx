@@ -12,7 +12,7 @@ The list of every V2 scenario the mock must generate and the outcome Vaidyx-TB m
 
 | Key | What it holds |
 |---|---|
-| `hospital` | Settings the scenarios assume: NCG level **optimal** (Essential and Optimal records required), PM-JAY empanelled, the surgical oncology list, the four board heads |
+| `hospital` | Settings the scenarios assume: NCG level **optimal** (Essential and Optimal records required; set per mock Case File as `hospital_level`, the V1 hospital default stays essential), PM-JAY empanelled, the surgical oncology list, the four board heads |
 | `identifier_patterns` | Regex and example for every synthetic identifier (UHID, temporary UHID, IP / OP No., accession, block No., barcode, ABHA, PM-JAY ID, Reg. No., CA, masked Aadhaar) |
 | `document_types`, `tests` | Vaidyx-TB document types, and each orderable test with its document type and producing department (`any_treating` = clinical records) |
 | `departments` | The 22 treating and 8 supporting departments of plan section 4, with code (accession prefix), the tests they produce, consultants |
@@ -51,4 +51,9 @@ for s in data["scenarios"]:
   assert `expected`.
 
 Tests: `/data/vaidyx/venv/app/bin/python -m pytest his_mock/tests -q`. They also cross-check every first-fetch gate against
-`tumour_board/protocols/*.json` (read as files, never imported), so a protocol change that moves a gap shows up here.
+`tumour_board/protocols/*.json` (read as files, never imported), so a protocol change that moves a gap shows up here. That
+cross-check is a simplified model of `rules.py` (tiers, NCG setting, hospital level, `applies_if`, facts-only records); it does not
+reproduce region keywords or document-type disputes. The Phase 3 and 4 e2e is the real check.
+
+Signatures: one certificate serial per signer (the DSC belongs to the person); `document_hash` is filled by 1.2 from the rendered PDF
+and `verification_status` is `verified` unless a scenario says otherwise.

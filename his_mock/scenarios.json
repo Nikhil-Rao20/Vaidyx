@@ -1,5 +1,5 @@
 {
- "version": "0.3.0",
+ "version": "0.3.1",
  "note": "SYNTHETIC only. Fixtures for the V2 mock Indian hospital (his_mock, plan item 1.1) and the outcomes Vaidyx-TB must show (e2e in Phases 3 to 6). Every patient, doctor, number, laboratory, hospital and certifying authority here is invented; nothing comes from a real patient or the real case. Aadhaar appears only once, masked, on one scanned outside report, to test masking.",
  "hospital": {
   "name": "Vaidyx Demo Hospital (SYNTHETIC)",
@@ -18,7 +18,7 @@
   ],
   "fetch_window_months": 12,
   "today": "2026-10-13",
-  "note": "Hospital settings the scenarios assume (root admin settings in Vaidyx-TB). ncg_level optimal means Essential (a) and Optimal (b) records are required. A scenario's setup.hospital overrides a value for that scenario only."
+  "note": "Hospital settings the scenarios assume. ncg_level optimal means Essential (a) and Optimal (b) records are required; the V1 org.json default is essential, so 1.1 / 3.2 set hospital_level = optimal on every mock Case File (rules.py reads case.hospital_level) rather than changing the hospital default (decision for Eswar). A scenario's setup.hospital overrides a value for that scenario only."
  },
  "identifier_patterns": {
   "uhid": {
@@ -871,7 +871,9 @@
       },
       "ca": "Vaidyx Demo CA",
       "certificate_serial": "VXDCA-00A1B201",
-      "block": "Digitally signed by Dr Kavitha Raghunathan, MS (General Surgery), MCh (Breast Surgery), Reg. No. VXREG-20104, 01/09/2026 13:30, Vaidyx Demo CA"
+      "block": "Digitally signed by Dr Kavitha Raghunathan, MS (General Surgery), MCh (Breast Surgery), Reg. No. VXREG-20104, 01/09/2026 13:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B201",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "presenting_complaint": "Painless lump in the left breast for 2 months",
@@ -926,7 +928,9 @@
       },
       "ca": "Vaidyx Demo CA",
       "certificate_serial": "VXDCA-00A1B202",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 02/09/2026 15:10, Vaidyx Demo CA"
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 02/09/2026 15:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "lesion_size": "2.4 x 1.8 cm",
@@ -977,8 +981,10 @@
        "value": "2026-09-02T16:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B203",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 02/09/2026 16:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 02/09/2026 16:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "lesion_size": "2.3 x 1.9 cm",
@@ -1033,7 +1039,9 @@
       },
       "ca": "Vaidyx Demo CA",
       "certificate_serial": "VXDCA-00A1B204",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 05/09/2026 17:20, Vaidyx Demo CA"
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 05/09/2026 17:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "histologic_type": "Invasive breast carcinoma of no special type",
@@ -1088,8 +1096,10 @@
        "value": "2026-09-08T14:45:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B205",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 08/09/2026 14:45, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 08/09/2026 14:45, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "er": "Positive (Allred score 7/8)",
@@ -1144,8 +1154,10 @@
        "value": "2026-09-01T11:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B206",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 01/09/2026 11:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 01/09/2026 11:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "haemoglobin": "12.1 gm%",
@@ -1199,7 +1211,9 @@
       },
       "ca": "Vaidyx Demo CA",
       "certificate_serial": "VXDCA-00A1B207",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 01/09/2026 12:05, Vaidyx Demo CA"
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 01/09/2026 12:05, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "bilirubin": "0.7 mg/dL",
@@ -1252,8 +1266,10 @@
        "value": "2026-09-01T12:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B208",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 01/09/2026 12:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 01/09/2026 12:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "creatinine": "0.8 mg/dL",
@@ -1368,7 +1384,9 @@
       },
       "ca": "Vaidyx Demo CA",
       "certificate_serial": "VXDCA-00A1B209",
-      "block": "Digitally signed by Dr Arvind Menon, MS (General Surgery), MCh (Surgical Oncology), Reg. No. VXREG-20101, 26/08/2026 12:40, Vaidyx Demo CA"
+      "block": "Digitally signed by Dr Arvind Menon, MS (General Surgery), MCh (Surgical Oncology), Reg. No. VXREG-20101, 26/08/2026 12:40, Vaidyx Demo CA, certificate serial VXDCA-00A1B209",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "presenting_complaint": "Right breast lump with skin tethering for 4 months",
@@ -1423,8 +1441,10 @@
        "value": "2026-08-27T15:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B20A",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 27/08/2026 15:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 27/08/2026 15:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "lesion_size": "5.6 x 4.2 cm",
@@ -1476,8 +1496,10 @@
        "value": "2026-08-27T16:15:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B20B",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 27/08/2026 16:15, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 27/08/2026 16:15, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "lesion_size": "5.4 x 4.0 cm",
@@ -1531,8 +1553,10 @@
        "value": "2026-08-31T17:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B20C",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 31/08/2026 17:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 31/08/2026 17:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "histologic_type": "Invasive breast carcinoma of no special type",
@@ -1587,8 +1611,10 @@
        "value": "2026-09-16T11:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B20D",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 16/09/2026 11:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 16/09/2026 11:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "er": "Negative (Allred score 0/8)",
@@ -1676,8 +1702,10 @@
        "value": "2026-08-29T18:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B20E",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 29/08/2026 18:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 29/08/2026 18:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "distant_findings": "No evidence of distant metastasis"
@@ -1730,7 +1758,9 @@
       },
       "ca": "Vaidyx Demo CA",
       "certificate_serial": "VXDCA-00A1B20F",
-      "block": "Digitally signed by Dr Vikram Rathore, MD (Nuclear Medicine), Reg. No. VXREG-20208, 01/09/2026 13:00, Vaidyx Demo CA"
+      "block": "Digitally signed by Dr Vikram Rathore, MD (Nuclear Medicine), Reg. No. VXREG-20208, 01/09/2026 13:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B20F",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "distant_findings": "No scintigraphic evidence of skeletal metastasis"
@@ -1783,8 +1813,10 @@
        "value": "2026-08-26T11:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B210",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 26/08/2026 11:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 26/08/2026 11:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "haemoglobin": "11.2 gm%",
@@ -1838,8 +1870,10 @@
        "value": "2026-08-26T12:05:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B211",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 26/08/2026 12:05, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 26/08/2026 12:05, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "bilirubin": "0.7 mg/dL",
@@ -1893,8 +1927,10 @@
        "value": "2026-08-26T12:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B212",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 26/08/2026 12:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 26/08/2026 12:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "creatinine": "0.8 mg/dL",
@@ -2048,8 +2084,10 @@
        "value": "2026-08-18T12:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B213",
-      "block": "Digitally signed by Dr Kavitha Raghunathan, MS (General Surgery), MCh (Breast Surgery), Reg. No. VXREG-20104, 18/08/2026 12:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B201",
+      "block": "Digitally signed by Dr Kavitha Raghunathan, MS (General Surgery), MCh (Breast Surgery), Reg. No. VXREG-20104, 18/08/2026 12:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B201",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "presenting_complaint": "Lump in the right breast for 3 months",
@@ -2103,8 +2141,10 @@
        "value": "2026-08-19T15:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B214",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 19/08/2026 15:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 19/08/2026 15:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "lesion_size": "1.9 x 1.6 cm"
@@ -2154,8 +2194,10 @@
        "value": "2026-08-19T16:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B215",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 19/08/2026 16:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 19/08/2026 16:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "lesion_size": "2.0 x 1.5 cm",
@@ -2209,8 +2251,10 @@
        "value": "2026-08-31T16:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B216",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 31/08/2026 16:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 31/08/2026 16:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "histologic_type": "Invasive lobular carcinoma",
@@ -2266,8 +2310,10 @@
        "value": "2026-09-02T13:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B217",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 02/09/2026 13:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 02/09/2026 13:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "er": "Positive (Allred score 8/8)",
@@ -2326,8 +2372,10 @@
        "value": "2026-08-27T11:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B218",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 27/08/2026 11:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 27/08/2026 11:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "haemoglobin": "12.4 gm%",
@@ -2380,8 +2428,10 @@
        "value": "2026-08-27T12:05:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B219",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 27/08/2026 12:05, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 27/08/2026 12:05, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "bilirubin": "0.7 mg/dL",
@@ -2434,8 +2484,10 @@
        "value": "2026-08-27T12:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B21A",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 27/08/2026 12:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 27/08/2026 12:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "creatinine": "0.8 mg/dL",
@@ -2487,8 +2539,10 @@
        "value": "2026-08-30T07:40:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B21B",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 30/08/2026 07:40, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 30/08/2026 07:40, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "haemoglobin": "10.9 gm%",
@@ -2536,8 +2590,10 @@
        "value": "2026-09-03T17:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B21C",
-      "block": "Digitally signed by Dr Kavitha Raghunathan, MS (General Surgery), MCh (Breast Surgery), Reg. No. VXREG-20104, 03/09/2026 17:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B201",
+      "block": "Digitally signed by Dr Kavitha Raghunathan, MS (General Surgery), MCh (Breast Surgery), Reg. No. VXREG-20104, 03/09/2026 17:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B201",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "comorbidities": "Hypertension on telmisartan"
@@ -2635,8 +2691,10 @@
        "value": "2026-09-03T12:15:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B21D",
-      "block": "Digitally signed by Dr Arvind Menon, MS (General Surgery), MCh (Surgical Oncology), Reg. No. VXREG-20101, 03/09/2026 12:15, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B209",
+      "block": "Digitally signed by Dr Arvind Menon, MS (General Surgery), MCh (Surgical Oncology), Reg. No. VXREG-20101, 03/09/2026 12:15, Vaidyx Demo CA, certificate serial VXDCA-00A1B209",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "presenting_complaint": "Left breast lump for 5 months",
@@ -2689,8 +2747,10 @@
        "value": "2026-09-04T15:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B21E",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 04/09/2026 15:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 04/09/2026 15:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "lesion_size": "5.1 x 3.8 cm"
@@ -2742,8 +2802,10 @@
        "value": "2026-09-08T17:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B21F",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 08/09/2026 17:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 08/09/2026 17:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "histologic_type": "Invasive breast carcinoma of no special type",
@@ -2797,8 +2859,10 @@
        "value": "2026-09-11T12:40:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B220",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 11/09/2026 12:40, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 11/09/2026 12:40, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "er": "Positive (Allred score 6/8)",
@@ -2852,8 +2916,10 @@
        "value": "2026-09-05T18:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B221",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 05/09/2026 18:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 05/09/2026 18:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "distant_findings": "No evidence of distant metastasis"
@@ -2905,8 +2971,10 @@
        "value": "2026-09-03T11:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B222",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 03/09/2026 11:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 03/09/2026 11:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "haemoglobin": "12.4 gm%",
@@ -2959,8 +3027,10 @@
        "value": "2026-09-03T12:05:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B223",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 03/09/2026 12:05, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 03/09/2026 12:05, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "bilirubin": "0.7 mg/dL",
@@ -3013,8 +3083,10 @@
        "value": "2026-09-03T12:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B224",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 03/09/2026 12:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 03/09/2026 12:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "creatinine": "0.8 mg/dL",
@@ -3160,7 +3232,9 @@
       },
       "ca": "Vaidyx Demo CA",
       "certificate_serial": "VXDCA-00A1B225",
-      "block": "Digitally signed by Dr Suresh Iyer, MS (ENT), MCh (Head and Neck Surgery), Reg. No. VXREG-20106, 07/09/2026 11:50, Vaidyx Demo CA"
+      "block": "Digitally signed by Dr Suresh Iyer, MS (ENT), MCh (Head and Neck Surgery), Reg. No. VXREG-20106, 07/09/2026 11:50, Vaidyx Demo CA, certificate serial VXDCA-00A1B225",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "presenting_complaint": "Non-healing ulcer of the left buccal mucosa for 3 months",
@@ -3216,8 +3290,10 @@
        "value": "2026-09-11T16:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B226",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 11/09/2026 16:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 11/09/2026 16:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "histologic_type": "Squamous cell carcinoma, moderately differentiated",
@@ -3269,8 +3345,10 @@
        "value": "2026-09-09T17:40:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B227",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 09/09/2026 17:40, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 09/09/2026 17:40, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "lesion_size": "3.8 x 2.6 cm",
@@ -3426,8 +3504,10 @@
        "value": "2026-09-10T12:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B228",
-      "block": "Digitally signed by Dr Arvind Menon, MS (General Surgery), MCh (Surgical Oncology), Reg. No. VXREG-20101, 10/09/2026 12:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B209",
+      "block": "Digitally signed by Dr Arvind Menon, MS (General Surgery), MCh (Surgical Oncology), Reg. No. VXREG-20101, 10/09/2026 12:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B209",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "presenting_complaint": "Ulcer on the right lateral border of the tongue for 2 months",
@@ -3482,8 +3562,10 @@
        "value": "2026-09-14T15:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B229",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 14/09/2026 15:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 14/09/2026 15:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "histologic_type": "Squamous cell carcinoma, well differentiated",
@@ -3535,8 +3617,10 @@
        "value": "2026-09-12T18:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B22A",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 12/09/2026 18:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 12/09/2026 18:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "lesion_size": "3.2 x 2.1 cm",
@@ -3588,8 +3672,10 @@
        "value": "2026-09-11T14:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B22B",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 11/09/2026 14:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 11/09/2026 14:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "distant_findings": "No focal lung lesion"
@@ -3639,7 +3725,9 @@
       },
       "ca": "Vaidyx Demo CA",
       "certificate_serial": "VXDCA-00A1B22C",
-      "block": "Digitally signed by Dr Harish Shetty, MDS (Oral and Maxillofacial Surgery), Reg. No. VXREG-20209, 17/09/2026 13:00, Vaidyx Demo CA"
+      "block": "Digitally signed by Dr Harish Shetty, MDS (Oral and Maxillofacial Surgery), Reg. No. VXREG-20209, 17/09/2026 13:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B22C",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "dental_evaluation": "Pre-radiotherapy dental evaluation done; oral prophylaxis completed"
@@ -3790,8 +3878,10 @@
        "value": "2026-08-24T12:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B22D",
-      "block": "Digitally signed by Dr Suresh Iyer, MS (ENT), MCh (Head and Neck Surgery), Reg. No. VXREG-20106, 24/08/2026 12:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B225",
+      "block": "Digitally signed by Dr Suresh Iyer, MS (ENT), MCh (Head and Neck Surgery), Reg. No. VXREG-20106, 24/08/2026 12:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B225",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "presenting_complaint": "Growth over the left lower alveolus for 4 months",
@@ -3846,8 +3936,10 @@
        "value": "2026-08-28T16:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B22E",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 28/08/2026 16:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 28/08/2026 16:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "histologic_type": "Squamous cell carcinoma, moderately differentiated"
@@ -3897,8 +3989,10 @@
        "value": "2026-08-26T17:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B22F",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 26/08/2026 17:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 26/08/2026 17:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "lesion_size": "4.1 x 3.0 cm",
@@ -3949,8 +4043,10 @@
        "value": "2026-08-25T13:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B230",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 25/08/2026 13:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 25/08/2026 13:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "distant_findings": "Lung fields clear"
@@ -3999,8 +4095,10 @@
        "value": "2026-08-27T12:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B231",
-      "block": "Digitally signed by Dr Harish Shetty, MDS (Oral and Maxillofacial Surgery), Reg. No. VXREG-20209, 27/08/2026 12:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B22C",
+      "block": "Digitally signed by Dr Harish Shetty, MDS (Oral and Maxillofacial Surgery), Reg. No. VXREG-20209, 27/08/2026 12:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B22C",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "dental_evaluation": "Dental evaluation completed; no active dental infection"
@@ -4051,8 +4149,10 @@
        "value": "2026-08-24T11:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B232",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 24/08/2026 11:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 24/08/2026 11:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "haemoglobin": "12.4 gm%",
@@ -4105,8 +4205,10 @@
        "value": "2026-08-24T12:05:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B233",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 24/08/2026 12:05, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 24/08/2026 12:05, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "bilirubin": "0.7 mg/dL",
@@ -4159,8 +4261,10 @@
        "value": "2026-08-24T12:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B234",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 24/08/2026 12:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 24/08/2026 12:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "creatinine": "0.8 mg/dL",
@@ -4310,7 +4414,9 @@
       },
       "ca": "Vaidyx Demo CA",
       "certificate_serial": "VXDCA-00A1B235",
-      "block": "Digitally signed by Dr Nandini Kulkarni, MS (Obstetrics and Gynaecology), MCh (Gynaecologic Oncology), Reg. No. VXREG-20105, 02/09/2026 12:30, Vaidyx Demo CA"
+      "block": "Digitally signed by Dr Nandini Kulkarni, MS (Obstetrics and Gynaecology), MCh (Gynaecologic Oncology), Reg. No. VXREG-20105, 02/09/2026 12:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B235",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "presenting_complaint": "Post-coital bleeding for 3 months",
@@ -4365,8 +4471,10 @@
        "value": "2026-09-06T15:40:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B236",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 06/09/2026 15:40, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 06/09/2026 15:40, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "histologic_type": "Squamous cell carcinoma, keratinising",
@@ -4420,8 +4528,10 @@
        "value": "2026-09-02T11:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B237",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 02/09/2026 11:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 02/09/2026 11:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "haemoglobin": "12.4 gm%",
@@ -4474,8 +4584,10 @@
        "value": "2026-09-02T12:05:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B238",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 02/09/2026 12:05, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 02/09/2026 12:05, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "bilirubin": "0.7 mg/dL",
@@ -4528,8 +4640,10 @@
        "value": "2026-09-02T12:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B239",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 02/09/2026 12:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 02/09/2026 12:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "creatinine": "0.8 mg/dL",
@@ -4608,8 +4722,10 @@
        "value": "2026-09-04T17:50:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B23A",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 04/09/2026 17:50, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 04/09/2026 17:50, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "nodal_findings": "Bilateral external iliac lymph nodes, largest 1.4 cm",
@@ -4660,8 +4776,10 @@
        "value": "2026-09-03T13:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B23B",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 03/09/2026 13:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 03/09/2026 13:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "distant_findings": "No focal lung lesion"
@@ -4711,8 +4829,10 @@
        "value": "2026-09-15T14:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B23C",
-      "block": "Digitally signed by Dr Nandini Kulkarni, MS (Obstetrics and Gynaecology), MCh (Gynaecologic Oncology), Reg. No. VXREG-20105, 15/09/2026 14:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B235",
+      "block": "Digitally signed by Dr Nandini Kulkarni, MS (Obstetrics and Gynaecology), MCh (Gynaecologic Oncology), Reg. No. VXREG-20105, 15/09/2026 14:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B235",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "bladder_mucosa": "Bladder mucosa normal",
@@ -4850,8 +4970,10 @@
        "value": "2026-08-23T10:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B23D",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 23/08/2026 10:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 23/08/2026 10:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "nodal_findings": "No significantly enlarged pelvic lymph nodes",
@@ -4901,8 +5023,10 @@
        "value": "2026-08-26T12:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B23E",
-      "block": "Digitally signed by Dr Nandini Kulkarni, MS (Obstetrics and Gynaecology), MCh (Gynaecologic Oncology), Reg. No. VXREG-20105, 26/08/2026 12:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B235",
+      "block": "Digitally signed by Dr Nandini Kulkarni, MS (Obstetrics and Gynaecology), MCh (Gynaecologic Oncology), Reg. No. VXREG-20105, 26/08/2026 12:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B235",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "presenting_complaint": "Bleeding per vaginum, intermittent, for 2 months",
@@ -4957,8 +5081,10 @@
        "value": "2026-08-29T16:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B23F",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 29/08/2026 16:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 29/08/2026 16:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "histologic_type": "Squamous cell carcinoma, keratinising",
@@ -5012,8 +5138,10 @@
        "value": "2026-08-26T11:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B240",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 26/08/2026 11:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 26/08/2026 11:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "haemoglobin": "12.4 gm%",
@@ -5066,8 +5194,10 @@
        "value": "2026-08-26T12:05:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B241",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 26/08/2026 12:05, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 26/08/2026 12:05, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "bilirubin": "0.7 mg/dL",
@@ -5120,8 +5250,10 @@
        "value": "2026-08-26T12:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B242",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 26/08/2026 12:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 26/08/2026 12:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "creatinine": "0.8 mg/dL",
@@ -5174,7 +5306,9 @@
       },
       "ca": "Vaidyx Demo CA",
       "certificate_serial": "VXDCA-00A1B243",
-      "block": "Digitally signed by Dr Pooja Banerjee, MD (Microbiology), Reg. No. VXREG-20207, 26/08/2026 16:40, Vaidyx Demo CA"
+      "block": "Digitally signed by Dr Pooja Banerjee, MD (Microbiology), Reg. No. VXREG-20207, 26/08/2026 16:40, Vaidyx Demo CA, certificate serial VXDCA-00A1B243",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "hiv_status": "Non-reactive",
@@ -5226,8 +5360,10 @@
        "value": "2026-08-27T12:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B244",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 27/08/2026 12:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 27/08/2026 12:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "distant_findings": "Lung fields clear"
@@ -5277,8 +5413,10 @@
        "value": "2026-09-01T15:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B245",
-      "block": "Digitally signed by Dr Nandini Kulkarni, MS (Obstetrics and Gynaecology), MCh (Gynaecologic Oncology), Reg. No. VXREG-20105, 01/09/2026 15:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B235",
+      "block": "Digitally signed by Dr Nandini Kulkarni, MS (Obstetrics and Gynaecology), MCh (Gynaecologic Oncology), Reg. No. VXREG-20105, 01/09/2026 15:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B235",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "bladder_mucosa": "Bladder mucosa normal",
@@ -5381,8 +5519,10 @@
        "value": "2026-09-15T12:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B246",
-      "block": "Digitally signed by Dr Nandini Kulkarni, MS (Obstetrics and Gynaecology), MCh (Gynaecologic Oncology), Reg. No. VXREG-20105, 15/09/2026 12:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B235",
+      "block": "Digitally signed by Dr Nandini Kulkarni, MS (Obstetrics and Gynaecology), MCh (Gynaecologic Oncology), Reg. No. VXREG-20105, 15/09/2026 12:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B235",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "presenting_complaint": "Foul-smelling discharge per vaginum for 4 months",
@@ -5437,8 +5577,10 @@
        "value": "2026-09-19T15:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B247",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 19/09/2026 15:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 19/09/2026 15:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "histologic_type": "Squamous cell carcinoma, keratinising",
@@ -5492,8 +5634,10 @@
        "value": "2026-09-15T11:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B248",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 15/09/2026 11:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 15/09/2026 11:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "haemoglobin": "12.4 gm%",
@@ -5546,8 +5690,10 @@
        "value": "2026-09-15T12:05:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B249",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 15/09/2026 12:05, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 15/09/2026 12:05, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "bilirubin": "0.7 mg/dL",
@@ -5600,8 +5746,10 @@
        "value": "2026-09-15T12:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B24A",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 15/09/2026 12:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 15/09/2026 12:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "creatinine": "1.1 mg/dL",
@@ -5653,8 +5801,10 @@
        "value": "2026-09-15T16:40:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B24B",
-      "block": "Digitally signed by Dr Pooja Banerjee, MD (Microbiology), Reg. No. VXREG-20207, 15/09/2026 16:40, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B243",
+      "block": "Digitally signed by Dr Pooja Banerjee, MD (Microbiology), Reg. No. VXREG-20207, 15/09/2026 16:40, Vaidyx Demo CA, certificate serial VXDCA-00A1B243",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "hiv_status": "Non-reactive",
@@ -5706,8 +5856,10 @@
        "value": "2026-09-16T12:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B24C",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 16/09/2026 12:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 16/09/2026 12:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "distant_findings": "No focal lung lesion"
@@ -5757,8 +5909,10 @@
        "value": "2026-09-22T14:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B24D",
-      "block": "Digitally signed by Dr Nandini Kulkarni, MS (Obstetrics and Gynaecology), MCh (Gynaecologic Oncology), Reg. No. VXREG-20105, 22/09/2026 14:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B235",
+      "block": "Digitally signed by Dr Nandini Kulkarni, MS (Obstetrics and Gynaecology), MCh (Gynaecologic Oncology), Reg. No. VXREG-20105, 22/09/2026 14:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B235",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "bladder_mucosa": "Bullous oedema of the posterior bladder wall",
@@ -5893,8 +6047,10 @@
        "value": "2026-09-11T12:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B24E",
-      "block": "Digitally signed by Dr Nandini Kulkarni, MS (Obstetrics and Gynaecology), MCh (Gynaecologic Oncology), Reg. No. VXREG-20105, 11/09/2026 12:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B235",
+      "block": "Digitally signed by Dr Nandini Kulkarni, MS (Obstetrics and Gynaecology), MCh (Gynaecologic Oncology), Reg. No. VXREG-20105, 11/09/2026 12:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B235",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "presenting_complaint": "Abnormal Pap smear on screening",
@@ -5993,8 +6149,10 @@
        "value": "2026-09-11T11:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B24F",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 11/09/2026 11:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 11/09/2026 11:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "haemoglobin": "12.4 gm%",
@@ -6047,8 +6205,10 @@
        "value": "2026-09-11T12:05:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B250",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 11/09/2026 12:05, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 11/09/2026 12:05, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "bilirubin": "0.7 mg/dL",
@@ -6101,8 +6261,10 @@
        "value": "2026-09-11T12:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B251",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 11/09/2026 12:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 11/09/2026 12:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "creatinine": "0.8 mg/dL",
@@ -6154,8 +6316,10 @@
        "value": "2026-09-11T16:40:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B252",
-      "block": "Digitally signed by Dr Pooja Banerjee, MD (Microbiology), Reg. No. VXREG-20207, 11/09/2026 16:40, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B243",
+      "block": "Digitally signed by Dr Pooja Banerjee, MD (Microbiology), Reg. No. VXREG-20207, 11/09/2026 16:40, Vaidyx Demo CA, certificate serial VXDCA-00A1B243",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "hiv_status": "Non-reactive",
@@ -6207,8 +6371,10 @@
        "value": "2026-09-12T13:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B253",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 12/09/2026 13:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 12/09/2026 13:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "nodal_findings": "No pelvic lymphadenopathy",
@@ -6259,8 +6425,10 @@
        "value": "2026-09-14T18:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B254",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 14/09/2026 18:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 14/09/2026 18:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "lesion_size": "2.2 x 1.8 cm",
@@ -6311,8 +6479,10 @@
        "value": "2026-09-12T12:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B255",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 12/09/2026 12:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 12/09/2026 12:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "distant_findings": "Lung fields clear"
@@ -6440,7 +6610,9 @@
       },
       "ca": "Vaidyx Demo CA",
       "certificate_serial": "VXDCA-00A1B256",
-      "block": "Digitally signed by Dr Farah Siddiqui, MD (General Medicine), DM (Medical Oncology), Reg. No. VXREG-20102, 01/09/2026 13:00, Vaidyx Demo CA"
+      "block": "Digitally signed by Dr Farah Siddiqui, MD (General Medicine), DM (Medical Oncology), Reg. No. VXREG-20102, 01/09/2026 13:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B256",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "presenting_complaint": "Cough and haemoptysis for 6 weeks",
@@ -6480,7 +6652,7 @@
      },
      "reported_by": {
       "name": "Dr Nikhil Agarwal",
-      "qualification": "MD (Radiodiagnosis), Junior Resident",
+      "qualification": "MBBS, Junior Resident (Radiodiagnosis)",
       "reg_no": "VXREG-20203"
      },
      "signature": null,
@@ -6537,8 +6709,10 @@
        "value": "2026-09-01T11:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B257",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 01/09/2026 11:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 01/09/2026 11:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "haemoglobin": "12.4 gm%",
@@ -6591,8 +6765,10 @@
        "value": "2026-09-01T12:05:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B258",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 01/09/2026 12:05, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 01/09/2026 12:05, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "bilirubin": "0.7 mg/dL",
@@ -6645,8 +6821,10 @@
        "value": "2026-09-01T12:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B259",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 01/09/2026 12:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 01/09/2026 12:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "creatinine": "0.8 mg/dL",
@@ -6699,8 +6877,10 @@
        "value": "2026-09-07T16:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B25A",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 07/09/2026 16:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 07/09/2026 16:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "histologic_type": "Adenocarcinoma, acinar predominant"
@@ -6752,8 +6932,10 @@
        "value": "2026-09-15T16:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B25B",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 15/09/2026 16:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 15/09/2026 16:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "egfr": "Not detected",
@@ -6809,8 +6991,10 @@
        "value": "2026-09-09T14:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B25C",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 09/09/2026 14:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 09/09/2026 14:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "pdl1": "TPS 30 %"
@@ -6860,8 +7044,10 @@
        "value": "2026-09-06T17:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B25D",
-      "block": "Digitally signed by Dr Vikram Rathore, MD (Nuclear Medicine), Reg. No. VXREG-20208, 06/09/2026 17:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B20F",
+      "block": "Digitally signed by Dr Vikram Rathore, MD (Nuclear Medicine), Reg. No. VXREG-20208, 06/09/2026 17:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B20F",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "recorded_stage": "cT2b N1 M0 (as recorded in the referral)",
@@ -6913,8 +7099,10 @@
        "value": "2026-09-06T19:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B25E",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 06/09/2026 19:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 06/09/2026 19:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "distant_findings": "No intracranial metastasis"
@@ -6965,7 +7153,9 @@
       },
       "ca": "Vaidyx Demo CA",
       "certificate_serial": "VXDCA-00A1B25F",
-      "block": "Digitally signed by Dr Rohit Bhattacharya, MD (Pulmonary Medicine), Reg. No. VXREG-20108, 05/09/2026 12:40, Vaidyx Demo CA"
+      "block": "Digitally signed by Dr Rohit Bhattacharya, MD (Pulmonary Medicine), Reg. No. VXREG-20108, 05/09/2026 12:40, Vaidyx Demo CA, certificate serial VXDCA-00A1B25F",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "endobronchial_findings": "No endobronchial lesion"
@@ -7015,8 +7205,10 @@
        "value": "2026-09-05T13:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B260",
-      "block": "Digitally signed by Dr Rohit Bhattacharya, MD (Pulmonary Medicine), Reg. No. VXREG-20108, 05/09/2026 13:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B25F",
+      "block": "Digitally signed by Dr Rohit Bhattacharya, MD (Pulmonary Medicine), Reg. No. VXREG-20108, 05/09/2026 13:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B25F",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "nodal_findings": "Stations 4R and 7 sampled"
@@ -7067,8 +7259,10 @@
        "value": "2026-09-07T15:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B261",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 07/09/2026 15:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 07/09/2026 15:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "nodal_findings": "Station 7: metastatic adenocarcinoma; station 4R: no malignant cells"
@@ -7198,8 +7392,10 @@
        "value": "2026-08-18T12:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B262",
-      "block": "Digitally signed by Dr Farah Siddiqui, MD (General Medicine), DM (Medical Oncology), Reg. No. VXREG-20102, 18/08/2026 12:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B256",
+      "block": "Digitally signed by Dr Farah Siddiqui, MD (General Medicine), DM (Medical Oncology), Reg. No. VXREG-20102, 18/08/2026 12:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B256",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "presenting_complaint": "Chest pain and weight loss for 2 months",
@@ -7253,8 +7449,10 @@
        "value": "2026-08-19T18:40:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B263",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 19/08/2026 18:40, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 19/08/2026 18:40, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "lesion_size": "3.9 x 3.1 cm left lower lobe mass",
@@ -7308,8 +7506,10 @@
        "value": "2026-08-18T11:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B264",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 18/08/2026 11:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 18/08/2026 11:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "haemoglobin": "12.4 gm%",
@@ -7362,8 +7562,10 @@
        "value": "2026-08-18T12:05:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B265",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 18/08/2026 12:05, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 18/08/2026 12:05, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "bilirubin": "0.7 mg/dL",
@@ -7416,8 +7618,10 @@
        "value": "2026-08-18T12:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B266",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 18/08/2026 12:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 18/08/2026 12:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "creatinine": "0.8 mg/dL",
@@ -7470,8 +7674,10 @@
        "value": "2026-08-29T16:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B267",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 29/08/2026 16:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 29/08/2026 16:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "histologic_type": "Adenocarcinoma, acinar predominant"
@@ -7523,8 +7729,10 @@
        "value": "2026-09-08T15:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B268",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 08/09/2026 15:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 08/09/2026 15:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "egfr": "Exon 19 deletion detected",
@@ -7580,8 +7788,10 @@
        "value": "2026-08-31T14:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B269",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 31/08/2026 14:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 31/08/2026 14:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "pdl1": "TPS 30 %"
@@ -7631,8 +7841,10 @@
        "value": "2026-08-28T17:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B26A",
-      "block": "Digitally signed by Dr Vikram Rathore, MD (Nuclear Medicine), Reg. No. VXREG-20208, 28/08/2026 17:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B20F",
+      "block": "Digitally signed by Dr Vikram Rathore, MD (Nuclear Medicine), Reg. No. VXREG-20208, 28/08/2026 17:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B20F",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "recorded_stage": "cT2b N1 M0 (as recorded in the referral)",
@@ -7684,8 +7896,10 @@
        "value": "2026-08-28T19:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B26B",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 28/08/2026 19:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 28/08/2026 19:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "distant_findings": "No intracranial metastasis"
@@ -7703,7 +7917,7 @@
      "id": "P13-R11",
      "test": "hpe_biopsy",
      "type": "histopathology",
-     "title": "Histopathology report (biopsy)",
+     "title": "Histopathology: mediastinal lymph node (mediastinoscopy)",
      "source": "his",
      "producing_department": "Pathology",
      "encounter": "IP/26/01876",
@@ -7737,8 +7951,10 @@
        "value": "2026-08-29T17:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B26C",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 29/08/2026 17:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 29/08/2026 17:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "nodal_findings": "Mediastinoscopy, station 4L lymph node: no metastatic deposit"
@@ -7964,8 +8180,10 @@
        "value": "2026-08-20T12:45:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B26D",
-      "block": "Digitally signed by Dr Rohit Bhattacharya, MD (Pulmonary Medicine), Reg. No. VXREG-20108, 20/08/2026 12:45, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B25F",
+      "block": "Digitally signed by Dr Rohit Bhattacharya, MD (Pulmonary Medicine), Reg. No. VXREG-20108, 20/08/2026 12:45, Vaidyx Demo CA, certificate serial VXDCA-00A1B25F",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "presenting_complaint": "Dry cough for 2 months; altered bowel habits",
@@ -8018,8 +8236,10 @@
        "value": "2026-08-21T18:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B26E",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 21/08/2026 18:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 21/08/2026 18:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "lesion_size": "Multiple bilateral lung nodules, largest 2.1 cm",
@@ -8076,8 +8296,10 @@
        "value": "2026-09-01T16:40:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B26F",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 01/09/2026 16:40, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 01/09/2026 16:40, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "histologic_type": "Metastatic adenocarcinoma; CK20 and CDX2 positive, CK7 and TTF-1 negative; consistent with colorectal origin"
@@ -8129,8 +8351,10 @@
        "value": "2026-08-27T11:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B270",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 27/08/2026 11:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 27/08/2026 11:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "haemoglobin": "12.4 gm%",
@@ -8183,8 +8407,10 @@
        "value": "2026-08-27T12:05:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B271",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 27/08/2026 12:05, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 27/08/2026 12:05, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "bilirubin": "0.7 mg/dL",
@@ -8237,8 +8463,10 @@
        "value": "2026-08-27T12:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B272",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 27/08/2026 12:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 27/08/2026 12:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "creatinine": "0.8 mg/dL",
@@ -8290,7 +8518,9 @@
       },
       "ca": "Vaidyx Demo CA",
       "certificate_serial": "VXDCA-00A1B273",
-      "block": "Digitally signed by Dr Deepa Hegde, MD (General Medicine), DM (Gastroenterology), Reg. No. VXREG-20111, 02/09/2026 15:20, Vaidyx Demo CA"
+      "block": "Digitally signed by Dr Deepa Hegde, MD (General Medicine), DM (Gastroenterology), Reg. No. VXREG-20111, 02/09/2026 15:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B273",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "distance_from_anal_verge": "Ulceroproliferative growth 8 cm from the anal verge"
@@ -8342,8 +8572,10 @@
        "value": "2026-09-05T17:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B274",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 05/09/2026 17:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 05/09/2026 17:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "histologic_type": "Adenocarcinoma, moderately differentiated",
@@ -8394,8 +8626,10 @@
        "value": "2026-09-04T11:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B275",
-      "block": "Digitally signed by Dr Rohit Bhattacharya, MD (Pulmonary Medicine), Reg. No. VXREG-20108, 04/09/2026 11:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B25F",
+      "block": "Digitally signed by Dr Rohit Bhattacharya, MD (Pulmonary Medicine), Reg. No. VXREG-20108, 04/09/2026 11:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B25F",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "presenting_complaint": "Rectal growth on colonoscopy; lung nodules",
@@ -8531,8 +8765,10 @@
        "value": "2026-09-08T12:50:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B276",
-      "block": "Digitally signed by Dr Farah Siddiqui, MD (General Medicine), DM (Medical Oncology), Reg. No. VXREG-20102, 08/09/2026 12:50, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B256",
+      "block": "Digitally signed by Dr Farah Siddiqui, MD (General Medicine), DM (Medical Oncology), Reg. No. VXREG-20102, 08/09/2026 12:50, Vaidyx Demo CA, certificate serial VXDCA-00A1B256",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "presenting_complaint": "Breathlessness on exertion for 1 month",
@@ -8586,8 +8822,10 @@
        "value": "2026-09-09T18:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B277",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 09/09/2026 18:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 09/09/2026 18:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "lesion_size": "3.4 x 2.8 cm right lower lobe mass",
@@ -8639,8 +8877,10 @@
        "value": "2026-09-08T11:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B278",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 08/09/2026 11:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 08/09/2026 11:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "haemoglobin": "12.1 gm%",
@@ -8697,8 +8937,10 @@
        "value": "2026-09-08T12:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B279",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 08/09/2026 12:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 08/09/2026 12:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "bilirubin": "0.7 mg/dL",
@@ -8749,8 +8991,10 @@
        "value": "2026-09-08T12:15:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B27A",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 08/09/2026 12:15, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 08/09/2026 12:15, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "creatinine": "0.8 mg/dL",
@@ -8801,8 +9045,10 @@
        "value": "2026-09-17T16:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B27B",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 17/09/2026 16:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 17/09/2026 16:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "histologic_type": "Adenocarcinoma, acinar predominant"
@@ -8888,8 +9134,10 @@
        "value": "2026-09-19T14:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B27C",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 19/09/2026 14:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 19/09/2026 14:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "pdl1": "TPS 30 %"
@@ -8939,8 +9187,10 @@
        "value": "2026-09-16T17:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B27D",
-      "block": "Digitally signed by Dr Vikram Rathore, MD (Nuclear Medicine), Reg. No. VXREG-20208, 16/09/2026 17:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B20F",
+      "block": "Digitally signed by Dr Vikram Rathore, MD (Nuclear Medicine), Reg. No. VXREG-20208, 16/09/2026 17:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B20F",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "recorded_stage": "cT2b N1 M0 (as recorded in the referral)",
@@ -8992,8 +9242,10 @@
        "value": "2026-09-16T19:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B27E",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 16/09/2026 19:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 16/09/2026 19:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "distant_findings": "No intracranial metastasis"
@@ -9043,8 +9295,10 @@
        "value": "2026-09-15T12:40:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B27F",
-      "block": "Digitally signed by Dr Rohit Bhattacharya, MD (Pulmonary Medicine), Reg. No. VXREG-20108, 15/09/2026 12:40, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B25F",
+      "block": "Digitally signed by Dr Rohit Bhattacharya, MD (Pulmonary Medicine), Reg. No. VXREG-20108, 15/09/2026 12:40, Vaidyx Demo CA, certificate serial VXDCA-00A1B25F",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "endobronchial_findings": "No endobronchial lesion"
@@ -9094,8 +9348,10 @@
        "value": "2026-09-15T13:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B280",
-      "block": "Digitally signed by Dr Rohit Bhattacharya, MD (Pulmonary Medicine), Reg. No. VXREG-20108, 15/09/2026 13:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B25F",
+      "block": "Digitally signed by Dr Rohit Bhattacharya, MD (Pulmonary Medicine), Reg. No. VXREG-20108, 15/09/2026 13:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B25F",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "nodal_findings": "Stations 4R and 7 sampled"
@@ -9146,8 +9402,10 @@
        "value": "2026-09-17T15:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B281",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 17/09/2026 15:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 17/09/2026 15:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "nodal_findings": "Station 7: metastatic adenocarcinoma; station 4R: no malignant cells"
@@ -9288,7 +9546,9 @@
       },
       "ca": "Vaidyx Demo CA",
       "certificate_serial": "VXDCA-00A1B282",
-      "block": "Digitally signed by Dr Imran Qureshi, MS (General Surgery), MCh (Surgical Gastroenterology), Reg. No. VXREG-20110, 25/08/2026 12:30, Vaidyx Demo CA"
+      "block": "Digitally signed by Dr Imran Qureshi, MS (General Surgery), MCh (Surgical Gastroenterology), Reg. No. VXREG-20110, 25/08/2026 12:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B282",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "presenting_complaint": "Bleeding per rectum for 3 months",
@@ -9341,8 +9601,10 @@
        "value": "2026-08-26T15:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B283",
-      "block": "Digitally signed by Dr Deepa Hegde, MD (General Medicine), DM (Gastroenterology), Reg. No. VXREG-20111, 26/08/2026 15:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B273",
+      "block": "Digitally signed by Dr Deepa Hegde, MD (General Medicine), DM (Gastroenterology), Reg. No. VXREG-20111, 26/08/2026 15:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B273",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "distance_from_anal_verge": "Growth 6 cm from the anal verge"
@@ -9394,8 +9656,10 @@
        "value": "2026-08-30T16:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B284",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 30/08/2026 16:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 30/08/2026 16:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "histologic_type": "Adenocarcinoma, moderately differentiated",
@@ -9448,8 +9712,10 @@
        "value": "2026-08-26T13:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B285",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 26/08/2026 13:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 26/08/2026 13:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "cea": "3.1 ng/mL"
@@ -9499,8 +9765,10 @@
        "value": "2026-08-29T18:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B286",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 29/08/2026 18:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 29/08/2026 18:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "recorded_stage": "mrT3c N1, mesorectal fascia clear (as reported)",
@@ -9552,8 +9820,10 @@
        "value": "2026-08-28T17:45:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B287",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 28/08/2026 17:45, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 28/08/2026 17:45, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "distant_findings": "No evidence of distant metastasis"
@@ -9687,7 +9957,9 @@
       },
       "ca": "Vaidyx Demo CA",
       "certificate_serial": "VXDCA-00A1B288",
-      "block": "Digitally signed by Dr Manoj Tiwari, MS (General Surgery), MCh (Surgical Gastroenterology), Reg. No. VXREG-20107, 12/03/2026 11:40, Vaidyx Demo CA"
+      "block": "Digitally signed by Dr Manoj Tiwari, MS (General Surgery), MCh (Surgical Gastroenterology), Reg. No. VXREG-20107, 12/03/2026 11:40, Vaidyx Demo CA, certificate serial VXDCA-00A1B288",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "presenting_complaint": "Haemorrhoids, advised review"
@@ -9732,8 +10004,10 @@
        "value": "2026-09-01T12:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B289",
-      "block": "Digitally signed by Dr Manoj Tiwari, MS (General Surgery), MCh (Surgical Gastroenterology), Reg. No. VXREG-20107, 01/09/2026 12:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B288",
+      "block": "Digitally signed by Dr Manoj Tiwari, MS (General Surgery), MCh (Surgical Gastroenterology), Reg. No. VXREG-20107, 01/09/2026 12:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B288",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "presenting_complaint": "Change in bowel habits and bleeding per rectum for 4 months",
@@ -9786,8 +10060,10 @@
        "value": "2026-09-02T15:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B28A",
-      "block": "Digitally signed by Dr Deepa Hegde, MD (General Medicine), DM (Gastroenterology), Reg. No. VXREG-20111, 02/09/2026 15:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B273",
+      "block": "Digitally signed by Dr Deepa Hegde, MD (General Medicine), DM (Gastroenterology), Reg. No. VXREG-20111, 02/09/2026 15:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B273",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "distance_from_anal_verge": "Growth 9 cm from the anal verge"
@@ -9839,8 +10115,10 @@
        "value": "2026-09-06T16:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B28B",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 06/09/2026 16:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 06/09/2026 16:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "histologic_type": "Adenocarcinoma, moderately differentiated",
@@ -9892,8 +10170,10 @@
        "value": "2026-09-05T18:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B28C",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 05/09/2026 18:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 05/09/2026 18:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "recorded_stage": "mrT3b N0, mesorectal fascia clear (as reported)",
@@ -9945,8 +10225,10 @@
        "value": "2026-09-04T17:45:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B28D",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 04/09/2026 17:45, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 04/09/2026 17:45, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "distant_findings": "No evidence of distant metastasis"
@@ -9997,8 +10279,10 @@
        "value": "2026-09-01T11:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B28E",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 01/09/2026 11:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 01/09/2026 11:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "haemoglobin": "12.4 gm%",
@@ -10047,8 +10331,10 @@
        "value": "2026-09-01T12:05:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B28F",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 01/09/2026 12:05, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 01/09/2026 12:05, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "bilirubin": "0.7 mg/dL",
@@ -10097,8 +10383,10 @@
        "value": "2026-09-01T12:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B290",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 01/09/2026 12:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 01/09/2026 12:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "creatinine": "0.8 mg/dL",
@@ -10259,8 +10547,10 @@
        "value": "2026-08-28T12:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B291",
-      "block": "Digitally signed by Dr Imran Qureshi, MS (General Surgery), MCh (Surgical Gastroenterology), Reg. No. VXREG-20110, 28/08/2026 12:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B282",
+      "block": "Digitally signed by Dr Imran Qureshi, MS (General Surgery), MCh (Surgical Gastroenterology), Reg. No. VXREG-20110, 28/08/2026 12:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B282",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "presenting_complaint": "Bleeding per rectum for 2 months",
@@ -10313,8 +10603,10 @@
        "value": "2026-08-29T15:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B292",
-      "block": "Digitally signed by Dr Deepa Hegde, MD (General Medicine), DM (Gastroenterology), Reg. No. VXREG-20111, 29/08/2026 15:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B273",
+      "block": "Digitally signed by Dr Deepa Hegde, MD (General Medicine), DM (Gastroenterology), Reg. No. VXREG-20111, 29/08/2026 15:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B273",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "distance_from_anal_verge": "Growth 6 cm from the anal verge"
@@ -10366,8 +10658,10 @@
        "value": "2026-09-02T16:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B293",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 02/09/2026 16:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 02/09/2026 16:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "histologic_type": "Adenocarcinoma, moderately differentiated",
@@ -10420,8 +10714,10 @@
        "value": "2026-08-29T13:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B294",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 29/08/2026 13:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 29/08/2026 13:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "cea": "2.4 ng/mL"
@@ -10471,8 +10767,10 @@
        "value": "2026-09-01T18:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B295",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 01/09/2026 18:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 01/09/2026 18:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "recorded_stage": "mrT3c N1, mesorectal fascia clear (as reported)",
@@ -10524,8 +10822,10 @@
        "value": "2026-08-31T17:45:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B296",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 31/08/2026 17:45, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 31/08/2026 17:45, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "distant_findings": "No evidence of distant metastasis"
@@ -10574,8 +10874,10 @@
        "value": "2026-09-07T13:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B297",
-      "block": "Digitally signed by Dr Kavitha Raghunathan, MS (General Surgery), MCh (Breast Surgery), Reg. No. VXREG-20104, 07/09/2026 13:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B201",
+      "block": "Digitally signed by Dr Kavitha Raghunathan, MS (General Surgery), MCh (Breast Surgery), Reg. No. VXREG-20104, 07/09/2026 13:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B201",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "presenting_complaint": "Painless right breast lump noted at the colorectal clinic",
@@ -10628,8 +10930,10 @@
        "value": "2026-09-08T15:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B298",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 08/09/2026 15:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 08/09/2026 15:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "lesion_size": "1.6 x 1.4 cm",
@@ -10680,8 +10984,10 @@
        "value": "2026-09-08T16:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B299",
-      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 08/09/2026 16:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 08/09/2026 16:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "lesion_size": "1.7 x 1.3 cm",
@@ -10735,8 +11041,10 @@
        "value": "2026-09-11T17:00:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B29A",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 11/09/2026 17:00, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 11/09/2026 17:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "histologic_type": "Invasive breast carcinoma of no special type",
@@ -10791,8 +11099,10 @@
        "value": "2026-09-14T12:30:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B29B",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 14/09/2026 12:30, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 14/09/2026 12:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "er": "Positive (Allred score 8/8)",
@@ -10847,8 +11157,10 @@
        "value": "2026-08-28T11:10:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B29C",
-      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 28/08/2026 11:10, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 28/08/2026 11:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "haemoglobin": "12.4 gm%",
@@ -10901,8 +11213,10 @@
        "value": "2026-08-28T12:05:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B29D",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 28/08/2026 12:05, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 28/08/2026 12:05, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "bilirubin": "0.7 mg/dL",
@@ -10955,8 +11269,10 @@
        "value": "2026-08-28T12:20:00+05:30"
       },
       "ca": "Vaidyx Demo CA",
-      "certificate_serial": "VXDCA-00A1B29E",
-      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 28/08/2026 12:20, Vaidyx Demo CA"
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 28/08/2026 12:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
      },
      "values": {
       "creatinine": "0.8 mg/dL",
@@ -11325,6 +11641,9 @@
    ],
    "checklist": [
     "sample_collected_awaited"
+   ],
+   "open_questions": [
+    "3.3 must map a ServiceRequest / Specimen in state sample_collected (result awaited) to the Pending state of the fact; today's gate would show 'Required field not documented'."
    ]
   },
   {
@@ -11336,7 +11655,7 @@
    ],
    "setup": "A casualty registration VXH/T/26/00412 (same name, age and sex) holds the CECT abdomen and pelvis; the permanent UHID VXH/26/004209 holds the rest.",
    "expected": {
-    "text": "On UHID entry the temporary registration is listed for a person to link, never merged automatically. Until linked, cect_abdomen_pelvis is a Level 1 gap; after a person links it (audited), the CECT joins the Case File labelled with its registration and the gate passes.",
+    "text": "On UHID entry the temporary registration is listed for a person to link, never merged automatically. Until linked, cect_abdomen_pelvis is a Level 1 gap; after a person links it (audited), the CECT joins the Case File labelled with its registration and the gate passes. No request to Radiology is suggested for the CECT: the gap points to the unlinked registration, not to a re-scan.",
     "gate": [
      {
       "patient": "P09",
@@ -11364,8 +11683,10 @@
     ],
     "never": [
      "Automatic merge",
-     "Records from the temporary registration added without a person linking them"
-    ]
+     "Records from the temporary registration added without a person linking them",
+     "a suggested request to Radiology for cect_abdomen_pelvis while the temporary registration is unlinked"
+    ],
+    "requests": []
    },
    "phase": 3,
    "also_phases": [],
@@ -11404,7 +11725,7 @@
       "patient": "P14",
       "protocol": "colorectal_rectum",
       "ncg_setting": "metastatic",
-      "when": "first_fetch",
+      "when": "after_referral",
       "result": "gaps",
       "level1": [
        "baseline_mri_pelvis"
@@ -11834,6 +12155,9 @@
    ],
    "checklist": [
     "unsigned_final"
+   ],
+   "open_questions": [
+    "A second variant, signature present but failing verification (document hash tampered), is added with 1.2 once document hashes exist; 4.1 counts only a verified signature as signed."
    ]
   },
   {
@@ -12046,7 +12370,9 @@
       "department": "Biochemistry",
       "accession": null,
       "origin": "suggested_from_gap",
-      "level": 2
+      "level": 2,
+      "note": "Suggested only, not sent: the doctor uploads the private-lab CEA (outside report, 3.6) instead",
+      "sent": false
      },
      {
       "patient": "P07",

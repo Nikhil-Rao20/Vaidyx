@@ -67,7 +67,8 @@ def test_mock_rows_count_when_run(v2):
 
 
 @pytest.mark.parametrize("mock_unit,conformance", [((40, 2, 1), None), ((42, 0, 0), ("CONFORMANCE FAILED: Patient missing identifier\n", 1)),
-                                                    ((42, 0, 0), ("crashed before the tally\n", 0)), ((0, 0, 0), None)])
+                                                    ((42, 0, 0), ("crashed before the tally\n", 0)), ((0, 0, 0), None),
+                                                    ((42, 0, 0), ("CONFORMANCE OK: 0 resources checked\n", 0)), ((42, 0, 0), ("CONFORMANCE OK\n", 0))])
 def test_a_failing_or_crashed_mock_check_makes_the_run_red(v2, mock_unit, conformance):
     _run(v2, "r3", mock_unit=mock_unit, conformance=conformance)
     assert gate_summary.main("r3", "baseline", runs=v2) == 1

@@ -55,8 +55,8 @@ def numbers(d):
     if "conformance" in rc:  # his_mock.eval.conformance (V2 item 1.3) prints "CONFORMANCE OK: <n> resources checked" and exits non-zero on any failure
         t = (d / "conformance.log").read_text() if (d / "conformance.log").exists() else ""
         m = re.search(r"CONFORMANCE (OK|FAILED)(?::\s*(\d+) resources)?", t)
-        n["conformance_ok"] = rc["conformance"] == 0 and bool(m and m.group(1) == "OK")
         n["conformance_resources"] = int(m.group(2)) if m and m.group(2) else None
+        n["conformance_ok"] = rc["conformance"] == 0 and bool(m and m.group(1) == "OK") and bool(n["conformance_resources"])  # "0 resources checked" is not a pass
     qa = next(d.glob("qa_*.json"), None)  # qa_v1-<label>.json or qa_v2-<label>.json (one per run folder)
     if qa:
         j = json.loads(qa.read_text())  # top level = the original wave (TB-001..003); the Phase 9 wave is the `phase9` block

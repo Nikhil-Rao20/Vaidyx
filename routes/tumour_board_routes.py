@@ -253,6 +253,7 @@ def setup_tumour_board_routes():
         rl = _roles(request); _need(rl, "list_case")
         d = metrics.dashboard(start or None, end or None)
         if format == "csv":
+            skills._audit({"kind": "dashboard_export", "by": rl["user"], "start": start, "end": end})  # org-level audit (Phase 0 review)
             from fastapi.responses import Response
             return Response(metrics.csv_text(d), media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="tumour_board_quality.csv"'})
         return d
@@ -565,15 +566,17 @@ def setup_tumour_board_routes():
 
     @r.get("/cases/{case_id}/export/fhir")
     async def export_fhir(case_id: str, request: Request):
-        """FHIR R4 document bundle of the Case File (mCODE-informed, not profile-validated; values as recorded) (12 Oct)."""
-        _user(request); _case(case_id)
+        """FHIR R4 document bundle of the Case File (mCODE-informed, not profile-validated; values as recorded) (12 Oct). Audited (Phase 0 review)."""
+        u = _user(request); _need_known(_roles(request)); _case(case_id)
         b = fhir_export.bundle(case_id)
+        store.audit(case_id, {"kind": "export_fhir", "by": u, "entries": len(b.get("entry") or [])})
         return JSONResponse(b, headers={"Content-Disposition": f'attachment; filename="{case_id}_fhir_bundle.json"'})
 
     @r.get("/cases/{case_id}/export/registry")
     async def export_registry(case_id: str, request: Request, format: str = "json"):
-        """The HBCR (ICMR-NCDIR 2025) registry items as the records state them, with sources (12 Oct)."""
-        _user(request); _case(case_id)
+        """The HBCR (ICMR-NCDIR 2025) registry items as the records state them, with sources (12 Oct). Audited (Phase 0 review)."""
+        u = _user(request); _need_known(_roles(request)); _case(case_id)
+        store.audit(case_id, {"kind": "export_registry", "by": u, "format": format})
         if format == "csv":
             from fastapi.responses import Response
             return Response(fhir_export.registry_csv(case_id), media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{case_id}_registry_abstract.csv"'})
@@ -581,8 +584,9 @@ def setup_tumour_board_routes():
 
     @r.get("/cases/{case_id}/export")
     async def export(case_id: str, request: Request):
-        """Portable record of the Case File (state, documents' extracted data, audit) for the hospital record system."""
-        _user(request); c = _case(case_id)
+        """Portable record of the Case File (state, documents' extracted data, audit) for the hospital record system. Audited (Phase 0 review)."""
+        u = _user(request); _need_known(_roles(request)); c = _case(case_id)
+        store.audit(case_id, {"kind": "export_case_file", "by": u})
         docs = []
         for d in store.list_docs(case_id):
             docs.append({k: d.get(k) for k in ("doc_id", "filename", "rel_path", "sha256", "classification", "identity", "facts", "state", "processed")})

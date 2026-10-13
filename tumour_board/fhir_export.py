@@ -179,7 +179,7 @@ def bundle(case_id: str) -> dict:
     for b in st.get("board_records") or []:
         rid = _uuid(case_id, "CarePlan", b["id"])
         plan = {"resourceType": "CarePlan", "id": rid, "status": "active" if (b.get("outcome_type") or "decision") == "decision" else "draft", "intent": "plan",
-                "title": f"Tumour Board record {b.get('board_date') or (b.get('recorded_at') or '')[:10]} ({postboard.OUTCOMES.get(b.get('outcome_type') or 'decision')})",
+                "title": f"Tumour Board record {b.get('board_date') or (b.get('recorded_at') or '')[:10]} ({getattr(postboard, 'OUTCOMES', {}).get(b.get('outcome_type') or 'decision', 'Decision recorded')})",
                 "description": b.get("decision_text") or "", "subject": _ref("Patient", patient_id), "created": b.get("recorded_at"),
                 "author": {"display": b.get("recorded_by") or b.get("entered_by") or ""},
                 "activity": [{"reference": _ref("Task", t)} for a, t in task_ids if a.get("board_record") == b["id"]],
