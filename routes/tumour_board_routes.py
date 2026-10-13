@@ -13,6 +13,7 @@ from tumour_board import board  # board sessions, attendance, agent log (V1 item
 from tumour_board import followup  # Tumour Board actions in department inboxes, closing suggestions (V1 item 7.4)
 from tumour_board import scanned  # values and citations read from scans (V1 items 8.1, 8.2)
 from tumour_board import discord  # discordances between reports, decision watch (12 Oct)
+from tumour_board import fhir_export  # FHIR R4 document bundle and the HBCR registry abstract (12 Oct)
 
 log = logging.getLogger("tumour_board")
 
@@ -411,6 +412,22 @@ def setup_tumour_board_routes():
         from fastapi.responses import Response
         return Response(data, media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                         headers={"Content-Disposition": f'attachment; filename="{vtb_export.filename(case_id)}"'})
+
+    @r.get("/cases/{case_id}/export/fhir")
+    async def export_fhir(case_id: str, request: Request):
+        """FHIR R4 document bundle of the Case File (mCODE-informed, not profile-validated; values as recorded) (12 Oct)."""
+        _user(request); _case(case_id)
+        b = fhir_export.bundle(case_id)
+        return JSONResponse(b, headers={"Content-Disposition": f'attachment; filename="{case_id}_fhir_bundle.json"'})
+
+    @r.get("/cases/{case_id}/export/registry")
+    async def export_registry(case_id: str, request: Request, format: str = "json"):
+        """The HBCR (ICMR-NCDIR 2025) registry items as the records state them, with sources (12 Oct)."""
+        _user(request); _case(case_id)
+        if format == "csv":
+            from fastapi.responses import Response
+            return Response(fhir_export.registry_csv(case_id), media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{case_id}_registry_abstract.csv"'})
+        return fhir_export.registry_abstract(case_id)
 
     @r.get("/cases/{case_id}/export")
     async def export(case_id: str, request: Request):
