@@ -1,7 +1,7 @@
 {
  "id": "breast",
  "label": "Breast cancer",
- "version": "0.6",
+ "version": "0.7",
  "note": "Configurable by the clinical team. The required records are rebuilt from the NCG Essential / Optimal / Optional tiers per setting (NCG breast cancer guidelines 2019, quoted with page on every record), then informed by ICMR, ESMO and the CAP breast biomarker template as before; to be confirmed by the hospital Tumour Board (clinical review before real use).",
  "settings_note": "NCG setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes stage). Item 4.1 derives the required records per setting from the NCG tiers.",
  "settings": [
@@ -27,7 +27,7 @@
     "clinical_note",
     "referral"
    ],
-   "department": "Surgical Oncology",
+   "department": "Breast Surgery",
    "required_facts": [
     "ecog",
     "menopausal_status",
@@ -39,7 +39,9 @@
     "page": 4,
     "quote": "All women with a breast lump should undergo a TRIPLE TEST (a)"
    },
-   "tier_basis": "clinical examination is one arm of the triple test"
+   "tier_basis": "clinical examination is one arm of the triple test",
+   "route": "owner",
+   "note": "V2 item 2.4: a clinical record of the owning treating department (route owner); the department named here is the default before a Case File has an owner"
   },
   {
    "id": "breast_imaging",
@@ -322,8 +324,8 @@
    }
   },
   {
-   "id": "baseline_labs",
-   "label": "Baseline blood tests",
+   "id": "cbc",
+   "label": "Complete blood count (CBC)",
    "tier": "a",
    "tiers": {
     "early": "b",
@@ -333,11 +335,44 @@
    "doc_types": [
     "lab"
    ],
-   "department": "Laboratory Medicine",
+   "region": "cbc|cbp|blood count|haemogram|hemogram|haematolog|hematolog|blood tests|routine labs",
+   "department": "Pathology",
    "required_facts": [
     "haemoglobin",
     "wbc",
-    "platelets",
+    "platelets"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Breast Cancer (2019)",
+     "page": 9,
+     "quote": "LFT (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Breast Cancer (2019)",
+     "page": 19,
+     "quote": "Routine labs for systemic function"
+    }
+   ],
+   "tier_basis": "NCG names LFT (a) for locally advanced disease and routine labs for metastatic disease; not listed for early breast cancer (Optimal there)",
+   "note": "V2 item 2.4: the V1 'Baseline blood tests' record is split by test so each request reaches the desk that does it (CBC: Pathology; LFT / RFT: Biochemistry)"
+  },
+  {
+   "id": "liver_renal_function",
+   "label": "Liver and renal function tests (LFT, RFT)",
+   "tier": "a",
+   "tiers": {
+    "early": "b",
+    "locally_advanced": "a",
+    "metastatic": "a"
+   },
+   "doc_types": [
+    "lab"
+   ],
+   "region": "lft|rft|kft|liver|renal|kidney|biochem|creatinine|bilirubin|urea|sgot|sgpt|blood tests|routine labs",
+   "department": "Biochemistry",
+   "required_facts": [
     "creatinine",
     "bilirubin"
    ],
@@ -354,7 +389,8 @@
      "quote": "Routine labs for systemic function"
     }
    ],
-   "tier_basis": "NCG names LFT (a) for locally advanced disease and routine labs for metastatic disease; not listed for early breast cancer (Optimal there)"
+   "tier_basis": "NCG names LFT (a) for locally advanced disease and routine labs for metastatic disease; not listed for early breast cancer (Optimal there)",
+   "note": "V2 item 2.4: the V1 'Baseline blood tests' record is split by test so each request reaches the desk that does it (CBC: Pathology; LFT / RFT: Biochemistry)"
   }
  ],
  "optional": [
@@ -373,7 +409,8 @@
    "doc_types": [
     "tumour_board_record"
    ],
-   "department": "Tumour Board coordinator"
+   "department": "MDT Coordinator",
+   "route": "coordinator"
   }
  ],
  "extract_facts": [

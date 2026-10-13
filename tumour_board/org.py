@@ -653,6 +653,35 @@ def admin_departments(r: dict) -> list[dict]:
     return [dict(d) for d in departments() if (r or {}).get("admin") or d.get("id") in adm]
 
 
+ROUTE_KINDS = ("department", OWNER_ID, COORDINATOR_ID)
+
+
+def route_for(protocol_id: str, record_id: str) -> str | None:
+    """The root admin's routing override for a protocol record (V2 item 2.4): a department id, "owner" (the Case File's owning
+    treating department) or "coordinator" (the MDT Coordinator); None when the protocol's own department applies."""
+    return (load().get("routes") or {}).get(f"{protocol_id}.{record_id}")
+
+
+def resolve_route(target: str | None, fallback_name: str, owner_dept: str | None = None) -> tuple[str, str | None, str]:
+    """(display name, department id or None, kind) for a routing target: a department (id, name or alias), "owner" (owner_dept when the
+    Case File has one, else the protocol's fallback department) or "coordinator". An unresolvable target falls back to the
+    protocol's department name; a name that resolves nowhere is returned with id None (the coordinator handles it, as in V1)."""
+    t = str(target or "").strip()
+    if t == COORDINATOR_ID or (t and is_coordinator_name(t)) or (not t and is_coordinator_name(fallback_name)):
+        return COORDINATOR_NAME, None, COORDINATOR_ID
+    if t == OWNER_ID:
+        did = department_id(owner_dept) if owner_dept else None
+        if did:
+            return department_name(did), did, OWNER_ID
+        did = department_id(fallback_name)
+        return (department_name(did) if did else str(fallback_name or "")), did, OWNER_ID
+    did = department_id(t) if t else None
+    if did:
+        return department_name(did), did, "department"
+    did = department_id(fallback_name)
+    return (department_name(did) if did else str(fallback_name or "")), did, "department"
+
+
 def visible_departments_for_inbox(r: dict) -> list[str]:
     """Department ids whose inbox the user may see: members and heads their own, admins all, coordinators none (unless
     they are also a member somewhere; the coordinator's own inbox row is added by notify.inbox)."""

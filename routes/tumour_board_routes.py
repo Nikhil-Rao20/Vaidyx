@@ -364,6 +364,16 @@ def setup_tumour_board_routes():
         rl = _roles(request); _need(rl, "manage_org")
         return {"events": org.read_audit(max(1, min(limit, 1000)))}
 
+    @r.get("/org/routes")
+    async def org_routes(request: Request):
+        """Root admin: every protocol record with the department it is requested from (the protocol default, the override, the effective
+        department), for the routing table of the Organisation screen (V2 item 2.4). Overrides are saved through PUT /org (routes)."""
+        rl = _roles(request); _need(rl, "manage_org")
+        return {"routes": rules.routes_table(), "overrides": org.load().get("routes") or {},
+                "targets": [{"id": d["id"], "name": d["name"], "group": d.get("group")} for d in org.departments()]
+                           + [{"id": org.OWNER_ID, "name": org.OWNER_NAME + " (the Case File's treating department)", "group": None},
+                              {"id": org.COORDINATOR_ID, "name": org.COORDINATOR_NAME, "group": None}]}
+
     @r.get("/org/accounts")
     async def org_accounts(request: Request):
         """Root admin: every Tumour Board placement with whether its Vaidyx account exists; Vaidyx admins listed as such, never placeable."""

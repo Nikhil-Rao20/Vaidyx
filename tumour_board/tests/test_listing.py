@@ -63,7 +63,7 @@ def test_listing_triggers_extraction_from_stored_pages_and_the_gate(fakes):
     c = store.get_case("TB-2026-0001")
     assert c["protocol"] == "lung_nsclc" and c["setting"] == "non_metastatic" and c["board_date"] == "2026-10-18" and c["hospital_level"] == "essential"
     assert c["listing"]["status"] == "listed" and c["listing"]["listed_by"] == "coord" and c["listing"]["previous"] == {"status": "awaiting_listing"}
-    assert job["state"] == "finished" and job["listed"] is True and job["total"] == 1 and job["gate"]["total"] == 5  # lung Essential records (V1 item 4.1)
+    assert job["state"] == "finished" and job["listed"] is True and job["total"] == 1 and job["gate"]["total"] == 6  # lung Essential records (V1 item 4.1; blood tests split by test in V2 2.4)
     d = store.get_doc("TB-2026-0001", did)
     assert d["facts"]["histologic_type"]["verification"] == "verified" and fakes["classify"] == 1 and fakes["extract"] == 1  # stored pages and classification reused
     g = store.get_state("TB-2026-0001")["gate"]
@@ -108,7 +108,7 @@ def test_changing_only_setting_or_date_rechecks_without_extracting_again(fakes):
     n = fakes["extract"]
     job = _run(go("lung_nsclc", "metastatic", "2026-10-25", "optimal", "coord"))
     c = store.get_case("TB-2026-0001")
-    assert fakes["extract"] == n and job["total"] == 0 and job["gate"]["total"] == 9 and c["setting"] == "metastatic" and c["board_date"] == "2026-10-25"  # Optimal hospital: + PD-L1, MET, PET-CT, mediastinal staging
+    assert fakes["extract"] == n and job["total"] == 0 and job["gate"]["total"] == 10 and c["setting"] == "metastatic" and c["board_date"] == "2026-10-25"  # Optimal hospital: + PD-L1, MET, PET-CT, mediastinal staging
     job = _run(go("breast", "", "", "", "coord"))  # another protocol: fields extracted again under it
     assert job["total"] == 1 and fakes["extract"] == n + 1 and store.get_state("TB-2026-0001")["gate"]["protocol"] == "breast"
 

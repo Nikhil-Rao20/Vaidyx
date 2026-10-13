@@ -84,10 +84,10 @@ class FakeTB:
         cy = _req("cystoscopy_proctoscopy") if closed else _req("cystoscopy_proctoscopy", "missing_record", 1)
         hp = _req("histopathology", "needs_confirmation", 2, [{"type": "confirm_doc_type", "doc_id": "D2"}]) if self.slip else _req("histopathology")
         if self.listed:
-            reqs = [_req("clinical_history"), hp, _req("baseline_labs"), _req("cect_abdomen_pelvis"), cy]
+            reqs = [_req("clinical_history"), hp, _req("cbc"), _req("liver_renal_function"), _req("viral_markers"), _req("cect_abdomen_pelvis"), cy]
             shown = {"abdomen_pelvis_imaging": "none", "chest_xray": "b", "mri_pelvis": "c", "ct_thorax": "c", "ihc": "c", "pet_ct": "c"}
         else:
-            reqs = [_req("clinical_history"), hp, _req("baseline_labs"), _req("abdomen_pelvis_imaging"), _req("cect_abdomen_pelvis"), _req("chest_xray"), cy]
+            reqs = [_req("clinical_history"), hp, _req("cbc"), _req("liver_renal_function"), _req("viral_markers"), _req("abdomen_pelvis_imaging"), _req("cect_abdomen_pelvis"), _req("chest_xray"), cy]
             shown = {"mri_pelvis": "b", "ct_thorax": "c", "ihc": "c", "pet_ct": "c"}
         ok = [r for r in reqs if r["status"] == "satisfied"]
         return {"protocol": "cervix", "setting": "locally_advanced" if self.listed else "", "hospital_level": "essential", "requirements": reqs,
@@ -107,7 +107,7 @@ class FakeTB:
 
     def _actions(self):
         closed = self.stage == "arrived" and self.arrivals_close
-        return [{"id": "A1", "requirement": "cystoscopy_proctoscopy", "source": "pre_authorization", "department": "Surgical Oncology", "level": 1,
+        return [{"id": "A1", "requirement": "cystoscopy_proctoscopy", "source": "pre_authorization", "department": "Gynaecologic Oncology", "level": 1,
                  "status": "completed" if closed else "pending"}]
 
     # HTTP --------------------------------------------------------------------------------------------------------------
@@ -122,7 +122,7 @@ class FakeTB:
         if url == "/api/tb/intake":
             return Resp({"documents": []})
         if url == "/api/tb/inbox":
-            rows = {"surgical_oncology": [{"case_id": "TB-008", "source": "pre_authorization", "requirement": "cystoscopy_proctoscopy", "label": "Cystoscopy",
+            rows = {"gynaecologic_oncology": [{"case_id": "TB-008", "source": "pre_authorization", "requirement": "cystoscopy_proctoscopy", "label": "Cystoscopy",
                                            "status": self._actions()[0]["status"]}], "radiation_oncology": []}
             for _ in self.board:
                 rows["radiation_oncology"].append({"case_id": "TB-008", "source": "board", "source_label": "Tumour Board action", "requirement": None, "label": "Start chemoradiation", "status": "pending"})
@@ -201,7 +201,7 @@ def test_tb008_walk_passes_offline(walk, capsys):
     ok, fail = walk(fake)
     assert fail == [] and len(ok) >= 18, fail
     out = capsys.readouterr().out
-    assert "gap unchanged" in out and "arrivals close the cystoscopy_proctoscopy gap: gate passed 5/5" in out
+    assert "gap unchanged" in out and "arrivals close the cystoscopy_proctoscopy gap: gate passed 7/7" in out
     assert "every radiotherapy schedule of the decision consistent with an Indian line" in out and "\u2014" not in out  # asserted for cervix (review)
     urls = [u for u, _ in fake.posts]
     assert urls[0] == "/api/tb/demo/TB-008" and urls[-1] == "/api/tb/demo/TB-008"  # re-imported at the end

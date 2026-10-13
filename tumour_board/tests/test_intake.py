@@ -372,7 +372,7 @@ def test_stale_protocol_documents_are_extracted_again_after_listing(fakes, monke
         job = service._job("TB-2026-0001", 1, [d["doc_id"]]); await service.process_docs("TB-2026-0001", [d["doc_id"]], job); return job
     job = asyncio.run(go())
     doc = store.get_doc("TB-2026-0001", d["doc_id"])
-    assert doc["extracted_under"] == "lung_nsclc" and doc["facts"].get("histologic_type") and job["gate"]["total"] == 5
+    assert doc["extracted_under"] == "lung_nsclc" and doc["facts"].get("histologic_type") and job["gate"]["total"] == 6
 
 
 def test_ocr_uncertain_numbers_never_carry_an_aadhaar(monkeypatch):

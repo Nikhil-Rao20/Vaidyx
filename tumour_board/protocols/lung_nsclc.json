@@ -1,7 +1,7 @@
 {
  "id": "lung_nsclc",
  "label": "Lung cancer (NSCLC)",
- "version": "0.7",
+ "version": "0.8",
  "note": "Configurable by the clinical team. The required records are rebuilt from the NCG Essential / Optimal / Optional tiers per setting (NCG thoracic cancer guidelines 2019, quoted with page on every record), then informed by ICMR, ESMO and CAP as before; to be confirmed by the hospital Tumour Board (clinical review before real use).",
  "settings_note": "NCG setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes stage). Item 4.1 derives the required records per setting from the NCG tiers.",
  "settings": [
@@ -34,7 +34,9 @@
     "page": 4,
     "quote": "Performance status; General and systemic examination"
    },
-   "tier_basis": "listed in the NCG work-up at diagnosis without a tier letter; treated as Essential (the board needs the question and the performance status)"
+   "tier_basis": "listed in the NCG work-up at diagnosis without a tier letter; treated as Essential (the board needs the question and the performance status)",
+   "route": "owner",
+   "note": "V2 item 2.4: a clinical record of the owning treating department (route owner); the department named here is the default before a Case File has an owner"
   },
   {
    "id": "cect_tap",
@@ -84,7 +86,7 @@
     "histopathology",
     "ihc"
    ],
-   "department": "Molecular Pathology",
+   "department": "Pathology",
    "required_facts": [
     "egfr",
     "alk",
@@ -99,17 +101,37 @@
    "note": "NCG p5 rates ROS-1 (c) in the metastatic chart and EGFR (b) for squamous histology; the p4 work-up list is followed (clinical review)"
   },
   {
-   "id": "baseline_labs",
-   "label": "Baseline blood tests",
+   "id": "cbc",
+   "label": "Complete blood count (CBC)",
    "tier": "a",
    "doc_types": [
     "lab"
    ],
-   "department": "Laboratory Medicine",
+   "region": "cbc|cbp|blood count|haemogram|hemogram|haematolog|hematolog|blood tests|routine labs",
+   "department": "Pathology",
    "required_facts": [
     "haemoglobin",
     "wbc",
-    "platelets",
+    "platelets"
+   ],
+   "sla_days": 2,
+   "source": {
+    "guideline": "NCG Guidelines for Thoracic Cancers (2019)",
+    "page": 4,
+    "quote": "CBC, LFT, RFT, Coagulation profile, Viral markers(a)"
+   },
+   "note": "coagulation profile and viral markers are listed by NCG but are not checked as fields in V1 (no field in the catalogue) V2 item 2.4: the V1 'Baseline blood tests' record is split by test so each request reaches the desk that does it (CBC: Pathology; LFT / RFT: Biochemistry)"
+  },
+  {
+   "id": "liver_renal_function",
+   "label": "Liver and renal function tests (LFT, RFT)",
+   "tier": "a",
+   "doc_types": [
+    "lab"
+   ],
+   "region": "lft|rft|kft|liver|renal|kidney|biochem|creatinine|bilirubin|urea|sgot|sgpt|blood tests|routine labs",
+   "department": "Biochemistry",
+   "required_facts": [
     "creatinine",
     "bilirubin"
    ],
@@ -119,7 +141,7 @@
     "page": 4,
     "quote": "CBC, LFT, RFT, Coagulation profile, Viral markers(a)"
    },
-   "note": "coagulation profile and viral markers are listed by NCG but are not checked as fields in V1 (no field in the catalogue)"
+   "note": "V2 item 2.4: the V1 'Baseline blood tests' record is split by test so each request reaches the desk that does it (CBC: Pathology; LFT / RFT: Biochemistry)"
   },
   {
    "id": "pdl1",
@@ -153,7 +175,7 @@
     "histopathology",
     "ihc"
    ],
-   "department": "Molecular Pathology",
+   "department": "Pathology",
    "required_facts": [
     "met"
    ],
@@ -311,7 +333,8 @@
    "doc_types": [
     "discharge_summary"
    ],
-   "department": "Medicine"
+   "department": "Medical Oncology",
+   "route": "owner"
   },
   {
    "id": "previous_board",
@@ -319,7 +342,8 @@
    "doc_types": [
     "tumour_board_record"
    ],
-   "department": "Tumour Board coordinator"
+   "department": "MDT Coordinator",
+   "route": "coordinator"
   }
  ],
  "extract_facts": [

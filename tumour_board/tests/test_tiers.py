@@ -94,7 +94,7 @@ def test_required_at_essential_and_optimal_levels():
 
 def test_lung_essential_non_metastatic():
     req = {r["id"] for r in protocol.records("lung_nsclc") if protocol.required(r, "non_metastatic", "essential")}
-    assert {"clinical_history", "cect_tap", "histopathology", "driver_mutations", "baseline_labs"} <= req
+    assert {"clinical_history", "cect_tap", "histopathology", "driver_mutations", "cbc", "liver_renal_function"} <= req
     assert not req & {"pet_ct", "brain_mri", "pdl1", "met"}
     opt = {r["id"] for r in protocol.records("lung_nsclc") if protocol.required(r, "non_metastatic", "optimal")}
     assert {"pet_ct", "brain_mri", "pdl1", "met", "bronchoscopy", "mediastinal_staging"} <= opt
@@ -106,8 +106,8 @@ def test_lung_essential_non_metastatic():
 
 def test_breast_early_and_rectum_metastatic():
     assert protocol.tier_for(_rec("breast", "metastatic_workup"), "early") == "none"
-    assert protocol.tier_for(_rec("breast", "baseline_labs"), "early") == "b"
-    assert protocol.tier_for(_rec("breast", "baseline_labs"), "locally_advanced") == "a"
+    assert protocol.tier_for(_rec("breast", "cbc"), "early") == "b" and protocol.tier_for(_rec("breast", "liver_renal_function"), "early") == "b"
+    assert protocol.tier_for(_rec("breast", "cbc"), "locally_advanced") == "a"
     early = {r["id"] for r in protocol.records("breast") if protocol.required(r, "early", "essential")}
     assert early == {"clinical_history", "breast_imaging", "histopathology", "receptor_status"}
     met = {r["id"] for r in protocol.records("colorectal_rectum") if protocol.required(r, "metastatic", "essential")}
@@ -164,7 +164,8 @@ def test_oral_cavity_tiers_by_setting():
     assert protocol.tier_for(_rec("oral_cavity", "primary_neck_imaging"), None) == "a"  # setting not recorded: the strictest
     assert not any(protocol.required(_rec("oral_cavity", r), s, "optimal") for r in ("pet_ct", "cect_thorax") for s in ("early", "locally_advanced", None))
     dental = _rec("oral_cavity", "dental_evaluation")
-    assert dental["facts_only"] and dental["required_facts"] == ["dental_evaluation"] and "clinical_note" in dental["fact_doc_types"]
+    assert "facts_only" not in dental and dental["required_facts"] == ["dental_evaluation"] and dental["doc_types"] == ["clinical_note", "referral"]  # V2 2.4: its own record
+    assert dental["department"].startswith("Dental Surgery") and dental["region"]
     assert all(s["guideline"] == "NCG Guidelines for Head and Neck Cancer (2019)" and s["page"] == 4 for s in _rec("oral_cavity", "chest_imaging")["sources"])
 
 
@@ -184,7 +185,7 @@ def test_cervix_tiers_by_setting():
     """V1 item 9.2: NCG gynaecological 2019, cervix summary table ((a) / (b) / (c) columns for early and locally advanced disease, FIGO 2018);
     conditional items (CT thorax for IIIC2, IHC as indicated, PET-CT) are shown, never counted."""
     req = lambda setting, level="essential": {r["id"] for r in protocol.records("cervix") if protocol.required(r, setting, level)}
-    base = {"clinical_history", "histopathology", "baseline_labs"}
+    base = {"clinical_history", "histopathology", "cbc", "liver_renal_function", "viral_markers"}  # V2 2.4: blood tests by test
     assert req("early") == base | {"abdomen_pelvis_imaging", "chest_xray"}
     assert req("early", "optimal") == base | {"abdomen_pelvis_imaging", "chest_xray", "mri_pelvis"}
     assert req("locally_advanced") == base | {"cect_abdomen_pelvis", "cystoscopy_proctoscopy"}
@@ -195,7 +196,7 @@ def test_cervix_tiers_by_setting():
         assert not req(s, "optimal") & {"ct_thorax", "ihc", "pet_ct"}, s
     hp = _rec("cervix", "histopathology")
     assert hp["required_facts"] == ["histologic_type", "grade", "depth_of_invasion", "lvi"]
-    assert "figo_stage" in _rec("cervix", "clinical_history")["required_facts"] and "hiv_status" in _rec("cervix", "baseline_labs")["required_facts"]
+    assert "figo_stage" in _rec("cervix", "clinical_history")["required_facts"] and "hiv_status" in _rec("cervix", "viral_markers")["required_facts"]
     for r in protocol.records("cervix"):
         for src in r["sources"]:
             assert src["guideline"] == "NCG Guidelines for Gynaecological Cancers (2019)" and src["page"] == "n/a" and src["where"], r["id"]

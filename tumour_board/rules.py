@@ -66,7 +66,7 @@ def _region_ok(d, region):
     if not region:
         return True
     c = d.get("classification") or {}
-    hay = " ".join([c.get("body_region", ""), c.get("title", ""), d.get("filename", ""), _study_lines(d)]).lower()
+    hay = " ".join([c.get("body_region", ""), c.get("title", ""), d.get("filename", ""), _study_lines(d)]).lower().replace("_", " ")  # file names word by word
     return re.search(r"\b(?:" + region + ")", hay) is not None  # whole words from the start ("rect" still matches rectum / rectal)
 
 
@@ -128,6 +128,14 @@ def _dept_id(name):
         return None
 
 
+def _is_coordinator(name) -> bool:
+    try:
+        from . import org
+        return org.is_coordinator_name(name)
+    except Exception:
+        return False
+
+
 def _dept_name(dept_id):
     """The department's name, or "" when the id is not (or no longer) a department of org.json."""
     try:
@@ -147,7 +155,7 @@ def _evaluate_record(req, ready, facts, overrides, cat):
     Level 1 (the record: present, final and signed, right patient, its type and date settled) and Level 2 (the required values in it:
     present, verified, not pending) with the document a Level 2 gap sits in (V1 item 4.2). `problems` keeps its order: confirmations
     first, then the record's status, then the fields."""
-    r = {"id": req["id"], "label": req["label"], "department": req["department"], "status": "satisfied", "problems": [], "evidence": []}
+    r = {"id": req["id"], "label": req["label"], "department": req.get("routed_department") or req["department"], "status": "satisfied", "problems": [], "evidence": []}
     l1 = {"status": "satisfied", "problems": [], "needs": []}
     l2 = {"status": "satisfied", "problems": [], "needs": []}
     source_doc = None  # the document a Level 2 gap sits in (routing: the department that uploaded it)
@@ -367,10 +375,11 @@ def evaluate(case_id):
     level = case.get("hospital_level") or hospital.get("level") or "essential"
     results, shown = [], []
     for req in protocol.records(prot):
+        req = {**req, "routed_department": routed(prot, req, case)[0]}  # the department the gap goes to (V2 item 2.4): shown on the row
         tier = protocol.tier_for(req, setting)
         is_required = tier != "none" and protocol.required(req, setting, level)
         if tier == "none":
-            r = {"id": req["id"], "label": req["label"], "department": req["department"], "status": "not_applicable", "problems": [], "evidence": [],
+            r = {"id": req["id"], "label": req["label"], "department": req["routed_department"], "status": "not_applicable", "problems": [], "evidence": [],
                  "level": None, "level1": {"status": "satisfied", "problems": [], "needs": []}, "level2": {"status": "satisfied", "problems": [], "needs": []}}
         else:
             r = _evaluate_record(req, ready, facts, overrides, cat)
@@ -501,15 +510,52 @@ def _notify(*a, **kw):
         return {"error": f"{e.__class__.__name__}: {e}"}
 
 
-def _route(r, case_id):
-    """Where a gap goes (V1 items 4.2 / 4.4): a Level 1 gap to the department that owns the record type (the protocol's Responsible
-    Department); a Level 2 gap to the department that uploaded the record the value should be in, when a department uploaded it
-    (otherwise the Responsible Department). Returns (department name, department id or None, doc id or None)."""
+def routed(prot, req, case=None):
+    """The department a protocol record is requested from (V2 item 2.4): the root admin's override in org.json routes, else the record's
+    `route` ("owner": the Case File's owning treating department, with the record's department as the default before 5.1 records an
+    owner; "coordinator": the MDT Coordinator), else the record's department (an org id, name or alias). Returns
+    (display name, department id or None, kind)."""
+    try:
+        from . import org
+        pid = prot.get("id") if isinstance(prot, dict) else str(prot or "")
+        target = org.route_for(pid, req.get("id")) or req.get("route") or None
+        owner = (case or {}).get("department") if isinstance(case, dict) else None
+        return org.resolve_route(target, req.get("department") or "", owner)
+    except Exception:
+        return req.get("department") or "", _dept_id(req.get("department")), "department"
+
+
+def routes_table(case=None) -> list[dict]:
+    """Every record of every protocol with its route: the protocol default, the root admin's override and the effective department
+    (for the Organisation screen, V2 items 2.3 / 2.4)."""
+    from . import org
+    out = []
+    for p in protocol.list_protocols():
+        prot = protocol.get(p["id"])
+        for kind, recs in (("required", protocol.records(prot)), ("optional", prot.get("optional") or [])):
+            for req in recs:
+                name, did, rkind = routed(prot, req, case)
+                default = req.get("route") if req.get("route") in (org.OWNER_ID, org.COORDINATOR_ID) else req.get("department")
+                out.append({"protocol": p["id"], "protocol_label": p["label"], "record": req["id"], "label": req["label"], "kind": kind,
+                            "tier": req.get("tier", "a") if kind == "required" else None, "default": default, "default_department": req.get("department"),
+                            "override": org.route_for(p["id"], req["id"]), "department": name, "department_id": did, "route_kind": rkind})
+    return out
+
+
+def _route(r, case_id, case=None, prot=None):
+    """Where a gap goes (V1 items 4.2 / 4.4, V2 item 2.4): a Level 1 gap to the department that produces the record (the protocol's
+    route, with the root admin's override); a Level 2 gap to the department that uploaded the record the value should be in, when a
+    department uploaded it (otherwise the routed department). Returns (department name, department id or None, doc id or None)."""
     name, doc_id = r["department"], r.get("source_doc_id")
     if r.get("level") == 2 and doc_id:
         d = store.get_doc(case_id, doc_id) or {}
         if d.get("department") and _dept_name(d["department"]):
             return _dept_name(d["department"]), d["department"], doc_id
+    if prot is not None:
+        req = next((x for x in protocol.records(prot) if x.get("id") == r.get("id")), None)
+        if req:
+            name, did, _kind = routed(prot, req, case)
+            return name, did, doc_id
     return name, _dept_id(name), doc_id
 
 
@@ -558,7 +604,8 @@ def sync_actions(case_id, gate, by=""):
                             text, action_id=a["id"], requirement=r["id"], level=a.get("level"))
             continue
         what = "; ".join(r["problems"]) or r["label"]
-        dept, dept_id, doc_id = _route(r, case_id)
+        dept, dept_id, doc_id = _route(r, case_id, case, prot)
+        to_coord = dept_id is None and _is_coordinator(dept)  # a record the MDT Coordinator produces (previous board records): its inbox row
         if a:
             legacy = "level" not in a  # a request opened before the two levels existed: classified once, not a move
             moved = (a.get("department") != dept) or (not legacy and a.get("level") != r.get("level"))
@@ -571,8 +618,9 @@ def sync_actions(case_id, gate, by=""):
                     if old_dept and old_dept != dept_id:  # the department it left is told, so its inbox makes sense
                         _notify({"department": old_dept}, "request_closed", case_id, f"{r['label']} request for {patient} ({case_id}) moved to {dept}",
                                 f"The request now sits with {dept} ({LEVEL_LABEL.get(r.get('level'), 'gap')}).", action_id=a["id"], requirement=r["id"], level=r.get("level"))
-                    if dept_id:
-                        _notify({"department": dept_id}, "request", case_id, f"{r['label']} needed for {patient} ({case_id})", what,
+                    a["role"] = "coordinator" if to_coord else None
+                    if dept_id or to_coord:
+                        _notify({"department": dept_id} if dept_id else {"role": "coordinator"}, "request", case_id, f"{r['label']} needed for {patient} ({case_id})", what,
                                 action_id=a["id"], requirement=r["id"], due=a.get("due"), level=r.get("level"), level_label=r.get("level_label", ""))
                 elif legacy:
                     a["history"].append({"ts": store.now_iso(), "event": f"Re-check: {LEVEL_LABEL.get(r.get('level'), 'gap')}", "detail": what})
@@ -584,10 +632,12 @@ def sync_actions(case_id, gate, by=""):
              "department": dept, "department_id": dept_id, "level": r.get("level"), "level_label": r.get("level_label", ""), "source_doc_id": doc_id,
              "what": what, "status": "pending", "created": store.now_iso(),
              "due": (today + timedelta(days=sla.get(r["id"], 3))).isoformat(), "history": [{"ts": store.now_iso(), "event": f"Gap detected ({LEVEL_LABEL.get(r.get('level'), 'gap')}), routed to " + dept}]}
+        if to_coord:
+            a["role"] = "coordinator"
         actions.append(a)
         store.audit(case_id, {"kind": "action_created", "action": a["id"], "requirement": r["id"], "department": dept, "level": r.get("level"), "what": what})
-        if dept_id:
-            _notify({"department": dept_id}, "request", case_id, f"{r['label']} needed for {patient} ({case_id})", what,
+        if dept_id or to_coord:
+            _notify({"department": dept_id} if dept_id else {"role": "coordinator"}, "request", case_id, f"{r['label']} needed for {patient} ({case_id})", what,
                     action_id=a["id"], requirement=r["id"], due=a["due"], level=r.get("level"), level_label=r.get("level_label", ""))
     for a in actions:
         if a["status"] == "pending" and a.get("due") and a["due"] < today.isoformat():

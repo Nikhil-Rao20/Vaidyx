@@ -1,7 +1,7 @@
 {
  "id": "oral_cavity",
  "label": "Oral cavity cancer (head and neck)",
- "version": "0.2",
+ "version": "0.3",
  "note": "Configurable by the clinical team. Required records derived from the NCG work-up for oral cancer (NCG Guidelines for Head and Neck Cancer 2019, quoted with page on every record). NCG lists the oral cancer work-up without Essential / Optimal / Optional letters (letters appear only for the imaging modality, neck ultrasound, chest X-ray and PET-CT / CECT thorax), so the listed records are treated as Essential. Squamous cell carcinoma of the oral cavity; HPV / p16 testing is an NCG item for oropharynx only. To be confirmed by the hospital Tumour Board (clinical review before real use).",
  "settings_note": "NCG setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes stage). Item 4.1 derives the required records per setting from the NCG tiers.",
  "settings": [
@@ -45,7 +45,9 @@
      "quote": "NACT# Poor GC Good GC"
     }
    ],
-   "tier_basis": "NCG lists this in the oral cancer work-up (p 4) without a tier letter: treated as Essential, as for the rectal work-up (assumption, for clinical review); performance status: NCG chooses the advanced-disease pathway by general condition (Good GC / Poor GC, p 6)"
+   "tier_basis": "NCG lists this in the oral cancer work-up (p 4) without a tier letter: treated as Essential, as for the rectal work-up (assumption, for clinical review); performance status: NCG chooses the advanced-disease pathway by general condition (Good GC / Poor GC, p 6)",
+   "route": "owner",
+   "note": "V2 item 2.4: a clinical record of the owning treating department (route owner); the department named here is the default before a Case File has an owner"
   },
   {
    "id": "histopathology",
@@ -142,13 +144,12 @@
    "id": "dental_evaluation",
    "label": "Dental evaluation",
    "tier": "a",
-   "facts_only": true,
-   "fact_doc_types": [
+   "doc_types": [
     "clinical_note",
-    "referral",
-    "xray"
+    "referral"
    ],
-   "department": "Surgical Oncology",
+   "region": "dental|dentist|opg|orthopantomogram|maxillofacial|prosthetic|oral hygiene|oral prophylaxis",
+   "department": "Dental Surgery / Oral and Maxillofacial Surgery",
    "required_facts": [
     "dental_evaluation"
    ],
@@ -159,7 +160,7 @@
     "quote": "Dental evaluation/Nutrition assessment/Speech & swallowing evaluation & appropriate intervention"
    },
    "tier_basis": "NCG lists this in the oral cancer work-up (p 4) without a tier letter: treated as Essential, as for the rectal work-up (assumption, for clinical review)",
-   "note": "the nutrition and speech and swallowing assessments of the same NCG line are shown in the records, not checked separately; Surgical Oncology is the Responsible Department until the hospital adds a dental department"
+   "note": "V2 item 2.4: its own record (a dental note), requested from Dental Surgery / Oral and Maxillofacial Surgery; the nutrition and speech and swallowing assessments of the same NCG line are shown in the records, not checked separately"
   },
   {
    "id": "pet_ct",
@@ -212,12 +213,24 @@
  ],
  "optional": [
   {
-   "id": "baseline_labs",
-   "label": "Baseline blood tests (not in the NCG oral cancer work-up)",
+   "id": "cbc",
+   "label": "Complete blood count (CBC)",
    "doc_types": [
     "lab"
    ],
-   "department": "Laboratory Medicine"
+   "region": "cbc|cbp|blood count|haemogram|hemogram|haematolog|hematolog|blood tests|routine labs",
+   "department": "Pathology",
+   "note": "V2 item 2.4: the V1 'Baseline blood tests' record is split by test so each request reaches the desk that does it (CBC: Pathology; LFT / RFT: Biochemistry)"
+  },
+  {
+   "id": "liver_renal_function",
+   "label": "Liver and renal function tests (LFT, RFT)",
+   "doc_types": [
+    "lab"
+   ],
+   "region": "lft|rft|kft|liver|renal|kidney|biochem|creatinine|bilirubin|urea|sgot|sgpt|blood tests|routine labs",
+   "department": "Biochemistry",
+   "note": "V2 item 2.4: the V1 'Baseline blood tests' record is split by test so each request reaches the desk that does it (CBC: Pathology; LFT / RFT: Biochemistry)"
   },
   {
    "id": "previous_board",
@@ -225,7 +238,8 @@
    "doc_types": [
     "tumour_board_record"
    ],
-   "department": "Tumour Board coordinator"
+   "department": "MDT Coordinator",
+   "route": "coordinator"
   }
  ],
  "extract_facts": [

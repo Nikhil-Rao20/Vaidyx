@@ -480,7 +480,7 @@ def phase4(c, base):
         d = c.get("/api/tb/cases/TB-TEST4").json(); g = d["state"]["gate"]
         req = {r["id"]: r for r in g["requirements"]}; shown = {r["id"]: r for r in g["shown"]}
         # 4.1 NCG tiers per setting
-        check("4.1 Essential hospital: only the NCG Essential (a) records are required", set(req) == {"clinical_history", "cect_tap", "histopathology", "driver_mutations", "baseline_labs"}, ", ".join(sorted(req)))
+        check("4.1 Essential hospital: only the NCG Essential (a) records are required", set(req) == {"clinical_history", "cect_tap", "histopathology", "driver_mutations", "cbc", "liver_renal_function"}, ", ".join(sorted(req)))
         check("4.1 PET-CT, MRI brain, PD-L1, MET are NCG Optimal (b): shown, not required", all(shown.get(k, {}).get("tier") == "b" and shown[k]["required"] is False for k in ("pet_ct", "brain_mri", "pdl1", "met")),
               json.dumps({k: (shown.get(k) or {}).get("tier") for k in ("pet_ct", "brain_mri", "pdl1", "met")}))
         check("4.1 every required record cites its NCG line (guideline, page, quote)", all(r.get("source", {}).get("quote") and r["source"].get("page") for r in g["requirements"]),
@@ -968,12 +968,12 @@ V9_CASES = {
     },
     "TB-008": {
         "site": "cervix", "protocol": "cervix",
-        "counted": ["clinical_history", "histopathology", "baseline_labs", "abdomen_pelvis_imaging", "cect_abdomen_pelvis", "chest_xray", "cystoscopy_proctoscopy"],
+        "counted": ["clinical_history", "histopathology", "cbc", "liver_renal_function", "viral_markers", "abdomen_pelvis_imaging", "cect_abdomen_pelvis", "chest_xray", "cystoscopy_proctoscopy"],
         "shown": {"mri_pelvis": "b", "ct_thorax": "c", "ihc": "c", "pet_ct": "c"},
         # cystoscopy / proctoscopy arrives later: at import it is the one Level 1 gap, routed to Surgical Oncology
-        "gap": {"record": "cystoscopy_proctoscopy", "status": "missing_record", "level": 1, "department": "Surgical Oncology", "inbox": "surgical_oncology"},
+        "gap": {"record": "cystoscopy_proctoscopy", "status": "missing_record", "level": 1, "department": "Gynaecologic Oncology", "inbox": "gynaecologic_oncology"},  # V2 2.4 route
         "listing": {"protocol": "cervix", "setting": "locally_advanced", "board_date": "20/10/2026", "hospital_level": "essential"},
-        "listed": {"counted": ["clinical_history", "histopathology", "baseline_labs", "cect_abdomen_pelvis", "cystoscopy_proctoscopy"],
+        "listed": {"counted": ["clinical_history", "histopathology", "cbc", "liver_renal_function", "viral_markers", "cect_abdomen_pelvis", "cystoscopy_proctoscopy"],
                    "shown": {"abdomen_pelvis_imaging": "none", "chest_xray": "b"}},
         "intake": {"department": "Radio-diagnosis", "filename": "usg_abdomen_2026-09-29.txt", "text":
                    "SAHYADRI CANCER INSTITUTE (SYNTHETIC)\nDEPARTMENT OF RADIO-DIAGNOSIS\nULTRASOUND ABDOMEN AND PELVIS\nPatient: Parvathi Naik  UHID: SYN-800415  46 Y / F\n"
@@ -1510,7 +1510,7 @@ def main(base, pw, only=None):
     # 1. import lung case (incomplete)
     j, s = wait_job(c, c.post("/api/tb/demo/TB-001").json()["job"])
     g = c.get("/api/tb/cases/TB-001").json()["state"]["gate"]
-    check("TB-001 ingest + gate", not g["passed"] and g["satisfied"] == 2 and g["total"] == 5, f"{j['total']} docs in {s}s, gate {g['satisfied']}/{g['total']} (NCG Essential records, V1 item 4.1)")
+    check("TB-001 ingest + gate", not g["passed"] and g["satisfied"] == 3 and g["total"] == 6, f"{j['total']} docs in {s}s, gate {g['satisfied']}/{g['total']} (NCG Essential records, V1 item 4.1)")
     st = {r["id"]: r["status"] for r in g["requirements"]}
     shown = {r["id"]: r for r in g.get("shown", [])}
     check("draft histopathology blocked as not final", st["histopathology"] == "not_final")
@@ -1611,7 +1611,7 @@ def main(base, pw, only=None):
     check("re-process all re-reads documents and keeps the attestation", jj["state"] == "finished" and jj["total"] == 1 and {r["id"]: r["status"] for r in g2["requirements"]}["clinical_history"] == "satisfied", f"{secs}s")
     st = c.post("/api/tb/cases/TB-TEST/overrides", json={"kind": "requirements", "key": "driver_mutations", "value": {"waived": True, "reason": "not indicated per treating team"}}).json()
     req = {r["id"]: r for r in st["gate"]["requirements"]}
-    check("waived requirement excluded from the gate", req["driver_mutations"]["status"] == "waived" and st["gate"]["total"] == 4, f"{req['driver_mutations']['status']} {st['gate']['total']}")
+    check("waived requirement excluded from the gate", req["driver_mutations"]["status"] == "waived" and st["gate"]["total"] == 5, f"{req['driver_mutations']['status']} {st['gate']['total']}")
     # 7. expert review + audit
     rv = c.post("/api/tb/cases/TB-001/review", json={"artefact": "summary", "status": "reviewed", "comment": "Checked against source reports"}).json()
     check("expert review recorded", rv["status"] == "reviewed")
