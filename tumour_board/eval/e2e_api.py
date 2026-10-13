@@ -281,6 +281,12 @@ def v2_phase2(c, base):
     check("2.2 root admin logs in and sees the organisation", root.post("/api/auth/login", json={"username": "tb-e2e-root", "password": pw["tb-e2e-root"]}).status_code == 200
           and root.get("/api/tb/org").json()["me"]["root_admin"] and "users" in root.get("/api/tb/org").json())
     check("2.2 root admin cannot create a Vaidyx account through the main app (403)", root.post("/api/auth/users", json={"username": "tb-e2e-evil", "password": "Evil-e2e-2026!", "is_admin": True}).status_code == 403)
+    check("2.2 root admin has no clinical action: Case Files, confirmations, waivers, sessions and board records answer 403 (plan section 4)",
+          root.get("/api/tb/cases").status_code == 403 and root.get("/api/tb/cases/TB-001").status_code == 403
+          and root.post("/api/tb/cases", json={"case_id": "TB-ROOT", "protocol": "lung_nsclc"}).status_code == 403
+          and root.post("/api/tb/cases/TB-001/confirmations", json={"type": "waive", "key": "histopathology", "reason": "e2e"}).status_code == 403
+          and root.post("/api/tb/sessions", json={"date": "2026-10-20"}).status_code == 403 and root.get("/api/tb/sessions").status_code == 403
+          and root.get("/api/tb/org/routes").status_code == 200 and root.get("/api/tb/org/accounts").status_code == 200)
     r1 = root.post("/api/tb/org/accounts", json={"username": "tb-e2e-radadmin", "password": pw["tb-e2e-radadmin"], "admin_of": ["Radiology"], "display_name": "Radiology admin (e2e)"})
     r2 = root.post("/api/tb/org/accounts", json={"username": "tb-e2e-mdt", "password": pw["tb-e2e-mdt"], "coordinator": True, "display_name": "MDT Coordinator (e2e)"})
     r3 = root.post("/api/tb/org/accounts", json={"username": "tb-e2e-breastdoc", "password": pw["tb-e2e-breastdoc"], "departments": {"breast_surgery": "doctor"}, "display_name": "Breast surgeon (e2e)"})
@@ -294,6 +300,10 @@ def v2_phase2(c, base):
     check("2.2 department admin sees its department only, no user map, no clinical rights", [d["id"] for d in oa["admin_departments"]] == ["radiology"] and "users" not in oa and not oa["me"]["admin"]
           and not oa["me"]["known"] and not oa["can"]["create_case"], json.dumps({k: oa["me"].get(k) for k in ("admin", "known", "admin_of")}))
     check("2.2 department admin: organisation edit forbidden (403)", ra.put("/api/tb/org", json=o).status_code == 403)
+    check("2.2 department admin cannot read Case Files, sessions or the intake queue (403)", ra.get("/api/tb/cases").status_code == 403 and ra.get("/api/tb/cases/TB-001").status_code == 403
+          and ra.get("/api/tb/sessions").status_code == 403 and ra.get("/api/tb/intake").status_code == 403)
+    r0 = ra.post("/api/tb/org/departments/radiology/doctors", json={"username": "tb-e2e-mdt", "role": "head"})
+    check("2.2 department admin cannot place the coordinator in its department (409)", r0.status_code == 409 and "root admin" in r0.text, r0.text[:120])
     check("2.2 department admin: root-admin account creation forbidden (403)", ra.post("/api/tb/org/accounts", json={"username": "tb-e2e-x", "password": "X-e2e-2026!!", "coordinator": True}).status_code == 403)
     check("2.2 department admin: another department forbidden (403)", ra.post("/api/tb/org/departments/pathology/doctors", json={"username": "tb-e2e-x", "password": "X-e2e-2026!!"}).status_code == 403
           and ra.get("/api/tb/org/departments/pathology/doctors").status_code == 403)
@@ -342,7 +352,7 @@ def v2_phase2(c, base):
     check("2.2 disabled doctor is refused on every Tumour Board route (403)", rd.get("/api/tb/org").status_code == 403 and rd.get("/api/tb/inbox").status_code == 403 and rd.get("/api/tb/cases").status_code == 403
           and rd.get("/api/tb/cases/TB-001").status_code == 403)
     check("2.2 department admin cannot disable a doctor placed elsewhere too (409)", ra.put("/api/tb/org/departments/radiology/doctors/tb-e2e-raddoc", json={"disabled": False}).status_code == 200
-          and (lambda cur: root.put("/api/tb/org", json={**{k: cur[k] for k in ("hospital", "departments", "admins", "routes")}, "users": {**cur["users"], "tb-e2e-raddoc": {"departments": {"radiology": "member", "pathology": "member"}}}}).status_code == 200)(root.get("/api/tb/org").json())
+          and (lambda cur: root.put("/api/tb/org", json={"users": {**cur["users"], "tb-e2e-raddoc": {"departments": {"radiology": "member", "pathology": "member"}}}, "expected_version": cur["version"]}).status_code == 200)(root.get("/api/tb/org").json())
           and ra.put("/api/tb/org/departments/radiology/doctors/tb-e2e-raddoc", json={"disabled": True}).status_code == 409 and rd.get("/api/tb/org").status_code == 200)
     r = ra.request("DELETE", "/api/tb/org/departments/radiology/doctors/tb-e2e-raddoc")
     check("2.2 department admin removes the doctor from Radiology (the account and the other placement stay)", r.status_code == 200 and r.json()["kept"] is True
@@ -352,6 +362,10 @@ def v2_phase2(c, base):
     check("2.2 every account change is audited, never a password", {"account_created", "account_placed", "account_roles_changed", "root_admins_changed"} <= kinds
           and not any(v in json.dumps(au) for v in pw.values()), json.dumps(sorted(kinds)))
     check("2.2 audit is for the root admin only (403 for others)", ra.get("/api/tb/org/audit").status_code == 403 and rd.get("/api/tb/org/audit").status_code == 403)
+    cur = root.get("/api/tb/org").json()
+    check("2.2 a save with an outdated version is refused (409), a partial save keeps the other keys", root.put("/api/tb/org", json={"hospital": cur["hospital"], "expected_version": "0-0"}).status_code == 409
+          and root.put("/api/tb/org", json={"hospital": {**cur["hospital"], "name": cur["hospital"].get("name") or ""}}).status_code == 200
+          and root.get("/api/tb/org").json()["departments"] == cur["departments"] and root.get("/api/tb/org").json()["routes"] == cur["routes"])
 
 
 def v2_phase2_cleanup(c):
@@ -485,7 +499,7 @@ def phase4(c, base):
               json.dumps({k: (shown.get(k) or {}).get("tier") for k in ("pet_ct", "brain_mri", "pdl1", "met")}))
         check("4.1 every required record cites its NCG line (guideline, page, quote)", all(r.get("source", {}).get("quote") and r["source"].get("page") for r in g["requirements"]),
               req["cect_tap"].get("source", {}).get("quote", ""))
-        check("4.1 gate records the setting and hospital level", g["setting"] == "non_metastatic" and g["hospital_level"] == "essential" and g["setting_label"] and g["protocol_version"] == "0.7",
+        check("4.1 gate records the setting and hospital level", g["setting"] == "non_metastatic" and g["hospital_level"] == "essential" and g["setting_label"] and g["protocol_version"] == "0.8",
               f"{g['setting']} / {g['hospital_level']} / v{g['protocol_version']}")
         # 4.2 Level 1 gap: the CECT is missing, routed to Radiology (owner of the record type)
         check("4.2 missing CECT is a Level 1 gap", req["cect_tap"]["status"] == "missing_record" and req["cect_tap"]["level"] == 1 and req["cect_tap"]["level1"]["status"] == "missing_record",
@@ -1517,7 +1531,7 @@ def main(base, pw, only=None):
     check("brain MRI is NCG Optimal: shown as missing, not required at an Essential hospital", shown.get("brain_mri", {}).get("status") == "missing_record" and shown["brain_mri"]["tier"] == "b" and not shown["brain_mri"]["required"])
     check("PD-L1 pending (NCG Optimal, shown)", shown.get("pdl1", {}).get("status") == "missing_field")
     acts = c.get("/api/tb/cases/TB-001").json()["state"]["actions"]
-    check("gaps routed to departments", {a["department"] for a in acts} >= {"Pathology", "Molecular Pathology", "Laboratory Medicine"}, ", ".join(sorted({a["department"] for a in acts})))
+    check("gaps routed to departments", {a["department"] for a in acts} >= {"Pathology"} and all(a["department_id"] for a in acts), ", ".join(sorted({a["department"] for a in acts})))  # V2 2.4: histopathology, molecular and CBC all to Pathology
     # 2. search + ask
     t0 = time.time(); r = c.post("/api/tb/cases/TB-001/search", json={"query": "PD-L1"}).json()
     check("instant value search", any("PD-L1" in h["text"] for h in r["values"]["hits"]), f"{r['ms_values']} ms values, {round((time.time() - t0) * 1000)} ms round trip")

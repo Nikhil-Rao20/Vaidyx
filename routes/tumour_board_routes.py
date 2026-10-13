@@ -26,6 +26,10 @@ from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse
 
 
+import re as _re
+_READ_CASE = _re.compile(r"^/api/tb/(cases|sessions|intake|metrics)(/|$)")  # routes that show patient data: a placed account only
+
+
 class _ModelErrorRoute(APIRoute):
     """Model-server problems become a clear 502 for the UI instead of a 500 stack trace. A login whose Tumour Board access is disabled
     (org.json `disabled`, V2 item 2.2) is refused on every Tumour Board route, whatever the route checks itself."""
@@ -35,10 +39,14 @@ class _ModelErrorRoute(APIRoute):
         async def handler(request):
             try:
                 u = get_current_user(request)
-                if u and org.roles(u).get("disabled"):  # the flag is read from the user map alone: a Vaidyx admin is never in it
-                    return JSONResponse({"detail": "Your Tumour Board access is disabled. Ask your department admin or the root admin."}, status_code=403)
+                if u:
+                    rl = _roles(request)
+                    if rl.get("disabled"):
+                        return JSONResponse({"detail": "Your Tumour Board access is disabled. Ask your department admin or the root admin."}, status_code=403)
+                    if _READ_CASE.match(request.url.path) and not org.can(rl, "read_case"):  # patient data only for placed accounts (review M6)
+                        return JSONResponse({"detail": "Your account is not placed in any department yet, so it cannot open Case Files. Ask a Tumour Board admin."}, status_code=403)
             except Exception as e:  # the organisation file is unreadable: the route's own checks still apply
-                log.warning("disabled-user check skipped (%s)", e)
+                log.warning("tumour board route guard skipped (%s)", e)
             try:
                 return await h(request)
             except llm.LLMError as e:
@@ -338,9 +346,9 @@ def setup_tumour_board_routes():
         out = {"hospital": o["hospital"], "departments": o["departments"], "me": rl, "my_departments": org.my_departments(rl),
                "inbox_departments": org.visible_departments_for_inbox(rl),  # whose department inbox this user may open (V1 item 4.4)
                "admin_departments": org.admin_departments(rl) if (rl["admin"] or rl.get("admin_of")) else [],  # V2 item 2.2
-               "can": {k: org.can(rl, k) for k in ("create_case", "list_case", "session", "upload_to_case", "match", "manage_org", "board_record")},
-               "reset_note": accounts.RESET_NOTE}
-        if rl["admin"]:
+               "can": {k: org.can(rl, k) for k in ("create_case", "list_case", "session", "upload_to_case", "match", "manage_org", "board_record", "read_case")},
+               "reset_note": accounts.RESET_NOTE, "version": org.version()}
+        if rl["admin"] or rl.get("root_admin"):
             mgr = getattr(request.app.state, "auth_manager", None)
             out["users"], out["admins"], out["routes"] = o["users"], o["admins"], o["routes"]
             try:
@@ -351,12 +359,23 @@ def setup_tumour_board_routes():
 
     @r.put("/org")
     async def put_org(request: Request):
+        """Save the organisation. A key left out of the body (hospital, departments, users, admins, routes) keeps its current value, so a
+        screen saves only what it edited and an older client never wipes the routes; `expected_version` (from GET /org) answers 409 when
+        the file changed since it was read (review M2)."""
         rl = _roles(request); _need(rl, "manage_org"); b = await request.json()
+        if not isinstance(b, dict):
+            raise HTTPException(400, "The organisation must be an object.")
+        want = b.pop("expected_version", None)
+        if want and str(want) != org.version():
+            raise HTTPException(409, "The organisation changed since this screen was loaded. Reload and apply your change again.")
+        cur = org.load()
+        body = {k: (b[k] if k in b else cur.get(k)) for k in ("hospital", "departments", "users", "admins", "routes")}
+        body.update({k: v for k, v in b.items() if k not in body})
         try:
-            o = org.save(b, by=rl["user"])
+            o = org.save(body, by=rl["user"])
         except ValueError as e:
             raise HTTPException(400, str(e))
-        return {"ok": True, "hospital": o["hospital"], "departments": o["departments"], "users": o["users"], "admins": o["admins"], "routes": o["routes"]}
+        return {"ok": True, "hospital": o["hospital"], "departments": o["departments"], "users": o["users"], "admins": o["admins"], "routes": o["routes"], "version": org.version()}
 
     # ---- accounts (V2 item 2.2): plain Vaidyx logins placed in Tumour Board roles; never a Vaidyx admin ----
     @r.get("/org/audit")
@@ -396,8 +415,8 @@ def setup_tumour_board_routes():
         rl = _roles(request); _need(rl, "manage_org"); b = await request.json()
         mgr = _auth_manager(request)
         out = _account_call(accounts.create_account, mgr, rl["user"], b.get("username"), b.get("password"), display_name=b.get("display_name") or "",
-                            coordinator=bool(b.get("coordinator", False)), admin_of=b.get("admin_of") or [], departments=b.get("departments") or {},
-                            root_admin=bool(b.get("root_admin", False)), **_account_limits())
+                            coordinator=b.get("coordinator", False), admin_of=b.get("admin_of") or [], departments=b.get("departments") or {},
+                            root_admin=b.get("root_admin", False), **_account_limits())
         return {"ok": True, **out}
 
     @r.get("/org/departments/{dept}/doctors")
@@ -419,8 +438,10 @@ def setup_tumour_board_routes():
             raise HTTPException(404, "Unknown department")
         _need(rl, "manage_department", did)
         mgr = _auth_manager(request)
+        _account_call(accounts.check_placement, did, b.get("role") or "member")  # before any login is created: no orphan account on a bad role
         made = _account_call(accounts.ensure_account, mgr, b.get("username"), b.get("password"), rl["user"], **_account_limits())
-        placed = _account_call(accounts.place_doctor, rl["user"], did, made["username"], role=b.get("role") or "member", display_name=b.get("display_name"))
+        placed = _account_call(accounts.place_doctor, rl["user"], did, made["username"], role=b.get("role") or "member", display_name=b.get("display_name"),
+                               caller=rl, created=made["created"])
         return {"ok": True, "created": made["created"], **placed}
 
     @r.put("/org/departments/{dept}/doctors/{username}")
@@ -430,7 +451,8 @@ def setup_tumour_board_routes():
         if not did:
             raise HTTPException(404, "Unknown department")
         _need(rl, "manage_department", did)
-        out = _account_call(accounts.update_doctor, rl["user"], rl, did, username, role=b.get("role"), disabled=b.get("disabled"))
+        out = _account_call(accounts.update_doctor, rl["user"], rl, did, username, role=b.get("role"), disabled=b.get("disabled"),
+                            mgr=getattr(request.app.state, "auth_manager", None))
         return {"ok": True, **out}
 
     @r.delete("/org/departments/{dept}/doctors/{username}")

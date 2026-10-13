@@ -251,6 +251,8 @@ def set_attendance(sid, dept_id, status, by) -> dict:
     did = _dept(dept_id)
     if status not in ATTENDANCE:
         raise ValueError(f"Attendance must be one of: {', '.join(ATTENDANCE)}")
+    for k in [k for k in s["attendance"] if k != did and org.department_id(k) == did]:  # a V1 key for the same department
+        del s["attendance"][k]
     s["attendance"][did] = status
     _save(s)
     _audit(sid, "attendance", by, department=did, status=status)
@@ -285,14 +287,27 @@ def remove_member(sid, member_id, by) -> dict:
     return s
 
 
+def attendance(session) -> dict:
+    """The session's attendance keyed by V2 department id: a V1 id stored before the 2.1 migration ("radio_diagnosis") resolves to its
+    department; an explicit mark wins over "not_marked" when both keys exist; the V1 "tumour_board" key (a role now) is dropped."""
+    out = {}
+    for k, v in ((session or {}).get("attendance") or {}).items():
+        did = org.department_id(k)
+        if not did:
+            continue
+        if did not in out or out[did] == "not_marked":
+            out[did] = v
+    return out
+
+
 def absent_roles(session) -> list[str]:
-    att = (session or {}).get("attendance") or {}
+    att = attendance(session)
     return [r for r, d in ROLE_DEPARTMENT.items() if att.get(d) == "absent"]
 
 
 def participants(session) -> dict:
     """Who took part, for the decision record (7.1 checks the PM-JAY composition from it)."""
-    att = session.get("attendance") or {}
+    att = attendance(session)
     members = session.get("members") or []
     present = [org.department_name(d) for d, v in att.items() if v == "present"]
     absent = [org.department_name(d) for d, v in att.items() if v == "absent"]
@@ -577,10 +592,10 @@ def _printable_rule(case_id):
 def export(sid) -> dict:
     s = _need(sid)
     names = {d["id"]: d["name"] for d in specialties()}
-    att = s.get("attendance") or {}
+    att = attendance(s)
     members = s.get("members") or []
-    attendance = [{"department": d, "name": names.get(d) or org.department_name(d), "status": v,
-                   "members": [m["name"] for m in members if m["department"] == d]} for d, v in att.items()]
+    attendance_rows = [{"department": d, "name": names.get(d) or org.department_name(d), "status": v,
+                        "members": [m["name"] for m in members if org.department_id(m["department"]) == d]} for d, v in att.items()]
     cases = []
     for a in s["agenda"]:
         c = store.get_case(a["case_id"]) or {}
@@ -591,7 +606,7 @@ def export(sid) -> dict:
                       "agent_log": [e for e in log if not e.get("superseded")] + [e for e in log if e.get("superseded")],
                       "decision": (s.get("decisions") or {}).get(a["case_id"]), "marks": _marks(log)})
     return {"session": {k: s.get(k) for k in ("id", "date", "title", "status", "created", "created_by", "started_at", "started_by", "closed_at", "closed_by")},
-            "attendance": attendance, "participants": participants(s), "absent_roles": absent_roles(s), "cases": cases, "note": NOTE,
+            "attendance": attendance_rows, "participants": participants(s), "absent_roles": absent_roles(s), "cases": cases, "note": NOTE,
             "timing": timing(s)}  # seconds per Case File on the floor (12 Oct)
 
 

@@ -134,6 +134,8 @@ def _mine(rec: dict, r: dict) -> bool:
     to = rec.get("to") or {}
     r = r or {}
     if "department" in to:
+        if org.is_coordinator_name(to["department"]):  # V1 notifications to the "Tumour Board coordination" department: the coordinator's now
+            return bool(r.get("coordinator") or r.get("admin"))
         did = org.department_id(to["department"]) or to["department"]  # a V1 id stored before the 2.1 migration resolves to its V2 department
         return bool(r.get("admin")) or did in (r.get("departments") or {})
     if "role" in to:

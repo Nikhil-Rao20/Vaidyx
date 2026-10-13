@@ -528,3 +528,16 @@ def test_decision_amended_updates_the_session_and_the_export(cases):
     assert "Doxorubicin 60 mg/m2 as decided." in html and "amended: version 2" in html
     assert board.decision_amended(sid, "TB-A", {**rec, "id": "Bother1"}, "Dr. Rao") is None  # not the record linked to this agenda item
     assert any(e["kind"] == "decision_amended" and e.get("version") == 2 for e in board.read_audit())
+
+
+def test_v1_attendance_keys_resolve(cases):
+    """Review M7: a session stored before the 2.1 migration keys attendance by V1 ids; the board reads them as the V2 departments and a
+    new mark replaces the old key."""
+    sid = _session(cases)["id"]
+    s = board.get(sid)
+    s["attendance"] = {"radio_diagnosis": "absent", "pathology": "present", "tumour_board": "present", "laboratory_medicine": "not_marked"}
+    board._save(s)
+    assert board.attendance(board.get(sid)) == {"radiology": "absent", "pathology": "present", "biochemistry": "not_marked"}
+    assert board.absent_roles(board.get(sid)) == ["radiology"] and board.participants(board.get(sid))["absent"] == ["Radiology"]
+    s = board.set_attendance(sid, "radiology", "present", "coord")
+    assert "radio_diagnosis" not in s["attendance"] and s["attendance"]["radiology"] == "present"

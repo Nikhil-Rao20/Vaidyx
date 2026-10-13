@@ -249,10 +249,10 @@ def dashboard(start: str = None, end: str = None) -> dict:
     att = {}
     for d in specs:
         did = d["id"]
-        present = sum(1 for x in closed if (x.get("attendance") or {}).get(did) == "present")
-        marked = sum(1 for x in closed if (x.get("attendance") or {}).get(did) in ("present", "absent"))
+        present = sum(1 for x in closed if board.attendance(x).get(did) == "present")
+        marked = sum(1 for x in closed if board.attendance(x).get(did) in ("present", "absent"))
         att[did] = {"department": d.get("name") or did, "present": present, "sessions": len(closed), "marked": marked, "rate": _pct(present, len(closed))}
-    quorate = sum(1 for x in closed if all((x.get("attendance") or {}).get(d) == "present" for d in PMJAY))
+    quorate = sum(1 for x in closed if all(board.attendance(x).get(d) == "present" for d in PMJAY))
     minutes = [v / 60 for x in closed for v in (x.get("timing") or {}).values() if v]
     briefs = sum(1 for x in sessions for cs in (x.get("agents") or {}).values() for r in cs.values() if isinstance(r, dict) and r.get("status") in ("done", "reused"))
     questions = sum(1 for x in sessions for en in x.get("log") or [] if en.get("kind") == "answer")

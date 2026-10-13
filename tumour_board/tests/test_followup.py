@@ -329,3 +329,11 @@ def test_document_added_in_the_same_second_as_the_action_is_suggested(case, toda
     st = {"actions": [_act(created="2026-10-09T18:00:00")]}
     followup.suggest_closures(case, st, [_doc("D2", "mri", "2026-10-09T17:59:59", title="MRI BREAST")])
     assert "suggested_close" not in st["actions"][0]
+
+
+def test_board_action_typed_for_the_coordinator_goes_to_the_role(case, today, data_root):
+    """Review minor 4: an action typed "MDT Coordinator" (or the V1 "Tumour Board coordination") sits in the coordinator's inbox row."""
+    acts = followup.board_actions(case, {"id": "R9", "actions": [{"task": "Send the minutes", "department": "MDT Coordinator"}, {"task": "Old style", "department": "Tumour Board coordination"}]}, by="coord")
+    assert all(a["role"] == "coordinator" and a["department_id"] is None and a["department"] == org.COORDINATOR_NAME for a in acts)
+    sent = [n for n in notify._load() if n["kind"] == "board_action" and n["to"] == {"role": "coordinator"}]
+    assert {n["action_id"] for n in sent} == {a["id"] for a in acts}

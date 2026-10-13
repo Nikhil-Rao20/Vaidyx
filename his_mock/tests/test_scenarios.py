@@ -306,3 +306,17 @@ def test_loader_helpers(data):
     assert [p["slot"] for p in sc.patients_for(s, data)] == s["patients"]
     assert [p["slot"] for p in sc.patients_for("two_primaries", data)] == s["patients"]
     assert len(sc.patients_for("two_primaries", data)[0]["case_files"]) == 2
+
+
+def test_first_fetch_gap_departments_follow_the_protocol_routes(data):
+    """Review (Phase 2) minor 9: the department each declared gap names is the department the protocol routes that record to (V2 item 2.4):
+    the record's department, or the Case File's owner for a record routed to the owner."""
+    if not PROTOCOL_DIR.is_dir():
+        pytest.skip("tumour_board protocols not present")
+    for p in data["patients"]:
+        for cf in p["case_files"]:
+            _, recs = _protocol(cf["protocol"])
+            for g in (cf.get("first_fetch") or {}).get("gaps", []):
+                rec = recs[g["requirement"]]
+                want = cf.get("owner") if rec.get("route") == "owner" else rec["department"]
+                assert g["department"] == want, (p["slot"], cf["protocol"], g["requirement"], g["department"], want)

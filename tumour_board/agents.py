@@ -400,7 +400,7 @@ def specialty_documents(case_id, role):
     """(ready, waiting, failed) documents of the agent's specialty: its document types, or uploaded by its department (V1 item 6.6)."""
     r = spec(role); dept = org.department_id(r["department"])
     mine = [d for d in rules.case_docs(case_id) if (d.get("classification") or {}).get("doc_type") in r["doc_types"]
-            or (dept and d.get("department") == dept)]
+            or (dept and d.get("department") and org.department_id(d["department"]) == dept)]  # V1 ids resolve (V2 2.1)
     return ([d for d in mine if d.get("state") == "ready"], [d for d in mine if d.get("state") not in ("ready", "error")],
             [d for d in mine if d.get("state") == "error"])
 

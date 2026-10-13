@@ -100,9 +100,9 @@ def board_actions(case_id: str, record: dict, by: str = "") -> list[dict]:
     """The follow-up actions for a newly recorded board decision (the caller appends them to state["actions"] and saves).
 
     One action per entry of record["actions"] ({task, department, due}). The department is kept as typed and resolved to a
-    department id through org (names and aliases: "Radiology" -> radio_diagnosis); a department that does not resolve gets
-    department_id None and no notification (the coordinator sees it in the Case File). A known department is notified
-    (kind "board_action")."""
+    department id through org (names and aliases: "Radio-diagnosis" -> radiology); a department that does not resolve gets
+    department_id None and no notification (the coordinator sees it in the Case File); an action typed for the MDT Coordinator
+    goes to the coordinator role (V2 item 2.1). A known department is notified (kind "board_action")."""
     case = store.get_case(case_id) or {}
     days = default_days(case)
     patient = _patient(case, case_id)
@@ -113,14 +113,17 @@ def board_actions(case_id: str, record: dict, by: str = "") -> list[dict]:
             continue
         task = str(a.get("task") or "").strip()
         dept = str(a.get("department") or "").strip()
-        did = org.department_id(dept) if dept else None
+        to_coord = org.is_coordinator_name(dept)  # an action typed for the MDT Coordinator (a role, not a department)
+        did = org.department_id(dept) if dept and not to_coord else None
         due = str(a.get("due") or "").strip() or (_today() + timedelta(days=days)).isoformat()
         now = store.now_iso()
         act = {"id": "A" + uuid.uuid4().hex[:6], "source": "board", "board_record": rid, "label": task or "Board action",
-               "department": dept, "department_id": did, "requirement": None, "what": task, "status": "pending",
+               "department": org.COORDINATOR_NAME if to_coord else dept, "department_id": did, "requirement": None, "what": task, "status": "pending",
                "created": now, "due": due, "history": [{"ts": now, "event": "Created from Tumour Board record " + rid}]}
-        if did:
-            _notify({"department": did}, "board_action", case_id, f"Tumour Board action for {patient} ({case_id}): {act['label']}",
+        if to_coord:
+            act["role"] = "coordinator"
+        if did or to_coord:
+            _notify({"department": did} if did else {"role": "coordinator"}, "board_action", case_id, f"Tumour Board action for {patient} ({case_id}): {act['label']}",
                     f"{task or 'Board action'}. Due {_dmy(due)}.", action_id=act["id"], due=due, board_record=rid, by=by)
         out.append(act)
     return out

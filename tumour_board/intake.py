@@ -332,7 +332,7 @@ def queue(roles):
     docs = store.list_intake()
     if not (roles.get("admin") or roles.get("coordinator")):
         mine = set(org.visible_departments_for_inbox(roles))
-        docs = [d for d in docs if d.get("department") in mine]
+        docs = [d for d in docs if (org.department_id(d.get("department")) or d.get("department")) in mine]  # V1 ids resolve (V2 2.1)
     out = []
     for d in docs:
         out.append({k: d.get(k) for k in ("doc_id", "filename", "rel_path", "ext", "size", "added", "state", "error", "department", "uploaded_by",

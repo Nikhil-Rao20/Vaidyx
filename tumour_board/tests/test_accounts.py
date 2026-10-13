@@ -160,7 +160,7 @@ def test_root_admin_creates_a_coordinator_and_a_department_admin(setup):
     r = org.roles("path.admin")
     assert org.can(r, "manage_department", "pathology") and not org.can(r, "manage_department", "radiology") and not org.can(r, "manage_org")
     root2 = accounts.create_account(mgr, "tbroot", "root.two", "synthetic-pass-4", root_admin=True)
-    assert root2["root_admin"] and org.roles("root.two")["admin"] and org.roles("root.two")["root_admin"] and not mgr.is_admin("root.two")
+    assert root2["root_admin"] and not org.roles("root.two")["admin"] and org.roles("root.two")["root_admin"] and org.can(org.roles("root.two"), "manage_org") and not mgr.is_admin("root.two")
     assert all(not adm for _, adm in mgr.created)  # never a Vaidyx admin
 
 
@@ -178,9 +178,49 @@ def test_root_admin_create_refuses_no_role_bad_role_and_vaidyx_admin(setup):
 
 
 def test_reset_note_names_the_vaidyx_admin():
-    assert "Vaidyx admin" in accounts.RESET_NOTE and "—" not in accounts.RESET_NOTE
+    assert "Vaidyx admin" in accounts.RESET_NOTE and "\u2014" not in accounts.RESET_NOTE
 
 
 def test_no_em_dashes_in_module():
     from pathlib import Path
-    assert "—" not in Path(accounts.__file__).read_text()
+    assert "\u2014" not in Path(accounts.__file__).read_text()
+
+
+# --- review fixes (Phase 2): reach of a department admin, the Vaidyx admin, orphan-free creation ------------------------------
+
+def test_department_admin_places_an_existing_account_only_within_reach(setup):
+    """Review M4: an existing login placed elsewhere (the coordinator, another department's doctor, a root admin) is the root admin's to place."""
+    me = org.roles("deepak")
+    with pytest.raises(AccountError, match="root admin") as e:
+        accounts.place_doctor("deepak", "radiology", "anil", role="head", caller=me, created=False)  # the coordinator
+    assert e.value.status == 409
+    with pytest.raises(AccountError, match="doctor of Pathology"):
+        accounts.place_doctor("deepak", "radiology", "meena", role="head", caller=me, created=False)
+    org.save({**copy.deepcopy(org.load()), "users": {**org.load()["users"], "free": {"departments": {}, "display_name": "Dr Free"}}}, by="setup")
+    out = accounts.place_doctor("deepak", "radiology", "free", role="doctor", display_name="Renamed", caller=me, created=False)
+    assert out["departments"] == {"radiology": "member"} and out["display_name"] == "Dr Free"  # placed, name left alone
+    out = accounts.place_doctor("tbroot", "radiology", "anil", role="head", caller=org.roles("tbroot"), created=False)  # the root admin may
+    assert out["departments"] == {"radiology": "head"} and out["coordinator"] is True
+
+
+def test_vaidyx_admin_is_never_disabled_here(setup):
+    mgr = setup
+    org.save({**copy.deepcopy(org.load()), "users": {**org.load()["users"], "admin": {"departments": {"radiology": "member"}}}}, by="setup")
+    with pytest.raises(AccountError, match="Vaidyx admin") as e:
+        accounts.update_doctor("tbroot", org.roles("tbroot"), "radiology", "admin", disabled=True, mgr=mgr)
+    assert e.value.status == 409
+    assert accounts.update_doctor("tbroot", org.roles("tbroot"), "radiology", "admin", role="head", mgr=mgr)["departments"] == {"radiology": "head"}
+
+
+def test_check_placement_before_any_login_is_created(setup):
+    with pytest.raises(AccountError, match="doctor or head"):
+        accounts.check_placement("radiology", "boss")
+    with pytest.raises(AccountError) as e:
+        accounts.check_placement("cardiology", "doctor")
+    assert e.value.status == 404 and setup.created == []
+    assert accounts.check_placement("Radio-diagnosis", "doctor") == ("radiology", "member")
+
+
+def test_create_account_validates_booleans(setup):
+    with pytest.raises(AccountError, match="true or false"):
+        accounts.create_account(setup, "tbroot", "x.y", "x" * 8, coordinator="false")

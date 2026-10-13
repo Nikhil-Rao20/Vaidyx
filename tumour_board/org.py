@@ -109,9 +109,10 @@ OWNER_ID = "owner"  # routing target: the Case File's owning treating department
 OWNER_NAME = "Owning department"
 
 # Who may do what. "who" lists the roles allowed: "member" / "head" mean of the department named in the call (for a
-# department-scoped action), "dept_admin" is a department admin of the department named in the call, "treating" / "supporting"
-# is a member or head of any department of that group, "coordinator" is the hospital-level flag, "known" is anyone placed
-# (a doctor, coordinator or admin), "any" is any logged-in user. Admins (root admins and Vaidyx admins) may do everything listed.
+# department-scoped action), "dept_admin" is a department admin of the department named in the call, "root_admin" the Tumour Board
+# super-admin (organisation and accounts, never a clinical action: plan section 4), "treating" / "supporting" is a member or head of
+# any department of that group, "coordinator" is the hospital-level flag, "known" is anyone placed (a doctor, coordinator or admin),
+# "any" is any logged-in user. Vaidyx admins (`admin`) may do everything listed.
 # A department-scoped action called without a department (a document uploaded straight into a Case File by the
 # coordinator, a document from before departments existed, an action with no Responsible Department) is decided by
 # "no_dept" alone: such an item belongs to the coordinator, never to a member / head of some other department. Every
@@ -142,9 +143,10 @@ ACTIONS = {
     "update_action": {"who": ("member", "head", "coordinator"), "dept": True, "no_dept": ("coordinator",),
                       "doc": "Update a pending action for a department (no department: coordinator)"},
     "review": {"who": ("known",), "dept": False, "doc": "Expert review of an AI artefact (human oversight)"},
-    "manage_org": {"who": (), "dept": False, "doc": "Edit the hospital, departments, routes, root admins, coordinators and department admins (root admin only)"},
-    "manage_department": {"who": ("dept_admin",), "dept": True, "no_dept": (),
-                          "doc": "Create, disable and remove the doctor logins of a department (its department admins; no department: admin)"},
+    "manage_org": {"who": ("root_admin",), "dept": False, "doc": "Edit the hospital, departments, routes, root admins, coordinators and department admins (root admin)"},
+    "manage_department": {"who": ("dept_admin", "root_admin"), "dept": True, "no_dept": ("root_admin",),
+                          "doc": "Create, disable and remove the doctor logins of a department (its department admins and the root admin)"},
+    "read_case": {"who": ("known",), "dept": False, "doc": "Read Case Files, board sessions, the intake queue and the dashboard (anyone placed: doctors, the coordinator, admins; not a department admin or root admin)"},
 }
 
 _SLUG = re.compile(r"^[a-z0-9_]+$")
@@ -228,6 +230,7 @@ def migrate_v1(org: dict) -> tuple[dict, dict]:
     new["hospital"] = {**DEFAULT_HOSPITAL, **{k: v for k, v in (old.get("hospital") or {}).items() if k in DEFAULT_HOSPITAL}}
     by_id = {d["id"]: d for d in new["departments"]}
     report = {"departments": {}, "users": {}, "kept": [], "dropped_aliases": []}
+    migration = dict(V1_MIGRATION)  # plus the hospital-added departments merged below
 
     def _taken():
         keys = {}
@@ -239,14 +242,21 @@ def migrate_v1(org: dict) -> tuple[dict, dict]:
     for d in old.get("departments") or []:
         if not isinstance(d, dict) or not isinstance(d.get("id"), str):
             continue
-        targets = V1_MIGRATION.get(d["id"])
+        targets = migration.get(d["id"])
         if targets is None:  # a department the hospital added in V1: kept, as a supporting department (the safer group)
-            if d["id"] not in by_id:
-                kept = {"id": d["id"], "name": str(d.get("name") or d["id"]), "group": "supporting",
-                        "aliases": [a for a in (d.get("aliases") or []) if isinstance(a, str)], "email": f"{d['id']}@{PLACEHOLDER_DOMAIN}"}
-                new["departments"].append(kept)
-                by_id[kept["id"]] = kept
-                report["kept"].append(d["id"])
+            taken = _taken()
+            name = str(d.get("name") or d["id"])
+            if d["id"] in by_id or _norm(name) in taken or _norm(d["id"]) in taken:  # its name or id already names a V2 department: merged into it
+                report["departments"][d["id"]] = [taken.get(_norm(name)) or taken.get(_norm(d["id"])) or d["id"]]
+                migration[d["id"]] = report["departments"][d["id"]]
+                continue
+            kept = {"id": d["id"], "name": name, "group": "supporting",
+                    "aliases": [a.strip() for a in (d.get("aliases") or []) if isinstance(a, str) and a.strip() and _norm(a) not in taken and _norm(a) != _norm(name)],
+                    "email": f"{d['id']}@{PLACEHOLDER_DOMAIN}"}
+            report["dropped_aliases"] += [a for a in (d.get("aliases") or []) if isinstance(a, str) and a.strip() and _norm(a) in taken]
+            new["departments"].append(kept)
+            by_id[kept["id"]] = kept
+            report["kept"].append(d["id"])
             continue
         report["departments"][d["id"]] = list(targets)
         if targets:
@@ -271,7 +281,7 @@ def migrate_v1(org: dict) -> tuple[dict, dict]:
             if did == "tumour_board":
                 nu["coordinator"] = True
                 continue
-            for t in V1_MIGRATION.get(did, [did] if did in by_id else []):
+            for t in migration.get(did, [did] if did in by_id else []):
                 if t in by_id and role in DEPT_ROLES:
                     nu["departments"][t] = role if nu["departments"].get(t) != "head" else "head"
         new["users"][uname] = nu
@@ -560,7 +570,8 @@ def department_email(dept_id) -> str:
 def roles(username: str, vaidyx_admin: bool = False) -> dict:
     """The Tumour Board roles of a Vaidyx login.
 
-    admin: a Vaidyx admin or a root admin (listed in org.json admins). An empty username means authentication is off (single-user
+    admin: a Vaidyx admin (everything). root_admin: listed in org.json admins (organisation and accounts, no clinical action: plan
+    section 4). An empty username means authentication is off (single-user
     mode): there is no login to tie a role to, so that user is treated as admin. This only happens when the main app
     runs with AUTH_ENABLED=false or through its localhost bypass; ~/vaidyx/start_vaidyx_app.sh sets neither, so a
     normal deployment always has a username. Only existing departments and the roles member / head are honoured, even if
@@ -578,9 +589,9 @@ def roles(username: str, vaidyx_admin: bool = False) -> dict:
     depts = {k: ROLE_SYNONYMS.get(v, v) for k, v in dmap.items() if k in ids and ROLE_SYNONYMS.get(v, v) in DEPT_ROLES}
     admin_of = [a for a in (u.get("admin_of") if isinstance(u.get("admin_of"), list) else []) if a in ids]
     root_admin = bool(username) and username in (org.get("admins") or [])
-    admin = (not username) or bool(vaidyx_admin) or root_admin
+    admin = (not username) or bool(vaidyx_admin)  # everything: the Vaidyx admin (or no login at all); a root admin manages, never treats
     coordinator = u.get("coordinator") is True
-    disabled = u.get("disabled") is True
+    disabled = u.get("disabled") is True and not admin  # the Tumour Board flag never locks out the Vaidyx admin (review M3)
     r = {"user": username, "admin": admin, "vaidyx_admin": bool(vaidyx_admin), "root_admin": root_admin, "coordinator": coordinator,
          "departments": depts, "admin_of": admin_of,
          "treating": {k: v for k, v in depts.items() if groups.get(k) == "treating"},
@@ -595,6 +606,8 @@ def _allowed(r: dict, who, department) -> bool:
     if "known" in who and r.get("known"):
         return True
     if "coordinator" in who and r.get("coordinator"):
+        return True
+    if "root_admin" in who and r.get("root_admin"):
         return True
     if "treating" in who and r.get("treating"):
         return True
@@ -612,7 +625,8 @@ def can(r: dict, action: str, department: str | None = None) -> bool:
     """True if the user with roles `r` may do `action` (for `department`: an id, name or alias, passed raw; it is
     resolved here, so "Radiology" and "radio_diagnosis" are the same). See ACTIONS.
 
-    A disabled user may do nothing. Admins may do every listed action; an unknown action is refused for everyone. A
+    A disabled user may do nothing. Vaidyx admins may do every listed action; a root admin only what lists "root_admin" (and
+    "any"); an unknown action is refused for everyone. A
     department-scoped action with no (or an empty) department follows its "no_dept" rule (admin only if none is declared): a
     member / head of some department never qualifies through it. A department that does not resolve matches no membership
     (coordinators and admins keep their hospital-wide rights where "who" lists them)."""
@@ -648,9 +662,18 @@ def my_departments(r: dict) -> list[dict]:
 
 
 def admin_departments(r: dict) -> list[dict]:
-    """The departments the user administers (every department for an admin)."""
+    """The departments the user administers (every department for a Vaidyx admin or a root admin)."""
     adm = set((r or {}).get("admin_of") or [])
-    return [dict(d) for d in departments() if (r or {}).get("admin") or d.get("id") in adm]
+    return [dict(d) for d in departments() if (r or {}).get("admin") or (r or {}).get("root_admin") or d.get("id") in adm]
+
+
+def version() -> str:
+    """A token for the current org.json (its mtime and size): PUT /org may send it back as expected_version for a 409 on a stale edit."""
+    try:
+        st = path().stat()
+        return f"{st.st_mtime_ns}-{st.st_size}"
+    except OSError:
+        return ""
 
 
 ROUTE_KINDS = ("department", OWNER_ID, COORDINATOR_ID)

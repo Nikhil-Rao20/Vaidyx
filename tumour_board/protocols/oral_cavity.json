@@ -148,7 +148,7 @@
     "clinical_note",
     "referral"
    ],
-   "region": "dental|dentist|opg|orthopantomogram|maxillofacial|prosthetic|oral hygiene|oral prophylaxis",
+   "region": "dental|dentist|opg|orthopantomogram|prosthetic|oral hygiene|oral prophylaxis",
    "department": "Dental Surgery / Oral and Maxillofacial Surgery",
    "required_facts": [
     "dental_evaluation"
@@ -228,7 +228,7 @@
    "doc_types": [
     "lab"
    ],
-   "region": "lft|rft|kft|liver|renal|kidney|biochem|creatinine|bilirubin|urea|sgot|sgpt|blood tests|routine labs",
+   "region": "lft|rft|kft|liver|renal|kidney|biochem|creatinine|bilirubin|urea|sgot|sgpt",
    "department": "Biochemistry",
    "note": "V2 item 2.4: the V1 'Baseline blood tests' record is split by test so each request reaches the desk that does it (CBC: Pathology; LFT / RFT: Biochemistry)"
   },

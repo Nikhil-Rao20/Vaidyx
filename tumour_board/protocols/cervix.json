@@ -103,7 +103,7 @@
     "quote": "Biopsy and Lab Investigations (Complete Blood Count, Liver and Renal Function Tests, HIV status)",
     "where": "Cervix cancer, summary table of imaging investigations"
    },
-   "tier_basis": "the liver function tests are checked by the total bilirubin, as in the other protocols",
+   "tier_basis": "NCG names the complete blood count among the baseline investigations (Essential)",
    "note": "V2 item 2.4: the V1 'Baseline blood tests' record is split by test so each request reaches the desk that does it (CBC: Pathology; LFT / RFT: Biochemistry; viral markers: Microbiology)"
   },
   {
@@ -113,7 +113,7 @@
    "doc_types": [
     "lab"
    ],
-   "region": "lft|rft|kft|liver|renal|kidney|biochem|creatinine|bilirubin|urea|sgot|sgpt|blood tests|routine labs",
+   "region": "lft|rft|kft|liver|renal|kidney|biochem|creatinine|bilirubin|urea|sgot|sgpt",
    "department": "Biochemistry",
    "required_facts": [
     "creatinine",
@@ -148,7 +148,7 @@
     "quote": "Biopsy and Lab Investigations (Complete Blood Count, Liver and Renal Function Tests, HIV status)",
     "where": "Cervix cancer, summary table of imaging investigations"
    },
-   "tier_basis": "the liver function tests are checked by the total bilirubin, as in the other protocols",
+   "tier_basis": "NCG names the HIV status among the baseline investigations (Essential)",
    "note": "V2 item 2.4: the V1 'Baseline blood tests' record is split by test so each request reaches the desk that does it (CBC: Pathology; LFT / RFT: Biochemistry; viral markers: Microbiology); HIV status is the value NCG names"
   },
   {

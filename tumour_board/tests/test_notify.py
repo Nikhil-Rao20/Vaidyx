@@ -22,7 +22,7 @@ def people():
     o["admins"] = ["tbadmin"]
     org.save(o, by="test")
     return {"radio": org.roles("ravi"), "path": org.roles("kavya"), "head": org.roles("suresh"),
-            "coord": org.roles("anil"), "admin": org.roles("tbadmin")}
+            "coord": org.roles("anil"), "admin": org.roles("tbadmin", vaidyx_admin=True)}  # a Vaidyx admin sees everything; a root admin (plan section 4) has no inbox
 
 
 @pytest.fixture
@@ -437,3 +437,17 @@ def test_inbox_board_action_by_department_name_alias(cases, people, today):
 def test_notify_board_kinds(people):
     assert notify.notify({"department": "Medical Oncology"}, "board_action", "TB-SYN-1", "t", board_record="B1")["to"] == {"department": "medical_oncology"}
     assert notify.notify({"department": "radiology"}, "board_action_suggestion", "TB-SYN-1", "t")["kind"] == "board_action_suggestion"
+
+
+def test_v1_notifications_to_the_coordination_department_reach_the_coordinator(people, data_root):
+    """Review M7: notifications stored before the 2.1 migration were addressed to the department "tumour_board"; the coordinator reads them."""
+    notify._lock.acquire()
+    try:
+        p = notify.path(); p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps({"id": "Nold1", "ts": "2026-10-01T10:00:00", "to": {"department": "tumour_board"}, "kind": "case_ready", "case_id": "TB-1", "title": "old", "text": "", "read_by": {}}) + "\n"
+                     + json.dumps({"id": "Nold2", "ts": "2026-10-01T10:00:00", "to": {"department": "radio_diagnosis"}, "kind": "request", "case_id": "TB-1", "title": "old", "text": "", "read_by": {}}) + "\n")
+    finally:
+        notify._lock.release()
+    assert [n["id"] for n in notify.for_roles(people["coord"])] == ["Nold1"]
+    assert [n["id"] for n in notify.for_roles(people["radio"])] == ["Nold2"]
+    assert not notify.for_roles(people["path"])

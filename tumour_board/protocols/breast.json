@@ -370,7 +370,7 @@
    "doc_types": [
     "lab"
    ],
-   "region": "lft|rft|kft|liver|renal|kidney|biochem|creatinine|bilirubin|urea|sgot|sgpt|blood tests|routine labs",
+   "region": "lft|rft|kft|liver|renal|kidney|biochem|creatinine|bilirubin|urea|sgot|sgpt",
    "department": "Biochemistry",
    "required_facts": [
     "creatinine",

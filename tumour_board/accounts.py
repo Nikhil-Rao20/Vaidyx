@@ -112,17 +112,29 @@ def department_doctors(dept, mgr=None) -> list[dict]:
     return out
 
 
-def place_doctor(by: str, dept, username: str, role: str = "member", display_name: str | None = None) -> dict:
-    """Place an existing plain account as a doctor (member) or head of the department; audited by org.save."""
+def check_placement(dept, role) -> tuple[str, str]:
+    """(department id, role) for a placement, or AccountError: checked before a login is created so no orphan account is left behind."""
     did = _dept(dept)
-    u = clean_username(username)
     role = org.ROLE_SYNONYMS.get(role, role or "member")
     if role not in org.DEPT_ROLES:
         raise AccountError(400, "The role must be doctor or head.")
+    return did, role
+
+
+def place_doctor(by: str, dept, username: str, role: str = "member", display_name: str | None = None, caller: dict | None = None, created: bool = True) -> dict:
+    """Place a plain account as a doctor (member) or head of the department; audited by org.save. A department admin may place an
+    existing account only when it is placed nowhere outside their own departments (a coordinator, a root admin, another department's
+    doctor: 409, the root admin decides; review M4); the display name of such an account is left alone."""
+    did, role = check_placement(dept, role)
+    u = clean_username(username)
     o = copy.deepcopy(org.load())
+    if not created and caller is not None:
+        reasons = _outside_reach(o, caller, u, did)
+        if reasons:
+            raise AccountError(409, f"'{u}' is already {', '.join(reasons)}: the root admin places this login.")
     user = o["users"].get(u) or _blank_user()
     user["departments"] = {**(user.get("departments") or {}), did: role}
-    if display_name is not None and str(display_name).strip():
+    if display_name is not None and str(display_name).strip() and (created or not user.get("display_name")):
         user["display_name"] = str(display_name).strip()
     o["users"][u] = user
     saved = org.save(o, by)
@@ -132,7 +144,7 @@ def place_doctor(by: str, dept, username: str, role: str = "member", display_nam
 def _outside_reach(o: dict, caller: dict, u: str, did: str) -> list[str]:
     """What a department admin cannot touch about this user: placements in departments they do not administer, the coordinator flag, a
     department-admin or root-admin role. Empty for admins."""
-    if (caller or {}).get("admin"):
+    if (caller or {}).get("admin") or (caller or {}).get("root_admin"):
         return []
     user = o["users"].get(u) or {}
     mine = set((caller or {}).get("admin_of") or [])
@@ -146,12 +158,14 @@ def _outside_reach(o: dict, caller: dict, u: str, did: str) -> list[str]:
     return reasons
 
 
-def update_doctor(by: str, caller: dict, dept, username: str, role: str | None = None, disabled: bool | None = None) -> dict:
+def update_doctor(by: str, caller: dict, dept, username: str, role: str | None = None, disabled: bool | None = None, mgr=None) -> dict:
     """Change the role in this department or the Tumour Board disabled flag. The flag blocks every Tumour Board action, so a
     department admin may set it only for someone placed nowhere outside their own departments (else 409: ask the root admin); a
-    root admin is disabled only after being removed from the root admins."""
+    root admin is disabled only after being removed from the root admins; a Vaidyx admin is never disabled here (review M3)."""
     did = _dept(dept)
     u = clean_username(username)
+    if disabled is not None and mgr is not None and is_vaidyx_admin(mgr, u):
+        raise AccountError(409, f"'{u}' is a Vaidyx admin (server administrator); the Tumour Board flag does not apply.")
     o = copy.deepcopy(org.load())
     user = o["users"].get(u)
     if not user or (did not in (user.get("departments") or {}) and did not in (user.get("admin_of") or [])):

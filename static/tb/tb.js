@@ -986,7 +986,7 @@ function resolutionHTML(b, f, i) {
   if (r) { const k = RESOLUTION[r.resolution] || ["c-mute", r.resolution];
     return `<div class="small" style="margin-top:6px"><span class="chip ${k[0]}">${k[1]}</span> by ${esc(r.by)} · ${esc((r.at || "").replace("T", " ").slice(0, 16))}${r.value ? ` · corrected value "${esc(r.value)}"` : ""}${r.version ? ` · decision version ${r.version}` : ""}${r.reason ? `<div class="muted">${esc(r.reason)}</div>` : ""}
       ${can("board_record") ? ` <button class="ghost sm" data-undores="${esc(r.confirmation)}">Undo</button>` : ""}</div>`; }
-  if (!can("board_record")) return `<div class="small muted" style="margin-top:6px">Awaiting resolution by the Tumour Board coordinator.</div>`;
+  if (!can("board_record")) return `<div class="small muted" style="margin-top:6px">Awaiting resolution by the MDT Coordinator.</div>`;
   return `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${Object.entries(RESOLUTION).map(([k, [, l]]) => `<button class="ghost sm" data-resolve="${esc(b.id)}|${esc(fid)}|${k}">${l}</button>`).join("")}</div>`;
 }
 const versionsHTML = (b) => (b.versions || []).length < 2 ? "" : `<details class="small" style="margin-top:6px"><summary>Version history (${b.versions.length} versions; the current one is shown above)</summary>
@@ -1009,7 +1009,7 @@ function renderBoard() {
   const records = (st.board_records || []).slice().reverse();
   const allActs = (st.actions || []).slice().sort((a, b) => (a.status === "completed") - (b.status === "completed") || a.due.localeCompare(b.due));
   $("#tab-board").innerHTML = `<div class="grid2"><div>
-    ${!can("board_record") ? `<div class="card"><h3>Tumour Board decision</h3><div class="muted small">Decisions are recorded by the Tumour Board coordinator.</div></div>` : `<div class="card form"><h3>Record the Tumour Board decision</h3><div class="muted small">Entered by the clinical team. The agent then checks the record (AI-assisted adjudication): documentation completeness, values against the signed sources, open Pre-Authorization items. It does not judge the clinical decision.</div>
+    ${!can("board_record") ? `<div class="card"><h3>Tumour Board decision</h3><div class="muted small">Decisions are recorded by the MDT Coordinator.</div></div>` : `<div class="card form"><h3>Record the Tumour Board decision</h3><div class="muted small">Entered by the clinical team. The agent then checks the record (AI-assisted adjudication): documentation completeness, values against the signed sources, open Pre-Authorization items. It does not judge the clinical decision.</div>
       <label>Board date</label><input type="date" id="b-date" value="${new Date().toISOString().slice(0, 10)}">
       <label>Decision recorded by the board</label><textarea id="b-text" placeholder="As decided and dictated by the board"></textarea>
       <label>Recorded by</label><input id="b-by" placeholder="Name, role">
@@ -1173,8 +1173,9 @@ async function newCase() {
 const deptName = (id) => (S.org?.departments || []).find((d) => d.id === id)?.name || id || "";
 async function loadOrg() {
   try { S.org = await api("/org"); S.me = S.org.me; } catch (e) { S.org = null; S.me = null; }
-  $("#btn-org").classList.toggle("hidden", !S.me?.admin);
+  $("#btn-org").classList.toggle("hidden", !(S.me?.admin || S.me?.root_admin));  // V2 2.2: the root admin manages the organisation
   $("#btn-mydept").classList.toggle("hidden", !(S.org?.admin_departments || []).length);  // V2 2.3: department admins (and admins)
+  $("#btn-sessions").classList.toggle("hidden", !(S.me?.known || S.me?.admin));  // patient data only for placed accounts (read_case)
   $("#btn-connectors").classList.toggle("hidden", !S.me?.admin);
   $("#btn-dashboard").classList.toggle("hidden", !(S.me?.admin || S.me?.coordinator));
   $("#btn-new").classList.toggle("hidden", !meCan("create_case"));
@@ -1193,8 +1194,8 @@ function rolesList(v, root) {  // [[chip class, text]] for a placement {departme
 }
 const rolesText = (v, root) => rolesList(v, root).map((x) => x[1]).join(", ") || "no roles";
 function orgPayload(edit = {}) {
-  const o = S.orgPage.o;
-  return { hospital: o.hospital, departments: o.departments, users: o.users || {}, admins: o.admins || [], routes: o.routes || {}, ...edit };
+  // each card saves only what it edited; the server keeps the other keys and refuses a stale edit (409) by the version token
+  return { ...edit, expected_version: S.orgPage.o.version };
 }
 async function saveOrg(edit, what) {
   try { await api("/org", { method: "PUT", json: orgPayload(edit) }); toast(what + " saved"); await loadOrg(); await showOrgPage(); if (S.caseId && !$("#case").classList.contains("hidden")) openCase(S.caseId, true); }
@@ -1308,7 +1309,7 @@ async function renderRoutes() {
       <div class="tscroll"><table class="t"><thead><tr><th>Record</th><th>Tier</th><th>Goes to</th><th>Department</th></tr></thead><tbody>${p.rows.map((x) => `<tr><td>${esc(x.label)}${x.kind === "optional" ? ' <span class="chip c-mute">optional</span>' : ""}</td><td class="small muted">${esc(x.tier ? { a: "Essential", b: "Optimal", c: "Optional" }[x.tier] || x.tier : "")}</td><td>${opt(x)}</td><td class="small">${esc(x.department)}${x.override ? ' <span class="chip c-info">override</span>' : ""}</td></tr>`).join("")}</tbody></table></div></details>`).join("")}
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px"><button class="ghost sm" id="rt-reset">Clear every override</button><button class="primary sm" id="rt-save">Save routes</button></div></div>`;
   const save = async (routes) => {
-    try { const cur = await api("/org"); await api("/org", { method: "PUT", json: { hospital: cur.hospital, departments: cur.departments, users: cur.users || {}, admins: cur.admins || [], routes } }); toast("Routes saved (audited)"); renderRoutes(); }
+    try { const cur = await api("/org"); await api("/org", { method: "PUT", json: { routes, expected_version: cur.version } }); toast("Routes saved (audited)"); renderRoutes(); }
     catch (e) { toast(e.message, 7000); }
   };
   $("#rt-save").onclick = () => { const routes = {}; $$("#o-routes .rt-sel").forEach((s) => { if (s.value) routes[s.dataset.key] = s.value; }); save(routes); };
@@ -1457,7 +1458,7 @@ function identityText(idr) {
 const DECISION = { auto_link: ["c-ok", "Filed automatically"], suggest: ["c-warn", "Suggested match: confirm"], needs_matching: ["c-warn", "Needs matching"],
   new_case: ["c-info", "New Case File"], id_conflict: ["c-bad", "Possible wrong ID"] };
 async function refreshQueueCount() {
-  if (!S.me) return;
+  if (!S.me || !(S.me.known || S.me.admin)) return;
   try { const q = await api("/intake"); S.queue = q; const n = q.documents.filter((d) => d.state !== "filed").length;
     $("#queue-count").textContent = n; $("#queue-count").classList.toggle("hidden", !n); } catch (e) {}
 }
@@ -1797,7 +1798,7 @@ function decisionHTML() {
     return `<p style="white-space:pre-wrap;margin-top:0">${esc(d.decision_text || "")}</p><div class="small muted">Recorded by ${esc(d.recorded_by || "")} · ${esc((d.recorded_at || "").replace("T", " ").slice(0, 16))} ·
       <span class="chip ${rec.resolution?.checks_complete !== false && (rec.status === "consistent" || rec.resolution?.final) ? "c-ok" : "c-rev"}">${rec.resolution?.checks_complete === false ? "Adjudication: a check did not run (open on the Case File)" : rec.status === "consistent" ? "Adjudication: consistent" : rec.resolution?.total && rec.resolution.final ? `Final: ${rec.resolution.total} flag(s) resolved` : `Adjudication: ${rec.resolution?.open ?? rec.flags ?? 0} flag(s) awaiting resolution`}</span>${(rec.version || 1) > 1 ? ` <span class="chip c-info">Amended: version ${rec.version}</span>` : ""} <button class="ghost sm" id="r-board">Open on the Case File</button></div>${compHTML(rec.composition)}
       <div class="small muted" style="margin-top:6px">Mark each agent point below: discussed, accepted or not relevant.</div>`; }
-  if (!r.can_manage) return `<div class="muted small">The decision is recorded by the Tumour Board coordinator.</div>`;
+  if (!r.can_manage) return `<div class="muted small">The decision is recorded by the MDT Coordinator.</div>`;
   const depts = BOARD_DEPTS;
   return `<div class="form"><div class="muted small">Entered by the clinical team. The agent then checks the record (documentation, values against the signed sources, open Pre-Authorization items); it does not judge the clinical decision.</div>
     <label for="d-text">Decision recorded by the board</label><textarea id="d-text" placeholder="As decided and dictated by the board"></textarea>
@@ -1861,7 +1862,9 @@ $("#btn-sessions").onclick = showSessions;
 (async () => {
   const pr = await api("/protocols"); S.protocols = pr.protocols; S.facts = pr.facts;
   await loadOrg(); bindIntakeUpload(); refreshQueueCount(); refreshInboxCount(); loadNotifications();
-  await loadCases(); loadModels(); setInterval(loadModels, 30000); setInterval(() => { loadNotifications(); refreshInboxCount(); }, 30000);
+  if (S.me?.known || S.me?.admin) await loadCases();  // a login not placed in any department (a department admin, a root admin) sees no Case Files
+  else { $("#case-list").innerHTML = `<div class="small muted">Case Files are shown to accounts placed in a department, to the MDT Coordinator and to admins.</div>`; $("#demo-list").innerHTML = ""; }
+  loadModels(); setInterval(loadModels, 30000); setInterval(() => { loadNotifications(); refreshInboxCount(); }, 30000);
   const m = location.hash.match(/case=([\w.-]+)/); if (m) openCase(m[1]);
 })();
 

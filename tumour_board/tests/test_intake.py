@@ -385,3 +385,12 @@ def test_ocr_uncertain_numbers_never_carry_an_aadhaar(monkeypatch):
     page = asyncio.run(ingest.ocr_page(b"png", audit=events.append))
     assert "2200" in page["text"] and "6043 1187 2200" not in page["text"] and page["aadhaar_masked"] == 1
     assert page["ocr_uncertain_numbers"] == ["11.6", "11.8"] and "6043" not in __import__("json").dumps(events)
+
+
+def test_queue_resolves_v1_department_ids_for_members(data_root):
+    """Review M7: an intake record stored under a V1 id (radio_diagnosis) still shows in the Radiology member's queue."""
+    store.add_intake_file("old.txt", NOID.encode(), "old.txt", "radio_diagnosis", "rad.user")
+    o = org.load()
+    org.save({**o, "users": {"rad.user": {"departments": {"radiology": "member"}, "coordinator": False}}}, by="test")
+    assert [d["department"] for d in intake.queue(org.roles("rad.user"))] == ["radio_diagnosis"]
+    assert intake.queue(org.roles("nobody")) == []
