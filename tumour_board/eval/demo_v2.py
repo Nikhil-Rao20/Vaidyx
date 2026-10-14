@@ -112,9 +112,10 @@ def every_sentence_cited(summary) -> bool:
 
 
 def default_board_date(today=None) -> str:
-    """The next Friday at least two days ahead (the board meets on Fridays in the demo hospital)."""
+    """The next Friday at least four days ahead (the board meets on Fridays in the demo hospital; the e2e test lists its own
+    Case Files for today + 3, so the two never share a date)."""
     today = today or datetime.date.today()
-    d = today + datetime.timedelta(days=2)
+    d = today + datetime.timedelta(days=4)
     while d.weekday() != 4:
         d += datetime.timedelta(days=1)
     return d.isoformat()
@@ -163,12 +164,16 @@ def login(base, logins, name):
     return c
 
 
-def wait_job(c, jid):
+def wait_job(c, jid, limit=1800):
+    """The finished job and the seconds it took; a job that cannot be read, or runs past `limit` seconds, comes back as failed."""
     t0 = time.time()
     while True:
-        j = c.get(f"/api/tb/jobs/{jid}").json()
+        r = c.get(f"/api/tb/jobs/{jid}")
+        j = r.json() if r.status_code == 200 else {"state": "failed", "error": f"job {jid}: {r.status_code} {r.text[:120]}"}
         if j.get("state") in ("finished", "failed", "interrupted"):
             return j, round(time.time() - t0, 1)
+        if time.time() - t0 > limit:
+            return {"state": "failed", "error": f"job {jid} still {j.get('state')} after {limit} s"}, round(time.time() - t0, 1)
         time.sleep(1)
 
 
@@ -219,8 +224,10 @@ def step1(cl, base, board_date, pause_on):
     d, j = create_from_his(breast, UHID_P19, "breast", "early", CASES["p19"], board_date, "1")
     if not d or d.get("_status"):
         return None
-    check("1 eight hospital-system records, each with its OP No. and accession, filed under Breast Surgery", len(d.get("documents") or []) == 8 and d["case"].get("department") == "breast_surgery"
-          and all((x.get("his") or {}).get("encounter_number") for x in d["documents"]), f"{len(d.get('documents') or [])} documents, owner {d['case'].get('department')}")
+    docs = d.get("documents") or []
+    check("1 eight hospital-system records, each with its OP No., the seven ordered ones with their accession No., filed under Breast Surgery", len(docs) == 8 and d["case"].get("department") == "breast_surgery"
+          and all((x.get("his") or {}).get("encounter_number") for x in docs) and sum(1 for x in docs if (x.get("his") or {}).get("accession")) == 7,
+          f"{len(docs)} documents, {sum(1 for x in docs if (x.get('his') or {}).get('accession'))} with an accession No., owner {d['case'].get('department')}")
     g = gaps(d)
     check("1 the Pre-Authorization check has two Level 1 gaps: the breast imaging report and the USG axilla, both preliminary", g == [("breast_imaging", 1), ("usg_axilla", 1)] and not d["state"]["gate"]["passed"], json.dumps(g))
     r = row(d, "breast_imaging")
@@ -272,12 +279,11 @@ def step3(cl, base, pause_on):
     breast, rad = cl["breast"], cl["rad"]
     d = case(breast, CASES["p19"])
     a_mg, a_us = action_for(d, "breast_imaging"), action_for(d, "usg_axilla")
-    ack = [rad.post(f"/api/tb/cases/{CASES['p19']}/requests/{a['id']}/acknowledge") for a in (a_mg, a_us) if a]
-    check("3 Radiology acknowledges both requests; the owning department is told", len(ack) == 2 and all(r.status_code == 200 for r in ack) and len(notes(breast, CASES["p19"], "request_acknowledged")) >= 2,
+    if not (a_mg and a_us):
+        check("3 the two requests of step 2 exist", False, json.dumps([a_mg, a_us])[:200]); return
+    ack = [rad.post(f"/api/tb/cases/{CASES['p19']}/requests/{a['id']}/acknowledge") for a in (a_mg, a_us)]
+    check("3 Radiology acknowledges both requests; the owning department is told", all(r.status_code == 200 for r in ack) and len(notes(breast, CASES["p19"], "request_acknowledged")) >= 2,
           " ".join(f"{r.status_code} {r.text[:80]}" for r in ack))
-    r = rad.post(f"/api/tb/cases/{CASES['p19']}/requests/{a_mg['id']}/done", json={"note": "Reported and signed in the RIS (demo, SYNTHETIC)"})
-    check("3 'done' back with a note: the request stays open until the signed report arrives; the owner is told to re-fetch", r.status_code == 200 and r.json().get("action", {}).get("status") == "pending"
-          and any(n.get("refetch_offer") for n in notes(breast, CASES["p19"], "request_done")), r.text[:200])
     his = his_url(breast)
     signed = {}
     for acc in (MG_ACCESSION, US_ACCESSION):
@@ -287,8 +293,11 @@ def step3(cl, base, pause_on):
         except Exception as e:
             signed[acc] = (0, str(e)[:160])
     check("3 the consultant radiologist completes and signs both reports on the RIS desk (final, digitally signed, demo CA)", all(v[0] == 200 for v in signed.values()), json.dumps(signed)[:300])
+    r = rad.post(f"/api/tb/cases/{CASES['p19']}/requests/{a_mg['id']}/done", json={"note": "Reported and signed in the RIS (demo, SYNTHETIC)"})
+    check("3 'done' back with a note once signed: the request stays open until the signed report reaches the Case File; the owner is told to re-fetch", r.status_code == 200 and r.json().get("action", {}).get("status") == "pending"
+          and any(n.get("refetch_offer") for n in notes(breast, CASES["p19"], "request_done")), r.text[:200])
     look([f"the RIS desk: {his}/desk/RAD (the two reports now under 'Signed', with the signed PDF; this is what 'Complete and sign' does as Dr Sanjay Joshi)",
-          "as tb-rad-doc: the inbox rows read Acknowledged and Done; as tb-breast-doc the bell shows 'Request acknowledged' and 'Done by the department' with the re-fetch hint"])
+          "as tb-rad-doc: the inbox rows read Acknowledged, the mammogram's Done; as tb-breast-doc the bell shows 'Request acknowledged' and 'Done by the department' with the re-fetch hint"])
     pause(pause_on, "step 4 (re-fetch, summary, ready for the board)")
 
 
@@ -296,6 +305,8 @@ def step4(cl, base, pause_on):
     head(4, "re-fetch: the requests close themselves, the check passes, the summary is compiled, the Case File is marked ready")
     breast = cl["breast"]
     d0 = case(breast, CASES["p19"])
+    if d0.get("_status"):
+        check("4 the Case File of step 1 exists", False, json.dumps(d0)[:200]); return
     ids = [action_for(d0, k).get("id") for k in ("breast_imaging", "usg_axilla")]
     r = breast.post(f"/api/tb/cases/{CASES['p19']}/his/refetch")
     if r.status_code != 200:
@@ -303,7 +314,8 @@ def step4(cl, base, pause_on):
     body, j, secs = r.json(), *wait_job(breast, r.json()["job"])
     d = case(breast, CASES["p19"])
     closed = (j.get("refetch_result") or {}).get("closed") or []
-    check(f"4 the re-fetch brings only the two changed reports ({secs} s), closes both requests and the check passes", (body.get("his") or {}).get("added", 0) >= 2 and sorted(closed) == sorted(x for x in ids if x)
+    check(f"4 the re-fetch brings only the two changed reports ({secs} s), closes both requests and the check passes", (body.get("his") or {}).get("added") == 2 and not (body.get("his") or {}).get("updated")
+          and sorted(closed) == sorted(x for x in ids if x)
           and d["state"]["gate"]["passed"] and all(action_for(d, k).get("status") == "completed" for k in ("breast_imaging", "usg_axilla")), json.dumps({"his": body.get("his"), "closed": closed, "gaps": gaps(d)})[:300])
     check("4 the owner is told what closed; Radiology sees its requests closed", any(n.get("refetch") for n in notes(breast, CASES["p19"], "request_closed"))
           and all(q.get("status") == "completed" for q in inbox_rows(cl["rad"], "radiology", CASES["p19"])))
@@ -333,13 +345,15 @@ def step5(cl, base, board_date, pause_on, ctx):
         sid = existing[0]["id"]
         print(f"  (reusing the open session {sid})")
     else:
-        s = mdt.post("/api/tb/sessions", json={"date": board_date, "title": SESSION_TITLE}).json()
+        s = mdt.post("/api/tb/sessions", json={"date": board_date, "title": SESSION_TITLE, "case_ids": [CASES["p19"]]}).json()
         sid = s.get("id")
-        check("5 a session for the board date takes the Case Files the owners marked ready", bool(sid) and CASES["p19"] in [a.get("case_id") for a in s.get("agenda") or []], json.dumps(s)[:200])
+        check("5 the session for the board date lists the Case File, marked ready by its owner", bool(sid) and [a.get("case_id") for a in s.get("agenda") or []] == [CASES["p19"]]
+              and (s.get("agenda") or [{}])[0].get("owner_ready") is True, json.dumps(s)[:200])
     if not sid:
         return
     ctx["sid"] = sid
-    for dept, st in (("radiology", "present"), ("medical_oncology", "present"), ("surgical_oncology", "present"), ("pathology", "absent")):
+    for dept, st in (("radiology", "present"), ("medical_oncology", "present"), ("surgical_oncology", "present"), ("pathology", "absent"),
+                     ("radiation_oncology", "present"), ("nuclear_medicine", "present")):  # the fixture scenario's sheet: only the Pathology head is away
         mdt.post(f"/api/tb/sessions/{sid}/attendance", json={"department": dept, "status": st})
     rm = mdt.get(f"/api/tb/sessions/{sid}").json()
     sheet = [x.get("id") for x in rm.get("attendance_list") or []]
@@ -356,10 +370,10 @@ def step5(cl, base, board_date, pause_on, ctx):
             break
         time.sleep(3)
     pst = states.get((CASES["p19"], "pathology"))
-    check(f"5 the Pathology brief is ready ({round(time.time() - t0)} s) and shown in the room", pst in ("ready", "no_documents") and "pathology" in ((rm.get("cases") or {}).get(CASES["p19"]) or {}).get("briefs", {}),
+    check(f"5 the Pathology brief is ready ({round(time.time() - t0)} s) and shown in the room", pst == "ready" and "pathology" in ((rm.get("cases") or {}).get(CASES["p19"]) or {}).get("briefs", {}),
           json.dumps({f"{k[0]}:{k[1]}": v for k, v in states.items()}))
     look([f"as tb-mdt: {base}/tb, 'Board sessions' (or Home: next board {board_date}): the session '{SESSION_TITLE}'",
-          "the Board room: the attendance sheet (Radiology, Medical Oncology, Surgical Oncology present; Pathology absent), the AI support card says the Pathology agent stands in, its brief under the Case File",
+          "the Board room: the attendance sheet (Radiology, Medical Oncology, Surgical Oncology, Radiation Oncology and Nuclear Medicine present; Pathology absent), the AI support card says the Pathology agent stands in, its brief under the Case File",
           "as tb-path-head (the absent head) the room still opens read-only for its department"])
     pause(pause_on, "step 6 (images, the decision, a referral, two primaries)")
 
@@ -397,8 +411,8 @@ def step6(cl, base, board_date, pause_on, ctx):
         rec = dec.get("record") or {}
         comp = (rec.get("adjudication") or {}).get("composition") or {}
         html = mdt.get(f"/api/tb/sessions/{sid}/minutes").text
-        check("6 the decision is recorded as dictated with its follow-up action; the PM-JAY composition check ran (the hospital is empanelled); the minutes carry it",
-              bool(rec) and comp.get("checked") is True and "MRI breast before surgery" in html and "Tumour Board minutes" in html, json.dumps(dec)[:300])
+        check("6 the decision is recorded as dictated with its follow-up action; the PM-JAY composition check ran (the hospital is empanelled) and found the three oncologists present; the minutes carry it",
+              bool(rec) and comp.get("checked") is True and comp.get("missing") == [] and "MRI breast before surgery" in html and "Tumour Board minutes" in html, json.dumps(dec)[:300])
         look([f"as tb-mdt, in the Board room: the Records card, 'Open images' on the mammogram opens OHIF in a new tab at {base}{ctx.get('viewer_url') or '/api/tb/pacs/ohif/viewer?...'} (the synthetic MG study; 127.0.0.1:8042 directly does not route)",
               "'Record decision' shows the decision as dictated, the agent points beside it, the composition line; 'Minutes' downloads the minutes; the Follow-up card lists the MRI action (it also sits in Radiology's inbox)"])
     else:
@@ -421,6 +435,8 @@ def step6(cl, base, board_date, pause_on, ctx):
             if r.status_code == 200 and r.json().get("job"):
                 wait_job(crs, r.json()["job"])
             d2 = case(crs, CASES["p14"])
+            if d2.get("_status"):
+                d2 = {"case": {}, "state": {}, "access": {}}
             acc = d2.get("access") or {}
             hist = (d2.get("state") or {}).get("gate_history") or []
             check("6 referral: on acceptance ownership moves to Colorectal Surgery with the rectal protocol on the same records; Pulmonology stays a participant; the lung check is kept as read-only history",
@@ -463,7 +479,7 @@ def reset(cl, quiet=False):
             try:
                 from tumour_board import board
                 board._path(s["id"]).unlink(missing_ok=True)
-                board.audit_session(s["id"], {"kind": "demo_removed", "by": ROLES["mdt"]})
+                board.audit_session(s["id"], {"kind": "demo_removed", "by": "demo_v2 script"})
                 gone.append(s["id"])
             except Exception as e:
                 print(f"  could not remove the session file of {s['id']}: {e}")
@@ -472,8 +488,18 @@ def reset(cl, quiet=False):
     return removed, gone
 
 
+def e2e_copy_running() -> bool:
+    """The e2e test's throw-away copy of the mock answers on 127.0.0.1:7131 while the e2e (or the gate) runs."""
+    try:
+        return httpx.get("http://127.0.0.1:7131/health", timeout=2).status_code == 200
+    except Exception:
+        return False
+
+
 def fresh_mock():
     """Rebuild the live mock hospital (documents, HL7, DICOM uploaded to Orthanc) and restart it: the radiology reports are preliminary again."""
+    if e2e_copy_running():
+        raise SystemExit("the e2e test's mock copy is running on 127.0.0.1:7131 (an e2e or gate run): not rebuilding the live mock now")
     print("== rebuilding the mock hospital (python -m his_mock.build --upload; his_mock/serve.sh restart) ...", flush=True)
     r = subprocess.run([PY, "-m", "his_mock.build", "--upload"], cwd=str(REPO), capture_output=True, text=True)
     print("  " + (r.stdout.strip().splitlines() or ["(no output)"])[-1])
@@ -528,6 +554,8 @@ def main(argv=None) -> int:
         steps = parse_steps(args.steps)
     except ValueError as e:
         ap.error(str(e))
+    if args.fresh and 1 not in steps:
+        ap.error("--fresh removes the demo Case Files and rebuilds the mock, so the run must include step 1 (--steps 1-6)")
     board_date = args.board_date or default_board_date()
     logins = read_logins(args.logins)
     missing = [u for u in ROLES.values() if u not in logins]
@@ -550,18 +578,15 @@ def main(argv=None) -> int:
     print("Roles: " + ", ".join(f"{u} ({logins[u][1]})" for u in ROLES.values()))
     t0 = time.time()
     ctx = {}
-    if 1 in steps:
-        step1(cl, args.base, board_date, args.pause)
-    if 2 in steps:
-        step2(cl, args.base, args.pause)
-    if 3 in steps:
-        step3(cl, args.base, args.pause)
-    if 4 in steps:
-        step4(cl, args.base, args.pause)
-    if 5 in steps:
-        step5(cl, args.base, board_date, args.pause, ctx)
-    if 6 in steps:
-        step6(cl, args.base, board_date, args.pause, ctx)
+    runners = {1: lambda: step1(cl, args.base, board_date, args.pause), 2: lambda: step2(cl, args.base, args.pause), 3: lambda: step3(cl, args.base, args.pause),
+               4: lambda: step4(cl, args.base, args.pause), 5: lambda: step5(cl, args.base, board_date, args.pause, ctx), 6: lambda: step6(cl, args.base, board_date, args.pause, ctx)}
+    for n in steps:
+        try:
+            runners[n]()
+        except KeyboardInterrupt:
+            check(f"{n} interrupted", False); break
+        except Exception as e:  # a step that crashes is a failed check; the later steps and the report still run
+            check(f"{n} the step crashed: {e.__class__.__name__}", False, repr(e)[:300])
     secs = round(time.time() - t0)
     print(f"\n{len(OK)} passed, {len(FAIL)} failed in {secs} s" + (f": {FAIL}" if FAIL else ""))
     print(f"The Case Files {', '.join(CASES.values())} and the session '{SESSION_TITLE}' stay on the app. To run again: --reset (or --fresh to rebuild the mock so the reports are preliminary again).")

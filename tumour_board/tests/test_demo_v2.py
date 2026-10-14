@@ -64,14 +64,51 @@ def test_every_sentence_cited():
     assert not dv.every_sentence_cited({"paragraphs": []}) and not dv.every_sentence_cited({})
 
 
-def test_default_board_date_is_the_next_friday_at_least_two_days_ahead():
-    assert dv.default_board_date(datetime.date(2026, 10, 14)) == "2026-10-16"   # Wednesday -> Friday
-    assert dv.default_board_date(datetime.date(2026, 10, 15)) == "2026-10-23"   # Thursday -> not tomorrow, next Friday
+def test_default_board_date_is_the_next_friday_at_least_four_days_ahead():
+    assert dv.default_board_date(datetime.date(2026, 10, 12)) == "2026-10-16"   # Monday -> this Friday
+    assert dv.default_board_date(datetime.date(2026, 10, 13)) == "2026-10-23"   # Tuesday -> next Friday (never the e2e's today + 3)
+    assert dv.default_board_date(datetime.date(2026, 10, 14)) == "2026-10-23"   # Wednesday
     assert dv.default_board_date(datetime.date(2026, 10, 16)) == "2026-10-23"   # Friday -> next Friday
-    assert dv.default_board_date(datetime.date(2026, 10, 17)) == "2026-10-23"   # Saturday
     for d in range(30):
-        got = datetime.date.fromisoformat(dv.default_board_date(datetime.date(2026, 10, 1) + datetime.timedelta(days=d)))
-        assert got.weekday() == 4 and (got - (datetime.date(2026, 10, 1) + datetime.timedelta(days=d))).days >= 2
+        today = datetime.date(2026, 10, 1) + datetime.timedelta(days=d)
+        got = datetime.date.fromisoformat(dv.default_board_date(today))
+        assert got.weekday() == 4 and (got - today).days >= 4 and got != today + datetime.timedelta(days=3)
+
+
+class _FakeResponse:
+    def __init__(self, status, body):
+        self.status_code, self._body, self.text = status, body, str(body)
+
+    def json(self):
+        return self._body
+
+
+class _FakeClient:
+    """Answers GET /api/tb/jobs/<id> from a script of responses (the last one repeats)."""
+    def __init__(self, answers):
+        self.answers, self.calls = list(answers), 0
+
+    def get(self, path, **kw):
+        a = self.answers[min(self.calls, len(self.answers) - 1)]; self.calls += 1
+        return _FakeResponse(*a)
+
+
+def test_wait_job_returns_the_finished_job_and_fails_on_an_unreadable_or_endless_job(monkeypatch):
+    monkeypatch.setattr(dv.time, "sleep", lambda s: None)
+    j, secs = dv.wait_job(_FakeClient([(200, {"state": "running"}), (200, {"state": "finished", "n": 1})]), "J1")
+    assert j == {"state": "finished", "n": 1} and secs >= 0
+    j, _ = dv.wait_job(_FakeClient([(404, {"detail": "no such job"})]), "J2")
+    assert j["state"] == "failed" and "404" in j["error"]
+    clock = iter([0, 0, 10, 10, 2000, 2000, 2000, 2000])
+    monkeypatch.setattr(dv.time, "time", lambda: next(clock))
+    j, _ = dv.wait_job(_FakeClient([(200, {"state": "running"})]), "J3", limit=100)
+    assert j["state"] == "failed" and "still running" in j["error"]
+
+
+def test_fresh_needs_step_one(capsys):
+    with pytest.raises(SystemExit) as e:
+        dv.main(["--fresh", "--steps", "5-6"])
+    assert e.value.code == 2 and "step 1" in capsys.readouterr().err
 
 
 def test_order_id_is_the_mock_slug():

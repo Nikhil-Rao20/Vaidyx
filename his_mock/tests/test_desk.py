@@ -55,7 +55,7 @@ def staff(client, code, role):
 
 
 def the_preliminary(client):
-    """The store's only preliminary report (the "preliminary only" scenario) and its department."""
+    """P12's preliminary report (the "preliminary only" scenario; P19 of the plan 8.1 demo holds two more) and its department."""
     s = hospital(client).store
     prelim = [r for r in s.reports.values() if r["status"] == "preliminary" and r["patient_id"] == "vxh-26-004212"]
     assert len(prelim) == 1, [r["id"] for r in prelim]
@@ -126,6 +126,8 @@ def test_department_page_shows_preliminary_and_scheduled_order(client):
                                                 and s.orders[x["order_id"]]["performing_department"] == dept["name"]}
     assert rep["patient"] == {"name": pat["name"], "uhid": pat["uhid"]}
     assert rep["encounter"] == s.encounters[r["encounter_id"]]["number"]
+    ids = [x["id"] for x in api["reports"]]  # three Radiology preliminary reports since P19: oldest first, as the README says
+    assert len(ids) >= 2 and ids == sorted(ids, key=lambda i: (desk._version_time(s.reports[i]), i))
     assert o["id"] in [x["id"] for x in api["orders"]]
 
 

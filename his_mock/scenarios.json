@@ -13352,7 +13352,7 @@
       "expect": "The Pathology agent is active automatically"
      },
      {
-      "actor": "treating_doctor",
+      "actor": "mdt_coordinator",
       "action": "Open the images in OHIF through the app's audited route (never Orthanc directly) and record the decision",
       "expect": "The MG study opens for viewing (no model reads it); the decision is recorded and audited"
      }
