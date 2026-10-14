@@ -117,6 +117,19 @@ def test_check_follows_the_case_file_scope():
     assert pacs.check("ohif/viewer", q, rad) == (403, pacs.NO_GRANT)
 
 
+def test_revoke_ends_the_grants_of_a_deleted_case_file():
+    q = f"StudyInstanceUIDs={UID}"
+    for cid in ("TB-A", "TB-B"):
+        store.create_case(cid, util.PATIENT, "lung_nsclc", created_by="test")
+    pacs.grant("dr.rao", UID, "TB-A", "d1"); pacs.grant("dr.mehta", UID, "TB-A", "d1"); pacs.grant("dr.rao", OTHER, "TB-B", "d2")
+    assert pacs.check("ohif/viewer", q, DOCTOR) is None
+    assert pacs.revoke("TB-A") == 2 and pacs.revoke("TB-A") == 0
+    assert pacs.check("ohif/viewer", q, DOCTOR) == (403, pacs.NO_GRANT) and pacs.granted("dr.mehta", UID) is None
+    assert pacs.granted("dr.rao", OTHER)["case_id"] == "TB-B"  # another Case File's grant stays
+    store.create_case("TB-A", util.PATIENT, "lung_nsclc", created_by="test") if not store.get_case("TB-A") else None
+    assert pacs.check("ohif/viewer", q, DOCTOR) == (403, pacs.NO_GRANT)  # a Case File re-created under the same id starts without grants
+
+
 def test_forward_query_rebuilds_the_study_search():
     assert pacs.forward_query("dicom-web/studies", f"includefield=all&0020000D={UID}&limit=2&offset=0") == f"StudyInstanceUID={UID}&includefield=all&limit=2&offset=0"
     assert pacs.forward_query("dicom-web/studies/", f"StudyInstanceUID={UID}") == f"StudyInstanceUID={UID}"

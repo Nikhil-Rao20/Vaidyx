@@ -6,7 +6,8 @@ hands an image to any agent; the app only forwards the viewer's own requests to 
 
     viewer_url(study_uid)                       the app path that opens OHIF on one study
     grant(user, study_uid, case_id, doc_id)     the route calls this after checking the user may read the Case File document; the
-                                                viewer and DICOMweb requests of that study are then forwarded for that user only
+                                                viewer and DICOMweb requests of that study are then forwarded for that user only;
+                                                revoke(case_id) ends them when the Case File is deleted
     classify(path, query) / check(...)          which requests are forwarded at all: the OHIF app, the viewer page of a granted study
                                                 and DICOMweb under that study; never Orthanc's REST API, explorer, plugins or a
                                                 study list; the query re-encoded from plain keys only, the study search reduced
@@ -84,6 +85,17 @@ def granted(user: str, study_uid: str, now: float | None = None) -> dict | None:
         _grants.pop(key, None)
         return None
     return dict(g)
+
+
+def revoke(case_id: str) -> int:
+    """Drop every grant opened from this Case File and its cached access answers: a deleted Case File (or one re-created under the same
+    id) carries no viewing right over (Phase 6 gate). Returns how many grants went."""
+    gone = [k for k, g in _grants.items() if g.get("case_id") == case_id]
+    for k in gone:
+        _grants.pop(k, None)
+    for k in [k for k in _access_cache if k[1] == case_id]:
+        _access_cache.pop(k, None)
+    return len(gone)
 
 
 def clear():
