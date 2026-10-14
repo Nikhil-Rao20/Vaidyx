@@ -91,6 +91,7 @@ def _case_readiness(c: dict, st: dict, today: date, board_day) -> dict:
     else:
         forecast, why = "on_track", "re-check pending"
     return {"case_id": c["case_id"], "patient": (c.get("patient") or {}).get("name") or c["case_id"], "protocol": c.get("protocol"), "board_date": c.get("board_date"),
+            "owner": c.get("department") or None, "owner_name": org.department_name(c["department"]) if c.get("department") else "",  # the owning treating department (V2 item 5.1)
             "readiness": gate.get("readiness"), "passed": bool(gate.get("passed")), "satisfied": gate.get("satisfied"), "total": gate.get("total"),
             "level1_open": (gate.get("levels") or {}).get("1", {}).get("open", 0), "level2_open": (gate.get("levels") or {}).get("2", {}).get("open", 0),
             "open_requests": len(pre), "unsent_requests": len(unsent), "overdue": len(overdue), "due_after_board": len(after_board), "blockers": len(gate.get("blockers") or []),

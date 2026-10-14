@@ -154,7 +154,13 @@ ACTIONS = {
     "manage_org": {"who": ("root_admin",), "dept": False, "doc": "Edit the hospital, departments, routes, root admins, coordinators and department admins (root admin)"},
     "manage_department": {"who": ("dept_admin", "root_admin"), "dept": True, "no_dept": ("root_admin",),
                           "doc": "Create, disable and remove the doctor logins of a department (its department admins and the root admin)"},
-    "read_case": {"who": ("known",), "dept": False, "doc": "Read Case Files, board sessions, the intake queue and the dashboard (anyone placed: doctors, the coordinator, admins; not a department admin or root admin)"},
+    "read_case": {"who": ("known",), "dept": False, "doc": "Read Case Files, board sessions, the intake queue and the dashboard (anyone placed: doctors, the coordinator, admins; not a department admin or root admin). Per Case File, access.scope() narrows this to the owner, the participants, the coordinator and the departments asked (V2 item 5.1)"},
+    "refer": {"who": ("treating",), "dept": False,
+              "doc": "Refer the Case File to another treating department (the owning department's doctors; V2 item 5.2)"},
+    "answer_referral": {"who": ("member", "head"), "dept": True, "no_dept": (),
+                        "doc": "Accept or decline a referral addressed to a department: the doctors of that department (V2 item 5.2)"},
+    "manage_participants": {"who": ("treating",), "dept": False,
+                            "doc": "Add or remove the departments that take part in a Case File, read and comment (the owning department's doctors; V2 item 5.1)"},
 }
 
 _SLUG = re.compile(r"^[a-z0-9_]+$")
@@ -651,6 +657,18 @@ def can(r: dict, action: str, department: str | None = None) -> bool:
         else:
             who = rule.get("no_dept", ())
     return _allowed(r, who, dept)
+
+
+def can_as_member(r: dict, action: str, department) -> bool:
+    """True if the user qualifies for a department-scoped action through a membership (member / head) of the department named, not
+    through a hospital-wide role: the uploading department confirms its own upload, its head deletes it (V2 item 5.1 owner rule)."""
+    rule = ACTIONS.get(action)
+    if rule is None or not rule.get("dept") or not isinstance(r, dict) or r.get("disabled") or not department:
+        return False
+    dept = department_id(department)
+    if not dept:
+        return False
+    return _allowed(r, tuple(x for x in rule["who"] if x in DEPT_ROLES), dept)
 
 
 def require(r: dict, action: str, department: str | None = None) -> None:

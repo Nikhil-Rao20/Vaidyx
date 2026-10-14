@@ -23,7 +23,8 @@ log = logging.getLogger(__name__)
 
 # a gap routed to a department; a request closed; the Case File is ready; a Tumour Board action sent to a department (item 7.4);
 # a new document may complete a Tumour Board action (a person decides)
-KINDS = ("request", "request_closed", "request_acknowledged", "request_done", "case_ready", "board_action", "board_action_suggestion", "decision_value_changed")
+KINDS = ("request", "request_closed", "request_acknowledged", "request_done", "case_ready", "board_action", "board_action_suggestion", "decision_value_changed",
+         "case_shared", "referral", "referral_answered")  # case_shared: a department invited to take part (5.1); referral / referral_answered: a Case File referred, the answer (5.2)
 UNSENT = "suggested"  # a request the gate proposed and nobody sent yet: in no inbox (V2 item 4.2)
 ROLES = ("coordinator",)
 CORE = ("id", "ts", "to", "kind", "case_id", "title", "text", "read_by")

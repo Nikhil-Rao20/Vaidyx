@@ -425,6 +425,15 @@ CAN = [
     ("answer_request", "pathology", (0, 0, 0, 0, 0, 0, 1, 0)),
     ("answer_request", None, (0, 0, 1, 0, 0, 0, 1, 0)),  # no department: the MDT Coordinator's own row
     ("answer_request", "Cardiology", (0, 0, 0, 0, 0, 0, 1, 0)),
+    # V2 items 5.1 / 5.2: the owning department refers and chooses the participants (access.may adds the owner rule per Case File); the
+    # receiving department's doctors answer a referral
+    ("refer", None, (0, 0, 0, 1, 0, 0, 1, 0)),
+    ("manage_participants", None, (0, 0, 0, 1, 0, 0, 1, 0)),
+    ("answer_referral", "radiology", (1, 1, 0, 0, 0, 0, 1, 0)),
+    ("answer_referral", "breast_surgery", (0, 0, 0, 1, 0, 0, 1, 0)),
+    ("answer_referral", "pathology", (0, 0, 0, 0, 0, 0, 1, 0)),
+    ("answer_referral", None, (0, 0, 0, 0, 0, 0, 1, 0)),
+    ("answer_referral", "Cardiology", (0, 0, 0, 0, 0, 0, 1, 0)),
 ]
 DEPT_ACTIONS = sorted(a for a, rule in org.ACTIONS.items() if rule["dept"])
 

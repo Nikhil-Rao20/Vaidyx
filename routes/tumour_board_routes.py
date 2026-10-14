@@ -20,6 +20,7 @@ from tumour_board import fhir_export  # FHIR R4 document bundle and the HBCR reg
 from tumour_board import metrics  # agenda readiness, chase list, quality dashboard (12 Oct)
 from tumour_board import accounts  # department admins create / disable / remove doctor logins; root admin accounts (V2 item 2.2)
 from tumour_board import his_case, his_client  # HIS-connected Case Files: create from a UHID, re-fetch, link registrations, outside reports (V2 items 3.1 to 3.6)
+from tumour_board import access  # who may open a Case File and act on it: owner, participants, the departments asked (V2 item 5.1)
 
 log = logging.getLogger("tumour_board")
 
@@ -30,6 +31,27 @@ from fastapi.responses import JSONResponse
 
 import re as _re
 _READ_CASE = _re.compile(r"^/api/tb/(cases|sessions|intake|metrics)(/|$)")  # routes that show patient data: a placed account only
+_CASE_PATH = _re.compile(r"^/api/tb/cases/([^/]+)(/.*)?$")  # one Case File: its owner, participants, the coordinator and the departments asked (V2 item 5.1)
+_LIMITED_OK = (_re.compile(r"^$"), _re.compile(r"^/documents/[^/]+(/file)?$"), _re.compile(r"^/requests/[^/]+/(acknowledge|done)$"),
+               _re.compile(r"^/actions/[^/]+/(close|dismiss-suggestion)$"))  # what a department that was only asked may call
+
+
+def _case_guard(rl, case_id, rest):
+    """The Case File scope of this user (access.FULL / access.REQUESTS), or a 403 response. A Case File that does not exist is left to
+    the route (404). A department that was only asked may read the Case File view (reduced by the route), open the records in its
+    scope and answer its requests and actions; nothing else."""
+    try:
+        c = store.get_case(case_id)
+    except (ValueError, OSError):
+        return None
+    if not c:
+        return None
+    sc = access.scope(rl, c)
+    if sc is None:
+        return JSONResponse({"detail": access.refusal(rl, c)}, status_code=403)
+    if sc == access.REQUESTS and not any(p.match(rest or "") for p in _LIMITED_OK):
+        return JSONResponse({"detail": "Your department sees only the items it was asked about in this Case File."}, status_code=403)
+    return sc
 
 
 class _ModelErrorRoute(APIRoute):
@@ -47,6 +69,12 @@ class _ModelErrorRoute(APIRoute):
                         return JSONResponse({"detail": "Your Tumour Board access is disabled. Ask your department admin or the root admin."}, status_code=403)
                     if _READ_CASE.match(request.url.path) and not org.can(rl, "read_case"):  # patient data only for placed accounts (review M6)
                         return JSONResponse({"detail": "Your account is not placed in any department yet, so it cannot open Case Files. Ask a Tumour Board admin."}, status_code=403)
+                    m = _CASE_PATH.match(request.url.path)
+                    if m and m.group(1) != "from-his":  # one Case File: owner, participants, coordinator, the departments asked (V2 item 5.1)
+                        sc = _case_guard(rl, m.group(1), m.group(2))
+                        if isinstance(sc, JSONResponse):
+                            return sc
+                        request.state.tb_scope = sc
             except Exception as e:  # the organisation file is unreadable: the route's own checks still apply
                 log.warning("tumour board route guard skipped (%s)", e)
             try:
@@ -74,6 +102,18 @@ def _need(r, action, department=None):
         org.require(r, action, department)
     except PermissionError as e:
         raise HTTPException(403, str(e))
+
+
+def _need_case(r, action, c, department=None):
+    """One permission check on a Case File: org.can() plus the owner rule (V2 item 5.1); a refusal is a 403 with a plain message."""
+    try:
+        access.require(r, action, c, department)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+
+
+def _scope(request):
+    return getattr(request.state, "tb_scope", None) or access.FULL
 
 
 def _need_known(r):
@@ -117,15 +157,20 @@ def _doc_department(d):
 def _case_permissions(r, c, st, docs):
     """What this user may do on this Case File, so the UI can hide forbidden actions (the routes still enforce them)."""
     prot = protocol.get(c["protocol"]) if c.get("protocol") else {"mandatory": []}
-    return {"upload": org.can(r, "upload_to_case"), "reprocess": org.can(r, "upload_to_case"), "delete_case": org.can(r, "delete_case"),
-            "refetch": bool(c.get("his")) and org.can(r, "upload_to_case"), "link_registration": bool(c.get("his")) and org.can(r, "upload_to_case"),  # V2 items 3.2 / 3.5
-            "board_record": org.can(r, "board_record"), "review": org.can(r, "review"), "list_case": org.can(r, "list_case"),
-            "waive": {q["id"]: org.can(r, "waive", q.get("department") or None) for q in prot.get("mandatory", [])},
-            "confirm": {d["doc_id"]: org.can(r, "confirm", _doc_department(d)) for d in docs},
-            "delete_document": {d["doc_id"]: org.can(r, "delete_document", _doc_department(d)) for d in docs},
+    own = access.may(r, "upload_to_case", c)  # the owner's doctors (any treating doctor on a Case File without an owner), V2 item 5.1
+    return {"upload": own, "reprocess": own, "delete_case": org.can(r, "delete_case"),
+            "refetch": bool(c.get("his")) and own, "link_registration": bool(c.get("his")) and own,  # V2 items 3.2 / 3.5
+            "board_record": org.can(r, "board_record"), "review": org.can(r, "review"), "list_case": access.may_list(r, c),
+            "waive": {q["id"]: access.may(r, "waive", c, q.get("department") or None) for q in prot.get("mandatory", [])},
+            "confirm": {d["doc_id"]: access.may(r, "confirm", c, _doc_department(d)) for d in docs},
+            "delete_document": {d["doc_id"]: access.may(r, "delete_document", c, _doc_department(d)) for d in docs},
             "unfile": {d["doc_id"]: bool(d.get("intake")) and org.can(r, "match") for d in docs},
             "update_action": {a["id"]: org.can(r, "update_action", a.get("department") or None) for a in st.get("actions", [])},
-            "send_request": org.can(r, "send_request"), "create_request": org.can(r, "create_request"), "close_request": org.can(r, "close_request"),  # V2 item 4.2
+            "send_request": access.may(r, "send_request", c), "create_request": access.may(r, "create_request", c), "close_request": access.may(r, "close_request", c),  # V2 item 4.2
+            "refer": access.may(r, "refer", c) and not access.open_referral(c), "manage_participants": access.may(r, "manage_participants", c),  # V2 items 5.1 / 5.2
+            "answer_referral": bool(access.open_referral(c)) and org.can(r, "answer_referral", (access.open_referral(c) or {}).get("to")),
+            "withdraw_referral": bool(access.open_referral(c)) and access.may(r, "refer", c),
+            "set_owner": not access.owner(c) and org.can(r, "create_case"),
             "answer_request": {a["id"]: _can_answer(r, a) for a in st.get("actions", []) if a.get("source") == "pre_authorization"},  # V2 item 4.3
             "undo_confirmation": {x["id"]: _can_confirm(r, c, st, x["type"], x["key"]) for x in st.get("confirmations", []) if not x.get("undone")}}
 
@@ -145,16 +190,16 @@ def _can_confirm(r, c, st, ctype, key):
         return False
     if ctype == "waive":
         dept = next((q.get("department") for q in protocol.get(c["protocol"]).get("mandatory", []) if q["id"] == key), "") if c.get("protocol") else ""
-        return org.can(r, "waive", dept or None)
+        return access.may(r, "waive", c, dept or None)
     if spec["target"] in ("document", "fact"):
         doc_id = key.partition(":")[0] if spec["target"] == "fact" else key
         d = store.get_doc(c["case_id"], doc_id) if doc_id else None
         if ctype == "confirm_match":
-            return org.can(r, "confirm", _doc_department(d)) if (d or {}).get("outside") else org.can(r, "match")  # an outside report: the treating doctor confirms the patient (V2 item 3.6)
-        return org.can(r, spec["action"], _doc_department(d))
+            return access.may(r, "confirm", c, _doc_department(d)) if (d or {}).get("outside") else org.can(r, "match")  # an outside report: the treating doctor confirms the patient (V2 item 3.6)
+        return access.may(r, spec["action"], c, _doc_department(d))
     if ctype == "resolve_flag":
         return org.can(r, "board_record")
-    return org.can(r, spec["action"])
+    return access.may(r, spec["action"], c)
 
 
 def _case(case_id):
@@ -486,8 +531,46 @@ def setup_tumour_board_routes():
 
     @r.get("/cases")
     async def cases(request: Request):
-        _user(request)
-        return {"cases": [_his_brief(c) for c in store.list_cases()], "demo": service.list_demo()}
+        rl = _roles(request)
+        out = []
+        for c in store.list_cases():  # only the Case Files this user may open (V2 item 5.1)
+            sc = access.scope(rl, c)
+            if sc:
+                out.append({**_his_brief(c), "scope": sc, "owner_name": org.department_name(access.owner(c)) if access.owner(c) else "",
+                            "participants": access.participants(c), "linked": len(c.get("linked_cases") or []), "referral": (access.open_referral(c) or {}).get("to")})
+        return {"cases": out, "demo": service.list_demo()}
+
+    @r.post("/cases/{case_id}/owner")
+    async def set_owner(case_id: str, request: Request):
+        """{"department", "reason"?}: record the owning treating department of a Case File that has none (a manual or demo Case File).
+        Once owned, ownership moves only through a referral (V2 item 5.2)."""
+        u = _user(request); rl = _roles(request); c = _case(case_id); _need(rl, "create_case")
+        if access.owner(c):
+            raise HTTPException(409, f"This Case File is owned by {org.department_name(access.owner(c))}; ownership moves through a referral.")
+        b = await request.json() if (await request.body()) else {}
+        try:
+            c = access.set_owner(case_id, str((b or {}).get("department") or ""), u, reason=str((b or {}).get("reason") or ""), roles=rl)
+        except access.AccessError as e:
+            raise HTTPException(e.status, str(e))
+        return {"case": c, "access": access.public(c)}
+
+    @r.put("/cases/{case_id}/participants")
+    async def participants(case_id: str, request: Request):
+        """{"add": [departments], "remove": [departments], "reason"?}: the owning department's doctors choose who takes part (read and
+        comment). Audited; an added department is told."""
+        u = _user(request); rl = _roles(request); c = _case(case_id); _need_case(rl, "manage_participants", c)
+        b = await request.json() if (await request.body()) else {}
+        b = b if isinstance(b, dict) else {}
+        reason = str(b.get("reason") or "")
+        try:
+            async with store.lock(case_id):
+                for d in b.get("add") or []:
+                    c = access.add_participant(case_id, str(d), u, reason)
+                for d in b.get("remove") or []:
+                    c = access.remove_participant(case_id, str(d), u, reason)
+        except access.AccessError as e:
+            raise HTTPException(e.status, str(e))
+        return {"case": store.get_case(case_id), "access": access.public(store.get_case(case_id))}
 
     # ---- HIS-connected Case Files (V2 items 3.1, 3.2, 3.5): the hospital information system, lookup, create from a UHID, re-fetch ----
     def _his_call(coro):
@@ -554,7 +637,7 @@ def setup_tumour_board_routes():
     async def his_refetch(case_id: str, request: Request):
         """Re-fetch from the HIS (V2 item 3.5): only records new or changed since the last fetch; the gate re-checks and requests whose
         record arrived final and signed close themselves."""
-        u = _user(request); rl = _roles(request); _need(rl, "upload_to_case"); _case(case_id)
+        u = _user(request); rl = _roles(request); c = _case(case_id); _need_case(rl, "upload_to_case", c)
         job = await _his_call(his_case.refetch(case_id, u))
         return {"job": job["id"], "total": job["total"], "his": job.get("his")}
 
@@ -562,14 +645,14 @@ def setup_tumour_board_routes():
     async def his_link(case_id: str, request: Request):
         """A person links a possible duplicate or temporary registration ({"uhid", "reason"?}); its records join the Case File labelled
         with that registration. Never automatic (plan 3.2)."""
-        u = _user(request); rl = _roles(request); _need(rl, "upload_to_case"); _case(case_id); b = await request.json()
+        u = _user(request); rl = _roles(request); c = _case(case_id); _need_case(rl, "upload_to_case", c); b = await request.json()
         job = await _his_call(his_case.link_registration(case_id, str((b or {}).get("uhid") or ""), u, str((b or {}).get("reason") or "")))
         return {"job": job["id"], "total": job["total"], "his": job.get("his"), "case": store.get_case(case_id)}
 
     @r.post("/cases/{case_id}/his/unlink")
     async def his_unlink(case_id: str, request: Request):
         """Undo a link ({"uhid", "reason"}): the registration's records leave the Case File and the identifiers learned from it are forgotten (audited)."""
-        u = _user(request); rl = _roles(request); _need(rl, "upload_to_case"); _case(case_id); b = await request.json()
+        u = _user(request); rl = _roles(request); c = _case(case_id); _need_case(rl, "upload_to_case", c); b = await request.json()
         async with store.lock(case_id):
             try:
                 out = his_case.unlink_registration(case_id, str((b or {}).get("uhid") or ""), u, str((b or {}).get("reason") or ""))
@@ -581,14 +664,20 @@ def setup_tumour_board_routes():
     @r.post("/cases/{case_id}/his/fetch-older")
     async def his_fetch_older(case_id: str, request: Request):
         """Widen the fetch window ({"months" | "all" | "from"}) without starting over (plan 3.2)."""
-        u = _user(request); rl = _roles(request); _need(rl, "upload_to_case"); _case(case_id); b = await request.json() if (await request.body()) else {}
+        u = _user(request); rl = _roles(request); c = _case(case_id); _need_case(rl, "upload_to_case", c); b = await request.json() if (await request.body()) else {}
         job = await _his_call(his_case.fetch_older(case_id, b if isinstance(b, dict) else {}, u))
         return {"job": job["id"], "total": job["total"], "his": job.get("his"), "case": store.get_case(case_id)}
 
     @r.post("/cases")
     async def create(request: Request):
-        u = _user(request); _need(_roles(request), "create_case"); b = await request.json()
+        u = _user(request); rl = _roles(request); _need(rl, "create_case"); b = await request.json()
         prot = b.get("protocol") or ""
+        owner_dept = None  # the owning treating department (V2 item 5.1): named in the request, else the creator's own; the coordinator may leave it open (V1 path)
+        if b.get("department") or (rl.get("treating") and not rl.get("admin") and not rl.get("coordinator")):
+            try:
+                owner_dept = his_case._owner_department(rl, b.get("department"))
+            except his_case.HISCaseError as e:
+                raise HTTPException(e.status, str(e))
         if prot and not protocol.exists(prot):
             raise HTTPException(400, f"Unknown protocol: {prot}")
         if b.get("setting") and (not prot or b["setting"] not in {x["id"] for x in protocol.settings(prot)}):
@@ -600,14 +689,19 @@ def setup_tumour_board_routes():
             c = store.create_case(store.safe_id(b["case_id"]), b.get("patient", {}), prot, b.get("board_date", ""), u, b.get("setting", ""), level or "")
         except FileExistsError:
             raise HTTPException(409, "Case already exists")
-        store.audit(c["case_id"], {"kind": "case_created", "by": u, "listing": c["listing"]["status"], "protocol": prot, "setting": c.get("setting")})
+        if owner_dept:
+            c["department"] = owner_dept
+            store.save_case(c)
+        store.audit(c["case_id"], {"kind": "case_created", "by": u, "listing": c["listing"]["status"], "protocol": prot, "setting": c.get("setting"), "owner": owner_dept})
         return c
 
     @r.post("/cases/{case_id}/listing")
     async def list_case(case_id: str, request: Request):
         """The coordinator lists the Case File for the board (V1 item 2.5): {"protocol", "setting", "board_date", "hospital_level"}.
         Pre-Authorization starts when listed (fields extracted from the stored pages, gate evaluated)."""
-        u = _user(request); _need(_roles(request), "list_case"); _case(case_id); b = await request.json()
+        u = _user(request); rl = _roles(request); c = _case(case_id); b = await request.json()
+        if not access.may_list(rl, c):  # the MDT Coordinator, or the owning department's doctors (the new owner picks the protocol after a referral, V2 item 5.2)
+            raise HTTPException(403, "Only the MDT Coordinator or the doctors of the owning department change the listing of this Case File.")
         try:
             job = service.list_case(case_id, str(b.get("protocol", "")), str(b.get("setting", "") or ""), str(b.get("board_date", "") or ""), str(b.get("hospital_level", "") or ""), u)
         except ValueError as e:
@@ -630,7 +724,7 @@ def setup_tumour_board_routes():
 
     @r.post("/cases/{case_id}/demo-arrivals")
     async def arrivals(case_id: str, request: Request):
-        u = _user(request); _need(_roles(request), "upload_to_case"); _case(case_id)
+        u = _user(request); c = _case(case_id); _need_case(_roles(request), "upload_to_case", c)
         job = service.demo_arrivals(case_id, u)
         if not job:
             raise HTTPException(404, "No demo arrivals for this case")
@@ -641,6 +735,16 @@ def setup_tumour_board_routes():
         rl = _roles(request); c = _case(case_id)
         st = store.get_state(case_id)
         all_docs = store.list_docs(case_id)
+        if _scope(request) == access.REQUESTS:  # a department that was only asked: its requests and the records in their scope (V2 item 5.1)
+            st = access.limited_state(rl, c, st)
+            mine = access.limited_docs(rl, c, rules.case_docs(case_id, store.get_state(case_id)), store.get_state(case_id))
+            docs = [{k: d.get(k) for k in ("doc_id", "filename", "rel_path", "ext", "state", "error", "classification", "added", "department", "uploaded_by")}
+                    | {"facts": {}, "pages": len(d.get("pages") or []), "methods": [], "scan_pages": [], "page_flags": []} | his_case.doc_view(d) for d in mine]
+            return {"case": {k: v for k, v in c.items() if k not in ("his",)}, "state": st, "documents": docs, "facts": {}, "timeline": [], "signature": None, "stale": {},
+                    "permissions": {"answer_request": {a["id"]: _can_answer(rl, a) for a in st["actions"] if a.get("source") == "pre_authorization"},
+                                    "update_action": {a["id"]: org.can(rl, "update_action", a.get("department") or None) for a in st["actions"]}},
+                    "discordances": None, "trends": None, "outcomes": postboard.OUTCOMES, "his": None, "his_flags": [], "requests": dept_requests.summary(st),
+                    "groups": his_case.encounter_groups(c, mine), "access": {**access.public(c), "scope": access.REQUESTS}}
         docs = []
         confirmed_docs = rules.case_docs(case_id, st)
         for d in confirmed_docs:  # as the clinicians confirmed them (type, dates, values; V1 items 2.2, 3.1, 3.2)
@@ -661,13 +765,14 @@ def setup_tumour_board_routes():
                 "trends": postboard.trends(case_id, st), "outcomes": postboard.OUTCOMES,  # values over time (12 Oct)
                 "his": his_case.public(c), "his_flags": his_case.flags(case_id, confirmed_docs),  # the hospital system, its registrations and orders; HIS values the text does not carry (V2 item 3.3)
                 "requests": dept_requests.summary(st),  # suggested / sent / done / closed counts (V2 item 4.2)
-                "groups": his_case.encounter_groups(c, confirmed_docs)}  # records grouped by OP visit and IP admission (V2 item 3.4)
+                "groups": his_case.encounter_groups(c, confirmed_docs),  # records grouped by OP visit and IP admission (V2 item 3.4)
+                "access": {**access.public(c), "scope": access.FULL}}  # owner, participants, linked Case Files (V2 items 5.1 / 5.3)
 
     @r.post("/cases/{case_id}/documents")
     async def upload(case_id: str, request: Request, files: list[UploadFile] = File(...), paths: str = Form("[]"), outside: str = Form("")):
         """Upload into a Case File. Into an HIS-connected Case File every upload is an outside report (another hospital, a private
         laboratory; V2 item 3.6) unless `outside` is "0"; elsewhere `outside=1` labels it so."""
-        u = _user(request); _need(_roles(request), "upload_to_case"); c = _case(case_id)
+        u = _user(request); c = _case(case_id); _need_case(_roles(request), "upload_to_case", c)
         rels = json.loads(paths or "[]")
         data = []
         for i, f in enumerate(files):
@@ -864,19 +969,25 @@ def setup_tumour_board_routes():
         return JSONResponse({"case": c, "state": store.get_state(case_id), "documents": docs, "audit": store.read_audit(case_id, 5000)},
                             headers={"Content-Disposition": f'attachment; filename="{c["case_id"]}_case_file.json"'})
 
+    def _in_scope(request, c, doc_id):
+        """A department that was only asked opens only the records in its scope (V2 item 5.1)."""
+        if _scope(request) == access.REQUESTS and not any(x["doc_id"] == doc_id for x in access.limited_docs(_roles(request), c, store.list_docs(c["case_id"]))):
+            raise HTTPException(403, "Your department sees only the records it produced or was asked about in this Case File.")
+
     @r.get("/cases/{case_id}/documents/{doc_id}")
     async def doc(case_id: str, doc_id: str, request: Request):
-        _user(request); _case(case_id)
+        _user(request); c = _case(case_id)
         d = store.get_doc(case_id, doc_id)
         if not d:
             raise HTTPException(404, "document not found")
+        _in_scope(request, c, doc_id)
         # as the clinicians confirmed it (V1 item 2.2; review M1: a confirmed value no longer shows as the model's reading), facts saying
         # whether they were read from a scan (V1 item 8.1)
         return scanned.with_source_methods(confirm.apply_to_doc(d, store.get_state(case_id), case_id))
 
     @r.get("/cases/{case_id}/documents/{doc_id}/file")
     async def doc_file(case_id: str, doc_id: str, request: Request, render: int = 0, page: int = 0):
-        _user(request); _case(case_id)
+        _user(request); c = _case(case_id); _in_scope(request, c, doc_id)
         p = store.original_path(case_id, doc_id)
         # page preview as PNG (keeps the strict CSP: no PDF iframes needed); Aadhaar groups read by the OCR engine blacked out (V1 item 8.4)
         out = scanned.preview_bytes(p, store.get_doc(case_id, doc_id) or {}, bool(render), page)
@@ -893,7 +1004,7 @@ def setup_tumour_board_routes():
 
     @r.post("/cases/{case_id}/reprocess")
     async def reprocess(case_id: str, request: Request):
-        u = _user(request); _need(_roles(request), "upload_to_case"); _case(case_id)
+        u = _user(request); c = _case(case_id); _need_case(_roles(request), "upload_to_case", c)
         b = await request.json() if (await request.body()) else {}
         async with store.lock(case_id):  # withdraws dismissals: never alongside a confirmation being recorded
             job = service.reprocess(case_id, (b if isinstance(b, dict) else {}).get("which", "errors"), u)
@@ -901,11 +1012,11 @@ def setup_tumour_board_routes():
 
     @r.delete("/cases/{case_id}/documents/{doc_id}")
     async def delete_doc(case_id: str, doc_id: str, request: Request):
-        u = _user(request); _case(case_id)
+        u = _user(request); c = _case(case_id)
         d = store.get_doc(case_id, doc_id)
         if not d:
             raise HTTPException(404, "document not found")
-        _need(_roles(request), "delete_document", _doc_department(d))
+        _need_case(_roles(request), "delete_document", c, _doc_department(d))
         async with store.lock(case_id):
             return service.delete_document(case_id, doc_id, u)
 
@@ -915,20 +1026,20 @@ def setup_tumour_board_routes():
         action = confirm.TYPES[ctype]["action"]
         if ctype == "waive":
             dept = next((q.get("department") for q in protocol.get(c["protocol"]).get("mandatory", []) if q["id"] == key), "") if c.get("protocol") else ""
-            _need(rl, "waive", dept or None)
+            _need_case(rl, "waive", c, dept or None)
         elif ctype == "confirm_match":
             d = store.get_doc(case_id, key) if key else None
             if d and d.get("outside"):  # an outside report matched by name only: the treating doctor confirms the patient (V2 item 3.6)
-                _need(rl, "confirm", _doc_department(d))
+                _need_case(rl, "confirm", c, _doc_department(d))
             else:
                 _need(rl, "match")
         elif confirm.TYPES[ctype]["target"] in ("document", "fact"):
             doc_id = key.partition(":")[0] if confirm.TYPES[ctype]["target"] == "fact" else key
-            _need(rl, action, _doc_department(store.get_doc(case_id, doc_id) if doc_id else None))
+            _need_case(rl, action, c, _doc_department(store.get_doc(case_id, doc_id) if doc_id else None))
         elif ctype == "resolve_flag":
             _need(rl, "board_record")
         else:
-            _need(rl, action)
+            _need_case(rl, action, c)
 
     @r.post("/cases/{case_id}/confirmations")
     async def confirmations(case_id: str, request: Request):
@@ -1068,7 +1179,7 @@ def setup_tumour_board_routes():
     async def request_send(case_id: str, action_id: str, request: Request):
         """{"message"?, "due"?, "subject"?}: the treating doctor sends the suggested request in-app (edited or as drafted); sending a sent
         request again is a reminder. The department is notified; audited."""
-        u = _user(request); rl = _roles(request); _need(rl, "send_request"); _case(case_id)
+        u = _user(request); rl = _roles(request); c = _case(case_id); _need_case(rl, "send_request", c)
         b = await request.json() if (await request.body()) else {}
         b = b if isinstance(b, dict) else {}
         async with store.lock(case_id):
@@ -1082,7 +1193,7 @@ def setup_tumour_board_routes():
     async def request_create(case_id: str, request: Request):
         """{"department", "label", "what"?, "message"?, "due"?}: a request with no protocol record behind it (a pre-anaesthetic check, a
         medication review), written by the treating doctor and sent in one step."""
-        u = _user(request); rl = _roles(request); _need(rl, "create_request"); _case(case_id)
+        u = _user(request); rl = _roles(request); c = _case(case_id); _need_case(rl, "create_request", c)
         b = await request.json() if (await request.body()) else {}
         b = b if isinstance(b, dict) else {}
         async with store.lock(case_id):
@@ -1126,7 +1237,7 @@ def setup_tumour_board_routes():
     @r.post("/cases/{case_id}/requests/{action_id}/close")
     async def request_close(case_id: str, action_id: str, request: Request):
         """{"note"?}: the treating doctor closes a request that has no protocol record behind it."""
-        u = _user(request); rl = _roles(request); _need(rl, "close_request"); _case(case_id)
+        u = _user(request); rl = _roles(request); c = _case(case_id); _need_case(rl, "close_request", c)
         b = await request.json() if (await request.body()) else {}
         async with store.lock(case_id):
             try:
