@@ -24,7 +24,7 @@ Every method except ping() raises HISError (a plain message, no stack, never the
 problem; nothing partially trusted is returned. The invariant (project rules): structured HIS values (Observations, conclusions,
 codes) are candidates only; Vaidyx-TB checks every one against the report text, and the PDF wins.
 
-Settings: <DATA_ROOT>/his.json {"kind": "fhir"|"mcp"|"none", "label", "url", "token", "token_file", "connector", "enabled"},
+Settings: <DATA_ROOT>/his.json {"kind": "fhir"|"mcp"|"none", "label", "url", "token", "token_file", "connector", "enabled", "pacs_url" (6.3)},
 environment overrides TB_HIS_URL, TB_HIS_TOKEN, TB_HIS_TOKEN_FILE; without the file the demo's mock hospital is used.
 Code tables (document type, Observation -> fact): protocols/his_codes.json.
 """
@@ -46,6 +46,7 @@ from . import config
 IST = timezone(timedelta(hours=5, minutes=30))
 DEFAULT_LABEL = "Vaidyx Demo Hospital HIS (SYNTHETIC)"
 DEFAULT_URL = "http://127.0.0.1:7130"
+DEFAULT_PACS_URL = "http://127.0.0.1:8042"  # Orthanc + OHIF of the demo (reached only through the app: pacs.py)
 KINDS = ("fhir", "mcp", "none")
 REFERRAL_SNOMED = "3457005"
 LOINC = "http://loinc.org"
@@ -1097,7 +1098,8 @@ def settings_path() -> Path:
 
 def _default_settings() -> dict:
     return {"kind": "fhir", "label": DEFAULT_LABEL, "url": DEFAULT_URL, "token": "",
-            "token_file": str(config.REPO / "data" / "his_mock" / "token"), "connector": "", "enabled": True}
+            "token_file": str(config.REPO / "data" / "his_mock" / "token"), "connector": "", "enabled": True,
+            "pacs_url": DEFAULT_PACS_URL}
 
 
 def settings() -> dict:
@@ -1139,6 +1141,7 @@ def token(d: dict | None = None) -> str:
 def public(d: dict, manager: bool = True) -> dict:
     """Settings without the token (the UI only learns whether one is available); the token file's server path only for a manager."""
     out = {k: v for k, v in d.items() if k != "token"} | {"has_token": bool(token(d))}
+    out.setdefault("pacs_url", DEFAULT_PACS_URL)  # not secret: the app forwards the image viewer to it (pacs.py), the browser never goes there
     if not manager:
         out["token_file"] = bool(out.get("token_file"))
     return out
@@ -1155,6 +1158,13 @@ def _origin(url: str) -> str:
 def allowed_hosts() -> set:
     """Hosts a root admin may point the HIS connection at beside this server: TB_HIS_ALLOW_HOSTS (comma separated host[:port])."""
     return {h.strip().lower() for h in os.getenv("TB_HIS_ALLOW_HOSTS", "").split(",") if h.strip()}
+
+
+def _host_ok(url: str, allow_remote: bool = False) -> bool:
+    """This server (loopback), a host[:port] in TB_HIS_ALLOW_HOSTS, or any host for a Vaidyx admin (`allow_remote`)."""
+    host = (urlsplit(url).hostname or "").lower()
+    hostport = (urlsplit(url).netloc or "").lower()
+    return host in LOOPBACK or host in allowed_hosts() or hostport in allowed_hosts() or allow_remote
 
 
 def validate_settings(d: dict, existing: dict | None = None, allow_remote: bool = False) -> dict:
@@ -1178,9 +1188,7 @@ def validate_settings(d: dict, existing: dict | None = None, allow_remote: bool 
     if kind == "fhir":
         if not _URL.match(url):
             raise ValueError("url must start with http:// or https://")
-        host = (urlsplit(url).hostname or "").lower()
-        hostport = (urlsplit(url).netloc or "").lower()
-        if host not in LOOPBACK and host not in allowed_hosts() and hostport not in allowed_hosts() and not allow_remote:
+        if not _host_ok(url, allow_remote):
             raise ValueError("the HIS connection may point only at this server or at a host listed in TB_HIS_ALLOW_HOSTS; ask the Vaidyx admin for another host")
         if not tok and not token_file:
             raise ValueError("a FHIR HIS needs a token (saved tokens never follow a change of host)")
@@ -1188,8 +1196,17 @@ def validate_settings(d: dict, existing: dict | None = None, allow_remote: bool 
         from . import connectors
         if not connectors.get(connector):
             raise ValueError(f"connector '{connector}' is not a configured MCP connector")
+    # the PACS the image viewer is forwarded to (pacs.py, V2 item 6.3); missing: the saved one (checked when it was saved), else the demo's
+    pacs_url = str(d.get("pacs_url") or "").strip().rstrip("/")
+    if not pacs_url:
+        pacs_url = str(existing.get("pacs_url") or DEFAULT_PACS_URL).strip().rstrip("/")
+    else:
+        if not _URL.match(pacs_url) or "?" in pacs_url or "#" in pacs_url:
+            raise ValueError("pacs_url must start with http:// or https:// and carry no query")
+        if not _host_ok(pacs_url, allow_remote):
+            raise ValueError("the PACS may point only at this server or at a host listed in TB_HIS_ALLOW_HOSTS; ask the Vaidyx admin for another host")
     return {"kind": kind, "label": label, "url": url, "token": tok, "token_file": token_file, "connector": connector,
-            "enabled": bool(d.get("enabled", True))}
+            "enabled": bool(d.get("enabled", True)), "pacs_url": pacs_url}
 
 
 def save_settings(d: dict, by: str = "", allow_remote: bool = False) -> dict:
@@ -1213,7 +1230,7 @@ def save_settings(d: dict, by: str = "", allow_remote: bool = False) -> dict:
     except OSError:
         pass
     tmp.replace(p)
-    org.audit("his_settings_saved", by, his_kind=clean["kind"], label=clean["label"], url=clean["url"],
+    org.audit("his_settings_saved", by, his_kind=clean["kind"], label=clean["label"], url=clean["url"], pacs_url=clean["pacs_url"],
               token_file=clean["token_file"], connector=clean["connector"], enabled=clean["enabled"],
               has_token=bool(clean["token"] or clean["token_file"]))
     return public(clean)

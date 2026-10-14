@@ -14,7 +14,13 @@ acknowledges and sends "done" from the department inbox, the doctor writes and c
 (Pulmonology, Colorectal Surgery) created through the Tumour Board; the Pulmonology doctor creates a Case File from VXH/26/004214 (lung),
 refers it to Colorectal Surgery from the hospital system's suggested referral; the Colorectal Surgery doctor accepts it from the inbox
 under colorectal_rectum (the gate re-runs on the same records, the lung gate stays as read-only history); the Pulmonology doctor stays as
-a participant with no Notify / waive buttons. The Case File and the logins are deleted at the end."""
+a participant with no Notify / waive buttons. The Case File and the logins are deleted at the end.
+--only board: before and during the board (V2 items 6.1 to 6.4) against the mock hospital (read-only on it): a throw-away Breast Surgery
+doctor creates a Case File from VXH/26/004201 and marks it ready for the board; a throw-away MDT Coordinator finds it ticked as ready
+among the candidates, creates the session, records the heads present and a Breast Surgery member (the surgical seat with the "check
+PM-JAY requirement" chip), opens a record in the drawer and the images in the OHIF viewer served through the app (no request to the
+PACS port), and fetches the minutes. The session is not started (no model call for briefs). The session file, the Case File and the
+logins are deleted at the end."""
 import argparse, os, secrets, sys, time
 from urllib.parse import unquote, urlparse
 
@@ -36,10 +42,14 @@ def login(pg, base, username, password):
     pg.fill("input[type=text], input[name=username], #username", username)
     pg.fill("input[type=password]", password)
     pg.keyboard.press("Enter")
-    try:  # a slow login (bcrypt under load) must not leave the page on /login
-        pg.wait_for_url(lambda u: urlparse(u).path.rstrip("/") != "/login", timeout=15000)
-    except Exception:
-        pass  # the next step names what is missing
+    for attempt in range(2):  # a slow login (bcrypt under load) must not leave the page on /login: one more try, then the next step names what is missing
+        try:
+            pg.wait_for_url(lambda u: urlparse(u).path.rstrip("/") != "/login", timeout=15000)
+            break
+        except Exception:
+            if attempt or urlparse(pg.url).path.rstrip("/") != "/login":
+                break
+            pg.fill("input[type=password]", password); pg.keyboard.press("Enter")
     pg.wait_for_timeout(2500)
 
 
@@ -594,9 +604,214 @@ def referral_screens(b, pg, base, pw, shot, errors):
             errors.append(f"could not delete the test Case File {cid}")
 
 
+BOARD_UHID, BOARD_DATE = "VXH/26/004201", "2026-11-27"  # mock hospital, synthetic: breast, early; a board date no demo Case File uses
+UI_BREAST, UI_COORD = "tb-ui-breastdoc", "tb-ui-coord"  # throw-away synthetic logins of the board flow
+BOARD_MEMBER = "Dr Breast Surgeon (UI test, synthetic)"
+PACS_PORT = ":8042"  # the browser must never reach the PACS directly: the viewer and its DICOMweb calls go through the app
+
+
+def board_cleanup(pg, base, cid=None, sid=None):
+    """As admin: delete the flow's session file, its Case File and its two logins. Errors are not test failures here."""
+    if sid:
+        try:
+            from tumour_board import board
+            board._path(sid).unlink(missing_ok=True); board.audit_session(sid, {"kind": "ui_test_removed", "by": "ui_test"})
+        except Exception as e:  # noqa: BLE001: reported, never fatal
+            print(f"note: the test session {sid} could not be removed: {type(e).__name__}")
+    if cid and cid not in PROTECTED and cid not in DEMO_CASES:
+        pg.request.delete(base + f"/api/tb/cases/{cid}")
+    o = pg.request.get(base + "/api/tb/org")
+    if o.ok:
+        cur = o.json().get("users") or {}
+        users = {u: v for u, v in cur.items() if u not in (UI_BREAST, UI_COORD)}
+        if users != cur:
+            pg.request.put(base + "/api/tb/org", data={"users": users, "expected_version": o.json().get("version")})
+    for u in (UI_BREAST, UI_COORD):
+        pg.request.delete(base + "/api/auth/users", data={"username": u})
+
+
+def set_value(p, sel, value):
+    """Set an input (a date) and fire its change event as a person picking the value would."""
+    p.evaluate("([s, v]) => { const el = document.querySelector(s); el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); }", [sel, value])
+
+
+def board_screens(b, pg, base, pw, shot, errors):
+    """V2 items 6.1 to 6.4 against the mock hospital (synthetic, read-only). `pg` is the admin page: it deletes the session, the Case
+    File and the throw-away logins in `finally`. Passwords are random, synthetic and never printed."""
+    cid, sid, pages = None, None, []
+    h = pg.request.get(base + "/api/tb/his")
+    if not (h.ok and (h.json().get("status") or {}).get("ok")):
+        errors.append(f"the hospital system does not answer for the board flow: HTTP {h.status}"); return
+    board_cleanup(pg, base)  # a previous run that stopped half way
+    creds = {}
+    try:
+        for u, body in [(UI_BREAST, {"departments": {"breast_surgery": "doctor"}, "display_name": "Dr. Breast Surgery Doctor (UI test, synthetic)"}),
+                        (UI_COORD, {"coordinator": True, "display_name": "MDT Coordinator (UI test, synthetic)"})]:
+            creds[u] = "Synthetic-" + secrets.token_urlsafe(12)
+            r = pg.request.post(base + "/api/tb/org/accounts", data={"username": u, "password": creds[u], **body})
+            if not r.ok:
+                errors.append(f"the {u} login for the board flow could not be created: HTTP {r.status} {r.text()[:120]}"); return
+
+        def page_as(u):
+            p = b.new_page(viewport=pg.viewport_size, device_scale_factor=1); watch(p, errors); pages.append(p)
+            login(p, base, u, creds[u]); p.goto(base + "/tb"); p.wait_for_selector("#btn-sessions", state="attached", timeout=20000); p.wait_for_timeout(800)
+            return p
+
+        def open_case(p, case_id):
+            open_side(p); p.click(f".citem[data-case='{case_id}']"); p.click("#tabs button[data-tab='ready']"); p.wait_for_selector("#own-card", timeout=30000); p.wait_for_timeout(400)
+
+        # 6.1: the owner's doctor creates the Case File for the board date and marks it ready
+        d = page_as(UI_BREAST)
+        open_side(d); d.click("#btn-new"); d.wait_for_selector("#h-id", timeout=20000)
+        if d.locator("[data-way='his']").count() and not d.locator("[data-way='his'].on").count():
+            d.click("[data-way='his']")
+        d.fill("#h-id", BOARD_UHID); d.click("#h-look"); d.wait_for_selector("#h-res .lookbox", timeout=30000)
+        d.select_option("#h-prot", "breast"); d.select_option("#h-setting", "early"); d.select_option("#h-level", "optimal"); d.select_option("#h-win", "12")
+        d.fill("#h-date", BOARD_DATE)
+        with d.expect_response(lambda r: "/api/tb/cases/from-his" in r.url, timeout=60000) as resp:
+            d.click("#h-go")
+        if not resp.value.ok:
+            errors.append(f"create from the HIS as the Breast Surgery doctor failed: HTTP {resp.value.status} {resp.value.text()[:160]}"); return
+        res = resp.value.json(); cid = res["case"]["case_id"]
+        if cid in PROTECTED or cid in DEMO_CASES:
+            cid = None; errors.append("create from the HIS returned a protected Case File id"); return
+        j = wait_job(d, base, res["job"])
+        if not j or j.get("state") != "finished":
+            errors.append(f"first fetch job did not finish: {(j or {}).get('state')} {(j or {}).get('error', '')}"); return
+        d.wait_for_timeout(1500); open_case(d, cid)
+        if not d.locator("#btn-ready").count():
+            errors.append("the owner's doctor is not offered 'Mark ready for the board' on a listed Case File"); return
+        d.click("#btn-ready"); d.wait_for_selector("#cd-note", timeout=10000)
+        d.fill("#cd-note", "UI test: ready (synthetic)"); shot("board_1_ready_dialog", page=d)
+        d.click("#cd-ok"); d.wait_for_selector("#c-readyline .chip:has-text('Ready for the board')", timeout=20000); d.wait_for_timeout(400)
+        if not d.locator("#btn-unready").count():
+            errors.append("after marking ready the header offers no 'Take back'")
+        # the Pre-Authorization tab: Remind on an open request for the owner's doctor (permissions.remind)
+        v = d.request.get(base + f"/api/tb/cases/{cid}").json()
+        if not (v.get("permissions") or {}).get("remind"):
+            errors.append("the owner's doctor does not hold permissions.remind")
+        if not [a for a in (v.get("state") or {}).get("actions") or [] if a.get("source") == "pre_authorization" and a.get("status") != "completed"]:
+            r = d.request.post(base + f"/api/tb/cases/{cid}/requests", data={"department": "anaesthesiology", "label": "Pre-anaesthetic check-up (UI test, synthetic)", "what": "UI test", "due": BOARD_DATE})
+            if not r.ok:
+                errors.append(f"a free request for the Remind check could not be sent: HTTP {r.status} {r.text()[:120]}")
+            open_case(d, cid)
+        if not d.locator("#req-card [data-remind]").count():
+            errors.append("the Pre-Authorization tab shows no Remind button on an open request for the owner's doctor")
+        page_checks(d, "Case File marked ready", errors); shot("board_2_ready", page=d, full_page=True)
+
+        # the MDT Coordinator: candidates (ticked as ready), the readiness list (Remind owner), the session
+        c = page_as(UI_COORD)
+        c.keyboard.press("Escape"); c.wait_for_timeout(300)
+        c.click("#btn-sessions"); c.wait_for_selector("#s-date", timeout=20000)
+        set_value(c, "#s-date", BOARD_DATE)
+        cand = f"#s-cands [data-cand='{cid}']"
+        c.wait_for_selector(cand, timeout=20000); c.wait_for_timeout(300)
+        if not c.is_checked(cand):
+            errors.append("the Case File marked ready is not ticked among the session candidates")
+        if "Ready (by" not in c.inner_text(f"#s-cands [data-cand-row='{cid}']"):
+            errors.append("the candidate row shows no 'Ready (by ...)' chip")
+        set_value(c, "#ag-date", BOARD_DATE); c.click("#ag-go")
+        c.wait_for_selector(f"#ag-out [data-remowner='{cid}']", timeout=20000); c.wait_for_timeout(300)
+        if "Ready (by" not in c.inner_text(f"#ag-out tr[data-open='{cid}']"):
+            errors.append("the readiness list shows no 'Ready' chip for the Case File marked ready")
+        page_checks(c, "Board sessions (coordinator)", errors); shot("board_3_sessions", page=c, full_page=True)
+        c.fill("#s-title", "UI test board (synthetic)")
+        for x in c.locator("#s-cands [data-cand]").all():  # only this flow's Case File on the agenda
+            if x.get_attribute("data-cand") != cid and x.is_checked():
+                x.uncheck()
+        with c.expect_response(lambda r: r.url.endswith("/api/tb/sessions") and r.request.method == "POST", timeout=30000) as resp:
+            c.click("#s-create")
+        if not resp.value.ok:
+            errors.append(f"creating the session failed: HTTP {resp.value.status} {resp.value.text()[:160]}"); return
+        sid = resp.value.json().get("id")
+        c.wait_for_selector("#room-agenda .agenda", timeout=20000); c.wait_for_selector("#att-list tbody tr", timeout=20000); c.wait_for_timeout(500)
+
+        # 6.1 / 6.2: the attendance sheet, heads first
+        rows = c.locator("#att-list tbody tr")
+        n = rows.count()
+        heads = [rows.nth(i).get_attribute("data-dept") for i in range(min(4, n))]
+        if heads != ["radiology", "medical_oncology", "surgical_oncology", "pathology"]:
+            errors.append(f"the attendance sheet does not list the four heads first: {heads}")
+        if c.locator("#att-list tbody tr .att-head").count() != 4 or any(not rows.nth(i).locator(".att-head").count() for i in range(min(4, n))):
+            errors.append("the four heads do not carry the 'Head' tag")
+        if n >= 10:
+            errors.append(f"the attendance sheet lists {n} rows (fewer than 10 expected: heads, on demand, the owner)")
+        if not c.locator("#att-list tr[data-dept='breast_surgery']").count():
+            errors.append("the owning department (Breast Surgery) is not on the attendance sheet")
+        shot("board_4_room", page=c, full_page=True)
+        for dept in ("radiology", "medical_oncology", "pathology"):
+            c.select_option(f"[data-att='{dept}']", "present")
+            c.wait_for_function("(d) => { const s = document.querySelector('[data-att=\"' + d + '\"]'); return s && s.value === 'present'; }", arg=dept, timeout=20000)
+            c.wait_for_timeout(500)
+        c.fill("#m-name", BOARD_MEMBER); c.select_option("#m-dept", "breast_surgery"); c.click("#m-add")
+        c.wait_for_selector(f"#att-members:has-text('{BOARD_MEMBER}')", timeout=20000); c.wait_for_timeout(500)
+        seat = c.inner_text("#r-seat")
+        if "filled by" not in seat or "Breast Surgery" not in seat:
+            errors.append(f"the surgical seat line does not say it is filled by Breast Surgery: {seat[:160]!r}")
+        if not c.locator("#r-seat-pmjay:has-text('check PM-JAY requirement')").count():
+            errors.append("no 'check PM-JAY requirement' chip on the surgical seat filled by Breast Surgery")
+        if c.locator("#room-agents [data-agent='surgical_oncology']").count():
+            errors.append("the Surgical Oncology agent stands in although the surgical seat is filled")
+        for role in ("radiology", "medical_oncology", "pathology"):
+            if c.locator(f"#room-agents > [data-agent='{role}']").count():
+                errors.append(f"the {role} agent stands in although the head is recorded present")
+        if not c.locator("#room-ondemand [data-agent='radiation_oncology']").count() or not c.locator("#room-ondemand [data-agent='nuclear_medicine']").count():
+            errors.append("no On demand block for Radiation Oncology and Nuclear Medicine")
+        if not c.locator("#r-start").count():
+            errors.append("the coordinator sees no 'Start session' button")
+        if not c.locator("#r-minutes").count():
+            errors.append("no Minutes button in the Board room")
+
+        # 6.3: the records, the drawer and the images
+        if not c.locator("#rec-list tr[data-rec]").count():
+            errors.append("the Records card lists no record"); return
+        img = c.locator("#room-records [data-images]")
+        if not img.count():
+            errors.append("the Records card shows no 'Open images' button"); return
+        page_checks(c, "Board room", errors); shot("board_5_room_marked", page=c, full_page=True)
+        c.locator("#rec-list [data-recopen]").first.click()
+        c.wait_for_selector("#drawer:not(.hidden) #doctext", timeout=30000); c.wait_for_timeout(800)
+        shot("board_6_record_drawer", page=c)
+        c.keyboard.press("Escape"); c.wait_for_timeout(300)
+        if c.locator("#drawer:not(.hidden)").count():
+            c.click("#drawer [data-close]"); c.wait_for_timeout(300)
+        doc = img.first.get_attribute("data-images")
+        r = c.request.get(base + f"/api/tb/cases/{cid}/documents/{doc}/images")
+        if not r.ok or not r.json().get("available") or not r.json().get("viewer_url"):
+            errors.append(f"the images of {doc} are not available: HTTP {r.status} {r.text()[:160]}")
+        else:
+            url = r.json()["viewer_url"]
+            if PACS_PORT in url:
+                errors.append(f"the viewer URL points at the PACS directly: {url}")
+            ctx = b.new_context(storage_state=c.context.storage_state(), viewport=pg.viewport_size)  # the same login cookies (b.new_page owns its context)
+            v, seen = ctx.new_page(), []
+            pages.append(v)
+            v.on("request", lambda q: seen.append(q.url))
+            v.goto(base + url if url.startswith("/") else url, timeout=60000)
+            try:
+                v.wait_for_function("() => /OHIF/i.test(document.title) || !!document.querySelector('[data-cy]') || ((document.getElementById('root') || {}).childElementCount > 0)", timeout=60000)
+                v.wait_for_timeout(6000)  # let the study and its images load for the screenshot
+            except Exception:
+                errors.append(f"the OHIF viewer did not render within 60 s (title {v.title()!r})")
+            shot("board_ohif", page=v)
+            direct = [u for u in seen if PACS_PORT in u]
+            if direct:
+                errors.append(f"{len(direct)} request(s) from the viewer went to the PACS port directly, e.g. {direct[0][:120]}")
+            v.close(); pages.remove(v); ctx.close()
+        m = c.request.get(base + f"/api/tb/sessions/{sid}/minutes")
+        if not m.ok or "Tumour Board minutes" not in m.text():
+            errors.append(f"the minutes do not download: HTTP {m.status}")
+    finally:
+        for p in pages:
+            p.close()
+        board_cleanup(pg, base, cid, sid)
+        if cid and pg.request.get(base + f"/api/tb/cases/{cid}").ok:
+            errors.append(f"could not delete the test Case File {cid}")
+
+
 def run_flow(b, base, pw, out, size, sfx, errors, only=None):
     """The whole UI flow in one fresh page at one viewport size; JS errors go into `errors`, screenshot names end in `sfx`.
-    only="admin" / "his" / "requests" / "referral": log in and run only that part."""
+    only="admin" / "his" / "requests" / "referral" / "board": log in and run only that part."""
     pg = b.new_page(viewport={"width": size[0], "height": size[1]}, device_scale_factor=1)
     watch(pg, errors)
     shot = lambda name, page=None, **kw: (page or pg).screenshot(path=f"{out}/{name}{sfx}.png", **kw)
@@ -615,11 +830,11 @@ def run_flow(b, base, pw, out, size, sfx, errors, only=None):
         finally:
             pg.close()
         return
-    if only in ("requests", "referral"):
+    if only in ("requests", "referral", "board"):
         pg.goto(base + "/tb")
         try:
             pg.wait_for_selector("#btn-new:not(.hidden)", state="attached", timeout=20000)
-            (requests_screens if only == "requests" else referral_screens)(b, pg, base, pw, shot, errors)
+            {"requests": requests_screens, "referral": referral_screens, "board": board_screens}[only](b, pg, base, pw, shot, errors)
         finally:
             pg.close()
         return
@@ -773,8 +988,9 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--base", default="http://127.0.0.1:7000"); ap.add_argument("--password", required=True)
     ap.add_argument("--out", default="/home/bharath.tangella/vaidyx/Vaidyx/data/tumour_board/ui_shots")
     ap.add_argument("--viewports", type=parse_viewports, default=None, help="comma list of desktop,tablet,phone (default: desktop)")
-    ap.add_argument("--only", choices=["admin", "his", "requests", "referral"], default=None, help="admin: only the Organisation and My department screens (no model calls); "
+    ap.add_argument("--only", choices=["admin", "his", "requests", "referral", "board"], default=None, help="admin: only the Organisation and My department screens (no model calls); "
                     "his: only the HIS-connected Case File screens against the mock hospital (reader model calls; the Case Files it creates are deleted); "
                     "requests: the requests to departments (V2 items 4.2 / 4.3) as a treating doctor and a radiologist (reader model calls; the Case File is deleted); "
-                    "referral: referral and ownership (V2 items 5.1 to 5.3) with two throw-away doctor logins (reader model calls; the Case File and logins are deleted)")
+                    "referral: referral and ownership (V2 items 5.1 to 5.3) with two throw-away doctor logins (reader model calls; the Case File and logins are deleted); "
+                    "board: before and during the board (V2 items 6.1 to 6.4) with a throw-away doctor and MDT Coordinator (reader model calls; the session, Case File and logins are deleted)")
     a = ap.parse_args(); sys.exit(main(a.base, a.password, a.out, a.viewports, a.only))

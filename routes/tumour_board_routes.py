@@ -22,6 +22,7 @@ from tumour_board import accounts  # department admins create / disable / remove
 from tumour_board import his_case, his_client  # HIS-connected Case Files: create from a UHID, re-fetch, link registrations, outside reports (V2 items 3.1 to 3.6)
 from tumour_board import access  # who may open a Case File and act on it: owner, participants, the departments asked (V2 item 5.1)
 from tumour_board import referral  # refer a Case File to another treating department: request, accept (ownership moves, new protocol), decline (V2 item 5.2)
+from tumour_board import pacs  # the image viewer (OHIF) and DICOMweb reached through the app only: logged in, granted per study, audited (V2 item 6.3)
 
 log = logging.getLogger("tumour_board")
 
@@ -1083,14 +1084,54 @@ def setup_tumour_board_routes():
 
     @r.get("/cases/{case_id}/documents/{doc_id}/file")
     async def doc_file(case_id: str, doc_id: str, request: Request, render: int = 0, page: int = 0):
-        _user(request); c = _case(case_id); _in_scope(request, c, doc_id)
-        p = store.original_path(case_id, doc_id)
+        u = _user(request); c = _case(case_id); _in_scope(request, c, doc_id)
+        try:
+            p = store.original_path(case_id, doc_id)
+        except StopIteration:  # a hospital-system record whose file is not on disk: fetched live from the HIS (V2 item 6.3)
+            d = store.get_doc(case_id, doc_id)
+            if not d:
+                raise HTTPException(404, "document not found")
+            try:
+                p = await his_case.fetch_file(case_id, d, u)
+            except his_case.HISCaseError as e:
+                raise HTTPException(e.status, str(e))
+            except his_client.HISError as e:
+                raise HTTPException(502, f"The hospital system did not give the file: {str(e)[:160]}")
         # page preview as PNG (keeps the strict CSP: no PDF iframes needed); Aadhaar groups read by the OCR engine blacked out (V1 item 8.4)
         out = scanned.preview_bytes(p, store.get_doc(case_id, doc_id) or {}, bool(render), page)
         if out:
             from fastapi.responses import Response
             return Response(out[0], media_type=out[1])
         return FileResponse(p)
+
+    @r.get("/cases/{case_id}/documents/{doc_id}/images")
+    async def doc_images(case_id: str, doc_id: str, request: Request):
+        """The images behind an imaging report from the hospital system (V2 item 6.3): the study is looked up (cached on the record), the
+        user is granted the viewer on that study for 12 hours, the open is audited, and the app's viewer URL is returned. Humans view;
+        no model ever reads the images."""
+        rl = _roles(request); u = _user(request); c = _case(case_id); _in_scope(request, c, doc_id)
+        d = store.get_doc(case_id, doc_id)
+        if not d:
+            raise HTTPException(404, "document not found")
+        if not (d.get("his") or {}).get("imaging_study_ref"):
+            raise HTTPException(404, "This record has no imaging study in the hospital system")
+        try:
+            study = await pacs.study_for_doc(case_id, d, his_client.client())
+        except Exception as e:
+            raise HTTPException(502, f"The hospital system did not answer about the study: {type(e).__name__}: {str(e)[:160]}")
+        if not study:
+            raise HTTPException(404, "This record has no imaging study in the hospital system")
+        if study.get("available"):
+            pacs.grant(rl.get("user") or u, study["study_uid"], case_id, doc_id)
+        store.audit(case_id, {"kind": "images_opened", "by": u, "doc_id": doc_id, "study_uid": study.get("study_uid") or "", "accession": study.get("accession") or "",
+                              "available": bool(study.get("available")), "reason": study.get("reason") or ""})
+        return {"doc_id": doc_id, **study, "note": "Images open in the hospital's image viewer through this app; they are viewed by people and never read by a model."}
+
+    @r.api_route("/pacs/{path:path}", methods=["GET", "HEAD"])
+    async def pacs_proxy(path: str, request: Request):
+        """The image viewer (OHIF) and the DICOMweb study it was opened on, forwarded to the PACS for a logged-in user holding a grant from
+        "Open images" on the report (V2 item 6.3). Orthanc's own API and explorer are never reached through here."""
+        return await pacs.proxy(request, path, _roles(request))
 
     @r.post("/cases/{case_id}/ready")
     async def case_ready(case_id: str, request: Request):
@@ -1577,6 +1618,21 @@ def setup_tumour_board_routes():
         if not board.may_open(rl, s):
             raise HTTPException(403, "This board session is open to the MDT Coordinator, the departments on its attendance sheet and the departments of the Case Files on its agenda.")
 
+    def _records(cid, st):
+        """The Case File's records for the Board room (V2 item 6.3): title, type, date, status, the hospital-system status and signature,
+        and whether an imaging report has images to open. Open and Open images go through the document routes (scope-checked, audited)."""
+        out = []
+        for d in rules.case_docs(cid, st):
+            if d.get("state") != "ready":
+                continue
+            cl = d.get("classification") or {}; h = d.get("his") or {}
+            out.append({"doc_id": d["doc_id"], "title": cl.get("title") or d.get("filename"), "doc_type": cl.get("doc_type"), "date": cl.get("report_date_iso") or cl.get("event_date_iso") or "",
+                        "status": cl.get("status"), "signed": cl.get("signed"), "department": d.get("department"), "superseded": bool(d.get("superseded")),
+                        "outside": bool(d.get("outside")), "his": {"status": h.get("status"), "signed": bool(h.get("signed")), "accession": h.get("accession"),
+                                                                  "encounter_number": h.get("encounter_number"), "version": h.get("version")} if h else None,
+                        "images": bool(h.get("imaging_study_ref")), "study": {k: v for k, v in (h.get("study") or {}).items() if k in ("available", "modality", "series", "instances", "reason")} or None})
+        return out
+
     def _room(s, rl):
         """Everything the Board room shows: the session, the attendance sheet (heads first), and for each Case File on the agenda its gate,
         its summary, the briefs of the agents active for it (a head not recorded present, the surgical seat rule; V2 item 6.2), its
@@ -1605,6 +1661,7 @@ def setup_tumour_board_routes():
                           "agents": roles_, "seat": board.seat(s, c),  # the agents active for this Case File and the surgical seat (V2 item 6.2)
                           "briefs": {r_: arts.get(f"brief_{r_}") for r_ in agents.ROLES if arts.get(f"brief_{r_}") and (r_ in roles_ or r_ in board.ON_DEMAND)},
                           "briefs_stale": {r_: stale(arts.get(f"brief_{r_}")) for r_ in agents.ROLES if arts.get(f"brief_{r_}") and (r_ in roles_ or r_ in board.ON_DEMAND)},
+                          "records": _records(cid, st),  # HIS records and images opened during the board (V2 item 6.3)
                           "board_records": [{"id": b_["id"], "board_date": b_.get("board_date"), "session": b_.get("session"), "status": b_["adjudication"]["status"],
                                              "flags": len(b_["adjudication"]["flags"]), "composition": b_["adjudication"].get("composition"),
                                              "resolution": b_.get("resolution"), "version": b_.get("version", 1)} for b_ in st.get("board_records", [])]}

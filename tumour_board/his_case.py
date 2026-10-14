@@ -15,6 +15,7 @@ record now arrives final and signed close themselves (rules.sync_actions) and th
 Outside reports (3.6) are uploaded by the treating doctor into the Case File (service.add_files(outside=True)); they run the V1
 pipeline including patient matching and OCR and carry `doc["outside"]`.
 """
+import hashlib
 import logging
 import asyncio
 import re
@@ -514,6 +515,30 @@ async def _refresh_doc(case_id: str, doc_id: str, r: dict, client) -> bool:
     doc["state"] = "queued"; doc.pop("error", None)
     store.save_doc(case_id, doc)
     return True
+
+
+async def fetch_file(case_id: str, doc: dict, user: str = "") -> "Path":
+    """The PDF of a hospital-system record fetched live when its file is missing on disk (V2 item 6.3: "any HIS record opens in the
+    document viewer, fetched live if needed"): the same DocumentReference, the bytes checked against the sha256 recorded at the first
+    fetch (HISCaseError when they differ: never a different file under a verified record). Audited."""
+    from pathlib import Path
+    h = doc.get("his") or {}
+    ref = h.get("document_ref")
+    if not ref:
+        raise HISCaseError("This record did not come from the hospital system; its file cannot be fetched", 404)
+    d = await _client().document(ref)
+    want = str(h.get("document_sha256") or doc.get("sha256") or "").lower()
+    got = hashlib.sha256(d["content"]).hexdigest()
+    if want and got != want:
+        store.audit(case_id, {"kind": "document_fetch_live_failed", "doc_id": doc["doc_id"], "by": user, "reason": "sha256 differs from the record fetched first",
+                              "expected": want, "got": got})
+        raise HISCaseError("The hospital system returned a file that differs from the record this Case File holds; ask the department", 409)
+    dd = Path(config.CASES_DIR) / store.safe_id(case_id) / "docs" / store.safe_id(doc["doc_id"])
+    dd.mkdir(parents=True, exist_ok=True)
+    p = dd / f"original{doc.get('ext') or Path(d.get('filename') or 'x.pdf').suffix.lower() or '.pdf'}"
+    p.write_bytes(d["content"])
+    store.audit(case_id, {"kind": "document_fetched_live", "doc_id": doc["doc_id"], "by": user, "document_ref": ref, "sha256": got, "bytes": len(d["content"])})
+    return p
 
 
 def _his_case(case_id) -> tuple:

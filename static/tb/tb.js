@@ -71,8 +71,9 @@ async function openCase(id, keepTab) {
     c.hospital_level && "Hospital level: " + c.hospital_level, c.board_date && "Board " + fmtDate(c.board_date)].filter(Boolean).join(" · ");
   const unlisted = c.listing?.status === "awaiting_listing", referred = unlisted && c.listing?.reason === "referred";  // referred: the new owner picks the protocol (V2 item 5.2)
   const listBtn = can("list_case") ? `<button class="${unlisted ? "primary" : "ghost"} sm" id="btn-list">${unlisted ? "List for the board" : "Change listing"}</button>` : "";
-  $("#c-actions").innerHTML = ownerLineHTML() + (referred ? `<div class="banner warn small refbanner"><b>Referred here by ${esc(referredFrom())}: choose the cancer protocol for the new work-up</b>${listBtn}</div>` : listBtn);
+  $("#c-actions").innerHTML = ownerLineHTML() + (referred ? `<div class="banner warn small refbanner"><b>Referred here by ${esc(referredFrom())}: choose the cancer protocol for the new work-up</b>${listBtn}</div>` : listBtn) + readyLineHTML();
   if ($("#btn-list")) $("#btn-list").onclick = listCase;
+  bindReadyLine();
   bindOwnerLine($("#c-actions"));
   renderReadiness();
   const hide = isLimited() ? ["ask", "roles", "summary", "board", "audit"] : unlisted ? ["roles", "summary", "board"] : [];  // a department that was only asked: its requests and records (V2 item 5.1)
@@ -263,19 +264,21 @@ const fcChip = (f) => `<span class="chip fc-${esc(f)}">${esc((FORECAST[f] || [""
 const tile = (label, value, unit = "", sub = "") => `<div class="tile"><div class="lbl">${esc(label)}</div><div class="val">${value == null ? '<span class="muted">n/a</span>' : esc(String(value))}${unit && value != null ? `<small>${esc(unit)}</small>` : ""}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}</div>`;
 const barRow = (label, value, max, text, target = null, muted = false) => `<div class="barrow"><div>${esc(label)}</div><div class="bar"><i class="${muted ? "muted" : ""}" style="width:${max ? Math.max(value ? 2 : 0, Math.round(100 * (value || 0) / max)) : 0}%"></i>${target != null && max ? `<b style="left:${Math.round(100 * target / max)}%" title="target ${target}"></b>` : ""}</div><div class="num">${esc(text)}</div></div>`;
 
-function readinessHTML(a) {
+function readinessHTML(a, remind = false) {  // remind: the MDT Coordinator / admin chases from here (V2 item 6.1)
   if (!a || !a.cases.length) return `<div class="muted small">No Case File is listed for this board date.</div>`;
+  const rem = (n) => n ? ` <span class="muted">${plural(n, "reminder")}</span>` : "";
   const c = a.counts;
   return `<div class="tiles">${tile("Days to the board", a.days_to_board, "", a.board_date ? fmtDate(a.board_date) : "")}${tile("Ready", c.ready, "", `of ${a.cases.length} Case Files`)}${tile("On track", c.on_track)}${tile("At risk", c.at_risk, "", "requests due after the board or overdue")}${tile("Blocked", c.blocked, "", "documents failed to read")}${tile("Open requests", a.requests_open, "", `${a.requests_overdue} overdue`)}</div>
     <table class="t" style="margin-top:8px"><thead><tr><th>Case File</th><th>Forecast</th><th>Readiness</th><th>Open gaps</th><th>Summary</th></tr></thead><tbody>
-    ${a.cases.map((r) => `<tr class="click" data-open="${esc(r.case_id)}"><td><b>${esc(r.patient)}</b><div class="small muted">${esc(r.case_id)} · ${esc(r.protocol || "not listed")}</div>${r.owner_name ? `<div class="small muted">Owner: ${esc(r.owner_name)}</div>` : ""}</td><td>${fcChip(r.forecast)}<div class="small muted">${esc(r.why)}</div></td>
+    ${a.cases.map((r) => `<tr class="click" data-open="${esc(r.case_id)}"><td><b>${esc(r.patient)}</b><div class="small muted">${esc(r.case_id)} · ${esc(r.protocol || "not listed")}</div>${r.owner_name ? `<div class="small muted">Owner: ${esc(r.owner_name)}</div>` : ""}<div class="small">${r.ready ? `<span class="chip c-ok" title="${esc(r.ready.note || "")}">Ready (by ${esc(r.ready.by)})</span>` : `<span class="chip c-mute">Not marked ready</span>`}${rem(r.reminders)}</div>${remind && r.owner ? `<button class="ghost sm" data-remowner="${esc(r.case_id)}" data-patient="${esc(r.patient)}" title="One in-app reminder to ${esc(r.owner_name || "the owning department")}: requests not sent, overdue ones, the summary and the ready mark (audited)">Remind owner</button>` : ""}</td><td>${fcChip(r.forecast)}<div class="small muted">${esc(r.why)}</div></td>
       <td><div class="bar" style="min-width:90px"><i style="width:${r.readiness || 0}%"></i></div><div class="small">${r.satisfied ?? 0} of ${r.total ?? 0}${r.level1_open ? ` · L1 ${r.level1_open}` : ""}${r.level2_open ? ` · L2 ${r.level2_open}` : ""}</div></td>
       <td class="small">${r.gaps.slice(0, 4).map((g) => `${esc(g.label)} <span class="muted">(${esc(g.department)})</span>`).join("<br>")}${r.gaps.length > 4 ? `<br><span class="muted">+${r.gaps.length - 4} more</span>` : ""}${r.discordances_open ? `<br><span class="chip c-rev">${r.discordances_open} report(s) disagree</span>` : ""}</td>
       <td class="small">${r.summary === "ready" ? '<span class="chip c-ok">ready</span>' : r.summary === "stale" ? '<span class="chip c-warn">stale</span>' : '<span class="chip c-mute">none</span>'}${Object.keys(r.briefs).length ? `<div class="muted">${Object.keys(r.briefs).length} brief(s)</div>` : ""}</td></tr>`).join("")}</tbody></table>
     <h4 style="margin:14px 0 4px">Chase list: what to ask which department before the board</h4>
     ${a.chase.length ? a.chase.map((g) => `<div style="margin:6px 0"><b>${esc(g.department)}</b> <span class="muted small">${g.items.length} request(s)${g.overdue ? `, ${g.overdue} overdue` : ""}</span>
       <table class="t"><tbody>${g.items.map((x) => `<tr><td class="small" style="width:160px"><b>${esc(x.patient)}</b><div class="muted">${esc(x.case_id)}</div></td><td class="small">${esc(x.label)}${x.what ? `<div class="muted">${esc(x.what).slice(0, 160)}</div>` : ""}</td>
-        <td class="small" style="width:150px">${x.due ? fmtDate(x.due) : "no due date"}<div>${x.overdue ? '<span class="chip c-bad">overdue</span>' : x.after_board ? '<span class="chip c-warn">due after the board</span>' : x.days_left != null ? `<span class="muted">${x.days_left} day(s) left</span>` : ""}</div></td></tr>`).join("")}</tbody></table></div>`).join("") : '<div class="muted small">Nothing to chase.</div>'}`;
+        <td class="small" style="width:150px">${x.due ? fmtDate(x.due) : "no due date"}<div>${x.overdue ? '<span class="chip c-bad">overdue</span>' : x.after_board ? '<span class="chip c-warn">due after the board</span>' : x.days_left != null ? `<span class="muted">${x.days_left} day(s) left</span>` : ""}${x.unsent ? ' <span class="chip c-mute">not sent</span>' : ""}${rem(x.reminders)}</div>
+        ${remind && x.action_id ? `<button class="ghost sm" data-remreq="${esc(x.action_id)}" data-case="${esc(x.case_id)}" data-sug="${x.unsent ? "1" : ""}" data-label="${esc(x.label || "")}" title="${x.unsent ? "Not sent yet: the reminder goes to the owning department, asking it to send the request" : `Remind ${esc(g.department)} about this request`} (in-app, audited)">Remind</button>` : ""}</td></tr>`).join("")}</tbody></table></div>`).join("") : '<div class="muted small">Nothing to chase.</div>'}`;
 }
 
 async function showDashboard(start = "", end = "") {
@@ -640,6 +643,7 @@ function requestHTML(a, answer) {
   if (open && can("send_request")) btns.push(sent ? `<button class="ghost sm" data-notify="${esc(a.id)}" title="Send the request again as a reminder (audited)">Send again</button>`
     : `<button class="primary sm" data-notify="${esc(a.id)}" title="Read the draft, edit it and send it in-app or open it in your own mail program">Notify ${esc(dept)}</button>`);
   if (a.sent) btns.push(`<button class="ghost sm" data-reqmsg="${esc(a.id)}">Request message</button>`);
+  if (open && can("remind")) btns.push(`<button class="ghost sm" data-remind="${esc(a.id)}" data-sug="${sent ? "" : "1"}" title="${sent ? `Remind ${esc(dept)} about this request (in-app, audited)` : "Not sent yet: the reminder goes to the owning department, asking it to send the request (in-app, audited)"}">Remind</button>`);  // V2 item 6.1
   if (open && free && sent && can("close_request")) btns.push(`<button class="ghost sm" data-closereq="${esc(a.id)}" title="Close a request with no protocol record behind it (audited)">Close</button>`);
   if (answer && open && sent && can("answer_request", a.id)) {  // the department asked answers on the Case File as in its inbox (V2 items 4.3 / 5.1)
     if (!a.acknowledged) btns.push(`<button class="ghost sm" data-ack="${esc(a.id)}">Acknowledge</button>`);
@@ -647,7 +651,7 @@ function requestHTML(a, answer) {
   }
   const po = a.pending_order;
   return `<div class="action reqcard ${open ? (cls === "c-bad" ? "overdue" : sent ? "" : "suggested") : "completed"}" data-aid="${esc(a.id)}"><div class="h"><span>${free ? `<span class="chip c-info" title="Written by the treating doctor; no protocol record behind it">Free request</span> ` : ""}${esc(a.label)}${a.level ? ` <span class="chip c-lvl" title="${esc((LEVEL[a.level] || [])[1] || "")}">${esc(a.level_label || (LEVEL[a.level] || [])[0] || "")}</span>` : ""}${a.accession ? ` <span class="chip c-mono" title="Accession / Lab No. in the hospital system">${esc(a.accession)}</span>` : ""}${po ? ` <span class="chip ${po.stage === "cancelled" ? "c-bad" : "c-info"}">Ordered in the HIS: ${esc(stageText(po))}</span>` : ""}</span><span class="chip ${cls} reqst">${esc(txt)}</span></div>
-    ${a.what ? `<div class="w">${esc(a.what)}</div>` : ""}${reqTrail(a)}
+    ${a.what ? `<div class="w">${esc(a.what)}</div>` : ""}${reqTrail(a)}${remindersHTML(a.reminders)}
     <div class="f"><span>Responsible Department: <b>${esc(dept)}</b>${sent && a.due ? ` · due ${esc(dmyd(a.due))}` : open ? " · not sent yet" : ""}</span>${btns.length ? `<span>${btns.join("")}</span>` : ""}</div>
     ${a.history?.length > 1 ? `<details class="small muted"><summary>History</summary>${a.history.map((h) => `<div>${esc(dmyt(h.ts))} ${esc(h.event)}</div>`).join("")}</details>` : ""}</div>`;
 }
@@ -725,6 +729,42 @@ async function closeRequest(aid) {
   try { await api(`/cases/${encodeURIComponent(S.caseId)}/requests/${encodeURIComponent(aid)}/close`, { json: { note: v.note } }); toast("Request closed (audited)"); await openCase(S.caseId, true); }
   catch (e) { toast(e.message, 7000); }
 }
+// ---- reminders and the ready mark before the board (V2 item 6.1): the MDT Coordinator on the owner's behalf, or the owner's doctors
+const remindersHTML = (list) => (list || []).length ? `<div class="small muted reminders" title="${esc(list.map((x) => `${dmyt(x.at)} by ${x.by}${x.to ? " to " + x.to : ""}${x.note ? ": " + x.note : ""}`).join("; "))}">${plural(list.length, "reminder")}, last ${esc(dmyt(list[list.length - 1].at))} by ${esc(list[list.length - 1].by)}</div>` : "";
+async function remindNote(title, intro) {
+  const v = await confirmDialog({ title, intro, fields: [{ id: "note", label: "Note", type: "textarea", placeholder: "e.g. needed before Friday's board" }], submit: "Send reminder", note: "Sent in-app (the bell), recorded with your name and the time in the audit log." });
+  return v ? v.note : null;
+}
+async function remindRequest(caseId, aid, suggested, label) {
+  const note = await remindNote(suggested ? "Remind the owning department" : "Send a reminder", suggested ? `"${label || "This request"}" has not been sent yet: the owning department is reminded to send it.` : `The department holding "${label || "this request"}" sees it again in its inbox and bell; the due date stays.`);
+  if (note === null) return false;
+  try { await api(`/cases/${encodeURIComponent(caseId)}/requests/${encodeURIComponent(aid)}/remind`, { json: { note } }); toast("Reminder sent (audited)"); return true; }
+  catch (e) { toast(e.message, 7000); return false; }
+}
+async function remindOwner(caseId, patient) {
+  const note = await remindNote("Remind the owning department", `One reminder about ${patient || caseId} before the board: the requests not sent, the overdue ones, the summary and the ready mark.`);
+  if (note === null) return false;
+  try { await api(`/cases/${encodeURIComponent(caseId)}/remind-owner`, { json: { note } }); toast("Reminder sent to the owning department (audited)"); return true; }
+  catch (e) { toast(e.message, 7000); return false; }
+}
+const readyChip = (r) => r ? `<span class="chip c-ok" title="${esc(r.note ? "Note: " + r.note : "Marked ready by the owning department")}">Ready for the board (by ${esc(r.by)}, ${esc(dmyd(r.at))})</span>` : "";
+function readyLineHTML() {
+  const c = S.data.case, r = c.board_ready, listed = !!c.protocol && (c.listing || { status: "listed" }).status === "listed";
+  const btn = can("mark_ready") && (r || listed) ? (r ? `<button class="ghost sm" id="btn-unready" title="Take the ready mark back (audited)">Take back</button>`
+    : `<button class="primary sm" id="btn-ready" title="Tell the MDT Coordinator this Case File is ready for the board (audited)">Mark ready for the board</button>`) : "";
+  return r || btn ? `<div class="readyline small" id="c-readyline">${readyChip(r)}${btn}</div>` : "";
+}
+function bindReadyLine() {
+  const go = async (ready) => {
+    const v = ready ? await confirmDialog({ title: "Mark ready for the board", intro: "The MDT Coordinator is told and builds the agenda from the Case Files their owners marked ready.", fields: [{ id: "note", label: "Note", type: "textarea", placeholder: "e.g. HER2 FISH awaited, discuss anyway" }], submit: "Mark ready", note: "Recorded with your name and the time in the audit log. It can be taken back." })
+      : await confirmDialog({ title: "Take back the ready mark", intro: "The Case File is no longer marked ready for the board.", fields: [{ id: "note", label: "Reason", type: "textarea" }], submit: "Take back", note: "Recorded with your name and the time in the audit log." });
+    if (!v) return;
+    try { await api(`/cases/${encodeURIComponent(S.caseId)}/ready`, { json: { ready, note: v.note } }); toast(ready ? "Marked ready for the board; the MDT Coordinator is told (audited)" : "Ready mark taken back (audited)"); await openCase(S.caseId, true); }
+    catch (e) { toast(e.message, 7000); }
+  };
+  if ($("#btn-ready")) $("#btn-ready").onclick = () => go(true);
+  if ($("#btn-unready")) $("#btn-unready").onclick = () => go(false);
+}
 async function answerRequest(caseId, aid, what) {
   // V2 item 4.3: the department acknowledges, then sends "done" back (with an optional note); the server checks who may
   let note = "";
@@ -743,6 +783,8 @@ function bindActions(root) {
   $$("[data-notify]", root).forEach((b) => (b.onclick = () => notifyDialog(b.dataset.notify)));
   $$("[data-reqmsg]", root).forEach((b) => (b.onclick = () => { const a = (S.data.state.actions || []).find((x) => x.id === b.dataset.reqmsg); if (a) requestMessage(a); }));
   $$("[data-closereq]", root).forEach((b) => (b.onclick = () => closeRequest(b.dataset.closereq)));
+  $$("[data-remind]", root).forEach((b) => (b.onclick = async () => { const a = (S.data.state.actions || []).find((x) => x.id === b.dataset.remind);
+    if (await remindRequest(S.caseId, b.dataset.remind, !!b.dataset.sug, a?.label)) await openCase(S.caseId, true); }));
   $$("[data-newreq]", root).forEach((b) => (b.onclick = () => newRequestDialog()));
   $$("[data-act]", root).forEach((b) => (b.onclick = async () => {
     const note = prompt("Note for the record (optional):") ?? "";
@@ -932,13 +974,27 @@ function docRow(d) {
   const st = d.state !== "ready" ? `<span class="chip ${d.state === "error" ? "c-bad" : "c-info"}" title="${esc(d.error || "")}">${d.state === "error" ? "failed to read" : esc(d.state)}</span>${d.state === "error" ? `<div class="small muted">${esc(d.error || "")}</div>${d.dismissed ? `<span class="chip c-mute" title="${esc(d.dismissed.reason || "")}">dismissed by ${esc(d.dismissed.by || "")}</span>` : `<span class="chip c-warn" title="A document that failed to read blocks the Pre-Authorization until it is re-processed or dismissed">blocks the gate</span>`}` : ""}` : statusChip(c) + (att?.attested_final ? ` <span class="chip c-ok" title="${esc(att.reason || "")}">attested final by ${esc(att.by)}</span>` : "");
   const unst = d.state === "ready" && c.status === "UNSTATED" && c.signed !== "no" && !att?.attested_final;
   const h = d.his, sup = !!d.superseded, ids = h ? [h.encounter_number, h.accession].filter(Boolean) : [], chips = docChips(d), hst = hisStatusChips(d);
-  const btns = sup ? "" : `${d.outside && d.identity === "name_match" && !d.identity_confirmed_by && can("confirm", d.doc_id) ? `<button class="ghost sm" data-confmatch="${esc(d.doc_id)}" title="An outside report matched by name only: check the patient on the report and confirm">Confirm patient</button>` : ""}${d.state === "error" && can("reprocess") ? `<button class="ghost sm" data-reproc-doc="${esc(d.doc_id)}">Re-process</button>` : ""}${d.state === "error" && !d.dismissed && can("confirm", d.doc_id) ? `<button class="ghost sm" data-dismiss="${esc(d.doc_id)}" title="Record, with a reason, that the Case File may pass without this document (audited, undoable)">Dismiss</button>` : ""}${unst && can("confirm", d.doc_id) ? `<button class="ghost sm" data-attest-doc="${esc(d.doc_id)}">Attest final</button>` : ""}${d.state === "ready" && (docDates(c).unconfirmed || docDates(c).flags.length) && can("confirm", d.doc_id) ? `<button class="ghost sm" data-confdate="${esc(d.doc_id)}">Confirm date</button>` : ""}${d.state === "ready" && c.doc_type_disagreement && !c.doc_type_confirmed_by && can("confirm", d.doc_id) ? `<button class="ghost sm" data-conftype="${esc(d.doc_id)}">Confirm type</button>` : ""}${can("unfile", d.doc_id) ? `<button class="ghost sm" data-unfile-doc="${esc(d.doc_id)}" title="Not this patient: move the record back to the Needs matching queue (audited, the Case File forgets what it learned from it)">Back to matching</button>` : ""}${can("delete_document", d.doc_id) ? `<button class="ghost sm" data-del-doc="${esc(d.doc_id)}" title="Remove this document from the Case File (audited)">Remove</button>` : ""}`;
+  const btns = (h?.imaging_study_ref ? imagesBtn(d.doc_id) : "") + (sup ? "" : `${d.outside && d.identity === "name_match" && !d.identity_confirmed_by && can("confirm", d.doc_id) ? `<button class="ghost sm" data-confmatch="${esc(d.doc_id)}" title="An outside report matched by name only: check the patient on the report and confirm">Confirm patient</button>` : ""}${d.state === "error" && can("reprocess") ? `<button class="ghost sm" data-reproc-doc="${esc(d.doc_id)}">Re-process</button>` : ""}${d.state === "error" && !d.dismissed && can("confirm", d.doc_id) ? `<button class="ghost sm" data-dismiss="${esc(d.doc_id)}" title="Record, with a reason, that the Case File may pass without this document (audited, undoable)">Dismiss</button>` : ""}${unst && can("confirm", d.doc_id) ? `<button class="ghost sm" data-attest-doc="${esc(d.doc_id)}">Attest final</button>` : ""}${d.state === "ready" && (docDates(c).unconfirmed || docDates(c).flags.length) && can("confirm", d.doc_id) ? `<button class="ghost sm" data-confdate="${esc(d.doc_id)}">Confirm date</button>` : ""}${d.state === "ready" && c.doc_type_disagreement && !c.doc_type_confirmed_by && can("confirm", d.doc_id) ? `<button class="ghost sm" data-conftype="${esc(d.doc_id)}">Confirm type</button>` : ""}${can("unfile", d.doc_id) ? `<button class="ghost sm" data-unfile-doc="${esc(d.doc_id)}" title="Not this patient: move the record back to the Needs matching queue (audited, the Case File forgets what it learned from it)">Back to matching</button>` : ""}${can("delete_document", d.doc_id) ? `<button class="ghost sm" data-del-doc="${esc(d.doc_id)}" title="Remove this document from the Case File (audited)">Remove</button>` : ""}`);
   return `<tr class="click${sup ? " superseded" : ""}" data-doc="${esc(d.doc_id)}"><td><b>${esc(c.title || d.filename)}</b>${ids.length ? `<div class="mono small" title="OP / IP No. and accession No. in the hospital system">${esc(ids.join(" · "))}</div>` : ""}<div class="small muted">${esc(d.rel_path)}${d.department ? ` · ${h ? "from" : "uploaded by"} ${esc(deptName(d.department))}${d.uploaded_by ? " (" + esc(d.uploaded_by) + ")" : ""}` : ""}${d.identity === "mismatch_or_missing" ? ' · <span style="color:#b23a2f">patient ID not found</span>' : d.identity === "id_differs" ? ' · <span style="color:#b23a2f">prints an identifier this Case File does not know</span>' : d.identity === "name_match" ? ' · <span style="color:#8a5300">matched by name only</span>' : ""}</div>${chips ? `<div class="chips" style="margin-top:4px">${chips}</div>` : ""}</td>
       <td>${esc(DT[c.doc_type] || c.doc_type || "")}${c.doc_type_disagreement ? ` <span class="chip c-warn" title="${esc(c.doc_type_disagreement.note || "")}">keywords say ${esc(DT[c.doc_type_disagreement.keyword_type] || c.doc_type_disagreement.keyword_type)}</span>` : ""}</td><td>${dateCell(c)}</td><td>${st}${hst ? `<div class="chips" style="margin-top:4px">${hst}</div>` : ""}</td>
       <td class="small">${(d.methods || []).map((m) => (m === "vision-transcription" ? "Vision reader (scan)" : m === "text-layer" ? "PDF text layer" : m)).join(", ")}${(d.page_flags || []).map((f) => ` <span class="chip c-warn" title="Transcribed as is, never translated into facts; values from these lines need a person's check">${esc(f)}</span>`).join("")}</td>
       <td>${nf.filter((f) => f.verification === "verified").length} verified${nf.filter((f) => f.verification !== "verified").length ? ` · <span class="chip c-rev">${nf.filter((f) => f.verification !== "verified").length} not verified</span>` : ""}
       ${btns ? `<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">${btns}</div>` : ""}</td></tr>`;
 }
+// V2 item 6.3: the images behind an imaging report open in the hospital's viewer (OHIF) through this app; people view them, no model reads them
+const IMG_NOTE = "Images are viewed by people; no model reads them";
+const imagesBtn = (docId, cid) => `<button class="ghost sm" data-images="${esc(docId)}"${cid ? ` data-case="${esc(cid)}"` : ""} title="Open the study in the hospital's image viewer (audited). ${IMG_NOTE}.">Open images</button>`;
+async function openImages(caseId, docId, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api(`/cases/${encodeURIComponent(caseId)}/documents/${encodeURIComponent(docId)}/images`);
+    if (!r.available || !r.viewer_url) { toast(r.reason || "The images are not available in the image viewer", 7000); return; }
+    if (!window.open(r.viewer_url, "_blank")) toast("The browser blocked the new window: allow pop-ups for this site to open the image viewer", 8000);
+    else toast(`Image viewer opened${r.modality ? ": " + r.modality : ""}${r.instances ? ", " + plural(r.instances, "image") : ""}. ${IMG_NOTE}.`, 6000);
+  } catch (e) { toast(e.message, 7000); }
+  finally { if (btn) btn.disabled = false; }
+}
+const bindImages = (root) => $$("[data-images]", root).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); openImages(b.dataset.case || S.caseId, b.dataset.images, b); }));
 // V2 item 3.4: the records of an HIS Case File grouped by OP visit and IP admission (newest first), then the groups without an encounter
 function groupHTML(g, byId) {
   const ds = (g.docs || []).map((id) => byId[id]).filter(Boolean), enc = g.kind === "OP" || g.kind === "IP";
@@ -975,6 +1031,7 @@ function renderDocs() {
   </tbody></table></div>`;
   $$("tr[data-doc]").forEach((tr) => (tr.onclick = (e) => { if (!e.target.closest("button")) openDoc(tr.dataset.doc); }));
   $$("[data-attest-doc]").forEach((b) => (b.onclick = () => attestDoc(b.dataset.attestDoc)));
+  bindImages($("#tab-docs"));
   $$("[data-reproc-doc]", $("#tab-docs")).forEach((b) => (b.onclick = async () => { const j = await api(`/cases/${S.caseId}/reprocess`, { json: { which: [b.dataset.reprocDoc] } }); S.tab = "ready"; showTab("ready"); watchJob(j.job); }));
   $$("[data-dismiss]", $("#tab-docs")).forEach((b) => (b.onclick = () => dismissDoc(b.dataset.dismiss)));
   $$("[data-confdate]", $("#tab-docs")).forEach((b) => (b.onclick = () => confirmDates(b.dataset.confdate)));
@@ -1616,7 +1673,9 @@ async function showOrgPage() {
         <div><label for="o-type">Hospital type</label><select id="o-type"><option value="" ${!h.type ? "selected" : ""}>Not set</option><option value="public" ${h.type === "public" ? "selected" : ""}>Public</option><option value="private" ${h.type === "private" ? "selected" : ""}>Private</option></select></div></div>
         <div class="grid3">
           <div><label for="o-fetch">HIS fetch window (months)</label><input id="o-fetch" type="number" min="1" max="120" step="1" value="${esc(h.fetch_window_months ?? 12)}"></div>
-          <div class="checkrow"><label class="chk"><input type="checkbox" id="o-pmjay" ${h.pmjay_empanelled !== false ? "checked" : ""}> PM-JAY empanelled</label></div><div></div></div></div>
+          <div class="checkrow"><label class="chk"><input type="checkbox" id="o-pmjay" ${h.pmjay_empanelled !== false ? "checked" : ""}> PM-JAY empanelled</label><div class="small muted">Asked at first set-up; the board composition flag applies only to an empanelled hospital</div></div><div></div></div>
+        <h4 class="subh">The board</h4>
+        ${BOARD_LISTS.map(([k, label, help]) => `<div class="deplist-wrap"><label>${esc(label)}</label><div class="small muted">${esc(help)}</div><div class="deplist" id="o-${k}" data-key="${k}"></div></div>`).join("")}</div>
       <div class="small muted" style="margin-top:6px">The NCG level decides which tier of the work-up applies. The fetch window is how far back the hospital systems are read for a patient.</div>
       <div class="actions-row"><button class="primary sm" id="o-save-h">Save hospital settings</button></div></div>
     <div id="o-his"></div>
@@ -1644,10 +1703,15 @@ async function showOrgPage() {
     <div class="card"><h3>Audit <span class="muted small">last 50 changes, newest first</span></h3>
       ${(aud.events || []).length ? tscroll(`<table class="t compact"><thead><tr><th>Time</th><th>By</th><th>Change</th><th>Details</th></tr></thead><tbody>${aud.events.map((e) => `<tr><td class="small nowrap">${esc((e.ts || "").replace("T", " ").slice(0, 16))}</td><td class="small">${esc(e.by)}</td><td class="small">${esc(AUDIT_KIND[e.kind] || e.kind)}</td><td class="small">${esc(auditText(e))}</td></tr>`).join("")}</tbody></table>`) : '<div class="muted small">No changes recorded yet.</div>'}</div>`;
   renderAccounts();
+  S.orgPage.lists = Object.fromEntries(BOARD_LISTS.map(([k]) => [k, [...(h[k] || (k === "board_heads" ? DEFAULT_HEADS : []))]]));
+  BOARD_LISTS.forEach(([k]) => renderDepList(k));
+  $("#o-hospital").addEventListener("click", (e) => { const x = e.target.closest("[data-rmdl]"); if (x) { const k = x.closest(".deplist").dataset.key; S.orgPage.lists[k] = S.orgPage.lists[k].filter((d) => d !== x.dataset.rmdl); renderDepList(k); } });
+  $("#o-hospital").addEventListener("change", (e) => { const x = e.target.closest("select[data-adddl]"); if (x && x.value) { const k = x.dataset.adddl; S.orgPage.lists[k] = [...S.orgPage.lists[k], x.value]; renderDepList(k); } });
   $("#o-save-h").onclick = () => {
     const n = Number($("#o-fetch").value);
     if (!Number.isInteger(n) || n < 1 || n > 120) { toast("The HIS fetch window must be 1 to 120 months"); return; }
-    saveOrg({ hospital: { ...h, name: $("#o-hname").value.trim(), level: $("#o-level").value, type: $("#o-type").value, pmjay_empanelled: $("#o-pmjay").checked, fetch_window_months: n } }, "Hospital settings");
+    if (!S.orgPage.lists.board_heads.length) { toast("The board needs at least one head"); return; }
+    saveOrg({ hospital: { ...h, name: $("#o-hname").value.trim(), level: $("#o-level").value, type: $("#o-type").value, pmjay_empanelled: $("#o-pmjay").checked, fetch_window_months: n, ...S.orgPage.lists } }, "Hospital settings");
   };
   $("#o-adddept").onclick = () => { $("#o-depts").insertAdjacentHTML("beforeend", deptRow({ id: "", name: "", group: "treating", aliases: [], email: "" }, true)); $("#o-depts tr:last-child .o-name").focus(); };
   $("#o-depts").addEventListener("input", (e) => { const tr = e.target.closest("tr[data-new]"); if (tr && e.target.matches(".o-name")) $(".o-id", tr).textContent = slugOf(e.target.value) || "(from the name)"; });
@@ -1683,6 +1747,17 @@ async function showOrgPage() {
   renderRoutes();  // V2 item 2.4: the routing table (loaded on its own, saved on its own)
   renderHISSettings();  // V2 item 3.1: the hospital information system connection (loaded and saved on its own)
 }
+// the board's lists of departments (V2 items 6.1 / 6.2 / 6.4): chips in the order chosen, a select adds one; saved with the hospital settings
+const DEFAULT_HEADS = ["radiology", "medical_oncology", "surgical_oncology", "pathology"];
+const BOARD_LISTS = [["board_heads", "Board heads", "Shown first on every attendance sheet, in this order. A head not recorded present has its AI support agent stand in (role-specific support, never a member)."],
+  ["board_attendance", "Also on the attendance sheet", "Departments listed on every session's sheet besides the heads, Radiation Oncology and Nuclear Medicine (on demand) and the owners of the Case Files on the agenda."],
+  ["surgical_departments", "Surgical departments", "A surgeon from the Case File's own one fills the surgical seat."],
+  ["pmjay_surgical_oncology", "Counted as the Surgical Oncologist for PM-JAY HBP 2.2", "A surgeon from another surgical department fills the seat with a 'check PM-JAY requirement' note."]];
+function renderDepList(k) {
+  const box = $("#o-" + k), v = S.orgPage.lists[k], rest = (S.orgPage.o.departments || []).filter((d) => !v.includes(d.id));
+  box.innerHTML = `${v.map((d, i) => `<span class="chip c-lvl">${k === "board_heads" ? `${i + 1}. ` : ""}${esc(deptName(d))} <button class="x" data-rmdl="${esc(d)}" aria-label="Remove ${esc(deptName(d))}">×</button></span>`).join("") || `<span class="small muted">None</span>`}
+    <select data-adddl="${k}" aria-label="Add a department"><option value="">Add a department</option>${rest.map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join("")}</select>`;
+}
 // ------------------------------------------------------------------ HIS connection (root admin) · V2 item 3.1
 async function renderHISSettings() {
   const box = $("#o-his"); if (!box) return;
@@ -1697,12 +1772,13 @@ async function renderHISSettings() {
       <div><label for="hs-label">Label</label><input id="hs-label" value="${esc(s.label || "")}" ${r.can_manage ? "" : "disabled"}></div>
       <div><label for="hs-url">URL</label><input id="hs-url" value="${esc(s.url || "")}" placeholder="http://127.0.0.1:7130" ${r.can_manage ? "" : "disabled"}></div>
       <div><label for="hs-token">Token</label><input id="hs-token" type="password" autocomplete="new-password" value="" placeholder="${s.has_token ? "token set (blank keeps it)" : "bearer token"}" ${r.can_manage ? "" : "disabled"}></div>
+      <div><label for="hs-pacs">PACS (image viewer) URL</label><input id="hs-pacs" value="${esc(s.pacs_url || "")}" placeholder="http://127.0.0.1:8042" ${r.can_manage ? "" : "disabled"}><div class="small muted">The app forwards the image viewer to it; the browser never goes there. Loopback or an allowed host.</div></div>
       <div><label>Token file</label><div class="small muted" style="padding:6px 0">${s.token_file ? `set on the server${typeof s.token_file === "string" ? ` (<span class="mono">${esc(s.token_file)}</span>)` : ""}; a change of host drops it` : "none (the token above is used)"}</div></div></div>
       <label class="chk"><input type="checkbox" id="hs-on" ${s.enabled ? "checked" : ""} ${r.can_manage ? "" : "disabled"}> Enabled</label></div>
     <div class="small muted">${s.has_token ? "Token set." : "No token set."} Kind: ${esc(s.kind || "fhir")}.</div>
     ${r.can_manage ? `<div class="actions-row"><button class="primary sm" id="hs-save">Save HIS connection</button></div>` : ""}</div>`;
   if ($("#hs-save")) $("#hs-save").onclick = async () => {
-    const body = { kind: s.kind || "fhir", connector: s.connector || "", label: $("#hs-label").value.trim(), url: $("#hs-url").value.trim(), token: $("#hs-token").value, enabled: $("#hs-on").checked };  // the token file is never sent: it stays what the server holds (review S2)
+    const body = { kind: s.kind || "fhir", connector: s.connector || "", label: $("#hs-label").value.trim(), url: $("#hs-url").value.trim(), token: $("#hs-token").value, enabled: $("#hs-on").checked, pacs_url: $("#hs-pacs").value.trim() };  // the token file is never sent: it stays what the server holds (review S2)
     $("#hs-token").value = "";
     try { await api("/his", { method: "PUT", json: body }); toast("HIS connection saved"); renderHISSettings(); }
     catch (e) { toast(e.message, 8000); }
@@ -1960,7 +2036,8 @@ async function showIntake() {
 // ------------------------------------------------------------------ notifications (bell) and the department inbox · V1 item 4.4
 const NKIND = { request: ["c-warn", "Request"], request_closed: ["c-ok", "Request closed"], request_acknowledged: ["c-info", "Request acknowledged"], request_done: ["c-ok", "Done by the department"], case_ready: ["c-ok", "Case File ready"],
   board_action: ["c-info", "Tumour Board action"], board_action_suggestion: ["c-ok", "Action may be complete"],
-  case_shared: ["c-info", "Case File shared"], case_unshared: ["c-mute", "Case File no longer shared"], referral: ["c-warn", "Referral"], referral_answered: ["c-info", "Referral answered"] };  // V2 items 5.1 / 5.2
+  case_shared: ["c-info", "Case File shared"], case_unshared: ["c-mute", "Case File no longer shared"], referral: ["c-warn", "Referral"], referral_answered: ["c-info", "Referral answered"],  // V2 items 5.1 / 5.2
+  request_reminder: ["c-warn", "Reminder"], owner_reminder: ["c-warn", "Before the board"], board_ready: ["c-ok", "Ready for the board"] };  // V2 item 6.1
 async function loadNotifications() {
   if (!S.me) return;
   try { const r = await api("/notifications?limit=80"); S.notifications = r.notifications; S.unread = r.unread;
@@ -2229,6 +2306,7 @@ function renderLimited() {
   $$("[data-ack], [data-done]", root).forEach((b) => (b.onclick = async () => { b.disabled = true; const what = b.dataset.ack ? "acknowledge" : "done";
     if (await answerRequest(S.caseId, b.dataset.ack || b.dataset.done, what)) { await openCase(S.caseId, true); loadNotifications(); refreshInboxCount(); } else b.disabled = false; }));
   $$("tr[data-doc]", root).forEach((tr) => (tr.onclick = (e) => { if (!e.target.closest("button")) openDoc(tr.dataset.doc); }));
+  bindImages(root);
 }
 function inboxReferralsHTML(refs) {
   if (!refs.length) return "";
@@ -2268,11 +2346,11 @@ async function showSessions() {
   const r = await api("/sessions"); showOnly("sessions");
   const today = new Date().toISOString().slice(0, 10);
   $("#sessions").innerHTML = `<div class="case-head"><div><div class="eyebrow">During the board</div><h1>Board sessions</h1>
-      <div class="muted">A board session takes the Case Files listed for its date, in agenda order. Mark each specialty present or absent and record the members present by name. When the session starts, the AI support agent of every absent specialty prepares its brief from the Case File records and its guideline pack (Indian sources first) and answers the board's questions. The board decides.</div></div></div>
+      <div class="muted">A board session takes the Case Files their owners marked ready for its date, in agenda order. The attendance sheet lists the board's heads first, then the departments of the Case Files; mark each present or absent and record the members present by name. When the session starts, the AI support agent of every head not recorded as present, and of every specialty marked absent, prepares its brief from the Case File records and its guideline pack (Indian sources first) and answers the board's questions; Radiation Oncology and Nuclear Medicine are on demand. An agent is role-specific support, never a member. The board decides.</div></div></div>
     ${r.can_manage ? `<div class="card form"><h3>New board session</h3>
       <label for="s-date">Board date</label><input type="date" id="s-date" value="${today}">
       <label for="s-title">Title (optional)</label><input id="s-title" placeholder="e.g. Thoracic Tumour Board">
-      <label>Case Files listed for that date (agenda order)</label><div id="s-cands" class="small muted"></div>
+      <label>Case Files listed for that date (agenda order; the ones their owners marked ready are ticked)</label><div id="s-cands" class="small muted"></div>
       <div style="margin-top:12px"><button class="primary" id="s-create">Create board session</button></div></div>` : ""}
     <div class="card"><h3>Agenda readiness and chase list <span class="muted small">before the board</span></h3>
       <div class="muted small" style="margin-bottom:6px">For a board date: which listed Case Files are ready, on track, at risk or blocked (from the Pre-Authorization check and the due dates of the open requests), and what to ask which department before the meeting.</div>
@@ -2283,18 +2361,26 @@ async function showSessions() {
   $$("#sessions tr[data-sid]").forEach((tr) => (tr.onclick = () => openSession(tr.dataset.sid)));
   const agendaGo = async () => {
     $("#ag-out").innerHTML = `<span class="spin"></span>`;
-    try { const a = await api("/metrics/agenda?date=" + encodeURIComponent($("#ag-date").value)); $("#ag-out").innerHTML = readinessHTML(a);
-      $$("#ag-out tr[data-open]").forEach((tr) => (tr.onclick = () => openCase(tr.dataset.open))); }
+    try { const a = await api("/metrics/agenda?date=" + encodeURIComponent($("#ag-date").value)); $("#ag-out").innerHTML = readinessHTML(a, !!(S.me?.coordinator || S.me?.admin));
+      $$("#ag-out tr[data-open]").forEach((tr) => (tr.onclick = (e) => { if (!e.target.closest("button")) openCase(tr.dataset.open); }));
+      $$("#ag-out [data-remowner]").forEach((b) => (b.onclick = async (e) => { e.stopPropagation(); if (await remindOwner(b.dataset.remowner, b.dataset.patient)) agendaGo(); }));
+      $$("#ag-out [data-remreq]").forEach((b) => (b.onclick = async (e) => { e.stopPropagation(); if (await remindRequest(b.dataset.case, b.dataset.remreq, !!b.dataset.sug, b.dataset.label)) agendaGo(); })); }
     catch (e) { $("#ag-out").textContent = e.message; }
   };
   $("#ag-go").onclick = agendaGo;
   const listedDates = [...new Set((S.cases || []).map((c) => c.board_date).filter(Boolean))].sort();
-  if (listedDates.length) { $("#ag-date").value = listedDates.find((d) => d >= today) || listedDates[listedDates.length - 1]; }
+  if (listedDates.length) { $("#ag-date").value = listedDates.find((d) => d >= today) || listedDates[listedDates.length - 1]; if ($("#s-date")) $("#s-date").value = $("#ag-date").value; }
   agendaGo();
   if (!r.can_manage) return;
   const cands = async () => {
     const c = await api("/sessions/candidates?date=" + encodeURIComponent($("#s-date").value));
-    $("#s-cands").innerHTML = c.cases.length ? c.cases.map((x, i) => `<label class="small" style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" data-cand="${esc(x.case_id)}" checked style="width:auto"> ${i + 1}. <b>${esc(x.patient?.name || x.case_id)}</b> <span class="muted">${esc(x.case_id)} · ${esc(x.protocol || "")}</span></label>`).join("")
+    const anyReady = c.cases.some((x) => x.ready);  // none marked: every listed Case File is ticked, as before V2
+    const SUMM = { ready: ["c-ok", "Summary ready"], stale: ["c-warn", "Summary stale"], none: ["c-mute", "No summary"] };
+    $("#s-cands").innerHTML = c.cases.length ? (anyReady ? "" : `<div class="small muted" style="margin-bottom:4px">No owner has marked a Case File ready for this date: all are ticked.</div>`) + c.cases.map((x, i) => { const sm = SUMM[x.summary] || SUMM.none;
+      return `<label class="cand" data-cand-row="${esc(x.case_id)}"><input type="checkbox" data-cand="${esc(x.case_id)}" ${x.ready || !anyReady ? "checked" : ""}>
+        <span><span>${i + 1}. <b>${esc(x.patient?.name || x.case_id)}</b> <span class="muted">${esc(x.case_id)} · ${esc(protoLabel(x.protocol))}${x.owner_name ? " · " + esc(x.owner_name) : ""}</span></span>
+        <span class="chips">${x.ready ? `<span class="chip c-ok" title="${esc(x.ready.note ? "Note: " + x.ready.note : "")}">Ready (by ${esc(x.ready.by)})</span>` : `<span class="chip c-warn">Not marked ready by the owner</span>`}
+          ${x.gate_passed ? `<span class="chip c-ok">Pre-Authorization met</span>` : `<span class="chip c-warn">Pre-Authorization ${x.gate?.total ? esc(x.gate.satisfied + "/" + x.gate.total) : "not evaluated"}</span>`}<span class="chip ${sm[0]}">${sm[1]}</span></span></span></label>`; }).join("")
       : `No Case File is listed for the board on ${fmtDate($("#s-date").value)}. List Case Files with this board date first (open a Case File, Change listing).`;
   };
   $("#s-date").onchange = cands; cands();
@@ -2341,63 +2427,106 @@ function renderRoom() {
   const m = r.can_manage;
   $("#sessions").innerHTML = `<div class="case-head"><div><div class="eyebrow">Board room · ${esc(s.id)}</div><h1>${esc(s.title || "Tumour Board")} · ${fmtDate(s.date)} <span class="chip ${st[0]}">${st[1]}</span></h1>
       <div class="muted">${s.agenda.length} Case File${s.agenda.length === 1 ? "" : "s"} · created by ${esc(s.created_by || "")}${s.started_at ? ` · started ${esc(s.started_at.replace("T", " ").slice(0, 16))}` : ""}${s.closed_at ? ` · closed ${esc(s.closed_at.replace("T", " ").slice(0, 16))}` : ""}</div>
-      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">${m && s.status === "planned" ? `<button class="primary sm" id="r-start" title="The AI support agents of the absent specialties prepare their briefs for every Case File on the agenda">Start session</button>` : ""}
+      <div class="room-btns">${m && s.status === "planned" ? `<button class="primary sm" id="r-start" title="The AI support agents of the heads not recorded as present and of the absent specialties prepare their briefs for every Case File on the agenda">Start session</button>` : ""}
         ${m && s.status === "in_session" ? `<button class="ghost sm" id="r-close">Close session</button>` : ""}
         <button class="ghost sm" id="r-export" title="What the agents said and what the board decided, side by side (reporting only)">Export agent log and decisions</button>
+        <button class="ghost sm" id="r-minutes" title="Attendance, the decisions as dictated, the actions and their follow-up (what people recorded; no model output)">Minutes</button>
         <button class="ghost sm" id="r-back">All board sessions</button></div></div></div>
     <div class="room"><div>
       <div class="card"><h3>Agenda</h3><div id="room-agenda">${agendaHTML()}</div></div>
       <div class="card"><h3>Attendance</h3><div id="room-att">${attendanceHTML()}</div></div>
     </div><div>
-      ${c.missing ? `<div class="card"><div class="refusal">This Case File no longer exists.</div></div>` : `
-      <div class="card"><div class="eyebrow">${esc(S.protocols?.find((x) => x.id === c.protocol)?.label || c.protocol || "")}</div><h2 style="margin:4px 0">${esc(c.patient?.name || S.roomCase)}</h2>
-        <div class="muted small">${esc(S.roomCase)}${c.patient?.mrn ? " · UHID / MRN " + esc(c.patient.mrn) : ""}${c.patient?.agesex ? " · " + esc(c.patient.agesex) : ""} ·
-          ${c.gate?.passed ? `<span class="chip c-ok">Readiness criteria met</span>` : `<span class="chip c-warn">Pre-Authorization ${c.gate?.total ? c.gate.satisfied + "/" + c.gate.total : "not evaluated"}</span>`}
-          <button class="ghost sm" id="r-open">Open Case File</button></div></div>
+      ${c.missing ? `<div class="card"><div class="refusal">This Case File no longer exists.</div></div>` : c.restricted ? `<div class="card" id="room-case"><div class="eyebrow">${esc(protoLabel(c.protocol))}</div><h2 style="margin:4px 0">${esc(S.roomCase)}</h2>
+        <div class="refusal" id="room-restricted">Restricted: another department's Case File${c.owner_name ? ` (owner: ${esc(c.owner_name)})` : ""}. Its records, summary and briefs are not shown to your department.</div>${seatHTML(c)}</div>` : `
+      <div class="card" id="room-case"><div class="eyebrow">${esc(protoLabel(c.protocol))}</div><h2 style="margin:4px 0">${esc(c.patient?.name || S.roomCase)}</h2>
+        <div class="muted small">${esc(S.roomCase)}${c.patient?.mrn ? " · UHID / MRN " + esc(c.patient.mrn) : ""}${c.patient?.agesex ? " · " + esc(c.patient.agesex) : ""}${c.owner_name ? " · Owner: " + esc(c.owner_name) : ""}${(c.linked_cases || []).length ? " · Linked: " + c.linked_cases.map(esc).join(", ") : ""}</div>
+        <div class="chips" style="margin-top:6px">${c.gate?.passed ? `<span class="chip c-ok">Readiness criteria met</span>` : `<span class="chip c-warn">Pre-Authorization ${c.gate?.total ? c.gate.satisfied + "/" + c.gate.total : "not evaluated"}</span>`}
+          ${c.ready ? readyChip(c.ready) : `<span class="chip c-warn">Not marked ready by the owner</span>`}
+          <button class="ghost sm" id="r-open">Open Case File</button></div>
+        ${seatHTML(c)}</div>
       <div class="card summary"><h3>Case File summary</h3>${roomSummaryHTML(c)}</div>
-      <div class="card"><h3>AI support for absent specialties <span class="muted small">role-specific, AI draft; the board decides</span></h3><div id="room-agents">${agentsHTML()}</div></div>
+      <div class="card" id="room-records-card"><h3>Records <span class="muted small">${(c.records || []).length}</span></h3><div id="room-records">${recordsHTML(c)}</div></div>
+      <div class="card"><h3>AI support <span class="muted small">role-specific, AI draft; the board decides</span></h3><div id="room-agents">${agentsHTML()}</div></div>
       <div class="card"><h3>Board decision</h3><div id="room-decision">${decisionHTML()}</div></div>
+      ${followupHTML()}
       <div class="card"><h3>What the agents said and what the board decided <span class="muted small">reporting only</span></h3><div id="room-log">${logHTML()}</div></div>`}
     </div></div>`;
-  if ($("#r-start")) $("#r-start").onclick = async () => { try { const x = await api(`/sessions/${s.id}/start`, { method: "POST" }); toast(x.preparing ? `Session started. ${x.preparing} brief(s) being prepared for the absent specialties.` : "Session started. No specialty is marked absent: no agent to prepare.", 7000); openSession(s.id); } catch (e) { toast(e.message, 7000); } };
+  if ($("#r-start")) $("#r-start").onclick = async () => { try { const x = await api(`/sessions/${s.id}/start`, { method: "POST" }); toast(x.preparing ? `Session started. ${x.preparing} brief(s) being prepared for the heads not recorded as present and the absent specialties.` : "Session started. Every head is recorded present and no specialty is marked absent: no agent to prepare.", 7000); openSession(s.id); } catch (e) { toast(e.message, 7000); } };
   if ($("#r-close")) $("#r-close").onclick = async () => { if (!confirm("Close this board session? Decisions and marks can still be recorded afterwards.")) return; try { await api(`/sessions/${s.id}/close`, { method: "POST" }); openSession(s.id); } catch (e) { toast(e.message, 7000); } };
   $("#r-back").onclick = showSessions;
-  $("#r-export").onclick = async () => {
-    const x = await fetch(`/api/tb/sessions/${encodeURIComponent(s.id)}/export?format=html`, { credentials: "same-origin" });
+  const download = async (path, name, done) => {
+    const x = await fetch(`/api/tb/sessions/${encodeURIComponent(s.id)}/${path}?format=html`, { credentials: "same-origin" });
     if (!x.ok) { toast(x.statusText, 7000); return; }
-    const blob = await x.blob(); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${s.id}_agent_log_and_decisions.html`; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000); toast("Exported; recorded in the audit log");
+    const blob = await x.blob(); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${s.id}_${name}.html`; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000); toast(done);
   };
+  $("#r-export").onclick = () => download("export", "agent_log_and_decisions", "Exported; recorded in the audit log");
+  $("#r-minutes").onclick = () => download("minutes", "minutes", "Minutes downloaded; recorded in the audit log");
   if ($("#r-open")) $("#r-open").onclick = () => openCase(S.roomCase);
-  bindAgenda(); bindAttendance(); bindAgents(); bindDecision(); bindLog();
+  bindAgenda(); bindAttendance(); bindAgents(); bindDecision(); bindLog(); bindRecords();
 }
 function agendaHTML() {
   const s = S.room.session, m = S.room.can_manage && s.status === "in_session";
   return s.agenda.map((a, i) => { const c = S.room.cases[a.case_id] || {}, st = ASTATUS[a.status] || ASTATUS.waiting;
     return `<div class="agenda ${a.case_id === S.roomCase ? "on" : ""}" data-rc="${esc(a.case_id)}"><div class="t"><span>${i + 1}. ${esc(c.patient?.name || a.case_id)}</span><span class="chip ${st[0]}">${st[1]}</span></div>
-      <div class="small muted">${esc(a.case_id)} · ${esc(c.protocol || "")}${m && s.current !== a.case_id ? ` · <button class="ghost sm" data-cur="${esc(a.case_id)}">Make current</button>` : ""}</div></div>`; }).join("");
+      <div class="small muted">${esc(a.case_id)} · ${esc(c.protocol || "")}${c.owner_name ? " · " + esc(c.owner_name) : ""}${c.restricted ? ' · <span class="chip c-mute">Restricted</span>' : ""}${a.owner_ready === false ? ' <span class="chip c-warn" title="Put on the agenda without the owner\'s ready mark">Not marked ready by the owner</span>' : ""}${m && s.current !== a.case_id ? ` · <button class="ghost sm" data-cur="${esc(a.case_id)}">Make current</button>` : ""}</div></div>`; }).join("");
 }
 function bindAgenda() {
   $$("#room-agenda [data-rc]").forEach((el) => (el.onclick = (e) => { if (e.target.closest("[data-cur]")) return; S.roomCase = el.dataset.rc; renderRoom(); }));
   $$("#room-agenda [data-cur]").forEach((b) => (b.onclick = async () => { try { await api(`/sessions/${S.roomId}/current`, { json: { case_id: b.dataset.cur } }); openSession(S.roomId, b.dataset.cur); } catch (e) { toast(e.message, 7000); } }));
 }
+const ATT = { present: ["c-ok", "Present"], absent: ["c-warn", "Absent"], not_marked: ["c-mute", "Not marked"] };
 function attendanceHTML() {
+  // V2 item 6.1: the session's attendance sheet (heads first, then on demand, the hospital's list, the Case Files' departments)
   const r = S.room, s = r.session, m = r.can_manage && s.status !== "closed";
-  const roleOf = (d) => d.role ? r.roles[d.role]?.label : "";
   const att = (d) => s.attendance?.[d.id] || "not_marked";
-  return `<table class="t att"><thead><tr><th>Specialty</th><th>Attendance</th></tr></thead><tbody>${r.specialties.map((d) => `<tr><td>${esc(d.name)}${d.role ? `<div class="small muted">${esc(roleOf(d))}${att(d) === "absent" ? ' · <span class="chip c-info">AI support active</span>' : ""}</div>` : ""}</td>
-      <td>${m ? `<select data-att="${esc(d.id)}" aria-label="Attendance of ${esc(d.name)}">${[["not_marked", "Not marked"], ["present", "Present"], ["absent", "Absent"]].map(([v, l]) => `<option value="${v}" ${att(d) === v ? "selected" : ""}>${l}</option>`).join("")}</select>`
-        : `<span class="chip ${att(d) === "present" ? "c-ok" : att(d) === "absent" ? "c-warn" : "c-mute"}">${att(d) === "present" ? "Present" : att(d) === "absent" ? "Absent" : "Not marked"}</span>`}</td></tr>`).join("")}</tbody></table>
+  const stands = (d) => d.role && (att(d) === "absent" || (d.head && att(d) !== "present"));
+  const list = r.attendance_list || [];
+  return `<table class="t att" id="att-list"><thead><tr><th>Department</th><th>Attendance</th></tr></thead><tbody>${list.map((d) => `<tr data-dept="${esc(d.id)}"><td><b>${esc(d.name)}</b>${d.head ? ' <span class="chip c-info att-head">Head</span>' : ""}${d.on_demand ? ' <span class="chip c-mute" title="AI support on demand: the board asks for a brief during the session">On demand</span>' : ""}
+        <div class="small muted">${esc(d.why || "")}${d.role ? ` · ${esc(r.roles[d.role]?.label || d.role)}` : ""}${stands(d) ? ' · <span class="chip c-info">AI support stands in</span>' : ""}</div></td>
+      <td>${m ? `<select data-att="${esc(d.id)}" aria-label="Attendance of ${esc(d.name)}">${Object.entries(ATT).map(([v, x]) => `<option value="${v}" ${att(d) === v ? "selected" : ""}>${x[1]}</option>`).join("")}</select>`
+        : `<span class="chip ${ATT[att(d)][0]}">${ATT[att(d)][1]}</span>`}</td></tr>`).join("")}</tbody></table>
     <h4 style="margin:12px 0 6px">Members present</h4>
-    <div>${(s.members || []).map((x) => `<span class="chip c-lvl" style="margin:2px">${esc(x.name)} (${esc(deptName(x.department))})${m ? ` <button class="x" data-rmm="${esc(x.id)}" aria-label="Remove ${esc(x.name)}">×</button>` : ""}</span>`).join("") || `<span class="small muted">None recorded.</span>`}</div>
-    ${m ? `<div class="arow" style="margin-top:8px"><input id="m-name" placeholder="Name, e.g. Dr. A. Rao" aria-label="Member name"><select id="m-dept" aria-label="Department">${[...r.specialties, { id: "coordinator", name: "MDT Coordinator" }].map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join("")}</select><button class="ghost sm" id="m-add">Add</button></div>` : ""}
-    <div class="small muted" style="margin-top:8px">An AI support agent stands in for an absent specialty only as role-specific support; it is never counted as a member.</div>`;
+    <div id="att-members">${(s.members || []).map((x) => `<span class="chip c-lvl" style="margin:2px">${esc(x.name)} (${esc(deptName(x.department))})${m ? ` <button class="x" data-rmm="${esc(x.id)}" aria-label="Remove ${esc(x.name)}">×</button>` : ""}</span>`).join("") || `<span class="small muted">None recorded.</span>`}</div>
+    ${m ? `<div class="arow memrow" style="margin-top:8px"><input id="m-name" placeholder="Name, e.g. Dr. A. Rao" aria-label="Member name"><select id="m-dept" aria-label="Department">${[...list, ...r.specialties.filter((d) => !list.some((x) => x.id === d.id)), { id: "coordinator", name: "MDT Coordinator" }].map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join("")}</select><button class="ghost sm" id="m-add">Add</button></div>
+      <div class="small muted" style="margin-top:4px">Adding a member marks the department present.</div>` : ""}
+    <div class="small muted" style="margin-top:8px">An AI support agent stands in for a head not recorded as present or a specialty marked absent, only as role-specific support; it is never counted as a member.</div>`;
 }
 function bindAttendance() {
   const sid = S.roomId;
   $$("[data-att]").forEach((sel) => (sel.onchange = async () => { try { await api(`/sessions/${sid}/attendance`, { json: { department: sel.dataset.att, status: sel.value } }); openSession(sid, S.roomCase); } catch (e) { toast(e.message, 7000); } }));
   $$("[data-rmm]").forEach((b) => (b.onclick = async () => { try { await api(`/sessions/${sid}/members/${b.dataset.rmm}`, { method: "DELETE" }); openSession(sid, S.roomCase); } catch (e) { toast(e.message, 7000); } }));
   if ($("#m-add")) $("#m-add").onclick = async () => { if (!$("#m-name").value.trim()) return; try { await api(`/sessions/${sid}/members`, { json: { name: $("#m-name").value, department: $("#m-dept").value } }); openSession(sid, S.roomCase); } catch (e) { toast(e.message, 7000); } };
+}
+function seatHTML(c) {
+  // V2 items 6.2 / 6.4: who fills the surgical seat for this Case File; the PM-JAY note never blocks
+  const x = c.seat; if (!x) return "";
+  const who = x.filled ? `filled by ${esc((x.members || []).join(", ") || "a surgeon recorded present")} (${esc((x.filled_by_names || []).join(", "))})` : "no surgeon recorded present: the Surgical Oncology agent stands in (AI support, never a member)";
+  const pm = x.check_pmjay && S.room.pmjay_empanelled ? ` <span class="chip c-warn" id="r-seat-pmjay" title="A surgeon from a department outside the hospital's PM-JAY surgical oncology list fills the seat; HBP 2.2 names a Surgical Oncologist">check PM-JAY requirement</span>` : "";
+  return `<div class="small seatline" id="r-seat"><b>Surgical seat:</b> ${who}${pm}${!x.filled && (x.own_surgical_names || []).length ? ` <span class="muted">(a surgeon of ${esc(x.own_surgical_names.join(" or "))} or Surgical Oncology fills it)</span>` : ""}</div>`;
+}
+function recordsHTML(c) {
+  // V2 item 6.3: the Case File's records during the board; Open shows the drawer, Open images the hospital's viewer (people view, no model reads)
+  const rs = c.records || [];
+  if (!rs.length) return `<div class="muted small">No processed record in the Case File.</div>`;
+  return `<div class="small muted" style="margin-bottom:6px">${IMG_NOTE}. Open images goes through this app to the hospital's image viewer and is audited.</div>
+    <div class="tscroll"><table class="t" id="rec-list"><thead><tr><th>Record</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>${rs.map((d) => { const h = d.his, hs = h && HSTAT[h.status], ids = h ? [h.encounter_number, h.accession].filter(Boolean) : [];
+      return `<tr data-rec="${esc(d.doc_id)}"${d.superseded ? ' class="superseded"' : ""}><td><b>${esc(d.title || d.doc_id)}</b><div class="small muted">${esc(DT[d.doc_type] || d.doc_type || "")}${d.department ? " · " + esc(deptName(d.department)) : ""}</div>${ids.length ? `<div class="mono small" title="OP / IP No. and accession No. in the hospital system">${esc(ids.join(" · "))}</div>` : ""}</td>
+        <td class="small nowrap">${d.date ? esc(dmyd(d.date)) : '<span class="muted">not found</span>'}</td>
+        <td><div class="chips">${hs ? `<span class="chip ${hs[0]}" title="Report status in the hospital system">${hs[1]}</span>` : d.status ? `<span class="chip ${/final/i.test(d.status) ? "c-ok" : "c-warn"}">${esc(d.status)}</span>` : ""}${(h ? h.signed : d.signed === "yes") ? '<span class="chip c-ok">Signed</span>' : ""}${h ? '<span class="chip c-info">from HIS</span>' : ""}${d.outside ? '<span class="chip c-mute">Outside report</span>' : ""}${d.superseded ? '<span class="chip c-mute">History</span>' : ""}${d.study?.modality ? `<span class="chip c-lvl" title="${esc(d.study.instances ? plural(d.study.instances, "image") : "")}">${esc(d.study.modality)}</span>` : ""}</div></td>
+        <td><div class="ibtns"><button class="ghost sm" data-recopen="${esc(d.doc_id)}">Open</button>${d.images ? imagesBtn(d.doc_id, S.roomCase) : ""}</div></td></tr>`; }).join("")}</tbody></table></div>`;
+}
+function bindRecords() {
+  const box = $("#room-records"); if (!box) return;
+  $$("[data-recopen]", box).forEach((b) => (b.onclick = () => { const cid = S.roomCase; openDoc(b.dataset.recopen, null, `/cases/${encodeURIComponent(cid)}/documents/${encodeURIComponent(b.dataset.recopen)}`).catch((e) => toast(e.message, 7000)); }));
+  bindImages(box);
+}
+function followupHTML() {
+  // V2 item 6.1: the Tumour Board actions the decisions of this session gave departments, and where they stand now
+  const f = S.room.followup; if (!f) return "";
+  return `<div class="card" id="room-followup"><h3>Follow-up <span class="muted small">${f.open} open · ${f.overdue} overdue · ${f.closed} closed</span></h3>
+    ${f.actions.length ? `<div class="tscroll"><table class="t"><thead><tr><th>Case File</th><th>Responsible Department</th><th>Task</th><th>Due</th><th>Status</th></tr></thead><tbody>${f.actions.map((x) => `<tr><td class="small"><b>${esc(x.patient)}</b><div class="muted">${esc(x.case_id)}</div></td><td class="small">${esc(x.department)}</td><td class="small">${esc(x.task)}</td><td class="small nowrap">${x.due ? esc(dmyd(x.due)) : ""}</td>
+      <td>${x.status === "completed" ? `<span class="chip c-ok">Closed</span>${x.completed ? `<div class="small muted">${esc(dmyt(x.completed))}</div>` : ""}` : x.overdue ? '<span class="chip c-bad">Overdue</span>' : '<span class="chip c-warn">Open</span>'}</td></tr>`).join("")}</tbody></table></div>` : `<div class="muted small">The decisions recorded so far gave no department an action.</div>`}</div>`;
 }
 function roomSummaryHTML(c) {
   const sm = c.summary;
@@ -2409,27 +2538,39 @@ function roomSummaryHTML(c) {
     ${sm.stage_as_recorded ? `<div class="stagebox"><b>Stage, as recorded in the ${esc(sm.stage_as_recorded.doc_title)}:</b> ${esc(sm.stage_as_recorded.value)}</div>` : ""}`;
 }
 function answersFor(role) { return (S.room.session.log || []).filter((e) => e.case_id === S.roomCase && e.role === role && e.kind === "answer").reverse(); }
-function agentsHTML() {
+function agentBlock(role, why, onDemand) {
   const r = S.room, s = r.session, c = roomCase();
-  if (!r.absent_roles.length) return `<div class="muted small">No specialty with an AI support agent is marked absent. Mark absent specialties under Attendance: their agents prepare a brief${s.status === "in_session" ? " at once" : " when the session starts"}.</div>`;
-  return r.absent_roles.map((role) => {
-    const ag = (s.agents?.[S.roomCase] || {})[role], b = (c.briefs || {})[role], label = r.roles[role]?.label || role, st = ag ? AGSTATUS[ag.status] || ["c-mute", ag.status] : ["c-mute", s.status === "planned" ? "Prepared when the session starts" : "Not prepared"];
-    const stale = (c.briefs_stale || {})[role];
-    const brief = !b ? "" : b.no_documents ? noDocsHTML(b) : `${b.points_for_review.length ? `<h4>Points for review (not treatment recommendations)</h4><ul>${b.points_for_review.map((it) => `<li class="${approxCls(it, b.review)}">${esc(it.text)} ${it.citations.map(citeHTML).join("")}${flagHTML(it)}${(it.references || []).length ? `<div class="grefs">${it.references.map(refHTML).join("")}</div>` : ""}</li>`).join("")}</ul>` : `<div class="small muted">No points for review.</div>`}
-      <details><summary class="small">Brief: ${b.sections.reduce((n, x) => n + x.items.length, 0)} cited item(s)${b.not_documented.length ? `, ${b.not_documented.length} not documented` : ""}</summary>${b.sections.map((x) => `<h4>${esc(x.heading)}</h4><ul>${x.items.map((it) => `<li class="${approxCls(it, b.review)}">${esc(it.text)} ${it.citations.map(citeHTML).join("")}${flagHTML(it)}</li>`).join("")}</ul>`).join("")}${b.not_documented.length ? `<h4>Not documented</h4><ul>${b.not_documented.map((x) => `<li class="muted">${esc(x)}</li>`).join("")}</ul>` : ""}</details>
-      ${r.can_review ? removedHTML(b.removed) : ""}<div class="small muted">${esc((b.generated || "").replace("T", " "))} · ${esc(modelLabel(b.model))}${b.review?.status === "reviewed" ? ` · reviewed by ${esc(b.review.by)}` : " · AI draft"}</div>`;
-    const ans = answersFor(role).map((e) => `<div class="qbox">${esc(e.question)}</div>${e.status === "answered" ? `<div class="answer">${(e.statements || []).map((x) => `<p>${esc(x.text)} ${(x.citations || []).map(citeHTML).join("")}${flagHTML(x)}</p>`).join("")}${(e.references || []).length ? `<div class="grefs">${e.references.map(refHTML).join("")}</div>` : ""}</div>`
-      : `<div class="refusal"><b>${e.status === "out_of_scope" ? "Outside the agent's scope." : "Not documented in the Case File."}</b> ${esc(e.text)}</div>`}${r.can_review ? removedHTML(e.removed) : ""}`).join("");
-    const pending = (S.asking || {})[S.roomCase + ":" + role];
-    return `<div class="agent" id="ag-${role}"><h4>${esc(label)} <span class="chip ${st[0]}">${["queued", "running"].includes(ag?.status) ? '<span class="spin"></span> ' : ""}${esc(st[1])}</span>${ag?.reused ? ' <span class="small muted">(brief still current, reused)</span>' : ""}
-        ${r.can_manage && s.status === "in_session" && !["queued", "running"].includes(ag?.status) ? `<button class="ghost sm" data-prep="${role}">Prepare again</button>` : ""}</h4>
-      ${ag?.status === "error" ? `<div class="refusal">${esc(ag.message || "The brief could not be prepared")}</div>` : ""}
-      ${stale && !["queued", "running"].includes(ag?.status) ? `<div class="banner warn stale"><b>${esc(stale)}.</b> Prepare the brief again before the board relies on it.</div>` : ""}
-      ${brief}
-      ${r.can_ask && s.status !== "closed" && c.protocol ? `<div class="search" style="margin-top:10px"><input id="ask-${role}" placeholder="Ask the ${esc(label.replace(" support", ""))} agent about the records" autocomplete="off"><button class="primary sm" data-ask="${role}" ${pending ? "disabled" : ""}>${pending ? '<span class="spin"></span>' : "Ask"}</button></div>` : ""}
-      <div class="small muted" style="margin-top:4px">AI support (role-specific): answers only from the Case File records and the specialty's guideline pack, every statement with a verified quote. No image reading, diagnosis or treatment advice. References are guideline text for the board to consult, Indian sources first; they are not facts about this patient and not a recommendation for this patient.</div>
-      ${ans}</div>`;
-  }).join("");
+  const ag = (s.agents?.[S.roomCase] || {})[role], b = (c.briefs || {})[role], label = r.roles[role]?.label || role, busy = ["queued", "running"].includes(ag?.status);
+  const st = ag ? AGSTATUS[ag.status] || ["c-mute", ag.status] : b ? AGSTATUS.ready : ["c-mute", onDemand ? (s.status === "in_session" ? "Not asked for" : "On demand during the session") : s.status === "planned" ? "Prepared when the session starts" : "Not prepared"];
+  const stale = (c.briefs_stale || {})[role];
+  const brief = !b ? "" : b.no_documents ? noDocsHTML(b) : `${b.points_for_review.length ? `<h4>Points for review (not treatment recommendations)</h4><ul>${b.points_for_review.map((it) => `<li class="${approxCls(it, b.review)}">${esc(it.text)} ${it.citations.map(citeHTML).join("")}${flagHTML(it)}${(it.references || []).length ? `<div class="grefs">${it.references.map(refHTML).join("")}</div>` : ""}</li>`).join("")}</ul>` : `<div class="small muted">No points for review.</div>`}
+    <details><summary class="small">Brief: ${b.sections.reduce((n, x) => n + x.items.length, 0)} cited item(s)${b.not_documented.length ? `, ${b.not_documented.length} not documented` : ""}</summary>${b.sections.map((x) => `<h4>${esc(x.heading)}</h4><ul>${x.items.map((it) => `<li class="${approxCls(it, b.review)}">${esc(it.text)} ${it.citations.map(citeHTML).join("")}${flagHTML(it)}</li>`).join("")}</ul>`).join("")}${b.not_documented.length ? `<h4>Not documented</h4><ul>${b.not_documented.map((x) => `<li class="muted">${esc(x)}</li>`).join("")}</ul>` : ""}</details>
+    ${r.can_review ? removedHTML(b.removed) : ""}<div class="small muted">${esc((b.generated || "").replace("T", " "))} · ${esc(modelLabel(b.model))}${b.review?.status === "reviewed" ? ` · reviewed by ${esc(b.review.by)}` : " · AI draft"}</div>`;
+  const ans = answersFor(role).map((e) => `<div class="qbox">${esc(e.question)}</div>${e.status === "answered" ? `<div class="answer">${(e.statements || []).map((x) => `<p>${esc(x.text)} ${(x.citations || []).map(citeHTML).join("")}${flagHTML(x)}</p>`).join("")}${(e.references || []).length ? `<div class="grefs">${e.references.map(refHTML).join("")}</div>` : ""}${e.model ? `<div class="small muted">${esc(modelLabel(e.model))} · AI draft</div>` : ""}</div>`
+    : `<div class="refusal"><b>${e.status === "out_of_scope" ? "Outside the agent's scope." : "Not documented in the Case File."}</b> ${esc(e.text)}</div>`}${r.can_review ? removedHTML(e.removed) : ""}`).join("");
+  const pending = (S.asking || {})[S.roomCase + ":" + role];
+  const prep = r.can_manage && s.status === "in_session" && !busy ? `<button class="ghost sm" data-prep="${role}">${onDemand && !b && !ag ? "Prepare" : "Prepare again"}</button>` : "";
+  const mayAsk = r.can_ask && s.status !== "closed" && c.protocol && (!onDemand || b);
+  return `<div class="agent" id="ag-${role}" data-agent="${role}"><h4>${esc(label)} <span class="chip ${st[0]}">${busy ? '<span class="spin"></span> ' : ""}${esc(st[1])}</span>${ag?.reused ? ' <span class="small muted">(brief still current, reused)</span>' : ""}${prep}</h4>
+    ${why ? `<div class="small muted agent-why">${esc(why)}</div>` : ""}
+    ${ag?.status === "error" ? `<div class="refusal">${esc(ag.message || "The brief could not be prepared")}</div>` : ""}
+    ${stale && !busy ? `<div class="banner warn stale"><b>${esc(stale)}.</b> Prepare the brief again before the board relies on it.</div>` : ""}
+    ${brief}
+    ${mayAsk ? `<div class="search" style="margin-top:10px"><input id="ask-${role}" placeholder="Ask the ${esc(label.replace(" support", ""))} agent about the records" autocomplete="off"><button class="primary sm" data-ask="${role}" ${pending ? "disabled" : ""}>${pending ? '<span class="spin"></span>' : "Ask"}</button></div>` : ""}
+    ${b || !onDemand ? `<div class="small muted" style="margin-top:4px">AI support (role-specific): answers only from the Case File records and the specialty's guideline pack, every statement with a verified quote. No image reading, diagnosis or treatment advice. References are guideline text for the board to consult, Indian sources first; they are not facts about this patient and not a recommendation for this patient.</div>` : ""}
+    ${ans}</div>`;
+}
+function agentsHTML() {
+  // V2 item 6.2: the agents active for THIS Case File (a head not recorded present, a specialty marked absent, Surgical Oncology only when
+  // the surgical seat is not filled for it), then Radiation Oncology and Nuclear Medicine on demand
+  const r = S.room, s = r.session, c = roomCase();
+  const roles = c.agents || [], heads = new Set((r.heads || []).map((h) => h.role).filter(Boolean)), od = (r.on_demand || []).filter((x) => !roles.includes(x));
+  const why = (role) => { const d = r.roles[role]?.department, a = s.attendance?.[d] || "not_marked";
+    if (role === "surgical_oncology" && a !== "absent") return "The surgical seat is not filled for this Case File" + (heads.has(role) ? "; the head is not recorded as present" : "");
+    return a === "absent" ? "Absent" : heads.has(role) ? "Head not recorded as present" : "Absent"; };
+  const active = roles.length ? roles.map((role) => agentBlock(role, why(role), false)).join("")
+    : `<div class="muted small">Every head is recorded present and no specialty is marked absent for this Case File: no agent stands in. Mark absent specialties under Attendance: their agents prepare a brief${s.status === "in_session" ? " at once" : " when the session starts"}.</div>`;
+  return `${active}${od.length ? `<div class="ondemand" id="room-ondemand"><h4 class="subh">On demand</h4><div class="small muted">The board may ask for these during the session; they answer from the records and their guideline pack like the others.</div>${od.map((role) => agentBlock(role, "", true)).join("")}</div>` : ""}`;
 }
 function bindAgents() {
   $$("[data-prep]").forEach((b) => (b.onclick = async () => { try { const x = await api(`/sessions/${S.roomId}/agents/prepare`, { json: { case_id: S.roomCase, role: b.dataset.prep, refresh: true } }); toast(`${x.preparing} brief(s) being prepared`); openSession(S.roomId, S.roomCase); } catch (e) { toast(e.message, 7000); } }));

@@ -150,7 +150,15 @@ rectangle, seeded noise, the burned-in word SYNTHETIC): no real image is used an
   prints it), so 6.3 links without a query. `meta` is not touched.
 - **Orthanc:** `python -m his_mock.dicom_studies --build | --upload | --verify [--data DIR] [--orthanc URL]`, or
   `his_mock/orthanc.sh load` (upload, then verify: every study found by Study UID through QIDO-RS with its accession and instance
-  count). Upload is idempotent. `viewer_url(study_uid)` gives `/ohif/viewer?StudyInstanceUIDs=<uid>`.
+  count). Upload is idempotent. `viewer_url(study_uid)` gives `/ohif/viewer?StudyInstanceUIDs=<uid>` relative to Orthanc; Vaidyx-TB
+  builds its own viewer URL under its proxy (below).
+- **Behind the Vaidyx-TB app (plan item V2-6.3):** the browser never reaches Orthanc. The app forwards `/api/tb/pacs/ohif/...` and
+  `/api/tb/pacs/dicom-web/...` to Orthanc for a logged-in user who opened the study from an imaging report (`tumour_board/pacs.py`),
+  so the Orthanc config (`/data/vaidyx/tools/orthanc/config/orthanc.json`, a reference copy in `his_mock/orthanc.json`) sets
+  `"OHIF": {"RouterBasename": "/api/tb/pacs/ohif/"}` and `"DicomWeb": {"PublicRoot": "/api/tb/pacs/dicom-web/"}`; OHIF's own
+  asset paths and its DICOMweb roots (`../dicom-web`) are relative, so the one generated absolute value is the router base. After a
+  change: `his_mock/orthanc.sh stop`, then `start` (wait for the port to free). Opening `127.0.0.1:8042/ohif/` directly no longer
+  routes (by design); QIDO-RS at `127.0.0.1:8042/dicom-web/` still answers for `--verify`.
 - **Tests:** `his_mock/tests/test_dicom.py`. The Orthanc tests run only when `127.0.0.1:8042/system` answers (skipped otherwise);
   they upload a temporary build and delete only the studies they added.
 

@@ -421,3 +421,22 @@ details.gatehist .hisrow { color: var(--muted); font-size: 13.5px; }
 details.gatehist .chip { opacity: .75; }
 .tev.referral:before { background: var(--muted); }
 .addpart select { flex: 1 1 160px; width: 160px; } .ownline select { width: 220px; }  /* a set width: the longest department name never widens the column on a phone */
+/* before and during the board (V2 items 6.1 to 6.4): ready mark, candidates, attendance sheet, surgical seat, records, on-demand agents */
+.readyline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 4px 0 2px; }
+.room-btns { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+label.cand { display: flex; gap: 8px; align-items: flex-start; font-weight: 400; font-size: 13.5px; margin: 4px 0; padding: 6px 0; border-bottom: 1px solid var(--line); color: var(--ink); }
+label.cand input { width: auto; margin-top: 3px; flex-shrink: 0; }
+label.cand > span { display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.seatline { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); overflow-wrap: anywhere; line-height: 1.6; }
+#rec-list td:first-child { min-width: 180px; overflow-wrap: anywhere; } #rec-list tr.superseded { opacity: .7; }
+.ondemand { margin-top: 12px; padding-top: 6px; border-top: 2px solid var(--line); }
+.agent-why { margin: -2px 0 6px; }
+.reminders { margin: 2px 0 4px; }
+.deplist-wrap { margin-top: 8px; } .deplist { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
+.deplist select { width: auto; max-width: 100%; min-width: 0; padding: 4px 8px; }
+table.att td:first-child { overflow-wrap: anywhere; }
+@media (max-width: 520px) { .deplist select { width: 100%; } .room-btns > * { flex: 1 1 auto; } }
+.arow.memrow { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; } .arow.memrow > * { min-width: 0; width: 100%; }
+@media (max-width: 860px) { .arow.memrow { grid-template-columns: minmax(0, 1fr) auto; } .arow.memrow > :nth-child(2) { grid-column: 1 / -1; order: 3; } }
+.room > div { min-width: 0; }  /* a grid column never widens to its tables' min-content width: the attendance sheet scrolls inside its card on a phone */

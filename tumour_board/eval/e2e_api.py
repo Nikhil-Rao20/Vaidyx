@@ -2378,6 +2378,243 @@ def v2_phase5_cleanup(c, ctx):
     _v2_cleanup(c, ctx, {**H5_USERS, H5_MDT[0]: (H5_MDT[1], {})})
 
 
+H6_USERS = {"tb-e2e-h6-breast": ("H6breast-e2e-2026!", {"breast_surgery": "doctor"}), "tb-e2e-h6-medonc": ("H6medonc-e2e-2026!", {"medical_oncology": "doctor"}),
+            "tb-e2e-h6-rad": ("H6rad-e2e-2026!", {"radiology": "doctor"}), "tb-e2e-h6-gyn": ("H6gyn-e2e-2026!", {"gynaecologic_oncology": "doctor"}),
+            "tb-e2e-h6-derm": ("H6derm-e2e-2026!", {"dermatology": "doctor"})}
+H6_MDT = ("tb-e2e-h6-mdt", "H6mdt-e2e-2026!")
+
+
+def v2_phase6(c, base, ctx):
+    """V2 Phase 6 on the fixture patients (SYNTHETIC): 6.1 the owner marks the Case File ready, the MDT Coordinator builds the agenda from the
+    ready Case Files, reminds on the owner's behalf, opens the Board room (who may), records the decision, exports the minutes and the
+    follow-up; 6.2 the agent of a head not recorded present, the surgical seat filled by the Case File's own surgeon, Radiation Oncology
+    on demand; 6.3 the records and the images of the current Case File through the app (OHIF and DICOMweb behind a logged-in, granted,
+    audited route; never Orthanc directly), a missing HIS PDF fetched live; 6.4 the PM-JAY composition flag only for an empanelled
+    hospital, "check PM-JAY requirement" for a surgeon outside the hospital's surgical oncology list."""
+    import datetime as _dt
+    from tumour_board import board
+    cl = _v2_setup(c, base, ctx, H6_USERS, "6.1")
+    breast, medonc, rad, gyn, derm = (cl[k] for k in ("tb-e2e-h6-breast", "tb-e2e-h6-medonc", "tb-e2e-h6-rad", "tb-e2e-h6-gyn", "tb-e2e-h6-derm"))
+    c.request("DELETE", "/api/auth/users", json={"username": H6_MDT[0]})
+    r = c.post("/api/tb/org/accounts", json={"username": H6_MDT[0], "password": H6_MDT[1], "coordinator": True, "display_name": "MDT Coordinator (e2e h6)"})
+    mdt = httpx.Client(base_url=base, timeout=600)
+    check("6.1 e2e coordinator login", r.status_code == 200 and mdt.post("/api/auth/login", json={"username": H6_MDT[0], "password": H6_MDT[1]}).status_code == 200, r.text[:120])
+    o0 = c.get("/api/tb/org").json()
+    ctx["hospital"] = dict(o0.get("hospital") or {})  # restored by the cleanup
+    today = _dt.date.today()
+    D = (today + _dt.timedelta(days=3)).isoformat()
+    due = (today + _dt.timedelta(days=10)).isoformat()
+
+    def create(client, ident, protocol, setting, cid):
+        r = client.post("/api/tb/cases/from-his", json={"identifier": ident, "protocol": protocol, "setting": setting, "hospital_level": "optimal", "case_id": cid, "board_date": D})
+        if r.status_code != 200:
+            check(f"6.1 create {cid} from {ident}", False, r.text[:200]); return None
+        ctx["cases"].append(cid)
+        _job(client, r)
+        return client.get(f"/api/tb/cases/{cid}").json()
+
+    def room(client):
+        return client.get(f"/api/tb/sessions/{sid}").json()
+
+    def wait_agents(client):
+        t = time.time()
+        while True:
+            rm = room(client)
+            if all(x.get("status") not in ("queued", "running") for by in (rm["session"].get("agents") or {}).values() for x in by.values()) or time.time() - t > 1200:
+                return rm
+            time.sleep(3)
+
+    # ---- 6.1 mark ready, candidates, the agenda from the ready Case Files -----------------------------------------------------------
+    p01, p12 = "TB-H6-P01", "TB-H6-P12"
+    d1 = create(breast, "VXH/26/004201", "breast", "early", p01)        # complete breast work-up with MG and US studies in the PACS
+    d2 = create(medonc, "VXH/26/004212", "lung_nsclc", "non_metastatic", p12)  # lung: the CT is preliminary, a suggested request to Radiology
+    if not (d1 and d2):
+        return
+    check("6.1 P01 passes the Pre-Authorization; P12 has a suggested (unsent) request", d1["state"]["gate"]["passed"] is True and d1["permissions"]["mark_ready"] is True
+          and any(a.get("status") == "suggested" for a in d2["state"]["actions"]), json.dumps(_gaps(d2)))
+    cand = {x["case_id"]: x for x in mdt.get("/api/tb/sessions/candidates", params={"date": D}).json()["cases"]}
+    check("6.1 the candidates carry the owner, the ready mark, the gate and the summary state", {p01, p12} <= set(cand) and cand[p01]["owner_name"] == "Breast Surgery"
+          and cand[p01]["ready"] is None and cand[p01]["gate_passed"] is True and cand[p12]["gate_passed"] is False and cand[p01]["summary"] == "none", json.dumps({k: {kk: v[kk] for kk in ("owner_name", "ready", "gate_passed", "summary")} for k, v in cand.items()}))
+    check("6.1 only the owning department marks a Case File ready (403 for a supporting doctor, another treating department and the coordinator)",
+          rad.post(f"/api/tb/cases/{p01}/ready", json={"ready": True}).status_code == 403 and medonc.post(f"/api/tb/cases/{p01}/ready", json={"ready": True}).status_code == 403
+          and mdt.post(f"/api/tb/cases/{p01}/ready", json={"ready": True}).status_code == 403)
+    r = breast.post(f"/api/tb/cases/{p01}/ready", json={"ready": True, "note": "Summary to follow"})
+    j = r.json() if r.status_code == 200 else {}
+    nts = mdt.get("/api/tb/notifications", params={"limit": 50}).json()["notifications"]
+    check("6.1 the owner marks it ready: recorded with the name and the note, audited, the coordinator told", r.status_code == 200 and (j.get("board_ready") or {}).get("by") == "tb-e2e-h6-breast"
+          and j["board_ready"]["note"] == "Summary to follow" and "board_ready" in [e["kind"] for e in breast.get(f"/api/tb/cases/{p01}/audit").json()["events"]]
+          and any(n["kind"] == "board_ready" and n["case_id"] == p01 for n in nts), r.text[:160])
+    cand = {x["case_id"]: x for x in mdt.get("/api/tb/sessions/candidates", params={"date": D}).json()["cases"]}
+    check("6.1 the candidates show who marked it ready", (cand[p01].get("ready") or {}).get("by") == "tb-e2e-h6-breast" and cand[p12].get("ready") is None)
+    s = mdt.post("/api/tb/sessions", json={"date": D, "title": "E2E Phase 6 board"}).json()
+    sid = s.get("id")
+    check("6.1 a session without an explicit agenda takes the Case Files the owners marked ready", sid and [a["case_id"] for a in s["agenda"]] == [p01] and s["agenda"][0]["owner_ready"] is True, json.dumps([a["case_id"] for a in s.get("agenda") or []]))
+    if not sid:
+        return
+    ctx["sid"] = sid
+    s = mdt.put(f"/api/tb/sessions/{sid}/agenda", json={"case_ids": [p01, p12]}).json()
+    check("6.1 the coordinator may add a Case File not marked ready; the agenda says so", [(a["case_id"], a["owner_ready"]) for a in s["agenda"]] == [(p01, True), (p12, False)])
+    check("6.1 the attendance sheet lists the four heads first, the on-demand specialties, then the owners of the agenda; not all 30 departments",
+          [d["id"] for d in room(mdt)["attendance_list"]][:6] == ["radiology", "medical_oncology", "surgical_oncology", "pathology", "radiation_oncology", "nuclear_medicine"]
+          and "breast_surgery" in [d["id"] for d in room(mdt)["attendance_list"]] and len(room(mdt)["attendance_list"]) < 10 and all(d["head"] for d in room(mdt)["attendance_list"][:4]),
+          json.dumps([d["id"] for d in room(mdt)["attendance_list"]]))
+    # ---- 6.1 reminders on the owner's behalf -------------------------------------------------------------------------------------------
+    a = next((x for x in d2["state"]["actions"] if x.get("status") == "suggested"), {})
+    r = mdt.post(f"/api/tb/cases/{p12}/requests/{a.get('id')}/remind", json={"note": "Board on " + D})
+    nm = medonc.get("/api/tb/notifications", params={"limit": 50}).json()["notifications"]
+    nr = rad.get("/api/tb/notifications", params={"limit": 50}).json()["notifications"]
+    check("6.1 a reminder about a suggestion nobody sent goes to the owning department, not to the department it names",
+          r.status_code == 200 and r.json()["reminders"][0]["sent"] is False and any(n["kind"] == "owner_reminder" and n["case_id"] == p12 for n in nm)
+          and not any(n["case_id"] == p12 for n in nr), r.text[:160])
+    rs = medonc.post(f"/api/tb/cases/{p12}/requests/{a.get('id')}/send", json={})
+    r = mdt.post(f"/api/tb/cases/{p12}/requests/{a.get('id')}/remind", json={"note": "Please report before the board"})
+    nr = rad.get("/api/tb/notifications", params={"limit": 50}).json()["notifications"]
+    rem = [n for n in nr if n["kind"] == "request_reminder" and n["case_id"] == p12]
+    check("6.1 once sent, the coordinator's reminder reaches Radiology on the owner's behalf (named so), with the note, the accession and the due date kept",
+          rs.status_code == 200 and r.status_code == 200 and rem and "on behalf of Medical Oncology" in rem[0]["text"] and "Please report before the board" in rem[0]["text"]
+          and rem[0].get("accession") == a.get("accession") and r.json()["due"] == (rs.json().get("action") or {}).get("due") and r.json()["status"] in ("pending", "overdue"),
+          f"{r.status_code} {len(rem)} {rem[0]['text'][:120] if rem else ''}")
+    check("6.1 only the coordinator and the owner's doctors remind (403 for the department asked, another treating department, a supporting department)",
+          rad.post(f"/api/tb/cases/{p12}/requests/{a.get('id')}/remind", json={}).status_code == 403 and breast.post(f"/api/tb/cases/{p12}/requests/{a.get('id')}/remind", json={}).status_code == 403
+          and derm.post(f"/api/tb/cases/{p12}/remind-owner", json={}).status_code == 403 and medonc.post(f"/api/tb/cases/{p12}/requests/{a.get('id')}/remind", json={}).status_code == 200)
+    r = mdt.post(f"/api/tb/cases/{p12}/remind-owner", json={"note": "Two days to go"})
+    check("6.1 the owner reminder sums up the Case File before the board (summary missing, not marked ready) and is audited",
+          r.status_code == 200 and "no Case File summary compiled yet" in r.json()["text"] and "not marked ready for the board" in r.json()["text"] and "Two days to go" in r.json()["text"]
+          and "owner_reminded" in [e["kind"] for e in medonc.get(f"/api/tb/cases/{p12}/audit").json()["events"]], r.text[:200])
+    ag = mdt.get("/api/tb/metrics/agenda", params={"date": D}).json()
+    row = next((x for x in ag["cases"] if x["case_id"] == p01), {})
+    chase_items = [i for d_ in ag["chase"] for i in d_["items"] if i["case_id"] == p12]
+    check("6.1 the readiness list carries the ready mark and the chase items their action id and reminder count", (row.get("ready") or {}).get("by") == "tb-e2e-h6-breast"
+          and chase_items and all(i.get("action_id") for i in chase_items) and any(i.get("reminders", 0) >= 2 for i in chase_items), json.dumps(chase_items)[:200])
+    # ---- 6.1 who opens the Board room -------------------------------------------------------------------------------------------------
+    rb, rr, rg, rd = (x.get(f"/api/tb/sessions/{sid}") for x in (breast, rad, gyn, derm))
+    check("6.1 the room opens to the coordinator, the heads' departments and the owners of the agenda; a department with no part in it is refused (403)",
+          rb.status_code == 200 and rr.status_code == 200 and rg.status_code == 403 and rd.status_code == 403, f"{rb.status_code} {rr.status_code} {rg.status_code} {rd.status_code}")
+    check("6.1 a doctor sees only the Case Files it may read; the others are restricted, with no patient data",
+          rb.status_code == 200 and rb.json()["cases"][p01].get("patient") and rb.json()["cases"][p12].get("restricted") is True and "patient" not in rb.json()["cases"][p12]
+          and rr.status_code == 200 and rr.json()["cases"][p01].get("restricted") is True and rr.json()["cases"][p12].get("restricted") is True)
+    check("6.1 the session list shows a doctor the sessions it may open", sid in [x["id"] for x in rad.get("/api/tb/sessions").json()["sessions"]]
+          and sid not in [x["id"] for x in derm.get("/api/tb/sessions").json()["sessions"]] and [h["id"] for h in mdt.get("/api/tb/sessions").json()["heads"]] == ["radiology", "medical_oncology", "surgical_oncology", "pathology"])
+    check("6.1 the MDT Coordinator cannot confirm or waive", mdt.post(f"/api/tb/cases/{p12}/confirmations", json={"type": "waive", "key": "cect_tap", "reason": "e2e"}).status_code == 403
+          and not any((mdt.get(f"/api/tb/cases/{p12}").json()["permissions"].get("waive") or {}).values()) and not any((mdt.get(f"/api/tb/cases/{p12}").json()["permissions"].get("confirm") or {}).values()))
+    # ---- 6.2 heads, the surgical seat, agents per Case File, on demand ------------------------------------------------------------------
+    for dept in ("radiology", "medical_oncology"):
+        mdt.post(f"/api/tb/sessions/{sid}/attendance", json={"department": dept, "status": "present"})
+    mdt.post(f"/api/tb/sessions/{sid}/members", json={"name": "Dr Breast Surgeon (e2e, synthetic)", "department": "breast_surgery"})
+    rm = room(mdt)
+    seat1, seat2 = rm["cases"][p01]["seat"], rm["cases"][p12]["seat"]
+    check("6.2 Pathology not recorded present: its agent is active; the breast surgeon fills the surgical seat for the breast Case File only",
+          rm["absent_roles_by_case"] == {p01: ["pathology"], p12: ["pathology", "surgical_oncology"]} and seat1["filled_by"] == ["breast_surgery"] and seat1["members"] == ["Dr Breast Surgeon (e2e, synthetic)"]
+          and seat1["check_pmjay"] is True and seat2["filled"] is False and seat2["agent"] is True, json.dumps(rm["absent_roles_by_case"]))
+    t0 = time.time(); st = mdt.post(f"/api/tb/sessions/{sid}/start").json()
+    check("6.2 the session starts the agents per Case File: Pathology for both, Surgical Oncology only where no surgeon fills the seat", st.get("preparing") == 3, str(st.get("preparing")))
+    r = mdt.post(f"/api/tb/sessions/{sid}/agents/prepare", json={"case_id": p01, "role": "surgical_oncology"})
+    r2 = mdt.post(f"/api/tb/sessions/{sid}/agents/prepare", json={"case_id": p01, "role": "radiation_oncology"})
+    check("6.2 no Surgical Oncology agent where the seat is filled (400); Radiation Oncology on demand (200)", r.status_code == 400 and r2.status_code == 200 and r2.json().get("preparing") == 1,
+          f"{r.status_code} {r.text[:80]} / {r2.status_code}")
+    rm = wait_agents(mdt)
+    ag_ = rm["session"].get("agents") or {}
+    sts = {(cid_, role_): x.get("status") for cid_, by in ag_.items() for role_, x in by.items()}
+    check("6.2 every brief prepared (or no documents), none in error", sts and all(v in ("ready", "no_documents") for v in sts.values()) and (p12, "surgical_oncology") in sts and (p01, "radiation_oncology") in sts,
+          f"{round(time.time() - t0, 1)} s: {json.dumps({f'{k[0]}:{k[1]}': v for k, v in sts.items()})}")
+    check("6.2 the room shows the briefs of the agents active for the Case File and the on-demand brief", "pathology" in rm["cases"][p01]["briefs"] and "radiation_oncology" in rm["cases"][p01]["briefs"]
+          and "surgical_oncology" not in rm["cases"][p01]["briefs"] and set(rm["cases"][p12]["briefs"]) >= {"pathology", "surgical_oncology"})
+    mdt.post(f"/api/tb/sessions/{sid}/attendance", json={"department": "pathology", "status": "present"})
+    check("6.2 a head recorded present later: its agent is no longer active for the Case Files", room(mdt)["absent_roles_by_case"] == {p01: [], p12: ["surgical_oncology"]})
+    # ---- 6.3 records and images during the board -----------------------------------------------------------------------------------
+    recs = rm["cases"][p01]["records"]
+    img = [x for x in recs if x.get("images")]
+    check("6.3 the room lists the Case File's records with their hospital-system status and which imaging reports have images", len(recs) >= 6 and img
+          and all(x.get("his") and x["his"].get("accession") for x in img), f"{len(recs)} records, {len(img)} with images")
+    doc_id = img[0]["doc_id"]
+    r = breast.get(f"/api/tb/cases/{p01}/documents/{doc_id}/images")
+    j = r.json() if r.status_code == 200 else {}
+    check("6.3 Open images: the study found in the hospital system, the viewer URL inside this app, audited", r.status_code == 200 and j.get("available") is True and j.get("study_uid")
+          and str(j.get("viewer_url", "")).startswith("/api/tb/pacs/ohif/viewer?StudyInstanceUIDs=") and j.get("modality") in ("MG", "US")
+          and "images_opened" in [e["kind"] for e in breast.get(f"/api/tb/cases/{p01}/audit").json()["events"]], r.text[:200])
+    uid = j.get("study_uid", "")
+    v = breast.get(j.get("viewer_url", "/api/tb/pacs/ohif/viewer"))
+    q = breast.get("/api/tb/pacs/dicom-web/studies", params={"StudyInstanceUID": uid})
+    se = breast.get(f"/api/tb/pacs/dicom-web/studies/{uid}/series")
+    check("6.3 the viewer page and the DICOMweb study are served through the app to the user who opened them", v.status_code == 200 and "text/html" in v.headers.get("content-type", "")
+          and q.status_code == 200 and len(q.json()) == 1 and se.status_code == 200 and len(se.json()) >= 1 and "viewer_opened" in [e["kind"] for e in breast.get(f"/api/tb/cases/{p01}/audit").json()["events"]],
+          f"{v.status_code} {q.status_code} {se.status_code}")
+    check("6.3 nobody else reaches that study, Orthanc's own API is never reached, a study nobody opened is refused",
+          gyn.get("/api/tb/pacs/dicom-web/studies", params={"StudyInstanceUID": uid}).status_code == 403 and mdt.get(j.get("viewer_url", "/x")).status_code == 403
+          and breast.get("/api/tb/pacs/studies").status_code == 404 and breast.get("/api/tb/pacs/app/explorer.html").status_code == 404
+          and breast.get("/api/tb/pacs/dicom-web/studies").status_code == 404 and breast.get("/api/tb/pacs/dicom-web/studies", params={"StudyInstanceUID": "1.2.3.4"}).status_code == 403
+          and httpx.Client(base_url=base).get("/api/tb/pacs/ohif/").status_code in (401, 403))
+    check("6.3 a department outside the Case File cannot open its images (403)", rad.get(f"/api/tb/cases/{p01}/documents/{doc_id}/images").status_code == 403 and gyn.get(f"/api/tb/cases/{p01}/documents/{doc_id}/images").status_code == 403)
+    rm2 = mdt.get(f"/api/tb/cases/{p01}/documents/{doc_id}/images").json()
+    v2 = mdt.get(rm2.get("viewer_url", "/x"))
+    check("6.3 the coordinator opens the images from the room after its own Open images (a grant per person)", rm2.get("available") is True and v2.status_code == 200)
+    # the file of a hospital-system record fetched live when it is missing on disk
+    pdfs = sorted((REPO / "data" / "tumour_board" / "cases" / p01 / "docs" / doc_id).glob("original.*"))
+    if pdfs:
+        pdfs[0].unlink()
+    f = breast.get(f"/api/tb/cases/{p01}/documents/{doc_id}/file")
+    check("6.3 a hospital-system PDF missing on disk is fetched live from the HIS, checked against its recorded hash, and audited",
+          bool(pdfs) and f.status_code == 200 and "pdf" in f.headers.get("content-type", "") and sorted((REPO / "data" / "tumour_board" / "cases" / p01 / "docs" / doc_id).glob("original.*"))
+          and "document_fetched_live" in [e["kind"] for e in breast.get(f"/api/tb/cases/{p01}/audit").json()["events"]], f"{f.status_code} {f.headers.get('content-type')}")
+    # ---- 6.1 / 6.4 the decision, the composition, the minutes and the follow-up ----------------------------------------------------
+    dec = mdt.post(f"/api/tb/sessions/{sid}/cases/{p01}/decision", json={"decision_text": "Breast conservation surgery first; adjuvant plan after the final histopathology.", "recorded_by": "Dr Chair (e2e, synthetic)",
+                                                                        "intent_as_recorded": "curative", "actions": [{"department": "Radiology", "task": "MRI breast before surgery", "due": due}]}).json()
+    rec = dec.get("record") or {}
+    comp = (rec.get("adjudication") or {}).get("composition") or {}
+    cflags = [x for x in (rec.get("adjudication") or {}).get("flags") or [] if x["kind"] == "composition"]
+    check("6.4 the breast surgeon fills the surgical seat for PM-JAY with 'check PM-JAY requirement'; the radiation oncologist is missing (a review flag, never a block)",
+          comp.get("checked") is True and (comp.get("seat") or {}).get("check") is True and "surgical_oncology" in comp.get("present", []) and comp.get("missing") == ["radiation_oncology"]
+          and cflags and "check the PM-JAY requirement" in cflags[0]["text"] and cflags[0]["severity"] == "review", json.dumps(comp)[:240])
+    mn = mdt.get(f"/api/tb/sessions/{sid}/minutes", params={"format": "json"}).json()
+    html = mdt.get(f"/api/tb/sessions/{sid}/minutes").text
+    c1 = next((x for x in mn.get("cases", []) if x["case_id"] == p01), {})
+    sheet = {x["id"]: x for x in mn.get("attendance", [])}
+    check("6.1 the minutes: the sheet with the heads, who stood in, the decision as dictated with its actions, the seat, the follow-up",
+          sheet.get("radiology", {}).get("head") is True and sheet.get("pathology", {}).get("agent_stood_in") == [p01, p12] and sheet.get("breast_surgery", {}).get("members") == ["Dr Breast Surgeon (e2e, synthetic)"]
+          and (c1.get("decision") or {}).get("actions") == [{"department": "Radiology", "task": "MRI breast before surgery", "due": due}] and c1.get("decision", {}).get("intent") == "curative"
+          and c1.get("seat", {}).get("filled_by") == ["breast_surgery"] and (c1.get("ready") or {}).get("by") == "tb-e2e-h6-breast" and mn["followup"]["open"] >= 1
+          and "Tumour Board minutes" in html and "check PM-JAY requirement" in html and "MRI breast before surgery" in html and "—" not in html
+          and any(e["kind"] == "minutes_export" for e in board.read_audit(2000) if e.get("session") == sid), json.dumps({k: c1.get(k) for k in ("seat", "ready", "agents")})[:200])
+    check("6.1 the minutes open to the room's readers only (403 for a department with no part)", gyn.get(f"/api/tb/sessions/{sid}/minutes").status_code == 403 and breast.get(f"/api/tb/sessions/{sid}/minutes").status_code == 200)
+    fu = room(mdt).get("followup") or {}
+    check("6.1 the room tracks the follow-up of the decisions (the MRI action open in Radiology's inbox, the patient-communication follow-up beside it)",
+          fu.get("open", 0) >= 1 and any(x["department"] == "Radiology" and x["status"] != "completed" for x in fu.get("actions") or [])
+          and any(q["case_id"] == p01 for d_ in rad.get("/api/tb/inbox").json()["departments"] for q in d_["requests"] if q.get("source") == "board"), json.dumps(fu)[:200])
+    # ---- 6.4 a hospital that is not PM-JAY empanelled; the board heads as a hospital setting --------------------------------------------
+    r = c.put("/api/tb/org", json={"hospital": {**ctx["hospital"], "pmjay_empanelled": False}})
+    dec2 = mdt.post(f"/api/tb/sessions/{sid}/cases/{p12}/decision", json={"decision_text": "Await the final CT report; re-discuss.", "recorded_by": "Dr Chair (e2e, synthetic)", "outcome_type": "deferred", "deferred_reason": "final CT report"}).json()
+    comp2 = ((dec2.get("record") or {}).get("adjudication") or {}).get("composition") or {}
+    html2 = mdt.get(f"/api/tb/sessions/{sid}/minutes").text
+    dash = c.get("/api/tb/metrics/dashboard").json()["kpis"]["during"]
+    check("6.4 not empanelled: the composition is not applicable, no flag, the minutes and the dashboard say so", r.status_code == 200 and comp2.get("not_applicable") is True
+          and not any(x["kind"] == "composition" for x in (dec2.get("record") or {}).get("adjudication", {}).get("flags", []))
+          and "PM-JAY board composition: not applicable" in html2 and dash.get("pmjay_empanelled") is False and dash.get("quorate_pct") is None, json.dumps(comp2)[:160])
+    r = c.put("/api/tb/org", json={"hospital": {**ctx["hospital"], "board_heads": ["pathology", "radiology"]}})
+    r_bad = c.put("/api/tb/org", json={"hospital": {**ctx["hospital"], "board_heads": ["cardiology"]}})
+    check("6.2 the board heads are a hospital setting (root admin); an unknown department is refused", r.status_code == 200 and [h["id"] for h in mdt.get("/api/tb/sessions").json()["heads"]] == ["pathology", "radiology"]
+          and r_bad.status_code == 400, f"{r.status_code} {r_bad.status_code} {r_bad.text[:100]}")
+    c.put("/api/tb/org", json={"hospital": ctx["hospital"]})
+    mdt.post(f"/api/tb/sessions/{sid}/close")
+    check("6.1 the closed session still exports its minutes", mdt.get(f"/api/tb/sessions/{sid}/minutes").status_code == 200)
+
+
+def v2_phase6_cleanup(c, ctx):
+    from tumour_board import board
+    try:
+        if ctx.get("hospital"):
+            c.put("/api/tb/org", json={"hospital": ctx["hospital"]})
+    except Exception as e:
+        print("restore hospital settings failed:", e)
+    sid = ctx.get("sid")
+    if sid:
+        try:  # the e2e session is a test artefact: its file goes, its history stays in sessions/audit.jsonl
+            board._path(sid).unlink()
+            board.audit_session(sid, {"kind": "e2e_removed", "by": "e2e"})
+        except Exception:
+            pass
+    _v2_cleanup(c, ctx, {**H6_USERS, H6_MDT[0]: (H6_MDT[1], {})})
+
+
 def main(base, pw, only=None):
     c = httpx.Client(base_url=base, timeout=600)
     check("login", c.post("/api/auth/login", json={"username": "admin", "password": pw}).status_code == 200)
@@ -2421,6 +2658,14 @@ def main(base, pw, only=None):
             v2_phase5(c, base, ctx)
         finally:
             v2_phase5_cleanup(c, ctx)
+        print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
+        return 0 if not FAIL else 1
+    if only == "v2p6":
+        ctx = {"cases": []}
+        try:
+            v2_phase6(c, base, ctx)
+        finally:
+            v2_phase6_cleanup(c, ctx)
         print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
         return 0 if not FAIL else 1
     if only == "phase4":
@@ -2606,6 +2851,13 @@ def main(base, pw, only=None):
         v2_phase5(c, base, ctx)
     finally:
         v2_phase5_cleanup(c, ctx)
+    # 9f. V2 Phase 6: the coordinator's agenda from ready Case Files, reminders, the Board room, heads and the surgical seat, records and
+    # images through the app, minutes, the PM-JAY flag only when empanelled (same throw-away mock; the live Orthanc for the images)
+    ctx = {"cases": []}
+    try:
+        v2_phase6(c, base, ctx)
+    finally:
+        v2_phase6_cleanup(c, ctx)
     # 10. V1 Phase 3: dates, document type, flags, big scans
     phase3(c)
     # 11. V1 Phase 4: NCG tiers, two-level gate, failed documents, inbox and notifications, stale summary, NCG VTB export

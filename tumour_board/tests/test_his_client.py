@@ -512,6 +512,37 @@ def test_save_settings_validates_and_never_audits_the_token(data_root, monkeypat
     assert his_client.client() is None
 
 
+def test_pacs_url_setting(data_root, monkeypatch):
+    """V2 item 6.3: the PACS the image viewer is forwarded to follows the HIS host rule (this server, TB_HIS_ALLOW_HOSTS or a Vaidyx
+    admin), defaults to the demo's Orthanc, and is shown in public() (it is not a secret)."""
+    for k in ("TB_HIS_URL", "TB_HIS_TOKEN", "TB_HIS_TOKEN_FILE", "TB_HIS_ALLOW_HOSTS"):
+        monkeypatch.delenv(k, raising=False)
+    assert his_client.settings()["pacs_url"] == "http://127.0.0.1:8042"
+    base = {"kind": "fhir", "url": "http://127.0.0.1:7130", "token": "t"}
+    assert his_client.validate_settings(base)["pacs_url"] == "http://127.0.0.1:8042"  # missing: the default
+    assert his_client.validate_settings({**base, "pacs_url": "http://localhost:9042/orthanc/"})["pacs_url"] == "http://localhost:9042/orthanc"
+    with pytest.raises(ValueError, match="PACS may point only"):
+        his_client.validate_settings({**base, "pacs_url": "http://10.0.0.7:8042"})
+    with pytest.raises(ValueError, match="pacs_url"):
+        his_client.validate_settings({**base, "pacs_url": "file:///etc/passwd"})
+    with pytest.raises(ValueError, match="pacs_url"):
+        his_client.validate_settings({**base, "pacs_url": "http://127.0.0.1:8042/?x=1"})
+    assert his_client.validate_settings({**base, "pacs_url": "http://10.0.0.7:8042"}, allow_remote=True)["pacs_url"] == "http://10.0.0.7:8042"
+    monkeypatch.setenv("TB_HIS_ALLOW_HOSTS", "pacs.hospital.example:8042")
+    assert his_client.validate_settings({**base, "pacs_url": "https://pacs.hospital.example:8042"})["pacs_url"] == "https://pacs.hospital.example:8042"
+    with pytest.raises(ValueError, match="PACS"):
+        his_client.validate_settings({**base, "pacs_url": "https://pacs.hospital.example:9999"})
+    # a saved PACS stays when an edit does not name one; it applies to every kind of HIS connection
+    assert his_client.validate_settings({"kind": "none"}, {"pacs_url": "http://10.0.0.7:8042"})["pacs_url"] == "http://10.0.0.7:8042"
+    with pytest.raises(ValueError, match="PACS"):
+        his_client.validate_settings({"kind": "none", "pacs_url": "http://10.0.0.8:8042"})
+    pub = his_client.save_settings({**base, "pacs_url": "http://127.0.0.1:9042"}, by="root")
+    assert pub["pacs_url"] == "http://127.0.0.1:9042" and "token" not in pub
+    assert his_client.settings()["pacs_url"] == "http://127.0.0.1:9042"
+    assert his_client.public(his_client.settings(), manager=False)["pacs_url"] == "http://127.0.0.1:9042"
+    assert his_client.public({"token": "", "token_file": ""})["pacs_url"] == "http://127.0.0.1:8042"
+
+
 # ------------------------------------------------------------------------------------------------ MCP transport
 def test_mcp_transport_against_the_demo_his(tmp_path, monkeypatch):
     from tumour_board import connectors
