@@ -253,7 +253,7 @@ def test_delta_returns_exactly_the_changed_reports(fstore):
     assert hl7.changed_since(s, mark) == [] and hl7.events_since(s, mark) == []
     assert len(hl7.changed_since(s, None)) == len(s.reports)
 
-    prelim = [r for r in s.reports.values() if r["status"] == "preliminary"]
+    prelim = [r for r in s.reports.values() if r["status"] == "preliminary" and r["patient_id"] == "vxh-26-004212"]  # P12, the "preliminary only" scenario
     assert len(prelim) == 1
     rep = prelim[0]
     dept = s.orders[rep["order_id"]]["performing_department"]

@@ -1,7 +1,7 @@
 """V2 item 4.1, live check ("Done when: scenario outcomes match"): the gate on HIS records, run on every fixture patient of
 his_mock/scenarios.json, against the scenarios' first-fetch expectations.
 
-For each Case File of the fixture (one per patients[].case_files[] entry: 18 patients, P14 and P18 with two), the Case File is
+For each Case File of the fixture (one per patients[].case_files[] entry: 19 patients, P14 and P18 with two), the Case File is
 created in-process from the live mock hospital (127.0.0.1:7130, read-only: patient lookup, encounters, reports, document downloads;
 the RIS / LIS desk is never called), the fetched documents go through the normal pipeline (service.process_docs, the reader model on
 :8101), and the gate and the open Pre-Authorization requests are compared with the fixture:

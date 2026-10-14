@@ -57,7 +57,7 @@ def staff(client, code, role):
 def the_preliminary(client):
     """The store's only preliminary report (the "preliminary only" scenario) and its department."""
     s = hospital(client).store
-    prelim = [r for r in s.reports.values() if r["status"] == "preliminary"]
+    prelim = [r for r in s.reports.values() if r["status"] == "preliminary" and r["patient_id"] == "vxh-26-004212"]
     assert len(prelim) == 1, [r["id"] for r in prelim]
     r = prelim[0]
     return r, s.department(s.orders[r["order_id"]]["performing_department"])
@@ -121,9 +121,11 @@ def test_department_page_shows_preliminary_and_scheduled_order(client):
     assert pat["uhid"] in prelim_part and "Venkatesh Rao" in prelim_part
     assert o["accession"] in pending_part and "Scheduled 20/10/2026" in pending_part and "scheduled" in pending_part
     api = client.get(f"/desk/api/{dept['code']}/pending").json()
-    assert [x["id"] for x in api["reports"]] == [r["id"]]
-    assert api["reports"][0]["patient"] == {"name": pat["name"], "uhid": pat["uhid"]}
-    assert api["reports"][0]["encounter"] == s.encounters[r["encounter_id"]]["number"]
+    rep = next(x for x in api["reports"] if x["id"] == r["id"])
+    assert {x["id"] for x in api["reports"]} == {x["id"] for x in s.reports.values() if x["status"] == "preliminary"
+                                                and s.orders[x["order_id"]]["performing_department"] == dept["name"]}
+    assert rep["patient"] == {"name": pat["name"], "uhid": pat["uhid"]}
+    assert rep["encounter"] == s.encounters[r["encounter_id"]]["number"]
     assert o["id"] in [x["id"] for x in api["orders"]]
 
 

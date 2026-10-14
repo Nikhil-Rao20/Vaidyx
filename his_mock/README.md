@@ -16,8 +16,8 @@ The list of every V2 scenario the mock must generate and the outcome Vaidyx-TB m
 | `identifier_patterns` | Regex and example for every synthetic identifier (UHID, temporary UHID, IP / OP No., accession, block No., barcode, ABHA, PM-JAY ID, Reg. No., CA, masked Aadhaar) |
 | `document_types`, `tests` | Vaidyx-TB document types, and each orderable test with its document type and producing department (`any_treating` = clinical records) |
 | `departments` | The 22 treating and 8 supporting departments of plan section 4, with code (accession prefix), the tests they produce, consultants |
-| `patients` | 18 patients (P01 to P18) across the five protocols, with encounters (OP visits, IP admissions), records and Case Files |
-| `scenarios` | 29 scenarios: the 11 of the plan 1.1 table (`plan_1_1: true`) and 18 that cover the orchestration checklist |
+| `patients` | 19 patients (P01 to P19) across the five protocols, with encounters (OP visits, IP admissions), records and Case Files |
+| `scenarios` | 31 scenarios: the 11 of the plan 1.1 table (`plan_1_1: true`), 19 that cover the orchestration checklist and the plan 8.1 demo (`demo_breast_preliminary_radiology`, P19: both Radiology reports preliminary, phase 8) |
 | `checklist` | The orchestration.md "V2 scenario checklist" as tags, grouped |
 
 **A record** carries `test`, `type`, `producing_department`, `encounter` (OP or IP No.; `registration` when filed under a

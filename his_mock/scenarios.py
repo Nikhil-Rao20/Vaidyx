@@ -54,7 +54,7 @@ REQUIRED_SCENARIOS = PLAN_SCENARIOS + CHECKLIST_SCENARIOS
 
 PROTOCOLS = ("breast", "oral_cavity", "cervix", "lung_nsclc", "colorectal_rectum")  # ids in tumour_board/protocols/
 BOARD_HEADS = ("Radiology", "Medical Oncology", "Surgical Oncology", "Pathology")
-PHASES = (3, 4, 5, 6)
+PHASES = (3, 4, 5, 6, 8)
 N_TREATING, N_SUPPORTING = 22, 8
 MIN_PATIENTS, MAX_PATIENTS = 15, 20
 

@@ -179,7 +179,7 @@ def test_similar_lists_temporary_and_duplicate_not_namesakes(client, auth):
 def test_no_aadhaar_in_patients(client, auth):
     from his_mock.scenarios import AADHAAR_LIKE
     b = get(client, auth, "/fhir/Patient")
-    assert b["total"] == 20
+    assert b["total"] == 21
     for p in resources(b):
         codes = {c["code"] for i in p["identifier"] for c in i["type"]["coding"]}
         assert "ADN" not in codes and not AADHAAR_LIKE.search(str(p))

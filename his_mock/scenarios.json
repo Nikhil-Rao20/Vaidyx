@@ -1,5 +1,5 @@
 {
- "version": "0.3.4",
+ "version": "0.3.5",
  "note": "SYNTHETIC only. Fixtures for the V2 mock Indian hospital (his_mock, plan item 1.1) and the outcomes Vaidyx-TB must show (e2e in Phases 3 to 6). Every patient, doctor, number, laboratory, hospital and certifying authority here is invented; nothing comes from a real patient or the real case. Aadhaar appears only once, masked, on one scanned outside report, to test masking.",
  "hospital": {
   "name": "Vaidyx Demo Hospital (SYNTHETIC)",
@@ -11358,6 +11358,510 @@
      ]
     }
    ]
+  },
+  {
+   "slot": "P19",
+   "marker": "SYNTHETIC",
+   "name": "Priya Venkatesan (SYNTHETIC)",
+   "sex": "F",
+   "age": 52,
+   "protocol": "breast",
+   "uhid": "VXH/26/004219",
+   "abha": {
+    "number": "99-2600-0000-0119",
+    "address": "priya.venkatesan@sbx"
+   },
+   "pmjay_id": "PMJAY-VX-26000119",
+   "treating_department": "Breast Surgery",
+   "case_files": [
+    {
+     "protocol": "breast",
+     "ncg_setting": "early",
+     "owner": "Breast Surgery",
+     "first_fetch": {
+      "result": "gaps",
+      "gaps": [
+       {
+        "requirement": "breast_imaging",
+        "level": 1,
+        "reason": "preliminary",
+        "department": "Radiology",
+        "accession": "RAD/26/01019",
+        "record": "P19-R02",
+        "note": "The bilateral mammogram is preliminary: reported by the junior resident, awaiting the consultant's sign-off in the RIS"
+       },
+       {
+        "requirement": "usg_axilla",
+        "level": 1,
+        "reason": "preliminary",
+        "department": "Radiology",
+        "accession": "RAD/26/01020",
+        "record": "P19-R03",
+        "note": "The USG of both breasts and axillae is preliminary: reported by the junior resident, awaiting the consultant's sign-off in the RIS"
+       }
+      ]
+     }
+    }
+   ],
+   "encounters": [
+    {
+     "kind": "OP",
+     "number": "OP/26/118725",
+     "registration": "VXH/26/004219",
+     "department": "Breast Surgery",
+     "unit": "Unit I",
+     "consultant": {
+      "name": "Dr Kavitha Raghunathan",
+      "qualification": "MS (General Surgery), MCh (Breast Surgery)",
+      "reg_no": "VXREG-20104"
+     },
+     "visit_type": "new",
+     "date": {
+      "display": "15/09/2026",
+      "value": "2026-09-15"
+     }
+    },
+    {
+     "kind": "OP",
+     "number": "OP/26/118726",
+     "registration": "VXH/26/004219",
+     "department": "Breast Surgery",
+     "unit": "Unit I",
+     "consultant": {
+      "name": "Dr Kavitha Raghunathan",
+      "qualification": "MS (General Surgery), MCh (Breast Surgery)",
+      "reg_no": "VXREG-20104"
+     },
+     "visit_type": "follow_up",
+     "date": {
+      "display": "23/09/2026",
+      "value": "2026-09-23"
+     }
+    }
+   ],
+   "records": [
+    {
+     "id": "P19-R01",
+     "test": "opd_note",
+     "type": "clinical_note",
+     "title": "OPD consultation note",
+     "source": "his",
+     "producing_department": "Breast Surgery",
+     "encounter": "OP/26/118725",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "15/09/2026",
+      "value": "2026-09-15"
+     },
+     "reported_on": {
+      "display": "15/09/2026 11:40",
+      "value": "2026-09-15T11:40:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Kavitha Raghunathan",
+      "qualification": "MS (General Surgery), MCh (Breast Surgery)",
+      "reg_no": "VXREG-20104"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Kavitha Raghunathan",
+       "qualification": "MS (General Surgery), MCh (Breast Surgery)",
+       "reg_no": "VXREG-20104"
+      },
+      "signed_at": {
+       "display": "15/09/2026 11:40",
+       "value": "2026-09-15T11:40:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B201",
+      "block": "Digitally signed by Dr Kavitha Raghunathan, MS (General Surgery), MCh (Breast Surgery), Reg. No. VXREG-20104, 15/09/2026 11:40, Vaidyx Demo CA, certificate serial VXDCA-00A1B201",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "presenting_complaint": "Lump in the right breast noticed 6 weeks ago",
+      "ecog": "0",
+      "clinical_question": "Primary management plan",
+      "menopausal_status": "Postmenopausal",
+      "comorbidities": "Type 2 diabetes mellitus on metformin"
+     },
+     "serves": {
+      "breast": [
+       "clinical_history"
+      ]
+     },
+     "scenarios": [
+      "demo_breast_preliminary_radiology"
+     ]
+    },
+    {
+     "id": "P19-R02",
+     "test": "mammogram",
+     "type": "mammogram",
+     "title": "Bilateral mammogram",
+     "source": "his",
+     "producing_department": "Radiology",
+     "encounter": "OP/26/118725",
+     "order_status": "completed",
+     "report_status": "preliminary",
+     "signed": false,
+     "ordered_on": {
+      "display": "15/09/2026",
+      "value": "2026-09-15"
+     },
+     "accession": "RAD/26/01019",
+     "reported_on": {
+      "display": "17/09/2026 17:05",
+      "value": "2026-09-17T17:05:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Nikhil Agarwal",
+      "qualification": "MBBS, Junior Resident (Radiodiagnosis)",
+      "reg_no": "VXREG-20203"
+     },
+     "signature": null,
+     "values": {
+      "lesion_size": "1.9 x 1.6 cm",
+      "birads": "BI-RADS 4c"
+     },
+     "serves": {
+      "breast": [
+       "breast_imaging"
+      ]
+     },
+     "scenarios": [
+      "demo_breast_preliminary_radiology"
+     ],
+     "note": "Preliminary report by the junior resident; awaiting consultant sign-off in the RIS"
+    },
+    {
+     "id": "P19-R03",
+     "test": "usg_breast_axilla",
+     "type": "ultrasound",
+     "title": "USG both breasts and axillae",
+     "source": "his",
+     "producing_department": "Radiology",
+     "encounter": "OP/26/118725",
+     "order_status": "completed",
+     "report_status": "preliminary",
+     "signed": false,
+     "ordered_on": {
+      "display": "15/09/2026",
+      "value": "2026-09-15"
+     },
+     "accession": "RAD/26/01020",
+     "reported_on": {
+      "display": "16/09/2026 16:20",
+      "value": "2026-09-16T16:20:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Nikhil Agarwal",
+      "qualification": "MBBS, Junior Resident (Radiodiagnosis)",
+      "reg_no": "VXREG-20203"
+     },
+     "signature": null,
+     "values": {
+      "lesion_size": "1.8 x 1.5 cm",
+      "nodal_findings": "No suspicious axillary lymph nodes"
+     },
+     "serves": {
+      "breast": [
+       "breast_imaging",
+       "usg_axilla"
+      ]
+     },
+     "scenarios": [
+      "demo_breast_preliminary_radiology"
+     ],
+     "note": "Preliminary report by the junior resident; awaiting consultant sign-off in the RIS"
+    },
+    {
+     "id": "P19-R04",
+     "test": "hpe_biopsy",
+     "type": "histopathology",
+     "title": "Histopathology report (biopsy)",
+     "source": "his",
+     "producing_department": "Pathology",
+     "encounter": "OP/26/118725",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "17/09/2026",
+      "value": "2026-09-17"
+     },
+     "accession": "PATH/26/00461",
+     "sample_barcode": "VXS26000186",
+     "block_no": "PATH/26/00461-A1",
+     "reported_on": {
+      "display": "20/09/2026 16:30",
+      "value": "2026-09-20T16:30:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Revathi Krishnan",
+      "qualification": "MD (Pathology)",
+      "reg_no": "VXREG-20204"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Revathi Krishnan",
+       "qualification": "MD (Pathology)",
+       "reg_no": "VXREG-20204"
+      },
+      "signed_at": {
+       "display": "20/09/2026 16:30",
+       "value": "2026-09-20T16:30:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 20/09/2026 16:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "histologic_type": "Invasive breast carcinoma of no special type",
+      "grade": "Grade 2 (Nottingham score 6)",
+      "lvi": "Not identified"
+     },
+     "serves": {
+      "breast": [
+       "histopathology",
+       "grade"
+      ]
+     },
+     "scenarios": [
+      "demo_breast_preliminary_radiology"
+     ]
+    },
+    {
+     "id": "P19-R05",
+     "test": "ihc_breast",
+     "type": "ihc",
+     "title": "IHC: ER, PR, HER2, Ki-67",
+     "source": "his",
+     "producing_department": "Pathology",
+     "encounter": "OP/26/118725",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "20/09/2026",
+      "value": "2026-09-20"
+     },
+     "accession": "PATH/26/00462",
+     "sample_barcode": "VXS26000187",
+     "block_no": "PATH/26/00462-A1",
+     "reported_on": {
+      "display": "23/09/2026 14:10",
+      "value": "2026-09-23T14:10:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Revathi Krishnan",
+      "qualification": "MD (Pathology)",
+      "reg_no": "VXREG-20204"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Revathi Krishnan",
+       "qualification": "MD (Pathology)",
+       "reg_no": "VXREG-20204"
+      },
+      "signed_at": {
+       "display": "23/09/2026 14:10",
+       "value": "2026-09-23T14:10:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 23/09/2026 14:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "er": "Positive (Allred score 8/8)",
+      "pr": "Positive (Allred score 5/8)",
+      "her2": "0 (Negative)",
+      "ki67": "12 %"
+     },
+     "serves": {
+      "breast": [
+       "receptor_status",
+       "ki67"
+      ]
+     },
+     "scenarios": [
+      "demo_breast_preliminary_radiology"
+     ]
+    },
+    {
+     "id": "P19-R06",
+     "test": "cbc",
+     "type": "lab",
+     "title": "Complete blood count",
+     "source": "his",
+     "producing_department": "Pathology",
+     "encounter": "OP/26/118725",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "15/09/2026",
+      "value": "2026-09-15"
+     },
+     "accession": "PATH/26/00463",
+     "sample_barcode": "VXS26000188",
+     "reported_on": {
+      "display": "15/09/2026 10:50",
+      "value": "2026-09-15T10:50:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Revathi Krishnan",
+      "qualification": "MD (Pathology)",
+      "reg_no": "VXREG-20204"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Revathi Krishnan",
+       "qualification": "MD (Pathology)",
+       "reg_no": "VXREG-20204"
+      },
+      "signed_at": {
+       "display": "15/09/2026 10:50",
+       "value": "2026-09-15T10:50:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 15/09/2026 10:50, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "haemoglobin": "11.6 gm%",
+      "wbc": "6,900 /cumm",
+      "platelets": "2.4 lakhs/cumm"
+     },
+     "serves": {
+      "breast": [
+       "cbc"
+      ]
+     },
+     "scenarios": [
+      "demo_breast_preliminary_radiology"
+     ]
+    },
+    {
+     "id": "P19-R07",
+     "test": "lft",
+     "type": "lab",
+     "title": "Liver function tests",
+     "source": "his",
+     "producing_department": "Biochemistry",
+     "encounter": "OP/26/118725",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "15/09/2026",
+      "value": "2026-09-15"
+     },
+     "accession": "BIO/26/02233",
+     "sample_barcode": "VXS26000189",
+     "reported_on": {
+      "display": "15/09/2026 11:30",
+      "value": "2026-09-15T11:30:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Anil Saxena",
+      "qualification": "MD (Biochemistry)",
+      "reg_no": "VXREG-20206"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Anil Saxena",
+       "qualification": "MD (Biochemistry)",
+       "reg_no": "VXREG-20206"
+      },
+      "signed_at": {
+       "display": "15/09/2026 11:30",
+       "value": "2026-09-15T11:30:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 15/09/2026 11:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "bilirubin": "0.6 mg/dL",
+      "sgot": "31 U/L",
+      "sgpt": "27 U/L"
+     },
+     "serves": {
+      "breast": [
+       "liver_renal_function"
+      ]
+     },
+     "scenarios": [
+      "demo_breast_preliminary_radiology"
+     ]
+    },
+    {
+     "id": "P19-R08",
+     "test": "rft",
+     "type": "lab",
+     "title": "Renal function tests",
+     "source": "his",
+     "producing_department": "Biochemistry",
+     "encounter": "OP/26/118725",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "15/09/2026",
+      "value": "2026-09-15"
+     },
+     "accession": "BIO/26/02234",
+     "sample_barcode": "VXS26000190",
+     "reported_on": {
+      "display": "15/09/2026 11:45",
+      "value": "2026-09-15T11:45:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Anil Saxena",
+      "qualification": "MD (Biochemistry)",
+      "reg_no": "VXREG-20206"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Anil Saxena",
+       "qualification": "MD (Biochemistry)",
+       "reg_no": "VXREG-20206"
+      },
+      "signed_at": {
+       "display": "15/09/2026 11:45",
+       "value": "2026-09-15T11:45:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 15/09/2026 11:45, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "creatinine": "0.9 mg/dL",
+      "urea": "27 mg/dL"
+     },
+     "serves": {
+      "breast": [
+       "liver_renal_function"
+      ]
+     },
+     "scenarios": [
+      "demo_breast_preliminary_radiology"
+     ]
+    }
+   ]
   }
  ],
  "scenarios": [
@@ -12751,6 +13255,127 @@
    "checklist": [
     "pmjay_empanelled_off",
     "medical_oncology_head_absent"
+   ]
+  },
+  {
+   "id": "demo_breast_preliminary_radiology",
+   "title": "Demo: breast work-up with preliminary radiology reports (plan item 8.1)",
+   "plan_1_1": false,
+   "patients": [
+    "P19"
+   ],
+   "setup": {
+    "text": "Bilateral mammogram (RAD/26/01019) and USG both breasts and axillae (RAD/26/01020) are preliminary in the RIS (junior resident, no signature); the mammogram is reported a day after the ultrasound. Everything else (OPD note, biopsy histopathology, IHC, CBC, LFT, RFT) is final and signed. The MG study is in the PACS.",
+    "case_file": "P19 breast (gate passes after the Radiology sign-off)",
+    "hospital": {
+     "pmjay_empanelled": true
+    },
+    "attendance": {
+     "Radiology": "present",
+     "Medical Oncology": "present",
+     "Surgical Oncology": "present",
+     "Pathology": "absent",
+     "Radiation Oncology": "present",
+     "Nuclear Medicine": "present"
+    }
+   },
+   "expected": {
+    "text": "Level 1 gaps on breast_imaging (the preliminary mammogram) and usg_axilla (the preliminary ultrasound). The Breast Surgery doctor sends the suggested requests to Radiology naming the accession Nos.; a Radiology doctor acknowledges and signs both reports on the RIS / LIS desk; Re-fetch brings only the changed reports; the requests close themselves, the gate passes and the summary is compiled. The MDT Coordinator lists the Case File on a session with the Pathology head absent, so the Pathology agent is active; the images open in OHIF and the decision is recorded.",
+    "gate": [
+     {
+      "patient": "P19",
+      "protocol": "breast",
+      "ncg_setting": "early",
+      "when": "first_fetch",
+      "result": "gaps",
+      "level1": [
+       "breast_imaging",
+       "usg_axilla"
+      ],
+      "level2": []
+     },
+     {
+      "patient": "P19",
+      "protocol": "breast",
+      "when": "after_refetch",
+      "result": "pass",
+      "level1": [],
+      "level2": []
+     }
+    ],
+    "requests": [
+     {
+      "patient": "P19",
+      "requirement": "breast_imaging",
+      "department": "Radiology",
+      "accession": "RAD/26/01019",
+      "origin": "suggested_from_gap",
+      "level": 1
+     },
+     {
+      "patient": "P19",
+      "requirement": "usg_axilla",
+      "department": "Radiology",
+      "accession": "RAD/26/01020",
+      "origin": "suggested_from_gap",
+      "level": 1
+     }
+    ],
+    "labels": [
+     "Preliminary",
+     "then Final, Digitally signed"
+    ],
+    "steps": [
+     {
+      "actor": "treating_doctor",
+      "action": "Create the Case File from the UHID VXH/26/004219 (Breast Surgery)",
+      "expect": "First fetch; the gate shows Level 1 gaps on breast_imaging (preliminary mammogram RAD/26/01019) and usg_axilla (preliminary ultrasound RAD/26/01020)"
+     },
+     {
+      "actor": "treating_doctor",
+      "action": "Send the suggested requests to Radiology (in-app; mail draft editable)",
+      "expect": "Radiology inbox shows UHID, OP No. and both accession Nos."
+     },
+     {
+      "actor": "supporting_doctor",
+      "action": "Acknowledge, then sign both reports on the RIS / LIS desk (port 7130)",
+      "expect": "Both DiagnosticReports become final with a Provenance signature"
+     },
+     {
+      "actor": "treating_doctor",
+      "action": "Re-fetch",
+      "expect": "Delta pull returns only the two reports; requests closed; owner told; gate passes; summary compiled"
+     },
+     {
+      "actor": "mdt_coordinator",
+      "action": "List the Case File on a board session; mark the Pathology head absent",
+      "expect": "The Pathology agent is active automatically"
+     },
+     {
+      "actor": "treating_doctor",
+      "action": "Open the images in OHIF through the app's audited route (never Orthanc directly) and record the decision",
+      "expect": "The MG study opens for viewing (no model reads it); the decision is recorded and audited"
+     }
+    ],
+    "board": {
+     "agents_active": [
+      "Pathology"
+     ],
+     "pmjay_flags": [],
+     "check_pmjay_requirement": false
+    }
+   },
+   "phase": 8,
+   "also_phases": [
+    4,
+    6
+   ],
+   "checklist": [
+    "entry_uhid",
+    "preliminary",
+    "final_signed",
+    "pathology_head_absent",
+    "abha_present"
    ]
   }
  ],

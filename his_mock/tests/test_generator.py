@@ -73,7 +73,7 @@ def test_build_writes_every_file(built):
 
 def test_patient_count_is_one_per_registration(store, fx):
     regs = sum(1 + bool(p.get("temporary_uhid")) + bool(p.get("duplicate_uhid")) for p in fx["patients"])
-    assert len(store.patients) == regs == 20
+    assert len(store.patients) == regs == 21
     kinds = sorted(p["registration_kind"] for p in store.patients.values())
     assert kinds.count("temporary") == 1 and kinds.count("duplicate") == 1
 
@@ -475,6 +475,6 @@ def test_build_refuses_inconsistent_fixtures(tmp_path, fx):
 def test_cli_prints_summary(tmp_path, capsys):
     assert build_cli.main(["--out", str(tmp_path), "--seed", "2026", "--no-pdf", "--no-hl7", "--no-dicom"]) == 0
     line = capsys.readouterr().out.strip()
-    assert "20 patients" in line and "165 orders" in line and "events" in line and "\n" not in line
+    assert "21 patients" in line and "173 orders" in line and "events" in line and "\n" not in line
     with pytest.raises(SystemExit):
         build_cli.main(["--out", str(tmp_path / "data" / "tumour_board" / "x")])
