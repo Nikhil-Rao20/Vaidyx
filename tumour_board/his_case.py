@@ -268,8 +268,12 @@ async def create(identifier: str, protocol_id: str, setting: str, hospital_level
         encs = await client.encounters(p["id"])
     except his_client.HISError as e:
         raise HISCaseError(f"The hospital system did not answer: {e}", 502)
+    others = [c for c in store.list_cases() if c.get("his") and str((c["his"] or {}).get("uhid") or "").upper() == str(p["uhid"]).upper() and c["case_id"] != case_id]
     case = store.create_case(case_id, patient_record(p, encs), protocol_id, board_date, user, setting, hospital_level)
     case["department"] = owner
+    if others:  # the same patient's other cancer episodes (two primaries, V2 item 5.3): linked both ways, each with its own owner and protocol
+        case["linked_cases"] = [{"case_id": o["case_id"], "protocol": o.get("protocol") or "", "department": o.get("department") or "", "linked_at": store.now_iso(),
+                                 "reason": "same UHID"} for o in others]
     case["his"] = {"kind": client.kind, "label": client.label, "patient_id": p["id"], "patient_ref": p.get("ref"), "uhid": p["uhid"],
                    "registration_kind": p.get("registration_kind") or "permanent", "matched_on": p.get("matched_on"),
                    "window": window, "window_start": window_start(window), "fetched_at": None, "watermark": "",
@@ -282,14 +286,37 @@ async def create(identifier: str, protocol_id: str, setting: str, hospital_level
     store.audit(case_id, {"kind": "case_created", "by": user, "listing": case["listing"]["status"], "protocol": protocol_id, "setting": setting,
                           "from_his": {"label": client.label, "identifier": identifier, "matched_on": p.get("matched_on"), "uhid": p["uhid"],
                                        "registration_kind": p.get("registration_kind"), "similar": [s.get("uhid") for s in p.get("similar") or []]},
-                          "owner": owner, "window": window, "same_uhid_case": dup})
+                          "owner": owner, "window": window, "same_uhid_case": dup, "linked_cases": [o["case_id"] for o in others]})
+    for o in others:  # the link is recorded on both sides and audited in both Case Files
+        full = store.get_case(o["case_id"]) or {}
+        if full and not any((l or {}).get("case_id") == case_id for l in full.get("linked_cases") or []):
+            full.setdefault("linked_cases", []).append({"case_id": case_id, "protocol": protocol_id, "department": owner, "linked_at": store.now_iso(), "reason": "same UHID"})
+            store.save_case(full)
+            store.audit(o["case_id"], {"kind": "case_linked", "by": user, "case_id": case_id, "protocol": protocol_id, "department": owner, "reason": "same UHID"})
+    if others:
+        store.audit(case_id, {"kind": "case_linked", "by": user, "linked": [o["case_id"] for o in others], "reason": "same UHID"})
     try:
         job = await fetch(case_id, client, start=case["his"]["window_start"], user=user, reason=FIRST)
     except HISCaseError:  # the first fetch failed: no half-made Case File stays behind (a retry would make a second one)
         notify.purge_case(case_id)
+        unlink_cases(case_id, user)  # the same patient's other Case Files forget the link too (V2 item 5.3)
         store.delete_case(case_id)
         raise
     return {"case": store.get_case(case_id), "job": job}
+
+
+def unlink_cases(case_id: str, user: str = "") -> list:
+    """A deleted Case File leaves the linked Case Files of the same patient (V2 item 5.3); returns the ids it was linked to."""
+    out = []
+    for c in store.list_cases():
+        links = c.get("linked_cases") or []
+        if any((l or {}).get("case_id") == case_id for l in links):
+            full = store.get_case(c["case_id"])
+            full["linked_cases"] = [l for l in full.get("linked_cases") or [] if (l or {}).get("case_id") != case_id]
+            store.save_case(full)
+            store.audit(c["case_id"], {"kind": "case_unlinked", "by": user, "case_id": case_id, "reason": "the linked Case File was deleted"})
+            out.append(c["case_id"])
+    return out
 
 
 # ---- fetching ----------------------------------------------------------------------------------------------------------
@@ -697,7 +724,7 @@ def public(case: dict) -> dict:
     if not his:
         return None
     out = {k: his.get(k) for k in ("kind", "label", "uhid", "registration_kind", "matched_on", "window", "window_start", "fetched_at", "watermark", "similar", "linked",
-                                   "older_available", "orders", "referrals")}
+                                   "older_available", "orders", "referrals", "same_uhid_case")}
     out["window_label"] = window_label(his.get("window") or {})
     out["encounters"] = [{k: e.get(k) for k in ("kind", "number", "department", "unit", "start", "end", "status", "ward_history", "pmjay_preauth", "registration")} | {"consultant": (e.get("consultant") or {}).get("name")}
                          for e in list(his.get("encounters") or []) + [x for es in (his.get("linked_encounters") or {}).values() for x in es]]

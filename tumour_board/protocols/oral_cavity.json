@@ -2,6 +2,8 @@
  "id": "oral_cavity",
  "label": "Oral cavity cancer (head and neck)",
  "version": "0.3",
+ "site": "oral|buccal|tongue|gingiv|alveol|mandib|maxill|palat|mouth|retromolar|cheek",
+ "site_note": "V2 item 5.3 (two primaries): among several candidates for one record, or several documents carrying a required value, one that names another protocol's site and not this one steps aside; a document naming no site (an IHC panel, a lab report) never does, and when every candidate names another site every candidate stays. Organ words only (regions such as thorax or pelvis are shared by protocols). A preference, never a filter.",
  "note": "Configurable by the clinical team. Required records derived from the NCG work-up for oral cancer (NCG Guidelines for Head and Neck Cancer 2019, quoted with page on every record). NCG lists the oral cancer work-up without Essential / Optimal / Optional letters (letters appear only for the imaging modality, neck ultrasound, chest X-ray and PET-CT / CECT thorax), so the listed records are treated as Essential. Squamous cell carcinoma of the oral cavity; HPV / p16 testing is an NCG item for oropharynx only. To be confirmed by the hospital Tumour Board (clinical review before real use).",
  "settings_note": "NCG setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes stage). Item 4.1 derives the required records per setting from the NCG tiers.",
  "settings": [

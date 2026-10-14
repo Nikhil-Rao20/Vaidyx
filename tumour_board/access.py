@@ -61,10 +61,14 @@ def open_referral(case) -> dict | None:
 
 
 def linked_owners(case) -> list[str]:
-    """The owning departments of the Case Files linked to this one (the same patient's other cancer, 5.3)."""
+    """The owning departments of the Case Files linked to this one (the same patient's other cancer, 5.3): the linked Case File's
+    current owner (it may have been referred since the link was made), else the department recorded with the link."""
     out = []
     for l in (case or {}).get("linked_cases") or []:
-        did = org.department_id((l or {}).get("department")) if isinstance(l, dict) else None
+        if not isinstance(l, dict):
+            continue
+        live = store.get_case(l.get("case_id")) if l.get("case_id") else None
+        did = owner(live) if live else org.department_id(l.get("department"))
         if did and did not in out:
             out.append(did)
     return out
@@ -287,5 +291,13 @@ def public(case: dict) -> dict:
             "participants": [{"id": org.department_id(p.get("department")), "name": org.department_name(org.department_id(p.get("department"))),
                               "since": p.get("since"), "by": p.get("by"), "reason": p.get("reason")} for p in case.get("participants") or [] if isinstance(p, dict)],
             "owner_history": list(case.get("owner_history") or []),
-            "linked_cases": [{**l, "department_name": org.department_name(org.department_id(l.get("department"))) if l.get("department") else ""}
-                             for l in case.get("linked_cases") or [] if isinstance(l, dict)]}
+            "linked_cases": [_linked_view(l) for l in case.get("linked_cases") or [] if isinstance(l, dict)]}
+
+
+def _linked_view(l: dict) -> dict:
+    """A linked Case File as the UI shows it: its current protocol and owner when it still exists (a referral may have moved it since
+    the link was made), else what the link recorded."""
+    live = store.get_case(l.get("case_id")) if l.get("case_id") else None
+    if live:
+        l = {**l, "protocol": live.get("protocol") or "", "department": owner(live) or l.get("department") or ""}
+    return {**l, "department_name": org.department_name(org.department_id(l.get("department"))) if l.get("department") else ""}

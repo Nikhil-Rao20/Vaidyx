@@ -713,7 +713,8 @@ def setup_tumour_board_routes():
     async def delete(case_id: str, request: Request):
         u = _user(request); _need(_roles(request), "delete_case"); _case(case_id)
         n = notify.purge_case(case_id)  # its notifications carry the patient's name: they go with the Case File (V1 item 4.4)
-        store.audit(case_id, {"kind": "case_deleted", "by": u, "notifications_removed": n}); store.delete_case(case_id)
+        linked = his_case.unlink_cases(case_id, u)  # the same patient's other Case Files forget the link (V2 item 5.3)
+        store.audit(case_id, {"kind": "case_deleted", "by": u, "notifications_removed": n, "unlinked": linked}); store.delete_case(case_id)
         log.info("case %s deleted by %s; %d notification(s) removed", case_id, u, n)
         return {"ok": True, "notifications_removed": n}
 

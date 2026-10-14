@@ -780,8 +780,50 @@ def test_first_fetch_failure_leaves_no_case_file_and_protected_ids_are_refused(f
         _create()
     assert e.value.status == 502 and store.list_cases() == []  # rolled back
     fake.reports = orig
+    first = _create(case_id="TB-TWO-A")["case"]  # a second cancer's Case File that fails its first fetch leaves no link behind (V2 item 5.3)
+    fake.reports = down
+    with pytest.raises(his_case.HISCaseError):
+        _create(protocol="colorectal_rectum", setting="non_metastatic", case_id="TB-TWO-B")
+    assert [c["case_id"] for c in store.list_cases()] == ["TB-TWO-A"] and not store.get_case("TB-TWO-A").get("linked_cases")
+    assert any(e["kind"] == "case_unlinked" and e["case_id"] == "TB-TWO-B" for e in store.read_audit("TB-TWO-A"))
+    fake.reports = orig
     from tumour_board import config
     monkeypatch.setattr(config, "PROTECTED_CASES", {"TB-REAL"})
     with pytest.raises(his_case.HISCaseError) as e:
         _create(case_id="TB-REAL")
     assert e.value.status == 409 and "protected" in str(e.value)
+
+
+# ---- two primaries: linked Case Files under one UHID (5.3) --------------------------------------------------------------------
+
+def test_a_second_cancer_of_the_same_uhid_gets_its_own_case_file_linked_both_ways(fakes, monkeypatch):
+    from tumour_board import access
+    _use(monkeypatch, FakeHIS(_two_reports()))
+    first = _create(case_id="TB-TWO-A")["case"]
+    assert "linked_cases" not in first and first["his"].get("same_uhid_case") is None
+    roles_gi = {**ROLES_DOC, "user": "dr.gi", "departments": {"colorectal_surgery": "member"}, "treating": {"colorectal_surgery": "member"}}
+    second = _create(protocol="colorectal_rectum", setting="non_metastatic", roles=roles_gi, case_id="TB-TWO-B")["case"]
+    assert second["department"] == "colorectal_surgery" and second["linked_cases"] == [{"case_id": "TB-TWO-A", "protocol": "breast", "department": "breast_surgery",
+                                                                                          "linked_at": second["linked_cases"][0]["linked_at"], "reason": "same UHID"}]
+    assert second["his"].get("same_uhid_case") is None, "another protocol: a second primary, not a duplicate listing"
+    first = store.get_case("TB-TWO-A")
+    assert [l["case_id"] for l in first["linked_cases"]] == ["TB-TWO-B"] and first["linked_cases"][0]["department"] == "colorectal_surgery"
+    assert len(store.list_docs("TB-TWO-B")) == 2, "both Case Files hold the patient's HIS records"
+    assert any(e["kind"] == "case_linked" and e["case_id"] == "TB-TWO-B" for e in store.read_audit("TB-TWO-A"))
+    assert any(e["kind"] == "case_linked" and e["linked"] == ["TB-TWO-A"] for e in store.read_audit("TB-TWO-B"))  # the new Case File audits the link too
+    assert next(e for e in store.read_audit("TB-TWO-B") if e["kind"] == "case_created")["linked_cases"] == ["TB-TWO-A"]
+    # the owners of linked Case Files read each other's (the same patient's other cancer); nobody else gains anything
+    gi = org.roles("x"); gi.update({"known": True, "departments": {"colorectal_surgery": "member"}, "treating": {"colorectal_surgery": "member"}})
+    br = org.roles("y"); br.update({"known": True, "departments": {"breast_surgery": "member"}, "treating": {"breast_surgery": "member"}})
+    rad = org.roles("z"); rad.update({"known": True, "departments": {"radiology": "member"}, "supporting": {"radiology": "member"}})
+    assert access.scope(gi, first) == access.FULL and access.scope(br, second) == access.FULL and access.scope(rad, second) is None
+    assert not access.may(gi, "waive", first, "Radiology"), "reading the linked Case File, never acting on it"
+    pub = access.public(second)
+    assert pub["linked_cases"][0]["department_name"] == "Breast Surgery"
+    # a third Case File of the same UHID under the first protocol again: linked to both, and flagged as the same listing
+    third = _create(case_id="TB-TWO-C")["case"]
+    assert sorted(l["case_id"] for l in third["linked_cases"]) == ["TB-TWO-A", "TB-TWO-B"] and third["his"]["same_uhid_case"] == "TB-TWO-A"
+    # deleting one Case File unlinks it from the others
+    assert sorted(his_case.unlink_cases("TB-TWO-C", "dr.breast")) == ["TB-TWO-A", "TB-TWO-B"]
+    assert [l["case_id"] for l in store.get_case("TB-TWO-A")["linked_cases"]] == ["TB-TWO-B"]
+    assert any(e["kind"] == "case_unlinked" and e["case_id"] == "TB-TWO-C" for e in store.read_audit("TB-TWO-B"))

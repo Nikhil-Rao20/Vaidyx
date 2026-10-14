@@ -119,6 +119,39 @@ def _region_ok(d, region):
     return re.search(r"\b(?:" + region + ")", hay) is not None  # whole words from the start ("rect" still matches rectum / rectal)
 
 
+def _foreign(d, site, others) -> bool:
+    """The document names another protocol's site (one of `others`) and not this one."""
+    return not _region_ok(d, site) and any(_region_ok(d, o) for o in others if o)
+
+
+def _prefer_site(items, site, others, doc_of=lambda x: x):
+    """V2 item 5.3 (two primaries): a patient's Case Files share the HIS records, so of several candidates for one record (and of
+    several documents carrying a required value) one that names another protocol's site and not this one (`site` of the protocol;
+    `others`: the sites of the other protocols; the reader's region, the title, the file name and the study lines, as `_region_ok`
+    reads them) steps aside while a candidate that does not remains. A candidate naming no site at all (an IHC panel, a lab report)
+    is never set aside, and when every candidate names another site every candidate stays (a lung biopsy that shows a colorectal
+    primary still answers the colorectal protocol's histopathology record after a referral). A preference, never a filter."""
+    if not site or not others:
+        return items
+    keep = [x for x in items if not _foreign(doc_of(x) or {}, site, others)]
+    return keep or items
+
+
+def other_sites(prot) -> list[str]:
+    """The `site` of every other shipped protocol (V2 item 5.3)."""
+    out = []
+    for x in protocol.list_protocols():
+        pid = x.get("id") if isinstance(x, dict) else x
+        if pid and pid != (prot or {}).get("id"):
+            try:
+                site = (protocol.get(pid) or {}).get("site")
+            except (OSError, ValueError, TypeError):
+                site = None
+            if site and site not in out:
+                out.append(site)
+    return out
+
+
 def _doc_types(d) -> set:
     """The document types a document may be: the model's, plus the keyword table's when they disagree and no clinician has
     confirmed the type yet (V1 item 3.2). A confirmed type (rules.case_docs overlay) is the only one."""
@@ -201,7 +234,7 @@ def _title(x):
     return x.get("doc_title") or (x.get("classification") or {}).get("title") or x.get("filename") or x.get("doc_id") or ""
 
 
-def _evaluate_record(req, ready, facts, overrides, cat, orders=()):
+def _evaluate_record(req, ready, facts, overrides, cat, orders=(), site="", other_sites=()):
     """One record of the protocol against the Case File: the verdict (status, problems, evidence, needs) as before, now split into
     Level 1 (the record: present, final and signed, right patient, its type and date settled) and Level 2 (the required values in it:
     present, verified, not pending) with the document a Level 2 gap sits in (V1 item 4.2). `problems` keeps its order: confirmations
@@ -220,6 +253,7 @@ def _evaluate_record(req, ready, facts, overrides, cat, orders=()):
     type_needs = []  # (doc or history entry, level): documents that match under only one of their two possible types (V1 item 3.2)
     match_needs = []  # (doc or history entry, level): outside reports matched by name only; the treating doctor confirms the patient (V2 item 3.6)
     unconfirmed = {d["doc_id"] for d in ready if _unconfirmed_outside(d)}
+    by_id = {d["doc_id"]: d for d in ready}  # the document behind a value, for the site preference (V2 item 5.3)
     if req.get("applies_if_doc_type_present"):
         present = [d for d in ready if req["applies_if_doc_type_present"] in _doc_types(d)]
         if not present:
@@ -230,7 +264,7 @@ def _evaluate_record(req, ready, facts, overrides, cat, orders=()):
     carrier_ids = []
     if not req.get("facts_only"):
         want = set(req["doc_types"])
-        cands = [d for d in ready if _doc_types(d) & want and _region_ok(d, req.get("region"))]
+        cands = _prefer_site([d for d in ready if _doc_types(d) & want and _region_ok(d, req.get("region"))], site, other_sites)  # another site's report steps aside (V2 item 5.3)
         type_needs += [(d, 1) for d in cands if len(_doc_types(d)) > 1 and len(_doc_types(d) & want) == 1]
         if req.get("must_postdate_doc_type"):
             refs = [x for x in ready if req["must_postdate_doc_type"] in _doc_types(x)]
@@ -280,7 +314,7 @@ def _evaluate_record(req, ready, facts, overrides, cat, orders=()):
                 p = f"{c.get('title') or d['filename']} prints an identifier this Case File does not know: check the document belongs to this patient"
                 r["problems"].append(p); l1["problems"].append(p); r["status"] = l1["status"] = "needs_review"
     else:  # facts_only: Level 1 is a final document of a type that can carry the values (the record that should document them)
-        carriers = [d for d in ready if _doc_types(d) & allowed and _is_final(d, overrides)]
+        carriers = _prefer_site([d for d in ready if _doc_types(d) & allowed and _is_final(d, overrides)], site, other_sites)  # another site's report steps aside (V2 item 5.3)
         carriers.sort(key=_doc_sort_key, reverse=True)
         match_needs += [(d, 1) for d in carriers if d["doc_id"] in unconfirmed]
         carrier_ids = [d["doc_id"] for d in carriers]
@@ -300,6 +334,7 @@ def _evaluate_record(req, ready, facts, overrides, cat, orders=()):
         type_needs += [(h, 2) for h in hist if allowed and len(h["doc_types"]) > 1 and len(set(h["doc_types"]) & allowed) == 1
                        and h["doc_id"] not in {x["doc_id"] for x, _ in type_needs}]
         good = [h for h in hist if h["verification"] in VERIFIED and h["doc_final"] and h["state"] == "present" and not h.get("superseded")]  # history never counts (review M7)
+        good = _prefer_site(good, site, other_sites, lambda h: by_id.get(h["doc_id"]))  # another site's value steps aside when the patient has two cancers (V2 item 5.3)
         documenting += [h["doc_id"] for h in good if h["doc_id"] in carrier_ids]
         match_needs += [(h, 2) for h in good if h["doc_id"] in unconfirmed and h["doc_id"] not in {x["doc_id"] for x, _ in match_needs}]
         if req.get("must_postdate_doc_type") and r.get("postdate_reference"):
@@ -479,6 +514,7 @@ def evaluate(case_id):
     hospital = _hospital()
     level = case.get("hospital_level") or hospital.get("level") or "essential"
     results, shown = [], []
+    site = prot.get("site") or ""; others = other_sites(prot) if site else []  # two primaries: another site's report steps aside (V2 item 5.3)
     for req in protocol.records(prot):
         req = {**req, "routed_department": routed(prot, req, case)[0]}  # the department the gap goes to (V2 item 2.4): shown on the row
         tier = protocol.tier_for(req, setting)
@@ -487,7 +523,7 @@ def evaluate(case_id):
             r = {"id": req["id"], "label": req["label"], "department": req["routed_department"], "status": "not_applicable", "problems": [], "evidence": [],
                  "level": None, "level1": {"status": "satisfied", "problems": [], "needs": []}, "level2": {"status": "satisfied", "problems": [], "needs": []}}
         else:
-            r = _evaluate_record(req, ready, facts, overrides, cat, orders)
+            r = _evaluate_record(req, ready, facts, overrides, cat, orders, site=site, other_sites=others)
             if unlinked and r.get("level") == 1 and r["status"] == "missing_record":
                 # a registration that may be this patient is not linked yet (temporary or duplicate UHID, V2 item 3.2): the record may sit there;
                 # a person links it before anything is requested of a department

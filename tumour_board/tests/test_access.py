@@ -103,7 +103,11 @@ def test_an_open_referral_and_a_linked_case_file_open_the_whole_case_file(people
     assert access.scope(people["colo"], c) is None
     c = _case("TB-A2", linked_cases=[{"case_id": "TB-A3", "protocol": "breast", "department": "breast_surgery"}])
     assert access.scope(people["breast"], c) == access.FULL and access.scope(people["colo"], c) is None
-    assert access.linked_owners(c) == ["breast_surgery"]
+    assert access.linked_owners(c) == ["breast_surgery"], "the linked Case File does not exist: the department recorded with the link"
+    # the linked Case File exists and was referred since: its current owner reads this one, the recorded department no longer does
+    _case("TB-A3", owner="colorectal_surgery")
+    assert access.linked_owners(c) == ["colorectal_surgery"] and access.scope(people["colo"], c) == access.FULL and access.scope(people["breast"], c) is None
+    assert access.public(c)["linked_cases"][0]["department_name"] == "Colorectal Surgery"
 
 
 def test_visible_filters_the_case_list(people):

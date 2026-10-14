@@ -526,3 +526,64 @@ def test_closing_for_a_waiver_says_waived(unit_case):
     _sync(unit_case)
     closed = [x for x in _notes() if x["kind"] == "request_closed"]
     assert len(closed) == 1 and " waived for " in closed[0]["title"] and "waived" in closed[0]["text"]
+
+
+# ---- two primaries: another site's report steps aside (V2 item 5.3) ---------------------------------------------------------
+def test_site_preference_sets_aside_the_other_sites_reports(unit_case, monkeypatch):
+    """A patient with two cancers shares the HIS records between two Case Files: of several reports for one record, one that names
+    another protocol's site and not this one steps aside, record and values alike; the newest report is not always this protocol's."""
+    from tumour_board import protocol
+    from tumour_board.tests import util
+    real_get = protocol.get
+
+    def with_site(site):
+        def get(pid):
+            p = util.unit_protocol(); p["site"] = site
+            return p if pid == "unit" else real_get(pid)
+        return get
+    monkeypatch.setattr(protocol, "get", with_site("rect|colon"))
+    add(unit_case, hist("Dbreast01", facts={"histologic_type": fact("Invasive ductal carcinoma, NST"), "pdl1": fact("TPS 5%")}, region="left breast", date="2026-09-20"),
+        hist("Drectal01", facts={"histologic_type": fact("Adenocarcinoma, rectum")}, region="rectal growth", date="2026-09-01"), ct())
+    g = rules.evaluate(unit_case)
+    r = req(g, "histopathology")
+    assert r["status"] == "satisfied" and r["evidence"][0]["doc_id"] == "Drectal01", "the newer breast report names another site: the rectal report answers"
+    assert r["evidence"][1] == {"doc_id": "Drectal01", "fact": "histologic_type", "value": "Adenocarcinoma, rectum", "quote": "Adenocarcinoma, rectum"}
+    p = req(g, "pdl1")
+    assert p["status"] == "satisfied" and p["evidence"][0]["doc_id"] == "Dbreast01", "only the breast report carries the value: every candidate stays"
+    # a report of this site that is only preliminary is named rather than the other site's final report
+    add(unit_case, hist("Drectal01", facts={"histologic_type": fact("Adenocarcinoma, rectum")}, region="rectal growth", date="2026-09-01", status="PRELIMINARY", title="HPE RECTAL BIOPSY"))
+    r = req(rules.evaluate(unit_case), "histopathology")
+    assert r["status"] == "not_final" and r["evidence"][0]["doc_id"] == "Drectal01" and r["problems"][0].startswith("HPE RECTAL BIOPSY is PRELIMINARY")
+    # without a site the newest report wins (V1); with a site that none names, every candidate stays (a lung biopsy showing a colorectal primary, P14)
+    monkeypatch.setattr(protocol, "get", lambda pid: util.unit_protocol() if pid == "unit" else real_get(pid))
+    assert req(rules.evaluate(unit_case), "histopathology")["evidence"][0]["doc_id"] == "Dbreast01"
+    monkeypatch.setattr(protocol, "get", with_site("oesophag|stomach"))
+    assert req(rules.evaluate(unit_case), "histopathology")["evidence"][0]["doc_id"] == "Dbreast01"
+    # a document naming no site is never set aside: the IHC panel that documents ER stays the carrier of the PD-L1 gap and names its
+    # accession (the P03 pattern: HER2 missing from the IHC), under either site
+    ihc = make_doc("Dihc00001", "ihc", facts={"er": fact("ER: positive (90%)")}, region="biopsy", date="2026-09-25", title="IHC PANEL"); ihc["his"] = {"accession": "PATH/26/00418"}
+    add(unit_case, hist("Drectal01", facts={"histologic_type": fact("Adenocarcinoma, rectum")}, region="rectal growth", date="2026-09-01"), ihc,
+        hist("Dbreast01", facts={"histologic_type": fact("Invasive ductal carcinoma, NST")}, region="left breast", date="2026-09-20"))
+    for site in ("breast|mammary", "rect|colon"):
+        def get(pid, site=site):
+            p = util.unit_protocol(); p["site"] = site
+            next(x for x in p["mandatory"] if x["id"] == "pdl1")["required_facts"] = ["pdl1", "er"]
+            return p if pid == "unit" else real_get(pid)
+        monkeypatch.setattr(protocol, "get", get)
+        p = req(rules.evaluate(unit_case), "pdl1")
+        assert p["status"] == "missing_field" and p["accession"] == "PATH/26/00418" and p["problems"] == ["Required field not documented: PD-L1"], site
+
+
+def test_every_shipped_protocol_names_its_site_with_organ_words():
+    from tumour_board import protocol
+    for pid in ("breast", "colorectal_rectum", "lung_nsclc", "oral_cavity", "cervix"):
+        p = protocol.get(pid)
+        assert p.get("site") and "|" in p["site"] and p.get("site_note"), pid
+        for shared in ("thora", "chest", "abdo", "pelvi", "neck", "lobe"):  # regions several protocols image: never a site word
+            assert shared not in p["site"], (pid, shared)
+        assert [o for o in rules.other_sites(p)] and p["site"] not in rules.other_sites(p)
+    crs, br = protocol.get("colorectal_rectum")["site"], protocol.get("breast")["site"]
+    doc = lambda region: {"classification": {"body_region": region}}
+    assert rules._foreign(doc("left breast"), crs, [br]) and not rules._foreign(doc("Colorectal"), crs, [br]) and not rules._foreign(doc("biopsy"), crs, [br])
+    assert not rules._foreign(doc("THORAX, ABDOMEN AND PELVIS"), br, rules.other_sites(protocol.get("breast"))), "a staging CT names no organ"
+    assert not rules._foreign(doc("cervical lymph nodes"), protocol.get("oral_cavity")["site"], rules.other_sites(protocol.get("oral_cavity"))), "cervical nodes are not the cervix"

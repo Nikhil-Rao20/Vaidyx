@@ -2108,6 +2108,248 @@ def v2_phase4_cleanup(c, ctx):
     _v2_cleanup(c, ctx, H4_USERS)
 
 
+H5_USERS = {"tb-e2e-h5-pulmo": ("H5pulmo-e2e-2026!", {"pulmonology": "doctor"}), "tb-e2e-h5-colo": ("H5colo-e2e-2026!", {"colorectal_surgery": "doctor"}),
+            "tb-e2e-h5-breast": ("H5breast-e2e-2026!", {"breast_surgery": "doctor"}), "tb-e2e-h5-medonc": ("H5medonc-e2e-2026!", {"medical_oncology": "doctor"}),
+            "tb-e2e-h5-rad": ("H5rad-e2e-2026!", {"radiology": "doctor"}), "tb-e2e-h5-nm": ("H5nm-e2e-2026!", {"nuclear_medicine": "doctor"})}
+H5_MDT = ("tb-e2e-h5-mdt", "H5mdt-e2e-2026!")
+
+
+def v2_phase5(c, base, ctx):
+    """V2 Phase 5 on the fixture patients (SYNTHETIC): 5.1 the owning department, participants, the departments asked (scoped reads, owner-only
+    clinical actions); 5.2 P14 the lung work-up referred to Colorectal Surgery (the HIS referral suggested, decline, accept with the new
+    protocol on the same records, the lung gate archived read-only, the open request closed with the reason); 5.3 P18 two primaries as
+    linked Case Files under one UHID."""
+    cl = _v2_setup(c, base, ctx, H5_USERS, "5.1")
+    pulmo, colo, breast, medonc, rad, nm = (cl[k] for k in ("tb-e2e-h5-pulmo", "tb-e2e-h5-colo", "tb-e2e-h5-breast", "tb-e2e-h5-medonc", "tb-e2e-h5-rad", "tb-e2e-h5-nm"))
+    c.request("DELETE", "/api/auth/users", json={"username": H5_MDT[0]})
+    r = c.post("/api/tb/org/accounts", json={"username": H5_MDT[0], "password": H5_MDT[1], "coordinator": True, "display_name": "MDT Coordinator (e2e h5)"})
+    mdt = httpx.Client(base_url=base, timeout=600)
+    check("5.1 e2e coordinator login", r.status_code == 200 and mdt.post("/api/auth/login", json={"username": H5_MDT[0], "password": H5_MDT[1]}).status_code == 200, r.text[:120])
+    fx = {p_["slot"]: p_ for p_ in json.load(open(REPO / "his_mock" / "scenarios.json"))["patients"]}
+
+    def fixture_gaps(slot, protocol):
+        cf = next(c_ for c_ in fx[slot]["case_files"] if c_["protocol"] == protocol)
+        return sorted((x["requirement"], x["level"]) for x in cf["first_fetch"]["gaps"])
+
+    def create(client, ident, protocol, setting, cid, department=None):
+        r = client.post("/api/tb/cases/from-his", json={"identifier": ident, "protocol": protocol, "setting": setting, "hospital_level": "optimal", "case_id": cid, "department": department})
+        if r.status_code != 200:
+            check(f"5.1 create {cid} from {ident}", False, r.text[:200]); return None, None
+        ctx["cases"].append(cid)
+        body, j, secs = _job(client, r)
+        return client.get(f"/api/tb/cases/{cid}").json(), j
+
+    def action(client, cid, requirement):
+        return next((x for x in client.get(f"/api/tb/cases/{cid}").json()["state"]["actions"] if x.get("requirement") == requirement), {})
+
+    def audit_kinds(client, cid):
+        return [e["kind"] for e in client.get(f"/api/tb/cases/{cid}/audit").json()["events"]]
+
+    # ---- 5.1 ownership, participants, the departments asked (P14, owned by Pulmonology) --------------------------------------------
+    cid = "TB-H5-P14"
+    d, j = create(pulmo, "VXH/26/004214", "lung_nsclc", "metastatic", cid)
+    if d:
+        acc = d.get("access") or {}
+        check("5.1 P14 the Case File is owned by the creating doctor's department; the view carries the owner and the full scope",
+              d["case"]["department"] == "pulmonology" and acc.get("owner") == {"id": "pulmonology", "name": "Pulmonology"} and acc.get("scope") == "full" and acc.get("participants") == [])
+        check("5.1 P14 first-fetch gate matches the fixture (lung, metastatic)", _gaps(d) == fixture_gaps("P14", "lung_nsclc"), json.dumps(_gaps(d)))
+        check("5.1 another treating department, a supporting department and a doctor of the department referred to later cannot open it (403); it is not in their lists",
+              breast.get(f"/api/tb/cases/{cid}").status_code == 403 and colo.get(f"/api/tb/cases/{cid}").status_code == 403 and rad.get(f"/api/tb/cases/{cid}").status_code == 403
+              and nm.get(f"/api/tb/cases/{cid}/documents/{d['documents'][0]['doc_id']}/file").status_code == 403
+              and cid not in [x["case_id"] for x in colo.get("/api/tb/cases").json()["cases"]] and cid not in [x["case_id"] for x in rad.get("/api/tb/cases").json()["cases"]])
+        rows = [x for x in pulmo.get("/api/tb/cases").json()["cases"] if x["case_id"] == cid]
+        check("5.1 P14 the owner's list row carries the owner and the scope", rows and rows[0]["owner_name"] == "Pulmonology" and rows[0]["scope"] == "full" and rows[0]["referral"] is None)
+        dm = mdt.get(f"/api/tb/cases/{cid}").json()
+        check("5.1 the MDT Coordinator and the Vaidyx admin read the whole Case File; the coordinator does no clinical action on it (no upload, waive or request)",
+              dm.get("access", {}).get("scope") == "full" and dm["permissions"]["upload"] is False and not any(dm["permissions"]["waive"].values()) and dm["permissions"]["send_request"] is False
+              and dm["permissions"]["list_case"] is True and c.get(f"/api/tb/cases/{cid}").json()["access"]["scope"] == "full"
+              and mdt.post(f"/api/tb/cases/{cid}/documents", files=[("files", ("x.txt", b"synthetic"))], data={"paths": "[]"}).status_code == 403)
+        # a participant reads and comments, never acts
+        r = breast.put(f"/api/tb/cases/{cid}/participants", json={"add": ["breast_surgery"]})
+        check("5.1 only the owner's doctors choose the participants (403 for others)", r.status_code == 403)
+        r = pulmo.put(f"/api/tb/cases/{cid}/participants", json={"add": ["Breast Surgery"], "reason": "second opinion on a breast lesion (synthetic e2e)"})
+        db = breast.get(f"/api/tb/cases/{cid}").json() if r.status_code == 200 else {}
+        check("5.1 the owner adds a participating department: it reads the whole Case File, is told, and the Case File lists it", r.status_code == 200
+              and r.json()["access"]["participants"][0]["id"] == "breast_surgery" and db.get("access", {}).get("scope") == "full" and db["state"].get("gate")
+              and len(_notes_of(breast, cid, "case_shared")) == 1 and "Pulmonology" in _notes_of(breast, cid, "case_shared")[0]["text"], r.text[:160])
+        req_id = next((q["id"] for q in db["state"]["gate"]["requirements"] if q["status"] not in ("satisfied", "waived", "not_applicable")), "pet_ct")
+        pet = action(pulmo, cid, "pet_ct")
+        check("5.1 a participant cannot waive, upload, re-fetch, send a request, refer or change the participants (403); its view hides those actions",
+              breast.post(f"/api/tb/cases/{cid}/confirmations", json={"type": "waive", "key": req_id, "reason": "e2e"}).status_code == 403
+              and breast.post(f"/api/tb/cases/{cid}/documents", files=[("files", ("x.txt", b"synthetic"))], data={"paths": "[]"}).status_code == 403
+              and breast.post(f"/api/tb/cases/{cid}/his/refetch").status_code == 403 and breast.post(f"/api/tb/cases/{cid}/requests/{pet.get('id')}/send", json={}).status_code == 403
+              and breast.post(f"/api/tb/cases/{cid}/referrals", json={"to": "Colorectal Surgery", "reason": "x"}).status_code == 403
+              and breast.put(f"/api/tb/cases/{cid}/participants", json={"remove": ["breast_surgery"]}).status_code == 403
+              and not any(db["permissions"]["waive"].values()) and db["permissions"]["upload"] is False and db["permissions"]["refer"] is False and db["permissions"]["send_request"] is False)
+        check("5.1 a participant may read the records and ask the Case File (read and comment)", breast.get(f"/api/tb/cases/{cid}/documents/{db['documents'][0]['doc_id']}").status_code == 200
+              and breast.post(f"/api/tb/cases/{cid}/search", json={"query": "adenocarcinoma"}).status_code == 200)
+        # the department asked sees only the items it was asked about
+        check("5.1 before any request is sent, Nuclear Medicine cannot open the Case File at all (403)", nm.get(f"/api/tb/cases/{cid}").status_code == 403)
+        rs = pulmo.post(f"/api/tb/cases/{cid}/requests/{pet.get('id')}/send", json={})
+        dn = nm.get(f"/api/tb/cases/{cid}").json() if rs.status_code == 200 else {}
+        check("5.1 once the PET-CT request is sent, Nuclear Medicine sees only the items it was asked about: its request, no gate, no facts, no other records",
+              rs.status_code == 200 and dn.get("access", {}).get("scope") == "requests" and dn["state"].get("limited") is True and dn["state"]["gate"] is None
+              and [a["id"] for a in dn["state"]["actions"]] == [pet.get("id")] and dn["facts"] == {} and dn["timeline"] == [] and dn.get("his") is None
+              and not any(x.get("department") not in ("nuclear_medicine",) for x in dn["documents"]) and set(dn["permissions"]) == {"answer_request", "update_action"}, json.dumps({k: dn.get(k) for k in ("access",)})[:200])
+        other_doc = next((x["doc_id"] for x in db["documents"] if x.get("department") != "nuclear_medicine"), None)
+        check("5.1 the department asked cannot open the other records, ask the Case File, waive or refer (403); it may acknowledge its request",
+              nm.get(f"/api/tb/cases/{cid}/documents/{other_doc}").status_code == 403 and nm.get(f"/api/tb/cases/{cid}/documents/{other_doc}/file").status_code == 403
+              and nm.post(f"/api/tb/cases/{cid}/search", json={"query": "x"}).status_code == 403 and nm.post(f"/api/tb/cases/{cid}/summary", json={}).status_code == 403
+              and nm.post(f"/api/tb/cases/{cid}/confirmations", json={"type": "waive", "key": "pet_ct", "reason": "e2e"}).status_code == 403
+              and nm.post(f"/api/tb/cases/{cid}/referrals", json={"to": "Colorectal Surgery", "reason": "x"}).status_code == 403
+              and nm.post(f"/api/tb/cases/{cid}/requests/{pet.get('id')}/acknowledge").status_code == 200
+              and [x["case_id"] for x in nm.get("/api/tb/cases").json()["cases"] if x["case_id"] == cid and x["scope"] == "requests"] == [cid])
+        check("5.1 a supporting department that received nothing still cannot open it (403)", rad.get(f"/api/tb/cases/{cid}").status_code == 403)
+        r = pulmo.put(f"/api/tb/cases/{cid}/participants", json={"remove": ["breast_surgery"], "reason": "opinion given"})
+        check("5.1 the owner removes the participant: it cannot open the Case File any more; both changes audited", r.status_code == 200 and r.json()["access"]["participants"] == []
+              and breast.get(f"/api/tb/cases/{cid}").status_code == 403 and {"participant_added", "participant_removed"} <= set(audit_kinds(pulmo, cid)))
+        check("5.1 the owner's doctors may change the listing (the board date); another department's may not", colo.post(f"/api/tb/cases/{cid}/listing", json={"protocol": "lung_nsclc", "setting": "metastatic", "board_date": "2026-11-05", "hospital_level": "optimal"}).status_code == 403
+              and pulmo.post(f"/api/tb/cases/{cid}/listing", json={"protocol": "lung_nsclc", "setting": "metastatic", "board_date": "2026-11-05", "hospital_level": "optimal"}).status_code == 200)
+
+        # ---- 5.2 referral: the lung work-up turns out to be a colorectal primary ----------------------------------------------------
+        d = pulmo.get(f"/api/tb/cases/{cid}").json()
+        sug = (d.get("referral") or {}).get("suggestions") or []
+        check("5.2 P14 the hospital system's inter-department referral (Pulmonology to Colorectal Surgery) is suggested, never applied by itself",
+              len(sug) == 1 and sug[0]["to"] == "colorectal_surgery" and sug[0]["from"] == "pulmonology" and sug[0]["on"] == "04/09/2026" and "Refer this Case File?" in sug[0]["text"]
+              and d["case"]["department"] == "pulmonology" and d["referral"]["open"] is None, json.dumps(sug)[:200])
+        check("5.2 a referral needs the owner, a reason and a treating target (403 / 400); the suggestion must exist (404)",
+              rad.post(f"/api/tb/cases/{cid}/referrals", json={"to": "Colorectal Surgery", "reason": "x"}).status_code == 403
+              and medonc.post(f"/api/tb/cases/{cid}/referrals", json={"to": "Colorectal Surgery", "reason": "x"}).status_code == 403
+              and pulmo.post(f"/api/tb/cases/{cid}/referrals", json={"to": "Colorectal Surgery", "reason": " "}).status_code == 400
+              and pulmo.post(f"/api/tb/cases/{cid}/referrals", json={"to": "Radiology", "reason": "x"}).status_code == 400
+              and pulmo.post(f"/api/tb/cases/{cid}/referrals", json={"to": "Pulmonology", "reason": "x"}).status_code == 409
+              and pulmo.post(f"/api/tb/cases/{cid}/referrals", json={"to": "Colorectal Surgery", "reason": "x", "his_ref": "ref-nope"}).status_code == 404)
+        r = pulmo.post(f"/api/tb/cases/{cid}/referrals", json={"to": "Colorectal Surgery", "reason": "Lung biopsy reported as metastatic adenocarcinoma of colorectal origin; colonoscopy shows a rectal growth (synthetic e2e)", "his_ref": sug[0]["his_ref"]})
+        ref1 = r.json().get("referral", {}) if r.status_code == 200 else {}
+        inbox_colo = colo.get("/api/tb/inbox").json().get("referrals", []) if r.status_code == 200 else []
+        dc = colo.get(f"/api/tb/cases/{cid}").json() if r.status_code == 200 else {}
+        check("5.2 the owner refers with a reason: the receiving department is told, sees it in its inbox and may now read the whole Case File; a second referral is refused while it waits",
+              r.status_code == 200 and ref1.get("status") == "requested" and ref1.get("from") == "pulmonology" and ref1.get("to") == "colorectal_surgery" and ref1.get("his_ref") == sug[0]["his_ref"]
+              and len(_notes_of(colo, cid, "referral")) == 1 and "colorectal origin" in _notes_of(colo, cid, "referral")[0]["text"]
+              and len(inbox_colo) == 1 and inbox_colo[0]["direction"] == "to" and inbox_colo[0]["can_answer"] and inbox_colo[0]["uhid"] == "VXH/26/004214"
+              and dc.get("access", {}).get("scope") == "full" and dc["permissions"]["answer_referral"] is True and dc["permissions"]["waive"] and not any(dc["permissions"]["waive"].values())
+              and pulmo.post(f"/api/tb/cases/{cid}/referrals", json={"to": "Medical Oncology", "reason": "y"}).status_code == 409
+              and (pulmo.get(f"/api/tb/cases/{cid}").json().get("referral") or {}).get("suggestions") == [], r.text[:160])
+        check("5.2 only the receiving department answers (403 for the owner, another department, a supporting one); the owner may withdraw",
+              pulmo.post(f"/api/tb/cases/{cid}/referrals/{ref1.get('id')}/accept", json={}).status_code == 403 and medonc.post(f"/api/tb/cases/{cid}/referrals/{ref1.get('id')}/accept", json={}).status_code == 403
+              and breast.post(f"/api/tb/cases/{cid}/referrals/{ref1.get('id')}/decline", json={}).status_code == 403 and nm.post(f"/api/tb/cases/{cid}/referrals/{ref1.get('id')}/accept", json={}).status_code == 403
+              and colo.post(f"/api/tb/cases/{cid}/referrals/{ref1.get('id')}/withdraw", json={}).status_code == 403
+              and [x["case_id"] for x in pulmo.get("/api/tb/cases").json()["cases"] if x["case_id"] == cid and x["referral"] == "colorectal_surgery"] == [cid])
+        r = colo.post(f"/api/tb/cases/{cid}/referrals/{ref1.get('id')}/decline", json={"note": "no colorectal primary on the colonoscopy biopsy (synthetic e2e)"})
+        check("5.2 the receiving department declines: the Case File stays with its owner, who is told; the department loses its access again",
+              r.status_code == 200 and r.json()["referral"]["status"] == "declined" and pulmo.get(f"/api/tb/cases/{cid}").json()["case"]["department"] == "pulmonology"
+              and colo.get(f"/api/tb/cases/{cid}").status_code == 403 and len(_notes_of(pulmo, cid, "referral_answered")) == 1 and _notes_of(pulmo, cid, "referral_answered")[0]["status"] == "declined"
+              and "colonoscopy biopsy" in _notes_of(pulmo, cid, "referral_answered")[0]["text"], r.text[:160])
+        r = pulmo.post(f"/api/tb/cases/{cid}/referrals", json={"to": "colorectal_surgery", "reason": "Review of the biopsy: colorectal origin confirmed by IHC (synthetic e2e)"})
+        ref2 = r.json().get("referral", {}) if r.status_code == 200 else {}
+        check("5.2 the owner refers again", r.status_code == 200 and ref2.get("status") == "requested" and colo.get(f"/api/tb/cases/{cid}").status_code == 200, r.text[:160])
+        check("5.2 accepting with an unknown protocol or setting is refused (400); nothing moves", colo.post(f"/api/tb/cases/{cid}/referrals/{ref2.get('id')}/accept", json={"protocol": "nope"}).status_code == 400
+              and colo.post(f"/api/tb/cases/{cid}/referrals/{ref2.get('id')}/accept", json={"protocol": "colorectal_rectum", "setting": "early"}).status_code == 400
+              and pulmo.get(f"/api/tb/cases/{cid}").json()["case"]["department"] == "pulmonology")
+        before_hist = audit_kinds(pulmo, cid)
+        r = colo.post(f"/api/tb/cases/{cid}/referrals/{ref2.get('id')}/accept", json={"protocol": "colorectal_rectum", "setting": "metastatic", "hospital_level": "optimal", "note": "accepted: rectal primary with lung metastases (synthetic e2e)"})
+        if r.status_code == 200 and r.json().get("job"):
+            wait_job(colo, r.json()["job"])
+        d2 = colo.get(f"/api/tb/cases/{cid}").json() if r.status_code == 200 else {}
+        acc2 = d2.get("access") or {}
+        check("5.2 on acceptance ownership moves to Colorectal Surgery, Pulmonology stays as a participant, the owner history and the referral history are kept",
+              r.status_code == 200 and r.json()["referral"]["status"] == "accepted" and d2["case"]["department"] == "colorectal_surgery" and acc2.get("owner", {}).get("id") == "colorectal_surgery"
+              and [x["id"] for x in acc2.get("participants", [])] == ["pulmonology"] and len(acc2.get("owner_history", [])) == 1 and acc2["owner_history"][0]["from"] == "pulmonology"
+              and [x["status"] for x in d2["referral"]["history"]] == ["declined", "accepted"] and d2["referral"]["open"] is None, r.text[:200])
+        g2 = d2.get("state", {}).get("gate") or {}
+        check("5.2 the new owner's protocol runs on the same records: the colorectal gate shows the fixture's gaps (MRI pelvis Level 1; CEA, MMR, RAS / BRAF Level 2), nothing re-fetched",
+              g2.get("protocol") == "colorectal_rectum" and _gaps(d2) == fixture_gaps("P14", "colorectal_rectum") and d2["case"]["setting"] == "metastatic" and d2["case"]["listing"]["status"] == "listed"
+              and len(d2["documents"]) == len(d["documents"]), json.dumps([_gaps(d2), fixture_gaps("P14", "colorectal_rectum")]))
+        hist = d2.get("state", {}).get("gate_history") or []
+        check("5.2 the lung protocol's gate is kept as read-only history with its gaps and the request that was open",
+              len(hist) == 1 and hist[0]["protocol"] == "lung_nsclc" and hist[0]["owner"] == "pulmonology" and hist[0]["reason"] == "referral" and hist[0]["referral"] == ref2.get("id")
+              and sorted((x["id"], x.get("level")) for x in hist[0]["gate"]["requirements"] if x["status"] not in ("satisfied", "not_applicable", "waived")) == fixture_gaps("P14", "lung_nsclc")
+              and [x["requirement"] for x in hist[0]["actions"] if x["status"] in ("pending", "overdue")] == ["pet_ct"], json.dumps(hist)[:200])
+        pet2 = next((x for x in d2["state"]["actions"] if x.get("requirement") == "pet_ct"), {})
+        nm_closed = _notes_of(nm, cid, "request_closed")
+        check("5.2 the PET-CT request of the lung protocol closed with the referral as the reason; Nuclear Medicine, which had received it, is told",
+              pet2.get("status") == "completed" and "referred to Colorectal Surgery" in (pet2.get("history") or [{}])[-1].get("event", "") and len(nm_closed) == 1 and "referred to Colorectal Surgery" in nm_closed[0]["text"], json.dumps(pet2.get("history"))[-300:])
+        check("5.2 the new gaps are suggested requests to their departments (Radiology, Biochemistry, Pathology), nothing sent",
+              sorted((a["requirement"], a["department"]) for a in d2["state"]["actions"] if a["status"] == "suggested") == [("baseline_mri_pelvis", "Radiology"), ("cea", "Biochemistry"), ("mmr", "Pathology"), ("ras_braf", "Pathology")])
+        dp = pulmo.get(f"/api/tb/cases/{cid}").json()
+        answered = _notes_of(pulmo, cid, "referral_answered")  # newest first
+        conds = {"participant full scope": dp.get("access", {}).get("scope") == "full", "participant no waive": not any(dp["permissions"]["waive"].values()),
+                 "participant no refetch": dp["permissions"]["refetch"] is False, "participant no refer": dp["permissions"]["refer"] is False,
+                 "participant refer 403": pulmo.post(f"/api/tb/cases/{cid}/referrals", json={"to": "Medical Oncology", "reason": "x"}).status_code == 403,
+                 "owner waive": any(d2["permissions"]["waive"].values()), "owner send": d2["permissions"]["send_request"] is True, "owner refer": d2["permissions"]["refer"] is True,
+                 "owner refetch": d2["permissions"]["refetch"] is True, "two answers told": len(answered) == 2, "latest accepted": bool(answered) and answered[0]["status"] == "accepted"}
+        check("5.2 the referring department still reads the Case File as a participant but no longer acts; the new owner may waive, send and refer", all(conds.values()),
+              json.dumps([k for k, v in conds.items() if not v]))
+        kinds = audit_kinds(colo, cid)
+        chain = colo.get(f"/api/tb/cases/{cid}/audit/verify").json()
+        check("5.2 every step is audited (requested twice, declined, accepted, owner changed, listed under the new protocol) and the chain verifies",
+              kinds.count("referral_requested") == 2 and {"referral_declined", "referral_accepted", "owner_changed", "case_listed"} <= set(kinds) and chain.get("ok", chain.get("valid", True)) is not False, json.dumps(chain)[:120])
+        tl = [e for e in d2.get("timeline", []) if e.get("kind") == "referral"]
+        check("5.2 the timeline shows the referrals and the ownership move", len(tl) == 3 and any(e.get("status") == "owner_changed" for e in tl))
+        rows = [x for x in colo.get("/api/tb/cases").json()["cases"] if x["case_id"] == cid]
+        check("5.2 the Case File list shows the new owner and the participant", rows and rows[0]["owner_name"] == "Colorectal Surgery" and rows[0]["participants"] == ["pulmonology"])
+        r = colo.post(f"/api/tb/cases/{cid}/referrals", json={"to": "Medical Oncology", "reason": "systemic therapy first (synthetic e2e)"})
+        ref3 = r.json().get("referral", {}) if r.status_code == 200 else {}
+        open_read = medonc.get(f"/api/tb/cases/{cid}").status_code if ref3 else None
+        rw = colo.post(f"/api/tb/cases/{cid}/referrals/{ref3.get('id')}/withdraw", json={"note": "discuss at the board first"}) if ref3 else None
+        told = _notes_of(medonc, cid, "referral_answered")
+        conds = {"referred onward": r.status_code == 200, "department referred to reads it while open": open_read == 200, "withdrawn": rw is not None and rw.status_code == 200 and rw.json()["referral"]["status"] == "withdrawn",
+                 "access gone after the withdrawal": medonc.get(f"/api/tb/cases/{cid}").status_code == 403, "told once": len(told) == 1, "told withdrawn": bool(told) and told[0]["status"] == "withdrawn"}
+        check("5.2 the new owner may refer onward and withdraw; the department referred to is told and loses its access", all(conds.values()),
+              json.dumps([k for k, v in conds.items() if not v]) + " " + (rw.text[:120] if rw is not None else r.text[:120]))
+        # accept without a protocol: the new owner picks it later on the listing form
+        r = colo.post(f"/api/tb/cases/{cid}/referrals", json={"to": "Medical Oncology", "reason": "systemic therapy first, after all (synthetic e2e)"})
+        ref4 = r.json().get("referral", {}) if r.status_code == 200 else {}
+        ra = medonc.post(f"/api/tb/cases/{cid}/referrals/{ref4.get('id')}/accept", json={"note": "protocol to follow"}) if ref4 else None
+        d4 = medonc.get(f"/api/tb/cases/{cid}").json() if ra is not None and ra.status_code == 200 else {}
+        check("5.2 accepting without a protocol: the Case File waits for the new owner to pick one (awaiting listing, the colorectal gate archived too); the other departments stay as participants",
+              ra is not None and ra.status_code == 200 and ra.json()["job"] is None and d4["case"]["department"] == "medical_oncology" and d4["case"]["protocol"] == "" and d4["case"]["listing"]["status"] == "awaiting_listing"
+              and d4["case"]["listing"]["reason"] == "referred" and d4["state"]["gate"] is None and [h["protocol"] for h in d4["state"]["gate_history"]] == ["lung_nsclc", "colorectal_rectum"]
+              and [x["id"] for x in d4["access"]["participants"]] == ["pulmonology", "colorectal_surgery"] and d4["permissions"]["list_case"] is True, (ra.text[:160] if ra is not None else r.text[:120]))
+        rl_ = medonc.post(f"/api/tb/cases/{cid}/listing", json={"protocol": "colorectal_rectum", "setting": "metastatic", "hospital_level": "optimal"})
+        if rl_.status_code == 200:
+            wait_job(medonc, rl_.json()["job"])
+        d5 = medonc.get(f"/api/tb/cases/{cid}").json()
+        check("5.2 the new owner lists it under the protocol: the gate re-runs on the same records", rl_.status_code == 200 and (d5["state"].get("gate") or {}).get("protocol") == "colorectal_rectum"
+              and _gaps(d5) == fixture_gaps("P14", "colorectal_rectum") and pulmo.get(f"/api/tb/cases/{cid}").json()["access"]["scope"] == "full", rl_.text[:120])
+
+    # ---- 5.3 two primaries: linked Case Files under one UHID (P18) ----------------------------------------------------------------
+    d1, j1 = create(colo, "VXH/26/004218", "colorectal_rectum", "non_metastatic", "TB-H5-P18A")
+    d2b, j2 = create(breast, "VXH/26/004218", "breast", "early", "TB-H5-P18B")
+    if d1 and d2b:
+        a_links = (colo.get("/api/tb/cases/TB-H5-P18A").json().get("access") or {}).get("linked_cases") or []
+        b_links = (d2b.get("access") or {}).get("linked_cases") or []
+        check("5.3 P18 the second cancer of the same UHID gets its own Case File, linked both ways, each with its own owner and protocol",
+              [x["case_id"] for x in b_links] == ["TB-H5-P18A"] and b_links[0]["department"] == "colorectal_surgery" and b_links[0]["protocol"] == "colorectal_rectum" and b_links[0]["department_name"] == "Colorectal Surgery"
+              and [x["case_id"] for x in a_links] == ["TB-H5-P18B"] and a_links[0]["department"] == "breast_surgery" and d2b["case"]["department"] == "breast_surgery"
+              and (d2b["case"]["his"] or {}).get("same_uhid_case") is None, json.dumps([a_links, b_links])[:200])
+        check("5.3 P18 both Case Files hold the patient's HIS records and each gate passes (the rectal records never satisfy the breast requirements, nor the reverse)",
+              len(d1["documents"]) == len(d2b["documents"]) >= 8 and d1["state"]["gate"]["passed"] and d2b["state"]["gate"]["passed"]
+              and _gaps(d1) == fixture_gaps("P18", "colorectal_rectum") == [] and _gaps(d2b) == fixture_gaps("P18", "breast") == [], json.dumps([_gaps(d1), _gaps(d2b)]))
+        hpe_a = next((x for x in d1["documents"] if x["doc_id"] == _req(d1, "histopathology").get("evidence", [{}])[0].get("doc_id")), {})
+        hpe_b = next((x for x in d2b["documents"] if x["doc_id"] == _req(d2b, "histopathology").get("evidence", [{}])[0].get("doc_id")), {})
+        check("5.3 P18 each Case File's histopathology requirement is met by its own episode's report", (hpe_a.get("his") or {}).get("id") and (hpe_b.get("his") or {}).get("id")
+              and hpe_a["his"]["id"] != hpe_b["his"]["id"], json.dumps([(hpe_a.get("his") or {}).get("id"), (hpe_b.get("his") or {}).get("id")]))
+        da = breast.get("/api/tb/cases/TB-H5-P18A").json()
+        check("5.3 the owners of linked Case Files read each other's (the same patient) but never act on them; a supporting department still cannot",
+              da.get("access", {}).get("scope") == "full" and not any(da["permissions"]["waive"].values()) and da["permissions"]["refer"] is False
+              and colo.get("/api/tb/cases/TB-H5-P18B").status_code == 200 and rad.get("/api/tb/cases/TB-H5-P18B").status_code == 403
+              and breast.post("/api/tb/cases/TB-H5-P18A/his/refetch").status_code == 403)
+        rows = {x["case_id"]: x for x in colo.get("/api/tb/cases").json()["cases"]}
+        check("5.3 the Case File list shows the link on both", rows.get("TB-H5-P18A", {}).get("linked") == 1 and rows.get("TB-H5-P18B", {}).get("linked") == 1)
+        check("5.3 the link is audited in both Case Files", "case_linked" in audit_kinds(colo, "TB-H5-P18A") and "case_linked" in audit_kinds(breast, "TB-H5-P18B"))
+        r = c.delete("/api/tb/cases/TB-H5-P18B")
+        if r.status_code == 200:
+            ctx["cases"].remove("TB-H5-P18B")
+        da2 = colo.get("/api/tb/cases/TB-H5-P18A").json()
+        check("5.3 deleting one Case File unlinks it from the other (audited)", r.status_code == 200 and (da2.get("access") or {}).get("linked_cases") == [] and "case_unlinked" in audit_kinds(colo, "TB-H5-P18A"), r.text[:120])
+    ctx["clients"] = [mdt]
+
+
+def v2_phase5_cleanup(c, ctx):
+    _v2_cleanup(c, ctx, {**H5_USERS, H5_MDT[0]: (H5_MDT[1], {})})
+
+
 def main(base, pw, only=None):
     c = httpx.Client(base_url=base, timeout=600)
     check("login", c.post("/api/auth/login", json={"username": "admin", "password": pw}).status_code == 200)
@@ -2143,6 +2385,14 @@ def main(base, pw, only=None):
             v2_phase4(c, base, ctx)
         finally:
             v2_phase4_cleanup(c, ctx)
+        print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
+        return 0 if not FAIL else 1
+    if only == "v2p5":
+        ctx = {"cases": []}
+        try:
+            v2_phase5(c, base, ctx)
+        finally:
+            v2_phase5_cleanup(c, ctx)
         print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
         return 0 if not FAIL else 1
     if only == "phase4":
@@ -2322,6 +2572,12 @@ def main(base, pw, only=None):
         v2_phase4(c, base, ctx)
     finally:
         v2_phase4_cleanup(c, ctx)
+    # 9e. V2 Phase 5: owner, participants and scoped reads; the referral (P14); two primaries (P18) (same throw-away mock)
+    ctx = {"cases": []}
+    try:
+        v2_phase5(c, base, ctx)
+    finally:
+        v2_phase5_cleanup(c, ctx)
     # 10. V1 Phase 3: dates, document type, flags, big scans
     phase3(c)
     # 11. V1 Phase 4: NCG tiers, two-level gate, failed documents, inbox and notifications, stale summary, NCG VTB export
@@ -2356,5 +2612,5 @@ def main(base, pw, only=None):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--base", default="http://127.0.0.1:7000"); ap.add_argument("--password", required=True)
-    ap.add_argument("--only", default=None, help="run one section only (phase2 | v2p2 | v2p3 | v2p4 | phase3 | phase4 | phase5 | phase6 | phase7 | phase8 | phase9 | skills | mcp | discord | records | metrics)")
+    ap.add_argument("--only", default=None, help="run one section only (phase2 | v2p2 | v2p3 | v2p4 | v2p5 | phase3 | phase4 | phase5 | phase6 | phase7 | phase8 | phase9 | skills | mcp | discord | records | metrics)")
     a = ap.parse_args(); sys.exit(main(a.base, a.password, a.only))
