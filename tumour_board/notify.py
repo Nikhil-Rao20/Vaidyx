@@ -23,7 +23,8 @@ log = logging.getLogger(__name__)
 
 # a gap routed to a department; a request closed; the Case File is ready; a Tumour Board action sent to a department (item 7.4);
 # a new document may complete a Tumour Board action (a person decides)
-KINDS = ("request", "request_closed", "case_ready", "board_action", "board_action_suggestion", "decision_value_changed")
+KINDS = ("request", "request_closed", "request_acknowledged", "request_done", "case_ready", "board_action", "board_action_suggestion", "decision_value_changed")
+UNSENT = "suggested"  # a request the gate proposed and nobody sent yet: in no inbox (V2 item 4.2)
 ROLES = ("coordinator",)
 CORE = ("id", "ts", "to", "kind", "case_id", "title", "text", "read_by")
 OPEN_STATUSES = ("pending", "overdue")
@@ -276,9 +277,12 @@ def _action_department(a: dict) -> str | None:
 
 
 def _request(case: dict, a: dict, today: date) -> dict | None:
-    """One inbox row, or None when the action is not shown (closed more than 7 days ago, or closed at an unknown time)."""
+    """One inbox row, or None when the action is not shown (closed more than 7 days ago, or closed at an unknown time, or a suggested
+    request nobody sent: V2 item 4.2)."""
     status = str(a.get("status") or "pending")
     overdue, days = False, 0
+    if status == UNSENT or (status == "completed" and a.get("never_sent")):
+        return None
     if status == "completed":
         done = str(a.get("completed") or "")[:10]
         if not done or done < (today - timedelta(days=RECENT_COMPLETED_DAYS)).isoformat():
@@ -298,6 +302,11 @@ def _request(case: dict, a: dict, today: date) -> dict | None:
     if source == "board":
         sug = a.get("suggested_close") if status != "completed" and isinstance(a.get("suggested_close"), dict) else None
         extra = {"board_record": a.get("board_record"), "suggested_close": dict(sug) if sug else None}
+    if source == "pre_authorization":  # what the department needs to find the patient in its own PACS / RIS / LIS (V2 item 4.3)
+        extra = {"uhid": p.get("mrn", ""), "encounter": _encounter_numbers(case), "accession": a.get("accession"), "pending_order": a.get("pending_order"),
+                 "department": a.get("department"), "department_id": a.get("department_id"), "free": bool(a.get("origin") == "doctor" or not a.get("requirement")),
+                 "sent": dict(a["sent"]) if isinstance(a.get("sent"), dict) else None, "acknowledged": dict(a["acknowledged"]) if isinstance(a.get("acknowledged"), dict) else None,
+                 "done": dict(a["done"]) if isinstance(a.get("done"), dict) else None, "closed_by": a.get("closed_by")}
     return {"case_id": case.get("case_id"), "source": source, "source_label": SOURCES.get(source, source), **extra,
             "patient": {"name": p.get("name", ""), "mrn": p.get("mrn", ""), "agesex": p.get("agesex", "")},
             "protocol": case.get("protocol", ""), "board_date": case.get("board_date", ""),
@@ -305,6 +314,15 @@ def _request(case: dict, a: dict, today: date) -> dict | None:
             "what": a.get("what", ""), "level": a.get("level"), "level_label": a.get("level_label", ""),
             "due": a.get("due", ""), "status": status, "overdue": overdue, "days_overdue": days,
             "created": a.get("created", ""), "completed": a.get("completed"), "history": list(a.get("history") or [])}
+
+
+def _encounter_numbers(case: dict) -> dict:
+    """The patient's newest IP No. and OP No. from the Case File's identifiers (learned from the HIS encounters, V2 item 3.2)."""
+    out = {}
+    for x in ((case or {}).get("patient") or {}).get("ids") or []:
+        if isinstance(x, dict) and x.get("kind") in ("ip_no", "op_no") and x.get("value"):
+            out[x["kind"]] = x["value"]
+    return out
 
 
 def _cases():

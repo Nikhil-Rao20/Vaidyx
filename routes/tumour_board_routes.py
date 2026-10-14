@@ -11,6 +11,7 @@ from tumour_board import confirm  # clinician confirmations (V1 item 2.2)
 from tumour_board import intake  # department uploads and patient matching (V1 items 2.3, 2.4)
 from tumour_board import board  # board sessions, attendance, agent log (V1 items 6.1 to 6.3)
 from tumour_board import followup  # Tumour Board actions in department inboxes, closing suggestions (V1 item 7.4)
+from tumour_board import dept_requests  # requests suggested by the gate, sent by the treating doctor, answered by the department (V2 items 4.2 / 4.3)
 from tumour_board import scanned  # values and citations read from scans (V1 items 8.1, 8.2)
 from tumour_board import skills  # agent role definitions as editable SKILL.md files (12 Oct)
 from tumour_board import connectors, mcp_server  # MCP: hospital-system connectors (client) and the read-only server (12 Oct)
@@ -124,7 +125,17 @@ def _case_permissions(r, c, st, docs):
             "delete_document": {d["doc_id"]: org.can(r, "delete_document", _doc_department(d)) for d in docs},
             "unfile": {d["doc_id"]: bool(d.get("intake")) and org.can(r, "match") for d in docs},
             "update_action": {a["id"]: org.can(r, "update_action", a.get("department") or None) for a in st.get("actions", [])},
+            "send_request": org.can(r, "send_request"), "create_request": org.can(r, "create_request"), "close_request": org.can(r, "close_request"),  # V2 item 4.2
+            "answer_request": {a["id"]: _can_answer(r, a) for a in st.get("actions", []) if a.get("source") == "pre_authorization"},  # V2 item 4.3
             "undo_confirmation": {x["id"]: _can_confirm(r, c, st, x["type"], x["key"]) for x in st.get("confirmations", []) if not x.get("undone")}}
+
+
+def _can_answer(r, a):
+    """Acknowledge / "done" on a request: the doctors of the department it went to; the coordinator for a request addressed to the
+    MDT Coordinator role (V2 item 4.3)."""
+    if a.get("role") == "coordinator" or org.is_coordinator_name(a.get("department_id")) or (not a.get("department_id") and org.is_coordinator_name(a.get("department"))):
+        return bool(r.get("coordinator") or r.get("admin")) and not r.get("disabled")
+    return org.can(r, "answer_request", a.get("department_id") or a.get("department") or None)
 
 
 def _can_confirm(r, c, st, ctype, key):
@@ -649,6 +660,7 @@ def setup_tumour_board_routes():
                 "discordances": discord.summary(case_id, st),  # reports that disagree, values a decision cited that later reports changed (12 Oct)
                 "trends": postboard.trends(case_id, st), "outcomes": postboard.OUTCOMES,  # values over time (12 Oct)
                 "his": his_case.public(c), "his_flags": his_case.flags(case_id, confirmed_docs),  # the hospital system, its registrations and orders; HIS values the text does not carry (V2 item 3.3)
+                "requests": dept_requests.summary(st),  # suggested / sent / done / closed counts (V2 item 4.2)
                 "groups": his_case.encounter_groups(c, confirmed_docs)}  # records grouped by OP visit and IP admission (V2 item 3.4)
 
     @r.post("/cases/{case_id}/documents")
@@ -1038,6 +1050,90 @@ def setup_tumour_board_routes():
                 store.save_state(case_id, st); store.audit(case_id, {"kind": "action_updated", "action": action_id, "by": u, **b})
                 return a
         raise HTTPException(404, "action not found")
+
+    # ---- requests to departments: suggested by the gate, sent by the treating doctor, answered by the department (V2 items 4.2 / 4.3)
+    def _request(case_id, action_id):
+        try:
+            return dept_requests.find(store.get_state(case_id), action_id)
+        except dept_requests.RequestError as e:
+            raise HTTPException(e.status, str(e))
+
+    @r.get("/cases/{case_id}/requests/{action_id}/draft")
+    async def request_draft(case_id: str, action_id: str, request: Request):
+        """The Notify dialog: the address, the subject, the editable message, the proposed due date and the mailto: link. Nothing is sent."""
+        rl = _roles(request); _need_known(rl); c = _case(case_id)
+        return dept_requests.draft(c, _request(case_id, action_id), rl.get("user") or "")
+
+    @r.post("/cases/{case_id}/requests/{action_id}/send")
+    async def request_send(case_id: str, action_id: str, request: Request):
+        """{"message"?, "due"?, "subject"?}: the treating doctor sends the suggested request in-app (edited or as drafted); sending a sent
+        request again is a reminder. The department is notified; audited."""
+        u = _user(request); rl = _roles(request); _need(rl, "send_request"); _case(case_id)
+        b = await request.json() if (await request.body()) else {}
+        b = b if isinstance(b, dict) else {}
+        async with store.lock(case_id):
+            try:
+                a = dept_requests.send(case_id, action_id, u, rl, message=str(b.get("message") or ""), due=str(b.get("due") or ""), subject_text=str(b.get("subject") or ""))
+            except dept_requests.RequestError as e:
+                raise HTTPException(e.status, str(e))
+        return {"action": a, "requests": dept_requests.summary(store.get_state(case_id))}
+
+    @r.post("/cases/{case_id}/requests")
+    async def request_create(case_id: str, request: Request):
+        """{"department", "label", "what"?, "message"?, "due"?}: a request with no protocol record behind it (a pre-anaesthetic check, a
+        medication review), written by the treating doctor and sent in one step."""
+        u = _user(request); rl = _roles(request); _need(rl, "create_request"); _case(case_id)
+        b = await request.json() if (await request.body()) else {}
+        b = b if isinstance(b, dict) else {}
+        async with store.lock(case_id):
+            try:
+                a = dept_requests.create_free(case_id, str(b.get("department") or ""), str(b.get("label") or ""), u, rl, message=str(b.get("message") or ""),
+                                              due=str(b.get("due") or ""), what=str(b.get("what") or ""))
+            except dept_requests.RequestError as e:
+                raise HTTPException(e.status, str(e))
+        return {"action": a, "requests": dept_requests.summary(store.get_state(case_id))}
+
+    def _answerable(case_id, action_id, request):
+        a = _request(case_id, action_id)
+        if not _can_answer(_roles(request), a):
+            raise HTTPException(403, f"Only the doctors of {a.get('department') or 'that department'} answer this request.")
+        return a
+
+    @r.post("/cases/{case_id}/requests/{action_id}/acknowledge")
+    async def request_acknowledge(case_id: str, action_id: str, request: Request):
+        """The department has read the request and is working on it; the owning department is told."""
+        u = _user(request); _case(case_id); _answerable(case_id, action_id, request)
+        async with store.lock(case_id):
+            try:
+                a = dept_requests.acknowledge(case_id, action_id, u)
+            except dept_requests.RequestError as e:
+                raise HTTPException(e.status, str(e))
+        return {"action": a}
+
+    @r.post("/cases/{case_id}/requests/{action_id}/done")
+    async def request_done(case_id: str, action_id: str, request: Request):
+        """{"note"?}: "done" back from the department. A gap request stays open until the re-fetch (or upload) brings the record; a free
+        request closes here. The owning department is told."""
+        u = _user(request); _case(case_id); _answerable(case_id, action_id, request)
+        b = await request.json() if (await request.body()) else {}
+        async with store.lock(case_id):
+            try:
+                a = dept_requests.done(case_id, action_id, u, note=str((b or {}).get("note") or "") if isinstance(b, dict) else "")
+            except dept_requests.RequestError as e:
+                raise HTTPException(e.status, str(e))
+        return {"action": a}
+
+    @r.post("/cases/{case_id}/requests/{action_id}/close")
+    async def request_close(case_id: str, action_id: str, request: Request):
+        """{"note"?}: the treating doctor closes a request that has no protocol record behind it."""
+        u = _user(request); rl = _roles(request); _need(rl, "close_request"); _case(case_id)
+        b = await request.json() if (await request.body()) else {}
+        async with store.lock(case_id):
+            try:
+                a = dept_requests.close_free(case_id, action_id, u, note=str((b or {}).get("note") or "") if isinstance(b, dict) else "")
+            except dept_requests.RequestError as e:
+                raise HTTPException(e.status, str(e))
+        return {"action": a}
 
     def _board_action(case_id, action_id, request):
         a = next((x for x in store.get_state(case_id).get("actions", []) if x.get("id") == action_id), None)

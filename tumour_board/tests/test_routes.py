@@ -136,15 +136,20 @@ def test_gate_rows_show_the_routed_department(demo_cases):
 
 
 def test_coordinator_routed_gap_opens_an_action_for_the_coordinator_row(unit_case, monkeypatch):
-    """A record routed to the MDT Coordinator (an override here) opens an action with role coordinator and a notification to the role."""
-    from tumour_board import notify, store
+    """A record routed to the MDT Coordinator (an override here) opens an action with role coordinator; the treating doctor sends it and
+    the role is notified (V2 item 4.2); the coordinator row of the inbox shows it."""
+    from tumour_board import dept_requests, notify, store
     from tumour_board.tests import util
     o = copy.deepcopy(org.load()); o["routes"] = {"unit.ct_thorax": "coordinator"}; org.save(o, by="root")
     g = rules.evaluate(unit_case)
     assert {r["id"]: r["department"] for r in g["requirements"]}["ct_thorax"] == org.COORDINATOR_NAME
     st = rules.sync_actions(unit_case, g)
     a = next(x for x in st["actions"] if x["requirement"] == "ct_thorax")
-    assert a["department"] == org.COORDINATOR_NAME and a["department_id"] is None and a["role"] == "coordinator"
+    assert a["department"] == org.COORDINATOR_NAME and a["department_id"] is None and a["role"] == "coordinator" and a["status"] == "suggested"
+    assert not any(n.get("action_id") == a["id"] for n in notify._load())
+    d = dept_requests.draft(store.get_case(unit_case), a, "dr.meera")
+    assert d["to"] == {"department": None, "name": org.COORDINATOR_NAME, "email": "", "role": "coordinator"} and d["mailto"] == ""
+    dept_requests.send(unit_case, a["id"], "dr.meera", {"user": "dr.meera", "treating": {"breast_surgery": "member"}})
     assert any(n["to"] == {"role": "coordinator"} and n["action_id"] == a["id"] for n in notify._load())
     box = notify.inbox(org.roles("", vaidyx_admin=True))
     assert a["id"] in [q["action_id"] for d in box["departments"] if d["id"] == "coordinator" for q in d["requests"]]

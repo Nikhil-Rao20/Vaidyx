@@ -107,8 +107,9 @@ class FakeTB:
 
     def _actions(self):
         closed = self.stage == "arrived" and self.arrivals_close
+        sent = getattr(self, "sent", False)  # V2 item 4.2: suggested by the gate until the treating side sends it
         return [{"id": "A1", "requirement": "cystoscopy_proctoscopy", "source": "pre_authorization", "department": "Gynaecologic Oncology", "level": 1,
-                 "status": "completed" if closed else "pending"}]
+                 "status": "completed" if closed else ("pending" if sent else "suggested")}]
 
     # HTTP --------------------------------------------------------------------------------------------------------------
     def get(self, url, params=None):
@@ -122,8 +123,9 @@ class FakeTB:
         if url == "/api/tb/intake":
             return Resp({"documents": []})
         if url == "/api/tb/inbox":
+            a = self._actions()[0]
             rows = {"gynaecologic_oncology": [{"case_id": "TB-008", "source": "pre_authorization", "requirement": "cystoscopy_proctoscopy", "label": "Cystoscopy",
-                                           "status": self._actions()[0]["status"]}], "radiation_oncology": []}
+                                           "status": a["status"]}] if a["status"] != "suggested" else [], "radiation_oncology": []}  # a suggestion is in no inbox
             for _ in self.board:
                 rows["radiation_oncology"].append({"case_id": "TB-008", "source": "board", "source_label": "Tumour Board action", "requirement": None, "label": "Start chemoradiation", "status": "pending"})
             return Resp({"departments": [{"id": k, "requests": v} for k, v in rows.items()]})
@@ -135,8 +137,11 @@ class FakeTB:
     def post(self, url, json=None, files=None, data=None):
         self.posts.append((url, json))
         if url == "/api/tb/demo/TB-008":
-            self.stage, self.listed = "imported", False
+            self.stage, self.listed, self.sent = "imported", False, False
             return Resp({"job": "import"})
+        if url == "/api/tb/cases/TB-008/requests/A1/send":
+            self.sent = True
+            return Resp({"action": self._actions()[0]})
         if url == "/api/tb/cases/TB-008/listing":
             self.listed = True
             return Resp({"job": "listing", "total": 0})

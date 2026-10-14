@@ -56,10 +56,16 @@ def _pct(n, d):
 
 # ---- agenda readiness and the chase list -----------------------------------------------------------------------------------
 
+def bd_soon(board_day, today, days: int = 3) -> bool:
+    """A board within `days`: a suggested request nobody sent is then a risk, not a routine."""
+    return bool(board_day) and (board_day - today).days <= days
+
+
 def _case_readiness(c: dict, st: dict, today: date, board_day) -> dict:
     gate = st.get("gate") or {}
     acts = [a for a in st.get("actions") or [] if a.get("status") != "completed"]
     pre = [a for a in acts if a.get("source") == "pre_authorization"]
+    unsent = [a for a in pre if a.get("status") == "suggested"]  # suggested by the gate, not sent by the doctor yet (V2 item 4.2)
     overdue = [a for a in acts if _d(a.get("due")) and _d(a["due"]) < today]
     after_board = [a for a in pre if board_day and _d(a.get("due")) and _d(a["due"]) > board_day]
     arts = st.get("artefacts") or {}
@@ -78,6 +84,8 @@ def _case_readiness(c: dict, st: dict, today: date, board_day) -> dict:
         forecast, why = "at_risk", f"{len(after_board)} request(s) due after the board date"
     elif overdue:
         forecast, why = "at_risk", f"{len(overdue)} request(s) overdue"
+    elif unsent:
+        forecast, why = "at_risk" if bd_soon(board_day, today) else "on_track", f"{len(unsent)} suggested request(s) not sent yet" + (f", {len(pre) - len(unsent)} sent" if len(pre) > len(unsent) else "")
     elif pre:
         forecast, why = "on_track", f"{len(pre)} request(s) open, all due before the board"
     else:
@@ -85,7 +93,7 @@ def _case_readiness(c: dict, st: dict, today: date, board_day) -> dict:
     return {"case_id": c["case_id"], "patient": (c.get("patient") or {}).get("name") or c["case_id"], "protocol": c.get("protocol"), "board_date": c.get("board_date"),
             "readiness": gate.get("readiness"), "passed": bool(gate.get("passed")), "satisfied": gate.get("satisfied"), "total": gate.get("total"),
             "level1_open": (gate.get("levels") or {}).get("1", {}).get("open", 0), "level2_open": (gate.get("levels") or {}).get("2", {}).get("open", 0),
-            "open_requests": len(pre), "overdue": len(overdue), "due_after_board": len(after_board), "blockers": len(gate.get("blockers") or []),
+            "open_requests": len(pre), "unsent_requests": len(unsent), "overdue": len(overdue), "due_after_board": len(after_board), "blockers": len(gate.get("blockers") or []),
             "summary": "none" if not summ else ("stale" if stale else "ready"), "briefs": briefs,
             "discordances_open": disc.get("open_review", 0), "decision_watch": disc.get("decision_watch", 0),
             "forecast": forecast, "why": why,
@@ -108,7 +116,8 @@ def agenda(board_date: str) -> dict:
             dept = a.get("department") or org.COORDINATOR_NAME
             chase.setdefault(dept, []).append({"case_id": c["case_id"], "patient": rows[-1]["patient"], "label": a.get("label"), "what": a.get("what"), "due": a.get("due"),
                                                "days_left": (due - today).days if due else None, "overdue": bool(due and due < today), "after_board": bool(due and bd and due > bd),
-                                               "source": a.get("source"), "level": a.get("level_label")})
+                                               "source": a.get("source"), "level": a.get("level_label"),
+                                               "unsent": a.get("status") == "suggested", "sent_by": (a.get("sent") or {}).get("by") if isinstance(a.get("sent"), dict) else None})
     for v in chase.values():
         v.sort(key=lambda x: (x["due"] or "9999", x["case_id"]))
     order = {"blocked": 0, "at_risk": 1, "on_track": 2, "not_listed": 3, "ready": 4}
@@ -116,7 +125,8 @@ def agenda(board_date: str) -> dict:
     counts = {k: sum(1 for r in rows if r["forecast"] == k) for k in ("ready", "on_track", "at_risk", "blocked", "not_listed")}
     return {"board_date": board_date, "days_to_board": (bd - today).days if bd else None, "cases": rows, "counts": counts,
             "chase": [{"department": d, "items": v, "overdue": sum(x["overdue"] for x in v)} for d, v in sorted(chase.items(), key=lambda kv: (-len(kv[1]), kv[0]))],
-            "requests_open": sum(len(v) for v in chase.values()), "requests_overdue": sum(x["overdue"] for v in chase.values() for x in v)}
+            "requests_open": sum(len(v) for v in chase.values()), "requests_overdue": sum(x["overdue"] for v in chase.values() for x in v),
+            "requests_unsent": sum(1 for v in chase.values() for x in v if x["unsent"])}
 
 
 # ---- the hospital's quality dashboard -----------------------------------------------------------------------------------

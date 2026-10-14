@@ -523,8 +523,10 @@ def v2_phase3(c, base, ctx):
         check("3.3 P12 preliminary CT is a Level 1 gap with its accession No.", _gaps(d) == [("cect_tap", 1)] and r12["status"] == "not_final" and r12["accession"] == "RAD/26/01004", json.dumps(_gaps(d)))
         a = next((x for x in d["state"]["actions"] if x["requirement"] == "cect_tap"), {})
         check("3.3 P12 request routed to Radiology carries the accession No.", a.get("department") == "Radiology" and a.get("accession") == "RAD/26/01004" and a.get("status") != "completed")
+        check("4.2 P12 the request is suggested, not sent: not in the Radiology inbox yet", a.get("status") == "suggested" and not _open_rows(rad, "radiology", cid, "cect_tap"))
+        rs_ = medonc.post(f"/api/tb/cases/{cid}/requests/{a.get('id')}/send", json={})
         rows = _open_rows(rad, "radiology", cid, "cect_tap")
-        check("3.3 P12 Radiology inbox shows the request", len(rows) == 1)
+        check("3.3 P12 Radiology inbox shows the request once the treating doctor sent it", rs_.status_code == 200 and len(rows) == 1, rs_.text[:120])
         check("3.2 P12 the OPD note of 2025 is outside the 12-month window and counted as older", d["case"]["his"]["older_available"] == 1 and d["case"]["his"]["window"] == {"months": 12})
         ct = next(x for x in d["documents"] if x["his"]["id"] == "p12-r02")
         check("3.3 P12 preliminary CT: status and signature from the HIS (preliminary, not signed)", ct["classification"]["status"] == "PRELIMINARY" and ct["classification"]["signed"] == "no" and ct["his"]["signed"] is False)
@@ -914,6 +916,12 @@ def phase4(c, base):
         a = acts.get("cect_tap") or {}
         check("4.2 Level 1 request routed to the department that owns the record (Radiology)", a.get("level") == 1 and a.get("department") == "Radiology" and a.get("department_id") == "radiology", json.dumps({k: a.get(k) for k in ("level", "department", "department_id")}))
         check("4.2 gate summarises open gaps per level", g["levels"]["1"]["open"] >= 1 and "label" in g["levels"]["2"], json.dumps(g["levels"]))
+        # V2 4.2: the gap is only suggested; nothing reaches Radiology until the treating side sends it
+        check("4.2 (V2) a new gap is a suggested request: no due date, nothing sent, not in the Radiology inbox", a.get("status") == "suggested" and a.get("due") is None
+              and not [q for dd in m.get("/api/tb/inbox").json()["departments"] for q in dd["requests"] if q["case_id"] == "TB-TEST4"]
+              and not any(n["kind"] == "request" and n["case_id"] == "TB-TEST4" for n in m.get("/api/tb/notifications").json()["notifications"]), json.dumps({k: a.get(k) for k in ("status", "due")}))
+        sent = _send_suggested(c, "TB-TEST4", "cect_tap")
+        check("4.2 (V2) the request is sent in-app (the admin stands in for the treating doctor)", bool(sent) and all(st_ == 200 for _, st_ in sent), json.dumps(sent))
         # 4.4 the radiology member sees the request in the inbox and the bell
         ib = m.get("/api/tb/inbox").json()
         mine = [q for dd in ib["departments"] for q in dd["requests"] if q["case_id"] == "TB-TEST4"]
@@ -937,6 +945,9 @@ def phase4(c, base):
         a = next((x for x in d["state"]["actions"] if x["requirement"] == "cect_tap" and x["status"] != "completed"), {})
         check("4.2 Level 2 request routed to the department that uploaded the record (Radio-diagnosis)", a.get("level") == 2 and a.get("department_id") == "radiology" and a.get("source_doc_id") == (filed[0]["doc_id"] if filed else None)
               and any("Level 2" in h["event"] for h in a.get("history", [])), json.dumps({k: a.get(k) for k in ("level", "department", "department_id", "source_doc_id")}))
+        check("4.2 (V2) the moved request is a suggestion again, the earlier sending kept, nothing forwarded by itself", a.get("status") == "suggested" and a.get("due") is None
+              and (a.get("earlier") or [{}])[0].get("department_id") == "radiology" and (a.get("earlier") or [{}])[0].get("sent", {}).get("count") == 1, json.dumps({k: a.get(k) for k in ("status", "earlier")})[:200])
+        _send_suggested(c, "TB-TEST4", "cect_tap")  # the doctor sends the Level 2 request so Radiology hears when it closes
         # the corrected CECT arrives: the request closes by itself and the coordinator is told the Case File is ready
         ct2 = ct1.decode().replace("Study date: 24/09/2026", "Study date: 25/09/2026 (repeat read with measurements)").replace("Findings: spiculated mass in the right upper lobe;", "Findings: spiculated mass in the right upper lobe measuring 4.2 x 3.1 cm;").encode()
         r = m.post("/api/tb/intake/documents", files=[("files", ("cect_tap_2026-09-25_measured.txt", ct2))], data={"paths": json.dumps(["cect_tap_2026-09-25_measured.txt"]), "department": "radiology"}).json()
@@ -1431,6 +1442,18 @@ def _confirm_disputed(c, cid, d, g):
     return out
 
 
+def _send_suggested(c, cid, requirement=None, message=""):
+    """V2 item 4.2: the gate only suggests a request; the treating side (here the admin client) sends it before a department can see
+    it in its inbox. Returns [(action id, HTTP status)] for the requests sent."""
+    d = c.get(f"/api/tb/cases/{cid}").json()
+    out = []
+    for a in d["state"].get("actions") or []:
+        if a.get("source", "pre_authorization") == "pre_authorization" and a.get("status") == "suggested" and (requirement is None or a.get("requirement") == requirement):
+            r = c.post(f"/api/tb/cases/{cid}/requests/{a['id']}/send", json={"message": message})
+            out.append((a["id"], r.status_code))
+    return out
+
+
 def _open_rows(c, dept, cid, requirement):
     """Inbox rows of a department for one Case File's Pre-Authorization request."""
     ib = c.get("/api/tb/inbox").json()
@@ -1528,8 +1551,10 @@ def phase9_case(c, cid, spec):
               f"{g.get('satisfied')}/{g.get('total')} " + json.dumps(unsat)[:200] + f"; L{gr.get('level')}" + (f"; reader slips confirmed {fixed}" if fixed else ""))
         act = [a for a in d["state"].get("actions") or [] if a.get("requirement") == gap["record"] and a.get("source", "pre_authorization") == "pre_authorization"
                and a.get("status") != "completed"]
+        suggested = bool(act) and act[0].get("status") == "suggested"
+        _send_suggested(c, cid, gap["record"])  # V2 4.2: suggested by the gate, sent by the treating side
         rows = [q for q in _open_rows(c, gap["inbox"], cid, gap["record"]) if q["status"] != "completed"]
-        check(f"{tag}: {gap['record']} routed to {gap['department']}: an open request in its inbox", bool(act) and act[0].get("department") == gap["department"] and bool(rows),
+        check(f"{tag}: {gap['record']} routed to {gap['department']}: suggested by the gate, an open request in its inbox once sent", suggested and act[0].get("department") == gap["department"] and bool(rows),
               f"actions {[(a.get('department'), a.get('status'), a.get('level')) for a in act]}; inbox {[(q.get('label'), q.get('status')) for q in rows]}")
     # b. listing with the NCG setting
     r = c.post(f"/api/tb/cases/{cid}/listing", json=spec["listing"])
@@ -1867,6 +1892,218 @@ def phase9(c):
         phase9_case(c, cid, spec)
 
 
+# ---- V2 Phase 4: Pre-Authorization and notifications (4.2 doctor-sent requests, 4.3 supporting inbox, 4.4 stale summary) -----------
+# Same throw-away mock copy as the Phase 3 section (port 7131); its own throw-away doctor logins.
+H4_USERS = {"tb-e2e-h4-medonc": ("H4medonc-e2e-2026!", {"medical_oncology": "doctor"}), "tb-e2e-h4-gyn": ("H4gyn-e2e-2026!", {"gynaecologic_oncology": "doctor"}),
+            "tb-e2e-h4-surg": ("H4surg-e2e-2026!", {"surgical_oncology": "doctor"}), "tb-e2e-h4-rad": ("H4rad-e2e-2026!", {"radiology": "doctor"}),
+            "tb-e2e-h4-path": ("H4path-e2e-2026!", {"pathology": "doctor"}), "tb-e2e-h4-anaes": ("H4anaes-e2e-2026!", {"anaesthesiology": "doctor"})}
+
+
+def _v2_setup(c, base, ctx, users, tag):
+    """The mock copy on 7131 as the HIS, throw-away doctor logins created through the Tumour Board (never a Vaidyx admin); clients per login."""
+    tmp, proc = _mock_copy(); ctx["tmp"], ctx["proc"] = tmp, proc
+    r = c.put("/api/tb/his", json={"kind": "fhir", "label": "Vaidyx Demo Hospital HIS (SYNTHETIC) e2e copy", "url": f"http://127.0.0.1:{MOCK_PORT}", "token": (tmp / "token").read_text().strip(), "enabled": True})
+    check(f"{tag} the HIS connection points at the throw-away mock copy", r.status_code == 200 and c.get("/api/tb/his").json()["status"]["ok"], r.text[:120])
+    cl = {}
+    for u, (pw, depts) in users.items():
+        c.request("DELETE", "/api/auth/users", json={"username": u})
+        r = c.post("/api/tb/org/accounts", json={"username": u, "password": pw, "departments": depts, "display_name": f"{u} (e2e)"})
+        cl[u] = httpx.Client(base_url=base, timeout=600)
+        if not (r.status_code == 200 and cl[u].post("/api/auth/login", json={"username": u, "password": pw}).status_code == 200):
+            check(f"{tag} e2e login {u}", False, r.text[:120])
+    return cl
+
+
+def _v2_cleanup(c, ctx, users):
+    """Delete the Case Files and accounts of the section, restore the live HIS connection, stop the e2e mock copy."""
+    for cid in ctx.get("cases") or []:
+        try:
+            c.delete(f"/api/tb/cases/{cid}")
+        except Exception as e:
+            print("cleanup case failed:", cid, e)
+    try:
+        o = c.get("/api/tb/org").json()
+        c.put("/api/tb/org", json={"users": {k: v for k, v in (o.get("users") or {}).items() if k not in users}})
+    except Exception as e:
+        print("cleanup org failed:", e)
+    for u in users:
+        c.request("DELETE", "/api/auth/users", json={"username": u})
+    try:
+        tok = (REPO / "data" / "his_mock" / "token").read_text().strip()
+        r = c.put("/api/tb/his", json={**LIVE_HIS, "token": tok})
+        print("HIS connection restored:", r.status_code, (r.json().get("settings") or {}).get("url") if r.status_code == 200 else r.text[:120])
+        (REPO / "data" / "tumour_board" / "his.json").unlink(missing_ok=True)  # back to the pristine default (the demo token file), not a saved copy of the token
+    except Exception as e:
+        print("restore HIS failed:", e)
+    proc = ctx.get("proc")
+    if proc:
+        try:
+            proc.terminate(); proc.wait(timeout=10)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+    if ctx.get("tmp"):
+        shutil.rmtree(ctx["tmp"], ignore_errors=True)
+
+
+def _notes_of(client, cid, kind):
+    return [n for n in client.get("/api/tb/notifications", params={"limit": 200}).json()["notifications"] if n["case_id"] == cid and n["kind"] == kind]
+
+
+def v2_phase4(c, base, ctx):
+    """V2 Phase 4 on the fixture patients (SYNTHETIC): P12 notify -> acknowledge -> done -> sign on the RIS desk -> re-fetch -> closed ->
+    owner told, with the mail draft and the readiness list; P11 closes itself on re-fetch although "done" was never sent; P07 a free
+    request to Anaesthesiology; the Case File summary waits for the gate and goes stale after a re-fetch changes the Case File."""
+    import datetime
+    cl = _v2_setup(c, base, ctx, H4_USERS, "4.2")
+    medonc, gyn, surg, rad, path, anaes = (cl[k] for k in ("tb-e2e-h4-medonc", "tb-e2e-h4-gyn", "tb-e2e-h4-surg", "tb-e2e-h4-rad", "tb-e2e-h4-path", "tb-e2e-h4-anaes"))
+    today = datetime.date.today()
+
+    def create(client, ident, protocol, setting, cid, board_date=""):
+        r = client.post("/api/tb/cases/from-his", json={"identifier": ident, "protocol": protocol, "setting": setting, "hospital_level": "optimal", "case_id": cid, "board_date": board_date})
+        if r.status_code != 200:
+            check(f"4.2 create {cid} from {ident}", False, r.text[:200]); return None, None
+        ctx["cases"].append(cid)
+        body, j, secs = _job(client, r)
+        return client.get(f"/api/tb/cases/{cid}").json(), j
+
+    def action(client, cid, requirement):
+        return next((x for x in client.get(f"/api/tb/cases/{cid}").json()["state"]["actions"] if x.get("requirement") == requirement), {})
+
+    # ---- P12 (lung, preliminary CT): the whole loop ---------------------------------------------------------------------------
+    bd = (today + datetime.timedelta(days=7)).isoformat()
+    d, j = create(medonc, "IP/26/01875", "lung_nsclc", "non_metastatic", "TB-H4-P12", board_date=bd)
+    if d:
+        cid = "TB-H4-P12"; a = action(medonc, cid, "cect_tap")
+        check("4.2 P12 the gap is a suggested request: no due date, nothing sent, counted as unsent", a.get("status") == "suggested" and a.get("due") is None and a.get("accession") == "RAD/26/01004"
+              and d["requests"] == {"suggested": 1, "sent": 0, "done": 0, "closed": 0} and d["permissions"]["send_request"] is True and d["permissions"]["create_request"] is True,
+              json.dumps({k: a.get(k) for k in ("status", "due", "accession")}) + " " + json.dumps(d.get("requests")))
+        check("4.2 P12 nothing reached Radiology: no inbox row, no notification", not _open_rows(rad, "radiology", cid, "cect_tap") and not _notes_of(rad, cid, "request"))
+        ag = c.get("/api/tb/metrics/agenda", params={"date": bd}).json()
+        row = next((x for x in ag["cases"] if x["case_id"] == cid), {})
+        check("4.2 P12 the coordinator's readiness list shows the unsent request", row.get("unsent_requests") == 1 and row.get("open_requests") == 1 and ag.get("requests_unsent", 0) >= 1
+              and any(it["case_id"] == cid and it["unsent"] for g_ in ag["chase"] for it in g_["items"]), json.dumps({k: row.get(k) for k in ("unsent_requests", "open_requests", "forecast", "why")}))
+        dr = medonc.get(f"/api/tb/cases/{cid}/requests/{a.get('id')}/draft")
+        dj = dr.json() if dr.status_code == 200 else {}
+        body = dj.get("body") or ""
+        check("4.2 P12 the draft names the patient, UHID, IP No., the record, what is missing, the accession No. and the due date", dr.status_code == 200 and dj["to"]["department"] == "radiology"
+              and dj["to"]["email"] and "UHID VXH/26/004212" in body and "IP No. IP/26/01875" in body and "Required record: " in body and "What is missing: " in body
+              and "Accession / order No.: RAD/26/01004" in body and "Needed by: " in body and dj["due"] == (today + datetime.timedelta(days=int(a.get("sla_days") or 3))).isoformat()
+              and dj["uhid"] == "VXH/26/004212" and dj["encounter"].get("ip_no") == "IP/26/01875", (dr.text if dr.status_code != 200 else body)[:300])
+        import urllib.parse
+        q = urllib.parse.parse_qs(urllib.parse.urlsplit(dj.get("mailto") or "").query)
+        check("4.2 P12 the mail draft is a mailto: to the department's address with the same subject and body", (dj.get("mailto") or "").startswith(f"mailto:{dj.get('to', {}).get('email')}?")
+              and q.get("subject") == [dj.get("subject")] and q.get("body") == [body], (dj.get("mailto") or "")[:120])
+        check("4.2 P12 a supporting doctor cannot send a request (403)", rad.post(f"/api/tb/cases/{cid}/requests/{a.get('id')}/send", json={}).status_code == 403)
+        check("4.3 P12 acknowledging a request nobody sent is refused (409)", rad.post(f"/api/tb/cases/{cid}/requests/{a.get('id')}/acknowledge").status_code == 409)
+        due = (today + datetime.timedelta(days=5)).isoformat()
+        r = medonc.post(f"/api/tb/cases/{cid}/requests/{a.get('id')}/send", json={"message": body + "\nPlease report before the board.", "due": due})
+        a = r.json().get("action", {}) if r.status_code == 200 else {}
+        check("4.2 P12 the treating doctor sends the edited request in-app: pending with the due date, sent by, audited", r.status_code == 200 and a.get("status") == "pending" and a.get("due") == due
+              and a.get("sent", {}).get("by") == "tb-e2e-h4-medonc" and a["sent"]["count"] == 1 and "Please report before the board." in a["sent"]["message"] and "Sent by tb-e2e-h4-medonc (Medical Oncology)" in a["sent"]["message"]
+              and any(e["kind"] == "request_sent" and e["by"] == "tb-e2e-h4-medonc" and e["department"] == "Radiology" for e in medonc.get(f"/api/tb/cases/{cid}/audit").json()["events"]), r.text[:200])
+        rows = _open_rows(rad, "radiology", cid, "cect_tap")
+        check("4.3 P12 the Radiology inbox shows the request with the UHID, IP No., accession No. and who sent it", len(rows) == 1 and rows[0]["uhid"] == "VXH/26/004212" and rows[0]["encounter"].get("ip_no") == "IP/26/01875"
+              and rows[0]["accession"] == "RAD/26/01004" and rows[0]["sent"]["by"] == "tb-e2e-h4-medonc" and rows[0]["status"] == "pending" and rows[0]["acknowledged"] is None, json.dumps(rows)[:200])
+        n = _notes_of(rad, cid, "request")
+        check("4.2 P12 Radiology is notified with the message", len(n) == 1 and "Please report before the board." in n[0].get("message", "") and n[0].get("uhid") == "VXH/26/004212" and n[0].get("reminder") is False)
+        row = next((x for x in c.get("/api/tb/metrics/agenda", params={"date": bd}).json()["cases"] if x["case_id"] == cid), {})
+        check("4.2 P12 the readiness list counts it as sent now", row.get("unsent_requests") == 0 and row.get("open_requests") == 1, json.dumps({k: row.get(k) for k in ("unsent_requests", "open_requests")}))
+        r = medonc.post(f"/api/tb/cases/{cid}/requests/{a.get('id')}/send", json={})
+        check("4.2 P12 sending again is a reminder (count 2, notification marked reminder)", r.status_code == 200 and r.json()["action"]["sent"]["count"] == 2 and _notes_of(rad, cid, "request")[0].get("reminder") is True
+              and r.json()["action"]["due"] == due, r.text[:120])
+        check("4.3 P12 the treating doctor cannot acknowledge for Radiology (403)", medonc.post(f"/api/tb/cases/{cid}/requests/{a.get('id')}/acknowledge").status_code == 403)
+        r = rad.post(f"/api/tb/cases/{cid}/requests/{a.get('id')}/acknowledge")
+        check("4.3 P12 Radiology acknowledges: the owning department is told", r.status_code == 200 and r.json()["action"]["acknowledged"]["by"] == "tb-e2e-h4-rad"
+              and len(_notes_of(medonc, cid, "request_acknowledged")) == 1 and rad.post(f"/api/tb/cases/{cid}/requests/{a.get('id')}/acknowledge").status_code == 409, r.text[:120])
+        r = rad.post(f"/api/tb/cases/{cid}/requests/{a.get('id')}/done", json={"note": "Reported and signed in the RIS (synthetic)"})
+        told = _notes_of(medonc, cid, "request_done")
+        check("4.3 P12 \"done\" back with a note: the request stays open until the record arrives, the owner is told to re-fetch", r.status_code == 200 and r.json()["action"]["status"] == "pending"
+              and r.json()["action"]["done"]["note"] == "Reported and signed in the RIS (synthetic)" and len(told) == 1 and told[0].get("refetch_offer") is True and "Re-fetch" in told[0]["text"]
+              and _open_rows(rad, "radiology", cid, "cect_tap")[0]["done"]["by"] == "tb-e2e-h4-rad", r.text[:160])
+        check("4.2 P12 a gap request cannot be closed by hand (409): it closes when the record arrives, or through a waiver", medonc.post(f"/api/tb/cases/{cid}/requests/{a.get('id')}/close", json={}).status_code == 409)
+        # 4.4 the summary waits for the gate
+        sm = medonc.post(f"/api/tb/cases/{cid}/summary", json={}).json()
+        check("4.4 P12 the Case File summary is not compiled while a Pre-Authorization check is open", sm.get("status") == "gate_not_met" and "CECT" in " ".join(sm.get("open") or []), json.dumps(sm)[:160])
+        # the radiologist completes and signs on the RIS desk of the e2e copy; the treating doctor re-fetches
+        rs = httpx.post(f"http://127.0.0.1:{MOCK_PORT}/desk/api/RAD/orders/rad-26-01004/sign", json={"signer": "prac-vxreg-20201"}, timeout=60)
+        r = medonc.post(f"/api/tb/cases/{cid}/his/refetch")
+        body_, jj, secs = _job(medonc, r)
+        d2 = medonc.get(f"/api/tb/cases/{cid}").json()
+        a2 = next((x for x in d2["state"]["actions"] if x["requirement"] == "cect_tap"), {})
+        check("4.3 P12 after the desk sign and the re-fetch the request closed itself and the gate passes", rs.status_code == 200 and d2["state"]["gate"]["passed"] and a2.get("status") == "completed"
+              and jj.get("refetch_result", {}).get("closed") == [a.get("id")], json.dumps(_gaps(d2)))
+        rows = _open_rows(rad, "radiology", cid, "cect_tap")
+        check("4.3 P12 the owner is told what closed; Radiology sees the request closed in its inbox and is told", any(n.get("refetch") and a.get("id") in (n.get("closed") or []) for n in _notes_of(medonc, cid, "request_closed"))
+              and len(rows) == 1 and rows[0]["status"] == "completed" and len(_notes_of(rad, cid, "request_closed")) >= 1, json.dumps([(x["status"], x.get("done", {}) or {}) for x in rows])[:160])
+        check("4.2 P12 counts: nothing suggested, nothing open, one closed", d2["requests"] == {"suggested": 0, "sent": 0, "done": 0, "closed": 1}, json.dumps(d2["requests"]))
+        # 4.4 the summary compiles once the gate passes, then goes stale when a re-fetch changes the Case File
+        sm = medonc.post(f"/api/tb/cases/{cid}/summary", json={}).json()
+        stale = medonc.get(f"/api/tb/cases/{cid}").json()["stale"].get("summary")
+        check("4.4 P12 the summary compiles once the gate passes, every sentence cited, not stale", sm.get("status") == "ready" and sm.get("paragraphs") and all(x.get("citations") for p_ in sm["paragraphs"] for x in p_) and stale == "",
+              f"{sm.get('status')} {sm.get('seconds')} s stale {stale!r}")
+        ra = httpx.post(f"http://127.0.0.1:{MOCK_PORT}/desk/api/RAD/reports/p12-r02/addendum", json={"signer": "prac-vxreg-20201", "note": "Addendum (synthetic e2e): measurements re-checked, no change in impression."}, timeout=60)
+        r = medonc.post(f"/api/tb/cases/{cid}/his/refetch")
+        body_, jj, secs = _job(medonc, r)
+        d3 = medonc.get(f"/api/tb/cases/{cid}").json()
+        stale = d3["stale"].get("summary") or ""
+        notice = [n for n in _notes_of(medonc, cid, "request_closed") if n.get("refetch") and n.get("summary_stale")]
+        check("4.4 P12 an addendum signed on the desk and re-fetched makes the summary stale (the stale banner)", ra.status_code == 200 and body_["his"]["added"] >= 1
+              and stale.startswith("The Case File changed since this was generated") and d3["state"]["gate"]["passed"],
+              json.dumps({"desk": ra.status_code, "his": body_.get("his"), "stale": stale[:100], "passed": d3["state"]["gate"].get("passed"), "gaps": _gaps(d3)})[:300])
+        check("4.4 P12 the re-fetch result and the owner's notice say the summary is stale", jj.get("refetch_result", {}).get("summary_stale") == stale and len(notice) >= 1
+              and "summary compiled earlier is stale" in notice[0]["text"], json.dumps({"job": jj.get("refetch_result"), "notice": [n["text"][:120] for n in notice]})[:300])
+        sm = medonc.post(f"/api/tb/cases/{cid}/summary", json={}).json()
+        stale = medonc.get(f"/api/tb/cases/{cid}").json()["stale"].get("summary")
+        check("4.4 P12 the doctor regenerates the summary: fresh again", sm.get("status") == "ready" and stale == "", f"{sm.get('status')} stale {stale!r}")
+
+    # ---- P11 (cervix, final without a signature): closes itself on re-fetch although "done" was never sent -------------------------
+    d, j = create(gyn, "VXH/26/004211", "cervix", "early", "TB-H4-P11")
+    if d:
+        cid = "TB-H4-P11"; a = action(gyn, cid, "histopathology")
+        r = gyn.post(f"/api/tb/cases/{cid}/requests/{a.get('id')}/send", json={})
+        rows = _open_rows(path, "pathology", cid, "histopathology")
+        check("4.3 P11 the request to Pathology sits in its inbox with the accession No.", r.status_code == 200 and len(rows) == 1 and rows[0]["accession"] == "PATH/26/00434" and rows[0]["uhid"] == "VXH/26/004211", r.text[:120])
+        rs = httpx.post(f"http://127.0.0.1:{MOCK_PORT}/desk/api/PATH/orders/path-26-00434/sign", json={"signer": "prac-vxreg-20204"}, timeout=60)
+        r = gyn.post(f"/api/tb/cases/{cid}/his/refetch")
+        body_, jj, secs = _job(gyn, r)
+        d2 = gyn.get(f"/api/tb/cases/{cid}").json()
+        rows = _open_rows(path, "pathology", cid, "histopathology")
+        check("4.3 P11 the request closes itself on re-fetch evidence although \"done\" was never sent; Pathology and the owner are told", rs.status_code == 200 and d2["state"]["gate"]["passed"]
+              and next(x for x in d2["state"]["actions"] if x["requirement"] == "histopathology")["status"] == "completed" and rows and rows[0]["status"] == "completed" and rows[0]["done"] is None
+              and len(_notes_of(path, cid, "request_closed")) >= 1 and any(n.get("refetch") for n in _notes_of(gyn, cid, "request_closed")), json.dumps(_gaps(d2)))
+
+    # ---- P07 (oral cavity, complete work-up): a free request with no protocol record behind it --------------------------------------
+    d, j = create(surg, "VXH/26/004207", "oral_cavity", "locally_advanced", "TB-H4-P07")
+    if d:
+        cid = "TB-H4-P07"
+        check("4.2 P07 complete work-up: nothing suggested", d["state"]["gate"]["passed"] and d["requests"]["suggested"] == 0)
+        check("4.2 P07 a free request needs a known department and a label (400)", surg.post(f"/api/tb/cases/{cid}/requests", json={"department": "MDT Coordinator", "label": "x"}).status_code == 400
+              and surg.post(f"/api/tb/cases/{cid}/requests", json={"department": "Anaesthesiology", "label": ""}).status_code == 400)
+        check("4.2 P07 a supporting doctor cannot write a free request (403)", rad.post(f"/api/tb/cases/{cid}/requests", json={"department": "Anaesthesiology", "label": "x"}).status_code == 403)
+        r = surg.post(f"/api/tb/cases/{cid}/requests", json={"department": "Anaesthesiology", "label": "Pre-anaesthetic check-up", "what": "Planned for surgery (synthetic e2e)"})
+        a = r.json().get("action", {}) if r.status_code == 200 else {}
+        rows = _open_rows(anaes, "anaesthesiology", cid, None)
+        check("4.2 P07 \"Notify Anaesthesiology\" with no gap behind it: created and sent in one step, in the Anaesthesiology inbox with the UHID", r.status_code == 200 and a.get("origin") == "doctor"
+              and a.get("requirement") is None and a.get("status") == "pending" and "Request: Pre-anaesthetic check-up" in a.get("sent", {}).get("message", "") and len(rows) == 1 and rows[0]["free"] is True
+              and rows[0]["uhid"] == "VXH/26/004207", r.text[:160])
+        r = anaes.post(f"/api/tb/cases/{cid}/requests/{a.get('id')}/done", json={"note": "PAC done, ASA II (synthetic)"})
+        check("4.3 P07 \"done\" closes a free request (nothing in the Case File can confirm it); the owner is told", r.status_code == 200 and r.json()["action"]["status"] == "completed"
+              and r.json()["action"]["closed_by"] == "tb-e2e-h4-anaes" and any(n.get("closed") for n in _notes_of(surg, cid, "request_done")), r.text[:120])
+        r = surg.post(f"/api/tb/cases/{cid}/requests", json={"department": "Clinical Pharmacology", "label": "Medication review"})
+        a = r.json().get("action", {}) if r.status_code == 200 else {}
+        r2 = surg.post(f"/api/tb/cases/{cid}/requests/{a.get('id')}/close", json={"note": "not needed after all"})
+        check("4.2 P07 the owner closes a free request (audited)", r.status_code == 200 and r2.status_code == 200 and r2.json()["action"]["status"] == "completed"
+              and any(e["kind"] == "request_closed_by_owner" for e in surg.get(f"/api/tb/cases/{cid}/audit").json()["events"]), r2.text[:120])
+        check("4.2 P07 every request action is audited", {"request_created", "request_sent", "request_done", "request_closed_by_owner"} <= {e["kind"] for e in surg.get(f"/api/tb/cases/{cid}/audit").json()["events"]})
+
+
+def v2_phase4_cleanup(c, ctx):
+    _v2_cleanup(c, ctx, H4_USERS)
+
+
 def main(base, pw, only=None):
     c = httpx.Client(base_url=base, timeout=600)
     check("login", c.post("/api/auth/login", json={"username": "admin", "password": pw}).status_code == 200)
@@ -1894,6 +2131,14 @@ def main(base, pw, only=None):
             v2_phase3(c, base, ctx)
         finally:
             v2_phase3_cleanup(c, ctx)
+        print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
+        return 0 if not FAIL else 1
+    if only == "v2p4":
+        ctx = {"cases": []}
+        try:
+            v2_phase4(c, base, ctx)
+        finally:
+            v2_phase4_cleanup(c, ctx)
         print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
         return 0 if not FAIL else 1
     if only == "phase4":
@@ -2067,6 +2312,12 @@ def main(base, pw, only=None):
         v2_phase3(c, base, ctx)
     finally:
         v2_phase3_cleanup(c, ctx)
+    # 9d. V2 Phase 4: doctor-sent requests, the supporting inbox, auto-close on re-fetch, the stale summary (same throw-away mock)
+    ctx = {"cases": []}
+    try:
+        v2_phase4(c, base, ctx)
+    finally:
+        v2_phase4_cleanup(c, ctx)
     # 10. V1 Phase 3: dates, document type, flags, big scans
     phase3(c)
     # 11. V1 Phase 4: NCG tiers, two-level gate, failed documents, inbox and notifications, stale summary, NCG VTB export
@@ -2101,5 +2352,5 @@ def main(base, pw, only=None):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--base", default="http://127.0.0.1:7000"); ap.add_argument("--password", required=True)
-    ap.add_argument("--only", default=None, help="run one section only (phase2 | v2p2 | v2p3 | phase3 | phase4 | phase5 | phase6 | phase7 | phase8 | phase9 | skills | mcp | discord | records | metrics)")
+    ap.add_argument("--only", default=None, help="run one section only (phase2 | v2p2 | v2p3 | v2p4 | phase3 | phase4 | phase5 | phase6 | phase7 | phase8 | phase9 | skills | mcp | discord | records | metrics)")
     a = ap.parse_args(); sys.exit(main(a.base, a.password, a.only))

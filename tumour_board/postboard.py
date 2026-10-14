@@ -624,8 +624,10 @@ def timeline(case_id):
     st = store.get_state(case_id)
     for b in st.get("board_records", []):
         ev.append({"date": (b.get("board_date") or b["recorded_at"])[:10], "kind": "board", "title": "Tumour Board decision recorded", "record": b["id"]})
-    for a in st.get("actions", []):
-        ev.append({"date": a["due"], "kind": "action", "title": f"{a['label']} ({a['department']})", "status": a["status"], "action": a["id"]})
+    for a in st.get("actions", []):  # a suggested request has no due date yet (V2 item 4.2): it sits on the day the gap was found
+        day = str(a.get("due") or a.get("created") or "")[:10]
+        if day:
+            ev.append({"date": day, "kind": "action", "title": f"{a['label']} ({a['department']})", "status": a["status"], "action": a["id"]})
     if st.get("next_review"):
         ev.append({"date": st["next_review"]["date"], "kind": "review", "title": "Next Tumour Board review"})
     return sorted(ev, key=lambda e: e["date"])

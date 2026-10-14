@@ -674,10 +674,34 @@ def _route(r, case_id, case=None, prot=None):
     return name, _dept_id(name), doc_id
 
 
+SUGGESTED = "suggested"  # a request the gate proposes; the treating doctor sends it (V2 item 4.2)
+
+
+def _was_sent(a: dict) -> bool:
+    """True when the department received this request: sent through dept_requests, or a V1 request opened before 4.2 (then it was
+    notified at once and sits in the inbox as pending / overdue)."""
+    return bool(a.get("sent")) or a.get("status") in ("pending", "overdue")
+
+
+def _suggest_again(a: dict) -> None:
+    """A request that moved (department or level) after it was sent goes back to a suggestion: the earlier sending, acknowledgement
+    and "done" are kept under `earlier` for the record, the status is suggested again and the due date cleared."""
+    if a.get("status") == "completed":
+        return
+    if _was_sent(a):
+        a.setdefault("earlier", []).append({k: a.get(k) for k in ("department", "department_id", "sent", "acknowledged", "done", "due") if a.get(k) is not None})
+    for k in ("sent", "acknowledged", "done"):
+        a.pop(k, None)
+    a["status"], a["due"] = SUGGESTED, None
+
+
 def sync_actions(case_id, gate, by=""):
     """Open an action (request) for every unmet requirement; complete actions whose requirement is now satisfied. Each request
-    carries its level and goes to the department that can act on it (V1 item 4.2); the department is notified when a request opens
-    or closes and the coordinator when the Case File is ready (V1 item 4.4)."""
+    carries its level and goes to the department that can act on it (V1 item 4.2). Since V2 item 4.2 a new request is only
+    SUGGESTED (status "suggested", no due date, nothing sent): the treating doctor reads the draft, edits it and sends it
+    (dept_requests.send), which notifies the department. A request that moves to another department or level after it was sent
+    becomes a suggestion again (the department it left is told). The department hears when a request it received closes, and the
+    coordinator once when the Case File is ready (V1 item 4.4)."""
     st = store.get_state(case_id)
     if gate is None:  # not listed yet
         st["gate"] = None
@@ -697,10 +721,13 @@ def sync_actions(case_id, gate, by=""):
                 event, reason = "Closed: no longer required for this Case File (NCG tier for its setting and hospital level)", "requirement no longer required (NCG tier)"
             else:
                 event, reason = f"Closed: the protocol ({prot['id']} v{prot.get('version')}) no longer lists this record", "requirement removed from the protocol"
+            sent = _was_sent(a)  # before the status changes: only a department that received the request hears that it closed
+            if not sent:
+                a["never_sent"] = True  # closed as a suggestion: no inbox ever listed it (V2 item 4.2)
             a["status"] = "completed"; a["completed"] = store.now_iso()
             a["history"].append({"ts": store.now_iso(), "event": event})
             store.audit(case_id, {"kind": "action_completed", "action": a["id"], "requirement": rid, "reason": reason})
-            if a.get("department_id"):
+            if a.get("department_id") and sent:
                 _notify({"department": a["department_id"]}, "request_closed", case_id, f"{a.get('label') or rid} no longer needed for {patient} ({case_id})",
                         event.replace("Closed: ", "The request closed: ") + ".", action_id=a["id"], requirement=rid, level=a.get("level"))
             by_req.pop(rid)
@@ -708,10 +735,13 @@ def sync_actions(case_id, gate, by=""):
         a = by_req.get(r["id"])
         if r["status"] in ("satisfied", "not_applicable", "waived"):
             if a:
+                sent = _was_sent(a)
+                if not sent:
+                    a["never_sent"] = True  # closed as a suggestion: no inbox ever listed it (V2 item 4.2)
                 a["status"] = "completed"; a["completed"] = store.now_iso()
                 a["history"].append({"ts": store.now_iso(), "event": "Re-check: requirement met", "evidence": [e["doc_id"] for e in r["evidence"]]})
                 store.audit(case_id, {"kind": "action_completed", "action": a["id"], "requirement": r["id"]})
-                if a.get("department_id"):
+                if a.get("department_id") and sent:
                     why = {"waived": ("waived", "The request closed: the requirement was waived for this Case File (audited)."),
                            "not_applicable": ("no longer applicable", "The request closed: the requirement does not apply to this Case File any more.")}
                     head, text = why.get(r["status"], ("received", "The request closed automatically: the Case File re-check found the requirement met."))
@@ -728,16 +758,15 @@ def sync_actions(case_id, gate, by=""):
                 a["what"] = what
                 a["accession"], a["pending_order"] = r.get("accession"), r.get("pending_order")  # the HIS order behind the gap (V2 item 3.3)
                 if moved:
-                    old_dept = a.get("department_id")
-                    a["history"].append({"ts": store.now_iso(), "event": f"Re-check: {LEVEL_LABEL.get(r.get('level'), 'gap')} routed to {dept}", "detail": what})
+                    old_dept, old_name, sent = a.get("department_id"), a.get("department"), _was_sent(a)
+                    a["history"].append({"ts": store.now_iso(), "event": f"Re-check: {LEVEL_LABEL.get(r.get('level'), 'gap')} routed to {dept}"
+                                         + (f" (sent to {old_name} earlier: send it again)" if sent else " (suggested, not sent)"), "detail": what})
+                    _suggest_again(a)  # V2 item 4.2: nothing goes out by itself; the earlier sending is kept, the doctor sends the moved request
                     a["level"], a["level_label"], a["department"], a["department_id"], a["source_doc_id"] = r.get("level"), r.get("level_label", ""), dept, dept_id, doc_id
-                    if old_dept and old_dept != dept_id:  # the department it left is told, so its inbox makes sense
+                    if sent and old_dept and old_dept != dept_id:  # the department it left is told, so its inbox makes sense
                         _notify({"department": old_dept}, "request_closed", case_id, f"{r['label']} request for {patient} ({case_id}) moved to {dept}",
                                 f"The request now sits with {dept} ({LEVEL_LABEL.get(r.get('level'), 'gap')}).", action_id=a["id"], requirement=r["id"], level=r.get("level"))
                     a["role"] = "coordinator" if to_coord else None
-                    if dept_id or to_coord:
-                        _notify({"department": dept_id} if dept_id else {"role": "coordinator"}, "request", case_id, f"{r['label']} needed for {patient} ({case_id})", what,
-                                action_id=a["id"], requirement=r["id"], due=a.get("due"), level=r.get("level"), level_label=r.get("level_label", ""))
                 elif legacy:
                     a["history"].append({"ts": store.now_iso(), "event": f"Re-check: {LEVEL_LABEL.get(r.get('level'), 'gap')}", "detail": what})
                     a["level"], a["level_label"], a["department_id"], a["source_doc_id"] = r.get("level"), r.get("level_label", ""), dept_id, doc_id
@@ -747,15 +776,12 @@ def sync_actions(case_id, gate, by=""):
         a = {"id": "A" + uuid.uuid4().hex[:6], "source": "pre_authorization", "requirement": r["id"], "label": r["label"],
              "department": dept, "department_id": dept_id, "level": r.get("level"), "level_label": r.get("level_label", ""), "source_doc_id": doc_id,
              "accession": r.get("accession"), "pending_order": r.get("pending_order"),  # the HIS order or record behind the gap (V2 item 3.3)
-             "what": what, "status": "pending", "created": store.now_iso(),
-             "due": (today + timedelta(days=sla.get(r["id"], 3))).isoformat(), "history": [{"ts": store.now_iso(), "event": f"Gap detected ({LEVEL_LABEL.get(r.get('level'), 'gap')}), routed to " + dept}]}
+             "what": what, "status": SUGGESTED, "created": store.now_iso(), "due": None, "sla_days": sla.get(r["id"], 3),  # the due date is set when it is sent (V2 item 4.2)
+             "history": [{"ts": store.now_iso(), "event": f"Gap detected ({LEVEL_LABEL.get(r.get('level'), 'gap')}), request to {dept} suggested (not sent)"}]}
         if to_coord:
             a["role"] = "coordinator"
         actions.append(a)
-        store.audit(case_id, {"kind": "action_created", "action": a["id"], "requirement": r["id"], "department": dept, "level": r.get("level"), "what": what})
-        if dept_id or to_coord:
-            _notify({"department": dept_id} if dept_id else {"role": "coordinator"}, "request", case_id, f"{r['label']} needed for {patient} ({case_id})", what,
-                    action_id=a["id"], requirement=r["id"], due=a["due"], level=r.get("level"), level_label=r.get("level_label", ""))
+        store.audit(case_id, {"kind": "action_created", "action": a["id"], "requirement": r["id"], "department": dept, "level": r.get("level"), "what": what, "status": SUGGESTED})
     for a in actions:
         if a["status"] == "pending" and a.get("due") and a["due"] < today.isoformat():
             a["status"] = "overdue"

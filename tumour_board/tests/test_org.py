@@ -416,6 +416,15 @@ CAN = [
     ("delete_document", "Cardiology", (0, 0, 1, 1, 0, 0, 1, 0)),
     ("update_action", "Cardiology", (0, 0, 1, 0, 0, 0, 1, 0)),
     ("dismiss_failed", "Cardiology", (0, 0, 0, 1, 0, 0, 1, 0)),
+    # V2 item 4.2 / 4.3: requests are sent, written and closed by treating doctors; answered by the doctors of the department they went to
+    ("send_request", None, (0, 0, 0, 1, 0, 0, 1, 0)),
+    ("create_request", None, (0, 0, 0, 1, 0, 0, 1, 0)),
+    ("close_request", None, (0, 0, 0, 1, 0, 0, 1, 0)),
+    ("answer_request", "radiology", (1, 1, 0, 0, 0, 0, 1, 0)),
+    ("answer_request", "Radiology", (1, 1, 0, 0, 0, 0, 1, 0)),
+    ("answer_request", "pathology", (0, 0, 0, 0, 0, 0, 1, 0)),
+    ("answer_request", None, (0, 0, 0, 0, 0, 0, 1, 0)),
+    ("answer_request", "Cardiology", (0, 0, 0, 0, 0, 0, 1, 0)),
 ]
 DEPT_ACTIONS = sorted(a for a, rule in org.ACTIONS.items() if rule["dept"])
 

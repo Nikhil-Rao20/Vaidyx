@@ -315,10 +315,10 @@ def test_sync_opens_action_routed_to_department(unit_case):
     st = _sync(unit_case)
     assert len(st["actions"]) == 1
     a = st["actions"][0]
-    assert (a["requirement"], a["department"], a["status"], a["source"]) == ("ct_thorax", "Radiology", "pending", "pre_authorization")
+    assert (a["requirement"], a["department"], a["status"], a["source"]) == ("ct_thorax", "Radiology", "suggested", "pre_authorization")  # suggested, not sent (V2 item 4.2)
     assert a["what"] == "No diagnostic ct thorax report in the Case File"
-    assert a["due"] == (date.today() + timedelta(days=3)).isoformat()
-    assert a["history"][0]["event"] == "Gap detected (Level 1: Case File), routed to Radiology"
+    assert a["due"] is None and a["sla_days"] == 3  # the due date is set when the doctor sends it
+    assert a["history"][0]["event"] == "Gap detected (Level 1: Case File), request to Radiology suggested (not sent)"
     assert (a["level"], a["level_label"], a["department_id"], a["source_doc_id"]) == (1, "Level 1: Case File", "radiology", None)
     assert store.get_state(unit_case)["gate"]["requirements"][1]["id"] == "ct_thorax"
     assert [e for e in store.read_audit(unit_case) if e["kind"] == "action_created"][0]["department"] == "Radiology"
@@ -327,7 +327,7 @@ def test_sync_opens_action_routed_to_department(unit_case):
 def test_sync_uses_requirement_sla(unit_case):
     add(unit_case, hist(facts={"histologic_type": fact("Adenocarcinoma")}), ct())
     a = _sync(unit_case)["actions"][0]
-    assert a["requirement"] == "pdl1" and a["department"] == "Pathology" and a["due"] == (date.today() + timedelta(days=7)).isoformat()
+    assert a["requirement"] == "pdl1" and a["department"] == "Pathology" and a["sla_days"] == 7 and a["due"] is None
 
 
 def test_sync_is_idempotent_and_updates_the_gap(unit_case):
@@ -339,7 +339,7 @@ def test_sync_is_idempotent_and_updates_the_gap(unit_case):
     st = _sync(unit_case)
     a = st["actions"][0]
     assert len(st["actions"]) == 1 and a["what"] == "Required field not documented: Primary lesion size"
-    assert a["history"][-1]["event"] == "Re-check: Level 2: Records routed to Radiology" and a["level"] == 2 and a["source_doc_id"] == "Dct000001"
+    assert a["history"][-1]["event"] == "Re-check: Level 2: Records routed to Radiology (suggested, not sent)" and a["level"] == 2 and a["source_doc_id"] == "Dct000001"
     st = _sync(unit_case)
     assert len(st["actions"][0]["history"]) == 2  # nothing changed: no new history entry
 
@@ -364,7 +364,7 @@ def test_sync_closes_a_request_when_the_record_is_no_longer_required(unit_case, 
     monkeypatch.setattr(protocol, "get", lambda pid: protocol._normalise(p) if pid == "unit" else None)
     add(unit_case, hist())
     a = _sync(unit_case)["actions"][0]  # no setting recorded: the strictest tier (a) applies
-    assert a["requirement"] == "ct_thorax" and a["status"] == "pending"
+    assert a["requirement"] == "ct_thorax" and a["status"] == "suggested"
     c = store.get_case(unit_case); c["setting"] = "non_metastatic"; c["hospital_level"] = "essential"; store.save_case(c)
     st = _sync(unit_case)
     assert [r["id"] for r in st["gate"]["shown"]] == ["ct_thorax"] and st["gate"]["shown"][0]["tier"] == "b"
@@ -381,11 +381,14 @@ def test_sync_waiver_completes_action(unit_case):
 
 
 def test_sync_marks_overdue(unit_case):
+    """A sent request (pending with a due date) becomes overdue; a suggestion has no due date and never does."""
     add(unit_case, hist())
     st = _sync(unit_case)
-    st["actions"][0]["due"] = (date.today() - timedelta(days=1)).isoformat()
+    st["actions"][0]["status"] = "pending"; st["actions"][0]["due"] = (date.today() - timedelta(days=1)).isoformat()
     store.save_state(unit_case, st)
     assert _sync(unit_case)["actions"][0]["status"] == "overdue"
+    st = store.get_state(unit_case); st["actions"][0]["status"] = "suggested"; st["actions"][0]["due"] = None; store.save_state(unit_case, st)
+    assert _sync(unit_case)["actions"][0]["status"] == "suggested"
 
 
 # ---- notifications from the gate (V1 item 4.4) --------------------------------------------------------------
@@ -397,10 +400,13 @@ def _notes():
 
 
 def test_sync_notifies_the_department_and_the_coordinator(unit_case):
-    """A new request notifies the department that must act; the closing upload tells it the request closed; the coordinators hear
-    once when the Case File becomes ready, not again on the next re-check."""
+    """A new request is only suggested (V2 item 4.2): the department hears when the treating doctor sends it; the closing upload tells
+    it the request closed; the coordinators hear once when the Case File becomes ready, not again on the next re-check."""
+    from tumour_board import dept_requests
     add(unit_case, hist())
     a = _sync(unit_case)["actions"][0]
+    assert [x for x in _notes() if x["kind"] == "request"] == [] and a["status"] == "suggested"
+    a = dept_requests.send(unit_case, a["id"], "dr.meera", {"user": "dr.meera", "treating": {"breast_surgery": "member"}})
     n = [x for x in _notes() if x["kind"] == "request"]
     assert len(n) == 1 and n[0]["to"] == {"department": "radiology"} and n[0]["case_id"] == unit_case and n[0]["action_id"] == a["id"]
     assert n[0]["level"] == 1 and n[0]["title"].startswith("Diagnostic CT thorax report needed for SYNTHETIC, Test Patient")
@@ -426,7 +432,7 @@ def test_a_notification_problem_never_breaks_the_gate(unit_case, monkeypatch):
     monkeypatch.setattr(notify, "notify", broken)
     add(unit_case, hist())
     st = _sync(unit_case)
-    assert st["actions"][0]["status"] == "pending" and st["gate"]["satisfied"] == 2
+    assert st["actions"][0]["status"] == "suggested" and st["gate"]["satisfied"] == 2
 
 
 # ---- Case File signature: stale summary and briefs (V1 item 4.5) ------------------------------------------
@@ -453,15 +459,18 @@ def test_case_signature_changes_with_the_case_file(unit_case):
 def test_level2_gap_goes_to_the_department_that_uploaded_the_record(unit_case):
     """V1 item 4.2 (review M6): the CT uploaded by Nuclear Medicine lacks the lesion size: the Level 2 request moves from Radiology
     (Level 1, the record's owner) to Nuclear Medicine, both departments are told, and the history says so."""
+    from tumour_board import dept_requests
     add(unit_case, hist())
     a = _sync(unit_case)["actions"][0]
     assert (a["requirement"], a["level"], a["department_id"]) == ("ct_thorax", 1, "radiology")
+    dept_requests.send(unit_case, a["id"], "dr.meera", {"user": "dr.meera", "treating": {"breast_surgery": "member"}})  # the doctor sent it to Radiology (V2 item 4.2)
     add(unit_case, {**ct(facts={}), "department": "nuclear_medicine"})
     a = _sync(unit_case)["actions"][0]
     assert (a["level"], a["department"], a["department_id"], a["source_doc_id"]) == (2, "Nuclear Medicine", "nuclear_medicine", "Dct000001")
-    assert a["history"][-1]["event"] == "Re-check: Level 2: Records routed to Nuclear Medicine"
+    assert a["history"][-1]["event"] == "Re-check: Level 2: Records routed to Nuclear Medicine (sent to Radiology earlier: send it again)"
+    assert a["status"] == "suggested"  # the moved request is not forwarded by itself: the doctor sends it to Nuclear Medicine
     n = _notes()
-    assert [x["to"] for x in n if x["kind"] == "request"] == [{"department": "radiology"}, {"department": "nuclear_medicine"}]
+    assert [x["to"] for x in n if x["kind"] == "request"] == [{"department": "radiology"}]
     moved = [x for x in n if x["kind"] == "request_closed"]
     assert len(moved) == 1 and moved[0]["to"] == {"department": "radiology"} and "moved to Nuclear Medicine" in moved[0]["title"]
 
@@ -509,8 +518,10 @@ def test_a_request_opened_before_the_two_levels_is_classified_without_a_notifica
 
 
 def test_closing_for_a_waiver_says_waived(unit_case):
+    from tumour_board import dept_requests
     add(unit_case, hist())
-    _sync(unit_case)
+    a = _sync(unit_case)["actions"][0]
+    dept_requests.send(unit_case, a["id"], "dr.meera", {"user": "dr.meera", "treating": {"breast_surgery": "member"}})  # only a sent request closes with a notice (V2 item 4.2)
     rules.set_override(unit_case, "requirements", "ct_thorax", {"waived": True, "reason": "not needed"}, by="Dr. Rao")
     _sync(unit_case)
     closed = [x for x in _notes() if x["kind"] == "request_closed"]
