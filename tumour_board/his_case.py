@@ -579,24 +579,30 @@ def unlink_registration(case_id: str, uhid: str, user: str, reason: str = "") ->
 
 
 def after_refetch(case_id: str, job: dict):
-    """After a re-fetch job ran the gate: requests that closed are reported to the owning department (and the audit), once."""
+    """After a re-fetch job ran the gate: requests that closed are reported to the owning department (and the audit), once; the notice
+    also says when the Case File summary compiled earlier went stale (V2 item 4.4)."""
+    from . import rules  # local: rules is the gate, his_case the fetch; neither needs the other at import time
     try:
         case = store.get_case(case_id) or {}
         st = store.get_state(case_id)
         before = set(job.get("open_before") or [])
         closed = [a for a in st.get("actions", []) if a["id"] in before and a.get("status") == "completed"]
         opened = [a for a in st.get("actions", []) if a.get("source") == "pre_authorization" and a.get("status") != "completed" and a["id"] not in before]
-        job["refetch_result"] = {"closed": [a["id"] for a in closed], "opened": [a["id"] for a in opened]}
+        summ = (st.get("artefacts") or {}).get("summary")  # the Case File summary compiled earlier goes stale when the re-fetch changed the Case File (V2 item 4.4)
+        stale = rules.stale_reason(summ["signature"], rules.case_signature(case_id, st)) if isinstance(summ, dict) and summ.get("signature") else ""
+        job["refetch_result"] = {"closed": [a["id"] for a in closed], "opened": [a["id"] for a in opened], "summary_stale": stale}
         store.audit(case_id, {"kind": "his_refetch_checked", "job": job.get("id"), "closed": [{"id": a["id"], "label": a.get("label")} for a in closed],
                               "opened": [{"id": a["id"], "label": a.get("label")} for a in opened], "added": (job.get("his") or {}).get("added", 0)})
         owner = case.get("department")
         patient = (case.get("patient") or {}).get("name") or case_id
-        if owner and (closed or (job.get("his") or {}).get("added")):
+        if owner and (closed or (job.get("his") or {}).get("added") or stale):
             what = (f"{len(closed)} request(s) closed: " + "; ".join(a.get("label") or a["id"] for a in closed)) if closed else "no request closed"
             g = st.get("gate") or {}
             notify.notify({"department": owner}, "request_closed", case_id, f"Re-fetch from the HIS for {patient} ({case_id}): {what}",
                           f"{(job.get('his') or {}).get('added', 0)} new or changed record(s) processed; Pre-Authorization {g.get('satisfied')}/{g.get('total')} met"
-                          + ("; the Case File is ready." if g.get("passed") else "."), refetch=True, closed=[a["id"] for a in closed])
+                          + ("; the Case File is ready." if g.get("passed") else ".")
+                          + (" The Case File summary compiled earlier is stale: regenerate it before the board." if stale else ""),
+                          refetch=True, closed=[a["id"] for a in closed], summary_stale=stale)
     except Exception as e:  # never fail the job for the notice
         store.audit(case_id, {"kind": "error", "where": "after_refetch", "error": f"{e.__class__.__name__}: {str(e)[:200]}"})
 
