@@ -17,7 +17,7 @@ The list of every V2 scenario the mock must generate and the outcome Vaidyx-TB m
 | `document_types`, `tests` | Vaidyx-TB document types, and each orderable test with its document type and producing department (`any_treating` = clinical records) |
 | `departments` | The 22 treating and 8 supporting departments of plan section 4, with code (accession prefix), the tests they produce, consultants |
 | `patients` | 19 patients (P01 to P19) across the five protocols, with encounters (OP visits, IP admissions), records and Case Files |
-| `scenarios` | 31 scenarios: the 11 of the plan 1.1 table (`plan_1_1: true`), 19 that cover the orchestration checklist and the plan 8.1 demo (`demo_breast_preliminary_radiology`, P19: both Radiology reports preliminary, phase 8) |
+| `scenarios` | 31 scenarios: 11 of the plan 1.1 table (`plan_1_1: true`), 19 for the orchestration checklist, and 1 for the plan 8.1 demo (`demo_breast_preliminary_radiology`, P19: both Radiology reports preliminary, phase 8) |
 | `checklist` | The orchestration.md "V2 scenario checklist" as tags, grouped |
 
 **A record** carries `test`, `type`, `producing_department`, `encounter` (OP or IP No.; `registration` when filed under a
@@ -49,6 +49,8 @@ for s in data["scenarios"]:
   accession Nos., values), skipping `never_ordered` and `outside_upload` records (the outside ones become upload files for 3.6).
 - **e2e (3.2 onward):** for each scenario of its phase, create the Case File from the UHID (or the IP / OP No. given), then
   assert `expected`.
+
+**The demo (plan item V2-8.1):** `python -m tumour_board.eval.demo_v2 --fresh` rebuilds this store (`his_mock.build --upload`, `serve.sh restart`) and runs the V2 story on it with the role logins: P19 (`VXH/26/004219`, both radiology reports preliminary) through notify, the desk sign, re-fetch, the board session and the images, then P14 (referral) and P18 (two primaries); `docs/tumour-board/DEMO_V2.md` is the walkthrough. The desk sign changes the live store, so rebuild (or run the demo with `--fresh`) before the scenario check (`python -m tumour_board.eval.his_scenarios`, 21 Case Files) or a second run.
 
 Tests: `/data/vaidyx/venv/app/bin/python -m pytest his_mock/tests -q`. They also cross-check every first-fetch gate against
 `tumour_board/protocols/*.json` (read as files, never imported), so a protocol change that moves a gap shows up here. That
