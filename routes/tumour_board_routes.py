@@ -1698,8 +1698,9 @@ def setup_tumour_board_routes():
         roles = [b["role"]] if b.get("role") else None
         if roles and roles[0] not in board.ROLE_DEPARTMENT:
             raise HTTPException(404, "unknown role")
-        if roles and roles[0] not in board.absent_roles(s):  # agents stand in for absent specialties only
-            raise HTTPException(400, "That specialty is not marked absent in this session")
+        if roles and roles[0] not in board.ON_DEMAND and roles[0] not in board.absent_roles(s, b.get("case_id") or None):
+            # agents stand in for a head not recorded present or a specialty marked absent; Radiation Oncology and Nuclear Medicine on demand (V2 item 6.2)
+            raise HTTPException(400, "That specialty is recorded as present in this session" if not b.get("case_id") else "That specialty is recorded as present, or its seat is filled for this Case File")
         pairs = service.prepare_session_agents(sid, u, roles=roles, case_ids=[b["case_id"]] if b.get("case_id") else None, refresh=bool(b.get("refresh")))
         return {**board.get(sid), "preparing": len(pairs)}
 
