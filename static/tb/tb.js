@@ -2043,11 +2043,12 @@ async function loadNotifications() {
   try { const r = await api("/notifications?limit=80"); S.notifications = r.notifications; S.unread = r.unread;
     $("#btn-bell").classList.remove("hidden"); $("#bell-count").textContent = r.unread; $("#bell-count").classList.toggle("hidden", !r.unread); } catch (e) {}
 }
-function showNotifications() {
-  const list = S.notifications || [];
-  const row = (n) => { const k = NKIND[n.kind] || ["c-mute", n.kind]; return `<div class="ntf ${n.read ? "read" : ""}" data-ntf="${esc(n.id)}" data-case="${esc(n.case_id || "")}" title="Open the Case File">
+const ntfRow = (n) => { const k = NKIND[n.kind] || ["c-mute", n.kind]; return `<div class="ntf ${n.read ? "read" : ""}" data-ntf="${esc(n.id)}" data-case="${esc(n.case_id || "")}" title="Open the Case File">
       <div class="h"><span class="chip ${k[0]}">${esc(k[1])}</span> <b>${esc(n.title)}</b>${n.kind === "referral_answered" && n.status ? " " + rChip(n.status) : ""}${n.level_label ? ` <span class="chip c-lvl">${esc(n.level_label)}</span>` : ""}${n.read ? "" : ' <span class="chip c-info">new</span>'}</div>
       ${n.text ? `<div class="small">${esc(n.text)}</div>` : ""}${(n.kind === "request" || n.kind === "referral") && n.uhid ? `<div class="small"><span class="chip c-mono" title="UHID">${esc(n.uhid)}</span>${n.accession ? ` <span class="chip c-mono" title="Accession / Lab No.">${esc(n.accession)}</span>` : ""}${encText(n.encounter) ? ` <span class="muted">${esc(encText(n.encounter))}</span>` : ""}${n.reminder ? ' <span class="chip c-warn">reminder</span>' : ""}${n.sent_by ? ` <span class="muted">sent by ${esc(n.sent_by)}</span>` : ""}</div>` : ""}${n.kind === "request_done" && n.refetch_offer ? `<div class="small"><b>Re-fetch from the HIS to close it.</b></div>` : ""}<div class="small muted">${esc((n.ts || "").slice(0, 16).replace("T", " "))}${n.due ? " · due " + fmtDate(n.due) : ""}${n.to?.department ? " · to " + esc(deptName(n.to.department)) : n.to?.role ? " · to the coordinator" : ""}</div></div>`; };
+function showNotifications() {
+  const list = S.notifications || [];
+  const row = ntfRow;
   $("#modal-body").innerHTML = `<h3 style="color:#1f2933;margin-top:0">Notifications <span class="muted small" style="font-weight:400">${S.unread || 0} unread</span></h3>
     <div class="small muted">In-app only. The Pre-Authorization check suggests a request for each gap; the treating doctor sends it to the Responsible Department, which acknowledges it and sends "done" back. A request closes by itself when the record arrives; the coordinator hears when a Case File is ready for the board.</div>
     <div style="margin:8px 0;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">${(S.org?.inbox_departments || []).length || S.me?.coordinator ? `<button class="ghost sm" id="nt-inbox">Open the department inbox</button>` : ""}${list.some((n) => !n.read) ? `<button class="ghost sm" id="nt-readall">Mark all read</button>` : ""}<button class="ghost sm" data-closemodal>Close</button></div>
@@ -2063,36 +2064,40 @@ async function refreshInboxCount() {
   if (!show) return;
   try { const ib = await api("/inbox"), n = ib.open + (ib.referrals || []).filter((r) => r.can_answer).length; $("#inbox-count").textContent = n; $("#inbox-count").classList.toggle("hidden", !n); } catch (e) {}
 }
+// the inbox rows (V2 item 4.3), shared by the Department inbox and the supporting doctor's home (V2 item 7.1). The inbox has no per-case
+// permissions: the buttons show for the doctors of that inbox department (the coordinator for the MDT Coordinator's row) and admins; the
+// server decides and a refusal is toasted.
+const ibMayAnswer = (d) => !!S.me && (S.me.admin || (d.id === "coordinator" ? !!S.me.coordinator : !!(S.me.departments || {})[d.id]));
+const ibChip = (q) => { if (q.source !== "pre_authorization") return q.status === "completed" ? `<span class="chip c-ok">Closed</span>` : q.overdue ? `<span class="chip c-bad">Overdue ${q.days_overdue} d</span>` : `<span class="chip c-warn">Pending</span>`;
+  const [cls, txt] = reqStatus(q); return `<span class="chip ${cls} reqst">${esc(txt)}</span>`; };
+const ibFirstLines = (m) => String(m || "").split("\n").map((l) => l.trim()).filter((l) => l && !/^(To|Tumour Board Case File|Patient|Treating department|Sent by)\b/.test(l)).slice(0, 3).join("\n");
+const ibAsked = (q) => { const s = q.sent || {}; const head = q.what || ibFirstLines(s.message);
+  return `${head ? `<div class="pre">${esc(head)}</div>` : ""}${s.message ? `<details class="small"><summary>Message${s.count > 1 ? ` (sent ${s.count} times)` : ""}</summary><div class="pre msg">${esc(s.message)}</div></details>` : ""}${s.by ? `<div class="muted">Sent by ${esc(s.by)} on ${dmyt(s.at)}</div>` : ""}`; };
+const ibActs = (q, d) => { if (q.source !== "pre_authorization" || q.status === "completed" || !(q.sent || q.status === "pending" || q.status === "overdue") || !ibMayAnswer(d)) return "";  // a V1 request (no sending record) is answered too
+  return `${!q.acknowledged ? `<button class="ghost sm" data-ack="${esc(q.action_id)}" data-case="${esc(q.case_id)}">Acknowledge</button>` : ""}${!q.done ? `<button class="primary sm" data-done="${esc(q.action_id)}" data-case="${esc(q.case_id)}" title="The report is signed in your own system: send &quot;done&quot; back with an optional note">Done</button>` : ""}`; };
+const ibRow = (q, d) => `<tr class="click" data-case="${esc(q.case_id)}" data-aid="${esc(q.action_id)}"><td><b>${esc(q.patient?.name || q.case_id)}</b><div class="small muted">${esc(q.case_id)}${q.patient?.agesex ? " · " + esc(q.patient.agesex) : ""}${q.board_date ? " · board " + dmyd(q.board_date) : ""}</div>
+      ${q.uhid || q.patient?.mrn ? `<div class="small">UHID <span class="mono">${esc(q.uhid || q.patient.mrn)}</span></div>` : ""}${encHTML(q.encounter)}</td>
+    <td>${q.source === "board" ? `<span class="chip c-info">${esc(q.source_label)}</span> ` : q.free ? `<span class="chip c-info">Free request</span> ` : ""}<b>${esc(q.label)}</b><div class="chips" style="margin-top:3px">${q.level_label ? `<span class="chip c-lvl">${esc(q.level_label)}</span>` : ""}${q.accession ? `<span class="chip c-mono" title="Accession / Lab No.: find the patient in your PACS / RIS / LIS">${esc(q.accession)}</span>` : ""}${q.pending_order ? `<span class="chip ${q.pending_order.stage === "cancelled" ? "c-bad" : "c-info"}">Ordered in the HIS: ${esc(stageText(q.pending_order))}</span>` : ""}</div></td>
+    <td class="small">${q.source === "pre_authorization" ? ibAsked(q) : esc(q.what)}${suggestionHTML(q, true)}</td><td class="small nowrap">${q.due ? esc(dmyd(q.due)) : ""}</td>
+    <td>${ibChip(q)}${q.source === "pre_authorization" ? reqTrail({ ...q, sent: null, earlier: [] }) : q.completed ? `<div class="small muted">${esc(dmyt(q.completed))}</div>` : ""}</td><td class="nowrap"><div class="ibtns">${ibActs(q, d)}</div></td></tr>`;
+function bindInboxRows(root, after) {  // open the Case File from a row; Acknowledge and Done re-render through `after`
+  $$(`${root} tr[data-case][data-aid]`).forEach((tr) => (tr.onclick = async (e) => { if (e.target.closest("button, details, a")) return; await openCaseSafe(tr.dataset.case); }));
+  $$(`${root} [data-ack]`).forEach((b) => (b.onclick = async (e) => { e.stopPropagation(); b.disabled = true; if (await answerRequest(b.dataset.case, b.dataset.ack, "acknowledge")) { await after(); loadNotifications(); } else b.disabled = false; }));
+  $$(`${root} [data-done]`).forEach((b) => (b.onclick = async (e) => { e.stopPropagation(); b.disabled = true; if (await answerRequest(b.dataset.case, b.dataset.done, "done")) { await after(); loadNotifications(); } else b.disabled = false; }));
+}
 async function showInbox() {
   const ib = await api("/inbox"); S.inbox = ib;
   MAIN_SECTIONS.forEach((x) => $("#" + x).classList.toggle("hidden", x !== "inbox")); stopRoomPoll();
   $$(".citem").forEach((el) => el.classList.remove("on"));
-  // V2 item 4.3: the department answers here. The inbox has no per-case permissions: the buttons show for the doctors of that inbox
-  // department (the coordinator for the MDT Coordinator's row) and admins; the server decides and a refusal is toasted.
-  const mayAnswer = (d) => !!S.me && (S.me.admin || (d.id === "coordinator" ? !!S.me.coordinator : !!(S.me.departments || {})[d.id]));
-  const chip = (q) => { if (q.source !== "pre_authorization") return q.status === "completed" ? `<span class="chip c-ok">Closed</span>` : q.overdue ? `<span class="chip c-bad">Overdue ${q.days_overdue} d</span>` : `<span class="chip c-warn">Pending</span>`;
-    const [cls, txt] = reqStatus(q); return `<span class="chip ${cls} reqst">${esc(txt)}</span>`; };
-  const firstLines = (m) => String(m || "").split("\n").map((l) => l.trim()).filter((l) => l && !/^(To|Tumour Board Case File|Patient|Treating department|Sent by)\b/.test(l)).slice(0, 3).join("\n");
-  const asked = (q) => { const s = q.sent || {}; const head = q.what || firstLines(s.message);
-    return `${head ? `<div class="pre">${esc(head)}</div>` : ""}${s.message ? `<details class="small"><summary>Message${s.count > 1 ? ` (sent ${s.count} times)` : ""}</summary><div class="pre msg">${esc(s.message)}</div></details>` : ""}${s.by ? `<div class="muted">Sent by ${esc(s.by)} on ${dmyt(s.at)}</div>` : ""}`; };
-  const acts = (q, d) => { if (q.source !== "pre_authorization" || q.status === "completed" || !(q.sent || q.status === "pending" || q.status === "overdue") || !mayAnswer(d)) return "";  // a V1 request (no sending record) is answered too
-    return `${!q.acknowledged ? `<button class="ghost sm" data-ack="${esc(q.action_id)}" data-case="${esc(q.case_id)}">Acknowledge</button>` : ""}${!q.done ? `<button class="primary sm" data-done="${esc(q.action_id)}" data-case="${esc(q.case_id)}" title="The report is signed in your own system: send &quot;done&quot; back with an optional note">Done</button>` : ""}`; };
-  const row = (q, d) => `<tr class="click" data-case="${esc(q.case_id)}" data-aid="${esc(q.action_id)}"><td><b>${esc(q.patient?.name || q.case_id)}</b><div class="small muted">${esc(q.case_id)}${q.patient?.agesex ? " · " + esc(q.patient.agesex) : ""}${q.board_date ? " · board " + dmyd(q.board_date) : ""}</div>
-        ${q.uhid || q.patient?.mrn ? `<div class="small">UHID <span class="mono">${esc(q.uhid || q.patient.mrn)}</span></div>` : ""}${encHTML(q.encounter)}</td>
-      <td>${q.source === "board" ? `<span class="chip c-info">${esc(q.source_label)}</span> ` : q.free ? `<span class="chip c-info">Free request</span> ` : ""}<b>${esc(q.label)}</b><div class="chips" style="margin-top:3px">${q.level_label ? `<span class="chip c-lvl">${esc(q.level_label)}</span>` : ""}${q.accession ? `<span class="chip c-mono" title="Accession / Lab No.: find the patient in your PACS / RIS / LIS">${esc(q.accession)}</span>` : ""}${q.pending_order ? `<span class="chip ${q.pending_order.stage === "cancelled" ? "c-bad" : "c-info"}">Ordered in the HIS: ${esc(stageText(q.pending_order))}</span>` : ""}</div></td>
-      <td class="small">${q.source === "pre_authorization" ? asked(q) : esc(q.what)}${suggestionHTML(q, true)}</td><td class="small nowrap">${q.due ? esc(dmyd(q.due)) : ""}</td>
-      <td>${chip(q)}${q.source === "pre_authorization" ? reqTrail({ ...q, sent: null, earlier: [] }) : q.completed ? `<div class="small muted">${esc(dmyt(q.completed))}</div>` : ""}</td><td class="nowrap"><div class="ibtns">${acts(q, d)}</div></td></tr>`;
   const refs = ib.referrals || [], refCard = inboxReferralsHTML(refs);  // V2 item 5.2: referrals to and from my departments
   $("#inbox").innerHTML = `<div class="case-head"><div><div class="eyebrow">Department inbox</div><h1>Requests to ${ib.departments.length === 1 ? esc(ib.departments[0].name) : "my departments"}</h1>
       <div class="muted">Requests the treating doctors sent to your department across the Tumour Board Case Files, and every action the Tumour Board gave your department: the patient with the UHID, IP / OP No. and accession No. to find the study or sample in your own PACS / RIS / LIS, what is asked, the due date and the status. Acknowledge a request when you take it up, then send "done" back (with a note if needed) once the report is signed in your own system. A request closes by itself when the record arrives in the Case File; a Tumour Board action is closed by a person (a newly arrived matching document is suggested). Requests closed in the last 7 days stay listed. Overdue is worked out when this page is shown.</div></div>
       <div class="readiness"><div class="rtext"><b>${ib.open} open</b><span>${ib.overdue} overdue</span>${refs.some((r) => r.can_answer) ? `<span> · ${plural(refs.filter((r) => r.can_answer).length, "referral")} to answer</span>` : ""}</div></div></div>
     ${refCard}
     ${ib.departments.map((d) => `<div class="card"><h3>${esc(d.name)} <span class="muted small">${d.open} open · ${d.overdue} overdue</span></h3>
-      ${d.requests.length ? `<div class="tscroll"><table class="t inbox-t"><thead><tr><th>Case File</th><th>Record needed</th><th>What is asked</th><th>Due</th><th>Status</th><th>Actions</th></tr></thead><tbody>${d.requests.map((q) => row(q, d)).join("")}</tbody></table></div>` : `<div class="muted small">No requests.</div>`}</div>`).join("") || (refs.length ? "" : `<div class="card"><div class="muted">Your account is not placed in a department with an inbox.</div></div>`)}`;
-  $$("#inbox tr[data-case]").forEach((tr) => (tr.onclick = async (e) => { if (e.target.closest("button, details, a")) return; await openCaseSafe(tr.dataset.case); }));
-  bindInboxReferrals(refs);
-  $$("#inbox [data-ack]").forEach((b) => (b.onclick = async (e) => { e.stopPropagation(); b.disabled = true; if (await answerRequest(b.dataset.case, b.dataset.ack, "acknowledge")) { await showInbox(); loadNotifications(); } else b.disabled = false; }));
-  $$("#inbox [data-done]").forEach((b) => (b.onclick = async (e) => { e.stopPropagation(); b.disabled = true; if (await answerRequest(b.dataset.case, b.dataset.done, "done")) { await showInbox(); loadNotifications(); } else b.disabled = false; }));
+      ${d.requests.length ? `<div class="tscroll"><table class="t inbox-t"><thead><tr><th>Case File</th><th>Record needed</th><th>What is asked</th><th>Due</th><th>Status</th><th>Actions</th></tr></thead><tbody>${d.requests.map((q) => ibRow(q, d)).join("")}</tbody></table></div>` : `<div class="muted small">No requests.</div>`}</div>`).join("") || (refs.length ? "" : `<div class="card"><div class="muted">Your account is not placed in a department with an inbox.</div></div>`)}`;
+  bindInboxRows("#inbox", showInbox);
+  bindInboxReferrals(refs, "#inbox", showInbox);
   const cnt = ib.open + refs.filter((r) => r.can_answer).length;
   $("#inbox-count").textContent = cnt; $("#inbox-count").classList.toggle("hidden", !cnt);
 }
@@ -2323,11 +2328,12 @@ function inboxReferralsHTML(refs) {
     <div class="muted small" style="margin-bottom:6px">Tumour Board Case Files referred to or by your department. On acceptance the receiving department owns the Case File and chooses the cancer protocol; the referring department stays as a participating department (read and comment). Answered referrals stay listed for 7 days.</div>
     <div class="tscroll"><table class="t inbox-t"><thead><tr><th>Case File</th><th>Referral</th><th>Reason</th><th>By</th><th>Status</th><th>Actions</th></tr></thead><tbody>${refs.map(row).join("")}</tbody></table></div></div>`;
 }
-function bindInboxReferrals(refs) {
+function bindInboxReferrals(refs, root = "#inbox", after = showInbox) {  // the inbox and the treating doctor's home (V2 item 7.1)
   const find = (b, k) => refs.find((r) => r.id === b.dataset[k] && r.case_id === b.dataset.rcase);
-  $$("#inbox [data-racc]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const r = find(b, "racc"); if (r) acceptReferralDialog(r.case_id, r, null); }));
-  $$("#inbox [data-rdec]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const r = find(b, "rdec"); if (r) answerReferral(r.case_id, r, "decline", showInbox); }));
-  $$("#inbox [data-rwd]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const r = find(b, "rwd"); if (r) answerReferral(r.case_id, r, "withdraw", showInbox); }));
+  $$(`${root} #ib-referrals tr[data-case]`).forEach((tr) => (tr.onclick = async (e) => { if (e.target.closest("button, details, a")) return; await openCaseSafe(tr.dataset.case); }));
+  $$(`${root} [data-racc]`).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const r = find(b, "racc"); if (r) acceptReferralDialog(r.case_id, r, null); }));
+  $$(`${root} [data-rdec]`).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const r = find(b, "rdec"); if (r) answerReferral(r.case_id, r, "decline", after); }));
+  $$(`${root} [data-rwd]`).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const r = find(b, "rwd"); if (r) answerReferral(r.case_id, r, "withdraw", after); }));
 }
 
 // ------------------------------------------------------------------ board sessions and the Board room · V1 items 6.1 to 6.3
@@ -2643,9 +2649,149 @@ function bindLog() {
 }
 document.addEventListener("click", (e) => { const x = e.target.closest("[data-open-session]"); if (x) openSession(x.dataset.openSession); });
 
+// ------------------------------------------------------------------ a home per role · V2 item 7.1
+// What each person sees first: the treating doctor its department's Case Files, Create from UHID, requests, referrals and notifications;
+// the supporting doctor its inbox; the department admin its doctors; the MDT Coordinator the sessions, the readiness of the next board
+// and the chase list; the root admin the organisation and its settings (with the first set-up question until it is answered once). One
+// login with several roles sees the sections stacked, the clinical one first. The server builds the home (GET /home) from the roles in
+// org.json and the Case Files the login may open; the V1 Case File page stays the work area.
+const ROLE_LABEL = { treating: "Treating doctor", supporting: "Supporting department", coordinator: "MDT Coordinator", dept_admin: "Department admin", root_admin: "Root admin" };
+const RELATION = { owner: ["c-ok", "Owned by my department"], participant: ["c-info", "Participating"], referred: ["c-warn", "Referred to my department"], asked: ["c-mute", "Asked"], open: ["c-mute", "No owner yet"] };
+const HOME_ROLE_TEXT = {
+  treating: "Your department's Case Files, with the Pre-Authorization check of each. Create a Case File from the patient's UHID, send the suggested requests, re-fetch, mark it ready for the board.",
+  supporting: "Requests the treating doctors sent to your department. Acknowledge one when you take it up; once the report is signed in your own system send \"done\" back. A request closes by itself when the record arrives in the Case File.",
+  coordinator: "Board sessions and agendas from the Case Files their owners marked ready, the readiness of the next board date and what to chase before the meeting.",
+  dept_admin: "The doctor logins of the department you administer: create, set Doctor or Head, disable, remove. No clinical action as admin.",
+  root_admin: "The hospital, its departments, the Tumour Board accounts and their roles, the hospital-system connection, the routing of each record. No clinical action.",
+};
+const welcomeHTML = (note = "") => `<div class="intro"><h1>Make the Tumour Board Case File complete, before the board.</h1>
+  <p class="lead">Vaidyx checks every Case File against the records configured as mandatory for that cancer, confirms each report is the final signed version, finds the required fields inside each document with a verifiable source quote, routes gaps to the Responsible Department, and prepares a cited Case File summary and role-specific support for the board.</p>
+  <div class="pillars"><div><b>Before the board</b><span>Pre-Authorization gate, gap routing, re-check</span></div><div><b>During the board</b><span>Ask the Case File, specialty support, cited summary</span></div><div><b>After the board</b><span>AI-assisted adjudication, follow-up tracking</span></div></div>
+  ${note || `<p class="muted">Select a Case File on the left, or load a synthetic demo case.</p>`}</div>`;
+const homeSec = (k, body, extra = "") => `<section class="home-sec" id="home-${k === "dept_admin" ? "deptadmin" : k === "root_admin" ? "root" : k}"><h2>${esc(ROLE_LABEL[k])}${extra}</h2><div class="muted small" style="margin-bottom:8px">${esc(HOME_ROLE_TEXT[k])}</div>${body}</section>`;
+const readyBar = (c) => c.gate_passed ? `<span class="chip c-ok">Pre-Authorization met</span>` : c.readiness != null ? `<div class="bar" style="min-width:80px"><i style="width:${Number(c.readiness) || 0}%"></i></div><div class="small muted">${esc(c.readiness)}% of the records</div>` : c.listing === "awaiting_listing" ? `<span class="chip c-mute">Awaiting listing</span>` : `<span class="chip c-mute">Not checked yet</span>`;
+function homeCaseRow(c, mine) {
+  const rel = RELATION[c.relation];
+  return `<tr class="click" data-open="${esc(c.case_id)}"><td><b>${esc(c.patient?.name || c.case_id)}</b><div class="small muted">${esc(c.case_id)}${c.patient?.agesex ? " · " + esc(c.patient.agesex) : ""}</div>${c.uhid ? `<div class="small">UHID <span class="mono">${esc(c.uhid)}</span></div>` : ""}</td>
+    <td class="small">${esc(protoLabel(c.protocol) || "no protocol yet")}${!mine && c.owner_name ? `<div class="muted">Owner: ${esc(c.owner_name)}</div>` : ""}${rel && rel[1] && !(mine && c.relation === "owner") ? `<div><span class="chip ${rel[0]}">${esc(rel[1])}</span></div>` : ""}</td>
+    <td>${readyBar(c)}${c.open_actions ? `<div class="small muted">${plural(c.open_actions, "open request")}</div>` : ""}${c.suggested_unsent ? `<div class="small"><span class="chip c-warn">${plural(c.suggested_unsent, "suggested request")} not sent</span></div>` : ""}</td>
+    <td class="small nowrap">${c.board_date ? esc(dmyd(c.board_date)) : '<span class="muted">not set</span>'}${c.ready ? `<div>${readyChip(c.ready)}</div>` : ""}</td>
+    <td class="small"><div class="chips">${c.referral ? `<span class="chip c-warn" title="Referral waiting for an answer">Referral to ${esc(c.referral)} waiting</span>` : ""}${c.linked ? `<span class="chip c-info">${esc(c.linked)} linked</span>` : ""}${c.scope === "requests" ? `<span class="chip c-mute" title="Your department sees only the items it was asked about">limited view</span>` : ""}</div></td></tr>`;
+}
+function homeTreatingHTML(h) {
+  const t = h.treating, c = t.counts, mine = !h.roles?.admin;
+  const tiles = `<div class="tiles">${tile(mine ? "My Case Files" : "Case Files", mine ? c.mine : c.visible, "", mine ? [c.participating ? plural(c.participating, "participating") : "", c.asked ? `${c.asked} asked about` : ""].filter(Boolean).join(", ") : "every Case File (admin)")}
+    ${tile("Pre-Authorization met", c.gate_passed, "", mine ? `of ${c.mine} owned` : "")}${tile("Ready for the board", c.ready_marked, "", "marked by the owner")}
+    ${tile("Suggested requests not sent", c.suggested_unsent, "", c.suggested_unsent ? "open the Case File to send them" : "")}
+    ${tile("Referrals to answer", t.referrals_to_answer, "", c.referral_waiting ? `${plural(c.referral_waiting, "referral")} sent, waiting` : "")}
+    ${t.inbox.departments.length ? tile("Requests to my department", t.inbox.open, "", `${t.inbox.overdue} overdue`) : ""}</div>`;
+  const cases = t.cases.filter((x) => !["asked", "open"].includes(x.relation)), asked = t.cases.filter((x) => x.relation === "asked"), open = t.cases.filter((x) => x.relation === "open");
+  const table = (rows) => `<div class="tscroll"><table class="t home-t"><thead><tr><th>Case File</th><th>Protocol</th><th>Pre-Authorization</th><th>Board date</th><th></th></tr></thead><tbody>${rows.map((x) => homeCaseRow(x, mine)).join("")}</tbody></table></div>`;
+  return homeSec("treating", `${tiles}
+    <div class="card"><h3>${mine ? "My Case Files" : "Case Files"} <span class="btns">${t.can_create ? `<button class="primary sm" id="hm-new">+ Create from UHID</button>` : ""}</span></h3>
+      ${cases.length ? table(cases) : `<div class="muted small">No Case File of ${mine ? "your department" : "an owning department"} yet.${t.can_create ? " Create one from the patient's UHID (or IP / OP No.)." : ""}</div>`}
+      ${open.length ? `<h4 class="subh">Case Files without an owning department <span class="muted small">${plural(open.length, "Case File")}, open to every placed account (V1 demo and manual Case Files)</span></h4>${table(open)}` : ""}
+      ${asked.length ? `<h4 class="subh">Asked of my department <span class="muted small">${plural(asked.length, "Case File")}, limited view</span></h4>${table(asked)}` : ""}</div>
+    ${t.referrals.length ? inboxReferralsHTML(t.referrals) : ""}
+    ${t.inbox.departments.length ? `<div class="card"><h3>Requests to ${esc(t.inbox.departments.map((d) => d.name).join(", "))} <span class="btns"><button class="ghost sm" id="hm-inbox">Open the department inbox</button></span></h3>
+      <div class="small">${t.inbox.open ? `<b>${t.inbox.open} open</b>${t.inbox.overdue ? `, <span class="chip c-bad">${t.inbox.overdue} overdue</span>` : ""}` : `<span class="muted">No open request to your department.</span>`}</div></div>` : ""}`,
+    h.departments.filter((d) => d.group === "treating").map((d) => ` <span class="chip c-mute">${esc(d.name)}${d.role === "head" ? " (Head)" : ""}</span>`).join(""));
+}
+function homeSupportingHTML(h) {
+  const s = h.supporting;
+  const tiles = `<div class="tiles">${tile("Open requests", s.open, "", s.departments.map((d) => d.name).join(", "))}${tile("Overdue", s.overdue)}${tile("Taken up", s.departments.reduce((n, d) => n + d.acknowledged, 0), "", "acknowledged, not yet done")}${tile("Done, awaiting re-fetch", s.departments.reduce((n, d) => n + d.done, 0), "", "closes when the record arrives")}</div>`;
+  return homeSec("supporting", `${tiles}${s.departments.map((d) => `<div class="card"><h3>${esc(d.name)} <span class="muted small">${d.open} open · ${d.overdue} overdue</span> <span class="btns"><button class="ghost sm" data-inbox>Open the department inbox</button></span></h3>
+      ${d.requests.length ? `<div class="tscroll"><table class="t inbox-t"><thead><tr><th>Case File</th><th>Record needed</th><th>What is asked</th><th>Due</th><th>Status</th><th>Actions</th></tr></thead><tbody>${d.requests.map((q) => ibRow(q, d)).join("")}</tbody></table></div>${d.more ? `<div class="small muted" style="margin-top:6px">${plural(d.more, "more request")} in the department inbox.</div>` : ""}` : `<div class="muted small">No request to this department.</div>`}</div>`).join("")}`,
+    h.departments.filter((d) => d.group === "supporting").map((d) => ` <span class="chip c-mute">${esc(d.name)}${d.role === "head" ? " (Head)" : ""}</span>`).join(""));
+}
+function homeCoordinatorHTML(h) {
+  const c = h.coordinator, ag = c.agenda, s = c.sessions;
+  const days = ag && ag.days_to_board != null ? (ag.days_to_board < 0 ? `${-ag.days_to_board} day(s) ago` : ag.days_to_board === 0 ? "today" : `in ${plural(ag.days_to_board, "day")}`) : "";
+  const tiles = `<div class="tiles">${tile("Next board", c.next_board_date ? dmyd(c.next_board_date) : "none", "", days)}${tile("Case Files listed", ag ? ag.cases.length : 0, "", ag ? `${ag.counts.ready} ready, ${ag.counts.on_track} on track, ${ag.counts.at_risk} at risk, ${ag.counts.blocked} blocked` : "for the next board")}
+    ${tile("Marked ready by owners", c.ready_marked, "", `${c.listed_total} listed in all${c.awaiting_listing ? `, ${c.awaiting_listing} awaiting listing` : ""}`)}${tile("Sessions", s.planned + s.in_session, "", `${s.planned} planned, ${s.in_session} in session, ${s.closed_n} closed`)}</div>`;
+  const srow = (x) => `<tr class="click" data-open-session="${esc(x.id)}"><td><b>${fmtDate(x.date)}</b></td><td>${esc(x.title || "Tumour Board")}<div class="small muted">${esc(x.id)}</div></td><td>${x.cases}</td><td><span class="chip ${(SSTATUS[x.status] || SSTATUS.planned)[0]}">${(SSTATUS[x.status] || SSTATUS.planned)[1]}</span></td></tr>`;
+  return homeSec("coordinator", `${tiles}
+    <div class="card"><h3>Board sessions <span class="btns">${c.can_manage ? `<button class="primary sm" id="hm-sessions-new">Create board session</button>` : ""}<button class="ghost sm" id="hm-sessions">All sessions</button></span></h3>
+      ${s.open.length ? `<div class="tscroll"><table class="t"><thead><tr><th>Date</th><th>Title</th><th>Case Files</th><th>Status</th></tr></thead><tbody>${s.open.map(srow).join("")}</tbody></table></div>` : `<div class="muted small">No open board session.${c.can_manage ? " Create one from the Case Files marked ready for a board date." : ""}</div>`}
+      ${s.closed.length ? `<div class="small muted" style="margin-top:6px">Closed: ${s.closed.map((x) => `<a href="#" data-open-session="${esc(x.id)}">${esc(fmtDate(x.date))}${x.title ? " " + esc(x.title) : ""}</a>`).join(", ")}</div>` : ""}</div>
+    <div class="card" id="hm-readiness"><h3>Readiness for ${c.next_board_date ? esc(dmyd(c.next_board_date)) : "the next board"} <span class="muted small">before the board</span></h3>
+      ${ag ? readinessHTML(ag, !!(S.me?.coordinator || S.me?.admin)) : `<div class="muted small">No Case File is listed for a board date yet.</div>`}</div>`);
+}
+function homeDeptAdminHTML(h) {
+  const d = h.dept_admin;
+  const row = (x) => `<tr><td><b>${esc(x.display_name || x.username)}</b></td><td class="small">${esc(x.username)}</td><td>${x.role === "head" ? "Head" : "Doctor"}</td><td><div class="chips">${x.disabled ? '<span class="chip c-bad">Disabled</span>' : '<span class="chip c-ok">Active</span>'}${x.account === false ? '<span class="chip c-warn" title="No Vaidyx login with this name">no Vaidyx login</span>' : ""}</div></td></tr>`;
+  return homeSec("dept_admin", d.departments.map((x) => `<div class="card"><h3>${esc(x.name)} <span class="chip c-mute">${x.group === "supporting" ? "Supporting" : "Treating"}</span> <span class="btns"><button class="primary sm" data-mydept="${esc(x.id)}">Manage doctors</button></span></h3>
+      <div class="tiles">${tile("Doctors", x.doctors, "", `${plural(x.heads, "head")}`)}${tile("Disabled", x.disabled)}${x.no_login ? tile("Without a Vaidyx login", x.no_login) : ""}${tile("Department admins", x.admins)}</div>
+      ${x.list.length ? `<div class="tscroll"><table class="t"><thead><tr><th>Name</th><th>Login</th><th>Role</th><th>Status</th></tr></thead><tbody>${x.list.map(row).join("")}</tbody></table></div>${x.doctors > x.list.length ? `<div class="small muted">${x.doctors - x.list.length} more under Manage doctors.</div>` : ""}` : `<div class="muted small">No one is placed in this department yet. Create the first doctor login under Manage doctors.</div>`}</div>`).join("") || `<div class="card"><div class="muted small">You administer no department.</div></div>`);
+}
+function homeRootHTML(h) {
+  const r = h.root_admin, hs = r.hospital, a = r.accounts;
+  const setup = r.setup_needed && meCan("manage_org") ? `<div class="card fs-card" id="hm-setup"><h3>First set-up <span class="chip c-warn">answer once</span></h3>
+      <div class="muted small" style="margin-bottom:6px">Three questions before the first board. The PM-JAY board composition check (a surgical, a radiation and a medical oncologist present, HBP 2.2) runs only for an empanelled hospital; it flags, never blocks. Everything can be changed later under Organisation.</div>
+      <div class="form"><div class="grid3">
+        <div><label for="fs-name">Hospital name</label><input id="fs-name" value="${esc(hs.name || "")}" placeholder="As the hospital writes it"></div>
+        <div><label for="fs-level">NCG level</label><select id="fs-level"><option value="essential" ${hs.level !== "optimal" ? "selected" : ""}>Essential</option><option value="optimal" ${hs.level === "optimal" ? "selected" : ""}>Optimal</option></select></div>
+        <div><label>Is the hospital PM-JAY empanelled?</label><div class="radio-row"><label class="chk"><input type="radio" name="fs-pmjay" value="yes" ${hs.pmjay_empanelled !== false ? "checked" : ""}> Yes</label><label class="chk"><input type="radio" name="fs-pmjay" value="no" ${hs.pmjay_empanelled === false ? "checked" : ""}> No</label></div></div></div></div>
+      <div class="actions-row"><button class="primary sm" id="fs-save">Save first set-up</button></div></div>` : "";
+  const tiles = `<div class="tiles">${tile("Hospital", hs.name || "not named", "", `NCG ${esc(hs.level || "essential")}${hs.type ? ", " + hs.type : ""}`)}${tile("PM-JAY empanelled", hs.pmjay_empanelled === false ? "No" : "Yes", "", r.first_setup ? `set up ${dmyd(r.first_setup.at)} by ${esc(r.first_setup.by)}` : "default, not yet confirmed")}
+    ${tile("Departments", r.departments.treating + r.departments.supporting, "", `${r.departments.treating} treating, ${r.departments.supporting} supporting${r.departments.placeholder_emails ? `, ${r.departments.placeholder_emails} with a placeholder email` : ""}`)}
+    ${tile("Accounts", a.placed, "", `${a.doctors} doctors, ${a.dept_admins} department admins, ${a.coordinators} coordinator(s), ${a.root_admins} root admin(s)${a.disabled ? `, ${a.disabled} disabled` : ""}${a.no_login ? `, ${a.no_login} without a Vaidyx login` : ""}`)}
+    ${tile("Hospital system", r.his.enabled ? "On" : "Off", "", r.his.label || r.his.url || "not configured")}${tile("Routes overridden", r.routes_overridden, "", "records routed by hand")}</div>`;
+  return homeSec("root_admin", `${setup}${tiles}<div class="card"><h3>Organisation <span class="btns"><button class="primary sm" id="hm-org">Open the organisation</button>${S.me?.admin || S.me?.coordinator ? `<button class="ghost sm" id="hm-dash">Quality dashboard</button>` : ""}</span></h3>
+      <div class="small muted">Board heads: ${esc(r.board_heads.join(", ") || "none")}. Hospital settings, departments and emails, accounts and roles, the hospital-system connection and the routing map are edited there; every change is audited.</div></div>`);
+}
+const HOME_HTML = { treating: homeTreatingHTML, supporting: homeSupportingHTML, coordinator: homeCoordinatorHTML, dept_admin: homeDeptAdminHTML, root_admin: homeRootHTML };
+function homeNotificationsHTML(h) {
+  const list = h.notifications || [];
+  return `<section class="home-sec" id="home-notifications"><h2>Notifications ${h.unread ? `<span class="chip c-warn">${h.unread} unread</span>` : ""}</h2>
+    <div class="card">${list.length ? list.map(ntfRow).join("") : `<div class="muted small">Nothing yet.</div>`}<div class="actions-row"><button class="ghost sm" id="hm-ntf-all">All notifications</button></div></div></section>`;
+}
+async function showHome() {
+  stopRoomPoll(); S.roomId = null; showOnly("welcome");
+  const box = $("#welcome");
+  if (!S.me) { box.classList.remove("home"); box.innerHTML = welcomeHTML(); return; }
+  if (!S.home) box.innerHTML = `<div class="card"><div class="muted small"><span class="spin"></span> Loading your home...</div></div>`;
+  let h;
+  try { h = await api("/home"); } catch (e) { box.classList.remove("home"); box.innerHTML = welcomeHTML(`<div class="card">${esc(e.message)}</div>`); return; }
+  S.home = h;
+  if (!h.sections.length) {
+    box.classList.remove("home");
+    box.innerHTML = welcomeHTML(`<div class="card"><h3>Your login has no Tumour Board role yet</h3><div class="muted small">Case Files are shown to accounts placed in a department (as a doctor), to the MDT Coordinator and to admins. Ask your department admin to place you, or the root admin for a role.</div></div>`);
+    return;
+  }
+  box.classList.add("home");
+  const roles = [...(h.roles?.admin ? ["Vaidyx admin"] : []), ...h.sections.map((k) => ROLE_LABEL[k])];
+  box.innerHTML = `<div class="home-head"><div><div class="eyebrow">Home · ${esc(roles.join(" · "))}</div><h1>${esc(h.display_name || h.user)}</h1>
+      <div class="muted small">${esc([h.departments.map((d) => `${d.name}${d.role === "head" ? " (Head)" : ""}`).join(", "), h.admin_of.length ? "admin of " + h.admin_of.map((d) => d.name).join(", ") : ""].filter(Boolean).join(" · ") || "Tumour Board")} · ${esc(dmyd(h.today))}</div></div>
+    <div class="home-actions"><button class="ghost sm" id="hm-refresh" title="Reload the home">Refresh</button></div></div>
+    ${h.sections.map((k) => HOME_HTML[k](h)).join("")}${homeNotificationsHTML(h)}`;
+  bindHome(h);
+}
+function bindHome(h) {
+  const on = (sel, fn) => { const el = $(sel); if (el) el.onclick = fn; };
+  on("#hm-refresh", showHome); on("#hm-new", newCase); on("#hm-inbox", showInbox); on("#hm-sessions", showSessions); on("#hm-sessions-new", showSessions);
+  on("#hm-org", () => showOrgPage()); on("#hm-dash", () => showDashboard()); on("#hm-ntf-all", async () => { await loadNotifications(); showNotifications(); });
+  $$("#welcome [data-inbox]").forEach((b) => (b.onclick = showInbox));
+  $$("#welcome [data-mydept]").forEach((b) => (b.onclick = () => showMyDept(b.dataset.mydept)));
+  $$("#welcome tr[data-open]").forEach((tr) => (tr.onclick = (e) => { if (!e.target.closest("button, a, details")) openCaseSafe(tr.dataset.open); }));
+  $$("#welcome [data-ntf]").forEach((el) => (el.onclick = async () => { try { await api("/notifications/read", { json: { ids: [el.dataset.ntf] } }); } catch (e) {} loadNotifications(); if (el.dataset.case) await openCaseSafe(el.dataset.case); else showHome(); }));
+  if (h.supporting) bindInboxRows("#home-supporting", showHome);
+  if (h.treating?.referrals?.length) bindInboxReferrals(h.treating.referrals, "#home-treating", showHome);
+  // the coordinator chases from the home as from the Board sessions page (V2 item 6.1)
+  $$("#hm-readiness [data-remowner]").forEach((b) => (b.onclick = async (e) => { e.stopPropagation(); if (await remindOwner(b.dataset.remowner, b.dataset.patient)) showHome(); }));
+  $$("#hm-readiness [data-remreq]").forEach((b) => (b.onclick = async (e) => { e.stopPropagation(); if (await remindRequest(b.dataset.case, b.dataset.remreq, !!b.dataset.sug, b.dataset.label)) showHome(); }));
+  on("#fs-save", async () => {
+    const yes = $('input[name="fs-pmjay"]:checked');
+    if (!yes) { toast("Answer whether the hospital is PM-JAY empanelled"); return; }
+    try { await api("/org/setup", { json: { pmjay_empanelled: yes.value === "yes", name: $("#fs-name").value.trim(), level: $("#fs-level").value } }); toast("First set-up saved"); await loadOrg(); S.orgPage = null; showHome(); }
+    catch (e) { toast(e.message, 8000); }
+  });
+}
+
 // ------------------------------------------------------------------ boot
 $$("#tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 $("#btn-new").onclick = newCase;
+$("#btn-home").onclick = showHome;
 $("#btn-cards").onclick = showCards;
 $("#btn-skills").onclick = () => showSkills();
 $("#btn-connectors").onclick = showConnectors;
@@ -2662,7 +2808,7 @@ $("#btn-sessions").onclick = showSessions;
   if (S.me?.known || S.me?.admin) await loadCases();  // a login not placed in any department (a department admin, a root admin) sees no Case Files
   else { $("#case-list").innerHTML = `<div class="small muted">Case Files are shown to accounts placed in a department, to the MDT Coordinator and to admins.</div>`; $("#demo-list").innerHTML = ""; }
   loadModels(); setInterval(loadModels, 30000); setInterval(() => { loadNotifications(); refreshInboxCount(); }, 30000);
-  const m = location.hash.match(/case=([\w.-]+)/); if (m) openCase(m[1]);
+  const m = location.hash.match(/case=([\w.-]+)/); if (m) openCase(m[1]); else showHome();  // a home per role (V2 item 7.1)
 })();
 
 // small screens: the case list is a slide-over panel

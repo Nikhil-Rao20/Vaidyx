@@ -7,7 +7,7 @@
 <link rel="icon" href="/static/vaidyx-icon.svg">
 <link rel="preload" href="/static/tb/fonts/AtkinsonHyperlegible-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/static/tb/fonts/AtkinsonHyperlegible-Bold.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/static/tb/tb.css?v=3.3">
+<link rel="stylesheet" href="/static/tb/tb.css?v=3.4">
 </head>
 <body>
 <header class="top">
@@ -15,6 +15,7 @@
   <a class="brand" href="/tb"><img src="/static/vaidyx-wordmark.svg" alt="Vaidyx"><span class="divider"></span><span class="product">AI Agent for Tumour Board</span></a>
   <div class="models" id="models"></div>
   <nav class="topnav">
+    <button class="ghost" id="btn-home" title="Your home: what your role sees first">Home</button>
     <button class="ghost bell hidden" id="btn-bell" title="Notifications: requests to your department, Case Files ready for the board" aria-label="Notifications">Notifications <span class="chip c-warn hidden" id="bell-count">0</span></button>
     <button class="ghost" id="btn-sessions" title="Board sessions: agenda, attendance, AI support for absent specialties, decisions">Board sessions</button>
     <button class="ghost hidden" id="btn-dashboard" title="Tumour Board quality dashboard: readiness, requests, attendance, decisions and follow-up against published standards">Quality dashboard</button>
@@ -53,16 +54,7 @@
   </aside>
 
   <main class="main" id="main">
-    <section class="welcome" id="welcome">
-      <h1>Make the Tumour Board Case File complete, before the board.</h1>
-      <p class="lead">Vaidyx checks every Case File against the records configured as mandatory for that cancer, confirms each report is the final signed version, finds the required fields inside each document with a verifiable source quote, routes gaps to the Responsible Department, and prepares a cited Case File summary and role-specific support for the board.</p>
-      <div class="pillars">
-        <div><b>Before the board</b><span>Pre-Authorization gate, gap routing, re-check</span></div>
-        <div><b>During the board</b><span>Ask the Case File, specialty support, cited summary</span></div>
-        <div><b>After the board</b><span>AI-assisted adjudication, follow-up tracking</span></div>
-      </div>
-      <p class="muted">Select a Case File on the left, or load a synthetic demo case.</p>
-    </section>
+    <section class="welcome" id="welcome"></section>
 
     <section id="intake" class="hidden"></section>
     <section id="inbox" class="hidden"></section>
@@ -106,6 +98,6 @@
 <div class="drawer hidden" id="drawer"><div class="drawer-body" id="drawer-body"></div></div>
 <div class="modal hidden" id="modal"><div class="modal-body" id="modal-body"></div></div>
 <div class="toast hidden" id="toast"></div>
-<script type="module" src="/static/tb/tb.js?v=3.3"></script>
+<script type="module" src="/static/tb/tb.js?v=3.4"></script>
 </body>
 </html>

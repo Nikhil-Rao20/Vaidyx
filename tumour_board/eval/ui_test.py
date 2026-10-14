@@ -20,7 +20,11 @@ doctor creates a Case File from VXH/26/004201 and marks it ready for the board; 
 among the candidates, creates the session, records the heads present and a Breast Surgery member (the surgical seat with the "check
 PM-JAY requirement" chip), opens a record in the drawer and the images in the OHIF viewer served through the app (no request to the
 PACS port), and fetches the minutes. The session is not started (no model call for briefs). The session file, the Case File and the
-logins are deleted at the end."""
+logins are deleted at the end.
+--only roles: a home per role (V2 item 7.1): throw-away logins of every role (a Breast Surgery doctor, a Radiology doctor, a Radiology
+department admin, an MDT Coordinator, a root admin) land on their home and use one button of it; the root admin answers the first set-up
+when it is still open (the hospital block is restored afterwards); a doctor who is also department admin sees both sections. Also part of
+the default run."""
 import argparse, os, secrets, sys, time
 from urllib.parse import unquote, urlparse
 
@@ -112,6 +116,138 @@ def admin_screens(b, pg, base, pw, shot, errors):
         if pg2:
             pg2.close()
         admin_cleanup(pg, base)
+
+
+H7 = {"breast": "tb-ui-h7-breast", "rad": "tb-ui-h7-rad", "radadmin": "tb-ui-h7-radadmin", "mdt": "tb-ui-h7-mdt", "root": "tb-ui-h7-root"}  # throwaway synthetic logins (V2 item 7.1)
+
+
+def roles_cleanup(pg, base, hospital=None):
+    """As admin: take the throwaway role logins out of the organisation (users and root admins), delete their Vaidyx logins and put the
+    hospital block back as it was before the pass (the first set-up answered by the throwaway root admin is undone)."""
+    names = set(H7.values())
+    try:
+        o = pg.request.get(base + "/api/tb/org").json()
+        body = {"users": {u: v for u, v in (o.get("users") or {}).items() if u not in names}, "admins": [a for a in (o.get("admins") or []) if a not in names]}
+        if hospital is not None:
+            body["hospital"] = hospital
+        pg.request.put(base + "/api/tb/org", data=body)
+    except Exception as e:
+        print("roles cleanup (org) failed:", e)
+    for u in names:
+        pg.request.delete(base + "/api/auth/users", data={"username": u})
+
+
+def roles_screens(b, pg, base, pw, shot, errors):
+    """V2 item 7.1: a home per role, 0 JS errors on each. Throwaway logins (a Breast Surgery doctor, a Radiology doctor, a Radiology
+    department admin, an MDT Coordinator, a root admin) are created through the Tumour Board API as admin; each logs in, lands on its
+    home and uses one button of it: Create from UHID (the dialog), the department inbox, the board sessions, Manage doctors, the
+    Organisation. The root admin answers the first set-up when it is still open (hospital name, NCG level, PM-JAY empanelled) and the home
+    shows the answer; the Radiology doctor made admin of Radiology sees both sections, the clinical one first. The hospital block and the
+    logins are restored at the end; passwords are random and never printed. `pg` is the admin page."""
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
+    hospital = (pg.request.get(base + "/api/tb/org").json().get("hospital") or {})
+    roles_cleanup(pg, base)  # a previous run that stopped half way
+    pws = {k: "Synthetic-" + secrets.token_urlsafe(12) for k in H7}
+    spec = {"breast": {"departments": {"breast_surgery": "doctor"}, "display_name": "Dr Breast (UI test, synthetic)"},
+            "rad": {"departments": {"radiology": "doctor"}, "display_name": "Dr Radiology (UI test, synthetic)"},
+            "radadmin": {"admin_of": ["radiology"], "display_name": "Radiology admin (UI test, synthetic)"},
+            "mdt": {"coordinator": True, "display_name": "MDT Coordinator (UI test, synthetic)"},
+            "root": {"root_admin": True, "display_name": "Root admin (UI test, synthetic)"}}
+    for k, body in spec.items():
+        r = pg.request.post(base + "/api/tb/org/accounts", data={"username": H7[k], "password": pws[k], **body})
+        if not r.ok:  # never a silent pass: every role's home must be visited
+            errors.append(f"roles: the {k} login could not be created: HTTP {r.status} {r.text()[:120]}"); roles_cleanup(pg, base, hospital); return
+    vp = pg.viewport_size
+    expect = {"breast": ["home-treating"], "rad": ["home-supporting"], "radadmin": ["home-deptadmin"], "mdt": ["home-coordinator"], "root": ["home-root"]}
+
+    def home(k):
+        p2 = b.new_page(viewport=vp, device_scale_factor=1); watch(p2, errors)
+        login(p2, base, H7[k], pws[k])
+        p2.goto(base + "/tb"); p2.wait_for_selector("#welcome .home-sec", timeout=20000); p2.wait_for_timeout(800)
+        secs = [el.get_attribute("id") for el in p2.locator("#welcome .home-sec").all()]
+        if secs[:-1] != expect[k] or secs[-1] != "home-notifications":  # the role's section(s), then the notifications
+            errors.append(f"roles: the {k} home shows sections {secs}, expected {expect[k] + ['home-notifications']}")
+        if p2.evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth"):
+            errors.append(f"roles: the {k} home scrolls sideways at {vp['width']}px")
+        shot(f"home_{k}", page=p2, full_page=True)
+        return p2
+
+    def back_home(p2, k):  # the Home button returns to the home from any screen
+        p2.click("#btn-home"); p2.wait_for_selector("#welcome .home-sec", timeout=20000)
+        if p2.locator("#welcome").is_hidden():
+            errors.append(f"roles: Home did not bring the {k} login back to its home")
+
+    p2 = None
+    try:
+        p2 = home("breast")
+        p2.click("#hm-new"); p2.wait_for_selector("#modal:not(.hidden) #nc-his, #modal:not(.hidden) #nc-manual", timeout=20000)
+        if "New Tumour Board Case File" not in p2.inner_text("#modal-body"):
+            errors.append("roles: Create from UHID on the treating doctor's home did not open the new Case File dialog")
+        p2.keyboard.press("Escape"); p2.wait_for_timeout(300)
+        if p2.locator("#modal").is_visible():
+            p2.click("[data-closemodal]") if p2.locator("[data-closemodal]").count() else p2.evaluate("document.getElementById('modal').classList.add('hidden')")
+        if not p2.locator("#home-treating .home-t, #home-treating .muted").count():
+            errors.append("roles: the treating doctor's home has neither a Case File table nor an empty note")
+        p2.close()
+
+        p2 = home("rad")
+        if not p2.locator("#home-supporting [data-inbox]").count():
+            errors.append("roles: the supporting doctor's home has no department inbox button")
+        else:
+            p2.click("#home-supporting [data-inbox]"); p2.wait_for_selector("#inbox .card", timeout=20000)
+            back_home(p2, "rad")
+        p2.close()
+
+        p2 = home("mdt")
+        if not p2.locator("#hm-readiness").count():
+            errors.append("roles: the coordinator's home has no readiness card")
+        p2.click("#hm-sessions"); p2.wait_for_selector("#sessions .card", timeout=20000)
+        back_home(p2, "mdt")
+        p2.close()
+
+        p2 = home("radadmin")
+        if p2.locator("#btn-org").is_visible():
+            errors.append("roles: a department admin sees the Organisation button")
+        p2.click("#home-deptadmin [data-mydept='radiology']"); p2.wait_for_selector("#deptpage .card", timeout=20000)
+        if H7["rad"] not in p2.inner_text("#deptpage"):
+            errors.append("roles: Manage doctors from the department admin's home does not list the Radiology doctor")
+        back_home(p2, "radadmin")
+        p2.close()
+
+        p2 = home("root")
+        answered = False
+        if p2.locator("#hm-setup").count():  # the first set-up is still open on this organisation: answer it, the home shows the answer
+            p2.fill("#fs-name", "Vaidyx UI Hospital (SYNTHETIC)"); p2.select_option("#fs-level", "optimal"); p2.check("input[name='fs-pmjay'][value='no']")
+            p2.click("#fs-save"); p2.wait_for_selector("#hm-setup", state="detached", timeout=20000); p2.wait_for_timeout(500)
+            txt = p2.inner_text("#home-root")
+            if "Vaidyx UI Hospital (SYNTHETIC)" not in txt or "NCG optimal" not in txt or "set up " not in txt:
+                errors.append("roles: after the first set-up the root admin's home does not show the name, the level and who answered")
+            tile = p2.locator("#home-root .tile", has_text="PM-JAY empanelled").first
+            if tile.count() and "No" not in tile.inner_text():
+                errors.append("roles: the PM-JAY tile does not show the No just answered")
+            answered = True
+            shot("home_root_after_setup", page=p2, full_page=True)
+        else:
+            print("roles: the first set-up was answered before this run; the set-up card is not shown (expected)")
+        p2.click("#hm-org"); p2.wait_for_selector("#o-depts tr", timeout=20000)
+        back_home(p2, "root")
+        p2.close(); p2 = None
+
+        r = pg.request.post(base + "/api/tb/org/accounts", data={"username": H7["rad"], "admin_of": ["radiology"]})  # the doctor also administers her department
+        if not r.ok:
+            errors.append(f"roles: the Radiology doctor could not be made department admin: HTTP {r.status}")
+        else:
+            p2 = b.new_page(viewport=vp, device_scale_factor=1); watch(p2, errors)
+            login(p2, base, H7["rad"], pws["rad"]); p2.goto(base + "/tb"); p2.wait_for_selector("#welcome .home-sec", timeout=20000); p2.wait_for_timeout(600)
+            secs = [el.get_attribute("id") for el in p2.locator("#welcome .home-sec").all()]
+            if secs != ["home-supporting", "home-deptadmin", "home-notifications"]:
+                errors.append(f"roles: a doctor who is also department admin shows sections {secs} (expected supporting, dept admin, notifications)")
+            shot("home_mixed", page=p2, full_page=True)
+            p2.close(); p2 = None
+    finally:
+        if p2:
+            p2.close()
+        roles_cleanup(pg, base, hospital)
 
 
 DEMO_LOGINS = os.path.expanduser("~/vaidyx/.tb_v2_demo_logins")  # synthetic V2 role logins (tab-separated); passwords never printed
@@ -824,7 +960,7 @@ def board_screens(b, pg, base, pw, shot, errors):
 
 def run_flow(b, base, pw, out, size, sfx, errors, only=None):
     """The whole UI flow in one fresh page at one viewport size; JS errors go into `errors`, screenshot names end in `sfx`.
-    only="admin" / "his" / "requests" / "referral" / "board": log in and run only that part."""
+    only="admin" / "his" / "requests" / "referral" / "board" / "roles": log in and run only that part."""
     pg = b.new_page(viewport={"width": size[0], "height": size[1]}, device_scale_factor=1)
     watch(pg, errors)
     shot = lambda name, page=None, **kw: (page or pg).screenshot(path=f"{out}/{name}{sfx}.png", **kw)
@@ -848,6 +984,14 @@ def run_flow(b, base, pw, out, size, sfx, errors, only=None):
         try:
             pg.wait_for_selector("#btn-new:not(.hidden)", state="attached", timeout=20000)
             {"requests": requests_screens, "referral": referral_screens, "board": board_screens}[only](b, pg, base, pw, shot, errors)
+        finally:
+            pg.close()
+        return
+    if only == "roles":
+        pg.goto(base + "/tb")
+        try:
+            pg.wait_for_selector("#welcome .home-sec", timeout=20000)
+            roles_screens(b, pg, base, pw, shot, errors)
         finally:
             pg.close()
         return
@@ -917,6 +1061,7 @@ def run_flow(b, base, pw, out, size, sfx, errors, only=None):
     if pg.locator("#btn-queue").is_visible():
         pg.click("#btn-queue"); pg.wait_for_selector("#intake .card", timeout=20000); pg.wait_for_timeout(600); shot("intake_queue", full_page=True)
     admin_screens(b, pg, base, pw, shot, errors)  # V2 item 2.3: Organisation (root admin) and My department (department admin)
+    roles_screens(b, pg, base, pw, shot, errors)  # V2 item 7.1: a home per role, every role's screens with 0 JS errors
     # after the board (V1 Phase 7): a decision with a dose slip and no radiation oncologist on TB-002 (adjudicated through the API: one
     # reasoner call); the Board tab renders the composition, the guideline flag with its reference and the resolution buttons; one flag
     # corrected through the dialog (version 2); the department inbox shows the board action. TB-002 is reset by the next e2e run.
@@ -1001,7 +1146,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--base", default="http://127.0.0.1:7000"); ap.add_argument("--password", required=True)
     ap.add_argument("--out", default="/home/bharath.tangella/vaidyx/Vaidyx/data/tumour_board/ui_shots")
     ap.add_argument("--viewports", type=parse_viewports, default=None, help="comma list of desktop,tablet,phone (default: desktop)")
-    ap.add_argument("--only", choices=["admin", "his", "requests", "referral", "board"], default=None, help="admin: only the Organisation and My department screens (no model calls); "
+    ap.add_argument("--only", choices=["admin", "his", "requests", "referral", "board", "roles"], default=None, help="admin: only the Organisation and My department screens (no model calls); "
                     "his: only the HIS-connected Case File screens against the mock hospital (reader model calls; the Case Files it creates are deleted); "
                     "requests: the requests to departments (V2 items 4.2 / 4.3) as a treating doctor and a radiologist (reader model calls; the Case File is deleted); "
                     "referral: referral and ownership (V2 items 5.1 to 5.3) with two throw-away doctor logins (reader model calls; the Case File and logins are deleted); "

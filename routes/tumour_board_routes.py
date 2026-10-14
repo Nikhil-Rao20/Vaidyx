@@ -17,6 +17,7 @@ from tumour_board import skills  # agent role definitions as editable SKILL.md f
 from tumour_board import connectors, mcp_server  # MCP: hospital-system connectors (client) and the read-only server (12 Oct)
 from tumour_board import discord  # discordances between reports, decision watch (12 Oct)
 from tumour_board import fhir_export  # FHIR R4 document bundle and the HBCR registry abstract (12 Oct)
+from tumour_board import home  # a home per role (V2 item 7.1)
 from tumour_board import metrics  # agenda readiness, chase list, quality dashboard (12 Oct)
 from tumour_board import accounts  # department admins create / disable / remove doctor logins; root admin accounts (V2 item 2.2)
 from tumour_board import his_case, his_client  # HIS-connected Case Files: create from a UHID, re-fetch, link registrations, outside reports (V2 items 3.1 to 3.6)
@@ -434,6 +435,29 @@ def setup_tumour_board_routes():
             except Exception:
                 out["vaidyx_users"] = []
         return out
+
+    @r.get("/home")
+    async def home_(request: Request):
+        """The home of this login (V2 item 7.1): its sections by role (treating doctor, supporting doctor, MDT Coordinator, department
+        admin, root admin) with what each needs first; nothing a role may not open elsewhere."""
+        rl = _roles(request)
+        if rl.get("disabled"):
+            raise HTTPException(403, "Your Tumour Board access is disabled. Ask your department admin or the root admin.")
+        return home.build(rl, mgr=getattr(request.app.state, "auth_manager", None))
+
+    @r.post("/org/setup")
+    async def org_setup(request: Request):
+        """{"pmjay_empanelled": bool, "name"?, "level"?}: the root admin's first set-up, answered once (V2 item 7.1; plan section 11).
+        409 once answered: the settings are then changed under Organisation. Audited."""
+        rl = _roles(request); _need(rl, "manage_org"); b = await request.json()
+        b = b if isinstance(b, dict) else {}
+        try:
+            h = org.first_setup(rl["user"], b.get("pmjay_empanelled"), name=b.get("name"), level=b.get("level") or None)
+        except org.SetupDone as e:
+            raise HTTPException(409, str(e))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {"ok": True, "hospital": h, "version": org.version()}
 
     @r.put("/org")
     async def put_org(request: Request):

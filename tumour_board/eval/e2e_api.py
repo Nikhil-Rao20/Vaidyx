@@ -2631,6 +2631,250 @@ def v2_phase6_cleanup(c, ctx):
     _v2_cleanup(c, ctx, {**H6_USERS, H6_MDT[0]: (H6_MDT[1], {})})
 
 
+H7_USERS = {"tb-e2e-h7-breast": ("H7breast-e2e-2026!", {"breast_surgery": "doctor"}), "tb-e2e-h7-medonc": ("H7medonc-e2e-2026!", {"medical_oncology": "doctor"}),
+            "tb-e2e-h7-rad": ("H7rad-e2e-2026!", {"radiology": "doctor"}), "tb-e2e-h7-gyn": ("H7gyn-e2e-2026!", {"gynaecologic_oncology": "doctor"})}
+H7_MDT = ("tb-e2e-h7-mdt", "H7mdt-e2e-2026!")
+H7_DEPTADMIN = ("tb-e2e-h7-radadmin", "H7radadmin-e2e-2026!")
+H7_ROOT = ("tb-e2e-h7-root", "H7root-e2e-2026!")
+
+
+def v2_phase7(c, base, ctx):
+    """V2 item 7.1 on the fixture patients (SYNTHETIC): the home per role. A treating doctor sees its department's Case Files (owned first,
+    the ready mark, unsent suggestions, the referral waiting or to answer); a supporting doctor its inbox (acknowledge from the home); the
+    MDT Coordinator the next board date, its readiness and the sessions; a department admin its doctors; a root admin the organisation and
+    the first set-up question (PM-JAY empanelled), answered once (409 after, 400 on a non-boolean, 403 for anyone without manage_org);
+    a login holding two roles stacks them, the clinical one first; a disabled login gets 403; a Vaidyx admin gets treating, coordinator and
+    root admin. Counts are compared with a baseline taken before the section, since the live store holds older Case Files (the demo ones
+    have no owning department and are open to every placed account)."""
+    import datetime as _dt
+    cl = _v2_setup(c, base, ctx, H7_USERS, "7.1")
+    breast, medonc, rad, gyn = (cl[k] for k in ("tb-e2e-h7-breast", "tb-e2e-h7-medonc", "tb-e2e-h7-rad", "tb-e2e-h7-gyn"))
+    o0 = c.get("/api/tb/org").json()
+    ctx["hospital"] = dict(o0.get("hospital") or {})  # restored by the cleanup (clears a first-set-up stamp made here)
+    extra = {}
+    for (u, pw), body in ((H7_MDT, {"coordinator": True, "display_name": "MDT Coordinator (e2e h7)"}),
+                          (H7_DEPTADMIN, {"admin_of": ["radiology"], "display_name": "Radiology admin (e2e h7)"}),
+                          (H7_ROOT, {"root_admin": True, "display_name": "Root admin (e2e h7)"})):
+        c.request("DELETE", "/api/auth/users", json={"username": u})
+        r = c.post("/api/tb/org/accounts", json={"username": u, "password": pw, **body})
+        extra[u] = httpx.Client(base_url=base, timeout=600)
+        check(f"7.1 e2e login {u}", r.status_code == 200 and extra[u].post("/api/auth/login", json={"username": u, "password": pw}).status_code == 200, r.text[:120])
+    mdt, radadmin, root = extra[H7_MDT[0]], extra[H7_DEPTADMIN[0]], extra[H7_ROOT[0]]
+    D = _dt.date.today().isoformat()  # today: the first board date >= today whatever older Case Files are listed for
+
+    def home(client):
+        r = client.get("/api/tb/home")
+        return r.json() if r.status_code == 200 else {"_status": r.status_code, "_text": r.text[:160]}
+
+    def row(h, cid):
+        return next((x for x in (h.get("treating") or {}).get("cases") or [] if x["case_id"] == cid), None)
+
+    def short(h, keys=("sections", "primary")):
+        return json.dumps({k: h.get(k) for k in keys + ("_status",) if k in h})
+
+    def create(client, ident, protocol, setting, cid):
+        r = client.post("/api/tb/cases/from-his", json={"identifier": ident, "protocol": protocol, "setting": setting, "hospital_level": "optimal", "case_id": cid, "board_date": D})
+        if r.status_code != 200:
+            check(f"7.1 create {cid} from {ident}", False, r.text[:200]); return None
+        ctx["cases"].append(cid)
+        _job(client, r)
+        return client.get(f"/api/tb/cases/{cid}").json()
+
+    # baselines before the section's Case Files (only counts are kept; rows of older Case Files are never printed)
+    b0 = {k: home(x) for k, x in (("breast", breast), ("medonc", medonc), ("rad", rad), ("gyn", gyn))}
+    bt = {k: (v.get("treating") or {}).get("counts") or {} for k, v in b0.items()}
+    b_refs = (b0["breast"].get("treating") or {}).get("referrals_to_answer", 0)
+    b_inbox_breast = next((d["open"] for d in ((b0["breast"].get("treating") or {}).get("inbox") or {}).get("departments", []) if d["id"] == "breast_surgery"), None)
+    b_rad = next((d for d in (b0["rad"].get("supporting") or {}).get("departments", []) if d["id"] == "radiology"), {})
+
+    # ---- 1. treating homes ---------------------------------------------------------------------------------------------------------
+    p01, p12 = "TB-H7-P01", "TB-H7-P12"
+    d1 = create(breast, "VXH/26/004201", "breast", "early", p01)        # complete breast work-up
+    d2 = create(medonc, "VXH/26/004212", "lung_nsclc", "non_metastatic", p12)  # lung: the CT is preliminary, a suggested request to Radiology
+    if not (d1 and d2):
+        return
+    hb = home(breast)
+    t = hb.get("treating") or {}
+    r1 = row(hb, p01)
+    check("7.1 a treating doctor's home: the treating section only, primary treating, its name and department", hb.get("sections") == ["treating"] and hb.get("primary") == "treating"
+          and hb.get("user") == "tb-e2e-h7-breast" and hb.get("display_name") == "tb-e2e-h7-breast (e2e)" and [d["id"] for d in hb.get("departments") or []] == ["breast_surgery"]
+          and not any(k in hb for k in ("supporting", "coordinator", "dept_admin", "root_admin")), short(hb, ("sections", "primary", "user", "display_name")))
+    check("7.1 the owned Case File comes first with the UHID, the owner, the gate passed and the relation owner", bool(t.get("cases")) and t["cases"][0]["case_id"] == p01 and r1
+          and r1["relation"] == "owner" and r1["uhid"] == "VXH/26/004201" and r1["owner_name"] == "Breast Surgery" and r1["gate_passed"] is True and r1["scope"] == "full"
+          and r1["board_date"] == D and r1["ready"] is None, json.dumps({k: (r1 or {}).get(k) for k in ("relation", "uhid", "owner_name", "gate_passed", "scope", "ready")}))
+    tc = t.get("counts") or {}
+    check("7.1 the treating counts: one more owned and visible Case File; the other department's Case File is not in the home", tc.get("mine") == bt["breast"].get("mine", 0) + 1
+          and tc.get("visible") == bt["breast"].get("visible", 0) + 1 and row(hb, p12) is None and tc.get("gate_passed") == bt["breast"].get("gate_passed", 0) + 1
+          and t.get("can_create") is True and t.get("his_enabled") is True,
+          json.dumps({"now": {k: tc.get(k) for k in ("mine", "visible", "gate_passed")}, "before": {k: bt["breast"].get(k) for k in ("mine", "visible", "gate_passed")}}))
+    hm = home(medonc)
+    r2 = row(hm, p12)
+    mc = (hm.get("treating") or {}).get("counts") or {}
+    check("7.1 the Medical Oncology home shows the unsent suggested request on its Case File and in the counts", r2 and r2["relation"] == "owner" and r2.get("suggested_unsent", 0) >= 1
+          and r2["gate_passed"] is False and mc.get("suggested_unsent", 0) >= bt["medonc"].get("suggested_unsent", 0) + 1 and row(hm, p01) is None,
+          json.dumps({"row": {k: (r2 or {}).get(k) for k in ("relation", "suggested_unsent", "gate_passed")}, "counts": mc.get("suggested_unsent")}))
+    hg = home(gyn)
+    gc = (hg.get("treating") or {}).get("counts") or {}
+    check("7.1 another treating department's home lists neither Case File; its counts do not move", hg.get("sections") == ["treating"] and row(hg, p01) is None and row(hg, p12) is None
+          and gc.get("visible") == bt["gyn"].get("visible", 0) and gc.get("mine") == 0, json.dumps({"now": gc.get("visible"), "before": bt["gyn"].get("visible")}))
+    if bt["gyn"].get("visible"):
+        print(f"INFO 7.1 the live store holds {bt['gyn']['visible']} Case File(s) without an owning department (before 5.1): every placed doctor's home lists them as 'open'", flush=True)
+
+    # ---- 2. the ready mark ---------------------------------------------------------------------------------------------------------
+    r = breast.post(f"/api/tb/cases/{p01}/ready", json={"ready": True, "note": "Summary to follow (e2e h7)"})
+    hb = home(breast); r1 = row(hb, p01) or {}
+    tc = (hb.get("treating") or {}).get("counts") or {}
+    check("7.1 after the owner marks it ready the home row carries who and the note; ready_marked counts it", r.status_code == 200 and (r1.get("ready") or {}).get("by") == "tb-e2e-h7-breast"
+          and r1["ready"].get("note") == "Summary to follow (e2e h7)" and r1["ready"].get("at") and tc.get("ready_marked") == bt["breast"].get("ready_marked", 0) + 1,
+          json.dumps({"ready": r1.get("ready"), "ready_marked": tc.get("ready_marked"), "before": bt["breast"].get("ready_marked")}))
+
+    # ---- 3. the supporting home --------------------------------------------------------------------------------------------------------
+    sent = _send_suggested(medonc, p12, "cect_tap", "Please report before the board (e2e h7)")
+    hr = home(rad)
+    sp = hr.get("supporting") or {}
+    rd = next((d for d in sp.get("departments") or [] if d["id"] == "radiology"), {})
+    q = next((x for x in rd.get("requests") or [] if x.get("case_id") == p12 and x.get("requirement") == "cect_tap"), None)
+    check("7.1 a supporting doctor's home: the supporting section only, the request sent to Radiology with the UHID and the Case File",
+          sent and all(s == 200 for _, s in sent) and hr.get("sections") == ["supporting"] and hr.get("primary") == "supporting" and "treating" not in hr
+          and sp.get("open", 0) >= 1 and rd.get("open", 0) == b_rad.get("open", 0) + 1 and q and q.get("uhid") == "VXH/26/004212" and q.get("status") == "pending" and q.get("acknowledged") is None,
+          json.dumps({"sent": sent, "sections": hr.get("sections"), "open": rd.get("open"), "before": b_rad.get("open"), "more": rd.get("more"), "row": {k: (q or {}).get(k) for k in ("uhid", "case_id", "status")}}))
+    r = rad.post(f"/api/tb/cases/{p12}/requests/{(q or {}).get('id') or (sent[0][0] if sent else 'x')}/acknowledge")
+    hr = home(rad)
+    rd = next((d for d in (hr.get("supporting") or {}).get("departments") or [] if d["id"] == "radiology"), {})
+    q2 = next((x for x in rd.get("requests") or [] if x.get("case_id") == p12 and x.get("requirement") == "cect_tap"), {})
+    check("7.1 acknowledged from the home: the department's acknowledged count goes up by one, the row says who", r.status_code == 200
+          and rd.get("acknowledged") == b_rad.get("acknowledged", 0) + 1 and (q2.get("acknowledged") or {}).get("by") == "tb-e2e-h7-rad",
+          json.dumps({"status": r.status_code, "acknowledged": rd.get("acknowledged"), "before": b_rad.get("acknowledged")}))
+    if b_rad.get("acknowledged"):
+        print(f"INFO 7.1 Radiology had {b_rad['acknowledged']} acknowledged open request(s) before the section; the check compares with that", flush=True)
+    hb = home(breast)
+    ibd = ((hb.get("treating") or {}).get("inbox") or {}).get("departments") or []
+    bs = next((d for d in ibd if d["id"] == "breast_surgery"), None)
+    check("7.1 the treating home's inbox names its own department (requests to Breast Surgery), nothing new open", bs is not None and bs["name"] == "Breast Surgery"
+          and bs["open"] == (b_inbox_breast or 0) and [d["id"] for d in ibd] == ["breast_surgery"], json.dumps(ibd))
+
+    # ---- 4. the referral -------------------------------------------------------------------------------------------------------------
+    r = medonc.post(f"/api/tb/cases/{p12}/referrals", json={"to": "breast_surgery", "reason": "Breast lesion on the CT to be worked up first (e2e h7, synthetic)"})
+    hb = home(breast); rr = row(hb, p12) or {}
+    tb_ = hb.get("treating") or {}
+    check("7.1 the department referred to sees the Case File as referred, with one referral to answer", r.status_code == 200 and rr.get("relation") == "referred"
+          and rr.get("owner_name") == "Medical Oncology" and tb_.get("referrals_to_answer") == b_refs + 1
+          and any(x.get("case_id") == p12 and x.get("can_answer") for x in tb_.get("referrals") or []) and tb_["cases"][0]["case_id"] == p01,
+          json.dumps({"status": r.status_code, "relation": rr.get("relation"), "to_answer": tb_.get("referrals_to_answer"), "before": b_refs}) + " " + (r.text[:120] if r.status_code != 200 else ""))
+    hm = home(medonc); r2 = row(hm, p12) or {}
+    mc = (hm.get("treating") or {}).get("counts") or {}
+    check("7.1 the referring department sees the referral waiting with Breast Surgery on its row and in the counts", r2.get("relation") == "owner" and r2.get("referral") == "Breast Surgery"
+          and mc.get("referral_waiting") == bt["medonc"].get("referral_waiting", 0) + 1, json.dumps({"referral": r2.get("referral"), "waiting": mc.get("referral_waiting")}))
+
+    # ---- 5. the MDT Coordinator ------------------------------------------------------------------------------------------------------
+    hc = home(mdt)
+    co = hc.get("coordinator") or {}
+    ag_ids = [x.get("case_id") for x in (co.get("agenda") or {}).get("cases") or []]
+    check("7.1 the coordinator's home: the coordinator section only, the next board date, its readiness list with both Case Files, the ready marks",
+          hc.get("sections") == ["coordinator"] and hc.get("primary") == "coordinator" and co.get("today") == D and co.get("next_board_date") == D
+          and {p01, p12} <= set(ag_ids) and co.get("ready_marked", 0) >= 1 and co.get("can_manage") is True,
+          json.dumps({"sections": hc.get("sections"), "next": co.get("next_board_date"), "h7_in_agenda": sorted(x for x in ag_ids if str(x).startswith("TB-H7-")), "ready": co.get("ready_marked")}))
+    s = mdt.post("/api/tb/sessions", json={"date": D, "title": "E2E Phase 7 home board", "case_ids": [p01, p12]})
+    sid = (s.json() if s.status_code == 200 else {}).get("id")
+    if sid:
+        ctx["sid"] = sid
+    hc = home(mdt); ss = (hc.get("coordinator") or {}).get("sessions") or {}
+    check("7.1 after the coordinator creates a session the home counts it as planned and names it among the open sessions", s.status_code == 200 and sid
+          and ss.get("planned", 0) >= 1 and any(x["id"] == sid and x["status"] == "planned" and x["cases"] == 2 for x in ss.get("open") or []),
+          json.dumps({"status": s.status_code, "planned": ss.get("planned"), "open": [x.get("id") for x in ss.get("open") or []]}) + (s.text[:120] if s.status_code != 200 else ""))
+    r = mdt.post("/api/tb/org/setup", json={"pmjay_empanelled": False})
+    check("7.1 the coordinator cannot answer the first set-up (403)", r.status_code == 403, f"{r.status_code} {r.text[:100]}")
+
+    # ---- 6. the department admin, then a doctor who is also its department admin ----------------------------------------------------
+    ha = home(radadmin)
+    da = (ha.get("dept_admin") or {}).get("departments") or [{}]
+    lst = {x["username"]: x for x in da[0].get("list") or []}
+    check("7.1 a department admin's home: its department with its doctors (the Radiology doctor placed as member, with a login)", ha.get("sections") == ["dept_admin"]
+          and ha.get("primary") == "dept_admin" and da[0].get("id") == "radiology" and len(da) == 1 and da[0].get("doctors", 0) >= 1 and da[0].get("admins", 0) >= 1
+          and (lst.get("tb-e2e-h7-rad") or {}).get("role") == "member" and lst["tb-e2e-h7-rad"].get("account") is True and lst["tb-e2e-h7-rad"].get("disabled") is False
+          and H7_DEPTADMIN[0] not in lst and [x["id"] for x in ha.get("admin_of") or []] == ["radiology"],
+          json.dumps({"sections": ha.get("sections"), "dept": {k: da[0].get(k) for k in ("id", "doctors", "heads", "admins", "no_login")}, "rad": lst.get("tb-e2e-h7-rad")}))
+    r = radadmin.post("/api/tb/org/setup", json={"pmjay_empanelled": False})
+    check("7.1 a department admin cannot answer the first set-up (403)", r.status_code == 403, f"{r.status_code} {r.text[:100]}")
+    r = c.post("/api/tb/org/accounts", json={"username": "tb-e2e-h7-rad", "admin_of": ["radiology"]})
+    hr = home(rad)
+    check("7.1 a Radiology doctor made also its department admin: both sections, the clinical one first", r.status_code == 200 and hr.get("sections") == ["supporting", "dept_admin"]
+          and hr.get("primary") == "supporting" and "supporting" in hr and (hr.get("dept_admin") or {}).get("departments", [{}])[0].get("id") == "radiology", short(hr) + " " + r.text[:100])
+
+    # ---- 7. the root admin and the first set-up -----------------------------------------------------------------------------------------
+    hroot = home(root)
+    ra = hroot.get("root_admin") or {}
+    deps = ra.get("departments") or {}
+    check("7.1 a root admin's home: the organisation section only, the set-up question state, accounts and departments, the HIS without a token",
+          hroot.get("sections") == ["root_admin"] and hroot.get("primary") == "root_admin" and isinstance(ra.get("setup_needed"), bool)
+          and (ra.get("accounts") or {}).get("root_admins", 0) >= 1 and (ra.get("accounts") or {}).get("coordinators", 0) >= 1 and (ra.get("accounts") or {}).get("dept_admins", 0) >= 2
+          and deps.get("treating", 0) > 0 and deps.get("supporting", 0) > 0 and isinstance(ra.get("his"), dict) and ra["his"].get("enabled") is True
+          and not any("token" in k for k in ra["his"]) and ra["his"].get("url") == f"http://127.0.0.1:{MOCK_PORT}" and "Radiology" in (ra.get("board_heads") or []),
+          json.dumps({"sections": hroot.get("sections"), "setup_needed": ra.get("setup_needed"), "accounts": ra.get("accounts"), "departments": deps, "his": ra.get("his")})[:400])
+    check("7.1 the live organisation has its default 22 treating and 8 supporting departments", deps.get("treating") == 22 and deps.get("supporting") == 8, json.dumps(deps))
+    r = medonc.post("/api/tb/org/setup", json={"pmjay_empanelled": False})
+    check("7.1 a plain doctor cannot answer the first set-up (403)", r.status_code == 403, f"{r.status_code} {r.text[:100]}")
+    if ra.get("setup_needed") is True:
+        rb = root.post("/api/tb/org/setup", json={"pmjay_empanelled": "yes"})
+        check("7.1 a non-boolean PM-JAY answer is refused (400), nothing recorded", rb.status_code == 400 and (home(root).get("root_admin") or {}).get("setup_needed") is True, f"{rb.status_code} {rb.text[:100]}")
+        r = root.post("/api/tb/org/setup", json={"pmjay_empanelled": False, "name": "Vaidyx Demo Hospital (SYNTHETIC)", "level": "optimal"})
+        hroot = home(root); ra = hroot.get("root_admin") or {}
+        hh = ra.get("hospital") or {}
+        check("7.1 the root admin answers the first set-up: recorded once with who and when; the home stops asking", r.status_code == 200 and (r.json().get("hospital") or {}).get("pmjay_empanelled") is False
+              and ra.get("setup_needed") is False and (ra.get("first_setup") or {}).get("by") == H7_ROOT[0] and (ra.get("first_setup") or {}).get("at")
+              and hh.get("pmjay_empanelled") is False and hh.get("name") == "Vaidyx Demo Hospital (SYNTHETIC)" and hh.get("level") == "optimal",
+              json.dumps({"status": r.status_code, "setup_needed": ra.get("setup_needed"), "first_setup": ra.get("first_setup"), "hospital": hh}) + (r.text[:120] if r.status_code != 200 else ""))
+        ev = [e for e in c.get("/api/tb/org/audit", params={"limit": 50}).json().get("events") or [] if e.get("kind") == "first_setup" and e.get("by") == H7_ROOT[0]]
+        check("7.1 the first set-up is in the organisation audit, by the root admin, with the answer", ev and str(ev[0].get("ts") or "") >= str((ra.get("first_setup") or {}).get("at") or "~")  # newest first; an earlier run left its own
+              and ev[0].get("pmjay_empanelled") is False and ev[0].get("level") == "optimal" and ev[0].get("name") == "Vaidyx Demo Hospital (SYNTHETIC)",
+              json.dumps(ev)[:200])
+        r = root.post("/api/tb/org/setup", json={"pmjay_empanelled": True})
+        check("7.1 a second answer is refused (409): the settings then change under Organisation", r.status_code == 409 and (home(root).get("root_admin") or {}).get("hospital", {}).get("pmjay_empanelled") is False,
+              f"{r.status_code} {r.text[:100]}")
+    else:
+        print(f"NOTE 7.1 the live organisation's first set-up was answered already ({json.dumps(ra.get('first_setup'))}): only the refusals are checked", flush=True)
+        r = root.post("/api/tb/org/setup", json={"pmjay_empanelled": False})
+        rb = root.post("/api/tb/org/setup", json={"pmjay_empanelled": "yes"})
+        check("7.1 the answered first set-up is refused again (409; a non-boolean too, the stamp is checked first)", r.status_code == 409 and rb.status_code in (400, 409), f"{r.status_code} {rb.status_code}")
+
+    # ---- 8. a disabled login -----------------------------------------------------------------------------------------------------------
+    r = c.put("/api/tb/org/departments/gynaecologic_oncology/doctors/tb-e2e-h7-gyn", json={"disabled": True})
+    rg = gyn.get("/api/tb/home")
+    check("7.1 a disabled login has no home (403)", r.status_code == 200 and rg.status_code == 403, f"{r.status_code} {rg.status_code} {rg.text[:100]}")
+
+    # ---- 9. the Vaidyx admin ---------------------------------------------------------------------------------------------------------
+    hv = home(c)
+    vt = hv.get("treating") or {}
+    check("7.1 a Vaidyx admin's home: every Case File, the coordinator's view and the organisation", hv.get("sections") == ["treating", "coordinator", "root_admin"]
+          and hv.get("primary") == "treating" and row(hv, p01) is not None and row(hv, p12) is not None and "coordinator" in hv and "root_admin" in hv and "supporting" not in hv
+          and hv.get("departments") == [], short(hv))
+
+
+def v2_phase7_cleanup(c, ctx):
+    from tumour_board import board
+    throwaway = {**H7_USERS, H7_MDT[0]: (H7_MDT[1], {}), H7_DEPTADMIN[0]: (H7_DEPTADMIN[1], {}), H7_ROOT[0]: (H7_ROOT[1], {})}
+    try:
+        if ctx.get("hospital"):
+            r = c.put("/api/tb/org", json={"hospital": ctx["hospital"]})  # the captured block has no first_setup stamp when it had none: restoring clears it
+            print("hospital settings restored:", r.status_code, "first set-up stamp:", (r.json().get("hospital") or {}).get("first_setup") if r.status_code == 200 else r.text[:120])
+    except Exception as e:
+        print("restore hospital settings failed:", e)
+    sid = ctx.get("sid")
+    if sid:
+        try:  # the e2e session is a test artefact: its file goes, its history stays in sessions/audit.jsonl
+            board._path(sid).unlink()
+            board.audit_session(sid, {"kind": "e2e_removed", "by": "e2e"})
+        except Exception:
+            pass
+    try:
+        o = c.get("/api/tb/org").json()
+        c.put("/api/tb/org", json={"users": {k: v for k, v in (o.get("users") or {}).items() if k not in throwaway},
+                                   "admins": [a for a in (o.get("admins") or []) if a not in throwaway]})
+    except Exception as e:
+        print("cleanup org (root admins) failed:", e)
+    _v2_cleanup(c, ctx, throwaway)
+
+
 def main(base, pw, only=None):
     c = httpx.Client(base_url=base, timeout=600)
     check("login", c.post("/api/auth/login", json={"username": "admin", "password": pw}).status_code == 200)
@@ -2682,6 +2926,14 @@ def main(base, pw, only=None):
             v2_phase6(c, base, ctx)
         finally:
             v2_phase6_cleanup(c, ctx)
+        print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
+        return 0 if not FAIL else 1
+    if only == "v2p7":
+        ctx = {"cases": []}
+        try:
+            v2_phase7(c, base, ctx)
+        finally:
+            v2_phase7_cleanup(c, ctx)
         print(f"\n{len(OK)} passed, {len(FAIL)} failed: {FAIL}")
         return 0 if not FAIL else 1
     if only == "phase4":
@@ -2874,6 +3126,12 @@ def main(base, pw, only=None):
         v2_phase6(c, base, ctx)
     finally:
         v2_phase6_cleanup(c, ctx)
+    # 9g. V2 Phase 7: the home per role (treating, supporting, coordinator, department admin, root admin and the first set-up) (same throw-away mock)
+    ctx = {"cases": []}
+    try:
+        v2_phase7(c, base, ctx)
+    finally:
+        v2_phase7_cleanup(c, ctx)
     # 10. V1 Phase 3: dates, document type, flags, big scans
     phase3(c)
     # 11. V1 Phase 4: NCG tiers, two-level gate, failed documents, inbox and notifications, stale summary, NCG VTB export
@@ -2908,5 +3166,5 @@ def main(base, pw, only=None):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--base", default="http://127.0.0.1:7000"); ap.add_argument("--password", required=True)
-    ap.add_argument("--only", default=None, help="run one section only (phase2 | v2p2 | v2p3 | v2p4 | v2p5 | phase3 | phase4 | phase5 | phase6 | phase7 | phase8 | phase9 | skills | mcp | discord | records | metrics)")
+    ap.add_argument("--only", default=None, help="run one section only (phase2 | v2p2 | v2p3 | v2p4 | v2p5 | v2p6 | v2p7 | phase3 | phase4 | phase5 | phase6 | phase7 | phase8 | phase9 | skills | mcp | discord | records | metrics)")
     a = ap.parse_args(); sys.exit(main(a.base, a.password, a.only))

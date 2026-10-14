@@ -434,6 +434,13 @@ def validate(org: dict) -> dict:
     if not FETCH_WINDOW_RANGE[0] <= fw <= FETCH_WINDOW_RANGE[1]:
         raise ValueError(f"The fetch window must be {FETCH_WINDOW_RANGE[0]} to {FETCH_WINDOW_RANGE[1]} months.")
     h["fetch_window_months"] = fw
+    fs = h.get("first_setup")  # the stamp of the answered first set-up (V2 item 7.1); absent until the root admin answers it once
+    if fs is None:
+        h.pop("first_setup", None)
+    elif isinstance(fs, dict):
+        h["first_setup"] = {"at": str(fs.get("at") or ""), "by": str(fs.get("by") or "")}
+    else:
+        raise ValueError("first_setup must be an object with at and by.")
 
     if not isinstance(out["departments"], list):
         raise ValueError("Departments must be a list.")
@@ -559,6 +566,35 @@ def validate(org: dict) -> dict:
 def hospital() -> dict:
     """The hospital settings (name, NCG level, type, PM-JAY empanelled, fetch window, the board lists), defaults filled."""
     return {**DEFAULT_HOSPITAL, **(load().get("hospital") or {})}
+
+
+class SetupDone(Exception):
+    """The first set-up was answered already; the setting is changed under Organisation."""
+
+
+def first_setup(by: str, pmjay_empanelled, name=None, level=None) -> dict:
+    """The root admin's first set-up (V2 item 7.1, plan section 11): the PM-JAY empanelled question (default yes), with the hospital name
+    and NCG level, answered once; the stamp (who, when) is kept in hospital.first_setup and the answer audited (first_setup). Later
+    changes go through the Organisation screen; a second answer is refused (SetupDone)."""
+    o = load()
+    h = o.get("hospital") if isinstance(o.get("hospital"), dict) else {}
+    if isinstance(h.get("first_setup"), dict):
+        raise SetupDone(f"The first set-up was recorded on {str(h['first_setup'].get('at') or '')[:10]} by {h['first_setup'].get('by') or 'an admin'}. "
+                        "Change the settings under Organisation.")
+    if not isinstance(pmjay_empanelled, bool):
+        raise ValueError("Answer whether the hospital is PM-JAY empanelled (true or false).")
+    h = {**DEFAULT_HOSPITAL, **h, "pmjay_empanelled": pmjay_empanelled}
+    if name is not None:
+        h["name"] = str(name).strip()
+    if level:
+        if level not in LEVELS:
+            raise ValueError(f"Hospital level must be one of: {', '.join(LEVELS)}.")
+        h["level"] = level
+    h["first_setup"] = {"at": now_iso(), "by": str(by or "")}
+    o["hospital"] = h
+    saved = save(o, by)
+    audit("first_setup", by, pmjay_empanelled=pmjay_empanelled, name=h["name"], level=h["level"])
+    return saved["hospital"]
 
 
 def departments(group: str | None = None) -> list[dict]:
