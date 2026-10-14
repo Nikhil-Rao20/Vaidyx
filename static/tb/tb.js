@@ -1960,7 +1960,7 @@ async function showIntake() {
 // ------------------------------------------------------------------ notifications (bell) and the department inbox · V1 item 4.4
 const NKIND = { request: ["c-warn", "Request"], request_closed: ["c-ok", "Request closed"], request_acknowledged: ["c-info", "Request acknowledged"], request_done: ["c-ok", "Done by the department"], case_ready: ["c-ok", "Case File ready"],
   board_action: ["c-info", "Tumour Board action"], board_action_suggestion: ["c-ok", "Action may be complete"],
-  case_shared: ["c-info", "Case File shared"], referral: ["c-warn", "Referral"], referral_answered: ["c-info", "Referral answered"] };  // V2 items 5.1 / 5.2
+  case_shared: ["c-info", "Case File shared"], case_unshared: ["c-mute", "Case File no longer shared"], referral: ["c-warn", "Referral"], referral_answered: ["c-info", "Referral answered"] };  // V2 items 5.1 / 5.2
 async function loadNotifications() {
   if (!S.me) return;
   try { const r = await api("/notifications?limit=80"); S.notifications = r.notifications; S.unread = r.unread;

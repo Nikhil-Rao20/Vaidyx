@@ -544,10 +544,21 @@ def test_site_preference_sets_aside_the_other_sites_reports(unit_case, monkeypat
     monkeypatch.setattr(protocol, "get", with_site("rect|colon"))
     add(unit_case, hist("Dbreast01", facts={"histologic_type": fact("Invasive ductal carcinoma, NST"), "pdl1": fact("TPS 5%")}, region="left breast", date="2026-09-20"),
         hist("Drectal01", facts={"histologic_type": fact("Adenocarcinoma, rectum")}, region="rectal growth", date="2026-09-01"), ct())
+    # a patient with one cancer (no linked Case File): the newest report wins, whatever the site says (V1 behaviour)
+    r = req(rules.evaluate(unit_case), "histopathology")
+    assert r["evidence"][0]["doc_id"] == "Dbreast01" and "notes" not in r
+    c = store.get_case(unit_case); c["linked_cases"] = [{"case_id": "TB-OTHER", "protocol": "breast", "department": "breast_surgery", "reason": "same UHID"}]; store.save_case(c)
     g = rules.evaluate(unit_case)
     r = req(g, "histopathology")
     assert r["status"] == "satisfied" and r["evidence"][0]["doc_id"] == "Drectal01", "the newer breast report names another site: the rectal report answers"
     assert r["evidence"][1] == {"doc_id": "Drectal01", "fact": "histologic_type", "value": "Adenocarcinoma, rectum", "quote": "Adenocarcinoma, rectum"}
+    assert r["set_aside"] == ["Dbreast01"] and r["notes"] == ["Two cancers under one UHID: HISTOPATHOLOGY REPORT Dbreast01 names another site and was set aside for this protocol; check which cancer it belongs to"]
+    # staging imaging serves both cancers: a CT whose title names the other site is never set aside
+    add(unit_case, ct("Dct000002", title="CT THORAX: BOTH LUNGS", region="lungs", date="2026-09-25"))
+    monkeypatch.setattr(protocol, "get", with_site("breast|mammary"))
+    r = req(rules.evaluate(unit_case), "ct_thorax")
+    assert r["evidence"][0]["doc_id"] == "Dct000002" and "notes" not in r
+    monkeypatch.setattr(protocol, "get", with_site("rect|colon"))
     p = req(g, "pdl1")
     assert p["status"] == "satisfied" and p["evidence"][0]["doc_id"] == "Dbreast01", "only the breast report carries the value: every candidate stays"
     # a report of this site that is only preliminary is named rather than the other site's final report
@@ -579,11 +590,14 @@ def test_every_shipped_protocol_names_its_site_with_organ_words():
     for pid in ("breast", "colorectal_rectum", "lung_nsclc", "oral_cavity", "cervix"):
         p = protocol.get(pid)
         assert p.get("site") and "|" in p["site"] and p.get("site_note"), pid
-        for shared in ("thora", "chest", "abdo", "pelvi", "neck", "lobe"):  # regions several protocols image: never a site word
-            assert shared not in p["site"], (pid, shared)
+        for shared in ("thora", "chest", "abdo", "pelvi", "neck", "lobe", "uter", "|rect|", "|oral|"):  # regions several protocols image, and words that other reports use: never a site word
+            assert shared not in f"|{p['site']}|", (pid, shared)
         assert [o for o in rules.other_sites(p)] and p["site"] not in rules.other_sites(p)
     crs, br = protocol.get("colorectal_rectum")["site"], protocol.get("breast")["site"]
     doc = lambda region: {"classification": {"body_region": region}}
     assert rules._foreign(doc("left breast"), crs, [br]) and not rules._foreign(doc("Colorectal"), crs, [br]) and not rules._foreign(doc("biopsy"), crs, [br])
     assert not rules._foreign(doc("THORAX, ABDOMEN AND PELVIS"), br, rules.other_sites(protocol.get("breast"))), "a staging CT names no organ"
     assert not rules._foreign(doc("cervical lymph nodes"), protocol.get("oral_cavity")["site"], rules.other_sites(protocol.get("oral_cavity"))), "cervical nodes are not the cervix"
+    for words in ("rectus abdominis flap", "CECT ABDOMEN PELVIS WITH ORAL CONTRAST", "uterus and ovaries", "CT THORAX - LUNG WINDOW"):
+        assert not rules._foreign(doc(words), br, rules.other_sites(protocol.get("breast"))) or words.startswith("CT THORAX"), words
+    assert rules.SITE_DOC_TYPES == {"histopathology", "cytology", "ihc", "molecular"}

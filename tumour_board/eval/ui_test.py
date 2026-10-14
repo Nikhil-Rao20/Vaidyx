@@ -431,8 +431,8 @@ def referral_cleanup(pg, base, cid=None):
     if o.ok:
         cur = o.json().get("users") or {}
         users = {u: v for u, v in cur.items() if u not in (UI_PULM, UI_CRS)}
-        if users != cur:
-            pg.request.put(base + "/api/tb/org", data={"users": users})
+        if users != cur:  # with the version token: an organisation edit made meanwhile is never overwritten (409 instead)
+            pg.request.put(base + "/api/tb/org", data={"users": users, "expected_version": o.json().get("version")})
     for u in (UI_PULM, UI_CRS):
         pg.request.delete(base + "/api/auth/users", data={"username": u})
 

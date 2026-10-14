@@ -124,17 +124,23 @@ def _foreign(d, site, others) -> bool:
     return not _region_ok(d, site) and any(_region_ok(d, o) for o in others if o)
 
 
+SITE_DOC_TYPES = {"histopathology", "cytology", "ihc", "molecular"}  # the records a second cancer has of its own; staging imaging and labs serve both
+
+
 def _prefer_site(items, site, others, doc_of=lambda x: x):
-    """V2 item 5.3 (two primaries): a patient's Case Files share the HIS records, so of several candidates for one record (and of
-    several documents carrying a required value) one that names another protocol's site and not this one (`site` of the protocol;
-    `others`: the sites of the other protocols; the reader's region, the title, the file name and the study lines, as `_region_ok`
-    reads them) steps aside while a candidate that does not remains. A candidate naming no site at all (an IHC panel, a lab report)
-    is never set aside, and when every candidate names another site every candidate stays (a lung biopsy that shows a colorectal
-    primary still answers the colorectal protocol's histopathology record after a referral). A preference, never a filter."""
+    """V2 item 5.3 (two primaries): a patient's Case Files share the HIS records, so of several candidates for one pathology record
+    (and of several pathology documents carrying a required value) one that names another protocol's site and not this one (`site`
+    of the protocol; `others`: the sites of the other protocols; the reader's region, the title, the file name and the study lines,
+    as `_region_ok` reads them) steps aside while a candidate that does not remains. A candidate naming no site at all (an IHC
+    panel) is never set aside, and when every candidate names another site every candidate stays (a lung biopsy that shows a
+    colorectal primary still answers the colorectal protocol's histopathology record after a referral). Only on a Case File with a
+    linked Case File (the same patient's other cancer) and only for SITE_DOC_TYPES: a patient with one cancer is checked as in V1.
+    Returns (kept, set aside); a preference, never a filter."""
     if not site or not others:
-        return items
-    keep = [x for x in items if not _foreign(doc_of(x) or {}, site, others)]
-    return keep or items
+        return items, []
+    aside = [x for x in items if _foreign(doc_of(x) or {}, site, others)]
+    keep = [x for x in items if x not in aside]
+    return (keep, aside) if keep else (items, [])
 
 
 def other_sites(prot) -> list[str]:
@@ -235,6 +241,7 @@ def _title(x):
 
 
 def _evaluate_record(req, ready, facts, overrides, cat, orders=(), site="", other_sites=()):
+    """(`site` / `other_sites`: the two-primaries preference, V2 item 5.3; empty on a Case File without a linked Case File.)"""
     """One record of the protocol against the Case File: the verdict (status, problems, evidence, needs) as before, now split into
     Level 1 (the record: present, final and signed, right patient, its type and date settled) and Level 2 (the required values in it:
     present, verified, not pending) with the document a Level 2 gap sits in (V1 item 4.2). `problems` keeps its order: confirmations
@@ -254,6 +261,14 @@ def _evaluate_record(req, ready, facts, overrides, cat, orders=(), site="", othe
     match_needs = []  # (doc or history entry, level): outside reports matched by name only; the treating doctor confirms the patient (V2 item 3.6)
     unconfirmed = {d["doc_id"] for d in ready if _unconfirmed_outside(d)}
     by_id = {d["doc_id"]: d for d in ready}  # the document behind a value, for the site preference (V2 item 5.3)
+    aside_docs = []  # documents of the other cancer set aside for this record (V2 item 5.3): named on the row for review
+
+    def prefer(items, allowed_types, doc_of=lambda x: x):
+        if not (site and other_sites and allowed_types and set(allowed_types) <= SITE_DOC_TYPES):
+            return items
+        kept, aside = _prefer_site(items, site, other_sites, doc_of)
+        aside_docs.extend(x for x in (doc_of(a) or {} for a in aside) if x and x not in aside_docs)
+        return kept
     if req.get("applies_if_doc_type_present"):
         present = [d for d in ready if req["applies_if_doc_type_present"] in _doc_types(d)]
         if not present:
@@ -264,7 +279,7 @@ def _evaluate_record(req, ready, facts, overrides, cat, orders=(), site="", othe
     carrier_ids = []
     if not req.get("facts_only"):
         want = set(req["doc_types"])
-        cands = _prefer_site([d for d in ready if _doc_types(d) & want and _region_ok(d, req.get("region"))], site, other_sites)  # another site's report steps aside (V2 item 5.3)
+        cands = prefer([d for d in ready if _doc_types(d) & want and _region_ok(d, req.get("region"))], want)  # the other cancer's report steps aside (V2 item 5.3)
         type_needs += [(d, 1) for d in cands if len(_doc_types(d)) > 1 and len(_doc_types(d) & want) == 1]
         if req.get("must_postdate_doc_type"):
             refs = [x for x in ready if req["must_postdate_doc_type"] in _doc_types(x)]
@@ -314,7 +329,7 @@ def _evaluate_record(req, ready, facts, overrides, cat, orders=(), site="", othe
                 p = f"{c.get('title') or d['filename']} prints an identifier this Case File does not know: check the document belongs to this patient"
                 r["problems"].append(p); l1["problems"].append(p); r["status"] = l1["status"] = "needs_review"
     else:  # facts_only: Level 1 is a final document of a type that can carry the values (the record that should document them)
-        carriers = _prefer_site([d for d in ready if _doc_types(d) & allowed and _is_final(d, overrides)], site, other_sites)  # another site's report steps aside (V2 item 5.3)
+        carriers = prefer([d for d in ready if _doc_types(d) & allowed and _is_final(d, overrides)], allowed)  # the other cancer's report steps aside (V2 item 5.3)
         carriers.sort(key=_doc_sort_key, reverse=True)
         match_needs += [(d, 1) for d in carriers if d["doc_id"] in unconfirmed]
         carrier_ids = [d["doc_id"] for d in carriers]
@@ -334,7 +349,7 @@ def _evaluate_record(req, ready, facts, overrides, cat, orders=(), site="", othe
         type_needs += [(h, 2) for h in hist if allowed and len(h["doc_types"]) > 1 and len(set(h["doc_types"]) & allowed) == 1
                        and h["doc_id"] not in {x["doc_id"] for x, _ in type_needs}]
         good = [h for h in hist if h["verification"] in VERIFIED and h["doc_final"] and h["state"] == "present" and not h.get("superseded")]  # history never counts (review M7)
-        good = _prefer_site(good, site, other_sites, lambda h: by_id.get(h["doc_id"]))  # another site's value steps aside when the patient has two cancers (V2 item 5.3)
+        good = prefer(good, allowed, lambda h: by_id.get(h["doc_id"]))  # the other cancer's value steps aside (V2 item 5.3)
         documenting += [h["doc_id"] for h in good if h["doc_id"] in carrier_ids]
         match_needs += [(h, 2) for h in good if h["doc_id"] in unconfirmed and h["doc_id"] not in {x["doc_id"] for x, _ in match_needs}]
         if req.get("must_postdate_doc_type") and r.get("postdate_reference"):
@@ -446,6 +461,10 @@ def _evaluate_record(req, ready, facts, overrides, cat, orders=(), site="", othe
             lv["status"] = "needs_confirmation"; lv["problems"].insert(0, p); lv["needs"].append({"type": "confirm_dates", "doc_id": did})
             if not any(e.get("doc_id") == did for e in r["evidence"]):
                 r["evidence"].append({"doc_id": did, "quote": ""})
+    if aside_docs:  # two primaries: say what was set aside, so a person checks which cancer it belongs to (V2 item 5.3)
+        r.setdefault("notes", []).append("Two cancers under one UHID: " + "; ".join(_title(d) for d in aside_docs)
+                                         + (" names" if len(aside_docs) == 1 else " name") + " another site and was set aside for this protocol; check which cancer it belongs to")
+        r["set_aside"] = [d["doc_id"] for d in aside_docs]
     r["level"] = 1 if l1["status"] != "satisfied" else 2 if l2["status"] != "satisfied" else None
     if r["level"] == 2 and open_doc:
         acc_doc = next((d for d in ready if d["doc_id"] == open_doc["doc_id"]), None)  # the document the open value sits in
@@ -514,7 +533,8 @@ def evaluate(case_id):
     hospital = _hospital()
     level = case.get("hospital_level") or hospital.get("level") or "essential"
     results, shown = [], []
-    site = prot.get("site") or ""; others = other_sites(prot) if site else []  # two primaries: another site's report steps aside (V2 item 5.3)
+    linked = bool(case.get("linked_cases"))  # the same patient's other cancer is a linked Case File (V2 item 5.3)
+    site = (prot.get("site") or "") if linked else ""; others = other_sites(prot) if site else []  # only then does the other cancer's report step aside
     for req in protocol.records(prot):
         req = {**req, "routed_department": routed(prot, req, case)[0]}  # the department the gap goes to (V2 item 2.4): shown on the row
         tier = protocol.tier_for(req, setting)
@@ -739,8 +759,39 @@ def _referred_from(case, st, prot) -> dict | None:
     if not last or last.get("reason") != "referral" or not last.get("protocol") or last.get("protocol") == (prot or {}).get("id"):
         return None
     from . import org
-    return {"owner": org.department_name(case.get("department")) if case.get("department") else "another department", "protocol": last["protocol"],
+    try:
+        label = (protocol.get(last["protocol"]) or {}).get("label") or last["protocol"]
+    except (OSError, ValueError, TypeError):
+        label = last["protocol"]
+    return {"owner": org.department_name(case.get("department")) if case.get("department") else "another department", "protocol": label,
             "actions": {a.get("id") for a in last.get("actions") or [] if isinstance(a, dict) and a.get("id")}}
+
+
+def close_requests_on_referral(case_id, new_owner_name, by=""):
+    """A referral accepted without a protocol (V2 item 5.2): every open Pre-Authorization request belonged to a protocol nobody
+    follows any more, so it closes with the referral as the reason; a department that received it is told (review Phase 5 M4). The
+    new owner's listing suggests the new protocol's requests afresh."""
+    st = store.get_state(case_id)
+    case = store.get_case(case_id) or {}
+    patient = (case.get("patient") or {}).get("name") or case_id
+    n = 0
+    for a in st.get("actions") or []:
+        if a.get("source") != "pre_authorization" or a.get("status") == "completed":
+            continue
+        sent = _was_sent(a)
+        if not sent:
+            a["never_sent"] = True
+        event = f"Closed: the Case File was referred to {new_owner_name}, which chooses the cancer protocol; the Pre-Authorization starts again under it"
+        a["status"] = "completed"; a["completed"] = store.now_iso()
+        a.setdefault("history", []).append({"ts": store.now_iso(), "event": event})
+        store.audit(case_id, {"kind": "action_completed", "action": a["id"], "requirement": a.get("requirement"), "reason": "Case File referred, protocol not chosen yet", "by": by})
+        if a.get("department_id") and sent:
+            _notify({"department": a["department_id"]}, "request_closed", case_id, f"{a.get('label') or a.get('requirement')} no longer needed for {patient} ({case_id})",
+                    event.replace("Closed: ", "The request closed: ") + ".", action_id=a["id"], requirement=a.get("requirement"), level=a.get("level"))
+        n += 1
+    if n:
+        store.save_state(case_id, st)
+    return n
 
 
 def sync_actions(case_id, gate, by=""):
@@ -767,9 +818,9 @@ def sync_actions(case_id, gate, by=""):
     for rid, a in list(by_req.items()):  # nothing left to request: the protocol no longer lists the record, or no longer requires it here
         if rid not in required_ids:
             if referred and a.get("id") in referred["actions"]:  # a request of the earlier protocol, open when the Case File was referred (V2 item 5.2)
-                event, reason = (f"Closed: the Case File was referred to {referred['owner']} and is now checked under {prot['id']} v{prot.get('version')} "
+                event, reason = (f"Closed: the Case File was referred to {referred['owner']} and is now checked under {prot.get('label') or prot['id']} v{prot.get('version')} "
                                  f"(it was {referred['protocol']}); this request belonged to the earlier protocol"
-                                 + (", under which the record is shown, not counted" if rid in shown_ids else ", and the new protocol does not count this record")), "Case File referred, protocol changed"
+                                 + (", and the new protocol shows this record without counting it" if rid in shown_ids else ", and the new protocol does not count this record")), "Case File referred, protocol changed"
             elif rid in shown_ids:  # the NCG setting or the hospital level changed: the record is now shown, not counted
                 event, reason = "Closed: no longer required for this Case File (NCG tier for its setting and hospital level)", "requirement no longer required (NCG tier)"
             else:

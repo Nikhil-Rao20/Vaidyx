@@ -102,12 +102,14 @@ def test_an_open_referral_and_a_linked_case_file_open_the_whole_case_file(people
     c["referrals"][0]["status"] = "declined"
     assert access.scope(people["colo"], c) is None
     c = _case("TB-A2", linked_cases=[{"case_id": "TB-A3", "protocol": "breast", "department": "breast_surgery"}])
-    assert access.scope(people["breast"], c) == access.FULL and access.scope(people["colo"], c) is None
-    assert access.linked_owners(c) == ["breast_surgery"], "the linked Case File does not exist: the department recorded with the link"
-    # the linked Case File exists and was referred since: its current owner reads this one, the recorded department no longer does
-    _case("TB-A3", owner="colorectal_surgery")
+    assert access.scope(people["breast"], c) is None and access.scope(people["colo"], c) is None and access.linked_owners(c) == [], "a link to a Case File that no longer exists gives nobody access"
+    assert access.public(c)["linked_cases"][0]["exists"] is False
+    _case("TB-A3", owner="breast_surgery")
+    assert access.scope(people["breast"], c) == access.FULL and access.scope(people["colo"], c) is None and access.linked_owners(c) == ["breast_surgery"]
+    # the linked Case File exists and was referred since: its current owner reads this one, the recorded department does not
+    c3 = store.get_case("TB-A3"); c3["department"] = "colorectal_surgery"; store.save_case(c3)
     assert access.linked_owners(c) == ["colorectal_surgery"] and access.scope(people["colo"], c) == access.FULL and access.scope(people["breast"], c) is None
-    assert access.public(c)["linked_cases"][0]["department_name"] == "Colorectal Surgery"
+    assert access.public(c)["linked_cases"][0]["department_name"] == "Colorectal Surgery" and access.public(c)["linked_cases"][0]["exists"] is True
 
 
 def test_visible_filters_the_case_list(people):
@@ -184,6 +186,14 @@ def test_set_owner_records_a_treating_department_once_and_is_audited(people):
     with pytest.raises(access.AccessError, match="not placed") as e:
         access.set_owner("TB-A1", "Colorectal Surgery", "pulmo", roles=people["pulmo"])
     assert e.value.status == 403
+    from tumour_board import config
+    monkeypatch_protected = set(config.PROTECTED_CASES); config.PROTECTED_CASES = monkeypatch_protected | {"TB-A1"}
+    try:
+        with pytest.raises(access.AccessError, match="protected") as e:  # the real case never gets an owner from here (review Phase 5 minor 5)
+            access.set_owner("TB-A1", "Pulmonology", "pulmo", roles=people["pulmo"])
+        assert e.value.status == 409
+    finally:
+        config.PROTECTED_CASES = monkeypatch_protected
     c = access.set_owner("TB-A1", "Pulmonology", "pulmo", roles=people["pulmo"], reason="my patient")
     assert c["department"] == "pulmonology" and access.owner(c) == "pulmonology"
     ev = next(e for e in store.read_audit("TB-A1") if e["kind"] == "owner_set")
@@ -221,3 +231,16 @@ def test_participants_are_added_and_removed_by_the_owner_told_and_audited(people
 def test_no_em_dashes_in_module():
     import pathlib
     assert "—" not in pathlib.Path(access.__file__).read_text(encoding="utf-8")
+
+
+def test_a_removed_participant_is_told(people):
+    """The department hears that it no longer takes part (review Phase 5 minor 8)."""
+    _case()
+    access.add_participant("TB-A1", "Radiation Oncology", "pulmo", reason="radiotherapy opinion")
+    access.remove_participant("TB-A1", "Radiation Oncology", "pulmo", reason="opinion given")
+    import json
+    recs = [json.loads(x) for x in notify.path().read_text().splitlines()] if notify.path().exists() else []
+    n = [x for x in recs if x["kind"] == "case_unshared"]
+    assert len(n) == 1 and n[0]["to"] == {"department": "radiation_oncology"} and "no longer takes part" in n[0]["title"] and "opinion given" in n[0]["text"] and n[0]["case_id"] == "TB-A1"
+    ro = org.roles("ro"); ro.update({"known": True, "departments": {"radiation_oncology": "member"}, "treating": {"radiation_oncology": "member"}})
+    assert [x["kind"] for x in notify.for_roles(ro, limit=50)] == ["case_unshared", "case_shared"], "newest first, to that department only"

@@ -180,7 +180,7 @@ def test_accept_moves_ownership_archives_the_gate_and_relists_under_the_new_prot
     g = st["gate"]
     assert g["protocol"] == "unit2" and {r["id"]: r["status"] for r in g["requirements"]} == {"histopathology": "satisfied", "mri_pelvis": "missing_record"}
     ct_req = next(a for a in st["actions"] if a["requirement"] == "ct_thorax")
-    assert ct_req["status"] == "completed" and "referred to Colorectal Surgery" in ct_req["history"][-1]["event"] and "unit2" in ct_req["history"][-1]["event"]
+    assert ct_req["status"] == "completed" and "referred to Colorectal Surgery" in ct_req["history"][-1]["event"] and "Second unit protocol" in ct_req["history"][-1]["event"]
     closed = [n for n in _notes("request_closed") if n["to"] == {"department": "radiology"}]
     assert len(closed) == 1 and "referred to Colorectal Surgery" in closed[0]["text"]
     assert next(a for a in st["actions"] if a["requirement"] == "mri_pelvis")["status"] == "suggested"
@@ -190,13 +190,13 @@ def test_accept_moves_ownership_archives_the_gate_and_relists_under_the_new_prot
     assert access.may(people["colo"], "refer", c)
     # the referring department is told, everything audited, the timeline shows the move
     n = _notes("referral_answered")[-1]
-    assert n["to"] == {"department": "pulmonology"} and n["status"] == "accepted" and "unit2" in n["text"] and "participating" in n["text"]
+    assert n["to"] == {"department": "pulmonology"} and n["status"] == "accepted" and "Second unit protocol" in n["text"] and "participating" in n["text"]
     kinds = _kinds("TB-R1")
     assert {"referral_requested", "referral_accepted", "owner_changed", "case_listed", "action_completed"} <= set(kinds)
     acc = next(e for e in store.read_audit("TB-R1") if e["kind"] == "referral_accepted")
     assert acc["protocol_before"] == "unit" and acc["protocol_after"] == "unit2" and acc["gate_archived"] is True and acc["from"] == "pulmonology" and acc["to"] == "colorectal_surgery"
     tl = [e for e in postboard.timeline("TB-R1") if e["kind"] == "referral"]
-    assert len(tl) == 2 and tl[1]["status"] == "owner_changed" and "unit2" in tl[1]["title"]
+    assert len(tl) == 2 and tl[1]["status"] == "owner_changed" and "Second unit protocol" in tl[1]["title"]
     assert store.verify_audit("TB-R1")["ok"] if "ok" in store.verify_audit("TB-R1") else True
     with pytest.raises(referral.ReferralError, match="No referral"):
         asyncio.run(_accept("TB-R1", "colo"))
@@ -273,9 +273,41 @@ def test_accept_closes_a_request_the_new_protocol_only_shows_with_the_referral_a
     assert [r["id"] for r in st["gate"]["shown"]] == ["ct_thorax"], "shown, not counted, at an Essential hospital"
     ct_req = next(a for a in st["actions"] if a["requirement"] == "ct_thorax")
     ev = ct_req["history"][-1]["event"]
-    assert ct_req["status"] == "completed" and "referred to Colorectal Surgery" in ev and "shown, not counted" in ev and "unit2" in ev
+    assert ct_req["status"] == "completed" and "referred to Colorectal Surgery" in ev and "shows this record without counting it" in ev and "Second unit protocol" in ev
     assert "no longer required for this Case File (NCG tier" not in ev
     assert [n for n in _notes("request_closed") if n["to"] == {"department": "radiology"}][-1]["text"].startswith("The request closed: the Case File was referred")
     referred = rules._referred_from(c, st, protocol.get("unit2"))
     mri = next(a for a in st["actions"] if a["requirement"] == "mri_pelvis")
     assert referred["actions"] == {sent["id"]} and mri["id"] not in referred["actions"], "only the requests open at the referral close with it as the reason"
+
+
+def test_an_answer_names_the_referral_it_saw(people, two_protocols):
+    """A referral withdrawn and replaced while the click was in flight is never answered in its place (review Phase 5 M3)."""
+    _case()
+    a = referral.request("TB-R1", "Colorectal Surgery", "x", "pulmo")
+    referral.withdraw("TB-R1", "pulmo", referral_id=a["id"])
+    b = referral.request("TB-R1", "Medical Oncology", "y", "pulmo")
+    for fn, kw in ((referral.accept, {}), (referral.decline, {}), (referral.withdraw, {})):
+        with pytest.raises(referral.ReferralError, match="not waiting for an answer any more") as e:
+            fn("TB-R1", "colo", referral_id=a["id"], **kw)
+        assert e.value.status == 409
+    assert store.get_case("TB-R1")["department"] == "pulmonology" and access.open_referral(store.get_case("TB-R1"))["id"] == b["id"], "nothing moved"
+    d = referral.decline("TB-R1", "medonc", referral_id=b["id"])
+    assert d["status"] == "declined"
+
+
+def test_accept_without_a_protocol_closes_the_sent_requests_and_tells_the_departments(people, two_protocols):
+    """Nothing stays asked of a department for a protocol nobody follows any more (review Phase 5 M4)."""
+    _case()
+    h = hist(); h.pop("pages"); add("TB-R1", h)
+    rules.sync_actions("TB-R1", rules.evaluate("TB-R1"))
+    sent = _send("TB-R1", "ct_thorax")
+    referral.request("TB-R1", "Colorectal Surgery", "colorectal origin", "pulmo")
+    asyncio.run(_accept("TB-R1", "colo"))
+    st = store.get_state("TB-R1")
+    ct_req = next(a for a in st["actions"] if a["id"] == sent["id"])
+    assert ct_req["status"] == "completed" and "referred to Colorectal Surgery, which chooses the cancer protocol" in ct_req["history"][-1]["event"]
+    closed = [n for n in _notes("request_closed") if n["to"] == {"department": "radiology"}]
+    assert len(closed) == 1 and "referred to Colorectal Surgery" in closed[0]["text"]
+    assert st["gate"] is None and st["gate_history"][0]["actions"][0]["id"] == sent["id"], "the archived gate still lists the request as it stood"
+    assert any(e["kind"] == "action_completed" and e.get("reason") == "Case File referred, protocol not chosen yet" for e in store.read_audit("TB-R1"))

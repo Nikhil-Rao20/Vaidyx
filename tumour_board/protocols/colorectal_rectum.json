@@ -2,8 +2,8 @@
  "id": "colorectal_rectum",
  "label": "Rectal cancer",
  "version": "0.6",
- "site": "rect|colon|colorectal|sigmoid|anorect|bowel|intestin",
- "site_note": "V2 item 5.3 (two primaries): among several candidates for one record, or several documents carrying a required value, one that names another protocol's site and not this one steps aside; a document naming no site (an IHC panel, a lab report) never does, and when every candidate names another site every candidate stays. Organ words only (regions such as thorax or pelvis are shared by protocols). A preference, never a filter.",
+ "site": "rectum|rectal|colon|colorectal|sigmoid|anorect|bowel|intestin",
+ "site_note": "V2 item 5.3 (two primaries): only on a Case File linked to the same patient's other Case File, and only for histopathology, cytology, IHC and molecular records: among several candidates for one record, or several documents carrying a required value, one that names another protocol's site and not this one steps aside and is named on the row for review; a document naming no site never does, and when every candidate names another site every candidate stays. Organ words only. A preference, never a filter; a patient with one cancer is checked as before.",
  "note": "Configurable by the clinical team. Includes a restaging rule for re-discussion after neoadjuvant therapy. The required records are rebuilt from the NCG work-up (NCG rectal cancer guideline, and the NCG colon flow for MMR / MSI and RAS / BRAF); NCG GI guidelines carry no Essential / Optimal / Optional letters, so the listed work-up is treated as Essential and the items NCG calls optional or select-only as Optional. Prototype defaults; to be confirmed by the hospital Tumour Board (clinical review before real use).",
  "settings_note": "NCG setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes stage). Item 4.1 derives the required records per setting from the NCG tiers.",
  "settings": [

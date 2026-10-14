@@ -13,7 +13,7 @@ deletes its own upload through its membership (the V1 rule), the coordinator kee
 is audited in the Case File. No model calls."""
 from datetime import date, timedelta
 
-from . import org, store
+from . import config, org, store
 
 FULL = "full"          # the whole Case File
 REQUESTS = "requests"  # only the items the department was asked about (a supporting department)
@@ -68,7 +68,9 @@ def linked_owners(case) -> list[str]:
         if not isinstance(l, dict):
             continue
         live = store.get_case(l.get("case_id")) if l.get("case_id") else None
-        did = owner(live) if live else org.department_id(l.get("department"))
+        if not live:  # a link to a Case File that no longer exists gives nobody access (review Phase 5 minor 2)
+            continue
+        did = owner(live)
         if did and did not in out:
             out.append(did)
     return out
@@ -226,6 +228,8 @@ def may_list(r: dict, case: dict) -> bool:
 
 def set_owner(case_id: str, department, user: str, reason: str = "", roles: dict | None = None) -> dict:
     """Record the owning treating department of a Case File that has none yet (a manual creation by a treating doctor). Audited."""
+    if case_id in config.PROTECTED_CASES:
+        raise AccessError("That Case File is protected; its owner is not set here", 409)
     case = store.get_case(case_id)
     if not case:
         raise AccessError("Case not found", 404)
@@ -278,9 +282,17 @@ def remove_participant(case_id: str, department, user: str, reason: str = "") ->
     did = org.department_id(department) if department else None
     if not did or did not in participants(case):
         raise AccessError(f"{department} does not take part in this Case File", 404)
+    from . import notify
     case["participants"] = [p for p in case.get("participants") or [] if org.department_id((p or {}).get("department")) != did]
     store.save_case(case)
     store.audit(case_id, {"kind": "participant_removed", "by": user, "department": did, "reason": str(reason or "")[:500]})
+    patient = (case.get("patient") or {}).get("name") or case_id
+    try:  # the department hears that it no longer takes part (review Phase 5 minor 8); the notice never fails the change
+        notify.notify({"department": did}, "case_unshared", case_id, f"{org.department_name(did)} no longer takes part in the Case File of {patient} ({case_id})",
+                      f"{org.department_name(owner(case)) if owner(case) else 'The owning department'} ended your department's part in this Tumour Board Case File."
+                      + (f" Reason: {str(reason or '')[:500]}" if reason else ""), by=user)
+    except Exception:
+        pass
     return case
 
 
@@ -300,4 +312,4 @@ def _linked_view(l: dict) -> dict:
     live = store.get_case(l.get("case_id")) if l.get("case_id") else None
     if live:
         l = {**l, "protocol": live.get("protocol") or "", "department": owner(live) or l.get("department") or ""}
-    return {**l, "department_name": org.department_name(org.department_id(l.get("department"))) if l.get("department") else ""}
+    return {**l, "exists": bool(live), "department_name": org.department_name(org.department_id(l.get("department"))) if l.get("department") else ""}

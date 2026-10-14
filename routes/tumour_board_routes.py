@@ -33,11 +33,11 @@ from fastapi.responses import JSONResponse
 import re as _re
 _READ_CASE = _re.compile(r"^/api/tb/(cases|sessions|intake|metrics)(/|$)")  # routes that show patient data: a placed account only
 _CASE_PATH = _re.compile(r"^/api/tb/cases/([^/]+)(/.*)?$")  # one Case File: its owner, participants, the coordinator and the departments asked (V2 item 5.1)
-_LIMITED_OK = (_re.compile(r"^$"), _re.compile(r"^/documents/[^/]+(/file)?$"), _re.compile(r"^/requests/[^/]+/(acknowledge|done)$"),
-               _re.compile(r"^/actions/[^/]+/(close|dismiss-suggestion)$"))  # what a department that was only asked may call
+_LIMITED_OK = ((("GET",), _re.compile(r"^$")), (("GET",), _re.compile(r"^/documents/[^/]+(/file)?$")),  # read only: a delete is never in scope (review Phase 5 S1)
+               (("POST",), _re.compile(r"^/requests/[^/]+/(acknowledge|done)$")), (("POST",), _re.compile(r"^/actions/[^/]+(/close|/dismiss-suggestion)?$")))  # what a department that was only asked may call
 
 
-def _case_guard(rl, case_id, rest):
+def _case_guard(rl, case_id, rest, method="GET"):
     """The Case File scope of this user (access.FULL / access.REQUESTS), or a 403 response. A Case File that does not exist is left to
     the route (404). A department that was only asked may read the Case File view (reduced by the route), open the records in its
     scope and answer its requests and actions; nothing else."""
@@ -50,7 +50,7 @@ def _case_guard(rl, case_id, rest):
     sc = access.scope(rl, c)
     if sc is None:
         return JSONResponse({"detail": access.refusal(rl, c)}, status_code=403)
-    if sc == access.REQUESTS and not any(p.match(rest or "") for p in _LIMITED_OK):
+    if sc == access.REQUESTS and not any(method in ms and p.match(rest or "") for ms, p in _LIMITED_OK):
         return JSONResponse({"detail": "Your department sees only the items it was asked about in this Case File."}, status_code=403)
     return sc
 
@@ -72,12 +72,14 @@ class _ModelErrorRoute(APIRoute):
                         return JSONResponse({"detail": "Your account is not placed in any department yet, so it cannot open Case Files. Ask a Tumour Board admin."}, status_code=403)
                     m = _CASE_PATH.match(request.url.path)
                     if m and m.group(1) != "from-his":  # one Case File: owner, participants, coordinator, the departments asked (V2 item 5.1)
-                        sc = _case_guard(rl, m.group(1), m.group(2))
+                        sc = _case_guard(rl, m.group(1), m.group(2), request.method)
                         if isinstance(sc, JSONResponse):
                             return sc
                         request.state.tb_scope = sc
-            except Exception as e:  # the organisation file is unreadable: the route's own checks still apply
-                log.warning("tumour board route guard skipped (%s)", e)
+            except Exception as e:  # the organisation file is unreadable: a Case File path is refused (never open), the other routes keep their own checks
+                log.warning("tumour board route guard failed (%s)", e)
+                if _CASE_PATH.match(request.url.path):
+                    return JSONResponse({"detail": "The organisation file could not be read; try again or ask the Vaidyx admin."}, status_code=503)
             try:
                 return await h(request)
             except llm.LLMError as e:
@@ -152,7 +154,11 @@ def _account_call(fn, *a, **kw):
 
 
 def _doc_department(d):
-    return (d or {}).get("department")  # department id recorded at upload (department uploads, V1 item 2.3); None for coordinator uploads
+    """The department whose member may confirm or delete this document as its own upload (department uploads, V1 item 2.3): None for
+    coordinator uploads and for hospital-system records, whose `department` is the department that performed the test and gives it no
+    right on the Case File (review Phase 5 S1)."""
+    d = d or {}
+    return None if d.get("his") else d.get("department")
 
 
 def _case_permissions(r, c, st, docs):
@@ -325,8 +331,7 @@ def setup_tumour_board_routes():
         c = connectors.get(store.safe_id(cid))
         if not c or not c.get("enabled"):
             raise HTTPException(404, "No such connector")
-        if not (org.can(rl, "list_case") or org.can(rl, "upload", c["department"])):
-            raise HTTPException(403, "Only a coordinator, or a member of the connector's department, can fetch records")
+        _need_case(rl, "upload_to_case", _case(case_id))  # records enter a Case File through its owning department's doctors (V2 item 5.1, review Phase 5 M5)
         ids = [str(x) for x in (b.get("record_ids") or []) if str(x).strip()][:50]
         if not ids:
             raise HTTPException(400, "Choose at least one record")
@@ -348,7 +353,18 @@ def setup_tumour_board_routes():
         iso = parse_date(date) if date else ""
         if date and not iso:
             raise HTTPException(400, f"Not a valid date: {date}")
-        return metrics.agenda(iso or store.now_iso()[:10])
+        out = metrics.agenda(iso or store.now_iso()[:10])
+        if not (rl.get("admin") or rl.get("coordinator")):  # a doctor sees the readiness of the Case Files it may open (V2 item 5.1, review Phase 5 M1)
+            vis = {c["case_id"] for c in access.visible(rl, store.list_cases())}
+            out["cases"] = [x for x in out["cases"] if x.get("case_id") in vis]
+            out["counts"] = {k: sum(1 for x in out["cases"] if x.get("forecast") == k) for k in (out.get("counts") or {})}
+            chase = []
+            for d in out.get("chase") or []:
+                items = [x for x in (d.get("items") or []) if x.get("case_id") in vis]
+                if items:
+                    chase.append({**d, "items": items, "overdue": sum(1 for x in items if x.get("overdue"))})
+            out["chase"] = chase
+        return out
 
     @r.get("/metrics/dashboard")
     async def metrics_dashboard(request: Request, start: str = "", end: str = "", format: str = "json"):
@@ -742,11 +758,14 @@ def setup_tumour_board_routes():
             mine = access.limited_docs(rl, c, rules.case_docs(case_id, store.get_state(case_id)), store.get_state(case_id))
             docs = [{k: d.get(k) for k in ("doc_id", "filename", "rel_path", "ext", "state", "error", "classification", "added", "department", "uploaded_by")}
                     | {"facts": {}, "pages": len(d.get("pages") or []), "methods": [], "scan_pages": [], "page_flags": []} | his_case.doc_view(d) for d in mine]
-            return {"case": {k: v for k, v in c.items() if k not in ("his",)}, "state": st, "documents": docs, "facts": {}, "timeline": [], "signature": None, "stale": {},
+            p = c.get("patient") if isinstance(c.get("patient"), dict) else {}
+            case_view = {k: c.get(k) for k in ("case_id", "protocol", "setting", "board_date", "department", "listing", "hospital_level", "created_at")} | {"patient": {k: p.get(k) for k in ("name", "mrn", "agesex")}}
+            return {"case": case_view, "state": st, "documents": docs, "facts": {}, "timeline": [], "signature": None, "stale": {},  # no referrals, participants, links or encounters without records (review Phase 5 M2)
                     "permissions": {"answer_request": {a["id"]: _can_answer(rl, a) for a in st["actions"] if a.get("source") == "pre_authorization"},
                                     "update_action": {a["id"]: org.can(rl, "update_action", a.get("department") or None) for a in st["actions"]}},
                     "discordances": None, "trends": None, "outcomes": postboard.OUTCOMES, "his": None, "his_flags": [], "requests": dept_requests.summary(st),
-                    "groups": his_case.encounter_groups(c, mine), "access": {**access.public(c), "scope": access.REQUESTS}}
+                    "groups": [g for g in his_case.encounter_groups(c, mine) if g.get("docs")],
+                    "access": {"owner": access.public(c)["owner"], "participants": [], "owner_history": [], "linked_cases": [], "scope": access.REQUESTS}}
         docs = []
         confirmed_docs = rules.case_docs(case_id, st)
         for d in confirmed_docs:  # as the clinicians confirmed them (type, dates, values; V1 items 2.2, 3.1, 3.2)
@@ -826,7 +845,7 @@ def setup_tumour_board_routes():
     async def intake_queue(request: Request):
         rl = _roles(request)
         docs = intake.queue(rl)
-        cases = [{"case_id": c["case_id"], "patient": c.get("patient") or {}, "protocol": c.get("protocol"), "listing": c.get("listing")} for c in store.list_cases()]
+        cases = [{"case_id": c["case_id"], "patient": c.get("patient") or {}, "protocol": c.get("protocol"), "listing": c.get("listing")} for c in access.visible(rl, store.list_cases())]  # only what the user may open (review Phase 5 M1)
         return {"documents": docs, "cases": cases, "can_match": org.can(rl, "match"), "can_create": org.can(rl, "create_case"),
                 "departments": org.my_departments(rl), "audit": store.read_intake_audit(200) if (rl["admin"] or rl["coordinator"]) else []}
 
@@ -944,7 +963,7 @@ def setup_tumour_board_routes():
         async with store.lock(case_id):
             if (access.open_referral(c) or {}).get("id") != referral_id:
                 raise HTTPException(409, "That referral is not waiting for an answer")
-            rec = _ref_call(referral.withdraw, case_id, u, note=str((b or {}).get("note") or "") if isinstance(b, dict) else "")
+            rec = _ref_call(referral.withdraw, case_id, u, note=str((b or {}).get("note") or "") if isinstance(b, dict) else "", referral_id=referral_id)
         return {"referral": rec, "case": store.get_case(case_id), "referrals": referral.public(store.get_case(case_id))}
 
     def _answer_referral(rl, c, referral_id):
@@ -960,7 +979,7 @@ def setup_tumour_board_routes():
         u = _user(request); rl = _roles(request); c = _case(case_id); _answer_referral(rl, c, referral_id)
         b = await request.json() if (await request.body()) else {}
         async with store.lock(case_id):
-            rec = _ref_call(referral.decline, case_id, u, note=str((b or {}).get("note") or "") if isinstance(b, dict) else "")
+            rec = _ref_call(referral.decline, case_id, u, note=str((b or {}).get("note") or "") if isinstance(b, dict) else "", referral_id=referral_id)
         return {"referral": rec, "case": store.get_case(case_id), "referrals": referral.public(store.get_case(case_id))}
 
     @r.post("/cases/{case_id}/referrals/{referral_id}/accept")
@@ -973,7 +992,7 @@ def setup_tumour_board_routes():
         b = b if isinstance(b, dict) else {}
         async with store.lock(case_id):
             out = _ref_call(referral.accept, case_id, u, note=str(b.get("note") or ""), protocol_id=str(b.get("protocol") or ""), setting=str(b.get("setting") or ""),
-                            hospital_level=str(b.get("hospital_level") or ""))
+                            hospital_level=str(b.get("hospital_level") or ""), referral_id=referral_id)
         job = out.get("job")
         return {"referral": out["referral"], "case": out["case"], "job": job["id"] if job else None, "total": job["total"] if job else 0,
                 "referrals": referral.public(out["case"]), "access": access.public(out["case"])}
@@ -1401,7 +1420,9 @@ def setup_tumour_board_routes():
 
     @r.post("/cases/{case_id}/summary")
     async def make_summary(case_id: str, request: Request):
-        _need_known(_roles(request)); _case(case_id)
+        rl = _roles(request); c = _case(case_id); _need_known(rl)
+        if not (org.can(rl, "list_case") or access.may(rl, "upload_to_case", c)):  # the owning department's doctors or the MDT Coordinator (plan section 4, review Phase 5 M5)
+            raise HTTPException(403, "Only the doctors of the owning department or the MDT Coordinator compile the Case File summary")
         b = await request.json() if (await request.body()) else {}
         return await summary.build(case_id, force=bool(b.get("force")))
 
@@ -1546,8 +1567,12 @@ def setup_tumour_board_routes():
     @r.get("/sessions/candidates")
     async def session_candidates(request: Request, date: str = ""):
         """The Case Files listed for the board on that date (V1 item 6.1), in agenda order."""
-        _user(request)
-        return {"date": date, "cases": _session_call(board.listed_for_date, date)}
+        rl = _roles(request)
+        rows = _session_call(board.listed_for_date, date)
+        if not org.can(rl, "session"):  # a doctor sees the listed Case Files it may open (review Phase 5 M1)
+            vis = {c["case_id"] for c in access.visible(rl, store.list_cases())}
+            rows = [x for x in rows if x.get("case_id") in vis]
+        return {"date": date, "cases": rows}
 
     @r.post("/sessions")
     async def session_create(request: Request):

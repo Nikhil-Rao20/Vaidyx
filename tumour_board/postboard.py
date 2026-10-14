@@ -608,6 +608,14 @@ def trends(case_id, state=None):
     return out
 
 
+def _protocol_label(pid) -> str:
+    try:
+        from . import protocol
+        return (protocol.get(pid) or {}).get("label") or str(pid)
+    except Exception:
+        return str(pid)
+
+
 def timeline(case_id):
     ev = []
     for d in rules.case_docs(case_id):  # confirmed dates and document types (V1 item 2.2)
@@ -627,7 +635,7 @@ def timeline(case_id):
             frm, to = org.department_name(r.get("from")), org.department_name(r.get("to"))
             ev.append({"date": str(r["at"])[:10], "kind": "referral", "title": f"Referred from {frm} to {to}", "status": r.get("status"), "referral": r.get("id"), "reason": r.get("reason")})
             if r.get("status") == "accepted" and r.get("answered_at"):
-                ev.append({"date": str(r["answered_at"])[:10], "kind": "referral", "title": f"Referral accepted: {to} owns the Case File" + (f", listed under {r['protocol_after']}" if r.get("protocol_after") else ""),
+                ev.append({"date": str(r["answered_at"])[:10], "kind": "referral", "title": f"Referral accepted: {to} owns the Case File" + (f", listed under {_protocol_label(r['protocol_after'])}" if r.get("protocol_after") else ""),
                            "status": "owner_changed", "referral": r.get("id")})
     st = store.get_state(case_id)
     for b in st.get("board_records", []):

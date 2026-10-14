@@ -15,11 +15,14 @@ record now arrives final and signed close themselves (rules.sync_actions) and th
 Outside reports (3.6) are uploaded by the treating doctor into the Case File (service.add_files(outside=True)); they run the V1
 pipeline including patient matching and OCR and carry `doc["outside"]`.
 """
+import logging
 import asyncio
 import re
 from datetime import date, datetime
 
 from . import config, his_client, identity, intake, notify, org, store
+
+log = logging.getLogger("tumour_board")
 
 FIRST, REFETCH, OLDER, LINK = "first_fetch", "refetch", "older", "link"
 WINDOW_MONTHS = (6, 12, 24)
@@ -268,7 +271,8 @@ async def create(identifier: str, protocol_id: str, setting: str, hospital_level
         encs = await client.encounters(p["id"])
     except his_client.HISError as e:
         raise HISCaseError(f"The hospital system did not answer: {e}", 502)
-    others = [c for c in store.list_cases() if c.get("his") and str((c["his"] or {}).get("uhid") or "").upper() == str(p["uhid"]).upper() and c["case_id"] != case_id]
+    others = [c for c in store.list_cases() if c.get("his") and str((c["his"] or {}).get("uhid") or "").upper() == str(p["uhid"]).upper() and c["case_id"] != case_id
+              and (c["his"] or {}).get("kind") == client.kind and str((c["his"] or {}).get("label") or "") == str(client.label or "")]  # the same hospital system (review Phase 5 minor 3)
     case = store.create_case(case_id, patient_record(p, encs), protocol_id, board_date, user, setting, hospital_level)
     case["department"] = owner
     if others:  # the same patient's other cancer episodes (two primaries, V2 item 5.3): linked both ways, each with its own owner and protocol
@@ -295,6 +299,12 @@ async def create(identifier: str, protocol_id: str, setting: str, hospital_level
             store.audit(o["case_id"], {"kind": "case_linked", "by": user, "case_id": case_id, "protocol": protocol_id, "department": owner, "reason": "same UHID"})
     if others:
         store.audit(case_id, {"kind": "case_linked", "by": user, "linked": [o["case_id"] for o in others], "reason": "same UHID"})
+        from . import service
+        for o in others:  # the linked Case File re-checks its gate: with a second cancer, the other site's reports step aside (V2 item 5.3)
+            try:
+                service.recheck(o["case_id"], user)
+            except Exception as e:  # a re-check problem never blocks the new Case File
+                log.warning("re-check of the linked Case File %s failed: %s", o["case_id"], e)
     try:
         job = await fetch(case_id, client, start=case["his"]["window_start"], user=user, reason=FIRST)
     except HISCaseError:  # the first fetch failed: no half-made Case File stays behind (a retry would make a second one)

@@ -820,10 +820,23 @@ def test_a_second_cancer_of_the_same_uhid_gets_its_own_case_file_linked_both_way
     assert not access.may(gi, "waive", first, "Radiology"), "reading the linked Case File, never acting on it"
     pub = access.public(second)
     assert pub["linked_cases"][0]["department_name"] == "Breast Surgery"
+    # the linked Case File re-checks its gate when the link is made (the other cancer's reports step aside, V2 item 5.3)
+    from tumour_board import service
+    rechecked = []
+    real_recheck = service.recheck
+    monkeypatch.setattr(service, "recheck", lambda cid, user="": rechecked.append((cid, user)) or real_recheck(cid, user))
+    # a Case File of the same UHID from another hospital system (another label) is never linked (review Phase 5 minor 3)
+    other = FakeHIS(_two_reports()); other.label = "Another HIS (SYNTHETIC)"
+    _use(monkeypatch, other)
+    foreign = _create(protocol="colorectal_rectum", setting="non_metastatic", roles=roles_gi, case_id="TB-TWO-X")["case"]
+    assert "linked_cases" not in foreign and rechecked == [] and [l["case_id"] for l in store.get_case("TB-TWO-A")["linked_cases"]] == ["TB-TWO-B"]
+    _use(monkeypatch, FakeHIS(_two_reports()))
     # a third Case File of the same UHID under the first protocol again: linked to both, and flagged as the same listing
     third = _create(case_id="TB-TWO-C")["case"]
+    assert sorted(c for c, _ in rechecked) == ["TB-TWO-A", "TB-TWO-B"] and all(u == "dr.breast" for _, u in rechecked)
     assert sorted(l["case_id"] for l in third["linked_cases"]) == ["TB-TWO-A", "TB-TWO-B"] and third["his"]["same_uhid_case"] == "TB-TWO-A"
     # deleting one Case File unlinks it from the others
     assert sorted(his_case.unlink_cases("TB-TWO-C", "dr.breast")) == ["TB-TWO-A", "TB-TWO-B"]
+    store.delete_case("TB-TWO-X")
     assert [l["case_id"] for l in store.get_case("TB-TWO-A")["linked_cases"]] == ["TB-TWO-B"]
     assert any(e["kind"] == "case_unlinked" and e["case_id"] == "TB-TWO-C" for e in store.read_audit("TB-TWO-B"))

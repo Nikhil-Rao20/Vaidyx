@@ -140,18 +140,27 @@ def request(case_id: str, to_department, reason: str, user: str, his_ref: str = 
     store.audit(case_id, {"kind": "referral_requested", "by": user, "referral": rec["id"], "from": owner, "to": to, "reason": rec["reason"], "his_ref": rec["his_ref"]})
     p = case.get("patient") or {}
     _tell({"department": to}, "referral", case, f"Referral of {_patient(case)} ({case_id}) from {org.department_name(owner)}",
-          f"{org.department_name(owner)} refers this Tumour Board Case File to {org.department_name(to)}. Reason: {rec['reason']}"
+          f"{org.department_name(owner)} refers this Tumour Board Case File to {org.department_name(to)}. Reason: {rec['reason'].rstrip('.')}."
           + (f" UHID {p['mrn']}." if p.get("mrn") else "") + " Accept or decline on the Case File or in your inbox; on acceptance your department owns the Case File and picks the cancer protocol.",
           referral=rec["id"], from_department=owner, to_department=to, uhid=p.get("mrn", ""), by=user)
     return rec
 
 
-def withdraw(case_id: str, user: str, note: str = "") -> dict:
-    """The referring department takes back an unanswered referral; the receiving department is told."""
-    case = _case(case_id)
+def _open_or_409(case: dict, referral_id: str = "") -> dict:
+    """The referral waiting for an answer, which must be the one the caller saw (`referral_id`): a referral withdrawn and replaced while
+    the click was in flight is never answered in its place (review Phase 5 M3)."""
     rec = open_(case)
     if not rec:
         raise ReferralError("No referral is waiting for an answer", 409)
+    if referral_id and rec.get("id") != referral_id:
+        raise ReferralError("That referral is not waiting for an answer any more", 409)
+    return rec
+
+
+def withdraw(case_id: str, user: str, note: str = "", referral_id: str = "") -> dict:
+    """The referring department takes back an unanswered referral; the receiving department is told."""
+    case = _case(case_id)
+    rec = _open_or_409(case, referral_id)
     rec.update(status=WITHDRAWN, answered_by=user, answered_at=store.now_iso(), note=str(note or "")[:500])
     store.save_case(case)
     store.audit(case_id, {"kind": "referral_withdrawn", "by": user, "referral": rec["id"], "to": rec["to"], "note": rec["note"]})
@@ -160,12 +169,10 @@ def withdraw(case_id: str, user: str, note: str = "") -> dict:
     return rec
 
 
-def decline(case_id: str, user: str, note: str = "") -> dict:
+def decline(case_id: str, user: str, note: str = "", referral_id: str = "") -> dict:
     """The receiving department declines; the Case File stays with its owner, who is told."""
     case = _case(case_id)
-    rec = open_(case)
-    if not rec:
-        raise ReferralError("No referral is waiting for an answer", 409)
+    rec = _open_or_409(case, referral_id)
     rec.update(status=DECLINED, answered_by=user, answered_at=store.now_iso(), note=str(note or "")[:500])
     store.save_case(case)
     store.audit(case_id, {"kind": "referral_declined", "by": user, "referral": rec["id"], "from": rec["from"], "to": rec["to"], "note": rec["note"]})
@@ -190,15 +197,13 @@ def _archive_gate(case: dict, st: dict, rec: dict, user: str) -> dict:
     return entry
 
 
-def accept(case_id: str, user: str, note: str = "", protocol_id: str = "", setting: str = "", hospital_level: str = ""):
+def accept(case_id: str, user: str, note: str = "", protocol_id: str = "", setting: str = "", hospital_level: str = "", referral_id: str = ""):
     """The receiving department accepts: ownership moves, the referring department stays as a participant, the earlier gate is
     archived; with a protocol the Case File is listed under it at once (the gate re-runs on the same records), otherwise it waits
     for the new owner to pick one. Returns {"referral", "case", "job"} (job None when no protocol was given)."""
     from . import service
     case = _case(case_id)
-    rec = open_(case)
-    if not rec:
-        raise ReferralError("No referral is waiting for an answer", 409)
+    rec = _open_or_409(case, referral_id)
     protocol_id = str(protocol_id or "").strip()
     if protocol_id:
         if not protocol.exists(protocol_id):
@@ -229,9 +234,12 @@ def accept(case_id: str, user: str, note: str = "", protocol_id: str = "", setti
     if protocol_id:
         job = service.list_case(case_id, protocol_id, setting or "", case.get("board_date") or "", hospital_level or case.get("hospital_level") or "", user)
     else:
-        service.recheck(case_id, user)  # no protocol: the gate is cleared, the earlier requests wait for the new listing
+        from . import rules
+        rules.close_requests_on_referral(case_id, org.department_name(new), user)  # nothing stays asked of a department for a protocol nobody follows any more (review Phase 5 M4)
+        service.recheck(case_id, user)  # no protocol: the gate is cleared until the new owner lists the Case File
     case = store.get_case(case_id)
-    what = (f"{org.department_name(new)} now owns the Case File and listed it under {protocol_id}" + (f" ({protocol.setting_label(protocol_id, setting)})" if setting else "")
+    plabel = (protocol.get(protocol_id) or {}).get("label") or protocol_id if protocol_id else ""
+    what = (f"{org.department_name(new)} now owns the Case File and listed it under {plabel}" + (f" ({protocol.setting_label(protocol_id, setting)})" if setting else "")
             + "; the Pre-Authorization re-runs on the same records.") if protocol_id else f"{org.department_name(new)} now owns the Case File and will pick the cancer protocol."
     _tell({"department": old}, "referral_answered", case, f"Referral of {_patient(case)} ({case_id}) accepted by {org.department_name(new)}",
           what + f" {org.department_name(old)} stays as a participating department (read and comment)." + (f" Note: {rec['note']}" if rec["note"] else ""),
