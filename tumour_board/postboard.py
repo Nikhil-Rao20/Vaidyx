@@ -124,10 +124,12 @@ def _text_present(text):
 NOT_EMPANELLED = "The hospital is not PM-JAY empanelled, so the HBP 2.2 board composition requirement does not apply"
 
 
-def pmjay_seat(present: set) -> dict:
+def pmjay_seat(present: set, own=None) -> dict:
     """The surgical seat for PM-JAY (V2 item 6.4): a Surgical Oncologist present fills it; otherwise a surgeon present from one of the
     hospital's surgical departments fills it, without a note when that department is on the hospital's PM-JAY surgical oncology list
     (default Surgical Oncology, Gynaecologic Oncology, Orthopaedic Oncology) and with "check PM-JAY requirement" when it is not.
+    `own`: the Case File's own surgical departments (board._case_surgical): a surgeon from a department outside the PM-JAY list fills
+    the seat only when it is one of them (plan 6.2; Phase 6 review M1). None: any surgical department (a session-level count).
     Returns {"filled", "filled_by", "check", "note"}; `present` is a set of department ids."""
     h = org.hospital()
     pmj = {org.department_id(x) for x in h.get("pmjay_surgical_oncology") or []} - {None}
@@ -138,22 +140,22 @@ def pmjay_seat(present: set) -> dict:
     if listed:
         return {"filled": True, "filled_by": listed, "check": False,
                 "note": f"Surgical seat filled by {', '.join(org.department_name(d) for d in listed)} (on the hospital's PM-JAY surgical oncology list)"}
-    other = sorted(d for d in present if d in surg)
+    other = sorted(d for d in present if d in surg and (own is None or d in set(own)))
     if other:
         return {"filled": True, "filled_by": other, "check": True,
                 "note": f"Surgical seat filled by {', '.join(org.department_name(d) for d in other)}: check the PM-JAY requirement, which names a Surgical Oncologist"}
     return {"filled": False, "filled_by": [], "check": False, "note": ""}
 
 
-def pmjay_present(present: set) -> set:
+def pmjay_present(present: set, own=None) -> set:
     """The PM-JAY specialties counted present: the three oncologists, with the surgical seat filled as pmjay_seat() says (V2 item 6.4)."""
     out = {d for d in PMJAY_BOARD if d in present}
-    if pmjay_seat(present)["filled"]:
+    if pmjay_seat(present, own)["filled"]:
         out.add("surgical_oncology")
     return out
 
 
-def composition(record):
+def composition(record, own=None):
     """Which of PM-JAY's three oncology specialties were present (V1 item 7.1). From the structured attendance when the record has one
     (Board room session, or members typed with their department), else from the participants text. Returns {"checked", "how",
     "present", "missing", "reference", "seat", "seat_note"}; "checked" is False when nothing says which specialties were there. V2 item
@@ -176,8 +178,8 @@ def composition(record):
         present, named_any = _text_present(str(record.get("participants") or ""))
         how = "participants text" if named_any else None
     present.discard(None)
-    seat = pmjay_seat(present) if how else {"filled": False, "filled_by": [], "check": False, "note": ""}
-    counted = pmjay_present(present) if how else set()
+    seat = pmjay_seat(present, own) if how else {"filled": False, "filled_by": [], "check": False, "note": ""}
+    counted = pmjay_present(present, own) if how else set()
     found = [d for d in PMJAY_BOARD if d in counted]
     return {"checked": how is not None, "how": how, "present": found, "missing": [d for d in PMJAY_BOARD if d not in counted] if how else [],
             "reference": PMJAY_REFERENCE, "seat": seat, "seat_note": seat["note"]}
@@ -221,7 +223,8 @@ async def adjudicate(case_id, record):
             flags.append({"kind": "documentation", "severity": "review", "text": f"Action {i + 1} has no Responsible Department"})
         if not a.get("due"):
             flags.append({"kind": "documentation", "severity": "review", "text": f"Action {i + 1} has no due date"})
-    comp = composition(record)  # PM-JAY: surgical, radiation and medical oncologist (V1 item 7.1)
+    from . import board as _board
+    comp = composition(record, own=_board._case_surgical(case))  # PM-JAY: surgical, radiation and medical oncologist (V1 item 7.1); the seat per Case File (6.2 / 6.4)
     if _composition_flag(comp):
         flags.append(_composition_flag(comp))
     gate = (store.get_state(case_id).get("gate") or {}) if listed else {}

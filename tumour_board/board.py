@@ -498,6 +498,44 @@ def may_open(r: dict, session) -> bool:
     return False
 
 
+def allowed_cases(r: dict, session) -> set | None:
+    """The Case Files of the agenda a user may read in full, or None for the MDT Coordinator and the Vaidyx admin (everything). A
+    doctor whose department is on the attendance sheet opens the room, but sees the log, decisions, minutes and export of its own
+    Case Files only (Phase 6 review S2)."""
+    from . import access
+    if isinstance(r, dict) and (r.get("admin") or r.get("coordinator")):
+        return None
+    out = set()
+    for a in (session or {}).get("agenda") or []:
+        cid = a.get("case_id")
+        c = store.get_case(cid) if cid and cid not in config.PROTECTED_CASES else None
+        if c and isinstance(r, dict) and access.scope(r, c) == access.FULL:
+            out.add(cid)
+    return out
+
+
+def session_view(session, allowed) -> dict:
+    """The session as a doctor may see it: the log entries, the decisions and the agent records of the Case Files in `allowed` only
+    (entries without a Case File, such as the start and close, stay). `allowed` None: the whole session."""
+    if allowed is None:
+        return session
+    return {**session, "log": [e for e in session.get("log") or [] if not e.get("case_id") or e.get("case_id") in allowed],
+            "decisions": {k: v for k, v in (session.get("decisions") or {}).items() if k in allowed},
+            "agents": {k: v for k, v in (session.get("agents") or {}).items() if k in allowed}}
+
+
+def session_surgical(session) -> set:
+    """The surgical departments of the Case Files on the agenda (their owners and participants in the hospital's surgical list): for a
+    session-level count such as the dashboard quorum, a surgeon from one of them fills the surgical seat (V2 items 6.2 / 6.4)."""
+    out = set()
+    for a in (session or {}).get("agenda") or []:
+        cid = a.get("case_id")
+        c = store.get_case(cid) if cid and cid not in config.PROTECTED_CASES else None
+        if c:
+            out.update(_case_surgical(c))
+    return out
+
+
 def participants(session) -> dict:
     """Who took part, for the decision record (7.1 checks the PM-JAY composition from it)."""
     att = attendance(session)
@@ -782,7 +820,8 @@ def _printable_rule(case_id):
     return ok
 
 
-def export(sid) -> dict:
+def export(sid, allowed=None) -> dict:
+    """`allowed`: the Case Files whose agent log and decision this reader may see (None: all; Phase 6 review S2)."""
     s = _need(sid)
     names = {d["id"]: d["name"] for d in specialties()}
     att = attendance(s)
@@ -791,6 +830,9 @@ def export(sid) -> dict:
                         "members": [m["name"] for m in members if org.department_id(m["department"]) == d]} for d, v in att.items()]
     cases = []
     for a in s["agenda"]:
+        if allowed is not None and a["case_id"] not in allowed:  # another department's Case File: nothing of it
+            cases.append({"case_id": a["case_id"], "status": a["status"], "restricted": True, "patient": {}, "protocol": None, "agents": {},
+                          "agent_log": [], "decision": None, "marks": _marks([])}); continue
         c = store.get_case(a["case_id"]) or {}
         printable = _printable_rule(a["case_id"])
         log = [{**e, "printable": printable(e)} for e in entries(s, a["case_id"])]
@@ -805,13 +847,14 @@ def export(sid) -> dict:
 
 # ---- after the session: follow-up of the board's decisions and the minutes (V2 item 6.1) ------------------------------------------
 
-def followup(session) -> dict:
+def followup(session, allowed=None) -> dict:
     """The Tumour Board actions that came out of this session's decisions (postboard.record_decision turns them into follow-up
-    requests in the Responsible Department's inbox, V1 item 7.4), with their state now: open, overdue, closed."""
+    requests in the Responsible Department's inbox, V1 item 7.4), with their state now: open, overdue, closed. `allowed`: only
+    these Case Files (None: all)."""
     today = store.now_iso()[:10]
     rows = []
     for cid, d in ((session or {}).get("decisions") or {}).items():
-        if cid in config.PROTECTED_CASES:
+        if cid in config.PROTECTED_CASES or (allowed is not None and cid not in allowed):
             continue
         st = store.get_state(cid)
         for a in st.get("actions") or []:
@@ -831,12 +874,13 @@ def _att_label(v) -> str:
     return {"present": "Present", "absent": "Absent", "not_marked": "Not recorded"}.get(v, v or "Not recorded")
 
 
-def minutes(sid) -> dict:
+def minutes(sid, allowed=None) -> dict:
     """The minutes of a board session (V2 item 6.1): the hospital, the session, the attendance sheet (heads first) with the members by
     name and the AI support agents that stood in, then per Case File the patient, the protocol, the owner, who marked it ready, the
     decision as dictated (outcome, text, intention, trial, corrections, divergent opinions, actions, next review), the surgical seat and
     the PM-JAY composition result, then the follow-up of every action. Nothing here is a model output: the agents' points are in the
-    agent log export (6.3)."""
+    agent log export (6.3). `allowed`: the Case Files this reader may see in full (None: all); the others print as restricted,
+    with no patient data, decision or seat (Phase 6 review S2)."""
     from . import postboard, protocol
     s = _need(sid)
     att = attendance(s)
@@ -859,6 +903,8 @@ def minutes(sid) -> dict:
     cases = []
     for i, a in enumerate(s["agenda"]):
         cid = a["case_id"]
+        if allowed is not None and cid not in allowed:
+            cases.append({"n": i + 1, "case_id": cid, "restricted": True}); continue
         c = store.get_case(cid) if cid not in config.PROTECTED_CASES else None
         if not c:
             cases.append({"n": i + 1, "case_id": cid, "missing": True}); continue
@@ -890,15 +936,15 @@ def minutes(sid) -> dict:
                           "final": bool((rec.get("resolution") or {}).get("final"))}})
     return {"hospital": org.hospital().get("name") or "", "pmjay_empanelled": bool(org.hospital().get("pmjay_empanelled", True)),
             "session": {k: s.get(k) for k in ("id", "date", "title", "status", "created", "created_by", "started_at", "started_by", "closed_at", "closed_by")},
-            "attendance": sheet, "coordinators_present": coord, "participants": participants(s), "cases": cases, "followup": followup(s),
+            "attendance": sheet, "coordinators_present": coord, "participants": participants(s), "cases": cases, "followup": followup(s, allowed),
             "generated": store.now_iso(),
             "note": "Minutes as dictated by the board and entered by the MDT Coordinator. The AI support agents' points and the board's marks on them are "
                     "in the agent log export; an agent is never a member of the board."}
 
 
-def minutes_html(sid) -> str:
+def minutes_html(sid, allowed=None) -> str:
     """Printable minutes (inline CSS, no scripts, no em dashes). Verified quotes do not appear here: the minutes hold what people recorded."""
-    x = minutes(sid)
+    x = minutes(sid, allowed)
     se = x["session"]
     title = f"Tumour Board minutes: {_ddmmyyyy(se['date'])}" + (f", {se['title']}" if se.get("title") else "")
     status = {"planned": "Planned", "in_session": "In session", "closed": "Closed"}.get(se.get("status"), se.get("status"))
@@ -917,6 +963,8 @@ def minutes_html(sid) -> str:
     for c in x["cases"]:
         if c.get("missing"):
             out.append(f"<h2>{c['n']}. {_h(c['case_id'])}</h2><div><i>This Case File no longer exists.</i></div>"); continue
+        if c.get("restricted"):
+            out.append(f"<h2>{c['n']}. {_h(c['case_id'])}</h2><div><i>Restricted: another department's Case File. Its patient, decision and follow-up are not shown to your department.</i></div>"); continue
         p = c["patient"]
         ident = ", ".join(v for v in (p.get("name"), (f"UHID/MRN {p.get('mrn') or p.get('uhid')}" if p.get("mrn") or p.get("uhid") else ""), p.get("agesex")) if v)
         out.append(f"<h2>{c['n']}. {_h(ident or c['case_id'])}</h2>")
@@ -1043,9 +1091,9 @@ th{background:#eef2f5}td.said{width:62%}.cite{color:#2c4a6b;font-size:11px;margi
 @media print{body{margin:10mm}tr{page-break-inside:avoid}}"""
 
 
-def export_html(sid) -> str:
+def export_html(sid, allowed=None) -> str:
     """Printable page: attendance, then per Case File the agent log beside the board's decision and marks. Inline CSS, no scripts."""
-    x = export(sid)
+    x = export(sid, allowed)
     se = x["session"]
     title = f"Board session {_ddmmyyyy(se['date'])}: agent log and board decision"
     out = [f"<!doctype html><html lang='en'><head><meta charset='utf-8'><title>{_h(title)}</title><style>{CSS}</style></head><body>",
@@ -1066,6 +1114,8 @@ def export_html(sid) -> str:
         out.append(f"<div class='meta'>AI support agents prepared briefs for the absent specialties: {_h(', '.join(org.department_name(ROLE_DEPARTMENT[r]) for r in x['absent_roles']))}</div>")
     models = []
     for c in x["cases"]:
+        if c.get("restricted"):
+            out.append(f"<h2>{_h(c['case_id'])}: restricted</h2><div class='meta'>Another department's Case File: its agent log and decision are not shown to your department.</div>"); continue
         p = c["patient"]
         ident = ", ".join(v for v in (p.get("name"), (f"UHID/MRN {p.get('mrn') or p.get('uhid')}" if p.get("mrn") or p.get("uhid") else ""),
                                        p.get("agesex"), c.get("protocol")) if v)

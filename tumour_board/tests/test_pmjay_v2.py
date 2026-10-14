@@ -37,6 +37,21 @@ def test_surgeon_outside_the_pmjay_list_fills_the_seat_with_a_check_flag(data_ro
     assert postboard.pmjay_present({"medical_oncology", "dermatology"}) == {"medical_oncology"}
 
 
+def test_the_seat_outside_the_pmjay_list_is_the_case_files_own_surgeon(data_root):
+    """Plan 6.2 / 6.4 (Phase 6 review M1): a surgeon from a department outside the hospital's PM-JAY surgical oncology list fills the seat
+    only when it is the Case File's own surgical department; the PM-JAY list counts for every Case File."""
+    att = {"present": ["Medical Oncology", "Radiation Oncology", "Urology"], "members": []}
+    c = postboard.composition({"attendance": att}, own=["breast_surgery"])  # a breast Case File: Urology present does not fill its seat
+    assert c["seat"]["filled"] is False and c["missing"] == ["surgical_oncology"] and "surgical_oncology" not in c["present"]
+    c = postboard.composition({"attendance": att}, own=["urology"])
+    assert c["seat"] == {"filled": True, "filled_by": ["urology"], "check": True, "note": "Surgical seat filled by Urology: check the PM-JAY requirement, which names a Surgical Oncologist"}
+    assert c["missing"] == []
+    c = postboard.composition({"attendance": {"present": ["Medical Oncology", "Gynaecologic Oncology"], "members": []}}, own=["breast_surgery"])
+    assert c["seat"]["filled"] is True and c["seat"]["check"] is False
+    assert postboard.pmjay_present({"medical_oncology", "urology"}, own=["breast_surgery"]) == {"medical_oncology"}
+    assert postboard.pmjay_present({"medical_oncology", "urology"}, own=None) == {"medical_oncology", "surgical_oncology"}
+
+
 def test_dashboard_quorum_follows_empanelment(cases):
     s = board.create(DATE, "anil", case_ids=["TB-BR"])
     for d in ("medical_oncology", "radiation_oncology", "breast_surgery"):

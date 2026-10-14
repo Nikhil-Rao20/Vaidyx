@@ -2495,7 +2495,9 @@ def v2_phase6(c, base, ctx):
           and rr.status_code == 200 and rr.json()["cases"][p01].get("restricted") is True and rr.json()["cases"][p12].get("restricted") is True)
     check("6.1 the session list shows a doctor the sessions it may open", sid in [x["id"] for x in rad.get("/api/tb/sessions").json()["sessions"]]
           and sid not in [x["id"] for x in derm.get("/api/tb/sessions").json()["sessions"]] and [h["id"] for h in mdt.get("/api/tb/sessions").json()["heads"]] == ["radiology", "medical_oncology", "surgical_oncology", "pathology"])
+    doc0 = ((d2.get("documents") or [{}])[0]).get("doc_id") or ""
     check("6.1 the MDT Coordinator cannot confirm or waive", mdt.post(f"/api/tb/cases/{p12}/confirmations", json={"type": "waive", "key": "cect_tap", "reason": "e2e"}).status_code == 403
+          and mdt.post(f"/api/tb/cases/{p12}/confirmations", json={"type": "attest_final", "key": doc0}).status_code == 403
           and not any((mdt.get(f"/api/tb/cases/{p12}").json()["permissions"].get("waive") or {}).values()) and not any((mdt.get(f"/api/tb/cases/{p12}").json()["permissions"].get("confirm") or {}).values()))
     # ---- 6.2 heads, the surgical seat, agents per Case File, on demand ------------------------------------------------------------------
     for dept in ("radiology", "medical_oncology"):
@@ -2513,6 +2515,7 @@ def v2_phase6(c, base, ctx):
     check("6.2 no Surgical Oncology agent where the seat is filled (400); Radiation Oncology on demand (200)", r.status_code == 400 and r2.status_code == 200 and r2.json().get("preparing") == 1,
           f"{r.status_code} {r.text[:80]} / {r2.status_code}")
     rm = wait_agents(mdt)
+    pname = (rm["cases"][p01].get("patient") or {}).get("name") or ""
     ag_ = rm["session"].get("agents") or {}
     sts = {(cid_, role_): x.get("status") for cid_, by in ag_.items() for role_, x in by.items()}
     check("6.2 every brief prepared (or no documents), none in error", sts and all(v in ("ready", "no_documents") for v in sts.values()) and (p12, "surgical_oncology") in sts and (p01, "radiation_oncology") in sts,
@@ -2527,7 +2530,7 @@ def v2_phase6(c, base, ctx):
     check("6.3 the room lists the Case File's records with their hospital-system status and which imaging reports have images", len(recs) >= 6 and img
           and all(x.get("his") and x["his"].get("accession") for x in img), f"{len(recs)} records, {len(img)} with images")
     doc_id = img[0]["doc_id"]
-    r = breast.get(f"/api/tb/cases/{p01}/documents/{doc_id}/images")
+    r = breast.post(f"/api/tb/cases/{p01}/documents/{doc_id}/images")
     j = r.json() if r.status_code == 200 else {}
     check("6.3 Open images: the study found in the hospital system, the viewer URL inside this app, audited", r.status_code == 200 and j.get("available") is True and j.get("study_uid")
           and str(j.get("viewer_url", "")).startswith("/api/tb/pacs/ohif/viewer?StudyInstanceUIDs=") and j.get("modality") in ("MG", "US")
@@ -2543,9 +2546,13 @@ def v2_phase6(c, base, ctx):
           gyn.get("/api/tb/pacs/dicom-web/studies", params={"StudyInstanceUID": uid}).status_code == 403 and mdt.get(j.get("viewer_url", "/x")).status_code == 403
           and breast.get("/api/tb/pacs/studies").status_code == 404 and breast.get("/api/tb/pacs/app/explorer.html").status_code == 404
           and breast.get("/api/tb/pacs/dicom-web/studies").status_code == 404 and breast.get("/api/tb/pacs/dicom-web/studies", params={"StudyInstanceUID": "1.2.3.4"}).status_code == 403
-          and httpx.Client(base_url=base).get("/api/tb/pacs/ohif/").status_code in (401, 403))
-    check("6.3 a department outside the Case File cannot open its images (403)", rad.get(f"/api/tb/cases/{p01}/documents/{doc_id}/images").status_code == 403 and gyn.get(f"/api/tb/cases/{p01}/documents/{doc_id}/images").status_code == 403)
-    rm2 = mdt.get(f"/api/tb/cases/{p01}/documents/{doc_id}/images").json()
+          and httpx.Client(base_url=base).get("/api/tb/pacs/ohif/").status_code in (401, 403)
+          and breast.get(f"/api/tb/pacs/dicom-web/studies?StudyInstanceUID={uid}&0020,000D=").status_code == 404  # the study tag in another spelling (review S1)
+          and breast.get(f"/api/tb/pacs/dicom-web/studies?StudyInstanceUID={uid}&StudyInstanceUID%00=").status_code == 404
+          and breast.get(f"/api/tb/pacs/dicom-web/studies?StudyInstanceUID={uid}&PatientName=").status_code == 404
+          and len(breast.get(f"/api/tb/pacs/dicom-web/studies?StudyInstanceUID={uid}&includefield=all").json()) == 1)
+    check("6.3 a department outside the Case File cannot open its images (403)", rad.post(f"/api/tb/cases/{p01}/documents/{doc_id}/images").status_code == 403 and gyn.post(f"/api/tb/cases/{p01}/documents/{doc_id}/images").status_code == 403)
+    rm2 = mdt.post(f"/api/tb/cases/{p01}/documents/{doc_id}/images").json()
     v2 = mdt.get(rm2.get("viewer_url", "/x"))
     check("6.3 the coordinator opens the images from the room after its own Open images (a grant per person)", rm2.get("available") is True and v2.status_code == 200)
     # the file of a hospital-system record fetched live when it is missing on disk
@@ -2576,6 +2583,15 @@ def v2_phase6(c, base, ctx):
           and "Tumour Board minutes" in html and "check PM-JAY requirement" in html and "MRI breast before surgery" in html and "—" not in html
           and any(e["kind"] == "minutes_export" for e in board.read_audit(2000) if e.get("session") == sid), json.dumps({k: c1.get(k) for k in ("seat", "ready", "agents")})[:200])
     check("6.1 the minutes open to the room's readers only (403 for a department with no part)", gyn.get(f"/api/tb/sessions/{sid}/minutes").status_code == 403 and breast.get(f"/api/tb/sessions/{sid}/minutes").status_code == 200)
+    rr = rad.get(f"/api/tb/sessions/{sid}").json(); rmj = rad.get(f"/api/tb/sessions/{sid}/minutes", params={"format": "json"}).json(); rmh = rad.get(f"/api/tb/sessions/{sid}/minutes").text
+    rex = rad.get(f"/api/tb/sessions/{sid}/export", params={"format": "json"}).json(); rexh = rad.get(f"/api/tb/sessions/{sid}/export").text
+    bm = breast.get(f"/api/tb/sessions/{sid}/minutes", params={"format": "json"}).json()
+    check("6.1 a head's department with no part in the Case Files opens the room but gets no log, decision, agent record, follow-up, minutes or export content of them (restricted); the owner sees its own",
+          bool(pname) and not any(e.get("case_id") for e in rr["session"]["log"]) and rr["session"]["decisions"] == {} and rr["session"].get("agents") == {} and not (rr.get("followup") or {}).get("actions")
+          and all(c.get("restricted") for c in rmj["cases"]) and not rmj["followup"]["actions"] and pname not in rmh and pname not in json.dumps(rex) and pname not in rexh
+          and all(c.get("restricted") and not c.get("agent_log") and c.get("decision") is None for c in rex["cases"])
+          and [c.get("restricted", False) for c in bm["cases"]] == [False, True] and bm["cases"][0]["patient"]["name"] == pname,
+          f"{len(rr['session']['log'])} log entries, {sum(1 for c in rmj['cases'] if c.get('restricted'))}/{len(rmj['cases'])} restricted, breast {[c.get('restricted', False) for c in bm['cases']]}")
     fu = room(mdt).get("followup") or {}
     check("6.1 the room tracks the follow-up of the decisions (the MRI action open in Radiology's inbox, the patient-communication follow-up beside it)",
           fu.get("open", 0) >= 1 and any(x["department"] == "Radiology" and x["status"] != "completed" for x in fu.get("actions") or [])

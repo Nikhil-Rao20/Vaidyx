@@ -267,7 +267,7 @@ def dashboard(start: str = None, end: str = None) -> dict:
         marked = sum(1 for x in closed if board.attendance(x).get(did) in ("present", "absent"))
         att[did] = {"department": d.get("name") or did, "present": present, "sessions": len(closed), "marked": marked, "rate": _pct(present, len(closed))}
     empanelled = bool(org.hospital().get("pmjay_empanelled", True))  # the PM-JAY composition applies to an empanelled hospital only (V2 item 6.4)
-    quorate = sum(1 for x in closed if postboard.pmjay_present({d for d, v in board.attendance(x).items() if v == "present"}) >= set(PMJAY)) if empanelled else 0
+    quorate = sum(1 for x in closed if postboard.pmjay_present({d for d, v in board.attendance(x).items() if v == "present"}, board.session_surgical(x)) >= set(PMJAY)) if empanelled else 0  # the seat by the agenda's own surgeons (6.2)
     minutes = [v / 60 for x in closed for v in (x.get("timing") or {}).values() if v]
     briefs = sum(1 for x in sessions for cs in (x.get("agents") or {}).values() for r in cs.values() if isinstance(r, dict) and r.get("status") in ("done", "reused"))
     questions = sum(1 for x in sessions for en in x.get("log") or [] if en.get("kind") == "answer")

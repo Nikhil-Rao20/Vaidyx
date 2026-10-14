@@ -299,3 +299,32 @@ def test_who_may_remind(cases):
 
 
 # ---- 6.3: a hospital-system record's file fetched live when missing --------------------------------------------------------------------
+
+
+def test_a_doctor_sees_only_its_own_case_files_in_the_room_minutes_and_export(cases):
+    """Phase 6 review S2: a doctor whose department is on the attendance sheet opens the room, but the log, decisions, agent records,
+    follow-up, minutes and export of another department's Case File are not shown to it; the coordinator and the admin see all."""
+    _case("TB-X1", owner="breast_surgery", name="SYNTHETIC, Breast Patient"); _case("TB-X2", owner="medical_oncology", protocol="lung_nsclc", name="SYNTHETIC, Lung Patient")
+    s = board.create(DATE, "anil", case_ids=["TB-X1", "TB-X2"])
+    board.start(s["id"], "anil")
+    _decide(s["id"], "TB-X1", actions=[{"department": "Radiology", "task": "MRI breast", "due": "2027-01-10"}])
+    _decide(s["id"], "TB-X2", text="Await the final CT.")
+    assert board.allowed_cases(COORD, s) is None and board.allowed_cases(ADMIN, s) is None
+    assert board.allowed_cases(BREAST, s) == {"TB-X1"} and board.allowed_cases(RAD, s) == set() and board.allowed_cases(UNPLACED, s) == set()
+    full = board.get(s["id"])
+    assert set(full["decisions"]) == {"TB-X1", "TB-X2"}
+    v = board.session_view(full, {"TB-X1"})
+    assert set(v["decisions"]) == {"TB-X1"} and all((e.get("case_id") or "TB-X1") == "TB-X1" for e in v["log"]) and set(v.get("agents") or {}) <= {"TB-X1"}
+    assert board.session_view(full, None) is full
+    m = board.minutes(s["id"], {"TB-X1"})
+    assert [c.get("restricted", False) for c in m["cases"]] == [False, True] and "patient" not in m["cases"][1] and "decision" not in m["cases"][1]
+    assert m["cases"][0]["patient"]["name"] == "SYNTHETIC, Breast Patient" and all(a["case_id"] == "TB-X1" for a in m["followup"]["actions"])
+    assert board.followup(full, {"TB-X2"})["actions"] == [] and board.followup(full)["open"] == 1
+    h = board.minutes_html(s["id"], set())
+    assert "Restricted" in h and "Breast Patient" not in h and "Lung Patient" not in h and "Await the final CT" not in h and "MRI breast" not in h
+    assert "Breast Patient" in board.minutes_html(s["id"], {"TB-X1"}) and "Lung Patient" in board.minutes_html(s["id"])
+    e = board.export(s["id"], {"TB-X2"})
+    assert e["cases"][0]["restricted"] is True and e["cases"][0]["agent_log"] == [] and e["cases"][0]["decision"] is None and e["cases"][0]["patient"] == {}
+    assert e["cases"][1].get("restricted") is None and e["cases"][1]["decision"]["decision_text"] == "Await the final CT."
+    eh = board.export_html(s["id"], set())
+    assert "restricted" in eh and "Breast Patient" not in eh and "Lung Patient" not in eh and "Await the final CT" not in eh

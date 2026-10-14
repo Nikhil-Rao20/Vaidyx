@@ -9,7 +9,9 @@ hands an image to any agent; the app only forwards the viewer's own requests to 
                                                 viewer and DICOMweb requests of that study are then forwarded for that user only
     classify(path, query) / check(...)          which requests are forwarded at all: the OHIF app, the viewer page of a granted study
                                                 and DICOMweb under that study; never Orthanc's REST API, explorer, plugins or a
-                                                study list
+                                                study list; the query re-encoded from plain keys only, the study search reduced
+                                                to the one study (forward_query); the grant re-checked against the Case File
+                                                scope once a minute
     proxy(request, path, roles)                 GET / HEAD only, a short header allow-list both ways (never cookies or the app's
                                                 Authorization), the body streamed; the viewer page open is audited on the Case
                                                 File (`viewer_opened`), the hundreds of image requests of a study are not
@@ -20,13 +22,13 @@ everyone, so every study viewed has an "opened from this report" entry behind it
 """
 import re
 import time
-from urllib.parse import parse_qsl, quote
+from urllib.parse import parse_qsl, quote, urlencode
 
 import httpx
 from starlette.background import BackgroundTask
 from starlette.responses import JSONResponse, Response, StreamingResponse
 
-from . import his_client, store
+from . import config, his_client, store
 
 PREFIX = "/api/tb/pacs"
 DEFAULT_PACS_URL = his_client.DEFAULT_PACS_URL
@@ -86,13 +88,31 @@ def granted(user: str, study_uid: str, now: float | None = None) -> dict | None:
 
 def clear():
     _grants.clear()
+    _access_cache.clear()
 
 
 # ---------------------------------------------------------------------------------------------------- what is forwarded
-def _uids(query: str, names: tuple) -> list[str]:
-    """Every value of the query keys `names` (case-insensitive), comma lists split, blanks dropped, duplicates kept once."""
+_KEY = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")  # a query key: a DICOM keyword, a plain hex tag or a DICOMweb parameter; anything else is refused
+_CTRL = re.compile(r"[\x00-\x1f\x7f]")       # (Orthanc also reads "0020,000D" or a key cut at a NUL as the study filter: Phase 6 review S1)
+STUDY_KEYS = ("studyinstanceuid", "0020000d")
+SEARCH_KEYS = ("includefield", "limit", "offset", "fuzzymatching")  # what the study search may carry besides the one study
+_ACCESS_TTL = 60.0
+
+
+def _pairs(query: str) -> list | None:
+    """The (key, value) pairs of a query string, or None when a key is not plain or a value carries a control character."""
     out = []
     for k, v in parse_qsl(query or "", keep_blank_values=True):
+        if not _KEY.match(k) or _CTRL.search(v):
+            return None
+        out.append((k, v))
+    return out
+
+
+def _uids(pairs: list, names: tuple) -> list[str]:
+    """Every value of the query keys `names` (case-insensitive), comma lists split, blanks dropped, duplicates kept once."""
+    out = []
+    for k, v in pairs:
         if k.lower() in names:
             for u in v.split(","):
                 u = u.strip()
@@ -108,28 +128,62 @@ def classify(path: str, query: str = "") -> tuple:
     ohif_viewer   the viewer page ohif/viewer?StudyInstanceUIDs=<one uid> (any OHIF page naming a study counts as a viewer page)
     dicomweb      dicom-web/studies/<uid>[/...], or the study search dicom-web/studies?StudyInstanceUID=<uid> (or 0020000D=)
     None          everything else: Orthanc's REST API and explorer, plugins, WADO-URI, dicom-web/servers or info, a study list
-                  without a uid, more than one study, a malformed uid, path traversal. uid "" when there is none."""
+                  without a uid, more than one study, a malformed uid, path traversal, a query key that is not plain (a NUL, a
+                  comma, brackets), a study search carrying anything but the one study and includefield / limit / offset /
+                  fuzzymatching, a study key under a study naming another one. uid "" when there is none."""
     path = str(path or "")
     if path.startswith("/") or _PATH_BAD.search(path) or any(s in (".", "..") for s in path.split("/")) or "//" in path:
         return None, ""
+    pairs = _pairs(query)
+    if pairs is None:
+        return None, ""
     if path.startswith("ohif/"):
         rest = path[len("ohif/"):].rstrip("/")
-        uids = _uids(query, ("studyinstanceuids",))
+        uids = _uids(pairs, ("studyinstanceuids",))
         if rest == "viewer" or rest.startswith("viewer/") or uids:
             if len(uids) != 1 or not valid_uid(uids[0]):
                 return (None, "") if uids else ("ohif_viewer", "")  # several studies or a malformed uid: refused
             return "ohif_viewer", uids[0]
         return "ohif_static", ""
-    if path.rstrip("/") == "dicom-web/studies":  # the study search: only when it names exactly one study
-        uids = _uids(query, ("studyinstanceuid", "0020000d"))
-        return ("dicomweb", uids[0]) if len(uids) == 1 and valid_uid(uids[0]) else (None, "")
+    if path.rstrip("/") == "dicom-web/studies":  # the study search: one study key naming one valid study, plus the search parameters
+        vals = [v.strip() for k, v in pairs if k.lower() in STUDY_KEYS]
+        if len(vals) != 1 or not valid_uid(vals[0]) or any(k.lower() not in STUDY_KEYS + SEARCH_KEYS for k, _ in pairs):
+            return None, ""
+        return "dicomweb", vals[0]
     if path.startswith("dicom-web/studies/"):
         uid = path[len("dicom-web/studies/"):].split("/", 1)[0]
-        q = _uids(query, ("studyinstanceuid", "0020000d"))
-        if not valid_uid(uid) or (q and q != [uid]):  # a malformed uid, or a filter naming another study
+        if not valid_uid(uid) or any(k.lower() in STUDY_KEYS and v.strip() != uid for k, v in pairs):  # a malformed uid, or a filter naming another study
             return None, ""
         return "dicomweb", uid
     return None, ""
+
+
+def forward_query(path: str, query: str) -> str:
+    """The query string sent to the PACS: the request's pairs re-encoded (classify() has refused anything that is not plain), and for
+    the study search only the one study and the search parameters, so nothing Orthanc might read as a wider filter gets through."""
+    pairs = _pairs(query) or []
+    if str(path or "").rstrip("/") == "dicom-web/studies":
+        uid = next((v.strip() for k, v in pairs if k.lower() in STUDY_KEYS), "")
+        pairs = [("StudyInstanceUID", uid)] + [(k, v) for k, v in pairs if k.lower() in SEARCH_KEYS]
+    return urlencode(pairs)
+
+
+_access_cache: dict[tuple, tuple] = {}
+
+
+def _still_allowed(roles: dict, g: dict, now: float) -> bool:
+    """The grant's Case File is still open to this user (owner, participant, coordinator, the department asked: access.scope), checked
+    once a minute so the hundreds of image requests of a study do not each read the Case File. A referral accepted elsewhere or a
+    participant removed ends the viewing (Phase 6 review)."""
+    key = (g.get("user") or "", g.get("case_id") or "")
+    hit = _access_cache.get(key)
+    if hit and hit[0] > now:
+        return hit[1]
+    from . import access
+    case = store.get_case(key[1]) if key[1] else None
+    ok = bool(case) and access.scope(roles, case) is not None
+    _access_cache[key] = (now + _ACCESS_TTL, ok)
+    return ok
 
 
 def check(path: str, query: str, roles: dict) -> tuple | None:
@@ -141,7 +195,8 @@ def check(path: str, query: str, roles: dict) -> tuple | None:
         return 404, NOT_REACHABLE
     if kind == "ohif_static":
         return None
-    if not uid or not granted(roles.get("user") or "", uid):
+    g = granted(roles.get("user") or "", uid) if uid else None
+    if not g or not _still_allowed(roles, g, time.time()):
         return 403, NO_GRANT
     return None
 
@@ -179,7 +234,8 @@ async def proxy(request, path: str, roles: dict) -> Response:
         g = granted(user, uid) or {}
         if g.get("case_id"):
             store.audit(g["case_id"], {"kind": "viewer_opened", "by": user, "doc_id": g.get("doc_id") or "", "study_uid": uid})
-    url = base_url() + "/" + quote(path, safe="/:@!$&'()*+,;=-._~") + ("?" + query if query else "")
+    fq = forward_query(path, query)  # re-encoded; the study search reduced to the one study and the search parameters
+    url = base_url() + "/" + quote(path, safe="/:@!$&'()*+,;=-._~") + ("?" + fq if fq else "")
     host = request.headers.get("host") or ""
     scheme = request.url.scheme or "http"
     headers = {k: v for k, v in request.headers.items() if k.lower() in REQ_HEADERS}
@@ -230,6 +286,8 @@ async def study_for_doc(case_id: str, doc: dict, client) -> dict | None:
             res = {"available": True, **fields}
     cached = {**res, "checked": store.now_iso()}
     doc.setdefault("his", {})["study"] = cached
+    if case_id in config.PROTECTED_CASES:  # never written to (project rules)
+        return _study_view(cached)
     fresh = store.get_doc(case_id, doc["doc_id"]) if doc.get("doc_id") else None
     if isinstance(fresh, dict):  # write onto the stored document, not over edits made since `doc` was read
         fresh.setdefault("his", {})["study"] = cached

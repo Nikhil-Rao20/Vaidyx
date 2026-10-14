@@ -776,28 +776,41 @@ def board_screens(b, pg, base, pw, shot, errors):
         if c.locator("#drawer:not(.hidden)").count():
             c.click("#drawer [data-close]"); c.wait_for_timeout(300)
         doc = img.first.get_attribute("data-images")
-        r = c.request.get(base + f"/api/tb/cases/{cid}/documents/{doc}/images")
+        r = c.request.post(base + f"/api/tb/cases/{cid}/documents/{doc}/images")
         if not r.ok or not r.json().get("available") or not r.json().get("viewer_url"):
             errors.append(f"the images of {doc} are not available: HTTP {r.status} {r.text()[:160]}")
         else:
             url = r.json()["viewer_url"]
             if PACS_PORT in url:
                 errors.append(f"the viewer URL points at the PACS directly: {url}")
-            ctx = b.new_context(storage_state=c.context.storage_state(), viewport=pg.viewport_size)  # the same login cookies (b.new_page owns its context)
-            v, seen = ctx.new_page(), []
-            pages.append(v)
-            v.on("request", lambda q: seen.append(q.url))
-            v.goto(base + url if url.startswith("/") else url, timeout=60000)
+            seen, resp = [], []  # every request of this login's pages, the popup included: none may go to the PACS port
+            c.context.on("request", lambda q: seen.append(q.url)); c.context.on("response", lambda x: resp.append((x.url, x.status)))
+            with c.expect_popup(timeout=30000) as pop:  # the real button: window.open on the app's viewer URL (review M3)
+                img.first.click()
+            v = pop.value; pages.append(v)
             try:
-                v.wait_for_function("() => /OHIF/i.test(document.title) || !!document.querySelector('[data-cy]') || ((document.getElementById('root') || {}).childElementCount > 0)", timeout=60000)
-                v.wait_for_timeout(6000)  # let the study and its images load for the screenshot
+                v.wait_for_load_state("load", timeout=60000)
+                v.wait_for_function("() => [...document.querySelectorAll('canvas')].some((x) => x.width > 0 && x.height > 0)", timeout=60000)  # an image drawn
+                v.wait_for_timeout(4000)  # let the series load for the screenshot
             except Exception:
-                errors.append(f"the OHIF viewer did not render within 60 s (title {v.title()!r})")
+                errors.append(f"the OHIF viewer did not draw an image within 60 s (title {v.title()!r}, url {v.url[:120]})")
             shot("board_ohif", page=v)
+            if PACS_PORT in v.url:
+                errors.append(f"the viewer opened on the PACS directly: {v.url[:120]}")
             direct = [u for u in seen if PACS_PORT in u]
             if direct:
                 errors.append(f"{len(direct)} request(s) from the viewer went to the PACS port directly, e.g. {direct[0][:120]}")
-            v.close(); pages.remove(v); ctx.close()
+            dw = [(u, st) for u, st in resp if "/api/tb/pacs/dicom-web/" in u]
+            study_uid = unquote(url.split("StudyInstanceUIDs=")[-1])
+            bad = [x for x in dw if x[1] >= 400 and study_uid in unquote(x[0])]  # a request about the granted study must go through
+            if bad:
+                errors.append(f"{len(bad)} DICOMweb request(s) of the viewer about the granted study were refused by the app, e.g. {bad[0][0][:140]} ({bad[0][1]})")
+            wider = [x for x in dw if study_uid not in unquote(x[0])]  # OHIF also asks for the patient's other studies (PatientID): refused by design
+            if any(st < 400 for _, st in wider):
+                errors.append(f"a viewer search beyond the granted study went through the app: {[u[:140] for u, st in wider if st < 400][0]}")
+            if not any(st == 200 for _, st in dw):
+                errors.append("no DICOMweb request of the viewer went through the app")
+            v.close(); pages.remove(v)
         m = c.request.get(base + f"/api/tb/sessions/{sid}/minutes")
         if not m.ok or "Tumour Board minutes" not in m.text():
             errors.append(f"the minutes do not download: HTTP {m.status}")

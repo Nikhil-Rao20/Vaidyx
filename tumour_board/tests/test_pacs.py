@@ -42,6 +42,8 @@ def no_grants():
     ("dicom-web/studies", f"StudyInstanceUID={UID}&limit=1", ("dicomweb", UID)),
     ("dicom-web/studies", f"0020000D={UID}", ("dicomweb", UID)),
     ("dicom-web/studies/", f"0020000d={UID}", ("dicomweb", UID)),
+    ("dicom-web/studies", f"includefield=all&0020000D={UID}&offset=0&fuzzymatching=false", ("dicomweb", UID)),
+    (f"dicom-web/studies/{UID}/series", "includefield=all&SeriesInstanceUID=1.2.3", ("dicomweb", UID)),
 ])
 def test_classify_forwarded(path, query, expected):
     assert pacs.classify(path, query) == expected
@@ -61,6 +63,14 @@ def test_classify_forwarded(path, query, expected):
     ("ohif/viewer", f"StudyInstanceUIDs={UID}&StudyInstanceUIDs={OTHER}"), ("ohif/viewer", "StudyInstanceUIDs=1.2;3"),
     ("ohif/../tools/find", ""), (f"dicom-web/studies/{UID}/../../../patients", ""), ("ohif/%2e%2e/system", ""),
     ("ohif//system", ""), ("/system", ""), ("ohif/a\\..\\system", ""), ("", ""),
+    # the study tag in another spelling, a key cut at a NUL, a second (blank) study key, a wider filter: Orthanc would read these as a
+    # study list (Phase 6 review S1)
+    ("dicom-web/studies", f"StudyInstanceUID={UID}&0020,000D="), ("dicom-web/studies", f"StudyInstanceUID={UID}&StudyInstanceUID%00="),
+    ("dicom-web/studies", f"StudyInstanceUID={UID}&0020,000d={OTHER}"), ("dicom-web/studies", f"StudyInstanceUID={UID}&(0020,000D)={OTHER}"),
+    ("dicom-web/studies", f"StudyInstanceUID={UID}&PatientName="), ("dicom-web/studies", f"StudyInstanceUID={UID}&StudyInstanceUID="),
+    ("dicom-web/studies", f"StudyInstanceUID={UID}&ModalitiesInStudy=MG"), (f"dicom-web/studies/{UID}/series", f"0020,000D={OTHER}"),
+    (f"dicom-web/studies/{UID}/series", f"StudyInstanceUID%00={OTHER}"), ("ohif/viewer", f"StudyInstanceUIDs={UID}&x%00y=1"),
+    (f"dicom-web/studies/{UID}/metadata", "SeriesInstanceUID=1.2%003"),
 ])
 def test_classify_refused(path, query):
     assert pacs.classify(path, query) == (None, "")
@@ -79,6 +89,7 @@ def test_check_roles_grants_and_kinds():
     # a Vaidyx admin needs a grant like everyone (the audit trail stays honest)
     admin = {"user": "vx.admin", "admin": True, "known": True}
     assert pacs.check("ohif/viewer", q, admin) == no
+    store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="test")
     pacs.grant("dr.rao", UID, "TB-PACS", "d1")
     assert pacs.check("ohif/viewer", q, DOCTOR) is None
     assert pacs.check(f"dicom-web/studies/{UID}/series", "", DOCTOR) is None
@@ -86,6 +97,32 @@ def test_check_roles_grants_and_kinds():
     assert pacs.check(f"dicom-web/studies/{OTHER}/series", "", DOCTOR) == no  # another study
     assert pacs.check("ohif/viewer", q, admin) == no  # another user's grant does not count
     assert pacs.check("tools/find", "", admin) == (404, pacs.NOT_REACHABLE)
+
+
+def test_check_follows_the_case_file_scope():
+    """A grant is re-checked against the Case File's scope (owner, participants, the department asked): a referral accepted elsewhere
+    or a participant removed ends the viewing within a minute; a grant on a Case File that no longer exists never forwards."""
+    q = f"StudyInstanceUIDs={UID}"
+    c = store.create_case("TB-OWNED", util.PATIENT, "breast", created_by="test"); c["department"] = "breast_surgery"; store.save_case(c)
+    breast = {"user": "dr.nair", "admin": False, "known": True, "departments": {"breast_surgery": "doctor"}}
+    rad = {"user": "dr.rao", "admin": False, "known": True, "departments": {"radiology": "doctor"}}
+    pacs.grant("dr.nair", UID, "TB-OWNED", "d1"); pacs.grant("dr.rao", UID, "TB-OWNED", "d1")
+    assert pacs.check("ohif/viewer", q, breast) is None
+    assert pacs.check("ohif/viewer", q, rad) == (403, pacs.NO_GRANT)  # not the owner, no part in the Case File
+    c["department"] = "medical_oncology"; store.save_case(c)  # the Case File moved (a referral accepted elsewhere)
+    assert pacs.check("ohif/viewer", q, breast) is None  # within the minute the answer is cached
+    pacs._access_cache.clear()
+    assert pacs.check("ohif/viewer", q, breast) == (403, pacs.NO_GRANT)
+    pacs.grant("dr.rao", UID, "TB-GONE", "d1"); pacs._access_cache.clear()
+    assert pacs.check("ohif/viewer", q, rad) == (403, pacs.NO_GRANT)
+
+
+def test_forward_query_rebuilds_the_study_search():
+    assert pacs.forward_query("dicom-web/studies", f"includefield=all&0020000D={UID}&limit=2&offset=0") == f"StudyInstanceUID={UID}&includefield=all&limit=2&offset=0"
+    assert pacs.forward_query("dicom-web/studies/", f"StudyInstanceUID={UID}") == f"StudyInstanceUID={UID}"
+    assert pacs.forward_query(f"dicom-web/studies/{UID}/series", "includefield=all&SeriesInstanceUID=1.2.3") == "includefield=all&SeriesInstanceUID=1.2.3"
+    assert pacs.forward_query("ohif/viewer", f"StudyInstanceUIDs={UID}") == f"StudyInstanceUIDs={UID}"
+    assert pacs.forward_query("ohif/app-config.js", "") == ""
 
 
 def test_grants_expire_and_are_per_user():
@@ -168,6 +205,7 @@ def test_proxy_forwards_the_granted_study_only(pacs_app):
     r = tc.get(f"/api/tb/pacs/dicom-web/studies/{UID}/series", headers={"Authorization": "Bearer app"})
     assert r.status_code == 403 and r.json()["detail"].startswith("Open the images") and not fake.seen
     assert tc.get("/api/tb/pacs/tools/find").status_code == 404 and not fake.seen
+    store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="test")
     pacs.grant("dr.rao", UID, "TB-PACS", "d1")
     r = tc.get(f"/api/tb/pacs/dicom-web/studies/{UID}/series?includefield=all&limit=5",
                headers={"Authorization": "Bearer app", "Accept": "application/dicom+json", "X-Custom": "no",
@@ -189,6 +227,14 @@ def test_proxy_forwards_the_granted_study_only(pacs_app):
     # the QIDO study search naming the granted study
     assert tc.get(f"/api/tb/pacs/dicom-web/studies?StudyInstanceUID={UID}").status_code == 200
     assert str(fake.seen[-1].url).endswith(f"/dicom-web/studies?StudyInstanceUID={UID}")
+    # the study search is rebuilt: the one study first, then the search parameters only (review S1)
+    assert tc.get(f"/api/tb/pacs/dicom-web/studies?includefield=all&0020000D={UID}&limit=2").status_code == 200
+    assert str(fake.seen[-1].url).endswith(f"/dicom-web/studies?StudyInstanceUID={UID}&includefield=all&limit=2")
+    n = len(fake.seen)
+    for q in (f"StudyInstanceUID={UID}&0020,000D=", f"StudyInstanceUID={UID}&StudyInstanceUID%00=", f"StudyInstanceUID={UID}&PatientName=",
+              f"StudyInstanceUID={UID}&StudyInstanceUID="):
+        assert tc.get(f"/api/tb/pacs/dicom-web/studies?{q}").status_code == 404, q
+    assert len(fake.seen) == n
     # the OHIF app is forwarded without a grant check (no study in it), still only for a placed user
     assert tc.get("/api/tb/pacs/ohif/app-config.js").status_code == 200
     who["roles"] = {"user": "nobody", "admin": False, "known": False}
@@ -198,6 +244,7 @@ def test_proxy_forwards_the_granted_study_only(pacs_app):
 
 def test_proxy_range_head_post_and_errors(pacs_app):
     tc, fake, who = pacs_app
+    store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="test")
     pacs.grant("dr.rao", UID, "TB-PACS", "d1")
     frame = f"/api/tb/pacs/dicom-web/studies/{UID}/series/1.2.3/instances/1.2.4/frames/1"
     r = tc.get(frame, headers={"Range": "bytes=0-3"})

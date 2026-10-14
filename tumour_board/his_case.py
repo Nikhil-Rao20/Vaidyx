@@ -522,17 +522,20 @@ async def fetch_file(case_id: str, doc: dict, user: str = "") -> "Path":
     document viewer, fetched live if needed"): the same DocumentReference, the bytes checked against the sha256 recorded at the first
     fetch (HISCaseError when they differ: never a different file under a verified record). Audited."""
     from pathlib import Path
+    if case_id in config.PROTECTED_CASES:  # never written to (project rules)
+        raise HISCaseError("This Case File is never written to", 403)
     h = doc.get("his") or {}
     ref = h.get("document_ref")
     if not ref:
         raise HISCaseError("This record did not come from the hospital system; its file cannot be fetched", 404)
     d = await _client().document(ref)
-    want = str(h.get("document_sha256") or doc.get("sha256") or "").lower()
+    want = str(doc.get("sha256") or h.get("document_sha256") or "").lower()  # the bytes read and quoted at the first fetch win over the hash the HIS declared
     got = hashlib.sha256(d["content"]).hexdigest()
-    if want and got != want:
-        store.audit(case_id, {"kind": "document_fetch_live_failed", "doc_id": doc["doc_id"], "by": user, "reason": "sha256 differs from the record fetched first",
-                              "expected": want, "got": got})
-        raise HISCaseError("The hospital system returned a file that differs from the record this Case File holds; ask the department", 409)
+    if not want or got != want:  # no recorded hash: nothing can vouch for the file (Phase 6 review)
+        store.audit(case_id, {"kind": "document_fetch_live_failed", "doc_id": doc["doc_id"], "by": user,
+                              "reason": "sha256 differs from the record fetched first" if want else "no sha256 recorded for this record", "expected": want, "got": got})
+        raise HISCaseError("The hospital system returned a file that differs from the record this Case File holds; ask the department" if want
+                           else "This record has no recorded hash, so a file fetched now cannot be matched to it; ask the department", 409)
     dd = Path(config.CASES_DIR) / store.safe_id(case_id) / "docs" / store.safe_id(doc["doc_id"])
     dd.mkdir(parents=True, exist_ok=True)
     p = dd / f"original{doc.get('ext') or Path(d.get('filename') or 'x.pdf').suffix.lower() or '.pdf'}"

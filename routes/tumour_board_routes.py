@@ -35,6 +35,7 @@ import re as _re
 _READ_CASE = _re.compile(r"^/api/tb/(cases|sessions|intake|metrics)(/|$)")  # routes that show patient data: a placed account only
 _CASE_PATH = _re.compile(r"^/api/tb/cases/([^/]+)(/.*)?$")  # one Case File: its owner, participants, the coordinator and the departments asked (V2 item 5.1)
 _LIMITED_OK = ((("GET",), _re.compile(r"^$")), (("GET",), _re.compile(r"^/documents/[^/]+(/file)?$")),  # read only: a delete is never in scope (review Phase 5 S1)
+               (("POST",), _re.compile(r"^/documents/[^/]+/images$")),  # Open images on a record in its scope (V2 item 6.3, Phase 6 review M2)
                (("POST",), _re.compile(r"^/requests/[^/]+/(acknowledge|done)$")), (("POST",), _re.compile(r"^/actions/[^/]+(/close|/dismiss-suggestion)?$")))  # what a department that was only asked may call
 
 
@@ -1104,11 +1105,11 @@ def setup_tumour_board_routes():
             return Response(out[0], media_type=out[1])
         return FileResponse(p)
 
-    @r.get("/cases/{case_id}/documents/{doc_id}/images")
+    @r.post("/cases/{case_id}/documents/{doc_id}/images")
     async def doc_images(case_id: str, doc_id: str, request: Request):
         """The images behind an imaging report from the hospital system (V2 item 6.3): the study is looked up (cached on the record), the
         user is granted the viewer on that study for 12 hours, the open is audited, and the app's viewer URL is returned. Humans view;
-        no model ever reads the images."""
+        no model ever reads the images. A POST: it grants, writes the record's cache and audits (Phase 6 review)."""
         rl = _roles(request); u = _user(request); c = _case(case_id); _in_scope(request, c, doc_id)
         d = store.get_doc(case_id, doc_id)
         if not d:
@@ -1665,12 +1666,14 @@ def setup_tumour_board_routes():
                           "board_records": [{"id": b_["id"], "board_date": b_.get("board_date"), "session": b_.get("session"), "status": b_["adjudication"]["status"],
                                              "flags": len(b_["adjudication"]["flags"]), "composition": b_["adjudication"].get("composition"),
                                              "resolution": b_.get("resolution"), "version": b_.get("version", 1)} for b_ in st.get("board_records", [])]}
-        return {"session": s, "specialties": board.specialties(), "attendance_list": board.attendance_list(s), "heads": board.heads(), "on_demand": list(board.ON_DEMAND),
+        allowed = None if full else {cid for cid, v in cases.items() if not v.get("restricted") and not v.get("missing")}
+        # a doctor sees the log, the decisions, the agent records and the follow-up of the Case Files it may read only (Phase 6 review S2)
+        return {"session": board.session_view(s, allowed), "specialties": board.specialties(), "attendance_list": board.attendance_list(s), "heads": board.heads(), "on_demand": list(board.ON_DEMAND),
                 "absent_roles": absent, "absent_roles_by_case": by_case, "participants": board.participants(s),
                 "roles": {k: {"label": agents.spec(k)["label"], "department": agents.department_of(k)} for k in agents.ROLES},
                 "cases": cases, "can_manage": org.can(rl, "session"), "can_ask": bool(rl.get("admin") or rl.get("known")), "can_review": org.can(rl, "review"),
                 "can_record": org.can(rl, "board_record"), "marks": board.MARKS,
-                "followup": board.followup(s) if s.get("decisions") else None,  # the board's actions after the session (V2 item 6.1)
+                "followup": board.followup(s, allowed) if s.get("decisions") else None,  # the board's actions after the session (V2 item 6.1)
                 "pmjay_empanelled": bool(org.hospital().get("pmjay_empanelled", True))}
 
     @r.get("/sessions")
@@ -1706,11 +1709,12 @@ def setup_tumour_board_routes():
     async def session_minutes(sid: str, request: Request, format: str = "html"):
         """The minutes of the session (V2 item 6.1): attendance, the decisions as dictated, the actions and their follow-up. Audited."""
         u = _user(request); rl = _roles(request); s = _session(sid); sid = s["id"]; _need_open(rl, s)
-        board.audit_session(sid, {"kind": "minutes_export", "by": u, "format": format})
+        allowed = board.allowed_cases(rl, s)  # None for the coordinator and the admin; a doctor gets its own Case Files, the others as restricted (Phase 6 review S2)
+        board.audit_session(sid, {"kind": "minutes_export", "by": u, "format": format, "restricted": sorted(set(a["case_id"] for a in s["agenda"]) - allowed) if allowed is not None else []})
         if format == "json":
-            return JSONResponse(board.minutes(sid), headers={"Content-Disposition": f'attachment; filename="{sid}_minutes.json"'})
+            return JSONResponse(board.minutes(sid, allowed), headers={"Content-Disposition": f'attachment; filename="{sid}_minutes.json"'})
         from fastapi.responses import HTMLResponse
-        return HTMLResponse(board.minutes_html(sid), headers={"Content-Disposition": f'attachment; filename="{sid}_minutes.html"'})
+        return HTMLResponse(board.minutes_html(sid, allowed), headers={"Content-Disposition": f'attachment; filename="{sid}_minutes.html"'})
 
     @r.put("/sessions/{sid}/agenda")
     async def session_agenda(sid: str, request: Request):
@@ -1817,12 +1821,13 @@ def setup_tumour_board_routes():
     @r.get("/sessions/{sid}/export")
     async def session_export(sid: str, request: Request, format: str = "html"):
         """What the agents said vs what the board decided, side by side (V1 item 6.3). Reporting only. Audited."""
-        u = _user(request); s = _session(sid); sid = s["id"]; _need_open(_roles(request), s)
-        board.audit_session(sid, {"kind": "export", "by": u, "format": format})
+        u = _user(request); rl = _roles(request); s = _session(sid); sid = s["id"]; _need_open(rl, s)
+        allowed = board.allowed_cases(rl, s)  # as for the minutes (Phase 6 review S2)
+        board.audit_session(sid, {"kind": "export", "by": u, "format": format, "restricted": sorted(set(a["case_id"] for a in s["agenda"]) - allowed) if allowed is not None else []})
         if format == "json":
-            return JSONResponse(board.export(sid), headers={"Content-Disposition": f'attachment; filename="{sid}_agent_log_and_decisions.json"'})
+            return JSONResponse(board.export(sid, allowed), headers={"Content-Disposition": f'attachment; filename="{sid}_agent_log_and_decisions.json"'})
         from fastapi.responses import HTMLResponse
-        return HTMLResponse(board.export_html(sid), headers={"Content-Disposition": f'attachment; filename="{sid}_agent_log_and_decisions.html"'})
+        return HTMLResponse(board.export_html(sid, allowed), headers={"Content-Disposition": f'attachment; filename="{sid}_agent_log_and_decisions.html"'})
 
     @r.get("/models")
     async def model_cards(request: Request):

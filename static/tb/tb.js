@@ -987,7 +987,7 @@ const imagesBtn = (docId, cid) => `<button class="ghost sm" data-images="${esc(d
 async function openImages(caseId, docId, btn) {
   if (btn) btn.disabled = true;
   try {
-    const r = await api(`/cases/${encodeURIComponent(caseId)}/documents/${encodeURIComponent(docId)}/images`);
+    const r = await api(`/cases/${encodeURIComponent(caseId)}/documents/${encodeURIComponent(docId)}/images`, { method: "POST" });  // grants, caches the study on the record, audits
     if (!r.available || !r.viewer_url) { toast(r.reason || "The images are not available in the image viewer", 7000); return; }
     if (!window.open(r.viewer_url, "_blank")) toast("The browser blocked the new window: allow pop-ups for this site to open the image viewer", 8000);
     else toast(`Image viewer opened${r.modality ? ": " + r.modality : ""}${r.instances ? ", " + plural(r.instances, "image") : ""}. ${IMG_NOTE}.`, 6000);
@@ -1673,7 +1673,7 @@ async function showOrgPage() {
         <div><label for="o-type">Hospital type</label><select id="o-type"><option value="" ${!h.type ? "selected" : ""}>Not set</option><option value="public" ${h.type === "public" ? "selected" : ""}>Public</option><option value="private" ${h.type === "private" ? "selected" : ""}>Private</option></select></div></div>
         <div class="grid3">
           <div><label for="o-fetch">HIS fetch window (months)</label><input id="o-fetch" type="number" min="1" max="120" step="1" value="${esc(h.fetch_window_months ?? 12)}"></div>
-          <div class="checkrow"><label class="chk"><input type="checkbox" id="o-pmjay" ${h.pmjay_empanelled !== false ? "checked" : ""}> PM-JAY empanelled</label><div class="small muted">Asked at first set-up; the board composition flag applies only to an empanelled hospital</div></div><div></div></div>
+          <div class="checkrow"><label class="chk"><input type="checkbox" id="o-pmjay" ${h.pmjay_empanelled !== false ? "checked" : ""}> PM-JAY empanelled</label><div class="small muted">The PM-JAY board composition flag (HBP 2.2) applies only to an empanelled hospital</div></div><div></div></div>
         <h4 class="subh">The board</h4>
         ${BOARD_LISTS.map(([k, label, help]) => `<div class="deplist-wrap"><label>${esc(label)}</label><div class="small muted">${esc(help)}</div><div class="deplist" id="o-${k}" data-key="${k}"></div></div>`).join("")}</div>
       <div class="small muted" style="margin-top:6px">The NCG level decides which tier of the work-up applies. The fetch window is how far back the hospital systems are read for a patient.</div>
