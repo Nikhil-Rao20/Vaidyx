@@ -87,6 +87,7 @@ button.danger { background: var(--panel); border-color: #efc7c2; color: var(--ba
 button.sm { padding: 5px 10px; font-size: 13px; }
 
 .grid2 { display: grid; grid-template-columns: 1.45fr 1fr; gap: 16px; }
+.grid2 > *, .grid2f > *, .room > * { min-width: 0; }  /* a grid column never grows past its container because of a wide child (phones: V2 item 7.2) */
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow); min-width: 0; overflow-x: auto; }
 .card h3 { margin: 0 0 10px; font-size: 16px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .card + .card { margin-top: 14px; }
@@ -465,3 +466,21 @@ label.chk input[type="radio"] { width: auto; }
   .home-sec .card h3 .btns > * { flex: 1 1 auto; }
 }
 @media (max-width: 520px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tile .val { font-size: 22px; } }
+
+/* V2 item 7.2, phones: the top bar's buttons in one row that scrolls sideways (the page itself never does), and the inbox, referral and
+   home tables as stacked cards with each cell labelled (data-l), instead of a table that scrolls out of sight */
+@media (max-width: 520px) {
+  .topnav { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin; padding-bottom: 2px; justify-content: flex-start; }
+  .topnav .ghost { flex: 0 0 auto; white-space: nowrap; }
+  .tscroll > table.inbox-t, .tscroll > table.home-t, table.inbox-t, table.home-t { display: block; overflow: visible; }
+  table.inbox-t thead, table.home-t thead { display: none; }
+  table.inbox-t tbody, table.home-t tbody { display: block; }
+  table.inbox-t tr, table.home-t tr { display: block; border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; margin-bottom: 8px; background: var(--panel); }
+  table.inbox-t tr:hover, table.home-t tr:hover { border-color: var(--tint-line); }
+  table.inbox-t td, table.home-t td { display: block; border: 0; padding: 3px 0; min-width: 0 !important; max-width: none !important; white-space: normal; }
+  table.inbox-t td:empty, table.home-t td:empty { display: none; }
+  table.inbox-t td[data-l]::before, table.home-t td[data-l]::before { content: attr(data-l); display: block; font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+  table.inbox-t td[data-l="Case File"]::before, table.home-t td[data-l="Case File"]::before { display: none; }
+  table.inbox-t .ibtns { flex-direction: row; flex-wrap: wrap; margin-top: 4px; } table.inbox-t .ibtns > * { flex: 1 1 auto; }
+  table.home-t .bar { max-width: 220px; }
+}
