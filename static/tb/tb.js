@@ -2079,7 +2079,7 @@ const ibRow = (q, d) => `<tr class="click" data-case="${esc(q.case_id)}" data-ai
       ${q.uhid || q.patient?.mrn ? `<div class="small">UHID <span class="mono">${esc(q.uhid || q.patient.mrn)}</span></div>` : ""}${encHTML(q.encounter)}</td>
     <td data-l="Record needed">${q.source === "board" ? `<span class="chip c-info">${esc(q.source_label)}</span> ` : q.free ? `<span class="chip c-info">Free request</span> ` : ""}<b>${esc(q.label)}</b><div class="chips" style="margin-top:3px">${q.level_label ? `<span class="chip c-lvl">${esc(q.level_label)}</span>` : ""}${q.accession ? `<span class="chip c-mono" title="Accession / Lab No.: find the patient in your PACS / RIS / LIS">${esc(q.accession)}</span>` : ""}${q.pending_order ? `<span class="chip ${q.pending_order.stage === "cancelled" ? "c-bad" : "c-info"}">Ordered in the HIS: ${esc(stageText(q.pending_order))}</span>` : ""}</div></td>
     <td class="small" data-l="What is asked">${q.source === "pre_authorization" ? ibAsked(q) : esc(q.what)}${suggestionHTML(q, true)}</td><td class="small nowrap" data-l="Due">${q.due ? esc(dmyd(q.due)) : ""}</td>
-    <td data-l="Status">${ibChip(q)}${q.source === "pre_authorization" ? reqTrail({ ...q, sent: null, earlier: [] }) : q.completed ? `<div class="small muted">${esc(dmyt(q.completed))}</div>` : ""}</td><td class="nowrap"><div class="ibtns">${ibActs(q, d)}</div></td></tr>`;
+    <td data-l="Status">${ibChip(q)}${q.source === "pre_authorization" ? reqTrail({ ...q, sent: null, earlier: [] }) : q.completed ? `<div class="small muted">${esc(dmyt(q.completed))}</div>` : ""}</td><td class="nowrap">${(() => { const a = ibActs(q, d); return a ? `<div class="ibtns">${a}</div>` : ""; })()}</td></tr>`;
 function bindInboxRows(root, after) {  // open the Case File from a row; Acknowledge and Done re-render through `after`
   $$(`${root} tr[data-case][data-aid]`).forEach((tr) => (tr.onclick = async (e) => { if (e.target.closest("button, details, a")) return; await openCaseSafe(tr.dataset.case); }));
   $$(`${root} [data-ack]`).forEach((b) => (b.onclick = async (e) => { e.stopPropagation(); b.disabled = true; if (await answerRequest(b.dataset.case, b.dataset.ack, "acknowledge")) { await after(); loadNotifications(); } else b.disabled = false; }));
@@ -2326,13 +2326,13 @@ function inboxReferralsHTML(refs) {
     <td class="small nowrap" data-l="By">${esc(r.by)}<div class="muted">${esc(r.on)}</div></td>
     <td data-l="Status">${rChip(r.status)}${r.answered_by && r.status !== "requested" ? `<div class="small muted">by ${esc(r.answered_by)}${r.answered_on ? " on " + esc(r.answered_on) : ""}</div>` : ""}</td>
     <td class="nowrap"><div class="ibtns">${r.can_answer ? `<button class="primary sm" data-racc="${esc(r.id)}" data-rcase="${esc(r.case_id)}">Accept</button><button class="ghost sm" data-rdec="${esc(r.id)}" data-rcase="${esc(r.case_id)}">Decline</button>` : ""}${r.can_withdraw ? `<button class="ghost sm" data-rwd="${esc(r.id)}" data-rcase="${esc(r.case_id)}">Withdraw</button>` : ""}</div></td></tr>`;
-  return `<div class="card" id="ib-referrals"><h3>Referrals <span class="muted small">${waiting} waiting for an answer</span></h3>
+  return `<div class="card ib-referrals"><h3>Referrals <span class="muted small">${waiting} waiting for an answer</span></h3>
     <div class="muted small" style="margin-bottom:6px">Tumour Board Case Files referred to or by your department. On acceptance the receiving department owns the Case File and chooses the cancer protocol; the referring department stays as a participating department (read and comment). Answered referrals stay listed for 7 days.</div>
     <div class="tscroll"><table class="t inbox-t"><thead><tr><th>Case File</th><th>Referral</th><th>Reason</th><th>By</th><th>Status</th><th>Actions</th></tr></thead><tbody>${refs.map(row).join("")}</tbody></table></div></div>`;
 }
 function bindInboxReferrals(refs, root = "#inbox", after = showInbox) {  // the inbox and the treating doctor's home (V2 item 7.1)
   const find = (b, k) => refs.find((r) => r.id === b.dataset[k] && r.case_id === b.dataset.rcase);
-  $$(`${root} #ib-referrals tr[data-case]`).forEach((tr) => (tr.onclick = async (e) => { if (e.target.closest("button, details, a")) return; await openCaseSafe(tr.dataset.case); }));
+  $$(`${root} .ib-referrals tr[data-case]`).forEach((tr) => (tr.onclick = async (e) => { if (e.target.closest("button, details, a")) return; await openCaseSafe(tr.dataset.case); }));
   $$(`${root} [data-racc]`).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const r = find(b, "racc"); if (r) acceptReferralDialog(r.case_id, r, null); }));
   $$(`${root} [data-rdec]`).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const r = find(b, "rdec"); if (r) answerReferral(r.case_id, r, "decline", after); }));
   $$(`${root} [data-rwd]`).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const r = find(b, "rwd"); if (r) answerReferral(r.case_id, r, "withdraw", after); }));
@@ -2649,7 +2649,7 @@ function bindLog() {
     catch (err) { toast(err.message, 7000); }
   }));
 }
-document.addEventListener("click", (e) => { const x = e.target.closest("[data-open-session]"); if (x) openSession(x.dataset.openSession); });
+document.addEventListener("click", (e) => { const x = e.target.closest("[data-open-session]"); if (x) { e.preventDefault(); openSession(x.dataset.openSession); } });
 
 // ------------------------------------------------------------------ a home per role · V2 item 7.1
 // What each person sees first: the treating doctor its department's Case Files, Create from UHID, requests, referrals and notifications;
@@ -2674,7 +2674,7 @@ const homeSec = (k, body, extra = "") => `<section class="home-sec" id="home-${k
 const readyBar = (c) => c.gate_passed ? `<span class="chip c-ok">Pre-Authorization met</span>` : c.readiness != null ? `<div class="bar" style="min-width:80px"><i style="width:${Number(c.readiness) || 0}%"></i></div><div class="small muted">${esc(c.readiness)}% of the records</div>` : c.listing === "awaiting_listing" ? `<span class="chip c-mute">Awaiting listing</span>` : `<span class="chip c-mute">Not checked yet</span>`;
 function homeCaseRow(c, mine) {
   const rel = RELATION[c.relation];
-  return `<tr class="click" data-open="${esc(c.case_id)}"><td data-l="Case File"><b>${esc(c.patient?.name || c.case_id)}</b><div class="small muted">${esc(c.case_id)}${c.patient?.agesex ? " · " + esc(c.patient.agesex) : ""}</div>${c.uhid ? `<div class="small">UHID <span class="mono">${esc(c.uhid)}</span></div>` : ""}</td>
+  return `<tr class="click" data-open="${esc(c.case_id)}" tabindex="0"><td data-l="Case File"><b>${esc(c.patient?.name || c.case_id)}</b><div class="small muted">${esc(c.case_id)}${c.patient?.agesex ? " · " + esc(c.patient.agesex) : ""}</div>${c.uhid ? `<div class="small">UHID <span class="mono">${esc(c.uhid)}</span></div>` : ""}</td>
     <td class="small" data-l="Protocol">${esc(protoLabel(c.protocol) || "no protocol yet")}${!mine && c.owner_name ? `<div class="muted">Owner: ${esc(c.owner_name)}</div>` : ""}${rel && rel[1] && !(mine && c.relation === "owner") ? `<div><span class="chip ${rel[0]}">${esc(rel[1])}</span></div>` : ""}</td>
     <td data-l="Pre-Authorization">${readyBar(c)}${c.open_actions ? `<div class="small muted">${plural(c.open_actions, "open request")}</div>` : ""}${c.suggested_unsent ? `<div class="small"><span class="chip c-warn">${plural(c.suggested_unsent, "suggested request")} not sent</span></div>` : ""}</td>
     <td class="small nowrap" data-l="Board date">${c.board_date ? esc(dmyd(c.board_date)) : '<span class="muted">not set</span>'}${c.ready ? `<div>${readyChip(c.ready)}</div>` : ""}</td>
@@ -2687,13 +2687,15 @@ function homeTreatingHTML(h) {
     ${tile("Suggested requests not sent", c.suggested_unsent, "", c.suggested_unsent ? "open the Case File to send them" : "")}
     ${tile("Referrals to answer", t.referrals_to_answer, "", c.referral_waiting ? `${plural(c.referral_waiting, "referral")} sent, waiting` : "")}
     ${t.inbox.departments.length ? tile("Requests to my department", t.inbox.open, "", `${t.inbox.overdue} overdue`) : ""}</div>`;
-  const cases = t.cases.filter((x) => !["asked", "open"].includes(x.relation)), asked = t.cases.filter((x) => x.relation === "asked"), open = t.cases.filter((x) => x.relation === "open");
+  const cases = t.cases.filter((x) => !["asked", "open", "all"].includes(x.relation) || (x.relation === "all" && !mine)), asked = t.cases.filter((x) => x.relation === "asked"), open = t.cases.filter((x) => x.relation === "open"), other = mine ? t.cases.filter((x) => x.relation === "all") : [];
   const table = (rows) => `<div class="tscroll"><table class="t home-t"><thead><tr><th>Case File</th><th>Protocol</th><th>Pre-Authorization</th><th>Board date</th><th></th></tr></thead><tbody>${rows.map((x) => homeCaseRow(x, mine)).join("")}</tbody></table></div>`;
   return homeSec("treating", `${tiles}
-    <div class="card"><h3>${mine ? "My Case Files" : "Case Files"} <span class="btns">${t.can_create ? `<button class="primary sm" id="hm-new">+ Create from UHID</button>` : ""}</span></h3>
+    <div class="card"><h3>${mine ? "My Case Files" : "Case Files"} <span class="btns">${t.can_create ? `<button class="primary sm" id="hm-new">${t.his_enabled ? "+ Create from UHID" : "+ New Case File"}</button>` : ""}</span></h3>
       ${cases.length ? table(cases) : `<div class="muted small">No Case File of ${mine ? "your department" : "an owning department"} yet.${t.can_create ? " Create one from the patient's UHID (or IP / OP No.)." : ""}</div>`}
+      ${other.length ? `<h4 class="subh">Other Case Files you may open <span class="muted small">${plural(other.length, "Case File")}, through your other roles (MDT Coordinator, a participating department)</span></h4>${table(other)}` : ""}
       ${open.length ? `<h4 class="subh">Case Files without an owning department <span class="muted small">${plural(open.length, "Case File")}, open to every placed account (V1 demo and manual Case Files)</span></h4>${table(open)}` : ""}
-      ${asked.length ? `<h4 class="subh">Asked of my department <span class="muted small">${plural(asked.length, "Case File")}, limited view</span></h4>${table(asked)}` : ""}</div>
+      ${asked.length ? `<h4 class="subh">Asked of my department <span class="muted small">${plural(asked.length, "Case File")}, limited view</span></h4>${table(asked)}` : ""}
+      ${t.cases_more ? `<div class="small muted" style="margin-top:8px">${plural(t.cases_more, "more Case File")} in the list on the left (the home shows the first ${t.cases.length}).</div>` : ""}</div>
     ${t.referrals.length ? inboxReferralsHTML(t.referrals) : ""}
     ${t.inbox.departments.length ? `<div class="card"><h3>Requests to ${esc(t.inbox.departments.map((d) => d.name).join(", "))} <span class="btns"><button class="ghost sm" id="hm-inbox">Open the department inbox</button></span></h3>
       <div class="small">${t.inbox.open ? `<b>${t.inbox.open} open</b>${t.inbox.overdue ? `, <span class="chip c-bad">${t.inbox.overdue} overdue</span>` : ""}` : `<span class="muted">No open request to your department.</span>`}</div></div>` : ""}`,
@@ -2735,7 +2737,7 @@ function homeRootHTML(h) {
         <div><label for="fs-level">NCG level</label><select id="fs-level"><option value="essential" ${hs.level !== "optimal" ? "selected" : ""}>Essential</option><option value="optimal" ${hs.level === "optimal" ? "selected" : ""}>Optimal</option></select></div>
         <div><label>Is the hospital PM-JAY empanelled?</label><div class="radio-row"><label class="chk"><input type="radio" name="fs-pmjay" value="yes" ${hs.pmjay_empanelled !== false ? "checked" : ""}> Yes</label><label class="chk"><input type="radio" name="fs-pmjay" value="no" ${hs.pmjay_empanelled === false ? "checked" : ""}> No</label></div></div></div></div>
       <div class="actions-row"><button class="primary sm" id="fs-save">Save first set-up</button></div></div>` : "";
-  const tiles = `<div class="tiles">${tile("Hospital", hs.name || "not named", "", `NCG ${esc(hs.level || "essential")}${hs.type ? ", " + hs.type : ""}`)}${tile("PM-JAY empanelled", hs.pmjay_empanelled === false ? "No" : "Yes", "", r.first_setup ? `set up ${dmyd(r.first_setup.at)} by ${esc(r.first_setup.by)}` : "default, not yet confirmed")}
+  const tiles = `<div class="tiles">${tile("Hospital", hs.name || "not named", "", `NCG ${hs.level || "essential"}${hs.type ? ", " + hs.type : ""}`)}${tile("PM-JAY empanelled", hs.pmjay_empanelled === false ? "No" : "Yes", "", r.first_setup ? `set up ${dmyd(r.first_setup.at)} by ${r.first_setup.by}` : "default, not yet confirmed")}
     ${tile("Departments", r.departments.treating + r.departments.supporting, "", `${r.departments.treating} treating, ${r.departments.supporting} supporting${r.departments.placeholder_emails ? `, ${r.departments.placeholder_emails} with a placeholder email` : ""}`)}
     ${tile("Accounts", a.placed, "", `${a.doctors} doctors, ${a.dept_admins} department admins, ${a.coordinators} coordinator(s), ${a.root_admins} root admin(s)${a.disabled ? `, ${a.disabled} disabled` : ""}${a.no_login ? `, ${a.no_login} without a Vaidyx login` : ""}`)}
     ${tile("Hospital system", r.his.enabled ? "On" : "Off", "", r.his.label || r.his.url || "not configured")}${tile("Routes overridden", r.routes_overridden, "", "records routed by hand")}</div>`;
@@ -2775,7 +2777,7 @@ function bindHome(h) {
   on("#hm-org", () => showOrgPage()); on("#hm-dash", () => showDashboard()); on("#hm-ntf-all", async () => { await loadNotifications(); showNotifications(); });
   $$("#welcome [data-inbox]").forEach((b) => (b.onclick = showInbox));
   $$("#welcome [data-mydept]").forEach((b) => (b.onclick = () => showMyDept(b.dataset.mydept)));
-  $$("#welcome tr[data-open]").forEach((tr) => (tr.onclick = (e) => { if (!e.target.closest("button, a, details")) openCaseSafe(tr.dataset.open); }));
+  $$("#welcome tr[data-open]").forEach((tr) => { tr.onclick = (e) => { if (!e.target.closest("button, a, details")) openCaseSafe(tr.dataset.open); }; tr.onkeydown = (e) => { if (e.key === "Enter" && e.target === tr) openCaseSafe(tr.dataset.open); }; });
   $$("#welcome [data-ntf]").forEach((el) => (el.onclick = async () => { try { await api("/notifications/read", { json: { ids: [el.dataset.ntf] } }); } catch (e) {} loadNotifications(); if (el.dataset.case) await openCaseSafe(el.dataset.case); else showHome(); }));
   if (h.supporting) bindInboxRows("#home-supporting", showHome);
   if (h.treating?.referrals?.length) bindInboxReferrals(h.treating.referrals, "#home-treating", showHome);

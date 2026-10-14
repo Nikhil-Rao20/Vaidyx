@@ -2636,6 +2636,7 @@ H7_USERS = {"tb-e2e-h7-breast": ("H7breast-e2e-2026!", {"breast_surgery": "docto
 H7_MDT = ("tb-e2e-h7-mdt", "H7mdt-e2e-2026!")
 H7_DEPTADMIN = ("tb-e2e-h7-radadmin", "H7radadmin-e2e-2026!")
 H7_ROOT = ("tb-e2e-h7-root", "H7root-e2e-2026!")
+THROWAWAY_ROOTS = ("tb-e2e-h7-root", "tb-ui-h7-root")  # the test logins that answer the first set-up (this script, the browser test)
 
 
 def v2_phase7(c, base, ctx):
@@ -2650,7 +2651,12 @@ def v2_phase7(c, base, ctx):
     cl = _v2_setup(c, base, ctx, H7_USERS, "7.1")
     breast, medonc, rad, gyn = (cl[k] for k in ("tb-e2e-h7-breast", "tb-e2e-h7-medonc", "tb-e2e-h7-rad", "tb-e2e-h7-gyn"))
     o0 = c.get("/api/tb/org").json()
-    ctx["hospital"] = dict(o0.get("hospital") or {})  # restored by the cleanup (clears a first-set-up stamp made here)
+    stamp0 = (o0.get("hospital") or {}).get("first_setup") or {}
+    if stamp0.get("by") in THROWAWAY_ROOTS:  # a killed earlier run left its stamp: re-open the question before the snapshot (review Phase 7 M1)
+        r = c.delete("/api/tb/org/setup")
+        print(f"INFO 7.1 a first-set-up stamp by {stamp0.get('by')} from an earlier test run was cleared: {r.status_code}", flush=True)
+        o0 = c.get("/api/tb/org").json()
+    ctx["hospital"] = dict(o0.get("hospital") or {})  # restored by the cleanup (the stamp made here is cleared again)
     extra = {}
     for (u, pw), body in ((H7_MDT, {"coordinator": True, "display_name": "MDT Coordinator (e2e h7)"}),
                           (H7_DEPTADMIN, {"admin_of": ["radiology"], "display_name": "Radiology admin (e2e h7)"}),
@@ -2734,6 +2740,10 @@ def v2_phase7(c, base, ctx):
     sp = hr.get("supporting") or {}
     rd = next((d for d in sp.get("departments") or [] if d["id"] == "radiology"), {})
     q = next((x for x in rd.get("requests") or [] if x.get("case_id") == p12 and x.get("requirement") == "cect_tap"), None)
+    if q is None and rd.get("more"):  # the home shows at most 12 rows (overdue first): an inbox with more earlier requests holds it further down
+        q = next((x for x in next((d for d in rad.get("/api/tb/inbox").json().get("departments") or [] if d["id"] == "radiology"), {}).get("requests") or []
+                  if x.get("case_id") == p12 and x.get("requirement") == "cect_tap"), None)
+        print(f"INFO 7.1 Radiology's home lists 12 of {rd.get('open')} open requests ({rd.get('more')} more in the inbox); the new request was looked up in the inbox", flush=True)
     check("7.1 a supporting doctor's home: the supporting section only, the request sent to Radiology with the UHID and the Case File",
           sent and all(s == 200 for _, s in sent) and hr.get("sections") == ["supporting"] and hr.get("primary") == "supporting" and "treating" not in hr
           and sp.get("open", 0) >= 1 and rd.get("open", 0) == b_rad.get("open", 0) + 1 and q and q.get("uhid") == "VXH/26/004212" and q.get("status") == "pending" and q.get("acknowledged") is None,
@@ -2811,26 +2821,38 @@ def v2_phase7(c, base, ctx):
           and deps.get("treating", 0) > 0 and deps.get("supporting", 0) > 0 and isinstance(ra.get("his"), dict) and ra["his"].get("enabled") is True
           and not any("token" in k for k in ra["his"]) and ra["his"].get("url") == f"http://127.0.0.1:{MOCK_PORT}" and "Radiology" in (ra.get("board_heads") or []),
           json.dumps({"sections": hroot.get("sections"), "setup_needed": ra.get("setup_needed"), "accounts": ra.get("accounts"), "departments": deps, "his": ra.get("his")})[:400])
-    check("7.1 the live organisation has its default 22 treating and 8 supporting departments", deps.get("treating") == 22 and deps.get("supporting") == 8, json.dumps(deps))
+    live = {g: sum(1 for d in o0.get("departments") or [] if d.get("group") == g) for g in ("treating", "supporting")}
+    check("7.1 the department counts on the root admin's home are the organisation's (22 treating, 8 supporting by default)", deps.get("treating") == live["treating"] and deps.get("supporting") == live["supporting"]
+          and live["treating"] >= 20 and live["supporting"] >= 6, json.dumps({"home": deps, "org": live}))
     r = medonc.post("/api/tb/org/setup", json={"pmjay_empanelled": False})
     check("7.1 a plain doctor cannot answer the first set-up (403)", r.status_code == 403, f"{r.status_code} {r.text[:100]}")
     if ra.get("setup_needed") is True:
         rb = root.post("/api/tb/org/setup", json={"pmjay_empanelled": "yes"})
         check("7.1 a non-boolean PM-JAY answer is refused (400), nothing recorded", rb.status_code == 400 and (home(root).get("root_admin") or {}).get("setup_needed") is True, f"{rb.status_code} {rb.text[:100]}")
-        r = root.post("/api/tb/org/setup", json={"pmjay_empanelled": False, "name": "Vaidyx Demo Hospital (SYNTHETIC)", "level": "optimal"})
+        rb = root.post("/api/tb/org/setup", content=b"not json", headers={"content-type": "application/json"})
+        check("7.1 a body that is not JSON is refused (400)", rb.status_code == 400, f"{rb.status_code} {rb.text[:100]}")
+        # the answer repeats the live settings (PM-JAY, level, name as captured), so a run killed before its cleanup changes nothing but the stamp (review Phase 7 M1)
+        cap = ctx["hospital"]; want = {"pmjay_empanelled": bool(cap.get("pmjay_empanelled", True)), "name": cap.get("name") or "", "level": cap.get("level") or "essential"}
+        r = root.post("/api/tb/org/setup", json=want)
         hroot = home(root); ra = hroot.get("root_admin") or {}
         hh = ra.get("hospital") or {}
-        check("7.1 the root admin answers the first set-up: recorded once with who and when; the home stops asking", r.status_code == 200 and (r.json().get("hospital") or {}).get("pmjay_empanelled") is False
+        check("7.1 the root admin answers the first set-up: recorded once with who and when; the home stops asking", r.status_code == 200 and (r.json().get("hospital") or {}).get("pmjay_empanelled") is want["pmjay_empanelled"]
               and ra.get("setup_needed") is False and (ra.get("first_setup") or {}).get("by") == H7_ROOT[0] and (ra.get("first_setup") or {}).get("at")
-              and hh.get("pmjay_empanelled") is False and hh.get("name") == "Vaidyx Demo Hospital (SYNTHETIC)" and hh.get("level") == "optimal",
+              and hh.get("pmjay_empanelled") is want["pmjay_empanelled"] and hh.get("name") == want["name"] and hh.get("level") == want["level"],
               json.dumps({"status": r.status_code, "setup_needed": ra.get("setup_needed"), "first_setup": ra.get("first_setup"), "hospital": hh}) + (r.text[:120] if r.status_code != 200 else ""))
         ev = [e for e in c.get("/api/tb/org/audit", params={"limit": 50}).json().get("events") or [] if e.get("kind") == "first_setup" and e.get("by") == H7_ROOT[0]]
         check("7.1 the first set-up is in the organisation audit, by the root admin, with the answer", ev and str(ev[0].get("ts") or "") >= str((ra.get("first_setup") or {}).get("at") or "~")  # newest first; an earlier run left its own
-              and ev[0].get("pmjay_empanelled") is False and ev[0].get("level") == "optimal" and ev[0].get("name") == "Vaidyx Demo Hospital (SYNTHETIC)",
+              and ev[0].get("pmjay_empanelled") is want["pmjay_empanelled"] and ev[0].get("level") == want["level"] and ev[0].get("name") == want["name"],
               json.dumps(ev)[:200])
-        r = root.post("/api/tb/org/setup", json={"pmjay_empanelled": True})
-        check("7.1 a second answer is refused (409): the settings then change under Organisation", r.status_code == 409 and (home(root).get("root_admin") or {}).get("hospital", {}).get("pmjay_empanelled") is False,
+        r = root.post("/api/tb/org/setup", json={"pmjay_empanelled": not want["pmjay_empanelled"]})
+        check("7.1 a second answer is refused (409): the settings then change under Organisation", r.status_code == 409 and (home(root).get("root_admin") or {}).get("hospital", {}).get("pmjay_empanelled") is want["pmjay_empanelled"],
               f"{r.status_code} {r.text[:100]}")
+        stamp = dict(ra.get("first_setup") or {})
+        r = c.put("/api/tb/org", json={"hospital": {k: v for k, v in c.get("/api/tb/org").json()["hospital"].items() if k != "first_setup"}})
+        r2 = c.put("/api/tb/org", json={"hospital": {**c.get("/api/tb/org").json()["hospital"], "first_setup": {"at": "2020-01-01T00:00:00", "by": "forger"}}})
+        now = c.get("/api/tb/org").json()["hospital"].get("first_setup")
+        check("7.1 the stamp is the server's: a hospital save without it, or with another one, keeps it", r.status_code == 200 and r2.status_code == 200 and now == stamp, json.dumps({"now": now, "stamp": stamp}))
+        check("7.1 a doctor cannot re-open the first set-up (403)", medonc.delete("/api/tb/org/setup").status_code == 403)
     else:
         print(f"NOTE 7.1 the live organisation's first set-up was answered already ({json.dumps(ra.get('first_setup'))}): only the refusals are checked", flush=True)
         r = root.post("/api/tb/org/setup", json={"pmjay_empanelled": False})
@@ -2855,10 +2877,14 @@ def v2_phase7_cleanup(c, ctx):
     throwaway = {**H7_USERS, H7_MDT[0]: (H7_MDT[1], {}), H7_DEPTADMIN[0]: (H7_DEPTADMIN[1], {}), H7_ROOT[0]: (H7_ROOT[1], {})}
     try:
         if ctx.get("hospital"):
-            r = c.put("/api/tb/org", json={"hospital": ctx["hospital"]})  # the captured block has no first_setup stamp when it had none: restoring clears it
-            print("hospital settings restored:", r.status_code, "first set-up stamp:", (r.json().get("hospital") or {}).get("first_setup") if r.status_code == 200 else r.text[:120])
+            r = c.put("/api/tb/org", json={"hospital": ctx["hospital"]})  # the settings as captured; the stamp is the server's and survives this
+            rd = c.delete("/api/tb/org/setup") if not isinstance(ctx["hospital"].get("first_setup"), dict) else None  # no stamp before: re-open the question (audited)
+            now = c.get("/api/tb/org").json().get("hospital") or {}
+            same = all(now.get(k) == ctx["hospital"].get(k) for k in ("name", "level", "type", "pmjay_empanelled", "fetch_window_months")) and (now.get("first_setup") or None) == (ctx["hospital"].get("first_setup") or None)
+            check("7.1 cleanup: the hospital settings and the first set-up state are back as they were", r.status_code == 200 and (rd is None or rd.status_code == 200) and same,
+                  json.dumps({"put": r.status_code, "reopen": rd.status_code if rd is not None else None, "stamp": now.get("first_setup"), "pmjay": now.get("pmjay_empanelled"), "level": now.get("level")}))
     except Exception as e:
-        print("restore hospital settings failed:", e)
+        check("7.1 cleanup: the hospital settings could be restored", False, str(e)[:160])
     sid = ctx.get("sid")
     if sid:
         try:  # the e2e session is a test artefact: its file goes, its history stays in sessions/audit.jsonl

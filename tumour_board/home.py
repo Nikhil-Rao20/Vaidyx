@@ -74,23 +74,32 @@ def _case_row(c: dict, r: dict, mine: set) -> dict:
             "referral": org.department_name(ref.get("to")) if ref else "", "linked": len(c.get("linked_cases") or []), "created": c.get("created") or ""}
 
 
-def _suggested_unsent(case_id: str) -> int:
-    st = store.get_state(case_id) or {}
-    return sum(1 for a in st.get("actions") or [] if isinstance(a, dict) and a.get("status") == "suggested")
+def _date_key(board_date: str, today: str) -> tuple:
+    """Upcoming boards first (nearest first), then past ones (latest first), then Case Files without a board date (review Phase 7 M3)."""
+    bd = (board_date or "")[:10]
+    try:
+        n = int(bd.replace("-", "")) if bd else 0
+    except ValueError:
+        n = 0
+    if not n:
+        return (2, 0)
+    return (0, n) if bd >= today else (1, -n)
 
 
-def treating(r: dict) -> dict:
+def treating(r: dict, cases: list | None = None) -> dict:
     """The Case Files the user may open, the owned ones first; counts; the requests to its treating departments; its referrals."""
     mine = set(r.get("treating") or {}) if not r.get("admin") else set()
+    today = _today()
     rows = []
-    for c in store.list_cases():
+    for c in (cases if cases is not None else store.list_cases()):
         if access.scope(r, c):
-            rows.append(_case_row(c, r, mine))
+            row = _case_row(c, r, mine)
+            if row["relation"] == "owner" or (r.get("admin") and row["relation"] != "asked"):
+                row["suggested_unsent"] = int(c.get("suggested_actions") or 0)  # requests nobody sent yet (counted by store.list_cases)
+            rows.append(row)
     order = {"owner": 0, "referred": 1, "participant": 2, "open": 3, "all": 4, "asked": 5}
-    rows.sort(key=lambda x: (order.get(x["relation"], 9), x["board_date"] or "9999", x["case_id"]))
-    owned = [x for x in rows if x["relation"] == "owner" or (r.get("admin") and x["relation"] != "asked")]
-    for x in owned:
-        x["suggested_unsent"] = _suggested_unsent(x["case_id"])
+    rows.sort(key=lambda x: (order.get(x["relation"], 9), _date_key(x["board_date"], today), x["case_id"]))
+    owned = [x for x in rows if "suggested_unsent" in x]
     counts = {"visible": len(rows), "mine": sum(1 for x in rows if x["relation"] == "owner"), "participating": sum(1 for x in rows if x["relation"] in ("participant", "referred")),
               "asked": sum(1 for x in rows if x["relation"] == "asked"), "awaiting_listing": sum(1 for x in owned if x["listing"] == "awaiting_listing"),
               "gate_passed": sum(1 for x in owned if x["gate_passed"] is True), "ready_marked": sum(1 for x in owned if x["ready"]),
@@ -99,7 +108,7 @@ def treating(r: dict) -> dict:
     ib = notify.inbox(r)
     depts = [{"id": d["id"], "name": d["name"], "open": d["open"], "overdue": d["overdue"]} for d in ib["departments"] if d.get("group") == "treating"]
     return {"departments": [{"id": d["id"], "name": d["name"], "role": d.get("role")} for d in org.my_departments(r) if d.get("group") == "treating"],
-            "cases": rows[:MAX_CASES], "counts": counts, "referrals": refs[:MAX_REQUESTS], "referrals_to_answer": sum(1 for x in refs if x.get("can_answer")),
+            "cases": rows[:MAX_CASES], "cases_more": max(0, len(rows) - MAX_CASES), "counts": counts, "referrals": refs[:MAX_REQUESTS], "referrals_to_answer": sum(1 for x in refs if x.get("can_answer")),
             "inbox": {"departments": depts, "open": sum(d["open"] for d in depts), "overdue": sum(d["overdue"] for d in depts)},
             "can_create": org.can(r, "create_case"), "his_enabled": bool(his_client.settings().get("enabled"))}
 
@@ -128,17 +137,16 @@ def _next_board_date(cases: list, today: str) -> str:
     return coming[0] if coming else (dates[-1] if dates else "")
 
 
-def coordinator(r: dict) -> dict:
-    """The board sessions (open ones first), the readiness of the next board date with its chase list, the ready marks."""
+def coordinator(r: dict, cases: list | None = None) -> dict:
+    """The board sessions (open ones first), the readiness of the next board date with its chase list, the ready marks. Built for the
+    MDT Coordinator and admins only (sections_for); anyone else gets no agenda and only the sessions it may open."""
     today = _today()
-    cases = store.list_cases()
+    cases = cases if cases is not None else store.list_cases()
     nxt = _next_board_date(cases, today)
-    agenda = metrics.agenda(nxt) if nxt else None
-    if agenda and not (r.get("admin") or r.get("coordinator")):  # as /metrics/agenda: a doctor sees what it may open
-        vis = {c["case_id"] for c in access.visible(r, cases)}
-        agenda["cases"] = [x for x in agenda["cases"] if x.get("case_id") in vis]
+    allowed = bool(r.get("admin") or r.get("coordinator"))
+    agenda = metrics.agenda(nxt) if nxt and allowed else None
     sessions = board.list_sessions()
-    if not (r.get("admin") or r.get("coordinator")):
+    if not allowed:
         sessions = [x for x in sessions if board.may_open(r, board.get(x["id"]))]
     open_ = sorted([s for s in sessions if s.get("status") != "closed"], key=lambda s: (s.get("date") or "", s.get("created") or ""))
     closed = [s for s in sessions if s.get("status") == "closed"]
@@ -212,12 +220,13 @@ def build(r: dict, mgr=None) -> dict:
            "departments": [{"id": d["id"], "name": d["name"], "group": d.get("group"), "role": d.get("role")} for d in org.my_departments(r)] if not (r or {}).get("admin") else [],
            "admin_of": [{"id": d["id"], "name": d["name"]} for d in org.departments() if d["id"] in ((r or {}).get("admin_of") or [])],
            "unread": notify.unread_count(r) if secs else 0, "notifications": notify.for_roles(r, limit=MAX_NOTIFICATIONS) if secs else []}
+    cases = store.list_cases() if ("treating" in secs or "coordinator" in secs) else None  # read once for both sections
     if "treating" in secs:
-        out["treating"] = treating(r)
+        out["treating"] = treating(r, cases)
     if "supporting" in secs:
         out["supporting"] = supporting(r)
     if "coordinator" in secs:
-        out["coordinator"] = coordinator(r)
+        out["coordinator"] = coordinator(r, cases)
     if "dept_admin" in secs:
         out["dept_admin"] = dept_admin(r, mgr)
     if "root_admin" in secs:

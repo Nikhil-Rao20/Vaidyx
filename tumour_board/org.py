@@ -33,7 +33,7 @@ Permissions: every route asks one question, can(roles(user), action, department)
 PermissionError (the route answers 403 and the UI hides the control). Unknown actions are refused (fail closed); a disabled user
 can do nothing. Every change to the organisation and to accounts is appended to org_audit.jsonl.
 """
-import copy, json, logging, re
+import copy, json, logging, re, threading
 from pathlib import Path
 
 from . import config
@@ -182,6 +182,8 @@ _SLUG = re.compile(r"^[a-z0-9_]+$")
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _UNKNOWN = object()  # a department name that does not resolve: matches no membership
 _cache: dict = {}
+_setup_lock = threading.Lock()  # the first set-up: load, check, save as one step (review Phase 7)
+HOSPITAL_AUDITED = ("name", "level", "type", "pmjay_empanelled", "fetch_window_months", "board_heads", "board_attendance", "surgical_departments", "pmjay_surgical_oncology", "first_setup")
 
 
 def path() -> Path:
@@ -364,16 +366,30 @@ def load() -> dict:
     return org
 
 
-def save(org: dict, by: str) -> dict:
+def save(org: dict, by: str, clear_setup: bool = False) -> dict:
     """Validate, write org.json atomically and append an org_saved entry to org_audit.jsonl, plus one entry per account whose roles
-    changed (account_placed / account_roles_changed / account_unplaced), one when the root admins change and one when the routes change:
-    every account change is audited whichever screen made it (V2 item 2.2)."""
+    changed (account_placed / account_roles_changed / account_unplaced), one when the root admins change, one when the routes change and
+    one (hospital_changed) naming each hospital setting that changed: every account change is audited whichever screen made it (V2 item
+    2.2). The first set-up stamp (hospital.first_setup) is the server's: a stored stamp survives every save whatever the caller sends
+    (it cannot be dropped or replaced through PUT /org); only clear_first_setup (clear_setup=True, audited) removes it (review Phase 7)."""
     clean = validate(org)
     p = path()
-    before = load() if p.exists() else _filled(DEFAULT_ORG)
+    try:  # what the file holds now, read afresh: load()'s cached object may be the very dict the caller edited
+        before = _filled(_read_json(p, {})) if p.exists() else _filled(DEFAULT_ORG)
+    except (ValueError, OSError):
+        before = load() if p.exists() else _filled(DEFAULT_ORG)
+    stored = (before.get("hospital") or {}).get("first_setup")
+    if clear_setup:
+        clean["hospital"].pop("first_setup", None)
+    elif isinstance(stored, dict):
+        clean["hospital"]["first_setup"] = dict(stored)
     _write_json(p, clean)
     _cache.update(key=_stat_key(p), org=clean)
     audit("org_saved", by, departments=len(clean["departments"]), users=len(clean["users"]))
+    hb, ha = before.get("hospital") or {}, clean["hospital"]
+    changed = {k: {"before": hb.get(k), "after": ha.get(k)} for k in HOSPITAL_AUDITED if hb.get(k) != ha.get(k)}
+    if changed:
+        audit("hospital_changed", by, changes=changed)
     old_users, new_users = before.get("users") or {}, clean["users"]
     for u in sorted(set(old_users) | set(new_users)):
         a, b = old_users.get(u), new_users.get(u)
@@ -437,10 +453,10 @@ def validate(org: dict) -> dict:
     fs = h.get("first_setup")  # the stamp of the answered first set-up (V2 item 7.1); absent until the root admin answers it once
     if fs is None:
         h.pop("first_setup", None)
-    elif isinstance(fs, dict):
-        h["first_setup"] = {"at": str(fs.get("at") or ""), "by": str(fs.get("by") or "")}
+    elif isinstance(fs, dict) and str(fs.get("at") or "").strip() and str(fs.get("by") or "").strip():
+        h["first_setup"] = {"at": str(fs["at"]).strip(), "by": str(fs["by"]).strip()}
     else:
-        raise ValueError("first_setup must be an object with at and by.")
+        raise ValueError("first_setup must be an object with at (when) and by (who).")
 
     if not isinstance(out["departments"], list):
         raise ValueError("Departments must be a list.")
@@ -576,25 +592,39 @@ def first_setup(by: str, pmjay_empanelled, name=None, level=None) -> dict:
     """The root admin's first set-up (V2 item 7.1, plan section 11): the PM-JAY empanelled question (default yes), with the hospital name
     and NCG level, answered once; the stamp (who, when) is kept in hospital.first_setup and the answer audited (first_setup). Later
     changes go through the Organisation screen; a second answer is refused (SetupDone)."""
-    o = load()
-    h = o.get("hospital") if isinstance(o.get("hospital"), dict) else {}
-    if isinstance(h.get("first_setup"), dict):
-        raise SetupDone(f"The first set-up was recorded on {str(h['first_setup'].get('at') or '')[:10]} by {h['first_setup'].get('by') or 'an admin'}. "
-                        "Change the settings under Organisation.")
     if not isinstance(pmjay_empanelled, bool):
         raise ValueError("Answer whether the hospital is PM-JAY empanelled (true or false).")
-    h = {**DEFAULT_HOSPITAL, **h, "pmjay_empanelled": pmjay_empanelled}
-    if name is not None:
-        h["name"] = str(name).strip()
-    if level:
-        if level not in LEVELS:
-            raise ValueError(f"Hospital level must be one of: {', '.join(LEVELS)}.")
-        h["level"] = level
-    h["first_setup"] = {"at": now_iso(), "by": str(by or "")}
-    o["hospital"] = h
-    saved = save(o, by)
-    audit("first_setup", by, pmjay_empanelled=pmjay_empanelled, name=h["name"], level=h["level"])
-    return saved["hospital"]
+    if level and level not in LEVELS:
+        raise ValueError(f"Hospital level must be one of: {', '.join(LEVELS)}.")
+    with _setup_lock:  # load, check and save as one step: two answers at once record one stamp
+        o = copy.deepcopy(load())
+        h = o.get("hospital") if isinstance(o.get("hospital"), dict) else {}
+        if isinstance(h.get("first_setup"), dict):
+            raise SetupDone(f"The first set-up was recorded on {str(h['first_setup'].get('at') or '')[:10]} by {h['first_setup'].get('by') or 'an admin'}. "
+                            "Change the settings under Organisation.")
+        h = {**DEFAULT_HOSPITAL, **h, "pmjay_empanelled": pmjay_empanelled}
+        if name is not None and str(name).strip():  # an empty name keeps the stored one
+            h["name"] = str(name).strip()
+        if level:
+            h["level"] = level
+        h["first_setup"] = {"at": now_iso(), "by": str(by or "") or "admin"}
+        o["hospital"] = h
+        saved = save(o, by)
+        audit("first_setup", by, pmjay_empanelled=pmjay_empanelled, name=h["name"], level=h["level"])
+        return saved["hospital"]
+
+
+def clear_first_setup(by: str) -> dict:
+    """A root admin re-opens the first set-up (the question is asked again on the home); audited (first_setup_cleared). The only way
+    the stamp goes: save() keeps a stored stamp whatever PUT /org sends."""
+    with _setup_lock:
+        o = copy.deepcopy(load())
+        stamp = (o.get("hospital") or {}).get("first_setup")
+        if not isinstance(stamp, dict):
+            return o["hospital"]
+        saved = save(o, by, clear_setup=True)
+        audit("first_setup_cleared", by, before=stamp)
+        return saved["hospital"]
 
 
 def departments(group: str | None = None) -> list[dict]:

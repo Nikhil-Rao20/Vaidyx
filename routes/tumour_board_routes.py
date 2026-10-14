@@ -449,7 +449,11 @@ def setup_tumour_board_routes():
     async def org_setup(request: Request):
         """{"pmjay_empanelled": bool, "name"?, "level"?}: the root admin's first set-up, answered once (V2 item 7.1; plan section 11).
         409 once answered: the settings are then changed under Organisation. Audited."""
-        rl = _roles(request); _need(rl, "manage_org"); b = await request.json()
+        rl = _roles(request); _need(rl, "manage_org")
+        try:
+            b = await request.json()
+        except Exception:
+            raise HTTPException(400, 'Send {"pmjay_empanelled": true or false, "name"?, "level"?}')
         b = b if isinstance(b, dict) else {}
         try:
             h = org.first_setup(rl["user"], b.get("pmjay_empanelled"), name=b.get("name"), level=b.get("level") or None)
@@ -458,6 +462,12 @@ def setup_tumour_board_routes():
         except ValueError as e:
             raise HTTPException(400, str(e))
         return {"ok": True, "hospital": h, "version": org.version()}
+
+    @r.delete("/org/setup")
+    async def org_setup_clear(request: Request):
+        """Root admin: re-open the first set-up (the home asks again). Audited. The stamp cannot be removed through PUT /org."""
+        rl = _roles(request); _need(rl, "manage_org")
+        return {"ok": True, "hospital": org.clear_first_setup(rl["user"]), "version": org.version()}
 
     @r.put("/org")
     async def put_org(request: Request):

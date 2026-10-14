@@ -129,7 +129,7 @@ def test_supporting_home_is_the_inbox_of_the_supporting_departments(people, case
 
 
 def test_supporting_home_leaves_out_the_treating_rows_of_a_mixed_login(people, cases):
-    o = org.load(); o["users"]["ravi"]["departments"]["pulmonology"] = "member"; org.save(o, by="test")
+    o = copy.deepcopy(org.load()); o["users"]["ravi"]["departments"]["pulmonology"] = "member"; org.save(o, by="test")
     r = org.roles("ravi")
     assert home.sections_for(r) == ["treating", "supporting"]
     h = home.build(r)
@@ -223,7 +223,7 @@ def test_first_setup_needs_a_yes_or_no_and_a_known_level(people):
 
 
 def test_first_setup_keeps_the_other_hospital_settings(people):
-    o = org.load(); o["hospital"]["fetch_window_months"] = 24; o["hospital"]["board_attendance"] = ["dermatology"]; org.save(o, by="test")
+    o = copy.deepcopy(org.load()); o["hospital"]["fetch_window_months"] = 24; o["hospital"]["board_attendance"] = ["dermatology"]; org.save(o, by="test")
     h = org.first_setup("tbroot", True)
     assert h["fetch_window_months"] == 24 and h["board_attendance"] == ["dermatology"] and h["name"] == "" and h["level"] == "essential"
 
@@ -241,7 +241,7 @@ def test_validate_keeps_or_clears_the_stamp():
 
 def test_a_hospital_save_from_the_organisation_screen_keeps_the_stamp(people):
     org.first_setup("tbroot", True)
-    o = org.load(); o["hospital"] = {**o["hospital"], "name": "Renamed (SYNTHETIC)"}; org.save(o, by="tbroot")
+    o = copy.deepcopy(org.load()); o["hospital"] = {**o["hospital"], "name": "Renamed (SYNTHETIC)"}; org.save(o, by="tbroot")
     assert org.hospital()["first_setup"]["by"] == "tbroot" and org.hospital()["name"] == "Renamed (SYNTHETIC)"
 
 
@@ -259,3 +259,91 @@ def test_notifications_on_the_home(people, cases):
     h = home.build(people["anil"])
     assert h["unread"] >= 1 and any(n["kind"] == "board_ready" and n["case_id"] == "TB-H-A" for n in h["notifications"])  # the ready mark told the coordinator
     assert len(h["notifications"]) <= home.MAX_NOTIFICATIONS
+
+
+# ---- review fixes (Phase 7): the stamp is the server's, the list order, the truncation -------------------------------------------
+
+def test_a_save_never_drops_or_replaces_the_stamp(people):
+    org.first_setup("tbroot", True)
+    stamp = org.hospital()["first_setup"]
+    o = copy.deepcopy(org.load()); o["hospital"] = {k: v for k, v in o["hospital"].items() if k != "first_setup"}; org.save(o, by="tbroot")  # a client that leaves it out
+    assert org.hospital()["first_setup"] == stamp
+    o = copy.deepcopy(org.load()); o["hospital"]["first_setup"] = {"at": "2020-01-01T00:00:00", "by": "forger"}; org.save(o, by="tbroot")  # a client that sends another one
+    assert org.hospital()["first_setup"] == stamp
+    o = copy.deepcopy(org.load()); o["hospital"]["first_setup"] = None; org.save(o, by="tbroot")  # a client that sends null
+    assert org.hospital()["first_setup"] == stamp and home.setup_needed() is False
+
+
+def test_clear_first_setup_reopens_the_question_and_is_audited(people):
+    assert org.clear_first_setup("tbroot")["name"] == "" and home.setup_needed() is True  # nothing to clear: no audit, no error
+    assert "first_setup_cleared" not in [e["kind"] for e in org.read_audit(50)]
+    org.first_setup("tbroot", False, name="Vaidyx Demo Hospital (SYNTHETIC)")
+    h = org.clear_first_setup("tbroot")
+    assert "first_setup" not in h and h["pmjay_empanelled"] is False and h["name"] == "Vaidyx Demo Hospital (SYNTHETIC)"  # the answers stay, the question is asked again
+    assert home.setup_needed() is True
+    ev = next(e for e in org.read_audit(50) if e["kind"] == "first_setup_cleared")
+    assert ev["by"] == "tbroot" and ev["before"]["by"] == "tbroot"
+    org.first_setup("tbroot", True)  # answered again after the re-opening
+    assert home.setup_needed() is False
+
+
+def test_validate_refuses_an_empty_stamp():
+    o = copy.deepcopy(org.DEFAULT_ORG)
+    for bad in ({}, {"at": "2026-10-14T10:00:00"}, {"by": "tbroot"}, {"at": " ", "by": "tbroot"}):
+        o["hospital"] = {**org.DEFAULT_HOSPITAL, "first_setup": bad}
+        with pytest.raises(ValueError):
+            org.validate(o)
+
+
+def test_hospital_changes_are_audited_key_by_key(people):
+    o = copy.deepcopy(org.load()); o["hospital"] = {**o["hospital"], "level": "optimal", "pmjay_empanelled": False}; org.save(o, by="tbroot")
+    ev = next(e for e in org.read_audit(50) if e["kind"] == "hospital_changed")
+    assert ev["by"] == "tbroot" and ev["changes"] == {"level": {"before": "essential", "after": "optimal"}, "pmjay_empanelled": {"before": True, "after": False}}
+    o = copy.deepcopy(org.load()); org.save(o, by="tbroot")  # nothing changed: no entry
+    assert sum(1 for e in org.read_audit(50) if e["kind"] == "hospital_changed") == 1
+    org.first_setup("tbroot", True)
+    ev = [e for e in org.read_audit(50) if e["kind"] == "hospital_changed"]
+    assert len(ev) == 2 and set(ev[0]["changes"]) == {"pmjay_empanelled", "first_setup"}  # newest first
+
+
+def test_first_setup_keeps_the_stored_name_when_none_is_given(people):
+    o = copy.deepcopy(org.load()); o["hospital"]["name"] = "Kept (SYNTHETIC)"; org.save(o, by="test")
+    assert org.first_setup("tbroot", True, name="")["name"] == "Kept (SYNTHETIC)"
+
+
+def test_treating_home_orders_upcoming_boards_first_then_past_then_undated(people):
+    for cid, bd in (("TB-O-PAST1", (TODAY - dt.timedelta(days=30)).isoformat()), ("TB-O-NEXT2", D_LATER), ("TB-O-NONE", ""), ("TB-O-NEXT1", D_NEXT), ("TB-O-PAST2", (TODAY - dt.timedelta(days=2)).isoformat())):
+        c = store.create_case(cid, {**util.PATIENT, "name": f"SYNTHETIC, {cid}"}, "breast", board_date=bd, created_by="priya")
+        c["department"] = "breast_surgery"; store.save_case(c)
+    ids = [c["case_id"] for c in home.build(people["priya"])["treating"]["cases"]]
+    assert ids == ["TB-O-NEXT1", "TB-O-NEXT2", "TB-O-PAST2", "TB-O-PAST1", "TB-O-NONE"]
+
+
+def test_treating_home_truncates_with_a_count(people, cases, monkeypatch):
+    monkeypatch.setattr(home, "MAX_CASES", 1)
+    t = home.build(people["priya"])["treating"]
+    assert len(t["cases"]) == 1 and t["cases"][0]["case_id"] == "TB-H-A" and t["cases_more"] == 1 and t["counts"]["visible"] == 2
+    monkeypatch.setattr(home, "MAX_CASES", 60)
+    assert home.build(people["priya"])["treating"]["cases_more"] == 0
+
+
+def test_suggested_requests_come_from_the_case_list(people, cases):
+    rows = {c["case_id"]: c for c in store.list_cases()}
+    assert rows["TB-H-A"]["suggested_actions"] == 1 and rows["TB-H-B"]["suggested_actions"] == 0
+    assert home.build(people["priya"])["treating"]["cases"][0]["suggested_unsent"] == 1
+
+
+def test_coordinator_section_gives_no_agenda_to_a_login_without_the_role(people, cases):
+    c = home.coordinator(people["priya"])  # never built for a doctor by sections_for; called directly it stays harmless
+    assert c["agenda"] is None and c["can_manage"] is False and c["next_board_date"] == D_NEXT
+    assert [x["id"] for x in c["sessions"]["open"]] == [cases["session"]]  # the sessions it may open (its department is on the attendance sheet), nothing more
+
+
+def test_coordinator_with_a_department_role_sees_the_other_case_files_as_all(people, cases):
+    o = copy.deepcopy(org.load()); o["users"]["anil"]["departments"] = {"breast_surgery": "member"}; org.save(o, by="test")
+    r = org.roles("anil")
+    assert home.sections_for(r) == ["treating", "coordinator"]
+    t = home.build(r)["treating"]
+    rel = {c["case_id"]: c["relation"] for c in t["cases"]}
+    assert rel == {"TB-H-A": "owner", "TB-H-B": "referred", "TB-H-C": "all"}  # the coordinator role opens every Case File; the home says so
+    assert "suggested_unsent" not in next(c for c in t["cases"] if c["case_id"] == "TB-H-C")

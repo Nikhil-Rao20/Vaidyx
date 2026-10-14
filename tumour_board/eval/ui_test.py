@@ -121,17 +121,33 @@ def admin_screens(b, pg, base, pw, shot, errors):
 H7 = {"breast": "tb-ui-h7-breast", "rad": "tb-ui-h7-rad", "radadmin": "tb-ui-h7-radadmin", "mdt": "tb-ui-h7-mdt", "root": "tb-ui-h7-root"}  # throwaway synthetic logins (V2 item 7.1)
 
 
-def roles_cleanup(pg, base, hospital=None):
+THROWAWAY_ROOTS = ("tb-ui-h7-root", "tb-e2e-h7-root")  # the test logins that answer the first set-up (this test, the e2e)
+
+
+def roles_cleanup(pg, base, hospital=None, errors=None):
     """As admin: take the throwaway role logins out of the organisation (users and root admins), delete their Vaidyx logins and put the
-    hospital block back as it was before the pass (the first set-up answered by the throwaway root admin is undone)."""
+    hospital block back as it was before the pass; the first set-up stamp is the server's (a save keeps it), so the question is re-opened
+    through DELETE /org/setup when there was no stamp before. A restore that fails is a test error, never silent."""
     names = set(H7.values())
     try:
         o = pg.request.get(base + "/api/tb/org").json()
         body = {"users": {u: v for u, v in (o.get("users") or {}).items() if u not in names}, "admins": [a for a in (o.get("admins") or []) if a not in names]}
         if hospital is not None:
             body["hospital"] = hospital
-        pg.request.put(base + "/api/tb/org", data=body)
+        r = pg.request.put(base + "/api/tb/org", data=body)
+        if not r.ok and errors is not None:
+            errors.append(f"roles cleanup: the organisation could not be restored: HTTP {r.status} {r.text()[:120]}")
+        if hospital is not None and not isinstance(hospital.get("first_setup"), dict):
+            r = pg.request.delete(base + "/api/tb/org/setup")
+            if not r.ok and errors is not None:
+                errors.append(f"roles cleanup: the first set-up could not be re-opened: HTTP {r.status}")
+        if hospital is not None and errors is not None:
+            now = pg.request.get(base + "/api/tb/org").json().get("hospital") or {}
+            if any(now.get(k) != hospital.get(k) for k in ("name", "level", "pmjay_empanelled", "fetch_window_months")) or (now.get("first_setup") or None) != (hospital.get("first_setup") or None):
+                errors.append("roles cleanup: the hospital settings are not back as they were")
     except Exception as e:
+        if errors is not None:
+            errors.append(f"roles cleanup (org) failed: {e}")
         print("roles cleanup (org) failed:", e)
     for u in names:
         pg.request.delete(base + "/api/auth/users", data={"username": u})
@@ -145,6 +161,9 @@ def roles_screens(b, pg, base, pw, shot, errors):
     shows the answer; the Radiology doctor made admin of Radiology sees both sections, the clinical one first. The hospital block and the
     logins are restored at the end; passwords are random and never printed. `pg` is the admin page."""
     pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
+    stamp0 = (pg.request.get(base + "/api/tb/org").json().get("hospital") or {}).get("first_setup") or {}
+    if stamp0.get("by") in THROWAWAY_ROOTS:  # a killed earlier run left its stamp: re-open the question before the snapshot
+        pg.request.delete(base + "/api/tb/org/setup")
     hospital = (pg.request.get(base + "/api/tb/org").json().get("hospital") or {})
     roles_cleanup(pg, base)  # a previous run that stopped half way
     pws = {k: "Synthetic-" + secrets.token_urlsafe(12) for k in H7}
@@ -156,7 +175,7 @@ def roles_screens(b, pg, base, pw, shot, errors):
     for k, body in spec.items():
         r = pg.request.post(base + "/api/tb/org/accounts", data={"username": H7[k], "password": pws[k], **body})
         if not r.ok:  # never a silent pass: every role's home must be visited
-            errors.append(f"roles: the {k} login could not be created: HTTP {r.status} {r.text()[:120]}"); roles_cleanup(pg, base, hospital); return
+            errors.append(f"roles: the {k} login could not be created: HTTP {r.status} {r.text()[:120]}"); roles_cleanup(pg, base, hospital, errors); return
     vp = pg.viewport_size
     expect = {"breast": ["home-treating"], "rad": ["home-supporting"], "radadmin": ["home-deptadmin"], "mdt": ["home-coordinator"], "root": ["home-root"]}
 
@@ -216,15 +235,18 @@ def roles_screens(b, pg, base, pw, shot, errors):
 
         p2 = home("root")
         answered = False
-        if p2.locator("#hm-setup").count():  # the first set-up is still open on this organisation: answer it, the home shows the answer
-            p2.fill("#fs-name", "Vaidyx UI Hospital (SYNTHETIC)"); p2.select_option("#fs-level", "optimal"); p2.check("input[name='fs-pmjay'][value='no']")
+        if p2.locator("#hm-setup").count():  # the first set-up is still open on this organisation: answer it as the settings stand (a killed run changes nothing but the stamp), the home shows the answer
+            want = "no" if hospital.get("pmjay_empanelled") is False else "yes"
+            if p2.input_value("#fs-level") != (hospital.get("level") or "essential") or (p2.input_value("#fs-name") or "") != (hospital.get("name") or ""):
+                errors.append("roles: the first set-up card is not pre-filled with the hospital's current settings")
+            p2.check(f"input[name='fs-pmjay'][value='{want}']")
             p2.click("#fs-save"); p2.wait_for_selector("#hm-setup", state="detached", timeout=20000); p2.wait_for_timeout(500)
             txt = p2.inner_text("#home-root")
-            if "Vaidyx UI Hospital (SYNTHETIC)" not in txt or "NCG optimal" not in txt or "set up " not in txt:
-                errors.append("roles: after the first set-up the root admin's home does not show the name, the level and who answered")
+            if f"NCG {hospital.get('level') or 'essential'}" not in txt or "set up " not in txt or H7["root"] not in txt:
+                errors.append("roles: after the first set-up the root admin's home does not show the level and who answered")
             tile = p2.locator("#home-root .tile", has_text="PM-JAY empanelled").first
-            if tile.count() and "No" not in tile.inner_text():
-                errors.append("roles: the PM-JAY tile does not show the No just answered")
+            if tile.count() and ("No" if want == "no" else "Yes") not in tile.inner_text():
+                errors.append("roles: the PM-JAY tile does not show the answer just given")
             answered = True
             shot("home_root_after_setup", page=p2, full_page=True)
         else:
@@ -247,7 +269,7 @@ def roles_screens(b, pg, base, pw, shot, errors):
     finally:
         if p2:
             p2.close()
-        roles_cleanup(pg, base, hospital)
+        roles_cleanup(pg, base, hospital, errors)
 
 
 DEMO_LOGINS = os.path.expanduser("~/vaidyx/.tb_v2_demo_logins")  # synthetic V2 role logins (tab-separated); passwords never printed
@@ -670,7 +692,7 @@ def referral_screens(b, pg, base, pw, shot, errors):
 
         c = page_as(UI_CRS)
         open_side(c); c.click("#btn-inbox")
-        row = f"#ib-referrals tr[data-case='{cid}']"
+        row = f".ib-referrals tr[data-case='{cid}']"
         c.wait_for_selector(row, timeout=20000); c.wait_for_timeout(400)
         t = c.inner_text(row)
         if REF_UHID not in t or "Pulmonology to Colorectal Surgery" not in t:

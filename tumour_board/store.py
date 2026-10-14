@@ -62,6 +62,7 @@ def list_cases():
             g = st.get("gate") or {}
             out.append({**c, "documents": len(list((d / "docs").glob("*/doc.json"))) if (d / "docs").exists() else 0,
                         "gate_passed": g.get("passed"), "open_actions": sum(1 for a in st.get("actions", []) if a["status"] != "completed"),
+                        "suggested_actions": sum(1 for a in st.get("actions", []) if a.get("status") == "suggested"),  # requests nobody sent yet (V2 items 4.2, 7.1)
                         "readiness": g.get("readiness")})
     return out
 
