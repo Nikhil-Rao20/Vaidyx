@@ -121,10 +121,48 @@ def _text_present(text):
     return present - absent, named
 
 
+NOT_EMPANELLED = "The hospital is not PM-JAY empanelled, so the HBP 2.2 board composition requirement does not apply"
+
+
+def pmjay_seat(present: set) -> dict:
+    """The surgical seat for PM-JAY (V2 item 6.4): a Surgical Oncologist present fills it; otherwise a surgeon present from one of the
+    hospital's surgical departments fills it, without a note when that department is on the hospital's PM-JAY surgical oncology list
+    (default Surgical Oncology, Gynaecologic Oncology, Orthopaedic Oncology) and with "check PM-JAY requirement" when it is not.
+    Returns {"filled", "filled_by", "check", "note"}; `present` is a set of department ids."""
+    h = org.hospital()
+    pmj = {org.department_id(x) for x in h.get("pmjay_surgical_oncology") or []} - {None}
+    surg = {org.department_id(x) for x in h.get("surgical_departments") or []} - {None}
+    if "surgical_oncology" in present:
+        return {"filled": True, "filled_by": ["surgical_oncology"], "check": False, "note": ""}
+    listed = sorted(d for d in present if d in pmj)
+    if listed:
+        return {"filled": True, "filled_by": listed, "check": False,
+                "note": f"Surgical seat filled by {', '.join(org.department_name(d) for d in listed)} (on the hospital's PM-JAY surgical oncology list)"}
+    other = sorted(d for d in present if d in surg)
+    if other:
+        return {"filled": True, "filled_by": other, "check": True,
+                "note": f"Surgical seat filled by {', '.join(org.department_name(d) for d in other)}: check the PM-JAY requirement, which names a Surgical Oncologist"}
+    return {"filled": False, "filled_by": [], "check": False, "note": ""}
+
+
+def pmjay_present(present: set) -> set:
+    """The PM-JAY specialties counted present: the three oncologists, with the surgical seat filled as pmjay_seat() says (V2 item 6.4)."""
+    out = {d for d in PMJAY_BOARD if d in present}
+    if pmjay_seat(present)["filled"]:
+        out.add("surgical_oncology")
+    return out
+
+
 def composition(record):
     """Which of PM-JAY's three oncology specialties were present (V1 item 7.1). From the structured attendance when the record has one
     (Board room session, or members typed with their department), else from the participants text. Returns {"checked", "how",
-    "present", "missing", "reference"}; "checked" is False when nothing says which specialties were there."""
+    "present", "missing", "reference", "seat", "seat_note"}; "checked" is False when nothing says which specialties were there. V2 item
+    6.4: only for a PM-JAY empanelled hospital (hospital setting, default yes); otherwise {"checked": False, "not_applicable": True} and
+    no flag; the surgical seat may be filled by a surgeon of the Case File's department, with "check PM-JAY requirement" when that
+    department is outside the hospital's surgical oncology list. Never a block; an AI support agent never counts."""
+    if not org.hospital().get("pmjay_empanelled", True):
+        return {"checked": False, "not_applicable": True, "how": None, "present": [], "missing": [], "reference": PMJAY_REFERENCE, "reason": NOT_EMPANELLED,
+                "seat": {"filled": False, "filled_by": [], "check": False, "note": ""}, "seat_note": ""}
     att = record.get("attendance") if isinstance(record.get("attendance"), dict) else {}
     present, how = set(), None
     if att.get("present") or att.get("members"):
@@ -138,14 +176,18 @@ def composition(record):
         present, named_any = _text_present(str(record.get("participants") or ""))
         how = "participants text" if named_any else None
     present.discard(None)
-    found = [d for d in PMJAY_BOARD if d in present]
-    return {"checked": how is not None, "how": how, "present": found, "missing": [d for d in PMJAY_BOARD if d not in present] if how else [],
-            "reference": PMJAY_REFERENCE}
+    seat = pmjay_seat(present) if how else {"filled": False, "filled_by": [], "check": False, "note": ""}
+    counted = pmjay_present(present) if how else set()
+    found = [d for d in PMJAY_BOARD if d in counted]
+    return {"checked": how is not None, "how": how, "present": found, "missing": [d for d in PMJAY_BOARD if d not in counted] if how else [],
+            "reference": PMJAY_REFERENCE, "seat": seat, "seat_note": seat["note"]}
 
 
 def _composition_flag(comp):
     ref = PMJAY_REFERENCE
     cite = f"PM-JAY HBP 2.2 (p {ref['page']}): the tumour board \"{ref['quote'].removeprefix('that ')}\""
+    if comp.get("not_applicable"):  # not an empanelled hospital: no requirement, no flag (V2 item 6.4)
+        return None
     if not comp["checked"]:
         return {"kind": "composition", "severity": "review", "missing": list(PMJAY_BOARD), "reference": ref,
                 "text": f"PM-JAY board composition not checked: the record does not say which specialties were present. {cite}. "
@@ -153,7 +195,11 @@ def _composition_flag(comp):
     if comp["missing"]:
         who = ", ".join(PMJAY_SPECIALIST[d] for d in comp["missing"])
         return {"kind": "composition", "severity": "review", "missing": comp["missing"], "reference": ref,
-                "text": f"PM-JAY board composition: no {who} recorded as present at this board. {cite}. An AI support agent does not count as a member."}
+                "text": f"PM-JAY board composition: no {who} recorded as present at this board. {cite}. An AI support agent does not count as a member."
+                        + (f" {comp['seat_note']}." if comp.get("seat_note") else "")}
+    if (comp.get("seat") or {}).get("check"):  # the seat is filled, by a surgeon outside the hospital's PM-JAY surgical oncology list (V2 item 6.4)
+        return {"kind": "composition", "severity": "review", "missing": [], "check": "surgical_seat", "reference": ref,
+                "text": f"PM-JAY board composition: {comp['seat_note']}. {cite}. A flag for review, not a block; an AI support agent does not count as a member."}
     return None
 
 

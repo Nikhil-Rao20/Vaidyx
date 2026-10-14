@@ -266,12 +266,13 @@ def dashboard(start: str = None, end: str = None) -> dict:
         present = sum(1 for x in closed if board.attendance(x).get(did) == "present")
         marked = sum(1 for x in closed if board.attendance(x).get(did) in ("present", "absent"))
         att[did] = {"department": d.get("name") or did, "present": present, "sessions": len(closed), "marked": marked, "rate": _pct(present, len(closed))}
-    quorate = sum(1 for x in closed if all(board.attendance(x).get(d) == "present" for d in PMJAY))
+    empanelled = bool(org.hospital().get("pmjay_empanelled", True))  # the PM-JAY composition applies to an empanelled hospital only (V2 item 6.4)
+    quorate = sum(1 for x in closed if postboard.pmjay_present({d for d, v in board.attendance(x).items() if v == "present"}) >= set(PMJAY)) if empanelled else 0
     minutes = [v / 60 for x in closed for v in (x.get("timing") or {}).values() if v]
     briefs = sum(1 for x in sessions for cs in (x.get("agents") or {}).values() for r in cs.values() if isinstance(r, dict) and r.get("status") in ("done", "reused"))
     questions = sum(1 for x in sessions for en in x.get("log") or [] if en.get("kind") == "answer")
     during = {"sessions": len(sessions), "closed": len(closed), "cases_discussed": sum(len(x.get("decisions") or {}) for x in closed),
-              "quorate_n": quorate, "quorate_pct": _pct(quorate, len(closed)), "attendance": att,
+              "quorate_n": quorate if empanelled else None, "quorate_pct": _pct(quorate, len(closed)) if empanelled else None, "pmjay_empanelled": empanelled, "attendance": att,
               "minutes_per_case_median": _median(minutes), "minutes_per_case_max": round(max(minutes), 1) if minutes else None,
               "agent_briefs": briefs, "agent_questions": questions}
     kpis = {
