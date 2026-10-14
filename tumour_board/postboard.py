@@ -621,6 +621,14 @@ def timeline(case_id):
             title = ("IP admission " if e.get("kind") == "IP" else "OP visit ") + str(e.get("number") or "") + (f", {e['department']}" if e.get("department") else "") + (f", {e['unit']}" if e.get("unit") else "")
             ev.append({"date": str(e["start"])[:10], "kind": "encounter", "encounter_kind": e.get("kind"), "number": e.get("number"), "title": title, "end": str(e.get("end") or "")[:10],
                        "ward_history": e.get("ward_history") or [], "status": e.get("status")})
+    for r in (store.get_case(case_id) or {}).get("referrals") or []:  # referrals and the ownership moves they made (V2 item 5.2)
+        if isinstance(r, dict) and r.get("at"):
+            from . import org
+            frm, to = org.department_name(r.get("from")), org.department_name(r.get("to"))
+            ev.append({"date": str(r["at"])[:10], "kind": "referral", "title": f"Referred from {frm} to {to}", "status": r.get("status"), "referral": r.get("id"), "reason": r.get("reason")})
+            if r.get("status") == "accepted" and r.get("answered_at"):
+                ev.append({"date": str(r["answered_at"])[:10], "kind": "referral", "title": f"Referral accepted: {to} owns the Case File" + (f", listed under {r['protocol_after']}" if r.get("protocol_after") else ""),
+                           "status": "owner_changed", "referral": r.get("id")})
     st = store.get_state(case_id)
     for b in st.get("board_records", []):
         ev.append({"date": (b.get("board_date") or b["recorded_at"])[:10], "kind": "board", "title": "Tumour Board decision recorded", "record": b["id"]})

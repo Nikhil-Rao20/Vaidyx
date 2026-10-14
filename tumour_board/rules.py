@@ -695,6 +695,18 @@ def _suggest_again(a: dict) -> None:
     a["status"], a["due"] = SUGGESTED, None
 
 
+def _referred_from(case, st, prot) -> dict | None:
+    """{"owner", "protocol", "actions"} when the last archived gate (V2 item 5.2) belongs to another protocol than the Case File's
+    current one: the Case File was referred, and the requests open at the time (`actions`, by id) close with the referral as the reason."""
+    hist = (st or {}).get("gate_history") or []
+    last = hist[-1] if hist and isinstance(hist[-1], dict) else None
+    if not last or last.get("reason") != "referral" or not last.get("protocol") or last.get("protocol") == (prot or {}).get("id"):
+        return None
+    from . import org
+    return {"owner": org.department_name(case.get("department")) if case.get("department") else "another department", "protocol": last["protocol"],
+            "actions": {a.get("id") for a in last.get("actions") or [] if isinstance(a, dict) and a.get("id")}}
+
+
 def sync_actions(case_id, gate, by=""):
     """Open an action (request) for every unmet requirement; complete actions whose requirement is now satisfied. Each request
     carries its level and goes to the department that can act on it (V1 item 4.2). Since V2 item 4.2 a new request is only
@@ -715,9 +727,14 @@ def sync_actions(case_id, gate, by=""):
     by_req = {a["requirement"]: a for a in actions if a.get("source") == "pre_authorization" and a["status"] != "completed" and a.get("requirement")}  # a free request (no protocol record behind it, V2 item 4.2) is never matched against the gate
     required_ids = {r["id"] for r in gate["requirements"]}
     shown_ids = {r["id"] for r in gate.get("shown", [])}
+    referred = _referred_from(case, st, prot)  # the Case File was referred and is now checked under another protocol (V2 item 5.2)
     for rid, a in list(by_req.items()):  # nothing left to request: the protocol no longer lists the record, or no longer requires it here
         if rid not in required_ids:
-            if rid in shown_ids:  # the NCG setting or the hospital level changed: the record is now shown, not counted
+            if referred and a.get("id") in referred["actions"]:  # a request of the earlier protocol, open when the Case File was referred (V2 item 5.2)
+                event, reason = (f"Closed: the Case File was referred to {referred['owner']} and is now checked under {prot['id']} v{prot.get('version')} "
+                                 f"(it was {referred['protocol']}); this request belonged to the earlier protocol"
+                                 + (", under which the record is shown, not counted" if rid in shown_ids else ", and the new protocol does not count this record")), "Case File referred, protocol changed"
+            elif rid in shown_ids:  # the NCG setting or the hospital level changed: the record is now shown, not counted
                 event, reason = "Closed: no longer required for this Case File (NCG tier for its setting and hospital level)", "requirement no longer required (NCG tier)"
             else:
                 event, reason = f"Closed: the protocol ({prot['id']} v{prot.get('version')}) no longer lists this record", "requirement removed from the protocol"

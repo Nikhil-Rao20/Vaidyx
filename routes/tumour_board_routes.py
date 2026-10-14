@@ -21,6 +21,7 @@ from tumour_board import metrics  # agenda readiness, chase list, quality dashbo
 from tumour_board import accounts  # department admins create / disable / remove doctor logins; root admin accounts (V2 item 2.2)
 from tumour_board import his_case, his_client  # HIS-connected Case Files: create from a UHID, re-fetch, link registrations, outside reports (V2 items 3.1 to 3.6)
 from tumour_board import access  # who may open a Case File and act on it: owner, participants, the departments asked (V2 item 5.1)
+from tumour_board import referral  # refer a Case File to another treating department: request, accept (ownership moves, new protocol), decline (V2 item 5.2)
 
 log = logging.getLogger("tumour_board")
 
@@ -766,7 +767,8 @@ def setup_tumour_board_routes():
                 "his": his_case.public(c), "his_flags": his_case.flags(case_id, confirmed_docs),  # the hospital system, its registrations and orders; HIS values the text does not carry (V2 item 3.3)
                 "requests": dept_requests.summary(st),  # suggested / sent / done / closed counts (V2 item 4.2)
                 "groups": his_case.encounter_groups(c, confirmed_docs),  # records grouped by OP visit and IP admission (V2 item 3.4)
-                "access": {**access.public(c), "scope": access.FULL}}  # owner, participants, linked Case Files (V2 items 5.1 / 5.3)
+                "access": {**access.public(c), "scope": access.FULL},  # owner, participants, linked Case Files (V2 items 5.1 / 5.3)
+                "referral": referral.public(c)}  # the open referral, the history, the hospital system's suggestions (V2 item 5.2)
 
     @r.post("/cases/{case_id}/documents")
     async def upload(case_id: str, request: Request, files: list[UploadFile] = File(...), paths: str = Form("[]"), outside: str = Form("")):
@@ -909,7 +911,80 @@ def setup_tumour_board_routes():
         """Every open Pre-Authorization request across the Case Files for the departments this user may see (members and heads
         their own, admins all), with overdue worked out on display; requests closed in the last 7 days are listed too."""
         rl = _roles(request)
-        return notify.inbox(rl)
+        return {**notify.inbox(rl), "referrals": referral.inbox(rl)}  # plus the referrals to and from the user's departments (V2 item 5.2)
+
+    @r.get("/referrals")
+    async def referrals_mine(request: Request):
+        """The referrals addressed to the user's departments (to accept or decline) and the ones they sent (V2 item 5.2)."""
+        rl = _roles(request); _need_known(rl)
+        return {"referrals": referral.inbox(rl)}
+
+    # ---- referral to another treating department (V2 item 5.2) ----
+    def _ref_call(fn, *a, **kw):
+        try:
+            return fn(*a, **kw)
+        except referral.ReferralError as e:
+            raise HTTPException(e.status, str(e))
+
+    @r.post("/cases/{case_id}/referrals")
+    async def referral_request(case_id: str, request: Request):
+        """{"to": department, "reason", "his_ref"?}: the owning department refers the Case File; the receiving department is told."""
+        u = _user(request); rl = _roles(request); c = _case(case_id); _need_case(rl, "refer", c)
+        b = await request.json() if (await request.body()) else {}
+        b = b if isinstance(b, dict) else {}
+        async with store.lock(case_id):
+            rec = _ref_call(referral.request, case_id, str(b.get("to") or ""), str(b.get("reason") or ""), u, his_ref=str(b.get("his_ref") or ""))
+        return {"referral": rec, "case": store.get_case(case_id), "referrals": referral.public(store.get_case(case_id))}
+
+    @r.post("/cases/{case_id}/referrals/{referral_id}/withdraw")
+    async def referral_withdraw(case_id: str, referral_id: str, request: Request):
+        u = _user(request); rl = _roles(request); c = _case(case_id); _need_case(rl, "refer", c)
+        b = await request.json() if (await request.body()) else {}
+        async with store.lock(case_id):
+            if (access.open_referral(c) or {}).get("id") != referral_id:
+                raise HTTPException(409, "That referral is not waiting for an answer")
+            rec = _ref_call(referral.withdraw, case_id, u, note=str((b or {}).get("note") or "") if isinstance(b, dict) else "")
+        return {"referral": rec, "case": store.get_case(case_id), "referrals": referral.public(store.get_case(case_id))}
+
+    def _answer_referral(rl, c, referral_id):
+        rec = access.open_referral(c)
+        if not rec or rec.get("id") != referral_id:
+            raise HTTPException(409, "That referral is not waiting for an answer")
+        _need(rl, "answer_referral", rec.get("to"))
+        return rec
+
+    @r.post("/cases/{case_id}/referrals/{referral_id}/decline")
+    async def referral_decline(case_id: str, referral_id: str, request: Request):
+        """{"note"?}: the receiving department declines; the Case File stays with its owner."""
+        u = _user(request); rl = _roles(request); c = _case(case_id); _answer_referral(rl, c, referral_id)
+        b = await request.json() if (await request.body()) else {}
+        async with store.lock(case_id):
+            rec = _ref_call(referral.decline, case_id, u, note=str((b or {}).get("note") or "") if isinstance(b, dict) else "")
+        return {"referral": rec, "case": store.get_case(case_id), "referrals": referral.public(store.get_case(case_id))}
+
+    @r.post("/cases/{case_id}/referrals/{referral_id}/accept")
+    async def referral_accept(case_id: str, referral_id: str, request: Request):
+        """{"note"?, "protocol"?, "setting"?, "hospital_level"?}: the receiving department accepts. Ownership moves, the referring department
+        stays as a participant, the earlier gate is archived; with a protocol the Case File is listed under it at once (a job re-runs
+        the Pre-Authorization on the same records), otherwise the new owner picks it on the listing form."""
+        u = _user(request); rl = _roles(request); c = _case(case_id); _answer_referral(rl, c, referral_id)
+        b = await request.json() if (await request.body()) else {}
+        b = b if isinstance(b, dict) else {}
+        async with store.lock(case_id):
+            out = _ref_call(referral.accept, case_id, u, note=str(b.get("note") or ""), protocol_id=str(b.get("protocol") or ""), setting=str(b.get("setting") or ""),
+                            hospital_level=str(b.get("hospital_level") or ""))
+        job = out.get("job")
+        return {"referral": out["referral"], "case": out["case"], "job": job["id"] if job else None, "total": job["total"] if job else 0,
+                "referrals": referral.public(out["case"]), "access": access.public(out["case"])}
+
+    @r.post("/cases/{case_id}/referrals/suggestions/{his_ref}/dismiss")
+    async def referral_dismiss_suggestion(case_id: str, his_ref: str, request: Request):
+        """{"note"?}: the owner decides not to follow the hospital system's referral (audited)."""
+        u = _user(request); rl = _roles(request); c = _case(case_id); _need_case(rl, "refer", c)
+        b = await request.json() if (await request.body()) else {}
+        async with store.lock(case_id):
+            c = _ref_call(referral.dismiss_suggestion, case_id, his_ref, u, note=str((b or {}).get("note") or "") if isinstance(b, dict) else "")
+        return {"case": c, "referrals": referral.public(c)}
 
     @r.get("/notifications")
     async def notifications(request: Request, unread: int = 0, limit: int = 100):

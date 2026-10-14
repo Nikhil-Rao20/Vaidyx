@@ -407,3 +407,17 @@ table.inbox-t td:nth-child(1) { min-width: 170px; }
   .actions-row > * { flex: 1 1 auto; }
   textarea.reqtxt { min-height: 200px; font-size: 12.5px; }
 }
+/* owner, participants, referral, linked Case Files (V2 items 5.1 to 5.3) */
+.ownline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin: 2px 0 6px; color: var(--body); }
+.ownline > span { min-width: 0; overflow-wrap: anywhere; }
+.ownline select, .addpart input { padding: 4px 8px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--panel); color: var(--ink); max-width: 100%; min-width: 0; }
+.refbanner { margin: 6px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.owncard .subh, details.gatehist .subh { margin: 12px 0 2px; font-size: 14px; display: flex; align-items: center; gap: 6px; }
+.owncard .banner { margin: 8px 0; }
+.addpart { margin-top: 8px; gap: 6px; } .addpart input { flex: 1 1 160px; }
+details.gatehist { margin-top: 12px; border: 1px dashed var(--line-2); border-radius: var(--radius); padding: 8px 12px; background: var(--tint-2); color: var(--muted); }
+details.gatehist summary { cursor: pointer; font-size: 13.5px; overflow-wrap: anywhere; }
+details.gatehist .hisrow { color: var(--muted); font-size: 13.5px; }
+details.gatehist .chip { opacity: .75; }
+.tev.referral:before { background: var(--muted); }
+.addpart select { flex: 1 1 160px; width: 160px; } .ownline select { width: 220px; }  /* a set width: the longest department name never widens the column on a phone */

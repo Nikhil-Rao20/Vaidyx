@@ -9,7 +9,12 @@ Case File it creates is deleted at the end (reader model calls for the fetched r
 --only requests: the requests to departments (V2 items 4.2 / 4.3) against the mock hospital: a treating doctor (tb-medonc-doc) creates
 a Case File from IP/26/01875, notifies Radiology (the draft, the "Open in mail" mailto: link, Send in-app), the radiologist (tb-rad-doc)
 acknowledges and sends "done" from the department inbox, the doctor writes and closes a free request to Anaesthesiology. Logins from
-~/vaidyx/.tb_v2_demo_logins; the Case File is deleted at the end."""
+~/vaidyx/.tb_v2_demo_logins; the Case File is deleted at the end.
+--only referral: referral and ownership (V2 items 5.1 to 5.3) against the mock hospital (read-only on it): two throw-away doctor logins
+(Pulmonology, Colorectal Surgery) created through the Tumour Board; the Pulmonology doctor creates a Case File from VXH/26/004214 (lung),
+refers it to Colorectal Surgery from the hospital system's suggested referral; the Colorectal Surgery doctor accepts it from the inbox
+under colorectal_rectum (the gate re-runs on the same records, the lung gate stays as read-only history); the Pulmonology doctor stays as
+a participant with no Notify / waive buttons. The Case File and the logins are deleted at the end."""
 import argparse, os, secrets, sys, time
 from urllib.parse import unquote, urlparse
 
@@ -358,6 +363,19 @@ def requests_screens(b, pg, base, pw, shot, errors):
         if "Sent" not in r.inner_text(f"{row} .reqst"):
             errors.append(f"the inbox row is not shown as Sent: {r.inner_text(row + ' .reqst')!r}")
         page_checks(r, "Radiology inbox", errors); shot("req_4_inbox", page=r, full_page=True)
+        if (r.request.get(base + f"/api/tb/cases/{cid}").json().get("access") or {}).get("scope") == "requests":  # V2 item 5.1: a department that was only asked
+            r.click(f"{row} td:first-child"); r.wait_for_selector("#limited-note", timeout=20000); r.wait_for_timeout(400)
+            if "only the items it was asked about" not in r.inner_text("#limited-note"):
+                errors.append("the reduced Case File view does not say the department sees only the items it was asked about")
+            if not r.locator(f"#tab-ready .reqcard[data-aid='{cect['id']}'] [data-ack]").count():
+                errors.append("the reduced Case File view offers no Acknowledge on the department's request")
+            shown = [t for t in ("ask", "roles", "summary", "board", "audit") if r.locator(f"#tabs button[data-tab='{t}']").is_visible()]
+            if shown or r.locator("#own-card, #btn-recheck").count():
+                errors.append(f"the reduced Case File view shows more than the requests and records: tabs {shown}")
+            page_checks(r, "Reduced Case File view (Radiology)", errors); shot("req_4b_limited", page=r, full_page=True)
+            open_side(r); r.click("#btn-inbox"); r.wait_for_selector(row, timeout=20000); r.wait_for_timeout(300)
+        else:
+            print("note: tb-rad-doc reads the whole Case File (placed in more than Radiology?): the reduced view check is skipped")
         r.click(f"{row} [data-ack]"); r.wait_for_selector(f"{row} .reqst:has-text('Acknowledged')", timeout=20000)
         if r.locator(f"{row} [data-ack]").count():
             errors.append("Acknowledge is still offered after acknowledging")
@@ -400,9 +418,185 @@ def requests_screens(b, pg, base, pw, shot, errors):
                 errors.append(f"could not delete the test Case File {cid}: HTTP {r.status}")
 
 
+REF_UHID = "VXH/26/004214"  # mock hospital, synthetic: a lung work-up the hospital system later refers to Colorectal Surgery (plan 1.1, P14)
+UI_PULM, UI_CRS = "tb-ui-pulmdoc", "tb-ui-crsdoc"  # throw-away synthetic doctor logins of the referral flow
+
+
+def referral_cleanup(pg, base, cid=None):
+    """As admin: delete the flow's Case File and its two doctor logins (org roles and Vaidyx accounts). Errors are not test failures
+    here (the next run starts clean either way)."""
+    if cid and cid not in PROTECTED and cid not in DEMO_CASES:
+        pg.request.delete(base + f"/api/tb/cases/{cid}")
+    o = pg.request.get(base + "/api/tb/org")
+    if o.ok:
+        cur = o.json().get("users") or {}
+        users = {u: v for u, v in cur.items() if u not in (UI_PULM, UI_CRS)}
+        if users != cur:
+            pg.request.put(base + "/api/tb/org", data={"users": users})
+    for u in (UI_PULM, UI_CRS):
+        pg.request.delete(base + "/api/auth/users", data={"username": u})
+
+
+def referral_screens(b, pg, base, pw, shot, errors):
+    """V2 items 5.1 to 5.3 against the mock hospital (synthetic, read-only). A throw-away Pulmonology doctor creates a Case File from
+    VXH/26/004214 (lung_nsclc, metastatic, Optimal); the Ownership card shows Pulmonology as the owner and the hospital system's referral
+    to Colorectal Surgery as a suggestion; Refer opens the pre-filled dialog; Send shows the waiting referral. A throw-away Colorectal
+    Surgery doctor accepts it from the inbox Referrals card under colorectal_rectum / metastatic; the header shows the new owner and
+    Pulmonology participating; the Pre-Authorization tab shows the earlier lung gate as read-only history. The Pulmonology doctor still
+    opens the Case File (participant) without Notify / waive / Refer. `pg` is the admin page: it deletes the Case File and the logins."""
+    cid, pages = None, []
+    h = pg.request.get(base + "/api/tb/his")
+    if not (h.ok and (h.json().get("status") or {}).get("ok")):
+        errors.append(f"the hospital system does not answer for the referral flow: HTTP {h.status}"); return
+    referral_cleanup(pg, base)  # a previous run that stopped half way
+    creds = {}
+    try:
+        for u, dept, name in [(UI_PULM, "pulmonology", "Dr. Pulmonology Doctor (UI test, synthetic)"), (UI_CRS, "colorectal_surgery", "Dr. Colorectal Surgeon (UI test, synthetic)")]:
+            creds[u] = "Synthetic-" + secrets.token_urlsafe(12)  # random, synthetic, never printed
+            r = pg.request.post(base + "/api/tb/org/accounts", data={"username": u, "password": creds[u], "departments": {dept: "doctor"}, "display_name": name})
+            if not r.ok:
+                errors.append(f"the {dept} doctor login for the referral flow could not be created: HTTP {r.status} {r.text()[:120]}"); return
+
+        def page_as(u):
+            p = b.new_page(viewport=pg.viewport_size, device_scale_factor=1); watch(p, errors); pages.append(p)
+            login(p, base, u, creds[u]); p.goto(base + "/tb"); p.wait_for_selector("#btn-new", state="attached", timeout=20000); p.wait_for_timeout(800)
+            return p
+
+        def open_case(p, case_id):
+            open_side(p); p.click(f".citem[data-case='{case_id}']"); p.click("#tabs button[data-tab='ready']"); p.wait_for_selector("#own-card", timeout=30000); p.wait_for_timeout(400)
+
+        d = page_as(UI_PULM)
+        open_side(d); d.click("#btn-new"); d.wait_for_selector("#h-id", timeout=20000)
+        if d.locator("[data-way='his']").count() and not d.locator("[data-way='his'].on").count():
+            d.click("[data-way='his']")
+        d.fill("#h-id", REF_UHID); d.click("#h-look"); d.wait_for_selector("#h-res .lookbox", timeout=30000)
+        d.select_option("#h-prot", "lung_nsclc"); d.select_option("#h-setting", "metastatic"); d.select_option("#h-level", "optimal"); d.select_option("#h-win", "12")
+        if d.locator("#h-dept[readonly]").count() and "Pulmonology" not in (d.input_value("#h-dept") or ""):
+            errors.append("+ New: the Pulmonology doctor's own department is not shown as the owner")
+        with d.expect_response(lambda r: "/api/tb/cases/from-his" in r.url, timeout=60000) as resp:
+            d.click("#h-go")
+        if not resp.value.ok:
+            errors.append(f"create from the HIS as the Pulmonology doctor failed: HTTP {resp.value.status} {resp.value.text()[:160]}"); return
+        res = resp.value.json(); cid = res["case"]["case_id"]
+        if cid in PROTECTED or cid in DEMO_CASES:  # the server assigns a fresh id; refuse to go on rather than touch a protected one
+            cid = None; errors.append("create from the HIS returned a protected Case File id"); return
+        j = wait_job(d, base, res["job"])
+        if not j or j.get("state") != "finished":
+            errors.append(f"first fetch job did not finish: {(j or {}).get('state')} {(j or {}).get('error', '')}"); return
+        d.wait_for_function("() => /finished from/.test(document.getElementById('toast').textContent)", timeout=60000)
+        st = d.request.get(base + f"/api/tb/cases/{cid}").json()
+        sug = [s for s in (st.get("referral") or {}).get("suggestions") or [] if s.get("to") == "colorectal_surgery"]
+        if (st.get("access") or {}).get("owner", {}).get("id") != "pulmonology" or not sug:
+            errors.append(f"the Case File is not owned by Pulmonology with the hospital system's referral to Colorectal Surgery suggested: owner {(st.get('access') or {}).get('owner')}, "
+                          f"suggestions {[(s.get('from'), s.get('to')) for s in (st.get('referral') or {}).get('suggestions') or []]}, HIS referrals {len((st.get('his') or {}).get('referrals') or [])}"); return
+        open_case(d, cid)
+        if "Pulmonology" not in d.inner_text("#own-name"):
+            errors.append(f"the Ownership card does not show Pulmonology as the owner: {d.inner_text('#own-name')!r}")
+        if "Owner: Pulmonology" not in d.inner_text("#c-owner"):
+            errors.append(f"the Case File header does not show Owner: Pulmonology: {d.inner_text('#c-owner')!r}")
+        card = f"#own-card .refsug[data-hisref='{sug[0]['his_ref']}']"
+        if "referral from Pulmonology to Colorectal Surgery" not in d.inner_text(card):
+            errors.append(f"the suggestion does not read 'referral from Pulmonology to Colorectal Surgery': {d.inner_text(card)[:160]!r}")
+        if not d.locator(f"{card} [data-refsugx]").count():
+            errors.append("the suggestion has no Dismiss button")
+        page_checks(d, "Ownership card (suggestion)", errors); shot("ref_1_suggestion", page=d, full_page=True)
+        d.click(f"{card} [data-refsug]"); d.wait_for_selector("#rf-to", timeout=10000); d.wait_for_timeout(300)
+        if d.input_value("#rf-to") != "colorectal_surgery" or not d.input_value("#rf-reason").strip():
+            errors.append(f"the referral dialog is not pre-filled from the suggestion: to {d.input_value('#rf-to')!r}, reason {d.input_value('#rf-reason')[:60]!r}")
+        if d.locator("#rf-to option[value='pulmonology']").count():
+            errors.append("the referral dialog offers the owning department itself")
+        page_checks(d, "Refer dialog", errors); shot("ref_2_refer_dialog", page=d)
+        d.click("#rf-send")
+        d.wait_for_selector("#ref-open", timeout=20000); d.wait_for_timeout(400)
+        if "Referral to Colorectal Surgery requested" not in d.inner_text("#ref-open"):
+            errors.append(f"no 'Referral to Colorectal Surgery requested' banner: {d.inner_text('#ref-open')[:120]!r}")
+        if "Referral to Colorectal Surgery waiting" not in d.inner_text("#c-owner"):
+            errors.append("the Case File header shows no 'Referral to Colorectal Surgery waiting' chip")
+        if not d.locator("#ref-withdraw").count():
+            errors.append("the referring doctor is not offered Withdraw on the open referral")
+        if d.locator("#btn-refer").count():
+            errors.append("Refer to another department is still offered while a referral waits")
+        open_side(d)
+        if not d.locator(f".citem[data-case='{cid}'] .chip:has-text('Referral waiting')").count():
+            errors.append("the case list shows no 'Referral waiting' chip")
+        d.keyboard.press("Escape"); d.wait_for_timeout(300)
+        page_checks(d, "Ownership card (requested)", errors); shot("ref_3_requested", page=d, full_page=True)
+
+        c = page_as(UI_CRS)
+        open_side(c); c.click("#btn-inbox")
+        row = f"#ib-referrals tr[data-case='{cid}']"
+        c.wait_for_selector(row, timeout=20000); c.wait_for_timeout(400)
+        t = c.inner_text(row)
+        if REF_UHID not in t or "Pulmonology to Colorectal Surgery" not in t:
+            errors.append(f"the inbox Referrals row lacks the UHID or 'Pulmonology to Colorectal Surgery': {t[:160]!r}")
+        if not c.locator(f"{row} [data-racc]").count():
+            errors.append("the inbox Referrals row offers no Accept to the Colorectal Surgery doctor"); return
+        page_checks(c, "Inbox (referrals)", errors); shot("ref_4_inbox", page=c, full_page=True)
+        c.click(f"{row} [data-racc]"); c.wait_for_selector("#ra-prot", timeout=10000)
+        c.select_option("#ra-prot", "colorectal_rectum"); c.select_option("#ra-setting", "metastatic"); c.select_option("#ra-level", "optimal")
+        if not c.locator("#ra-later").count():
+            errors.append("the Accept dialog has no 'Accept, choose the protocol later'")
+        page_checks(c, "Accept dialog", errors); shot("ref_5_accept_dialog", page=c)
+        with c.expect_response(lambda r: "/accept" in r.url and "/referrals/" in r.url, timeout=60000) as resp:
+            c.click("#ra-go")
+        if not resp.value.ok:
+            errors.append(f"accepting the referral failed: HTTP {resp.value.status} {resp.value.text()[:160]}"); return
+        acc = resp.value.json()
+        if acc.get("job"):
+            j = wait_job(c, base, acc["job"])
+            if not j or j.get("state") != "finished":
+                errors.append(f"the listing job after the acceptance did not finish: {(j or {}).get('state')} {(j or {}).get('error', '')}")
+        else:
+            errors.append("accepting under a protocol started no job (the Pre-Authorization should re-run on the same records)")
+        c.wait_for_timeout(2500)
+        open_case(c, cid)
+        own, head = c.inner_text("#own-name"), c.inner_text("#c-owner")
+        if "Colorectal Surgery" not in own or "Owner: Colorectal Surgery" not in head or "Participating: Pulmonology" not in head:
+            errors.append(f"after the acceptance the header does not show Owner: Colorectal Surgery, Participating: Pulmonology: {head!r}")
+        hist = c.locator("#tab-ready details.gatehist[data-protocol='lung_nsclc']")
+        if not hist.count():
+            errors.append("the Pre-Authorization tab shows no 'Earlier protocol' block for lung_nsclc")
+        else:
+            if "Earlier protocol (read-only history)" not in hist.first.inner_text():
+                errors.append("the earlier gate block is not titled 'Earlier protocol (read-only history)'")
+            hist.first.locator("summary").click(); c.wait_for_timeout(300)
+            if hist.first.locator("button").count():
+                errors.append("the earlier gate block carries buttons (it must be read-only)")
+        st = c.request.get(base + f"/api/tb/cases/{cid}").json()
+        if ((st.get("state") or {}).get("gate") or {}).get("protocol") != "colorectal_rectum":
+            errors.append(f"the gate does not run under colorectal_rectum after the acceptance: {((st.get('state') or {}).get('gate') or {}).get('protocol')!r}")
+        if not c.locator("#tab-ready .req").count():
+            errors.append("the Pre-Authorization tab shows no requirement rows under the new protocol")
+        page_checks(c, "Pre-Authorization after the acceptance", errors); shot("ref_6_accepted", page=c, full_page=True)
+        c.click("#tabs button[data-tab='board']"); c.wait_for_timeout(700)
+        if "Referred from Pulmonology to Colorectal Surgery" not in c.inner_text("#tab-board"):
+            errors.append("the timeline shows no referral event")
+        page_checks(c, "Board tab (timeline)", errors)
+
+        open_case(d, cid)
+        for sel, what in [("[data-notify]", "Notify"), ("[data-waive]", "Waive"), ("#btn-refer", "Refer to another department"), ("[data-newreq]", "Notify a department")]:
+            if d.locator(f"#tab-ready {sel}").count():
+                errors.append(f"the participating Pulmonology doctor sees a {what} button")
+        if "Participating: Pulmonology" not in d.inner_text("#c-owner"):
+            errors.append("the participating Pulmonology doctor's header does not show Participating: Pulmonology")
+        page_checks(d, "Participant view", errors); shot("ref_7_participant", page=d, full_page=True)
+        if d.locator("#btn-bell").is_visible():
+            d.click("#btn-bell"); d.wait_for_selector("#modal-body .ntf", timeout=10000)
+            if "Referral answered" not in d.inner_text("#modal-body"):
+                errors.append("the bell shows no 'Referral answered' notification to the referring department")
+            page_checks(d, "Notifications (referral)", errors); shot("ref_8_bell", page=d)
+            d.keyboard.press("Escape"); d.wait_for_timeout(300)
+    finally:
+        for p in pages:
+            p.close()
+        referral_cleanup(pg, base, cid)
+        if cid and pg.request.get(base + f"/api/tb/cases/{cid}").ok:
+            errors.append(f"could not delete the test Case File {cid}")
+
+
 def run_flow(b, base, pw, out, size, sfx, errors, only=None):
     """The whole UI flow in one fresh page at one viewport size; JS errors go into `errors`, screenshot names end in `sfx`.
-    only="admin" / "his" / "requests": log in and run only that part."""
+    only="admin" / "his" / "requests" / "referral": log in and run only that part."""
     pg = b.new_page(viewport={"width": size[0], "height": size[1]}, device_scale_factor=1)
     watch(pg, errors)
     shot = lambda name, page=None, **kw: (page or pg).screenshot(path=f"{out}/{name}{sfx}.png", **kw)
@@ -421,11 +615,11 @@ def run_flow(b, base, pw, out, size, sfx, errors, only=None):
         finally:
             pg.close()
         return
-    if only == "requests":
+    if only in ("requests", "referral"):
         pg.goto(base + "/tb")
         try:
             pg.wait_for_selector("#btn-new:not(.hidden)", state="attached", timeout=20000)
-            requests_screens(b, pg, base, pw, shot, errors)
+            (requests_screens if only == "requests" else referral_screens)(b, pg, base, pw, shot, errors)
         finally:
             pg.close()
         return
@@ -579,7 +773,8 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--base", default="http://127.0.0.1:7000"); ap.add_argument("--password", required=True)
     ap.add_argument("--out", default="/home/bharath.tangella/vaidyx/Vaidyx/data/tumour_board/ui_shots")
     ap.add_argument("--viewports", type=parse_viewports, default=None, help="comma list of desktop,tablet,phone (default: desktop)")
-    ap.add_argument("--only", choices=["admin", "his", "requests"], default=None, help="admin: only the Organisation and My department screens (no model calls); "
+    ap.add_argument("--only", choices=["admin", "his", "requests", "referral"], default=None, help="admin: only the Organisation and My department screens (no model calls); "
                     "his: only the HIS-connected Case File screens against the mock hospital (reader model calls; the Case Files it creates are deleted); "
-                    "requests: the requests to departments (V2 items 4.2 / 4.3) as a treating doctor and a radiologist (reader model calls; the Case File is deleted)")
+                    "requests: the requests to departments (V2 items 4.2 / 4.3) as a treating doctor and a radiologist (reader model calls; the Case File is deleted); "
+                    "referral: referral and ownership (V2 items 5.1 to 5.3) with two throw-away doctor logins (reader model calls; the Case File and logins are deleted)")
     a = ap.parse_args(); sys.exit(main(a.base, a.password, a.out, a.viewports, a.only))

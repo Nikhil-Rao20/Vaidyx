@@ -45,6 +45,7 @@ async function loadCases() {
     <div class="citem ${c.case_id === S.caseId ? "on" : ""}" data-case="${esc(c.case_id)}">
       <div class="t"><span>${esc(c.patient?.name || c.case_id)}</span>${c.gate_passed ? '<span class="chip c-ok">Ready</span>' : c.readiness != null ? `<span class="chip c-warn">${c.readiness}%</span>` : c.listing?.status === "awaiting_listing" ? '<span class="chip c-mute">Awaiting listing</span>' : ""}</div>
       <div class="s">${esc(c.case_id)} · ${esc(c.protocol || "no protocol yet")} · ${c.documents} documents${c.open_actions ? ` · ${c.open_actions} open actions` : ""}</div>
+      ${caseRowOwner(c)}
       ${c.his ? `<div class="s"><span class="mono" title="${esc(`Created from ${c.his.label || "the hospital system"}; ${c.his.window_label || ""}`)}">HIS ${esc(c.his.uhid || "")}</span>${c.his.unlinked ? ` <span class="chip c-warn">${plural(c.his.unlinked, "registration")} to link</span>` : ""}</div>` : ""}
     </div>`).join("") : `<div class="muted small">No Case Files yet.</div>`);
   $$(".citem").forEach((el) => (el.onclick = () => openCase(el.dataset.case)));
@@ -66,20 +67,24 @@ async function openCase(id, keepTab) {
   $("#c-protocol").textContent = (S.protocols?.find((x) => x.id === c.protocol)?.label || c.protocol) + " · Tumour Board Case File";
   $("#c-title").textContent = p.name || c.case_id;
   const setLabel = S.protocols?.find((x) => x.id === c.protocol)?.settings?.find((x) => x.id === c.setting)?.label;
-  $("#c-meta").textContent = [c.case_id, p.mrn && "UHID / MRN " + p.mrn, p.agesex, c.listing?.status === "awaiting_listing" ? "Awaiting listing: no Pre-Authorization check until the coordinator lists it" : "", setLabel && "NCG setting: " + setLabel,
+  $("#c-meta").textContent = [c.case_id, p.mrn && "UHID / MRN " + p.mrn, p.agesex, c.listing?.status === "awaiting_listing" ? (c.listing?.reason === "referred" ? "Awaiting listing: no Pre-Authorization check until the cancer protocol is chosen" : "Awaiting listing: no Pre-Authorization check until the coordinator lists it") : "", setLabel && "NCG setting: " + setLabel,
     c.hospital_level && "Hospital level: " + c.hospital_level, c.board_date && "Board " + fmtDate(c.board_date)].filter(Boolean).join(" · ");
-  $("#c-actions").innerHTML = can("list_case") ? `<button class="${c.listing?.status === "awaiting_listing" ? "primary" : "ghost"} sm" id="btn-list">${c.listing?.status === "awaiting_listing" ? "List for the board" : "Change listing"}</button>` : "";
+  const unlisted = c.listing?.status === "awaiting_listing", referred = unlisted && c.listing?.reason === "referred";  // referred: the new owner picks the protocol (V2 item 5.2)
+  const listBtn = can("list_case") ? `<button class="${unlisted ? "primary" : "ghost"} sm" id="btn-list">${unlisted ? "List for the board" : "Change listing"}</button>` : "";
+  $("#c-actions").innerHTML = ownerLineHTML() + (referred ? `<div class="banner warn small refbanner"><b>Referred here by ${esc(referredFrom())}: choose the cancer protocol for the new work-up</b>${listBtn}</div>` : listBtn);
   if ($("#btn-list")) $("#btn-list").onclick = listCase;
+  bindOwnerLine($("#c-actions"));
   renderReadiness();
-  const unlisted = c.listing?.status === "awaiting_listing";
-  $$("#tabs button").forEach((b) => b.classList.toggle("hidden", unlisted && ["roles", "summary", "board"].includes(b.dataset.tab)));
-  if (unlisted && ["roles", "summary", "board"].includes(S.tab)) S.tab = "ready";
+  const hide = isLimited() ? ["ask", "roles", "summary", "board", "audit"] : unlisted ? ["roles", "summary", "board"] : [];  // a department that was only asked: its requests and records (V2 item 5.1)
+  $$("#tabs button").forEach((b) => b.classList.toggle("hidden", hide.includes(b.dataset.tab)));
+  if (hide.includes(S.tab)) S.tab = "ready";
   if (!keepTab) S.tab = S.tab || "ready";
   showTab(S.tab);
   loadCases();
 }
 
 function renderReadiness() {
+  if (isLimited()) { $("#c-ready").innerHTML = ""; return; }  // a department that was only asked never sees the gate (V2 item 5.1)
   const g = S.data.state.gate;
   if (!g) { $("#c-ready").innerHTML = S.data.case.listing?.status === "awaiting_listing" ? `<div class="rtext"><b>Not listed yet</b><span>Records are kept; the Pre-Authorization check starts when the Case File is listed</span></div>` : ""; return; }
   const pct = g.readiness, r = 26, C = 2 * Math.PI * r, col = g.passed ? "#1e6b45" : pct >= 60 ? "#8a5300" : "#b23a2f";
@@ -178,6 +183,7 @@ function reqRow(r, shown) {
     ${r.problems.map((p) => `<div class="prob">${esc(p)}</div>`).join("")}${(r.notes || []).map((p) => `<div class="prob muted">${esc(p)}</div>`).join("")}${ncgLine(r)}<div class="ev">${ev}</div></div></div>`;
 }
 function renderReady() {
+  if (isLimited()) return renderLimited();  // V2 item 5.1: the reduced view of a department that was only asked
   const { state } = S.data, g = state.gate;
   const group = (title, sub, list, shown) => list.length ? `<div class="lvlhead"><b>${title}</b><span class="small muted">${sub}</span></div>${list.map((r) => reqRow(r, shown)).join("")}` : "";
   let reqs;
@@ -188,7 +194,7 @@ function renderReady() {
       + group("Met, waived or not applicable", `${met.filter((r) => r.status === "satisfied").length} of ${g.total} counted records met`, met)
       + group("Shown, not counted", "NCG Optimal records at an Essential hospital, Optional records, and records not applicable in this setting", g.shown || [], true);
     if (!g.requirements.length && !(g.shown || []).length) reqs = `<div class="muted">This protocol lists no records.</div>`;
-  } else reqs = `<div class="muted">Not evaluated yet. Add documents to start.</div>`;
+  } else reqs = S.data.case.listing?.status === "awaiting_listing" ? `<div class="muted">Not listed: the Pre-Authorization check starts when the Case File is listed under a cancer protocol.</div>` : `<div class="muted">Not evaluated yet. Add documents to start.</div>`;
   const blockers = g?.blockers?.length ? `<div class="banner bad"><b>${g.blockers.length} document${g.blockers.length > 1 ? "s" : ""} failed to read</b> and block the Pre-Authorization until re-processed or dismissed (a dismissal needs a reason and is audited; the Case File can then pass without that document).
     ${g.blockers.map((b) => `<div class="row"><span>${esc(b.filename)}: <span class="muted">${esc(b.error)}</span></span>${can("reprocess") ? `<button class="ghost sm" data-reproc-doc="${esc(b.doc_id)}">Re-process</button>` : ""}${can("confirm", b.doc_id) ? `<button class="ghost sm" data-dismiss="${esc(b.doc_id)}">Dismiss</button>` : ""}</div>`).join("")}</div>` : "";
   const opt = g ? g.optional.map((o) => `<span class="chip ${o.available ? "c-info" : "c-mute"}" style="margin:2px">${o.available ? "✓ " : ""}${esc(o.label)}</span>`).join("") : "";
@@ -201,10 +207,11 @@ function renderReady() {
   const hisCase = !!S.data.his;
   $("#tab-ready").innerHTML = `<div class="grid2"><div>
     ${hisCardHTML()}
+    ${ownershipCardHTML()}
     <div class="card"><h3>Pre-Authorization check <span class="btns">${hisCase && can("refetch") ? `<button class="ghost sm" id="btn-refetch" data-refetch title="Fetch from the hospital system only the records new or changed since the last fetch; the Pre-Authorization then re-checks">Re-fetch from the HIS</button>` : ""}<button class="ghost sm" id="btn-recheck">Re-check now</button></span></h3>
       <div class="muted small" style="margin-bottom:6px">Required records from the NCG Essential / Optimal / Optional tiers for this cancer and setting (clinical review before real use). A record counts only when it is the final, signed version and its required primary fields are found with a verified source quote. Document exists ≠ Document is ready.</div>
       ${setting ? `<div class="small" style="margin-bottom:4px">${setting}</div>` : ""}${g?.tiers_note ? `<div class="muted small" style="margin-bottom:6px">${esc(g.tiers_note)}</div>` : ""}
-      ${blockers}${orphanHTML(g)}${reqs}</div>
+      ${blockers}${orphanHTML(g)}${reqs}${gateHistoryHTML()}</div>
     ${hisFlagsHTML()}
     ${g?.core_data?.length ? `<div class="card"><h3>MDT minimum core data <span class="muted small">${g.core_data.filter((c) => c.present).length} of ${g.core_data.length} documented</span></h3>
       <div class="muted small" style="margin-bottom:6px">Informational checklist (not part of the gate). Source: ${esc(g.core_data_source || "")}.</div>
@@ -242,6 +249,7 @@ function renderReady() {
   $$("[data-confval]", $("#tab-ready")).forEach((b) => (b.onclick = () => confirmValue(JSON.parse(b.dataset.confval))));
   $$("[data-attest]", $("#tab-ready")).forEach((b) => (b.onclick = () => attestDoc(b.dataset.attest)));
   bindHIS($("#tab-ready"));
+  bindOwnership($("#tab-ready"));
   if ($("#drop")) bindUpload();
   const arr = $("#btn-arrivals");
   if (arr) arr.onclick = async () => { try { const j = await api(`/cases/${S.caseId}/demo-arrivals`, { method: "POST" }); watchJob(j.job); } catch (e) { toast(e.message); } };
@@ -260,7 +268,7 @@ function readinessHTML(a) {
   const c = a.counts;
   return `<div class="tiles">${tile("Days to the board", a.days_to_board, "", a.board_date ? fmtDate(a.board_date) : "")}${tile("Ready", c.ready, "", `of ${a.cases.length} Case Files`)}${tile("On track", c.on_track)}${tile("At risk", c.at_risk, "", "requests due after the board or overdue")}${tile("Blocked", c.blocked, "", "documents failed to read")}${tile("Open requests", a.requests_open, "", `${a.requests_overdue} overdue`)}</div>
     <table class="t" style="margin-top:8px"><thead><tr><th>Case File</th><th>Forecast</th><th>Readiness</th><th>Open gaps</th><th>Summary</th></tr></thead><tbody>
-    ${a.cases.map((r) => `<tr class="click" data-open="${esc(r.case_id)}"><td><b>${esc(r.patient)}</b><div class="small muted">${esc(r.case_id)} · ${esc(r.protocol || "not listed")}</div></td><td>${fcChip(r.forecast)}<div class="small muted">${esc(r.why)}</div></td>
+    ${a.cases.map((r) => `<tr class="click" data-open="${esc(r.case_id)}"><td><b>${esc(r.patient)}</b><div class="small muted">${esc(r.case_id)} · ${esc(r.protocol || "not listed")}</div>${r.owner_name ? `<div class="small muted">Owner: ${esc(r.owner_name)}</div>` : ""}</td><td>${fcChip(r.forecast)}<div class="small muted">${esc(r.why)}</div></td>
       <td><div class="bar" style="min-width:90px"><i style="width:${r.readiness || 0}%"></i></div><div class="small">${r.satisfied ?? 0} of ${r.total ?? 0}${r.level1_open ? ` · L1 ${r.level1_open}` : ""}${r.level2_open ? ` · L2 ${r.level2_open}` : ""}</div></td>
       <td class="small">${r.gaps.slice(0, 4).map((g) => `${esc(g.label)} <span class="muted">(${esc(g.department)})</span>`).join("<br>")}${r.gaps.length > 4 ? `<br><span class="muted">+${r.gaps.length - 4} more</span>` : ""}${r.discordances_open ? `<br><span class="chip c-rev">${r.discordances_open} report(s) disagree</span>` : ""}</td>
       <td class="small">${r.summary === "ready" ? '<span class="chip c-ok">ready</span>' : r.summary === "stale" ? '<span class="chip c-warn">stale</span>' : '<span class="chip c-mute">none</span>'}${Object.keys(r.briefs).length ? `<div class="muted">${Object.keys(r.briefs).length} brief(s)</div>` : ""}</td></tr>`).join("")}</tbody></table>
@@ -625,7 +633,7 @@ function reqTrail(a) {
   if (a.status === "completed") out.push(a.closed_by ? `Closed by <b>${esc(a.closed_by)}</b>${a.completed ? " on " + esc(dmyt(a.completed)) : ""}` : `Closed by itself${a.completed ? " on " + esc(dmyt(a.completed)) : ""}: the record reached the Case File`);
   return out.length ? `<div class="reqtrail small">${out.map((x) => `<div>${x}</div>`).join("")}</div>` : "";
 }
-function requestHTML(a) {
+function requestHTML(a, answer) {
   const [cls, txt] = reqStatus(a), open = a.status !== "completed", sent = a.status !== "suggested", free = isFreeReq(a);
   const dept = a.department || deptName(a.department_id) || "the department";
   const btns = [];
@@ -633,6 +641,10 @@ function requestHTML(a) {
     : `<button class="primary sm" data-notify="${esc(a.id)}" title="Read the draft, edit it and send it in-app or open it in your own mail program">Notify ${esc(dept)}</button>`);
   if (a.sent) btns.push(`<button class="ghost sm" data-reqmsg="${esc(a.id)}">Request message</button>`);
   if (open && free && sent && can("close_request")) btns.push(`<button class="ghost sm" data-closereq="${esc(a.id)}" title="Close a request with no protocol record behind it (audited)">Close</button>`);
+  if (answer && open && sent && can("answer_request", a.id)) {  // the department asked answers on the Case File as in its inbox (V2 items 4.3 / 5.1)
+    if (!a.acknowledged) btns.push(`<button class="ghost sm" data-ack="${esc(a.id)}">Acknowledge</button>`);
+    if (!a.done) btns.push(`<button class="primary sm" data-done="${esc(a.id)}" title="The report is signed in your own system: send &quot;done&quot; back with an optional note">Done</button>`);
+  }
   const po = a.pending_order;
   return `<div class="action reqcard ${open ? (cls === "c-bad" ? "overdue" : sent ? "" : "suggested") : "completed"}" data-aid="${esc(a.id)}"><div class="h"><span>${free ? `<span class="chip c-info" title="Written by the treating doctor; no protocol record behind it">Free request</span> ` : ""}${esc(a.label)}${a.level ? ` <span class="chip c-lvl" title="${esc((LEVEL[a.level] || [])[1] || "")}">${esc(a.level_label || (LEVEL[a.level] || [])[0] || "")}</span>` : ""}${a.accession ? ` <span class="chip c-mono" title="Accession / Lab No. in the hospital system">${esc(a.accession)}</span>` : ""}${po ? ` <span class="chip ${po.stage === "cancelled" ? "c-bad" : "c-info"}">Ordered in the HIS: ${esc(stageText(po))}</span>` : ""}</span><span class="chip ${cls} reqst">${esc(txt)}</span></div>
     ${a.what ? `<div class="w">${esc(a.what)}</div>` : ""}${reqTrail(a)}
@@ -954,7 +966,7 @@ function renderDocs() {
   } else list = `<div class="card"><h3>Documents in the Case File <span class="muted small">${docs.length}</span></h3>
   <table class="t">${DOC_HEAD}<tbody>${docs.map(docRow).join("")}</tbody></table></div>`;
   $("#tab-docs").innerHTML = `${list}
-  <div class="card"><h3>Primary fields across the Case File</h3><div class="muted small" style="margin-bottom:8px">Current value = most recent verified value from a final, signed document. Every value links to its source quote.</div>
+  <div class="card${isLimited() ? " hidden" : ""}"><h3>Primary fields across the Case File</h3><div class="muted small" style="margin-bottom:8px">Current value = most recent verified value from a final, signed document. Every value links to its source quote.</div>
   <table class="t"><thead><tr><th>Field</th><th>Current value</th><th>Source</th><th>History</th></tr></thead><tbody>
   ${Object.entries(S.data.facts).map(([k, f]) => { const c = f.current;
     return `<tr><td>${esc(f.label)}</td><td><b>${esc(c.value)}</b> ${c.state === "pending" ? '<span class="chip c-warn">pending</span>' : ""}${critChip(k, c)}${c.verification !== "verified" ? '<span class="chip c-rev">' + esc(c.verification) + "</span>" : ""}${!c.doc_final ? '<span class="chip c-bad">non-final doc</span>' : ""}</td>
@@ -1330,7 +1342,7 @@ function renderBoard() {
       ${allActs.map(actionHTML).join("") || '<div class="muted small">No actions.</div>'}
       ${st.next_review ? `<div class="stagebox"><b>Next Tumour Board review:</b> ${fmtDate(st.next_review.date)}</div>` : ""}</div>
     ${trendsHTML()}
-    <div class="card"><h3>Longitudinal Case File</h3><div class="timeline">${S.data.timeline.map((e) => e.kind === "encounter" ? `<div class="tev encounter"><div class="d">${fmtDate(e.date)}</div>${esc(e.title)}${e.encounter_kind === "IP" && e.end ? ", " + dmyd(e.date) + " to " + dmyd(e.end) : ""}${(e.ward_history || []).length ? `<div class="small muted">Ward: ${esc(e.ward_history.map(wardText).join("; "))}</div>` : ""}</div>` : `<div class="tev ${e.kind}"><div class="d">${fmtDate(e.date)}</div>${e.doc_id ? `<span class="cite" data-doc="${esc(e.doc_id)}">${esc(e.title)}</span> <span class="chip ${["FINAL", "AMENDED", "CORRECTED"].includes(e.status) ? "c-ok" : "c-bad"}">${esc(e.status)}</span>` : esc(e.title)}${e.kind === "action" ? ` <span class="chip c-mute">${esc(e.status)}</span>` : ""}</div>`).join("")}</div></div>
+    <div class="card"><h3>Longitudinal Case File</h3><div class="timeline">${S.data.timeline.map((e) => e.kind === "encounter" ? `<div class="tev encounter"><div class="d">${fmtDate(e.date)}</div>${esc(e.title)}${e.encounter_kind === "IP" && e.end ? ", " + dmyd(e.date) + " to " + dmyd(e.end) : ""}${(e.ward_history || []).length ? `<div class="small muted">Ward: ${esc(e.ward_history.map(wardText).join("; "))}</div>` : ""}</div>` : `<div class="tev ${e.kind}"><div class="d">${fmtDate(e.date)}</div>${e.doc_id ? `<span class="cite" data-doc="${esc(e.doc_id)}">${esc(e.title)}</span> <span class="chip ${["FINAL", "AMENDED", "CORRECTED"].includes(e.status) ? "c-ok" : "c-bad"}">${esc(e.status)}</span>` : esc(e.title)}${e.kind === "action" ? ` <span class="chip c-mute">${esc(e.status)}</span>` : ""}${e.kind === "referral" && e.status ? ` <span class="chip c-mute">${esc(e.status === "owner_changed" ? "owner changed" : e.status)}</span>` : ""}${e.kind === "referral" && e.reason ? `<div class="small muted">${esc(e.reason)}</div>` : ""}</div>`).join("")}</div></div>
   </div></div>`;
   const addRow = (d = "", t = "", due = "") => $("#b-acts").insertAdjacentHTML("beforeend", `<div class="arow"><select>${depts.map((x) => `<option ${x === d ? "selected" : ""}>${x}</option>`).join("")}</select><input placeholder="Task" value="${esc(t)}"><input type="date" value="${due}"><button class="ghost sm" data-rmrow>×</button></div>`);
   if ($("#b-acts")) addRow();
@@ -1947,7 +1959,8 @@ async function showIntake() {
 
 // ------------------------------------------------------------------ notifications (bell) and the department inbox · V1 item 4.4
 const NKIND = { request: ["c-warn", "Request"], request_closed: ["c-ok", "Request closed"], request_acknowledged: ["c-info", "Request acknowledged"], request_done: ["c-ok", "Done by the department"], case_ready: ["c-ok", "Case File ready"],
-  board_action: ["c-info", "Tumour Board action"], board_action_suggestion: ["c-ok", "Action may be complete"] };
+  board_action: ["c-info", "Tumour Board action"], board_action_suggestion: ["c-ok", "Action may be complete"],
+  case_shared: ["c-info", "Case File shared"], referral: ["c-warn", "Referral"], referral_answered: ["c-info", "Referral answered"] };  // V2 items 5.1 / 5.2
 async function loadNotifications() {
   if (!S.me) return;
   try { const r = await api("/notifications?limit=80"); S.notifications = r.notifications; S.unread = r.unread;
@@ -1956,8 +1969,8 @@ async function loadNotifications() {
 function showNotifications() {
   const list = S.notifications || [];
   const row = (n) => { const k = NKIND[n.kind] || ["c-mute", n.kind]; return `<div class="ntf ${n.read ? "read" : ""}" data-ntf="${esc(n.id)}" data-case="${esc(n.case_id || "")}" title="Open the Case File">
-      <div class="h"><span class="chip ${k[0]}">${esc(k[1])}</span> <b>${esc(n.title)}</b>${n.level_label ? ` <span class="chip c-lvl">${esc(n.level_label)}</span>` : ""}${n.read ? "" : ' <span class="chip c-info">new</span>'}</div>
-      ${n.text ? `<div class="small">${esc(n.text)}</div>` : ""}${n.kind === "request" && n.uhid ? `<div class="small"><span class="chip c-mono" title="UHID">${esc(n.uhid)}</span>${n.accession ? ` <span class="chip c-mono" title="Accession / Lab No.">${esc(n.accession)}</span>` : ""}${encText(n.encounter) ? ` <span class="muted">${esc(encText(n.encounter))}</span>` : ""}${n.reminder ? ' <span class="chip c-warn">reminder</span>' : ""}${n.sent_by ? ` <span class="muted">sent by ${esc(n.sent_by)}</span>` : ""}</div>` : ""}${n.kind === "request_done" && n.refetch_offer ? `<div class="small"><b>Re-fetch from the HIS to close it.</b></div>` : ""}<div class="small muted">${esc((n.ts || "").slice(0, 16).replace("T", " "))}${n.due ? " · due " + fmtDate(n.due) : ""}${n.to?.department ? " · to " + esc(deptName(n.to.department)) : n.to?.role ? " · to the coordinator" : ""}</div></div>`; };
+      <div class="h"><span class="chip ${k[0]}">${esc(k[1])}</span> <b>${esc(n.title)}</b>${n.kind === "referral_answered" && n.status ? " " + rChip(n.status) : ""}${n.level_label ? ` <span class="chip c-lvl">${esc(n.level_label)}</span>` : ""}${n.read ? "" : ' <span class="chip c-info">new</span>'}</div>
+      ${n.text ? `<div class="small">${esc(n.text)}</div>` : ""}${(n.kind === "request" || n.kind === "referral") && n.uhid ? `<div class="small"><span class="chip c-mono" title="UHID">${esc(n.uhid)}</span>${n.accession ? ` <span class="chip c-mono" title="Accession / Lab No.">${esc(n.accession)}</span>` : ""}${encText(n.encounter) ? ` <span class="muted">${esc(encText(n.encounter))}</span>` : ""}${n.reminder ? ' <span class="chip c-warn">reminder</span>' : ""}${n.sent_by ? ` <span class="muted">sent by ${esc(n.sent_by)}</span>` : ""}</div>` : ""}${n.kind === "request_done" && n.refetch_offer ? `<div class="small"><b>Re-fetch from the HIS to close it.</b></div>` : ""}<div class="small muted">${esc((n.ts || "").slice(0, 16).replace("T", " "))}${n.due ? " · due " + fmtDate(n.due) : ""}${n.to?.department ? " · to " + esc(deptName(n.to.department)) : n.to?.role ? " · to the coordinator" : ""}</div></div>`; };
   $("#modal-body").innerHTML = `<h3 style="color:#1f2933;margin-top:0">Notifications <span class="muted small" style="font-weight:400">${S.unread || 0} unread</span></h3>
     <div class="small muted">In-app only. The Pre-Authorization check suggests a request for each gap; the treating doctor sends it to the Responsible Department, which acknowledges it and sends "done" back. A request closes by itself when the record arrives; the coordinator hears when a Case File is ready for the board.</div>
     <div style="margin:8px 0;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">${(S.org?.inbox_departments || []).length || S.me?.coordinator ? `<button class="ghost sm" id="nt-inbox">Open the department inbox</button>` : ""}${list.some((n) => !n.read) ? `<button class="ghost sm" id="nt-readall">Mark all read</button>` : ""}<button class="ghost sm" data-closemodal>Close</button></div>
@@ -1965,13 +1978,13 @@ function showNotifications() {
   $("#modal").classList.remove("hidden");
   if ($("#nt-readall")) $("#nt-readall").onclick = async () => { await api("/notifications/read", { json: { all: true } }); await loadNotifications(); showNotifications(); };
   if ($("#nt-inbox")) $("#nt-inbox").onclick = () => { $("#modal").classList.add("hidden"); showInbox(); };
-  $$("[data-ntf]").forEach((el) => (el.onclick = async () => { try { await api("/notifications/read", { json: { ids: [el.dataset.ntf] } }); } catch (e) {} $("#modal").classList.add("hidden"); loadNotifications(); if (el.dataset.case) { S.tab = "ready"; try { await openCase(el.dataset.case); } catch (e) { toast("That Case File no longer exists", 6000); } } }));
+  $$("[data-ntf]").forEach((el) => (el.onclick = async () => { try { await api("/notifications/read", { json: { ids: [el.dataset.ntf] } }); } catch (e) {} $("#modal").classList.add("hidden"); loadNotifications(); if (el.dataset.case) { await openCaseSafe(el.dataset.case); } }));
 }
 async function refreshInboxCount() {
   const show = (S.org?.inbox_departments || []).length > 0 || !!S.me?.coordinator;  // V2 2.1: the MDT Coordinator has an inbox row of its own
   $("#btn-inbox").classList.toggle("hidden", !show);
   if (!show) return;
-  try { const ib = await api("/inbox"); $("#inbox-count").textContent = ib.open; $("#inbox-count").classList.toggle("hidden", !ib.open); } catch (e) {}
+  try { const ib = await api("/inbox"), n = ib.open + (ib.referrals || []).filter((r) => r.can_answer).length; $("#inbox-count").textContent = n; $("#inbox-count").classList.toggle("hidden", !n); } catch (e) {}
 }
 async function showInbox() {
   const ib = await api("/inbox"); S.inbox = ib;
@@ -1992,15 +2005,19 @@ async function showInbox() {
       <td>${q.source === "board" ? `<span class="chip c-info">${esc(q.source_label)}</span> ` : q.free ? `<span class="chip c-info">Free request</span> ` : ""}<b>${esc(q.label)}</b><div class="chips" style="margin-top:3px">${q.level_label ? `<span class="chip c-lvl">${esc(q.level_label)}</span>` : ""}${q.accession ? `<span class="chip c-mono" title="Accession / Lab No.: find the patient in your PACS / RIS / LIS">${esc(q.accession)}</span>` : ""}${q.pending_order ? `<span class="chip ${q.pending_order.stage === "cancelled" ? "c-bad" : "c-info"}">Ordered in the HIS: ${esc(stageText(q.pending_order))}</span>` : ""}</div></td>
       <td class="small">${q.source === "pre_authorization" ? asked(q) : esc(q.what)}${suggestionHTML(q, true)}</td><td class="small nowrap">${q.due ? esc(dmyd(q.due)) : ""}</td>
       <td>${chip(q)}${q.source === "pre_authorization" ? reqTrail({ ...q, sent: null, earlier: [] }) : q.completed ? `<div class="small muted">${esc(dmyt(q.completed))}</div>` : ""}</td><td class="nowrap"><div class="ibtns">${acts(q, d)}</div></td></tr>`;
+  const refs = ib.referrals || [], refCard = inboxReferralsHTML(refs);  // V2 item 5.2: referrals to and from my departments
   $("#inbox").innerHTML = `<div class="case-head"><div><div class="eyebrow">Department inbox</div><h1>Requests to ${ib.departments.length === 1 ? esc(ib.departments[0].name) : "my departments"}</h1>
       <div class="muted">Requests the treating doctors sent to your department across the Tumour Board Case Files, and every action the Tumour Board gave your department: the patient with the UHID, IP / OP No. and accession No. to find the study or sample in your own PACS / RIS / LIS, what is asked, the due date and the status. Acknowledge a request when you take it up, then send "done" back (with a note if needed) once the report is signed in your own system. A request closes by itself when the record arrives in the Case File; a Tumour Board action is closed by a person (a newly arrived matching document is suggested). Requests closed in the last 7 days stay listed. Overdue is worked out when this page is shown.</div></div>
-      <div class="readiness"><div class="rtext"><b>${ib.open} open</b><span>${ib.overdue} overdue</span></div></div></div>
+      <div class="readiness"><div class="rtext"><b>${ib.open} open</b><span>${ib.overdue} overdue</span>${refs.some((r) => r.can_answer) ? `<span> · ${plural(refs.filter((r) => r.can_answer).length, "referral")} to answer</span>` : ""}</div></div></div>
+    ${refCard}
     ${ib.departments.map((d) => `<div class="card"><h3>${esc(d.name)} <span class="muted small">${d.open} open · ${d.overdue} overdue</span></h3>
-      ${d.requests.length ? `<div class="tscroll"><table class="t inbox-t"><thead><tr><th>Case File</th><th>Record needed</th><th>What is asked</th><th>Due</th><th>Status</th><th>Actions</th></tr></thead><tbody>${d.requests.map((q) => row(q, d)).join("")}</tbody></table></div>` : `<div class="muted small">No requests.</div>`}</div>`).join("") || `<div class="card"><div class="muted">Your account is not placed in a department with an inbox.</div></div>`}`;
-  $$("#inbox tr[data-case]").forEach((tr) => (tr.onclick = async (e) => { if (e.target.closest("button, details, a")) return; S.tab = "ready"; try { await openCase(tr.dataset.case); } catch (err) { toast("That Case File no longer exists", 6000); } }));
+      ${d.requests.length ? `<div class="tscroll"><table class="t inbox-t"><thead><tr><th>Case File</th><th>Record needed</th><th>What is asked</th><th>Due</th><th>Status</th><th>Actions</th></tr></thead><tbody>${d.requests.map((q) => row(q, d)).join("")}</tbody></table></div>` : `<div class="muted small">No requests.</div>`}</div>`).join("") || (refs.length ? "" : `<div class="card"><div class="muted">Your account is not placed in a department with an inbox.</div></div>`)}`;
+  $$("#inbox tr[data-case]").forEach((tr) => (tr.onclick = async (e) => { if (e.target.closest("button, details, a")) return; await openCaseSafe(tr.dataset.case); }));
+  bindInboxReferrals(refs);
   $$("#inbox [data-ack]").forEach((b) => (b.onclick = async (e) => { e.stopPropagation(); b.disabled = true; if (await answerRequest(b.dataset.case, b.dataset.ack, "acknowledge")) { await showInbox(); loadNotifications(); } else b.disabled = false; }));
   $$("#inbox [data-done]").forEach((b) => (b.onclick = async (e) => { e.stopPropagation(); b.disabled = true; if (await answerRequest(b.dataset.case, b.dataset.done, "done")) { await showInbox(); loadNotifications(); } else b.disabled = false; }));
-  $("#inbox-count").textContent = ib.open; $("#inbox-count").classList.toggle("hidden", !ib.open);
+  const cnt = ib.open + refs.filter((r) => r.can_answer).length;
+  $("#inbox-count").textContent = cnt; $("#inbox-count").classList.toggle("hidden", !cnt);
 }
 
 // ------------------------------------------------------------------ Case File listing (coordinator) · V1 item 2.5
@@ -2015,6 +2032,224 @@ async function listCase() {
   if (!v) return;
   try { const r = await api(`/cases/${S.caseId}/listing`, { json: v }); toast(r.total ? `Listed. Extracting fields from ${r.total} document(s) and running the Pre-Authorization check...` : "Listing saved; Pre-Authorization re-checked", 6000); S.tab = "ready"; await openCase(S.caseId, true); if (r.total) watchJob(r.job); loadCases(); }
   catch (e) { toast(e.message, 7000); }
+}
+
+// ------------------------------------------------------------------ owner, participants, referral, linked Case Files · V2 items 5.1 to 5.3
+// The owning treating department's doctors act on the Case File; participating departments read and comment; a department that was
+// only asked sees its requests and records. A referral moves the Case File to another treating department once that department
+// accepts it. The server decides every permission (S.data.permissions); the UI only hides what the user may not do.
+const RSTATUS = { requested: ["c-warn", "Requested"], accepted: ["c-ok", "Accepted"], declined: ["c-bad", "Declined"], withdrawn: ["c-mute", "Withdrawn"] };
+const rChip = (s) => { const k = RSTATUS[s] || ["c-mute", s || "unknown"]; return `<span class="chip ${k[0]} rst">${esc(k[1])}</span>`; };
+const isLimited = () => S.data?.access?.scope === "requests" || !!S.data?.state?.limited;
+const treatingDepts = () => (S.org?.departments || []).filter((d) => d.group === "treating");
+const protoLabel = (id) => (S.protocols || []).find((p) => p.id === id)?.label || id || "";
+const deptOptions = (list, sel = "") => list.map((d) => `<option value="${esc(d.id)}" ${d.id === sel ? "selected" : ""}>${esc(d.name)}</option>`).join("");
+function referredFrom() {
+  const acc = (S.data?.referral?.history || []).filter((r) => r.status === "accepted").slice(-1)[0];
+  if (acc) return acc.from_name || deptName(acc.from);
+  const oh = (S.data?.access?.owner_history || []).slice(-1)[0];
+  return oh ? deptName(oh.from) : "another department";
+}
+async function openCaseSafe(id) {
+  // a Case File from a link, the bell or the inbox: a refusal (another department's Case File, a referral already answered) is toasted
+  const prev = S.data?.case?.case_id || null;
+  S.tab = "ready";
+  try { await openCase(id); } catch (e) { if (prev && S.caseId === id) S.caseId = prev; toast(/not found/i.test(e.message) ? "That Case File no longer exists" : e.message, 7000); }
+}
+async function reopenOrLeave() {
+  // after an answer that may end this user's access (a declined referral): reopen the Case File, else go back to the start page
+  try { await openCase(S.caseId, true); }
+  catch (e) { S.caseId = null; S.data = null; MAIN_SECTIONS.forEach((x) => $("#" + x).classList.toggle("hidden", x !== "welcome")); loadCases(); }
+}
+function caseRowOwner(c) {
+  const chips = [c.referral ? `<span class="chip c-warn" title="${esc(`Referral to ${deptName(c.referral)} waiting for an answer`)}">Referral waiting</span>` : "",
+    c.linked ? `<span class="chip c-info" title="Linked Case Files of the same patient">${esc(c.linked)} linked</span>` : "",
+    c.scope === "requests" ? `<span class="chip c-mute" title="Your department sees only the items it was asked about">asked</span>` : ""].filter(Boolean).join(" ");
+  return c.owner_name || chips ? `<div class="s">${c.owner_name ? `<span title="Owning department">${esc(c.owner_name)}</span>` : ""}${c.owner_name && chips ? " " : ""}${chips}</div>` : "";
+}
+function ownerLineHTML() {
+  const a = S.data.access; if (!a) return "";
+  const ref = S.data.referral?.open, out = [];
+  out.push(a.owner ? `Owner: <b>${esc(a.owner.name)}</b>` : `<span class="muted">No owning department yet</span>${can("set_owner") ? ` <select id="own-dept" aria-label="Owning treating department"><option value="">Choose the treating department</option>${deptOptions(treatingDepts())}</select> <button class="ghost sm" id="own-set">Set owner</button>` : ""}`);
+  if ((a.participants || []).length) out.push(`Participating: ${a.participants.map((p) => esc(p.name)).join(", ")}`);
+  (a.linked_cases || []).forEach((l) => out.push(`Linked Case File: <a href="#" data-opencase="${esc(l.case_id)}" title="${esc(`The same patient${l.reason ? ": " + l.reason : ""}${l.linked_at ? ", linked " + dmyd(l.linked_at) : ""}`)}">${esc(l.case_id)}</a> <span class="muted">(${esc([l.protocol ? protoLabel(l.protocol) : "no protocol yet", l.department_name].filter(Boolean).join(", "))})</span>`));
+  if (ref) out.push(`<span class="chip c-warn" title="${esc(`Requested by ${ref.by} on ${ref.on}: ${ref.reason}`)}">Referral to ${esc(ref.to_name)} waiting</span>`);
+  return `<div class="ownline small" id="c-owner">${out.map((x) => `<span>${x}</span>`).join("")}</div>`;
+}
+function bindOwnerLine(root) {
+  $$("[data-opencase]", root).forEach((a) => (a.onclick = (e) => { e.preventDefault(); openCaseSafe(a.dataset.opencase); }));
+  const set = $("#own-set", root);
+  if (set) set.onclick = async () => {
+    const department = $("#own-dept").value; if (!department) { toast("Choose the treating department that owns this Case File"); return; }
+    set.disabled = true;
+    try { await api(`/cases/${encodeURIComponent(S.caseId)}/owner`, { json: { department } }); toast(`${deptName(department)} now owns this Case File (audited)`); await openCase(S.caseId, true); }
+    catch (e) { toast(e.message, 7000); set.disabled = false; }
+  };
+}
+function ownershipCardHTML() {
+  const a = S.data.access; if (!a) return "";
+  const R = S.data.referral || {}, o = R.open, hist = (R.history || []).slice().reverse(), sugg = R.suggestions || [];
+  const inPart = new Set((a.participants || []).map((p) => p.id));
+  const addable = (S.org?.departments || []).filter((d) => d.id !== a.owner?.id && !inPart.has(d.id));
+  const grp = (g, label) => { const l = addable.filter((d) => d.group === g); return l.length ? `<optgroup label="${label}">${deptOptions(l)}</optgroup>` : ""; };
+  const parts = (a.participants || []).map((p) => `<div class="hisrow"><span><b>${esc(p.name)}</b> <span class="small muted">${[p.since && "since " + dmyd(p.since), p.by && "added by " + p.by, p.reason].filter(Boolean).map(esc).join(" · ")}</span></span>${can("manage_participants") ? `<button class="ghost sm" data-rmpart="${esc(p.id)}" title="The department no longer takes part in this Case File (audited)">Remove</button>` : ""}</div>`).join("");
+  const open = o ? `<div class="banner warn small" id="ref-open"><b>Referral to ${esc(o.to_name)} requested by ${esc(o.by)} on ${esc(o.on)}</b>: ${esc(o.reason)}
+      <div class="row">${can("answer_referral") ? `<button class="primary sm" id="ref-accept">Accept</button><button class="ghost sm" id="ref-decline">Decline</button>` : ""}${can("withdraw_referral") ? `<button class="ghost sm" id="ref-withdraw" title="Take the referral back before it is answered (audited)">Withdraw</button>` : ""}${!can("answer_referral") && !can("withdraw_referral") ? `<span class="muted">Waiting for ${esc(o.to_name)} to accept or decline.</span>` : ""}</div></div>` : "";
+  const sug = sugg.map((s) => `<div class="banner warn small refsug" data-hisref="${esc(s.his_ref)}"><div>${esc(s.text)}</div>${s.encounter_number ? `<div class="muted">Encounter <span class="mono">${esc(s.encounter_number)}</span></div>` : ""}${can("refer") ? `<div class="row"><button class="primary sm" data-refsug="${esc(s.his_ref)}">Refer</button><button class="ghost sm" data-refsugx="${esc(s.his_ref)}" title="Do not follow the hospital system's referral for this Case File (audited; not suggested again)">Dismiss</button></div>` : ""}</div>`).join("");
+  const hrow = (r) => `<div class="hisrow refrow-h"><span>${esc(r.from_name)} → ${esc(r.to_name)} · ${esc(r.on)} ${rChip(r.status)} <span class="small muted">requested by ${esc(r.by)}${r.answered_by && r.status !== "requested" ? `; ${esc(r.status)} by ${esc(r.answered_by)}${r.answered_on ? " on " + esc(r.answered_on) : ""}` : ""}${r.note ? `: "${esc(r.note)}"` : ""}${r.protocol_after ? ` · listed under ${esc(protoLabel(r.protocol_after))}` : ""}</span>${r.reason ? `<div class="small muted">Reason: ${esc(r.reason)}</div>` : ""}</span></div>`;
+  const ohist = (a.owner_history || []).slice().reverse().map((h) => `<div class="hisrow"><span>${esc(deptName(h.from))} → ${esc(deptName(h.to))} <span class="small muted">on ${esc(dmyt(h.at))} by ${esc(h.by)}${h.referral ? " (referral " + esc(h.referral) + ")" : ""}</span></span></div>`).join("");
+  const linked = (a.linked_cases || []).map((l) => `<div class="hisrow"><span><a href="#" data-opencase="${esc(l.case_id)}">${esc(l.case_id)}</a> <span class="small muted">${esc([l.protocol ? protoLabel(l.protocol) : "no protocol yet", l.department_name, l.linked_at && "linked " + dmyd(l.linked_at), l.reason].filter(Boolean).join(" · "))}</span></span></div>`).join("");
+  return `<div class="card owncard" id="own-card"><h3>Ownership and referral${can("refer") ? `<span class="btns"><button class="ghost sm" id="btn-refer" title="When the signed records move the work-up to another treating department">Refer to another department</button></span>` : ""}</h3>
+    <div class="muted small" style="margin-bottom:6px">The owning department's doctors act on this Case File; participating departments read and comment. A referral moves the Case File to another treating department once that department accepts it: it then owns the Case File and chooses the cancer protocol, and the earlier protocol's check is kept read-only.</div>
+    <div class="kv small"><div>Owner</div><div id="own-name">${a.owner ? `<b>${esc(a.owner.name)}</b>` : `<span class="muted">No owning department yet</span>`}</div></div>
+    ${open}
+    ${sug ? `<h4 class="subh">Suggested by the hospital system</h4>${sug}` : ""}
+    <h4 class="subh">Participating departments</h4>${parts || `<div class="small muted">None</div>`}
+    ${can("manage_participants") && addable.length ? `<div class="inline addpart"><select id="part-dept" aria-label="Department to add"><option value="">Choose the department</option>${grp("treating", "Treating departments")}${grp("supporting", "Supporting departments")}</select><input id="part-reason" placeholder="Reason (optional)" maxlength="300" aria-label="Reason for adding the department"><button class="ghost sm" id="part-add">Add a department</button></div>` : ""}
+    ${linked ? `<h4 class="subh">Linked Case Files of the same patient</h4>${linked}` : ""}
+    ${hist.length ? `<h4 class="subh">Referral history</h4>${hist.map(hrow).join("")}` : ""}
+    ${ohist ? `<h4 class="subh">Owner history</h4>${ohist}` : ""}</div>`;
+}
+function bindOwnership(root) {
+  const card = $("#own-card", root); if (!card) return;
+  bindOwnerLine(card);
+  const cid = () => encodeURIComponent(S.caseId);
+  const participants = async (body, what) => { try { await api(`/cases/${cid()}/participants`, { method: "PUT", json: body }); toast(what); await openCase(S.caseId, true); } catch (e) { toast(e.message, 7000); } };
+  const add = $("#part-add", card);
+  if (add) add.onclick = async () => {
+    const d = $("#part-dept", card).value; if (!d) { toast("Choose the department to add"); return; }
+    add.disabled = true; await participants({ add: [d], reason: $("#part-reason", card).value.trim() }, `${deptName(d)} takes part in this Case File (audited)`); add.disabled = false;
+  };
+  $$("[data-rmpart]", card).forEach((b) => (b.onclick = async () => {
+    const d = b.dataset.rmpart;
+    const v = await confirmDialog({ title: `Remove ${deptName(d)}`, intro: `${deptName(d)} no longer takes part in this Case File (read and comment).`, fields: [{ id: "reason", label: "Reason", type: "text" }], submit: "Remove", note: "Recorded with your name and the time in the audit log." });
+    if (v) participants({ remove: [d], reason: v.reason }, `${deptName(d)} removed from the participating departments (audited)`);
+  }));
+  const refer = $("#btn-refer", card); if (refer) refer.onclick = () => referDialog({});
+  $$("[data-refsug]", card).forEach((b) => (b.onclick = () => { const s = (S.data.referral?.suggestions || []).find((x) => x.his_ref === b.dataset.refsug); if (s) referDialog({ to: s.to, reason: s.reason, his_ref: s.his_ref, text: s.text }); }));
+  $$("[data-refsugx]", card).forEach((b) => (b.onclick = async () => {
+    const v = await confirmDialog({ title: "Dismiss the suggested referral", intro: "The hospital system's referral is not followed for this Case File and is not suggested again.", fields: [{ id: "note", label: "Reason", type: "textarea", required: true }], submit: "Dismiss", note: "Recorded with your name and the time in the audit log." });
+    if (!v) return;
+    try { await api(`/cases/${cid()}/referrals/suggestions/${encodeURIComponent(b.dataset.refsugx)}/dismiss`, { json: { note: v.note } }); toast("Suggested referral dismissed (audited)"); await openCase(S.caseId, true); }
+    catch (e) { toast(e.message, 7000); }
+  }));
+  const o = S.data.referral?.open; if (!o) return;
+  const acc = $("#ref-accept", card); if (acc) acc.onclick = () => acceptReferralDialog(S.caseId, o, S.data.case.hospital_level);
+  const dec = $("#ref-decline", card); if (dec) dec.onclick = () => answerReferral(S.caseId, o, "decline", reopenOrLeave);
+  const wd = $("#ref-withdraw", card); if (wd) wd.onclick = () => answerReferral(S.caseId, o, "withdraw", () => openCase(S.caseId, true));
+}
+function referDialog(pre = {}) {
+  // V2 item 5.2: the owning department refers the Case File to another treating department, with a reason (the hospital system's own
+  // referral pre-fills it); the receiving department accepts or declines
+  const own = S.data.access?.owner, ds = treatingDepts().filter((d) => d.id !== own?.id);
+  $("#modal-body").innerHTML = `<h3 style="color:#1f2933;margin-top:0">Refer to another department</h3>
+    <div class="small muted">The receiving department sees the referral in its inbox and bell and accepts or declines it. On acceptance it owns the Case File and chooses the cancer protocol; ${esc(own?.name || "the referring department")} stays as a participating department (read and comment). The earlier protocol's Pre-Authorization check is kept as read-only history.</div>
+    ${pre.text ? `<div class="banner warn small">${esc(pre.text)}</div>` : ""}
+    <div class="form"><label for="rf-to">Treating department</label><select id="rf-to"><option value="">Choose the department</option>${deptOptions(ds, pre.to || "")}</select>
+      <label for="rf-reason">Reason</label><textarea id="rf-reason" maxlength="1000" placeholder="What the signed records now say that moves the work-up to this department">${esc(pre.reason || "")}</textarea></div>
+    <div class="small muted" style="margin-top:10px">Recorded with your name and the time in the audit log.</div>
+    <div class="actions-row"><button class="ghost" data-closemodal>Cancel</button><button class="primary" id="rf-send">Send</button></div>`;
+  $("#modal").classList.remove("hidden");
+  $("#rf-send").onclick = async () => {
+    const to = $("#rf-to").value, reason = $("#rf-reason").value.trim();
+    if (!to) { toast("Choose the treating department"); return; }
+    if (!reason) { toast("A referral needs a reason"); return; }
+    const btn = $("#rf-send"); btn.disabled = true;
+    try {
+      await api(`/cases/${encodeURIComponent(S.caseId)}/referrals`, { json: { to, reason, ...(pre.his_ref ? { his_ref: pre.his_ref } : {}) } });
+      $("#modal").classList.add("hidden"); toast(`Referral sent to ${deptName(to)} (audited)`); await openCase(S.caseId, true);
+    } catch (e) { toast(e.message, 7000); btn.disabled = false; }
+  };
+}
+function acceptReferralDialog(caseId, ref, level) {
+  // V2 item 5.2: the receiving department accepts; with a protocol the Pre-Authorization runs again on the same records under it
+  $("#modal-body").innerHTML = `<h3 style="color:#1f2933;margin-top:0">Accept the referral to ${esc(ref.to_name)}</h3>
+    <div class="small muted">${esc(ref.from_name)} refers ${esc(ref.patient?.name || caseId)} (${esc(caseId)}${ref.uhid ? ", UHID " + esc(ref.uhid) : ""}) to ${esc(ref.to_name)}. Reason: ${esc(ref.reason)}</div>
+    <div class="small muted" style="margin-top:6px">On acceptance ${esc(ref.to_name)} owns the Case File and ${esc(ref.from_name)} stays as a participating department (read and comment). The earlier protocol's Pre-Authorization check is kept as read-only history; under the chosen protocol the check runs again on the same records.</div>
+    <div class="form"><label for="ra-note">Note <span class="muted" style="font-weight:400">(optional)</span></label><textarea id="ra-note" maxlength="500"></textarea>
+      <label for="ra-prot">Cancer protocol for the new work-up</label><select id="ra-prot">${protoOpts()}</select>
+      <label for="ra-setting">NCG setting (as recorded in the signed reports, chosen by the clinician)</label><select id="ra-setting"></select>
+      <label for="ra-level">Hospital level (NCG tiers)</label><select id="ra-level">${levelOpts()}</select></div>
+    <div class="small muted" style="margin-top:10px">Recorded with your name and the time in the audit log; ${esc(ref.from_name)} is told.</div>
+    <div class="actions-row"><button class="ghost" data-closemodal>Cancel</button><button class="ghost" id="ra-later">Accept, choose the protocol later</button><button class="primary" id="ra-go">Accept and list under the chosen protocol</button></div>`;
+  $("#modal").classList.remove("hidden");
+  const fill = () => ($("#ra-setting").innerHTML = settingOpts($("#ra-prot").value));
+  fill(); $("#ra-prot").onchange = fill;
+  $("#ra-level").value = level || S.org?.hospital?.level || "essential";
+  const go = async (withProtocol) => {
+    const bs = [$("#ra-go"), $("#ra-later")]; bs.forEach((b) => (b.disabled = true));
+    const body = { note: $("#ra-note").value.trim(), ...(withProtocol ? { protocol: $("#ra-prot").value, setting: $("#ra-setting").value, hospital_level: $("#ra-level").value } : {}) };
+    try {
+      const r = await api(`/cases/${encodeURIComponent(caseId)}/referrals/${encodeURIComponent(ref.id)}/accept`, { json: body });
+      $("#modal").classList.add("hidden");
+      toast(r.job ? `Accepted: ${ref.to_name} owns the Case File. The Pre-Authorization runs again under ${protoLabel(body.protocol)} on the same records...` : `Accepted: ${ref.to_name} owns the Case File. Choose the cancer protocol to start the Pre-Authorization check.`, 8000);
+      S.tab = "ready"; await openCase(caseId, true);
+      if (r.job) watchJob(r.job);
+      loadNotifications(); refreshInboxCount();
+    } catch (e) { toast(e.message, 7000); bs.forEach((b) => (b.disabled = false)); }
+  };
+  $("#ra-go").onclick = () => go(true);
+  $("#ra-later").onclick = () => go(false);
+}
+async function answerReferral(caseId, ref, what, after) {
+  // decline (the receiving department) or withdraw (the referring department), with an optional note; the other side is told
+  const T = { decline: ["Decline the referral", `${ref.from_name} refers ${ref.patient?.name || caseId} to ${ref.to_name}. On declining, the Case File stays with ${ref.from_name}, which is told.`, "Decline", "Referral declined (audited)"],
+    withdraw: ["Withdraw the referral", `The referral to ${ref.to_name} is taken back before it is answered; ${ref.to_name} is told.`, "Withdraw", "Referral withdrawn (audited)"] }[what];
+  const v = await confirmDialog({ title: T[0], intro: T[1], fields: [{ id: "note", label: "Note", type: "textarea" }], submit: T[2], note: "Recorded with your name and the time in the audit log." });
+  if (!v) return;
+  try { await api(`/cases/${encodeURIComponent(caseId)}/referrals/${encodeURIComponent(ref.id)}/${what}`, { json: { note: v.note } }); toast(T[3]); loadNotifications(); refreshInboxCount(); await after(); }
+  catch (e) { toast(e.message, 7000); }
+}
+const GH_ACT = { suggested: "Suggested (not sent)", pending: "Sent", overdue: "Overdue", completed: "Closed" };
+function gateHistoryHTML() {
+  // V2 item 5.2: the earlier protocol's gate and the requests open when it was archived, read-only (never re-checked, nothing to act on)
+  const hs = S.data.state?.gate_history || []; if (!hs.length) return "";
+  return hs.slice().reverse().map((h) => {
+    const g = h.gate, reqs = g?.requirements || [], acts = h.actions || [];
+    const head = `Earlier protocol (read-only history): ${protoLabel(h.protocol) || "no protocol"}${h.protocol_version ? " v" + h.protocol_version : ""}, ${h.setting_label || h.setting || "NCG setting not recorded"}, hospital level ${h.hospital_level || "essential"}, owned by ${h.owner_name || deptName(h.owner)}, archived ${dmyd(h.archived_at)}`;
+    const row = (r) => { const s = STATUS[r.status] || STATUS.needs_review;
+      return `<div class="hisrow"><span>${esc(r.label)} <span class="small muted">· Responsible Department: ${esc(r.department || "")}</span>${r.level && LEVEL[r.level] ? ` <span class="chip c-lvl">${esc(LEVEL[r.level][0])}</span>` : ""}</span><span class="chip ${s[0]}">${esc(s[1])}</span></div>`; };
+    return `<details class="gatehist" data-protocol="${esc(h.protocol)}"><summary>${esc(head)}</summary>
+      <div class="small muted" style="margin:4px 0 6px">Kept as it stood when ${esc(h.owner_name || deptName(h.owner))} referred the Case File${h.by ? ` (accepted by ${esc(h.by)})` : ""}. Nothing here is re-checked or actionable.</div>
+      ${g ? `<div class="small">${esc(g.satisfied ?? "?")} of ${esc(g.total ?? "?")} counted records were satisfied.</div>${reqs.map(row).join("")}` : `<div class="small muted">No Pre-Authorization check was listed under it.</div>`}
+      <h4 class="subh">Requests open at the time</h4>
+      ${acts.length ? acts.map((x) => `<div class="hisrow"><span>${esc(x.label)} <span class="small muted">${esc([x.department, x.level_label].filter(Boolean).join(" · "))}${x.accession ? " · " + esc(x.accession) : ""}</span></span><span class="chip c-mute">${esc(GH_ACT[x.status] || x.status || "")}</span></div>`).join("") : `<div class="small muted">None</div>`}</details>`;
+  }).join("");
+}
+function renderLimited() {
+  // V2 item 5.1: a department that was only asked sees its requests (Acknowledge / Done as in its inbox) and the records in its scope
+  const acts = S.data.state.actions || [], docs = S.data.documents || [];
+  $("#tab-ready").innerHTML = `<div class="banner small" id="limited-note"><b>Your department sees only the items it was asked about in this Case File.</b> The requests sent to it and the records it produced or the requests name; the rest of the Case File stays with ${esc(S.data.access?.owner?.name || "the owning department")}.</div>
+    <div class="grid2"><div><div class="card" id="req-card"><h3>Requests to your department <span class="muted small">${acts.length}</span></h3>
+      ${acts.length ? acts.map((a) => a.source === "pre_authorization" ? requestHTML(a, true) : actionHTML(a)).join("") : `<div class="muted small">No requests.</div>`}</div></div>
+    <div><div class="card"><h3>Records in your department's scope <span class="muted small">${docs.length}</span></h3>
+      ${docs.length ? `<div class="tscroll"><table class="t">${DOC_HEAD}<tbody>${docs.map(docRow).join("")}</tbody></table></div>` : `<div class="muted small">No record in your department's scope yet.</div>`}</div></div></div>`;
+  const root = $("#tab-ready");
+  bindActions(root);
+  $$("[data-ack], [data-done]", root).forEach((b) => (b.onclick = async () => { b.disabled = true; const what = b.dataset.ack ? "acknowledge" : "done";
+    if (await answerRequest(S.caseId, b.dataset.ack || b.dataset.done, what)) { await openCase(S.caseId, true); loadNotifications(); refreshInboxCount(); } else b.disabled = false; }));
+  $$("tr[data-doc]", root).forEach((tr) => (tr.onclick = (e) => { if (!e.target.closest("button")) openDoc(tr.dataset.doc); }));
+}
+function inboxReferralsHTML(refs) {
+  if (!refs.length) return "";
+  const waiting = refs.filter((r) => r.status === "requested").length;
+  const dir = { to: "to your department", from: "sent by your department", other: "" };
+  const row = (r) => `<tr class="click" data-case="${esc(r.case_id)}" data-rid="${esc(r.id)}"><td><b>${esc(r.patient?.name || r.case_id)}</b><div class="small muted">${esc(r.case_id)}${r.patient?.agesex ? " · " + esc(r.patient.agesex) : ""}${r.board_date ? " · board " + dmyd(r.board_date) : ""}</div>
+      ${r.uhid ? `<div class="small">UHID <span class="mono">${esc(r.uhid)}</span></div>` : ""}</td>
+    <td><b>${esc(r.from_name)} to ${esc(r.to_name)}</b>${dir[r.direction] ? `<div class="small muted">${esc(dir[r.direction])}</div>` : ""}</td>
+    <td class="small"><div class="pre">${esc(r.reason)}</div>${r.note ? `<div class="muted">Note: ${esc(r.note)}</div>` : ""}${r.protocol_after ? `<div class="muted">Listed under ${esc(protoLabel(r.protocol_after))}</div>` : ""}</td>
+    <td class="small nowrap">${esc(r.by)}<div class="muted">${esc(r.on)}</div></td>
+    <td>${rChip(r.status)}${r.answered_by && r.status !== "requested" ? `<div class="small muted">by ${esc(r.answered_by)}${r.answered_on ? " on " + esc(r.answered_on) : ""}</div>` : ""}</td>
+    <td class="nowrap"><div class="ibtns">${r.can_answer ? `<button class="primary sm" data-racc="${esc(r.id)}" data-rcase="${esc(r.case_id)}">Accept</button><button class="ghost sm" data-rdec="${esc(r.id)}" data-rcase="${esc(r.case_id)}">Decline</button>` : ""}${r.can_withdraw ? `<button class="ghost sm" data-rwd="${esc(r.id)}" data-rcase="${esc(r.case_id)}">Withdraw</button>` : ""}</div></td></tr>`;
+  return `<div class="card" id="ib-referrals"><h3>Referrals <span class="muted small">${waiting} waiting for an answer</span></h3>
+    <div class="muted small" style="margin-bottom:6px">Tumour Board Case Files referred to or by your department. On acceptance the receiving department owns the Case File and chooses the cancer protocol; the referring department stays as a participating department (read and comment). Answered referrals stay listed for 7 days.</div>
+    <div class="tscroll"><table class="t inbox-t"><thead><tr><th>Case File</th><th>Referral</th><th>Reason</th><th>By</th><th>Status</th><th>Actions</th></tr></thead><tbody>${refs.map(row).join("")}</tbody></table></div></div>`;
+}
+function bindInboxReferrals(refs) {
+  const find = (b, k) => refs.find((r) => r.id === b.dataset[k] && r.case_id === b.dataset.rcase);
+  $$("#inbox [data-racc]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const r = find(b, "racc"); if (r) acceptReferralDialog(r.case_id, r, null); }));
+  $$("#inbox [data-rdec]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const r = find(b, "rdec"); if (r) answerReferral(r.case_id, r, "decline", showInbox); }));
+  $$("#inbox [data-rwd]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const r = find(b, "rwd"); if (r) answerReferral(r.case_id, r, "withdraw", showInbox); }));
 }
 
 // ------------------------------------------------------------------ board sessions and the Board room · V1 items 6.1 to 6.3
