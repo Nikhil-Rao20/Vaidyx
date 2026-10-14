@@ -81,7 +81,8 @@ def test_load_creates_default_file_and_caches(data_root):
 def test_load_fills_a_partly_filled_v2_file(data_root):
     (data_root / "org.json").write_text(json.dumps({"version": 2, "hospital": {"name": "Synthetic Cancer Centre"}, "users": {"a": {"departments": {"pathology": "head"}}}}))
     o = org.load()
-    assert o["hospital"] == {"name": "Synthetic Cancer Centre", "level": "essential", "type": "", "pmjay_empanelled": True, "fetch_window_months": 12}
+    assert o["hospital"] == {**org.DEFAULT_HOSPITAL, "name": "Synthetic Cancer Centre", "level": "essential", "type": "", "pmjay_empanelled": True, "fetch_window_months": 12}
+    assert o["hospital"]["board_heads"] == ["radiology", "medical_oncology", "surgical_oncology", "pathology"]  # the board lists filled in (V2 item 6.1)
     assert len(o["departments"]) == len(org.DEFAULT_DEPARTMENTS) and o["admins"] == []
     assert org.roles("a")["departments"] == {"pathology": "head"}
     assert not (data_root / "org_audit.jsonl").exists()  # not a migration
@@ -218,7 +219,7 @@ def test_v1_file_is_migrated_on_load_and_audited(data_root):
     o = org.load()
     raw = json.loads(org.path().read_text())
     assert raw["version"] == 2 and o["version"] == 2
-    assert o["hospital"] == {"name": "Synthetic Cancer Centre", "level": "optimal", "type": "public", "pmjay_empanelled": True, "fetch_window_months": 12}
+    assert o["hospital"] == {**org.DEFAULT_HOSPITAL, "name": "Synthetic Cancer Centre", "level": "optimal", "type": "public", "pmjay_empanelled": True, "fetch_window_months": 12}
     ids = [d["id"] for d in o["departments"]]
     assert ids[:30] == [d["id"] for d in org.DEFAULT_DEPARTMENTS] and ids[30:] == ["cardiology"]
     assert org.department("cardiology")["group"] == "supporting" and org.department("cardiology")["aliases"] == ["Cardio"]
@@ -434,6 +435,10 @@ CAN = [
     ("answer_referral", "pathology", (0, 0, 0, 0, 0, 0, 1, 0)),
     ("answer_referral", None, (0, 0, 0, 0, 0, 0, 1, 0)),
     ("answer_referral", "Cardiology", (0, 0, 0, 0, 0, 0, 1, 0)),
+    # V2 item 6.1: the owner marks the Case File ready (access.may adds the owner rule); reminders by the MDT Coordinator on the owner's behalf
+    # or by the owner's doctors (access.may_remind)
+    ("mark_ready", None, (0, 0, 0, 1, 0, 0, 1, 0)),
+    ("remind", None, (0, 0, 1, 1, 0, 0, 1, 0)),
 ]
 DEPT_ACTIONS = sorted(a for a, rule in org.ACTIONS.items() if rule["dept"])
 

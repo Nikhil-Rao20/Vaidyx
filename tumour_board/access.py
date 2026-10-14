@@ -21,7 +21,7 @@ SCOPES = (FULL, REQUESTS)
 # The clinical actions a treating doctor does on the Case Files its department owns (plan section 4). The other actions keep their
 # org.ACTIONS rule (board and session actions for the coordinator, a department's own upload for its doctors, reading for everyone in scope).
 OWNER_ACTIONS = frozenset({"waive", "confirm", "dismiss_failed", "upload_to_case", "send_request", "create_request", "close_request",
-                           "delete_document", "refer", "manage_participants"})
+                           "delete_document", "refer", "manage_participants", "mark_ready"})
 RECENT_DAYS = 7  # a department that received a request keeps its limited view this long after the request closed (as its inbox lists it)
 REFERRAL_OPEN = "requested"
 
@@ -216,6 +216,14 @@ def require(r: dict, action: str, case: dict, department: str | None = None) -> 
         raise PermissionError(f"Only the doctors of {org.department_name(own)}, which owns this Case File, can do '{action}' on it"
                               + (" (your department takes part: read and comment)." if set(participants(case)) & _mine(r) else "."))
     org.require(r, action, department)
+
+
+def may_remind(r: dict, case: dict) -> bool:
+    """Send a reminder about a Case File's requests (V2 item 6.1): the MDT Coordinator on the owner's behalf, the Vaidyx admin, and the
+    owning department's doctors (any treating doctor on a Case File without an owner)."""
+    if not org.can(r, "remind"):
+        return False
+    return bool(r.get("admin") or r.get("coordinator")) or is_owner_doctor(r, case)
 
 
 def may_list(r: dict, case: dict) -> bool:

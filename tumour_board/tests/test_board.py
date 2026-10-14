@@ -67,7 +67,9 @@ def test_create_from_listed_cases(cases, data_root):
     assert s["id"].startswith("S20261020-") and len(s["id"]) == len("S20261020-") + 4
     assert [a["case_id"] for a in s["agenda"]] == cases and all(a["status"] == "waiting" for a in s["agenda"])
     assert s["status"] == "planned" and s["title"] == "Thoracic board"
-    assert set(s["attendance"]) == {d["id"] for d in board.specialties()} and set(s["attendance"].values()) == {"not_marked"}
+    # V2 item 6.1: the sheet lists the heads, the on-demand specialties and the owners of the agenda's Case Files (none here), not all 30
+    assert set(s["attendance"]) == {d["id"] for d in board.attendance_list(s)} == {"radiology", "medical_oncology", "surgical_oncology", "pathology", "radiation_oncology", "nuclear_medicine"}
+    assert set(s["attendance"].values()) == {"not_marked"} and [d["id"] for d in board.attendance_list(s)][:4] == board.head_ids()
     assert "tumour_board" not in s["attendance"]
     assert (data_root / "sessions" / f"{s['id']}.json").exists()
     assert board.get(s["id"]) == s
@@ -145,8 +147,8 @@ def test_members_and_participants(cases):
     board.set_attendance(sid, "pathology", "present", "coord")
     s = board.remove_member(sid, s["members"][1]["id"], "coord")
     p = board.participants(s)
-    assert p["text"] == "Dr Anita Rao (Medical Oncology), Pathology; absent: Surgical Oncology, Radiology"
-    assert p["present"] == ["Medical Oncology", "Pathology"] and p["absent"] == ["Surgical Oncology", "Radiology"]
+    assert p["text"] == "Dr Anita Rao (Medical Oncology), Pathology; absent: Radiology, Surgical Oncology"  # the sheet's order: heads first (V2 6.1)
+    assert p["present"] == ["Medical Oncology", "Pathology"] and p["absent"] == ["Radiology", "Surgical Oncology"]
     assert board.absent_roles(s) == ["radiology", "surgical_oncology"]
     for bad in ("", "   ", "x" * 121):
         with pytest.raises(ValueError):
@@ -268,6 +270,8 @@ def _decided_session(cases, decision="Await EGFR result <script>alert(1)</script
     sid = _session(cases)["id"]
     board.add_member(sid, "Dr Anita Rao", "medical_oncology", "coord")
     board.set_attendance(sid, "pathology", "absent", "coord")
+    for d in ("radiology", "surgical_oncology"):  # V2 item 6.2: a head not recorded present would have its agent active too
+        board.set_attendance(sid, d, "present", "coord")
     board.start(sid, "chair")
     board.log_brief(sid, "TB-A", "pathology", BRIEF)
     board.log_brief(sid, "TB-A", "pathology", {**BRIEF, "generated": "2026-10-20T10:00:00", "points_for_review": []})
@@ -476,6 +480,8 @@ def test_export_html_models_statuses_absent_names(cases):
     sid = _session(cases)["id"]
     board.set_attendance(sid, "radiology", "absent", "coord")
     board.set_attendance(sid, "surgical_oncology", "absent", "coord")
+    for d in ("medical_oncology", "pathology"):  # the other heads recorded present (V2 item 6.2)
+        board.set_attendance(sid, d, "present", "coord")
     board.log_brief(sid, "TB-A", "radiology", {**BRIEF, "model": "reasoner"})
     board.log_brief(sid, "TB-A", "pathology", {"label": "Pathology support", "no_documents": True, "message": "No pathology documents"})
     board.log_answer(sid, "TB-A", "pathology", "Give chemo?", {"status": "out_of_scope", "message": "Outside the agent's scope.", "model": "Gemma-4-31B-it"})
@@ -535,9 +541,10 @@ def test_v1_attendance_keys_resolve(cases):
     new mark replaces the old key."""
     sid = _session(cases)["id"]
     s = board.get(sid)
-    s["attendance"] = {"radio_diagnosis": "absent", "pathology": "present", "tumour_board": "present", "laboratory_medicine": "not_marked"}
+    s["attendance"] = {"radio_diagnosis": "absent", "pathology": "present", "tumour_board": "present", "laboratory_medicine": "not_marked",
+                       "medical_oncology": "present", "surgical_oncology": "present"}
     board._save(s)
-    assert board.attendance(board.get(sid)) == {"radiology": "absent", "pathology": "present", "biochemistry": "not_marked"}
+    assert board.attendance(board.get(sid)) == {"radiology": "absent", "pathology": "present", "biochemistry": "not_marked", "medical_oncology": "present", "surgical_oncology": "present"}
     assert board.absent_roles(board.get(sid)) == ["radiology"] and board.participants(board.get(sid))["absent"] == ["Radiology"]
     s = board.set_attendance(sid, "radiology", "present", "coord")
     assert "radio_diagnosis" not in s["attendance"] and s["attendance"]["radiology"] == "present"

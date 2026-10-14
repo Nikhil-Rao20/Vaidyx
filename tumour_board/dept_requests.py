@@ -266,6 +266,107 @@ def _tell_owner(case: dict, a: dict, kind: str, title: str, text: str, **extra) 
         return {"error": f"{e.__class__.__name__}: {e}"}
 
 
+# ---- reminders on the owner's behalf (V2 item 6.1) ---------------------------------------------------------------------------------
+
+def _owner_name(case: dict) -> str:
+    did = org.department_id(case.get("department") or "") if case.get("department") else None
+    return org.department_name(did) if did else "the treating team"
+
+
+def _sender(user: str, roles: dict | None, case: dict) -> str:
+    """How the reminder names its sender: the MDT Coordinator sends on the owning department's behalf; an owner's doctor in its own name."""
+    r = roles or {}
+    own = org.department_id(case.get("department") or "") if case.get("department") else None
+    if r.get("coordinator") and not (own and own in (r.get("treating") or {})):
+        return f"{user} (MDT Coordinator, on behalf of {_owner_name(case)})"
+    return f"{user} ({_owner_name(case)})"
+
+
+def remind(case_id: str, action_id: str, user: str, roles: dict | None = None, note: str = "") -> dict:
+    """A reminder about one request: a sent one reaches the department holding it again (kind request_reminder, the request keeps its
+    due date); a suggested one that nobody sent reminds the owning department to send it (kind owner_reminder). Recorded on the request
+    (`reminders`), in its history and in the audit log. Nothing is sent to anyone the request does not already concern."""
+    case = store.get_case(case_id)
+    if not case:
+        raise RequestError("Case File not found.", 404)
+    st = store.get_state(case_id)
+    a = find(st, action_id)
+    if a.get("status") == "completed":
+        raise RequestError("This request is closed; nothing to remind about.", 409)
+    note = " ".join(str(note or "").split())[:MAX_MESSAGE]
+    now, sender = store.now_iso(), _sender(user, roles, case)
+    patient = (case.get("patient") or {}).get("name") or case_id
+    label = a.get("label") or "Request"
+    if is_sent(a):
+        to = _to(a)
+        if not to["department"] and not to["role"]:
+            raise RequestError(f"No department of the hospital matches \"{a.get('department')}\".", 409)
+        due = a.get("due") or ""
+        text = (f"Reminder about the request sent on {_dmy((a.get('sent') or {}).get('at'))}: {a.get('what') or label}."
+                + (f" Due {_dmy(due)}." if due else "") + (f" {note}" if note else "") + f" Sent by {sender}.")
+        n = notify.notify({"department": to["department"]} if to["department"] else {"role": "coordinator"}, "request_reminder", case_id,
+                          f"Reminder: {label} needed for {patient} ({case_id})", text, action_id=a["id"], requirement=a.get("requirement"), due=due,
+                          accession=a.get("accession"), sent_by=user, on_behalf_of=case.get("department") or "", uhid=(case.get("patient") or {}).get("mrn") or "",
+                          encounter=encounter_numbers(case))
+        kind, target = "request_reminded", to["name"]
+    else:
+        to_dept = {"department": case["department"]} if case.get("department") and org.department_id(case["department"]) else None
+        if not to_dept:
+            raise RequestError("This Case File has no owning department to remind; the request can be sent from the Pre-Authorization tab.", 409)
+        text = (f"The Pre-Authorization suggested a request to {a.get('department') or 'a department'} ({a.get('what') or label}) that nobody has sent yet."
+                + (f" The board is on {_dmy(case.get('board_date'))}." if case.get("board_date") else "") + (f" {note}" if note else "") + f" Reminder from {sender}.")
+        n = notify.notify(to_dept, "owner_reminder", case_id, f"Suggested request not sent: {label} for {patient} ({case_id})", text,
+                          action_id=a["id"], requirement=a.get("requirement"), sent_by=user)
+        kind, target = "owner_reminded", _owner_name(case)
+    rec = {"by": user, "at": now, "to": target, "note": note, "notification_id": n.get("id"), "sent": is_sent(a)}
+    a.setdefault("reminders", []).append(rec)
+    a.setdefault("history", []).append({"ts": now, "event": f"Reminder to {target} by {user}" + (f": {note}" if note else "")})
+    store.save_state(case_id, st)
+    store.audit(case_id, {"kind": kind, "action": a["id"], "requirement": a.get("requirement"), "to": target, "by": user, "note": note[:300]})
+    return a
+
+
+def remind_owner(case_id: str, user: str, roles: dict | None = None, note: str = "") -> dict:
+    """One reminder to the owning department about the Case File as a whole before the board: the suggested requests nobody sent, the
+    overdue requests, the summary (missing or stale) and whether the owner has marked it ready (V2 item 6.1). Audited."""
+    from . import rules
+    case = store.get_case(case_id)
+    if not case:
+        raise RequestError("Case File not found.", 404)
+    if not (case.get("department") and org.department_id(case["department"])):
+        raise RequestError("This Case File has no owning department to remind.", 409)
+    st = store.get_state(case_id)
+    acts = [a for a in st.get("actions") or [] if a.get("source") == "pre_authorization" and a.get("status") != "completed"]
+    unsent = [a for a in acts if a.get("status") == SUGGESTED]
+    overdue = [a for a in acts if is_sent(a) and a.get("due") and str(a["due"])[:10] < _today().isoformat()]
+    arts = st.get("artefacts") or {}
+    summ = arts.get("summary")
+    stale = bool(summ and summ.get("signature") and rules.stale_reason(summ["signature"], rules.case_signature(case_id, st)))
+    parts = []
+    if unsent:
+        parts.append(f"{len(unsent)} suggested request(s) not sent: " + "; ".join(f"{a.get('label')} ({a.get('department')})" for a in unsent[:6]))
+    if overdue:
+        parts.append(f"{len(overdue)} request(s) overdue: " + "; ".join(f"{a.get('label')} ({a.get('department')}, due {_dmy(a.get('due'))})" for a in overdue[:6]))
+    if not summ:
+        parts.append("no Case File summary compiled yet")
+    elif stale:
+        parts.append("the Case File summary is stale (records changed since it was compiled)")
+    if not (case.get("board_ready") or {}).get("at"):
+        parts.append("not marked ready for the board")
+    note = " ".join(str(note or "").split())[:MAX_MESSAGE]
+    patient = (case.get("patient") or {}).get("name") or case_id
+    text = ((f"Before the board on {_dmy(case.get('board_date'))}: " if case.get("board_date") else "Before the board: ")
+            + ("; ".join(parts) if parts else "nothing open") + "." + (f" {note}" if note else "") + f" Reminder from {_sender(user, roles, case)}.")
+    n = notify.notify({"department": case["department"]}, "owner_reminder", case_id, f"Before the board: {patient} ({case_id})", text, sent_by=user,
+                      unsent=len(unsent), overdue=len(overdue))
+    now = store.now_iso()
+    case.setdefault("reminders", []).append({"by": user, "at": now, "note": note, "notification_id": n.get("id"), "unsent": len(unsent), "overdue": len(overdue)})
+    store.save_case(case)
+    store.audit(case_id, {"kind": "owner_reminded", "by": user, "unsent": len(unsent), "overdue": len(overdue), "summary": "none" if not summ else ("stale" if stale else "ready"),
+                          "note": note[:300]})
+    return {"case_id": case_id, "to": _owner_name(case), "text": text, "unsent": len(unsent), "overdue": len(overdue), "notification_id": n.get("id")}
+
+
 def acknowledge(case_id: str, action_id: str, user: str) -> dict:
     """The supporting department has read the request and is working on it."""
     case = store.get_case(case_id)

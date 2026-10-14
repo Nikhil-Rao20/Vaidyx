@@ -85,7 +85,18 @@ DEFAULT_DEPARTMENTS = [
     _d("dental_surgery", "Dental Surgery / Oral and Maxillofacial Surgery", "supporting", ["Dental Surgery", "Dental", "Oral and Maxillofacial Surgery", "OMFS", "Dentistry"]),
     _d("anaesthesiology", "Anaesthesiology", "supporting", ["Anaesthesia", "Anesthesiology", "Pre-anaesthetic check-up", "PAC"]),
 ]
-DEFAULT_HOSPITAL = {"name": "", "level": "essential", "type": "", "pmjay_empanelled": True, "fetch_window_months": 12}
+# The board (V2 item 6.1 / 6.2 / 6.4): the four heads (each must have a specialty agent: board.ROLE_DEPARTMENT), the departments the
+# hospital's attendance sheet lists besides them and the owners of the Case Files on the agenda, the departments whose surgeon fills the
+# surgical seat for a Case File of its own, and the departments PM-JAY HBP 2.2 accepts as the surgical oncologist (plan section 8, 6.4).
+BOARD_HEADS = ["radiology", "medical_oncology", "surgical_oncology", "pathology"]
+SURGICAL_DEPARTMENTS = ["surgical_oncology", "general_surgery", "breast_surgery", "gynaecologic_oncology", "ent_head_neck_surgery", "urology",
+                        "gastrointestinal_surgery", "thoracic_surgery", "neurosurgery", "orthopaedic_oncology", "hepatobiliary_pancreatic_surgery",
+                        "colorectal_surgery", "plastic_reconstructive_surgery"]
+PMJAY_SURGICAL_ONCOLOGY = ["surgical_oncology", "gynaecologic_oncology", "orthopaedic_oncology"]
+DEFAULT_HOSPITAL = {"name": "", "level": "essential", "type": "", "pmjay_empanelled": True, "fetch_window_months": 12,
+                    "board_heads": list(BOARD_HEADS), "board_attendance": [], "surgical_departments": list(SURGICAL_DEPARTMENTS),
+                    "pmjay_surgical_oncology": list(PMJAY_SURGICAL_ONCOLOGY)}
+BOARD_LISTS = ("board_heads", "board_attendance", "surgical_departments", "pmjay_surgical_oncology")  # hospital keys that list department ids
 DEFAULT_ORG = {"version": VERSION, "hospital": DEFAULT_HOSPITAL, "departments": DEFAULT_DEPARTMENTS, "users": {}, "admins": [], "routes": {}}
 LEVELS = ("essential", "optimal")
 TYPES = ("", "public", "private")
@@ -161,6 +172,10 @@ ACTIONS = {
                         "doc": "Accept or decline a referral addressed to a department: the doctors of that department (V2 item 5.2)"},
     "manage_participants": {"who": ("treating",), "dept": False,
                             "doc": "Add or remove the departments that take part in a Case File, read and comment (the owning department's doctors; V2 item 5.1)"},
+    "mark_ready": {"who": ("treating",), "dept": False,
+                   "doc": "Mark a Case File ready for the board, or take the mark back (the owning department's doctors; the MDT Coordinator builds the agenda from these; V2 item 6.1)"},
+    "remind": {"who": ("coordinator", "treating"), "dept": False,
+               "doc": "Send a reminder about an open request to the department holding it, or about unsent suggestions to the owning department: the MDT Coordinator on the owner's behalf, or the owner's doctors (access.may_remind; V2 item 6.1)"},
 }
 
 _SLUG = re.compile(r"^[a-z0-9_]+$")
@@ -459,6 +474,22 @@ def validate(org: dict) -> dict:
         names.add(name.lower())
         depts.append(d)
     out["departments"] = depts
+    for key in BOARD_LISTS:  # the board lists name existing departments, each once (V2 items 6.1 / 6.2 / 6.4)
+        lst = h.get(key, DEFAULT_HOSPITAL[key])
+        if lst is None:
+            lst = []
+        if not isinstance(lst, list) or not all(isinstance(x, str) for x in lst):
+            raise ValueError(f"Hospital setting {key} must be a list of department ids.")
+        clean = []
+        for x in lst:
+            x = x.strip()
+            if x and x not in ids:
+                raise ValueError(f"Hospital setting {key} names an unknown department {x!r}.")
+            if x and x not in clean:
+                clean.append(x)
+        if key == "board_heads" and not clean:
+            raise ValueError("The board needs at least one head (hospital setting board_heads).")
+        h[key] = clean
 
     if not isinstance(out["users"], dict):
         raise ValueError("Users must be an object keyed by username.")
@@ -523,6 +554,11 @@ def validate(org: dict) -> dict:
         clean_routes[key] = did
     out["routes"] = clean_routes
     return out
+
+
+def hospital() -> dict:
+    """The hospital settings (name, NCG level, type, PM-JAY empanelled, fetch window, the board lists), defaults filled."""
+    return {**DEFAULT_HOSPITAL, **(load().get("hospital") or {})}
 
 
 def departments(group: str | None = None) -> list[dict]:

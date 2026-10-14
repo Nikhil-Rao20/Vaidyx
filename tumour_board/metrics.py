@@ -92,6 +92,8 @@ def _case_readiness(c: dict, st: dict, today: date, board_day) -> dict:
         forecast, why = "on_track", "re-check pending"
     return {"case_id": c["case_id"], "patient": (c.get("patient") or {}).get("name") or c["case_id"], "protocol": c.get("protocol"), "board_date": c.get("board_date"),
             "owner": c.get("department") or None, "owner_name": org.department_name(c["department"]) if c.get("department") else "",  # the owning treating department (V2 item 5.1)
+            "ready": c.get("board_ready") or None,  # marked ready for the board by the owner (V2 item 6.1)
+            "reminders": len(c.get("reminders") or []),
             "readiness": gate.get("readiness"), "passed": bool(gate.get("passed")), "satisfied": gate.get("satisfied"), "total": gate.get("total"),
             "level1_open": (gate.get("levels") or {}).get("1", {}).get("open", 0), "level2_open": (gate.get("levels") or {}).get("2", {}).get("open", 0),
             "open_requests": len(pre), "unsent_requests": len(unsent), "overdue": len(overdue), "due_after_board": len(after_board), "blockers": len(gate.get("blockers") or []),
@@ -115,7 +117,8 @@ def agenda(board_date: str) -> dict:
                 continue
             due = _d(a.get("due"))
             dept = a.get("department") or org.COORDINATOR_NAME
-            chase.setdefault(dept, []).append({"case_id": c["case_id"], "patient": rows[-1]["patient"], "label": a.get("label"), "what": a.get("what"), "due": a.get("due"),
+            chase.setdefault(dept, []).append({"case_id": c["case_id"], "action_id": a.get("id"), "patient": rows[-1]["patient"], "label": a.get("label"), "what": a.get("what"), "due": a.get("due"),
+                                               "reminders": len(a.get("reminders") or []),  # reminders sent so far (V2 item 6.1)
                                                "days_left": (due - today).days if due else None, "overdue": bool(due and due < today), "after_board": bool(due and bd and due > bd),
                                                "source": a.get("source"), "level": a.get("level_label"),
                                                "unsent": a.get("status") == "suggested", "sent_by": (a.get("sent") or {}).get("by") if isinstance(a.get("sent"), dict) else None})

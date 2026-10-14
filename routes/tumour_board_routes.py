@@ -178,6 +178,7 @@ def _case_permissions(r, c, st, docs):
             "answer_referral": bool(access.open_referral(c)) and org.can(r, "answer_referral", (access.open_referral(c) or {}).get("to")),
             "withdraw_referral": bool(access.open_referral(c)) and access.may(r, "refer", c),
             "set_owner": not access.owner(c) and org.can(r, "create_case"),
+            "mark_ready": access.may(r, "mark_ready", c), "remind": access.may_remind(r, c),  # V2 item 6.1
             "answer_request": {a["id"]: _can_answer(r, a) for a in st.get("actions", []) if a.get("source") == "pre_authorization"},  # V2 item 4.3
             "undo_confirmation": {x["id"]: _can_confirm(r, c, st, x["type"], x["key"]) for x in st.get("confirmations", []) if not x.get("undone")}}
 
@@ -1091,6 +1092,43 @@ def setup_tumour_board_routes():
             return Response(out[0], media_type=out[1])
         return FileResponse(p)
 
+    @r.post("/cases/{case_id}/ready")
+    async def case_ready(case_id: str, request: Request):
+        """{"ready": true | false, "note"?}: the owning department marks the Case File ready for the board (or takes it back); the MDT
+        Coordinator builds the agenda from the ready Case Files (V2 item 6.1)."""
+        u = _user(request); c = _case(case_id); _need_case(_roles(request), "mark_ready", c); b = await request.json() if (await request.body()) else {}
+        try:
+            c = board.mark_ready(case_id, u, ready=bool(b.get("ready", True)), note=str(b.get("note") or ""))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {"case_id": case_id, "board_ready": c.get("board_ready") or None, "history": c.get("board_ready_history") or []}
+
+    @r.post("/cases/{case_id}/requests/{action_id}/remind")
+    async def request_remind(case_id: str, action_id: str, request: Request):
+        """A reminder about one request (V2 item 6.1): the MDT Coordinator on the owner's behalf, or the owner's doctors. A sent request
+        reaches its department again; a suggested one reminds the owning department to send it."""
+        u = _user(request); rl = _roles(request); c = _case(case_id)
+        if not access.may_remind(rl, c):
+            raise HTTPException(403, "Reminders are sent by the MDT Coordinator on the owner's behalf or by the owning department's doctors.")
+        b = await request.json() if (await request.body()) else {}
+        try:
+            return dept_requests.remind(case_id, action_id, u, rl, note=str(b.get("note") or ""))
+        except dept_requests.RequestError as e:
+            raise HTTPException(e.status, str(e))
+
+    @r.post("/cases/{case_id}/remind-owner")
+    async def remind_owner(case_id: str, request: Request):
+        """One reminder to the owning department about the Case File before the board: unsent suggestions, overdue requests, the
+        summary, the ready mark (V2 item 6.1). The MDT Coordinator, or the owner's own doctors."""
+        u = _user(request); rl = _roles(request); c = _case(case_id)
+        if not access.may_remind(rl, c):
+            raise HTTPException(403, "Reminders are sent by the MDT Coordinator on the owner's behalf or by the owning department's doctors.")
+        b = await request.json() if (await request.body()) else {}
+        try:
+            return dept_requests.remind_owner(case_id, u, rl, note=str(b.get("note") or ""))
+        except dept_requests.RequestError as e:
+            raise HTTPException(e.status, str(e))
+
     @r.post("/cases/{case_id}/recheck")
     async def recheck(case_id: str, request: Request):
         u = _user(request); _need_known(_roles(request)); _case(case_id)
@@ -1533,36 +1571,58 @@ def setup_tumour_board_routes():
         if case_id not in {a["case_id"] for a in s["agenda"]}:
             raise HTTPException(404, "This Case File is not on the session's agenda")
 
+    def _need_open(rl, s):
+        """Who may open a session (V2 item 6.1): the MDT Coordinator, the Vaidyx admin, a doctor on the attendance sheet or of a department
+        that may read a Case File on the agenda."""
+        if not board.may_open(rl, s):
+            raise HTTPException(403, "This board session is open to the MDT Coordinator, the departments on its attendance sheet and the departments of the Case Files on its agenda.")
+
     def _room(s, rl):
-        """Everything the Board room shows: the session, the specialties, and for each Case File on the agenda its gate, its summary and
-        the briefs of the absent specialties' agents (with their stale state)."""
+        """Everything the Board room shows: the session, the attendance sheet (heads first), and for each Case File on the agenda its gate,
+        its summary, the briefs of the agents active for it (a head not recorded present, the surgical seat rule; V2 item 6.2), its
+        records (6.3), its decision and the follow-up (6.1). A doctor sees the Case Files it may read; the others are restricted."""
+        by_case = board.absent_roles_by_case(s)
         absent = board.absent_roles(s)
+        full = bool(rl.get("admin") or rl.get("coordinator"))
         cases = {}
         for a in s["agenda"]:
             cid = a["case_id"]; c = store.get_case(cid)
             if not c:
                 cases[cid] = {"missing": True}; continue
+            if not full and access.scope(rl, c) != access.FULL:  # a department that may not read this Case File (V2 item 5.1)
+                cases[cid] = {"restricted": True, "protocol": c.get("protocol"), "owner_name": org.department_name(c["department"]) if c.get("department") else "",
+                              "agents": by_case.get(cid, []), "seat": board.seat(s, c)}; continue
             st = store.get_state(cid); g = st.get("gate") or {}
             sig = rules.case_signature(cid, st)
             arts = st.get("artefacts") or {}
+            roles_ = by_case.get(cid, [])
             stale = lambda x: (rules.stale_reason(x["signature"], sig) if x.get("signature") else "Compiled before the Case File signature was kept") if x else ""
             cases[cid] = {"patient": c.get("patient") or {}, "protocol": c.get("protocol"), "setting": c.get("setting"), "board_date": c.get("board_date"),
+                          "owner": c.get("department") or None, "owner_name": org.department_name(c["department"]) if c.get("department") else "",
+                          "ready": c.get("board_ready") or None, "linked_cases": [l.get("case_id") for l in c.get("linked_cases") or [] if isinstance(l, dict)],
                           "gate": {"passed": g.get("passed"), "satisfied": g.get("satisfied"), "total": g.get("total"), "readiness": g.get("readiness")},
                           "summary": arts.get("summary"), "summary_stale": stale(arts.get("summary")),
-                          "briefs": {r_: arts.get(f"brief_{r_}") for r_ in absent if arts.get(f"brief_{r_}")},
-                          "briefs_stale": {r_: stale(arts.get(f"brief_{r_}")) for r_ in absent if arts.get(f"brief_{r_}")},
+                          "agents": roles_, "seat": board.seat(s, c),  # the agents active for this Case File and the surgical seat (V2 item 6.2)
+                          "briefs": {r_: arts.get(f"brief_{r_}") for r_ in agents.ROLES if arts.get(f"brief_{r_}") and (r_ in roles_ or r_ in board.ON_DEMAND)},
+                          "briefs_stale": {r_: stale(arts.get(f"brief_{r_}")) for r_ in agents.ROLES if arts.get(f"brief_{r_}") and (r_ in roles_ or r_ in board.ON_DEMAND)},
                           "board_records": [{"id": b_["id"], "board_date": b_.get("board_date"), "session": b_.get("session"), "status": b_["adjudication"]["status"],
                                              "flags": len(b_["adjudication"]["flags"]), "composition": b_["adjudication"].get("composition"),
                                              "resolution": b_.get("resolution"), "version": b_.get("version", 1)} for b_ in st.get("board_records", [])]}
-        return {"session": s, "specialties": board.specialties(), "absent_roles": absent, "participants": board.participants(s),
+        return {"session": s, "specialties": board.specialties(), "attendance_list": board.attendance_list(s), "heads": board.heads(), "on_demand": list(board.ON_DEMAND),
+                "absent_roles": absent, "absent_roles_by_case": by_case, "participants": board.participants(s),
                 "roles": {k: {"label": agents.spec(k)["label"], "department": agents.department_of(k)} for k in agents.ROLES},
                 "cases": cases, "can_manage": org.can(rl, "session"), "can_ask": bool(rl.get("admin") or rl.get("known")), "can_review": org.can(rl, "review"),
-                "marks": board.MARKS}
+                "can_record": org.can(rl, "board_record"), "marks": board.MARKS,
+                "followup": board.followup(s) if s.get("decisions") else None,  # the board's actions after the session (V2 item 6.1)
+                "pmjay_empanelled": bool(org.hospital().get("pmjay_empanelled", True))}
 
     @r.get("/sessions")
     async def sessions(request: Request):
         rl = _roles(request)
-        return {"sessions": board.list_sessions(), "can_manage": org.can(rl, "session")}
+        rows = board.list_sessions()
+        if not (rl.get("admin") or rl.get("coordinator")):  # a doctor sees the sessions it may open (V2 item 6.1)
+            rows = [x for x in rows if board.may_open(rl, board.get(x["id"]))]
+        return {"sessions": rows, "can_manage": org.can(rl, "session"), "heads": board.heads()}
 
     @r.get("/sessions/candidates")
     async def session_candidates(request: Request, date: str = ""):
@@ -1582,8 +1642,18 @@ def setup_tumour_board_routes():
 
     @r.get("/sessions/{sid}")
     async def session_get(sid: str, request: Request):
-        rl = _roles(request); sid = _session(sid)["id"]
+        rl = _roles(request); s = _session(sid); sid = s["id"]; _need_open(rl, s)
         return _room(service.session_interrupted(sid), rl)
+
+    @r.get("/sessions/{sid}/minutes")
+    async def session_minutes(sid: str, request: Request, format: str = "html"):
+        """The minutes of the session (V2 item 6.1): attendance, the decisions as dictated, the actions and their follow-up. Audited."""
+        u = _user(request); rl = _roles(request); s = _session(sid); sid = s["id"]; _need_open(rl, s)
+        board.audit_session(sid, {"kind": "minutes_export", "by": u, "format": format})
+        if format == "json":
+            return JSONResponse(board.minutes(sid), headers={"Content-Disposition": f'attachment; filename="{sid}_minutes.json"'})
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(board.minutes_html(sid), headers={"Content-Disposition": f'attachment; filename="{sid}_minutes.html"'})
 
     @r.put("/sessions/{sid}/agenda")
     async def session_agenda(sid: str, request: Request):
@@ -1646,7 +1716,9 @@ def setup_tumour_board_routes():
     @r.post("/sessions/{sid}/cases/{case_id}/agents/{role}/ask")
     async def session_ask(sid: str, case_id: str, role: str, request: Request):
         """The board asks an absent specialty's agent (V1 item 6.2); the answer goes to the session's agent log (6.3)."""
-        u = _user(request); rl = _roles(request); _need_known(rl); s = _session(sid); sid = s["id"]; _on_agenda(s, case_id); _case(case_id)
+        u = _user(request); rl = _roles(request); _need_known(rl); s = _session(sid); sid = s["id"]; _on_agenda(s, case_id); c = _case(case_id); _need_open(rl, s)
+        if not (rl.get("admin") or rl.get("coordinator")) and access.scope(rl, c) != access.FULL:  # a doctor asks about the Case Files it may read (V2 item 5.1)
+            raise HTTPException(403, access.refusal(rl, c))
         b = await request.json()
         if role not in agents.ROLES:
             raise HTTPException(404, "unknown role")
@@ -1687,7 +1759,7 @@ def setup_tumour_board_routes():
     @r.get("/sessions/{sid}/export")
     async def session_export(sid: str, request: Request, format: str = "html"):
         """What the agents said vs what the board decided, side by side (V1 item 6.3). Reporting only. Audited."""
-        u = _user(request); sid = _session(sid)["id"]
+        u = _user(request); s = _session(sid); sid = s["id"]; _need_open(_roles(request), s)
         board.audit_session(sid, {"kind": "export", "by": u, "format": format})
         if format == "json":
             return JSONResponse(board.export(sid), headers={"Content-Disposition": f'attachment; filename="{sid}_agent_log_and_decisions.json"'})

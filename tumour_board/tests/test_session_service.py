@@ -14,6 +14,8 @@ def _session():
     s = board.create("2026-12-04", "coord")
     board.set_attendance(s["id"], "radiology", "absent", "coord")
     board.set_attendance(s["id"], "pathology", "absent", "coord")
+    for d in ("medical_oncology", "surgical_oncology"):  # the other heads recorded present (V2 item 6.2: a head not recorded present has its agent active)
+        board.set_attendance(s["id"], d, "present", "coord")
     return s["id"]
 
 
