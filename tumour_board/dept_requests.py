@@ -24,6 +24,8 @@ from . import notify, org, store
 DEFAULT_SLA_DAYS = 3
 SUGGESTED = "suggested"
 OPEN = ("pending", "overdue")
+MAX_MESSAGE = 4000
+MAX_SUBJECT = 200
 
 
 class RequestError(Exception):
@@ -58,6 +60,11 @@ def find(state: dict, action_id: str) -> dict:
 def is_free(a: dict) -> bool:
     """A request the doctor wrote by hand (no protocol record behind it)."""
     return a.get("origin") == "doctor" or not a.get("requirement")
+
+
+def is_sent(a: dict) -> bool:
+    """The department received this request: sent through send(), or a V1 request opened before 4.2 (pending / overdue, notified at once)."""
+    return bool(a.get("sent")) or a.get("status") in OPEN
 
 
 def encounter_numbers(case: dict) -> dict:
@@ -149,14 +156,14 @@ def mailto(to: dict, subj: str, text: str) -> str:
     """A mailto: link the doctor's own mail program opens (plan 4.2: the server sends no email). "" when the department has no address."""
     if not to.get("email"):
         return ""
-    q = urllib.parse.urlencode({"subject": subj, "body": text}, quote_via=urllib.parse.quote)
+    q = urllib.parse.urlencode({"subject": subj, "body": text.replace("\r\n", "\n").replace("\n", "\r\n")}, quote_via=urllib.parse.quote)  # CRLF line breaks (RFC 6068)
     return f"mailto:{to['email']}?{q}"
 
 
 def draft(case: dict, a: dict, user: str = "") -> dict:
     """What the Notify dialog shows: the address, a subject, the editable body, the proposed due date and the mailto: link."""
     to = _to(a)
-    due = a.get("due") if a.get("status") in OPEN and a.get("sent") else proposed_due(a)
+    due = a.get("due") if a.get("status") in OPEN and a.get("due") else proposed_due(a)  # a sent request (also a V1 one) keeps its due date
     subj = subject(case, a)
     text = body(case, a, due, to)
     return {"action_id": a.get("id"), "to": to, "subject": subj, "body": text, "due": due, "mailto": mailto(to, subj, text),
@@ -175,9 +182,11 @@ def _check_due(due) -> str:
     if not s:
         return ""
     try:
-        date.fromisoformat(s)
+        d = date.fromisoformat(s)
     except ValueError:
         raise RequestError("The due date must be a date (YYYY-MM-DD).")
+    if d < _today():
+        raise RequestError(f"The due date {_dmy(s)} is in the past: choose today or a later date.")
     return s
 
 
@@ -194,10 +203,11 @@ def send(case_id: str, action_id: str, user: str, roles: dict | None = None, mes
     to = _to(a)
     if not to["department"] and not to["role"]:
         raise RequestError(f"No department of the hospital matches \"{a.get('department')}\": ask the root admin to route this record.", 409)
-    due = _check_due(due) or (a.get("due") if a.get("sent") else "") or proposed_due(a)
-    text = str(message or "").strip() or body(case, a, due, to)
-    text = text if _signature("", None)[:8] in text else text.rstrip() + "\n" + _signature(user, roles)
-    subj = str(subject_text or "").strip() or subject(case, a)
+    due = _check_due(due) or (a.get("due") if a.get("status") in OPEN and a.get("due") else "") or proposed_due(a)
+    text = str(message or "").strip()[:MAX_MESSAGE] or body(case, a, due, to)
+    sig = _signature(user, roles)  # the real sender's line is always the last line, whatever the text says (review M2)
+    text = text if text.rstrip().endswith(sig) else text.rstrip() + "\n" + sig
+    subj = str(subject_text or "").strip()[:MAX_SUBJECT] or subject(case, a)
     now = store.now_iso()
     again = bool(a.get("sent"))
     rec = {"by": user, "at": now, "to": to["department"] or to["role"], "to_name": to["name"], "subject": subj, "message": text, "channel": "in_app",
@@ -263,7 +273,7 @@ def acknowledge(case_id: str, action_id: str, user: str) -> dict:
         raise RequestError("Case File not found.", 404)
     st = store.get_state(case_id)
     a = find(st, action_id)
-    if a.get("status") == SUGGESTED or not a.get("sent"):
+    if a.get("status") == SUGGESTED or not is_sent(a):
         raise RequestError("This request has not been sent yet.", 409)
     if a.get("status") == "completed":
         raise RequestError("This request is closed.", 409)
@@ -288,7 +298,7 @@ def done(case_id: str, action_id: str, user: str, note: str = "") -> dict:
         raise RequestError("Case File not found.", 404)
     st = store.get_state(case_id)
     a = find(st, action_id)
-    if a.get("status") == SUGGESTED or not a.get("sent"):
+    if a.get("status") == SUGGESTED or not is_sent(a):
         raise RequestError("This request has not been sent yet.", 409)
     if a.get("status") == "completed":
         raise RequestError("This request is closed.", 409)

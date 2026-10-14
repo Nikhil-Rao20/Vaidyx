@@ -610,18 +610,19 @@ function reqStatus(a) {
   const late = a.days_overdue || daysLate(a.due);
   if (late) return ["c-bad", `Overdue ${late} d`];
   if (a.acknowledged) return ["c-info", "Acknowledged"];
-  return ["c-warn", a.sent ? `Sent ${dmyd(a.sent.at)}` : "Pending"];  // "Pending": a V1 request, sent automatically before V2 recorded the sending
+  return ["c-warn", a.sent ? `Sent ${esc(dmyd(a.sent.at))}` : "Pending"];  // "Pending": a V1 request, sent automatically before V2 recorded the sending
 }
 const encText = (e) => [e?.ip_no && "IP No. " + e.ip_no, e?.op_no && "OP No. " + e.op_no].filter(Boolean).join(" · ");
 const encHTML = (e) => [["ip_no", "IP No."], ["op_no", "OP No."]].filter(([k]) => e?.[k]).map(([k, l]) => `<div class="small">${l} <span class="mono">${esc(e[k])}</span></div>`).join("");
 function reqTrail(a) {
   // who did what: sent, acknowledged, done (with the note), closed; earlier sendings when the request moved to another department
   const s = a.sent, k = a.acknowledged, d = a.done, out = [];
-  (a.earlier || []).forEach((e) => out.push(`<span class="muted">Sent earlier to ${esc(e.to_name || e.to || "")} by ${esc(e.by || "")} on ${dmyt(e.at)}; the request moved since, so it is sent afresh</span>`));
-  if (s) out.push(`Sent to ${esc(s.to_name || a.department)} by <b>${esc(s.by)}</b> on ${dmyt(s.at)}${s.count > 1 ? ` (${s.count} times)` : ""}`);
-  if (k && !k.implied) out.push(`Acknowledged by <b>${esc(k.by)}</b> on ${dmyt(k.at)}`);
-  if (d) out.push(`Done, sent back by <b>${esc(d.by)}</b> on ${dmyt(d.at)}${d.note ? `: "${esc(d.note)}"` : ""}`);
-  if (a.status === "completed") out.push(a.closed_by ? `Closed by <b>${esc(a.closed_by)}</b>${a.completed ? " on " + dmyt(a.completed) : ""}` : `Closed by itself${a.completed ? " on " + dmyt(a.completed) : ""}: the record reached the Case File`);
+  (a.earlier || []).forEach((e) => out.push(e.sent ? `<span class="muted">Sent earlier to ${esc(e.sent.to_name || e.department || "")} by ${esc(e.sent.by || "")} on ${esc(dmyt(e.sent.at))}; the request moved since, so it is sent afresh</span>`
+    : `<span class="muted">Sent automatically to ${esc(e.department || "")} before V2 (no sending record); the request moved since, so it is sent afresh</span>`));
+  if (s) out.push(`Sent to ${esc(s.to_name || a.department)} by <b>${esc(s.by)}</b> on ${esc(dmyt(s.at))}${s.count > 1 ? ` (${s.count} times)` : ""}`);
+  if (k && !k.implied) out.push(`Acknowledged by <b>${esc(k.by)}</b> on ${esc(dmyt(k.at))}`);
+  if (d) out.push(`Done, sent back by <b>${esc(d.by)}</b> on ${esc(dmyt(d.at))}${d.note ? `: "${esc(d.note)}"` : ""}`);
+  if (a.status === "completed") out.push(a.closed_by ? `Closed by <b>${esc(a.closed_by)}</b>${a.completed ? " on " + esc(dmyt(a.completed)) : ""}` : `Closed by itself${a.completed ? " on " + esc(dmyt(a.completed)) : ""}: the record reached the Case File`);
   return out.length ? `<div class="reqtrail small">${out.map((x) => `<div>${x}</div>`).join("")}</div>` : "";
 }
 function requestHTML(a) {
@@ -635,7 +636,7 @@ function requestHTML(a) {
   const po = a.pending_order;
   return `<div class="action reqcard ${open ? (cls === "c-bad" ? "overdue" : sent ? "" : "suggested") : "completed"}" data-aid="${esc(a.id)}"><div class="h"><span>${free ? `<span class="chip c-info" title="Written by the treating doctor; no protocol record behind it">Free request</span> ` : ""}${esc(a.label)}${a.level ? ` <span class="chip c-lvl" title="${esc((LEVEL[a.level] || [])[1] || "")}">${esc(a.level_label || (LEVEL[a.level] || [])[0] || "")}</span>` : ""}${a.accession ? ` <span class="chip c-mono" title="Accession / Lab No. in the hospital system">${esc(a.accession)}</span>` : ""}${po ? ` <span class="chip ${po.stage === "cancelled" ? "c-bad" : "c-info"}">Ordered in the HIS: ${esc(stageText(po))}</span>` : ""}</span><span class="chip ${cls} reqst">${esc(txt)}</span></div>
     ${a.what ? `<div class="w">${esc(a.what)}</div>` : ""}${reqTrail(a)}
-    <div class="f"><span>Responsible Department: <b>${esc(dept)}</b>${sent && a.due ? ` · due ${dmyd(a.due)}` : open ? " · not sent yet" : ""}</span>${btns.length ? `<span>${btns.join("")}</span>` : ""}</div>
+    <div class="f"><span>Responsible Department: <b>${esc(dept)}</b>${sent && a.due ? ` · due ${esc(dmyd(a.due))}` : open ? " · not sent yet" : ""}</span>${btns.length ? `<span>${btns.join("")}</span>` : ""}</div>
     ${a.history?.length > 1 ? `<details class="small muted"><summary>History</summary>${a.history.map((h) => `<div>${esc(dmyt(h.ts))} ${esc(h.event)}</div>`).join("")}</details>` : ""}</div>`;
 }
 const crlf = (s) => String(s || "").replace(/\r?\n/g, "\r\n");  // RFC 6068: line breaks in a mailto: body are CRLF
@@ -675,7 +676,7 @@ function requestMessage(a) {
   // read-only: what was sent, to whom, by whom
   const s = a.sent || {};
   $("#modal-body").innerHTML = `<h3 style="color:#1f2933;margin-top:0">Request to ${esc(s.to_name || a.department)}</h3>
-    <div class="small muted">Sent by ${esc(s.by)} on ${dmyt(s.at)}${s.count > 1 ? `, ${s.count} times (the last sending is shown)` : ""}, in-app.${a.due ? ` Needed by ${dmyd(a.due)}.` : ""}</div>
+    <div class="small muted">Sent by ${esc(s.by)} on ${esc(dmyt(s.at))}${s.count > 1 ? `, ${s.count} times (the last sending is shown)` : ""}, in-app.${a.due ? ` Needed by ${esc(dmyd(a.due))}.` : ""}</div>
     <div class="form"><label for="reqview-subj">Subject</label><input id="reqview-subj" readonly value="${esc(s.subject || "")}"><label for="reqview">Message</label><textarea id="reqview" class="reqtxt" readonly>${esc(s.message || "")}</textarea></div>
     <div class="actions-row"><button class="ghost" id="reqview-copy">Copy</button><button class="primary" data-closemodal>Close</button></div>`;
   $("#modal").classList.remove("hidden");
@@ -1984,12 +1985,12 @@ async function showInbox() {
   const firstLines = (m) => String(m || "").split("\n").map((l) => l.trim()).filter((l) => l && !/^(To|Tumour Board Case File|Patient|Treating department|Sent by)\b/.test(l)).slice(0, 3).join("\n");
   const asked = (q) => { const s = q.sent || {}; const head = q.what || firstLines(s.message);
     return `${head ? `<div class="pre">${esc(head)}</div>` : ""}${s.message ? `<details class="small"><summary>Message${s.count > 1 ? ` (sent ${s.count} times)` : ""}</summary><div class="pre msg">${esc(s.message)}</div></details>` : ""}${s.by ? `<div class="muted">Sent by ${esc(s.by)} on ${dmyt(s.at)}</div>` : ""}`; };
-  const acts = (q, d) => { if (q.source !== "pre_authorization" || q.status === "completed" || !q.sent || !mayAnswer(d)) return "";
+  const acts = (q, d) => { if (q.source !== "pre_authorization" || q.status === "completed" || !(q.sent || q.status === "pending" || q.status === "overdue") || !mayAnswer(d)) return "";  // a V1 request (no sending record) is answered too
     return `${!q.acknowledged ? `<button class="ghost sm" data-ack="${esc(q.action_id)}" data-case="${esc(q.case_id)}">Acknowledge</button>` : ""}${!q.done ? `<button class="primary sm" data-done="${esc(q.action_id)}" data-case="${esc(q.case_id)}" title="The report is signed in your own system: send &quot;done&quot; back with an optional note">Done</button>` : ""}`; };
   const row = (q, d) => `<tr class="click" data-case="${esc(q.case_id)}" data-aid="${esc(q.action_id)}"><td><b>${esc(q.patient?.name || q.case_id)}</b><div class="small muted">${esc(q.case_id)}${q.patient?.agesex ? " · " + esc(q.patient.agesex) : ""}${q.board_date ? " · board " + dmyd(q.board_date) : ""}</div>
         ${q.uhid || q.patient?.mrn ? `<div class="small">UHID <span class="mono">${esc(q.uhid || q.patient.mrn)}</span></div>` : ""}${encHTML(q.encounter)}</td>
       <td>${q.source === "board" ? `<span class="chip c-info">${esc(q.source_label)}</span> ` : q.free ? `<span class="chip c-info">Free request</span> ` : ""}<b>${esc(q.label)}</b><div class="chips" style="margin-top:3px">${q.level_label ? `<span class="chip c-lvl">${esc(q.level_label)}</span>` : ""}${q.accession ? `<span class="chip c-mono" title="Accession / Lab No.: find the patient in your PACS / RIS / LIS">${esc(q.accession)}</span>` : ""}${q.pending_order ? `<span class="chip ${q.pending_order.stage === "cancelled" ? "c-bad" : "c-info"}">Ordered in the HIS: ${esc(stageText(q.pending_order))}</span>` : ""}</div></td>
-      <td class="small">${q.source === "pre_authorization" ? asked(q) : esc(q.what)}${suggestionHTML(q, true)}</td><td class="small nowrap">${q.due ? dmyd(q.due) : ""}</td>
+      <td class="small">${q.source === "pre_authorization" ? asked(q) : esc(q.what)}${suggestionHTML(q, true)}</td><td class="small nowrap">${q.due ? esc(dmyd(q.due)) : ""}</td>
       <td>${chip(q)}${q.source === "pre_authorization" ? reqTrail({ ...q, sent: null, earlier: [] }) : q.completed ? `<div class="small muted">${esc(dmyt(q.completed))}</div>` : ""}</td><td class="nowrap"><div class="ibtns">${acts(q, d)}</div></td></tr>`;
   $("#inbox").innerHTML = `<div class="case-head"><div><div class="eyebrow">Department inbox</div><h1>Requests to ${ib.departments.length === 1 ? esc(ib.departments[0].name) : "my departments"}</h1>
       <div class="muted">Requests the treating doctors sent to your department across the Tumour Board Case Files, and every action the Tumour Board gave your department: the patient with the UHID, IP / OP No. and accession No. to find the study or sample in your own PACS / RIS / LIS, what is asked, the due date and the status. Acknowledge a request when you take it up, then send "done" back (with a note if needed) once the report is signed in your own system. A request closes by itself when the record arrives in the Case File; a Tumour Board action is closed by a person (a newly arrived matching document is suggested). Requests closed in the last 7 days stay listed. Overdue is worked out when this page is shown.</div></div>

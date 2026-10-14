@@ -88,7 +88,7 @@ def test_draft_carries_the_patient_identifiers_the_accession_and_the_due_date(un
     assert d["subject"].startswith("Tumour Board Case File TB-UNIT: Diagnostic CT thorax report for ")
     assert d["mailto"].startswith(f"mailto:{org.department_email('radiology')}?subject=") and "body=" in d["mailto"]
     q = urllib.parse.parse_qs(urllib.parse.urlsplit(d["mailto"]).query)
-    assert q["subject"] == [d["subject"]] and q["body"] == [body]
+    assert q["subject"] == [d["subject"]] and q["body"] == [body.replace("\n", "\r\n")]  # CRLF line breaks in the mail draft (RFC 6068)
     assert d["free"] is False and d["sent"] is None and d["status"] == "suggested"
 
 
@@ -137,7 +137,10 @@ def test_send_with_an_edited_message_due_date_and_subject(unit_case, people):
     with pytest.raises(dept_requests.RequestError):
         dept_requests.send(unit_case, a0["id"], "meera", people["meera"], due="31/12/2026")
     past = (date.today() - timedelta(days=1)).isoformat()
-    assert dept_requests.send(unit_case, a0["id"], "meera", people["meera"], due=past)["status"] == "overdue"
+    with pytest.raises(dept_requests.RequestError, match="in the past"):
+        dept_requests.send(unit_case, a0["id"], "meera", people["meera"], due=past)
+    long = dept_requests.send(unit_case, a0["id"], "meera", people["meera"], message="x" * 5000, subject_text="s" * 300)
+    assert len(long["sent"]["message"]) <= dept_requests.MAX_MESSAGE + 80 and long["sent"]["message"].endswith("through the Tumour Board.") and len(long["sent"]["subject"]) == dept_requests.MAX_SUBJECT
 
 
 def test_send_refuses_a_closed_request_a_board_action_and_an_unknown_one(unit_case, people):
@@ -198,13 +201,55 @@ def test_an_unsent_request_that_moves_tells_nobody(unit_case, people):
 
 
 def test_a_v1_pending_request_counts_as_sent(unit_case, people):
-    """A request opened before 4.2 (status pending, no `sent`) was notified at once: it still closes with a notice and moves as sent."""
+    """A request opened before 4.2 (status pending, no `sent`) was notified at once: it is answered, keeps its due date when sent
+    again, closes with a notice and moves as sent."""
+    _own(unit_case)
     add(unit_case, hist())
     st = _sync(unit_case); st["actions"][0]["status"] = "pending"; st["actions"][0]["due"] = date.today().isoformat(); store.save_state(unit_case, st)
+    a = st["actions"][0]
     rows = [q for d in notify.inbox(people["ravi"])["departments"] for q in d["requests"]]
     assert len(rows) == 1 and rows[0]["sent"] is None
+    assert dept_requests.draft(store.get_case(unit_case), a, "meera")["due"] == date.today().isoformat()
+    assert dept_requests.acknowledge(unit_case, a["id"], "ravi")["acknowledged"]["by"] == "ravi"  # a V1 request is answered like a sent one (review minor 1)
+    assert dept_requests.send(unit_case, a["id"], "meera", people["meera"])["due"] == date.today().isoformat()  # sent again: the V1 due date stays
     add(unit_case, ct()); _sync(unit_case)
     assert len(_notes("request_closed")) == 1
+
+
+def test_the_sender_line_is_always_the_real_sender(unit_case, people):
+    """Review M2: a message that names someone else as the sender still ends with the real sender's line."""
+    _own(unit_case)
+    add(unit_case, hist())
+    a = dept_requests.send(unit_case, _first(unit_case)["id"], "meera", people["meera"], message="Please do it. Sent by Dr Somebody Else")
+    assert a["sent"]["message"] == "Please do it. Sent by Dr Somebody Else\nSent by meera (Breast Surgery) through the Tumour Board."
+    a = dept_requests.send(unit_case, a["id"], "meera", people["meera"], message=a["sent"]["message"])  # re-sending the stored text adds no second line
+    assert a["sent"]["message"].count("Sent by meera") == 1
+
+
+def test_a_free_request_survives_every_re_check(unit_case, people):
+    """Review S1: a free request has no protocol record, so no re-check (upload, re-fetch, listing, waiver) may close it."""
+    _own(unit_case)
+    add(unit_case, hist())
+    free = dept_requests.create_free(unit_case, "Anaesthesiology", "Pre-anaesthetic check-up", "meera", people["meera"])
+    for _ in range(2):
+        st = _sync(unit_case)
+    add(unit_case, ct()); st = _sync(unit_case)
+    a = next(x for x in st["actions"] if x["id"] == free["id"])
+    assert a["status"] == "pending" and not any("no longer lists" in h["event"] for h in a["history"])
+    assert _notes("request_closed") == [] and st["gate"]["passed"]
+
+
+def test_a_sent_request_that_changes_level_in_the_same_department_tells_it(unit_case, people):
+    """Review minor 3: the CT arrives from Radiology without the lesion size: the Level 2 gap stays with Radiology, but the sent request
+    becomes a suggestion again (it leaves the inbox), so Radiology is told it returned to the treating doctor."""
+    _own(unit_case)
+    add(unit_case, hist())
+    dept_requests.send(unit_case, _first(unit_case)["id"], "meera", people["meera"])
+    add(unit_case, {**ct(facts={}), "department": "radiology"})
+    a = _first(unit_case)
+    assert (a["level"], a["department_id"], a["status"]) == (2, "radiology", "suggested")
+    told = _notes("request_closed")
+    assert len(told) == 1 and told[0]["to"] == {"department": "radiology"} and "returned to the treating doctor" in told[0]["title"] and "Level 2" in told[0]["text"]
 
 
 # ---- free requests ----------------------------------------------------------------------------------------------------

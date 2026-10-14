@@ -134,7 +134,7 @@ def _can_answer(r, a):
     """Acknowledge / "done" on a request: the doctors of the department it went to; the coordinator for a request addressed to the
     MDT Coordinator role (V2 item 4.3)."""
     if a.get("role") == "coordinator" or org.is_coordinator_name(a.get("department_id")) or (not a.get("department_id") and org.is_coordinator_name(a.get("department"))):
-        return bool(r.get("coordinator") or r.get("admin")) and not r.get("disabled")
+        return org.can(r, "answer_request", None)  # no department: the coordinator's row (ACTIONS no_dept)
     return org.can(r, "answer_request", a.get("department_id") or a.get("department") or None)
 
 

@@ -712,7 +712,7 @@ def sync_actions(case_id, gate, by=""):
     case = store.get_case(case_id); prot = protocol.get(case["protocol"])
     patient = (case.get("patient") or {}).get("name") or case_id
     sla = {r["id"]: r.get("sla_days", 3) for r in protocol.records(prot)}
-    by_req = {a["requirement"]: a for a in actions if a.get("source") == "pre_authorization" and a["status"] != "completed"}
+    by_req = {a["requirement"]: a for a in actions if a.get("source") == "pre_authorization" and a["status"] != "completed" and a.get("requirement")}  # a free request (no protocol record behind it, V2 item 4.2) is never matched against the gate
     required_ids = {r["id"] for r in gate["requirements"]}
     shown_ids = {r["id"] for r in gate.get("shown", [])}
     for rid, a in list(by_req.items()):  # nothing left to request: the protocol no longer lists the record, or no longer requires it here
@@ -763,9 +763,13 @@ def sync_actions(case_id, gate, by=""):
                                          + (f" (sent to {old_name} earlier: send it again)" if sent else " (suggested, not sent)"), "detail": what})
                     _suggest_again(a)  # V2 item 4.2: nothing goes out by itself; the earlier sending is kept, the doctor sends the moved request
                     a["level"], a["level_label"], a["department"], a["department_id"], a["source_doc_id"] = r.get("level"), r.get("level_label", ""), dept, dept_id, doc_id
-                    if sent and old_dept and old_dept != dept_id:  # the department it left is told, so its inbox makes sense
-                        _notify({"department": old_dept}, "request_closed", case_id, f"{r['label']} request for {patient} ({case_id}) moved to {dept}",
-                                f"The request now sits with {dept} ({LEVEL_LABEL.get(r.get('level'), 'gap')}).", action_id=a["id"], requirement=r["id"], level=r.get("level"))
+                    if sent and old_dept:  # the department that received it is told, so its inbox makes sense (it leaves the inbox until sent again)
+                        if old_dept != dept_id:
+                            _notify({"department": old_dept}, "request_closed", case_id, f"{r['label']} request for {patient} ({case_id}) moved to {dept}",
+                                    f"The request now sits with {dept} ({LEVEL_LABEL.get(r.get('level'), 'gap')}); the treating doctor sends it afresh.", action_id=a["id"], requirement=r["id"], level=r.get("level"))
+                        else:
+                            _notify({"department": old_dept}, "request_closed", case_id, f"{r['label']} request for {patient} ({case_id}) returned to the treating doctor",
+                                    f"The gap changed ({LEVEL_LABEL.get(r.get('level'), 'gap')}: {what}); the treating doctor sends a new request.", action_id=a["id"], requirement=r["id"], level=r.get("level"))
                     a["role"] = "coordinator" if to_coord else None
                 elif legacy:
                     a["history"].append({"ts": store.now_iso(), "event": f"Re-check: {LEVEL_LABEL.get(r.get('level'), 'gap')}", "detail": what})

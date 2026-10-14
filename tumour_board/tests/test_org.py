@@ -423,7 +423,7 @@ CAN = [
     ("answer_request", "radiology", (1, 1, 0, 0, 0, 0, 1, 0)),
     ("answer_request", "Radiology", (1, 1, 0, 0, 0, 0, 1, 0)),
     ("answer_request", "pathology", (0, 0, 0, 0, 0, 0, 1, 0)),
-    ("answer_request", None, (0, 0, 0, 0, 0, 0, 1, 0)),
+    ("answer_request", None, (0, 0, 1, 0, 0, 0, 1, 0)),  # no department: the MDT Coordinator's own row
     ("answer_request", "Cardiology", (0, 0, 0, 0, 0, 0, 1, 0)),
 ]
 DEPT_ACTIONS = sorted(a for a, rule in org.ACTIONS.items() if rule["dept"])

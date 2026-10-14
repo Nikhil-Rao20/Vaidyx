@@ -1995,7 +1995,7 @@ def v2_phase4(c, base, ctx):
         import urllib.parse
         q = urllib.parse.parse_qs(urllib.parse.urlsplit(dj.get("mailto") or "").query)
         check("4.2 P12 the mail draft is a mailto: to the department's address with the same subject and body", (dj.get("mailto") or "").startswith(f"mailto:{dj.get('to', {}).get('email')}?")
-              and q.get("subject") == [dj.get("subject")] and q.get("body") == [body], (dj.get("mailto") or "")[:120])
+              and q.get("subject") == [dj.get("subject")] and q.get("body") == [body.replace("\n", "\r\n")], (dj.get("mailto") or "")[:120])
         check("4.2 P12 a supporting doctor cannot send a request (403)", rad.post(f"/api/tb/cases/{cid}/requests/{a.get('id')}/send", json={}).status_code == 403)
         check("4.3 P12 acknowledging a request nobody sent is refused (409)", rad.post(f"/api/tb/cases/{cid}/requests/{a.get('id')}/acknowledge").status_code == 409)
         due = (today + datetime.timedelta(days=5)).isoformat()
@@ -2089,6 +2089,10 @@ def v2_phase4(c, base, ctx):
         check("4.2 P07 \"Notify Anaesthesiology\" with no gap behind it: created and sent in one step, in the Anaesthesiology inbox with the UHID", r.status_code == 200 and a.get("origin") == "doctor"
               and a.get("requirement") is None and a.get("status") == "pending" and "Request: Pre-anaesthetic check-up" in a.get("sent", {}).get("message", "") and len(rows) == 1 and rows[0]["free"] is True
               and rows[0]["uhid"] == "VXH/26/004207", r.text[:160])
+        rc = surg.post(f"/api/tb/cases/{cid}/recheck")
+        a_after = next((x for x in surg.get(f"/api/tb/cases/{cid}").json()["state"]["actions"] if x["id"] == a.get("id")), {})
+        check("4.2 P07 a re-check never closes a free request (review S1)", rc.status_code == 200 and a_after.get("status") == "pending" and not _notes_of(anaes, cid, "request_closed"),
+              json.dumps({k: a_after.get(k) for k in ("status", "history")})[:200])
         r = anaes.post(f"/api/tb/cases/{cid}/requests/{a.get('id')}/done", json={"note": "PAC done, ASA II (synthetic)"})
         check("4.3 P07 \"done\" closes a free request (nothing in the Case File can confirm it); the owner is told", r.status_code == 200 and r.json()["action"]["status"] == "completed"
               and r.json()["action"]["closed_by"] == "tb-e2e-h4-anaes" and any(n.get("closed") for n in _notes_of(surg, cid, "request_done")), r.text[:120])
