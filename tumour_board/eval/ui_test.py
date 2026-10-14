@@ -5,9 +5,13 @@ Viewports: desktop 1600x1000, tablet 1024x768, phone 390x844 (screenshots suffix
 --only admin: log in and run only the Organisation and My department screens (V2 item 2.3), no model calls.
 --only his: the HIS-connected Case File screens (V2 items 3.2 to 3.7) against the mock hospital (synthetic data, 127.0.0.1:7130):
 create from a UHID, the HIS card, the Documents tab grouped by encounter, Re-fetch; the side panel as a treating doctor. Every
-Case File it creates is deleted at the end (reader model calls for the fetched records)."""
+Case File it creates is deleted at the end (reader model calls for the fetched records).
+--only requests: the requests to departments (V2 items 4.2 / 4.3) against the mock hospital: a treating doctor (tb-medonc-doc) creates
+a Case File from IP/26/01875, notifies Radiology (the draft, the "Open in mail" mailto: link, Send in-app), the radiologist (tb-rad-doc)
+acknowledges and sends "done" from the department inbox, the doctor writes and closes a free request to Anaesthesiology. Logins from
+~/vaidyx/.tb_v2_demo_logins; the Case File is deleted at the end."""
 import argparse, os, secrets, sys, time
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from playwright.sync_api import sync_playwright
 
@@ -97,6 +101,7 @@ def admin_screens(b, pg, base, pw, shot, errors):
 
 DEMO_LOGINS = os.path.expanduser("~/vaidyx/.tb_v2_demo_logins")  # synthetic V2 role logins (tab-separated); passwords never printed
 PROTECTED = {"TB-2026-bharath"}  # real patient data: never touched
+DEMO_CASES = {f"TB-00{i}" for i in range(1, 9)}  # the demo Case Files: the requests flow never deletes one
 
 
 def page_checks(pg, where, errors):
@@ -237,9 +242,167 @@ def his_screens(b, pg, base, pw, shot, errors):
         pg2.close()
 
 
+REQ_IP, REQ_UHID, REQ_ACC = "IP/26/01875", "VXH/26/004212", "RAD/26/01004"  # mock hospital, synthetic: lung, CECT ordered in the RIS
+
+
+def requests_screens(b, pg, base, pw, shot, errors):
+    """V2 items 4.2 / 4.3 against the mock hospital (synthetic). A treating doctor (tb-medonc-doc) creates a Case File from IP/26/01875;
+    the CECT gap shows as a suggested request with "Notify Radiology"; the draft names the UHID, the IP No. and the accession No.; the
+    "Open in mail" link is a mailto: with the subject and the message; "Send in-app" sends it. The radiologist (tb-rad-doc) sees it in
+    the department inbox with the UHID and the accession No., acknowledges it and sends "done" back with a note. The doctor sees both,
+    then writes a free request to Anaesthesiology (pre-anaesthetic check-up) and closes it. `pg` is the admin page: it deletes the
+    Case File in `finally`. Nothing is signed on the mock desk."""
+    doc, rad = demo_login("tb-medonc-doc"), demo_login("tb-rad-doc")
+    if not doc or not rad:  # never a silent pass
+        errors.append(f"{DEMO_LOGINS} lacks tb-medonc-doc or tb-rad-doc: the requests screens cannot be checked"); return
+    cid, pages = None, []
+
+    def page_as(cred):
+        p = b.new_page(viewport=pg.viewport_size, device_scale_factor=1); watch(p, errors); pages.append(p)
+        login(p, base, *cred); p.goto(base + "/tb"); p.wait_for_selector("#btn-new", state="attached", timeout=20000); p.wait_for_timeout(800)
+        return p
+
+    def open_case(p, case_id):
+        open_side(p); p.click(f".citem[data-case='{case_id}']"); p.click("#tabs button[data-tab='ready']"); p.wait_for_selector("#req-card", timeout=20000)
+
+    try:
+        d = page_as(doc)
+        open_side(d); d.click("#btn-new"); d.wait_for_selector("#h-id", timeout=20000)
+        if d.locator("[data-way='his']").count() and not d.locator("[data-way='his'].on").count():
+            d.click("[data-way='his']")
+        d.fill("#h-id", REQ_IP); d.click("#h-look"); d.wait_for_selector("#h-res .lookbox", timeout=30000)
+        if REQ_UHID not in d.inner_text("#h-res"):
+            errors.append(f"lookup of {REQ_IP} does not show the UHID {REQ_UHID}")
+        d.select_option("#h-prot", "lung_nsclc"); d.select_option("#h-setting", "non_metastatic"); d.select_option("#h-level", "optimal"); d.select_option("#h-win", "12")
+        with d.expect_response(lambda r: "/api/tb/cases/from-his" in r.url, timeout=60000) as resp:
+            d.click("#h-go")
+        if not resp.value.ok:
+            errors.append(f"create from the HIS as tb-medonc-doc failed: HTTP {resp.value.status} {resp.value.text()[:160]}"); return
+        res = resp.value.json(); cid = res["case"]["case_id"]
+        if cid in PROTECTED or cid in DEMO_CASES:  # the server assigns a fresh id; refuse to go on rather than touch a protected one
+            cid = None; errors.append("create from the HIS returned a protected Case File id"); return
+        j = wait_job(d, base, res["job"])
+        if not j or j.get("state") != "finished":
+            errors.append(f"first fetch job did not finish: {(j or {}).get('state')} {(j or {}).get('error', '')}"); return
+        d.wait_for_function("() => /finished from/.test(document.getElementById('toast').textContent)", timeout=60000)
+        cect, t0 = None, time.time()
+        while not cect and time.time() - t0 < 90:  # the gate's re-check after the job may land a moment later
+            st = d.request.get(base + f"/api/tb/cases/{cid}").json()
+            acts = [a for a in st["state"].get("actions") or [] if a.get("source") == "pre_authorization"]
+            cect = next((a for a in acts if a.get("accession") == REQ_ACC), None) or next((a for a in acts if a.get("requirement") == "cect_tap"), None)
+            if not cect:
+                time.sleep(3)
+        if not cect:
+            gate = st["state"].get("gate") or {}
+            errors.append(f"no Pre-Authorization request for the CECT ({REQ_ACC}) in {cid}: requests {[(a.get('requirement'), a.get('status')) for a in acts]}, "
+                          f"gate {gate.get('satisfied')}/{gate.get('total')} {[(x.get('id'), x.get('status')) for x in gate.get('requirements') or [] if x.get('status') != 'satisfied']}, "
+                          f"CT records {[((x.get('classification') or {}).get('status'), (x.get('his') or {}).get('status'), (x.get('his') or {}).get('accession')) for x in st.get('documents') or [] if (x.get('classification') or {}).get('doc_type') == 'ct']}"); return
+        if not st.get("permissions", {}).get("send_request"):
+            errors.append("tb-medonc-doc (a treating doctor) may not send requests")
+        card = f"#tab-ready .reqcard[data-aid='{cect['id']}']"
+        open_case(d, cid); d.wait_for_selector(card, timeout=20000); d.wait_for_timeout(500)
+        if "Requests to departments" not in d.inner_text("#req-card h3"):
+            errors.append("the requests card is not titled Requests to departments")
+        if "Suggested" not in d.inner_text(f"{card} .reqst"):
+            errors.append(f"the CECT request is not shown as suggested: {d.inner_text(card + ' .reqst')!r}")
+        btn = d.locator(f"{card} [data-notify]")
+        if not btn.count() or btn.inner_text().strip() != "Notify Radiology":
+            errors.append(f"the CECT request has no 'Notify Radiology' button ({btn.inner_text().strip() if btn.count() else 'none'})"); return
+        if REQ_ACC not in d.inner_text(card):
+            errors.append("the CECT request does not show the accession No. chip")
+        page_checks(d, "Requests card (suggested)", errors); shot("req_1_suggested", page=d, full_page=True)
+        btn.click(); d.wait_for_selector("#reqtxt", timeout=20000); d.wait_for_timeout(300)
+        body, subj = d.input_value("#reqtxt"), d.input_value("#reqsubj")
+        for v, what in [(REQ_UHID, "UHID"), (REQ_IP, "IP No."), (REQ_ACC, "accession No.")]:
+            if v not in body:
+                errors.append(f"the draft message lacks the {what} {v}")
+        if not d.input_value("#reqdue"):
+            errors.append("the Notify dialog has no proposed due date")
+        if not d.locator("a#reqmail").count():
+            errors.append("the Notify dialog has no 'Open in mail' link (Radiology has an address)")
+        else:
+            href = d.get_attribute("a#reqmail", "href") or ""
+            plain = unquote(href)
+            if not href.startswith("mailto:"):
+                errors.append(f"'Open in mail' is not a mailto: link: {href[:60]!r}")
+            if REQ_UHID not in plain or subj not in plain or REQ_ACC not in plain:
+                errors.append("the mailto: link does not carry the subject and the message (UHID, accession No.)")
+            d.fill("#reqsubj", subj + " (urgent)")
+            if "(urgent)" not in unquote(d.get_attribute("a#reqmail", "href") or ""):
+                errors.append("the mailto: link is not rebuilt from the edited subject")
+            d.fill("#reqsubj", subj)
+        if "sends no e-mail" not in d.inner_text("#modal-body"):
+            errors.append("the Notify dialog does not say that the server sends no e-mail")
+        if not d.locator("#reqcopy").count():
+            errors.append("the Notify dialog has no 'Copy draft' button")
+        page_checks(d, "Notify dialog", errors); shot("req_2_notify", page=d)
+        d.click("#reqsend")
+        d.wait_for_selector(f"{card} .reqst:has-text('Sent')", timeout=20000); d.wait_for_timeout(400)
+        if "Request sent to Radiology" not in d.inner_text("#toast"):
+            errors.append(f"no 'Request sent to Radiology' toast: {d.inner_text('#toast')[:100]!r}")
+        if not d.locator(f"{card} [data-reqmsg]").count() or "Send again" not in d.inner_text(card):
+            errors.append("a sent request offers no 'Request message' / 'Send again'")
+        d.click(f"{card} [data-reqmsg]"); d.wait_for_selector("#reqview", timeout=10000)
+        if REQ_UHID not in d.input_value("#reqview"):
+            errors.append("the Request message view does not show the message as sent")
+        d.keyboard.press("Escape"); d.wait_for_timeout(300)
+        shot("req_3_sent", page=d, full_page=True)
+
+        r = page_as(rad)
+        open_side(r); r.click("#btn-inbox")
+        row = f"#inbox tr[data-aid='{cect['id']}']"
+        r.wait_for_selector(row, timeout=20000); r.wait_for_timeout(400)
+        t = r.inner_text(row)
+        if REQ_UHID not in t or REQ_ACC not in t:
+            errors.append(f"the Radiology inbox row lacks the UHID {REQ_UHID} or the accession No. {REQ_ACC}")
+        if "Sent" not in r.inner_text(f"{row} .reqst"):
+            errors.append(f"the inbox row is not shown as Sent: {r.inner_text(row + ' .reqst')!r}")
+        page_checks(r, "Radiology inbox", errors); shot("req_4_inbox", page=r, full_page=True)
+        r.click(f"{row} [data-ack]"); r.wait_for_selector(f"{row} .reqst:has-text('Acknowledged')", timeout=20000)
+        if r.locator(f"{row} [data-ack]").count():
+            errors.append("Acknowledge is still offered after acknowledging")
+        r.once("dialog", lambda dlg: dlg.accept("CECT reported and signed in the RIS (UI test, synthetic)"))
+        r.click(f"{row} [data-done]"); r.wait_for_selector(f"{row} .reqst:has-text('Done')", timeout=20000); r.wait_for_timeout(400)
+        if "signed in the RIS" not in r.inner_text(row):
+            errors.append("the inbox row does not show the done note")
+        page_checks(r, "Radiology inbox (done)", errors); shot("req_5_inbox_done", page=r, full_page=True)
+
+        open_case(d, cid); d.wait_for_selector(card, timeout=20000); d.wait_for_timeout(400)
+        t = d.inner_text(card)
+        if "Acknowledged by" not in t or "Done, awaiting the record" not in d.inner_text(f"{card} .reqst"):
+            errors.append(f"the Case File does not show the request as acknowledged and done: {d.inner_text(card + ' .reqst')!r}")
+        if d.locator("#btn-bell").is_visible():
+            d.click("#btn-bell"); d.wait_for_selector("#modal-body .ntf", timeout=10000)
+            n = d.inner_text("#modal-body")
+            if "Done by the department" not in n or "Re-fetch from the HIS to close it" not in n:
+                errors.append("the bell does not show the done notification with the re-fetch hint")
+            page_checks(d, "Notifications", errors); shot("req_6_bell", page=d)
+            d.keyboard.press("Escape"); d.wait_for_timeout(300)
+        d.click("#req-card [data-newreq]"); d.wait_for_selector("#fr-dept", timeout=10000)
+        d.select_option("#fr-dept", "anaesthesiology"); d.fill("#fr-label", "Pre-anaesthetic check-up")
+        d.fill("#fr-what", "Planned for surgery after the board (UI test, synthetic)")
+        page_checks(d, "Notify a department dialog", errors); shot("req_7_free", page=d)
+        d.click("#fr-send")
+        free = "#tab-ready .reqcard:has-text('Pre-anaesthetic check-up')"
+        d.wait_for_selector(f"{free} .reqst:has-text('Sent')", timeout=20000); d.wait_for_timeout(300)
+        if "Anaesthesiology" not in d.inner_text(free):
+            errors.append("the free request does not name Anaesthesiology")
+        d.click(f"{free} [data-closereq]"); d.wait_for_selector("#cd-note", timeout=10000)
+        d.fill("#cd-note", "Done in the OPD (UI test, synthetic)"); d.click("#cd-ok")
+        d.wait_for_selector(f"{free} .reqst:has-text('Closed')", timeout=20000); d.wait_for_timeout(300)
+        page_checks(d, "Requests card (after)", errors); shot("req_8_after", page=d, full_page=True)
+    finally:
+        for p in pages:
+            p.close()
+        if cid and cid not in PROTECTED and cid not in DEMO_CASES:
+            r = pg.request.delete(base + f"/api/tb/cases/{cid}")
+            if not r.ok:
+                errors.append(f"could not delete the test Case File {cid}: HTTP {r.status}")
+
+
 def run_flow(b, base, pw, out, size, sfx, errors, only=None):
     """The whole UI flow in one fresh page at one viewport size; JS errors go into `errors`, screenshot names end in `sfx`.
-    only="admin": log in and run only admin_screens."""
+    only="admin" / "his" / "requests": log in and run only that part."""
     pg = b.new_page(viewport={"width": size[0], "height": size[1]}, device_scale_factor=1)
     watch(pg, errors)
     shot = lambda name, page=None, **kw: (page or pg).screenshot(path=f"{out}/{name}{sfx}.png", **kw)
@@ -255,6 +418,14 @@ def run_flow(b, base, pw, out, size, sfx, errors, only=None):
         try:
             pg.wait_for_selector("#btn-new:not(.hidden)", state="attached", timeout=20000)
             his_screens(b, pg, base, pw, shot, errors)
+        finally:
+            pg.close()
+        return
+    if only == "requests":
+        pg.goto(base + "/tb")
+        try:
+            pg.wait_for_selector("#btn-new:not(.hidden)", state="attached", timeout=20000)
+            requests_screens(b, pg, base, pw, shot, errors)
         finally:
             pg.close()
         return
@@ -408,6 +579,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--base", default="http://127.0.0.1:7000"); ap.add_argument("--password", required=True)
     ap.add_argument("--out", default="/home/bharath.tangella/vaidyx/Vaidyx/data/tumour_board/ui_shots")
     ap.add_argument("--viewports", type=parse_viewports, default=None, help="comma list of desktop,tablet,phone (default: desktop)")
-    ap.add_argument("--only", choices=["admin", "his"], default=None, help="admin: only the Organisation and My department screens (no model calls); "
-                    "his: only the HIS-connected Case File screens against the mock hospital (reader model calls; the Case Files it creates are deleted)")
+    ap.add_argument("--only", choices=["admin", "his", "requests"], default=None, help="admin: only the Organisation and My department screens (no model calls); "
+                    "his: only the HIS-connected Case File screens against the mock hospital (reader model calls; the Case Files it creates are deleted); "
+                    "requests: the requests to departments (V2 items 4.2 / 4.3) as a treating doctor and a radiologist (reader model calls; the Case File is deleted)")
     a = ap.parse_args(); sys.exit(main(a.base, a.password, a.out, a.viewports, a.only))

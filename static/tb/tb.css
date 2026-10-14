@@ -385,3 +385,25 @@ table.t tr.superseded td { background: #f7f9fb; color: var(--muted); } table.t t
 @media (max-width: 860px) { .grid2f { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 520px) { .inline-input { flex-wrap: wrap; } .inline-input button { flex: 1; } .seg button { flex: 1; } .seg { display: flex; } }
 #o-his:not(:empty) { margin: 14px 0; }
+/* requests to departments (V2 items 4.2 / 4.3): status chip, who did what, the Notify dialog, the department inbox */
+a.primary { border-radius: 8px; padding: 8px 14px; cursor: pointer; border: 1px solid transparent; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; background: var(--primary); color: var(--on-primary); }
+a.ghost.sm, a.primary.sm { padding: 5px 10px; font-size: 13px; }
+.action.suggested { border-left-color: var(--line-2); border-style: dashed; border-left-style: solid; }
+.action .h > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.action .h .reqst { flex-shrink: 0; }
+.reqtrail { color: var(--body); margin: 4px 0 6px; display: grid; gap: 2px; overflow-wrap: anywhere; }
+textarea.reqtxt { width: 100%; min-height: 230px; padding: 10px; border: 1px solid var(--line-2); border-radius: 8px; font-family: var(--mono); font-size: 13px; line-height: 1.45; background: var(--panel); color: var(--ink); resize: vertical; }
+textarea.reqtxt[readonly] { background: var(--tint-2); }
+.reqto { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+.reqto .mono { font-weight: 400; }
+.pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.pre.msg { font-family: var(--mono); font-size: 12px; background: var(--tint-2); border-radius: 6px; padding: 6px 8px; margin-top: 4px; }
+table.inbox-t td:nth-child(3) { min-width: 220px; max-width: 360px; }
+table.inbox-t td:nth-child(1) { min-width: 170px; }
+.ibtns { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.nowrap { white-space: nowrap; }
+@media (max-width: 520px) {
+  .action .h { flex-wrap: wrap; }
+  .actions-row > * { flex: 1 1 auto; }
+  textarea.reqtxt { min-height: 200px; font-size: 12.5px; }
+}

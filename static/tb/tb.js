@@ -193,7 +193,9 @@ function renderReady() {
     ${g.blockers.map((b) => `<div class="row"><span>${esc(b.filename)}: <span class="muted">${esc(b.error)}</span></span>${can("reprocess") ? `<button class="ghost sm" data-reproc-doc="${esc(b.doc_id)}">Re-process</button>` : ""}${can("confirm", b.doc_id) ? `<button class="ghost sm" data-dismiss="${esc(b.doc_id)}">Dismiss</button>` : ""}</div>`).join("")}</div>` : "";
   const opt = g ? g.optional.map((o) => `<span class="chip ${o.available ? "c-info" : "c-mute"}" style="margin:2px">${o.available ? "✓ " : ""}${esc(o.label)}</span>`).join("") : "";
   const acts = (state.actions || []).filter((a) => a.source === "pre_authorization");
-  const actHTML = acts.length ? acts.sort((a, b) => (a.status === "completed") - (b.status === "completed")).map(actionHTML).join("") : `<div class="muted small">No gaps routed.</div>`;
+  const RQORD = { suggested: 0, overdue: 1, pending: 2, completed: 3 };  // what still needs the doctor first, closed last
+  const actHTML = acts.length ? acts.sort((a, b) => (RQORD[a.status] ?? 2) - (RQORD[b.status] ?? 2)).map(actionHTML).join("") : `<div class="muted small">No requests.</div>`;
+  const rq = S.data.requests || { suggested: acts.filter((a) => a.status === "suggested").length, sent: acts.filter((a) => a.status === "pending" || a.status === "overdue").length, closed: acts.filter((a) => a.status === "completed").length };
   const docs = g?.documents || {};
   const setting = g ? `NCG setting: <b>${esc(g.setting_label || "not recorded (the strictest tier of each record applies until the coordinator records it)")}</b> · Hospital level: <b>${esc(g.hospital_level || "essential")}</b> · Protocol ${esc(g.protocol)} v${esc(g.protocol_version || "")}` : "";
   const hisCase = !!S.data.his;
@@ -212,8 +214,8 @@ function renderReady() {
     ${confirmationsHTML()}
     ${g?.policy_basis ? `<div class="card"><h3>Why a Pre-Authorization gate</h3><div class="small" style="color:#475569">${esc(g.policy_basis)}</div>${g.pmjay_note ? `<div class="small muted" style="margin-top:6px">${esc(g.pmjay_note)}</div>` : ""}</div>` : ""}
   </div><div>
-    <div class="card"><h3>Routed requests <span class="muted small">${acts.filter((a) => a.status !== "completed").length} open</span></h3>
-      <div class="muted small" style="margin-bottom:8px">Every gap becomes a request to the department that can act on it: a Level 1 gap to the department that owns the record, a Level 2 gap to the department that uploaded the record. Requests close by themselves when the record arrives; the department sees them in its inbox and the bell. The agent routes the gap; it does not perform the missing clinical task.</div>${actHTML}</div>
+    <div class="card" id="req-card"><h3>Requests to departments <span class="muted small">${rq.suggested || 0} suggested · ${rq.sent || 0} sent${rq.done ? ` (${rq.done} done)` : ""} · ${rq.closed || 0} closed</span>${can("create_request") ? `<span class="btns"><button class="ghost sm" data-newreq title="A request no protocol record covers, for example a pre-anaesthetic check-up">Notify a department</button></span>` : ""}</h3>
+      <div class="muted small" style="margin-bottom:8px">Every gap becomes a suggested request to the Responsible Department (a Level 1 gap to the department that owns the record, a Level 2 gap to the department that uploaded it). Nothing is sent until the treating doctor sends it: Notify opens the draft to edit and send in-app, or to open in your own mail program. A sent request closes by itself when the record arrives (re-fetch from the HIS, or an upload); the department acknowledges it and sends "done" back from its inbox. The agent routes the gap; it does not perform the missing clinical task.</div>${actHTML}</div>
     <div class="card"><h3>${can("upload") ? (hisCase ? "Outside reports" : "Add documents") : "Documents"}</h3>
       ${can("upload") ? `<div class="drop" id="drop">${hisCase ? "Upload an outside report (another hospital, a private laboratory): it is read, matched to the patient and checked like every record" : "Drop files or a whole folder here"}<br><span class="small">PDF, scanned images (PNG / JPG / TIFF), text and Office files</span><br>
       <button class="ghost sm" id="pick-files" style="margin-top:8px">Choose files</button> <button class="ghost sm" id="pick-folder">Choose folder</button></div>
@@ -576,7 +578,8 @@ async function waiveReq(reqId) {
 const suggestionHTML = (a, inbox) => !a.suggested_close || a.status === "completed" ? "" : `<div class="stagebox small" style="margin-top:6px"><span class="chip c-ok">May be complete</span> ${esc(a.suggested_close.reason)}.
   ${!inbox && can("update_action", a.id) ? ` <button class="ghost sm" data-sugclose="${esc(a.id)}" data-doc="${esc(a.suggested_close.doc_id)}">Close with this document</button> <button class="ghost sm" data-sugdismiss="${esc(a.id)}">Not this document</button>` : inbox ? ` <span class="muted">Open the Case File to close it.</span>` : ""}</div>`;
 function actionHTML(a) {
-  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);  // local date
+  if (a.source === "pre_authorization") return requestHTML(a);  // V2 items 4.2 / 4.3: a request to a department, sent by the treating doctor
+  const today = localToday();
   if (a.status === "pending" && a.due && a.due < today) a = { ...a, status: "overdue" };  // worked out on display, like the inbox
   return `<div class="action ${a.status}"><div class="h"><span>${a.source === "board" ? `<span class="chip c-info" title="From the Tumour Board record ${esc(a.board_record || "")}">Tumour Board action</span> ` : ""}${esc(a.label)}${a.level ? ` <span class="chip c-lvl" title="${esc((LEVEL[a.level] || [])[1] || "")}">${esc(a.level_label || (LEVEL[a.level] || [])[0] || "")}</span>` : ""}${a.accession ? ` <span class="chip c-mono" title="Accession / Lab No. in the hospital system">${esc(a.accession)}</span>` : ""}${a.pending_order ? ` <span class="chip c-info">Ordered in the HIS: ${esc(stageText(a.pending_order))}</span>` : ""}</span><span class="chip ${a.status === "completed" ? "c-ok" : a.status === "overdue" ? "c-bad" : "c-warn"}">${a.status === "completed" ? "Completed" : a.status === "overdue" ? "Overdue" : "Pending"}</span></div>
     <div class="w">${esc(a.what)}</div>${suggestionHTML(a)}
@@ -585,6 +588,7 @@ function actionHTML(a) {
     ${a.history?.length > 1 ? `<details class="small muted"><summary>History</summary>${a.history.map((h) => `<div>${esc(h.ts.slice(0, 16).replace("T", " "))} ${esc(h.event)}</div>`).join("")}</details>` : ""}</div>`;
 }
 function requestText(a) {
+  // the V1 message of a Tumour Board action (a Pre-Authorization request takes its draft from the server: V2 item 4.2)
   const c = S.data.case, p = c.patient || {};
   return `Tumour Board Case File ${c.case_id}: ${p.name || ""}${p.mrn ? ", UHID " + p.mrn : ""}${p.agesex ? ", " + p.agesex : ""}
 To: ${a.department}
@@ -593,14 +597,140 @@ Details: ${a.what}
 Please upload the final, signed report to the Case File by ${fmtDate(a.due)}. The Case File is re-checked automatically when it arrives.
 (Generated by Vaidyx Tumour Board assistant, action ${a.id})`;
 }
+
+// ---- requests to departments (V2 items 4.2 / 4.3): the gate suggests, the treating doctor sends, the department answers
+const localToday = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const daysLate = (due) => { if (!due) return 0; const n = Math.round((new Date(localToday() + "T00:00:00") - new Date(String(due).slice(0, 10) + "T00:00:00")) / 86400000); return n > 0 ? n : 0; };
+const isFreeReq = (a) => !!a.free || a.origin === "doctor" || !a.requirement;
+function reqStatus(a) {
+  // one chip per request: Suggested (not sent) / Sent DD/MM/YYYY / Acknowledged / Done, awaiting the record / Overdue n d / Closed
+  if (a.status === "completed") return ["c-ok", "Closed"];
+  if (a.status === "suggested") return ["c-mute", "Suggested (not sent)"];
+  if (a.done) return ["c-info", "Done, awaiting the record"];
+  const late = a.days_overdue || daysLate(a.due);
+  if (late) return ["c-bad", `Overdue ${late} d`];
+  if (a.acknowledged) return ["c-info", "Acknowledged"];
+  return ["c-warn", a.sent ? `Sent ${dmyd(a.sent.at)}` : "Pending"];  // "Pending": a V1 request, sent automatically before V2 recorded the sending
+}
+const encText = (e) => [e?.ip_no && "IP No. " + e.ip_no, e?.op_no && "OP No. " + e.op_no].filter(Boolean).join(" · ");
+const encHTML = (e) => [["ip_no", "IP No."], ["op_no", "OP No."]].filter(([k]) => e?.[k]).map(([k, l]) => `<div class="small">${l} <span class="mono">${esc(e[k])}</span></div>`).join("");
+function reqTrail(a) {
+  // who did what: sent, acknowledged, done (with the note), closed; earlier sendings when the request moved to another department
+  const s = a.sent, k = a.acknowledged, d = a.done, out = [];
+  (a.earlier || []).forEach((e) => out.push(`<span class="muted">Sent earlier to ${esc(e.to_name || e.to || "")} by ${esc(e.by || "")} on ${dmyt(e.at)}; the request moved since, so it is sent afresh</span>`));
+  if (s) out.push(`Sent to ${esc(s.to_name || a.department)} by <b>${esc(s.by)}</b> on ${dmyt(s.at)}${s.count > 1 ? ` (${s.count} times)` : ""}`);
+  if (k && !k.implied) out.push(`Acknowledged by <b>${esc(k.by)}</b> on ${dmyt(k.at)}`);
+  if (d) out.push(`Done, sent back by <b>${esc(d.by)}</b> on ${dmyt(d.at)}${d.note ? `: "${esc(d.note)}"` : ""}`);
+  if (a.status === "completed") out.push(a.closed_by ? `Closed by <b>${esc(a.closed_by)}</b>${a.completed ? " on " + dmyt(a.completed) : ""}` : `Closed by itself${a.completed ? " on " + dmyt(a.completed) : ""}: the record reached the Case File`);
+  return out.length ? `<div class="reqtrail small">${out.map((x) => `<div>${x}</div>`).join("")}</div>` : "";
+}
+function requestHTML(a) {
+  const [cls, txt] = reqStatus(a), open = a.status !== "completed", sent = a.status !== "suggested", free = isFreeReq(a);
+  const dept = a.department || deptName(a.department_id) || "the department";
+  const btns = [];
+  if (open && can("send_request")) btns.push(sent ? `<button class="ghost sm" data-notify="${esc(a.id)}" title="Send the request again as a reminder (audited)">Send again</button>`
+    : `<button class="primary sm" data-notify="${esc(a.id)}" title="Read the draft, edit it and send it in-app or open it in your own mail program">Notify ${esc(dept)}</button>`);
+  if (a.sent) btns.push(`<button class="ghost sm" data-reqmsg="${esc(a.id)}">Request message</button>`);
+  if (open && free && sent && can("close_request")) btns.push(`<button class="ghost sm" data-closereq="${esc(a.id)}" title="Close a request with no protocol record behind it (audited)">Close</button>`);
+  const po = a.pending_order;
+  return `<div class="action reqcard ${open ? (cls === "c-bad" ? "overdue" : sent ? "" : "suggested") : "completed"}" data-aid="${esc(a.id)}"><div class="h"><span>${free ? `<span class="chip c-info" title="Written by the treating doctor; no protocol record behind it">Free request</span> ` : ""}${esc(a.label)}${a.level ? ` <span class="chip c-lvl" title="${esc((LEVEL[a.level] || [])[1] || "")}">${esc(a.level_label || (LEVEL[a.level] || [])[0] || "")}</span>` : ""}${a.accession ? ` <span class="chip c-mono" title="Accession / Lab No. in the hospital system">${esc(a.accession)}</span>` : ""}${po ? ` <span class="chip ${po.stage === "cancelled" ? "c-bad" : "c-info"}">Ordered in the HIS: ${esc(stageText(po))}</span>` : ""}</span><span class="chip ${cls} reqst">${esc(txt)}</span></div>
+    ${a.what ? `<div class="w">${esc(a.what)}</div>` : ""}${reqTrail(a)}
+    <div class="f"><span>Responsible Department: <b>${esc(dept)}</b>${sent && a.due ? ` · due ${dmyd(a.due)}` : open ? " · not sent yet" : ""}</span>${btns.length ? `<span>${btns.join("")}</span>` : ""}</div>
+    ${a.history?.length > 1 ? `<details class="small muted"><summary>History</summary>${a.history.map((h) => `<div>${esc(dmyt(h.ts))} ${esc(h.event)}</div>`).join("")}</details>` : ""}</div>`;
+}
+const crlf = (s) => String(s || "").replace(/\r?\n/g, "\r\n");  // RFC 6068: line breaks in a mailto: body are CRLF
+async function copyText(text, el) { try { await navigator.clipboard.writeText(text); toast("Copied"); } catch (e) { if (el) { el.focus(); el.select(); } toast("Select and copy the text"); } }
+async function notifyDialog(aid) {
+  // V2 item 4.2: the draft comes from the server (patient, UHID, IP / OP No., the record, what is missing, accession No., due date);
+  // the doctor edits it and sends it in-app, or opens it in their own mail program. The server sends no e-mail.
+  let d;
+  try { d = await api(`/cases/${encodeURIComponent(S.caseId)}/requests/${encodeURIComponent(aid)}/draft`); } catch (e) { toast(e.message, 7000); return; }
+  const to = d.to || {}, again = !!d.sent && d.status !== "suggested", addr = d.mailto ? d.mailto.split("?")[0] : "";
+  $("#modal-body").innerHTML = `<h3 style="color:#1f2933;margin-top:0">${again ? "Send again to" : "Notify"} ${esc(to.name)}</h3>
+    <div class="small muted">${again ? "A reminder: the department sees it again in its inbox and bell." : "Nothing has been sent yet. Check and edit the message, then send it."} The message names the patient, the record and what is missing, so the department can find the patient in its own system.</div>
+    <div class="form reqform">
+      <label>To</label><div class="reqto">${esc(to.name)}${to.email ? ` <span class="mono">${esc(to.email)}</span>` : to.role === "coordinator" ? "" : ` <span class="muted small">(no e-mail address recorded)</span>`}${d.uhid ? ` <span class="chip c-mono" title="UHID">${esc(d.uhid)}</span>` : ""}${d.accession ? ` <span class="chip c-mono" title="Accession / Lab No.">${esc(d.accession)}</span>` : ""}</div>
+      <label for="reqsubj">Subject</label><input id="reqsubj" value="${esc(d.subject)}">
+      <label for="reqtxt">Message</label><textarea id="reqtxt" class="reqtxt" spellcheck="false">${esc(d.body)}</textarea>
+      <label for="reqdue">Needed by</label><input type="date" id="reqdue" value="${esc(d.due || "")}" style="max-width:220px"></div>
+    <div class="small muted" style="margin-top:10px">"Send in-app" puts the request in the department's Tumour Board inbox and bell (audited). The server sends no e-mail: "Open in mail" opens your own mail program with this message, and is not recorded here; send it in-app too so the request is tracked.</div>
+    <div class="actions-row"><button class="ghost" data-closemodal>Cancel</button><button class="ghost" id="reqcopy">Copy draft</button>
+      ${addr ? `<a class="ghost" id="reqmail" href="#">Open in mail</a>` : `<span class="small muted" id="reqnomail">${esc(to.name)} has no e-mail address: the root admin adds one under Organisation.</span>`}
+      <button class="primary" id="reqsend">${again ? "Send reminder in-app" : "Send in-app"}</button></div>`;
+  $("#modal").classList.remove("hidden");
+  const mail = () => { if ($("#reqmail")) $("#reqmail").href = `${addr}?subject=${encodeURIComponent($("#reqsubj").value)}&body=${encodeURIComponent(crlf($("#reqtxt").value))}`; };
+  mail();
+  $("#reqsubj").oninput = mail; $("#reqtxt").oninput = mail;
+  $("#reqdue").onchange = () => { const v = $("#reqdue").value; if (v) { $("#reqtxt").value = $("#reqtxt").value.replace(/^Needed by: \d{2}\/\d{2}\/\d{4}/m, "Needed by: " + dmy(v)); mail(); } };
+  $("#reqcopy").onclick = () => copyText(`Subject: ${$("#reqsubj").value}\n\n${$("#reqtxt").value}`, $("#reqtxt"));
+  $("#reqsend").onclick = async () => {
+    const btn = $("#reqsend"); btn.disabled = true;
+    try {
+      await api(`/cases/${encodeURIComponent(S.caseId)}/requests/${encodeURIComponent(aid)}/send`, { json: { message: $("#reqtxt").value, due: $("#reqdue").value, subject: $("#reqsubj").value } });
+      $("#modal").classList.add("hidden"); toast(`${again ? "Reminder" : "Request"} sent to ${to.name} (audited)`); await openCase(S.caseId, true);
+    } catch (e) { toast(e.message, 7000); btn.disabled = false; }
+  };
+}
+function requestMessage(a) {
+  // read-only: what was sent, to whom, by whom
+  const s = a.sent || {};
+  $("#modal-body").innerHTML = `<h3 style="color:#1f2933;margin-top:0">Request to ${esc(s.to_name || a.department)}</h3>
+    <div class="small muted">Sent by ${esc(s.by)} on ${dmyt(s.at)}${s.count > 1 ? `, ${s.count} times (the last sending is shown)` : ""}, in-app.${a.due ? ` Needed by ${dmyd(a.due)}.` : ""}</div>
+    <div class="form"><label for="reqview-subj">Subject</label><input id="reqview-subj" readonly value="${esc(s.subject || "")}"><label for="reqview">Message</label><textarea id="reqview" class="reqtxt" readonly>${esc(s.message || "")}</textarea></div>
+    <div class="actions-row"><button class="ghost" id="reqview-copy">Copy</button><button class="primary" data-closemodal>Close</button></div>`;
+  $("#modal").classList.remove("hidden");
+  $("#reqview-copy").onclick = () => copyText(`Subject: ${s.subject || ""}\n\n${s.message || ""}`, $("#reqview"));
+}
+async function newRequestDialog() {
+  // V2 item 4.2: a request with no gap behind it (a pre-anaesthetic check, a medication review), created and sent in one step
+  const ds = S.org?.departments || [];
+  const grp = (g, label) => { const l = ds.filter((d) => d.group === g); return l.length ? `<optgroup label="${label}">${l.map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join("")}</optgroup>` : ""; };
+  $("#modal-body").innerHTML = `<h3 style="color:#1f2933;margin-top:0">Notify a department</h3>
+    <div class="small muted">For something no protocol record covers, for example a pre-anaesthetic check-up (Anaesthesiology) or a medication review (Clinical Pharmacology). The request is created and sent in one step: the department sees it in its inbox and bell (audited). It closes when the department sends "done" back, or when you close it.</div>
+    <div class="form"><label for="fr-dept">Department</label><select id="fr-dept"><option value="">Choose the department</option>${grp("supporting", "Supporting departments")}${grp("treating", "Treating departments")}</select>
+      <label for="fr-label">What you are asking for</label><input id="fr-label" placeholder="e.g. Pre-anaesthetic check-up" maxlength="160">
+      <label for="fr-what">Details <span class="muted" style="font-weight:400">(optional)</span></label><textarea id="fr-what" placeholder="e.g. planned for surgery after the board; please record fitness for general anaesthesia"></textarea>
+      <label for="fr-due">Needed by <span class="muted" style="font-weight:400">(optional; 3 days from today when empty)</span></label><input type="date" id="fr-due" style="max-width:220px"></div>
+    <div class="actions-row"><button class="ghost" data-closemodal>Cancel</button><button class="primary" id="fr-send">Send in-app</button></div>`;
+  $("#modal").classList.remove("hidden");
+  $("#fr-send").onclick = async () => {
+    const department = $("#fr-dept").value, label = $("#fr-label").value.trim();
+    if (!department) { toast("Choose the department"); return; }
+    if (!label) { toast("Say what you are asking for"); return; }
+    const btn = $("#fr-send"); btn.disabled = true;
+    try {
+      await api(`/cases/${encodeURIComponent(S.caseId)}/requests`, { json: { department, label, what: $("#fr-what").value.trim(), due: $("#fr-due").value } });
+      $("#modal").classList.add("hidden"); toast(`Request sent to ${deptName(department)} (audited)`); await openCase(S.caseId, true);
+    } catch (e) { toast(e.message, 7000); btn.disabled = false; }
+  };
+}
+async function closeRequest(aid) {
+  const a = (S.data.state.actions || []).find((x) => x.id === aid);
+  const v = await confirmDialog({ title: "Close this request", intro: `"${a?.label || aid}" to ${a?.department || "the department"} is closed for this Case File. The department is told.`,
+    fields: [{ id: "note", label: "Note", type: "textarea", placeholder: "e.g. pre-anaesthetic check-up done in the OPD on 12/10/2026" }], submit: "Close request" });
+  if (!v) return;
+  try { await api(`/cases/${encodeURIComponent(S.caseId)}/requests/${encodeURIComponent(aid)}/close`, { json: { note: v.note } }); toast("Request closed (audited)"); await openCase(S.caseId, true); }
+  catch (e) { toast(e.message, 7000); }
+}
+async function answerRequest(caseId, aid, what) {
+  // V2 item 4.3: the department acknowledges, then sends "done" back (with an optional note); the server checks who may
+  let note = "";
+  if (what === "done") { const v = prompt("Done: the report is signed in your own system. Note for the treating doctor (optional):"); if (v === null) return false; note = v.trim(); }
+  try { await api(`/cases/${encodeURIComponent(caseId)}/requests/${encodeURIComponent(aid)}/${what}`, { json: what === "done" ? { note } : {} }); toast(what === "done" ? "\"Done\" sent back to the treating department (audited)" : "Acknowledged (audited)"); return true; }
+  catch (e) { toast(e.message, 7000); return false; }
+}
 function bindActions(root) {
   $$("[data-req]", root).forEach((b) => (b.onclick = () => {
     const a = (S.data.state.actions || []).find((x) => x.id === b.dataset.req);
-    $("#modal-body").innerHTML = `<h3 style="color:#1f2933;margin-top:0">Request to ${esc(a.department)}</h3><textarea id="reqtxt" style="width:100%;min-height:190px;padding:10px;border:1px solid #d9e2ec;border-radius:8px">${esc(requestText(a))}</textarea>
+    $("#modal-body").innerHTML = `<h3 style="color:#1f2933;margin-top:0">Request to ${esc(a.department)}</h3><textarea id="reqtxt" class="reqtxt">${esc(requestText(a))}</textarea>
       <div style="text-align:right;margin-top:10px"><button class="ghost" data-closemodal>Close</button> <button class="primary" id="reqcopy">Copy</button></div>`;
     $("#modal").classList.remove("hidden");
-    $("#reqcopy").onclick = async () => { try { await navigator.clipboard.writeText($("#reqtxt").value); toast("Copied"); } catch (e) { $("#reqtxt").select(); toast("Select and copy the text"); } };
+    $("#reqcopy").onclick = () => copyText($("#reqtxt").value, $("#reqtxt"));
   }));
+  $$("[data-notify]", root).forEach((b) => (b.onclick = () => notifyDialog(b.dataset.notify)));
+  $$("[data-reqmsg]", root).forEach((b) => (b.onclick = () => { const a = (S.data.state.actions || []).find((x) => x.id === b.dataset.reqmsg); if (a) requestMessage(a); }));
+  $$("[data-closereq]", root).forEach((b) => (b.onclick = () => closeRequest(b.dataset.closereq)));
+  $$("[data-newreq]", root).forEach((b) => (b.onclick = () => newRequestDialog()));
   $$("[data-act]", root).forEach((b) => (b.onclick = async () => {
     const note = prompt("Note for the record (optional):") ?? "";
     await api(`/cases/${S.caseId}/actions/${b.dataset.act}`, { json: { status: b.dataset.st, note } });
@@ -1160,7 +1290,7 @@ function renderBoard() {
   const st = S.data.state;
   const depts = BOARD_DEPTS;
   const records = (st.board_records || []).slice().reverse();
-  const allActs = (st.actions || []).slice().sort((a, b) => (a.status === "completed") - (b.status === "completed") || a.due.localeCompare(b.due));
+  const allActs = (st.actions || []).slice().sort((a, b) => (a.status === "completed") - (b.status === "completed") || String(a.due || "").localeCompare(String(b.due || "")));  // a suggested request has no due date (V2 4.2)
   $("#tab-board").innerHTML = `<div class="grid2"><div>
     ${!can("board_record") ? `<div class="card"><h3>Tumour Board decision</h3><div class="muted small">Decisions are recorded by the MDT Coordinator.</div></div>` : `<div class="card form"><h3>Record the Tumour Board decision</h3><div class="muted small">Entered by the clinical team. The agent then checks the record (AI-assisted adjudication): documentation completeness, values against the signed sources, open Pre-Authorization items. It does not judge the clinical decision.</div>
       <label>Board date</label><input type="date" id="b-date" value="${new Date().toISOString().slice(0, 10)}">
@@ -1815,7 +1945,7 @@ async function showIntake() {
 }
 
 // ------------------------------------------------------------------ notifications (bell) and the department inbox · V1 item 4.4
-const NKIND = { request: ["c-warn", "Request"], request_closed: ["c-ok", "Request closed"], case_ready: ["c-ok", "Case File ready"],
+const NKIND = { request: ["c-warn", "Request"], request_closed: ["c-ok", "Request closed"], request_acknowledged: ["c-info", "Request acknowledged"], request_done: ["c-ok", "Done by the department"], case_ready: ["c-ok", "Case File ready"],
   board_action: ["c-info", "Tumour Board action"], board_action_suggestion: ["c-ok", "Action may be complete"] };
 async function loadNotifications() {
   if (!S.me) return;
@@ -1826,9 +1956,9 @@ function showNotifications() {
   const list = S.notifications || [];
   const row = (n) => { const k = NKIND[n.kind] || ["c-mute", n.kind]; return `<div class="ntf ${n.read ? "read" : ""}" data-ntf="${esc(n.id)}" data-case="${esc(n.case_id || "")}" title="Open the Case File">
       <div class="h"><span class="chip ${k[0]}">${esc(k[1])}</span> <b>${esc(n.title)}</b>${n.level_label ? ` <span class="chip c-lvl">${esc(n.level_label)}</span>` : ""}${n.read ? "" : ' <span class="chip c-info">new</span>'}</div>
-      ${n.text ? `<div class="small">${esc(n.text)}</div>` : ""}<div class="small muted">${esc((n.ts || "").slice(0, 16).replace("T", " "))}${n.due ? " · due " + fmtDate(n.due) : ""}${n.to?.department ? " · to " + esc(deptName(n.to.department)) : n.to?.role ? " · to the coordinator" : ""}</div></div>`; };
+      ${n.text ? `<div class="small">${esc(n.text)}</div>` : ""}${n.kind === "request" && n.uhid ? `<div class="small"><span class="chip c-mono" title="UHID">${esc(n.uhid)}</span>${n.accession ? ` <span class="chip c-mono" title="Accession / Lab No.">${esc(n.accession)}</span>` : ""}${encText(n.encounter) ? ` <span class="muted">${esc(encText(n.encounter))}</span>` : ""}${n.reminder ? ' <span class="chip c-warn">reminder</span>' : ""}${n.sent_by ? ` <span class="muted">sent by ${esc(n.sent_by)}</span>` : ""}</div>` : ""}${n.kind === "request_done" && n.refetch_offer ? `<div class="small"><b>Re-fetch from the HIS to close it.</b></div>` : ""}<div class="small muted">${esc((n.ts || "").slice(0, 16).replace("T", " "))}${n.due ? " · due " + fmtDate(n.due) : ""}${n.to?.department ? " · to " + esc(deptName(n.to.department)) : n.to?.role ? " · to the coordinator" : ""}</div></div>`; };
   $("#modal-body").innerHTML = `<h3 style="color:#1f2933;margin-top:0">Notifications <span class="muted small" style="font-weight:400">${S.unread || 0} unread</span></h3>
-    <div class="small muted">In-app only. The Pre-Authorization check sends each gap to the Responsible Department (Level 1) or to the department that uploaded the record (Level 2); a request closes by itself when the record arrives; the coordinator hears when a Case File is ready for the board.</div>
+    <div class="small muted">In-app only. The Pre-Authorization check suggests a request for each gap; the treating doctor sends it to the Responsible Department, which acknowledges it and sends "done" back. A request closes by itself when the record arrives; the coordinator hears when a Case File is ready for the board.</div>
     <div style="margin:8px 0;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">${(S.org?.inbox_departments || []).length || S.me?.coordinator ? `<button class="ghost sm" id="nt-inbox">Open the department inbox</button>` : ""}${list.some((n) => !n.read) ? `<button class="ghost sm" id="nt-readall">Mark all read</button>` : ""}<button class="ghost sm" data-closemodal>Close</button></div>
     ${list.length ? list.map(row).join("") : `<div class="muted">Nothing yet.</div>`}`;
   $("#modal").classList.remove("hidden");
@@ -1846,15 +1976,29 @@ async function showInbox() {
   const ib = await api("/inbox"); S.inbox = ib;
   MAIN_SECTIONS.forEach((x) => $("#" + x).classList.toggle("hidden", x !== "inbox")); stopRoomPoll();
   $$(".citem").forEach((el) => el.classList.remove("on"));
-  const chip = (q) => q.status === "completed" ? `<span class="chip c-ok">Closed</span>` : q.overdue ? `<span class="chip c-bad">Overdue ${q.days_overdue} d</span>` : `<span class="chip c-warn">Pending</span>`;
-  const row = (q) => `<tr class="click" data-case="${esc(q.case_id)}"><td><b>${esc(q.patient?.name || q.case_id)}</b><div class="small muted">${esc(q.case_id)}${q.patient?.mrn ? " · UHID / MRN " + esc(q.patient.mrn) : ""}${q.patient?.agesex ? " · " + esc(q.patient.agesex) : ""}${q.board_date ? " · board " + fmtDate(q.board_date) : ""}</div></td>
-      <td>${q.source === "board" ? `<span class="chip c-info">${esc(q.source_label)}</span> ` : ""}<b>${esc(q.label)}</b>${q.level_label ? `<div><span class="chip c-lvl">${esc(q.level_label)}</span></div>` : ""}</td><td class="small">${esc(q.what)}${suggestionHTML(q, true)}</td><td class="small">${fmtDate(q.due)}</td><td>${chip(q)}${q.completed ? `<div class="small muted">${esc(q.completed.slice(0, 16).replace("T", " "))}</div>` : ""}</td></tr>`;
+  // V2 item 4.3: the department answers here. The inbox has no per-case permissions: the buttons show for the doctors of that inbox
+  // department (the coordinator for the MDT Coordinator's row) and admins; the server decides and a refusal is toasted.
+  const mayAnswer = (d) => !!S.me && (S.me.admin || (d.id === "coordinator" ? !!S.me.coordinator : !!(S.me.departments || {})[d.id]));
+  const chip = (q) => { if (q.source !== "pre_authorization") return q.status === "completed" ? `<span class="chip c-ok">Closed</span>` : q.overdue ? `<span class="chip c-bad">Overdue ${q.days_overdue} d</span>` : `<span class="chip c-warn">Pending</span>`;
+    const [cls, txt] = reqStatus(q); return `<span class="chip ${cls} reqst">${esc(txt)}</span>`; };
+  const firstLines = (m) => String(m || "").split("\n").map((l) => l.trim()).filter((l) => l && !/^(To|Tumour Board Case File|Patient|Treating department|Sent by)\b/.test(l)).slice(0, 3).join("\n");
+  const asked = (q) => { const s = q.sent || {}; const head = q.what || firstLines(s.message);
+    return `${head ? `<div class="pre">${esc(head)}</div>` : ""}${s.message ? `<details class="small"><summary>Message${s.count > 1 ? ` (sent ${s.count} times)` : ""}</summary><div class="pre msg">${esc(s.message)}</div></details>` : ""}${s.by ? `<div class="muted">Sent by ${esc(s.by)} on ${dmyt(s.at)}</div>` : ""}`; };
+  const acts = (q, d) => { if (q.source !== "pre_authorization" || q.status === "completed" || !q.sent || !mayAnswer(d)) return "";
+    return `${!q.acknowledged ? `<button class="ghost sm" data-ack="${esc(q.action_id)}" data-case="${esc(q.case_id)}">Acknowledge</button>` : ""}${!q.done ? `<button class="primary sm" data-done="${esc(q.action_id)}" data-case="${esc(q.case_id)}" title="The report is signed in your own system: send &quot;done&quot; back with an optional note">Done</button>` : ""}`; };
+  const row = (q, d) => `<tr class="click" data-case="${esc(q.case_id)}" data-aid="${esc(q.action_id)}"><td><b>${esc(q.patient?.name || q.case_id)}</b><div class="small muted">${esc(q.case_id)}${q.patient?.agesex ? " · " + esc(q.patient.agesex) : ""}${q.board_date ? " · board " + dmyd(q.board_date) : ""}</div>
+        ${q.uhid || q.patient?.mrn ? `<div class="small">UHID <span class="mono">${esc(q.uhid || q.patient.mrn)}</span></div>` : ""}${encHTML(q.encounter)}</td>
+      <td>${q.source === "board" ? `<span class="chip c-info">${esc(q.source_label)}</span> ` : q.free ? `<span class="chip c-info">Free request</span> ` : ""}<b>${esc(q.label)}</b><div class="chips" style="margin-top:3px">${q.level_label ? `<span class="chip c-lvl">${esc(q.level_label)}</span>` : ""}${q.accession ? `<span class="chip c-mono" title="Accession / Lab No.: find the patient in your PACS / RIS / LIS">${esc(q.accession)}</span>` : ""}${q.pending_order ? `<span class="chip ${q.pending_order.stage === "cancelled" ? "c-bad" : "c-info"}">Ordered in the HIS: ${esc(stageText(q.pending_order))}</span>` : ""}</div></td>
+      <td class="small">${q.source === "pre_authorization" ? asked(q) : esc(q.what)}${suggestionHTML(q, true)}</td><td class="small nowrap">${q.due ? dmyd(q.due) : ""}</td>
+      <td>${chip(q)}${q.source === "pre_authorization" ? reqTrail({ ...q, sent: null, earlier: [] }) : q.completed ? `<div class="small muted">${esc(dmyt(q.completed))}</div>` : ""}</td><td class="nowrap"><div class="ibtns">${acts(q, d)}</div></td></tr>`;
   $("#inbox").innerHTML = `<div class="case-head"><div><div class="eyebrow">Department inbox</div><h1>Requests to ${ib.departments.length === 1 ? esc(ib.departments[0].name) : "my departments"}</h1>
-      <div class="muted">Every gap the Pre-Authorization check routed to your department across the Tumour Board Case Files, and every action the Tumour Board gave your department: the Case File, what is needed, the due date and the status. A Pre-Authorization request closes by itself when the record arrives; a Tumour Board action is closed by a person (a newly arrived matching document is suggested). Requests closed in the last 7 days stay listed. Overdue is worked out when this page is shown.</div></div>
+      <div class="muted">Requests the treating doctors sent to your department across the Tumour Board Case Files, and every action the Tumour Board gave your department: the patient with the UHID, IP / OP No. and accession No. to find the study or sample in your own PACS / RIS / LIS, what is asked, the due date and the status. Acknowledge a request when you take it up, then send "done" back (with a note if needed) once the report is signed in your own system. A request closes by itself when the record arrives in the Case File; a Tumour Board action is closed by a person (a newly arrived matching document is suggested). Requests closed in the last 7 days stay listed. Overdue is worked out when this page is shown.</div></div>
       <div class="readiness"><div class="rtext"><b>${ib.open} open</b><span>${ib.overdue} overdue</span></div></div></div>
     ${ib.departments.map((d) => `<div class="card"><h3>${esc(d.name)} <span class="muted small">${d.open} open · ${d.overdue} overdue</span></h3>
-      ${d.requests.length ? `<table class="t"><thead><tr><th>Case File</th><th>Record needed</th><th>What is missing</th><th>Due</th><th>Status</th></tr></thead><tbody>${d.requests.map(row).join("")}</tbody></table>` : `<div class="muted small">No requests.</div>`}</div>`).join("") || `<div class="card"><div class="muted">Your account is not placed in a department with an inbox.</div></div>`}`;
-  $$("#inbox tr[data-case]").forEach((tr) => (tr.onclick = async () => { S.tab = "ready"; try { await openCase(tr.dataset.case); } catch (e) { toast("That Case File no longer exists", 6000); } }));
+      ${d.requests.length ? `<div class="tscroll"><table class="t inbox-t"><thead><tr><th>Case File</th><th>Record needed</th><th>What is asked</th><th>Due</th><th>Status</th><th>Actions</th></tr></thead><tbody>${d.requests.map((q) => row(q, d)).join("")}</tbody></table></div>` : `<div class="muted small">No requests.</div>`}</div>`).join("") || `<div class="card"><div class="muted">Your account is not placed in a department with an inbox.</div></div>`}`;
+  $$("#inbox tr[data-case]").forEach((tr) => (tr.onclick = async (e) => { if (e.target.closest("button, details, a")) return; S.tab = "ready"; try { await openCase(tr.dataset.case); } catch (err) { toast("That Case File no longer exists", 6000); } }));
+  $$("#inbox [data-ack]").forEach((b) => (b.onclick = async (e) => { e.stopPropagation(); b.disabled = true; if (await answerRequest(b.dataset.case, b.dataset.ack, "acknowledge")) { await showInbox(); loadNotifications(); } else b.disabled = false; }));
+  $$("#inbox [data-done]").forEach((b) => (b.onclick = async (e) => { e.stopPropagation(); b.disabled = true; if (await answerRequest(b.dataset.case, b.dataset.done, "done")) { await showInbox(); loadNotifications(); } else b.disabled = false; }));
   $("#inbox-count").textContent = ib.open; $("#inbox-count").classList.toggle("hidden", !ib.open);
 }
 
@@ -2133,7 +2277,7 @@ $("#btn-org").onclick = () => showOrgPage();
 $("#btn-mydept").onclick = () => showMyDept();
 $("#btn-queue").onclick = showIntake;
 $("#btn-inbox").onclick = showInbox;
-$("#btn-bell").onclick = showNotifications;
+$("#btn-bell").onclick = async () => { await loadNotifications(); showNotifications(); };  // fresh on open: a department may have answered since the last poll (V2 4.3)
 $("#btn-sessions").onclick = showSessions;
 (async () => {
   const pr = await api("/protocols"); S.protocols = pr.protocols; S.facts = pr.facts;
@@ -2151,7 +2295,7 @@ $("#btn-sessions").onclick = showSessions;
   btn.addEventListener("click", () => set(!document.body.classList.contains("side-open")));
   document.addEventListener("click", (e) => {
     if (!document.body.classList.contains("side-open")) return;
-    if (e.target.closest(".side .citem, .side [data-demo], .side #btn-new, .side #btn-queue") || (!e.target.closest(".side") && !e.target.closest("#btn-side"))) set(false);
+    if (e.target.closest(".side .citem, .side [data-demo], .side #btn-new, .side #btn-queue, .side #btn-inbox") || (!e.target.closest(".side") && !e.target.closest("#btn-side"))) set(false);
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") set(false); });
   window.addEventListener("resize", () => { if (innerWidth > 860) set(false); });
