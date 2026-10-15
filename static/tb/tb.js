@@ -50,7 +50,7 @@ async function loadCases() {
     </div>`).join("") : `<div class="muted small">No Case Files yet.</div>`);
   $$(".citem").forEach((el) => (el.onclick = () => openCase(el.dataset.case)));
   $("#demo-list").innerHTML = d.demo.map((c) => `<div class="demo"><b>${esc(c.case_id)}</b> ${esc(c.patient?.name)}<br><span class="muted">${esc(c.protocol)} · ${c.files} files${c.has_arrivals ? " · has later arrivals" : ""}</span><br>
-      ${meCan("create_case") ? `<button class="ghost sm" data-demo="${esc(c.case_id)}" style="margin-top:6px">Load as new Case File</button>` : ""}</div>`).join("") || `<div class="muted small">No demo corpus found.</div>`;
+      ${meCan("create_case") ? `<button class="ghost sm" data-demo="${esc(c.case_id)}" style="margin-top:6px">Load as new Case File</button>` : ""}</div>`).join("") || empty("No demo corpus found.", "Ask an administrator to load the demo corpus, or create a Case File from a UHID.");
   $$("[data-demo]").forEach((b) => (b.onclick = async () => {
     if (!confirm(`Load synthetic case ${b.dataset.demo}? Any existing Case File with this id is replaced.`)) return;
     const j = await api("/demo/" + b.dataset.demo, { method: "POST" });
@@ -99,6 +99,7 @@ function showTab(t) {
   S.tab = t;
   $$("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === t));
   $$(".tab").forEach((el) => el.classList.toggle("hidden", el.id !== "tab-" + t));
+  putHelp($("#tab-help-host"), t, "help-tab-" + t);
   ({ ready: renderReady, docs: renderDocs, ask: renderAsk, roles: renderRoles, summary: renderSummary, board: renderBoard, audit: renderAudit })[t]();
 }
 
@@ -201,7 +202,7 @@ function renderReady() {
   const opt = g ? g.optional.map((o) => `<span class="chip ${o.available ? "c-info" : "c-mute"}" style="margin:2px">${o.available ? "✓ " : ""}${esc(o.label)}</span>`).join("") : "";
   const acts = (state.actions || []).filter((a) => a.source === "pre_authorization");
   const RQORD = { suggested: 0, overdue: 1, pending: 2, completed: 3 };  // what still needs the doctor first, closed last
-  const actHTML = acts.length ? acts.sort((a, b) => (RQORD[a.status] ?? 2) - (RQORD[b.status] ?? 2)).map(actionHTML).join("") : `<div class="muted small">No requests.</div>`;
+  const actHTML = acts.length ? acts.sort((a, b) => (RQORD[a.status] ?? 2) - (RQORD[b.status] ?? 2)).map(actionHTML).join("") : empty("No requests.", "Requests appear when a gap is found in the Pre-Authorization check or a doctor asks a department for a record.");
   const rq = S.data.requests || { suggested: acts.filter((a) => a.status === "suggested").length, sent: acts.filter((a) => a.status === "pending" || a.status === "overdue").length, closed: acts.filter((a) => a.status === "completed").length };
   const docs = g?.documents || {};
   const setting = g ? `NCG setting: <b>${esc(g.setting_label || "not recorded (the strictest tier of each record applies until the coordinator records it)")}</b> · Hospital level: <b>${esc(g.hospital_level || "essential")}</b> · Protocol ${esc(g.protocol)} v${esc(g.protocol_version || "")}` : "";
@@ -299,12 +300,12 @@ async function showDashboard(start = "", end = "") {
     <div class="card"><h3>Before the board</h3>
     <div class="tiles">${tile("Case Files", b.cases, "", `${b.listed} listed, ${b.awaiting_listing} awaiting listing`)}${tile("Readiness (median)", b.readiness_median, "%")}${tile("Ready before the board date", b.ready_before_board_pct, "%", `${b.ready_before_board_n} of ${b.ready_before_board_d} past boards · target 80% (Victorian 4.4)`)}${tile("Days listed to ready (median)", b.days_listed_to_ready_median)}${tile("Documents", b.documents, "", `${b.final_signed_pct ?? 0}% final and signed · ${b.scanned_pct ?? 0}% from scans`)}${tile("Reports that disagree", b.discordances_open, "", "open for review")}${tile("Identity flags", b.identity_flags, "", "documents needing a patient check")}${tile("Requests open", b.requests_open, "", `${b.requests_overdue} overdue · ${b.requests_closed} closed · median ${b.hours_to_close_median ?? "n/a"} h to close`)}</div>
     <h4 style="margin:12px 0 4px">Requests by department</h4><div class="muted small" style="margin-bottom:4px">Bar = open requests; number = open (overdue) · closed · median hours to close.</div>
-    ${b.by_department.length ? b.by_department.map((x) => barRow(x.department, x.open, maxOpen, `${x.open}${x.overdue ? ` (${x.overdue})` : ""} · ${x.closed} · ${x.hours_to_close_median ?? "n/a"} h`)).join("") : '<div class="muted small">No requests yet.</div>'}</div>
+    ${b.by_department.length ? b.by_department.map((x) => barRow(x.department, x.open, maxOpen, `${x.open}${x.overdue ? ` (${x.overdue})` : ""} · ${x.closed} · ${x.hours_to_close_median ?? "n/a"} h`)).join("") : empty("No requests yet.", "Requests appear when a treating doctor sends one from a Case File.")}</div>
 
     <div class="card"><h3>During the board</h3>
     <div class="tiles">${tile("Board sessions", du.sessions, "", `${du.closed} closed`)}${tile("Cases discussed", du.cases_discussed)}${tile("Quorate sessions", du.quorate_pct, "%", `${du.quorate_n} of ${du.closed} · surgical, radiation and medical oncologist present (PM-JAY) · target 95% (NHS 2020)`)}${tile("Minutes per case (median)", du.minutes_per_case_median, "", du.minutes_per_case_max != null ? `max ${du.minutes_per_case_max}` : "")}${tile("AI briefs for absent specialties", du.agent_briefs)}${tile("Questions to AI support", du.agent_questions)}</div>
     <h4 style="margin:12px 0 4px">Attendance per specialty <span class="muted small">closed sessions · target line 90% (Victorian 3.3)</span></h4>
-    ${att.length && du.closed ? att.map((x) => barRow(x.department, x.rate ?? 0, 100, x.rate == null ? "not marked" : `${x.rate}% · ${x.present} of ${x.sessions}`, 90, x.rate == null)).join("") : '<div class="muted small">No closed session yet.</div>'}</div>
+    ${att.length && du.closed ? att.map((x) => barRow(x.department, x.rate ?? 0, 100, x.rate == null ? "not marked" : `${x.rate}% · ${x.present} of ${x.sessions}`, 90, x.rate == null)).join("") : empty("No closed session yet.", "Attendance is shown after a board session is closed.")}</div>
 
     <div class="card"><h3>After the board</h3>
     <div class="tiles">${tile("Decisions recorded", af.decisions, "", outcomes.map(([k, v]) => `${k} ${v}`).join(" · "))}${tile("Records final (every flag resolved)", af.final_pct, "%", `${af.final} of ${af.decisions}`)}${tile("Flags open / resolved", `${af.flags_open} / ${af.flags_resolved}`)}${tile("PM-JAY composition complete", af.composition_complete_pct, "%", `${af.composition_checked} records checked`)}${tile("Recorded on the board day", af.decision_recorded_same_day_pct, "%", "target 80% (Victorian 8.4, within 24 h)")}${tile("Patient informed within 7 days", af.patient_informed_7d_pct, "%", `${af.patient_informed_7d_n} of ${af.patient_informed_7d_d} · target 80% (Victorian 8.4 / 8.5)`)}${tile("Follow-up actions open", af.board_actions_open, "", `${af.board_actions_overdue} overdue · ${af.board_actions_closed} closed · median ${af.days_to_close_action_median ?? "n/a"} days`)}${tile("Decisions with a changed value", af.decision_watch_open, "", "a later report changed a value the decision cited")}</div>
@@ -1074,7 +1075,7 @@ async function openDoc(docId, focus, base) {
   const isImg = [".png", ".jpg", ".jpeg", ".webp", ".bmp"].includes(d.ext);
   const isPdf = [".pdf", ".tif", ".tiff"].includes(d.ext);  // pages rendered by the server (TIFF: one frame per page)
   const preview = isImg ? `<div class="scanwrap"><img class="orig" src="/api/tb${base}/file" alt="Original document"><div id="ocrboxes"></div></div><div class="small muted" id="boxnote"></div>` :
-    isPdf ? `<div class="scanwrap"><img class="orig" id="pdfimg" src="/api/tb${base}/file?render=1&page=${pg}" alt="Page preview"><div id="ocrboxes"></div></div><div class="small muted" id="boxnote"></div>` : `<div class="muted">No image preview for this format.</div>`;
+    isPdf ? `<div class="scanwrap"><img class="orig" id="pdfimg" src="/api/tb${base}/file?render=1&page=${pg}" alt="Page preview"><div id="ocrboxes"></div></div><div class="small muted" id="boxnote"></div>` : empty("No image preview for this format.", "Open the extracted text or download the original file.");
   const drawBoxes = (pi) => {  // V1 item 8.4: the cited quote (strong) and this page's fields (light) on the scan image
     const el = $("#ocrboxes"), note = $("#boxnote"), p = pages[pi] || {}; if (!el) return;
     const out = [];
@@ -1136,7 +1137,7 @@ async function instant(text) {
   const rx = r.values.patterns.length ? new RegExp(r.values.patterns.join("|"), "ig") : null;
   $("#hits").innerHTML = r.values.hits.map((h) => `<div class="hit cite-row" data-doc="${esc(h.doc_id)}" data-page="${h.page}" data-start="${h.start}" data-end="${h.end}">
     <div class="small muted">${esc(h.doc_title)} · ${fmtDate(h.date)} · ${esc(h.status || "")}</div><div>${rx ? esc(h.text).replace(rx, (m) => `<mark>${m}</mark>`) : esc(h.text)}</div></div>`).join("")
-    || (r.passages.length ? `<div class="small muted" style="margin:8px 0">No exact line match. Closest passages:</div>` + r.passages.slice(0, 5).map((p) => `<div class="hit cite-row" data-doc="${esc(p.doc_id)}" data-page="${p.page}" data-start="${p.start}" data-end="${p.end}"><div class="small muted">${esc(p.doc_title)} · ${fmtDate(p.date)}</div><div>${esc(p.text.slice(0, 220))}</div></div>`).join("") : `<div class="muted small">Nothing found.</div>`);
+    || (r.passages.length ? `<div class="small muted" style="margin:8px 0">No exact line match. Closest passages:</div>` + r.passages.slice(0, 5).map((p) => `<div class="hit cite-row" data-doc="${esc(p.doc_id)}" data-page="${p.page}" data-start="${p.start}" data-end="${p.end}"><div class="small muted">${esc(p.doc_title)} · ${fmtDate(p.date)}</div><div>${esc(p.text.slice(0, 220))}</div></div>`).join("") : empty("Nothing found.", "Try other words, or check that the record has been uploaded to this Case File."));
   $$(".cite-row").forEach((el) => (el.onclick = () => openDoc(el.dataset.doc, { page: +el.dataset.page, start: +el.dataset.start, end: +el.dataset.end })));
 }
 async function ask(text) {
@@ -1626,6 +1627,7 @@ async function loadOrg() {
   $("#btn-sessions").classList.toggle("hidden", !(S.me?.known || S.me?.admin));  // patient data only for placed accounts (read_case)
   $("#btn-connectors").classList.toggle("hidden", !S.me?.admin);
   $("#btn-dashboard").classList.toggle("hidden", !(S.me?.admin || S.me?.coordinator));
+  $$(".navgrp").forEach((g) => g.classList.toggle("hidden", ![...g.querySelectorAll("button")].some((b) => !b.classList.contains("hidden"))));
   $("#btn-new").classList.toggle("hidden", !meCan("create_case"));
 }
 // ------------------------------------------------------------------ Organisation (root admin) and My department (department admin) · V2 item 2.3
@@ -1701,7 +1703,7 @@ async function showOrgPage() {
       <div class="small muted" style="margin-top:6px">An existing plain login is placed without a password. ${esc(acc.reset_note || o.reset_note || "")}</div>
       <div class="actions-row"><button class="primary sm" id="na-create">Create login</button></div></div>
     <div class="card"><h3>Audit <span class="muted small">last 50 changes, newest first</span></h3>
-      ${(aud.events || []).length ? tscroll(`<table class="t compact"><thead><tr><th>Time</th><th>By</th><th>Change</th><th>Details</th></tr></thead><tbody>${aud.events.map((e) => `<tr><td class="small nowrap">${esc((e.ts || "").replace("T", " ").slice(0, 16))}</td><td class="small">${esc(e.by)}</td><td class="small">${esc(AUDIT_KIND[e.kind] || e.kind)}</td><td class="small">${esc(auditText(e))}</td></tr>`).join("")}</tbody></table>`) : '<div class="muted small">No changes recorded yet.</div>'}</div>`;
+      ${(aud.events || []).length ? tscroll(`<table class="t compact"><thead><tr><th>Time</th><th>By</th><th>Change</th><th>Details</th></tr></thead><tbody>${aud.events.map((e) => `<tr><td class="small nowrap">${esc((e.ts || "").replace("T", " ").slice(0, 16))}</td><td class="small">${esc(e.by)}</td><td class="small">${esc(AUDIT_KIND[e.kind] || e.kind)}</td><td class="small">${esc(auditText(e))}</td></tr>`).join("")}</tbody></table>`) : empty("No changes recorded yet.", "Every change to this Case File is logged here with who and when.")}</div>`;
   renderAccounts();
   S.orgPage.lists = Object.fromEntries(BOARD_LISTS.map(([k]) => [k, [...(h[k] || (k === "board_heads" ? DEFAULT_HEADS : []))]]));
   BOARD_LISTS.forEach(([k]) => renderDepList(k));
@@ -2014,7 +2016,7 @@ async function showIntake() {
   $("#intake").innerHTML = `<div class="case-head"><div><div class="eyebrow">Department uploads</div><h1>Needs matching</h1>
       <div class="muted">Records uploaded by departments that could not be matched to a patient on an exact identifier. A person files each one into a Case File, starts a new Case File, or discards it. Every decision is recorded in the audit log.</div></div></div>
     <div class="card"><h3>Waiting <span class="muted small">${docs.length}</span></h3>
-    ${docs.length ? `<table class="t"><thead><tr><th>Record</th><th>Uploaded by</th><th>Patient as printed</th><th>Decision</th></tr></thead><tbody>${docs.map(row).join("")}</tbody></table>` : `<div class="muted">Nothing waiting. Department uploads that match a patient exactly are filed into the Case File automatically.</div>`}</div>
+    ${docs.length ? `<table class="t"><thead><tr><th>Record</th><th>Uploaded by</th><th>Patient as printed</th><th>Decision</th></tr></thead><tbody>${docs.map(row).join("")}</tbody></table>` : empty("Nothing waiting.", "Department uploads that match a patient exactly are filed into the Case File automatically.")}</div>
     ${q.audit?.length ? `<div class="card"><h3>Intake log <span class="muted small">${q.audit.length} events</span></h3><table class="t"><tbody>${q.audit.slice().reverse().slice(0, 60).map((e) => { const { ts, kind, ...rest } = e; return `<tr><td class="small">${esc(ts.replace("T", " ").slice(0, 16))}</td><td><span class="chip c-info">${esc(kind)}</span></td><td class="small">${esc(JSON.stringify(rest)).slice(0, 220)}</td></tr>`; }).join("")}</tbody></table></div>` : ""}`;
   const after = async (jobId, cid) => { toast(cid ? `Filed into ${cid}; fields are being extracted` : "Done"); await showIntake(); refreshQueueCount(); loadCases(); if (jobId && cid) { S.caseId = cid; } };
   $$("[data-intake]").forEach((el) => (el.onclick = () => openDoc(el.dataset.intake, null, `/intake/${el.dataset.intake}`)));
@@ -2052,7 +2054,7 @@ function showNotifications() {
   $("#modal-body").innerHTML = `<h3 style="color:#1f2933;margin-top:0">Notifications <span class="muted small" style="font-weight:400">${S.unread || 0} unread</span></h3>
     <div class="small muted">In-app only. The Pre-Authorization check suggests a request for each gap; the treating doctor sends it to the Responsible Department, which acknowledges it and sends "done" back. A request closes by itself when the record arrives; the coordinator hears when a Case File is ready for the board.</div>
     <div style="margin:8px 0;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">${(S.org?.inbox_departments || []).length || S.me?.coordinator ? `<button class="ghost sm" id="nt-inbox">Open the department inbox</button>` : ""}${list.some((n) => !n.read) ? `<button class="ghost sm" id="nt-readall">Mark all read</button>` : ""}<button class="ghost sm" data-closemodal>Close</button></div>
-    ${list.length ? list.map(row).join("") : `<div class="muted">Nothing yet.</div>`}`;
+    ${list.length ? list.map(row).join("") : empty("Nothing yet.", "Requests, referrals and Case Files marked ready will appear here.")}`;
   $("#modal").classList.remove("hidden");
   if ($("#nt-readall")) $("#nt-readall").onclick = async () => { await api("/notifications/read", { json: { all: true } }); await loadNotifications(); showNotifications(); };
   if ($("#nt-inbox")) $("#nt-inbox").onclick = () => { $("#modal").classList.add("hidden"); showInbox(); };
@@ -2090,14 +2092,14 @@ async function showInbox() {
   MAIN_SECTIONS.forEach((x) => $("#" + x).classList.toggle("hidden", x !== "inbox")); stopRoomPoll();
   $$(".citem").forEach((el) => el.classList.remove("on"));
   const refs = ib.referrals || [], refCard = inboxReferralsHTML(refs);  // V2 item 5.2: referrals to and from my departments
-  const withRows = ib.departments.filter((d) => d.requests.length || ib.departments.length <= 2), empty = ib.departments.filter((d) => !withRows.includes(d));  // V2 item 7.2: an admin's 30 departments as one line when empty
-  const emptyCard = empty.length ? `<div class="card"><h3>No requests <span class="muted small">${plural(empty.length, "department")}</span></h3><div class="small muted">${esc(empty.map((d) => d.name).join(", "))}</div></div>` : "";
+  const withRows = ib.departments.filter((d) => d.requests.length || ib.departments.length <= 2), emptyDeps = ib.departments.filter((d) => !withRows.includes(d));  // V2 item 7.2: an admin's 30 departments as one line when empty
+  const emptyCard = emptyDeps.length ? `<div class="card"><h3>No requests <span class="muted small">${plural(emptyDeps.length, "department")}</span></h3><div class="small muted">${esc(emptyDeps.map((d) => d.name).join(", "))}</div></div>` : "";
   $("#inbox").innerHTML = `<div class="case-head"><div><div class="eyebrow">Department inbox</div><h1>Requests to ${ib.departments.length === 1 ? esc(ib.departments[0].name) : "my departments"}</h1>
       <div class="muted">Requests the treating doctors sent to your department across the Tumour Board Case Files, and every action the Tumour Board gave your department: the patient with the UHID, IP / OP No. and accession No. to find the study or sample in your own PACS / RIS / LIS, what is asked, the due date and the status. Acknowledge a request when you take it up, then send "done" back (with a note if needed) once the report is signed in your own system. A request closes by itself when the record arrives in the Case File; a Tumour Board action is closed by a person (a newly arrived matching document is suggested). Requests closed in the last 7 days stay listed. Overdue is worked out when this page is shown.</div></div>
       <div class="readiness"><div class="rtext"><b>${ib.open} open</b><span>${ib.overdue} overdue</span>${refs.some((r) => r.can_answer) ? `<span> · ${plural(refs.filter((r) => r.can_answer).length, "referral")} to answer</span>` : ""}</div></div></div>
     ${refCard}
     ${withRows.map((d) => `<div class="card"><h3>${esc(d.name)} <span class="muted small">${d.open} open · ${d.overdue} overdue</span></h3>
-      ${d.requests.length ? `<div class="tscroll"><table class="t inbox-t"><thead><tr><th>Case File</th><th>Record needed</th><th>What is asked</th><th>Due</th><th>Status</th><th>Actions</th></tr></thead><tbody>${d.requests.map((q) => ibRow(q, d)).join("")}</tbody></table></div>` : `<div class="muted small">No requests.</div>`}</div>`).join("") + emptyCard || (refs.length ? "" : `<div class="card"><div class="muted">Your account is not placed in a department with an inbox.</div></div>`)}`;
+      ${d.requests.length ? `<div class="tscroll"><table class="t inbox-t"><thead><tr><th>Case File</th><th>Record needed</th><th>What is asked</th><th>Due</th><th>Status</th><th>Actions</th></tr></thead><tbody>${d.requests.map((q) => ibRow(q, d)).join("")}</tbody></table></div>` : empty("No requests.", "Requests appear when a treating doctor sends one from a Case File.")}</div>`).join("") + emptyCard || (refs.length ? "" : `<div class="card"><div class="muted">Your account is not placed in a department with an inbox.</div></div>`)}`;
   bindInboxRows("#inbox", showInbox);
   bindInboxReferrals(refs, "#inbox", showInbox);
   const cnt = ib.open + refs.filter((r) => r.can_answer).length;
@@ -2305,7 +2307,7 @@ function renderLimited() {
   const acts = S.data.state.actions || [], docs = S.data.documents || [];
   $("#tab-ready").innerHTML = `<div class="banner small" id="limited-note"><b>Your department sees only the items it was asked about in this Case File.</b> The requests sent to it and the records it produced or the requests name; the rest of the Case File stays with ${esc(S.data.access?.owner?.name || "the owning department")}.</div>
     <div class="grid2"><div><div class="card" id="req-card"><h3>Requests to your department <span class="muted small">${acts.length}</span></h3>
-      ${acts.length ? acts.map((a) => a.source === "pre_authorization" ? requestHTML(a, true) : actionHTML(a)).join("") : `<div class="muted small">No requests.</div>`}</div></div>
+      ${acts.length ? acts.map((a) => a.source === "pre_authorization" ? requestHTML(a, true) : actionHTML(a)).join("") : empty("No requests.", "Requests appear when a gap is found in the Pre-Authorization check or a doctor asks a department for a record.")}</div></div>
     <div><div class="card"><h3>Records in your department's scope <span class="muted small">${docs.length}</span></h3>
       ${docs.length ? `<div class="tscroll"><table class="t">${DOC_HEAD}<tbody>${docs.map(docRow).join("")}</tbody></table></div>` : `<div class="muted small">No record in your department's scope yet.</div>`}</div></div></div>`;
   const root = $("#tab-ready");
@@ -2365,7 +2367,7 @@ async function showSessions() {
       <div class="dash-filters"><div><label>Board date</label><input type="date" id="ag-date" value="${today}"></div><button class="ghost sm" id="ag-go">Show</button></div>
       <div id="ag-out" class="small muted">Choose a board date.</div></div>
     <div class="card"><h3>Sessions <span class="muted small">${r.sessions.length}</span></h3>
-      ${r.sessions.length ? `<table class="t"><thead><tr><th>Date</th><th>Title</th><th>Case Files</th><th>Status</th></tr></thead><tbody>${r.sessions.map((x) => `<tr class="click" data-sid="${esc(x.id)}"><td><b>${fmtDate(x.date)}</b></td><td>${esc(x.title || "Tumour Board")}<div class="small muted">${esc(x.id)} · created by ${esc(x.created_by || "")}</div></td><td>${x.cases}</td><td><span class="chip ${(SSTATUS[x.status] || SSTATUS.planned)[0]}">${(SSTATUS[x.status] || SSTATUS.planned)[1]}</span></td></tr>`).join("")}</tbody></table>` : `<div class="muted small">No board sessions yet.</div>`}</div>`;
+      ${r.sessions.length ? `<table class="t"><thead><tr><th>Date</th><th>Title</th><th>Case Files</th><th>Status</th></tr></thead><tbody>${r.sessions.map((x) => `<tr class="click" data-sid="${esc(x.id)}"><td><b>${fmtDate(x.date)}</b></td><td>${esc(x.title || "Tumour Board")}<div class="small muted">${esc(x.id)} · created by ${esc(x.created_by || "")}</div></td><td>${x.cases}</td><td><span class="chip ${(SSTATUS[x.status] || SSTATUS.planned)[0]}">${(SSTATUS[x.status] || SSTATUS.planned)[1]}</span></td></tr>`).join("")}</tbody></table>` : empty("No board sessions yet.", "Create one from the Case Files marked ready for a board date.")}</div>`;
   $$("#sessions tr[data-sid]").forEach((tr) => (tr.onclick = () => openSession(tr.dataset.sid)));
   const agendaGo = async () => {
     $("#ag-out").innerHTML = `<span class="spin"></span>`;
@@ -2635,7 +2637,7 @@ function bindDecision() {
 function logHTML() {
   const r = S.room, s = r.session, decided = !!(s.decisions || {})[S.roomCase], m = r.can_manage && decided;
   const log = (s.log || []).filter((e) => e.case_id === S.roomCase && !e.superseded);
-  if (!log.length) return `<div class="muted small">Nothing yet. The agents' briefs and their answers to the board's questions are kept here, with what the board made of each.</div>`;
+  if (!log.length) return empty("Nothing yet.", "The agents' briefs and their answers to the board's questions are kept here, with what the board made of each.");
   return `${decided ? "" : `<div class="small muted" style="margin-bottom:6px">Marks open once the board's decision is recorded.</div>`}<table class="t"><thead><tr><th>What the agent said</th><th>The board</th></tr></thead><tbody>${log.map((e) => `<tr class="${e.approximate ? "approx noprint" : ""}"><td>
       <div class="small muted">${esc(e.label || e.role)} · ${esc(KIND[e.kind] || e.kind)}${e.heading ? ` (${esc(e.heading)})` : ""}</div>${e.kind === "answer" ? `<div class="small"><b>Q:</b> ${esc(e.question)}</div>` : ""}
       <div>${esc(e.text)} ${(e.citations || []).map(citeHTML).join("")}${flagHTML(e)}</div></td>
@@ -2649,7 +2651,7 @@ function bindLog() {
     catch (err) { toast(err.message, 7000); }
   }));
 }
-document.addEventListener("click", (e) => { const x = e.target.closest("[data-open-session]"); if (x) { e.preventDefault(); openSession(x.dataset.openSession); } });
+document.addEventListener("click", (e) => { const f = e.target.closest("[data-go-feat]"); if (f) { e.preventDefault(); showFeatures(f.dataset.goFeat); return; } const x = e.target.closest("[data-open-session]"); if (x) { e.preventDefault(); openSession(x.dataset.openSession); } });
 
 // ------------------------------------------------------------------ a home per role · V2 item 7.1
 // What each person sees first: the treating doctor its department's Case Files, Create from UHID, requests, referrals and notifications;
@@ -2666,9 +2668,10 @@ const HOME_ROLE_TEXT = {
   dept_admin: "The doctor logins of the department you administer: create, set Doctor or Head, disable, remove. No clinical action as admin.",
   root_admin: "The hospital, its departments, the Tumour Board accounts and their roles, the hospital-system connection, the routing of each record. No clinical action.",
 };
+const empty = (what, next) => `<div class="empty-state"><b>${esc(what)}</b><div class="small muted">${esc(next)}</div></div>`;
 const welcomeHTML = (note = "") => `<div class="intro"><h1>Make the Tumour Board Case File complete, before the board.</h1>
   <p class="lead">Vaidyx checks every Case File against the records configured as mandatory for that cancer, confirms each report is the final signed version, finds the required fields inside each document with a verifiable source quote, routes gaps to the Responsible Department, and prepares a cited Case File summary and role-specific support for the board.</p>
-  <div class="pillars"><div><b>Before the board</b><span>Pre-Authorization gate, gap routing, re-check</span></div><div><b>During the board</b><span>Ask the Case File, specialty support, cited summary</span></div><div><b>After the board</b><span>AI-assisted adjudication, follow-up tracking</span></div></div>
+  <div class="pillars"><a href="#" data-go-feat="before"><b>Before the board</b><span>Pre-Authorization gate, gap routing, re-check</span></a><a href="#" data-go-feat="during"><b>During the board</b><span>Ask the Case File, specialty support, cited summary</span></a><a href="#" data-go-feat="after"><b>After the board</b><span>AI-assisted adjudication, follow-up tracking</span></a></div>
   ${note || `<p class="muted">Select a Case File on the left, or load a synthetic demo case.</p>`}</div>`;
 const homeSec = (k, body, extra = "") => `<section class="home-sec" id="home-${k === "dept_admin" ? "deptadmin" : k === "root_admin" ? "root" : k}"><h2>${esc(ROLE_LABEL[k])}${extra}</h2><div class="muted small" style="margin-bottom:8px">${esc(HOME_ROLE_TEXT[k])}</div>${body}</section>`;
 const readyBar = (c) => c.gate_passed ? `<span class="chip c-ok">Pre-Authorization met</span>` : c.readiness != null ? `<div class="bar" style="min-width:80px"><i style="width:${Number(c.readiness) || 0}%"></i></div><div class="small muted">${esc(c.readiness)}% of the records</div>` : c.listing === "awaiting_listing" ? `<span class="chip c-mute">Awaiting listing</span>` : `<span class="chip c-mute">Not checked yet</span>`;
@@ -2716,7 +2719,7 @@ function homeCoordinatorHTML(h) {
   const srow = (x) => `<tr class="click" data-open-session="${esc(x.id)}"><td><b>${fmtDate(x.date)}</b></td><td>${esc(x.title || "Tumour Board")}<div class="small muted">${esc(x.id)}</div></td><td>${x.cases}</td><td><span class="chip ${(SSTATUS[x.status] || SSTATUS.planned)[0]}">${(SSTATUS[x.status] || SSTATUS.planned)[1]}</span></td></tr>`;
   return homeSec("coordinator", `${tiles}
     <div class="card"><h3>Board sessions <span class="btns">${c.can_manage ? `<button class="primary sm" id="hm-sessions-new">Create board session</button>` : ""}<button class="ghost sm" id="hm-sessions">All sessions</button></span></h3>
-      ${s.open.length ? `<div class="tscroll"><table class="t"><thead><tr><th>Date</th><th>Title</th><th>Case Files</th><th>Status</th></tr></thead><tbody>${s.open.map(srow).join("")}</tbody></table></div>` : `<div class="muted small">No open board session.${c.can_manage ? " Create one from the Case Files marked ready for a board date." : ""}</div>`}
+      ${s.open.length ? `<div class="tscroll"><table class="t"><thead><tr><th>Date</th><th>Title</th><th>Case Files</th><th>Status</th></tr></thead><tbody>${s.open.map(srow).join("")}</tbody></table></div>` : empty("No open board session.", c.can_manage ? "Create one from the Case Files marked ready for a board date." : "A coordinator creates a session from the Case Files marked ready for a board date.")}
       ${s.closed.length ? `<div class="small muted" style="margin-top:6px">Closed: ${s.closed.map((x) => `<a href="#" data-open-session="${esc(x.id)}">${esc(fmtDate(x.date))}${x.title ? " " + esc(x.title) : ""}</a>`).join(", ")}</div>` : ""}</div>
     <div class="card" id="hm-readiness"><h3>Readiness for ${c.next_board_date ? esc(dmyd(c.next_board_date)) : "the next board"} <span class="muted small">before the board</span></h3>
       ${ag ? readinessHTML(ag, !!(S.me?.coordinator || S.me?.admin)) : `<div class="muted small">No Case File is listed for a board date yet.</div>`}</div>`);
@@ -2726,7 +2729,7 @@ function homeDeptAdminHTML(h) {
   const row = (x) => `<tr><td><b>${esc(x.display_name || x.username)}</b></td><td class="small">${esc(x.username)}</td><td>${x.role === "head" ? "Head" : "Doctor"}</td><td><div class="chips">${x.disabled ? '<span class="chip c-bad">Disabled</span>' : '<span class="chip c-ok">Active</span>'}${x.account === false ? '<span class="chip c-warn" title="No Vaidyx login with this name">no Vaidyx login</span>' : ""}</div></td></tr>`;
   return homeSec("dept_admin", d.departments.map((x) => `<div class="card"><h3>${esc(x.name)} <span class="chip c-mute">${x.group === "supporting" ? "Supporting" : "Treating"}</span> <span class="btns"><button class="primary sm" data-mydept="${esc(x.id)}">Manage doctors</button></span></h3>
       <div class="tiles">${tile("Doctors", x.doctors, "", `${plural(x.heads, "head")}`)}${tile("Disabled", x.disabled)}${x.no_login ? tile("Without a Vaidyx login", x.no_login) : ""}${tile("Department admins", x.admins)}</div>
-      ${x.list.length ? `<div class="tscroll"><table class="t"><thead><tr><th>Name</th><th>Login</th><th>Role</th><th>Status</th></tr></thead><tbody>${x.list.map(row).join("")}</tbody></table></div>${x.doctors > x.list.length ? `<div class="small muted">${x.doctors - x.list.length} more under Manage doctors.</div>` : ""}` : `<div class="muted small">No one is placed in this department yet. Create the first doctor login under Manage doctors.</div>`}</div>`).join("") || `<div class="card"><div class="muted small">You administer no department.</div></div>`);
+      ${x.list.length ? `<div class="tscroll"><table class="t"><thead><tr><th>Name</th><th>Login</th><th>Role</th><th>Status</th></tr></thead><tbody>${x.list.map(row).join("")}</tbody></table></div>${x.doctors > x.list.length ? `<div class="small muted">${x.doctors - x.list.length} more under Manage doctors.</div>` : ""}` : empty("No one is placed in this department yet.", "Create the first doctor login under Manage doctors.")}</div>`).join("") || `<div class="card"><div class="muted small">You administer no department.</div></div>`);
 }
 function homeRootHTML(h) {
   const r = h.root_admin, hs = r.hospital, a = r.accounts;
@@ -2748,7 +2751,7 @@ const HOME_HTML = { treating: homeTreatingHTML, supporting: homeSupportingHTML, 
 function homeNotificationsHTML(h) {
   const list = h.notifications || [];
   return `<section class="home-sec" id="home-notifications"><h2>Notifications ${h.unread ? `<span class="chip c-warn">${h.unread} unread</span>` : ""}</h2>
-    <div class="card">${list.length ? list.map(ntfRow).join("") : `<div class="muted small">Nothing yet.</div>`}<div class="actions-row"><button class="ghost sm" id="hm-ntf-all">All notifications</button></div></div></section>`;
+    <div class="card">${list.length ? list.map(ntfRow).join("") : empty("Nothing yet.", "Requests, referrals and Case Files marked ready will appear here.")}<div class="actions-row"><button class="ghost sm" id="hm-ntf-all">All notifications</button></div></div></section>`;
 }
 async function showHome() {
   stopRoomPoll(); S.roomId = null; showOnly("welcome");
@@ -2768,11 +2771,26 @@ async function showHome() {
   box.innerHTML = `<div class="home-head"><div><div class="eyebrow">Home · ${esc(roles.join(" · "))}</div><h1>${esc(h.display_name || h.user)}</h1>
       <div class="muted small">${esc([h.departments.map((d) => `${d.name}${d.role === "head" ? " (Head)" : ""}`).join(", "), h.admin_of.length ? "admin of " + h.admin_of.map((d) => d.name).join(", ") : ""].filter(Boolean).join(" · ") || "Tumour Board")} · ${esc(dmyd(h.today))}</div></div>
     <div class="home-actions"><button class="ghost sm" id="hm-refresh" title="Reload the home">Refresh</button></div></div>
-    ${h.sections.map((k) => HOME_HTML[k](h)).join("")}${homeNotificationsHTML(h)}`;
+    ${startCardHTML(h.sections[0])}${h.sections.map((k) => HOME_HTML[k](h)).join("")}${homeNotificationsHTML(h)}`;
   bindHome(h);
 }
+const START_STEPS = {
+  treating: ["Create a Case File from the patient's UHID.", "Open Pre-Authorization and send the suggested requests.", "Mark the Case File ready for the board date."],
+  supporting: ["Open your department inbox.", "Take up a request and sign the record in your own system.", "Mark it done; it closes when the record arrives."],
+  coordinator: ["Check readiness for the next board date.", "Remind owners or departments on the chase list.", "Create the board session and record attendance and decisions."],
+  dept_admin: ["Open Manage doctors.", "Add each doctor and mark the Head.", "Disable logins of doctors who have left."],
+  root_admin: ["Answer the first set-up (hospital name, NCG level, PM-JAY).", "Add departments and their emails.", "Place accounts and give roles."],
+};
+const startHidden = () => { try { return localStorage.getItem("tb_hide_start") === "1"; } catch (e) { return false; } };
+const startCardHTML = (role) => (START_STEPS[role] && !startHidden()
+  ? `<div class="start-card" id="start-steps"><b>3 steps to start</b><ol>${START_STEPS[role].map((x) => `<li>${esc(x)}</li>`).join("")}</ol>
+     <div class="small" style="margin-top:8px"><a href="#" id="hm-features">What can Vaidyx do? See every feature.</a> &nbsp; <a href="#" id="hm-hide-start">Hide</a></div></div>`
+  : `<div class="start-card" id="start-steps"><a href="#" id="hm-features">What can Vaidyx do? See every feature.</a></div>`);
 function bindHome(h) {
   const on = (sel, fn) => { const el = $(sel); if (el) el.onclick = fn; };
+  const lk = (sel, fn) => { const el = $(sel); if (el) el.onclick = (e) => { e.preventDefault(); fn(); }; };
+  lk("#hm-features", () => showFeatures());
+  lk("#hm-hide-start", () => { try { localStorage.setItem("tb_hide_start", "1"); } catch (e) {} const c = $("#start-steps"); if (c) c.innerHTML = `<a href="#" id="hm-features">What can Vaidyx do? See every feature.</a>`; lk("#hm-features", () => showFeatures()); });
   on("#hm-refresh", showHome); on("#hm-new", newCase); on("#hm-inbox", showInbox); on("#hm-sessions", showSessions); on("#hm-sessions-new", showSessions);
   on("#hm-org", () => showOrgPage()); on("#hm-dash", () => showDashboard()); on("#hm-ntf-all", async () => { await loadNotifications(); showNotifications(); });
   $$("#welcome [data-inbox]").forEach((b) => (b.onclick = showInbox));
@@ -2792,11 +2810,124 @@ function bindHome(h) {
   });
 }
 
+// ------------------------------------------------------------------ UI plan 15 Oct: Features overview, screen help, glossary (front end only)
+const FEATURES = [
+  ["before", "Before the board", [
+    ["Create from UHID", "Opens a Tumour Board Case File for one cancer episode and fetches the records from the hospital system by UHID or IP / OP No.", "Plain rules", "home", "Home"],
+    ["Department upload and matching", "Departments upload records; each is matched to a patient, or waits in Needs matching for a person.", "Plain rules", "intake", "Needs matching"],
+    ["Document reading", "Reads each record (text layer, or scanned pages transcribed), classifies it and finds required fields with a source quote. A second OCR engine (Tesseract) flags numbers it reads differently.", "Qwen reader, Tesseract", "tab:docs", "Documents tab"],
+    ["Pre-Authorization", "Checks that every record required by NCG for this cancer, setting and hospital level is present, final and signed, with each rule citing its NCG line.", "Plain rules", "tab:ready", "Pre-Authorization tab"],
+    ["Requests to the Responsible Department", "Turns each gap into a suggested request; the treating doctor sends it, the department answers from its inbox, and it closes when the record arrives.", "Plain rules", "inbox", "Department inbox"],
+    ["Referral and linking", "Hands a Case File to another treating department, or links two primaries.", "Plain rules", "home", "Home"],
+    ["Discordances between reports", "Flags when two reports disagree on the same value, as a Point for review.", "Plain rules", "tab:ready", "Pre-Authorization tab"],
+    ["Values over time", "Lists every verified numeric value with its report and quote, in date order.", "Plain rules", "tab:board", "Board and follow-up tab"],
+    ["Agenda readiness and chase list", "Shows, per board date, which Case Files are ready, on track, at risk or blocked, with reminders to send.", "Plain rules", "sessions", "Board sessions"],
+    ["NCG case template export", "Exports the Case File as the NCG Virtual Tumour Board slide template (.pptx).", "Plain rules", "tab:docs", "Documents tab"]]],
+  ["during", "During the board", [
+    ["Board sessions and Board room", "Agenda, attendance, the current case and timing per case.", "Plain rules", "sessions", "Board sessions"],
+    ["Ask the Case File", "Answers a question with the page it came from, says \"not documented\" when it is not there, and refuses out-of-scope questions.", "Gemma reasoner", "tab:ask", "Ask the Case File tab"],
+    ["Value search", "Finds a value across every page instantly.", "Search only", "tab:ask", "Ask the Case File tab"],
+    ["Specialty support", "A brief per specialty (radiology, pathology, medical, surgical and radiation oncology, nuclear medicine): what that specialty would check, with citations. Stands in when a board head is absent.", "Gemma reasoner", "tab:roles", "Specialty support tab"],
+    ["Agent skills", "The editable SKILL.md that tells each specialty agent what to look for.", "Plain rules", "skills", "Agent skills"],
+    ["Case File summary", "A cited summary in the NCG Virtual Tumour Board structure; the stage only as recorded in the reports.", "Gemma reasoner", "tab:summary", "Case File summary tab"],
+    ["Guideline references", "India-first guideline passages relevant to the Case File (97 documents).", "Search only", "tab:summary", "Case File summary tab"]]],
+  ["after", "After the board", [
+    ["Decision record", "Participants, the outcome (decision, deferred, referred, not discussed), report corrections raised and divergent opinions, all entered by people.", "Plain rules", "tab:board", "Board and follow-up tab"],
+    ["AI-assisted adjudication", "Checks the record against documentation rules and flags transcription or polarity mismatches as Points for review.", "Plain rules plus Gemma reasoner", "tab:board", "Board and follow-up tab"],
+    ["Amended-report watch", "Notifies when a report behind a recorded decision is amended.", "Plain rules", "bell", "Notifications"],
+    ["Patient communication", "Records when and how the patient was informed, key worker, intent, trial and consent, with an \"inform the patient\" follow-up.", "Plain rules", "tab:board", "Board and follow-up tab"],
+    ["Follow-up tracker and timeline", "Tracks follow-up items and shows the episode as a timeline.", "Plain rules", "tab:board", "Board and follow-up tab"],
+    ["Exports", "FHIR R4 document bundle, registry abstract (HBCR 2025 items, cited), minutes.", "Plain rules", "tab:docs", "Documents tab"]]],
+  ["throughout", "Throughout", [
+    ["Home per role", "What each role sees first: treating doctor, supporting doctor, MDT Coordinator, department admin, root admin.", "Plain rules", "home", "Home"],
+    ["Notifications", "Requests, referrals, Case Files ready, amended reports.", "Plain rules", "bell", "Notifications"],
+    ["Human oversight (expert-in-the-loop)", "Every AI draft is reviewed, confirmed or corrected by a clinician; nothing is final until a person signs it off.", "People", "tab:ready", "Any Case File"],
+    ["Audit log", "Every action, who and when, in a tamper-evident hash chain you can verify.", "Plain rules", "tab:audit", "Audit tab"],
+    ["Quality dashboard", "Readiness, requests, attendance, decisions and follow-up against published standards.", "Plain rules", "dashboard", "Quality dashboard"],
+    ["Organisation and departments", "Hospital settings, departments, accounts and roles; department admins manage their doctors.", "Plain rules", "org", "Organisation / My department"],
+    ["Connectors", "Hospital-system connectors (MCP) and a read-only MCP server for outside agents.", "Plain rules", "connectors", "Connectors"],
+    ["Model and data cards", "Source, version, intended use and limits of every model and dataset.", "Plain rules", "cards", "Model and data cards"]]],
+];
+const GO_BTN = { home: "btn-home", bell: "btn-bell", sessions: "btn-sessions", dashboard: "btn-dashboard", skills: "btn-skills", connectors: "btn-connectors", cards: "btn-cards", inbox: "btn-inbox", intake: "btn-queue" };
+const goVisible = (g) => (g.startsWith("tab:") ? true : g === "org" ? !($("#btn-org").classList.contains("hidden") && $("#btn-mydept").classList.contains("hidden")) : !$("#" + GO_BTN[g])?.classList.contains("hidden"));
+function featGo(g, label) {
+  $("#modal").classList.add("hidden");
+  if (g.startsWith("tab:")) {
+    if (S.caseId && !$("#case").classList.contains("hidden")) showTab(g.slice(4));
+    else toast("Open a Case File from the list on the left first, then use the " + label + (/tab$/.test(label) ? "" : " tab"), 6000);
+    return;
+  }
+  if (g === "org") return $("#btn-org").classList.contains("hidden") ? showMyDept() : showOrgPage();
+  if (g === "bell") return $("#btn-bell").click();
+  ({ home: showHome, sessions: showSessions, dashboard: () => showDashboard(), skills: () => showSkills(), connectors: showConnectors, cards: showCards, inbox: showInbox, intake: showIntake })[g]();
+}
+function showFeatures(scrollTo) {
+  $("#modal-body").innerHTML = `<h2 style="color:#1f2933;margin-top:0">Features</h2>
+    <p class="muted small">Everything Vaidyx-TB does, in the order of the board. AI output is a draft for Human oversight (expert-in-the-loop): a clinician reviews it. Vaidyx does not diagnose, stage or recommend treatment.</p>
+    <p class="small"><b>Engines.</b> Plain rules: fixed checks, no AI. Qwen reader: Qwen3.5-4B, Chinese (Alibaba Qwen), non-medical, reads and transcribes documents. Gemma reasoner: Gemma-4-31B, non-medical, writes cited drafts. Search only: finds text, writes nothing.</p>
+    ${FEATURES.map(([id, title, rows]) => `<h3 id="feat-${id}" style="margin:14px 0 6px">${esc(title)}</h3><div class="tscroll"><table class="t feat-t"><thead><tr><th>Feature</th><th>What it does</th><th>Engine</th><th>Go</th></tr></thead><tbody>${rows.map(([f, w, e, g, l]) => `<tr><td><b>${esc(f)}</b></td><td>${esc(w)}</td><td>${esc(e)}</td><td>${goVisible(g) ? `<button class="ghost sm" data-go="${esc(g)}" data-golabel="${esc(l)}" title="Go to: ${esc(l)}" aria-label="Go to ${esc(l)}">Go</button>` : `<span class="muted small">${esc(l)}</span>`}</td></tr>`).join("")}</tbody></table></div>`).join("")}
+    <div style="display:flex;justify-content:space-between;gap:8px;margin-top:14px"><button class="ghost" id="feat-gloss">Glossary</button><button class="ghost" data-closemodal>Close</button></div>`;
+  $$("[data-go]", $("#modal-body")).forEach((b) => (b.onclick = () => featGo(b.dataset.go, b.dataset.golabel)));
+  $("#feat-gloss").onclick = showGlossary;
+  $("#modal").classList.remove("hidden");
+  if (scrollTo) document.getElementById("feat-" + scrollTo)?.scrollIntoView();
+}
+const GLOSSARY = [
+  ["Tumour Board Case File", "All the records of one cancer episode of one patient, owned by one treating department."],
+  ["Pre-Authorization", "The check that every record required for this cancer is present, final and signed before the board."],
+  ["Responsible Department", "The department that can produce or correct a missing record."],
+  ["Points for review", "Items Vaidyx flags for a clinician to look at; they are not findings."],
+  ["Human oversight (expert-in-the-loop)", "A clinician reviews every AI draft; nothing is final until a person confirms it."],
+  ["NCG Essential / Optimal", "National Cancer Grid resource tiers; the hospital level decides which records are required."],
+  ["Level 1 / Level 2", "Level 1: the Case File as a whole (owner). Level 2: a single record (the department that uploaded it)."],
+  ["PM-JAY", "Ayushman Bharat scheme; an empanelled hospital also gets the board composition check (flags, never blocks)."],
+  ["UHID / IP / OP No.", "Hospital patient identifier, in-patient or out-patient number used to fetch records."],
+  ["Waiver / attest final", "A doctor accepts a missing item, or confirms a report is final; both are audited."],
+  ["Discordance", "Two reports disagree on the same value."],
+  ["Re-fetch", "Vaidyx asks the hospital system again for new or updated records."],
+  ["MCP", "Model Context Protocol: a standard way for systems and agents to connect."],
+  ["FHIR", "A health-data exchange standard used for the export bundle."],
+];
+function showGlossary() {
+  $("#modal-body").innerHTML = `<h2 style="color:#1f2933;margin-top:0">Glossary</h2><dl class="gloss-dl">${GLOSSARY.map(([t, m]) => `<dt>${esc(t)}</dt><dd>${esc(m)}</dd>`).join("")}</dl>
+    <div style="display:flex;justify-content:space-between;gap:8px;margin-top:14px"><button class="ghost" id="gloss-feat">Features</button><button class="ghost" data-closemodal>Close</button></div>`;
+  $("#gloss-feat").onclick = () => showFeatures();
+  $("#modal").classList.remove("hidden");
+}
+const HELP = {
+  ready: ["Is every record this cancer needs present, final and signed?", ["Required records come from NCG for the setting and hospital level; each rule cites its NCG line.", "A gap becomes a suggested request to the Responsible Department; you send it.", "The check re-runs by itself when a record arrives."], "A lung Case File with only a preliminary CT shows a suggested request to Radiology."],
+  docs: ["Every record in this Case File, with its status and the quotes found in it.", ["Status (final, signed) is read from the hospital system or the report text.", "Click a field to see the exact quote on the page.", "Exports: NCG template, FHIR bundle, registry abstract."], "Open a pathology report to see the ER / PR / HER2 quotes highlighted."],
+  ask: ["Ask a question about this Case File; every answer cites its page.", ["If the answer is not in the records it says \"not documented\".", "Questions outside the Case File are refused.", "Value search finds a number on any page instantly."], "\"What was the last CA 15-3?\" returns the value with the report and date."],
+  roles: ["A brief per specialty: what that specialty would check, with citations.", ["Briefs are drafts for Human oversight (expert-in-the-loop).", "They do not diagnose, stage or recommend treatment.", "What each agent looks for is in Agent skills."], "The radiology brief lists the imaging present and its dates."],
+  summary: ["A cited summary in the NCG Virtual Tumour Board structure.", ["The stage appears only as recorded in a report.", "It is marked stale when the Case File changes.", "Guideline references are passages found by search."], "Print it for the board as the case sheet."],
+  board: ["The board decision, outcome, follow-up and patient communication.", ["People record the decision; Vaidyx records who attended and how long.", "Adjudication flags mismatches as Points for review.", "Values over time lists every verified number."], "Record \"deferred: awaiting PET-CT\" and a follow-up item."],
+  audit: ["Who did what and when on this Case File.", ["Append-only; each entry is chained to the previous one.", "The chip shows whether the chain verifies.", "Nothing here can be edited."], "See who attested a report final."],
+  sessions: ["Board sessions: agenda, attendance and the Board room.", ["The MDT Coordinator builds the agenda from Case Files marked ready.", "The readiness list shows what is still missing per Case File.", "An absent board head's specialty brief can stand in."], "Create the Thursday session and add the 6 ready Case Files."],
+  dashboard: ["How the Tumour Board is doing against published standards.", ["Readiness, requests, attendance, decisions, follow-up.", "Pick a date range; download as CSV.", "Counts only, no patient-level judgement."], "Share the month's attendance with the board heads."],
+  inbox: ["Requests to your department across all Case Files.", ["Take a request up, mark it done, then sign the record in your own system.", "It closes when the record arrives in the Case File.", "Overdue requests are marked."], "Radiology sees \"CECT thorax needed by 18 Oct\"."],
+  intake: ["Records that could not be matched to a patient automatically.", ["Match by UHID, name and date.", "Every match is audited.", "Matched records join the Case File and re-run Pre-Authorization."], "A scanned report without a UHID waits here."],
+  orgpage: ["Hospital settings, departments, accounts and roles.", ["NCG level and PM-JAY empanelment set the checks.", "Departments have emails for requests.", "Every change is audited."], "Add a new Nuclear Medicine department."],
+  deptpage: ["The doctor logins of your department.", ["Add, disable, or make a doctor Head.", "A doctor without a Vaidyx login is flagged.", "Changes are audited."], "Disable a doctor who has left."],
+};
+const helpHTML = (k) => { const h = HELP[k]; return h ? `${esc(h[0])} <details class="screen-more"><summary>Learn more</summary><ul>${h[1].map((b) => `<li>${esc(b)}</li>`).join("")}</ul><p class="small muted">Example: ${esc(h[2])}</p><p class="small"><a href="#" class="gloss-link">Terms used here: open the glossary</a></p></details>` : ""; };
+function putHelp(host, key, id) {
+  if (!host || !HELP[key]) return;
+  let el = host.querySelector(":scope > .screen-help");
+  if (!el) { el = document.createElement("div"); el.className = "screen-help"; host.prepend(el); }
+  el.id = id; el.innerHTML = helpHTML(key);
+  const a = el.querySelector(".gloss-link"); if (a) a.onclick = (e) => { e.preventDefault(); showGlossary(); };
+}
+// wrap each screen so its one-line help is put at the top of its section after it renders (no change to the screen itself)
+const withHelp = (orig, sec) => async function (...a) { const r = await orig.apply(this, a); putHelp($("#" + sec), sec, "help-" + sec); return r; };
+showSessions = withHelp(showSessions, "sessions"); showDashboard = withHelp(showDashboard, "dashboard"); showInbox = withHelp(showInbox, "inbox");
+showIntake = withHelp(showIntake, "intake"); showOrgPage = withHelp(showOrgPage, "orgpage"); showMyDept = withHelp(showMyDept, "deptpage");
+
 // ------------------------------------------------------------------ boot
 $$("#tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 $("#btn-new").onclick = newCase;
 $("#btn-home").onclick = showHome;
 $("#btn-cards").onclick = showCards;
+$("#btn-features").onclick = () => showFeatures();
 $("#btn-skills").onclick = () => showSkills();
 $("#btn-connectors").onclick = showConnectors;
 $("#btn-dashboard").onclick = () => showDashboard();
