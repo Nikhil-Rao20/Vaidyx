@@ -640,7 +640,12 @@ window.ATLAS = {
     { id: "K06", cat: "Backend that affects users", sev: "high", title: "Passwords exposed", detail: "Run logs (docs_Eswar/runs/v2_round_27) hold the Vaidyx admin, tb-root and tb-mdt passwords; demo passwords also appeared in tool output on 16 Oct. Rotate them.", where: "", roles: ["vaidyxadmin"] },
     { id: "K07", cat: "Backend that affects users", sev: "low", title: "Live app not set up", detail: "Hospital name empty, first set-up never answered, demo leftovers (TB-DEMO-*, sessions) on the app.", where: "data/tumour_board/org.json", roles: ["root"] },
     { id: "K08", cat: "Backend that affects users", sev: "low", title: "Re-fetch result reuses 'request_closed'", detail: "Different events share one notification kind.", where: "his_case.py:666", roles: [] },
-    { id: "K09", cat: "Backend that affects users", sev: "medium", title: "Overdue never notifies", detail: "Overdue is worked out only when a page is shown.", where: "notify.py", roles: ["coordinator", "supporting"] }
+    { id: "K09", cat: "Backend that affects users", sev: "medium", title: "Overdue never notifies", detail: "Overdue is worked out only when a page is shown.", where: "notify.py", roles: ["coordinator", "supporting"] },
+    { id: "K10", cat: "Backend that affects users", sev: "high", title: "Guidelines added on 11 Oct never reach the agents", detail: "ASCO, ASTRO, ESTRO / GEC-ESTRO, AJCC, MoHFW STG and DHR / DGHS are only in the general guideline search; no specialty agent pack reads them (the Radiation Oncology agent has no ASTRO or ESTRO) and the dose and radiotherapy reference table has none of their lines.", where: "protocols/specialty_packs.json, dose_references.json (last changed before the additions)", roles: ["ai", "supporting"] },
+    { id: "G32", cat: "Workflow", sev: "high", title: "Only 5 cancers; no Cancer of Unknown Primary, no 'other cancer'", detail: "The Case File form offers breast, cervix, lung NSCLC, rectal and oral cavity only. The doctors asked for a top-10 list with manual entry and said Cancer of Unknown Primary must exist.", where: "tumour_board/protocols/*.json, tb.js protoOpts", roles: ["treating"] },
+    { id: "G33", cat: "Access and roles", sev: "low", title: "Departments differ from the doctors' list", detail: "Pediatric Surgery and Medical Genetics are missing; Medical Gastroenterology, Dental Surgery / OMFS and Anaesthesiology were added by the build and are not confirmed by the doctors.", where: "tumour_board/org.py", roles: ["root"] },
+    { id: "G34", cat: "Workflow", sev: "medium", title: "Sessions have no site or board type", detail: "Indian hospitals with several boards run them by site (head and neck, gynaecology, breast, uro-oncology); a session here is just a date and title.", where: "board.py", roles: ["coordinator"] },
+    { id: "U22", cat: "Interface", sev: "medium", title: "Doctors cannot see what the guideline library holds", detail: "No screen lists the sources, editions and what is missing (paid, licence, not yet downloaded).", where: "", roles: ["treating", "supporting"] },
   ],
 
   /* ---------------------------------------------------------------- ideas (to discuss, nothing decided) */
@@ -664,7 +669,9 @@ window.ATLAS = {
     { id: "I17", stage: "throughout", title: "Plain names, one date format", detail: "One word per state, consistent verbs, DD/MM/YYYY everywhere, IST for 'today'.", from: "Gaps U05, U06" },
     { id: "I18", stage: "after", title: "De-identified NCG VTB export", detail: "The existing .pptx with a de-identified option for spoke centres.", from: "NCG VTB audit" },
     { id: "I19", stage: "after", title: "Plan versus treatment received", detail: "A yearly concordance check from the follow-up tracker.", from: "Greater Manchester; 6.9% to 19.5% of decisions not implemented" },
-    { id: "I20", stage: "throughout", title: "Split the UI into modules per screen", detail: "Smaller files per screen, with the UI tests updated as screens change.", from: "Gap U21" }
+    { id: "I20", stage: "throughout", title: "Split the UI into modules per screen", detail: "Smaller files per screen, with the UI tests updated as screens change.", from: "Gap U21" },
+    { id: "I21", stage: "during", title: "Site boards", detail: "A session belongs to a board type (head and neck, breast, gynaecology, thoracic, GI, uro, paediatric, CUP) and Case Files of that group go to it.", from: "NCRP survey: 28.5% run several site boards; Tata Memorial DMGs; NAVIFY / OncoLens" },
+    { id: "I22", stage: "throughout", title: "A guideline library screen", detail: "What sources are held (India first), edition, which agents read them, and what is missing and why.", from: "Doctors' reading lists; gap U22" },
   ],
 
   /* ---------------------------------------------------------------- research */

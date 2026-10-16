@@ -85,6 +85,7 @@
     { grp: "Detail" },
     { id: "matrix", label: "Who can do what" }, { id: "ai", label: "AI and human checks" }, { id: "notifications", label: "Notifications" }, { id: "screens", label: "Screens today" },
     { grp: "Discuss" },
+    { id: "doctors", label: "Doctors' inputs", n: () => (A.doctors?.points.length || 0) + (A.doctors?.asks.length || 0) },
     { id: "gaps", label: "Gaps", n: () => A.gaps.length }, { id: "ideas", label: "Ideas (not decided)", n: () => A.ideas.length },
     { id: "research", label: "Research" }, { id: "glossary", label: "Glossary and docs" },
     { id: "notes", label: "My notes", n: () => Object.keys(S.notes.items).length + Object.keys(S.notes.general).length }
@@ -278,6 +279,60 @@
       ${generalHTML("gaps", "the gaps")}`;
   };
 
+  R.doctors = () => {
+    const D = A.doctors; if (!D) return "<p>Not loaded.</p>";
+    const st = { done: ["built", "Done"], partial: ["partial", "Partly"], missing: ["missing", "Not built"] };
+    const tone = { held: "built", partial: "partial", paid: "high", licence: "high", terms: "medium", browser: "medium", notneeded: "low", nottaken: "low" };
+    const all = D.lists.flatMap((l) => l.rows.map((r) => r[1]));
+    const counts = Object.keys(D.statusLabel).map((k) => [k, all.filter((x) => x === k).length]).filter(([, n]) => n);
+    const f = S.docStatus || "";
+    const R2 = D.research;
+    return `<div class="lede"><div class="eyebrow">Doctors' inputs</div><h2>What the doctors shared, and what the system does with it</h2>
+      <p>${esc(D.who)} Checked against the code on the-ui, the guideline library on the server, every chat and every branch (GitHub has only main and vaidyx-theOG, both the same; no other fork or branch holds Vaidyx work).</p></div>
+    <div class="grid two">${D.points.map((p) => `<div class="item ${p.status === "missing" ? "sev-high" : p.status === "partial" ? "sev-medium" : "sev-low"}" id="it-${p.id}">
+      <h3><span class="sid">${p.id}</span>${esc(p.title)} <span class="chip ${st[p.status][0]}">${st[p.status][1]}</span></h3>
+      <div class="small"><b>What we have:</b> ${esc(p.have)}</div><div class="small"><b>Missing:</b> ${esc(p.missing)}</div>
+      ${p.where ? `<div class="where">${esc(p.where)}</div>` : ""}${markHTML("doc-" + p.id, p.id + ": " + p.title, "doctors")}</div>`).join("")}</div>
+
+    <div class="card band before"><h3>The WhatsApp discussion, ask by ask</h3><div class="scroll"><table class="t"><thead><tr><th>Ask</th><th>Who</th><th>Today</th><th>What is needed</th></tr></thead><tbody>
+      ${D.asks.map((w) => `<tr id="it-${w.id}"><td><span class="sid">${w.id}</span><b>${esc(w.ask)}</b>${markHTML("ask-" + w.id, w.id + ": " + w.ask, "doctors")}</td><td>${esc(w.who)}</td><td class="small">${esc(w.today)}</td><td class="small">${esc(w.gap)}</td></tr>`).join("")}
+    </tbody></table></div></div>
+
+    <div class="card"><h3>The five reading lists, entry by entry (${all.length} entries)</h3>
+      <div class="filters"><button class="${!f ? "on" : ""}" data-docstatus="">All</button>${counts.map(([k, n]) => `<button class="${f === k ? "on" : ""}" data-docstatus="${k}">${esc(D.statusLabel[k])} (${n})</button>`).join("")}</div>
+      ${D.lists.map((l) => { const rows = l.rows.filter((r) => !f || r[1] === f); if (!rows.length) return "";
+        return `<h4>${esc(l.title)} <span class="mono">${esc(l.file)}</span></h4><div class="scroll"><table class="t"><thead><tr><th>Entry</th><th>Status</th><th>What we hold</th><th>Used by</th></tr></thead><tbody>
+        ${rows.map((r) => `<tr><td><b>${esc(r[0])}</b></td><td><span class="chip ${tone[r[1]]}">${esc(D.statusLabel[r[1]])}</span></td><td class="small">${esc(r[2])}</td><td class="small">${esc(r[3] || "Nothing")}</td></tr>`).join("")}
+        </tbody></table></div>`; }).join("")}
+      ${markHTML("doc-lists", "The five reading lists", "doctors")}</div>
+
+    <div class="card"><h3>How the guideline library is wired today</h3>
+      <p class="small">Search weight boosts Indian sources. 'Agents' = which specialty agents read the source for briefs and live answers. 'Dose lines' = rows in the after-board dose and radiotherapy reference table (301 rows). Everything below is also in the general guideline search (Summary tab references, Ask).</p>
+      <div class="scroll"><table class="t"><thead><tr><th>Source</th><th>Weight</th><th>Agents</th><th>Dose lines</th><th>Other use</th></tr></thead><tbody>
+      ${D.wiring.map((w) => `<tr><td><b>${esc(w[0])}</b></td><td class="mono">${esc(w[1])}</td><td class="small">${esc(w[2])}</td><td class="small">${esc(w[3])}</td><td class="small">${esc(w[4])}</td></tr>`).join("")}
+      </tbody></table></div>${markHTML("doc-wiring", "Guideline library wiring", "doctors")}</div>
+
+    ${R2 ? `<div class="card band during"><h3>Research: which cancers to list</h3><p class="small">${esc(R2.top10.note)}</p>
+      <div class="scroll"><table class="t"><thead><tr><th>#</th><th>India, both sexes</th><th>NCRP 2020</th><th>GLOBOCAN 2024</th></tr></thead><tbody>
+      ${R2.top10.overall.map((r, i) => `<tr><td class="mono">${i + 1}</td><td><b>${esc(r[0])}</b></td><td class="mono">${esc(r[1])}</td><td class="mono">${esc(r[2])}</td></tr>`).join("")}</tbody></table></div>
+      <dl class="kv"><dt>Men</dt><dd>${esc(R2.top10.men)}</dd><dt>Women</dt><dd>${esc(R2.top10.women)}</dd><dt>Children</dt><dd>${esc(R2.top10.children)}</dd><dt>Adolescents</dt><dd>${esc(R2.top10.adolescents)}</dd></dl>
+      <h4>A list design that answers all three asks (idea, not decided)</h4><ul class="plain">${R2.design.map((d) => `<li>${esc(d)}</li>`).join("")}</ul>
+      <div class="small"><b>Next cancers by frequency:</b> ${esc(R2.nextCancers)}</div>${markHTML("doc-cancerlist", "Cancer list design", "doctors")}</div>
+
+    <div class="card band after"><h3>Research: Cancer of Unknown Primary</h3><p class="small">${esc(R2.cup.freq)}</p>
+      <div class="scroll"><table class="t"><thead><tr><th>Stage (NICE CG104)</th><th>Meaning</th></tr></thead><tbody>${R2.cup.stages.map((s) => `<tr><td><b>${esc(s[0])}</b></td><td class="small">${esc(s[1])}</td></tr>`).join("")}</tbody></table></div>
+      <p class="small">${esc(R2.cup.team)}</p>
+      <h4>Records a CUP Pre-Authorization could check (completeness only, never a diagnostic path)</h4><ul class="plain">${R2.cup.records.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>
+      <p class="small"><b>For the doctors:</b> ${esc(R2.cup.conflict)} ${esc(R2.cup.india)}</p>${markHTML("doc-cup", "Cancer of Unknown Primary", "doctors")}</div>
+
+    <div class="card"><h3>Research: the new departments</h3><dl class="kv">${R2.newDepts.map((d) => `<dt><b>${esc(d[0])}</b></dt><dd class="small">${esc(d[1])}</dd>`).join("")}</dl>${markHTML("doc-depts", "New departments", "doctors")}</div>
+
+    <div class="card"><h3>Possible questions for the doctors (meeting 19 Oct)</h3><ol class="plain">${D.questions.map((q, i) => `<li>${esc(q)}${markHTML("doc-q" + i, "Question: " + q, "doctors")}</li>`).join("")}</ol></div>
+
+    <div class="card"><h3>Sources</h3><ol class="plain">${R2.sources.map((s) => `<li><a href="${esc(s[1])}" target="_blank" rel="noopener">${esc(s[0])}</a></li>`).join("")}</ol></div>` : ""}
+    ${generalHTML("doctors", "the doctors' inputs")}`;
+  };
+
   R.ideas = () => {
     const order = ["before", "during", "after", "throughout"];
     return `<div class="lede"><div class="eyebrow">Ideas</div><h2>Ideas to discuss</h2>
@@ -350,6 +405,7 @@
     if (t.dataset.mxstage !== undefined) { S.mxStage = t.dataset.mxstage; return render(); }
     if (t.dataset.gapcat !== undefined) { S.gapCat = t.dataset.gapcat; return render(); }
     if (t.dataset.gapsev !== undefined) { S.gapSev = t.dataset.gapsev; return render(); }
+    if (t.dataset.docstatus !== undefined) { S.docStatus = t.dataset.docstatus; return render(); }
     if (t.id === "theme") { const r = document.documentElement, dark = r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
       r.dataset.theme = dark ? "light" : "dark"; store.set("atlas-theme", r.dataset.theme); return; }
     if (t.dataset.step && t.dataset.go === "workflow") { S.openStep = t.dataset.step; return go("workflow", { anchor: "it-" + t.dataset.step }); }
