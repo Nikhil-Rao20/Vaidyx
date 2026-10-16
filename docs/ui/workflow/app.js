@@ -85,6 +85,7 @@
     { grp: "Detail" },
     { id: "matrix", label: "Who can do what" }, { id: "ai", label: "AI and human checks" }, { id: "notifications", label: "Notifications" }, { id: "screens", label: "Screens today" },
     { grp: "Discuss" },
+    { id: "plan", label: "Plan (proposed)", n: () => (A.plan?.phases || []).reduce((n, p) => n + p.items.length, 0) },
     { id: "doctors", label: "Doctors' inputs", n: () => (A.doctors?.points.length || 0) + (A.doctors?.asks.length || 0) },
     { id: "gaps", label: "Gaps", n: () => A.gaps.length }, { id: "ideas", label: "Ideas (not decided)", n: () => A.ideas.length },
     { id: "research", label: "Research" }, { id: "glossary", label: "Glossary and docs" },
@@ -279,6 +280,23 @@
       ${generalHTML("gaps", "the gaps")}`;
   };
 
+  R.plan = () => {
+    const P = A.plan; if (!P) return "<p>Not loaded.</p>";
+    const link = (txt) => esc(txt).replace(/\b([GUKIWPJT]\d{2}|[WP]\d)\b/g, (m) => {
+      const sec = /^[GUK]/.test(m) ? "gaps" : m[0] === "I" ? "ideas" : /^[WP]/.test(m) ? "doctors" : m[0] === "J" ? "journeys" : "plan";
+      return `<a href="#${sec}" data-go="${sec}" data-anchor="it-${m}">${m}</a>`; });
+    const tone = { PH0: "setup", PH1: "before", PH2: "before", PH3: "during", PH4: "after" };
+    return `<div class="lede"><div class="eyebrow">Plan</div><h2>What we could do, in order</h2><p>${esc(P.intro)}</p></div>
+      <div class="ideas-banner">Proposed only. Nothing starts without your go.</div>
+      <div class="card flat"><h3>Ground rules</h3><ul class="plain">${P.rules.map((r) => `<li>${esc(r)}</li>`).join("")}</ul></div>
+      ${P.phases.map((ph) => `<div class="card band ${tone[ph.id] || "before"}" id="it-${ph.id}"><div class="row"><span class="sid">${ph.id}</span><h3>${esc(ph.title)}</h3><span class="chip">${esc(ph.when)}</span></div>
+        <div class="grid two">${ph.items.map((t) => `<div class="item" id="it-${t.id}"><h3><span class="sid">${t.id}</span>${esc(t.title)} <span class="chip">${esc(t.size)}</span></h3>
+          <div class="small"><b>Why:</b> ${link(t.why)}</div><div class="small"><b>What:</b> ${esc(t.what)}</div>
+          <div class="row small"><span class="chip">${esc(t.touches)}</span>${t.needs ? `<span class="chip partial">Needs: ${esc(t.needs)}</span>` : ""}${t.depends ? `<span class="chip">After ${link(t.depends)}</span>` : ""}</div>
+          ${markHTML("plan-" + t.id, t.id + ": " + t.title, "plan")}</div>`).join("")}</div></div>`).join("")}
+      ${generalHTML("plan", "the plan")}`;
+  };
+
   R.doctors = () => {
     const D = A.doctors; if (!D) return "<p>Not loaded.</p>";
     const st = { done: ["built", "Done"], partial: ["partial", "Partly"], missing: ["missing", "Not built"] };
@@ -318,6 +336,11 @@
       <dl class="kv"><dt>Men</dt><dd>${esc(R2.top10.men)}</dd><dt>Women</dt><dd>${esc(R2.top10.women)}</dd><dt>Children</dt><dd>${esc(R2.top10.children)}</dd><dt>Adolescents</dt><dd>${esc(R2.top10.adolescents)}</dd></dl>
       <h4>A list design that answers all three asks (idea, not decided)</h4><ul class="plain">${R2.design.map((d) => `<li>${esc(d)}</li>`).join("")}</ul>
       <div class="small"><b>Next cancers by frequency:</b> ${esc(R2.nextCancers)}</div>${markHTML("doc-cancerlist", "Cancer list design", "doctors")}</div>
+
+    ${R2.indiaSources ? `<div class="card"><h3>Indian guidelines per cancer (what exists, what we hold)</h3><p class="small">${esc(R2.indiaSources.note)}</p>
+      <div class="scroll"><table class="t"><thead><tr><th>Cancer</th><th>NCG</th><th>ICMR consensus</th><th>Tata Memorial EBM</th></tr></thead><tbody>
+      ${R2.indiaSources.rows.map((r) => `<tr><td><b>${esc(r[0])}</b></td><td class="small">${esc(r[1])}</td><td class="small">${esc(r[2])}</td><td class="small">${esc(r[3])}</td></tr>`).join("")}
+      </tbody></table></div>${markHTML("doc-indiasrc", "Indian guidelines per cancer", "doctors")}</div>` : ""}
 
     <div class="card band after"><h3>Research: Cancer of Unknown Primary</h3><p class="small">${esc(R2.cup.freq)}</p>
       <div class="scroll"><table class="t"><thead><tr><th>Stage (NICE CG104)</th><th>Meaning</th></tr></thead><tbody>${R2.cup.stages.map((s) => `<tr><td><b>${esc(s[0])}</b></td><td class="small">${esc(s[1])}</td></tr>`).join("")}</tbody></table></div>

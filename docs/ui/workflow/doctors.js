@@ -174,7 +174,7 @@ window.ATLAS.doctors = {
                 "Tumour markers by presentation: PSA (men), AFP and hCG (midline nodes), CA125 (women with peritoneal disease)",
                 "Conditional: mammography and breast MRI, endoscopy or ENT panendoscopy, PET-CT, myeloma screen, testicular ultrasound", "Optional: NGS / MSI report; palliative care input"],
       conflict: "ESMO 2023 asks mammography for every woman; NICE says not routinely. The doctors should decide.",
-      india: "No ICMR or NCG guideline for CUP was found [unverified]. Sources for a protocol would be NICE CG104 (verbatim, UK) and ESMO 2023 (paywalled full text)."
+      india: "Indian sources: no general CUP guideline from NCG or ICMR. NCG Head and Neck 2019 (already in our library) has chapter 20 'Cervical node metastasis with unknown primary' (p 35); Tata Memorial EBM 2012 Head and Neck, chapter 13 covers the same; IJMPO 2023 has Indian PET-CT imaging recommendations for carcinoma of unknown origin; a Kidwai review (IJMPO 2018). For the general work-up the sources would be NICE CG104 (UK, verbatim) and ESMO 2023 (paywalled full text)."
     },
     newDepts: [
       ["Medical Genetics", "Brings a three-generation pedigree, pre- and post-test counselling notes, consent, germline reports (BRCA1/2, PALB2, MLH1, MSH2, MSH6, RET) with the ACMG five-tier class, and a cascade testing plan (ISMPO 2025 Indian consensus; ESMO 2023 germline follow-up). ESMO 2025 names clinical geneticists as key members of molecular tumour boards. Tata Memorial's ACTREC runs a national genetics unit. Likely a supporting role: counselling and germline reports on request."],
@@ -182,7 +182,28 @@ window.ATLAS.doctors = {
       ["Palliative Medicine", "Already in the code. NICE makes it a required member of the CUP team; 48.9% of Indian boards have a palliative specialist."],
       ["Hematology", "Already in the code as Haematology. Tata Memorial runs separate adult and paediatric haematolymphoid groups."]
     ],
-    nextCancers: "By Indian frequency (NCRP and GLOBOCAN agree): oesophagus, stomach, ovary, prostate, then liver, lymphoma, leukaemia, thyroid, gallbladder, corpus uteri; paediatric groups. Each needs its Indian source first (NCG or ICMR); NCG Essential / Optimal tiers only where the NCG document for that site is on hand.",
+    nextCancers: "By Indian frequency (NCRP and GLOBOCAN agree): oesophagus, stomach, ovary, prostate, then liver, lymphoma, leukaemia, thyroid, gallbladder, corpus uteri; paediatric groups. Most have an Indian source (table below); thyroid has no NCG or ICMR management guideline.",
+    indiaSources: {
+      note: "NCG Guidelines 2019 (Essential / Optimal / Optional tiers) are free on ncgindia.org: 9 books. We hold 4 of them plus the colorectal and rectal parts of the GI set; the urological, adult haematolymphoid, paediatric, bone and soft tissue books and the rest of the GI set are not downloaded yet. No NCG clinical guideline was found from 2022 to 2026 except plastic surgery 2024.",
+      rows: [
+        ["Oral cavity, larynx, pharynx", "2019 Head and Neck (held)", "Buccal mucosa 2014, larynx and hypopharynx 2017", "2018"],
+        ["Neck node, unknown primary", "2019 Head and Neck ch 20 (held)", "None", "2012 H and N ch 13"],
+        ["Cancer of Unknown Primary (general)", "None", "None", "None"],
+        ["Breast", "2019 (held)", "2016", "2003"],
+        ["Lung", "2019 Thoracic (held)", "None (DHR / DGHS 2025 national lung guideline held)", "2022"],
+        ["Oesophagus", "2019 Thoracic (held)", "2017", "2013"],
+        ["Stomach, liver, gallbladder, GIST", "2019 GI set (not held)", "Stomach 2014, liver 2019, gallbladder 2014", "2013, 2019 HPB"],
+        ["Pancreas", "Pathology format only", "2019", "2019 HPB"],
+        ["Colorectal, anal", "2019 GI set (colorectal and rectal held)", "Colorectal 2014", "2011"],
+        ["Cervix, ovary, endometrium, vulva", "2019 Gynaecological (held)", "Cervix 2016, ovary 2019, uterine 2019", "2003 to 2005"],
+        ["Prostate, bladder, kidney, testis", "2019 Urological (not held)", "Prostate 2023, bladder 2024", "2005, 2010, 2020"],
+        ["Thyroid", "None (CT template only)", "None", "2006, 2012"],
+        ["Brain / CNS", "2017; 2020 draft only", "None", "2008, 2020"],
+        ["Bone and soft tissue sarcoma", "2019 (not held)", "2016", "2011, 2022"],
+        ["Leukaemia, lymphoma, myeloma", "2019 Adult haematolymphoid (not held)", "AML 2019, MDS 2019, NHL 2016, myeloma 2017", "2010 to 2013"],
+        ["Paediatric (ALL, AML, lymphoma, Wilms, neuroblastoma, hepatoblastoma, retinoblastoma, germ cell, RMS)", "2019 Paediatric (not held)", "Paediatric lymphomas and solid tumours 2017, retinoblastoma 2023", "2004, 2018"]
+      ]
+    },
     sources: [
       ["NCRP 2020, projections by site and sex", "https://www.ncdirindia.org/All_Reports/Report_2020/resources/Chapter14ProjectionofCancerCasesinIndia.pdf"],
       ["GLOBOCAN 2024, India fact sheet", "https://gco.iarc.who.int/media/globocan/factsheets/populations/356-india-fact-sheet.pdf"],
@@ -197,6 +218,9 @@ window.ATLAS.doctors = {
       ["ISMPO 2025 hereditary breast and ovarian cancer consensus", "https://www.ijmpo.org/assets/articles/2025/pdf/s-0044-1788727.pdf"],
       ["SIOPE 2025 European standards of care for children with cancer", "https://ccieurope.eu/wp-content/uploads/2025/09/European-Standards-of-Care-for-Children-and-Adolescents-with-Cancer-2025.pdf"],
       ["WHO ICD-10 2019 (C80)", "https://icd.who.int/browse10/2019/en"],
+      ["NCG cancer guidelines index (2019 books)", "https://www.ncgindia.org/cancer-guidelines"],
+      ["ICMR guidelines index (consensus documents)", "https://www.icmr.gov.in/guidelines"],
+      ["IJMPO 2023, PET-CT imaging recommendations, carcinoma of unknown origin", "https://doi.org/10.1055/s-0042-1760311"],
       ["Tempus oFM preprint, arXiv 2608.24688", "https://arxiv.org/abs/2608.24688"]
     ]
   },
