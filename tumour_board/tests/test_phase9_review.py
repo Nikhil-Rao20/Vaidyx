@@ -110,7 +110,7 @@ def test_cervix_quotes_are_paragraphs_of_the_guideline_file():
 
 
 def test_no_em_dash_in_any_reference_quote_or_protocol_text():
-    """CLAUDE.md: no em dashes in UI or reports. Dose reference quotes are shown in board-record flags (NCG prints 'PC weekly—Paclitaxel')."""
+    """Project rule: no em dashes in UI or reports. Dose reference quotes are shown in board-record flags (NCG prints 'PC weekly—Paclitaxel')."""
     refs = dosecheck.table()["references"]
     assert not [r["id"] for r in refs if "—" in r["quote"]]
     for pid in ("oral_cavity", "cervix"):

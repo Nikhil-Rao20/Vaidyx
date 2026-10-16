@@ -123,7 +123,7 @@ def _review_words(review) -> str:
 
 
 def _model_words(summary) -> str:
-    """The reasoner's configured label with "(non-medical)" (CLAUDE.md model labelling); a generic name when no label was recorded."""
+    """The reasoner's configured label with "(non-medical)" (project model-labelling rule); a generic name when no label was recorded."""
     label = _clean(summary.get("model"))
     if not label or label.lower() == "reasoner":
         return "the reasoner model (non-medical)"

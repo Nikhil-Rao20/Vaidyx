@@ -243,8 +243,6 @@ data/tumour_board/
 
 # personal onboarding notes (not shared)
 docs_Eswar/
-CLAUDE.md
-.claude/
 
 # Vaidyx-TB V2 mock hospital data (synthetic, rebuilt from a seed)
 data/his_mock/

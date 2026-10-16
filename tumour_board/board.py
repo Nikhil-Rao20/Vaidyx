@@ -1029,7 +1029,7 @@ def _h(x) -> str:
 
 
 def model_words(label) -> str:
-    """How a model is named in a report: always with "(non-medical)" (CLAUDE.md model labels)."""
+    """How a model is named in a report: always with "(non-medical)" (project model-labelling rule)."""
     label = str(label or "").strip()
     if not label or label == "reasoner":
         return "the reasoner model (non-medical)"

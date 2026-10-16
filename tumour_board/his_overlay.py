@@ -1,7 +1,7 @@
 """HIS data into the pipeline (plan item V2-3.3). Pure functions over one document record fetched from the hospital
 information system (`doc["his"]`, written by his_case.fetch); no model, no I/O.
 
-Policy (plan 3.3, the invariant in CLAUDE.md):
+Policy (plan 3.3, the invariant in the project rules):
   - Status and signature: the HIS report status and the Provenance signature fill `classification.status` / `signed`. The text
     rules' reading is kept beside them (`text_status`, `text_signed`) and the stricter side wins: a report the HIS calls
     preliminary or cancelled never counts as final because its PDF says FINAL, and a PDF that says "Signature pending" is not

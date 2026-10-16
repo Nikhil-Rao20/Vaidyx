@@ -21,7 +21,7 @@ DiagnosticReport is versioned: `meta.versionId` = the report version number, `/_
 Clinical notes, referral notes and discharge summaries are not DiagnosticReports: they are served as DocumentReference only
 and their DocumentBundle's Composition section holds only the DocumentReference.
 
-The invariant (CLAUDE.md): structured values here (Observations, conclusions) are candidates; Vaidyx-TB checks them against
+The invariant (project rules): structured values here (Observations, conclusions) are candidates; Vaidyx-TB checks them against
 the report text, and the PDF wins. Identifier systems are synthetic (`https://his.vaidyx-demo.invalid/...`); the only real
 ABDM URI is the ABHA number system, with sandbox numbers. Never an Aadhaar number.
 """
