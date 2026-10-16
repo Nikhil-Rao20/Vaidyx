@@ -1,0 +1,12 @@
+{
+ "case_id": "TB-002",
+ "patient": {
+  "name": "SYNTHETIC, Lakshmi Iyer",
+  "mrn": "SYN-200417",
+  "agesex": "48 Y / F"
+ },
+ "protocol": "breast",
+ "board_date": "",
+ "created": "2026-10-09T16:41:59",
+ "created_by": "admin"
+}

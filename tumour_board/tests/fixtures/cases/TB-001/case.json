@@ -1,0 +1,12 @@
+{
+ "case_id": "TB-001",
+ "patient": {
+  "name": "SYNTHETIC, Ramesh Kumar",
+  "mrn": "SYN-100231",
+  "agesex": "62 Y / M"
+ },
+ "protocol": "lung_nsclc",
+ "board_date": "",
+ "created": "2026-10-11T00:45:15",
+ "created_by": "admin"
+}

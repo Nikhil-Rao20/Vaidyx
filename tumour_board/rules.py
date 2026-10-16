@@ -1,0 +1,904 @@
+"""Pre-Authorization gate: deterministic evaluation of the case protocol over the processed documents.
+
+No model is involved here. For every mandatory record it decides: satisfied / missing record / not final-signed /
+missing or pending field / needs expert review, names the Responsible Department, and keeps the action list in sync
+(new gaps open actions, resolved gaps close them with the evidence document)."""
+import hashlib
+import json
+import re
+import uuid
+from datetime import date, datetime, timedelta
+
+from . import confirm, dates, doctype, grounding, protocol, scanned, store
+
+FINAL_OK = {"FINAL", "AMENDED", "CORRECTED"}
+VERIFIED = {"verified", "confirmed"}  # a value counts when code found its quote, or a clinician confirmed it against the source (V1 item 2.2)
+
+
+def case_docs(case_id, state=None):
+    """The Case File's documents as the clinicians confirmed them: confirmations (document type, dates, values) are overlaid
+    on the model's reading at read time, so they win and survive a re-process (V1 item 2.2). Every fact carries the method of the page
+    its quote sits on (`source_method`, V1 item 8.1), filled in from the pages for documents processed before it existed."""
+    return [scanned.with_source_methods(d) for d in confirm.apply_to_docs(store.list_docs(case_id), store.get_state(case_id) if state is None else state, case_id)]
+STATUS_RANK = {"CORRECTED": 4, "AMENDED": 4, "FINAL": 3, "PRELIMINARY": 1, "DRAFT": 0, "CANCELLED": -1, "UNKNOWN": 0}
+
+
+def _doc_sort_key(d):
+    """Clinical order: event date, then report date, then status (V1 item 3.1)."""
+    c = d.get("classification") or {}
+    return (*dates.doc_dates(d)["sort"], STATUS_RANK.get(c.get("status"), 0))
+
+
+NEGATIVE = {"DRAFT", "PRELIMINARY", "CANCELLED"}
+
+
+def _is_final(d, overrides=None):
+    """FINAL/AMENDED/CORRECTED and not explicitly unsigned. A document with no explicit status marker counts when it carries
+    a signature line, or when a clinician has attested it is the final signed version (audited override)."""
+    c = d.get("classification") or {}
+    if c.get("signed") == "no" or c.get("status") in NEGATIVE:
+        return False
+    if c.get("status") in FINAL_OK:
+        return True
+    if c.get("status") == "UNSTATED":
+        att = ((overrides or {}).get("documents") or {}).get(d["doc_id"], {})
+        return c.get("signed") == "yes" or bool(att.get("attested_final"))
+    return False
+
+
+def _needs_confirmation(d):
+    c = d.get("classification") or {}
+    return c.get("status") == "UNSTATED" and c.get("signed") != "no"
+
+
+def _unconfirmed_outside(d) -> bool:
+    """An outside report (V2 item 3.6) matched to the patient by name only, which no person has confirmed yet."""
+    return bool(d.get("outside")) and d.get("identity") == "name_match" and not d.get("identity_confirmed_by")
+
+
+ORDER_STAGE_RANK = {"sample_collected": 3, "scheduled": 2, "ordered": 1, "cancelled": 0}
+
+
+def _order_for(req, orders):
+    """The open HIS order (no report yet) that would produce this record, if any (V2 item 3.3): same document type, the region
+    words of the record on the order's label; the most advanced stage wins."""
+    want = set(req.get("doc_types") or req.get("fact_doc_types") or [])
+    best = None
+    for o in orders or []:
+        if not isinstance(o, dict) or o.get("doc_type") not in want:
+            continue
+        if req.get("region") and not re.search(r"\b(?:" + req["region"] + ")", (o.get("test") or "").lower().replace("_", " ")):
+            continue
+        rank = ORDER_STAGE_RANK.get(o.get("stage"), 0)
+        if best is None or rank > best[0]:
+            best = (rank, o)
+    return best[1] if best else None
+
+
+def _dmy(s) -> str:
+    """DD/MM/YYYY of an ISO date or date-time (Indian convention), as given when it is not one."""
+    s = str(s or "")[:10]
+    return f"{s[8:10]}/{s[5:7]}/{s[0:4]}" if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s) else s
+
+
+def _order_line(o) -> str:
+    acc = o.get("accession") or "no accession No."
+    test = o.get("test") or o.get("doc_type") or "the test"
+    stage = o.get("stage")
+    if stage == "sample_collected":
+        when = (o.get("specimen") or {}).get("collected") or ""
+        return f"Sample collected{' on ' + _dmy(when) if when else ''} ({acc}): {test}, result awaited in the HIS"
+    if stage == "scheduled":
+        return f"Ordered in the HIS ({acc}): {test} scheduled for {_dmy(o.get('scheduled_for')) or 'a date to be fixed'}, no report yet"
+    if stage == "cancelled":
+        return f"Order cancelled in the HIS ({acc}): {test}" + (f"; {o['note']}" if o.get("note") else "")
+    return f"Ordered in the HIS ({acc}): {test}, no report yet"
+
+
+def _pending_order_view(o) -> dict:
+    return {k: o.get(k) for k in ("id", "accession", "test", "doc_type", "stage", "status", "scheduled_for", "authored_on", "performer_department", "encounter_number", "encounter_kind", "note")} | {
+        "collected": ((o.get("specimen") or {}).get("collected") if o.get("specimen") else None)}
+
+
+def _study_lines(d):
+    """The header lines that name the study ("CECT THORAX", "MRI BRAIN"): the title keyword hits of the first lines of page 1 (V1 item
+    3.2). Department, hospital, patient and signature lines carry no study keyword and never count ("Head: Dr. Rao" is not a brain study)."""
+    pages = d.get("pages") or []
+    text = (pages[0].get("text") if pages and isinstance(pages[0], dict) else "") or ""
+    if not text:
+        return ""
+    ev = doctype.keyword_type([text], "").get("evidence") or []
+    return "\n".join(e.get("quote") or "" for e in ev if str(e.get("where", "")).startswith("line"))
+
+
+def _region_ok(d, region):
+    if not region:
+        return True
+    c = d.get("classification") or {}
+    hay = " ".join([c.get("body_region", ""), c.get("title", ""), d.get("filename", ""), _study_lines(d)]).lower().replace("_", " ")  # file names word by word
+    return re.search(r"\b(?:" + region + ")", hay) is not None  # whole words from the start ("rect" still matches rectum / rectal)
+
+
+def _foreign(d, site, others) -> bool:
+    """The document names another protocol's site (one of `others`) and not this one."""
+    return not _region_ok(d, site) and any(_region_ok(d, o) for o in others if o)
+
+
+SITE_DOC_TYPES = {"histopathology", "cytology", "ihc", "molecular"}  # the records a second cancer has of its own; staging imaging and labs serve both
+
+
+def _prefer_site(items, site, others, doc_of=lambda x: x):
+    """V2 item 5.3 (two primaries): a patient's Case Files share the HIS records, so of several candidates for one pathology record
+    (and of several pathology documents carrying a required value) one that names another protocol's site and not this one (`site`
+    of the protocol; `others`: the sites of the other protocols; the reader's region, the title, the file name and the study lines,
+    as `_region_ok` reads them) steps aside while a candidate that does not remains. A candidate naming no site at all (an IHC
+    panel) is never set aside, and when every candidate names another site every candidate stays (a lung biopsy that shows a
+    colorectal primary still answers the colorectal protocol's histopathology record after a referral). Only on a Case File with a
+    linked Case File (the same patient's other cancer) and only for SITE_DOC_TYPES: a patient with one cancer is checked as in V1.
+    Returns (kept, set aside); a preference, never a filter."""
+    if not site or not others:
+        return items, []
+    aside = [x for x in items if _foreign(doc_of(x) or {}, site, others)]
+    keep = [x for x in items if x not in aside]
+    return (keep, aside) if keep else (items, [])
+
+
+def other_sites(prot) -> list[str]:
+    """The `site` of every other shipped protocol (V2 item 5.3)."""
+    out = []
+    for x in protocol.list_protocols():
+        pid = x.get("id") if isinstance(x, dict) else x
+        if pid and pid != (prot or {}).get("id"):
+            try:
+                site = (protocol.get(pid) or {}).get("site")
+            except (OSError, ValueError, TypeError):
+                site = None
+            if site and site not in out:
+                out.append(site)
+    return out
+
+
+def _doc_types(d) -> set:
+    """The document types a document may be: the model's, plus the keyword table's when they disagree and no clinician has
+    confirmed the type yet (V1 item 3.2). A confirmed type (rules.case_docs overlay) is the only one."""
+    c = d.get("classification") or {}
+    types = {c.get("doc_type")} if c.get("doc_type") else set()
+    dis = c.get("doc_type_disagreement")
+    if dis and dis.get("keyword_type") and not c.get("doc_type_confirmed_by"):
+        types.add(dis["keyword_type"])
+    return types
+
+
+def _type_note(d):
+    c = d.get("classification") or {}
+    dis = c.get("doc_type_disagreement") or {}
+    return dis.get("note") or f"the reader model (Qwen3.5-4B, Chinese, non-medical) called it {c.get('doc_type')} and the title keywords say {dis.get('keyword_type')}"
+
+
+def resolve_facts(docs, overrides=None):
+    """Case-level view of every fact. Current value = most recent verified value from a FINAL/SIGNED document; if none,
+    the most recent verified value; else the most recent value. Every value is kept in `history` (longitudinal record)."""
+    hist = {}
+    for d in sorted([d for d in docs if d.get("state") == "ready"], key=_doc_sort_key):
+        c = d.get("classification") or {}
+        for fid, f in (d.get("facts") or {}).items():
+            hist.setdefault(fid, []).append({**f, "doc_id": d["doc_id"], "doc_title": c.get("title") or d["filename"], "doc_type": c.get("doc_type"),
+                                             "doc_types": sorted(_doc_types(d)), "type_note": _type_note(d) if len(_doc_types(d)) > 1 else "",
+                                             "date": dates.doc_dates(d)["event"] or None, "report_date": dates.doc_dates(d)["report"] or None,
+                                             "date_unconfirmed": dates.doc_dates(d)["unconfirmed"], "date_questionable": dates.doc_dates(d)["questionable"],
+                                             "date_flags": dates.doc_dates(d)["flags"],
+                                             "doc_final": _is_final(d, overrides), "doc_status": c.get("status"),
+                                             "superseded": bool(d.get("superseded")), "unconfirmed_outside": _unconfirmed_outside(d)})
+    out = {}
+    for fid, h in hist.items():
+        live = [e for e in h if not e.get("superseded")] or h  # an earlier version of an amended report is history, never the current value (review M7)
+        tiers = [[e for e in live if e["verification"] in VERIFIED and e["doc_final"] and e["state"] == "present"],
+                 [e for e in live if e["verification"] in VERIFIED], live]
+        out[fid] = {"current": next(t[-1] for t in tiers if t), "history": h}
+    return out
+
+
+LEVEL_LABEL = {1: "Level 1: Case File", 2: "Level 2: Records"}  # V1 item 4.2: records present, final, signed, right patient; then the values in them
+LEVEL_WHAT = {1: "the record is missing, not final or not this patient", 2: "a required value is missing, pending or not verified in the record"}
+
+
+def _hospital():
+    try:
+        from . import org
+        return org.load().get("hospital") or {}
+    except Exception:
+        return {}
+
+
+def _dept_id(name):
+    try:
+        from . import org
+        return org.department_id(name) if name else None
+    except Exception:
+        return None
+
+
+def _is_coordinator(name) -> bool:
+    try:
+        from . import org
+        return org.is_coordinator_name(name)
+    except Exception:
+        return False
+
+
+def _dept_name(dept_id):
+    """The department's name, or "" when the id is not (or no longer) a department of org.json."""
+    try:
+        from . import org
+        d = org.department(dept_id) if dept_id else None
+        return d["name"] if d else ""
+    except Exception:
+        return ""
+
+
+def _title(x):
+    return x.get("doc_title") or (x.get("classification") or {}).get("title") or x.get("filename") or x.get("doc_id") or ""
+
+
+def _evaluate_record(req, ready, facts, overrides, cat, orders=(), site="", other_sites=()):
+    """(`site` / `other_sites`: the two-primaries preference, V2 item 5.3; empty on a Case File without a linked Case File.)"""
+    """One record of the protocol against the Case File: the verdict (status, problems, evidence, needs) as before, now split into
+    Level 1 (the record: present, final and signed, right patient, its type and date settled) and Level 2 (the required values in it:
+    present, verified, not pending) with the document a Level 2 gap sits in (V1 item 4.2). `problems` keeps its order: confirmations
+    first, then the record's status, then the fields."""
+    r = {"id": req["id"], "label": req["label"], "department": req.get("routed_department") or req["department"], "status": "satisfied", "problems": [], "evidence": []}
+    l1 = {"status": "satisfied", "problems": [], "needs": []}
+    l2 = {"status": "satisfied", "problems": [], "needs": []}
+    source_doc = None  # the document a Level 2 gap sits in (routing: the department that uploaded it)
+    w = (overrides.get("requirements") or {}).get(req["id"])
+    if w and w.get("waived"):
+        r["status"] = "waived"; r["waiver"] = w
+        r["problems"].append(f"Waived for this Case File by {w.get('by') or 'clinician'}: {w.get('reason') or 'no reason given'}")
+        r["level"] = None; r["level1"] = l1; r["level2"] = l2
+        return r
+    date_needs = []  # (doc or history entry, why, level): a clinician confirms the date that decides this requirement (V1 item 3.1)
+    type_needs = []  # (doc or history entry, level): documents that match under only one of their two possible types (V1 item 3.2)
+    match_needs = []  # (doc or history entry, level): outside reports matched by name only; the treating doctor confirms the patient (V2 item 3.6)
+    unconfirmed = {d["doc_id"] for d in ready if _unconfirmed_outside(d)}
+    by_id = {d["doc_id"]: d for d in ready}  # the document behind a value, for the site preference (V2 item 5.3)
+    aside_docs = []  # documents of the other cancer set aside for this record (V2 item 5.3): named on the row for review
+
+    def prefer(items, allowed_types, doc_of=lambda x: x):
+        if not (site and other_sites and allowed_types and set(allowed_types) <= SITE_DOC_TYPES):
+            return items
+        kept, aside = _prefer_site(items, site, other_sites, doc_of)
+        aside_docs.extend(x for x in (doc_of(a) or {} for a in aside) if x and x not in aside_docs)
+        return kept
+    if req.get("applies_if_doc_type_present"):
+        present = [d for d in ready if req["applies_if_doc_type_present"] in _doc_types(d)]
+        if not present:
+            r["status"] = "not_applicable"; r["level"] = None; r["level1"] = l1; r["level2"] = l2
+            return r
+        type_needs += [(d, 1) for d in present if len(_doc_types(d)) > 1]  # whether this requirement applies rests on a disputed type
+    allowed = set(req.get("fact_doc_types") or req.get("doc_types") or [])
+    carrier_ids = []
+    if not req.get("facts_only"):
+        want = set(req["doc_types"])
+        cands = prefer([d for d in ready if _doc_types(d) & want and _region_ok(d, req.get("region"))], want)  # the other cancer's report steps aside (V2 item 5.3)
+        type_needs += [(d, 1) for d in cands if len(_doc_types(d)) > 1 and len(_doc_types(d) & want) == 1]
+        if req.get("must_postdate_doc_type"):
+            refs = [x for x in ready if req["must_postdate_doc_type"] in _doc_types(x)]
+            type_needs += [(x, 1) for x in refs if len(_doc_types(x)) > 1]  # the end-of-treatment reference rests on a disputed type
+            ref = max([dates.doc_dates(x)["event"] for x in refs if dates.doc_dates(x)["event"] and not dates.doc_dates(x)["questionable"]], default="")
+            for x in refs:  # the reference event (end of treatment) has no trusted date: nothing can be placed after it
+                if dates.doc_dates(x)["questionable"]:
+                    date_needs.append((x, f"the {req['label'].lower()} must be dated after it", 1))
+            if ref:  # "after treatment" compares event dates (V1 item 3.1)
+                undated = [d for d in cands if dates.doc_dates(d)["questionable"]]
+                cands = [d for d in cands if not dates.doc_dates(d)["questionable"] and dates.doc_dates(d)["event"] > ref]
+                r["postdate_reference"] = ref
+                if not cands:  # only undated or flagged candidates: ask for their date instead of calling the record missing
+                    date_needs += [(d, f"it must be dated after {ref}", 1) for d in undated]
+        cands.sort(key=_doc_sort_key, reverse=True)
+        match_needs += [(d, 1) for d in cands if d["doc_id"] in unconfirmed]
+        finals = [d for d in cands if _is_final(d, overrides)]
+        if not cands:
+            r["status"] = l1["status"] = "missing_record"
+            p = f"No {req['label'].lower()} in the Case File" + (f" dated after {r['postdate_reference']}" if r.get("postdate_reference") else "")
+            r["problems"].append(p); l1["problems"].append(p)
+        elif not finals:
+            d = cands[0]; c = d["classification"]; source_doc = d
+            if _needs_confirmation(d):
+                r["status"] = l1["status"] = "needs_confirmation"
+                p = (f"{c.get('title') or d['filename']} has no explicit status or signature line: confirm it is the final, signed version"
+                     + ("; " + "; ".join(c.get("status_notes") or []) if c.get("status_notes") else ""))
+                r["problems"].append(p); l1["problems"].append(p)
+                r.setdefault("needs", []).append({"type": "attest_final", "doc_id": d["doc_id"]}); l1["needs"].append({"type": "attest_final", "doc_id": d["doc_id"]})
+            else:
+                r["status"] = l1["status"] = "not_final"
+                his_why = [n[len("HIS: "):] for n in (c.get("status_notes") or []) if n.startswith("HIS: ")]  # the hospital system's reason (V2 item 3.3)
+                p = (f"{c.get('title') or d['filename']} is {c.get('status', 'UNKNOWN')}" + (" and unsigned" if c.get("signed") == "no" else "")
+                     + ": a final, signed version is required" + (" (" + "; ".join(his_why) + ")" if his_why else ""))
+                r["problems"].append(p); l1["problems"].append(p)
+            r["evidence"].append({"doc_id": d["doc_id"], "quote": c.get("status_quote") or c.get("signature_quote")})
+        else:
+            d = finals[0]; c = d["classification"]; source_doc = d
+            r["evidence"].append({"doc_id": d["doc_id"], "quote": c.get("status_quote") or c.get("signature_quote")})
+            if c.get("status") == "UNSTATED":
+                att = (overrides.get("documents") or {}).get(d["doc_id"], {})
+                r["notes"] = [f"status not explicit in {c.get('title') or d['filename']}; " + ("attested final by " + att.get("by", "clinician") if att.get("attested_final") else "signature line present")]
+            if d.get("identity") == "mismatch_or_missing":
+                p = f"Patient identifier not found in {c.get('title') or d['filename']}: check the document belongs to this patient"
+                r["problems"].append(p); l1["problems"].append(p); r["status"] = l1["status"] = "needs_review"
+            elif d.get("identity") == "id_differs":
+                p = f"{c.get('title') or d['filename']} prints an identifier this Case File does not know: check the document belongs to this patient"
+                r["problems"].append(p); l1["problems"].append(p); r["status"] = l1["status"] = "needs_review"
+    else:  # facts_only: Level 1 is a final document of a type that can carry the values (the record that should document them)
+        carriers = prefer([d for d in ready if _doc_types(d) & allowed and _is_final(d, overrides)], allowed)  # the other cancer's report steps aside (V2 item 5.3)
+        carriers.sort(key=_doc_sort_key, reverse=True)
+        match_needs += [(d, 1) for d in carriers if d["doc_id"] in unconfirmed]
+        carrier_ids = [d["doc_id"] for d in carriers]
+        if carriers:
+            source_doc = carriers[0]
+        else:
+            l1["status"] = "missing_record"
+            l1["problems"].append("No final, signed " + " / ".join(allowed_label(cat, t) for t in sorted(allowed)) + " report in the Case File to carry: "
+                                  + ", ".join(cat[f]["label"] for f in req.get("required_facts", []) if f in cat))
+    # required fields (Level 2)
+    missing, pending, review = [], [], []
+    documenting = []  # carrier documents that hold at least one of the required values (the record the verdict rests on, V2 item 3.3)
+    scan_needs = []  # (history entry, field): critical values read from a scan, not yet confirmed against the image (V1 item 8.2)
+    open_doc = None  # the document the open value sits in (pending, approximate, non-final or awaiting confirmation against the scan)
+    for fid in req.get("required_facts", []):
+        hist = [h for h in facts.get(fid, {}).get("history", []) if not allowed or set(h["doc_types"]) & allowed]
+        type_needs += [(h, 2) for h in hist if allowed and len(h["doc_types"]) > 1 and len(set(h["doc_types"]) & allowed) == 1
+                       and h["doc_id"] not in {x["doc_id"] for x, _ in type_needs}]
+        good = [h for h in hist if h["verification"] in VERIFIED and h["doc_final"] and h["state"] == "present" and not h.get("superseded")]  # history never counts (review M7)
+        good = prefer(good, allowed, lambda h: by_id.get(h["doc_id"]))  # the other cancer's value steps aside (V2 item 5.3)
+        documenting += [h["doc_id"] for h in good if h["doc_id"] in carrier_ids]
+        match_needs += [(h, 2) for h in good if h["doc_id"] in unconfirmed and h["doc_id"] not in {x["doc_id"] for x, _ in match_needs}]
+        if req.get("must_postdate_doc_type") and r.get("postdate_reference"):
+            good = [h for h in good if (h["date"] or "") > r["postdate_reference"]]
+        if good:
+            g = sorted(good, key=lambda h: h["date"] or "")[-1]
+            if scanned.needs_scan_confirmation(g, cat.get(fid)):  # the current value rests on a scan transcription alone (V1 item 8.2)
+                same = [h for h in good if not scanned.needs_scan_confirmation(h, cat.get(fid)) and grounding.norm(h["value"]) == grounding.norm(g["value"])]
+                if same:  # the same value in a verified record not read from a scan (or already confirmed): it stands
+                    g = sorted(same, key=lambda h: h["date"] or "")[-1]
+                else:
+                    scan_needs.append((g, fid)); open_doc = open_doc or g
+            scan = g["verification"] != "confirmed" and g.get("source_method") == scanned.SCAN_METHOD  # read from a scan (V1 item 8.1); a confirmed value is the clinician's reading
+            r["evidence"].append({"doc_id": g["doc_id"], "fact": fid, "value": g["value"], "quote": g["quote"], **({"source_method": scanned.SCAN_METHOD} if scan else {})})
+            if len({h["doc_id"] for h in good}) > 1 and len({grounding.norm(h["value"]) for h in good}) > 1:  # which value is current depends on the dates
+                seen = set()
+                for h in good:
+                    if h.get("date_questionable") and h["doc_id"] not in seen:
+                        seen.add(h["doc_id"]); date_needs.append((h, f"{cat[fid]['label'].lower()} is documented more than once and the current value depends on the dates", 2))
+        elif any(h["state"] == "pending" for h in hist):
+            h = [h for h in hist if h["state"] == "pending"][-1]; open_doc = open_doc or h
+            pending.append(f"{cat[fid]['label']}: \"{h['value']}\" in {h['doc_title']}")
+        elif any(h["verification"] == "needs_review" for h in hist):
+            open_doc = open_doc or [h for h in hist if h["verification"] == "needs_review"][-1]
+            review.append(cat[fid]["label"])
+        elif hist and not any(h["doc_final"] for h in hist):
+            open_doc = open_doc or hist[-1]
+            pending.append(f"{cat[fid]['label']}: only in a non-final document ({hist[-1]['doc_title']})")
+        else:
+            missing.append(cat[fid]["label"])
+    if missing and r["status"] == "missing_record":
+        r.setdefault("notes", []).append("That record must document: " + ", ".join(missing))
+        l2["problems"].append("Required field not documented: " + ", ".join(missing))
+    elif missing:
+        p = "Required field not documented: " + ", ".join(missing); r["problems"].append(p); l2["problems"].append(p)
+    if pending:
+        r["problems"] += ["Pending: " + p for p in pending]; l2["problems"] += ["Pending: " + p for p in pending]
+    if review:
+        p = "Needs expert review (approximate source match): " + ", ".join(review); r["problems"].append(p); l2["problems"].append(p)
+    if missing or pending:
+        l2["status"] = "missing_field"
+    elif review:
+        l2["status"] = "needs_review"
+    if r["status"] in ("satisfied", "needs_confirmation"):
+        if missing or pending:
+            r["status"] = "missing_field" if r["status"] == "satisfied" else r["status"]
+        elif review and r["status"] == "satisfied":
+            r["status"] = "needs_review"
+    if scan_needs and r["status"] != "not_applicable" and l1["status"] == "satisfied":  # a clinician reads each critical value on the scan image (V1 item 8.2); not while the record itself is open at Level 1
+        for h, fid in scan_needs:
+            loc = h.get("location") or {}
+            p = (f"Confirm {cat[fid]['label']} against the scan image: \"{h['value']}\" was read from a scanned page of {h['doc_title']} "
+                 "(critical value: the transcription alone does not count)")
+            need = {"type": "confirm_value", "doc_id": h["doc_id"], "fact": fid, "value": h["value"],
+                    **({k: loc[k] for k in ("page", "start", "end") if k in loc} if loc else {}),
+                    **({"boxes": h["boxes"]} if h.get("boxes") else {})}  # where it was read on the image (V1 item 8.4)
+            r["problems"].append(p); l2["problems"].append(p)
+            r.setdefault("needs", []).append(need); l2["needs"].append(need)
+        if l2["status"] == "satisfied":
+            l2["status"] = "needs_confirmation"
+        if r["status"] == "satisfied":
+            r["status"] = "needs_confirmation"
+    if type_needs and r["status"] != "not_applicable":  # the document type decides whether this record counts: a clinician confirms it
+        r["status"] = "needs_confirmation"
+        seen = set()
+        for x, lvl in type_needs:
+            did = x["doc_id"]
+            if did in seen:
+                continue
+            seen.add(did)
+            p = f"Confirm the document type of {_title(x)}: {x.get('type_note') or _type_note(x)}"
+            r["problems"].insert(0, p)
+            r.setdefault("needs", []).append({"type": "confirm_doc_type", "doc_id": did})
+            lv = l1 if lvl == 1 else l2
+            lv["status"] = "needs_confirmation"; lv["problems"].insert(0, p); lv["needs"].append({"type": "confirm_doc_type", "doc_id": did})
+            if not any(e.get("doc_id") == did for e in r["evidence"]):
+                r["evidence"].append({"doc_id": did, "quote": ""})
+    if match_needs and r["status"] != "not_applicable":  # an outside report matched by name only: a person confirms the patient before it counts (V2 item 3.6)
+        r["status"] = "needs_confirmation"
+        seen = set()
+        for x, lvl in match_needs:
+            did = x["doc_id"]
+            if did in seen:
+                continue
+            seen.add(did)
+            p = f"Confirm the patient of {_title(x)}: an outside report matched by name only (no hospital identifier printed)"
+            r["problems"].insert(0, p)
+            r.setdefault("needs", []).append({"type": "confirm_match", "doc_id": did})
+            lv = l1 if lvl == 1 else l2
+            lv["status"] = "needs_confirmation"; lv["problems"].insert(0, p); lv["needs"].append({"type": "confirm_match", "doc_id": did})
+            if not any(e.get("doc_id") == did for e in r["evidence"]):
+                r["evidence"].append({"doc_id": did, "quote": ""})
+    if date_needs and r["status"] != "not_applicable":  # confirmation first (like an attestation): the date decides the check
+        r["status"] = "needs_confirmation"
+        seen = set()
+        for x, why, lvl in date_needs:
+            did = x["doc_id"]
+            if did in seen:
+                continue
+            seen.add(did)
+            dd = dates.doc_dates(x) if "classification" in x else None
+            cause = "no document date was found in its text" if (dd is None or dd["unconfirmed"]) else "its date is flagged (" + "; ".join(dd["flags"]) + ")"
+            if dd is None and x.get("date_flags"):
+                cause = "its date is flagged (" + "; ".join(x["date_flags"]) + ")"
+            p = f"Confirm the date of {_title(x)}: {cause} and {why}"
+            r["problems"].insert(0, p)
+            r.setdefault("needs", []).append({"type": "confirm_dates", "doc_id": did})
+            lv = l1 if lvl == 1 else l2
+            lv["status"] = "needs_confirmation"; lv["problems"].insert(0, p); lv["needs"].append({"type": "confirm_dates", "doc_id": did})
+            if not any(e.get("doc_id") == did for e in r["evidence"]):
+                r["evidence"].append({"doc_id": did, "quote": ""})
+    if aside_docs:  # two primaries: say what was set aside, so a person checks which cancer it belongs to (V2 item 5.3)
+        r.setdefault("notes", []).append("Two cancers under one UHID: " + "; ".join(_title(d) for d in aside_docs)
+                                         + (" names" if len(aside_docs) == 1 else " name") + " another site and was set aside for this protocol; check which cancer it belongs to")
+        r["set_aside"] = [d["doc_id"] for d in aside_docs]
+    r["level"] = 1 if l1["status"] != "satisfied" else 2 if l2["status"] != "satisfied" else None
+    if r["level"] == 2 and open_doc:
+        acc_doc = next((d for d in ready if d["doc_id"] == open_doc["doc_id"]), None)  # the document the open value sits in
+    elif r["level"] == 2 and req.get("facts_only"):
+        # a value missing from a carrier that documents the others (HER2 omitted from the IHC): that report; missing from every
+        # carrier (no CEA in any lab report): no accession, the carrier's is not the test's
+        acc_doc = next((d for d in ready if d["doc_id"] in documenting), None) if documenting else None
+    else:
+        acc_doc = source_doc
+    if acc_doc and ((acc_doc.get("his") or {}).get("accession")):
+        r["accession"] = acc_doc["his"]["accession"]  # the HIS accession / Lab No. of the record the verdict rests on (V2 item 3.3)
+    order = _order_for(req, orders) if orders and r["level"] else None
+    if order:  # the HIS holds an open order for this record: the gap names the accession No. and the stage (V2 item 3.3)
+        r["pending_order"] = _pending_order_view(order)
+        r["accession"] = order.get("accession") or r.get("accession")
+        line = _order_line(order)
+        if r["level"] == 2 and missing and order.get("stage") in ("sample_collected", "scheduled", "ordered"):
+            old_p = "Required field not documented: " + ", ".join(missing)
+            new_p = "Pending: " + ", ".join(missing) + ": " + line.lower()[:1] + line[1:]
+            r["problems"] = [new_p if x == old_p else x for x in r["problems"]]
+            l2["problems"] = [new_p if x == old_p else x for x in l2["problems"]]
+            r["pending_from_order"] = True
+        else:
+            r["problems"].append(line)
+            (l1 if r["level"] == 1 else l2)["problems"].append(line)
+    r["level_label"] = LEVEL_LABEL.get(r["level"], "")
+    r["level1"], r["level2"] = l1, l2
+    if r["level"] == 2 and open_doc:
+        src = open_doc  # the document the pending, approximate or non-final value sits in
+    elif r["level"] == 2 and req.get("facts_only"):
+        src = None  # a value missing from every carrier (e.g. EGFR with only the histopathology filed): the department that owns the test is asked
+    else:
+        src = source_doc
+    r["source_doc_id"] = (src or {}).get("doc_id")
+    return r
+
+
+def allowed_label(cat, doc_type):
+    return doc_type.replace("_", " ")
+
+
+def evaluate(case_id):
+    """The Pre-Authorization gate, or None for a Case File that is not listed yet (no protocol: records are shown but nothing is checked).
+
+    V1 item 4.1: every record of the protocol carries its NCG tier for the Case File's setting (a Essential, b Optimal, c Optional, none =
+    not applicable in that setting); a record counts (is in `requirements`) when it is Essential, or Optimal at an Optimal hospital; the
+    others are evaluated the same way and listed under `shown` (never counted, never routed). V1 item 4.2: each result carries its Level 1
+    (Case File) and Level 2 (Records) verdicts. V1 item 4.3: a document that failed to read and was neither re-processed nor dismissed
+    blocks `passed` (`blockers`)."""
+    case = store.get_case(case_id)
+    if not case.get("protocol"):
+        return None
+    prot = protocol.get(case["protocol"])
+    cat = protocol.facts()
+    state = store.get_state(case_id)
+    docs = case_docs(case_id, state)
+    ready = [d for d in docs if d.get("state") == "ready" and not d.get("superseded")]  # an earlier version of an amended HIS report is history (V2 item 3.5)
+    overrides = state.get("overrides") or {}
+    facts = resolve_facts(docs, overrides)
+    his = case.get("his") or {}
+    orders = list(his.get("orders") or []) + [o for os_ in (his.get("linked_orders") or {}).values() for o in os_]  # open HIS orders (V2 item 3.3)
+    if his.get("window_start"):  # an order placed before the fetch window (an old cancelled scan) never stands for a gap
+        orders = [o for o in orders if not str(o.get("authored_on") or "")[:10] or str(o.get("authored_on") or "")[:10] >= his["window_start"]]
+    unlinked = [x.get("uhid") for x in his.get("similar") or [] if isinstance(x, dict) and x.get("uhid") and not x.get("linked")]
+    setting = case.get("setting") or ""
+    hospital = _hospital()
+    level = case.get("hospital_level") or hospital.get("level") or "essential"
+    results, shown = [], []
+    linked = bool(case.get("linked_cases"))  # the same patient's other cancer is a linked Case File (V2 item 5.3)
+    site = (prot.get("site") or "") if linked else ""; others = other_sites(prot) if site else []  # only then does the other cancer's report step aside
+    for req in protocol.records(prot):
+        req = {**req, "routed_department": routed(prot, req, case)[0]}  # the department the gap goes to (V2 item 2.4): shown on the row
+        tier = protocol.tier_for(req, setting)
+        is_required = tier != "none" and protocol.required(req, setting, level)
+        if tier == "none":
+            r = {"id": req["id"], "label": req["label"], "department": req["routed_department"], "status": "not_applicable", "problems": [], "evidence": [],
+                 "level": None, "level1": {"status": "satisfied", "problems": [], "needs": []}, "level2": {"status": "satisfied", "problems": [], "needs": []}}
+        else:
+            r = _evaluate_record(req, ready, facts, overrides, cat, orders, site=site, other_sites=others)
+            if unlinked and r.get("level") == 1 and r["status"] == "missing_record":
+                # a registration that may be this patient is not linked yet (temporary or duplicate UHID, V2 item 3.2): the record may sit there;
+                # a person links it before anything is requested of a department
+                r["unlinked_registrations"] = unlinked
+                p = f"A registration that may be this patient is not linked ({', '.join(unlinked)}): check and link it before requesting the record"
+                r["problems"].append(p); r["level1"]["problems"].append(p)
+        r["tier"] = tier; r["tier_label"] = protocol.TIER_LABEL.get(tier, tier); r["required"] = is_required
+        for k in ("source", "sources", "note", "tier_basis"):
+            if req.get(k):
+                r[k] = req[k]
+        if req.get("tiers") and not setting:
+            r["setting_note"] = "NCG setting not recorded for this Case File: the strictest tier applies until the coordinator records it"
+        elif req.get("tiers") and setting:
+            r["setting_note"] = f"tier {tier} in the {protocol.setting_label(prot['id'], setting) or setting} setting"
+        if tier == "b" and not is_required:
+            r["tier_note"] = "NCG Optimal: shown; required at an Optimal hospital"
+        elif tier == "c" and (req.get("condition") or {}).get("ncg_tier") in protocol.TIERS:
+            # NCG gives this record another tier under a condition the system never judges (a stage, an indication, a finding): shown,
+            # never counted, labelled with NCG's own tier (review of V1 Phase 9)
+            cond = req["condition"]
+            r["ncg_tier"] = cond["ncg_tier"]
+            r["tier_note"] = (f"NCG {protocol.TIER_LABEL[cond['ncg_tier']]} {cond.get('text') or 'under a condition'}: shown, not counted; "
+                              "the system does not judge this condition")
+        elif tier == "c":
+            r["tier_note"] = "NCG Optional: shown only"
+        elif tier == "none":
+            r["tier_note"] = "not applicable in this NCG setting"
+        (results if is_required else shown).append(r)
+    optional = []
+    for opt in prot.get("optional", []):
+        hit = [d for d in ready if _doc_types(d) & set(opt["doc_types"])]
+        optional.append({"id": opt["id"], "label": opt["label"], "available": bool(hit), "doc_ids": [d["doc_id"] for d in hit]})
+    core = []  # informational MDT minimum core data (not part of the gate): documented anywhere in the Case File, verified
+    for c in prot.get("core_data", []):
+        hits = [h for fid in c["facts"] for h in facts.get(fid, {}).get("history", []) if h["verification"] in VERIFIED and h["state"] == "present"]
+        core.append({"id": c["id"], "label": c["label"], "present": bool(hits),
+                     "evidence": [{"doc_id": h["doc_id"], "fact": fid, "value": h["value"], "quote": h["quote"]} for fid in c["facts"] for h in facts.get(fid, {}).get("history", [])
+                                  if h["verification"] in VERIFIED and h["state"] == "present"][:3]})
+    applicable = [r for r in results if r["status"] not in ("not_applicable", "waived")]
+    ok = [r for r in applicable if r["status"] == "satisfied"]
+    listed = {r["id"] for r in protocol.records(prot)}
+    orphaned = [{"requirement": k, "by": w.get("by") or "", "reason": w.get("reason") or "", "at": w.get("at") or ""}
+                for k, w in sorted((overrides.get("requirements") or {}).items()) if w and w.get("waived") and k not in listed]
+    failed = [d for d in docs if d.get("state") == "error" and not d.get("dismissed")]  # V1 item 4.3: re-process or dismiss before the gate can pass
+    dismissed = [d for d in docs if d.get("state") == "error" and d.get("dismissed")]
+    blockers = [{"doc_id": d["doc_id"], "filename": d.get("rel_path") or d.get("filename") or d["doc_id"], "error": d.get("error") or "could not be read",
+                 "department": d.get("department")} for d in failed]
+    processing = [d for d in docs if d.get("state") not in ("ready", "error")]
+    gate = {"evaluated": store.now_iso(), "protocol": prot["id"], "protocol_version": prot.get("version"), "setting": setting,
+            "setting_label": protocol.setting_label(prot["id"], setting) if setting else "",
+            "hospital_level": level, "hospital_type": hospital.get("type") or "",
+            "pmjay_note": "PM-JAY mandatory document lists per package are not available yet (pendings); the hospital type ("
+                          + (hospital.get("type") or "not set") + ") changes only that paperwork, never this check.",
+            "tiers_note": "NCG tiers: a = Essential (required everywhere), b = Optimal (required at an Optimal hospital, otherwise shown), c = Optional (shown only). Clinical review before real use.",
+            "passed": len(ok) == len(applicable) and not processing and not blockers,
+            "readiness": round(100 * len(ok) / max(len(applicable), 1)), "satisfied": len(ok), "total": len(applicable),
+            "levels": {"1": {"label": LEVEL_LABEL[1], "what": LEVEL_WHAT[1], "open": sum(1 for r in applicable if r.get("level") == 1)},
+                       "2": {"label": LEVEL_LABEL[2], "what": LEVEL_WHAT[2], "open": sum(1 for r in applicable if r.get("level") == 2)}},
+            "requirements": results, "shown": shown, "optional": optional, "core_data": core, "core_data_source": prot.get("core_data_source"), "policy_basis": prot.get("policy_basis"),
+            "blockers": blockers,
+            "orphaned_waivers": orphaned,  # recorded for a record this protocol version no longer lists (renamed or removed): review
+            "documents": {"total": len(docs), "ready": len(ready), "processing": len(processing),
+                          "errors": len([d for d in docs if d.get("state") == "error"]),
+                          "failed": [d["doc_id"] for d in failed], "dismissed": [{"doc_id": d["doc_id"], **(d.get("dismissed") or {})} for d in dismissed],
+                          "non_final": [d["doc_id"] for d in ready if not _is_final(d, overrides)],
+                          "unconfirmed": [d["doc_id"] for d in ready if _needs_confirmation(d) and not _is_final(d, overrides)],
+                          "date_unconfirmed": [d["doc_id"] for d in ready if dates.doc_dates(d)["unconfirmed"]],
+                          "type_disagreements": [d["doc_id"] for d in ready if len(_doc_types(d)) > 1],
+                          "date_flags": {d["doc_id"]: dates.doc_dates(d)["flags"] for d in ready if dates.doc_dates(d)["flags"]},
+                          "identity_flags": [d["doc_id"] for d in ready if d.get("identity") in ("mismatch_or_missing", "id_differs")],
+                          "superseded": [d["doc_id"] for d in docs if d.get("superseded")],  # earlier versions kept as history (V2 item 3.5)
+                          "outside_unconfirmed": [d["doc_id"] for d in ready if _unconfirmed_outside(d)],  # outside reports awaiting the patient confirmation (3.6)
+                          "his_flags": sum(len(d.get("his_flags") or []) for d in ready)},  # HIS values the report text does not carry (3.3)
+            "his": {"open_orders": len(orders), "source": his.get("label")} if his else None}
+    return gate
+
+
+def case_signature(case_id, state=None):
+    """What a summary or brief was generated from (V1 item 4.5): the processed documents (id, state, processed time, protocol they
+    were extracted under), the active clinician confirmations, the protocol and its version, the NCG setting and the hospital level.
+    Stored with every artefact; a different hash on load means the Case File changed since it was generated."""
+    st = store.get_state(case_id) if state is None else state
+    case = store.get_case(case_id) or {}
+    docs = store.list_docs(case_id)
+    parts = sorted(f"{d['doc_id']}:{d.get('state')}:{d.get('processed') or ''}:{d.get('extracted_under') or ''}" for d in docs)
+    confs = sorted(c["id"] for c in confirm.active(st))
+    prot = protocol.get(case["protocol"]) if case.get("protocol") else {}
+    level = case.get("hospital_level") or _hospital().get("level") or "essential"  # as the gate uses it
+    basis = {"documents": parts, "confirmations": confs, "protocol": case.get("protocol") or "", "protocol_version": prot.get("version") or "",
+             "setting": case.get("setting") or "", "hospital_level": level}
+    return {"hash": hashlib.sha256(json.dumps(basis, sort_keys=True).encode()).hexdigest()[:16],
+            "documents": len(docs), "ready": sum(1 for d in docs if d.get("state") == "ready"), "confirmations": len(confs),
+            "protocol": basis["protocol"], "protocol_version": basis["protocol_version"], "setting": basis["setting"], "hospital_level": basis["hospital_level"],
+            "at": store.now_iso()}
+
+
+def stale_reason(then, now):
+    """Plain words for why an artefact is stale, from its stored signature and the current one; "" when they agree."""
+    if not then or then.get("hash") == now.get("hash"):
+        return ""
+    why = []
+    for k, what in (("documents", "document"), ("ready", "processed document"), ("confirmations", "clinician confirmation")):
+        d = (now.get(k) or 0) - (then.get(k) or 0)
+        if d:
+            why.append(f"{abs(d)} {what}{'s' if abs(d) != 1 else ''} {'added' if d > 0 else 'removed'}")
+    if then.get("protocol") != now.get("protocol") or then.get("protocol_version") != now.get("protocol_version"):
+        why.append(f"protocol {then.get('protocol') or '?'} v{then.get('protocol_version') or '?'} is now {now.get('protocol') or '?'} v{now.get('protocol_version') or '?'}")
+    if then.get("setting") != now.get("setting"):
+        why.append("the NCG setting changed")
+    if then.get("hospital_level") != now.get("hospital_level"):
+        why.append("the hospital level changed")
+    return "The Case File changed since this was generated" + (": " + ", ".join(why) if why else " (documents were re-processed or confirmations changed)")
+
+
+def set_override(case_id, kind, key, value: dict, by=""):
+    """Per-Case-File clinical override: waive a requirement, or attest a document is the final signed version. Audited."""
+    st = store.get_state(case_id)
+    ov = st.setdefault("overrides", {}).setdefault(kind, {})
+    if value is None:
+        ov.pop(key, None)
+    else:
+        ov[key] = {**value, "by": by, "at": store.now_iso()}
+    store.save_state(case_id, st)
+    store.audit(case_id, {"kind": "override", "target": kind, "key": key, "value": value, "by": by})
+
+
+def _notify(*a, **kw):
+    """In-app notification (V1 item 4.4); never lets a notification problem break the gate."""
+    try:
+        from . import notify
+        return notify.notify(*a, **kw)
+    except ImportError:
+        return None
+    except Exception as e:  # unknown department, disk problem: the gate result still stands
+        return {"error": f"{e.__class__.__name__}: {e}"}
+
+
+def routed(prot, req, case=None):
+    """The department a protocol record is requested from (V2 item 2.4): the root admin's override in org.json routes, else the record's
+    `route` ("owner": the Case File's owning treating department, with the record's department as the default before 5.1 records an
+    owner; "coordinator": the MDT Coordinator), else the record's department (an org id, name or alias). Returns
+    (display name, department id or None, kind)."""
+    try:
+        from . import org
+        pid = prot.get("id") if isinstance(prot, dict) else str(prot or "")
+        target = org.route_for(pid, req.get("id")) or req.get("route") or None
+        owner = (case or {}).get("department") if isinstance(case, dict) else None
+        return org.resolve_route(target, req.get("department") or "", owner)
+    except Exception:
+        return req.get("department") or "", _dept_id(req.get("department")), "department"
+
+
+def routes_table(case=None) -> list[dict]:
+    """Every record of every protocol with its route: the protocol default, the root admin's override and the effective department
+    (for the Organisation screen, V2 items 2.3 / 2.4)."""
+    from . import org
+    out = []
+    for p in protocol.list_protocols():
+        prot = protocol.get(p["id"])
+        for kind, recs in (("required", protocol.records(prot)), ("optional", prot.get("optional") or [])):
+            for req in recs:
+                name, did, rkind = routed(prot, req, case)
+                default = req.get("route") if req.get("route") in (org.OWNER_ID, org.COORDINATOR_ID) else req.get("department")
+                out.append({"protocol": p["id"], "protocol_label": p["label"], "record": req["id"], "label": req["label"], "kind": kind,
+                            "tier": req.get("tier", "a") if kind == "required" else None, "default": default, "default_department": req.get("department"),
+                            "override": org.route_for(p["id"], req["id"]), "department": name, "department_id": did, "route_kind": rkind})
+    return out
+
+
+def _route(r, case_id, case=None, prot=None):
+    """Where a gap goes (V1 items 4.2 / 4.4, V2 item 2.4): a Level 1 gap to the department that produces the record (the protocol's
+    route, with the root admin's override); a Level 2 gap to the department that uploaded the record the value should be in, when a
+    department uploaded it (otherwise the routed department). Returns (department name, department id or None, doc id or None)."""
+    name, doc_id = r["department"], r.get("source_doc_id")
+    if r.get("level") == 2 and doc_id:
+        d = store.get_doc(case_id, doc_id) or {}
+        if d.get("department") and _dept_name(d["department"]):
+            return _dept_name(d["department"]), d["department"], doc_id
+    if prot is not None:
+        req = next((x for x in protocol.records(prot) if x.get("id") == r.get("id")), None)
+        if req:
+            name, did, _kind = routed(prot, req, case)
+            return name, did, doc_id
+    return name, _dept_id(name), doc_id
+
+
+SUGGESTED = "suggested"  # a request the gate proposes; the treating doctor sends it (V2 item 4.2)
+
+
+def _was_sent(a: dict) -> bool:
+    """True when the department received this request: sent through dept_requests, or a V1 request opened before 4.2 (then it was
+    notified at once and sits in the inbox as pending / overdue)."""
+    return bool(a.get("sent")) or a.get("status") in ("pending", "overdue")
+
+
+def _suggest_again(a: dict) -> None:
+    """A request that moved (department or level) after it was sent goes back to a suggestion: the earlier sending, acknowledgement
+    and "done" are kept under `earlier` for the record, the status is suggested again and the due date cleared."""
+    if a.get("status") == "completed":
+        return
+    if _was_sent(a):
+        a.setdefault("earlier", []).append({k: a.get(k) for k in ("department", "department_id", "sent", "acknowledged", "done", "due") if a.get(k) is not None})
+    for k in ("sent", "acknowledged", "done"):
+        a.pop(k, None)
+    a["status"], a["due"] = SUGGESTED, None
+
+
+def _referred_from(case, st, prot) -> dict | None:
+    """{"owner", "protocol", "actions"} when the last archived gate (V2 item 5.2) belongs to another protocol than the Case File's
+    current one: the Case File was referred, and the requests open at the time (`actions`, by id) close with the referral as the reason."""
+    hist = (st or {}).get("gate_history") or []
+    last = hist[-1] if hist and isinstance(hist[-1], dict) else None
+    if not last or last.get("reason") != "referral" or not last.get("protocol") or last.get("protocol") == (prot or {}).get("id"):
+        return None
+    from . import org
+    try:
+        label = (protocol.get(last["protocol"]) or {}).get("label") or last["protocol"]
+    except (OSError, ValueError, TypeError):
+        label = last["protocol"]
+    return {"owner": org.department_name(case.get("department")) if case.get("department") else "another department", "protocol": label,
+            "actions": {a.get("id") for a in last.get("actions") or [] if isinstance(a, dict) and a.get("id")}}
+
+
+def close_requests_on_referral(case_id, new_owner_name, by=""):
+    """A referral accepted without a protocol (V2 item 5.2): every open Pre-Authorization request belonged to a protocol nobody
+    follows any more, so it closes with the referral as the reason; a department that received it is told (review Phase 5 M4). The
+    new owner's listing suggests the new protocol's requests afresh."""
+    st = store.get_state(case_id)
+    case = store.get_case(case_id) or {}
+    patient = (case.get("patient") or {}).get("name") or case_id
+    n = 0
+    for a in st.get("actions") or []:
+        if a.get("source") != "pre_authorization" or a.get("status") == "completed":
+            continue
+        sent = _was_sent(a)
+        if not sent:
+            a["never_sent"] = True
+        event = f"Closed: the Case File was referred to {new_owner_name}, which chooses the cancer protocol; the Pre-Authorization starts again under it"
+        a["status"] = "completed"; a["completed"] = store.now_iso()
+        a.setdefault("history", []).append({"ts": store.now_iso(), "event": event})
+        store.audit(case_id, {"kind": "action_completed", "action": a["id"], "requirement": a.get("requirement"), "reason": "Case File referred, protocol not chosen yet", "by": by})
+        if a.get("department_id") and sent:
+            _notify({"department": a["department_id"]}, "request_closed", case_id, f"{a.get('label') or a.get('requirement')} no longer needed for {patient} ({case_id})",
+                    event.replace("Closed: ", "The request closed: ") + ".", action_id=a["id"], requirement=a.get("requirement"), level=a.get("level"))
+        n += 1
+    if n:
+        store.save_state(case_id, st)
+    return n
+
+
+def sync_actions(case_id, gate, by=""):
+    """Open an action (request) for every unmet requirement; complete actions whose requirement is now satisfied. Each request
+    carries its level and goes to the department that can act on it (V1 item 4.2). Since V2 item 4.2 a new request is only
+    SUGGESTED (status "suggested", no due date, nothing sent): the treating doctor reads the draft, edits it and sends it
+    (dept_requests.send), which notifies the department. A request that moves to another department or level after it was sent
+    becomes a suggestion again (the department it left is told). The department hears when a request it received closes, and the
+    coordinator once when the Case File is ready (V1 item 4.4)."""
+    st = store.get_state(case_id)
+    if gate is None:  # not listed yet
+        st["gate"] = None
+        store.save_state(case_id, st)
+        return st
+    actions = st.get("actions", [])
+    today = date.today()
+    case = store.get_case(case_id); prot = protocol.get(case["protocol"])
+    patient = (case.get("patient") or {}).get("name") or case_id
+    sla = {r["id"]: r.get("sla_days", 3) for r in protocol.records(prot)}
+    by_req = {a["requirement"]: a for a in actions if a.get("source") == "pre_authorization" and a["status"] != "completed" and a.get("requirement")}  # a free request (no protocol record behind it, V2 item 4.2) is never matched against the gate
+    required_ids = {r["id"] for r in gate["requirements"]}
+    shown_ids = {r["id"] for r in gate.get("shown", [])}
+    referred = _referred_from(case, st, prot)  # the Case File was referred and is now checked under another protocol (V2 item 5.2)
+    for rid, a in list(by_req.items()):  # nothing left to request: the protocol no longer lists the record, or no longer requires it here
+        if rid not in required_ids:
+            if referred and a.get("id") in referred["actions"]:  # a request of the earlier protocol, open when the Case File was referred (V2 item 5.2)
+                event, reason = (f"Closed: the Case File was referred to {referred['owner']} and is now checked under {prot.get('label') or prot['id']} v{prot.get('version')} "
+                                 f"(it was {referred['protocol']}); this request belonged to the earlier protocol"
+                                 + (", and the new protocol shows this record without counting it" if rid in shown_ids else ", and the new protocol does not count this record")), "Case File referred, protocol changed"
+            elif rid in shown_ids:  # the NCG setting or the hospital level changed: the record is now shown, not counted
+                event, reason = "Closed: no longer required for this Case File (NCG tier for its setting and hospital level)", "requirement no longer required (NCG tier)"
+            else:
+                event, reason = f"Closed: the protocol ({prot['id']} v{prot.get('version')}) no longer lists this record", "requirement removed from the protocol"
+            sent = _was_sent(a)  # before the status changes: only a department that received the request hears that it closed
+            if not sent:
+                a["never_sent"] = True  # closed as a suggestion: no inbox ever listed it (V2 item 4.2)
+            a["status"] = "completed"; a["completed"] = store.now_iso()
+            a["history"].append({"ts": store.now_iso(), "event": event})
+            store.audit(case_id, {"kind": "action_completed", "action": a["id"], "requirement": rid, "reason": reason})
+            if a.get("department_id") and sent:
+                _notify({"department": a["department_id"]}, "request_closed", case_id, f"{a.get('label') or rid} no longer needed for {patient} ({case_id})",
+                        event.replace("Closed: ", "The request closed: ") + ".", action_id=a["id"], requirement=rid, level=a.get("level"))
+            by_req.pop(rid)
+    for r in gate["requirements"]:
+        a = by_req.get(r["id"])
+        if r["status"] in ("satisfied", "not_applicable", "waived"):
+            if a:
+                sent = _was_sent(a)
+                if not sent:
+                    a["never_sent"] = True  # closed as a suggestion: no inbox ever listed it (V2 item 4.2)
+                a["status"] = "completed"; a["completed"] = store.now_iso()
+                a["history"].append({"ts": store.now_iso(), "event": "Re-check: requirement met", "evidence": [e["doc_id"] for e in r["evidence"]]})
+                store.audit(case_id, {"kind": "action_completed", "action": a["id"], "requirement": r["id"]})
+                if a.get("department_id") and sent:
+                    why = {"waived": ("waived", "The request closed: the requirement was waived for this Case File (audited)."),
+                           "not_applicable": ("no longer applicable", "The request closed: the requirement does not apply to this Case File any more.")}
+                    head, text = why.get(r["status"], ("received", "The request closed automatically: the Case File re-check found the requirement met."))
+                    _notify({"department": a["department_id"]}, "request_closed", case_id, f"{r['label']} {head} for {patient} ({case_id})",
+                            text, action_id=a["id"], requirement=r["id"], level=a.get("level"))
+            continue
+        what = "; ".join(r["problems"]) or r["label"]
+        dept, dept_id, doc_id = _route(r, case_id, case, prot)
+        to_coord = dept_id is None and _is_coordinator(dept)  # a record the MDT Coordinator produces (previous board records): its inbox row
+        if a:
+            legacy = "level" not in a  # a request opened before the two levels existed: classified once, not a move
+            moved = (a.get("department") != dept) or (not legacy and a.get("level") != r.get("level"))
+            if a["what"] != what or moved or legacy:
+                a["what"] = what
+                a["accession"], a["pending_order"] = r.get("accession"), r.get("pending_order")  # the HIS order behind the gap (V2 item 3.3)
+                if moved:
+                    old_dept, old_name, sent = a.get("department_id"), a.get("department"), _was_sent(a)
+                    a["history"].append({"ts": store.now_iso(), "event": f"Re-check: {LEVEL_LABEL.get(r.get('level'), 'gap')} routed to {dept}"
+                                         + (f" (sent to {old_name} earlier: send it again)" if sent else " (suggested, not sent)"), "detail": what})
+                    _suggest_again(a)  # V2 item 4.2: nothing goes out by itself; the earlier sending is kept, the doctor sends the moved request
+                    a["level"], a["level_label"], a["department"], a["department_id"], a["source_doc_id"] = r.get("level"), r.get("level_label", ""), dept, dept_id, doc_id
+                    if sent and old_dept:  # the department that received it is told, so its inbox makes sense (it leaves the inbox until sent again)
+                        if old_dept != dept_id:
+                            _notify({"department": old_dept}, "request_closed", case_id, f"{r['label']} request for {patient} ({case_id}) moved to {dept}",
+                                    f"The request now sits with {dept} ({LEVEL_LABEL.get(r.get('level'), 'gap')}); the treating doctor sends it afresh.", action_id=a["id"], requirement=r["id"], level=r.get("level"))
+                        else:
+                            _notify({"department": old_dept}, "request_closed", case_id, f"{r['label']} request for {patient} ({case_id}) returned to the treating doctor",
+                                    f"The gap changed ({LEVEL_LABEL.get(r.get('level'), 'gap')}: {what}); the treating doctor sends a new request.", action_id=a["id"], requirement=r["id"], level=r.get("level"))
+                    a["role"] = "coordinator" if to_coord else None
+                elif legacy:
+                    a["history"].append({"ts": store.now_iso(), "event": f"Re-check: {LEVEL_LABEL.get(r.get('level'), 'gap')}", "detail": what})
+                    a["level"], a["level_label"], a["department_id"], a["source_doc_id"] = r.get("level"), r.get("level_label", ""), dept_id, doc_id
+                else:
+                    a["history"].append({"ts": store.now_iso(), "event": "Re-check: gap updated", "detail": what})
+            continue
+        a = {"id": "A" + uuid.uuid4().hex[:6], "source": "pre_authorization", "requirement": r["id"], "label": r["label"],
+             "department": dept, "department_id": dept_id, "level": r.get("level"), "level_label": r.get("level_label", ""), "source_doc_id": doc_id,
+             "accession": r.get("accession"), "pending_order": r.get("pending_order"),  # the HIS order or record behind the gap (V2 item 3.3)
+             "what": what, "status": SUGGESTED, "created": store.now_iso(), "due": None, "sla_days": sla.get(r["id"], 3),  # the due date is set when it is sent (V2 item 4.2)
+             "history": [{"ts": store.now_iso(), "event": f"Gap detected ({LEVEL_LABEL.get(r.get('level'), 'gap')}), request to {dept} suggested (not sent)"}]}
+        if to_coord:
+            a["role"] = "coordinator"
+        actions.append(a)
+        store.audit(case_id, {"kind": "action_created", "action": a["id"], "requirement": r["id"], "department": dept, "level": r.get("level"), "what": what, "status": SUGGESTED})
+    for a in actions:
+        if a["status"] == "pending" and a.get("due") and a["due"] < today.isoformat():
+            a["status"] = "overdue"
+    before = st.get("gate") or {}
+    if gate.get("passed") and not before.get("passed"):  # the coordinator hears once, when the Case File becomes ready (V1 item 4.4)
+        n = _notify({"role": "coordinator"}, "case_ready", case_id, f"Case File ready: {patient} ({case_id})",
+                    f"Every Pre-Authorization check is met ({gate['satisfied']} of {gate['total']} records). The Case File summary can be compiled.", by=by)
+        store.audit(case_id, {"kind": "case_ready", "by": by, "satisfied": gate["satisfied"], "total": gate["total"], "notified": bool(n and not n.get("error"))})
+    st["actions"] = actions
+    st["gate"] = gate
+    store.save_state(case_id, st)
+    return st

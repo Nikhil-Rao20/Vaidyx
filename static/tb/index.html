@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vaidyx · Tumour Board</title>
+<link rel="icon" href="/static/vaidyx-icon.svg">
+<link rel="preload" href="/static/tb/fonts/AtkinsonHyperlegible-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/tb/fonts/AtkinsonHyperlegible-Bold.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/tb/tb.css?v=3.4">
+</head>
+<body>
+<header class="top">
+  <button class="ghost menu-btn" id="btn-side" aria-label="Show Case Files" aria-expanded="false"><span class="menu-ico" aria-hidden="true"></span><span class="lbl">Case Files</span></button>
+  <a class="brand" href="/tb"><img src="/static/vaidyx-wordmark.svg" alt="Vaidyx"><span class="divider"></span><span class="product">AI Agent for Tumour Board</span></a>
+  <div class="models" id="models" title="Models in use and whether each is running. Labels: Qwen3.5-4B is Chinese (Alibaba Qwen), non-medical; Gemma-4-31B is non-medical. Open Model and data cards for details."></div>
+  <nav class="topnav">
+    <div class="navgrp" role="group" aria-label="Start"><span class="navlbl">Start</span>
+    <button class="ghost" id="btn-home" title="Your home: what your role sees first">Home</button>
+    <button class="ghost" id="btn-features" title="Every feature, grouped before, during and after the board, with a Go link">Features</button>
+    <button class="ghost bell hidden" id="btn-bell" title="Notifications: requests to your department, Case Files ready for the board" aria-label="Notifications">Notifications <span class="chip c-warn hidden" id="bell-count">0</span></button>
+    </div>
+    <div class="navgrp" role="group" aria-label="Board"><span class="navlbl">Board</span>
+    <button class="ghost" id="btn-sessions" title="Board sessions: agenda, attendance, AI support for absent specialties, decisions">Board sessions</button>
+    <button class="ghost hidden" id="btn-dashboard" title="Tumour Board quality dashboard: readiness, requests, attendance, decisions and follow-up against published standards">Quality dashboard</button>
+    </div>
+    <div class="navgrp" role="group" aria-label="Admin"><span class="navlbl">Admin</span>
+    <button class="ghost hidden" id="btn-mydept" title="The doctor logins of the department you administer (Department admin)">My department</button>
+    <button class="ghost hidden" id="btn-org" title="Hospital settings, departments, accounts and roles (Root admin)">Organisation</button>
+    <button class="ghost hidden" id="btn-connectors" title="Hospital-system connectors (MCP) and this store's read-only MCP server (admin)">Connectors</button>
+    </div>
+    <div class="navgrp" role="group" aria-label="About the AI"><span class="navlbl">About the AI</span>
+    <button class="ghost" id="btn-skills" title="What each specialty support agent looks for (SKILL.md files; admins edit)">Agent skills</button>
+    <button class="ghost" id="btn-cards" title="What each model and data source is, its labels and limits">Model and data cards</button>
+    </div>
+    <a class="ghost" href="/">Vaidyx chat</a>
+  </nav>
+</header>
+
+<div class="layout">
+  <aside class="side">
+    <div class="side-head">
+      <h3>Tumour Board Case Files</h3>
+      <button class="primary sm hidden" id="btn-new" title="Create a new Tumour Board Case File">+ New</button>
+    </div>
+    <div id="case-list" class="case-list"></div>
+    <div class="side-intake hidden" id="side-intake">
+      <h4>Records</h4>
+      <button class="ghost sm hidden" id="btn-inbox" title="Requests to your department across the Case Files: Pre-Authorization gaps and Tumour Board actions">Department inbox <span class="chip c-warn hidden" id="inbox-count">0</span></button>
+      <button class="ghost sm" id="btn-queue" title="Records that could not be matched to a patient automatically">Needs matching <span class="chip c-warn hidden" id="queue-count">0</span></button>
+      <div class="card intake-card" id="intake-upload">
+        <label class="small" for="up-dept">Upload for my department</label>
+        <select id="up-dept"></select>
+        <div class="drop small" id="up-drop">Drop files here<br><button class="ghost sm" id="up-pick" style="margin-top:6px">Choose files</button> <button class="ghost sm" id="up-folder" title="Upload every file in a folder">Folder</button></div>
+        <input type="file" id="up-files" multiple class="hidden"><input type="file" id="up-files-dir" webkitdirectory multiple class="hidden">
+        <div id="up-job" class="small"></div>
+      </div>
+    </div>
+    <div class="side-demo">
+      <h4>Synthetic demo cases</h4>
+      <div id="demo-list"></div>
+    </div>
+  </aside>
+
+  <main class="main" id="main">
+    <section class="welcome" id="welcome"></section>
+
+    <section id="intake" class="hidden"></section>
+    <section id="inbox" class="hidden"></section>
+    <section id="sessions" class="hidden"></section>
+    <section id="dashboard" class="hidden"></section>
+    <section id="orgpage" class="hidden"></section>
+    <section id="deptpage" class="hidden"></section>
+
+    <section id="case" class="hidden">
+      <div class="case-head">
+        <div>
+          <div class="eyebrow" id="c-protocol"></div>
+          <h1 id="c-title"></h1>
+          <div class="muted" id="c-meta"></div>
+          <div id="c-actions" style="margin-top:6px"></div>
+        </div>
+        <div class="readiness" id="c-ready"></div>
+      </div>
+      <nav class="tabs" id="tabs">
+        <button data-tab="ready" title="Is every required record present, final and signed? Gaps become requests to the Responsible Department" class="on">Pre-Authorization</button>
+        <button data-tab="docs" title="Every record in this Case File, with status, quotes and exports">Documents</button>
+        <button data-tab="ask" title="Ask a question; answers cite the page, or say not documented">Ask the Case File</button>
+        <button data-tab="roles" title="Briefs per specialty: what each specialty would look for, with citations">Specialty support</button>
+        <button data-tab="summary" title="A cited summary in the NCG Virtual Tumour Board structure; stage only as recorded">Case File summary</button>
+        <button data-tab="board" title="Decision record, outcome, follow-up, values over time, patient communication">Board and follow-up</button>
+        <button data-tab="audit" title="Who did what and when; tamper-evident log">Audit</button>
+      </nav>
+      <div id="tab-help-host"></div>
+      <div class="tab" id="tab-ready"></div>
+      <div class="tab hidden" id="tab-docs"></div>
+      <div class="tab hidden" id="tab-ask"></div>
+      <div class="tab hidden" id="tab-roles"></div>
+      <div class="tab hidden" id="tab-summary"></div>
+      <div class="tab hidden" id="tab-board"></div>
+      <div class="tab hidden" id="tab-audit"></div>
+    </section>
+  </main>
+</div>
+
+<footer class="scope">AI support for the Tumour Board. Informing, not managing: the agent checks, finds and organises what the signed records say. It does not diagnose, interpret scans, assign stage or recommend treatment. Human oversight (expert-in-the-loop) throughout.</footer>
+
+<div class="drawer hidden" id="drawer"><div class="drawer-body" id="drawer-body"></div></div>
+<div class="modal hidden" id="modal"><div class="modal-body" id="modal-body"></div></div>
+<div class="toast hidden" id="toast"></div>
+<script type="module" src="/static/tb/tb.js?v=3.4"></script>
+</body>
+</html>

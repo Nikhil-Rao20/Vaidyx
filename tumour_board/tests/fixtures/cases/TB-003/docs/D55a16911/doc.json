@@ -1,0 +1,123 @@
+{
+ "doc_id": "D55a16911",
+ "filename": "mri_pelvis_2026-06-05_baseline.pdf",
+ "rel_path": "radiology/mri_pelvis_2026-06-05_baseline.pdf",
+ "ext": ".pdf",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-09T16:42:05",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Radiology\nMRI PELVIS (RECTAL CANCER PROTOCOL), BASELINE\nPatient SYNTHETIC, Abdul Rahman\nUHID SYN-300582\nAge / Sex 57 Y / M\nStudy date 05-Jun-2026\nFindings\nT umour in the mid rectum, lower edge 6 cm from the anal verge, 5.5 cm craniocaudal length.\nExtramural spread 6 mm (mrT3c). Mesorectal fascia: tumour 1 mm from the fascia\n(threatened).\nEMVI: positive. T wo mesorectal lymph nodes with irregular borders.\nStaging as recorded by the reporting radiologist\nmrT3c N1, MRF threatened, EMVI positive.\nReport status: FINAL\nReported by: Dr. Nisha Kulkarni, Consultant Radiologist (electronically signed)\nSigned: 05-Jun-2026 19:40\nFINAL / SIGNED\nSYNTHETIC -\nDEMO ONLY",
+   "method": "text-layer"
+  }
+ ],
+ "classification": {
+  "title": "MRI PELVIS (RECTAL CANCER PROTOCOL), BASELINE",
+  "department": "Department of Radiology",
+  "doc_type": "mri",
+  "body_region": "pelvis",
+  "report_date": "05-Jun-2026",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "Staging as recorded by the reporting radiologist",
+  "signer": "Dr. Nisha Kulkarni, Consultant Radiologist",
+  "patient_name": "Abdul Rahman",
+  "patient_id": "SYN-300582",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-06-05"
+ },
+ "facts": {
+  "recorded_stage": {
+   "value": "mrT3c N1, MRF threatened, EMVI positive",
+   "quote": "Staging as recorded by the reporting radiologist\nmrT3c N1, MRF threatened, EMVI positive.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 460,
+    "end": 549,
+    "score": 100.0,
+    "matched": "Staging as recorded by the reporting radiologist\nmrT3c N1, MRF threatened, EMVI positive."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "lesion_size": {
+   "value": "5.5 cm",
+   "quote": "5.5 cm craniocaudal length.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 271,
+    "end": 298,
+    "score": 100.0,
+    "matched": "5.5 cm craniocaudal length."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "nodal_findings": {
+   "value": "Two mesorectal lymph nodes with irregular borders",
+   "quote": "wo mesorectal lymph nodes with irregular borders.\n",
+   "verification": "needs_review",
+   "reason": "quote matched approximately (98.0)",
+   "location": {
+    "page": 0,
+    "start": 410,
+    "end": 460,
+    "score": 98.0,
+    "matched": "wo mesorectal lymph nodes with irregular borders.\n"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "distance_from_anal_verge": {
+   "value": "6 cm",
+   "quote": "lower edge 6 cm from the anal verge",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 234,
+    "end": 269,
+    "score": 100.0,
+    "matched": "lower edge 6 cm from the anal verge"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "mrf_status": {
+   "value": "1 mm from the fascia (threatened)",
+   "quote": "Mesorectal fascia: tumour 1 mm from the fascia\n(threatened).",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 331,
+    "end": 391,
+    "score": 100.0,
+    "matched": "Mesorectal fascia: tumour 1 mm from the fascia\n(threatened)."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "emvi": {
+   "value": "positive",
+   "quote": "EMVI: positive.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 392,
+    "end": 407,
+    "score": 100.0,
+    "matched": "EMVI: positive."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  }
+ }
+}

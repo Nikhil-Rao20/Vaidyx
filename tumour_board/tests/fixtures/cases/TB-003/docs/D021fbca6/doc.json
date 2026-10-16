@@ -1,0 +1,63 @@
+{
+ "doc_id": "D021fbca6",
+ "filename": "cect_chest_abdomen_pelvis_2026-06-06.pdf",
+ "rel_path": "radiology/cect_chest_abdomen_pelvis_2026-06-06.pdf",
+ "ext": ".pdf",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-09T16:42:04",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Radiology\nCECT CHEST, ABDOMEN AND PELVIS\nPatient SYNTHETIC, Abdul Rahman\nUHID SYN-300582\nAge / Sex 57 Y / M\nStudy date 06-Jun-2026\nFindings\nNo pulmonary nodules. Liver without focal lesion. No retroperitoneal lymphadenopathy. Rectal\nwall thickening as known.\nImpression (reporting radiologist)\nNo distant metastatic disease.\nReport status: FINAL\nReported by: Dr. Arjun Rao, Consultant Radiologist (electronically signed)\nSigned: 06-Jun-2026 18:05\nFINAL / SIGNED\nSYNTHETIC -\nDEMO ONLY",
+   "method": "text-layer"
+  }
+ ],
+ "classification": {
+  "title": "CECT CHEST, ABDOMEN AND PELVIS",
+  "department": "Department of Radiology",
+  "doc_type": "ct",
+  "body_region": "chest, abdomen and pelvis",
+  "report_date": "06-Jun-2026",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "Reported by: Dr. Arjun Rao, Consultant Radiologist (electronically signed)",
+  "signer": "Dr. Arjun Rao, Consultant Radiologist",
+  "patient_name": "Abdul Rahman",
+  "patient_id": "SYN-300582",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-06-06"
+ },
+ "facts": {
+  "nodal_findings": {
+   "value": "No retroperitoneal lymphadenopathy.",
+   "quote": "No retroperitoneal lymphadenopathy.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 242,
+    "end": 277,
+    "score": 100.0,
+    "matched": "No retroperitoneal lymphadenopathy."
+   },
+   "state": "present",
+   "polarity": "negated"
+  },
+  "distant_findings": {
+   "value": "No distant metastatic disease.",
+   "quote": "No distant metastatic disease.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 346,
+    "end": 376,
+    "score": 100.0,
+    "matched": "No distant metastatic disease."
+   },
+   "state": "present",
+   "polarity": "negated"
+  }
+ }
+}

@@ -1,0 +1,108 @@
+{
+ "doc_id": "D4edcec61",
+ "filename": "pet_ct_2026-09-06.png",
+ "rel_path": "03_nuclear_medicine/pet_ct_2026-09-06.png",
+ "ext": ".png",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-11T00:45:19",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Nuclear Medicine\nWHOLE BODY 18F-FDG PET/CT REPORT\nPatient SYNTHETIC, Ramesh Kumar\nUHID SYN-100231\nAge / Sex 62 Y / M\nStudy date 06-Sep-2026\nFindings (as recorded by the reporting physician)\nPrimary: 5.2 cm spiculated right upper lobe mass, SUVmax 14.2.\nNodes: FDG-avid right hilar (SUVmax 8.1) and subcarinal (SUVmax 6.4) lymph nodes.\nDistant: no FDG-avid distant metastatic disease.\nStaging as recorded in this report\ncT3 N2 M0, Stage IIIB (AJCC 8th edition)\nReport status: FINAL\nReported by: Dr. S. Iyer, Consultant Nuclear Medicine (electronically signed)\nSigned: 06-Sep-2026 17:05\nFINAL / SIGNED",
+   "method": "vision-transcription"
+  }
+ ],
+ "classification": {
+  "title": "WHOLE BODY 18F-FDG PET/CT REPORT",
+  "department": "Department of Nuclear Medicine",
+  "doc_type": "pet_ct",
+  "body_region": "Whole Body",
+  "report_date": "06-Sep-2026",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "Findings (as recorded by the reporting physician)",
+  "signer": "Dr. S. Iyer, Consultant Nuclear Medicine",
+  "patient_name": "Ramesh Kumar",
+  "patient_id": "SYN-100231",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-09-06"
+ },
+ "facts": {
+  "recorded_stage": {
+   "value": "cT3 N2 M0, Stage IIIB (AJCC 8th edition)",
+   "quote": "cT3 N2 M0, Stage IIIB (AJCC 8th edition)",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 471,
+    "end": 511,
+    "score": 100.0,
+    "matched": "cT3 N2 M0, Stage IIIB (AJCC 8th edition)"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "lesion_size": {
+   "value": "5.2 cm",
+   "quote": "Primary: 5.2 cm spiculated right upper lobe mass, SUVmax 14.2.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 242,
+    "end": 304,
+    "score": 100.0,
+    "matched": "Primary: 5.2 cm spiculated right upper lobe mass, SUVmax 14.2."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "nodal_findings": {
+   "value": "FDG-avid right hilar (SUVmax 8.1) and subcarinal (SUVmax 6.4) lymph nodes",
+   "quote": "Nodes: FDG-avid right hilar (SUVmax 8.1) and subcarinal (SUVmax 6.4) lymph nodes.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 305,
+    "end": 386,
+    "score": 100.0,
+    "matched": "Nodes: FDG-avid right hilar (SUVmax 8.1) and subcarinal (SUVmax 6.4) lymph nodes."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "distant_findings": {
+   "value": "no FDG-avid distant metastatic disease",
+   "quote": "Distant: no FDG-avid distant metastatic disease.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 387,
+    "end": 435,
+    "score": 100.0,
+    "matched": "Distant: no FDG-avid distant metastatic disease."
+   },
+   "state": "present",
+   "polarity": "negated"
+  },
+  "suv_max": {
+   "value": "14.2",
+   "quote": "Primary: 5.2 cm spiculated right upper lobe mass, SUVmax 14.2.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 242,
+    "end": 304,
+    "score": 100.0,
+    "matched": "Primary: 5.2 cm spiculated right upper lobe mass, SUVmax 14.2."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  }
+ }
+}

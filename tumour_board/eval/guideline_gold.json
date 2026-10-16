@@ -1,0 +1,393 @@
+{
+ "version": "0.1",
+ "created": "2026-10-11",
+ "judged_by": null,
+ "note": "Gold queries for guideline search (V1 item 5.3). Expected files and pages were found by reading the guideline text (guidelines._read page numbering: PDF page number, or a 6000-character block for .docx / .txt), never by running the search. Any one expected answer counts as a hit. Awaiting Eswar's one-time judgement: until then every entry has judged false and judged_by is null. Review sheet: docs_Eswar/review/phase5_guideline_gold.md. No patient data.",
+ "queries": [
+  {
+   "id": "G01",
+   "query": "NSCLC staging work-up PET-CT brain MRI",
+   "cancer": "lung_nsclc",
+   "kind": "case",
+   "indian_expected": true,
+   "expected": [
+    {"file": "ncg_india/ncg-guidelines-for-thoracic-cancer-2019.pdf", "pages": [4], "evidence": "5. PET-Scan(b) and MRI brain(b)"},
+    {"file": "icmr/ICMR-STW-lung-cancer-2020.pdf", "pages": [1], "evidence": "Metastatic work up: PET CT and MRI brain"},
+    {"file": "icmr/ICMR-STW-oncology-all-2020.pdf", "pages": [9], "evidence": "Metastatic work up: PET CT and MRI brain"},
+    {"file": "iria/ICRI-IRIA-onco-imaging-protocols-and-reporting-checklists-2020.pdf", "pages": [45], "evidence": "MRI brain is indicated in patients with neurological symptoms and stage IIIb and above"}
+   ],
+   "judged": false
+  },
+  {
+   "id": "G02",
+   "query": "NSCLC biomarker testing EGFR ALK ROS1 PD-L1 before treatment",
+   "cancer": "lung_nsclc",
+   "kind": "case",
+   "indian_expected": true,
+   "expected": [
+    {"file": "ncg_india/ncg-guidelines-for-thoracic-cancer-2019.pdf", "pages": [4], "evidence": "EGFR(a), ALK(a), ROS1(a), MET(b), PDL1(b)"},
+    {"file": "icmr/ICMR-STW-lung-cancer-2020.pdf", "pages": [1], "evidence": "Molecular tests for adenocarcinoma: EGFR, ALK, ROS-1"},
+    {"file": "icmr/ICMR-STW-oncology-all-2020.pdf", "pages": [9], "evidence": "Molecular tests for adenocarcinoma: EGFR, ALK, ROS-1"},
+    {"file": "asco_cap/2018-lung-update-summary.pdf", "pages": [1], "evidence": "ROS1 testing must be performed on all lung adenocarcinoma patients"}
+   ],
+   "judged": false
+  },
+  {
+   "id": "G03",
+   "query": "Lung cancer (NSCLC): Mediastinal staging (EBUS / EUS, mediastinoscopy) before multidisciplinary treatment planning",
+   "cancer": "lung_nsclc",
+   "kind": "case",
+   "indian_expected": true,
+   "expected": [
+    {"file": "ncg_india/ncg-guidelines-for-thoracic-cancer-2019.pdf", "pages": [4], "evidence": "EBUS/EUS + Mediastinoscopy(b)"},
+    {"file": "ncg_india/ncg-guidelines-for-thoracic-cancer-2019.pdf", "pages": [5], "evidence": "Mediastinal staging with PET(a)/ EBUS(b)/ Mediastinoscopy(b)"},
+    {"file": "icmr/ICMR-STW-lung-cancer-2020.pdf", "pages": [1], "evidence": "EBUS/ EUS ± mediastinoscopy"},
+    {"file": "icmr/ICMR-STW-oncology-all-2020.pdf", "pages": [9], "evidence": "EBUS/ EUS ± mediastinoscopy"}
+   ],
+   "judged": false
+  },
+  {
+   "id": "G04",
+   "query": "What should a lung cancer staging CT report include? Synoptic reporting checklist for lung cancer imaging",
+   "cancer": "lung_nsclc",
+   "kind": "board",
+   "indian_expected": true,
+   "expected": [
+    {"file": "iria/ICRI-IRIA-onco-imaging-protocols-and-reporting-checklists-2020.pdf", "pages": [46, 47], "evidence": "Synoptic Reporting in lung cancer"}
+   ],
+   "judged": false,
+   "note": "Page 47 continues the same lung template (nodes, distant metastases, impression)."
+  },
+  {
+   "id": "G05",
+   "query": "breast cancer ER PR HER2 Ki-67 testing and reporting",
+   "cancer": "breast",
+   "kind": "case",
+   "indian_expected": true,
+   "expected": [
+    {"file": "tmc/tata-memorial-centre-evidence-based-management-of-breast.pdf", "pages": [5], "evidence": "Estrogen receptor, Progesterone receptor, HER2/ Neu with score (as per ASCO/CAP)"},
+    {"file": "tmc/tata-memorial-centre-evidence-based-management-of-breast.pdf", "pages": [20], "evidence": "Progesterone Receptor (PR) and Human epidermal growth factor receptor 2 (HER2)"},
+    {"file": "icmr/Breast_Cancer.pdf", "pages": [26], "evidence": "Receptor status: ER and PR (by IHC or EIA) and HER2neu by IHC"},
+    {"file": "ncg_india/ncg-guidelines-for-breast-cancer-2019.pdf", "pages": [34], "evidence": "Ki67 in appropriate"}
+   ],
+   "judged": false
+  },
+  {
+   "id": "G06",
+   "query": "breast cancer staging work-up imaging locally advanced",
+   "cancer": "breast",
+   "kind": "case",
+   "indian_expected": true,
+   "expected": [
+    {"file": "ncg_india/ncg-guidelines-for-breast-cancer-2019.pdf", "pages": [9], "evidence": "Metastatic work up (a) (X-ray Chest, USG abdomen and pelvis, LFT (a) Bone Scan, CECT CHEST /ABDO (b) PETCT(c))"},
+    {"file": "tmc/tata-memorial-centre-evidence-based-management-of-breast.pdf", "pages": [4], "evidence": "the preferred tests are contrast-enhanced computed tomography (CECT) chest and abdomen and Tc99m-methylene diphosphonate bone scan"},
+    {"file": "tmc/tata-memorial-centre-evidence-based-management-of-breast.pdf", "pages": [10], "evidence": "Metastatic work-up in the form of PET-CT, CT TAP, and bone scan is recommended"}
+   ],
+   "judged": false
+  },
+  {
+   "id": "G07",
+   "query": "Is immunohistochemistry on a core biopsy required before neoadjuvant chemotherapy for breast cancer?",
+   "cancer": "breast",
+   "kind": "board",
+   "indian_expected": true,
+   "expected": [
+    {"file": "ncg_india/ncg-guidelines-for-breast-cancer-2019.pdf", "pages": [5], "evidence": "IHC evaluation is mandatory prior to neo adjuvant therapy."},
+    {"file": "ncg_india/ncg-guidelines-for-breast-cancer-2019.pdf", "pages": [9], "evidence": "Histopathological confirmation with core biopsy and breast imaging as appropriate (a)"}
+   ],
+   "judged": false
+  },
+  {
+   "id": "G08",
+   "query": "HER2 IHC 2+ equivocal breast cancer: reflex in situ hybridization testing",
+   "cancer": "breast",
+   "kind": "board",
+   "indian_expected": true,
+   "expected": [
+    {"file": "tmc/tata-memorial-centre-evidence-based-management-of-breast.pdf", "pages": [6], "evidence": "HER2 equivocal results on IHC (score 2+) undergo molecular testing by in-situ hybridization techniques"},
+    {"file": "icmr/Breast_Cancer.pdf", "pages": [17], "evidence": "If IHC is equivocal (2+) then FISH"},
+    {"file": "icmr/Breast_Cancer.pdf", "pages": [26], "evidence": "HER2neu of 2+ on IHC is considered equivocal"},
+    {"file": "asco_cap/her2_breast_update_algorithms_2023.pdf", "pages": [1], "evidence": "Must order reflex test (same specimen using ISH)"},
+    {"file": "asco_cap/her2_breast_update_sor_2023.pdf", "pages": [1], "evidence": "IHC 2+ (equivocal) is invasive breast cancer with weak to moderate complete membrane staining"}
+   ],
+   "judged": false
+  },
+  {
+   "id": "G09",
+   "query": "HER2 IHC 3+ positive breast cancer: percentage of tumour cells with complete intense circumferential membrane staining",
+   "cancer": "breast",
+   "kind": "board",
+   "indian_expected": false,
+   "expected": [
+    {"file": "asco_cap/her2_breast_update_sor_2023.pdf", "pages": [3], "evidence": "threshold of more than 10% of tumor cells that must show homogeneous, dark circumferential (chicken wire) pattern"},
+    {"file": "asco_cap/her2_breast_update_algorithms_2023.pdf", "pages": [1], "evidence": "Circumferential membrane staining that is complete, intense and in >10% of tumor cells"}
+   ],
+   "judged": false,
+   "note": "ICMR breast consensus page 27 states an older threshold (more than 30% of cells); not listed as an answer. Eswar to decide."
+  },
+  {
+   "id": "G10",
+   "query": "rectal cancer restaging MRI after chemoradiotherapy response assessment",
+   "cancer": "colorectal_rectum",
+   "kind": "case",
+   "indian_expected": true,
+   "expected": [
+    {"file": "ncg_india/ncg-rectal-cancer.docx", "pages": [1], "evidence": "Restaging is usually performed 4-6 weeks after short course RT and 6-8 weeks after chemoradiation."},
+    {"file": "iria/ICRI-IRIA-onco-imaging-protocols-and-reporting-checklists-2020.pdf", "pages": [156], "evidence": "Restaging MRI helps assess response, plan surgery and adjuvant therapy."},
+    {"file": "iria/ICRI-IRIA-onco-imaging-protocols-and-reporting-checklists-2020.pdf", "pages": [161], "evidence": "Restaging MRI template for loco regional staging"},
+    {"file": "ncg_india/synoptic-reporting-radiology-template.pdf", "pages": [26, 27], "evidence": "RESPONSE ASSESSMENT MRI FOR RECTAL CANCER"}
+   ],
+   "judged": false
+  },
+  {
+   "id": "G11",
+   "query": "rectal cancer MRI reporting mesorectal fascia EMVI",
+   "cancer": "colorectal_rectum",
+   "kind": "case",
+   "indian_expected": true,
+   "expected": [
+    {"file": "iria/ICRI-IRIA-onco-imaging-protocols-and-reporting-checklists-2020.pdf", "pages": [160, 162], "evidence": "Mesorectal fascia involved/threatened* by primary"},
+    {"file": "iria/ICRI-IRIA-onco-imaging-protocols-and-reporting-checklists-2020.pdf", "pages": [161], "evidence": "CRM positive = tumor-MRF distance is < 1mm"},
+    {"file": "ncg_india/synoptic-reporting-radiology-template.pdf", "pages": [19, 21], "evidence": "Pelvic Side Wall Nodes/Nodules"}
+   ],
+   "judged": false,
+   "note": "NCG synoptic rectal template: MRF and EMVI fields on page 19, CRM and EMVI on page 21."
+  },
+  {
+   "id": "G12",
+   "query": "Rectal cancer: Baseline MRI pelvis (rectal protocol) before multidisciplinary treatment planning",
+   "cancer": "colorectal_rectum",
+   "kind": "case",
+   "indian_expected": true,
+   "expected": [
+    {"file": "ncg_india/ncg-rectal-cancer.docx", "pages": [1], "evidence": "High resolution phased array external MRI with minimum strength 1.5 T"},
+    {"file": "iria/ICRI-IRIA-onco-imaging-protocols-and-reporting-checklists-2020.pdf", "pages": [156], "evidence": "High resolution MRI with external coil (NOT endorectal coil) is the optimal/ desirable first method of choice for locoregional staging of rectal cancer"},
+    {"file": "iria/ICRI-IRIA-onco-imaging-protocols-and-reporting-checklists-2020.pdf", "pages": [157], "evidence": "RECTAL CANCER IMAGING PROTOCOL"}
+   ],
+   "judged": false
+  },
+  {
+   "id": "G13",
+   "query": "Rectal cancer: MMR / MSI status before multidisciplinary treatment planning",
+   "cancer": "colorectal_rectum",
+   "kind": "case",
+   "indian_expected": true,
+   "expected": [
+    {"file": "icmr/Colorectal_Cancer_0.pdf", "pages": [26], "evidence": "Tumour MMR status should be assessed in all patients who present with stage II CRC"},
+    {"file": "icmr/Colorectal_Cancer_0.pdf", "pages": [27], "evidence": "IHC for dMMR should be performed before adjuvant chemotherapy is offered"},
+    {"file": "ncg_india/management-of-colorectal-cancer.pdf", "pages": [2], "evidence": "Check for RAS, BRAF and MSI status"},
+    {"file": "ncg_india/management-of-colorectal-cancer.pdf", "pages": [4], "evidence": "Determine the MSI status, mutation status in KRAS/NRAS/BRAF and HER2 amplification"}
+   ],
+   "judged": false
+  },
+  {
+   "id": "G14",
+   "query": "Rectal cancer: RAS / BRAF before multidisciplinary treatment planning",
+   "cancer": "colorectal_rectum",
+   "kind": "case",
+   "indian_expected": true,
+   "expected": [
+    {"file": "icmr/Colorectal_Cancer_0.pdf", "pages": [18], "evidence": "RAS mutation testing is recommended for patients with metastatic disease"},
+    {"file": "ncg_india/management-of-colorectal-cancer.pdf", "pages": [4], "evidence": "Determine the MSI status, mutation status in KRAS/NRAS/BRAF and HER2 amplification"},
+    {"file": "ncg_india/management-of-colorectal-cancer.pdf", "pages": [2], "evidence": "Check for RAS, BRAF and MSI status"},
+    {"file": "ncg_india/ncg-rectal-cancer.docx", "pages": [2], "evidence": "based on KRAS/NRAS/BRAF mutation status"}
+   ],
+   "judged": false
+  },
+  {
+   "id": "G15",
+   "query": "Minimum number of lymph nodes to be examined in a colorectal cancer resection specimen",
+   "cancer": "colorectal_rectum",
+   "kind": "board",
+   "indian_expected": true,
+   "expected": [
+    {"file": "icmr/Colorectal_Cancer_0.pdf", "pages": [58], "evidence": "a minimum of 12 lymph nodes should be examined to avoid tumour understaging"},
+    {"file": "icmr/Colorectal_Cancer_0.pdf", "pages": [25], "evidence": "a minimum of 8 nodes and ideally >12 lymph nodes should have been examined"},
+    {"file": "cap_protocols/ColoRectal_4.4.0.1.REL_CAPCP.pdf", "pages": [25], "evidence": "12 lymph nodes should be considered the minimum target"}
+   ],
+   "judged": false
+  },
+  {
+   "id": "G16",
+   "query": "Tumour regression score in the pathology report after neoadjuvant chemoradiotherapy for rectal cancer",
+   "cancer": "colorectal_rectum",
+   "kind": "board",
+   "indian_expected": false,
+   "expected": [
+    {"file": "cap_protocols/ColoRectal_4.4.0.1.REL_CAPCP.pdf", "pages": [31], "evidence": "Modified Ryan Scheme for Tumor Regression Score"},
+    {"file": "cap_protocols/ColoRectal_4.4.0.1.REL_CAPCP.pdf", "pages": [7], "evidence": "Treatment Effect (Note J)"},
+    {"file": "rcpath/G049-colorectal-cancer-dataset-v4-2018.pdf", "pages": [22], "evidence": "Single cells or rare small groups of cancer cells (near-complete response)"},
+    {"file": "rcpath/G049-colorectal-cancer-dataset-v4-2018.pdf", "pages": [48], "evidence": "Preoperative therapy response (tumour regression score)"}
+   ],
+   "judged": false,
+   "note": "No Indian guideline in the library was found to describe a tumour regression score."
+  },
+  {
+   "id": "G17",
+   "query": "Oral cavity cancer work-up: imaging of the primary and neck, chest X-ray, PET-CT for high risk of distant metastasis",
+   "cancer": null,
+   "kind": "board",
+   "indian_expected": true,
+   "expected": [
+    {"file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf", "pages": [4], "evidence": "Chest X-ray(a) is an essential investigation for ruling out lung metastasis"},
+    {"file": "iria/ICRI-IRIA-onco-imaging-protocols-and-reporting-checklists-2020.pdf", "pages": [13], "evidence": "Contrast enhanced MRI - Preferred"}
+   ],
+   "judged": false
+  },
+  {
+   "id": "G18",
+   "query": "Neck dissection for a clinically node-negative (N0) neck in oral cavity cancer: which levels",
+   "cancer": null,
+   "kind": "board",
+   "indian_expected": true,
+   "expected": [
+    {"file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf", "pages": [5], "evidence": "For N0 Neck- Selective neck dissection addressing Level I-III (a)+/- Level IV."}
+   ],
+   "judged": false
+  },
+  {
+   "id": "G19",
+   "query": "Indications for adjuvant post-operative radiotherapy or chemoradiation after surgery for oral cancer",
+   "cancer": null,
+   "kind": "board",
+   "indian_expected": true,
+   "expected": [
+    {"file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf", "pages": [7], "evidence": "Indications for adjuvant post-op radiotherapy are T3-T4 primary, Node positivity"},
+    {"file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf", "pages": [15, 18, 20, 22, 23], "evidence": "Indications for adjuvant post-op radiotherapy are T3-T4 primary, Node positivity"}
+   ],
+   "judged": false,
+   "note": "Page 7 is the oral cancer algorithm. Pages 15 to 23 repeat the same footnote under the larynx / pharynx algorithms; Eswar to say whether they count."
+  },
+  {
+   "id": "G20",
+   "query": "Cervical cancer FIGO 2018 staging work-up: investigations and imaging before treatment",
+   "cancer": null,
+   "kind": "board",
+   "indian_expected": true,
+   "expected": [
+    {"file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx", "pages": [1], "evidence": "CERVIX CANCER FIGO 2018 Workup, Investigations"},
+    {"file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx", "pages": [2, 3], "evidence": "Biopsy and Lab Investigations (Complete Blood Count, Liver and Renal Function Tests, HIV status)"},
+    {"file": "iria/ICRI-IRIA-onco-imaging-protocols-and-reporting-checklists-2020.pdf", "pages": [131], "evidence": "modality of choice for local staging"}
+   ],
+   "judged": false,
+   "note": "The gynaecological guideline is a .docx: pages are 6000-character blocks, not printed pages."
+  },
+  {
+   "id": "G21",
+   "query": "Concurrent chemoradiation with weekly cisplatin for locally advanced cervical cancer (IB3 to IVA)",
+   "cancer": null,
+   "kind": "board",
+   "indian_expected": true,
+   "expected": [
+    {"file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx", "pages": [4], "evidence": "Concurrent weekly cisplatin (40 mg/m2) during external radiation."},
+    {"file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx", "pages": [2], "evidence": "Radical Radiotherapy (External + Brachytherapy) + Concurrent weekly cisplatin (a)(b)"}
+   ],
+   "judged": false,
+   "note": ".docx pages are 6000-character blocks."
+  },
+  {
+   "id": "G22",
+   "query": "Radiology reporting checklist for carcinoma cervix at baseline: parametrium, hydroureteronephrosis, pelvic lymph nodes",
+   "cancer": null,
+   "kind": "board",
+   "indian_expected": true,
+   "expected": [
+    {"file": "iria/ICRI-IRIA-onco-imaging-protocols-and-reporting-checklists-2020.pdf", "pages": [132], "evidence": "Infiltrating parametrium right or left (+/-) with extension to lateral pelvic walls (+/-)"},
+    {"file": "ncg_india/synoptic-reporting-radiology-template.pdf", "pages": [12], "evidence": "Parametrial Invasion"},
+    {"file": "ncg_india/synoptic-reporting-radiology-template.pdf", "pages": [13], "evidence": "Distal Ureter involvement or Hydroureter"}
+   ],
+   "judged": false
+  },
+  {
+   "id": "G23",
+   "query": "PM-JAY: does cancer treatment need a multidisciplinary tumour board decision for pre-authorization?",
+   "cancer": null,
+   "kind": "board",
+   "indian_expected": true,
+   "expected": [
+    {"file": "pmjay/NHA-HBP-2.2-manual-2021.pdf", "pages": [27, 33], "evidence": "decision regarding appropriate patient care for cancer care treatments would need to be taken by a multidisciplinary tumor board"}
+   ],
+   "judged": false,
+   "note": "Page 27 is the Medical Oncology section, page 33 Radiation / Surgical Oncology (printed page numbers are one lower)."
+  },
+  {
+   "id": "G24",
+   "query": "PM-JAY pre-authorization: time limit for the insurance company or trust to approve or reject the request",
+   "cancer": null,
+   "kind": "board",
+   "indian_expected": true,
+   "expected": [
+    {"file": "pmjay/NHA-HBP-2.2-manual-2021.pdf", "pages": [36], "evidence": "The insurance company/ trust will have to approve or reject the request latest by 6 hours."}
+   ],
+   "judged": false
+  },
+  {
+   "id": "G25",
+   "query": "RECIST 1.1 partial response: decrease in the sum of diameters of target lesions",
+   "cancer": null,
+   "kind": "board",
+   "indian_expected": false,
+   "expected": [
+    {"file": "recist/RECIST_1.1_Eisenhauer_2009_EJC.pdf", "pages": [5], "evidence": "At least a 30% decrease in the sum of diameters of target lesions"}
+   ],
+   "judged": false
+  },
+  {
+   "id": "G26",
+   "query": "RECIST 1.1 measurable lesion: minimum size on CT scan",
+   "cancer": null,
+   "kind": "board",
+   "indian_expected": false,
+   "expected": [
+    {"file": "recist/RECIST_1.1_Eisenhauer_2009_EJC.pdf", "pages": [3], "evidence": "10 mm by CT scan (CT scan slice thickness no greater than 5 mm"}
+   ],
+   "judged": false
+  },
+  {
+   "id": "G27",
+   "query": "PD-L1 immunohistochemistry testing and reporting in advanced NSCLC for immune checkpoint inhibitor selection",
+   "cancer": "lung_nsclc",
+   "kind": "board",
+   "indian_expected": false,
+   "expected": [
+    {"file": "asco_cap/pdl1_summary_recommendations.pdf", "pages": [1], "evidence": "Pathologists should report PD-L1 IHC results"}
+   ],
+   "judged": false,
+   "note": "NCG thoracic pages 4 and 5 name PD-L1 as an optimal test and a 50% cut-off for treatment, but say nothing on how to test or report it."
+  },
+  {
+   "id": "G28",
+   "query": "Which patients can be managed on an agreed standard of care without full discussion at the multidisciplinary team meeting (MDT streamlining)?",
+   "cancer": null,
+   "kind": "board",
+   "indian_expected": false,
+   "expected": [
+    {"file": "nhs_england/mdt-streamlining-guidance-2020.pdf", "pages": [3], "evidence": "MDT Streamlining will be supported by agreeing Standards of Care (SoCs) across Cancer Alliances."}
+   ],
+   "judged": false
+  },
+  {
+   "id": "G29",
+   "query": "Molecular tumour board: scale for ranking the clinical actionability of genomic alterations",
+   "cancer": null,
+   "kind": "board",
+   "indian_expected": false,
+   "expected": [
+    {"file": "eusoma/ESMO-precision-oncology-MTB-recommendations-2025.pdf", "pages": [6], "evidence": "ESMO Scale for Clinical Actionability of molecular Targets (ESCAT)"}
+   ],
+   "judged": false
+  },
+  {
+   "id": "G30",
+   "query": "Tumour board meeting core membership and attendance standard for each meeting",
+   "cancer": null,
+   "kind": "board",
+   "indian_expected": false,
+   "expected": [
+    {"file": "victoria_au/vic-cancer-mdm-quality-framework-2018.pdf", "pages": [15], "evidence": "all core membership specialties attend 90 per cent of MDMs"}
+   ],
+   "judged": false,
+   "note": "PM-JAY HBP 2.2 pages 27 / 33 name Surgical, Radiation and Medical Oncologists for the tumour board but set no attendance standard; Eswar may add them."
+  }
+ ]
+}

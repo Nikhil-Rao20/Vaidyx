@@ -1,0 +1,440 @@
+{
+ "id": "colorectal_rectum",
+ "label": "Rectal cancer",
+ "version": "0.6",
+ "site": "rectum|rectal|colon|colorectal|sigmoid|anorect|bowel|intestin",
+ "site_note": "V2 item 5.3 (two primaries): only on a Case File linked to the same patient's other Case File, and only for histopathology, cytology, IHC and molecular records: among several candidates for one record, or several documents carrying a required value, one that names another protocol's site and not this one steps aside and is named on the row for review; a document naming no site never does, and when every candidate names another site every candidate stays. Organ words only. A preference, never a filter; a patient with one cancer is checked as before.",
+ "note": "Configurable by the clinical team. Includes a restaging rule for re-discussion after neoadjuvant therapy. The required records are rebuilt from the NCG work-up (NCG rectal cancer guideline, and the NCG colon flow for MMR / MSI and RAS / BRAF); NCG GI guidelines carry no Essential / Optimal / Optional letters, so the listed work-up is treated as Essential and the items NCG calls optional or select-only as Optional. Prototype defaults; to be confirmed by the hospital Tumour Board (clinical review before real use).",
+ "settings_note": "NCG setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes stage). Item 4.1 derives the required records per setting from the NCG tiers.",
+ "settings": [
+  {
+   "id": "non_metastatic",
+   "label": "Non-metastatic (no distant disease recorded)"
+  },
+  {
+   "id": "metastatic",
+   "label": "Metastatic (distant disease recorded)"
+  }
+ ],
+ "records": [
+  {
+   "id": "clinical_history",
+   "label": "Clinical history and performance status",
+   "tier": "a",
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ],
+   "department": "GI Oncology",
+   "required_facts": [
+    "ecog",
+    "clinical_question"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Rectal Cancer guideline",
+     "page": "n/a",
+     "quote": "Workup: Digital rectal examination (and rigid sigmoidoscopy if available)",
+     "where": "Workup"
+    },
+    {
+     "guideline": "NCG Rectal Cancer guideline",
+     "page": "n/a",
+     "quote": "All patients need to be evaluated by a Multidisciplinary team",
+     "where": "Workup"
+    }
+   ],
+   "tier_basis": "NCG GI guidelines carry no tier letters; the listed work-up is treated as Essential (assumption, for clinical review)",
+   "route": "owner",
+   "note": "V2 item 2.4: a clinical record of the owning treating department (route owner); the department named here is the default before a Case File has an owner"
+  },
+  {
+   "id": "endoscopy",
+   "label": "Endoscopy report",
+   "tier": "a",
+   "doc_types": [
+    "endoscopy"
+   ],
+   "department": "Medical Gastroenterology",
+   "required_facts": [
+    "distance_from_anal_verge"
+   ],
+   "sla_days": 5,
+   "source": {
+    "guideline": "NCG Rectal Cancer guideline",
+    "page": "n/a",
+    "quote": "Complete colonoscopy with multiple (8) biopsies",
+    "where": "Workup"
+   },
+   "tier_basis": "NCG GI guidelines carry no tier letters; the listed work-up is treated as Essential (assumption, for clinical review)",
+   "note": "the distance from the anal verge is the rectal protocol's key measurement; NCG does not quote it"
+  },
+  {
+   "id": "histopathology",
+   "label": "Histopathology report",
+   "tier": "a",
+   "doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type"
+   ],
+   "sla_days": 5,
+   "source": {
+    "guideline": "NCG Rectal Cancer guideline",
+    "page": "n/a",
+    "quote": "Complete colonoscopy with multiple (8) biopsies",
+    "where": "Workup"
+   },
+   "tier_basis": "NCG GI guidelines carry no tier letters; the listed work-up is treated as Essential (assumption, for clinical review); implied by the biopsies"
+  },
+  {
+   "id": "cea",
+   "label": "CEA",
+   "tier": "a",
+   "facts_only": true,
+   "fact_doc_types": [
+    "lab"
+   ],
+   "department": "Biochemistry",
+   "required_facts": [
+    "cea"
+   ],
+   "sla_days": 2,
+   "source": {
+    "guideline": "NCG Rectal Cancer guideline",
+    "page": "n/a",
+    "quote": "Serum CEA",
+    "where": "Workup"
+   },
+   "tier_basis": "NCG GI guidelines carry no tier letters; the listed work-up is treated as Essential (assumption, for clinical review)"
+  },
+  {
+   "id": "baseline_mri_pelvis",
+   "label": "Baseline MRI pelvis (rectal protocol)",
+   "tier": "a",
+   "doc_types": [
+    "mri"
+   ],
+   "region": "pelvis|rect",
+   "department": "Radiology",
+   "required_facts": [
+    "recorded_stage"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Rectal Cancer guideline",
+     "page": "n/a",
+     "quote": "Local staging: MRI pelvis (Endorectal ultrasound in early tumorsc)",
+     "where": "Workup, local staging"
+    },
+    {
+     "guideline": "NCG Rectal Cancer guideline",
+     "page": "n/a",
+     "quote": "High resolution phased array external MRI with minimum strength 1.5 T with T2W non-fat suppressed sequences ... Add Diffusion weighted imaging; NO ENDORECTAL MRI",
+     "where": "footnote b"
+    }
+   ],
+   "tier_basis": "NCG GI guidelines carry no tier letters; the listed work-up is treated as Essential (assumption, for clinical review)"
+  },
+  {
+   "id": "systemic_staging",
+   "label": "Metastatic work-up (CECT abdomen; CECT thorax or chest X-ray)",
+   "tier": "a",
+   "doc_types": [
+    "ct",
+    "xray"
+   ],
+   "region": "abdomen|abdo|thorax|chest|pelvis",
+   "department": "Radiology",
+   "required_facts": [
+    "distant_findings"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Rectal Cancer guideline",
+     "page": "n/a",
+     "quote": "Metastatic workup: CECT scan abdomen, CECT thorax/chest X-rayd",
+     "where": "Workup, metastatic workup"
+    },
+    {
+     "guideline": "NCG Rectal Cancer guideline",
+     "page": "n/a",
+     "quote": "the latter may be an alternative in a resource constrained setting",
+     "where": "footnote d"
+    }
+   ],
+   "tier_basis": "NCG GI guidelines carry no tier letters; the listed work-up is treated as Essential (assumption, for clinical review)",
+   "note": "PET-CT does not satisfy this record (NCG: select indications only). NCG lists CECT abdomen with CECT thorax or a chest X-ray; V1 counts this record when one of these studies is present: check that both the chest and the abdomen were imaged (clinical review)"
+  },
+  {
+   "id": "pet_ct",
+   "label": "PET/CT (select indications only)",
+   "tier": "c",
+   "doc_types": [
+    "pet_ct"
+   ],
+   "department": "Nuclear Medicine",
+   "required_facts": [],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Rectal Cancer guideline",
+     "page": "n/a",
+     "quote": "PET scan can be considered only in select indications",
+     "where": "Workup"
+    },
+    {
+     "guideline": "NCG Rectal Cancer guideline",
+     "page": "n/a",
+     "quote": "PETCT in initial staging is indicated ONLY in the following 4 scenarios",
+     "where": "footnote e"
+    }
+   ],
+   "tier_basis": "NCG GI guidelines carry no tier letters; NCG limits PET to select indications, so it is Optional (assumption, for clinical review)"
+  },
+  {
+   "id": "mmr",
+   "label": "MMR / MSI status",
+   "tier": "c",
+   "tiers": {
+    "non_metastatic": "c",
+    "metastatic": "a"
+   },
+   "facts_only": true,
+   "fact_doc_types": [
+    "histopathology",
+    "ihc",
+    "molecular"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "mmr"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NCG Management of Colorectal Cancer (colon flow)",
+     "page": 2,
+     "quote": "DISCUSS IN MULTIDISCIPLINARY MEETING, EARLY INTEGRATION OF PALLIATIVE CARE, Check for RAS, BRAF and MSI status"
+    },
+    {
+     "guideline": "NCG Management of Colorectal Cancer (colon flow)",
+     "page": 2,
+     "quote": "Stage II (pT3-4,N0): MSI testing indicated"
+    }
+   ],
+   "tier_basis": "NCG GI guidelines carry no tier letters; metastatic: the colon flow says check MSI status (treated as Essential); otherwise Optional (assumption, for clinical review)",
+   "note": "not in the NCG rectal file; from the colon flow (metastatic, stage II)"
+  },
+  {
+   "id": "ras_braf",
+   "label": "RAS / BRAF",
+   "tier": "c",
+   "tiers": {
+    "non_metastatic": "c",
+    "metastatic": "a"
+   },
+   "facts_only": true,
+   "fact_doc_types": [
+    "molecular",
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "ras_braf"
+   ],
+   "sla_days": 10,
+   "sources": [
+    {
+     "guideline": "NCG Management of Colorectal Cancer (colon flow)",
+     "page": 2,
+     "quote": "DISCUSS IN MULTIDISCIPLINARY MEETING, EARLY INTEGRATION OF PALLIATIVE CARE, Check for RAS, BRAF and MSI status"
+    },
+    {
+     "guideline": "NCG Management of Colorectal Cancer (colon flow)",
+     "page": 4,
+     "quote": "Determine the MSI status, mutation status in KRAS/NRAS/BRAF and HER2 amplification"
+    }
+   ],
+   "tier_basis": "NCG GI guidelines carry no tier letters; metastatic: the colon flow says check RAS and BRAF status (treated as Essential); otherwise Optional (assumption, for clinical review)"
+  },
+  {
+   "id": "restaging_mri",
+   "label": "Restaging MRI pelvis after neoadjuvant therapy",
+   "tier": "a",
+   "doc_types": [
+    "mri"
+   ],
+   "region": "pelvis|rect",
+   "department": "Radiology",
+   "required_facts": [],
+   "must_postdate_doc_type": "treatment_summary",
+   "applies_if_doc_type_present": "treatment_summary",
+   "sla_days": 7,
+   "source": {
+    "guideline": "NCG Rectal Cancer guideline",
+    "page": "n/a",
+    "quote": "Restaging is usually performed 4-6 weeks after short course RT and 6-8 weeks after chemoradiation. A high-resolution phased array external MRI ... is used for local staging",
+    "where": "footnote c"
+   },
+   "tier_basis": "NCG GI guidelines carry no tier letters; the listed work-up is treated as Essential (assumption, for clinical review)"
+  },
+  {
+   "id": "restaging_ct",
+   "label": "Restaging CT thorax and abdomen (optional)",
+   "tier": "c",
+   "doc_types": [
+    "ct"
+   ],
+   "region": "thorax|chest|abdomen|abdo",
+   "department": "Radiology",
+   "required_facts": [],
+   "must_postdate_doc_type": "treatment_summary",
+   "applies_if_doc_type_present": "treatment_summary",
+   "sla_days": 7,
+   "source": {
+    "guideline": "NCG Rectal Cancer guideline",
+    "page": "n/a",
+    "quote": "A CT thorax and abdomen for restaging is optional since it changes the management in <7% of patients. A PET-CT may be considered optional if an exenterative procedure is planned.",
+    "where": "Restaging"
+   },
+   "tier_basis": "NCG calls restaging CT optional"
+  }
+ ],
+ "optional": [
+  {
+   "id": "treatment_summary",
+   "label": "Neoadjuvant treatment summary",
+   "doc_types": [
+    "treatment_summary"
+   ],
+   "department": "Radiation Oncology"
+  },
+  {
+   "id": "previous_board",
+   "label": "Previous Tumour Board record",
+   "doc_types": [
+    "tumour_board_record"
+   ],
+   "department": "MDT Coordinator",
+   "route": "coordinator"
+  }
+ ],
+ "extract_facts": [
+  "presenting_complaint",
+  "ecog",
+  "comorbidities",
+  "clinical_question",
+  "recorded_stage",
+  "lesion_size",
+  "nodal_findings",
+  "distant_findings",
+  "histologic_type",
+  "grade",
+  "mmr",
+  "ras_braf",
+  "distance_from_anal_verge",
+  "mrf_status",
+  "emvi",
+  "haemoglobin",
+  "wbc",
+  "platelets",
+  "creatinine",
+  "cea",
+  "treatment_received",
+  "treatment_completion_date",
+  "patient_preference",
+  "clinical_trial_note",
+  "diagnosis_date_mode"
+ ],
+ "post_board": {
+  "required_record_fields": [
+   "decision_text",
+   "recorded_by",
+   "participants",
+   "actions"
+  ],
+  "follow_up_default_days": 14,
+  "record_fields_source": "EUSOMA 2020 (names of all participants, evidence on decisions); Victorian Cancer MDM quality framework 2018 (report errors/changes raised, divergent recommendations and dissenting clinicians); PM-JAY HBP 2.2 s.3.9 (tumour board decision and treatment plan)"
+ },
+ "core_data": [
+  {
+   "id": "diagnosis",
+   "label": "Histopathological / cytological diagnosis",
+   "facts": [
+    "histologic_type"
+   ]
+  },
+  {
+   "id": "diagnosis_date_mode",
+   "label": "Date and mode of diagnosis",
+   "facts": [
+    "diagnosis_date_mode"
+   ]
+  },
+  {
+   "id": "stage",
+   "label": "Stage as recorded (with the investigations used)",
+   "facts": [
+    "recorded_stage"
+   ]
+  },
+  {
+   "id": "performance_status",
+   "label": "Performance status",
+   "facts": [
+    "ecog"
+   ]
+  },
+  {
+   "id": "comorbidities",
+   "label": "Co-morbidities",
+   "facts": [
+    "comorbidities"
+   ]
+  },
+  {
+   "id": "biomarkers",
+   "label": "Relevant genomic / biomarker testing",
+   "facts": [
+    "mmr",
+    "ras_braf"
+   ]
+  },
+  {
+   "id": "treatment_history",
+   "label": "Treatment history",
+   "facts": [
+    "treatment_received"
+   ]
+  },
+  {
+   "id": "patient_preference",
+   "label": "Patient preference / special circumstances",
+   "facts": [
+    "patient_preference"
+   ]
+  },
+  {
+   "id": "clinical_trial",
+   "label": "Clinical trial availability / suitability recorded",
+   "facts": [
+    "clinical_trial_note"
+   ]
+  },
+  {
+   "id": "question",
+   "label": "Question for the Tumour Board",
+   "facts": [
+    "clinical_question"
+   ]
+  }
+ ],
+ "core_data_source": "NHS England, Streamlining MDT meetings (2020), p.11 'minimum core data requirements'; aligned with the NCG Virtual Tumour Board case template (India)",
+ "policy_basis": "PM-JAY Health Benefit Package 2.2 user guidelines (NHA, 2021), section 3.9: pre-authorization is mandatory at each step of cancer care and the decision on appropriate care is to be taken by a multidisciplinary tumour board; NHS England MDT streamlining guidance (2020) pre-listing conditions."
+}

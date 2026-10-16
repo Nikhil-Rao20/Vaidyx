@@ -1,0 +1,35 @@
+{
+  "Name": "Vaidyx Demo PACS (SYNTHETIC)",
+  "StorageDirectory": "/data/vaidyx/tools/orthanc/db/storage",
+  "IndexDirectory": "/data/vaidyx/tools/orthanc/db/index",
+  "HttpServerEnabled": true,
+  "HttpPort": 8042,
+  "HttpBindAddresses": [
+    "127.0.0.1"
+  ],
+  "RemoteAccessAllowed": false,
+  "AuthenticationEnabled": false,
+  "DicomServerEnabled": false,
+  "DicomAet": "VXPACS",
+  "OverwriteInstances": "IfChanged",
+  "HttpVerbose": false,
+  "VerboseEnabled": false,
+  "Plugins": [
+    "/data/vaidyx/tools/orthanc/plugins/libOrthancDicomWeb.so",
+    "/data/vaidyx/tools/orthanc/plugins/libOrthancOHIF.so"
+  ],
+  "DicomWeb": {
+    "Enable": true,
+    "Root": "/dicom-web/",
+    "EnableWado": true,
+    "WadoRoot": "/wado",
+    "Ssl": false,
+    "StudiesMetadata": "Full",
+    "SeriesMetadata": "Full",
+    "PublicRoot": "/api/tb/pacs/dicom-web/"
+  },
+  "OHIF": {
+    "DataSource": "dicom-web",
+    "RouterBasename": "/api/tb/pacs/ohif/"
+  }
+}

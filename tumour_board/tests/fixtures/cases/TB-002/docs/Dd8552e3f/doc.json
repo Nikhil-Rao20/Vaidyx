@@ -1,0 +1,63 @@
+{
+ "doc_id": "Dd8552e3f",
+ "filename": "cect_chest_abdomen_2026-08-22.pdf",
+ "rel_path": "radiology/cect_chest_abdomen_2026-08-22.pdf",
+ "ext": ".pdf",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-09T16:42:01",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Radiology\nCECT CHEST AND ABDOMEN (STAGING)\nPatient SYNTHETIC, Lakshmi Iyer\nUHID SYN-200417\nAge / Sex 48 Y / F\nStudy date 22-Aug-2026\nFindings\nLungs clear. No pleural effusion. Liver normal in size with no focal lesion. Adrenals normal. No\nabdominal lymphadenopathy.\nImpression (reporting radiologist)\nNo evidence of distant metastatic disease in the chest or abdomen.\nReport status: FINAL\nReported by: Dr. Arjun Rao, Consultant Radiologist (electronically signed)\nSigned: 22-Aug-2026 18:30\nFINAL / SIGNED\nSYNTHETIC -\nDEMO ONLY",
+   "method": "text-layer"
+  }
+ ],
+ "classification": {
+  "title": "CECT CHEST AND ABDOMEN (STAGING)",
+  "department": "Department of Radiology",
+  "doc_type": "ct",
+  "body_region": "chest and abdomen",
+  "report_date": "22-Aug-2026",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "Reported by: Dr. Arjun Rao, Consultant Radiologist (electronically signed)",
+  "signer": "Dr. Arjun Rao, Consultant Radiologist",
+  "patient_name": "Lakshmi Iyer",
+  "patient_id": "SYN-200417",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-08-22"
+ },
+ "facts": {
+  "nodal_findings": {
+   "value": "No abdominal lymphadenopathy.",
+   "quote": "No\nabdominal lymphadenopathy.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 288,
+    "end": 317,
+    "score": 100.0,
+    "matched": "No\nabdominal lymphadenopathy."
+   },
+   "state": "present",
+   "polarity": "negated"
+  },
+  "distant_findings": {
+   "value": "No evidence of distant metastatic disease in the chest or abdomen.",
+   "quote": "No evidence of distant metastatic disease in the chest or abdomen.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 353,
+    "end": 419,
+    "score": 100.0,
+    "matched": "No evidence of distant metastatic disease in the chest or abdomen."
+   },
+   "state": "present",
+   "polarity": "negated"
+  }
+ }
+}

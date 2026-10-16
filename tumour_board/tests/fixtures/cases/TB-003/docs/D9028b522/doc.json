@@ -1,0 +1,48 @@
+{
+ "doc_id": "D9028b522",
+ "filename": "cea_2026-06-04.pdf",
+ "rel_path": "lab/cea_2026-06-04.pdf",
+ "ext": ".pdf",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-09T16:42:04",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Biochemistry\nTUMOUR MARKER REPORT\nPatient SYNTHETIC, Abdul Rahman\nUHID SYN-300582\nAge / Sex 57 Y / M\nSample date 04-Jun-2026\nResult\nT est Result Unit Ref. range\nCEA 35.2 ng/mL < 5.0\nReport status: FINAL\nReported by: Dr. R. Pillai, Consultant Biochemist (electronically signed)\nSigned: 04-Jun-2026 15:00\nFINAL / SIGNED\nSYNTHETIC -\nDEMO ONLY",
+   "method": "text-layer"
+  }
+ ],
+ "classification": {
+  "title": "TUMOUR MARKER REPORT",
+  "department": "Department of Biochemistry",
+  "doc_type": "lab",
+  "body_region": "",
+  "report_date": "04-Jun-2026",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "Reported by: Dr. R. Pillai, Consultant Biochemist (electronically signed)",
+  "signer": "Dr. R. Pillai, Consultant Biochemist",
+  "patient_name": "Abdul Rahman",
+  "patient_id": "SYN-300582",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-06-04"
+ },
+ "facts": {
+  "cea": {
+   "value": "35.2 ng/mL",
+   "quote": "CEA 35.2 ng/mL < 5.0",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 213,
+    "end": 233,
+    "score": 100.0,
+    "matched": "CEA 35.2 ng/mL < 5.0"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  }
+ }
+}

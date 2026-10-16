@@ -1,0 +1,48 @@
+{
+ "doc_id": "D275302cb",
+ "filename": "discharge_summary_2026-09-05.pdf",
+ "rel_path": "06_discharge/discharge_summary_2026-09-05.pdf",
+ "ext": ".pdf",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-11T00:45:17",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Medicine\nDISCHARGE SUMMARY\nPatient SYNTHETIC, Ramesh Kumar\nUHID SYN-100231\nAge / Sex 62 Y / M\nAdmitted / Discharged 01-Sep-2026 / 05-Sep-2026\nReason for admission\nHaemoptysis.\nCourse in hospital\nHaemodynamically stable. Tranexamic acid given for 48 hours. IV antibiotics were not\nrequired. Biopsy planned as outpatient.\nMedications at discharge\nAmlodipine 5 mg once daily. Pantoprazole 40 mg once daily.\nReport status: FINAL\nReported by: Dr. K. Nair, Consultant Physician (electronically signed)\nSigned: 05-Sep-2026 19:20\nFINAL / SIGNED\nSYNTHETIC -\nDEMO ONLY",
+   "method": "text-layer"
+  }
+ ],
+ "classification": {
+  "title": "DISCHARGE SUMMARY",
+  "department": "Department of Medicine",
+  "doc_type": "discharge_summary",
+  "body_region": "",
+  "report_date": "05-Sep-2026",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "Reported by: Dr. K. Nair, Consultant Physician (electronically signed)",
+  "signer": "Dr. K. Nair, Consultant Physician",
+  "patient_name": "Ramesh Kumar",
+  "patient_id": "SYN-100231",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-09-05"
+ },
+ "facts": {
+  "presenting_complaint": {
+   "value": "Haemoptysis.",
+   "quote": "Reason for admission\nHaemoptysis.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 194,
+    "end": 227,
+    "score": 100.0,
+    "matched": "Reason for admission\nHaemoptysis."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  }
+ }
+}

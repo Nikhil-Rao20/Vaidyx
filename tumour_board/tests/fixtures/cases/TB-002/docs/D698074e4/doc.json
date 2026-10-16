@@ -1,0 +1,63 @@
+{
+ "doc_id": "D698074e4",
+ "filename": "mri_breast_2026-08-18.pdf",
+ "rel_path": "radiology/mri_breast_2026-08-18.pdf",
+ "ext": ".pdf",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-09T16:42:01",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Radiology\nMRI BREAST (BILATERAL) WITH CONTRAST\nPatient SYNTHETIC, Lakshmi Iyer\nUHID SYN-200417\nAge / Sex 48 Y / F\nStudy date 18-Aug-2026\nFindings\nLeft breast: irregular enhancing mass, 3.1 x 2.6 x 2.5 cm, upper outer quadrant. No multifocal\nor multicentric disease.\nRight breast: no suspicious enhancement.\nLeft axilla: one abnormal level I node.\nImpression (reporting radiologist)\nUnifocal left breast mass, 3.1 cm. Single abnormal left axillary node.\nReport status: FINAL\nReported by: Dr. Nisha Kulkarni, Consultant Radiologist (electronically signed)\nSigned: 18-Aug-2026 20:05\nFINAL / SIGNED\nSYNTHETIC -\nDEMO ONLY",
+   "method": "text-layer"
+  }
+ ],
+ "classification": {
+  "title": "MRI BREAST (BILATERAL) WITH CONTRAST",
+  "department": "Department of Radiology",
+  "doc_type": "mri",
+  "body_region": "breast",
+  "report_date": "18-Aug-2026",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "Reported by: Dr. Nisha Kulkarni, Consultant Radiologist (electronically signed)",
+  "signer": "Dr. Nisha Kulkarni, Consultant Radiologist",
+  "patient_name": "Lakshmi Iyer",
+  "patient_id": "SYN-200417",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-08-18"
+ },
+ "facts": {
+  "lesion_size": {
+   "value": "3.1 x 2.6 x 2.5 cm",
+   "quote": "irregular enhancing mass, 3.1 x 2.6 x 2.5 cm, upper outer quadrant.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 211,
+    "end": 278,
+    "score": 100.0,
+    "matched": "irregular enhancing mass, 3.1 x 2.6 x 2.5 cm, upper outer quadrant."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "nodal_findings": {
+   "value": "one abnormal level I node",
+   "quote": "Left axilla: one abnormal level I node.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 359,
+    "end": 398,
+    "score": 100.0,
+    "matched": "Left axilla: one abnormal level I node."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  }
+ }
+}

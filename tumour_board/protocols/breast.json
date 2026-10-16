@@ -1,0 +1,531 @@
+{
+ "id": "breast",
+ "label": "Breast cancer",
+ "version": "0.7",
+ "site": "breast|mammary",
+ "site_note": "V2 item 5.3 (two primaries): only on a Case File linked to the same patient's other Case File, and only for histopathology, cytology, IHC and molecular records: among several candidates for one record, or several documents carrying a required value, one that names another protocol's site and not this one steps aside and is named on the row for review; a document naming no site never does, and when every candidate names another site every candidate stays. Organ words only. A preference, never a filter; a patient with one cancer is checked as before.",
+ "note": "Configurable by the clinical team. The required records are rebuilt from the NCG Essential / Optimal / Optional tiers per setting (NCG breast cancer guidelines 2019, quoted with page on every record), then informed by ICMR, ESMO and the CAP breast biomarker template as before; to be confirmed by the hospital Tumour Board (clinical review before real use).",
+ "settings_note": "NCG setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes stage). Item 4.1 derives the required records per setting from the NCG tiers.",
+ "settings": [
+  {
+   "id": "early",
+   "label": "Early (operable), as recorded"
+  },
+  {
+   "id": "locally_advanced",
+   "label": "Locally advanced, as recorded"
+  },
+  {
+   "id": "metastatic",
+   "label": "Metastatic, as recorded"
+  }
+ ],
+ "records": [
+  {
+   "id": "clinical_history",
+   "label": "Clinical history and performance status",
+   "tier": "a",
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ],
+   "department": "Breast Surgery",
+   "required_facts": [
+    "ecog",
+    "menopausal_status",
+    "clinical_question"
+   ],
+   "sla_days": 2,
+   "source": {
+    "guideline": "NCG Guidelines for Breast Cancer (2019)",
+    "page": 4,
+    "quote": "All women with a breast lump should undergo a TRIPLE TEST (a)"
+   },
+   "tier_basis": "clinical examination is one arm of the triple test",
+   "route": "owner",
+   "note": "V2 item 2.4: a clinical record of the owning treating department (route owner); the department named here is the default before a Case File has an owner"
+  },
+  {
+   "id": "breast_imaging",
+   "label": "Breast imaging report (mammography / ultrasound)",
+   "tier": "a",
+   "doc_types": [
+    "mammogram",
+    "ultrasound"
+   ],
+   "department": "Radiology",
+   "required_facts": [
+    "lesion_size"
+   ],
+   "sla_days": 3,
+   "source": {
+    "guideline": "NCG Guidelines for Breast Cancer (2019)",
+    "page": 4,
+    "quote": "a bilateral mammogram (a) and/or Ultrasound (a)/ MRI as appropriate (c)"
+   }
+  },
+  {
+   "id": "histopathology",
+   "label": "Histopathology (core biopsy preferred) or FNAC",
+   "tier": "a",
+   "doc_types": [
+    "histopathology",
+    "cytology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Breast Cancer (2019)",
+     "page": 4,
+     "quote": "Histopathology** (Core biopsy preferred (b) or FNAC (a))"
+    },
+    {
+     "guideline": "NCG Guidelines for Breast Cancer (2019)",
+     "page": 5,
+     "quote": "Histo/cyto pathology confirmation is a MUST before initiating cancer directed treatment"
+    }
+   ]
+  },
+  {
+   "id": "grade",
+   "label": "Grade (core biopsy)",
+   "tier": "b",
+   "facts_only": true,
+   "fact_doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "grade"
+   ],
+   "sla_days": 5,
+   "source": {
+    "guideline": "NCG Guidelines for Breast Cancer (2019)",
+    "page": 5,
+    "quote": "Core Biopsy is preferred in cases where neo-adjuvant therapy is planned (for grading and receptor status)"
+   }
+  },
+  {
+   "id": "receptor_status",
+   "label": "Receptor status (ER / PR / HER2)",
+   "tier": "a",
+   "facts_only": true,
+   "fact_doc_types": [
+    "ihc",
+    "histopathology",
+    "molecular"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "er",
+    "pr",
+    "her2"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Breast Cancer (2019)",
+     "page": 5,
+     "quote": "IHC evaluation is mandatory prior to neo adjuvant therapy"
+    },
+    {
+     "guideline": "NCG Guidelines for Breast Cancer (2019)",
+     "page": 13,
+     "quote": "Hormone Therapy for all ER &/or PR positive"
+    }
+   ],
+   "tier_basis": "NCG gives no tier letter; every adjuvant arm depends on ER / PR / HER2, so it is treated as Essential (the synoptic form labels IHC (c), B p34)"
+  },
+  {
+   "id": "ki67",
+   "label": "Ki-67",
+   "tier": "c",
+   "facts_only": true,
+   "fact_doc_types": [
+    "ihc",
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "ki67"
+   ],
+   "sla_days": 7,
+   "source": {
+    "guideline": "NCG Guidelines for Breast Cancer (2019)",
+    "page": 34,
+    "quote": "Ki67 in appropriate"
+   }
+  },
+  {
+   "id": "metastatic_workup",
+   "label": "Metastatic work-up (chest X-ray, USG abdomen and pelvis; or CECT; bone scan)",
+   "note": "NCG lists X-ray chest, USG abdomen and pelvis and LFT (a); V1 counts this record when any one listed study is present (the LFT is checked under baseline blood tests): check that both the chest and the abdomen and pelvis were imaged (clinical review)",
+   "tier": "a",
+   "tiers": {
+    "early": "none",
+    "locally_advanced": "a",
+    "metastatic": "a"
+   },
+   "doc_types": [
+    "xray",
+    "ultrasound",
+    "ct",
+    "pet_ct",
+    "bone_scan"
+   ],
+   "region": "chest|thorax|abdomen|abdo|pelvis|whole body|bone|skeletal",
+   "department": "Radiology",
+   "required_facts": [
+    "distant_findings"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Breast Cancer (2019)",
+     "page": 6,
+     "quote": "Staging investigations not indicated in cT1-2, N0-1, M0, unless specific symptoms suspicious of metastases"
+    },
+    {
+     "guideline": "NCG Guidelines for Breast Cancer (2019)",
+     "page": 9,
+     "quote": "Metastatic work up (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Breast Cancer (2019)",
+     "page": 9,
+     "quote": "(X-ray Chest, USG abdomen and pelvis, LFT (a) Bone Scan, CECT CHEST /ABDO (b) PETCT(c))"
+    },
+    {
+     "guideline": "NCG Guidelines for Breast Cancer (2019)",
+     "page": 19,
+     "quote": "CECT (Thorax/abdomen/pelvis)"
+    }
+   ],
+   "tier_basis": "metastatic: listed in the NCG metastatic work-up (B p19) without a tier letter; treated as Essential"
+  },
+  {
+   "id": "cect_chest_abdomen",
+   "label": "CECT chest and abdomen",
+   "tier": "b",
+   "tiers": {
+    "early": "none",
+    "locally_advanced": "b",
+    "metastatic": "a"
+   },
+   "doc_types": [
+    "ct"
+   ],
+   "region": "chest|thorax|abdomen|abdo",
+   "department": "Radiology",
+   "required_facts": [
+    "distant_findings"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Breast Cancer (2019)",
+     "page": 9,
+     "quote": "(X-ray Chest, USG abdomen and pelvis, LFT (a) Bone Scan, CECT CHEST /ABDO (b) PETCT(c))"
+    },
+    {
+     "guideline": "NCG Guidelines for Breast Cancer (2019)",
+     "page": 19,
+     "quote": "CECT (Thorax/abdomen/pelvis)"
+    }
+   ],
+   "tier_basis": "metastatic: listed in the metastatic work-up without a letter; treated as Essential"
+  },
+  {
+   "id": "bone_scan",
+   "label": "Bone scan",
+   "tier": "b",
+   "tiers": {
+    "early": "none",
+    "locally_advanced": "b",
+    "metastatic": "a"
+   },
+   "doc_types": [
+    "bone_scan"
+   ],
+   "department": "Nuclear Medicine",
+   "required_facts": [],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Breast Cancer (2019)",
+     "page": 9,
+     "quote": "(X-ray Chest, USG abdomen and pelvis, LFT (a) Bone Scan, CECT CHEST /ABDO (b) PETCT(c))"
+    },
+    {
+     "guideline": "NCG Guidelines for Breast Cancer (2019)",
+     "page": 19,
+     "quote": "Bone scan"
+    }
+   ],
+   "tier_basis": "metastatic: listed in the NCG metastatic work-up (B p19) without a tier letter; treated as Essential",
+   "note": "NCG prints the letter only after LFT; the bone scan is grouped under Metastatic work up (a): kept Optimal for locally advanced disease until clinical review"
+  },
+  {
+   "id": "pet_ct",
+   "label": "PET/CT",
+   "tier": "c",
+   "doc_types": [
+    "pet_ct"
+   ],
+   "department": "Nuclear Medicine",
+   "required_facts": [],
+   "sla_days": 5,
+   "source": {
+    "guideline": "NCG Guidelines for Breast Cancer (2019)",
+    "page": 9,
+    "quote": "PETCT(c)"
+   }
+  },
+  {
+   "id": "mri_breast",
+   "label": "MRI breast",
+   "tier": "c",
+   "doc_types": [
+    "mri"
+   ],
+   "region": "breast",
+   "department": "Radiology",
+   "required_facts": [],
+   "sla_days": 5,
+   "source": {
+    "guideline": "NCG Guidelines for Breast Cancer (2019)",
+    "page": 4,
+    "quote": "MRI as appropriate (c)"
+   }
+  },
+  {
+   "id": "usg_axilla",
+   "label": "USG axilla (cN0)",
+   "tier": "b",
+   "tiers": {
+    "early": "b",
+    "locally_advanced": "none",
+    "metastatic": "none"
+   },
+   "doc_types": [
+    "ultrasound",
+    "mammogram"
+   ],
+   "region": "axilla",
+   "department": "Radiology",
+   "required_facts": [],
+   "sla_days": 3,
+   "source": {
+    "guideline": "NCG Guidelines for Breast Cancer (2019)",
+    "page": 7,
+    "quote": "USG axilla for cN0 cases (b)"
+   }
+  },
+  {
+   "id": "cbc",
+   "label": "Complete blood count (CBC)",
+   "tier": "a",
+   "tiers": {
+    "early": "b",
+    "locally_advanced": "a",
+    "metastatic": "a"
+   },
+   "doc_types": [
+    "lab"
+   ],
+   "region": "cbc|cbp|blood count|haemogram|hemogram|haematolog|hematolog|blood tests|routine labs",
+   "department": "Pathology",
+   "required_facts": [
+    "haemoglobin",
+    "wbc",
+    "platelets"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Breast Cancer (2019)",
+     "page": 9,
+     "quote": "LFT (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Breast Cancer (2019)",
+     "page": 19,
+     "quote": "Routine labs for systemic function"
+    }
+   ],
+   "tier_basis": "NCG names LFT (a) for locally advanced disease and routine labs for metastatic disease; not listed for early breast cancer (Optimal there)",
+   "note": "V2 item 2.4: the V1 'Baseline blood tests' record is split by test so each request reaches the desk that does it (CBC: Pathology; LFT / RFT: Biochemistry)"
+  },
+  {
+   "id": "liver_renal_function",
+   "label": "Liver and renal function tests (LFT, RFT)",
+   "tier": "a",
+   "tiers": {
+    "early": "b",
+    "locally_advanced": "a",
+    "metastatic": "a"
+   },
+   "doc_types": [
+    "lab"
+   ],
+   "region": "lft|rft|kft|liver|renal|kidney|biochem|creatinine|bilirubin|urea|sgot|sgpt",
+   "department": "Biochemistry",
+   "required_facts": [
+    "creatinine",
+    "bilirubin"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Breast Cancer (2019)",
+     "page": 9,
+     "quote": "LFT (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Breast Cancer (2019)",
+     "page": 19,
+     "quote": "Routine labs for systemic function"
+    }
+   ],
+   "tier_basis": "NCG names LFT (a) for locally advanced disease and routine labs for metastatic disease; not listed for early breast cancer (Optimal there)",
+   "note": "V2 item 2.4: the V1 'Baseline blood tests' record is split by test so each request reaches the desk that does it (CBC: Pathology; LFT / RFT: Biochemistry)"
+  }
+ ],
+ "optional": [
+  {
+   "id": "axilla",
+   "label": "Axillary node sampling (FNAC / biopsy)",
+   "doc_types": [
+    "cytology",
+    "histopathology"
+   ],
+   "department": "Pathology"
+  },
+  {
+   "id": "previous_board",
+   "label": "Previous Tumour Board record",
+   "doc_types": [
+    "tumour_board_record"
+   ],
+   "department": "MDT Coordinator",
+   "route": "coordinator"
+  }
+ ],
+ "extract_facts": [
+  "presenting_complaint",
+  "ecog",
+  "menopausal_status",
+  "comorbidities",
+  "clinical_question",
+  "recorded_stage",
+  "lesion_size",
+  "nodal_findings",
+  "distant_findings",
+  "histologic_type",
+  "grade",
+  "lvi",
+  "er",
+  "pr",
+  "her2",
+  "ki67",
+  "haemoglobin",
+  "wbc",
+  "platelets",
+  "creatinine",
+  "bilirubin",
+  "patient_preference",
+  "clinical_trial_note",
+  "diagnosis_date_mode"
+ ],
+ "post_board": {
+  "required_record_fields": [
+   "decision_text",
+   "recorded_by",
+   "participants",
+   "actions"
+  ],
+  "follow_up_default_days": 14,
+  "record_fields_source": "EUSOMA 2020 (names of all participants, evidence on decisions); Victorian Cancer MDM quality framework 2018 (report errors/changes raised, divergent recommendations and dissenting clinicians); PM-JAY HBP 2.2 s.3.9 (tumour board decision and treatment plan)"
+ },
+ "core_data": [
+  {
+   "id": "diagnosis",
+   "label": "Histopathological / cytological diagnosis",
+   "facts": [
+    "histologic_type"
+   ]
+  },
+  {
+   "id": "diagnosis_date_mode",
+   "label": "Date and mode of diagnosis",
+   "facts": [
+    "diagnosis_date_mode"
+   ]
+  },
+  {
+   "id": "stage",
+   "label": "Stage as recorded (with the investigations used)",
+   "facts": [
+    "recorded_stage"
+   ]
+  },
+  {
+   "id": "performance_status",
+   "label": "Performance status",
+   "facts": [
+    "ecog"
+   ]
+  },
+  {
+   "id": "comorbidities",
+   "label": "Co-morbidities",
+   "facts": [
+    "comorbidities"
+   ]
+  },
+  {
+   "id": "biomarkers",
+   "label": "Relevant genomic / biomarker testing",
+   "facts": [
+    "er",
+    "pr",
+    "her2",
+    "ki67"
+   ]
+  },
+  {
+   "id": "treatment_history",
+   "label": "Treatment history",
+   "facts": [
+    "treatment_received"
+   ]
+  },
+  {
+   "id": "patient_preference",
+   "label": "Patient preference / special circumstances",
+   "facts": [
+    "patient_preference"
+   ]
+  },
+  {
+   "id": "clinical_trial",
+   "label": "Clinical trial availability / suitability recorded",
+   "facts": [
+    "clinical_trial_note"
+   ]
+  },
+  {
+   "id": "question",
+   "label": "Question for the Tumour Board",
+   "facts": [
+    "clinical_question"
+   ]
+  }
+ ],
+ "core_data_source": "NHS England, Streamlining MDT meetings (2020), p.11 'minimum core data requirements'; aligned with the NCG Virtual Tumour Board case template (India)",
+ "policy_basis": "PM-JAY Health Benefit Package 2.2 user guidelines (NHA, 2021), section 3.9: pre-authorization is mandatory at each step of cancer care and the decision on appropriate care is to be taken by a multidisciplinary tumour board; NHS England MDT streamlining guidance (2020) pre-listing conditions."
+}

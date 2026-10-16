@@ -1,0 +1,32 @@
+{
+ "doc_id": "D6fd0e1b6",
+ "filename": "bone_scan_2026-08-23.png",
+ "rel_path": "nuclear_medicine/bone_scan_2026-08-23.png",
+ "ext": ".png",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-09T16:42:01",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Nuclear Medicine\nWHOLE BODY BONE SCAN (99mTc-MDP)\nPatient SYNTHETIC, Lakshmi Iyer\nUHID SYN-200417\nAge / Sex 48 Y / F\nStudy date 23-Aug-2026\nFindings\nPhysiological tracer distribution. No focal abnormal tracer uptake to suggest skeletal metastasis.\nImpression (reporting physician)\nNo scintigraphic evidence of skeletal metastasis.\nReport status: FINAL\nReported by: Dr. S. Iyer, Consultant Nuclear Medicine (electronically signed)\nSigned: 23-Aug-2026 15:20\nFINAL / SIGNED",
+   "method": "vision-transcription"
+  }
+ ],
+ "classification": {
+  "title": "WHOLE BODY BONE SCAN (99mTc-MDP)",
+  "department": "Department of Nuclear Medicine",
+  "doc_type": "bone_scan",
+  "body_region": "",
+  "report_date": "23-Aug-2026",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "Reported by: Dr. S. Iyer, Consultant Nuclear Medicine (electronically signed)",
+  "signer": "Dr. S. Iyer, Consultant Nuclear Medicine",
+  "patient_name": "Lakshmi Iyer",
+  "patient_id": "SYN-200417",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-08-23"
+ },
+ "facts": {}
+}

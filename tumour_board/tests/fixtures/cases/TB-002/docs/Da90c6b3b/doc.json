@@ -1,0 +1,63 @@
+{
+ "doc_id": "Da90c6b3b",
+ "filename": "mammogram_ultrasound_2026-08-12.pdf",
+ "rel_path": "radiology/mammogram_ultrasound_2026-08-12.pdf",
+ "ext": ".pdf",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-09T16:42:00",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Radiology\nBILATERAL MAMMOGRAPHY AND BREAST ULTRASOUND\nPatient SYNTHETIC, Lakshmi Iyer\nUHID SYN-200417\nAge / Sex 48 Y / F\nStudy date 12-Aug-2026\nFindings\nLeft breast upper outer quadrant: irregular spiculated mass, 2.8 x 2.4 cm.\nLeft axilla: one node with cortical thickening, 1.4 cm.\nRight breast: no suspicious finding.\nAssessment (reporting radiologist)\nLeft breast BI-RADS 5. Right breast BI-RADS 1.\nReport status: FINAL\nReported by: Dr. Nisha Kulkarni, Consultant Radiologist (electronically signed)\nSigned: 12-Aug-2026 17:40\nFINAL / SIGNED\nSYNTHETIC -\nDEMO ONLY",
+   "method": "text-layer"
+  }
+ ],
+ "classification": {
+  "title": "BILATERAL MAMMOGRAPHY AND BREAST ULTRASOUND",
+  "department": "Department of Radiology",
+  "doc_type": "mammogram",
+  "body_region": "Left breast, Right breast, Left axilla",
+  "report_date": "12-Aug-2026",
+  "status_quote": "Report status: FINAL",
+  "signature_quote": "Reported by: Dr. Nisha Kulkarni, Consultant Radiologist (electronically signed)",
+  "signer": "Dr. Nisha Kulkarni, Consultant Radiologist",
+  "patient_name": "Lakshmi Iyer",
+  "patient_id": "SYN-200417",
+  "status": "FINAL",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-08-12"
+ },
+ "facts": {
+  "lesion_size": {
+   "value": "2.8 x 2.4 cm",
+   "quote": "Left breast upper outer quadrant: irregular spiculated mass, 2.8 x 2.4 cm.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 205,
+    "end": 279,
+    "score": 100.0,
+    "matched": "Left breast upper outer quadrant: irregular spiculated mass, 2.8 x 2.4 cm."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "nodal_findings": {
+   "value": "one node with cortical thickening, 1.4 cm",
+   "quote": "Left axilla: one node with cortical thickening, 1.4 cm.",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 280,
+    "end": 335,
+    "score": 100.0,
+    "matched": "Left axilla: one node with cortical thickening, 1.4 cm."
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  }
+ }
+}

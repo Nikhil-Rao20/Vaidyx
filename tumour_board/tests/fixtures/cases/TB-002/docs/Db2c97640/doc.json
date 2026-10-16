@@ -1,0 +1,93 @@
+{
+ "doc_id": "Db2c97640",
+ "filename": "ihc_breast_2026-08-19_preliminary.pdf",
+ "rel_path": "pathology/ihc_breast_2026-08-19_preliminary.pdf",
+ "ext": ".pdf",
+ "state": "ready",
+ "identity": "match",
+ "processed": "2026-10-09T16:42:01",
+ "pages": [
+  {
+   "text": "Sahyadri Cancer Institute (SYNTHETIC)\nDepartment of Pathology\nIMMUNOHISTOCHEMISTRY REPORT (PRELIMINARY)\nPatient SYNTHETIC, Lakshmi Iyer\nUHID SYN-200417\nAge / Sex 48 Y / F\nSpecimen Core biopsy, left breast\nResults\nMarker Result\nEstrogen receptor (ER) Positive, 90% strong (Allred 8)\nProgesterone receptor (PR) Positive, 70% (Allred 7)\nHER2 (IHC) 2+ (equivocal); reflex FISH sent\nKi-67 25%\nReport status: PRELIMINARY (pending HER2 FISH)\nReported by: Dr. Kavita Shah, Consultant Pathologist (electronically signed)\nSigned: 19-Aug-2026 10:30\nPRELIMINARY\nSYNTHETIC -\nDEMO ONLY",
+   "method": "text-layer"
+  }
+ ],
+ "classification": {
+  "title": "IMMUNOHISTOCHEMISTRY REPORT (PRELIMINARY)",
+  "department": "Department of Pathology",
+  "doc_type": "ihc",
+  "body_region": "left breast",
+  "report_date": "19-Aug-2026 10:30",
+  "status_quote": "Report status: PRELIMINARY (pending HER",
+  "signature_quote": "Reported by: Dr. Kavita Shah, Consultant Pathologist (electronically signed)",
+  "signer": "Dr. Kavita Shah",
+  "patient_name": "Lakshmi Iyer",
+  "patient_id": "SYN-200417",
+  "status": "PRELIMINARY",
+  "signed": "yes",
+  "status_notes": [],
+  "report_date_iso": "2026-08-19"
+ },
+ "facts": {
+  "er": {
+   "value": "Positive, 90% strong (Allred 8)",
+   "quote": "Estrogen receptor (ER) Positive, 90% strong (Allred 8)",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 227,
+    "end": 281,
+    "score": 100.0,
+    "matched": "Estrogen receptor (ER) Positive, 90% strong (Allred 8)"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "pr": {
+   "value": "Positive, 70% (Allred 7)",
+   "quote": "Progesterone receptor (PR) Positive, 70% (Allred 7)",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 282,
+    "end": 333,
+    "score": 100.0,
+    "matched": "Progesterone receptor (PR) Positive, 70% (Allred 7)"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "her2": {
+   "value": "2+ (equivocal); reflex FISH sent",
+   "quote": "HER2 (IHC) 2+ (equivocal); reflex FISH sent",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 334,
+    "end": 377,
+    "score": 100.0,
+    "matched": "HER2 (IHC) 2+ (equivocal); reflex FISH sent"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  },
+  "ki67": {
+   "value": "25%",
+   "quote": "Ki-67 25%",
+   "verification": "verified",
+   "reason": null,
+   "location": {
+    "page": 0,
+    "start": 378,
+    "end": 387,
+    "score": 100.0,
+    "matched": "Ki-67 25%"
+   },
+   "state": "present",
+   "polarity": "affirmed"
+  }
+ }
+}
