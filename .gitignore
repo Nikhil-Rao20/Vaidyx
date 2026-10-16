@@ -246,3 +246,7 @@ docs_Eswar/
 
 # Vaidyx-TB V2 mock hospital data (synthetic, rebuilt from a seed)
 data/his_mock/
+
+# Workflow atlas: the reader's marks and comments (local only)
+docs/ui/workflow/notes.json
+docs/ui/workflow/notes.json.tmp
