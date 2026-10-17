@@ -31,7 +31,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Read back in the room (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R13-Q02",
@@ -91,7 +93,11 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Every field of today's form, condensed to about 10",
+   "own_words": "Every field of today's form, but not 17: make it about 10; mix up and combine.",
+   "notes": "Design task: merge the 17 record fields into about 10 (one form used in the Board room and on the Case File, fixing G27).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R13-Q04",
@@ -117,7 +123,9 @@
    ],
    "skip_if": "Skip if R10-Q11 set no 'for noting' list.",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Add 'Noted' (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R13-Q05",
@@ -145,7 +153,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "What is awaited, from whom (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R13-Q06",
@@ -205,7 +215,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "One card per case, at the end (Recommended)",
+   "notes": "Text only in the first build.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R13-Q08",
@@ -235,7 +248,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Required for board heads",
+   "notes": "The five head departments' members answer or tick 'nothing to add'.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R13-Q09",
@@ -265,7 +281,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Agree or concern, plus notes (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R13-Q10",
@@ -328,7 +346,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Coordinator and owner's team (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R13-Q12",
@@ -358,7 +378,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Coordinator copies what counts",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R13-Q13",
@@ -388,7 +410,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Named, in their own words (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R13-Q14",
@@ -418,8 +442,44 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Optional, unmarked shown so (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Agents during the meeting",
+   "core": false,
+   "type": "decision",
+   "question": "You want the agents standing in for absent heads to keep hearing the discussion for more context. How should that work, given voice is deferred and agents must speak only from the records?",
+   "header": "Agent listen",
+   "multi": false,
+   "options": [
+    {
+     "label": "Typed notes now, transcript later (Recommended)",
+     "description": "First build: the coordinator's live notes feed the agent's context; later, with voice, the meeting is transcribed locally; it only steers what the agent looks up; every statement still cites a record."
+    },
+    {
+     "label": "Only later, with voice",
+     "description": "Nothing until voice is on; then the local transcript feeds the agents' context, same rules."
+    },
+    {
+     "label": "Typed notes only, never audio",
+     "description": "Agents get the coordinator's notes and typed questions; the meeting is never transcribed."
+    }
+   ],
+   "why": "Added in interview (17 Oct) from the owner's message: replacing agents should keep hearing the discussion to get more context.",
+   "depends_on": [
+    "R09-Q13",
+    "R11-Q15"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R13-Q15",
+   "status": "Answered",
+   "answer": "Only later, with voice",
+   "notes": "Later: the meeting transcribed locally (LiveKit + local speech-to-text), audio discarded; the transcript steers what the agent looks up; every agent statement still cites a record.",
+   "answered_on": "17/10/2026"
   }
  ],
- "status": "In progress"
+ "status": "Done"
 }
