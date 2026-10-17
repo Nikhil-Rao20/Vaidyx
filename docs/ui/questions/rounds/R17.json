@@ -69,10 +69,11 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "Asked",
+   "status": "Answered",
    "own_words": "Organise it neat and clear; think in depth about the user experience rather than 'next step on top'; create a new UI / UX component for this, invent something new that doctors and residents use easily, not complex. Ideate with me: first tell me what is there, then take my suggestions.",
-   "notes": "Moved to a design-together session: research, then the page content inventory, then concepts with the owner.",
-   "answered_on": "17/10/2026"
+   "notes": "Chosen after the owner's views (R17-Q15 to Q20) and the layout research (17 Oct): the summary is the checklist; each value the board needs is a line with its source quote; a value not found is a blank with its action button in place; right side: shared saved Ask chat (opens the quoted page) and the compact report list by visit with a Timeline view; top: patient strip with urgency, buttons for Specialty helpers (6), Team, Board form; audit in profile settings. Alternatives shown: patient story timeline, reading desk 3 columns.",
+   "answered_on": "17/10/2026",
+   "answer": "Fill-in summary (new concept, chosen 17 Oct)"
   },
   {
    "id": "R17-Q03",
@@ -140,10 +141,11 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "Asked",
+   "status": "Answered",
    "own_words": "First research that UI component in depth, then ask me correctly.",
-   "notes": "Research launched 17 Oct before asking again.",
-   "answered_on": "17/10/2026"
+   "notes": "Asked 17 Oct after the research the owner asked for: small undoable steps in place with a 10 s Undo (no confirm); steps that need checking open a non-modal right panel with the source quote and Approve / Edit / Not needed, then the next item; only sign and lock opens a pop-up; the page never jumps, scroll and focus kept.",
+   "answered_on": "17/10/2026",
+   "answer": "Ladder: in place, panel, pop-up (Recommended)"
   },
   {
    "id": "R17-Q05",
@@ -264,7 +266,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Skipped",
+   "notes": "Settled by R17-Q02 (fill-in summary): the timeline is a view inside the report list.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R17-Q09",
@@ -434,7 +438,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Own laptop, shown live (Recommended)",
+   "notes": "The room computer drives the big screen (one camera, one microphone, R11-Q11); the coordinator types on their own laptop; the words show live in a strip at the bottom of the room screen marked not saved; saved after the read-back (R13-Q01).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R17-Q14",
@@ -464,7 +471,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Short guided steps, then settings (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "topic": "Case File first look",
@@ -749,5 +758,5 @@
    "answered_on": "17/10/2026"
   }
  ],
- "status": "In progress"
+ "status": "Done"
 }
