@@ -76,7 +76,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
-        response.headers["Permissions-Policy"] = "camera=(), microphone=(self), geolocation=()"
+        # Camera and microphone are allowed for the page itself: the Tumour Board
+        # meeting (self-hosted LiveKit) publishes the room camera and remote
+        # members' video. Never delegated to embedded frames.
+        response.headers["Permissions-Policy"] = "camera=(self), microphone=(self), geolocation=()"
 
         is_https = (
             request.url.scheme == "https"
@@ -119,8 +122,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 "font-src 'self' https://cdn.jsdelivr.net; "
                 "img-src 'self' data: blob: https:; "
                 "media-src 'self' blob:; "
-                "connect-src 'self'; "
-                "frame-src 'self'; "
+                # Tumour Board meeting: the self-hosted LiveKit server on this
+                # machine (signalling over WebSocket) and the demo PACS viewer
+                # (Orthanc + OHIF) opened inside the room screen. Both are
+                # loopback-only services; nothing on the public internet.
+                "connect-src 'self' ws://127.0.0.1:7880 http://127.0.0.1:7880; "
+                "frame-src 'self' http://127.0.0.1:8042; "
                 "frame-ancestors 'none'"
             )
         return response
