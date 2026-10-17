@@ -7,14 +7,20 @@ Legend: [ ] to do, [~] in progress, [x] done (commit), [!] blocked or partial (r
 ## Phase 0: set-up
 - [x] Node.js v24.22.0 LTS in /data/vaidyx/tools/node/current (checksum verified); npm cache /data/vaidyx/tools/node/npm-cache. Use: `export PATH=/data/vaidyx/tools/node/current/bin:$PATH`.
 - [x] livekit-server v1.13.10 in /data/vaidyx/tools/livekit/v1.13.10 (checksum verified).
-- [~] Code maps (backend, core, his_mock) by Explore agents into scratchpad maps/.
-- [ ] SPEC.md complete (this folder).
-- [ ] Commit "Build spec and run log".
+- [x] Code maps (backend, core, his_mock) in scratchpad maps/ (backend_map.md, core_map.md, his_mock_map.md).
+- [x] SPEC.md complete (this folder).
+- [x] Commit "Build spec and run log".
 
 ## Phase 1: main app exceptions (3 small commits)
-- [ ] app.py: route /tb-nik serving static/tb-nik/index.html (SPA fallback for /tb-nik/*).
-- [ ] core/auth.py: admin password reset (admin_reset_password) and must_change_password flag enforced at login; TB routes to drive it.
-- [ ] core/middleware.py: CSP connect-src allows ws://127.0.0.1:7880 and http://127.0.0.1:7880 (LiveKit), media-src for blob.
+- [x] app.py: route /tb-nik serving static/tb-nik/index.html (SPA fallback for /tb-nik/*).
+- [x] core/auth.py: admin password reset (admin_reset_password) and must_change_password flag enforced at login; TB routes to drive it.
+- [x] core/middleware.py: CSP connect-src allows ws://127.0.0.1:7880 and http://127.0.0.1:7880 (LiveKit), media-src for blob.
+
+## Phase 1b: shared pieces (done 18 Oct ~02:00)
+- [x] tumour_board/api/common.py (shared guards, RateLimit, fail(), body()); routes/tumour_board_routes.py includes tumour_board.api.{me,cases_list,team,setup,slots,chats,helpers,published,meetings,live,video,push} when present; cross-site Origin check on unsafe methods for every /api/tb route.
+- [x] docs/ui/build/SPEC-API.md: the contract for the new routers (paths /case-list and /case-join instead of /cases/list, /cases/join).
+- [x] web/tb-nik scaffold builds (vite 8, react 18, tailwind 4, shadcn 28 components); App.tsx composes src/features/<x>/routes.tsx; session store src/lib/session.tsx; guards. Commit 12372a0.
+- [~] AGENTS RUNNING (launched ~02:10, 18 Oct): H = HIMS screens (his_mock); B1 = me/cases_list/team/setup + org/access/accounts; B2 = slots/chats/helpers/published + ready hook; B3 = meetings/live/video/push/scheduler + board/notify; F1 = shell/auth/home/newcase/requests/settings/admin; F2 = Case File + meetings pages; plus TCIA plan (research) and CUP protocol (tumour_board/protocols/cup.json). When an agent reports: review, run its tests, commit its files in one or two commits as Nikhil-Rao20, tick the items below. After a context reset with agents lost: check `git status` for uncommitted work, read the files, continue the unfinished parts yourself or re-launch per the prompts in this file's spirit.
 
 ## Phase 2: demo HIMS (his_mock, :7130)
 - [ ] Role logins (8 accounts, synthetic emails, session cookie, rate-limited login, CSRF on writes).
