@@ -442,6 +442,219 @@
    "skip_if": "",
    "resource": null,
    "status": "To ask"
+  },
+  {
+   "topic": "Case File first look",
+   "core": false,
+   "type": "view",
+   "question": "When a doctor opens a Case File, what must they see straight away, without any click?",
+   "header": "First look",
+   "multi": true,
+   "options": [
+    {
+     "label": "Patient line and what's missing",
+     "description": "Name, UHID, cancer, board date, urgency, plus the short list of reports still missing or unsigned (today's tab 1)."
+    },
+    {
+     "label": "All the reports",
+     "description": "The list of reports by visit and admission (today's tab 2)."
+    },
+    {
+     "label": "The summary",
+     "description": "The compiled one-page summary of the patient (today's tab 5)."
+    },
+    {
+     "label": "The Ask box",
+     "description": "A box to type a question about this patient and get quoted answers (today's tab 3)."
+    }
+   ],
+   "why": "Added in interview (17 Oct): owner's view of today's Case File page before a new layout is designed (R17-Q02).",
+   "depends_on": [
+    "R17-Q02"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R17-Q15",
+   "status": "Answered",
+   "answer": "Patient line and what's missing; The summary; All the reports (compact); The Ask box",
+   "own_words": "Patient line and what's missing, the summary, all the reports in a small form that opens on click but is organised structurally. The Ask box is an advanced chat box or more: you get your answer, the referenced area of the document, and more clickable things. Place it strategically so that when the doctor has a doubt they want to open it and chat; the conversations must be saved properly.",
+   "notes": "Follow-ups: who sees saved chats; the cited passage shown highlighted in the source page.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Case File one click away",
+   "core": false,
+   "type": "view",
+   "question": "Which parts can stay one click away, opened only when needed?",
+   "header": "One click",
+   "multi": true,
+   "options": [
+    {
+     "label": "Audit log",
+     "description": "Every action ever taken on the Case File (today's tab 7)."
+    },
+    {
+     "label": "Specialty briefs",
+     "description": "The 6 AI helper briefs (today's tab 4)."
+    },
+    {
+     "label": "Board decision form",
+     "description": "Filled by the coordinator in the meeting (today's tab 6)."
+    },
+    {
+     "label": "Team list",
+     "description": "Who is on this Case File: residents added by code, other departments."
+    }
+   ],
+   "why": "Added in interview (17 Oct): owner's view of today's Case File page before a new layout is designed (R17-Q02).",
+   "depends_on": [
+    "R17-Q02"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R17-Q16",
+   "status": "Answered",
+   "answer": "Board decision form; Team list; Specialty briefs",
+   "own_words": "Board decision form, team list, and the 6 AI helpers: if the doctor needs that role's summary, or what that type of doctor might be thinking about, they ask it. Why does the audit log need to be seen by the doctor?",
+   "notes": "Follow-ups: audit hidden from doctors? Specialty helpers must stay in scope (records and guideline points per specialty, never an opinion on diagnosis or treatment).",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Case File pain points",
+   "core": false,
+   "type": "view",
+   "question": "What bothers you most on today's Case File page?",
+   "header": "Pain point",
+   "multi": true,
+   "options": [
+    {
+     "label": "Too many tabs",
+     "description": "Seven tabs; the doctor has to hunt for things."
+    },
+    {
+     "label": "Hard words",
+     "description": "Level 1 / Level 2, tier chips, accession chips; not plain English."
+    },
+    {
+     "label": "Too long to scroll",
+     "description": "One very long page; the place is lost after each action."
+    },
+    {
+     "label": "Not clear what to do",
+     "description": "The doctor cannot tell at a glance what is left before the board."
+    }
+   ],
+   "why": "Added in interview (17 Oct): owner's view of today's Case File page before a new layout is designed (R17-Q02).",
+   "depends_on": [
+    "R17-Q02"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R17-Q17",
+   "status": "Answered",
+   "answer": "Too many tabs; Hard words; Too long to scroll; Not clear what to do",
+   "own_words": "All of them, and very clumsy. Doctors are not tech people: they need a simple UI and powerful UX, beautifully organised, easier to use.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Audit log place",
+   "core": false,
+   "type": "decision",
+   "question": "Who should see the audit log on screen (it is always recorded in the background)?",
+   "header": "Audit log",
+   "multi": false,
+   "options": [
+    {
+     "label": "Hide it; show who-and-when lines (Recommended)",
+     "description": "Doctors never see the log; a small grey line beside each confirmed or waived item says who and when; full log for the root admin and coordinator."
+    },
+    {
+     "label": "Hide it completely",
+     "description": "Doctors see nothing of the log; only the root admin sees it."
+    },
+    {
+     "label": "Keep it one click away",
+     "description": "A small History link at the bottom of the Case File opens the full log for anyone on the team."
+    }
+   ],
+   "why": "Added in interview (17 Oct): follow-up to the owner's view of the Case File page (R17-Q15, Q16).",
+   "depends_on": [
+    "R17-Q16"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R17-Q18",
+   "status": "Answered",
+   "answer": "Own words: in the doctor's profile settings and for an audit person; never on the main screens",
+   "own_words": "Keep it for the audit person, or in the settings of the doctor's profile, where they can see the audit; that would be very nice. Not on the main screens.",
+   "notes": "Mock-up: Settings > Activity (audit) for each doctor; an auditor view. Detail to confirm at mock-up: own actions only or the full log of their Case Files.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Saved Ask chats",
+   "core": false,
+   "type": "decision",
+   "question": "Who should be able to read the saved Ask conversations on a Case File?",
+   "header": "Saved chats",
+   "multi": false,
+   "options": [
+    {
+     "label": "Private, with a Share button (Recommended)",
+     "description": "Each doctor sees only their own chats; Share pins a useful answer for the team."
+    },
+    {
+     "label": "Shared with the whole team",
+     "description": "Everyone on the Case File (owner, residents, departments added) reads every chat."
+    },
+    {
+     "label": "Private only",
+     "description": "Each doctor sees only their own chats; nothing can be shared."
+    }
+   ],
+   "why": "Added in interview (17 Oct): follow-up to the owner's view of the Case File page (R17-Q15, Q16).",
+   "depends_on": [
+    "R17-Q16"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R17-Q19",
+   "status": "Answered",
+   "answer": "Shared with the whole team",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Specialty helpers place",
+   "core": false,
+   "type": "decision",
+   "question": "Where should the 6 specialty helpers live on the new Case File page?",
+   "header": "Helpers",
+   "multi": false,
+   "options": [
+    {
+     "label": "Inside the Ask chat as a lens (Recommended)",
+     "description": "Pick a specialty above the chat box and ask from that angle, or tap Brief."
+    },
+    {
+     "label": "Separate panel, one click away",
+     "description": "A Specialty briefs button opens a side panel with 6 cards."
+    },
+    {
+     "label": "Brief cards under the summary",
+     "description": "Each specialty brief is a folded card below the summary."
+    }
+   ],
+   "why": "Added in interview (17 Oct): follow-up to the owner's view of the Case File page (R17-Q15, Q16).",
+   "depends_on": [
+    "R17-Q16"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R17-Q20",
+   "status": "Answered",
+   "answer": "Own words: Ask stays general; a separate place with 6 specialty buttons or cards: pick one, get its brief, then ask it questions",
+   "own_words": "The Ask is a general one. The 6 agents are there separately: first the option is to select one; there are 6 buttons or cards; that gives a brief, clear, nice and on the point, and then the doctor's questions can be taken.",
+   "notes": "Brief = what that specialty checks in the records (quotes, missing, not final, disagreements); never an opinion on diagnosis, stage or treatment (scope explained to the owner 17 Oct).",
+   "answered_on": "17/10/2026"
   }
  ],
  "status": "In progress"
