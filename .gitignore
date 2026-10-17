@@ -248,3 +248,6 @@ docs_Eswar/
 data/his_mock/
 
 # Workflow atlas: the reader's marks and comments (local only)
+
+# Build docs for the UI rebuild (the generic build/ rule above must not hide them)
+!docs/ui/build/
