@@ -93,5 +93,10 @@
   "topic": "Voice",
   "decision": "No voice anywhere (input or read-out) in the first build of the new interface; text only. The owner will bring up speech after several iterations.",
   "source": "Interview R09-Q13 (17 Oct)"
+ },
+ {
+  "topic": "Devices",
+  "decision": "Laptop first for every role in the first build (assume every hospital user has a laptop); phones come later. Do not over-complicate.",
+  "source": "Interview R17-Q03 (17 Oct)"
  }
 ]

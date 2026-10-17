@@ -35,7 +35,11 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Neat, filtered Case File list with an urgency tag 1 to 5",
+   "own_words": "The doctor's first screen should be neat and clean, arranged in a neat order; all Case Files have filters: date, name, treated by, imaging, organ and many more. Each has an urgency tag, a rating from 1 to 5 (5 most urgent): a simple, understandable UI to show all Case Files. They can be cards or list items; you can discuss more or show it directly in the UI mock-up, up to you.",
+   "notes": "Follow-up needed: who sets urgency (a person, never the AI judging clinical urgency). Show in the mock-up.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R17-Q02",
@@ -65,7 +69,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Asked",
+   "own_words": "Organise it neat and clear; think in depth about the user experience rather than 'next step on top'; create a new UI / UX component for this, invent something new that doctors and residents use easily, not complex. Ideate with me: first tell me what is there, then take my suggestions.",
+   "notes": "Moved to a design-together session: research, then the page content inventory, then concepts with the owner.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R17-Q03",
@@ -99,7 +106,11 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Laptop first for everyone; phones later",
+   "own_words": "This is not phone first. Don't make it complex: build for the laptop first; ideally everyone in the hospital has a laptop; then we get to the phone.",
+   "notes": "Overrides 'phone first' in I12 and T17 and R03 / R17 phone wording: every role laptop-first in the first build.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R17-Q04",
@@ -129,7 +140,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Asked",
+   "own_words": "First research that UI component in depth, then ask me correctly.",
+   "notes": "Research launched 17 Oct before asking again.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R17-Q05",
@@ -429,5 +443,6 @@
    "resource": null,
    "status": "To ask"
   }
- ]
+ ],
+ "status": "In progress"
 }
