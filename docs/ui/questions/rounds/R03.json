@@ -32,7 +32,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Consultant's team; department reads (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R03-Q02",
@@ -63,7 +65,9 @@
    ],
    "skip_if": "Skip if R03-Q01 answered 'Any consultant of the department' and doctors of other departments need no access.",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Yes, with a reason; owner told (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R03-Q03",
@@ -93,7 +97,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Re-fetch and upload outside reports; Ask questions and prepare briefs; Send requests and reminders",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R03-Q04",
@@ -123,7 +129,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Resident proposes, consultant approves (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R03-Q05",
@@ -151,7 +159,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Nothing at all",
+   "own_words": "If a resident account is deleted, they are removed from that Case File and nothing can be seen.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R03-Q06",
@@ -179,7 +190,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Request, its records, the clinical question (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R03-Q07",
@@ -207,7 +220,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Yes, acknowledge and Done (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R03-Q08",
@@ -237,7 +252,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Only the board date and agenda (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R03-Q09",
@@ -265,7 +282,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Archive with a reason, never delete (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R03-Q10",
@@ -293,7 +312,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Read and comment (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R03-Q11",
@@ -323,7 +344,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Every Case File on today's agenda (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R03-Q12",
@@ -351,7 +374,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Only by break-glass, with a reason (Recommended)",
+   "answered_on": "17/10/2026"
   }
- ]
+ ],
+ "status": "Done"
 }
