@@ -29,7 +29,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Code, then doctor approves",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R06-Q02",
@@ -57,7 +59,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Any consultant of the owner's team (Recommended)",
+   "notes": "Options adapted to R03-Q01 (owner consultant and co-owner consultant).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R06-Q03",
@@ -87,7 +92,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Admin sets, consultant adds (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R06-Q04",
@@ -117,7 +124,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Listed but not ticked",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R06-Q05",
@@ -145,7 +154,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Nobody else",
+   "own_words": "The resident gets added to their doctor's Case File: the doctor shares the code with everyone, the resident enters it, the doctor approves, and that is it, they are in.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R06-Q06",
@@ -175,7 +187,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Six digits, like meetings (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R06-Q07",
@@ -205,7 +219,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Doctor shares it (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R06-Q08",
@@ -239,7 +255,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "24 hours (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R06-Q09",
@@ -265,7 +283,10 @@
    ],
    "skip_if": "Skip if R06-Q01 answered 'Doctor picks, code confirms' (that code is single use for one named person).",
    "resource": null,
-   "status": "To ask"
+   "status": "Skipped",
+   "answer": "Reusable until it expires",
+   "notes": "Settled by R06-Q01 and R06-Q05: one code shared with the whole team, each person who enters it is approved by the doctor.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R06-Q10",
@@ -291,7 +312,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "No, a login comes first (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R06-Q11",
@@ -325,7 +348,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "The consultants who can add; The resident, by leaving; The department admin",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R06-Q12",
@@ -349,7 +374,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Yes, any number (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R06-Q13",
@@ -377,7 +404,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Read-only, like their department (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R06-Q14",
@@ -411,7 +440,11 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Approved or removed; A department answered; Their proposal approved or returned; Listed for a board date",
+   "notes": "First option adapted to R06-Q01 (approval flow): 'approved or removed'.",
+   "answered_on": "17/10/2026"
   }
- ]
+ ],
+ "status": "Done"
 }
