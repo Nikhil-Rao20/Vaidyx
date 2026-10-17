@@ -33,7 +33,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Board members plus case teams",
+   "own_words": "Board members plus case teams; people in the team can also share the code with others in the hospital, and if they have Vaidyx they can join, but for the extra people the coordinator must confirm and admit them to the meeting.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R11-Q02",
@@ -63,7 +66,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "One code per meeting",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R11-Q03",
@@ -93,7 +98,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Meeting day only (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R11-Q04",
@@ -127,7 +134,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "In-app only",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R11-Q05",
@@ -158,7 +167,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Skipped",
+   "answer": "Login always needed",
+   "notes": "From R11-Q01 and R11-Q04: only people with a Vaidyx login join; outside specialists get a login first (R04).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R11-Q06",
@@ -188,7 +200,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "The whole shared screen",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R11-Q07",
@@ -219,7 +233,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Skipped",
+   "answer": "Invited go straight in; extras wait for the coordinator",
+   "notes": "From R11-Q01 own words.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R11-Q08",
@@ -249,7 +266,10 @@
    ],
    "skip_if": "Skip if R11-Q02 answered 'One code per meeting'.",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Yes, coordinator corrects (Recommended)",
+   "notes": "Adapted to one code per meeting with sign-in (Vaidyx knows who joined).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R11-Q09",
@@ -279,7 +299,11 @@
    ],
    "skip_if": "Skip if R11-Q08 answered 'No, by hand (today)'.",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "All three ways",
+   "own_words": "All three options; multiple ways and anything can happen, so that we stay safe.",
+   "notes": "Code on own phone with 'I am in the room', coordinator ticks names, and a QR code on the room screen.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R11-Q10",
@@ -311,7 +335,11 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "own_words": "I am okay with Zoom, Meet or Teams, but my idea is a Vaidyx agent being in the meeting: press the unmute button for Vaidyx so the doctors talk to it and Vaidyx answers their questions. I need that kind of stack and options. If there is a video conferencing option for this with my additional features, I would love to choose it. Research it and ask again with refined options.",
+   "notes": "Settled through R11-Q15 after research (17 Oct): LiveKit Agents supports a push-to-talk agent participant, runs in-house with local models. The voice agent itself waits for the owner's speech go-ahead (voice deferred). IT must open ports for remote phones. Flag: speech travels over a lossy codec (Opus); test STT on real meeting audio.",
+   "answered_on": "17/10/2026",
+   "answer": "Self-hosted LiveKit + Vaidyx agent"
   },
   {
    "id": "R11-Q11",
@@ -341,7 +369,11 @@
    ],
    "skip_if": "Skip if R11-Q10 answered 'No video, phone call voice'.",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Like Google Meet: any number of devices",
+   "own_words": "Just like Google Meet should work: multiple computers, laptops or phones, like that.",
+   "notes": "Any device can join (room PC, laptops, phones); echo control needed when several devices sit in one room (in-room devices join muted, see R11-Q09).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R11-Q12",
@@ -372,7 +404,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Anyone invited (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R11-Q13",
@@ -398,7 +432,9 @@
    ],
    "skip_if": "Skip if R11-Q08 answered 'No, by hand (today)'.",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Yes, per case (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R11-Q14",
@@ -429,7 +465,47 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "All five board heads, adjustable by the coordinator",
+   "own_words": "All five board heads, but that is adjusted by the coordinator.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Video",
+   "core": true,
+   "type": "decision",
+   "question": "For remote members and a future Vaidyx voice agent in the meeting (a doctor unmutes Vaidyx, asks, Vaidyx answers aloud from the records), which video platform should we build on?",
+   "header": "Video stack",
+   "multi": false,
+   "options": [
+    {
+     "label": "Self-hosted LiveKit + agent (Recommended)",
+     "description": "Open source, on the hospital server with local models; push-to-talk agent built in; audio stays in the hospital; IT opens ports for remote phones."
+    },
+    {
+     "label": "Self-hosted Jitsi + custom bot",
+     "description": "In-house too; a talking agent needs much more custom audio work."
+    },
+    {
+     "label": "Zoom with a Meeting SDK bot",
+     "description": "Familiar app; patient audio goes through Zoom's cloud; bot speaking reported unreliable."
+    },
+    {
+     "label": "Teams or Meet via Recall.ai",
+     "description": "Quickest on the big platforms; audio leaves India; paid."
+    }
+   ],
+   "why": "Added in interview (17 Oct): the owner wants a Vaidyx agent in the meeting that doctors unmute and talk to; research compared LiveKit, Jitsi, Pipecat, Zoom, Meet, Teams, Recall.ai.",
+   "depends_on": [
+    "R11-Q10"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R11-Q15",
+   "status": "Answered",
+   "answer": "Self-hosted LiveKit + agent (Recommended)",
+   "answered_on": "17/10/2026"
   }
- ]
+ ],
+ "status": "Done"
 }
