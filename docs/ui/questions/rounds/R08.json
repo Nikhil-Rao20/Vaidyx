@@ -621,6 +621,102 @@
    "answer": "Public de-identified scans (Recommended)",
    "notes": "Owner approved 17 Oct a rule change: PACS images may come from open-licence public de-identified datasets (licence checked and logged), relabelled with fake IDs; never the real case. Recorded in CLAUDE.md.",
    "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Demo HIS logins",
+   "core": false,
+   "type": "decision",
+   "question": "Who should log in to the demo hospital system?",
+   "header": "HIS logins",
+   "multi": false,
+   "options": [
+    {
+     "label": "Real roles, kept small (Recommended)",
+     "description": "About 8 demo logins: registration desk, OPD / ward doctor, and for Lab, Radiology, Pathology a technician who enters and a doctor who checks and signs."
+    },
+    {
+     "label": "One login per department",
+     "description": "One login each that both enters and signs."
+    },
+    {
+     "label": "No login (today)",
+     "description": "Anyone on the demo opens any screen."
+    }
+   ],
+   "why": "Added after the interview (17 Oct): discussing the demo HIS / PACS build before it starts.",
+   "depends_on": [
+    "R08-Q17"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R08-Q20",
+   "status": "Answered",
+   "answer": "Real roles, kept small (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Demo HIS look",
+   "core": false,
+   "type": "decision",
+   "question": "How should the demo hospital system look?",
+   "header": "HIS look",
+   "multi": false,
+   "options": [
+    {
+     "label": "Classic hospital-system look (Recommended)",
+     "description": "Plain, dense, blue-grey menus like real Indian HIS screens (e-Hospital style), clearly different from Vaidyx."
+    },
+    {
+     "label": "Same look as Vaidyx",
+     "description": "Teal and modern like the new Vaidyx."
+    },
+    {
+     "label": "Modern, different colour",
+     "description": "Clean modern screens in its own colour."
+    }
+   ],
+   "why": "Added after the interview (17 Oct): discussing the demo HIS / PACS build before it starts.",
+   "depends_on": [
+    "R08-Q17"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R08-Q21",
+   "status": "Answered",
+   "answer": "Classic hospital-system look (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Demo cancers",
+   "core": false,
+   "type": "decision",
+   "question": "Which cancers should the demo patients and checklists cover in this first build?",
+   "header": "Cancers",
+   "multi": false,
+   "options": [
+    {
+     "label": "5 built + CUP (Recommended)",
+     "description": "About 25 demo patients for breast, cervix, colorectal rectum, lung NSCLC, oral cavity plus a new CUP checklist (NICE CG104, ESMO 2023); other top-10 cancers follow the no-checklist rule (R05-Q04)."
+    },
+    {
+     "label": "Top 10 + CUP, drafts",
+     "description": "Also draft the missing top-10 checklists from NCG, each needing a named doctor's approval."
+    },
+    {
+     "label": "Only the 5 built",
+     "description": "No CUP yet."
+    }
+   ],
+   "why": "Added after the interview (17 Oct): discussing the demo HIS / PACS build before it starts.",
+   "depends_on": [
+    "R08-Q17"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R08-Q22",
+   "status": "Answered",
+   "answer": "5 built + CUP (Recommended)",
+   "answered_on": "17/10/2026"
   }
  ],
  "status": "Done"
