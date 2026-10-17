@@ -370,9 +370,9 @@
    "skip_if": "Skip if R11-Q10 answered 'No video, phone call voice'.",
    "resource": null,
    "status": "Answered",
-   "answer": "Like Google Meet: any number of devices",
-   "own_words": "Just like Google Meet should work: multiple computers, laptops or phones, like that.",
-   "notes": "Any device can join (room PC, laptops, phones); echo control needed when several devices sit in one room (in-room devices join muted, see R11-Q09).",
+   "answer": "One room computer (Recommended)",
+   "own_words": "First: just like Google Meet, multiple computers, laptops or phones. Then corrected: the room should be one room computer with one camera and one microphone, as recommended.",
+   "notes": "The room = one computer, camera and microphone; remote members join from any device (Google Meet-like).",
    "answered_on": "17/10/2026"
   },
   {
