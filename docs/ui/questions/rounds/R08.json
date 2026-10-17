@@ -29,7 +29,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Tell the doctor to order (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R08-Q02",
@@ -60,7 +62,10 @@
    ],
    "skip_if": "Skip if R01-Q02 answered 'Everything, including sending' or 'Sends after a hold' (sending is then automatic).",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "One by one, as today",
+   "notes": "Question adapted to R01-Q02 (Vaidyx writes, the doctor presses Send).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R08-Q03",
@@ -92,7 +97,11 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "In-app inbox (messages inside Vaidyx)",
+   "own_words": "Right now let us build in-app email sending to the existing people.",
+   "notes": "Clarified by R08-Q15: an email-like inbox inside Vaidyx to every registered doctor of the department; nothing leaves the server. No real email, WhatsApp, SMS for requests for now.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R08-Q04",
@@ -120,7 +129,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Department, first to take (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R08-Q05",
@@ -148,7 +159,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "On Done, plus half-hourly (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R08-Q06",
@@ -178,7 +191,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Nothing required, Done optional (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R08-Q07",
@@ -206,7 +221,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Yes, free text only",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R08-Q08",
@@ -234,7 +251,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Due day, then daily (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R08-Q09",
@@ -265,7 +284,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Head, then coordinator (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R08-Q10",
@@ -295,7 +316,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Plus a comment for the board",
+   "notes": "Report stands / addendum pending, plus a short typed or spoken comment shown to the board as theirs.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R08-Q11",
@@ -323,7 +347,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Yes, after the doctor attests (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R08-Q12",
@@ -355,7 +381,11 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "own_words": "I want demo systems so that in the real world I can use the hospital's HIMS and PACS here. If Bahmni is very useful for us, install it; the main motive is to replicate a real-world hospital HIMS and PACS.",
+   "notes": "Settled through R08-Q16: Bahmni not installable here (no Docker / sudo).",
+   "answered_on": "17/10/2026",
+   "answer": "Extend our own mock, to real standards"
   },
   {
    "id": "R08-Q13",
@@ -385,7 +415,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Before the UI rebuild",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R08-Q14",
@@ -420,7 +452,79 @@
     "target_folder": "hospital documents",
     "why": "Makes the demo look like the systems the supporting doctors use and tells us if I14 deep links are possible."
    },
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Use e-Hospital public documents",
+   "resource_status": "No download needed: model the demo on NIC e-Hospital's published modules",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Channels",
+   "core": false,
+   "type": "decision",
+   "question": "By 'in-app email sending to the existing people', which do you mean?",
+   "header": "Email kind",
+   "multi": false,
+   "options": [
+    {
+     "label": "Messages inside Vaidyx (Recommended)",
+     "description": "An email-like inbox inside Vaidyx: the request arrives as a message to every registered doctor of that department; nothing leaves the server."
+    },
+    {
+     "label": "Real email sent by Vaidyx",
+     "description": "The Vaidyx server sends a real email through the hospital's mail server."
+    },
+    {
+     "label": "Both",
+     "description": "The in-app message, plus a real email copy."
+    }
+   ],
+   "why": "Added in interview (17 Oct) to clarify the owner's answer to R08-Q03.",
+   "depends_on": [
+    "R08-Q03"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R08-Q15",
+   "status": "Answered",
+   "answer": "Messages inside Vaidyx (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Demo HIS and PACS",
+   "core": false,
+   "type": "decision",
+   "question": "Bahmni needs Docker, which this server does not have (no admin rights). How should we build demo hospital systems that replicate the real world, so a real hospital's HIMS and PACS can be plugged in later?",
+   "header": "Real HIMS",
+   "multi": false,
+   "options": [
+    {
+     "label": "Real standards, our own mock (Recommended)",
+     "description": "Extend our mock to behave like an Indian HIMS (e-Hospital modules) and speak the real interfaces (FHIR R4 NRCeS, HL7 v2, DICOMweb); Orthanc is itself a real PACS. A real hospital later = swap one adapter."
+    },
+    {
+     "label": "OpenMRS 3 here, no Docker",
+     "description": "The open-source EMR Bahmni is built on, in user space; several days of set-up, some risk."
+    },
+    {
+     "label": "Bahmni on another machine",
+     "description": "Bahmni with Docker on a laptop or cloud VM, connected over FHIR."
+    },
+    {
+     "label": "Ask IT for Docker here",
+     "description": "The server admin installs Docker; then Bahmni here."
+    }
+   ],
+   "why": "Added in interview (17 Oct): the owner asked for Bahmni if useful; the server has no Docker, no sudo, no database.",
+   "depends_on": [
+    "R08-Q12"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R08-Q16",
+   "status": "Answered",
+   "answer": "Real standards, our own mock (Recommended)",
+   "answered_on": "17/10/2026"
   }
- ]
+ ],
+ "status": "Done"
 }
