@@ -29,7 +29,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Teal brand, four status colours (Recommended)",
+   "notes": "Status always colour plus icon: green done, amber waiting, red blocks the board, violet needs a person.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R18-Q02",
@@ -59,7 +62,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Keep Atkinson Hyperlegible (Recommended)",
+   "notes": "Fits R01-Q10 English only for now.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R18-Q03",
@@ -87,7 +93,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Light default, dark by choice (Recommended)",
+   "notes": "Switch in profile settings; the room screen stays light.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R18-Q04",
@@ -115,7 +124,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Roomy, 16 px text (Recommended)",
+   "notes": "Asked 17 Oct re-worded laptop first (no phone option).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R18-Q05",
@@ -143,7 +155,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Icon and word, mostly (Recommended)",
+   "notes": "Icon only for universal actions: copy, close, search, print.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R18-Q06",
@@ -171,7 +186,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Looks clickable, short hover hint (Recommended)",
+   "notes": "Asked 17 Oct re-worded for laptops (hover exists): rows lift and show an arrow on hover, one-line tooltip, no help paragraphs; no hints on the room screen.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R18-Q07",
@@ -202,7 +220,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Logistics only (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R18-Q08",
@@ -230,7 +250,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Skipped",
+   "own_words": "What price?",
+   "notes": "Owner asked 'what price?': there is no price anywhere in the app. Principle 2 (price anchoring) applies only to a future sales page or pitch deck, which is not part of this build (V1 direction: no enterprise work). Parked; not used in the app.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R18-Q09",
@@ -292,7 +315,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Theme and text size; Pin what my home shows; Accent colour; Start page",
+   "notes": "Asked 17 Oct as multi-select with a fourth option 'Start page' (Home, last Case File or Meetings). Accent colour only for the top bar; status colours never change.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R18-Q11",
@@ -351,7 +377,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Small picture, line and action",
+   "notes": "In place, not a pop-up; a small friendly illustration, one plain sentence with the cause, one action button; technical details folded.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R18-Q13",
@@ -381,7 +410,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Preview filling in",
+   "notes": "Grey placeholder lines become sentences one by one, each shown only after its quote is verified (no unverified sentence ever shown as fact).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R18-Q14",
@@ -409,8 +441,11 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Button change plus slider (Recommended)",
+   "notes": "Button turns to 'Sent' with a tick; a 2 s slider (screen-reader announced), with Undo where the step can be undone (fits R17-Q04 ladder).",
+   "answered_on": "17/10/2026"
   }
  ],
- "status": "Not started"
+ "status": "Done"
 }
