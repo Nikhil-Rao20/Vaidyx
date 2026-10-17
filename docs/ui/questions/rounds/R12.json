@@ -311,7 +311,9 @@
    ],
    "skip_if": "Skip if R09-Q13 ticked nothing (nothing is read aloud).",
    "resource": null,
-   "status": "To ask"
+   "status": "Skipped",
+   "notes": "Voice deferred (R09-Q13 own words): agent points shown as text only for now.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R12-Q11",
@@ -341,7 +343,10 @@
    ],
    "skip_if": "Skip if R09-Q12 answered 'Not yet' (no voice input).",
    "resource": null,
-   "status": "To ask"
+   "status": "Skipped",
+   "answer": "Text only",
+   "notes": "Voice deferred (R09-Q13 own words): live questions are typed.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R12-Q12",
@@ -438,5 +443,6 @@
    "resource": null,
    "status": "To ask"
   }
- ]
+ ],
+ "status": "In progress"
 }

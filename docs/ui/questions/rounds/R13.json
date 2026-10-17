@@ -61,7 +61,9 @@
    ],
    "skip_if": "Skip if R09-Q12 answered 'Not yet' (no voice input).",
    "resource": null,
-   "status": "To ask"
+   "status": "Skipped",
+   "notes": "Voice deferred (R09-Q13 own words): decisions are typed.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R13-Q03",
@@ -293,7 +295,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Skipped",
+   "notes": "Voice deferred (R09-Q13 own words): the end-of-meeting pop-up is text only in the first build.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R13-Q11",
@@ -416,5 +420,6 @@
    "resource": null,
    "status": "To ask"
   }
- ]
+ ],
+ "status": "In progress"
 }

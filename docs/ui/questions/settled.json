@@ -31,7 +31,7 @@
  },
  {
   "topic": "End-of-meeting input",
-  "decision": "At the end each board member gets a pop-up to give a summary or suggestions, by text or voice.",
+  "decision": "At the end each board member gets a pop-up to give a summary or suggestions: text only in the first build of the new interface; voice comes later, when the owner says (17 Oct).",
   "source": "Notes on 'board heads' (16 Oct)"
  },
  {
@@ -88,5 +88,10 @@
   "topic": "Plan items kept",
   "decision": "T01, T04, T06 to T18, T20, T22, T23.",
   "source": "Plan marks (16 Oct)"
+ },
+ {
+  "topic": "Voice",
+  "decision": "No voice anywhere (input or read-out) in the first build of the new interface; text only. The owner will bring up speech after several iterations.",
+  "source": "Interview R09-Q13 (17 Oct)"
  }
 ]

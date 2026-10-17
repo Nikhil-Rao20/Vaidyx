@@ -29,7 +29,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "When the owner marks ready",
+   "notes": "Order is: check met, then ready mark, then the summary compiles. R10-Q06 must not require a reviewed summary before ready (adapt its options).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R09-Q02",
@@ -55,7 +58,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "No, only after the check",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R09-Q03",
@@ -85,7 +90,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "New draft, reviewed one kept (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R09-Q04",
@@ -115,7 +122,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "The owning consultant (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R09-Q05",
@@ -147,7 +156,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Prepare; consultant approves (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R09-Q06",
@@ -175,7 +186,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Notes added, AI text locked (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R09-Q07",
@@ -203,7 +216,11 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "A count, or a short summary of what was removed",
+   "own_words": "A count is enough, or a summary of what was deleted, so that it becomes an active learning opportunity for Vaidyx: a good opportunity for us in the backend.",
+   "notes": "Removed items are also stored for the team's quality review and prompt / rule improvement (active learning). Real patient data used only under the hospital's data rules (round 15).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R09-Q08",
@@ -227,7 +244,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "No, exact quotes only (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R09-Q09",
@@ -257,7 +276,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "With the summary, all five heads (Recommended)",
+   "notes": "Prepared when the owner marks ready (with the summary, R09-Q01); five heads incl. Radiation Oncology (R02-Q04).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R09-Q10",
@@ -288,7 +310,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "A doctor of that specialty (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R09-Q11",
@@ -316,7 +340,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Doctor pins chosen answers (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R09-Q12",
@@ -344,7 +370,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Not yet",
+   "notes": "No voice in question boxes for now. The settled end-of-meeting pop-up keeps its voice option (text and voice).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R09-Q13",
@@ -376,7 +405,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Skipped",
+   "own_words": "Don't talk about voice now; work only with text for the initial build of the new interface. After I confirm it over several iterations, I will talk about speech and giving Vaidyx ears and a mouth.",
+   "notes": "Voice deferred everywhere (owner, 17 Oct).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R09-Q14",
@@ -406,7 +438,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Only after review (Recommended)",
+   "answered_on": "17/10/2026"
   }
- ]
+ ],
+ "status": "Done"
 }
