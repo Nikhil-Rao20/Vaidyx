@@ -29,7 +29,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "AI runs, expert supervises (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R01-Q02",
@@ -59,7 +61,10 @@
    ],
    "skip_if": "Skip if R01-Q01 answered 'Expert audits afterwards only'.",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Write it, doctor presses Send (Recommended)",
+   "notes": "Asked again in plainer words (17 Oct): Vaidyx writes requests by itself, nothing reaches another person until the doctor presses Send. Same as the original recommended option 'Sending waits for a tap'.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R01-Q03",
@@ -91,7 +96,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Deferred, back on a later board; Hand-over to another department; Ready, then something changes; Back after treatment",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R01-Q04",
@@ -121,7 +128,9 @@
    ],
    "skip_if": "Skip if R01-Q03 did not tick 'Back after treatment'.",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Same Case File, new round (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R01-Q05",
@@ -149,7 +158,11 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "No numeric target",
+   "own_words": "No click or tap count is needed. The point was only that the interface must be simple and nice; keep that as the design principle, no number.",
+   "notes": "Owner did not want a numeric target; R17-Q01 and R17-Q04 depend on this: use 'simple, few steps' as the guide.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R01-Q06",
@@ -181,7 +194,11 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Indian official guidelines and registries; International society guidelines; Standard reference books; Peer-reviewed journal papers",
+   "own_words": "Also other journals: the most recent papers, and white papers where doctors publish about patients, so similar cases can be referred to. The treating doctor's slides or document can say: a similar patient at hospital X, handled by doctors (authors) X, Y, Z, had this procedure and this was the conclusion.",
+   "notes": "New topic: similar published cases. Follow-ups added as R01-Q14 and R01-Q15 to keep it in scope (shown as published references, never as advice for this patient).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R01-Q07",
@@ -211,7 +228,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "A named doctor approves each (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R01-Q08",
@@ -239,7 +258,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Short chip, passage on tap (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R01-Q09",
@@ -269,7 +290,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Listed once a doctor confirms (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R01-Q10",
@@ -297,7 +320,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "English only for now (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R01-Q11",
@@ -325,7 +350,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Keep it, add 'records check' (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R01-Q12",
@@ -355,7 +382,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Human oversight (expert over the loop) (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R01-Q13",
@@ -383,7 +412,136 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Model page and exports only",
+   "notes": "Screens stay clean; labels (Qwen3.5-4B Chinese, non-medical; Gemma-4-31B non-medical) on the model page and in every printout and export.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Similar published cases",
+   "core": false,
+   "type": "decision",
+   "question": "You want similar published patient cases shown (a similar patient at hospital X, by authors X, Y, Z, this procedure, this conclusion). How should they reach the Case File?",
+   "header": "Similar case",
+   "multi": false,
+   "options": [
+    {
+     "label": "Vaidyx finds, doctor picks (Recommended)",
+     "description": "Vaidyx searches published case reports matching the recorded cancer and findings; the doctor or resident picks which to attach; only picked ones reach the summary, slides and the board."
+    },
+    {
+     "label": "Doctor searches and attaches",
+     "description": "A literature search box on the Case File; nothing is suggested, the doctor finds and attaches papers."
+    },
+    {
+     "label": "Shown automatically",
+     "description": "Matching case reports are listed on every Case File, like guideline references, with no one choosing."
+    }
+   ],
+   "why": "Added in interview (17 Oct) from the owner's answer to R01-Q06. Scope: shown as published references, never as advice for this patient.",
+   "depends_on": [
+    "R01-Q06"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R01-Q14",
+   "status": "Answered",
+   "answer": "Vaidyx finds, doctor picks (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Similar published cases",
+   "core": false,
+   "type": "decision",
+   "question": "Which papers may be used for similar published cases?",
+   "header": "Case papers",
+   "multi": false,
+   "options": [
+    {
+     "label": "Peer-reviewed reports and series (Recommended)",
+     "description": "Case reports and case series in indexed journals with a DOI; preprints and white papers are left out."
+    },
+    {
+     "label": "Also preprints and white papers",
+     "description": "Included, but each shows a 'not peer reviewed' label next to it on screen, in slides and in the summary."
+    },
+    {
+     "label": "Any paper the doctor picks",
+     "description": "No type rule; whatever the doctor attaches is shown with its journal and date."
+    }
+   ],
+   "why": "Added in interview (17 Oct), follow-up to R01-Q14.",
+   "depends_on": [
+    "R01-Q14"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R01-Q15",
+   "status": "Answered",
+   "answer": "Peer-reviewed reports and series; books; preprints; white papers",
+   "own_words": "peer reviewed reports and series, books, preprints and white papers",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Similar published cases",
+   "core": false,
+   "type": "decision",
+   "question": "Where should Vaidyx search for these papers (only words like 'oral cavity carcinoma, buccal mucosa', never patient names or IDs)?",
+   "header": "Paper search",
+   "multi": false,
+   "options": [
+    {
+     "label": "Online PubMed / Europe PMC (Recommended)",
+     "description": "Free public indexes, newest papers; Vaidyx keeps to their rate limits and sends no patient identifiers."
+    },
+    {
+     "label": "Local library only",
+     "description": "Only papers already downloaded to the server are searched; nothing leaves the hospital."
+    },
+    {
+     "label": "Both, local first",
+     "description": "Searches the local library first, then online for anything newer."
+    }
+   ],
+   "why": "Added in interview (17 Oct), follow-up to R01-Q14; the owner asked to mind rate limits when searching.",
+   "depends_on": [
+    "R01-Q14"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R01-Q16",
+   "status": "Answered",
+   "answer": "Both, local first",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Similar published cases",
+   "core": false,
+   "type": "decision",
+   "question": "Preprints and white papers are not peer reviewed. Should they carry a 'not peer reviewed' label wherever they appear (screen, summary, slides)?",
+   "header": "PR label",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, label them (Recommended)",
+     "description": "A small 'not peer reviewed' tag beside each one, so the board knows how much weight it carries."
+    },
+    {
+     "label": "No label",
+     "description": "Shown like any other paper, with journal or source and date only."
+    }
+   ],
+   "why": "Added in interview (17 Oct), follow-up to R01-Q15 (preprints and white papers allowed).",
+   "depends_on": [
+    "R01-Q15"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R01-Q17",
+   "status": "Answered",
+   "answer": "Yes, label them (Recommended)",
+   "answered_on": "17/10/2026"
   }
- ]
+ ],
+ "status": "Done"
 }
