@@ -524,6 +524,103 @@
    "status": "Answered",
    "answer": "Real standards, our own mock (Recommended)",
    "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Demo HIS base",
+   "core": false,
+   "type": "decision",
+   "question": "For the demo hospital system, should we extend what we have or start again?",
+   "header": "HIS base",
+   "multi": false,
+   "options": [
+    {
+     "label": "Extend it, new real-looking screens (Recommended)",
+     "description": "Keep the data, standards (FHIR R4, HL7, DICOM) and the Vaidyx link; rebuild the screens module by module like a real Indian HIS (e-Hospital style) with role logins; own name 'Vaidyx Demo Hospital', no NIC logos."
+    },
+    {
+     "label": "Rebuild from scratch",
+     "description": "New code for the whole demo hospital; the Vaidyx link and tests redone. Slower, more risk."
+    },
+    {
+     "label": "Keep as is, polish only",
+     "description": "Only tidy today's screens."
+    }
+   ],
+   "why": "Added after the interview (17 Oct): discussing the demo HIS / PACS build before it starts (R08-Q12, Q13, Q16).",
+   "depends_on": [
+    "R08-Q16"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R08-Q17",
+   "status": "Answered",
+   "answer": "Extend it, new real-looking screens (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Demo HIS modules",
+   "core": false,
+   "type": "decision",
+   "question": "Which hospital modules must the demo HIS show?",
+   "header": "Modules",
+   "multi": true,
+   "options": [
+    {
+     "label": "Registration, OPD, IPD",
+     "description": "UHID registration, OP visits, admissions, ward and bed, transfers, discharge."
+    },
+    {
+     "label": "Lab (LIS)",
+     "description": "Order, sample with barcode, result entry, verification and digital signature."
+    },
+    {
+     "label": "Radiology (RIS) + PACS",
+     "description": "Order, study worklist, report preliminary to final signed, images in the viewer."
+    },
+    {
+     "label": "Pathology",
+     "description": "Biopsy, block No., HPE report, IHC and molecular tests that arrive later."
+    }
+   ],
+   "why": "Added after the interview (17 Oct): discussing the demo HIS / PACS build before it starts (R08-Q12, Q13, Q16).",
+   "depends_on": [
+    "R08-Q16"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R08-Q18",
+   "status": "Answered",
+   "answer": "All four: Registration, OPD, IPD; Lab (LIS); Radiology (RIS) + PACS; Pathology",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Demo PACS images",
+   "core": false,
+   "type": "decision",
+   "question": "What images should the demo PACS show?",
+   "header": "PACS images",
+   "multi": false,
+   "options": [
+    {
+     "label": "Public de-identified scans (Recommended)",
+     "description": "Real-looking CT, MRI, mammogram, PET-CT from open public research datasets (licence checked), relabelled with our fake IDs; changes the synthetic-only rule for images; no model reads them."
+    },
+    {
+     "label": "Generated images (today)",
+     "description": "Fully synthetic images; rule unchanged; look fake to a radiologist."
+    }
+   ],
+   "why": "Added after the interview (17 Oct): discussing the demo HIS / PACS build before it starts (R08-Q12, Q13, Q16).",
+   "depends_on": [
+    "R08-Q16"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R08-Q19",
+   "status": "Answered",
+   "answer": "Public de-identified scans (Recommended)",
+   "notes": "Owner approved 17 Oct a rule change: PACS images may come from open-licence public de-identified datasets (licence checked and logged), relabelled with fake IDs; never the real case. Recorded in CLAUDE.md.",
+   "answered_on": "17/10/2026"
   }
  ],
  "status": "Done"

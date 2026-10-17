@@ -506,6 +506,39 @@
    "answer": "React + TypeScript + Vite + Tailwind (Recommended)",
    "notes": "Plus shadcn/ui and Motion; static build served by FastAPI.",
    "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Full build run",
+   "core": false,
+   "type": "decision",
+   "question": "How should the full first build run?",
+   "header": "Build run",
+   "multi": false,
+   "options": [
+    {
+     "label": "One long run, in order (Recommended)",
+     "description": "After the owner's go: check fixes, build spec, demo HIS / PACS, then the whole new website; agents in parallel, small commits; review from the next day."
+    },
+    {
+     "label": "HIS / PACS first, then pause",
+     "description": "Demo hospital first, review, then the website in a second run."
+    },
+    {
+     "label": "Part by part with reviews",
+     "description": "Each part reviewed before the next."
+    }
+   ],
+   "why": "Added after the interview (17 Oct): discussing the demo HIS / PACS build before it starts (R08-Q12, Q13, Q16).",
+   "depends_on": [
+    "R16-Q06"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R16-Q16",
+   "status": "Answered",
+   "answer": "One long run, in order (Recommended)",
+   "notes": "Pending the owner's explicit go for app code changes and a user-space Node.js install. Owner may switch the model to Fable for this run.",
+   "answered_on": "17/10/2026"
   }
  ],
  "status": "Done"

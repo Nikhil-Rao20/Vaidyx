@@ -103,5 +103,10 @@
   "topic": "Mock-ups",
   "decision": "No mock-ups: the interview answers are enough; the workflow atlas page is deleted. Build straight from the answers.",
   "source": "Owner, after the interview (17 Oct)"
+ },
+ {
+  "topic": "Demo HIS / PACS",
+  "decision": "Extend our own mock (his_mock) with real-looking screens module by module (Registration, OPD, IPD, LIS, RIS + PACS, Pathology), role logins, own name 'Vaidyx Demo Hospital'; PACS images from open-licence public de-identified datasets relabelled with fake IDs.",
+  "source": "Owner, after the interview (17 Oct)"
  }
 ]
