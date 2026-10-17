@@ -29,7 +29,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "NCRP 2020, ICMR-NCDIR (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R05-Q02",
@@ -55,7 +57,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Yes, each group's own top 10 (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R05-Q03",
@@ -79,7 +83,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Yes, one tap shows all (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R05-Q04",
@@ -107,7 +113,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Four core records (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R05-Q05",
@@ -135,7 +143,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Colorectal, colon or rectum inside (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R05-Q06",
@@ -163,7 +173,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Yes, grows with the stage (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R05-Q07",
@@ -193,7 +205,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Only when it fits, NICE (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R05-Q08",
@@ -221,7 +235,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Refer to the site checklist (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R05-Q09",
@@ -256,7 +272,13 @@
     "target_folder": "/data/vaidyx/tb_resources/guidelines/esmo/",
     "why": "To quote ESMO's CUP work-up (including the mammography advice) verbatim beside NICE CG104 in the CUP checklist (T09)."
    },
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "I'll download it (Recommended)",
+   "own_words": "Downloaded as kermet-analysis-of-oncology.pdf; rename and move it where it belongs.",
+   "resource_status": "Placed",
+   "resource_location": "/home/bharath.tangella/vaidyx/kermet-analysis-of-oncology.pdf",
+   "resource_placed": "/data/vaidyx/tb_resources/guidelines/esmo/ESMO_2023_cancer_of_unknown_primary_Kramer.pdf (19 pages, verified: Kramer et al., Ann Oncol 34:228-246, 2023); logged in _reading_lists/MANIFEST; needs a guideline index rebuild to be searchable.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R05-Q10",
@@ -288,7 +310,11 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "UHID, IP or OP number; Name with age and sex; the hospital system's own patient ID",
+   "own_words": "Also the ID the HIMS and the others hold, so that the HIMS, PACS and Vaidyx stay in sync: that is the aim.",
+   "notes": "One patient key shared by the demo HIS, the demo PACS and Vaidyx (PACS Patient ID = the HIS UHID).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R05-Q11",
@@ -316,7 +342,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Show it, offer to join (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R05-Q12",
@@ -348,7 +376,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Next board date, pre-filled; Stage group, or 'not yet known'; Fetch window, 12 months pre-filled",
+   "notes": "Hospital level not asked on the form: the hospital's level applies.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R05-Q13",
@@ -376,7 +407,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "No, the doctor starts it (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R05-Q14",
@@ -413,7 +446,13 @@
     "target_folder": "/data/vaidyx/tb_resources/guidelines/ncg_india/",
     "why": "Indian source for the next checklists: stomach, liver, gallbladder, prostate, bladder, lymphoma, leukaemia, myeloma, sarcoma and the paediatric cancers."
    },
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Server downloads all five (Recommended)",
+   "own_words": "First asked for the list to download by hand, then: 'you download them, and tell me which were not possible'.",
+   "resource_status": "Placed (13 of 13 downloaded, none failed)",
+   "answered_on": "17/10/2026",
+   "resource_placed": "/data/vaidyx/tb_resources/guidelines/ncg_india/: Urological 2019 (65 pp), Adult Hematolymphoid 2019 (95 pp), Paediatric Hematolymphoid and Solid Tumours 2019 (66 pp), Bone and Soft Tissue 2019 (52 pp), GI set marked by NCG as draft 15 Jan 2021 (gastric, gall bladder, GIST, anal, hepatocellular docx), three radiology synoptic formats (pancreas, gallbladder, cholangiocarcinoma), Plastic and Reconstructive Surgery 2024; logged in _reading_lists/MANIFEST; needs a guideline index rebuild (app side)."
   }
- ]
+ ],
+ "status": "Done"
 }

@@ -26,7 +26,7 @@ def main(path):
             by_id[qid] = (p, q)
         p, q = by_id[qid]
         q["status"] = a.get("status", "Answered")
-        for k in ("answer", "own_words", "notes"):
+        for k in ("answer", "own_words", "notes", "resource_status", "resource_location", "resource_placed"):
             if a.get(k):
                 q[k] = a[k]
         q["answered_on"] = today
