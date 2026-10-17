@@ -370,7 +370,8 @@
    "resource": null,
    "status": "Answered",
    "answer": "Mock-ups on the atlas page (Recommended)",
-   "answered_on": "17/10/2026"
+   "answered_on": "17/10/2026",
+   "notes": "OVERRIDDEN 17 Oct by the owner: no mock-ups ('these questions are enough'); the atlas page was deleted (commit 95977d3). Build straight from the answers."
   },
   {
    "id": "R16-Q12",

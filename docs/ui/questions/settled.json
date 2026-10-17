@@ -98,5 +98,10 @@
   "topic": "Devices",
   "decision": "Laptop first for every role in the first build (assume every hospital user has a laptop); phones come later. Do not over-complicate.",
   "source": "Interview R17-Q03 (17 Oct)"
+ },
+ {
+  "topic": "Mock-ups",
+  "decision": "No mock-ups: the interview answers are enough; the workflow atlas page is deleted. Build straight from the answers.",
+  "source": "Owner, after the interview (17 Oct)"
  }
 ]
