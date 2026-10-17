@@ -265,7 +265,10 @@ if AUTH_ENABLED:
         "/api/version",
         "/login",
     }
-    AUTH_EXEMPT_PREFIXES = ["/static"]
+    # "/tb-nik" is the Vaidyx-TB new interface shell (a React build): the shell
+    # is public so it can show its own sign-in page; every call it makes goes
+    # to /api/tb/... which stays behind this middleware.
+    AUTH_EXEMPT_PREFIXES = ["/static", "/tb-nik"]
     # Dynamic paths whose own handler proves identity via a path-embedded
     # secret instead of the session/bearer auth. The route handler at
     # routes/task_routes.py validates the per-task `webhook_token` itself
@@ -757,6 +760,13 @@ async def serve_index(request: Request):
 async def serve_tumour_board(request: Request):
     """Vaidyx-TB workspace (Tumour Board). Auth is enforced by the middleware like the main app shell."""
     return serve_html_with_nonce(request, abs_join(BASE_DIR, "static/tb/index.html"))
+
+@app.get("/tb-nik")
+@app.get("/tb-nik/{path:path}")
+async def serve_tumour_board_nik(request: Request, path: str = ""):
+    """Vaidyx-TB new interface (React build in static/tb-nik, client-side routes under /tb-nik/*).
+    The shell is served to everyone (it carries no data); the API behind it is auth-gated."""
+    return serve_html_with_nonce(request, abs_join(BASE_DIR, "static/tb-nik/index.html"))
 
 @app.get("/notes")
 async def serve_notes(request: Request):
