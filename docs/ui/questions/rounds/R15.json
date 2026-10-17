@@ -447,6 +447,40 @@
    "notes": "Links given to the owner: https://www.meity.gov.in/data-protection-framework and https://www.indiacode.nic.in/handle/123456789/22037 ; target folder /data/vaidyx/tb_resources/guidelines/india_dpdp/.",
    "resource_status": "Server could not download (17 Oct): MeitY pages are script-blocked; India Code timed out. Owner to download in a browser and place in /home/bharath.tangella/vaidyx.",
    "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Outside identity",
+   "core": false,
+   "type": "decision",
+   "question": "Outside experts (from another hospital) joining the board: what patient identity should they see?",
+   "header": "Outside ID",
+   "multi": false,
+   "options": [
+    {
+     "label": "Full identity only with consent (Recommended)",
+     "description": "Owner ticks 'patient consented to outside discussion'; then name and UHID; otherwise initials, age, sex."
+    },
+    {
+     "label": "Always full identity",
+     "description": "As in R15-Q05, no consent step."
+    },
+    {
+     "label": "Always de-identified",
+     "description": "Never name or UHID."
+    }
+   ],
+   "why": "Added in the final answer check (17 Oct): resolves a conflict or gap found by the check.",
+   "depends_on": [
+    "R15-Q05",
+    "R15-Q10"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R15-Q15",
+   "status": "Answered",
+   "answer": "Full identity only with consent (Recommended)",
+   "notes": "Resolves R15-Q05 vs R15-Q10.",
+   "answered_on": "17/10/2026"
   }
  ],
  "status": "Done"

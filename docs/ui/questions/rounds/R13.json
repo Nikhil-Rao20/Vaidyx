@@ -479,6 +479,35 @@
    "answer": "Only later, with voice",
    "notes": "Later: the meeting transcribed locally (LiveKit + local speech-to-text), audio discarded; the transcript steers what the agent looks up; every agent statement still cites a record.",
    "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Clinical flags",
+   "core": false,
+   "type": "decision",
+   "question": "When the coordinator is not a doctor, who resolves clinical flags (dose mismatch, two different values)?",
+   "header": "Flags",
+   "multi": false,
+   "options": [
+    {
+     "label": "A doctor resolves, coordinator records (Recommended)",
+     "description": "Owning consultant or a board doctor resolves clinical flags; the coordinator records decision and logistics."
+    },
+    {
+     "label": "Coordinator may resolve",
+     "description": "As today."
+    }
+   ],
+   "why": "Added in the final answer check (17 Oct): resolves a conflict or gap found by the check.",
+   "depends_on": [
+    "R02-Q08",
+    "R13-Q14"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R13-Q16",
+   "status": "Answered",
+   "answer": "A doctor resolves, coordinator records (Recommended)",
+   "answered_on": "17/10/2026"
   }
  ],
  "status": "Done"

@@ -541,6 +541,69 @@
    "status": "Answered",
    "answer": "Yes, label them (Recommended)",
    "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Published cases display",
+   "core": false,
+   "type": "decision",
+   "question": "You asked for 'a similar patient at hospital X, by authors X, Y, Z, this procedure, this conclusion' on the slides. By our signed scope that reads as treatment advice. How should published cases appear?",
+   "header": "Pub cases",
+   "multi": false,
+   "options": [
+    {
+     "label": "References the doctor adds (Recommended)",
+     "description": "Doctor-approved search words; list of papers; doctor adds chosen ones; 'not advice for this patient'; no similarity score, no procedure or outcome text on slides."
+    },
+    {
+     "label": "As you said, with a label",
+     "description": "Procedure and conclusion lines next to the patient with a 'not advice' label."
+    },
+    {
+     "label": "Leave out of the first build",
+     "description": "Later build."
+    }
+   ],
+   "why": "Added in the final answer check (17 Oct): resolves a conflict or gap found by the check.",
+   "depends_on": [
+    "R01-Q14",
+    "R01-Q15"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R01-Q18",
+   "status": "Answered",
+   "answer": "As you said, with a label",
+   "notes": "Owner chose this knowing it conflicts with the signed scope wording (no treatment advice). Build guard: the doctor picks each paper (R01-Q14); the procedure and conclusion are verbatim quotes from the paper (quote verified), labelled 'Published case, not advice for this patient', with authors, journal, year, link and peer-review status; no similarity score. Confirm the CLAUDE.md scope exception wording with the owner.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Scope rule exception",
+   "core": false,
+   "type": "decision",
+   "question": "Should the published-cases exception be written into CLAUDE.md's scope rule now?",
+   "header": "Scope rule",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, with the guards (Recommended)",
+     "description": "Doctor-picked paper; procedure and conclusion as verbatim verified quotes; labelled 'Published case, not advice for this patient'."
+    },
+    {
+     "label": "Check the signed paper first",
+     "description": "Plain references until checked."
+    }
+   ],
+   "why": "Added in the final answer check (17 Oct): resolves a conflict or gap found by the check.",
+   "depends_on": [
+    "R01-Q18"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R01-Q19",
+   "status": "Answered",
+   "answer": "Yes, with the guards (Recommended)",
+   "notes": "Written into CLAUDE.md Invariants (17 Oct).",
+   "answered_on": "17/10/2026"
   }
  ],
  "status": "Done"

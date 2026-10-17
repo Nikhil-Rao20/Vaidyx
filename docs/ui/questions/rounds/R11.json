@@ -505,6 +505,35 @@
    "status": "Answered",
    "answer": "Self-hosted LiveKit + agent (Recommended)",
    "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Video between people",
+   "core": false,
+   "type": "decision",
+   "question": "'Text only' means Vaidyx does not speak or listen. Should remote doctors still see and hear each other by video in the first build?",
+   "header": "Video",
+   "multi": false,
+   "options": [
+    {
+     "label": "Basic video on our own server (Recommended)",
+     "description": "Own LiveKit on this server, localhost first; remote access later when IT opens ports and gives a certificate; the Vaidyx agent stays text only."
+    },
+    {
+     "label": "No video yet",
+     "description": "Remote members use their usual call; the meeting screen follows the case."
+    }
+   ],
+   "why": "Added in the final answer check (17 Oct): resolves a conflict or gap found by the check.",
+   "depends_on": [
+    "R11-Q15",
+    "R09-Q13"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R11-Q16",
+   "status": "Answered",
+   "answer": "Basic video on our own server (Recommended)",
+   "answered_on": "17/10/2026"
   }
  ],
  "status": "Done"

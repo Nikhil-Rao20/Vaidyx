@@ -441,6 +441,73 @@
    "status": "Answered",
    "answer": "Only after review (Recommended)",
    "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Summary timing",
+   "core": false,
+   "type": "decision",
+   "question": "Earlier (R09-Q01) the summary is written only when the doctor marks ready, but the new Case File page IS the summary. When should its lines appear?",
+   "header": "Summary",
+   "multi": false,
+   "options": [
+    {
+     "label": "Lines live now, AI text at ready (Recommended)",
+     "description": "From the first fetch each line is filled straight from verified report quotes (no AI writing), blanks show gaps; AI-written parts (history paragraph, specialty briefs) come at the ready mark."
+    },
+    {
+     "label": "Everything live from the start",
+     "description": "AI writes all text from the first fetch and rewrites on change."
+    },
+    {
+     "label": "Page shows only gaps until ready",
+     "description": "Summary appears at the ready mark."
+    }
+   ],
+   "why": "Added in the final answer check (17 Oct): resolves a conflict or gap found by the check.",
+   "depends_on": [
+    "R09-Q01",
+    "R17-Q02"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R09-Q15",
+   "status": "Answered",
+   "answer": "Lines live now, AI text at ready (Recommended)",
+   "notes": "Supersedes R09-Q01 / Q02 for the fill-in summary: slot lines from verified facts are live; AI prose and briefs at the ready mark.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Briefs in advance",
+   "core": false,
+   "type": "decision",
+   "question": "Which specialty briefs should be prepared in advance at the ready mark?",
+   "header": "Briefs",
+   "multi": false,
+   "options": [
+    {
+     "label": "5 heads at ready, Nuclear Med on click (Recommended)",
+     "description": "Radiology, Pathology, Medical, Surgical, Radiation Oncology at the ready mark; Nuclear Medicine when its card is opened."
+    },
+    {
+     "label": "All 6 at ready",
+     "description": "More GPU time."
+    },
+    {
+     "label": "None in advance",
+     "description": "Each on click."
+    }
+   ],
+   "why": "Added in the final answer check (17 Oct): resolves a conflict or gap found by the check.",
+   "depends_on": [
+    "R09-Q09",
+    "R17-Q20"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R09-Q16",
+   "status": "Answered",
+   "answer": "5 heads at ready, Nuclear Med on click (Recommended)",
+   "answered_on": "17/10/2026"
   }
  ],
  "status": "Done"

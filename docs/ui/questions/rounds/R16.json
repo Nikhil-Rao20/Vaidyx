@@ -539,6 +539,40 @@
    "answer": "One long run, in order (Recommended)",
    "notes": "Pending the owner's explicit go for app code changes and a user-space Node.js install. Owner may switch the model to Fable for this run.",
    "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Main app changes",
+   "core": false,
+   "type": "decision",
+   "question": "Three of your answers need small changes in the main Vaidyx app, which CLAUDE.md forbids touching. Allow them?",
+   "header": "Main app",
+   "multi": false,
+   "options": [
+    {
+     "label": "Allow these 3 small changes (Recommended)",
+     "description": "(1) the /tb-nik route (app.py); (2) admin password reset and forced change at first login (core/auth.py); (3) the video connection in the browser security rule (core/middleware.py). Each its own small commit."
+    },
+    {
+     "label": "Only the website route",
+     "description": "Password resets by the Vaidyx admin; video waits."
+    },
+    {
+     "label": "None, use workarounds",
+     "description": "New site under the Tumour Board path; no reset; no video."
+    }
+   ],
+   "why": "Added in the final answer check (17 Oct): resolves a conflict or gap found by the check.",
+   "depends_on": [
+    "R16-Q05",
+    "R04-Q04"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R16-Q17",
+   "status": "Answered",
+   "answer": "Allow these 3 small changes (Recommended)",
+   "notes": "Exception written into CLAUDE.md 'Do not touch' (17 Oct).",
+   "answered_on": "17/10/2026"
   }
  ],
  "status": "Done"
