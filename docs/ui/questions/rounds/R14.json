@@ -33,7 +33,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Phone push alerts (Recommended)",
+   "notes": "Web push from the installable Vaidyx web app; no email, SMS or WhatsApp.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R14-Q02",
@@ -63,7 +66,9 @@
    ],
    "skip_if": "Skip if R14-Q01 chose no channel outside the app.",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "No patient details (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R14-Q03",
@@ -93,7 +98,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "The Case File team (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R14-Q04",
@@ -123,7 +130,10 @@
    ],
    "skip_if": "Skip if R08-Q04 answered 'Department, first to take' (everyone in the department is then told).",
    "resource": null,
-   "status": "To ask"
+   "status": "Skipped",
+   "answer": "Everyone in the department, shows who took it",
+   "notes": "From R08-Q04 'Department, first to take'.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R14-Q05",
@@ -153,7 +163,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Only what needs them (Recommended)",
+   "notes": "Adapted to no cut-off: 'Case Files added late' instead of 'late changes before the cut-off'.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R14-Q06",
@@ -215,7 +228,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Admin events only (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R14-Q08",
@@ -246,7 +261,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Agenda out, start reminder (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R14-Q09",
@@ -307,7 +324,9 @@
    ],
    "skip_if": "Skip if R14-Q01 chose no channel outside the app.",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Morning digest plus urgent (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R14-Q11",
@@ -335,7 +354,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "By Case File (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R14-Q12",
@@ -365,7 +386,9 @@
    ],
    "skip_if": "Skip if R14-Q01 chose no channel outside the app.",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "No quiet hours",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R14-Q13",
@@ -395,7 +418,9 @@
    ],
    "skip_if": "Ask only if R08-Q05 answered 'Manual, one tap in notice'.",
    "resource": null,
-   "status": "To ask"
+   "status": "Skipped",
+   "notes": "R08-Q05 chose automatic re-fetch on Done plus half-hourly, so no manual re-fetch tap is needed in the notification.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R14-Q14",
@@ -425,7 +450,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Hospital defaults, people mute some (Recommended)",
+   "answered_on": "17/10/2026"
   }
- ]
+ ],
+ "status": "Done"
 }
