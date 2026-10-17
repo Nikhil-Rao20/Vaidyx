@@ -29,7 +29,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Separate instances (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R15-Q02",
@@ -57,7 +59,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Nothing after sign-out (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R15-Q03",
@@ -85,7 +89,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Viewer's name as watermark (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R15-Q04",
@@ -147,7 +153,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Yes, full identity",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R15-Q06",
@@ -177,7 +185,9 @@
    ],
    "skip_if": "Skip if R11-Q10 answered 'Self-hosted Jitsi Meet' or 'Self-hosted LiveKit'.",
    "resource": null,
-   "status": "To ask"
+   "status": "Skipped",
+   "notes": "R11-Q15 chose self-hosted LiveKit: patient screens never pass through an outside video service.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R15-Q07",
@@ -207,7 +217,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Owner's team and coordinator (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R15-Q08",
@@ -235,7 +247,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "As the hospital's records policy (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R15-Q09",
@@ -263,7 +277,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Only when shared outside",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R15-Q10",
@@ -293,7 +309,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "De-identified unless owner confirms (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R15-Q11",
@@ -321,7 +339,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Mask the stored copy too (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R15-Q12",
@@ -351,7 +371,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Yes, before real use (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R15-Q13",
@@ -384,7 +406,10 @@
     "target_folder": "hospital documents",
     "why": "Sets the retention period the root admin enters and whether a separate consent tick is needed at Case File creation."
    },
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Skip for now",
+   "resource_status": "Not needed now",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R15-Q14",
@@ -417,7 +442,12 @@
     "target_folder": "/data/vaidyx/tb_resources/guidelines/india_dpdp/",
     "why": "Grounds R15-Q08 (retention), R15-Q09 (consent), R15-Q10 (data leaving the hospital) and R14-Q02 (message content) in the Indian law."
    },
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "You download it (Recommended)",
+   "notes": "Links given to the owner: https://www.meity.gov.in/data-protection-framework and https://www.indiacode.nic.in/handle/123456789/22037 ; target folder /data/vaidyx/tb_resources/guidelines/india_dpdp/.",
+   "resource_status": "Server could not download (17 Oct): MeitY pages are script-blocked; India Code timed out. Owner to download in a browser and place in /home/bharath.tangella/vaidyx.",
+   "answered_on": "17/10/2026"
   }
- ]
+ ],
+ "status": "Done"
 }
