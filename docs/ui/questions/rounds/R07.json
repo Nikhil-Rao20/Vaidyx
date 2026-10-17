@@ -29,7 +29,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "One line plus to-do list (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R07-Q02",
@@ -57,7 +59,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Ready, needs you, waiting (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R07-Q03",
@@ -85,7 +89,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Drop them, plain words (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R07-Q04",
@@ -117,7 +123,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Journey bar of real steps (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R07-Q05",
@@ -145,7 +153,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Met, or each gap settled (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R07-Q06",
@@ -173,7 +183,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Two actions, both with reason (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R07-Q07",
@@ -203,7 +215,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Reason, shown to the board (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R07-Q08",
@@ -262,7 +276,11 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Board question and clinical values",
+   "own_words": "Board questions and clinical values, but you need to build the interface for this too; take care of it.",
+   "notes": "Typed values show 'entered by Dr X, no report'. Interface needed: a typed-values form on the Case File (feeds R17).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R07-Q10",
@@ -292,7 +310,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Doctor answers yes or no (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R07-Q11",
@@ -353,7 +373,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Remove the ready mark",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R07-Q13",
@@ -377,7 +399,11 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Wait until a doctor confirms which value counts",
+   "own_words": "Flag it to the doctor if there are any such disagreements and ask for confirmation of which value to take, with proper reasoning. You need to do this carefully.",
+   "notes": "Scope: Vaidyx shows both quotes and the factual differences (report dates, newer report, amended or corrected status, method or lab) as the reasoning; the doctor confirms which value counts with a reason (audited); Vaidyx never chooses the value. The check is not met until the doctor confirms.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R07-Q14",
@@ -412,7 +438,11 @@
     "target_folder": "hospital documents",
     "why": "Aligns the check's required fields and the typed values with what the hospital's board already asks for."
    },
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Skip for now",
+   "resource_status": "Not needed now",
+   "answered_on": "17/10/2026"
   }
- ]
+ ],
+ "status": "Done"
 }
