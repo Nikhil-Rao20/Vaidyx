@@ -171,7 +171,11 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Own words: newest first; filters for urgency, who must act and the rest",
+   "own_words": "Default should be the newest one first, then filters like the ones above: urgency, who must act; that would be great. Who must act is not what the doctor needs to see first: parallel running Case Files are rare, so that is not the case scenario.",
+   "notes": "Asked 17 Oct with laptop options (grouped by who must act / urgency first / board date). Key fact from the owner: a doctor rarely has many Case Files running at the same time.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R17-Q06",
@@ -199,7 +203,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Slim top bar (laptop)",
+   "notes": "Asked 17 Oct re-worded for laptop: slim top bar with 3 to 5 items per role, search in the middle, bell and profile (settings, audit) on the right; Case File gets the full width.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R17-Q07",
@@ -227,7 +234,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Skipped",
+   "notes": "Settled by R17-Q06 (search in the top bar) and R17-Q05 (parallel Case Files are rare): no side list beside the open Case File.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R17-Q08",
@@ -286,7 +295,11 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "'Send for sign-off' button (Recommended)",
+   "own_words": "Every such button needs a little thing that asks the doctor: the resident can fill up to the last step, the next step is done by the doctor; that button raises an alert to the doctor so that the doctor acts on it.",
+   "notes": "Pattern for every consultant-only step: resident completes everything, one 'Ask Dr X to sign off' button, alert to the consultant, approve or return.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R17-Q10",
@@ -317,7 +330,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "The request card itself (Recommended)",
+   "notes": "Asked 17 Oct re-worded for laptop (click, not phone tap).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R17-Q11",
@@ -348,7 +364,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Two short lists, one page (Recommended)",
+   "notes": "Asked 17 Oct re-worded to the R10 answers (one general board, ready marks fill the agenda, doctor picks the list): for discussion on top, for noting below, coordinator's order by drag; each row patient, owner, presenter, board question, gap left, Remind; not ready folded at the end.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R17-Q12",
@@ -380,7 +399,11 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Own words: full-screen slides with the summary on the left; when a stand-in agent is active, an animated agent tile (listening, thinking, answering) and the members online",
+   "own_words": "If no Vaidyx agent is active in the backend replacing any role, then only the direct full-screen slide, with the summary on the left. If any Vaidyx replacing agent is there, an active Vaidyx agent logo listening to each and every discussion should be there, animating; when the agent is unmuted so the doctors ask questions (right now only text input; in much later phases text and voice), it animates: listening, then a thinking animation, then a speaking action when the answer comes out (right now only text). That is how I see the meeting screen. Apart from that, the other members online are shown there.",
+   "notes": "Follow-up asked 17 Oct: in the text-only first build the agent cannot hear the room (R13-Q15: hearing only later, with voice), so the states must not claim listening to the discussion.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R17-Q13",
@@ -654,6 +677,75 @@
    "answer": "Own words: Ask stays general; a separate place with 6 specialty buttons or cards: pick one, get its brief, then ask it questions",
    "own_words": "The Ask is a general one. The 6 agents are there separately: first the option is to select one; there are 6 buttons or cards; that gives a brief, clear, nice and on the point, and then the doctor's questions can be taken.",
    "notes": "Brief = what that specialty checks in the records (quotes, missing, not final, disagreements); never an opinion on diagnosis, stage or treatment (scope explained to the owner 17 Oct).",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Urgency tag",
+   "core": false,
+   "type": "decision",
+   "question": "Who sets the urgency tag (1 to 5) on a Case File?",
+   "header": "Urgency",
+   "multi": false,
+   "options": [
+    {
+     "label": "Treating doctor; resident proposes (Recommended)",
+     "description": "The owner sets it when creating the Case File and can change it; a resident can suggest a change, the owner accepts with one click; shown with who and when."
+    },
+    {
+     "label": "Treating doctor only",
+     "description": "Only the owner sets and changes it."
+    },
+    {
+     "label": "Anyone on the Case File team",
+     "description": "Owner, residents and the coordinator can all set it; the last change wins."
+    },
+    {
+     "label": "MDT Coordinator",
+     "description": "The coordinator sets it for every Case File, as part of planning the board."
+    }
+   ],
+   "why": "Added in interview (17 Oct): the owner asked for an urgency tag 1 to 5 (R17-Q01); by scope the AI never judges clinical urgency, so a person sets it.",
+   "depends_on": [
+    "R17-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R17-Q21",
+   "status": "Answered",
+   "answer": "Treating doctor; resident proposes (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Stand-in agent tile",
+   "core": false,
+   "type": "decision",
+   "question": "In the text-only first build, what should the stand-in agent's animated tile show on the meeting screen?",
+   "header": "Agent tile",
+   "multi": false,
+   "options": [
+    {
+     "label": "True states for text (Recommended)",
+     "description": "Ready (soft glow), Reading the question, Thinking, Answering (text appears); muted icon when muted; 'Listening to the room' added only when voice comes."
+    },
+    {
+     "label": "Listening animation from the start",
+     "description": "The tile always shows listening to the discussion, though in the first build it only reads typed questions."
+    },
+    {
+     "label": "Plain badge, no animation",
+     "description": "A still badge 'present'; answers appear as text."
+    }
+   ],
+   "why": "Added in interview (17 Oct): the owner wants an animated agent tile on the meeting screen (R17-Q12); the first build is text only and agents hear the room only later with voice (R13-Q15), so the tile must not claim to listen.",
+   "depends_on": [
+    "R17-Q12",
+    "R13-Q15"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R17-Q22",
+   "status": "Answered",
+   "answer": "True states for text (Recommended)",
    "answered_on": "17/10/2026"
   }
  ],
