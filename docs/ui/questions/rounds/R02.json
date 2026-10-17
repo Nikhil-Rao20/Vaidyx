@@ -33,7 +33,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "One department: Haematology (Recommended)",
+   "notes": "'Hematology' stays a search alias; 23 distinct treating departments.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R02-Q02",
@@ -61,7 +64,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Remove; map to your departments (Recommended)",
+   "notes": "Endoscopy to Gastrointestinal Surgery; dental evaluation and pre-anaesthetic check to the owning department; root admin can change routes.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R02-Q03",
@@ -89,7 +95,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Yes, owns and receives requests (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R02-Q04",
@@ -117,7 +125,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Yes, five heads by default (Recommended)",
+   "notes": "Board heads: Radiology, Medical Oncology, Surgical Oncology, Pathology, Radiation Oncology.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R02-Q05",
@@ -145,7 +156,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Consultants only (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R02-Q06",
@@ -173,7 +186,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Oversight of the department's files (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R02-Q07",
@@ -203,7 +218,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "One role for all (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R02-Q08",
@@ -231,7 +248,11 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Anyone the root admin names",
+   "own_words": "Anyone the root admin names, and the role is called MDT Coordinator itself; they can be a doctor or anyone.",
+   "notes": "Same rights whether doctor or not. Note for round 3 / 13: the coordinator records the decision and (today) resolves flags; check whether a non-doctor coordinator should resolve clinical flags.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R02-Q09",
@@ -261,7 +282,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Several; each session names a lead (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R02-Q10",
@@ -291,7 +314,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "A department seat (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R02-Q11",
@@ -321,7 +346,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Heads plus invited specialists (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R02-Q12",
@@ -349,7 +376,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Yes, root admin stays non-clinical (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R02-Q13",
@@ -373,7 +402,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "No, doctors only",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R02-Q14",
@@ -405,7 +436,11 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "PM-JAY desk: Arogya Mitra / MEDCO; Hospital quality team; Medical records staff",
+   "notes": "Nurse navigator / key worker not chosen.",
+   "answered_on": "17/10/2026"
   }
- ]
+ ],
+ "status": "Done"
 }
