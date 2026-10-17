@@ -65,6 +65,14 @@ class _ModelErrorRoute(APIRoute):
         h = super().get_route_handler()
 
         async def handler(request):
+            # Cross-site request forgery: a browser always sends Origin on a cross-site POST; when it is present it must be this
+            # app's own origin (host and port). Non-browser clients (tests, scripts) send no Origin and are not affected.
+            if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+                origin = request.headers.get("origin")
+                if origin:
+                    host = request.headers.get("host", "")
+                    if origin.split("://", 1)[-1].rstrip("/") != host:
+                        return JSONResponse({"detail": "Cross-site request refused."}, status_code=403)
             try:
                 u = get_current_user(request)
                 if u:
@@ -234,9 +242,30 @@ def _warm():
     threading.Thread(target=lambda: guidelines.index(), daemon=True, name="tb-guideline-warmup").start()
 
 
+def _include_nik_routers(r):
+    """The routers of the new interface (tumour_board/api/*): each module exports `router`; a module that fails to import is logged
+    and skipped so one broken area never takes the whole API down."""
+    import importlib
+    for name in ("me", "cases_list", "team", "setup", "slots", "chats", "helpers", "published", "meetings", "live", "video", "push"):
+        try:
+            mod = importlib.import_module(f"tumour_board.api.{name}")
+        except ModuleNotFoundError as e:
+            if e.name == f"tumour_board.api.{name}":
+                continue  # not built yet
+            log.warning("tumour_board.api.%s not loaded: %s", name, e)
+            continue
+        except Exception as e:
+            log.warning("tumour_board.api.%s not loaded: %s", name, e)
+            continue
+        sub = getattr(mod, "router", None)
+        if sub is not None:
+            r.include_router(sub)
+
+
 def setup_tumour_board_routes():
     _warm()
     r = APIRouter(prefix="/api/tb", tags=["tumour-board"], route_class=_ModelErrorRoute)
+    _include_nik_routers(r)
 
     @r.get("/health")
     async def health(request: Request):

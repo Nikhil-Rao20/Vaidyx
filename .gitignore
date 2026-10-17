@@ -251,3 +251,5 @@ data/his_mock/
 
 # Build docs for the UI rebuild (the generic build/ rule above must not hide them)
 !docs/ui/build/
+
+# React build output of the new interface (built from web/tb-nik; committed separately when a release is cut)
