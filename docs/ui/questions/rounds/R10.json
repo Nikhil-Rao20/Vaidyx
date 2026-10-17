@@ -29,7 +29,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "One general board only",
+   "notes": "Overrides plan item T13 (site boards): not wanted for now.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R10-Q02",
@@ -59,7 +62,11 @@
    ],
    "skip_if": "Skip if R10-Q01 answered 'One general board only'.",
    "resource": null,
-   "status": "To ask"
+   "status": "Skipped",
+   "answer": "General board",
+   "own_words": "It is general only, right.",
+   "notes": "One general board (R10-Q01).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R10-Q03",
@@ -89,7 +96,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "No slots, by hand (today)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R10-Q04",
@@ -120,7 +129,10 @@
    ],
    "skip_if": "Skip if R10-Q03 answered 'No slots, by hand (today)'.",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Next open meeting (Recommended)",
+   "notes": "With meetings made by hand: the ready Case File joins the next meeting the coordinator has created whose cut-off has not passed.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R10-Q05",
@@ -183,7 +195,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Yes, a question is required (Recommended)",
+   "notes": "Options adapted (17 Oct): the summary compiles at the ready mark (R09-Q01), so a reviewed summary cannot be a precondition.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R10-Q07",
@@ -211,7 +226,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Fills from ready marks (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R10-Q08",
@@ -241,7 +258,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Yes, with a reason (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R10-Q09",
@@ -275,7 +294,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "No cut-off (today)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R10-Q10",
@@ -309,7 +330,9 @@
    ],
    "skip_if": "Skip if R10-Q09 answered 'No cut-off (today)'.",
    "resource": null,
-   "status": "To ask"
+   "status": "Skipped",
+   "notes": "No cut-off (R10-Q09): Case Files can join until the meeting starts.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R10-Q11",
@@ -340,7 +363,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Doctor at mark-ready (Recommended)",
+   "notes": "Lists: for discussion, for noting.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R10-Q12",
@@ -372,7 +398,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Automatic, coordinator can stop (Recommended)",
+   "notes": "Adapted to no cut-off: 3 days and 1 day before the meeting.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R10-Q13",
@@ -406,7 +435,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Not reached moves; deferred waits (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R10-Q14",
@@ -436,7 +467,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "No invites",
+   "answered_on": "17/10/2026"
   }
- ]
+ ],
+ "status": "Done"
 }
