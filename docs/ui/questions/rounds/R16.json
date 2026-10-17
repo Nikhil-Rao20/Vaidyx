@@ -33,7 +33,11 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "React, a modern stack",
+   "own_words": "Use React and an advanced tech stack, because we need UI components like Kokonut UI, React Bits and more; make sure we use a good stack so all of that works.",
+   "notes": "Setup detail asked in R16-Q15. Node.js is not on the server: user-space install for building only. Self-host every font and asset (no CDN at run time).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R16-Q02",
@@ -67,7 +71,11 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Website first, installable as a web app",
+   "own_words": "Make it a website; on all devices they can also install it as a web app, but primarily a website.",
+   "notes": "Phone push alerts (R14-Q01) work once the web app is installed; on iPhone after Add to Home Screen.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R16-Q03",
@@ -99,7 +107,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Current Chrome, Edge, Android; iPhone and iPad Safari",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R16-Q04",
@@ -129,7 +139,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "App opens, typed text kept (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R16-Q05",
@@ -157,7 +169,11 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Side by side at /tb-nik",
+   "own_words": "We will develop it at /tb-nik.",
+   "notes": "Old /tb untouched except blocking bugs; switch when tests pass and the owner says go.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R16-Q06",
@@ -189,7 +205,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Treating doctor first (Recommended)",
+   "notes": "Order: demo HIS / PACS (R08-Q13), design base, treating doctor, supporting doctor, coordinator and meeting room, admin last.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R16-Q07",
@@ -221,7 +240,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Doctors' walkthrough at TANUH",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R16-Q08",
@@ -252,7 +273,10 @@
    ],
    "skip_if": "Skip if R16-Q07 answered 'No fixed event'.",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Everything",
+   "notes": "Adapted to the doctors' walkthrough (R16-Q07): no old screens in the walkthrough.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R16-Q09",
@@ -282,7 +306,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Skipped",
+   "own_words": "We will discuss this later, once we develop everything locally.",
+   "notes": "Deployment parked: localhost first.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R16-Q10",
@@ -310,7 +337,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Skipped",
+   "own_words": "Don't worry about this now; we will sort it all out on localhost, then talk about deployment.",
+   "notes": "Deployment parked: localhost first.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R16-Q11",
@@ -338,7 +368,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Mock-ups on the atlas page (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R16-Q12",
@@ -368,7 +400,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Only when everything works",
+   "own_words": "After everything is done.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R16-Q13",
@@ -400,7 +435,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "The advisers role-play it",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R16-Q14",
@@ -431,7 +468,44 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "In person at TANUH (Recommended)",
+   "notes": "Adapted to localhost-only for now.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Frontend",
+   "core": false,
+   "type": "decision",
+   "question": "For React with Kokonut UI and React Bits, which setup should we use?",
+   "header": "React setup",
+   "multi": false,
+   "options": [
+    {
+     "label": "React + TypeScript + Vite + Tailwind (Recommended)",
+     "description": "With shadcn/ui and Motion, the base Kokonut UI and React Bits expect; built to static files that FastAPI serves; no extra server."
+    },
+    {
+     "label": "Next.js (React framework)",
+     "description": "Same libraries; adds its own Node.js server next to FastAPI."
+    },
+    {
+     "label": "React + JavaScript + Vite",
+     "description": "Without TypeScript; quicker to start, more runtime mistakes."
+    }
+   ],
+   "why": "Added in interview (17 Oct) from the owner's answer to R16-Q01 (React, Kokonut UI, React Bits).",
+   "depends_on": [
+    "R16-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R16-Q15",
+   "status": "Answered",
+   "answer": "React + TypeScript + Vite + Tailwind (Recommended)",
+   "notes": "Plus shadcn/ui and Motion; static build served by FastAPI.",
+   "answered_on": "17/10/2026"
   }
- ]
+ ],
+ "status": "Done"
 }
