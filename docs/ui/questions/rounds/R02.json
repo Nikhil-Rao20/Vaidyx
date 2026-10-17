@@ -1,0 +1,411 @@
+{
+ "round": 2,
+ "title": "Departments and roles",
+ "intro": "Round 2 settles the open department details and defines every role precisely: who each person is, how many there are, and whether one login can hold several roles. What each role may do comes in round 3.",
+ "questions": [
+  {
+   "id": "R02-Q01",
+   "topic": "Departments",
+   "core": false,
+   "type": "decision",
+   "question": "Your list has 'Haematology' (no. 15) and 'Hematology' (no. 21): one department or two?",
+   "header": "Haematology",
+   "multi": false,
+   "options": [
+    {
+     "label": "One department: Haematology (Recommended)",
+     "description": "British spelling as in 'Paediatric' and 'Tumour'; 'Hematology' stays a search alias, so the list has 23 distinct treating departments."
+    },
+    {
+     "label": "Two: Clinical Haematology and Haemato-Oncology",
+     "description": "Benign and malignant blood disorders as separate units, as some Indian hospitals run them; 24 stay."
+    },
+    {
+     "label": "Two: adult and paediatric",
+     "description": "Adult Haematology and Paediatric Haematology-Oncology; overlaps with Paediatric Oncology need a rule."
+    },
+    {
+     "label": "I'll confirm with the doctors",
+     "description": "Both stay one department until Dr Usha and Dr Minmini answer."
+    }
+   ],
+   "why": "doc-P3: the owner counts 24 treating departments with Hematology as no. 21, but the code already treats 'Hematology', 'Clinical Haematology' and 'Haemato-oncology' as aliases of Haematology (org.py, doctors.js P3). Tata Memorial runs separate adult and paediatric haematolymphoid groups (doctors.js research.design).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R02-Q02",
+   "topic": "Departments",
+   "core": true,
+   "type": "decision",
+   "question": "The build added Medical Gastroenterology, Dental Surgery / OMFS and Anaesthesiology, which are not in your lists: where should their requests go?",
+   "header": "Added depts",
+   "multi": false,
+   "options": [
+    {
+     "label": "Remove; map to your departments (Recommended)",
+     "description": "Endoscopy goes to Gastrointestinal Surgery; dental evaluation and the pre-anaesthetic check go to the owning department; the root admin can change any route."
+    },
+    {
+     "label": "Remove; all to the owning department",
+     "description": "The treating doctor's own team arranges all three; no request leaves the department."
+    },
+    {
+     "label": "Keep as request-only units",
+     "description": "They receive requests but sit in neither list, own no Case Files and have no board seat."
+    }
+   ],
+   "why": "doc-P4: 'only the 6 are the supporting ones'; doc-P3: 24 treating. Today the rectal protocol routes endoscopy to Medical Gastroenterology, the oral cavity protocol routes the pre-radiotherapy dental evaluation to Dental Surgery, and the pre-anaesthetic check is a free request to Anaesthesiology (V2 item 2.4, G33). T06 (kept) migrates existing data without loss.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R02-Q03",
+   "topic": "Departments",
+   "core": false,
+   "type": "decision",
+   "question": "Medical Genetics is in your treating list, so it can own Case Files: should it also receive requests (germline tests, counselling)?",
+   "header": "Genetics",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, owns and receives requests (Recommended)",
+     "description": "Like Pulmonology with bronchoscopy: it owns hereditary-cancer Case Files and answers requests for counselling and germline reports."
+    },
+    {
+     "label": "Owns Case Files only",
+     "description": "No requests reach it; germline reports come through Pathology or the hospital system."
+    },
+    {
+     "label": "I'll confirm with the doctors",
+     "description": "Kept as treating with no requests until the doctors answer."
+    }
+   ],
+   "why": "doc-P3 lists 'Medical Geneticist' as no. 23 of the treating departments (department name: Medical Genetics); the research found its usual board work is supporting (pedigree, counselling, germline reports: ISMPO 2025, ESMO 2025, doctors.js research.newDepts). How asked treating departments see requests (G11) is settled in R03.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R02-Q04",
+   "topic": "Board heads",
+   "core": false,
+   "type": "decision",
+   "question": "Should Radiation Oncology be a board head by default, next to Radiology, Medical Oncology, Surgical Oncology and Pathology?",
+   "header": "Fifth head",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, five heads by default (Recommended)",
+     "description": "Its agent stands in automatically when no radiation oncologist is present, as for the other four."
+    },
+    {
+     "label": "Head for attendance, agent on demand",
+     "description": "Listed with the heads on the attendance sheet, but its agent runs only when asked."
+    },
+    {
+     "label": "No, keep four",
+     "description": "As today: an on-demand specialty after the four heads."
+    }
+   ],
+   "why": "Radiation oncologists attend 92.7% of Indian boards, the highest of any specialty (ICMR-NCDIR survey), and the PM-JAY composition check needs one (V2 item 6.4), yet the code treats it as on demand (data.js specialties). The four heads came from Eswar (13 Oct); the root admin can still edit the list per hospital.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R02-Q05",
+   "topic": "Treating doctor",
+   "core": true,
+   "type": "decision",
+   "question": "Who counts as a treating doctor, able to create and own Case Files?",
+   "header": "Who treats",
+   "multi": false,
+   "options": [
+    {
+     "label": "Consultants only (Recommended)",
+     "description": "Assistant Professor and above, or consultant grade in private hospitals; senior residents, PGs and fellows join teams."
+    },
+    {
+     "label": "Consultants and senior residents",
+     "description": "Senior residents who already hold an MD / MS can also create and own Case Files."
+    },
+    {
+     "label": "Whoever the department admin marks",
+     "description": "Each department decides per login."
+    }
+   ],
+   "why": "Settled: Case Files are created only by treating doctors, and residents / PG / fellows are the treating doctor's team (notes role-treating, role-resident, gap-G01). Indian medical colleges have senior residents with an MD / MS; this decides their side. Eswar: about 5 top doctors per department (data.js roles.treating).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R02-Q06",
+   "topic": "Head of department",
+   "core": false,
+   "type": "decision",
+   "question": "What should 'Head of department' add beyond a consultant?",
+   "header": "Head of dept",
+   "multi": false,
+   "options": [
+    {
+     "label": "Oversight of the department's Case Files (Recommended)",
+     "description": "Sees every Case File of the department and can reassign one to another consultant; otherwise the same as a consultant."
+    },
+    {
+     "label": "A label only",
+     "description": "Same rights as any consultant; shown as Head in lists and attendance."
+    },
+    {
+     "label": "Drop the Head role",
+     "description": "Everyone is a consultant; 'head' is kept only for the board heads."
+    }
+   ],
+   "why": "G07: 'Head' means two things today: a department Head only adds deleting its own uploads (org.py delete_document), while 'board heads' are departments at the board. This sets the meaning; R03 sets the exact rights.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R02-Q07",
+   "topic": "Residents",
+   "core": false,
+   "type": "decision",
+   "question": "Should PGs, senior residents and fellows share one team-member role?",
+   "header": "PG tiers",
+   "multi": false,
+   "options": [
+    {
+     "label": "One role for all (Recommended)",
+     "description": "Same limited rights; the title (PG, senior resident, fellow) is shown for information only."
+    },
+    {
+     "label": "Two tiers, PGs below",
+     "description": "Fellows and senior residents get a few more rights than PGs (set in R03), like the fellow step in PACS sign chains."
+    },
+    {
+     "label": "Three tiers",
+     "description": "PG, senior resident and fellow each get their own rights."
+    }
+   ],
+   "why": "Settled: residents / PG / fellows are the treating doctor's team, join each Case File with a code and cannot sign (notes role-resident, role-treating). PACS sign chains often put a fellow between resident and attending (IntelePACS resident over-read workflow). One role keeps R03 and R06 simple.",
+   "depends_on": [
+    "R02-Q05"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R02-Q08",
+   "topic": "Coordinator",
+   "core": true,
+   "type": "decision",
+   "question": "The MDT Coordinator now also does the chair's job: must the coordinator be a doctor?",
+   "header": "Coordinator",
+   "multi": false,
+   "options": [
+    {
+     "label": "A doctor, with an optional assistant (Recommended)",
+     "description": "A senior doctor holds the role; a non-clinical board assistant may schedule, chase and mark attendance, but never records decisions."
+    },
+    {
+     "label": "Anyone the root admin names",
+     "description": "Doctor or non-clinical staff, with the same rights either way."
+    },
+    {
+     "label": "Always a doctor, no assistant",
+     "description": "Only doctors hold the role and do all the secretariat work."
+    }
+   ],
+   "why": "Settled: no separate chair; 'who decides' is the coordinator (plan T19 comment, notes role-chair). Real boards split a clinical chair from a secretariat (Victoria framework); 52.5% of Indian boards have a designated secretariat (ICMR-NCDIR). The board decision record is a clinical record.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R02-Q09",
+   "topic": "Coordinator",
+   "core": false,
+   "type": "decision",
+   "question": "How many MDT Coordinators should a hospital have?",
+   "header": "Coord count",
+   "multi": false,
+   "options": [
+    {
+     "label": "Several; each session names a lead (Recommended)",
+     "description": "Any coordinator can prepare agendas; each board session names one lead who records it."
+    },
+    {
+     "label": "One or more per site board",
+     "description": "Each site board (head and neck, breast and so on) has its own coordinators, who see only its sessions."
+    },
+    {
+     "label": "One per hospital, with a deputy",
+     "description": "Only one active coordinator; a named deputy takes over during leave."
+    }
+   ],
+   "why": "T13 (site boards) is kept; 28.5% of Indian hospitals with a board run several site boards (NCRP survey). Today the coordinator is a flag on any login, so several are possible, but a session has no lead.",
+   "depends_on": [
+    "R02-Q08"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R02-Q10",
+   "topic": "Board heads",
+   "core": false,
+   "type": "decision",
+   "question": "Is a board head seat held by a department (any of its consultants fills it) or by a named person?",
+   "header": "Head seat",
+   "multi": false,
+   "options": [
+    {
+     "label": "A department seat (Recommended)",
+     "description": "Any consultant of that department who is present fills it; if nobody is, its agent stands in."
+    },
+    {
+     "label": "A named person with a deputy",
+     "description": "Each head department names one person and a deputy; only they fill the seat."
+    },
+    {
+     "label": "A named person only",
+     "description": "If that person is absent the agent stands in, even when a colleague attends."
+    }
+   ],
+   "why": "Today heads are departments, not named people (data.js roles.boardheads), and the Case File's own surgeon can fill the surgical seat (V2 item 6.2). This decides attendance and when an agent stands in (R11, R12).",
+   "depends_on": [
+    "R02-Q04"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R02-Q11",
+   "topic": "Board members",
+   "core": false,
+   "type": "decision",
+   "question": "Who counts as a board member for a session?",
+   "header": "Members",
+   "multi": false,
+   "options": [
+    {
+     "label": "Heads plus invited specialists (Recommended)",
+     "description": "The head departments are standing members; any specialist, inside or outside the hospital, can be invited for a session with the six-digit code."
+    },
+    {
+     "label": "Head departments only",
+     "description": "Others may watch but are not members and get no end-of-meeting pop-up."
+    },
+    {
+     "label": "Everyone who joins",
+     "description": "Any doctor who joins with the code is a member for that session."
+    }
+   ],
+   "why": "Settled: board members join from anywhere with a six-digit code and each gets a pop-up for their summary or suggestions (notes role-boardheads, general.plan). Open: heads only or anyone invited. R11 owns the code details; R13 owns the pop-up.",
+   "depends_on": [
+    "R02-Q10"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R02-Q12",
+   "topic": "Several roles",
+   "core": false,
+   "type": "decision",
+   "question": "Can one login hold several roles at once?",
+   "header": "Multi-role",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, except root admin stays non-clinical (Recommended)",
+     "description": "A consultant can also be department admin, coordinator or board member on one login; a root admin login cannot take clinical roles."
+    },
+    {
+     "label": "Yes, any mix",
+     "description": "As today: even a root admin can give itself clinical roles, audited only."
+    },
+    {
+     "label": "One role per login",
+     "description": "People with two roles keep two logins and sign in as each."
+    }
+   ],
+   "why": "Today one login can be doctor, department admin and coordinator together (V2 section 4: a department admin may also be a doctor); G06: a root admin can give itself clinical roles, kept only by convention. Every action records the role used. R04 owns how accounts are made.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R02-Q13",
+   "topic": "Supporting side",
+   "core": false,
+   "type": "decision",
+   "question": "Should supporting departments have a 'department desk' role (technician or front desk) that can answer requests?",
+   "header": "Dept staff",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, add a department desk role (Recommended)",
+     "description": "Desk staff can acknowledge requests and send Done; the report is still signed by the doctor in the RIS / LIS."
+    },
+    {
+     "label": "No, doctors only",
+     "description": "Only radiologists, pathologists and the other supporting doctors answer requests."
+    }
+   ],
+   "why": "Settled: supporting doctors sign in their own RIS / LIS / PACS and send 'done' (notes role-supporting). In Vaidyx, Done is a message and never closes a request by itself; the signed record arriving does (B7, V2 item 4.3). R03 decides what residents of supporting departments may do.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R02-Q14",
+   "topic": "Missing roles",
+   "core": false,
+   "type": "decision",
+   "question": "Which roles that research found in real boards should Vaidyx add (built later where they belong after the board)?",
+   "header": "New roles",
+   "multi": true,
+   "options": [
+    {
+     "label": "PM-JAY desk: Arogya Mitra / MEDCO (Recommended)",
+     "description": "A non-clinical view of the signed decision and the package's document checklist for pre-authorisation."
+    },
+    {
+     "label": "Hospital quality team",
+     "description": "A read-only dashboard of counts (readiness, quorum, follow-up) for NABH and audits; no patient detail."
+    },
+    {
+     "label": "Nurse navigator / key worker",
+     "description": "Owns 'inform the patient' tasks, consent and preferences, in the patient's language."
+    },
+    {
+     "label": "Medical records staff",
+     "description": "Scans paper or outside reports and files the one-page decision in the paper record."
+    }
+   ],
+   "why": "From data.js roles marked missing: G15, G16, I04, I11, I19. PM-JAY needs a board decision for every cancer package (HBP 2.2); 63.5% of Indian boards keep paper records only (ICMR-NCDIR). After-the-board work is parked, so this only fixes the role list; the patient stays a non-user.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  }
+ ]
+}

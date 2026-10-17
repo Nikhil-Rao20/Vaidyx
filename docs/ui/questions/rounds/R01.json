@@ -1,0 +1,389 @@
+{
+ "round": 1,
+ "title": "Principles",
+ "intro": "Round 1 sets the ground rules every later round builds on: what 'expert over the loop' means, how the workflow loops, how simple it must be, which sources count, and the words and model labels we show.",
+ "questions": [
+  {
+   "id": "R01-Q01",
+   "topic": "Expert over the loop",
+   "core": true,
+   "type": "decision",
+   "question": "What should 'expert over the loop' mean in daily use?",
+   "header": "Over loop",
+   "multi": false,
+   "options": [
+    {
+     "label": "AI runs, expert supervises (Recommended)",
+     "description": "Vaidyx reads, checks, drafts and chases by itself; the named doctor watches, can override or undo anything, and signs only the key steps."
+    },
+    {
+     "label": "Expert sets rules, AI acts",
+     "description": "Each hospital or department sets what Vaidyx may do alone; the expert sees only the exceptions it raises."
+    },
+    {
+     "label": "Expert audits afterwards only",
+     "description": "Vaidyx completes the routine steps; experts review a sample or the audit later, with no sign-off points."
+    }
+   ],
+   "why": "Settles the owner's note 'this is not the format of expert in the loop, this is expert over the loop' (notes general.workflow). Today every AI output is a draft until someone marks it reviewed (DESIGN.md section 2, glossary 'Human oversight (expert-in-the-loop)'). Whatever is chosen, Vaidyx never diagnoses, stages, reads images or recommends treatment. R07, R08, R09 and R13 apply this answer.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R01-Q02",
+   "topic": "No-click work",
+   "core": true,
+   "type": "decision",
+   "question": "As a default rule, which work may Vaidyx do with no click?",
+   "header": "No click",
+   "multi": false,
+   "options": [
+    {
+     "label": "Sending waits for a tap (Recommended)",
+     "description": "Reading, checking, drafting and re-checking run alone; anything that reaches another person (request, reminder, board summary) waits for one tap."
+    },
+    {
+     "label": "Everything, including sending",
+     "description": "Requests and reminders go out by themselves in the owner's name; the owner sees each one and can recall or correct it."
+    },
+    {
+     "label": "Sends after a hold",
+     "description": "Drafted requests go out on their own after a set wait (for example 2 hours) unless the owner edits or stops them."
+    }
+   ],
+   "why": "Today nothing is sent automatically (V2 item 4.2; Eswar 13 Oct: the doctor stays in control); V1 sent every gap at once. This sets the default only: R08-Q02 (sending requests), R08-Q05 (re-fetch), R08-Q08 and R10-Q12 (reminders) and R09-Q01 (summary) apply it and can be skipped where they match.",
+   "depends_on": [
+    "R01-Q01"
+   ],
+   "skip_if": "Skip if R01-Q01 answered 'Expert audits afterwards only'.",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R01-Q03",
+   "topic": "Loops",
+   "core": false,
+   "type": "decision",
+   "question": "Which loops should the new workflow treat as normal paths, not exceptions?",
+   "header": "Loops",
+   "multi": true,
+   "options": [
+    {
+     "label": "Deferred, back on a later board (Recommended)",
+     "description": "The board defers for more tests; the Case File returns to preparation and is listed again without being rebuilt."
+    },
+    {
+     "label": "Hand-over to another department",
+     "description": "A referral, or a primary found in Cancer of Unknown Primary, moves ownership; the check re-runs on the same records."
+    },
+    {
+     "label": "Ready, then something changes",
+     "description": "An amended or new report after 'ready' reopens the check and the summary."
+    },
+    {
+     "label": "Back after treatment",
+     "description": "Restaging, surgery or a recurrence brings the patient back for another discussion."
+    }
+   ],
+   "why": "The owner: 'there will be some loops around, it is not like a linear' (notes general.workflow). Today only the request loop (B6 to B8) and referral (B10) exist. Recommended: tick all four. Later rounds detail each loop: R10-Q13 and R13-Q06 (deferred), R05-Q08 (primary found), R07-Q12 and R09-Q03 (changes after ready or after the summary), R01-Q04 (back after treatment).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R01-Q04",
+   "topic": "Returning patient",
+   "core": false,
+   "type": "decision",
+   "question": "When a patient comes back for another board discussion, does it stay in the same Case File?",
+   "header": "Return",
+   "multi": false,
+   "options": [
+    {
+     "label": "Same Case File, new round (Recommended)",
+     "description": "Each discussion becomes a numbered round with its own question, check and decision; the history stays in one place."
+    },
+    {
+     "label": "New linked Case File each time",
+     "description": "Every discussion starts a fresh Case File, linked both ways to the earlier ones."
+    },
+    {
+     "label": "Owner chooses each time",
+     "description": "When listing again, the owner picks a new round or a new Case File."
+    }
+   ],
+   "why": "A Case File is 'one cancer episode of one patient' (glossary); treatment before surgery often brings the same episode back to the board, and today a decided Case File has no way back to the agenda. Two primaries already get separate linked Case Files (B11). R05-Q11 handles a second Case File started by mistake; R13 owns closing a case.",
+   "depends_on": [
+    "R01-Q03"
+   ],
+   "skip_if": "Skip if R01-Q03 did not tick 'Back after treatment'.",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R01-Q05",
+   "topic": "Simplicity",
+   "core": false,
+   "type": "decision",
+   "question": "What click or tap target should each everyday task meet?",
+   "header": "Tap target",
+   "multi": false,
+   "options": [
+    {
+     "label": "3 taps usual, 6 at most (Recommended)",
+     "description": "Counted from the home or the notification; any task needing more is redesigned before release."
+    },
+    {
+     "label": "5 taps usual, 10 at most",
+     "description": "Allows fuller forms on one screen; fewer redesigns."
+    },
+    {
+     "label": "No number; time it with doctors",
+     "description": "Dr Minmini and Dr Usha time real tasks and the target is set from their runs."
+    }
+   ],
+   "why": "The owner: 'very simple and few clicks' (notes general.screens). Today J1 takes 9 steps from Create to Mark ready and J2 sends the supporting doctor out of Vaidyx and back (data.js journeys); Hartmann 2026 counted about 25 program switches per case. Everyday tasks: answer a request, send the suggested requests, add a Case File to an agenda.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R01-Q06",
+   "topic": "Validated sources",
+   "core": true,
+   "type": "decision",
+   "question": "Which kinds of source count as validated for anything Vaidyx lists or cites?",
+   "header": "Source types",
+   "multi": true,
+   "options": [
+    {
+     "label": "Indian official guidelines and registries (Recommended)",
+     "description": "NCG, ICMR, MoHFW, NHA / PM-JAY and the ICMR-NCDIR registry reports; always shown first."
+    },
+    {
+     "label": "International society guidelines",
+     "description": "ESMO, NICE, ASCO, ASTRO, CAP, ACR and NCI PDQ; shown after the Indian ones, labelled with their country."
+    },
+    {
+     "label": "Standard reference books",
+     "description": "AJCC, WHO Blue Books, UICC TNM; reference text only, never used to work out a stage."
+    },
+    {
+     "label": "Peer-reviewed journal papers",
+     "description": "PubMed-indexed papers with a DOI; preprints, company pages and websites stay out."
+    }
+   ],
+   "why": "Owner on W1 and T10: 'research papers or books which are authorized and validated ones only'. The library today mixes these kinds (doctors.js wiring, RESOURCES.md); NCCN is excluded for its licence; Dr Minmini shared an arXiv preprint (W6). Recommended: tick all four, preprints excluded.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R01-Q07",
+   "topic": "Source approval",
+   "core": false,
+   "type": "decision",
+   "question": "Who approves a new source before Vaidyx uses it?",
+   "header": "Who approves",
+   "multi": false,
+   "options": [
+    {
+     "label": "A named doctor approves each (Recommended)",
+     "description": "The team proposes; Dr Minmini, Dr Usha or a reviewer the hospital names approves it, and the approval shows on the source."
+    },
+    {
+     "label": "The team, by the type rules",
+     "description": "Any source of an allowed kind goes in; the library screen (T12) lists it for doctors to see."
+    },
+    {
+     "label": "Each hospital's root admin",
+     "description": "Every hospital keeps its own library and decides what goes in."
+    }
+   ],
+   "why": "T10 comment: sources must be validated 'so that those all can be true and not false ones'. Today the team adds sources (RESOURCES.md) and no clinician signs them. T12 (guideline library screen, kept) would show the approval.",
+   "depends_on": [
+    "R01-Q06"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R01-Q08",
+   "topic": "Showing sources",
+   "core": false,
+   "type": "decision",
+   "question": "How should a source appear next to a listed or cited item?",
+   "header": "Show source",
+   "multi": false,
+   "options": [
+    {
+     "label": "Short chip, passage on tap (Recommended)",
+     "description": "For example 'NCG Breast 2019, p 12'; one tap shows the exact passage, edition and link."
+    },
+    {
+     "label": "Full reference under each item",
+     "description": "Always visible; longer screens, nothing to tap."
+    },
+    {
+     "label": "Numbered marks, list at the end",
+     "description": "Small [1] [2] marks; the references sit at the foot of the screen or the print."
+    }
+   ],
+   "why": "T10 (kept): every cancer, department and required record shows where it comes from. Today Pre-Authorization rows cite the NCG line and page and AI statements carry a quote chip, but lists such as cancers and departments show nothing (W1). R07-Q11 applies this to the required records.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R01-Q09",
+   "topic": "No source",
+   "core": false,
+   "type": "decision",
+   "question": "What happens to an item for which no validated source exists?",
+   "header": "No source",
+   "multi": false,
+   "options": [
+    {
+     "label": "Listed once a doctor confirms (Recommended)",
+     "description": "Shown as 'No published source; confirmed by Dr <name> on <date>' and kept on a list to re-check."
+    },
+    {
+     "label": "Left out until a source exists",
+     "description": "Not listed at all; the gap shows only on the library screen."
+    },
+    {
+     "label": "Listed with a 'no source' flag",
+     "description": "Shown at once with a warning until a source or a doctor's confirmation is added."
+    }
+   ],
+   "why": "Real cases today: no Indian general Cancer of Unknown Primary guideline (doctors.js research.cup), thyroid has no NCG or ICMR management guideline, and the three build-added departments had no source (G33). W1: 'a justification for whatever you are listing'.",
+   "depends_on": [
+    "R01-Q06"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R01-Q10",
+   "topic": "Language",
+   "core": false,
+   "type": "decision",
+   "question": "Which languages should Vaidyx-TB support, and when?",
+   "header": "Language",
+   "multi": false,
+   "options": [
+    {
+     "label": "English only for now (Recommended)",
+     "description": "Screens, AI drafts and voice stay English; revisit after the first hospital goes live."
+    },
+    {
+     "label": "English now, Hindi screens later",
+     "description": "Screen labels and help get Hindi in a later phase; drafts and quotes stay English, as the reports are."
+    },
+    {
+     "label": "English plus the state's language",
+     "description": "Screen labels follow each hospital's state language; drafts and quotes stay English."
+    }
+   ],
+   "why": "The audio research agreed 'English first' (audio_feature.md section 1). The reports Vaidyx reads are in English and every fact needs a verbatim quote, so AI drafts are never translated (no translation into facts, CLAUDE.md invariants). Patient-facing text is after-the-board work (parked).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R01-Q11",
+   "topic": "Terminology",
+   "core": false,
+   "type": "decision",
+   "question": "Keep the name 'Pre-Authorization' for the records check, when PM-JAY uses 'pre-authorisation' for insurance approval?",
+   "header": "Pre-Auth",
+   "multi": false,
+   "options": [
+    {
+     "label": "Keep it, add 'records check' (Recommended)",
+     "description": "Shown as 'Pre-Authorization: records check'; the clinical reviewers' term stays and the clash is explained."
+    },
+    {
+     "label": "Rename to 'Board readiness check'",
+     "description": "Clearer for new users; the old name stays only in the audit and docs."
+    },
+    {
+     "label": "Rename to 'Records check'",
+     "description": "Shortest; the PM-JAY clash goes away."
+    }
+   ],
+   "why": "The term came from clinical reviewers (DESIGN.md section 3) and is on the terminology list; the glossary has to add 'Not payer authorisation', and PM-JAY desks use pre-authorisation daily (NHA process flow, research source 3). U16 lists it among the jargon a first-time doctor meets. R07 owns the Level 1 / Level 2 names.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R01-Q12",
+   "topic": "Terminology",
+   "core": false,
+   "type": "decision",
+   "question": "What wording should replace 'Human oversight (expert-in-the-loop)' on screens and in exports?",
+   "header": "Oversight",
+   "multi": false,
+   "options": [
+    {
+     "label": "Human oversight (expert over the loop) (Recommended)",
+     "description": "Same places as today (glossary, AI draft footers, model cards); only the phrase changes."
+    },
+    {
+     "label": "Clinician in charge",
+     "description": "A plain phrase with no 'loop' wording; the glossary explains the idea."
+    },
+    {
+     "label": "Doctor-supervised AI",
+     "description": "Puts the doctor first and names the AI as the helper."
+    }
+   ],
+   "why": "The terminology rules (CLAUDE.md, UI_PLAN_OCT15 section 0 rule 4) still say 'Human oversight (expert-in-the-loop)'; the owner now says 'expert over the loop' (notes general.workflow).",
+   "depends_on": [
+    "R01-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R01-Q13",
+   "topic": "Model labels",
+   "core": false,
+   "type": "decision",
+   "question": "Where should the model labels (Qwen3.5-4B: Chinese, non-medical; Gemma-4-31B: non-medical) appear?",
+   "header": "Model labels",
+   "multi": false,
+   "options": [
+    {
+     "label": "On each AI output and export (Recommended)",
+     "description": "A short line such as 'Drafted by Gemma-4-31B, non-medical' under every AI result, in prints and exports, plus a model page."
+    },
+    {
+     "label": "Top bar always, plus each output",
+     "description": "As today: model chips on every screen and the line under each AI result."
+    },
+    {
+     "label": "Model page and exports only",
+     "description": "Screens stay clean; labels appear on the model page and in every printout and export."
+    }
+   ],
+   "why": "Rule: label the models in every report (CLAUDE.md terminology; owner's labelling rule). Today the labels sit in the top bar chips, under each brief and summary, inside dialog texts and in the model cards; UI_PLAN_OCT15 A2 notes the chips crowd the top bar. The same rule would cover the speech models (Whisper turbo, Kokoro) if voice is built.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  }
+ ]
+}

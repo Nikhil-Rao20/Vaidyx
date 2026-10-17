@@ -1,0 +1,419 @@
+{
+ "round": 5,
+ "title": "Starting a Case File",
+ "intro": "How a treating doctor starts a Tumour Board Case File: finding the patient, picking the cancer (top 10, manual entry, Cancer of Unknown Primary) and what the form asks. Clinical lists drafted here are confirmed by Dr Minmini and Dr Usha before they are built.",
+ "questions": [
+  {
+   "id": "R05-Q01",
+   "topic": "Cancer picker",
+   "core": true,
+   "type": "decision",
+   "question": "Which source should rank the top 10 cancers in the picker?",
+   "header": "Top 10",
+   "multi": false,
+   "options": [
+    {
+     "label": "NCRP 2020, ICMR-NCDIR (Recommended)",
+     "description": "Indian registry projections from 28 population registries; place 10 is shared by non-Hodgkin lymphoma and prostate."
+    },
+    {
+     "label": "GLOBOCAN 2024, IARC",
+     "description": "The WHO cancer agency's newer estimate for India; place 10 is liver."
+    },
+    {
+     "label": "Both, side by side",
+     "description": "Each badge shows both percentages; the order follows NCRP."
+    }
+   ],
+   "why": "W2, W1 (justify every listed item), T07, T10. Both sources agree on the first nine (breast, oral cavity, lung, cervix, colorectum, oesophagus, stomach, leukaemia, ovary) and differ only at place 10 (doctors.js research.top10).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R05-Q02",
+   "topic": "Cancer picker",
+   "core": false,
+   "type": "decision",
+   "question": "When the picker is filtered to men, women or children, should the top-10 badges follow the filter?",
+   "header": "Badges",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, each group's own top 10 (Recommended)",
+     "description": "Men see oral cavity, lung, prostate first; women see breast, cervix, ovary; children see leukaemia, lymphoma, brain tumours."
+    },
+    {
+     "label": "One India-wide top 10 always",
+     "description": "The same ten badges whatever the filter; prostate and most children's cancers get none."
+    }
+   ],
+   "why": "T07 kept (organ groups, men / women / children 0 to 14 / adolescents 15 to 19 filter), W3. Rankings by sex from NCRP 2020 and for children from Kapoor 2024 (research.top10 men, women, children).",
+   "depends_on": [
+    "R05-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R05-Q03",
+   "topic": "Cancer picker",
+   "core": false,
+   "type": "decision",
+   "question": "Should the picker open already filtered by the patient's sex and age from the hospital record?",
+   "header": "Pre-filter",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, one tap shows all (Recommended)",
+     "description": "A 52-year-old woman's picker opens on women's and general cancers, a 9-year-old's on children's cancers; nothing is hidden for good."
+    },
+    {
+     "label": "No, always open on All",
+     "description": "The doctor sets the filter by hand each time."
+    }
+   ],
+   "why": "UX note 1 (sensible defaults). Sex and age come from the HIS registration fetched at lookup (his_client find_patient, B2). The filter only orders the list.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R05-Q04",
+   "topic": "Manual entry",
+   "core": true,
+   "type": "decision",
+   "question": "What should a Case File require when its cancer has no checklist yet (a manual entry, or a listed cancer not built)?",
+   "header": "Min records",
+   "multi": false,
+   "options": [
+    {
+     "label": "Four core records (Recommended)",
+     "description": "Histopathology, staging imaging, a clinical note with performance status, and a typed question for the board; labelled 'No disease-specific Indian protocol'."
+    },
+    {
+     "label": "No check, records only",
+     "description": "Records are fetched and read; the Case File says 'no automatic check' and can still go to the board."
+    },
+    {
+     "label": "Doctor picks the records",
+     "description": "The doctor ticks which record types count as required for this Case File."
+    }
+   ],
+   "why": "W2 (manual entry), T08 kept (generic minimum set the doctors choose, or none), G32. Only 5 cancers have a checklist today (breast, cervix, lung NSCLC, rectal, oral cavity). Free text with an ICD-10 / ICD-O-3 lookup is already kept in T08. The doctors confirm the final set (T04).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R05-Q05",
+   "topic": "Cancer picker",
+   "core": false,
+   "type": "decision",
+   "question": "Should 'Rectal cancer' become 'Colorectal cancer'?",
+   "header": "Colorectal",
+   "multi": false,
+   "options": [
+    {
+     "label": "Colorectal, colon or rectum inside (Recommended)",
+     "description": "One entry ranked as colorectum (5.3%); the doctor picks colon or rectum and the records follow NCG's colorectal flow or rectal guideline (both held)."
+    },
+    {
+     "label": "Two entries: Colon and Rectal",
+     "description": "Each has its own checklist; Colon must be built and validated first."
+    },
+    {
+     "label": "Keep Rectal only",
+     "description": "Colon cancers go through manual entry."
+    }
+   ],
+   "why": "research.design ('rename Rectal to Colorectal'), open question for T04. NCRP and GLOBOCAN rank colorectum (colon plus rectum). The NCG GI 2019 colorectal and rectal parts are held (guidelines/ncg_india/).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R05-Q06",
+   "topic": "Cancer of Unknown Primary",
+   "core": true,
+   "type": "decision",
+   "question": "Should the Cancer of Unknown Primary (CUP) checklist grow with the stage the doctor records: MUO, provisional or confirmed?",
+   "header": "CUP stages",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, grows with the stage (Recommended)",
+     "description": "MUO (cancer seen, tests not done) asks the initial screen; provisional adds the biopsy with an immunohistochemistry (IHC) panel and markers; confirmed adds the specialist review."
+    },
+    {
+     "label": "One full list from the start",
+     "description": "Every record is shown at once; early CUP Case Files show many gaps."
+    },
+    {
+     "label": "Initial screen only",
+     "description": "Only the initial screen is required; later tests are shown, never required."
+    }
+   ],
+   "why": "W4 (CUP must exist; the board helps investigate), T09 kept (the doctor records the stage). Stages and records from NICE CG104 (research.cup.stages, research.cup.records). No general Indian CUP guideline exists (research.cup.india). Vaidyx never works out the stage.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R05-Q07",
+   "topic": "Cancer of Unknown Primary",
+   "core": false,
+   "type": "decision",
+   "question": "For women with Cancer of Unknown Primary, when should mammography be a required record?",
+   "header": "Mammography",
+   "multi": false,
+   "options": [
+    {
+     "label": "Only when it fits, NICE (Recommended)",
+     "description": "Required when the doctor records a presentation that fits breast cancer; otherwise 'not applicable' with a reason."
+    },
+    {
+     "label": "Every woman, ESMO 2023",
+     "description": "Always required for women; often a gap the doctor must waive."
+    },
+    {
+     "label": "Shown for every woman, optional",
+     "description": "Listed in the Optional tier; never blocks the check."
+    }
+   ],
+   "why": "research.cup.conflict: ESMO 2023 asks for mammography in every woman, NICE CG104 says not routinely. Conditional records use 'not applicable with a reason' (T09). The doctors confirm (T04).",
+   "depends_on": [
+    "R05-Q06"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R05-Q08",
+   "topic": "Cancer of Unknown Primary",
+   "core": false,
+   "type": "decision",
+   "question": "When the primary site is found, what should happen to the CUP Case File?",
+   "header": "Primary",
+   "multi": false,
+   "options": [
+    {
+     "label": "Refer to the site checklist (Recommended)",
+     "description": "The existing referral moves the same Case File to the site's checklist and department; the CUP check stays as read-only history."
+    },
+    {
+     "label": "New linked Case File",
+     "description": "A new Case File starts under the site checklist, linked to the CUP one, which is closed."
+    },
+    {
+     "label": "Change checklist, same owner",
+     "description": "The owner switches the checklist; ownership does not move."
+    }
+   ],
+   "why": "W4, T09 kept ('the existing referral moves the Case File to the site protocol'), B10 (on accept the earlier check is kept read-only). The doctor records the primary; Vaidyx never infers it. A UK CUP service found a primary in 36% of referrals (research.cup.freq).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R05-Q09",
+   "topic": "Cancer of Unknown Primary",
+   "core": false,
+   "type": "resource",
+   "question": "Can you get the full text of the ESMO 2023 Cancer of Unknown Primary guideline?",
+   "header": "ESMO CUP",
+   "multi": false,
+   "options": [
+    {
+     "label": "I'll download it (Recommended)",
+     "description": "From the journal or the ESMO guidelines page in a browser, saved to the esmo folder; ESMO's points then get a verbatim source."
+    },
+    {
+     "label": "Use NICE CG104 only",
+     "description": "NICE is free and we fetch it ourselves; ESMO's points stay out of the checklist."
+    },
+    {
+     "label": "Skip for now",
+     "description": "CUP is drafted from NICE; ESMO is added later."
+    }
+   ],
+   "why": "Every listed record must show a validated source with a verbatim quote (W1, T10, notes plan-T10). Our search found only the journal page for ESMO 2023; NICE CG104 is free.",
+   "depends_on": [
+    "R05-Q06"
+   ],
+   "skip_if": "",
+   "resource": {
+    "item": "ESMO Clinical Practice Guideline: Cancer of unknown primary, diagnosis, treatment and follow-up, 2023 (Kramer et al., Annals of Oncology), full text PDF",
+    "source_url": "https://doi.org/10.1016/j.annonc.2022.11.013",
+    "target_folder": "/data/vaidyx/tb_resources/guidelines/esmo/",
+    "why": "To quote ESMO's CUP work-up (including the mammography advice) verbatim beside NICE CG104 in the CUP checklist (T09)."
+   },
+   "status": "To ask"
+  },
+  {
+   "id": "R05-Q10",
+   "topic": "Patient lookup",
+   "core": false,
+   "type": "decision",
+   "question": "Which ways should a doctor be able to find the patient when starting a Case File?",
+   "header": "Find patient",
+   "multi": true,
+   "options": [
+    {
+     "label": "UHID, IP or OP number (Recommended)",
+     "description": "As today; each resolves to one hospital registration."
+    },
+    {
+     "label": "ABHA number",
+     "description": "The 14-digit Ayushman Bharat Health Account number; the HIS adapter already accepts it."
+    },
+    {
+     "label": "Name with age and sex",
+     "description": "Finds a patient without a number; more risk of the wrong person, so the doctor confirms."
+    },
+    {
+     "label": "Scan the file's barcode",
+     "description": "The phone camera reads the UHID barcode or QR code on the file or wristband (needs HTTPS)."
+    }
+   ],
+   "why": "B2 today: UHID, IP No. or OP No. (his_case.py); his_client find_patient also takes ABHA. Aadhaar is never used (changes_v2 section 3). Doctors use the phone too (role-treating devices).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R05-Q11",
+   "topic": "Duplicates",
+   "core": false,
+   "type": "decision",
+   "question": "If a Case File for the same patient and cancer already exists, what should happen?",
+   "header": "Duplicate",
+   "multi": false,
+   "options": [
+    {
+     "label": "Show it, offer to join (Recommended)",
+     "description": "Vaidyx shows the existing Case File's owner and status; the doctor asks to participate or sends a referral instead of making a second."
+    },
+    {
+     "label": "Allow it, linked and flagged",
+     "description": "As today: both exist side by side, linked and marked 'possible duplicate'."
+    },
+    {
+     "label": "Block a second one",
+     "description": "The doctor must use the existing Case File or ask its owner."
+    }
+   ],
+   "why": "Today a second Case File of the same UHID and protocol is linked and noted as a possible duplicate (DESIGN V2 Phase 3 review, B11). Registrations that may be the same person stay 'listed for a person to link, never merged' (B2). Settled: no Case File without an owner.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R05-Q12",
+   "topic": "Create form",
+   "core": false,
+   "type": "decision",
+   "question": "Besides the patient and the cancer, what should the create form ask?",
+   "header": "Create form",
+   "multi": true,
+   "options": [
+    {
+     "label": "Next board date, pre-filled (Recommended)",
+     "description": "The next board session's date is filled in and changed with one tap; if not asked, it is set later."
+    },
+    {
+     "label": "Stage group, or 'not yet known'",
+     "description": "The doctor picks early, locally advanced or metastatic from the signed reports, or leaves it; until picked, the check shows records every stage group needs."
+    },
+    {
+     "label": "Fetch window, 12 months pre-filled",
+     "description": "How far back records are fetched; if not asked, the hospital default applies."
+    },
+    {
+     "label": "Hospital level, pre-filled",
+     "description": "Essential or Optimal for this Case File; if not asked, the hospital's level applies."
+    }
+   ],
+   "why": "Today the form asks protocol, NCG setting, hospital level, fetch window, department and board date (B2, J1). Owner: very simple, few clicks (notes screens). Anything not asked uses its default and can change on the Case File. The doctor picks the stage group; Vaidyx never works it out. How sessions are built is R10.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R05-Q13",
+   "topic": "Trigger",
+   "core": false,
+   "type": "decision",
+   "question": "Should Vaidyx suggest starting a Case File when the hospital system records something cancer-related?",
+   "header": "Trigger",
+   "multi": false,
+   "options": [
+    {
+     "label": "No, the doctor starts it (Recommended)",
+     "description": "Case Files begin only when a treating doctor decides; nothing is suggested."
+    },
+    {
+     "label": "Suggest from a tumour board order",
+     "description": "When the HIS holds a tumour board referral or order, the treating doctor sees 'Start a Case File?'."
+    },
+    {
+     "label": "Suggest from a cancer code too",
+     "description": "Also when the HIS records an ICD-10 cancer code (C00 to C97) on a visit; the doctor decides."
+    }
+   ],
+   "why": "Settled: Case Files are created only by treating doctors; a suggestion never creates one. Scope: a suggestion reads a code the hospital already recorded, never the meaning of a report. Today nothing is suggested (B2).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R05-Q14",
+   "topic": "Guideline sources",
+   "core": false,
+   "type": "resource",
+   "question": "May we download the five NCG 2019 guideline books we do not hold yet?",
+   "header": "NCG books",
+   "multi": false,
+   "options": [
+    {
+     "label": "Server downloads all five (Recommended)",
+     "description": "Fetched once from ncgindia.org (the server reached it before), filed in ncg_india and indexed for search; no checklist is built until the doctors validate it."
+    },
+    {
+     "label": "Only GI and Urological first",
+     "description": "The books for stomach, liver, gallbladder and prostate, the next cancers by Indian frequency."
+    },
+    {
+     "label": "I'll download them by hand",
+     "description": "You save them to the folder; we index them."
+    },
+    {
+     "label": "Skip for now",
+     "description": "New checklists wait; listed cancers stay 'no checklist yet'."
+    }
+   ],
+   "why": "T23 kept (new checklists by Indian frequency) needs an Indian source with Essential / Optimal / Optional tiers for each cancer (research.indiaSources, research.nextCancers). Oesophagus (Thoracic) and ovary (Gynaecological) books are already held.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": {
+    "item": "NCG Guidelines 2019: Gastrointestinal set (all parts except colorectal and rectal), Urological, Adult Haematolymphoid, Paediatric, Bone and Soft Tissue",
+    "source_url": "https://www.ncgindia.org/cancer-guidelines",
+    "target_folder": "/data/vaidyx/tb_resources/guidelines/ncg_india/",
+    "why": "Indian source for the next checklists: stomach, liver, gallbladder, prostate, bladder, lymphoma, leukaemia, myeloma, sarcoma and the paediatric cancers."
+   },
+   "status": "To ask"
+  }
+ ]
+}

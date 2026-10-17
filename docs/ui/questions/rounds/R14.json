@@ -1,0 +1,431 @@
+{
+ "round": 14,
+ "title": "Notifications",
+ "intro": "Who hears what, and how. Today notifications are in-app only (15 kinds, the bell): the coordinator had 536 unread, overdue never notifies and admins get none.",
+ "questions": [
+  {
+   "id": "R14-Q01",
+   "topic": "Channels",
+   "core": true,
+   "type": "decision",
+   "question": "Besides the in-app bell, which channels should Vaidyx use?",
+   "header": "Channels",
+   "multi": true,
+   "options": [
+    {
+     "label": "Phone web push (Recommended)",
+     "description": "Alerts on the phone's lock screen from the browser; needs HTTPS, and on iPhone the app must be added to the home screen."
+    },
+    {
+     "label": "Email from the hospital",
+     "description": "Sent through the hospital's mail server; needs its address and IT approval (the server sends no mail today)."
+    },
+    {
+     "label": "SMS",
+     "description": "Needs an SMS provider and DLT registration (India's sender and template rules), with a cost per message."
+    },
+    {
+     "label": "WhatsApp",
+     "description": "Needs a WhatsApp Business account; every message passes through Meta's servers."
+    }
+   ],
+   "why": "Today: in-app only; email only as a draft from the doctor's own mail (V2 sections 3 and 13). Treating doctors want notifications on the phone (atlas role needs). The server allows outbound HTTPS, so push, mail, SMS and WhatsApp gateways are reachable.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R14-Q02",
+   "topic": "Message content",
+   "core": true,
+   "type": "decision",
+   "question": "What may a message outside the app show about the patient?",
+   "header": "Message text",
+   "multi": false,
+   "options": [
+    {
+     "label": "No patient details (Recommended)",
+     "description": "Only the task and Case File number, for example '1 new request for Radiology'; details open after login."
+    },
+    {
+     "label": "UHID and task, no name",
+     "description": "A radiologist can find the study at once; the UHID leaves the hospital in the message."
+    },
+    {
+     "label": "Name, UHID and task",
+     "description": "Most useful at a glance; patient identity sits on phones and outside servers."
+    }
+   ],
+   "why": "Push, SMS, WhatsApp and email pass through outside servers (R14-Q01). Today the in-app texts carry the patient's name and UHID. Ties to R15 (data leaving the hospital).",
+   "depends_on": [
+    "R14-Q01"
+   ],
+   "skip_if": "Skip if R14-Q01 chose no channel outside the app.",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R14-Q03",
+   "topic": "Who hears: treating side",
+   "core": true,
+   "type": "decision",
+   "question": "Should treating-side notifications go to the Case File's own team or to the whole department?",
+   "header": "Addressee",
+   "multi": false,
+   "options": [
+    {
+     "label": "The Case File team (Recommended)",
+     "description": "The owner doctor and the residents added to that Case File are told; the department sees it only in its lists."
+    },
+    {
+     "label": "Whole department, as today",
+     "description": "Every doctor of the owning department hears every event of every Case File."
+    },
+    {
+     "label": "Team, copied to the head",
+     "description": "The team is told and the head of department gets a copy."
+    }
+   ],
+   "why": "Today notifications are addressed to a department (notify.py), one cause of the flood (U17). Owner's note on G04: the owner is the treating doctor. Settled: the treating doctor adds residents per Case File.",
+   "depends_on": [
+    "R06-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R14-Q04",
+   "topic": "Who hears: supporting side",
+   "core": false,
+   "type": "decision",
+   "question": "When a request reaches a supporting department, who gets the alert?",
+   "header": "Dept alerts",
+   "multi": false,
+   "options": [
+    {
+     "label": "Everyone, shows who took it (Recommended)",
+     "description": "All doctors of that department are told; once one acknowledges, the others see it is taken."
+    },
+    {
+     "label": "The report's signer, else everyone",
+     "description": "If the HIS names the doctor who signed the report, only that doctor is told."
+    },
+    {
+     "label": "The department head only",
+     "description": "The head passes it on; one person per department hears every request."
+    }
+   ],
+   "why": "Six supporting departments (settled). Today the department as a whole gets it (bell and inbox). I08 specialist confirmation, requested by the treating doctor, may name a person (R08).",
+   "depends_on": [
+    "R08-Q04"
+   ],
+   "skip_if": "Skip if R08-Q04 answered 'Department, first to take' (everyone in the department is then told).",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R14-Q05",
+   "topic": "Who hears: coordinator",
+   "core": false,
+   "type": "decision",
+   "question": "What should reach the coordinator as a notification?",
+   "header": "Coordinator",
+   "multi": false,
+   "options": [
+    {
+     "label": "Only what needs them (Recommended)",
+     "description": "Ready marks, late changes before the cut-off and amended values behind a decision; request traffic stays in the readiness list."
+    },
+    {
+     "label": "All events of listed Case Files",
+     "description": "Every event of the Case Files listed for a board date."
+    },
+    {
+     "label": "Everything, grouped",
+     "description": "As today, but grouped by Case File."
+    }
+   ],
+   "why": "U17: the coordinator had 536 unread. Today the coordinator gets case_ready, board_ready, decision_value_changed, the inform-the-patient task and rows addressed to it. The readiness list already shows request states (B15).",
+   "depends_on": [
+    "R10-Q09"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R14-Q06",
+   "topic": "Who hears: residents",
+   "core": false,
+   "type": "decision",
+   "question": "What should a resident on a Case File be told?",
+   "header": "Residents",
+   "multi": false,
+   "options": [
+    {
+     "label": "Same as the owner (Recommended)",
+     "description": "Requests answered, Done, re-fetch results and the decision, only for Case Files they were added to."
+    },
+    {
+     "label": "Only tasks given to them",
+     "description": "They hear only what the consultant assigns to them."
+    },
+    {
+     "label": "Nothing, they check the app",
+     "description": "The consultant hears everything; residents look in the app themselves."
+    }
+   ],
+   "why": "Settled: residents are part of the treating doctor's team per Case File, join with a code, have limited access and cannot sign. Residents usually chase reports (atlas resident role, Hartmann 2026). Their limits are set in R03.",
+   "depends_on": [
+    "R03 (resident limits)",
+    "R14-Q03"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Dropped",
+   "notes": "Dropped in validation (17 Oct): same as R06-Q14 (which events reach a resident)."
+  },
+  {
+   "id": "R14-Q07",
+   "topic": "Who hears: admins",
+   "core": false,
+   "type": "decision",
+   "question": "Should department and root admins get notifications?",
+   "header": "Admins",
+   "multi": false,
+   "options": [
+    {
+     "label": "Admin events only (Recommended)",
+     "description": "Department admin: account or join requests, a doctor's access ending; root admin: hospital system connection down. No patient details."
+    },
+    {
+     "label": "Also overdue counts",
+     "description": "The department admin also hears how many of its department's requests are overdue (counts only, no patients)."
+    },
+    {
+     "label": "No, as today",
+     "description": "Admins check their own screens."
+    }
+   ],
+   "why": "G05: admins are blind by design (no clinical access). How accounts and joins are created is R04 and R06.",
+   "depends_on": [
+    "R04-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R14-Q08",
+   "topic": "Who hears: board members",
+   "core": false,
+   "type": "decision",
+   "question": "What should board members be told before a session?",
+   "header": "Board alerts",
+   "multi": false,
+   "options": [
+    {
+     "label": "Agenda out, start reminder (Recommended)",
+     "description": "One message when the agenda is final, one 15 minutes before the start with the join code."
+    },
+    {
+     "label": "Start reminder only",
+     "description": "One message shortly before the meeting."
+    },
+    {
+     "label": "Nothing extra",
+     "description": "The join code message from R11 is all they get."
+    }
+   ],
+   "why": "Settled: members join from anywhere, phone too, with a six-digit code; how the code is sent is R11. Victoria framework: agenda out 48 hours before (I06 liked).",
+   "depends_on": [
+    "R11-Q04",
+    "R10-Q09"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R14-Q09",
+   "topic": "Overdue",
+   "core": false,
+   "type": "decision",
+   "question": "When a request passes its due date, should Vaidyx notify by itself?",
+   "header": "Overdue",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, department then owner (Recommended)",
+     "description": "The department is told on the due date; if still open next morning, the owner's team and the coordinator are told once."
+    },
+    {
+     "label": "Department only, daily",
+     "description": "The department is reminded each morning until it acts."
+    },
+    {
+     "label": "No, screens only",
+     "description": "As today: overdue appears only when a page is opened."
+    }
+   ],
+   "why": "K09: overdue never notifies; it is worked out only when a page is shown. Reminder timing and escalation are R08; this sets who is told.",
+   "depends_on": [
+    "R08 (due dates and reminders)"
+   ],
+   "skip_if": "Skip if R08 already set automatic overdue reminders and who gets them.",
+   "resource": null,
+   "status": "Dropped",
+   "notes": "Dropped in validation (17 Oct): same as R08-Q08 and R08-Q09 (overdue reminders and escalation)."
+  },
+  {
+   "id": "R14-Q10",
+   "topic": "Digest",
+   "core": false,
+   "type": "decision",
+   "question": "Should people get a daily summary instead of a message for every event?",
+   "header": "Digest",
+   "multi": false,
+   "options": [
+    {
+     "label": "Morning digest plus urgent (Recommended)",
+     "description": "One message at 08:00 IST with everything open; only urgent items (decision recorded, session starting) come at once."
+    },
+    {
+     "label": "Every event at once",
+     "description": "Each event is its own message, as the bell does today."
+    },
+    {
+     "label": "Digest only",
+     "description": "One message a day, nothing in between."
+    }
+   ],
+   "why": "U17 flood; I13 (grouped notifications and a daily digest). A digest cuts outside messages without hiding anything from the bell.",
+   "depends_on": [
+    "R14-Q01"
+   ],
+   "skip_if": "Skip if R14-Q01 chose no channel outside the app.",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R14-Q11",
+   "topic": "Bell grouping",
+   "core": false,
+   "type": "decision",
+   "question": "How should the in-app bell group notifications?",
+   "header": "Bell list",
+   "multi": false,
+   "options": [
+    {
+     "label": "By Case File (Recommended)",
+     "description": "One line per Case File with its newest event and a count; open it to see all, mark all read per line."
+    },
+    {
+     "label": "By kind",
+     "description": "Requests, Done, ready marks and decisions in separate groups."
+    },
+    {
+     "label": "Flat list with filters",
+     "description": "Newest first as today, with filters by kind and Case File."
+    }
+   ],
+   "why": "U17: 536 unread, no grouping, filter or digest; I13. How the bell looks is R17; this sets the rule.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R14-Q12",
+   "topic": "Quiet hours",
+   "core": false,
+   "type": "decision",
+   "question": "Should messages outside the app pause at night?",
+   "header": "Quiet hours",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, 21:00 to 07:00 IST (Recommended)",
+     "description": "Held and sent in the morning; each person can change the hours."
+    },
+    {
+     "label": "No quiet hours",
+     "description": "Messages go out whenever the event happens."
+    },
+    {
+     "label": "Each person sets their own",
+     "description": "No default; nothing pauses until a person sets it."
+    }
+   ],
+   "why": "Nothing in Vaidyx is an emergency alert, so board work can wait for the morning. Applies to push, SMS, WhatsApp and email, never to the in-app bell.",
+   "depends_on": [
+    "R14-Q01"
+   ],
+   "skip_if": "Skip if R14-Q01 chose no channel outside the app.",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R14-Q13",
+   "topic": "Re-fetch from the notification",
+   "core": false,
+   "type": "decision",
+   "question": "You liked I15, 'Re-fetch now' inside the Done notification. What should the tap do?",
+   "header": "Re-fetch",
+   "multi": false,
+   "options": [
+    {
+     "label": "Re-fetch, show result there (Recommended)",
+     "description": "Pulls the changed records at once and says in the notification what closed and what is still missing."
+    },
+    {
+     "label": "Open Case File, then re-fetch",
+     "description": "The tap opens the Case File and runs the re-fetch there."
+    },
+    {
+     "label": "Open the Case File only",
+     "description": "The doctor looks first and presses Re-fetch themselves."
+    }
+   ],
+   "why": "G21: re-fetch is manual and the owner must remember it after Done; I15 liked. Re-fetch pulls only changed versions, and requests close themselves when the record arrives final and signed (B8).",
+   "depends_on": [
+    "R08-Q05"
+   ],
+   "skip_if": "Ask only if R08-Q05 answered 'Manual, one tap in notice'.",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R14-Q14",
+   "topic": "Personal settings",
+   "core": false,
+   "type": "decision",
+   "question": "Can each person switch off kinds of messages?",
+   "header": "Mute",
+   "multi": false,
+   "options": [
+    {
+     "label": "Hospital defaults, people mute some (Recommended)",
+     "description": "Root admin sets defaults per role; a person may mute optional kinds, never requests to their department."
+    },
+    {
+     "label": "Fixed by the hospital",
+     "description": "Nobody changes their own settings."
+    },
+    {
+     "label": "Each person chooses all",
+     "description": "Anyone can turn any kind off, requests included."
+    }
+   ],
+   "why": "Per-role defaults keep set-up simple; a must-hear list (requests, decisions on one's own Case Files) stops missed work. Settings screens are R04 and R17.",
+   "depends_on": [
+    "R14-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  }
+ ]
+}

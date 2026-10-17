@@ -1,0 +1,433 @@
+{
+ "round": 17,
+ "title": "Screens per role (UI)",
+ "intro": "What each person sees first and how the pages are arranged. Asked after every other round, so the answers of rounds 1 to 16 shape these choices.",
+ "questions": [
+  {
+   "id": "R17-Q01",
+   "topic": "Treating doctor's home",
+   "core": true,
+   "type": "decision",
+   "question": "What should a treating doctor see first after logging in?",
+   "header": "Doctor home",
+   "multi": false,
+   "options": [
+    {
+     "label": "One to-do list across patients (Recommended)",
+     "description": "Each row is one next step for one Case File (send 2 requests, re-fetch, approve a resident's draft) with its button; nothing else above it."
+    },
+    {
+     "label": "My Case Files with status",
+     "description": "A list of patients with one status each; the doctor opens one to see what to do."
+    },
+    {
+     "label": "Next board date first",
+     "description": "The coming board with my Case Files and what each still needs."
+    },
+    {
+     "label": "Search box first",
+     "description": "A big UHID or name box, for doctors who come with one patient in mind."
+    }
+   ],
+   "why": "Your note on screens: think as a treating doctor, very simple, few clicks. Today the home stacks Case Files, requests, referrals and notifications in sections (DESIGN 7.1, U01). I16 liked; research: 55% of preparation time goes on the system itself (Hartmann 2026).",
+   "depends_on": [
+    "R01-Q05"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R17-Q02",
+   "topic": "Case File page",
+   "core": true,
+   "type": "decision",
+   "question": "How should the Case File page be organised instead of today's 7 tabs?",
+   "header": "Case File",
+   "multi": false,
+   "options": [
+    {
+     "label": "One page, next step on top (Recommended)",
+     "description": "Header, next-step card, what is missing, records, summary in one scroll; Ask, specialty briefs and audit under a More menu; a loop simply brings its step back to the top."
+    },
+    {
+     "label": "Numbered steps (checklist)",
+     "description": "Steps 1 to 5 with ticks; clear the first time, but loops (a new report, a referral) reopen earlier steps."
+    },
+    {
+     "label": "Three or four tabs",
+     "description": "For example To do, Records, Summary, Board; less scrolling, one more tap to switch."
+    }
+   ],
+   "why": "U16 (seven tabs, jargon on every row), U02 (Case File about 9,500 px tall on a phone), U09 (scroll lost after each action). Your note: the workflow is not linear, it has loops. T16 kept: restructure around what the doctor must do.",
+   "depends_on": [
+    "R07-Q04"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R17-Q03",
+   "topic": "Phone-first roles",
+   "core": false,
+   "type": "decision",
+   "question": "Supporting doctors are already phone-first: which other roles should be designed phone-first?",
+   "header": "Phone-first",
+   "multi": true,
+   "options": [
+    {
+     "label": "Board members joining by code (Recommended)",
+     "description": "Join, current case, call button and the closing pop-up are laid out for a phone first."
+    },
+    {
+     "label": "Residents / PG / fellows",
+     "description": "Their Case File work (collecting reports, drafts) is laid out for a phone first."
+    },
+    {
+     "label": "Treating doctors",
+     "description": "Home and next steps phone-first; the full Case File stays best on a desktop."
+    },
+    {
+     "label": "MDT Coordinator",
+     "description": "Agenda and chasing on the phone; recording the decision stays on a laptop."
+    }
+   ],
+   "why": "T17 and I12 settled phone-first for supporting doctors; settled: board members join from anywhere, phone too, with a six-digit code and a call button. Atlas devices: treating doctors OPD desktop and phone, residents ward desktop and phone, coordinator desktop and room screen. What phone members can do comes from R12-Q14.",
+   "depends_on": [
+    "R12-Q14"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R17-Q04",
+   "topic": "Next-step card",
+   "core": false,
+   "type": "decision",
+   "question": "When the next-step card says what to do, what should its button do?",
+   "header": "Next step",
+   "multi": false,
+   "options": [
+    {
+     "label": "Finish it in a small panel (Recommended)",
+     "description": "For example 'Send 2 requests' opens both drafts in one panel with one Send; the doctor stays on the page."
+    },
+    {
+     "label": "Jump to the right section",
+     "description": "Scrolls to the place on the page where the doctor does it."
+    },
+    {
+     "label": "Show the step only",
+     "description": "One line of text, no button; the doctor finds the control."
+    }
+   ],
+   "why": "I16 liked: one line saying what to do now. One-panel actions cut clicks (R01 targets). Steps a resident may not do become a send-for-sign-off (R17-Q09).",
+   "depends_on": [
+    "R01-Q05"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R17-Q05",
+   "topic": "Lists and search",
+   "core": false,
+   "type": "decision",
+   "question": "Below one search box (UHID, name, IP / OP No.), how should the treating doctor's Case Files be grouped?",
+   "header": "Case list",
+   "multi": false,
+   "options": [
+    {
+     "label": "By who must act (Recommended)",
+     "description": "Needs me, waiting on a department, ready for the board, done; the top group is what to do today."
+    },
+    {
+     "label": "By board date",
+     "description": "Upcoming boards nearest first, then Case Files without a date."
+    },
+    {
+     "label": "One table with filters",
+     "description": "Sortable columns and filters; powerful, more to learn."
+    }
+   ],
+   "why": "U18: no search, names written two ways. Today the list is grouped owned, referred, participating and only asked about (DESIGN 7.1 M3). The coordinator's triage lists (I05) are a separate view (R17-Q11).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R17-Q06",
+   "topic": "Navigation",
+   "core": false,
+   "type": "decision",
+   "question": "How should people move between the main areas of the app?",
+   "header": "Navigation",
+   "multi": false,
+   "options": [
+    {
+     "label": "Phone bottom bar, desktop top bar (Recommended)",
+     "description": "3 to 5 items per role (for example Home, Case Files, Meetings, Alerts); rare items such as admin and help under the profile menu."
+    },
+    {
+     "label": "Left menu plus phone bar",
+     "description": "A left menu on desktop with room for more items, taking width from the Case File; bottom bar on phones."
+    },
+    {
+     "label": "Home only, no menu",
+     "description": "Everything starts from home cards; simplest, but more back taps."
+    }
+   ],
+   "why": "Today up to 9 buttons sit in the top bar (UI_PLAN A1, A10) and the bar scrolls sideways on phones. Each role sees only its own items (R03).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R17-Q07",
+   "topic": "Switching Case Files",
+   "core": false,
+   "type": "decision",
+   "question": "On a desktop, should a list of Case Files stay beside the open Case File?",
+   "header": "Side list",
+   "multi": false,
+   "options": [
+    {
+     "label": "No, a quick switcher instead (Recommended)",
+     "description": "The Case File uses the full width; a search box in the top bar jumps to any patient by UHID or name."
+    },
+    {
+     "label": "Yes, a narrow list on desktop",
+     "description": "Today's 300 px side list; quick to hop between patients, less room for records."
+    },
+    {
+     "label": "Yes, and a drawer on phones",
+     "description": "The same list everywhere; on phones it slides in from the side."
+    }
+   ],
+   "why": "Today the 300 px side list sits beside the Case File on desktop and hides behind a button on phones (U02, UI_PLAN A10).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R17-Q08",
+   "topic": "Timeline",
+   "core": false,
+   "type": "decision",
+   "question": "Should the Case File show a dated timeline of the patient's records?",
+   "header": "Timeline",
+   "multi": false,
+   "options": [
+    {
+     "label": "Compact strip above records (Recommended)",
+     "description": "Visits, scans, biopsy and reports as dots on one dated line; tap a dot to open that record."
+    },
+    {
+     "label": "As a separate view",
+     "description": "A full timeline one tap away; the main page stays shorter."
+    },
+    {
+     "label": "No timeline",
+     "description": "Records stay grouped by OP visit and IP admission, as today."
+    }
+   ],
+   "why": "From Dr Minmini's Tempus link (W6): a dated patient timeline is an idea worth borrowing for the screens. Records are already grouped by visit and admission, and a timeline exists on the Board tab (A6). Dates and record names only, no interpretation.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R17-Q09",
+   "topic": "Resident's screens",
+   "core": false,
+   "type": "decision",
+   "question": "Where a resident cannot act (sign, waive, mark ready), what should the screen show?",
+   "header": "Resident",
+   "multi": false,
+   "options": [
+    {
+     "label": "'Send for sign-off' button (Recommended)",
+     "description": "The resident prepares it and sends it; the consultant approves with one tap from their to-do list; the audit shows both names."
+    },
+    {
+     "label": "Greyed button with a reason",
+     "description": "Visible but disabled, 'Only Dr X can sign'; the resident tells the consultant outside the app."
+    },
+    {
+     "label": "Hidden",
+     "description": "The resident sees only what they may do; cleaner, but they may not know the step exists."
+    }
+   ],
+   "why": "Settled: residents join a Case File with a code, have role-based access and cannot sign, 'same as PACS systems'. I03: drafts approved by the consultant, audit shows both names. Which actions are blocked comes from R03 (resident limits) and R06 (team).",
+   "depends_on": [
+    "R03-Q04",
+    "R06-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R17-Q10",
+   "topic": "Supporting doctor on the phone",
+   "core": false,
+   "type": "decision",
+   "question": "When a supporting doctor taps a request alert on the phone, what should open?",
+   "header": "Request tap",
+   "multi": false,
+   "options": [
+    {
+     "label": "The request card itself (Recommended)",
+     "description": "Patient IDs, accession No., what is missing, due date, a link into the RIS / PACS (I14) and the answer button on one screen."
+    },
+    {
+     "label": "The department inbox",
+     "description": "The list of all open requests, with the tapped one highlighted."
+    },
+    {
+     "label": "The limited Case File view",
+     "description": "The patient's page showing only the items asked about."
+    }
+   ],
+   "why": "I12 (phone-first supporting views) and I14 (deep link) liked; U02: the supporting home is about 7,000 px tall on a phone; J2: two systems, no link. The answer steps come from R08 (supporting flow); the alert channel from R14-Q01.",
+   "depends_on": [
+    "R08-Q06",
+    "R14-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R17-Q11",
+   "topic": "Coordinator's agenda board",
+   "core": false,
+   "type": "decision",
+   "question": "How should the coordinator see the Case Files of the next board?",
+   "header": "Agenda",
+   "multi": false,
+   "options": [
+    {
+     "label": "Columns by triage list (Recommended)",
+     "description": "For discussion, for noting and not ready side by side; each card shows the owner, what is missing and a Remind button."
+    },
+    {
+     "label": "One table with readiness",
+     "description": "Rows marked ready, on track, at risk or blocked with chase buttons; today's view, tidied."
+    },
+    {
+     "label": "Calendar, then the day's list",
+     "description": "Board dates (per site board) on a calendar; a date opens its agenda."
+    }
+   ],
+   "why": "I05 (triage lists) and I06 (cut-off) liked; T13 site boards kept; G22 to G24. Which boards exist and who places a Case File in a triage list come from R10-Q01 and R10-Q11.",
+   "depends_on": [
+    "R10-Q01",
+    "R10-Q11"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R17-Q12",
+   "topic": "Room screen layout",
+   "core": true,
+   "type": "decision",
+   "question": "How should the meeting-room screen be laid out for the current case?",
+   "header": "Room screen",
+   "multi": false,
+   "options": [
+    {
+     "label": "Case sheet left, record right (Recommended)",
+     "description": "Left: patient line, board question, key values with sources and gaps in large type; right: the record or image being opened; a thin agenda and timer strip at the bottom."
+    },
+    {
+     "label": "Full-screen slides",
+     "description": "One section per slide, like the NCG Virtual Tumour Board template; clean, but a record opens as a separate step."
+    },
+    {
+     "label": "One large scrolling page",
+     "description": "The presenter scrolls a big-type version of the Case File."
+    }
+   ],
+   "why": "I01 presenter mode liked; G25: no presenter view today, and the room page turns into one long column below 1100 px; research: 2 to 6 minutes per case. What the view holds and shows first comes from R12-Q04 and R12-Q05; the timer from R12-Q07.",
+   "depends_on": [
+    "R12-Q04",
+    "R12-Q05",
+    "R12-Q07"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R17-Q13",
+   "topic": "Recording during the meeting",
+   "core": false,
+   "type": "decision",
+   "question": "Where should the coordinator type the decision while the room screen shows the case?",
+   "header": "Recording",
+   "multi": false,
+   "options": [
+    {
+     "label": "Own laptop, text shown live (Recommended)",
+     "description": "A control view on the coordinator's laptop; the typed decision appears in a strip on the room screen so the board can read it back before saving."
+    },
+    {
+     "label": "Own laptop, shown once saved",
+     "description": "The room sees the decision only after it is saved."
+    },
+    {
+     "label": "On the room screen itself",
+     "description": "One screen for everything; the case is partly covered while typing."
+    }
+   ],
+   "why": "Settled: the coordinator records the decision. Victoria framework: a scribe records in real time and may ask the chair to slow down. Who drives the shared screen and how the wording is confirmed come from R12-Q01 and R13-Q01.",
+   "depends_on": [
+    "R12-Q01",
+    "R13-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R17-Q14",
+   "topic": "Admin screens",
+   "core": false,
+   "type": "decision",
+   "question": "How should the root admin's hospital set-up look?",
+   "header": "Admin setup",
+   "multi": false,
+   "options": [
+    {
+     "label": "Short guided steps, then settings (Recommended)",
+     "description": "About 5 steps once (hospital, departments, people, hospital system, board lists), each saved as you go; later a plain settings page."
+    },
+    {
+     "label": "One settings page in sections",
+     "description": "Like today but with one Save; quick for experts, hard the first time."
+    },
+    {
+     "label": "Set up by the Vaidyx team",
+     "description": "We fill it from a form the hospital sends; admins only manage people."
+    }
+   ],
+   "why": "T20 kept: set-up as a short guided flow, department doctors list with confirmation and undo. J4: one long page of separate Save buttons; K07: the live app was never set up. What set-up asks comes from R04 (root admin set-up).",
+   "depends_on": [
+    "R04-Q12"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  }
+ ]
+}

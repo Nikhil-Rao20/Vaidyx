@@ -1,0 +1,437 @@
+{
+ "round": 16,
+ "title": "Delivery",
+ "intro": "How the new interface is built, in what order, for which demo, and how the doctors try it. Screens and look come after, in rounds 17 and 18.",
+ "questions": [
+  {
+   "id": "R16-Q01",
+   "topic": "Frontend technology",
+   "core": true,
+   "type": "decision",
+   "question": "Which technology should the new frontend be built with?",
+   "header": "Frontend",
+   "multi": false,
+   "options": [
+    {
+     "label": "Preact with a build step (Recommended)",
+     "description": "Screens become small reusable parts (React-like, about 3 KB) bundled into local files under /tb; no CDN, today's strict script rules (CSP) stay; Node.js needed only to build."
+    },
+    {
+     "label": "Svelte 5 with a build step",
+     "description": "Smallest files and quick on cheap phones; fewer developers know it, so outside help is harder to find."
+    },
+    {
+     "label": "htmx with server-built pages",
+     "description": "FastAPI sends ready HTML pages with little JavaScript; the live room screen and offline use get harder."
+    },
+    {
+     "label": "Vanilla JS split into modules",
+     "description": "No build step and no new tools; the 376 KB file is split per screen, but every part is still hand-made."
+    }
+   ],
+   "why": "Sets the base for every screen (I20, U21). Facts: the UI is one 376 KB vanilla JS file served at /tb with a per-request CSP nonce (core/middleware.py), fonts self-hosted, Playwright tests in tumour_board/eval/ui_test.py; Node.js is not installed on the H200 today (a user-space install under /data/vaidyx/tools is enough). Research Oct 2026: Preact is about 3 KB with the React API; Svelte 5 compiles to the smallest bundles; htmx 4.0 shipped 28 Aug 2026 with breaking changes. All four can run with no CDN at run time.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R16-Q02",
+   "topic": "Web, installable or native",
+   "core": true,
+   "type": "decision",
+   "question": "Should doctors use Vaidyx-TB as a website, an installable web app (PWA), or a native phone app?",
+   "header": "App type",
+   "multi": false,
+   "options": [
+    {
+     "label": "Installable web app (PWA) (Recommended)",
+     "description": "One code base for desktop, room screen and phones; Android installs it from Chrome with push alerts; iPhones must use Add to Home Screen first."
+    },
+    {
+     "label": "Website only",
+     "description": "Nothing to install; no push alerts on a locked phone, only in-app, email or SMS alerts."
+    },
+    {
+     "label": "Web app now, Android app later",
+     "description": "PWA first, then a Play Store wrapper (for example Capacitor) only if hospitals ask for a store app."
+    },
+    {
+     "label": "Native Android and iOS apps",
+     "description": "Best phone features, but two more code bases, store reviews and slower changes."
+    }
+   ],
+   "why": "Decides how phones are served: supporting doctors (I12, T17), board members joining by code from anywhere, phone push alerts (R14-Q01). Research 2026: Android is about 92 to 93% of Indian mobile web traffic (StatCounter, May to July 2026); on iPhones web push works only for apps added to the Home Screen (iOS 16.4 and later). A PWA needs HTTPS and a fixed address (R16-Q09).",
+   "depends_on": [
+    "R14-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R16-Q03",
+   "topic": "Devices and browsers",
+   "core": false,
+   "type": "decision",
+   "question": "Which devices and browsers must the first release be tested on?",
+   "header": "Devices",
+   "multi": true,
+   "options": [
+    {
+     "label": "Current Chrome, Edge, Android (Recommended)",
+     "description": "Laptops, OPD desktops and Android phones on browsers from the last two years; covers most Indian users."
+    },
+    {
+     "label": "iPhone and iPad Safari",
+     "description": "Adds Safari checks at each checkpoint; needed if consultants or board members use iPhones."
+    },
+    {
+     "label": "Old hospital PCs",
+     "description": "Windows 7 or 8.1 machines stuck on Chrome 109, common in government hospitals; limits newer browser features."
+    },
+    {
+     "label": "Room TV or projector",
+     "description": "A 1080p screen through the room computer or the TV's own browser, read from across the room."
+    }
+   ],
+   "why": "Sets the test matrix (T22, kept) and how modern the code may be. ui_test.py runs only headless Chromium at 1600, 1024 and 390 px today. Government medical colleges often run old desktops; the room screen is its own target (I01, G25, R11-Q11).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R16-Q04",
+   "topic": "Offline tolerance",
+   "core": false,
+   "type": "decision",
+   "question": "What should still work when the hospital network drops for a few minutes?",
+   "header": "Offline",
+   "multi": false,
+   "options": [
+    {
+     "label": "App opens, typed text kept (Recommended)",
+     "description": "The app opens, says it is offline, and keeps unsent typing (a request, a decision) in the open page until the network returns; no patient data saved on the device."
+    },
+    {
+     "label": "Also a read-only copy",
+     "description": "Recently opened Case Files stay readable offline, which means patient data is stored on the phone or PC."
+    },
+    {
+     "label": "Nothing offline",
+     "description": "A plain 'no connection' page; anything typed but not sent is lost."
+    }
+   ],
+   "why": "Hospital Wi-Fi and 4G drop often; losing a typed decision in the room is costly (U08: errors and double submits today). Keeping patient data on a device is a privacy choice, so the second option needs a yes in R15 (patient data on phones).",
+   "depends_on": [
+    "R15-Q02"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R16-Q05",
+   "topic": "Old UI during the rebuild",
+   "core": false,
+   "type": "decision",
+   "question": "Where should the new interface live while the old one is still in use?",
+   "header": "Old UI",
+   "multi": false,
+   "options": [
+    {
+     "label": "Side by side, new path (Recommended)",
+     "description": "New UI at /tb/new on the same API and data; old /tb untouched except blocking bugs; switch when tests pass and you say go."
+    },
+    {
+     "label": "Replace screen by screen in /tb",
+     "description": "Users see a mix of old and new screens during the rebuild."
+    },
+    {
+     "label": "Switch all at once",
+     "description": "Nothing new is visible until the whole new UI is complete."
+    }
+   ],
+   "why": "Keeps a working demo at all times. Both UIs call the same /api/tb routes; the old ui_test.py keeps guarding /tb while the new tests grow with the new screens (T22).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R16-Q06",
+   "topic": "Build order",
+   "core": true,
+   "type": "decision",
+   "question": "After the shared design base (T15), which role's screens should be rebuilt first?",
+   "header": "Build order",
+   "multi": false,
+   "options": [
+    {
+     "label": "Treating doctor first (Recommended)",
+     "description": "Home, Case File and requests first (T16), then supporting phone views (T17), coordinator and room (T18), admin last (T20)."
+    },
+    {
+     "label": "The meeting first",
+     "description": "Six-digit join, room screen and closing pop-up first; the treating side keeps the old screens longer."
+    },
+    {
+     "label": "Thin slice of every role",
+     "description": "One simple screen per role for the whole demo story first, then each is deepened."
+    },
+    {
+     "label": "Supporting doctor first",
+     "description": "Smallest set (inbox, request, Done) to prove the new look quickly."
+    }
+   ],
+   "why": "Plan PH3 puts the design base T15 before T16 to T20; your note on screens says today's UI fails the treating doctor. The answers of rounds 5 to 13 feed the screens in this order.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R16-Q07",
+   "topic": "Demo target",
+   "core": false,
+   "type": "decision",
+   "question": "Which event is the first deadline for the new interface?",
+   "header": "Demo target",
+   "multi": false,
+   "options": [
+    {
+     "label": "Healthathon 2026 next round (Recommended)",
+     "description": "Planning works back from that round's date; the must-have list (R16-Q08) is sized to it."
+    },
+    {
+     "label": "Doctors' walkthrough at TANUH",
+     "description": "No outside deadline; Dr Minmini and Dr Usha review when the main screens are ready."
+    },
+    {
+     "label": "A hospital pilot",
+     "description": "Real users in one hospital; needs real logins, real HIS access and the privacy answers of R15 first."
+    },
+    {
+     "label": "No fixed event",
+     "description": "Quality first; screens are released one checkpoint at a time."
+    }
+   ],
+   "why": "Sets the time box. The project came from Healthathon 2026 (Cancer Care track, Team TANUH, IISc); the Round 1 submission is dated 1 Oct 2026 and we hold no date for the next round. If you know the date, add it in Other.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R16-Q08",
+   "topic": "Must-have for the demo",
+   "core": false,
+   "type": "decision",
+   "question": "If time runs short before that event, what must be in the new interface?",
+   "header": "Must-have",
+   "multi": false,
+   "options": [
+    {
+     "label": "The demo story end to end (Recommended)",
+     "description": "The six DEMO_V2 steps (create, request, sign, re-fetch, meeting, decision) in the new UI; other screens stay old."
+    },
+    {
+     "label": "Treating doctor and meeting only",
+     "description": "The doctor's before-the-board screens plus join by code and the room screen; supporting and admin stay old."
+    },
+    {
+     "label": "Everything, or move the date",
+     "description": "No mix of old and new screens in the demo."
+    }
+   ],
+   "why": "Lets us cut safely. DEMO_V2.md is today's six-step story on the mock hospital (32 checks). A mix of old and new screens is possible only if both run side by side (R16-Q05).",
+   "depends_on": [
+    "R16-Q07",
+    "R16-Q05"
+   ],
+   "skip_if": "Skip if R16-Q07 answered 'No fixed event'.",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R16-Q09",
+   "topic": "Public demo address",
+   "core": false,
+   "type": "decision",
+   "question": "Should the public demo link get a fixed address?",
+   "header": "Demo link",
+   "multi": false,
+   "options": [
+    {
+     "label": "Fixed address via named tunnel (Recommended)",
+     "description": "A free Cloudflare account plus a domain we own; bookmarks and installed apps keep working across restarts."
+    },
+    {
+     "label": "Keep the quick tunnel",
+     "description": "Free and no account, but a new random trycloudflare.com address after each restart breaks bookmarks and installed apps."
+    },
+    {
+     "label": "ngrok free static domain",
+     "description": "One fixed free address, but visitors see an ngrok warning page first."
+    }
+   ],
+   "why": "The public demo (~/vaidyx/public_demo) is a separate synthetic-only instance on :7100 behind a front gate; the internal :7000 is never tunnelled. An installed web app (R16-Q02) and the microphone (audio research: needs HTTPS) need a stable HTTPS address. A domain costs a small yearly fee.",
+   "depends_on": [
+    "R16-Q02"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R16-Q10",
+   "topic": "Public demo content",
+   "core": false,
+   "type": "decision",
+   "question": "What should the public demo link show during the rebuild?",
+   "header": "Demo shows",
+   "multi": false,
+   "options": [
+    {
+     "label": "New UI at each checkpoint (Recommended)",
+     "description": "Refreshed after each approved checkpoint, synthetic data only, so the doctors always test the latest."
+    },
+    {
+     "label": "Only finished milestones",
+     "description": "Updated when a whole role is done; testers see fewer half-built screens."
+    },
+    {
+     "label": "Stay on V1 until done",
+     "description": "Nothing new is shown outside IISc until the switch."
+    }
+   ],
+   "why": "README: the public instance still runs V1 (plan section 11 chose V2 after item 8.1, left open for Eswar). Doctors' phones can reach only the public link, so testing on their own phones (R16-Q14) needs it.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R16-Q11",
+   "topic": "Mock-ups first",
+   "core": false,
+   "type": "decision",
+   "question": "Should each role's screens be shown as clickable mock-ups before they are coded?",
+   "header": "Mock-ups",
+   "multi": false,
+   "options": [
+    {
+     "label": "Mock-ups in the atlas page (Recommended)",
+     "description": "Static HTML pictures at desktop and phone width on the :7150 atlas, with your Keep / Change marks in notes.json; code starts after your go."
+    },
+    {
+     "label": "Build directly on the app",
+     "description": "Real screens sooner; changes after review cost more."
+    },
+    {
+     "label": "Design in Figma first",
+     "description": "Polished pictures with comments; needs a Figma account for you and the doctors."
+    }
+   ],
+   "why": "You review through the workflow atlas today (notes.json). Mock-ups make the rule 'confirm every decision first' cheap for screens.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R16-Q12",
+   "topic": "Doctors' first look",
+   "core": false,
+   "type": "decision",
+   "question": "When should Dr Minmini and Dr Usha first see the new interface?",
+   "header": "First look",
+   "multi": false,
+   "options": [
+    {
+     "label": "At the mock-up stage (Recommended)",
+     "description": "They react to pictures of the treating and supporting screens before code, when changes are cheap."
+    },
+    {
+     "label": "After treating doctor screens work",
+     "description": "They try real screens on synthetic data; fewer but more concrete comments."
+    },
+    {
+     "label": "Only when the whole flow works",
+     "description": "One review at the end; late changes are expensive."
+    }
+   ],
+   "why": "Plan rule: clinical content is confirmed by the doctors before it is built. If R16-Q11 is 'Build directly', the first option means screenshots instead of mock-ups.",
+   "depends_on": [
+    "R16-Q11"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R16-Q13",
+   "topic": "Who tests",
+   "core": false,
+   "type": "decision",
+   "question": "Both advisers are from supporting departments: who should test the treating doctor's screens?",
+   "header": "Testers",
+   "multi": false,
+   "options": [
+    {
+     "label": "A consultant they bring (Recommended)",
+     "description": "Dr Minmini and Dr Usha invite one oncologist or surgeon, plus a PG resident, for a short session."
+    },
+    {
+     "label": "The advisers role-play it",
+     "description": "Quick and no new people; their view stays the supporting side's."
+    },
+    {
+     "label": "Team members role-play it",
+     "description": "Fastest; misses real clinical habits."
+    },
+    {
+     "label": "Find one via NCG or mentors",
+     "description": "An outside clinician; takes longer to arrange."
+    }
+   ],
+   "why": "The rebuild is judged from the treating doctor's side (your note on screens), but Dr Minmini is Radiology and Dr Usha Biochemistry. Residents do much of the preparation (I03, research: 39% to 72% of preparation hours in US data), so a PG tester helps too.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R16-Q14",
+   "topic": "Test format",
+   "core": false,
+   "type": "decision",
+   "question": "How should the doctors try the screens?",
+   "header": "Test format",
+   "multi": false,
+   "options": [
+    {
+     "label": "Task sessions on own devices (Recommended)",
+     "description": "20 to 30 minutes, 4 or 5 tasks (create a Case File, answer a request) on their own phone and laptop via the public link, thinking aloud while we note stumbles."
+    },
+    {
+     "label": "In person at TANUH",
+     "description": "We bring a laptop and a phone; easy to watch, but not their own devices."
+    },
+    {
+     "label": "Demo video, written feedback",
+     "description": "Least of their time; we do not see where they get stuck."
+    }
+   ],
+   "why": "Hartmann 2026 (think-aloud) found 13 minutes and about 25 program switches per case: watching real tasks finds such friction. Their phones can reach only the public synthetic link.",
+   "depends_on": [
+    "R16-Q10",
+    "R16-Q12"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  }
+ ]
+}

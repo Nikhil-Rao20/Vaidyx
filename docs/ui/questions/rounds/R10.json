@@ -1,0 +1,442 @@
+{
+ "round": 10,
+ "title": "Agenda and scheduling",
+ "intro": "How Case Files get onto a board meeting: site boards and their weekly slots, the ready mark, the cut-off and late cases, triage lists and chasing. Today the owner marks ready and the coordinator builds each session by hand.",
+ "questions": [
+  {
+   "id": "R10-Q01",
+   "topic": "Site boards",
+   "core": true,
+   "type": "decision",
+   "question": "How should the hospital's boards be set up (one general board, or separate site boards such as Breast or Head and Neck)?",
+   "header": "Board types",
+   "multi": false,
+   "options": [
+    {
+     "label": "Admin list, site defaults (Recommended)",
+     "description": "The root admin ticks boards from a default list (General, Head and Neck, Breast, Gynaecology, Thoracic, GI, Uro, Paediatric, CUP) and can add or rename."
+    },
+    {
+     "label": "One general board only",
+     "description": "Every Case File goes to the same board; simplest; site boards can be switched on later."
+    },
+    {
+     "label": "Fixed list, no edits",
+     "description": "The same site boards in every hospital; no set-up, but a hospital cannot match its own boards."
+    }
+   ],
+   "why": "T13 kept, G34, I21. Today a session is only a date and a title. Research: 28.5% of Indian hospitals with a board run several site boards (head and neck, gynaecology, breast, uro-oncology most often); Tata Memorial works in 11 Disease Management Groups.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R10-Q02",
+   "topic": "Site boards",
+   "core": false,
+   "type": "decision",
+   "question": "How should a Case File reach the right board?",
+   "header": "Board pick",
+   "multi": false,
+   "options": [
+    {
+     "label": "From the cancer, changeable (Recommended)",
+     "description": "The cancer picked at creation chooses the board (breast to Breast, CUP to CUP or General); the treating doctor can move it."
+    },
+    {
+     "label": "Treating doctor picks",
+     "description": "No default; the doctor chooses the board each time, one more choice when marking ready."
+    },
+    {
+     "label": "Coordinator places it",
+     "description": "The doctor only marks ready; the coordinator decides which board takes it."
+    }
+   ],
+   "why": "T13 ('Case Files of that group are its candidates'), I21. The cancer picker groups (T07, R05) already follow organ systems, so the board can come from them.",
+   "depends_on": [
+    "R10-Q01"
+   ],
+   "skip_if": "Skip if R10-Q01 answered 'One general board only'.",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R10-Q03",
+   "topic": "Recurring schedule",
+   "core": false,
+   "type": "decision",
+   "question": "Should each board have a fixed weekly slot (day, time, room) that creates its meetings by itself?",
+   "header": "Schedule",
+   "multi": false,
+   "options": [
+    {
+     "label": "Fixed slot, auto meetings (Recommended)",
+     "description": "Set once; Vaidyx keeps the next few meetings ready; the coordinator can cancel or move a single one."
+    },
+    {
+     "label": "Fixed slot, coordinator confirms",
+     "description": "The slot suggests the next date; a meeting exists only after the coordinator creates it."
+    },
+    {
+     "label": "No slots, by hand (today)",
+     "description": "The coordinator creates every meeting with a date and a title, as today."
+    }
+   ],
+   "why": "B16 today: New board session needs a date and title each time. Research: 47.4% of Indian boards meet weekly (ICMR-NCDIR); Victoria framework: at least fortnightly; NAVIFY and Philips keep a meeting calendar.",
+   "depends_on": [
+    "R10-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R10-Q04",
+   "topic": "Board date",
+   "core": false,
+   "type": "decision",
+   "question": "When a Case File is marked ready, which meeting should it go to?",
+   "header": "Which date",
+   "multi": false,
+   "options": [
+    {
+     "label": "Next open meeting (Recommended)",
+     "description": "It joins its board's next meeting whose cut-off has not passed; the doctor can pick a later one."
+    },
+    {
+     "label": "Doctor picks the date",
+     "description": "The doctor chooses from the board's coming meetings each time."
+    },
+    {
+     "label": "Coordinator decides",
+     "description": "Ready Case Files wait in a pool; the coordinator puts each into a meeting."
+    }
+   ],
+   "why": "Today the board date is typed on the Case File at creation (B2) and a session takes the Case Files listed for its date. With fixed slots the date can follow the board instead.",
+   "depends_on": [
+    "R10-Q03",
+    "R05-Q12"
+   ],
+   "skip_if": "Skip if R10-Q03 answered 'No slots, by hand (today)'.",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R10-Q05",
+   "topic": "Ready mark",
+   "core": false,
+   "type": "decision",
+   "question": "Who may mark a Case File ready for the board?",
+   "header": "Mark ready",
+   "multi": false,
+   "options": [
+    {
+     "label": "Doctor; resident proposes (Recommended)",
+     "description": "A resident taps 'propose ready'; the treating doctor confirms with one tap; both names are kept."
+    },
+    {
+     "label": "Treating doctor only",
+     "description": "Residents cannot touch the ready mark."
+    },
+    {
+     "label": "Doctor or resident",
+     "description": "Either marks it; the audit shows who did."
+    }
+   ],
+   "why": "B14: today only the owning department marks ready (mark_ready, owner action) and the coordinator is told. Settled: residents work under the treating doctor and cannot sign; I03 liked. The ready mark is not a signature, so the owner decides.",
+   "depends_on": [
+    "R03 (resident limits)",
+    "R06 (Case File team)"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Dropped",
+   "notes": "Dropped in validation (17 Oct): same as R03-Q04 (the resident sign-off rule includes 'mark ready')."
+  },
+  {
+   "id": "R10-Q06",
+   "topic": "Ready mark",
+   "core": false,
+   "type": "decision",
+   "question": "Besides the Pre-Authorization rule set in R07-Q05, what else must be done before a Case File can be marked ready?",
+   "header": "Ready rule",
+   "multi": false,
+   "options": [
+    {
+     "label": "A question for the board (Recommended)",
+     "description": "One or two lines saying what the board should decide; shown on the agenda and the room screen."
+    },
+    {
+     "label": "Question and reviewed summary",
+     "description": "Also a current Case File summary that a doctor marked reviewed; strictest, slowest."
+    },
+    {
+     "label": "Nothing more",
+     "description": "The question for the board stays optional; only the R07-Q05 rule applies."
+    }
+   ],
+   "why": "Code: mark_ready needs only a protocol and a board date, not the check or the summary. I07 (question for the board before listing); I01 presenter mode shows the board question; NCG VTB template ends with 'questions for the tumour board'; research: missing information is the top cause of deferral (UK lung MDTs: 24% deferred).",
+   "depends_on": [
+    "R07-Q05",
+    "R09-Q04"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R10-Q07",
+   "topic": "Building the agenda",
+   "core": false,
+   "type": "decision",
+   "question": "How should a meeting's agenda be filled?",
+   "header": "Agenda fill",
+   "multi": false,
+   "options": [
+    {
+     "label": "Fills from ready marks (Recommended)",
+     "description": "Each Case File marked ready joins its meeting by itself; the coordinator reviews and can remove one; unready ones are never ticked."
+    },
+    {
+     "label": "Coordinator ticks ready ones",
+     "description": "Ready Case Files are offered; none joins until the coordinator ticks it."
+    },
+    {
+     "label": "All listed ticked (today)",
+     "description": "When nobody marked any ready, every listed Case File is ticked (gap G22)."
+    }
+   ],
+   "why": "G22: unready Case Files get ticked when no owner marked any ready. B16, J3. The coordinator does the chair's job (T19 note).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R10-Q08",
+   "topic": "Building the agenda",
+   "core": false,
+   "type": "decision",
+   "question": "May the coordinator add a Case File that its owner has not marked ready?",
+   "header": "Unready add",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, with a reason (Recommended)",
+     "description": "Allowed; the reason is typed, the owner is told, and the minutes say 'not marked ready by the owner' (as today)."
+    },
+    {
+     "label": "Only after the owner agrees",
+     "description": "The owner gets a request to mark ready; nothing is added until they do."
+    },
+    {
+     "label": "No, never",
+     "description": "Only Case Files the owner marked ready can be on the agenda."
+    }
+   ],
+   "why": "Today the coordinator can add an unmarked Case File and it is minuted as such (owner_ready on the agenda item). Settled: Case Files belong to their treating doctor.",
+   "depends_on": [
+    "R10-Q07"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R10-Q09",
+   "topic": "Cut-off",
+   "core": true,
+   "type": "decision",
+   "question": "When should the agenda close to new Case Files (the cut-off)?",
+   "header": "Cut-off",
+   "multi": false,
+   "options": [
+    {
+     "label": "48 hours before (Recommended)",
+     "description": "The agenda locks two days ahead and goes to members, so heads can prepare; later cases follow the late-addition rule."
+    },
+    {
+     "label": "24 hours before",
+     "description": "More time for late reports, less time for members to read."
+    },
+    {
+     "label": "Each board sets it",
+     "description": "Each site board picks its own cut-off; 48 hours by default."
+    },
+    {
+     "label": "No cut-off (today)",
+     "description": "Case Files can join until the meeting starts."
+    }
+   ],
+   "why": "I06 liked, G23. Victoria framework: agenda out 48 h before the meeting. Bart's: radiologists spend about an hour preparing a board list.",
+   "depends_on": [
+    "R10-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R10-Q10",
+   "topic": "Late additions",
+   "core": false,
+   "type": "decision",
+   "question": "Who may add a Case File after the cut-off?",
+   "header": "Late case",
+   "multi": false,
+   "options": [
+    {
+     "label": "Coordinator, with a reason (Recommended)",
+     "description": "The doctor asks; the coordinator approves with a reason; it shows as 'late addition' on the agenda and in the minutes."
+    },
+    {
+     "label": "Coordinator, Radiology and Pathology",
+     "description": "Victoria rule: the radiologist and pathologist must also agree, since they prepare the case; slower."
+    },
+    {
+     "label": "Urgent cases only",
+     "description": "Only a Case File the doctor marks urgent can join late; others wait for the next meeting."
+    },
+    {
+     "label": "Nobody: next meeting",
+     "description": "After the cut-off every new Case File goes to the next meeting."
+    }
+   ],
+   "why": "I06, G23. Victoria framework: late additions need chair, pathologist and radiologist agreement. Settled: the MDT Coordinator does the chair's job (T19 note), so 'chair' reads as coordinator here.",
+   "depends_on": [
+    "R10-Q09"
+   ],
+   "skip_if": "Skip if R10-Q09 answered 'No cut-off (today)'.",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R10-Q11",
+   "topic": "Triage",
+   "core": true,
+   "type": "decision",
+   "question": "Who puts each Case File in a triage list (for discussion, for noting, not ready)?",
+   "header": "Triage",
+   "multi": false,
+   "options": [
+    {
+     "label": "Doctor at mark-ready (Recommended)",
+     "description": "The doctor picks 'for discussion' or 'for noting'; 'not ready' comes from the check; the coordinator can change it with a reason."
+    },
+    {
+     "label": "Coordinator at cut-off",
+     "description": "The coordinator sorts every ready Case File after the cut-off."
+    },
+    {
+     "label": "Doctor only, fixed",
+     "description": "The coordinator cannot change the doctor's choice."
+    }
+   ],
+   "why": "I05 liked, G24. NHS 2020 Streamlining MDTs: each case is either 'standard of care, not for discussion' or 'for discussion'; Greater Manchester adds 'not ready'. Scope: clinicians choose the list; the AI only shows completeness and never labels a case 'standard of care'.",
+   "depends_on": [
+    "R03-Q04",
+    "R10-Q09"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R10-Q12",
+   "topic": "Chasing",
+   "core": false,
+   "type": "decision",
+   "question": "Should Vaidyx send the readiness reminders by itself before the cut-off?",
+   "header": "Chasing",
+   "multi": false,
+   "options": [
+    {
+     "label": "Automatic, coordinator can stop (Recommended)",
+     "description": "Three days and one day before the cut-off, each owner with open gaps gets one grouped reminder; the coordinator sees what went and can switch it off."
+    },
+    {
+     "label": "Coordinator approves daily",
+     "description": "Vaidyx prepares the day's reminders; the coordinator sends them with one tap."
+    },
+    {
+     "label": "By hand only (today)",
+     "description": "Nothing goes out unless the coordinator presses Remind."
+    }
+   ],
+   "why": "B15: readiness and chase list exist, Remind and Remind owner are manual. K09: overdue never notifies; U17: 536 unread notifications, so reminders must be grouped. R14 sets the channels; R08 sets request due dates and reminders to departments.",
+   "depends_on": [
+    "R01-Q02",
+    "R08-Q08",
+    "R10-Q09"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R10-Q13",
+   "topic": "Carry-over",
+   "core": false,
+   "type": "decision",
+   "question": "What should happen to a Case File that is deferred or not reached in a meeting?",
+   "header": "Carry over",
+   "multi": false,
+   "options": [
+    {
+     "label": "Not reached moves; deferred waits (Recommended)",
+     "description": "A case not reached goes first on the next meeting; a deferred case goes back to the owner until marked ready again."
+    },
+    {
+     "label": "Both to next meeting",
+     "description": "Both move to the board's next meeting by themselves, marked 'carried over'."
+    },
+    {
+     "label": "Both back to the owner",
+     "description": "Both leave the agenda; the doctor marks ready again."
+    },
+    {
+     "label": "Coordinator decides each",
+     "description": "Nothing moves until the coordinator places it."
+    }
+   ],
+   "why": "Outcome types exist (decision, deferred, referred, not discussed: OCT12 feature 5); R13 settles them. Research: UK lung MDTs deferred 24% of cases, mostly awaiting results, so a deferred case usually needs something new first.",
+   "depends_on": [
+    "R10-Q03"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R10-Q14",
+   "topic": "Calendar",
+   "core": false,
+   "type": "decision",
+   "question": "Should board members get a calendar invite for the meetings?",
+   "header": "Calendar",
+   "multi": false,
+   "options": [
+    {
+     "label": "Recurring invite per board (Recommended)",
+     "description": "One repeating invite when the weekly slot is set (a calendar file that works in Google, Outlook and phone calendars); changes go out as updates; no patient names."
+    },
+    {
+     "label": "One invite per meeting",
+     "description": "A new invite for every meeting with date, time, room and join link."
+    },
+    {
+     "label": "No invites",
+     "description": "Members rely on Vaidyx notifications only."
+    }
+   ],
+   "why": "Nothing in Vaidyx sends calendar invites today. Products: NAVIFY and Philips keep a meeting calendar. An invite travels by email (R14 sets channels); patient details stay out of it (R15).",
+   "depends_on": [
+    "R10-Q03"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  }
+ ]
+}

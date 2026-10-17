@@ -1,0 +1,423 @@
+{
+ "round": 15,
+ "title": "Privacy and safety",
+ "intro": "How patient data is protected: real versus demo data, phones, outside members who join by code, the audit, retention, consent, Aadhaar and any data leaving the hospital (none leaves by itself today).",
+ "questions": [
+  {
+   "id": "R15-Q01",
+   "topic": "Real vs demo",
+   "core": true,
+   "type": "decision",
+   "question": "How should real patient data and demo data be kept apart?",
+   "header": "Real vs demo",
+   "multi": false,
+   "options": [
+    {
+     "label": "Separate instances (Recommended)",
+     "description": "Real Case Files only on a hospital-run instance; this server and the public link stay synthetic only."
+    },
+    {
+     "label": "One server, hidden from demos",
+     "description": "The real Case File stays here, visible only to named real accounts."
+    },
+    {
+     "label": "One app, a demo switch",
+     "description": "Each login is marked real or demo; both kinds of data live side by side."
+    }
+   ],
+   "why": "Today the real Case File sits on the internal app (:7000), kept out of sessions and the matcher but shown in demo logins' side list (G01; T01 kept). The public demo is a separate synthetic-only instance; the mock HIS and PACS are synthetic only.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R15-Q02",
+   "topic": "Phones",
+   "core": false,
+   "type": "decision",
+   "question": "What may a phone keep of patient data?",
+   "header": "Phone cache",
+   "multi": false,
+   "options": [
+    {
+     "label": "Nothing after logout (Recommended)",
+     "description": "Pages load live and nothing is saved for offline use; logout, or a remote sign-out for a lost phone, clears it."
+    },
+    {
+     "label": "Today's agenda offline",
+     "description": "The day's agenda is kept on the phone for weak networks during the meeting."
+    },
+    {
+     "label": "Normal browser behaviour",
+     "description": "The browser may keep pages and PDFs it opened."
+    }
+   ],
+   "why": "Board members join by phone from anywhere (settled); supporting doctors are phone first (I12). R16 decides web, installable app (PWA) or native, which changes what can be stored; this sets the rule it must follow.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R15-Q03",
+   "topic": "Screenshots",
+   "core": false,
+   "type": "decision",
+   "question": "A web page cannot block screenshots. What should Vaidyx do on patient screens?",
+   "header": "Screenshots",
+   "multi": false,
+   "options": [
+    {
+     "label": "Viewer's name as watermark (Recommended)",
+     "description": "A light mark with the viewer's name and time on patient screens, so a leaked picture shows who took it."
+    },
+    {
+     "label": "Nothing, hospital rules apply",
+     "description": "No mark; staff conduct rules cover it."
+    },
+    {
+     "label": "Native app that blocks them",
+     "description": "Blocking works on Android only and needs a phone app (R16)."
+    }
+   ],
+   "why": "Patient data on phones (members join from anywhere, R11). Browsers offer no screenshot block; Android apps can block them, iPhone apps can only detect them.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R15-Q04",
+   "topic": "Outside members",
+   "core": false,
+   "type": "decision",
+   "question": "An outside expert joins by code without an account. What may they see?",
+   "header": "Code access",
+   "multi": false,
+   "options": [
+    {
+     "label": "Shared screen only (Recommended)",
+     "description": "They see what the presenter shows during the meeting; no Case File, no downloads, nothing after it ends."
+    },
+    {
+     "label": "Agenda cases, read only",
+     "description": "Their own read-only view of the agenda's Case Files, during the meeting only."
+    },
+    {
+     "label": "Same as a hospital member",
+     "description": "Full Case File view of the agenda cases, like members with accounts."
+    }
+   ],
+   "why": "Settled: board members join with a six-digit code; R11 decides joining without an account. Today the Board room opens only to logged-in departments (G13). R03 sets access for members with accounts.",
+   "depends_on": [
+    "R11 (joining without an account)",
+    "R03 (external board members)"
+   ],
+   "skip_if": "Skip if R11 decided everyone needs an account.",
+   "resource": null,
+   "status": "Dropped",
+   "notes": "Dropped in validation (17 Oct): same as R11-Q06 (what an invited outside expert sees); R11 is asked first."
+  },
+  {
+   "id": "R15-Q05",
+   "topic": "Outside members",
+   "core": false,
+   "type": "decision",
+   "question": "Should outside members see the patient's name and UHID?",
+   "header": "Identity",
+   "multi": false,
+   "options": [
+    {
+     "label": "No, de-identified (Recommended)",
+     "description": "Initials, age and sex only; if they watch the shared screen, it hides name and IDs while they are in."
+    },
+    {
+     "label": "Yes, full identity",
+     "description": "The same patient details as hospital members see."
+    },
+    {
+     "label": "Coordinator decides per session",
+     "description": "The coordinator turns identity on or off for each meeting."
+    }
+   ],
+   "why": "The NCG Virtual Tumour Board template is de-identified (name and IDs removed; I18). Hospital members keep the full view.",
+   "depends_on": [
+    "R11-Q06"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R15-Q06",
+   "topic": "Video calls",
+   "core": false,
+   "type": "decision",
+   "question": "If the meeting runs on an outside video service, may patient screens be shared on it?",
+   "header": "Video",
+   "multi": false,
+   "options": [
+    {
+     "label": "Only on self-hosted video (Recommended)",
+     "description": "Patient screens go only through video the hospital runs (for example Jitsi); Zoom, Meet or Teams carry voice only."
+    },
+    {
+     "label": "Yes, de-identified screens",
+     "description": "Outside services allowed when the shared screen hides name and IDs."
+    },
+    {
+     "label": "Yes, as hospitals do today",
+     "description": "Patient screens shared on the hospital's usual video service."
+    }
+   ],
+   "why": "The video choice is R11 (built in, Zoom / Meet / Teams, self-hosted Jitsi). On an outside service the shared pictures pass through its servers. 24.8% of Indian boards meet hybrid (ICMR-NCDIR survey).",
+   "depends_on": [
+    "R11-Q10"
+   ],
+   "skip_if": "Skip if R11-Q10 answered 'Self-hosted Jitsi Meet' or 'Self-hosted LiveKit'.",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R15-Q07",
+   "topic": "Audit",
+   "core": false,
+   "type": "decision",
+   "question": "Who should see a Case File's audit trail (who did what, when)?",
+   "header": "Audit view",
+   "multi": false,
+   "options": [
+    {
+     "label": "Owner's doctors and coordinator (Recommended)",
+     "description": "Residents see their own actions; supporting doctors and participants see none."
+    },
+    {
+     "label": "Everyone who opens it",
+     "description": "As today: anyone who can open the Case File sees the whole audit."
+    },
+    {
+     "label": "Also root admin, no clinical text",
+     "description": "Owner's doctors and coordinator, plus the root admin with values and questions hidden."
+    }
+   ],
+   "why": "Today the Audit tab is open to every Case File reader and shows raw JSON (U14); the log is tamper-evident (hash chain, OCT12 feature 6). Root admins open no Case File (G05).",
+   "depends_on": [
+    "R03-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R15-Q08",
+   "topic": "Retention",
+   "core": false,
+   "type": "decision",
+   "question": "How long should Vaidyx keep a Case File after the board?",
+   "header": "Retention",
+   "multi": false,
+   "options": [
+    {
+     "label": "As the hospital's records policy (Recommended)",
+     "description": "Root admin enters the period at set-up; after it Vaidyx removes or archives the Case File, audited."
+    },
+    {
+     "label": "Decision kept, copies removed",
+     "description": "After follow-up closes, fetched report copies are removed (the HIS keeps them); the decision record stays."
+    },
+    {
+     "label": "Keep everything",
+     "description": "Nothing is ever removed; storage grows and old data stays exposed."
+    }
+   ],
+   "why": "No retention rule exists today (notifications drop after 90 days; a deleted Case File purges its notifications). The originals live in the HIS. IMC Regulations 2002 (1.3.1) ask doctors to keep in-patient records at least 3 years; hospitals often keep longer. R15-Q13 asks for the hospital's policy.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R15-Q09",
+   "topic": "Consent",
+   "core": false,
+   "type": "decision",
+   "question": "Should the Case File record the patient's consent to be discussed at the board?",
+   "header": "Consent",
+   "multi": false,
+   "options": [
+    {
+     "label": "A tick at creation (Recommended)",
+     "description": "The treating doctor ticks 'patient informed and agrees' when creating the Case File; name and time saved."
+    },
+    {
+     "label": "Only when shared outside",
+     "description": "Required only when outside members or an outside board (NCG VTB) will see the case."
+    },
+    {
+     "label": "Not recorded",
+     "description": "The hospital's registration consent is taken to cover the board."
+    }
+   ],
+   "why": "Today consent is a field filled after the board (G29; OCT12 feature 8). Victoria framework 5.2: consent recorded. I07 puts consent and preference before listing. One tick keeps clicks low.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R15-Q10",
+   "topic": "Data leaving the hospital",
+   "core": true,
+   "type": "decision",
+   "question": "What rule applies to any patient data leaving the hospital?",
+   "header": "Data out",
+   "multi": false,
+   "options": [
+    {
+     "label": "De-identified unless owner confirms (Recommended)",
+     "description": "Exports and mail drafts are de-identified by default; full identity needs the owner's reason, audited."
+    },
+    {
+     "label": "Owner decides, audited",
+     "description": "The owner's doctors may export or mail identified data; each one is audited."
+    },
+    {
+     "label": "Nothing identifiable leaves",
+     "description": "Identified data never leaves; outside boards get de-identified packs only."
+    }
+   ],
+   "why": "Nothing leaves by itself today, but 'Open in mail' drafts carry the patient's name and UHID through the doctor's own mail, and the NCG VTB, FHIR and JSON exports are identified (I18). All AI runs on the hospital's own GPU. Also covers outside messages (R14-Q02).",
+   "depends_on": [
+    "R14-Q02"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R15-Q11",
+   "topic": "Aadhaar",
+   "core": false,
+   "type": "decision",
+   "question": "Uploaded outside reports keep the Aadhaar number in the original file. What should happen?",
+   "header": "Aadhaar",
+   "multi": false,
+   "options": [
+    {
+     "label": "Mask the stored copy too (Recommended)",
+     "description": "The file kept and shown has Aadhaar blacked out; the unmasked original is not kept."
+    },
+    {
+     "label": "Original locked behind a reason",
+     "description": "Masked copy everywhere; the original opens only with a stated reason, audited."
+    },
+    {
+     "label": "Keep as today",
+     "description": "Text and previews masked; the original file stays as uploaded."
+    }
+   ],
+   "why": "Today Aadhaar is masked in the text, previews and audit and never reaches a patient record; the uploaded original is kept as is (DESIGN.md pending item). Indian ID rule: never Aadhaar.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R15-Q12",
+   "topic": "Encryption",
+   "core": false,
+   "type": "decision",
+   "question": "Should patient files and audit logs be encrypted on the server before real patients are used?",
+   "header": "Encryption",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, before real use (Recommended)",
+     "description": "Files and logs encrypted at rest; a stolen disk shows nothing; what the models read is unchanged."
+    },
+    {
+     "label": "Hospital disk encryption",
+     "description": "Rely on the hospital server's own disk encryption."
+    },
+    {
+     "label": "Later, after the pilot",
+     "description": "Pilot data stays unencrypted on the server."
+    }
+   ],
+   "why": "Today patient documents and audit logs are stored unencrypted (01_how_vaidyx_tb_works, security). Encryption sits in storage, not in the models, so the bf16 weights and their outputs are untouched.",
+   "depends_on": [
+    "R15-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R15-Q13",
+   "topic": "Hospital policy",
+   "core": false,
+   "type": "resource",
+   "question": "Can you get the hospital's medical records retention policy and its patient consent form?",
+   "header": "MRD policy",
+   "multi": false,
+   "options": [
+    {
+     "label": "I'll ask the hospital (Recommended)",
+     "description": "Retention and consent then follow the hospital's own words, and R15-Q08 and R15-Q09 get a source."
+    },
+    {
+     "label": "Skip for now",
+     "description": "The answers above stay as defaults, marked 'not from a hospital document'."
+    },
+    {
+     "label": "Find a free alternative",
+     "description": "Use national rules (IMC Regulations, DPDP Act) in place of the hospital's own."
+    }
+   ],
+   "why": "R15-Q08 and R15-Q09 need the hospital's own rule; Vaidyx holds neither document.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": {
+    "item": "The medical records department's retention policy, and the registration or treatment consent form (does it cover discussion at the tumour board, and with outside experts?)",
+    "source_url": "The hospital's medical records department (MRD) and legal desk; no public URL",
+    "target_folder": "hospital documents",
+    "why": "Sets the retention period the root admin enters and whether a separate consent tick is needed at Case File creation."
+   },
+   "status": "To ask"
+  },
+  {
+   "id": "R15-Q14",
+   "topic": "Indian data law",
+   "core": false,
+   "type": "resource",
+   "question": "Can you download India's DPDP Act 2023 and DPDP Rules 2025 (the personal data protection law)?",
+   "header": "DPDP law",
+   "multi": false,
+   "options": [
+    {
+     "label": "I'll download it (Recommended)",
+     "description": "Consent, retention and breach choices get an official Indian source in the library."
+    },
+    {
+     "label": "Skip for now",
+     "description": "Privacy choices rest on the answers above without the law's text."
+    },
+    {
+     "label": "Find a free alternative",
+     "description": "Use the government's published summary (PIB) in place of the full text."
+    }
+   ],
+   "why": "No Indian privacy law is held in the guideline library (RESOURCES.md). India first: the national law comes before any foreign framework.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": {
+    "item": "Digital Personal Data Protection Act 2023 (Act 22 of 2023) and the Digital Personal Data Protection Rules 2025, official PDFs",
+    "source_url": "https://www.meity.gov.in/data-protection-framework (browser only: the page refused an automated fetch on 17 Oct 2026)",
+    "target_folder": "/data/vaidyx/tb_resources/guidelines/india_dpdp/",
+    "why": "Grounds R15-Q08 (retention), R15-Q09 (consent), R15-Q10 (data leaving the hospital) and R14-Q02 (message content) in the Indian law."
+   },
+   "status": "To ask"
+  }
+ ]
+}

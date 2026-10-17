@@ -1,0 +1,415 @@
+{
+ "round": 18,
+ "title": "Look and feel (UX)",
+ "intro": "Your 13 UX principles turned into concrete choices, plus theme, fonts and states. Principles 8, 9 and 11 (4 px spacing grid, line and letter spacing, lighter outer and stronger inner shadows) are built as you wrote them.",
+ "questions": [
+  {
+   "id": "R18-Q01",
+   "topic": "Colour with purpose",
+   "core": true,
+   "type": "decision",
+   "question": "How should colour be used across the app?",
+   "header": "Colours",
+   "multi": false,
+   "options": [
+    {
+     "label": "Teal brand, four status colours (Recommended)",
+     "description": "MONAI teal #00C0B5 only for the brand and main buttons; green done, amber waiting, red blocked, violet needs a person, each with its own icon."
+    },
+    {
+     "label": "Teal also means done",
+     "description": "Teal replaces green for complete items; fewer colours, but brand and status can be confused."
+    },
+    {
+     "label": "A new palette",
+     "description": "Move away from teal to a fresh brand colour set chosen with you."
+    }
+   ],
+   "why": "Principle 10 (colour with purpose). Today teal is a fill only with dark text on it (DESIGN 1.9), every text colour is at 4.5:1 or better on white, violet already marks 'needs review'; U10: status chips by colour only. MONAI theme set by Eswar for V1.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R18-Q02",
+   "topic": "Font",
+   "core": false,
+   "type": "decision",
+   "question": "Which font family should the new interface use?",
+   "header": "Font",
+   "multi": false,
+   "options": [
+    {
+     "label": "Keep Atkinson Hyperlegible (Recommended)",
+     "description": "Made for easy reading, with clearly different 1 / l / I and 0 / O (useful for IDs and values); already self-hosted; Latin script only."
+    },
+    {
+     "label": "Noto Sans family",
+     "description": "Covers Hindi, Tamil, Kannada and other Indian scripts in one matching look; needed if R01 adds Indian languages."
+    },
+    {
+     "label": "Inter",
+     "description": "A common modern interface font; letter shapes less distinct than Atkinson's."
+    }
+   ],
+   "why": "Today Atkinson Hyperlegible and JetBrains Mono are self-hosted under static/tb/fonts (SIL OFL 1.1). Text in Indian languages needs Indic fonts, so this follows R01 (languages).",
+   "depends_on": [
+    "R01-Q10"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R18-Q03",
+   "topic": "Dark mode",
+   "core": false,
+   "type": "decision",
+   "question": "How should dark mode be offered?",
+   "header": "Dark mode",
+   "multi": false,
+   "options": [
+    {
+     "label": "Light default, dark by choice (Recommended)",
+     "description": "Everyone starts light; anyone can switch in their profile (radiologists reading in dark rooms may like it)."
+    },
+    {
+     "label": "Follow the device setting",
+     "description": "Dark when the phone or PC is dark; nothing to choose, but the look changes between devices."
+    },
+    {
+     "label": "Light only for now",
+     "description": "One theme to build and test; dark later."
+    }
+   ],
+   "why": "No dark theme exists today (tb.css has no dark rules). A light room screen usually reads better in a lit meeting room. Every status colour must pass contrast in both themes.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R18-Q04",
+   "topic": "Density and text size",
+   "core": false,
+   "type": "decision",
+   "question": "How dense should the working screens be?",
+   "header": "Density",
+   "multi": false,
+   "options": [
+    {
+     "label": "Roomy, 16 px text (Recommended)",
+     "description": "Bigger text and rows on the 4 px grid; fewer items per screen, easier on tired eyes and phones."
+    },
+    {
+     "label": "Compact desktop, roomy phone",
+     "description": "More rows on the OPD desktop, larger touch targets on phones."
+    },
+    {
+     "label": "Compact everywhere",
+     "description": "Most on one screen (15 px text as today); harder to read."
+    }
+   ],
+   "why": "Principles 8 and 9 (let text breathe, spacing in steps of 4 px, line spacing). Today body text is 15 px with paddings off the grid (10 px, 14 px); U01: text-heavy screens.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R18-Q05",
+   "topic": "Icons or words",
+   "core": false,
+   "type": "decision",
+   "question": "How should buttons and actions be labelled?",
+   "header": "Icons",
+   "multi": false,
+   "options": [
+    {
+     "label": "Icon and word, mostly (Recommended)",
+     "description": "Clinical actions show an icon and a short word (Send, Waive); only universal ones (copy, call, close, search) are icon alone."
+    },
+    {
+     "label": "Icon and word everywhere",
+     "description": "Clearest; buttons take more room on phones."
+    },
+    {
+     "label": "Icons alone with tooltips",
+     "description": "Cleanest look; a doctor must learn or hover to know an icon, and phones have no hover."
+    }
+   ],
+   "why": "Principle 7 (visual hierarchy, icons rather than text). U01: screens are text-heavy today. A wrong tap matters for clinical actions, so a word next to the icon removes doubt. Icons from one self-hosted open set (for example Lucide, ISC licence).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R18-Q06",
+   "topic": "Affordances on touch",
+   "core": false,
+   "type": "decision",
+   "question": "Phones and the room screen have no hover: how should tappable things show they can be tapped?",
+   "header": "Affordance",
+   "multi": false,
+   "options": [
+    {
+     "label": "Look tappable, hint on tap (Recommended)",
+     "description": "Buttons look like buttons, tappable rows end in a small arrow, an (i) icon opens a short hint on tap; desktop hover only adds to this."
+    },
+    {
+     "label": "Hover tooltips plus long-press",
+     "description": "Tooltips on desktop hover; on phones a long-press shows the same hint."
+    },
+    {
+     "label": "Short hint text under controls",
+     "description": "Small grey lines always visible; nothing hidden, but more text on screen."
+    }
+   ],
+   "why": "Principle 6 (affordances and signifiers: hover, tooltips). U01: help is explained three times today (paragraph, help line, long tooltip).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R18-Q07",
+   "topic": "Sensible defaults",
+   "core": true,
+   "type": "decision",
+   "question": "Which form fields should come pre-filled with the usual choice?",
+   "header": "Defaults",
+   "multi": false,
+   "options": [
+    {
+     "label": "Logistics only (Recommended)",
+     "description": "Fetch window 12 months, the next board date, hospital level and the doctor's department; cancer and stage group always picked by the doctor."
+    },
+    {
+     "label": "Logistics plus my last choices",
+     "description": "The same logistics, but each doctor's last-used values (fetch window, level, board) are remembered; cancer and stage group are still picked every time."
+    },
+    {
+     "label": "Logistics plus usual cancer",
+     "description": "Also pre-selects the department's most common cancer; faster, but a wrong pick changes the required records."
+    }
+   ],
+   "why": "Principle 1 (defaults that feel like a recommendation). Scope: the stage group (NCG setting) is picked by the doctor from the signed reports and the system never works out a stage, so clinical choices are not pre-filled. The 12-month fetch window is already the default (V2 decisions). Settled: each treating doctor has at least one resident.",
+   "depends_on": [
+    "R05-Q12",
+    "R06-Q04"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R18-Q08",
+   "topic": "Anchoring",
+   "core": false,
+   "type": "decision",
+   "question": "Principle 2 (anchoring a price against a bigger number) is about pricing: where should it be used?",
+   "header": "Anchoring",
+   "multi": false,
+   "options": [
+    {
+     "label": "Pricing and pitch only (Recommended)",
+     "description": "Hospital pricing and the Healthathon deck compare the cost with a bigger figure (for example a deferred case); clinical screens show plain facts."
+    },
+    {
+     "label": "Also a monthly time card",
+     "description": "The coordinator's dashboard shows time spent in Vaidyx per Case File beside a published manual figure (about 13 min, Hartmann 2026)."
+    },
+    {
+     "label": "Also on each Case File",
+     "description": "Each Case File shows its own preparation time beside that published figure."
+    }
+   ],
+   "why": "Principle 2. Clinical screens must not carry performance or accuracy claims; a published figure with its source is the honest anchor. Time in Vaidyx can be counted from the audit log.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R18-Q09",
+   "topic": "Gift first and learning",
+   "core": false,
+   "type": "decision",
+   "question": "What should a new user get on first login, before being asked for anything more?",
+   "header": "Gift first",
+   "multi": false,
+   "options": [
+    {
+     "label": "A check of one patient (Recommended)",
+     "description": "Type one UHID and see the records fetched and what is missing in seconds; profile details after; short hints on first use instead of a tour."
+    },
+    {
+     "label": "A ready demo Case File",
+     "description": "A finished synthetic Case File to explore, plus a skippable 4-step tour."
+    },
+    {
+     "label": "A short tour, then the home",
+     "description": "4 screens explaining the parts of the app; nothing done for them yet."
+    }
+   ],
+   "why": "Principle 3 (gift first, like Duolingo) and the onboarding tour. For a supporting doctor the gift is their open requests, already listed. Today: a '3 steps to start' card on the home (UI_PLAN C.3). Account steps at first login come from R04; on the public demo the patient is synthetic.",
+   "depends_on": [
+    "R04 (first-login onboarding)"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Dropped",
+   "notes": "Dropped in validation (17 Oct): same as R04-Q11 (what a new user sees first); its 'check one patient' option was added to R04-Q11."
+  },
+  {
+   "id": "R18-Q10",
+   "topic": "Making it their own",
+   "core": false,
+   "type": "decision",
+   "question": "Which look-and-feel choices should the profile set-up offer, so people make the app their own?",
+   "header": "Profile",
+   "multi": true,
+   "options": [
+    {
+     "label": "Theme and text size (Recommended)",
+     "description": "Light or dark (if R18-Q03 offers dark) and normal or large text, seen live while choosing."
+    },
+    {
+     "label": "Pin what my home shows",
+     "description": "Choose and order the home's cards (to-do, board date, requests)."
+    },
+    {
+     "label": "Accent colour",
+     "description": "A personal colour for the menu bar only; status colours never change."
+    }
+   ],
+   "why": "Principle 4 (IKEA effect: ask more than email and password, such as name and theme). Identity fields (name, title, photo) come from R04 (profile fields); these are the look-and-feel ones.",
+   "depends_on": [
+    "R04-Q09",
+    "R18-Q03"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R18-Q11",
+   "topic": "Progress that does not start at 0",
+   "core": false,
+   "type": "decision",
+   "question": "Principle 5 says progress should not start at 0: how should that work honestly?",
+   "header": "Progress",
+   "multi": false,
+   "options": [
+    {
+     "label": "Count what the system did (Recommended)",
+     "description": "A new Case File already shows 'records fetched' and 'check run' as done, so it starts near a third with no made-up numbers."
+    },
+    {
+     "label": "Head start outside clinical bars",
+     "description": "Set-up and profile bars start at 20%; the Case File readiness bar stays exact."
+    },
+    {
+     "label": "Steps instead of percent",
+     "description": "'3 of 7 done' with ticks; no percentage anywhere."
+    }
+   ],
+   "why": "Principle 5. Readiness decides whether a Case File goes to the board (R07), so its bar must never overstate completeness; counting real automatic steps gives the momentum honestly.",
+   "depends_on": [
+    "R07 (readiness display)"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Dropped",
+   "notes": "Dropped in validation (17 Oct): same as R07-Q04 (an honest readiness bar that does not start at 0) and R04-Q10 (set-up progress)."
+  },
+  {
+   "id": "R18-Q12",
+   "topic": "Empty, error and offline states",
+   "core": false,
+   "type": "decision",
+   "question": "When a list is empty or something fails, what should the screen show?",
+   "header": "States",
+   "multi": false,
+   "options": [
+    {
+     "label": "Plain line, cause, one action (Recommended)",
+     "description": "In place, not a pop-up: 'The hospital system did not answer.' with a Try again button; technical details under 'Details'."
+    },
+    {
+     "label": "Small picture, line and action",
+     "description": "The same with a friendly illustration; warmer, takes more room."
+    },
+    {
+     "label": "Note at the bottom only",
+     "description": "A short pop-up note that fades (today's way); easy to miss."
+    }
+   ],
+   "why": "Principle 12 (a response for every state, error pages included). Button states (default, hover, pressed, disabled, loading) are built for every button as you wrote. U08: spinners that never stop, no screen-reader announcements, double submits; UI_PLAN item 5: empty states with a next step.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R18-Q13",
+   "topic": "Slow AI steps",
+   "core": false,
+   "type": "decision",
+   "question": "How should a 15 to 35 second AI step (summary, specialty brief) look while it runs?",
+   "header": "AI wait",
+   "multi": false,
+   "options": [
+    {
+     "label": "Live steps, free to leave (Recommended)",
+     "description": "Each step shows as it happens (reading records, writing, checking quotes); the doctor can leave and is alerted when it is ready."
+    },
+    {
+     "label": "Preview filling in",
+     "description": "Grey placeholder lines turn into sentences only once each is written and its quote verified."
+    },
+    {
+     "label": "Spinner with time estimate",
+     "description": "'About 30 s'; simple, nothing to read meanwhile."
+    }
+   ],
+   "why": "K02: summary 24 to 34 s, brief 13 to 17 s, a question median 6 s, GPU capped at 300 W. Principle 12. No option shows an unverified sentence as fact. The alert channel comes from R14.",
+   "depends_on": [
+    "R14-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R18-Q14",
+   "topic": "Micro-interactions",
+   "core": false,
+   "type": "decision",
+   "question": "After a small action (copy, send, save), how should the app confirm it?",
+   "header": "Feedback",
+   "multi": false,
+   "options": [
+    {
+     "label": "Button change plus slider (Recommended)",
+     "description": "The button turns into 'Copied' or 'Sent' with a tick and a small slider confirms it at the bottom for 2 seconds; also announced to screen readers."
+    },
+    {
+     "label": "Button change only",
+     "description": "The confirmation sits where the finger is; nothing slides in."
+    },
+    {
+     "label": "Slider only",
+     "description": "Your example: a small 'Copied' slider; the button itself does not change."
+    }
+   ],
+   "why": "Principle 13 (small responses everywhere, such as a 'copied' slider). U08: today's pop-up notes are not announced to screen readers. Destructive actions keep confirmation and undo (T15, kept).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  }
+ ]
+}

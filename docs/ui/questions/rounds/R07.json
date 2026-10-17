@@ -1,0 +1,418 @@
+{
+ "round": 7,
+ "title": "The completeness check",
+ "intro": "This round is about the Pre-Authorization check: how its result reads to a doctor, how readiness is shown, and what a person settles by hand. Requests to departments come in Round 8.",
+ "questions": [
+  {
+   "id": "R07-Q01",
+   "topic": "Explaining the result",
+   "core": true,
+   "type": "decision",
+   "question": "When a treating doctor opens a Case File, how should the Pre-Authorization result first appear?",
+   "header": "First view",
+   "multi": false,
+   "options": [
+    {
+     "label": "One line plus to-do list (Recommended)",
+     "description": "Shows '6 of 9 ready' and only the 3 things left, each with who acts; the full record list opens on tap."
+    },
+    {
+     "label": "Full record table",
+     "description": "Every required record at once with its status, as today but simplified; more to read before the first action."
+    },
+    {
+     "label": "Single colour badge",
+     "description": "Green, amber or red only; the reason is always one tap away."
+    }
+   ],
+   "why": "Sets how the check opens for a first-time doctor. Today the tab lists Level 1 gaps, Level 2 gaps, met records and 'shown, not counted' with jargon on every row (U16, U01; J1 friction: three long paragraphs before the first button). I16 next-step card liked; Hartmann 2026: 55% of preparation time is spent on the system.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R07-Q02",
+   "topic": "Status words",
+   "core": false,
+   "type": "decision",
+   "question": "How many different states should a doctor see for a required record?",
+   "header": "States",
+   "multi": false,
+   "options": [
+    {
+     "label": "Ready, needs you, waiting (Recommended)",
+     "description": "Records sort by who acts: ready; needs you (attest, confirm, failed document); waiting on a department or the HIS. The exact reason is one line under it."
+    },
+    {
+     "label": "All nine statuses",
+     "description": "Missing, not final, needs confirmation, missing value, needs review, pending, blocked, waived and met each keep their own chip and colour."
+    },
+    {
+     "label": "Ready or not ready",
+     "description": "One chip per record; the reason is plain text, so colour carries less meaning."
+    }
+   ],
+   "why": "PreAuth_Checks_for_Validation.pdf (sent to the doctors) lists 9 checks with red, amber, violet and grey statuses plus 'Pending' and 'Gate blocked'. U05 (one word per state), U19 (status shown three times on one row), I17 plain names.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R07-Q03",
+   "topic": "Levels naming",
+   "core": false,
+   "type": "decision",
+   "question": "Should the words 'Level 1' and 'Level 2' stay in the check?",
+   "header": "Levels",
+   "multi": false,
+   "options": [
+    {
+     "label": "Drop them, plain words (Recommended)",
+     "description": "Rows say 'report missing', 'report not final or not signed', 'value not found in the report'; the two levels live only in the code."
+    },
+    {
+     "label": "Rename to Reports and Values",
+     "description": "Two groups: 'Reports in place' (present, final, signed, right patient) and 'Values found' (with a quote)."
+    },
+    {
+     "label": "Keep Level 1 / Level 2",
+     "description": "Same as today, with a one-line meaning on hover; doctors learn the terms once."
+    }
+   ],
+   "why": "Level 1 = record present, final, signed, right patient; Level 2 = required values present with a verified quote (B4, data.js glossary). U16 calls it jargon; U04: the in-app glossary defines the levels differently from the code (Case File vs single record). R01 sets terminology in general; this is the check's own wording.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R07-Q04",
+   "topic": "Readiness display",
+   "core": true,
+   "type": "decision",
+   "question": "How should readiness be shown on a Case File, given your rule that a progress bar should not start from 0?",
+   "header": "Readiness",
+   "multi": false,
+   "options": [
+    {
+     "label": "Journey bar of real steps (Recommended)",
+     "description": "The bar counts the path (created, records fetched, check met, summary, ready), so it starts part-full honestly; '6 of 9 records ready' sits beside it."
+    },
+    {
+     "label": "Bar of records ready",
+     "description": "Fills by records ready out of records required; fetched records count at once, but a new patient can still show 0."
+    },
+    {
+     "label": "Fixed 20% head start",
+     "description": "Starts at 20% for creating the Case File and spreads the records over the rest; the bar no longer equals records ready divided by required."
+    },
+    {
+     "label": "Count only, no bar",
+     "description": "Text such as '6 of 9 ready'; nothing to misread, less sense of momentum."
+    }
+   ],
+   "why": "UX_notes.md point 5 (progress bar not from 0). Today readiness % = records satisfied / records that apply, waived records leave the count (validation sheet page 1). The coordinator's readiness list (B15) shows the same number, so the choice carries over to R10.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R07-Q05",
+   "topic": "Check and the ready mark",
+   "core": true,
+   "type": "decision",
+   "question": "Must the Pre-Authorization check be met before the owner can mark a Case File ready for the board?",
+   "header": "Hard gate",
+   "multi": false,
+   "options": [
+    {
+     "label": "Met, or each gap settled (Recommended)",
+     "description": "Ready only when every required record is met, waived or marked not applicable with a reason; no silent gap reaches the agenda."
+    },
+    {
+     "label": "No, advice only",
+     "description": "The owner may mark ready with gaps, as the code allows today; the gaps show to the coordinator and the board."
+    },
+    {
+     "label": "Gaps only with urgent reason",
+     "description": "Ready with gaps needs an 'urgent case' reason, audited and shown on the agenda and in the room."
+    }
+   ],
+   "why": "Today mark_ready (board.py) needs only a protocol and a board date, not a met check, while the summary needs a met check (V2 4.4). Research: 24% of UK lung MDT cases deferred, mostly awaiting results; NHS England 2020 puts responsibility for complete information on the referring clinician. R10 then decides who marks ready and the agenda rules.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R07-Q06",
+   "topic": "Not applicable with a reason",
+   "core": false,
+   "type": "decision",
+   "question": "Should 'not applicable' be a separate action from 'waive'?",
+   "header": "N/A vs waive",
+   "multi": false,
+   "options": [
+    {
+     "label": "Two actions, both with reason (Recommended)",
+     "description": "'Not applicable' when a record does not fit this patient (mammography in a man); 'Waive' when it fits but the board goes ahead without it."
+    },
+    {
+     "label": "One 'Not needed' button",
+     "description": "One action with a short reason list (not applicable, patient declined, done elsewhere, urgent) plus free text."
+    },
+    {
+     "label": "Keep 'Waive' only",
+     "description": "As today: one waive with a free-text reason, removed from the count."
+    }
+   ],
+   "why": "Validation sheet check 9 (waived, grey; logged, removed from the count). T09 Cancer of Unknown Primary plans records conditional on sex and presentation with 'not applicable' and a reason (W4). Checkpoints table: waive needs a reason today.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R07-Q07",
+   "topic": "Waiving an Essential record",
+   "core": false,
+   "type": "decision",
+   "question": "Should waiving an NCG Essential record need anything more than a reason?",
+   "header": "Essential",
+   "multi": false,
+   "options": [
+    {
+     "label": "Reason, shown to the board (Recommended)",
+     "description": "No second approval; the waiver and its reason appear in the summary, on the agenda line and in the room."
+    },
+    {
+     "label": "Second consultant approves",
+     "description": "Another consultant of the owning department (or its head) approves before the waiver counts; slower, two names on it."
+    },
+    {
+     "label": "Reason only, as today",
+     "description": "Logged and audited, but the board sees it only if someone opens the audit."
+    }
+   ],
+   "why": "Essential (tier a) records are required at every hospital (validation sheet Part 2). Today a waiver needs only a reason and is audited (checkpoints). Links to 'expert over the loop' (R01) and to the board seeing what is missing (I01 presenter mode gap badges).",
+   "depends_on": [
+    "R07-Q06"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R07-Q08",
+   "topic": "Resident actions in the check",
+   "core": false,
+   "type": "decision",
+   "question": "In the check, what may a resident, PG or fellow do on a Case File they joined?",
+   "header": "Resident",
+   "multi": false,
+   "options": [
+    {
+     "label": "Propose; consultant approves (Recommended)",
+     "description": "Every attest, confirm, waive or not-applicable a resident makes stays 'proposed' until the treating doctor approves; the audit shows both names."
+    },
+    {
+     "label": "Small confirmations alone",
+     "description": "Resident confirms report dates and document type alone; attest final, waive, patient match and values from scans need the consultant."
+    },
+    {
+     "label": "View and chase only",
+     "description": "Resident sees the check and sends requests but cannot confirm or waive anything."
+    }
+   ],
+   "why": "Settled: residents join a Case File with a code and cannot sign 'same as PACS systems' (notes role-treating, role-resident); I03 liked (drafts, consultant approves, both names). B5 lists the person-only actions. R03 sets resident rights overall; this asks only about the check's actions.",
+   "depends_on": [
+    "R03 (resident limits)"
+   ],
+   "skip_if": "Skip if R03 already set resident rights for attest, confirm and waive.",
+   "resource": null,
+   "status": "Dropped",
+   "notes": "Dropped in validation (17 Oct): same as R03-Q04 (the general resident sign-off rule covers attest, confirm and waive)."
+  },
+  {
+   "id": "R07-Q09",
+   "topic": "Values typed by a doctor",
+   "core": false,
+   "type": "decision",
+   "question": "May the treating doctor type a required value into Vaidyx when no signed report carries it?",
+   "header": "Typed values",
+   "multi": false,
+   "options": [
+    {
+     "label": "Only the board question (Recommended)",
+     "description": "The question for the board is typed on the Case File with the doctor's name; every other required value must come from a signed report."
+    },
+    {
+     "label": "Board question and clinical values",
+     "description": "Also ECOG and menopausal status, each shown as 'entered by Dr X, no report'; fewer requests, more values without a report quote."
+    },
+    {
+     "label": "Nothing typed",
+     "description": "Every value must be quoted from a signed report; a missing value means a request or a waiver."
+    }
+   ],
+   "why": "The clinical-history record requires 'ECOG performance status' and 'Question for the Tumour Board' quoted from a clinical note (validation sheet Part 3); HIS notes rarely carry the board question, so the owner ends up requesting it from itself (G12). Greater Manchester pro-forma makes the clinical question mandatory; I07. Invariant: a value shown as fact needs a verified quote, so a typed value is shown as the doctor's own statement.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R07-Q10",
+   "topic": "Conditional records",
+   "core": false,
+   "type": "decision",
+   "question": "For records needed only in some patients (bronchoscopy if surgery is planned, PSA only in men), who settles whether they apply?",
+   "header": "Conditional",
+   "multi": false,
+   "options": [
+    {
+     "label": "Doctor answers yes or no (Recommended)",
+     "description": "The Case File asks short questions such as 'Surgery planned?'; the answer turns the record on or off, audited. Sex and age come from registration."
+    },
+    {
+     "label": "Optional, never blocking",
+     "description": "Conditional records are shown for information only, as today; the doctor remembers which apply."
+    },
+    {
+     "label": "Required until marked not applicable",
+     "description": "Every conditional record blocks until it is met or marked not applicable with a reason."
+    }
+   ],
+   "why": "Lung bronchoscopy 'patients planned for surgery', MRI thorax 'superior sulcus tumour only' and oral cavity PET-CT 'high risk' are Optional today because the system must not judge the condition (validation sheet Part 3; scope). T09 CUP needs records conditional on sex and presentation.",
+   "depends_on": [
+    "R07-Q06"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R07-Q11",
+   "topic": "Source of each requirement",
+   "core": false,
+   "type": "decision",
+   "question": "On each required record, how much of its guideline source should show?",
+   "header": "Source",
+   "multi": false,
+   "options": [
+    {
+     "label": "Short chip, quote on tap (Recommended)",
+     "description": "'NCG Breast 2019, p 5' on the row; a tap shows the guideline's exact line and opens that page in the library."
+    },
+    {
+     "label": "Full quote always visible",
+     "description": "The guideline line shows under every row; complete but long on a phone."
+    },
+    {
+     "label": "Separate sources page",
+     "description": "Rows show no source; one 'Why these records' page lists every record with its guideline line."
+    }
+   ],
+   "why": "T10 kept with 'only validated sources'; W1 'a justification for whatever you are listing'. Every protocol record already carries its NCG guideline, page and verbatim quote (V1 4.1); the rectal rows show 'p.n/a' on the validation sheet. R01 decides what counts as a validated source and the general source style.",
+   "depends_on": [
+    "R01 (validated sources and how they are shown)"
+   ],
+   "skip_if": "Skip if R01 fixed one source display for every screen.",
+   "resource": null,
+   "status": "Dropped",
+   "notes": "Dropped in validation (17 Oct): same as R01-Q08 (one source display for every screen)."
+  },
+  {
+   "id": "R07-Q12",
+   "topic": "Check drops back after ready",
+   "core": false,
+   "type": "decision",
+   "question": "If the check stops being met after a Case File was marked ready (an amended report, a changed stage group), what should happen?",
+   "header": "Drop-back",
+   "multi": false,
+   "options": [
+    {
+     "label": "Keep on agenda, warn both (Recommended)",
+     "description": "The ready mark stays with 'check no longer met: CT amended'; the owner and the coordinator are told at once."
+    },
+    {
+     "label": "Remove the ready mark",
+     "description": "The Case File leaves 'ready' until the check is met again; the coordinator is told and may drop it from the agenda."
+    },
+    {
+     "label": "Nothing until the meeting",
+     "description": "The change shows only when someone opens the Case File."
+    }
+   ],
+   "why": "The check re-runs by itself in milliseconds after every re-fetch, confirmation or setting change (B4, B8); an amended report becomes the current version. Today the ready mark does not react. R10 (agenda cut-off) and R14 (who hears what) build on this.",
+   "depends_on": [
+    "R07-Q05"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R07-Q13",
+   "topic": "Reports that disagree",
+   "core": false,
+   "type": "decision",
+   "question": "When two final reports disagree on a value that should not change (HER2, histologic type), should the check wait for a doctor?",
+   "header": "Disagreement",
+   "multi": false,
+   "options": [
+    {
+     "label": "Wait until a doctor notes (Recommended)",
+     "description": "The check is not met until a doctor opens both quotes and notes the disagreement (audited); it then goes to the board as a Point for review."
+    },
+    {
+     "label": "Flag only, never block",
+     "description": "As today: shown in 'Reports that disagree' and the summary; the check can be met without anyone looking."
+    }
+   ],
+   "why": "12 Oct discordance check (OCT12_FEATURES.md 3): stable fields that differ between final reports are 'for review', a polarity flip is always review; today they never block. Noting is audited and undoable. Vaidyx never says which value is right; the board decides.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R07-Q14",
+   "topic": "Hospital case form",
+   "core": false,
+   "type": "resource",
+   "question": "Can you get the hospital's current Tumour Board case submission form or checklist, blank, with no patient data?",
+   "header": "Proforma",
+   "multi": false,
+   "options": [
+    {
+     "label": "I'll get it (Recommended)",
+     "description": "We compare its fields with the NCG-based record list and the typed board question before the check is rebuilt."
+    },
+    {
+     "label": "Skip for now",
+     "description": "The check stays NCG-based only; hospital fields are added later."
+    },
+    {
+     "label": "Use a published pro-forma",
+     "description": "We model the typed fields on the Greater Manchester MDT standards pro-forma, already in the research."
+    }
+   ],
+   "why": "No hospital form is held (RESOURCES.md lists guidelines and synoptic templates only). It shows which fields the doctors already fill by hand (board question, ECOG, consent, specimen numbers), which settles R07-Q09 against real practice.",
+   "depends_on": [
+    "R07-Q09"
+   ],
+   "skip_if": "",
+   "resource": {
+    "item": "The hospital's blank Tumour Board case submission form or checklist (no patient data)",
+    "source_url": "No public URL: the hospital's Tumour Board secretariat, through Dr Minmini (Radiology) or Dr Usha (Biochemistry); fallback https://gmcancer.org.uk/wp-content/uploads/2023/06/V3.0-GM-MDT-Standards-June-23.pdf",
+    "target_folder": "hospital documents",
+    "why": "Aligns the check's required fields and the typed values with what the hospital's board already asks for."
+   },
+   "status": "To ask"
+  }
+ ]
+}

@@ -1,0 +1,357 @@
+{
+ "round": 3,
+ "title": "Access and permissions",
+ "intro": "Round 3 sets what each role may see and do, action by action, on top of the roles from round 2. The resident options follow how PACS, RIS and EMR systems split drafting from signing.",
+ "questions": [
+  {
+   "id": "R03-Q01",
+   "topic": "Case File rights",
+   "core": true,
+   "type": "decision",
+   "question": "Who may act on a Case File: the creating consultant's team only, or any consultant of the owning department?",
+   "header": "Owner scope",
+   "multi": false,
+   "options": [
+    {
+     "label": "Consultant's team; department reads (Recommended)",
+     "description": "The owner consultant, a co-owner consultant they name and their residents act; other consultants of the department can read."
+    },
+    {
+     "label": "Any consultant of the department",
+     "description": "As today: every doctor of the owning department can confirm, waive, send and mark ready."
+    },
+    {
+     "label": "The consultant's OPD unit",
+     "description": "Consultants of the same OPD unit (the clinic team in the HIS) share the Case Files and act on them."
+    }
+   ],
+   "why": "Today ownership is per department (access.py, V2 item 5.1). The owner ties residents to a named treating doctor per Case File (notes role-treating) and asked 'the owner is the treatment doctor right?' (gap-G04). EMRs add relationship rules on top of roles: supervisors attest entries of residents under their supervision (HL7 EHR-S FM TI.1.2).",
+   "depends_on": [
+    "R02-Q05",
+    "R02-Q06"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R03-Q02",
+   "topic": "Outside the team",
+   "core": false,
+   "type": "decision",
+   "question": "Should a doctor outside the team be able to open a Case File in an urgent case ('break-glass': open with a reason, audited)?",
+   "header": "Break-glass",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, with a reason; owner told (Recommended)",
+     "description": "Read-only for 24 hours; the opening is logged as its own audit event and the owner is told."
+    },
+    {
+     "label": "No; owner must add them",
+     "description": "Only the team, the participants and the coordinator ever open it."
+    },
+    {
+     "label": "Heads of department only",
+     "description": "Only a Head can break glass, with a reason; others ask the owner."
+    }
+   ],
+   "why": "EHRs use break-glass for care outside the usual relationship: a reason, a separate audit event, an alert and a time limit (Forcepoint and NHIMG guidance on break-the-glass access). Today a doctor of another department is refused unless participating (data.js matrix read_case). Option 3 uses R02-Q06.",
+   "depends_on": [
+    "R03-Q01",
+    "R02-Q06"
+   ],
+   "skip_if": "Skip if R03-Q01 answered 'Any consultant of the department' and doctors of other departments need no access.",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R03-Q03",
+   "topic": "Resident work",
+   "core": true,
+   "type": "decision",
+   "question": "Which preparation work may a resident do alone on a Case File they joined?",
+   "header": "Resident",
+   "multi": true,
+   "options": [
+    {
+     "label": "Re-fetch and upload outside reports (Recommended)",
+     "description": "Records come in and the check re-runs; a name-only patient match still needs the consultant."
+    },
+    {
+     "label": "Ask questions and prepare briefs",
+     "description": "Questions and specialty briefs are logged under the resident's name."
+    },
+    {
+     "label": "Send requests and reminders",
+     "description": "Messages read 'Dr <resident> for Dr <consultant>'; both see the replies."
+    }
+   ],
+   "why": "Settled: residents help before the board with role-based limited access and cannot sign (notes role-resident, role-treating). In reporting systems residents create drafts and preliminary reports while consultants sign the final (RADPAIR user roles, IntelePACS resident over-reads); US residents carried 39% to 72% of board preparation hours (data.js roles.resident). Recommended: tick all three. The summary is R09-Q05. If R02-Q07 chose tiers, answer for PGs.",
+   "depends_on": [
+    "R02-Q07"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R03-Q04",
+   "topic": "Resident sign rule",
+   "core": true,
+   "type": "decision",
+   "question": "As a general rule, what happens when a resident does something a consultant would sign or confirm (attest final, confirm a value, waive, mark ready, refer)?",
+   "header": "PG sign rule",
+   "multi": false,
+   "options": [
+    {
+     "label": "Resident proposes, consultant approves (Recommended)",
+     "description": "It shows as 'proposed by Dr R, awaiting Dr C' and counts only after the consultant's one tap; both names stay in the audit."
+    },
+    {
+     "label": "Small steps alone, others proposed",
+     "description": "Report dates and document type count at once; attest, values from scans, waive, ready and refer wait for the consultant's tap."
+    },
+    {
+     "label": "Consultant only",
+     "description": "Residents prepare and chase; every confirmation and sign-off is the consultant's."
+    }
+   ],
+   "why": "Settled: residents cannot sign, 'same as PACS systems' (notes role-treating); I03 liked. PACS and EMRs keep resident work preliminary until the attending signs (RADPAIR, IntelePACS, SIU Cerner co-sign guides; HL7 EHR-S FM: supervisors attest entries proposed by their residents); one study found only 73% of attestations done within 24 hours (JGME), so pending proposals need reminders (R14-Q06). R07-Q08 (the check), R09-Q05 (summary) and R10-Q05 (ready mark) apply this rule per area and can be skipped where they match.",
+   "depends_on": [
+    "R02-Q07"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R03-Q05",
+   "topic": "Leaving a team",
+   "core": false,
+   "type": "decision",
+   "question": "After a resident leaves a Case File team or their posting ends, what may they still see?",
+   "header": "After leave",
+   "multi": false,
+   "options": [
+    {
+     "label": "Only a de-identified logbook line (Recommended)",
+     "description": "Cancer type, date and their role, with no patient identifiers, for the PG e-logbook; past actions stay in the audit under their name."
+    },
+    {
+     "label": "Nothing at all",
+     "description": "Access ends at once; past actions stay in the audit."
+    },
+    {
+     "label": "Read-only until the board meets",
+     "description": "They can follow the case to its discussion, then access ends."
+    }
+   ],
+   "why": "Settled: residents join per Case File with a code (notes role-resident); R06 owns how they are removed. PG trainees in India keep an electronic logbook under PGMER-2023 (eportfolios.in summary, not checked against the NMC text). The same rule covers a fellow from another department.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R03-Q06",
+   "topic": "Supporting view",
+   "core": false,
+   "type": "decision",
+   "question": "What should a supporting doctor see of a Case File they were asked about?",
+   "header": "Support view",
+   "multi": false,
+   "options": [
+    {
+     "label": "Request, its records, the clinical question (Recommended)",
+     "description": "Adds the one-line question for the board and the treating doctor's note; no values, check or summary."
+    },
+    {
+     "label": "Only the request and its records",
+     "description": "As today; nothing else of the Case File."
+    },
+    {
+     "label": "The whole Case File while asked",
+     "description": "Full read until the request closes."
+    }
+   ],
+   "why": "Today a supporting department sees only its requests and the records it produced or was asked about, while the request is open (V2 item 5.1, data.js matrix 'L'). The clinical question helps the reporting doctor see what is needed. The same view would apply to treating departments that receive a request, such as Pulmonology (G11).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R03-Q07",
+   "topic": "Supporting residents",
+   "core": false,
+   "type": "decision",
+   "question": "May residents of a supporting department (for example radiology PGs) acknowledge requests and send Done?",
+   "header": "Support PGs",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, acknowledge and Done (Recommended)",
+     "description": "Done is a message, not a signature; the consultant still finalises the report in the RIS / LIS."
+    },
+    {
+     "label": "Acknowledge only",
+     "description": "A consultant of the department sends Done."
+    },
+    {
+     "label": "No Vaidyx access",
+     "description": "Residents of supporting departments do not use Vaidyx at all."
+    }
+   ],
+   "why": "Radiology residents write preliminary reports that a consultant finalises in the RIS / PACS (Toledo radiology policy, IntelePACS). In Vaidyx, Done never closes a request by itself; the signed record arriving does (V2 item 4.3). R02-Q13 decides the department desk role.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R03-Q08",
+   "topic": "Coordinator powers",
+   "core": false,
+   "type": "decision",
+   "question": "Which Case File details may the MDT Coordinator change?",
+   "header": "Coord edit",
+   "multi": false,
+   "options": [
+    {
+     "label": "Only the board date and agenda (Recommended)",
+     "description": "Cancer, stage group (the NCG setting) and hospital level stay the owner's; the owner is told of any date change."
+    },
+    {
+     "label": "All listing details, owner told",
+     "description": "As today: protocol, stage group, board date and level; each change notifies the owner."
+    },
+    {
+     "label": "Nothing; the owner changes all",
+     "description": "The coordinator only asks the owner to change details."
+    }
+   ],
+   "why": "Today the coordinator may change a Case File's listing (data.js matrix list_case), though the NCG setting is the stage group the doctor picks from signed reports (glossary). V2 section 4: the coordinator does no clinical confirmation. Settled: the coordinator records the decision (plan T19).",
+   "depends_on": [
+    "R02-Q08"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R03-Q09",
+   "topic": "Removing a Case File",
+   "core": false,
+   "type": "decision",
+   "question": "Who may remove a Case File, and how?",
+   "header": "Delete",
+   "multi": false,
+   "options": [
+    {
+     "label": "Archive with a reason, never delete (Recommended)",
+     "description": "Owner or coordinator archives it; it leaves every list but stays in storage and the audit; only test files can be purged."
+    },
+    {
+     "label": "Coordinator deletes, with a reason",
+     "description": "As today, plus a required reason; the owner is told."
+    },
+    {
+     "label": "Owner and coordinator delete",
+     "description": "Either can delete, with a reason."
+    }
+   ],
+   "why": "Today only the coordinator deletes and the owner cannot delete its own Case File (data.js matrix delete_case); destructive actions lack confirmation (U07). R15 owns retention periods.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R03-Q10",
+   "topic": "Participants",
+   "core": false,
+   "type": "decision",
+   "question": "What may a participating department do on a Case File it shares?",
+   "header": "Participant",
+   "multi": false,
+   "options": [
+    {
+     "label": "Read and comment (Recommended)",
+     "description": "Comments go to the owner's team and stay with the Case File; they never change records or the check."
+    },
+    {
+     "label": "Read only",
+     "description": "As built today."
+    },
+    {
+     "label": "Read, comment and send requests",
+     "description": "They can also ask departments for records on this Case File."
+    }
+   ],
+   "why": "B12 promised 'read and comment', but no comment feature exists (G08). The owner kept the participating department role (notes role-participant).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R03-Q11",
+   "topic": "Meeting access",
+   "core": false,
+   "type": "decision",
+   "question": "During a session, which Case Files may an internal board member open on their own device?",
+   "header": "Room access",
+   "multi": false,
+   "options": [
+    {
+     "label": "Every Case File on today's agenda (Recommended)",
+     "description": "Access opens when the session starts and ends when it closes; each opening is audited."
+    },
+    {
+     "label": "Only those their department may read",
+     "description": "As today: the rest show as restricted."
+    },
+    {
+     "label": "Only the shared screen",
+     "description": "Members follow the presenter and open nothing themselves."
+    }
+   ],
+   "why": "Today a department on the attendance sheet opens the room, but Case Files it may not read show as restricted (data.js matrix may_open, G13), so a pathologist in the room may not see the case under discussion. R12 owns what the shared screen shows.",
+   "depends_on": [
+    "R02-Q11"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R03-Q12",
+   "topic": "Vaidyx admin",
+   "core": false,
+   "type": "decision",
+   "question": "Should the Vaidyx admin (server level, with a shell tool) be able to open patient Case Files?",
+   "header": "Vaidyx admin",
+   "multi": false,
+   "options": [
+    {
+     "label": "Only by break-glass, with a reason (Recommended)",
+     "description": "Technical work uses synthetic data; opening a real Case File needs a reason, is audited and is shown to the root admin."
+    },
+    {
+     "label": "Yes, everything (as today)",
+     "description": "Sees and may do everything, every notification included."
+    },
+    {
+     "label": "Never; technical access only",
+     "description": "No clinical screen opens for the Vaidyx admin."
+    }
+   ],
+   "why": "Today the Vaidyx admin holds every right and receives every department's notification (data.js roles.vaidyxadmin, matrix column 'vx'); the role holds a server shell tool and should be rarely used in daily work.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  }
+ ]
+}

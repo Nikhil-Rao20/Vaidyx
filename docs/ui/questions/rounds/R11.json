@@ -1,0 +1,435 @@
+{
+ "round": 11,
+ "title": "Meeting: joining and attendance",
+ "intro": "You settled that members join with a six-digit code from anywhere, phones included, and that a call option opens the dialer. These questions settle the details: the code, video, the hybrid room, attendance and quorum.",
+ "questions": [
+  {
+   "id": "R11-Q01",
+   "topic": "Invite list",
+   "core": false,
+   "type": "decision",
+   "question": "Who should get a join code for a meeting by default?",
+   "header": "Invite list",
+   "multi": false,
+   "options": [
+    {
+     "label": "Board members plus case teams (Recommended)",
+     "description": "The board's named members (set per board) plus each agenda Case File's treating doctor and residents; the coordinator can add or remove people."
+    },
+    {
+     "label": "Whole head departments",
+     "description": "Every doctor of the head departments and of the owners' departments gets a code (close to today's sheet, G13)."
+    },
+    {
+     "label": "Coordinator picks each time",
+     "description": "No default list; the coordinator chooses the people for every meeting."
+    }
+   ],
+   "why": "Settled: board members join with a six-digit code. Today attendance is by department, not named people, and every session opens to six departments (G13, D1). Named members also feed attendance (R11-Q08) and quorum (R11-Q14).",
+   "depends_on": [
+    "R10-Q01",
+    "R06-Q01",
+    "R02-Q11"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R11-Q02",
+   "topic": "Join code",
+   "core": true,
+   "type": "decision",
+   "question": "You said members join with a six-digit code: should each person get their own code, or one code per meeting?",
+   "header": "Join code",
+   "multi": false,
+   "options": [
+    {
+     "label": "Own code per person (Recommended)",
+     "description": "Each invitee gets a different code for that meeting; joining tells Vaidyx who it is; one leaked code is cancelled alone."
+    },
+    {
+     "label": "One code per meeting",
+     "description": "Everyone uses the same code; easiest to pass on; each person must type their name, and a forwarded code lets anyone in."
+    },
+    {
+     "label": "Own code for all meetings",
+     "description": "Each member keeps one code for every meeting of their board; fewer messages, harder to cancel."
+    }
+   ],
+   "why": "Settled: six-digit code, join from anywhere including phones (plan note, role-boardheads note). Per-person codes are what make automatic attendance possible (R11-Q08). Six digits give one million combinations, so wrong tries must be limited.",
+   "depends_on": [
+    "R11-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R11-Q03",
+   "topic": "Join code",
+   "core": false,
+   "type": "decision",
+   "question": "How long should a join code work?",
+   "header": "Code expiry",
+   "multi": false,
+   "options": [
+    {
+     "label": "Meeting day only (Recommended)",
+     "description": "Works from 30 minutes before the start until the coordinator closes the meeting; five wrong tries pause it for ten minutes."
+    },
+    {
+     "label": "From sending to close",
+     "description": "Works as soon as it arrives, so members can open the agenda early with it."
+    },
+    {
+     "label": "Single use",
+     "description": "Works once; rejoining after a dropped call needs a new code from the coordinator."
+    }
+   ],
+   "why": "Detail of the settled six-digit code. A short window limits a forwarded or guessed code; members reading the agenda early is covered by the cut-off (R10-Q09) and their own login.",
+   "depends_on": [
+    "R11-Q02"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R11-Q04",
+   "topic": "Join code",
+   "core": false,
+   "type": "decision",
+   "question": "How should the join code reach each person?",
+   "header": "Code sent by",
+   "multi": false,
+   "options": [
+    {
+     "label": "App and email (Recommended)",
+     "description": "Staff see it in Vaidyx, outside experts get it by email with the join link; free, no outside provider."
+    },
+    {
+     "label": "App, email and SMS",
+     "description": "Also an SMS to every invitee; in India this needs the hospital's DLT registration (TRAI rule: approved sender name and text) and an SMS provider."
+    },
+    {
+     "label": "App, email and WhatsApp",
+     "description": "Also WhatsApp, the channel most doctors read; needs a paid WhatsApp Business account with per-message charges, and messages pass through Meta."
+    },
+    {
+     "label": "All four",
+     "description": "Every channel at once; most reach, most set-up and cost."
+    }
+   ],
+   "why": "Only the join code here; R14 sets channels for all other notices. Research 17 Oct: SMS to Indian numbers must match a DLT-registered sender and template or it is blocked; WhatsApp codes must use Meta's paid authentication template (vendor pricing pages, 2025 to 2026; confirm before budgeting).",
+   "depends_on": [
+    "R11-Q02"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R11-Q05",
+   "topic": "Joining without an account",
+   "core": false,
+   "type": "decision",
+   "question": "Can someone without a Vaidyx login join with the code?",
+   "header": "No account",
+   "multi": false,
+   "options": [
+    {
+     "label": "Outside experts, plus OTP (Recommended)",
+     "description": "Staff log in and enter the code; an invited outside expert enters the code and a one-time password sent to the phone or email the coordinator typed."
+    },
+    {
+     "label": "Code alone for everyone",
+     "description": "Fastest; whoever holds the code joins, so a forwarded code lets a stranger in."
+    },
+    {
+     "label": "Login always needed",
+     "description": "Outside experts first get a guest login (R04), then use the code."
+    }
+   ],
+   "why": "Settled: joining is by code from anywhere. R03 sets what external members may access; R04 sets how logins work. Indian boards invite experts from other centres (NCG Virtual Tumour Board hub and spoke).",
+   "depends_on": [
+    "R04-Q04",
+    "R11-Q02"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R11-Q06",
+   "topic": "Outside experts",
+   "core": false,
+   "type": "decision",
+   "question": "What should an invited outside expert see during the meeting?",
+   "header": "Outside view",
+   "multi": false,
+   "options": [
+    {
+     "label": "Only their invited cases (Recommended)",
+     "description": "They see the shared screen for the cases they were invited to; other cases stay blank for them; nothing after the meeting."
+    },
+    {
+     "label": "The whole shared screen",
+     "description": "Everything the room sees for the whole meeting."
+    },
+    {
+     "label": "Voice and video only",
+     "description": "No patient data on their screen; they hear the presentation."
+    }
+   ],
+   "why": "NCG Virtual Tumour Board spokes share a de-identified case template. R15 decides de-identification and patient data on outside devices.",
+   "depends_on": [
+    "R11-Q05"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R11-Q07",
+   "topic": "Joining",
+   "core": false,
+   "type": "decision",
+   "question": "Should people with a valid code enter at once, or wait in a waiting room until the coordinator lets them in?",
+   "header": "Lobby",
+   "multi": false,
+   "options": [
+    {
+     "label": "Straight in, removable (Recommended)",
+     "description": "A valid code joins at once; the coordinator sees each name arrive and can remove anyone."
+    },
+    {
+     "label": "Everyone waits",
+     "description": "Each person waits until the coordinator admits them; safer, slow with 15 people."
+    },
+    {
+     "label": "Outside experts wait",
+     "description": "Hospital staff go straight in; outside experts wait to be admitted."
+    }
+   ],
+   "why": "The owner asked that adding people to the meeting be 'at very best'; fewest taps for members, control for the coordinator, who runs the board (T19 note).",
+   "depends_on": [
+    "R11-Q02",
+    "R11-Q05"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R11-Q08",
+   "topic": "Attendance",
+   "core": true,
+   "type": "decision",
+   "question": "Should joining with the code mark a person present by itself?",
+   "header": "Attendance",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, coordinator corrects (Recommended)",
+     "description": "Joining marks the person and their department present with the time; the coordinator fixes mistakes; corrections are audited."
+    },
+    {
+     "label": "Yes, confirmed at start",
+     "description": "Joins fill a draft list; the coordinator confirms it when starting the meeting."
+    },
+    {
+     "label": "No, by hand (today)",
+     "description": "Joins are shown, but the coordinator still marks attendance department by department."
+    }
+   ],
+   "why": "D1 today: the coordinator marks each department present or absent and types members by name; an agent is never counted as a member. A head not recorded present gets its agent (D2), so attendance drives the AI support.",
+   "depends_on": [
+    "R11-Q02"
+   ],
+   "skip_if": "Skip if R11-Q02 answered 'One code per meeting'.",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R11-Q09",
+   "topic": "Hybrid room",
+   "core": false,
+   "type": "decision",
+   "question": "How should people sitting in the meeting room be marked present?",
+   "header": "In the room",
+   "multi": false,
+   "options": [
+    {
+     "label": "Code on own phone, 'in room' (Recommended)",
+     "description": "They enter their code and pick 'I am in the room': counted present without joining audio or video (no echo)."
+    },
+    {
+     "label": "Coordinator ticks names",
+     "description": "The coordinator ticks in-room people from the invite list."
+    },
+    {
+     "label": "Scan a code on screen",
+     "description": "The room screen shows a QR code; scanning it with a logged-in phone marks present."
+    }
+   ],
+   "why": "Research: 73.7% of Indian boards meet in person and 24.8% are hybrid (ICMR-NCDIR). One rule for room and remote keeps attendance consistent.",
+   "depends_on": [
+    "R11-Q08"
+   ],
+   "skip_if": "Skip if R11-Q08 answered 'No, by hand (today)'.",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R11-Q10",
+   "topic": "Video",
+   "core": true,
+   "type": "decision",
+   "question": "How should remote members see and hear the meeting?",
+   "header": "Video",
+   "multi": false,
+   "options": [
+    {
+     "label": "Self-hosted Jitsi Meet (Recommended)",
+     "description": "Open source (Apache 2.0) on the hospital's server, so voice, video and shared screens stay in-house; phones may need the free Jitsi app."
+    },
+    {
+     "label": "Self-hosted LiveKit",
+     "description": "Also open source and in-house; video sits inside Vaidyx's own pages on any device; more building work for us."
+    },
+    {
+     "label": "Link to Zoom, Meet or Teams",
+     "description": "Uses the hospital's existing account, nothing to run; shared patient screens pass through that company's servers."
+    },
+    {
+     "label": "No video, phone call voice",
+     "description": "Remote members follow the shared screen in Vaidyx and talk over a normal call."
+    }
+   ],
+   "why": "Research 17 Oct: Jitsi Meet is a mature self-hosted stack with guest joining and token login (Jitsi handbook); on phone browsers camera and microphone support varies, so integrators advise the Jitsi app. LiveKit server and its web, Android and iOS kits are Apache 2.0, but the meeting screens must be built. Both run on CPU, not the GPU. Any video or voice needs HTTPS: browsers block camera and microphone otherwise (audio_feature.md); the internal app is plain http through SSH today, the public demo is HTTPS but synthetic only.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R11-Q11",
+   "topic": "Hybrid room",
+   "core": false,
+   "type": "decision",
+   "question": "How should the meeting room itself join a hybrid meeting?",
+   "header": "Room device",
+   "multi": false,
+   "options": [
+    {
+     "label": "One room computer (Recommended)",
+     "description": "The room PC with the big screen, one camera and one microphone joins as 'Meeting room'; remote members hear the whole room."
+    },
+    {
+     "label": "Coordinator's laptop",
+     "description": "The coordinator's laptop drives the big screen and carries the call."
+    },
+    {
+     "label": "Screen only, no call",
+     "description": "The room only shows the screen; remote members dial in by phone."
+    }
+   ],
+   "why": "Hybrid is common (24.8% of Indian boards, ICMR-NCDIR). R12 decides who controls the shared screen; this is only how the room is connected.",
+   "depends_on": [
+    "R11-Q10"
+   ],
+   "skip_if": "Skip if R11-Q10 answered 'No video, phone call voice'.",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R11-Q12",
+   "topic": "Phone calls",
+   "core": false,
+   "type": "decision",
+   "question": "You said a call option opens the phone's dialer: whom should a member be able to call with one tap?",
+   "header": "Call",
+   "multi": false,
+   "options": [
+    {
+     "label": "Anyone invited (Recommended)",
+     "description": "A call icon beside each invitee, joined or not, opens the dialer with their number; handy to reach a late head."
+    },
+    {
+     "label": "Coordinator calls anyone",
+     "description": "Only the coordinator sees call icons; members can call the coordinator."
+    },
+    {
+     "label": "Only people who joined",
+     "description": "Call icons only beside people already in the meeting."
+    }
+   ],
+   "why": "Settled: on phones a call option opens the dialer with the person's number (a tel: link, no telephone line needed). Numbers come from the profile (R04). Numbers are not listed on screen; the dialer shows only the one called.",
+   "depends_on": [
+    "R11-Q01",
+    "R04-Q09"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R11-Q13",
+   "topic": "Attendance",
+   "core": false,
+   "type": "decision",
+   "question": "Should attendance follow people joining and leaving case by case?",
+   "header": "Per case",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, per case (Recommended)",
+     "description": "A head who joins late or leaves early counts only for the cases they were there for; their agent stands in for the rest."
+    },
+    {
+     "label": "Once per meeting",
+     "description": "Attendance is taken at the start; leaving early changes nothing."
+    }
+   ],
+   "why": "Today attendance is per session; marking a head absent during the session starts its agent at once, and agents already run per Case File (absent_roles_by_case). Busy surgeons often attend only their own cases.",
+   "depends_on": [
+    "R11-Q08"
+   ],
+   "skip_if": "Skip if R11-Q08 answered 'No, by hand (today)'.",
+   "resource": null,
+   "status": "To ask"
+  },
+  {
+   "id": "R11-Q14",
+   "topic": "Quorum",
+   "core": false,
+   "type": "decision",
+   "question": "What should count as quorate (the minimum specialties present)?",
+   "header": "Quorum",
+   "multi": false,
+   "options": [
+    {
+     "label": "PM-JAY three, editable (Recommended)",
+     "description": "Default: a surgical, a medical and a radiation oncologist present, in person or online; the root admin can change it per board; agents never count; shown as a flag, never a block."
+    },
+    {
+     "label": "All four board heads",
+     "description": "Radiology, Medical Oncology, Surgical Oncology and Pathology present; often missed (pathologists attend 28.5% of Indian boards)."
+    },
+    {
+     "label": "No quorum check",
+     "description": "Only attendance is recorded."
+    }
+   ],
+   "why": "Today: a PM-JAY composition flag (HBP 2.2: surgical, radiation and medical oncologist) runs only for empanelled hospitals; Gujarat 2024 asks for a three-oncologist certificate. NHS: quorate on 95% of meetings; UK lung MDTs quorate in 21%. I01 included a quorum panel.",
+   "depends_on": [
+    "R11-Q08",
+    "R10-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "To ask"
+  }
+ ]
+}
