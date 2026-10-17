@@ -248,5 +248,3 @@ docs_Eswar/
 data/his_mock/
 
 # Workflow atlas: the reader's marks and comments (local only)
-docs/ui/workflow/notes.json
-docs/ui/workflow/notes.json.tmp
