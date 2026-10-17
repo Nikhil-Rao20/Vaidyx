@@ -1,0 +1,770 @@
+[
+ {
+  "id": "C-A1",
+  "questions": "R09-Q01, R09-Q02, R07-Q04, R17-Q02",
+  "issue": "Summary only at ready mark vs fill-in summary page from the start",
+  "resolution": "Lines live from verified quotes; AI text and briefs at ready (R09-Q15); fix journey bar order",
+  "severity": "Blocks build",
+  "decided": "Owner decided 17 Oct"
+ },
+ {
+  "id": "C-A2",
+  "questions": "R10-Q08, R12-Q05",
+  "issue": "Coordinator adds a not-ready case; room opens on the summary",
+  "resolution": "Show the fill-in summary with blanks, labelled 'not marked ready by the owner'",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-A3",
+  "questions": "R09-Q09, R17-Q20",
+  "issue": "Five heads vs six helper cards",
+  "resolution": "5 heads at ready, Nuclear Medicine on click (R09-Q16)",
+  "severity": "Should fix",
+  "decided": "Owner decided 17 Oct"
+ },
+ {
+  "id": "C-A4",
+  "questions": "R09-Q11, R17-Q19",
+  "issue": "Unpinned Ask answers not kept vs every chat saved",
+  "resolution": "Keep all chats; pinned answers go to the summary notes and the room",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-A5",
+  "questions": "R01-Q02, R08-Q08, R08-Q09, R10-Q12, R14-Q08",
+  "issue": "Sending waits for a tap vs automatic reminders",
+  "resolution": "New content needs Send; reminders about something already sent go out by themselves, audited as 'Vaidyx (automatic)'",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-A6",
+  "questions": "R13-Q03, R13-Q04",
+  "issue": "About 10 required fields vs 'Noted' in one click",
+  "resolution": "Required fields set per outcome (decision, deferred, referred, not discussed, noted)",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-A7",
+  "questions": "R17-Q02, R17-Q04",
+  "issue": "No next-step card, but the ladder question speaks of one",
+  "resolution": "Ladder applies to each blank line's button; no separate card",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-A8",
+  "questions": "R15-Q05, R15-Q10",
+  "issue": "Outside members full identity vs de-identified",
+  "resolution": "Full identity only with a consent tick (R15-Q15)",
+  "severity": "Should fix",
+  "decided": "Owner decided 17 Oct"
+ },
+ {
+  "id": "C-A9",
+  "questions": "R15-Q07, R17-Q18",
+  "issue": "Audit to team and coordinator vs only in profile settings / audit person",
+  "resolution": "Settings > Activity shows a person's own actions; full log to the coordinator and a read-only Auditor role",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-A10",
+  "questions": "R17-Q19, R03-Q06",
+  "issue": "Chats readable by 'departments added' vs supporting doctors see no values",
+  "resolution": "Chats for the owner's team and participating departments, never supporting doctors",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-A11",
+  "questions": "R13-Q12, R13-Q13",
+  "issue": "Coordinator copies what counts vs concern saved by name",
+  "resolution": "A member's concern always goes into the record; other notes copied by choice",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-A12",
+  "questions": "R14-Q08, R10-Q09",
+  "issue": "Message when the agenda is final, but no cut-off",
+  "resolution": "Coordinator presses 'Send agenda'; later additions flagged",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-A13",
+  "questions": "R01-Q06, R01-Q15",
+  "issue": "Preprints out vs preprints allowed",
+  "resolution": "Preprints and white papers only in published cases, labelled 'not peer reviewed', never a checklist source",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-A14",
+  "questions": "R17-Q04, R18-Q14",
+  "issue": "Undo 10 s vs 2 s slider",
+  "resolution": "Slider stays while Undo is possible (10 s)",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-A15",
+  "questions": "R05-Q12, R17-Q21, R18-Q07",
+  "issue": "Urgency set at creation but not on the form; hospital level pre-filled but not asked",
+  "resolution": "Urgency on the create form (no default); hospital level comes from hospital set-up, not the form",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-A16",
+  "questions": "R07-Q12, R10-Q07",
+  "issue": "Unready case stays on agenda vs never on agenda",
+  "resolution": "Stays, flagged 'no longer ready'; coordinator decides",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-A17",
+  "questions": "R03-Q08, R03-Q09",
+  "issue": "Coordinator limited to date and agenda, yet may archive",
+  "resolution": "Coordinator may archive only with a reason; owner told",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-A18",
+  "questions": "R18-Q10, R17-Q05",
+  "issue": "'Pin what my home shows' vs home is a list",
+  "resolution": "Pinning = saved filters and columns",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-A19",
+  "questions": "R11-Q04, R14-Q08",
+  "issue": "Join code in-app only vs push carries the code",
+  "resolution": "Push says 'meeting starting'; the code shows only in the app",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-A20",
+  "questions": "R15-Q08, R03-Q09",
+  "issue": "Remove after retention vs never deleted",
+  "resolution": "Archive; purge only by hospital policy with root admin approval",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-A21",
+  "questions": "R14-Q03, R06-Q14",
+  "issue": "Residents get all team alerts vs four kinds",
+  "resolution": "Residents get the R06-Q14 list only",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-A22",
+  "questions": "R04-Q13, R08-Q15",
+  "issue": "Department email for mail drafts vs in-app only",
+  "resolution": "Department email is a contact field only",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-B1",
+  "questions": "settled Departments, R02-Q01",
+  "issue": "24 treating in settled vs 23 (Haematology listed twice)",
+  "resolution": "settled.json corrected to 23",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-B2",
+  "questions": "settled Departments, R02-Q02, R02-Q03",
+  "issue": "Only 6 supporting, but Medical Genetics and GI Surgery (endoscopy) also receive requests",
+  "resolution": "Add 'treating departments that also receive requests'",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-B3",
+  "questions": "I06, I15, T13 vs R10-Q09, R14-Q13, R10-Q01",
+  "issue": "Liked ideas overtaken (cut-off, re-fetch tap, site boards)",
+  "resolution": "Marked superseded",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-B4",
+  "questions": "settled Sources, R01-Q15",
+  "issue": "Peer-reviewed only vs preprints",
+  "resolution": "Labelled exception as C-A13",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-B5",
+  "questions": "settled Demo passwords, R04-Q04, Q05, Q10",
+  "issue": "Dummy logins vs email login, forced change, full profile",
+  "resolution": "Demo accounts get synthetic emails and full profiles, no forced change",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-B6",
+  "questions": "settled After the board, R16-Q08",
+  "issue": "After-board parked vs 'everything' in the new UI",
+  "resolution": "'Everything' = before and during the board; after-board screens later",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-B7",
+  "questions": "settled Supporting side demo, R08-Q16",
+  "issue": "'Open source based' vs own mock",
+  "resolution": "Own mock HIS to real standards; open-source Orthanc and OHIF",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-B8",
+  "questions": "CLAUDE.md, R01-Q12",
+  "issue": "'expert-in-the-loop' vs 'expert over the loop'",
+  "resolution": "CLAUDE.md and the new UI say 'Human oversight (expert over the loop)'; old /tb unchanged",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-C1",
+  "questions": "settled Board members joining, R11-Q12",
+  "issue": "Phones, dialer",
+  "resolution": "Laptop: call icon shows the number; dialer with phones later",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-C2",
+  "questions": "I12, T17, R17-Q10",
+  "issue": "Phone-first supporting views",
+  "resolution": "Laptop views, click",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-C3",
+  "questions": "R12-Q14",
+  "issue": "Member on a phone",
+  "resolution": "Remote member on a laptop, same three actions",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-C4",
+  "questions": "R11-Q09",
+  "issue": "Code on own phone, QR",
+  "resolution": "'I am in the room' on own laptop plus coordinator ticks; QR later",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-C5",
+  "questions": "R14-Q01, R16-Q02",
+  "issue": "Phone push alerts",
+  "resolution": "Browser push on the laptop (Chrome, Edge); phones later",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-C6",
+  "questions": "R16-Q03",
+  "issue": "Android, iPhone, iPad tests now",
+  "resolution": "Laptop browsers now; phone tests in the phone phase",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-C7",
+  "questions": "R15-Q02",
+  "issue": "What a phone may keep",
+  "resolution": "Applies to the browser on every device",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-C8",
+  "questions": "R16-Q11",
+  "issue": "Mock-ups at desktop and phone width",
+  "resolution": "No mock-ups (owner, 17 Oct)",
+  "severity": "Minor",
+  "decided": "Owner decided 17 Oct"
+ },
+ {
+  "id": "C-C9",
+  "questions": "R08-Q10",
+  "issue": "Typed or spoken comment",
+  "resolution": "Typed",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-C10",
+  "questions": "R09-Q12",
+  "issue": "Pop-up keeps a voice option",
+  "resolution": "Text only",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-C11",
+  "questions": "R11-Q10, R11-Q15, R17-Q12",
+  "issue": "Push-to-talk agent, listening to every discussion",
+  "resolution": "Text agent with R17-Q22 states; voice later",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-D1",
+  "questions": "R11-Q10, R11-Q15, R09-Q13",
+  "issue": "Is video between people in the text-only build?",
+  "resolution": "Basic LiveKit video on our server, localhost first (R11-Q16)",
+  "severity": "Blocks build",
+  "decided": "Owner decided 17 Oct"
+ },
+ {
+  "id": "C-D2",
+  "questions": "R13-Q03",
+  "issue": "The about 10 decision fields not listed",
+  "resolution": "Proposed in the build spec for your review",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-D3",
+  "questions": "R02-Q08, R07-Q13, R13-Q14",
+  "issue": "Non-doctor coordinator and clinical flags",
+  "resolution": "A doctor resolves, coordinator records (R13-Q16)",
+  "severity": "Should fix",
+  "decided": "Owner decided 17 Oct"
+ },
+ {
+  "id": "C-D4",
+  "questions": "R11-Q14",
+  "issue": "Quorum flag or block; do agents count?",
+  "resolution": "Flag only; agents never count",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-D5",
+  "questions": "R14-Q10, R14-Q14",
+  "issue": "New request urgent or 08:00 digest?",
+  "resolution": "Requests to a department go out at once",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-D6",
+  "questions": "R07-Q09",
+  "issue": "Which values may be typed without a report?",
+  "resolution": "Fixed list (for example ECOG, menopausal status); never stage or tumour markers",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-D7",
+  "questions": "R01-Q04",
+  "issue": "What starts a new round?",
+  "resolution": "Only coming back after a recorded decision",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-D8",
+  "questions": "R01-Q03, R05-Q08, R06-Q13",
+  "issue": "On referral who owns; must the new department accept?",
+  "resolution": "A receiving consultant accepts; old owner stays until then",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-D9",
+  "questions": "R17-Q12, R09-Q14",
+  "issue": "Room may show an unreviewed summary",
+  "resolution": "Labelled 'AI draft, not reviewed'",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-D10",
+  "questions": "R01-Q14 to Q17, R17-Q15",
+  "issue": "Published cases have no place on the new page",
+  "resolution": "'Published cases' panel one click away",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-D11",
+  "questions": "R09-Q07, R15-Q01",
+  "issue": "Removed items for active learning, no privacy rule",
+  "resolution": "Kept on the hospital instance; only de-identified data you confirm may leave",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-D12",
+  "questions": "R05-Q12, R10-Q03",
+  "issue": "Board date pre-filled vs meetings by hand",
+  "resolution": "Pre-fill only when a meeting exists",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-D13",
+  "questions": "R13-Q07, R13-Q08",
+  "issue": "Pop-up open after save; head never answers",
+  "resolution": "Coordinator adds an addendum; missing answer shown as missing",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-D14",
+  "questions": "R09-Q07",
+  "issue": "Count or short summary",
+  "resolution": "A count, list on click",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-D15",
+  "questions": "R17-Q01, R17-Q21",
+  "issue": "Urgency 1 to 5 labels; filter list",
+  "resolution": "Labels in the build spec (5 most urgent); filters: date, name, treated by, organ, imaging, urgency, status, board date",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-D16",
+  "questions": "R02-Q12, R17-Q06",
+  "issue": "Top bar for people with several roles",
+  "resolution": "All items of all their roles",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-E1",
+  "questions": "R16-Q09, R16-Q10, R14-Q01",
+  "issue": "Push needs HTTPS except localhost; walkthrough laptop and phone",
+  "resolution": "Walkthrough on a laptop over localhost; HTTPS with deployment later",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-E2",
+  "questions": "R15-Q06",
+  "issue": "Returns if video waits",
+  "resolution": "Video is in (R11-Q16): stays skipped",
+  "severity": "Should fix",
+  "decided": "Owner decided 17 Oct"
+ },
+ {
+  "id": "C-E3",
+  "questions": "R11-Q05, R04-Q01, R04-Q10",
+  "issue": "Outside and non-clinical accounts not defined",
+  "resolution": "Define guest (outside expert) and non-clinical accounts; registration number for doctors only",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-E4",
+  "questions": "R15-Q04, R11-Q06",
+  "issue": "Do outside experts open Case Files?",
+  "resolution": "Shared screen only, during the meeting",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-E5",
+  "questions": "R10-Q10, R14-Q05",
+  "issue": "'Late' assumes a cut-off",
+  "resolution": "'Late' = added after 'Send agenda'",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-E6",
+  "questions": "R13-Q06, R10-Q13, R13-Q04",
+  "issue": "'Not reached' vs 'not discussed'",
+  "resolution": "One term 'Not discussed'; next step stated per outcome",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "C-E7",
+  "questions": "R15-Q13, R15-Q08",
+  "issue": "Retention and consent defaults",
+  "resolution": "Labelled 'not from a hospital document'",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-A1",
+  "questions": "R01-Q06, R01-Q14 to Q16",
+  "issue": "Published cases read as treatment advice",
+  "resolution": "Owner exception with guards (R01-Q18, R01-Q19, CLAUDE.md)",
+  "severity": "Blocks build",
+  "decided": "Owner decided 17 Oct"
+ },
+ {
+  "id": "S-A2",
+  "questions": "R17-Q16, R17-Q20",
+  "issue": "Helpers 'what that doctor might be thinking'",
+  "resolution": "Named '<Specialty> records check'; brief only from the records",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-A3",
+  "questions": "R12-Q09, R17-Q12, R11-Q14",
+  "issue": "Agent 'replaces' an absent head",
+  "resolution": "Labelled 'AI support for absent <specialty>, from records'; never counts for quorum or the PM-JAY seat",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-A4",
+  "questions": "R17-Q01, R17-Q21, R14-Q10",
+  "issue": "Urgency is a clinical priority",
+  "resolution": "Only people set it, shown 'set by Dr X'; AI never pre-fills or suggests it",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-A5",
+  "questions": "R05-Q07, R05-Q08",
+  "issue": "CUP mammography 'when it fits', 'primary found'",
+  "resolution": "The doctor answers yes or no; Vaidyx shows the quote",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-A6",
+  "questions": "R08-Q01",
+  "issue": "'Tell the doctor to order'",
+  "resolution": "Worded 'NCG lists X as required; no order found in the hospital system'",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-B2",
+  "questions": "R01-Q01, R08-Q08, R10-Q12",
+  "issue": "Automatic reminders vs nothing without a click",
+  "resolution": "Same rule as C-A5; never confirms, waives, marks ready or sends a first request",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-B3",
+  "questions": "R07-Q09",
+  "issue": "Typed values have no quote",
+  "resolution": "Shown 'entered by Dr X, no report'; settles a gap, never a verified value",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-B4",
+  "questions": "R17-Q19, R09-Q11",
+  "issue": "Saved chats go stale",
+  "resolution": "Stamped with the records version; 'records changed since' shown",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-B6",
+  "questions": "R03-Q12",
+  "issue": "Vaidyx admin has full access today",
+  "resolution": "Break-glass with a reason, owner told, no clinical actions",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-B7",
+  "questions": "R01-Q13",
+  "issue": "AI drafts on screen carry no model name",
+  "resolution": "Small 'AI draft' chip linking to the model page",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-B10",
+  "questions": "R15-Q11",
+  "issue": "Masking could touch the protected real case",
+  "resolution": "Skip protected cases; masked copy beside the original",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-B11",
+  "questions": "R17-Q18, R02-Q14",
+  "issue": "New roles (auditor)",
+  "resolution": "Plain accounts, never a Vaidyx admin",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-C1",
+  "questions": "R04-Q04, R04-Q06",
+  "issue": "Random password by plain email; no second step",
+  "resolution": "Password expires in 24 h or on first use; TOTP for coordinators, admins and remote logins",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-C2",
+  "questions": "settled Board members joining, R11-Q01",
+  "issue": "'From anywhere' exposes the real instance",
+  "resolution": "Remote only through hospital VPN or an IT HTTPS proxy, later; code plus login, limited tries",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-C4",
+  "questions": "R17-Q19",
+  "issue": "'Whole team' not defined",
+  "resolution": "Owner's Case File team; removed residents lose access",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-C6",
+  "questions": "R15-Q08, R15-Q13",
+  "issue": "DPDP basics not asked (breach notice, processing agreement, children's data, access requests)",
+  "resolution": "One short privacy round with the hospital before any real patient",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-C8",
+  "questions": "R06-Q05, R06-Q09",
+  "issue": "Reusable join code shared widely",
+  "resolution": "Show join attempts to the approver; limit tries",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-C9",
+  "questions": "R16-Q04, R15-Q02",
+  "issue": "Offline text stays on the device",
+  "resolution": "Session only; wiped at sign-out",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-C10",
+  "questions": "R14-Q01",
+  "issue": "Push goes through Google / Mozilla servers",
+  "resolution": "No UHID or Case File id in a push",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-C11",
+  "questions": "R04-Q09, R11-Q12",
+  "issue": "Doctors' mobile numbers shown",
+  "resolution": "Staff agree at profile set-up; shown to signed-in hospital members only",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-C12",
+  "questions": "R01-Q16",
+  "issue": "Search words leave the server",
+  "resolution": "Diagnosis words only, no age, sex or dates; each search logged",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-D1",
+  "questions": "R16-Q05",
+  "issue": "/tb-nik route needs main app code",
+  "resolution": "Owner exception (R16-Q17, CLAUDE.md)",
+  "severity": "Blocks build",
+  "decided": "Owner decided 17 Oct"
+ },
+ {
+  "id": "S-D2",
+  "questions": "R04-Q04, R04-Q07",
+  "issue": "No admin password reset in the main app",
+  "resolution": "Owner exception (R16-Q17, CLAUDE.md)",
+  "severity": "Blocks build",
+  "decided": "Owner decided 17 Oct"
+ },
+ {
+  "id": "S-D3",
+  "questions": "R04-Q05",
+  "issue": "Login names reject '@'",
+  "resolution": "Allow email addresses",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-D4",
+  "questions": "R11-Q16",
+  "issue": "LiveKit not installed; CSP blocks it; remote needs IT",
+  "resolution": "User-space binary, localhost first, CSP exception (R16-Q17); IT ticket later",
+  "severity": "Should fix",
+  "decided": "Owner decided 17 Oct"
+ },
+ {
+  "id": "S-D5",
+  "questions": "R09-Q09, R08-Q05, R12-Q13",
+  "issue": "GPU 135.7 of 143.7 GB at 300 W",
+  "resolution": "Priority queue, meeting first; redraft only on change, never during a meeting; no speech models now",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-D6",
+  "questions": "R16-Q15",
+  "issue": "Node.js not installed",
+  "resolution": "User-space Node in /data/vaidyx/tools (needs your go)",
+  "severity": "Minor",
+  "decided": "Needs go"
+ },
+ {
+  "id": "S-D7",
+  "questions": "R08-Q05, R10-Q12",
+  "issue": "No background jobs today",
+  "resolution": "In-process scheduler, single worker",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-D8",
+  "questions": "R15-Q11",
+  "issue": "No PDF redaction library",
+  "resolution": "Masked copy, original hash kept; licence checked before adding a library",
+  "severity": "Should fix",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-D9",
+  "questions": "R14-Q01",
+  "issue": "Browser push library missing",
+  "resolution": "Install into the app venv; desktop push first, localhost",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ },
+ {
+  "id": "S-D11",
+  "questions": "R04-Q08",
+  "issue": "Server token lives 7 days",
+  "resolution": "Tumour Board idle timeout",
+  "severity": "Minor",
+  "decided": "Default (change if you disagree)"
+ }
+]

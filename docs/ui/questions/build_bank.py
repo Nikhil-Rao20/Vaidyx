@@ -15,6 +15,7 @@ HERE = Path(__file__).resolve().parent
 ROUNDS = HERE / "rounds"
 OUT = HERE / "Vaidyx_TB_Question_Bank.xlsx"
 SETTLED = HERE / "settled.json"
+CHECK = HERE / "check.json"
 
 DASHES = re.compile("[\u2013\u2014]")
 SCOPE = re.compile(r"\b(diagnos(e|is|es)|recommend(s|ed)? (a )?treatment|treatment (plan|choice) by (the )?AI|predict(s|ion)? (survival|outcome|prognosis)|assign(s)? (the )?stage|interpret(s)? (the )?(image|scan))", re.I)
@@ -131,6 +132,7 @@ def build(rounds):
         ["Settled", "Things you already decided on the workflow page (Settled sheet). They are not asked again."],
         ["Source of truth", "docs/ui/questions/rounds/R01.json to R18.json; this workbook is rebuilt from them (build_bank.py)."],
         ["Status values", ", ".join(STATUS)],
+        ["Check", "The final check of all answers (17 Oct): every conflict or gap found, its resolution, and whether you decided it or a default was applied (Check sheet, from check.json)."],
     ]:
         ws.append(line)
     ws.column_dimensions["A"].width = 18; ws.column_dimensions["B"].width = 120
@@ -187,6 +189,11 @@ def build(rounds):
     rows = [[q["id"], q["question"], q.get("answer", ""), q.get("own_words", ""), q.get("answered_on", "")]
             for r in rounds for q in r.get("questions", []) if q.get("status") == "Answered"]
     sheet(wb.create_sheet("Decisions"), ["Q ID", "Question", "Answer", "Your own words", "Date"], rows, [10, 60, 30, 50, 12])
+
+    check = json.loads(CHECK.read_text(encoding="utf-8")) if CHECK.exists() else []
+    sheet(wb.create_sheet("Check"), ["Check ID", "Questions", "Issue found", "Resolution", "Severity", "Decided"],
+          [[c["id"], c["questions"], c["issue"], c["resolution"], c["severity"], c["decided"]] for c in check],
+          [9, 30, 50, 60, 12, 26])
     wb.save(OUT)
     return OUT
 
