@@ -29,7 +29,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Admin invites, doctor completes (Recommended)",
+   "notes": "Refined by R04-Q04: the admin creates the account with a random password and sends it by mailto from their own email; the doctor changes it at first login and completes the profile.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R04-Q02",
@@ -59,7 +62,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Department admin, like doctors (Recommended)",
+   "own_words": "Doctors will be busy; the admin creates every account and assigns them, in the right way possible.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R04-Q03",
@@ -89,7 +95,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Yes, course or posting end (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R04-Q04",
@@ -121,7 +129,10 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Password set by the admin, changed at first login",
+   "own_words": "When the admin creates a fresh account, the credentials are sent to the person by email: the admin has a mailto option to send from their own email to the person's email, with a randomly generated password. At the first login the person must change the password. That ends the login procedure.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R04-Q05",
@@ -151,7 +162,10 @@
    ],
    "skip_if": "Skip if R04-Q04 answered 'Mobile number and SMS OTP' (the mobile number is then the login).",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Their email address",
+   "notes": "Options adapted in the interview to the email-based flow of R04-Q04 (email added and recommended).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R04-Q06",
@@ -185,7 +199,10 @@
    ],
    "skip_if": "Skip if R04-Q04 answered 'Password and OTP every time' (everyone already has a second step).",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "No one",
+   "own_words": "Keep it simple for now; no one needs a second step.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R04-Q07",
@@ -215,7 +232,10 @@
    ],
    "skip_if": "Skip if R04-Q04 answered 'Mobile number and SMS OTP' (there are no passwords).",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Department admin sends a new password by mail",
+   "notes": "Options adapted to the R04-Q04 flow: fresh random password mailed from the admin's own email, changed at the next sign-in, audited.",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R04-Q08",
@@ -243,7 +263,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "When the browser closes",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R04-Q09",
@@ -277,7 +299,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Name, designation and photo; Mobile number; Medical registration number; Qualification and unit",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R04-Q10",
@@ -307,7 +331,9 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Full profile before any use",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R04-Q11",
@@ -339,7 +365,11 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Their department's Case Files, tagged and filterable",
+   "own_words": "They see their department's Case Files, each with a tag 'from Dr XX, Dept XX' showing who created it. Everything must have filtering, not everything placed at once: by date, name, treating doctor, supporting doctor and many more filters, so doctors see and do everything neat and clear. This is the first screen: simple, neat and clear.",
+   "notes": "Screen decision: feeds R17-Q01 (doctor home) and R17-Q05 (case list grouping).",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R04-Q12",
@@ -367,7 +397,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Also a working HIS test",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R04-Q13",
@@ -395,7 +427,9 @@
    "depends_on": [],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Email and desk phone (Recommended)",
+   "answered_on": "17/10/2026"
   },
   {
    "id": "R04-Q14",
@@ -425,7 +459,10 @@
    ],
    "skip_if": "",
    "resource": null,
-   "status": "To ask"
+   "status": "Answered",
+   "answer": "Edit department contacts; Mark a doctor on leave",
+   "answered_on": "17/10/2026"
   }
- ]
+ ],
+ "status": "Done"
 }

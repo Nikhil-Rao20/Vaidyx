@@ -1,20 +1,92 @@
 [
-  {"topic": "Departments", "decision": "24 treating departments: the 20 of the first list plus Hematology, Pediatric Surgery, Medical Geneticist, Palliative Medicine. Only 6 supporting: Radiology, Pathology, Microbiology, Biochemistry, Nuclear Medicine, Clinical Pharmacology.", "source": "Workflow page notes P3, P4 (16 Oct)"},
-  {"topic": "Case File ownership", "decision": "Only a treating doctor creates a Case File; there is never a Case File without an owner.", "source": "Notes on G01 (16 Oct)"},
-  {"topic": "Chair", "decision": "No separate chair role: the MDT Coordinator does the chair's job.", "source": "Section notes 'chair' (16 Oct)"},
-  {"topic": "Who decides", "decision": "The MDT Coordinator.", "source": "Notes on plan T19 (16 Oct)"},
-  {"topic": "Residents / PG / fellows", "decision": "Part of the treating doctor's team. The treating doctor adds them to each Case File (own department or other departments); they join with a code; role-based limited access; they cannot sign documents, as in PACS systems. Each treating doctor has at least one resident.", "source": "Notes on roles 'treating' and 'resident' (16 Oct)"},
-  {"topic": "Board members joining", "decision": "Join the meeting from anywhere, phones included, with a six-digit code. On phones a call option opens the phone dialer with the person's number.", "source": "Notes on 'board heads' and the plan (16 Oct)"},
-  {"topic": "End-of-meeting input", "decision": "At the end each board member gets a pop-up to give a summary or suggestions, by text or voice.", "source": "Notes on 'board heads' (16 Oct)"},
-  {"topic": "Supporting side demo", "decision": "A demo PACS and HIS (open source) must be built in a later phase to show the supporting doctor's work.", "source": "Notes on role 'supporting' (16 Oct)"},
-  {"topic": "Oversight", "decision": "Expert OVER the loop, not expert-in-the-loop.", "source": "Section notes 'workflow' (16 Oct)"},
-  {"topic": "Workflow shape", "decision": "Not linear: the workflow has loops.", "source": "Section notes 'workflow' (16 Oct)"},
-  {"topic": "Interface", "decision": "Rebuild the whole frontend; very simple, few clicks, from a treating doctor's point of view.", "source": "Section notes 'screens', 'plan' (16 Oct)"},
-  {"topic": "Sources", "decision": "Only authorised, validated sources (official guidelines, books, peer-reviewed papers); mind rate limits when searching.", "source": "Notes on W1, T10 (16 Oct)"},
-  {"topic": "Cancer list", "decision": "Top 10 followed by manual entry; grouping by male / female / paediatric / general; Cancer of Unknown Primary must exist.", "source": "Notes on W2, W3, W4 (16 Oct)"},
-  {"topic": "After the board", "decision": "Parked until the workflow and the interface are set.", "source": "Notes on plan T21 (16 Oct)"},
-  {"topic": "Demo passwords", "decision": "Keep the existing dummy demo logins.", "source": "Notes on plan T02 (16 Oct)"},
-  {"topic": "Doctors' meeting 19 Oct", "decision": "Handled by the owner; no need to record it here.", "source": "Notes on W7, T05 (16 Oct)"},
-  {"topic": "Ideas liked", "decision": "I01 presenter mode, I03 resident role, I05 triage lists, I06 agenda cut-off, I08 specialist confirmation (requested by the treating doctor), I09 send the outcome, I10 tell the owner and a one-page decision, I12 phone-first supporting views, I14 link to the department's own system, I15 re-fetch from the notification, I16 next-step card.", "source": "Section notes on roles (16 Oct)"},
-  {"topic": "Plan items kept", "decision": "T01, T04, T06 to T18, T20, T22, T23.", "source": "Plan marks (16 Oct)"}
+ {
+  "topic": "Departments",
+  "decision": "24 treating departments: the 20 of the first list plus Hematology, Pediatric Surgery, Medical Geneticist, Palliative Medicine. Only 6 supporting: Radiology, Pathology, Microbiology, Biochemistry, Nuclear Medicine, Clinical Pharmacology.",
+  "source": "Workflow page notes P3, P4 (16 Oct)"
+ },
+ {
+  "topic": "Case File ownership",
+  "decision": "Only a treating doctor creates a Case File; there is never a Case File without an owner.",
+  "source": "Notes on G01 (16 Oct)"
+ },
+ {
+  "topic": "Chair",
+  "decision": "No separate chair role: the MDT Coordinator does the chair's job.",
+  "source": "Section notes 'chair' (16 Oct)"
+ },
+ {
+  "topic": "Who decides",
+  "decision": "The MDT Coordinator.",
+  "source": "Notes on plan T19 (16 Oct)"
+ },
+ {
+  "topic": "Residents / PG / fellows",
+  "decision": "Part of the treating doctor's team. The treating doctor adds them to each Case File (own department or other departments); they join with a code; role-based limited access; they cannot sign documents, as in PACS systems. Each treating doctor has at least one resident.",
+  "source": "Notes on roles 'treating' and 'resident' (16 Oct)"
+ },
+ {
+  "topic": "Board members joining",
+  "decision": "Join the meeting from anywhere, phones included, with a six-digit code. On phones a call option opens the phone dialer with the person's number.",
+  "source": "Notes on 'board heads' and the plan (16 Oct)"
+ },
+ {
+  "topic": "End-of-meeting input",
+  "decision": "At the end each board member gets a pop-up to give a summary or suggestions, by text or voice.",
+  "source": "Notes on 'board heads' (16 Oct)"
+ },
+ {
+  "topic": "Supporting side demo",
+  "decision": "We MUST also build a demo HIS and a demo PACS (open source based) so the supporting doctor's side and the whole request loop can be shown. Owner's firm reminder, 17 Oct.",
+  "source": "Notes on role 'supporting' (16 Oct); owner reminder in the interview (17 Oct)"
+ },
+ {
+  "topic": "Oversight",
+  "decision": "Expert OVER the loop, not expert-in-the-loop.",
+  "source": "Section notes 'workflow' (16 Oct)"
+ },
+ {
+  "topic": "Workflow shape",
+  "decision": "Not linear: the workflow has loops.",
+  "source": "Section notes 'workflow' (16 Oct)"
+ },
+ {
+  "topic": "Interface",
+  "decision": "Rebuild the whole frontend; very simple, few clicks, from a treating doctor's point of view.",
+  "source": "Section notes 'screens', 'plan' (16 Oct)"
+ },
+ {
+  "topic": "Sources",
+  "decision": "Only authorised, validated sources (official guidelines, books, peer-reviewed papers); mind rate limits when searching.",
+  "source": "Notes on W1, T10 (16 Oct)"
+ },
+ {
+  "topic": "Cancer list",
+  "decision": "Top 10 followed by manual entry; grouping by male / female / paediatric / general; Cancer of Unknown Primary must exist.",
+  "source": "Notes on W2, W3, W4 (16 Oct)"
+ },
+ {
+  "topic": "After the board",
+  "decision": "Parked until the workflow and the interface are set.",
+  "source": "Notes on plan T21 (16 Oct)"
+ },
+ {
+  "topic": "Demo passwords",
+  "decision": "Keep the existing dummy demo logins.",
+  "source": "Notes on plan T02 (16 Oct)"
+ },
+ {
+  "topic": "Doctors' meeting 19 Oct",
+  "decision": "Handled by the owner; no need to record it here.",
+  "source": "Notes on W7, T05 (16 Oct)"
+ },
+ {
+  "topic": "Ideas liked",
+  "decision": "I01 presenter mode, I03 resident role, I05 triage lists, I06 agenda cut-off, I08 specialist confirmation (requested by the treating doctor), I09 send the outcome, I10 tell the owner and a one-page decision, I12 phone-first supporting views, I14 link to the department's own system, I15 re-fetch from the notification, I16 next-step card.",
+  "source": "Section notes on roles (16 Oct)"
+ },
+ {
+  "topic": "Plan items kept",
+  "decision": "T01, T04, T06 to T18, T20, T22, T23.",
+  "source": "Plan marks (16 Oct)"
+ }
 ]
