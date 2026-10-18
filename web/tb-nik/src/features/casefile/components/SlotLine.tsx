@@ -2,14 +2,14 @@
 // its actions in place. Small steps act here with Undo; evidence steps open the side panel; residents ask the consultant.
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Bell, FileText, PenLine, Send, ShieldCheck, Trash2, UserRoundCheck, X } from "lucide-react";
+import { Bell, Check, CircleDashed, FileText, Hourglass, PenLine, Send, ShieldCheck, Trash2, UserRoundCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { Slot, SlotAction, SlotQuote } from "../types";
 import type { SourceTarget } from "./SourceViewer";
-import { LoadingButton, StatusChip, fmtDate, screenNote } from "./common";
+import { LoadingButton, StatusChip, fmtDate, niceTitle, screenNote } from "./common";
 import { UndoBar, type Pending } from "./deferred";
 
 export interface SlotHandlers {
@@ -39,18 +39,19 @@ export interface SlotContext {
 
 export function QuoteChip({ quote, onOpen, className }: { quote: SlotQuote; onOpen: (t: SourceTarget) => void; className?: string }) {
   const page = (quote.page ?? 0) + 1;
-  const title = `${quote.doc_title || "record"}, page ${page}`;
+  const docTitle = niceTitle(quote.doc_title) || "record";
+  const title = `${docTitle}, page ${page}`;
   return (
     <button
       type="button"
       onClick={() => onOpen({ docId: quote.doc_id, page: quote.page ?? 0, quote: quote.text || undefined, factId: quote.fact_id ?? undefined, title: quote.doc_title })}
       className={cn("quote-chip hover:brightness-95 active:scale-95 transition max-w-full", className)}
       title={quote.text ? `"${quote.text}"\nOpen ${title} with the quote marked` : `Open ${title}`}
-      aria-label={`${quote.doc_title || "record"} p. ${page}: open the source`}
+      aria-label={`${docTitle} p. ${page}: open the source`}
       data-testid="quote-chip"
     >
       <FileText className="size-3 shrink-0" aria-hidden />
-      <span className="truncate">{quote.doc_title || "record"}</span>{" "}
+      <span className="truncate">{docTitle}</span>{" "}
       <span className="opacity-80 shrink-0">p. {page}</span>
     </button>
   );
@@ -83,8 +84,9 @@ function validate(factId: string, raw: string): string | null {
 }
 
 function Blank({ children, kind = "muted", testId }: { children: ReactNode; kind?: "muted" | "warn" | "review" | "ok"; testId?: string }) {
-  const cls = kind === "warn" ? "border-warn/50 text-warn bg-warn-soft/60" : kind === "review" ? "border-review/50 text-review bg-review-soft/60" : kind === "ok" ? "border-ok/40 text-ok bg-ok-soft/60" : "border-border-strong text-muted-foreground bg-muted/60";
-  return <span data-testid={testId} className={cn("inline-flex items-center gap-1 rounded-md border border-dashed px-2 py-0.5 text-sm font-mono", cls)}>[ {children} ]</span>;
+  const cls = kind === "warn" ? "status-warn" : kind === "review" ? "status-review" : kind === "ok" ? "status-ok" : "bg-muted text-muted-foreground";
+  const Icon = kind === "warn" ? Hourglass : kind === "review" ? ShieldCheck : kind === "ok" ? Check : CircleDashed;
+  return <span data-testid={testId} className={cn("inline-flex max-w-full items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium", cls)}><Icon className="size-3.5 shrink-0" aria-hidden /><span className="truncate">{children}</span></span>;
 }
 
 export function SlotLine({ slot, ctx, h }: { slot: Slot; ctx: SlotContext; h: SlotHandlers }) {
@@ -198,7 +200,7 @@ export function SlotLine({ slot, ctx, h }: { slot: Slot; ctx: SlotContext; h: Sl
   } else if (status === "not_needed") {
     body = (
       <div className="flex flex-wrap items-center gap-2">
-        <Blank kind="muted" testId="slot-not-needed">not needed</Blank>
+        <Blank kind="muted" testId="slot-not-needed">Not needed</Blank>
         <span className="text-xs text-muted-foreground">{optimistic?.label ?? screenNote(slot.note)}</span>
       </div>
     );
@@ -209,7 +211,7 @@ export function SlotLine({ slot, ctx, h }: { slot: Slot; ctx: SlotContext; h: Sl
     const canRemind = actions.some((a) => a.kind === "remind") || !!slot.request?.action_id;
     body = (
       <div className="flex flex-wrap items-center gap-2">
-        <Blank kind="warn" testId="slot-waiting">waiting on {who}{askedOn ? `, asked ${askedOn}` : ""}</Blank>
+        <Blank kind="warn" testId="slot-waiting">Waiting on {who}{askedOn ? `, asked ${askedOn}` : ""}</Blank>
         {slot.request?.due ? <span className={cn("text-xs", overdue ? "text-bad font-medium" : "text-muted-foreground")}>{overdue ? "overdue, was due" : "due"} {fmtDate(slot.request.due)}</span> : null}
         {slot.request?.reminders ? <span className="text-xs text-muted-foreground">{slot.request.reminders} reminder{slot.request.reminders === 1 ? "" : "s"} sent</span> : null}
         {!optimistic && ctx.canAct && !ctx.resident && canRemind && mode === "idle" ? <Button variant="outline" size="xs" onClick={doRemind} disabled={!!pending}><Bell className="size-3" />Remind</Button> : null}
@@ -221,7 +223,7 @@ export function SlotLine({ slot, ctx, h }: { slot: Slot; ctx: SlotContext; h: Sl
   } else if (status === "needs_confirmation") {
     body = (
       <div className="flex flex-wrap items-center gap-2">
-        <Blank kind="review" testId="slot-needs-confirmation">needs your confirmation</Blank>
+        <Blank kind="review" testId="slot-needs-confirmation">Needs your confirmation</Blank>
         {slot.value ? <span className="text-sm text-foreground">{slot.value}</span> : null}
         {slot.quote ? <QuoteChip quote={slot.quote} onOpen={h.openSource} /> : null}
         <Button variant="secondary" size="xs" onClick={() => h.review(slot)} data-testid="slot-review"><ShieldCheck className="size-3" />{ctx.resident ? "Review and ask to sign off" : "Review"}</Button>
@@ -231,7 +233,7 @@ export function SlotLine({ slot, ctx, h }: { slot: Slot; ctx: SlotContext; h: Sl
   } else if (status === "pending_ready") {
     body = (
       <div className="flex flex-wrap items-center gap-2">
-        <Blank kind="muted">prepared at the ready mark</Blank>
+        <Blank kind="muted">Prepared at the ready mark</Blank>
         {slot.note ? <span className="text-xs text-muted-foreground">{screenNote(slot.note)}</span> : null}
       </div>
     );
@@ -240,9 +242,9 @@ export function SlotLine({ slot, ctx, h }: { slot: Slot; ctx: SlotContext; h: Sl
     body = (
       <div className="flex flex-col gap-1.5">
         <div className="flex flex-wrap items-center gap-2">
-          <Blank kind="muted" testId="slot-not-found">not found in the file</Blank>
+          <Blank kind="muted" testId="slot-not-found">Not in the file</Blank>
           {slot.note && slot.note !== "Not found in the file" ? <span className="text-xs text-muted-foreground">{screenNote(slot.note)}</span> : null}
-          {slot.draft?.doc_id ? <button type="button" className="quote-chip hover:brightness-95" onClick={() => h.openSource({ docId: slot.draft!.doc_id!, page: 0, title: slot.draft!.doc_title })}>{slot.draft.doc_title ?? "report"}: {String(slot.draft.status ?? "not final").toLowerCase()}</button> : null}
+          {slot.draft?.doc_id ? <button type="button" className="quote-chip hover:brightness-95" onClick={() => h.openSource({ docId: slot.draft!.doc_id!, page: 0, title: slot.draft!.doc_title })}>{niceTitle(slot.draft.doc_title) || "report"}: {String(slot.draft.status ?? "not final").toLowerCase()}</button> : null}
         </div>
         {mode === "idle" && ctx.canAct ? (
           <div className="flex flex-wrap items-center gap-1.5">

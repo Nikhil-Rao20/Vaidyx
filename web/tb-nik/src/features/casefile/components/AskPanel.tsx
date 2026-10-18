@@ -10,7 +10,7 @@ import { ApiError } from "@/lib/api";
 import { askOld, getChats, notBuiltYet, pinChat, postChat } from "../api";
 import type { CaseDocument, ChatThread } from "../types";
 import type { SourceTarget } from "./SourceViewer";
-import { EmptyState, ErrorState, LoadingButton, SkeletonLines, StatusChip, errorText, fmtDateTime, useAnnounce } from "./common";
+import { EmptyState, ErrorState, LoadingButton, SkeletonLines, StatusChip, errorText, fmtDateTime, useAnnounce, niceTitle } from "./common";
 import { cn } from "@/lib/utils";
 
 export function AskPanel({ caseId, docs, onOpenSource, compact }: { caseId: string; docs: CaseDocument[]; onOpenSource: (t: SourceTarget) => void; compact?: boolean }) {
@@ -22,7 +22,7 @@ export function AskPanel({ caseId, docs, onOpenSource, compact }: { caseId: stri
   const listRef = useRef<HTMLDivElement>(null);
   const q = useQuery({ queryKey: ["chats", caseId], queryFn: () => getChats(caseId), retry: false });
   const notBuilt = q.isError && notBuiltYet(q.error);
-  const docTitle = (id: string) => docs.find((d) => d.doc_id === id)?.classification?.title ?? docs.find((d) => d.doc_id === id)?.filename ?? "record";
+  const docTitle = (id: string) => niceTitle(docs.find((d) => d.doc_id === id)?.classification?.title ?? docs.find((d) => d.doc_id === id)?.filename ?? "record");
 
   const ask = useMutation({
     mutationFn: async (text: string): Promise<ChatThread> => {
@@ -119,7 +119,7 @@ export function AskPanel({ caseId, docs, onOpenSource, compact }: { caseId: stri
                     <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
                       {(s.citations ?? []).map((c, j) => (
                         <button key={j} type="button" className="quote-chip hover:brightness-95 active:scale-95 transition" onClick={() => onOpenSource({ docId: c.doc_id, page: c.page ?? 0, quote: c.quote, title: c.doc_title || docTitle(c.doc_id) })} title={`Open ${c.doc_title || docTitle(c.doc_id)}, page ${(c.page ?? 0) + 1}`}>
-                          {c.doc_title || docTitle(c.doc_id)} p. {(c.page ?? 0) + 1}
+                          {niceTitle(c.doc_title) || docTitle(c.doc_id)} p. {(c.page ?? 0) + 1}
                         </button>
                       ))}
                     </span>

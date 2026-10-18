@@ -58,11 +58,30 @@ export function modelLabel(m?: string | null): string {
   return s;
 }
 
-/** The title of a record for a quote chip: the citation's own title, else the Case File's document list. */
+const TITLE_ACRONYMS = new Set(["ER", "PR", "HER2", "CBC", "LFT", "RFT", "KFT", "USG", "CT", "CECT", "MRI", "PET", "PET-CT", "PET/CT", "IHC", "HPE", "OPD", "IPD", "BI-RADS", "TNM", "FNAC", "ECG", "ECHO", "HIV", "HBSAG", "HCV", "CEA", "CA", "CA-125", "CA125", "PSA", "AFP", "LDH", "HBA1C", "SGOT", "SGPT", "TLC", "WBC", "RBC", "TSH", "FISH", "PD-L1", "EGFR", "ALK", "ROS1", "KRAS", "BRAF", "MSI", "NGS", "DX", "MG", "US", "MDT", "ICU", "OT", "PMJAY", "PM-JAY", "ABHA", "UHID", "IP", "OP", "ENT", "GI", "HEENT", "CNS", "CVS", "RS", "PA", "AP", "LFTS", "RFTS", "HB", "II", "III", "IV", "ER/PR", "ER,", "PR,", "HER2,"]);
+const SPECIAL: Record<string, string> = { "KI-67": "Ki-67", "KI67": "Ki-67", "X-RAY": "X-ray", "XRAY": "X-ray", "HBSAG": "HBsAg", "HBA1C": "HbA1c", "PH": "pH", "MG/DL": "mg/dL", "ML": "mL" };
+
+/** A record title as the hospital system shouts it ("BILATERAL MAMMOGRAPHY REPORT") in sentence case, with the medical acronyms
+ *  kept ("Immunohistochemistry report (ER, PR, HER2, Ki-67)"). Text that already has lower-case letters is left as it is. */
+export function niceTitle(text?: string | null): string {
+  const t = (text || "").trim();
+  if (!t || /[a-z]/.test(t)) return t;
+  const words = t.toLowerCase().split(/(\s+)/).map((w) => {
+    if (!w.trim()) return w;
+    const core = w.replace(/^[(\[]+|[)\],.;:]+$/g, "");
+    const up = core.toUpperCase();
+    const fixed = SPECIAL[up] ?? (TITLE_ACRONYMS.has(up) ? up : null);
+    return fixed ? w.replace(core, fixed) : w;
+  });
+  const out = words.join("");
+  return out.charAt(0).toUpperCase() + out.slice(1);
+}
+
+/** The title of a record for a quote chip: the citation's own title, else the Case File's document list; in sentence case. */
 export function docTitleOf(docs: Array<{ doc_id: string; filename: string; classification?: { title?: string } }> | undefined, docId: string, given?: string | null): string {
-  if (given) return given;
+  if (given) return niceTitle(given);
   const d = (docs ?? []).find((x) => x.doc_id === docId);
-  return d?.classification?.title || d?.filename || "record";
+  return niceTitle(d?.classification?.title || d?.filename || "record");
 }
 
 

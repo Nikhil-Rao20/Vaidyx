@@ -14,7 +14,7 @@ import { ErrorState, LoadingButton, NotYetState, SkeletonLines, StatusChip, docT
 import { cn } from "@/lib/utils";
 
 const ORDER = ["radiology", "pathology", "medical_oncology", "surgical_oncology", "radiation_oncology", "nuclear_medicine"];
-const NAMES: Record<string, string> = { radiology: "Radiology", pathology: "Pathology", medical_oncology: "Medical Oncology", surgical_oncology: "Surgical Oncology", radiation_oncology: "Radiation Oncology", nuclear_medicine: "Nuclear Medicine" };
+export const NAMES: Record<string, string> = { radiology: "Radiology", pathology: "Pathology", medical_oncology: "Medical Oncology", surgical_oncology: "Surgical Oncology", radiation_oncology: "Radiation Oncology", nuclear_medicine: "Nuclear Medicine" };
 
 export function useHelpers(caseId: string, cf: CaseFile | null, enabled: boolean) {
   const q = useQuery({ queryKey: ["helpers", caseId], queryFn: () => getHelpers(caseId), retry: false, enabled, refetchInterval: (query) => (query.state.data?.helpers.some((h) => h.brief.status === "preparing") ? 4000 : false) });
@@ -138,6 +138,7 @@ function HelperDetail({ caseId, helper, notBuilt, docs, onBack, onOpenSource, on
       {busy ? (
         <div className="rounded-md border border-border bg-muted/60 p-2 text-xs" role="status" aria-live="polite">
           <p className="font-medium text-foreground">Reading the records for {name}</p>
+          <p className="text-muted-foreground">You can go back to the other helpers or close this panel: it keeps preparing, and you are told when the brief is ready.</p>
           <ul className="mt-1 space-y-0.5 text-muted-foreground">
             {(job ? job.events.slice(-5).map((e) => e.text ?? `${e.doc_id ?? ""} ${e.state ?? ""}`) : steps).map((s, i) => <li key={i}>{s}</li>)}
           </ul>

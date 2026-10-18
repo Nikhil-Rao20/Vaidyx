@@ -61,13 +61,14 @@ export function UrgencyTag({ urgency, resident, canSet, consultantName, onSet, b
   );
 }
 
-export function HeaderStrip({ cf, team, left, resident, consultantName, canMarkReady, markReadyReason, onMarkReady, onOpenPanel, activePanel, onPrint, exportAllowed, exportReason, exportHref, onUrgency, urgencyBusy, canSetUrgency, helpersCount, publishedCount, onArchive, protocolLabel }: {
+export function HeaderStrip({ cf, team, left, resident, consultantName, canMarkReady, markReadyReason, onMarkReady, onOpenPanel, activePanel, onPrint, exportAllowed, exportReason, exportHref, onUrgency, urgencyBusy, canSetUrgency, helpersCount, publishedCount, onArchive, protocolLabel, helpersReady = 0, helpersPreparing = 0 }: {
   cf: CaseFile; team: Team | null; left: number | null; resident: boolean; consultantName: string;
   canMarkReady: boolean; markReadyReason: string | null; onMarkReady: () => void;
   onOpenPanel: (p: PanelKind) => void; activePanel: PanelKind; onPrint: () => void;
   exportAllowed: boolean; exportReason: string | null; exportHref: string;
   onUrgency: (level: number, note?: string) => Promise<void>; urgencyBusy: boolean; canSetUrgency: boolean;
   helpersCount: number; publishedCount: number; onArchive?: () => void; protocolLabel?: string;
+  helpersReady?: number; helpersPreparing?: number;
 }) {
   const c = cf.case;
   const p = c.patient ?? { name: "", mrn: "", agesex: "" };
@@ -84,9 +85,12 @@ export function HeaderStrip({ cf, team, left, resident, consultantName, canMarkR
   const readyLogin = c.board_ready?.by ?? "";
   const readyBy = readyLogin ? ([...(team?.owner?.doctors ?? []), ...(team?.residents ?? [])].find((d) => d.user === readyLogin)?.name || readyLogin) : "";
   const teamCount = (team?.residents?.length ?? 0) + (team?.owner?.doctors?.length ?? 0) + (team?.departments?.length ?? 0);
-  const panelBtn = (kind: Exclude<PanelKind, null>, icon: React.ReactNode, label: string) => (
-    <Button size="sm" variant={activePanel === kind ? "secondary" : "outline"} aria-pressed={activePanel === kind} onClick={() => onOpenPanel(activePanel === kind ? null : kind)} className="print:hidden" data-testid={`open-${kind}`}>{icon}{label}</Button>
+  const panelBtn = (kind: Exclude<PanelKind, null>, icon: React.ReactNode, label: string, extra?: React.ReactNode) => (
+    <Button size="sm" variant={activePanel === kind ? "secondary" : "outline"} aria-pressed={activePanel === kind} onClick={() => onOpenPanel(activePanel === kind ? null : kind)} className="print:hidden" data-testid={`open-${kind}`}>{icon}{label}{extra}</Button>
   );
+  const helpersExtra = helpersPreparing ? (
+    <span className="relative ml-0.5 inline-flex size-2" title={`${helpersPreparing} preparing in the background`} aria-label={`${helpersPreparing} preparing`}><span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-75" /><span className="relative inline-flex size-2 rounded-full bg-primary" /></span>
+  ) : helpersReady ? <span className="ml-0.5 rounded-full bg-ok-soft px-1.5 text-[11px] font-bold leading-4 text-ok" title={`${helpersReady} briefs ready`}>{helpersReady}</span> : null;
   return (
     <header className="surface p-3 sm:p-4 print:shadow-none print:border-0 print:p-0" data-testid="header-strip">
       <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:gap-4">
@@ -100,7 +104,7 @@ export function HeaderStrip({ cf, team, left, resident, consultantName, canMarkR
             <span className="font-medium text-foreground break-words" data-testid="header-cancer">{cancer}</span>
             {generic ? (
               <span className="text-muted-foreground" title="Owner decision R05-Q04: histopathology, staging imaging, a clinical note with performance status, the question for the board">{GENERIC_RULE}</span>
-            ) : c.setting ? <span className="text-muted-foreground">{c.setting.replace(/_/g, " ")} (as recorded)</span> : null}
+            ) : c.setting ? <span className="text-muted-foreground">{c.setting.replace(/_/g, " ")}, as recorded</span> : null}
             <span className="text-muted-foreground">{ownerName ? `${ownerName}, ` : ""}{ownerDept || "no owner yet"}</span>
             <span className="inline-flex items-center gap-1 text-muted-foreground"><CalendarDays className="size-3.5" aria-hidden />{c.board_date ? `Board ${fmtDate(c.board_date)}` : "Board date not set"}{c.meeting_id ? <Link className="text-link underline underline-offset-2 ml-1" to={`/meetings/${c.meeting_id}`}>meeting</Link> : null}</span>
           </p>
@@ -130,7 +134,7 @@ export function HeaderStrip({ cf, team, left, resident, consultantName, canMarkR
       </div>
       {/* One row that scrolls sideways on a phone (the summary starts higher up); wraps on a laptop. */}
       <div className="mt-3 -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0 print:hidden [&>*]:shrink-0">
-        {panelBtn("helpers", <Sparkles className="size-4" />, `Specialty helpers (${helpersCount})`)}
+        {panelBtn("helpers", <Sparkles className="size-4" />, `Specialty helpers (${helpersCount})`, helpersExtra)}
         {panelBtn("team", <Users className="size-4" />, `Team${teamCount ? ` (${teamCount})` : ""}`)}
         {panelBtn("board", <ClipboardList className="size-4" />, "Board form")}
         {panelBtn("published", <BookOpen className="size-4" />, `Published cases${publishedCount ? ` (${publishedCount})` : ""}`)}

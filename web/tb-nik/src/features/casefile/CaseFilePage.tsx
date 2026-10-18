@@ -1,7 +1,7 @@
 // The Case File page: the fill-in summary. Header strip, then two columns on a laptop (summary left, Ask and Reports
 // right) and tabs on a phone. Small steps act in place with Undo; evidence steps open the right side panel; only
 // Mark ready, Archive and Sign use a modal.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
@@ -21,7 +21,8 @@ import { BoardFormPanel } from "./components/BoardFormPanel";
 import { EmptyState, ErrorState, LoadingButton, SkeletonLines, errorText, plural, useAnnounce } from "./components/common";
 import { useDeferred } from "./components/deferred";
 import { HeaderStrip, type PanelKind } from "./components/HeaderStrip";
-import { HelpersPanel, useHelpers } from "./components/HelpersPanel";
+import { HelpersPanel, NAMES as HELPER_NAMES, useHelpers } from "./components/HelpersPanel";
+import { notify } from "@/components/Toasts";
 import { MarkReadyDialog } from "./components/MarkReadyDialog";
 import { ProposalsStrip } from "./components/ProposalsStrip";
 import { PublishedPanel } from "./components/PublishedPanel";
@@ -100,6 +101,22 @@ export default function CaseFilePage() {
   const canAct = !!cf && (role.resident || !!cf.permissions?.send_request || !!cf.permissions?.mark_ready || !!cf.permissions?.upload);
 
   const refresh = useCallback(async () => { await cfq.refresh(); await slotsq.refetch(); await proposalsq.refetch(); }, [cfq, slotsq, proposalsq]);
+
+  // A helper that was preparing (in the background: the panel may be closed) and is now ready is announced once.
+  const helperStatus = useRef<Record<string, string>>({});
+  const helpersReady = helpersq.helpers.filter((x) => x.brief.status === "ready").length;
+  const helpersPreparing = helpersq.helpers.filter((x) => x.brief.status === "preparing").length;
+  useEffect(() => {
+    const prev = helperStatus.current;
+    const next: Record<string, string> = {};
+    for (const x of helpersq.helpers) {
+      next[x.role] = x.brief.status;
+      if (prev[x.role] === "preparing" && (x.brief.status === "ready" || x.brief.status === "stale")) {
+        notify.success(`${HELPER_NAMES[x.role] ?? x.label} brief is ready`, "Open Specialty helpers to read it.");
+      }
+    }
+    helperStatus.current = next;
+  }, [helpersq.helpers]);
 
   useEffect(() => { if (flash) { const t = window.setTimeout(() => setFlash(null), 6000); return () => window.clearTimeout(t); } return undefined; }, [flash]);
   // /cases/:id/<view> opens the matching panel or tab once the Case File is on screen.
@@ -213,8 +230,8 @@ export default function CaseFilePage() {
     const status = e instanceof ApiError ? e.status : 0;
     return (
       <div className="max-w-xl mx-auto py-8" data-testid="casefile-error" data-status={status}>
-        {status === 404 ? <EmptyState title="This Case File does not exist" text={`No Case File with the id ${id}. The link may be old.`} action={<Button asChild variant="outline"><Link to="/home"><ArrowLeft className="size-4" />Back to Home</Link></Button>} />
-          : status === 403 ? <EmptyState title="You do not have access to this Case File" text="Only the owner's team, the departments asked, and the MDT Coordinator can open it." action={<Button asChild variant="outline"><Link to="/home"><ArrowLeft className="size-4" />Back to Home</Link></Button>} />
+        {status === 404 ? <EmptyState title="This Case File does not exist" text={`No Case File with the id ${id}. The link may be old.`} action={<Button asChild variant="outline"><Link to="/cases"><ArrowLeft className="size-4" />Back to the Case Files</Link></Button>} />
+          : status === 403 ? <EmptyState title="You do not have access to this Case File" text="Only the owner's team, the departments asked, and the MDT Coordinator can open it." action={<Button asChild variant="outline"><Link to="/cases"><ArrowLeft className="size-4" />Back to the Case Files</Link></Button>} />
           : <ErrorState error={e} retry={() => void cfq.refetch()} />}
       </div>
     );
@@ -267,7 +284,7 @@ export default function CaseFilePage() {
         onOpenPanel={(p) => (p ? openPanelLinked(p) : closeLinked())} activePanel={activePanel}
         onPrint={() => window.print()} exportAllowed={exportAllowed} exportReason={exportReason} exportHref={exportVtbUrl(id)}
         onUrgency={onUrgency} urgencyBusy={urgencyBusy} canSetUrgency={canSetUrgency}
-        helpersCount={helpersCount} publishedCount={publishedCount} protocolLabel={slots?.protocol_label}
+        helpersCount={helpersCount} publishedCount={publishedCount} protocolLabel={slots?.protocol_label} helpersReady={helpersReady} helpersPreparing={helpersPreparing}
         onArchive={teamq.data?.can?.archive && !teamq.data?.archived ? () => setArchiveOpen(true) : undefined}
       />
       {teamq.data?.archived ? (
@@ -323,7 +340,7 @@ export default function CaseFilePage() {
         {side?.kind === "request" ? (requestSlot ? <RequestEditPanel caseId={id} slot={requestSlot} action={side.action} onSent={async () => { closeAll(); announce("Request sent."); await refresh(); }} /> : null) : null}
       </SidePanel>
 
-      <ArchiveDialog open={archiveOpen} onOpenChange={setArchiveOpen} patient={cf.case.patient?.name || id} onConfirm={async (reason) => { await archiveCase(id, reason); nav("/home", { replace: true }); }} />
+      <ArchiveDialog open={archiveOpen} onOpenChange={setArchiveOpen} patient={cf.case.patient?.name || id} onConfirm={async (reason) => { await archiveCase(id, reason); nav("/cases", { replace: true }); }} />
       <MarkReadyDialog open={readyOpen} onOpenChange={setReadyOpen} slots={slots} resident={role.resident} consultantName={consultantShort} onConfirm={onMarkReady} boardQuestionMissing={boardQuestionMissing} />
     </div>
   );
