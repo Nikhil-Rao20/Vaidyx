@@ -41,18 +41,18 @@ Legend: [ ] to do, [~] in progress, [x] done (commit), [!] blocked or partial (r
 - [ ] Vaidyx link: ImagingStudy in FHIR points to the Study UID; viewer link works from Case File and from the meeting room screen.
 
 ## Phase 4: backend (tumour_board/, routes)
-- [ ] Urgency tag (1 to 5, set by owner, resident proposes, audited, filters).
-- [ ] Case File team: residents join by code with approval; roles; end dates; propose/approve/return queue ("ask Dr X to sign off") with alerts.
-- [ ] Saved shared Ask chats per Case File (team), pins, stale stamp, cited page link.
-- [ ] Specialty helpers: 5 briefs at ready mark, Nuclear Med on click; per-helper chat threads; Radiation Oncology default head.
-- [ ] Fill-in summary slots: per-protocol template from verified facts; blanks with actions; typed values form (fixed list), AI prose at ready.
+- [x] Urgency tag (e88aff2).
+- [x] Case File team, residents, join codes, proposals with 9 executors (e88aff2).
+- [x] Shared Ask chats (47ee3a8).
+- [x] Specialty helpers + ready hook (47ee3a8); five default heads in org (e88aff2).
+- [x] Fill-in summary slots + typed values overlay in rules.py (47ee3a8).
 - [ ] Meeting: sessions with agenda lists (discussion/noting), order, presenter, timer, join code + waiting room, attendance, live channel (WebSocket) for current case, decision strip, follow screen, raise hand, questions; end-of-meeting member cards; outcomes incl. Noted; images open from the room.
 - [ ] Notifications: in-app + browser push (localhost), digests, automatic reminders (audited as Vaidyx automatic), half-hourly re-fetch scheduler (in-process, single worker, never during a meeting).
-- [ ] Admin: guided set-up (5 steps), department contacts, email logins, mailto with random password, forced change; department admin; auditor role; Settings > Activity.
-- [ ] Access: break-glass for Vaidyx admin; coordinator limited; archive instead of delete; outside experts consent view; chats never to supporting doctors.
+- [x] Guided set-up, email logins, mailto, resets, auditor, /me/activity (e88aff2).
+- [x] Break-glass, archive (all routes guarded b43dde9), consent, chats visibility (e88aff2).
 - [ ] LiveKit: config, token route (room per meeting), localhost server start script.
 - [x] CUP protocol draft (cup.json, 23 records, 72 quotes; commit) ; [ ] demo patients to ~25 incl. CUP (HIMS fixtures).
-- [ ] Published cases: search (local library + PubMed/Europe PMC), doctor picks, labelled.
+- [x] Published cases (47ee3a8).
 - [ ] Security: rate limits, CSRF, input validation, no secrets to client, audit of everything.
 - [ ] Tests: pytest for every new module + role matrix tests.
 
