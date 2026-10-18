@@ -264,7 +264,7 @@ def test_proxy_range_head_post_and_errors(pacs_app):
     assert r.status_code == 206 and r.content == b"DICM"
     assert r.headers["content-range"] == "bytes 0-3/10" and r.headers["accept-ranges"] == "bytes"
     assert fake.seen[-1].headers["range"] == "bytes=0-3"
-    assert tc.head(frame).status_code == 200 and fake.seen[-1].method == "HEAD"
+    assert tc.head(frame).status_code == 200 and fake.seen[-1].method == "GET"  # Orthanc answers HEAD with 404: asked with GET, headers only (18 Oct)
     n = len(fake.seen)
     r = tc.post(frame, content=b"x")
     assert r.status_code == 405 and len(fake.seen) == n

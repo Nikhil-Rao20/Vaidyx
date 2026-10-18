@@ -254,11 +254,16 @@ async def proxy(request, path: str, roles: dict) -> Response:
     headers |= {"X-Forwarded-Host": host, "X-Forwarded-Proto": scheme, "X-Forwarded-Prefix": PREFIX,
                 "Forwarded": f"host={host};proto={scheme}"}
     c = _client()
+    head = request.method == "HEAD"  # Orthanc answers HEAD with 404: ask with GET and send back the headers only
     try:
-        up = await c.send(c.build_request(request.method, url, headers=headers), stream=True)
+        up = await c.send(c.build_request("GET" if head else request.method, url, headers=headers), stream=True)
     except httpx.TransportError as e:  # connect, timeout, network
         return JSONResponse({"detail": f"The PACS did not answer: {type(e).__name__}"}, status_code=502)
     out = {k: v for k, v in up.headers.items() if k.lower() in RESP_HEADERS}
+    if head:
+        await up.aclose()
+        from starlette.responses import Response
+        return Response(status_code=up.status_code, headers=out)
     return StreamingResponse(up.aiter_raw(), status_code=up.status_code, headers=out, background=BackgroundTask(up.aclose))
 
 
