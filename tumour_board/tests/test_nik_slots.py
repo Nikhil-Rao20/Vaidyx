@@ -425,6 +425,7 @@ def test_ready_hook_a_failing_step_never_stops_the_next(tb001, monkeypatch):
     monkeypatch.setattr(summary, "build", bad_build)
     monkeypatch.setattr(agents, "run_agent", fake_run)
     monkeypatch.setattr(ready_hook, "meeting_in_session", lambda: False)
+    monkeypatch.setattr(ready_hook, "RUNNING", {})  # a run scheduled by an earlier test may still hold the case in its own thread
     out = asyncio.run(ready_hook.run(CASE, "dr.rao"))
     assert out["failed"] == ["summary", "pathology"] and out["done"] == ["radiology", "medical_oncology", "surgical_oncology", "radiation_oncology"]
     steps = [e["step"] for e in store.read_audit(CASE) if e.get("kind") == "ready_hook"]
