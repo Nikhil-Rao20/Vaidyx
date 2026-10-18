@@ -257,3 +257,6 @@ data/his_mock/
 
 # Screenshots of the UI checks (large; kept on disk, not in git)
 docs/ui/build/shots/
+
+# Runtime picks of public images for live desk orders
+pacs_public/assignment_live.json

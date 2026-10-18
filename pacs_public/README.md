@@ -8,7 +8,7 @@ logged in a manifest, relabelled with our fake IDs, marked as public dataset ima
 are for humans to view in the PACS; no model ever reads them, and nothing here interprets pixels.
 
 Phase 1 (this folder, done): download, privacy QA, manifest and licences, assignment plan, relabel library and tests.
-Phase 2 (not done, see the end): the image source switch in `his_mock/dicom_studies.py` and the Orthanc upload.
+Phase 2 (done 18 Oct, see the end): the image source switch in `his_mock/dicom_studies.py` and the Orthanc upload.
 
 ## Where things live
 
@@ -153,69 +153,48 @@ on the HIMS date and time and intervals stay true (PET injection time included);
 note; DeidentificationMethod gets "Vaidyx demo relabel". Removed: private tags, overlays and curves, every (0010,xxxx)
 not rewritten (OtherPatientIDs, PatientAddress, PatientTelephoneNumbers, EthnicGroup, PatientComments and the rest;
 PatientWeight is kept, rounded, for PET only, for SUV display), clinical trial tags (0012, they hold the collection name
-and TCIA patient ID), visit tags (0038), request and referenced patient / study sequences. Pixels and geometry are
+and TCIA patient ID), visit tags (0038), request and referenced patient / study sequences, and the source site's request,
+reason and procedure texts and codes (ReasonForStudy, RequestedProcedureDescription, PerformedProcedureStepDescription,
+ProcedureCodeSequence and the like, `CLINICAL_TEXT_KEYWORDS`: they held another person's clinical history, for example an
+age and a diagnosis, and the source hospital's order codes; found in the phase 2 import). Pixels and geometry are
 unchanged; source instance numbers are kept (cropped series keep their gaps). Written as Explicit VR Little Endian (8
 series are Implicit VR at source; none is compressed; a compressed series is decompressed, and one that cannot be is a
 `RelabelError`: keep that study synthetic). `verify_relabelled` checks that no string element holds the source
-PatientID, the collection name or an original UID, no private tag, no extra patient element, no date before 2020 except
+PatientID, the collection name or an original UID, no private tag, no extra patient element, no removed element, no date before 2020 except
 the birth date, the identity, accession, Study UID, provenance note and unchanged pixels. A dry run relabelled and
 verified all 77 series cleanly (output deleted; nothing went to Orthanc or data/his_mock).
 
-## Phase 2 plug-in (not done in Phase 1)
+## Phase 2: the image source switch (done 18 Oct)
 
-An image source switch in `his_mock/dicom_studies.py`, `build_study` (called by `build_all` and by the desk when a
-report is entered). Orthanc upload stays as it is (`upload_all` posts every `.dcm` under `dicom/<accession slug>/`).
+`his_mock/dicom_studies.py` (module docstring) builds every performed HIMS imaging study either from this library or as
+synthetic test patterns:
 
-```python
-# his_mock/dicom_studies.py (sketch)
-PUBLIC_ASSIGNMENT = Path(__file__).resolve().parent.parent / "pacs_public" / "assignment.json"
-PUBLIC_MANIFEST = Path("/data/vaidyx/tb_resources/dicom_public/MANIFEST.json")
+- `build_all(store, dicom_dir, source="public")` (what `python -m his_mock.build` does; `--images synthetic` turns it off;
+  `$TB_HIS_MOCK_IMAGES` overrides) records the choice in `store.meta.image_source`, so the HIMS desk keeps it for studies
+  reported live (`build_study` without a source). A build without a source (tests, `generator.build`) stays synthetic.
+- An accession in `assignment.json` with a series: the series (all of the entry's series, numbered 1..n) is relabelled
+  into `dicom/<accession slug>/` with the HIMS identity, `ids.study_uid(accession)`, the his_mock series and instance
+  UIDs, the HIMS study date and time, `Vaidyx Demo Hospital (SYNTHETIC)`, the referring consultant and the test label,
+  then checked with `verify_relabelled`. One new frame of reference per source frame (a PET and its CT keep theirs).
+  An entry that no longer fits the study (other test, other sex) is not used.
+- An accession the plan does not know (an order placed live at the HIMS desk): `_live_pick` takes an unused source series
+  of the planner's roles for that test, with the same sex rules, never a source patient who serves another HIMS patient
+  in the plan or the live picks of this store, preferring the patient's own source patients and cancer group; the choice
+  (public or the synthetic reason) goes into `assignment_live.json` (this folder for the demo HIMS data/his_mock; a
+  throw-away data directory keeps its own beside its store) with the UHID, test and the store's `built_at` (a
+  rebuilt store starts afresh). Checked on a store copy: a PET-CT for a cervix patient got CX-04, an MRI pelvis CX-03, a
+  man's chest radiograph CXR-03.
+- Everything else stays synthetic: no library (quietly), no fit (ultrasound, bone scan, brain and head and neck MRI), or a
+  series that fails to relabel or verify (logged, reason recorded). Each study records `image_source`: `{"kind": "public",
+  collection, licence, licence_url, doi, source_series_uid, source_series_uids, slot, assignment, verified}` or
+  `{"kind": "synthetic", reason}`.
+- `upload_all` deletes a study from Orthanc first when Orthanc holds instances the store does not list (an older build of
+  the same accession), so the PACS shows exactly the built images.
+- Credit (licence duty 1): the HIMS footer of every page and the Radiology module footer show `ATTRIBUTION.txt`'s first
+  line with a link to `/his/about/images`, the PACS about page (credit, the studies with public images with collection,
+  licence and DOI, and `LICENCES.md` as simple HTML). OHIF itself is not modified.
 
-def public_entry(study):
-    if not PUBLIC_ASSIGNMENT.exists():
-        return None
-    e = json.loads(PUBLIC_ASSIGNMENT.read_text()).get(study.get("accession"))
-    return e if e and e.get("source_series_uid") else None
-
-def build_study(store, study, dicom_dir, when=None):
-    d = Path(dicom_dir) / study_dirname(study)
-    ...                                              # clear d as today
-    entry = public_entry(study)
-    if entry:
-        from pacs_public import relabel
-        acc, patient = study_key(study), store.patients[study["patient_id"]]
-        t0 = study_time(store, study)
-        rows = {r["source_series_uid"]: r for r in relabel.load_manifest_rows(PUBLIC_MANIFEST)}
-        identity = {"name": patient["name"], "uhid": patient["uhid"], "sex": patient.get("sex"),
-                    "dob_iso": patient.get("dob_iso"), "issuer": INSTITUTION}
-        uid_map, series, source_uids = {}, [], []
-        try:
-            for n, s in enumerate(entry["series"], start=1):
-                res = relabel.relabel_series(
-                    rows[s["source_series_uid"]]["raw_dir"], d, identity, study["study_uid"],
-                    lambda k: series_uid(acc, k), lambda k, m: instance_uid(acc, k, m), acc, t0.date(),
-                    t0.strftime("%H%M%S"), INSTITUTION, consultant_name_or_empty, study.get("description"),
-                    series_number=n, institution_address=hospital_address, uid_map=uid_map)
-                source_uids += res["source_uids"]
-                series.append({"uid": res["series_uid"], "number": n, "modality": res["modality"],
-                               "instances": [{"uid": u, "sop_class": c, "number": k} for u, c, k in
-                                             zip(res["sop_uids"], res["sop_classes"], res["instance_numbers"])]})
-            problems = relabel.verify_relabelled(d, {"source_patient_id": entry["source_patient_id"],
-                                                     "collection": entry["collection"], "source_uids": source_uids,
-                                                     "patient_id": patient["uhid"], "accession": acc,
-                                                     "study_uid": study["study_uid"]})
-            if problems:
-                raise relabel.RelabelError("; ".join(problems[:5]))
-        except relabel.RelabelError:
-            ...                                      # clear d, fall back to the synthetic pattern, log it
-        study["public_images"] = {"collection": entry["collection"], "slot": entry["slot"]}
-    else:
-        ...                                          # synthetic series as today
-    ...                                              # same store fields: status registered, counts, series, path,
-                                                     # orthanc_id (UHID | Study UID); upload_all unchanged
-```
-
-Notes for Phase 2: the store says CR for chest_xray while the public files are DX (keep the DICOM Modality and record
-`res["modality"]` in the series); a live desk order with no assignment can rerun `plan_assignment` (deterministic; the
-reserve source patients are free) or stay synthetic; add `manifest.CREDIT_LINE` to the HIMS radiology footer and the
-PACS about page with `ATTRIBUTION.txt`; the Vaidyx-TB side keeps reading images only through the PACS proxy.
+Import of 18 Oct (store built 12:07 IST): 27 of 43 studies with public images (4066 instances), 16 synthetic (72
+instances); Orthanc 43 studies, 54 series, 4138 instances, 1957 MB. The import found free clinical text in three source
+series (ReasonForStudy with another person's age and diagnosis, the source site's order texts and procedure codes);
+the relabeller now removes them (`CLINICAL_TEXT_KEYWORDS`) and `verify_relabelled` flags any that survive.

@@ -247,6 +247,17 @@ REMOVE_KEYWORDS = {
     "ReferringPhysicianAddress", "ReferringPhysicianTelephoneNumbers", "PersonAddress", "PersonTelephoneNumbers",
     "StorageMediaFileSetUID", "StorageMediaFileSetID", "PerformedLocation", "TimezoneOffsetFromUTC",
 }
+# The source site's request, reason and procedure texts and codes: clinical history of another person (for example
+# "79 yr old f recently diagnosed rectal mass") or the source hospital's own order codes. They never appear under a
+# HIMS patient; the HIMS study carries its own test label as StudyDescription.
+CLINICAL_TEXT_KEYWORDS = {
+    "ReasonForStudy", "RequestedProcedureDescription", "RequestedProcedureCodeSequence",
+    "PerformedProcedureStepDescription", "ReasonForTheRequestedProcedure", "ReasonForRequestedProcedureCodeSequence",
+    "RequestedProcedureComments", "CommentsOnThePerformedProcedureStep", "AdmittingDiagnosesDescription",
+    "AdmittingDiagnosesCodeSequence", "ImagingServiceRequestComments", "ProcedureCodeSequence",
+    "PerformedProcedureCodeSequence", "ReasonForPerformedProcedureCodeSequence", "RequestingPhysician",
+}
+REMOVE_KEYWORDS |= CLINICAL_TEXT_KEYWORDS
 BLANK_KEYWORDS = {"InstitutionName", "InstitutionAddress", "InstitutionalDepartmentName", "StationName",
                   "DeviceSerialNumber", "PerformedStationName", "ScheduledStationName", "ScheduledStationAETitle",
                   "PerformedStationAETitle", "SourceApplicationEntityTitle"}
@@ -519,9 +530,9 @@ def verify_relabelled(out_dir, expected):
                optional "patient_id", "accession", "study_uid", "instances", "pixel_sha256": {new SOP UID: sha256},
                optional "forbidden": [other strings that must not appear]}.
     Checks every string element (sequences and file meta included): no source PatientID, no collection name, no
-    original UID; no private tag; no patient element beyond the rewritten ones; no date before 2020 except the birth
-    date; Explicit VR Little Endian; the expected identity, accession and Study UID; the provenance comment; pixel data
-    unchanged when hashes are given."""
+    original UID; no private tag; no patient element beyond the rewritten ones; no element the relabeller removes (the
+    source's request and reason texts among them); no date before 2020 except the birth date; Explicit VR Little Endian;
+    the expected identity, accession and Study UID; the provenance comment; pixel data unchanged when hashes are given."""
     import pydicom
     problems = []
     files = sorted(Path(out_dir).glob("*.dcm"))
@@ -544,6 +555,8 @@ def verify_relabelled(out_dir, expected):
                 problems.append(f"{where}: private tag {el.tag}")
             elif el.tag.group == 0x0010 and int(el.tag) not in PATIENT_KEEP:
                 problems.append(f"{where}: patient element {_tag_label(el)} left")
+            elif el.keyword in REMOVE_KEYWORDS:
+                problems.append(f"{where}: {_tag_label(el)} should have been removed")
         for path, kw, vr, text in _walk_strings(ds):
             low = text.lower()
             if src_pid and src_pid in text:

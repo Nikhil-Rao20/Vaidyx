@@ -8,10 +8,13 @@
                                                                 findings, impression), preliminary save, sign
                                                                 (radiologist), addendum, cancel, the signed PDF
     POST /his/radiology/orders/{order id}/schedule | /report | /sign | /cancel, /his/radiology/reports/{report id}/addendum
+    GET  /his/about/images                                      the PACS about page: where the images come from, which
+                                                                studies show public library images, LICENCES.md
 
 The technician schedules and may save a preliminary report; only the radiologist signs. Signing an imaging report builds
-the synthetic DICOM study and uploads it to the PACS when Orthanc answers (the reporting engine of desk.py), after which
-"Open images" opens OHIF through this HIMS (/api/tb/pacs/..., see pacs_proxy.py). No em dashes.
+the DICOM study (public library images when pacs_public maps it, else synthetic test patterns; dicom_studies) and
+uploads it to the PACS when Orthanc answers (the reporting engine of desk.py), after which "Open images" opens OHIF
+through this HIMS (/api/tb/pacs/..., see pacs_proxy.py). The module footer carries the image credit (CC BY). No em dashes.
 """
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
@@ -76,7 +79,46 @@ def study_cell(store, o):
         out += f'<br><span class=small>{ui.esc(dt(o["scheduled_for"]))}{", " + ui.esc(o["room"]) if o.get("room") else ""}</span>'
     if s.get("series") or s.get("uploaded"):
         out += f'<br><a href="{common.viewer_url(s["study_uid"])}" target=_blank>Open images</a>'
+        if is_public(s):
+            out += '<br><span class="small muted">public dataset images</span>'
     return out
+
+
+# -------------------------------------------------------------------- image source and credit (CC BY attribution)
+def is_public(study):
+    return ((study or {}).get("image_source") or {}).get("kind") == "public"
+
+
+def image_note(store):
+    """The module footer: the credit line and the share of public images when any study shows them, else the plain
+    synthetic note. Always links the PACS about page."""
+    built = [s for s in store.imaging_studies.values() if s.get("series")]
+    public = sum(1 for s in built if is_public(s))
+    credit = ui.image_credit()
+    if public and credit:
+        return (f'<p class=small id=image-credit>{ui.credit_html(credit)} {public} of {len(built)} imaging studies '
+                'show public dataset images; the others show synthetic test patterns.</p>')
+    return ('<p class=small id=image-credit>Images: synthetic DICOM test patterns built when a report is entered and '
+            f'uploaded to the demo PACS (Orthanc + OHIF). <a href="{ui.ABOUT_IMAGES}">About the PACS images</a></p>')
+
+
+def source_cell(study):
+    src = (study or {}).get("image_source") or {}
+    if src.get("kind") == "public":
+        lic = ui.esc(_short_licence(src.get("licence")))
+        return (f'Public research images, {ui.esc(src.get("collection"))} ({lic}), relabelled for this demo; they do '
+                f'not belong to this patient. <a href="{ui.ABOUT_IMAGES}">About the PACS images</a>')
+    if (study or {}).get("series"):
+        return 'Synthetic test pattern, no clinical content'
+    return '<span class=muted>none yet</span>'
+
+
+def _short_licence(name):
+    text = str(name or "")
+    for ver in ("4.0", "3.0"):
+        if "Attribution" in text and ver in text:
+            return f"CC BY {ver}"
+    return text or "licence on the about page"
 
 
 @router.get("/radiology", response_class=HTMLResponse)
@@ -95,9 +137,59 @@ def radiology_home(request: Request, tab: str = "ordered", hospital: Hospital = 
     body = (ui.tabs([(k, l, n[k]) for k, l in TABS], tab, "/his/radiology") + '<div class=panel id=worklist>'
             + ui.table(["Accession No.", "Patient / UHID", "IP / OP No.", "Study", "Department", "Ordered on",
                         "Ordering unit", "Study / images", "Report", "PDF"], rows, f"No order under '{dict(TABS)[tab]}'.")
-            + '</div><p class=small>Images: synthetic DICOM test patterns built when a report is entered and uploaded to '
-            'the demo PACS (Orthanc + OHIF); public-dataset images, when loaded, are credited on the PACS about page.</p>')
+            + '</div>' + image_note(store))
     return common.page(request, "Radiology (RIS)", body, active="Radiology")
+
+
+# -------------------------------------------------------------------- the PACS about page
+def _licences_text():
+    try:
+        return (ui.PUBLIC_LIBRARY / "LICENCES.md").read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+@router.get("/about/images", response_class=HTMLResponse)
+def about_images(request: Request, hospital: Hospital = Depends(get_hospital)):
+    """Where the PACS images come from: the credit, the studies that show public dataset images (with collection,
+    licence and DOI), and the full licence record (LICENCES.md of the library, rendered as simple HTML)."""
+    store = hospital.store
+    built = sorted((s for s in store.imaging_studies.values() if s.get("series")), key=lambda s: s.get("accession") or s["id"])
+    public = [s for s in built if is_public(s)]
+    credit = ui.image_credit()
+    if credit:
+        intro = (f'<p>{ui.credit_html(credit)}</p><p><b>{len(public)} of {len(built)}</b> imaging studies with images in '
+                 'this HIMS show public dataset images; the others show synthetic test patterns with the word '
+                 'SYNTHETIC burned in. The public images come from other people, some with other cancer types, so they '
+                 'do not match the report text of the study. Humans view them; no model reads them.</p>')
+    else:
+        intro = ('<p>The public image library is not installed on this server: every study in the PACS shows '
+                 'synthetic test patterns with the word SYNTHETIC burned in (no clinical content).</p>')
+    rows = []
+    for s in public:
+        src = s["image_source"]
+        o = store.orders.get(s["order_id"]) or {}
+        doi = src.get("doi") or ""
+        rows.append([f'<a href="/his/radiology/orders/{ui.esc(o.get("id") or "")}" class=mono>{ui.esc(s.get("accession"))}</a>',
+                     common.patient_cell(store, o) if o else "", ui.esc(s.get("description")),
+                     ui.esc(src.get("collection")),
+                     f'<a href="{ui.esc(src.get("licence_url"))}" rel="noopener noreferrer" target=_blank>'
+                     f'{ui.esc(_short_licence(src.get("licence")))}</a>' if src.get("licence_url") else
+                     ui.esc(_short_licence(src.get("licence"))),
+                     f'<a href="{ui.esc(doi)}" rel="noopener noreferrer" target=_blank class=mono>{ui.esc(doi)}</a>'
+                     if doi.startswith("https://") else ui.esc(doi)])
+    body = (f'<div class="panel prose" id=about-intro><h2>Where the images come from</h2>{intro}</div>'
+            '<div class=panel id=about-studies><h2>Studies with public dataset images</h2>'
+            + ui.table(["Accession No.", "Patient / UHID", "Study", "Collection", "Licence", "Collection DOI"], rows,
+                       "No study shows public dataset images.") + '</div>')
+    text = _licences_text() if credit else None
+    if text:
+        body += f'<div class="panel prose" id=licences>{ui.markdown_html(text)}</div>'
+    elif credit:
+        body += ('<div class=panel id=licences><p class=muted>The licence record (LICENCES.md) is missing from the '
+                 'library; rebuild it with python -I pacs_public/manifest.py --licences.</p></div>')
+    body += '<p><a href="/his/radiology">Back to Radiology</a></p>'
+    return common.page(request, "About the PACS images", body, active="Radiology")
 
 
 # -------------------------------------------------------------------- one order
@@ -126,6 +218,7 @@ def _study_panel(store, o):
              ("Series / images", f'{s.get("number_of_series") or 0} / {s.get("number_of_instances") or 0}')]
     if s.get("series") or s.get("uploaded"):
         pairs.append(("Images", f'<a href="{common.viewer_url(s["study_uid"])}" target=_blank>Open images in the PACS viewer</a>'))
+        pairs.append(("Image source", source_cell(s)))
     else:
         pairs.append(("Images", '<span class=muted>none yet: the study images arrive when the report is entered</span>'))
     return f'<div class=panel id=study><h2>Imaging study</h2>{ui.dl(pairs)}</div>'
@@ -197,7 +290,7 @@ def render_order(request, hospital, o, state=None, status=200):
             forms += '<div class=panel id=addendum><h2>Addendum</h2>' + common.refused_line(request, "rad.sign") + '</div>'
     else:
         forms += f'<p class=muted>This order is {ui.esc(o["status"])}; no action is open.</p>'
-    body += forms + '<p><a href="/his/radiology">Back to the work list</a></p>'
+    body += forms + '<p><a href="/his/radiology">Back to the work list</a></p>' + image_note(store)
     return common.page(request, f"{o['label']}: {o['accession'] or o['id']}", body, active="Radiology",
                        banner=common.banner(store, p, e), status=status)
 

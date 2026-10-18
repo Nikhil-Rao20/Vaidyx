@@ -403,7 +403,7 @@ def _mock_copy():
             shutil.copy2(src / name, tmp / name)
     shutil.copytree(src / "documents", tmp / "documents")
     (tmp / "dicom").mkdir()
-    env = {**os.environ, "TB_HIS_MOCK_DATA": str(tmp), "TB_HIS_MOCK_PORT": str(MOCK_PORT), "TB_HIS_MOCK_ORTHANC": "http://127.0.0.1:1", "TB_HIS_MOCK_OPEN_API": "1"}  # a throw-away copy: its JSON desk API opened for the script  # never the live Orthanc
+    env = {**os.environ, "TB_HIS_MOCK_DATA": str(tmp), "TB_HIS_MOCK_PORT": str(MOCK_PORT), "TB_HIS_MOCK_ORTHANC": "http://127.0.0.1:1", "TB_HIS_MOCK_OPEN_API": "1", "TB_HIS_MOCK_IMAGES": "synthetic"}  # a throw-away copy: JSON desk API open, synthetic images only  # never the live Orthanc
     log = open(tmp / "mock.log", "w")
     proc = subprocess.Popen([sys.executable, "-m", "uvicorn", "--factory", "his_mock.app:create_app", "--host", "127.0.0.1", "--port", str(MOCK_PORT), "--log-level", "warning"],
                             cwd=str(REPO), env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)

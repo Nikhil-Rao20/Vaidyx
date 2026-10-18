@@ -3,13 +3,22 @@ hospital information system (e-Hospital / e-Sushrut style): a dark blue header b
 dense bordered tables, a 13 px Verdana / Arial system font, grey buttons, blue links, small status pills. Plain Python
 strings, one inline CSS block, no template engine. The SYNTHETIC DATA ribbon and the footer are on every page.
 No em dashes anywhere in the UI. Clearly not Vaidyx (no teal).
+
+When the public image library (pacs_public) is installed, the footer carries its one-line credit (the first line of
+ATTRIBUTION.txt) with a link to /his/about/images, the PACS about page (CC BY attribution duty).
 """
 import html
+import os
+import re
+from pathlib import Path
 
 HOSPITAL = "Vaidyx Demo Hospital"
 PRODUCT = "DemoHIMS"
 FOOTER = ("Vaidyx Demo Hospital (SYNTHETIC), a mock Indian hospital for the Vaidyx-TB demo. Every patient, doctor and "
           "number is invented; nothing here is a real record.")
+# The public image library of the demo PACS (pacs_public/README.md); dicom_studies reads it through this constant.
+PUBLIC_LIBRARY = Path(os.environ.get("TB_PACS_PUBLIC_LIBRARY") or "/data/vaidyx/tb_resources/dicom_public")
+ABOUT_IMAGES = "/his/about/images"
 MODULES = [("Registration", "/his"), ("OPD", "/his/opd"), ("IPD", "/his/ipd"), ("Laboratory", "/his/lab"),
            ("Radiology", "/his/radiology"), ("Pathology", "/his/pathology"), ("Exchange", "/his/exchange"),
            ("Admin", "/his/admin")]
@@ -99,7 +108,8 @@ td .mono, td a.mono, .banner .mono { white-space: nowrap; overflow-wrap: normal;
 pre.hl7 { background: #f7f7f7; border: 1px solid var(--line-soft); padding: 6px; font-size: 11.5px; max-height: 320px; overflow: auto; }
 .label-print { font-family: var(--mono); font-size: 13px; border: 1px dashed #666; padding: 6px 8px; display: inline-block; background: #fff; }
 .login { max-width: 420px; margin: 40px auto; }
-footer { text-align: center; color: var(--muted); font-size: 11px; padding: 14px; }
+footer { text-align: center; color: var(--muted); font-size: 11px; padding: 14px; overflow-wrap: anywhere; }
+.prose p, .prose li { overflow-wrap: anywhere; max-width: 110ch; } .prose ul { padding-left: 20px; }
 @media (max-width: 760px) { .row { grid-template-columns: 1fr; } .checks { columns: 1; } header.top .who { margin-left: 0; } main { padding: 6px; } }
 """
 
@@ -152,7 +162,92 @@ def page(title, body, *, active=None, flash=None, user=None, banner=None, hospit
             f"<header class=top><span class=brand>{esc(hospital)}<span class=product>{esc(PRODUCT)}</span></span>"
             f"{who}<span class=synthetic>SYNTHETIC DATA</span></header>"
             f"{f'<nav class=modules>{links}</nav>' if user else ''}<main>{banner or ''}<h1>{esc(title)}</h1>{msg}{body}</main>"
-            f"<footer>{esc(FOOTER)}</footer><script>{SCRIPT}</script></body></html>")
+            f"<footer>{footer_html()}</footer><script>{SCRIPT}</script></body></html>")
+
+
+def footer_html():
+    """The footer: the about text of the mock hospital, plus the image credit when the public library is installed."""
+    credit = image_credit()
+    return esc(FOOTER) + (f"<br>{credit_html(credit)}" if credit else "")
+
+
+_CREDIT_CACHE = {}
+
+
+def image_credit(root=None):
+    """The one-line credit of the public PACS images (first line of ATTRIBUTION.txt in the library), or "" when the
+    library is not installed (fresh clones and tests keep synthetic images and show no credit)."""
+    path = Path(root or PUBLIC_LIBRARY) / "ATTRIBUTION.txt"
+    try:
+        key = (str(path), path.stat().st_mtime_ns)
+        if key not in _CREDIT_CACHE:
+            lines = [x.strip() for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
+            _CREDIT_CACHE.clear()
+            _CREDIT_CACHE[key] = lines[0] if lines else ""
+        return _CREDIT_CACHE[key]
+    except (OSError, UnicodeDecodeError):
+        return ""
+
+
+def credit_html(credit):
+    """The credit line escaped, with its closing reference ("PACS about page") linked to the about page."""
+    text = esc(credit)
+    link = f'<a href="{ABOUT_IMAGES}">PACS about page</a>'
+    if "PACS about page" in text:
+        return text.replace("PACS about page", link, 1)
+    return f'{text} <a href="{ABOUT_IMAGES}">About the PACS images</a>'
+
+
+_URL = re.compile(r"https?://[^\s<>\"&]+")      # stops at an escaped entity (&quot; &amp;)
+
+
+def _inline(text):
+    """One escaped line of Markdown: `code`, **bold** and bare links (http and https only)."""
+    out = esc(text)
+    out = re.sub(r"`([^`]+)`", r"<code>\1</code>", out)
+    out = re.sub(r"\*\*([^*]+)\*\*", r"<b>\1</b>", out)
+
+    def link(m):
+        url = m.group(0)
+        tail = ""
+        while url and url[-1] in ".,;:)":
+            tail = url[-1] + tail
+            url = url[:-1]
+        return f'<a href="{url}" rel="noopener noreferrer" target=_blank>{url}</a>{tail}'
+    return _URL.sub(link, out)
+
+
+def markdown_html(text):
+    """Simple Markdown to HTML for plain record files (LICENCES.md): headings, paragraphs, bullet lists, `code`,
+    **bold** and bare links. Everything is escaped first; no raw HTML passes through."""
+    out, para, items = [], [], []
+
+    def flush():
+        if para:
+            out.append("<p>" + _inline(" ".join(para)) + "</p>")
+            para.clear()
+        if items:
+            out.append("<ul>" + "".join(f"<li>{_inline(i)}</li>" for i in items) + "</ul>")
+            items.clear()
+    for raw in str(text or "").splitlines():
+        line = raw.rstrip()
+        m = re.match(r"^(#{1,6})\s+(.*)$", line)
+        if m:
+            flush()
+            level = {1: 2, 2: 2}.get(len(m.group(1)), 3)
+            out.append(f"<h{level}>{_inline(m.group(2))}</h{level}>")
+        elif re.match(r"^\s*[-*]\s+", line):
+            if para:
+                flush()
+            items.append(re.sub(r"^\s*[-*]\s+", "", line))
+        elif not line.strip():
+            flush()
+        else:
+            if items:
+                flush()
+            para.append(line.strip())
+    flush()
+    return "\n".join(out)
 
 
 def pill(status):

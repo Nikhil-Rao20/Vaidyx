@@ -584,3 +584,32 @@ def test_face_check_required():
     assert M.face_check_required({"slot": "X", "bp": "CHEST", "modality": "DX"})
     assert not M.face_check_required({"slot": "X", "bp": "BREAST", "modality": "MG"})
     assert not M.face_check_required({"slot": "X", "bp": "PELVIS", "modality": "MR"})
+
+
+def test_relabel_removes_the_source_request_and_reason_texts(tmp_path):
+    """Found in the phase 2 import: ReasonForStudy held another person's history ("79 yr old f ..."), the procedure codes
+    the source hospital's own order names. They are removed, and verify flags one that survives."""
+    uids = make_series(tmp_path / "src", n=2)
+    for f in sorted((tmp_path / "src").glob("*.dcm")):
+        ds = pydicom.dcmread(f)
+        ds.ReasonForStudy = "79 yr old f recently diagnosed rectal mass"
+        ds.RequestedProcedureDescription = "CT ABDOMEN PELVIS W CONT"
+        ds.PerformedProcedureStepDescription = "CT ABDOMEN PELVIS W CONT"
+        code = Dataset()
+        code.CodeValue, code.CodingSchemeDesignator, code.CodeMeaning = "CT008", "SRCHOSP", "SRC CT ABDOMEN W CONTRAST"
+        ds.ProcedureCodeSequence = Sequence([code])
+        ds.save_as(f, enforce_file_format=True)
+    res = relabel(tmp_path / "src", tmp_path / "out")
+    assert R.verify_relabelled(tmp_path / "out", expected_for(res, uids)) == []
+    for f in sorted((tmp_path / "out").glob("*.dcm")):
+        ds = pydicom.dcmread(f)
+        for kw in ("ReasonForStudy", "RequestedProcedureDescription", "PerformedProcedureStepDescription",
+                   "ProcedureCodeSequence"):
+            assert kw not in ds
+        assert "rectal mass" not in str(ds) and "SRCHOSP" not in str(ds)
+    f = sorted((tmp_path / "out").glob("*.dcm"))[0]
+    ds = pydicom.dcmread(f)
+    ds.ReasonForStudy = "left behind"
+    ds.save_as(f, enforce_file_format=True)
+    problems = R.verify_relabelled(tmp_path / "out", expected_for(res, uids))
+    assert any("ReasonForStudy should have been removed" in p for p in problems)

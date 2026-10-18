@@ -1,6 +1,8 @@
 """Unit tests for the mock PACS images (plan item V2-1.7): one synthetic DICOM study per imaging study, linked to its order
 by Study UID and accession number. SYNTHETIC data only; builds into a temporary directory. The Orthanc tests run only when
-Orthanc answers on 127.0.0.1:8042, and delete every study they uploaded (studies already there before are left alone)."""
+Orthanc answers on 127.0.0.1:8042, on one study per modality relabelled to test-only accessions (TST/26/9000n) and UHIDs
+(VXH/26/99nnnn), so the live demo studies (public library images under the same accessions) are never touched; they
+delete every study they uploaded."""
 import copy
 import hashlib
 import json
@@ -248,16 +250,48 @@ def test_cli_build_on_a_data_dir(tmp_path, fx, capsys):
 
 
 # ------------------------------------------------------------------ Orthanc (only when it answers)
+def _test_copy(store, tmp):
+    """One built study per modality under test-only accessions and UHIDs (never the live demo ids), in a store copy."""
+    s2 = Store(copy.deepcopy(store.data))
+    picks, seen, uhids = [], set(), {}
+    for st in live(s2):
+        if st["modality"] in seen:
+            continue
+        seen.add(st["modality"])
+        acc = f"TST/26/{90000 + len(picks) + 1:05d}"
+        st.update(accession=acc, study_uid=ids.study_uid(acc), series=[])
+        s2.orders[st["order_id"]]["accession"] = acc
+        p = s2.patients[st["patient_id"]]
+        if p["id"] not in uhids:
+            uhids[p["id"]] = f"VXH/26/99{len(uhids) + 1:04d}"
+            p["uhid"] = uhids[p["id"]]
+        picks.append(st)
+    picks_ids = {st["id"] for st in picks}
+    for sid in list(s2.imaging_studies):
+        if sid not in picks_ids:
+            del s2.imaging_studies[sid]
+    for st in picks:
+        dicom_studies.build_study(s2, st, tmp)
+    return s2, picks
+
+
 @pytest.fixture(scope="module")
-def orthanc(store, dicom_dir):
+def orthanc(store, tmp_path_factory):
     if not dicom_studies.orthanc_alive(ORTHANC):
         pytest.skip(f"Orthanc not answering at {ORTHANC}/system (start it with his_mock/orthanc.sh start)")
+    d = tmp_path_factory.mktemp("orthanc_dicom")
+    s2, picks = _test_copy(store, d)
+    assert all(ids.PATTERNS["accession"].match(st["accession"]) for st in picks)
     before = set(json.loads(_get(f"{ORTHANC}/studies")))
-    counts = dicom_studies.upload_all(store, dicom_dir, ORTHANC)
-    yield counts, before
-    for oid in counts["studies"]:
-        if oid not in before:          # never delete a study that was there before this test (the real build)
-            dicom_studies.delete_study(oid, ORTHANC)
+    assert not {st["orthanc_id"] for st in picks} & before, "test-only study ids already in Orthanc"
+    counts = dicom_studies.upload_all(s2, d, ORTHANC, studies=picks)
+    yield counts, before, s2, picks, d
+    for oid in set(counts["studies"]) | {st["orthanc_id"] for st in picks}:
+        if oid not in before:          # never delete a study that was there before this test (the live build)
+            try:
+                dicom_studies.delete_study(oid, ORTHANC)
+            except Exception:
+                pass
     assert set(json.loads(_get(f"{ORTHANC}/studies"))) == before
 
 
@@ -267,24 +301,28 @@ def _get(url):
         return r.read()
 
 
-def test_upload_all_counts_and_orthanc_ids(orthanc, store):
-    counts, _ = orthanc
-    studies = live(store)
-    assert counts["failed"] == 0
-    assert counts["files"] == counts["stored"] + counts["already_stored"] == sum(s["number_of_instances"] for s in studies)
-    assert set(counts["studies"]) == {s["orthanc_id"] for s in studies}
+def test_upload_all_counts_and_orthanc_ids(orthanc):
+    counts, _, s2, picks, _ = orthanc
+    assert counts["failed"] == 0 and counts["replaced"] == 0
+    assert counts["files"] == counts["stored"] + counts["already_stored"] == sum(s["number_of_instances"] for s in picks)
+    assert set(counts["studies"]) == {s["orthanc_id"] for s in picks}
+    assert {s["modality"] for s in picks} == set(EXPECTED_INSTANCES)
 
 
-def test_upload_is_idempotent(orthanc, store, dicom_dir):
-    again = dicom_studies.upload_all(store, dicom_dir, ORTHANC)
+def test_upload_is_idempotent(orthanc):
+    _, _, s2, picks, d = orthanc
+    again = dicom_studies.upload_all(s2, d, ORTHANC, studies=picks)
     assert again["stored"] == 0 and again["failed"] == 0 and again["already_stored"] == again["files"]
+    assert again["replaced"] == 0
 
 
-def test_every_study_found_by_uid_and_accession(orthanc, store):
-    for s in live(store):
+def test_every_study_found_by_uid_and_accession(orthanc):
+    _, _, s2, picks, _ = orthanc
+    for s in picks:
         e = dicom_studies.find_study(s["study_uid"], ORTHANC)
         assert e, s["id"]
         assert e["00080050"]["Value"][0] == s["accession"]
+        assert e["00100020"]["Value"][0] == s2.patients[s["patient_id"]]["uhid"]
         assert int(e["00201208"]["Value"][0]) == s["number_of_instances"]
         a = dicom_studies.find_by_accession(s["accession"], ORTHANC)
         assert a and a["0020000D"]["Value"][0] == s["study_uid"]
@@ -292,17 +330,35 @@ def test_every_study_found_by_uid_and_accession(orthanc, store):
     assert dicom_studies.find_by_accession("RAD/26/99999", ORTHANC) is None
 
 
-def test_verify_passes_and_catches_a_mismatch(orthanc, store):
-    assert dicom_studies.verify(store, ORTHANC) == []
-    s2 = Store(copy.deepcopy(store.data))
-    victim = live(s2)[0]
+def test_verify_passes_and_catches_a_mismatch(orthanc):
+    _, _, s2, picks, _ = orthanc
+    assert dicom_studies.verify(s2, ORTHANC) == []
+    s3 = Store(copy.deepcopy(s2.data))
+    victim, other = sorted(s3.imaging_studies.values(), key=lambda s: s["id"])[:2]
     victim["number_of_instances"] += 1
-    s2.imaging_studies[live(s2)[1]["id"]]["study_uid"] = ids.study_uid("RAD/26/99998")
-    problems = dicom_studies.verify(s2, ORTHANC)
+    other["study_uid"] = ids.study_uid("RAD/26/99998")
+    problems = dicom_studies.verify(s3, ORTHANC)
     assert len(problems) == 2 and any("instances" in p for p in problems) and any("not found" in p for p in problems)
 
 
-def test_ohif_viewer_answers(orthanc, store):
-    s = live(store)[0]
-    body = _get(ORTHANC + dicom_studies.viewer_url(s["study_uid"])).decode("utf-8", "replace")
+def test_upload_replaces_an_older_copy_in_orthanc(orthanc):
+    """A study rebuilt with other instances (synthetic before public) loses the old ones in the PACS."""
+    _, _, s2, picks, d = orthanc
+    ct = next(s for s in picks if s["modality"] == "CT")
+    extra = dicom_studies.instance_dataset(s2, ct, 1, 9, 9)        # an instance the store does not list
+    import io
+    buf = io.BytesIO()
+    extra.save_as(buf, enforce_file_format=True)
+    dicom_studies._request(ORTHANC + "/instances", data=buf.getvalue(), method="POST",
+                           headers={"Content-Type": "application/dicom"})
+    assert dicom_studies.stale_instances(ct, ORTHANC) == {extra.SOPInstanceUID}
+    counts = dicom_studies.upload_all(s2, d, ORTHANC, studies=[ct])
+    assert counts["replaced"] == 1 and counts["failed"] == 0 and counts["stored"] == ct["number_of_instances"]
+    assert dicom_studies.stale_instances(ct, ORTHANC) == set()
+    assert int(dicom_studies.find_study(ct["study_uid"], ORTHANC)["00201208"]["Value"][0]) == 8
+
+
+def test_ohif_viewer_answers(orthanc):
+    _, _, _, picks, _ = orthanc
+    body = _get(ORTHANC + dicom_studies.viewer_url(picks[0]["study_uid"])).decode("utf-8", "replace")
     assert "<html" in body.lower()
