@@ -130,8 +130,7 @@ def body(case: dict, a: dict, due: str = "", to: dict | None = None) -> str:
         if a.get("what"):
             lines.append(f"Details: {a['what']}")
     else:
-        lvl = f" ({a['level_label']})" if a.get("level_label") else ""
-        lines.append(f"Required record: {a.get('label') or a.get('requirement')}{lvl}")
+        lines.append(f"Required record: {a.get('label') or a.get('requirement')}")  # no "Level 1 / 2" wording to departments (owner, 17 Oct)
         lines.append(f"What is missing: {a.get('what') or 'see the Case File'}")
     if a.get("accession"):
         po = a.get("pending_order") or {}

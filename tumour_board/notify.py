@@ -337,6 +337,10 @@ def _request(case: dict, a: dict, today: date) -> dict | None:
                  "department": a.get("department"), "department_id": a.get("department_id"), "free": bool(a.get("origin") == "doctor" or not a.get("requirement")),
                  "sent": dict(a["sent"]) if isinstance(a.get("sent"), dict) else None, "acknowledged": dict(a["acknowledged"]) if isinstance(a.get("acknowledged"), dict) else None,
                  "done": dict(a["done"]) if isinstance(a.get("done"), dict) else None, "closed_by": a.get("closed_by")}
+        for k in ("sent", "acknowledged", "done"):  # the person's name next to the login, for the request cards (18 Oct)
+            rec = extra.get(k)
+            if rec and rec.get("by") and not rec.get("by_name"):
+                rec["by_name"] = _person_name(rec["by"])
     return {"case_id": case.get("case_id"), "source": source, "source_label": SOURCES.get(source, source), **extra,
             "patient": {"name": p.get("name", ""), "mrn": p.get("mrn", ""), "agesex": p.get("agesex", "")},
             "protocol": case.get("protocol", ""), "board_date": case.get("board_date", ""),
@@ -371,6 +375,16 @@ def _cases():
             continue
         if isinstance(case, dict) and isinstance(st, dict):
             yield case, st
+
+
+
+def _person_name(login: str) -> str:
+    """Display name for a login (profile, else org.json, else the login); never fails."""
+    try:
+        from . import profiles
+        return profiles.display_name(login)
+    except Exception:
+        return str(login or "")
 
 
 def inbox(r: dict) -> dict:

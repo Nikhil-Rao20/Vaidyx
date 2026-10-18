@@ -38,7 +38,7 @@ export function RequestCard({ request: r, onChanged, canAnswer = true }: { reque
     notify.success(board ? "Board action closed" : "Done sent back", board ? undefined : r.free ? "The request is closed." : "It closes by itself when the signed record arrives.");
     onChanged();
   }, { onError: (m) => notify.error("Could not send done", m) });
-  const asked = r.sent?.by ? personWord(r.sent.by) : board ? "the Tumour Board" : "the treating doctor";
+  const asked = r.sent?.by ? ((r.sent as { by_name?: string }).by_name || personWord(r.sent.by)) : board ? "the Tumour Board" : "the treating doctor";
   const encounter = r.encounter?.ip_no ? `IP ${r.encounter.ip_no}` : r.encounter?.op_no ? `OP ${r.encounter.op_no}` : "";
   const stateWord = completed ? { tone: "ok" as const, icon: CheckCircle2, text: "Closed" }
     : r.done ? { tone: "ok" as const, icon: CheckCircle2, text: "Done, awaiting the record" }

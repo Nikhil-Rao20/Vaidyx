@@ -83,7 +83,7 @@ def test_draft_carries_the_patient_identifiers_the_accession_and_the_due_date(un
     body = d["body"]
     assert body.startswith("To: Radiology\nTumour Board Case File TB-UNIT\nPatient: ")
     assert f"UHID {c['patient']['mrn']}" in body and "IP No. IP/26/00001" in body and "OP No. OP/26/000001" in body and "Treating department: Breast Surgery" in body
-    assert "Required record: Diagnostic CT thorax report (Level 1: Case File)" in body and "Accession / order No.: RAD/26/00001 (scheduled in the hospital system)" in body
+    assert "Required record: Diagnostic CT thorax report\n" in body and "Level 1" not in body and "Accession / order No.: RAD/26/00001 (scheduled in the hospital system)" in body
     assert f"Needed by: {date.fromisoformat(due).strftime('%d/%m/%Y')}" in body and "final, signed report" in body
     assert d["subject"].startswith("Tumour Board Case File TB-UNIT: Diagnostic CT thorax report for ")
     assert d["mailto"].startswith(f"mailto:{org.department_email('radiology')}?subject=") and "body=" in d["mailto"]
