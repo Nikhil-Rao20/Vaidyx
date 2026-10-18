@@ -1,7 +1,9 @@
 // Who is signed in. One fetch of /api/tb/me on load; every page reads it through useSession().
 // The sign-in page calls signIn(); a 401 anywhere sends the person back to /sign-in with the page they wanted.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { api, AUTH, TB, onUnauthenticated, onMustChangePassword, ApiError } from "@/lib/api";
+import { unsubscribePush } from "@/lib/push";
 import { applyTheme, applyTextSize, type Theme, type TextSize } from "@/lib/appearance";
 
 export type RoleKind = "member" | "head" | "resident";
@@ -52,7 +54,18 @@ interface SessionState {
 
 const Ctx = createContext<SessionState | null>(null);
 
+// What this browser keeps about the person: dropped on sign out and when the server ends the session (idle timeout), so the next
+// person at a shared workstation sees nothing of the last one.
+const LOCAL_KEYS = ["tbnik.lastCase"];
+
+function forgetLocal() {
+  for (const k of LOCAL_KEYS) {
+    try { localStorage.removeItem(k); } catch { /* storage blocked */ }
+  }
+}
+
 export function SessionProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
@@ -78,10 +91,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => { void refresh(); }, [refresh]);
 
   useEffect(() => {
-    const off = onUnauthenticated(() => setMe(null));
+    const off = onUnauthenticated((err) => {
+      setMe(null);
+      if (err.code === "idle_timeout") { queryClient.clear(); forgetLocal(); }  // the server ended an idle session
+    });
     const off2 = onMustChangePassword(() => setMe((m) => (m ? { ...m, must_change_password: true } : m)));
     return () => { off(); off2(); };
-  }, []);
+  }, [queryClient]);
 
   const signIn = useCallback(async (username: string, password: string, totp?: string) => {
     const r = await api.post<{ ok: boolean; requires_totp?: boolean }>(`${AUTH}/login`, { username, password, remember: true, totp_code: totp || undefined }, { quiet401: true });
@@ -90,9 +106,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const signOut = useCallback(async () => {
+    // Best effort: this device stops receiving the person's push notifications (needs the session, so before the logout).
+    try { await unsubscribePush(); } catch { /* no subscription, or the browser refused */ }
     try { await api.post(`${AUTH}/logout`); } catch { /* the cookie is gone either way */ }
     setMe(null);
-  }, []);
+    queryClient.clear();  // no Case File, list or meeting of this person stays in memory for the next one
+    forgetLocal();
+  }, [queryClient]);
 
   const value = useMemo(() => ({ me, loading, error, refresh, signIn, signOut, setMe }), [me, loading, error, refresh, signIn, signOut]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

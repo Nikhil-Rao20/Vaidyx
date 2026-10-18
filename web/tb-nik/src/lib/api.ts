@@ -26,6 +26,16 @@ export function onMustChangePassword(fn: Listener) {
   return () => { listeners.mustChange = listeners.mustChange.filter((f) => f !== fn); };
 }
 
+// The server signs a person out of the Tumour Board after 8 hours without activity. A request made while nobody has touched the
+// page for a while (a poll, a background refresh) says so, so an open tab on an unattended workstation does not count as activity.
+const QUIET_MS = 5 * 60_000;
+let lastInput = Date.now();
+if (typeof window !== "undefined") {
+  for (const ev of ["pointerdown", "keydown", "wheel", "touchstart"]) {
+    window.addEventListener(ev, () => { lastInput = Date.now(); }, { passive: true, capture: true });
+  }
+}
+
 export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export interface RequestOptions {
@@ -60,6 +70,7 @@ function messageFor(status: number, data: unknown): string {
 export async function request<T = unknown>(path: string, opts: RequestOptions = {}): Promise<T> {
   const method = opts.method ?? "GET";
   const headers: Record<string, string> = { "X-Requested-With": "tb-nik", Accept: "application/json", ...(opts.headers ?? {}) };
+  if (Date.now() - lastInput > QUIET_MS) headers["X-TB-Background"] = "1";
   let body: BodyInit | undefined;
   if (opts.form) body = opts.form;
   else if (opts.body !== undefined) { headers["Content-Type"] = "application/json"; body = JSON.stringify(opts.body); }
