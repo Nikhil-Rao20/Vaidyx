@@ -156,12 +156,12 @@ def test_order_states_and_report_versions(client, store):
         assert want in row, (want, row)
     amended = next(r for r in store.reports.values() if r["status"] == "amended")
     html = client.get(f"/his/encounters/{amended['encounter_id']}").text
-    assert "v1 (final) not rendered" in html and "v2 (amended) not rendered" in html
+    assert "PDF not rendered" in html and "Earlier versions (1)" in html and "v1 (final) not rendered" in html  # the current version first, earlier ones folded (18 Oct)
     v = amended["versions"][1]
     v["document"] = {"path": "documents/x.pdf", "sha256": "0" * 64}
     try:
         html = client.get(f"/his/encounters/{amended['encounter_id']}").text
-        assert f'href="/view/reports/{amended["id"]}/2"' in html and ">v2 (amended)</a>" in html
+        assert f'href="/view/reports/{amended["id"]}/2"' in html and ">PDF (amended)</a>" in html and "v1 (final) not rendered" in html  # current version as the PDF button, v1 folded (18 Oct)
     finally:
         v["document"] = {"path": None, "sha256": None}
 

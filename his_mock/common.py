@@ -371,18 +371,27 @@ def version_label(v):
 
 
 def documents_cell(r):
+    """The report's PDF: one button for the current version; earlier versions (a preliminary entry, an amended report) stay
+    kept and reachable under a folded "Earlier versions" line (every version is part of the medico-legal record)."""
     if not r:
         return '<span class=muted>no report yet</span>'
-    vs = r["versions"]
-    parts = []
-    for v in vs:
-        path = (v.get("document") or {}).get("path")
-        label = "PDF" if len(vs) == 1 else version_label(v)
-        if path:
-            parts.append(f'<a href="/view/reports/{ui.esc(r["id"])}/{v["version"]}" target=_blank>{ui.esc(label)}</a>')
-        else:
-            parts.append(f'<span class=muted>{ui.esc(label if len(vs) > 1 else "PDF")} not rendered</span>')
-    return "<br>".join(parts)
+    vs = sorted(r["versions"], key=lambda v: v["version"])
+    cur = next((v for v in vs if v["version"] == r.get("current_version")), vs[-1])
+    path = (cur.get("document") or {}).get("path")
+    word = {"final": "final", "amended": "amended", "preliminary": "preliminary", "cancelled": "cancelled"}.get(cur.get("status"), "")
+    if path:
+        out = (f'<a class="btn" href="/view/reports/{ui.esc(r["id"])}/{cur["version"]}" target=_blank '
+               f'title="Version {cur["version"]}{", " + word if word else ""}">PDF{" (" + ui.esc(word) + ")" if word and word != "final" else ""}</a>')
+    else:
+        out = '<span class=muted>PDF not rendered</span>'
+    older = [v for v in vs if v is not cur]
+    if older:
+        links = "".join(
+            f'<li><a href="/view/reports/{ui.esc(r["id"])}/{v["version"]}" target=_blank>{ui.esc(version_label(v))}</a></li>'
+            if (v.get("document") or {}).get("path") else f'<li class=muted>{ui.esc(version_label(v))} not rendered</li>'
+            for v in older)
+        out += (f'<details class="small versions"><summary>Earlier versions ({len(older)})</summary><ul>{links}</ul></details>')
+    return out
 
 
 def order_state(store, o):

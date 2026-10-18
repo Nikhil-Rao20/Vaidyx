@@ -87,6 +87,7 @@ button.busy, .btn.busy { cursor: progress; opacity: .75; }
 button.busy::after { content: " (working)"; font-weight: normal; }
 a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible {
   outline: 2px solid var(--band); outline-offset: 1px; }
+details.versions { margin-top: 4px; } details.versions summary { cursor: pointer; color: var(--link, #1a4f8b); } details.versions ul { margin: 2px 0 0 14px; padding: 0; }
 button.primary, .btn.primary { font-weight: bold; background: #d6e0ec; border-color: #4f6f91; }
 button.primary:hover, .btn.primary:hover { background: #c4d3e4; }
 button.primary:active, .btn.primary:active { background: #b2c5db; }
