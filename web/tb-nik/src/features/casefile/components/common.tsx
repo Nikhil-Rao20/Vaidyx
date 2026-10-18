@@ -65,7 +65,8 @@ const SPECIAL: Record<string, string> = { "KI-67": "Ki-67", "KI67": "Ki-67", "X-
  *  kept ("Immunohistochemistry report (ER, PR, HER2, Ki-67)"). Text that already has lower-case letters is left as it is. */
 export function niceTitle(text?: string | null): string {
   const t = (text || "").trim();
-  if (!t || /[a-z]/.test(t)) return t;
+  const letters = t.replace(/[^A-Za-z]/g, "");
+  if (!t || !letters || letters.replace(/[^A-Z]/g, "").length / letters.length < 0.8) return t;
   const words = t.toLowerCase().split(/(\s+)/).map((w) => {
     if (!w.trim()) return w;
     const core = w.replace(/^[(\[]+|[)\],.;:]+$/g, "");

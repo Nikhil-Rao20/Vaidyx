@@ -11,3 +11,4 @@
 | 19 Oct 05:20 | R4 | built (uncommitted): tumour_board/deck (python-pptx design, assets), api/deck.py (meeting + case decks, hospital logo upload), tests 4/4, LogoUpload in set-up, Download menu on the Case File, Deck button on the meeting page; LibreOffice portable at /data/vaidyx/tools/libreoffice for rendering (deck/render.py); docs DECK.md | set-up shot, full suite, commit, restart :7000; then R5 |
 | 19 Oct 06:10 | R4 | committed fafaae5; :7000 restarted | |
 | 19 Oct 06:40 | R5 | committed (ring, phone conduct, live video check passed: live-*.png) | R6: REVIEW.md for the owner, final suites, memory |
+| 19 Oct 07:00 | R6 | REVIEW.md written; ring fallback; committed; :7000 restarted with the final build | owner's review; parked: eslint has no v9 config (lint not run) |
