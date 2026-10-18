@@ -28,7 +28,14 @@ async def video_token(mid: str, request: Request):
         common.fail(403, "Only members admitted to this meeting can join its video.", "not_member")
     if not video.enabled():
         common.fail(503, "Video is not set up on this server (ask the Vaidyx admin to run scripts/livekit.sh).", "video_off")
-    out = video.for_meeting(mid, u, meetings.display_name(u))
+    body = await common.body(request) if request.headers.get("content-length") not in (None, "0") else {}
+    screen = str((body or {}).get("screen") or "").strip().lower()
+    if screen == "room":  # the room computer: its own identity, so the coordinator's laptop and the room screen are both in the call
+        if not meetings.manage(rl):
+            common.fail(403, "Only the MDT Coordinator opens the room screen's video.", "not_coordinator")
+        out = video.for_meeting(mid, f"{u}#room", f"Room screen ({meetings.display_name(u)})")
+    else:
+        out = video.for_meeting(mid, u, meetings.display_name(u))
     from .. import board
-    board.audit_event(mid, "video_token", u, room=out["room"])
+    board.audit_event(mid, "video_token", u, room=out["room"], identity=out["identity"])
     return out

@@ -1,49 +1,117 @@
-// Video tiles for remote members (LiveKit). Camera and microphone are off until the person switches them on.
-import { RoomAudioRenderer, RoomContext, VideoTrack, useTracks } from "@livekit/components-react";
-import { Track } from "livekit-client";
-import { Camera, CameraOff, Mic, MicOff } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useVideoRoom } from "@/lib/video";
-import { StatusChip, initials } from "@/features/casefile/components/common";
+// The people in the meeting as tiles, the way a video call shows them: the camera when it is on, the initials when it is off,
+// the name and department, the microphone state, a ring while someone speaks, a hand when it is raised. Members who are in the
+// room without a laptop still get a tile from the attendance list. LiveKit carries the video and audio.
+import { useMemo } from "react";
+import { RoomAudioRenderer, RoomContext, VideoTrack, isTrackReference, useIsSpeaking, useTracks } from "@livekit/components-react";
+import { Track, type Participant, type Room } from "livekit-client";
+import { Hand, Mic, MicOff, MonitorPlay } from "lucide-react";
+import type { Attendee } from "@/lib/live";
+import { identityUser, isRoomScreen } from "@/lib/video";
+import { initials } from "@/features/casefile/components/common";
 import { cn } from "@/lib/utils";
 
-function Tiles() {
-  const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], { onlySubscribed: false });
-  if (!tracks.length) return <p className="text-xs text-muted-foreground">No one has a camera on.</p>;
+export interface TilePerson {
+  key: string;
+  user: string;
+  name: string;
+  department?: string;
+  remote: boolean;
+  hand: boolean;
+  local?: boolean;
+  roomScreen?: boolean;
+}
+
+const COLOURS = ["#2f6f8f", "#3e5cad", "#5b3fc4", "#1d6a44", "#8a5200", "#9c3d5e", "#2a7a74", "#6b4e2e"];
+function colourOf(key: string): string {
+  let h = 0;
+  for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return COLOURS[h % COLOURS.length];
+}
+
+function Avatar({ name, size }: { name: string; size: "sm" | "md" | "lg" }) {
+  const dim = size === "lg" ? "size-20 text-2xl" : size === "md" ? "size-14 text-lg" : "size-9 text-sm";
+  return <span className={cn("grid place-items-center rounded-full font-semibold text-white", dim)} style={{ background: colourOf(name) }} aria-hidden>{initials(name)}</span>;
+}
+
+function TileFrame({ person, speaking, micOn, children, size, className }: { person: TilePerson; speaking?: boolean; micOn?: boolean | null; children?: React.ReactNode; size: "sm" | "md" | "lg"; className?: string }) {
   return (
-    <ul className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-      {tracks.map((t) => {
-        const name = t.participant.name || t.participant.identity;
-        const hasVideo = "publication" in t && !!t.publication && !t.publication.isMuted;
-        return (
-          <li key={`${t.participant.identity}-${t.source}`} className="relative aspect-video overflow-hidden rounded-md bg-muted" aria-label={name}>
-            {hasVideo ? <VideoTrack trackRef={t} className="h-full w-full object-cover" /> : <div className="grid h-full w-full place-items-center"><span className="grid size-10 place-items-center rounded-full bg-primary text-primary-foreground font-medium">{initials(name)}</span></div>}
-            <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[11px] text-white">{name}{t.participant.isLocal ? " (you)" : ""}</span>
-          </li>
-        );
-      })}
-    </ul>
+    <div
+      className={cn("relative aspect-video overflow-hidden rounded-xl bg-stage-raised ring-2 ring-transparent transition-[box-shadow,ring-color] duration-200", speaking && "ring-primary", className)}
+      data-testid="tile"
+      data-user={person.user}
+      aria-label={`${person.name}${person.department ? `, ${person.department}` : ""}${person.remote ? ", remote" : ", in the room"}${micOn === false ? ", microphone off" : ""}${person.hand ? ", hand raised" : ""}`}
+    >
+      {children ?? <div className="grid h-full w-full place-items-center"><Avatar name={person.name} size={size} /></div>}
+      <div className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 bg-gradient-to-t from-black/70 to-transparent px-2 pb-1.5 pt-5">
+        {micOn === false ? <MicOff className="size-3.5 shrink-0 text-white/90" aria-hidden /> : micOn ? <Mic className={cn("size-3.5 shrink-0 text-white/90", speaking && "text-primary")} aria-hidden /> : null}
+        <span className="min-w-0 truncate text-xs font-medium text-white">{person.name}{person.local ? " (you)" : ""}</span>
+        {person.department ? <span className="hidden min-w-0 truncate text-[11px] text-white/70 sm:inline">· {person.department}</span> : null}
+        <span className="flex-1" />
+        {person.roomScreen ? <MonitorPlay className="size-3.5 text-white/80" aria-label="room screen" /> : null}
+        {!person.remote && !person.roomScreen ? <span className="rounded bg-white/15 px-1 text-[10px] text-white/90">room</span> : null}
+        {person.hand ? <span className="grid size-5 place-items-center rounded-full bg-warn text-white" aria-label="hand raised"><Hand className="size-3" /></span> : null}
+      </div>
+    </div>
   );
 }
 
-export function VideoTiles({ mid, enabled }: { mid: string; enabled: boolean }) {
-  const v = useVideoRoom(mid, enabled);
-  if (!enabled) return null;
+/** A tile for a LiveKit participant: the camera when published and not muted, else the initials; the ring while speaking. */
+function LiveTile({ participant, person, size, trackRef }: { participant: Participant; person: TilePerson; size: "sm" | "md" | "lg"; trackRef: ReturnType<typeof useTracks>[number] }) {
+  const speaking = useIsSpeaking(participant);
+  const camPub = participant.getTrackPublication(Track.Source.Camera);
+  const micPub = participant.getTrackPublication(Track.Source.Microphone);
+  const hasVideo = !!camPub && !camPub.isMuted && (!!camPub.track || participant.isLocal);
+  const micOn = micPub ? !micPub.isMuted : false;
   return (
-    <section className="surface p-3 space-y-2" aria-label="Video" data-testid="video-tiles" data-video-status={v.status}>
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-sm font-semibold">Video</h2>
-        {v.status === "connecting" ? <StatusChip kind="info">connecting</StatusChip> : v.status === "connected" ? <StatusChip kind="ok">connected</StatusChip> : v.status === "reconnecting" ? <StatusChip kind="warn">reconnecting</StatusChip> : v.status === "failed" ? <StatusChip kind="bad">not connected</StatusChip> : null}
-        <span className="flex-1" />
-        <Button size="sm" variant={v.micOn ? "secondary" : "outline"} onClick={() => void v.toggleMic()} disabled={v.status !== "connected"} aria-pressed={v.micOn} aria-label={v.micOn ? "Mute the microphone" : "Unmute the microphone"}>{v.micOn ? <Mic className="size-4" /> : <MicOff className="size-4" />}{v.micOn ? "Mic on" : "Muted"}</Button>
-        <Button size="sm" variant={v.camOn ? "secondary" : "outline"} onClick={() => void v.toggleCam()} disabled={v.status !== "connected"} aria-pressed={v.camOn} aria-label={v.camOn ? "Turn the camera off" : "Turn the camera on"}>{v.camOn ? <Camera className="size-4" /> : <CameraOff className="size-4" />}{v.camOn ? "Camera on" : "Camera off"}</Button>
-      </div>
-      {v.error ? <p role="alert" className="text-xs text-bad">{v.error}</p> : null}
-      {v.status === "failed" ? <p className="text-xs text-muted-foreground">You can still follow the shared screen and type questions.</p> : null}
-      <div className={cn(v.status !== "connected" && "opacity-60")}>
-        {v.room ? <RoomContext.Provider value={v.room}><Tiles /><RoomAudioRenderer /></RoomContext.Provider> : <p className="text-xs text-muted-foreground">Joining the video room</p>}
-      </div>
-      <p className="text-[11px] text-muted-foreground">Video stays on the hospital's own server. You join muted; switch the microphone on to speak.</p>
-    </section>
+    <TileFrame person={person} speaking={speaking} micOn={micOn} size={size}>
+      {hasVideo && isTrackReference(trackRef) ? <VideoTrack trackRef={trackRef} className={cn("h-full w-full object-cover", participant.isLocal && "-scale-x-100")} /> : undefined}
+    </TileFrame>
+  );
+}
+
+function Live({ people, size, max }: { people: TilePerson[]; size: "sm" | "md" | "lg"; max: number }) {
+  const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], { onlySubscribed: false });
+  const byUser = useMemo(() => new Map(people.map((p) => [p.key, p])), [people]);
+  const seen = new Set<string>();
+  const tiles: React.ReactNode[] = [];
+  for (const t of tracks) {
+    const id = t.participant.identity;
+    const key = isRoomScreen(id) ? `${identityUser(id)}#room` : identityUser(id);
+    seen.add(key);
+    const base = byUser.get(key);
+    const person: TilePerson = base ?? { key, user: identityUser(id), name: t.participant.name || identityUser(id), remote: !isRoomScreen(id), hand: false, roomScreen: isRoomScreen(id) };
+    tiles.push(<LiveTile key={`${id}-${t.source}`} participant={t.participant} person={{ ...person, local: t.participant.isLocal }} size={size} trackRef={t} />);
+  }
+  for (const p of people) if (!seen.has(p.key)) tiles.push(<TileFrame key={p.key} person={p} size={size} micOn={null} />);
+  const shown = tiles.slice(0, max);
+  const more = tiles.length - shown.length;
+  return (
+    <>
+      {shown}
+      {more > 0 ? <div className="grid aspect-video place-items-center rounded-xl bg-stage-raised text-sm text-stage-muted">+{more} more</div> : null}
+      <RoomAudioRenderer />
+    </>
+  );
+}
+
+/** The attendance list as tile people: admitted members, the hands, the room screen when the coordinator has it on. */
+export function tilePeople(attendance: Attendee[], hands: Set<string>, me?: string | null): TilePerson[] {
+  return attendance
+    .filter((a) => a.status === "present" || a.status === "remote")
+    .map((a) => ({ key: a.user, user: a.user, name: a.name, department: a.department_name ?? a.department, remote: a.status === "remote", hand: hands.has(a.user) || !!a.hand, local: a.user === me }));
+}
+
+export function TileGrid({ room, people, layout = "column", size = "md", max = 8, className }: { room: Room | null; people: TilePerson[]; layout?: "column" | "row" | "grid"; size?: "sm" | "md" | "lg"; max?: number; className?: string }) {
+  const cls = layout === "column" ? "flex flex-col gap-2" : layout === "row" ? "flex gap-2 overflow-x-auto scroll-thin [&>*]:w-40 [&>*]:shrink-0" : "grid gap-2 grid-cols-2 sm:grid-cols-3";
+  if (!people.length && !room) return <p className="text-sm text-stage-muted">No one has joined yet.</p>;
+  return (
+    <div className={cn(cls, className)} data-testid="tile-grid">
+      {room ? <RoomContext.Provider value={room}><Live people={people} size={size} max={max} /></RoomContext.Provider> : (
+        <>
+          {people.slice(0, max).map((p) => <TileFrame key={p.key} person={p} size={size} micOn={null} />)}
+          {people.length > max ? <div className="grid aspect-video place-items-center rounded-xl bg-stage-raised text-sm text-stage-muted">+{people.length - max} more</div> : null}
+        </>
+      )}
+    </div>
   );
 }

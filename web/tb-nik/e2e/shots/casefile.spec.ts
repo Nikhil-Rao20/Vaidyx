@@ -36,6 +36,7 @@ test.describe("Case File", () => {
   test("every line state: found, entered, waiting, not found, needs confirmation", async ({ page }) => {
     const errors = watchConsole(page);
     await open(page, { slots: slotsAllStates() });
+    await page.getByRole("button", { name: "Open all" }).click();
     await expect(page.locator('[data-slot-status="waiting"]').first()).toBeVisible();
     await expect(page.locator('[data-slot-status="entered"]').first()).toBeVisible();
     await expect(page.locator('[data-slot-status="needs_confirmation"]').first()).toBeVisible();

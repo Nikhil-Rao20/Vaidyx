@@ -79,10 +79,15 @@ test.describe("Meetings", () => {
   test("control view during the meeting", async ({ page }) => {
     const errors = watchConsole(page);
     const live = await open(page, `/meetings/${MID}`, { wait: "control-view", state: meetingState("in_session") });
+    await expect(page.getByTestId("waiting-banner")).toContainText("Kiran Shetty");
+    await snap(page, "meetings", "control", { fullPage: false });
+    await page.getByRole("tab", { name: "Decision" }).click();
     await expect(page.getByTestId("decision-form")).toBeVisible();
-    await expect(page.getByTestId("waiting-list")).toContainText("Kiran Shetty");
     await page.locator("#d-text").fill("Breast conservation surgery with sentinel node biopsy");
-    await snap(page, "meetings", "control", { before: async (p) => { await p.evaluate(() => window.scrollTo(0, 0)); } });
+    await snap(page, "meetings", "control-decision", { sizes: [SIZES[0]], fullPage: false });
+    await page.getByRole("tab", { name: "People" }).click();
+    await expect(page.getByTestId("waiting-list")).toContainText("Kiran Shetty");
+    await snap(page, "meetings", "control-people", { sizes: [SIZES[0]], fullPage: false });
     live.push({ type: "end_case", case_id: CID, cards_requested: ["radiology", "medical_oncology"], timer: { seconds_left: 300, running: false, total: 600 } });
     await page.getByTestId("end-meeting").click();
     await snap(page, "meetings", "control-end-meeting", { sizes: [SIZES[0]], fullPage: false });
@@ -133,8 +138,10 @@ test.describe("Meetings", () => {
   test("member view with video on (server without video)", async ({ page }) => {
     const errors = watchConsole(page);
     const s = memberState({ meeting: { ...memberState().meeting, video: true }, can: { ...memberState().can, video: true } });
-    await open(page, `/meetings/${MID}/member`, { role: "treating", wait: "member-view", state: s });
-    await expect(page.getByTestId("video-tiles")).toHaveAttribute("data-video-status", "failed", { timeout: 15_000 });
+    await open(page, `/meetings/${MID}/member`, { role: "treating", wait: "prejoin", state: s });
+    await snap(page, "meetings", "prejoin", { sizes: DESKTOP_MOBILE, fullPage: false });
+    await page.getByTestId("prejoin-join").click();
+    await expect(page.getByTestId("member-view")).toHaveAttribute("data-video-status", "failed", { timeout: 15_000 });
     await snap(page, "meetings", "member-video-off", { sizes: [SIZES[0]], fullPage: false });
     expect(errors).toEqual([]);
   });

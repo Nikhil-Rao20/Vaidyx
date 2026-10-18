@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Bot, FileText, Hand, Images, Radio, Timer as TimerIcon, Wifi, WifiOff } from "lucide-react";
 import { answerText, handUsers, type AgentState, type Attendee, type LiveStatus, type MeetingQuestion, type MeetingState, type MeetingTimer } from "@/lib/live";
 import type { Slide, SlideCitation, SlideContentMap, SlideSentence } from "../types";
-import { StatusChip, fmtDate, indianDates, initials } from "@/features/casefile/components/common";
+import { StatusChip, fmtDate, indianDates, initials, niceTitle } from "@/features/casefile/components/common";
 import { cn } from "@/lib/utils";
 
 export function MeetingStatusChip({ status }: { status: string }) {
@@ -124,7 +124,7 @@ function Dots() {
 
 function Cite({ c, big }: { c: SlideCitation; big?: boolean }) {
   const page = typeof c.page === "number" ? ` p. ${c.page + 1}` : "";
-  return <span className={cn("quote-chip ml-1 align-middle", big && "text-sm")} title={c.quote ? `"${c.quote}"` : undefined}><FileText className="size-3" aria-hidden />{c.doc_title || "record"}{page}</span>;
+  return <span className={cn("quote-chip ml-1 align-middle", big && "text-sm")} title={c.quote ? `"${c.quote}"` : undefined}><FileText className="size-3" aria-hidden />{niceTitle(c.doc_title) || "record"}{page}</span>;
 }
 
 export function QuestionsList({ questions, big, emptyText = "No questions yet.", caseId }: { questions: MeetingQuestion[]; big?: boolean; emptyText?: string; caseId?: string | null }) {
@@ -239,7 +239,7 @@ function SlideBody({ slide, c, big }: { slide: Slide; c: SlideContentMap; big?: 
         <ul className="space-y-2">
           {docs.map((d) => (
             <li key={d.doc_id} className={cn("text-foreground", t)}>
-              <span className="font-medium">{d.title}</span>
+              <span className="font-medium">{niceTitle(d.title)}</span>
               <span className={cn("ml-2 text-muted-foreground", small)}>{[d.date ? fmtDate(d.date) : "", (d.status ?? "").toLowerCase(), d.signed === "yes" ? "signed" : ""].filter(Boolean).join(", ")}</span>
               {d.images ? <span className={cn("ml-2 inline-flex items-center gap-1 text-link", small)}><Images className="size-3.5" aria-hidden />{d.viewer_available ? "images in the viewer" : "images listed"}</span> : null}
               {(d.facts ?? []).length ? <ul className="mt-0.5 pl-4 space-y-0.5">{d.facts!.map((f) => <li key={f.id} className={cn("text-foreground", big ? "text-lg" : "text-sm")}><span className="text-muted-foreground">{f.label}: </span>{f.value}</li>)}</ul> : null}

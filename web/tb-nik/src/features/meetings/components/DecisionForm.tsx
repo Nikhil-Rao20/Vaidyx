@@ -24,7 +24,7 @@ const OUTCOMES: Array<{ id: Outcome; label: string; hint: string }> = [
 
 const empty = (): DecisionBody => ({ outcome: "decision", decision_text: "", rationale: "", intent_as_stated: "", responsible_doctor: "", next_step: "", next_step_date: "", awaited: "", awaited_from: "", referred_to: "", members_present: [], concerns: [] });
 
-export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRecord = true }: { mid: string; caseId: string; attendance: Attendee[]; onSaved: () => void; liveText?: string; canRecord?: boolean }) {
+export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRecord = true, compact = false }: { mid: string; caseId: string; attendance: Attendee[]; onSaved: () => void; liveText?: string; canRecord?: boolean; compact?: boolean }) {
   const [f, setF] = useState<DecisionBody>(() => ({ ...empty(), members_present: attendance.filter((a) => a.status === "present" || a.status === "remote").map((a) => a.name) }));
   const [saved, setSaved] = useState(false);
   const [liveErr, setLiveErr] = useState<string | null>(null);
@@ -70,7 +70,7 @@ export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRe
         <Textarea id="d-text" value={f.decision_text} onChange={(e) => set("decision_text", e.target.value)} className="mt-1 min-h-24 text-sm" maxLength={4000} aria-invalid={touched && needText} placeholder="Type as the chair states it; it shows live on the room screen marked not saved" />
         <p className={`text-xs mt-0.5 ${liveErr ? "text-warn" : "text-muted-foreground"}`} data-testid="live-strip-note">{liveErr ? `The room screen did not get the text: ${liveErr}` : f.decision_text && liveText === f.decision_text ? "Shown on the room screen, marked not saved" : "Appears on the room screen as you type, marked not saved"}</p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className={compact ? "grid gap-3" : "grid gap-3 sm:grid-cols-2"}>
         <div><Label htmlFor="d-rat">Rationale as discussed</Label><Textarea id="d-rat" value={f.rationale} onChange={(e) => set("rationale", e.target.value)} className="mt-1 min-h-16 text-sm" maxLength={2000} /></div>
         <div><Label htmlFor="d-intent">Treatment intent as stated by the board</Label><Input id="d-intent" value={f.intent_as_stated} onChange={(e) => set("intent_as_stated", e.target.value)} className="mt-1 text-sm" maxLength={200} placeholder="as stated, never computed" /></div>
         <div><Label htmlFor="d-resp">Responsible doctor</Label><Input id="d-resp" list="d-members" value={f.responsible_doctor} onChange={(e) => set("responsible_doctor", e.target.value)} className="mt-1 text-sm" maxLength={120} /><datalist id="d-members">{members.map((m) => <option key={m.user} value={m.name} />)}</datalist></div>
@@ -84,7 +84,7 @@ export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRe
             <div><Label htmlFor="d-from">From whom</Label><Input id="d-from" value={f.awaited_from} onChange={(e) => set("awaited_from", e.target.value)} className="mt-1 text-sm" maxLength={120} /></div>
           </>
         ) : null}
-        {f.outcome === "referred" ? <div className="sm:col-span-2"><Label htmlFor="d-ref">Referred to</Label><Input id="d-ref" value={f.referred_to} onChange={(e) => set("referred_to", e.target.value)} className="mt-1 text-sm" maxLength={200} aria-invalid={touched && needReferred} /></div> : null}
+        {f.outcome === "referred" ? <div className={compact ? "" : "sm:col-span-2"}><Label htmlFor="d-ref">Referred to</Label><Input id="d-ref" value={f.referred_to} onChange={(e) => set("referred_to", e.target.value)} className="mt-1 text-sm" maxLength={200} aria-invalid={touched && needReferred} /></div> : null}
       </div>
       <fieldset>
         <legend className="text-sm font-medium">Members present</legend>

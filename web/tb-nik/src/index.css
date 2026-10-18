@@ -142,6 +142,13 @@
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  /* The meeting stage is dark in both themes, as a video call is. */
+  --color-stage: #0b0f14;
+  --color-stage-panel: #141a21;
+  --color-stage-raised: #1b232d;
+  --color-stage-line: #28323e;
+  --color-stage-fg: #eef2f6;
+  --color-stage-muted: #9aa6b3;
 }
 
 @layer base {

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/DateInput";
+import { TimeInput } from "@/components/TimeInput";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useSession } from "@/lib/session";
@@ -35,7 +36,7 @@ function NewMeetingDialog({ open, onOpenChange, videoAvailable, onCreated }: { o
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
             <div><Label htmlFor="nm-date">Date</Label><DateInput id="nm-date" value={form.date} min={today} onChange={(v) => setForm({ ...form, date: v })} wrapperClassName="mt-1" aria-invalid={touched && !!dateBad} />{touched && dateBad ? <p className="text-xs text-bad mt-0.5">{dateBad}</p> : null}</div>
-            <div><Label htmlFor="nm-time">Time</Label><Input id="nm-time" type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} className="mt-1" aria-invalid={touched && !!timeBad} />{touched && timeBad ? <p className="text-xs text-bad mt-0.5">{timeBad}</p> : null}</div>
+            <div><Label htmlFor="nm-time">Time</Label><TimeInput id="nm-time" value={form.time} onChange={(v) => setForm({ ...form, time: v })} wrapperClassName="mt-1" aria-invalid={touched && !!timeBad} />{touched && timeBad ? <p className="text-xs text-bad mt-0.5">{timeBad}</p> : null}</div>
             <div className="col-span-2"><Label htmlFor="nm-room">Room</Label><Input id="nm-room" value={form.room} onChange={(e) => setForm({ ...form, room: e.target.value })} placeholder="for example: Oncology seminar room, 2nd floor" className="mt-1" maxLength={120} /></div>
             <div><Label htmlFor="nm-mins">Minutes per case</Label><Input id="nm-mins" type="number" min={1} max={60} value={form.minutes_per_case ?? ""} onChange={(e) => setForm({ ...form, minutes_per_case: Number(e.target.value) })} className="mt-1 w-28" aria-invalid={touched && !!minsBad} />{touched && minsBad ? <p className="text-xs text-bad mt-0.5">{minsBad}</p> : null}</div>
             <div className="flex items-end gap-2 pb-1">

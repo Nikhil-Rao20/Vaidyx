@@ -5,6 +5,7 @@ import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Check, Copy, KeyRound, ListPlus, MonitorPlay, Play, Send, Users, Video, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { notify } from "@/components/Toasts";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { api, TB } from "@/lib/api";
@@ -102,7 +103,11 @@ export default function MeetingAgendaPage() {
   const code = useMutation({ mutationFn: () => wrap(() => newCode(id), "New join code ready.")() });
   const start = useMutation({ mutationFn: () => wrap(() => startMeeting(id), "The meeting has started. This page is now the control view.")() });
   const cancel = useMutation({ mutationFn: () => wrap(() => cancelMeeting(id, cancelReason.trim() || undefined), "Meeting cancelled.")(), onSuccess: () => setCancelOpen(false) });
-  const addCase = async (cid: string, list: "discussion" | "noting") => { await wrap(() => addToAgenda(id, cid, list), `Added for ${list}.`)(); };
+  const addCase = async (cid: string, list: "discussion" | "noting") => {
+    await wrap(() => addToAgenda(id, cid, list), `Added for ${list}.`)();
+    const name = [...(live.state?.agenda.discussion ?? []), ...(live.state?.agenda.noting ?? [])].find((r) => r.case_id === cid)?.patient_line ?? cid;
+    notify.success(`Added for ${list}`, `${name} is on the agenda${live.state?.meeting.agenda_sent_at ? "; the members see it flagged as added later" : ""}.`);
+  };
 
   if (live.notBuilt) return <div className="max-w-4xl mx-auto"><OldSessionView sid={id} /></div>;
   if (live.isLoading) return <div className="max-w-5xl mx-auto space-y-3" aria-busy="true"><div className="skeleton-line h-8 w-1/3" /><div className="surface p-4"><SkeletonLines n={5} /></div></div>;
@@ -148,7 +153,7 @@ export default function MeetingAgendaPage() {
       {err ? <p role="alert" className="text-sm text-bad rounded-md bg-bad-soft px-3 py-2">{err}</p> : null}
       {cancelled ? <div className="surface p-4"><EmptyState kind="wait" title="This meeting was cancelled" text={s.meeting.cancelled?.reason ? `Reason: ${s.meeting.cancelled.reason}` : "The members were told."} /></div> : null}
 
-      {inSession && canManage ? <ControlView mid={id} state={s} onChanged={() => void live.refresh()} /> : null}
+      {inSession && canManage ? <ControlView mid={id} state={s} onChanged={() => void live.refresh()} liveStatus={live.status} liveDetail={live.statusDetail} /> : null}
 
       {!inSession && !closed && !cancelled || (inSession && !canManage) ? (
         <div className="grid gap-4 lg:grid-cols-12 items-start">
