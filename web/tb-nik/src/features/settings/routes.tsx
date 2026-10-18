@@ -1,4 +1,10 @@
+import { lazy } from "react";
 import type { RouteObject } from "react-router-dom";
 
-// Filled in by the settings feature build.
-export const settingsRoutes: RouteObject[] = [];
+const SettingsPage = lazy(() => import("@/features/settings/SettingsPage"));
+const ActivityPage = lazy(() => import("@/features/settings/ActivityPage"));
+
+export const settingsRoutes: RouteObject[] = [
+  { path: "/settings", element: <SettingsPage /> },
+  { path: "/activity", element: <ActivityPage /> },
+];
