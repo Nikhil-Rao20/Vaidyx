@@ -34,6 +34,9 @@ from pathlib import Path
 
 from .ids import display_date, display_time, parse_time
 from .model import CA_NAME, IMAGING_MODALITY, MARKER, Store
+
+# The cursive face of the sign-off (Great Vibes, SIL Open Font Licence 1.1, his_mock/fonts/OFL-GreatVibes.txt).
+SIGNATURE_FONT = Path(__file__).resolve().parent / "fonts" / "GreatVibes-Regular.ttf"
 from .paths import layout
 from .scenarios import AADHAAR_LIKE, MASKED_AADHAAR
 
@@ -172,6 +175,18 @@ table.res th { background: #f3f3f3; }
 .foot { margin-top: 20px; border-top: 1px solid #999; padding-top: 6px; font-size: 9.5pt; }
 .foot .status { font-weight: bold; }
 .sig { border: 1px solid #1f3b63; padding: 4px 8px; margin-top: 6px; }
+@font-face { font-family: 'Great Vibes'; src: url('%(sigfont)s'); }
+.signoff { margin: 14px 0 0 auto; width: 82mm; page-break-inside: avoid; text-align: left; }
+.signoff .ink { font-family: 'Great Vibes', cursive; font-size: 26pt; color: #12305e; line-height: 1.05; margin: 0 0 0 4mm;
+                transform: rotate(-3deg); }
+.signoff .rule { border-top: 1px solid #555; margin: 1px 0 3px; }
+.signoff .who { font-size: 8.8pt; line-height: 1.3; color: #222; }
+.signoff .who b { font-size: 9.5pt; }
+.signoff .dsc { margin-top: 5px; border: 1px solid #2f6f3a; background: #f3faf3; padding: 3px 6px; font-size: 7.6pt; color: #1d3d22;
+                line-height: 1.3; }
+.signoff .dsc .tick { color: #2f6f3a; font-weight: bold; }
+.signoff .dsc p.sig { border: 0; padding: 0; margin: 2px 0 0; }
+table.res td:nth-child(5) { font-weight: bold; color: #b23a2f; }
 .nabl { font-size: 8pt; color: #444; margin-top: 10px; border-top: 1px dotted #999; padding-top: 4px; }
 p { margin: 3px 0 5px; line-height: 1.35; }
 """
@@ -202,8 +217,32 @@ def _split_result(value):
     return (v[:m.start(1)].rstrip(), m.group(1)) if m else (v, "")
 
 
-def _lab_rows(vals, sex):
-    return [(label(k),) + _split_result(v) + (_reference(k, sex),) for k, v in vals.items()]
+def _lab_rows(vals, sex, flags=False):
+    """One row per value: investigation, result, unit, reference interval, and (flags=True, the hospital's own reports) a last
+    "Flag" column, Low or High when a numeric result lies outside its interval, as a laboratory system prints it."""
+    out = []
+    for k, v in vals.items():
+        result, unit = _split_result(v)
+        ref = _reference(k, sex)
+        row = (label(k), result, unit, ref)
+        out.append(row + (_flag(result, ref),) if flags else row)
+    return out
+
+
+_RANGE = re.compile(r"^\s*([\d.,]+)\s*-\s*([\d.,]+)\s*$")
+
+
+def _flag(result, ref):
+    """Low / High against a numeric "a-b" interval; empty for text results or text intervals."""
+    m = _RANGE.match(str(ref or ""))
+    try:
+        x = float(str(result).replace(",", "").lstrip("<>").strip())
+    except ValueError:
+        return ""
+    if not m:
+        return ""
+    lo, hi = (float(g.replace(",", "")) for g in m.groups())
+    return "Low" if x < lo else "High" if x > hi else ""
 
 
 def _reference(key, sex):
@@ -253,7 +292,7 @@ def _grid(pairs):
 
 
 def _page(title, header, body, footer, page_footer=PAGE_FOOTER):
-    css = CSS % {"footer": page_footer.replace('"', "'")}
+    css = CSS % {"footer": page_footer.replace('"', "'"), "sigfont": SIGNATURE_FONT.as_uri()}
     return (f"<!doctype html><html><head><meta charset='utf-8'><title>{_e(title)}</title><style>{css}</style></head><body>"
             f"<div class='wm'>{WATERMARK}</div>{header}{body}<div class='foot'>{footer}</div></body></html>")
 
@@ -352,6 +391,25 @@ def html_for(store, report, version):
     return _page(f"{title} {report['id']}-v{version['version']}", header, body, _footer(store, report, version, order))
 
 
+def _signoff(store, sig):
+    """The signed report's sign-off at the bottom right, as Indian report PDFs carry it: the signer's name in ink (a cursive
+    font: an image of a hand signature, never a real one), the printed name, qualification, designation and Reg. No., and the
+    digital-signature stamp with the signature block verbatim (the text the readers check). SYNTHETIC like everything here."""
+    prac = store.practitioner(sig.get("signer_id")) or {}
+    name = str(prac.get("name") or "")
+    ink = name[3:] if name.startswith("Dr ") else name
+    role = {"consultant": "Consultant", "junior_resident": "Junior Resident"}.get(prac.get("role"), str(prac.get("role") or "").title())
+    dept = prac.get("department") or ""
+    designation = f"{role}, Department of {dept}" if role and dept else role or dept
+    who = [f"<b>{_e(name)}</b>", _e(prac.get("qualification") or ""), _e(designation)]  # the Reg. No. is in the stamp below, once
+    return ("<div class='signoff'>"
+            f"<div class='ink'>{_e(ink)}</div><div class='rule'></div>"
+            f"<div class='who'>{'<br>'.join(x for x in who if x)}</div>"
+            f"<div class='dsc'><span class='tick'>&#10003;</span> Digitally signed, {_e(sig.get('ca') or CA_NAME)}"
+            f"<p class='sig'>{_e(sig['block'])}</p></div>"
+            "</div>")
+
+
 def _footer(store, report, version, order):
     status = _status_word(report, version)
     lines = [f"<p class='status'>Report status: {status}</p>"]
@@ -366,7 +424,7 @@ def _footer(store, report, version, order):
     sid = version.get("signature_id")
     by = store.practitioner(version.get("reported_by")) or {}
     if sid:
-        lines.append(f"<p class='sig'>{_e(store.signatures[sid]['block'])}</p>")
+        lines.append(_signoff(store, store.signatures[sid]))
     elif version["status"] == "preliminary":
         lines.append(f"<p>Reported by: {_e(by.get('name', ''))} (preliminary, verification awaited)</p>")
     else:
@@ -378,7 +436,7 @@ def _footer(store, report, version, order):
 def _body_lab(store, report, version, vals, patient, group=None, order=None, **_):
     dept = (order or {}).get("performing_department")
     body = f"<p><b>Specimen:</b> {_e(LAB_GROUPS.get(dept, 'Serum'))}</p>"
-    body += _table(("Investigation", "Result", "Units", "Biological reference interval"), _lab_rows(vals, patient["sex"]))
+    body += _table(("Investigation", "Result", "Units", "Biological reference interval", "Flag"), _lab_rows(vals, patient["sex"], flags=True))
     body += f"<div class='nabl'>{_e(NABL_LINE)}</div>"
     return body
 
