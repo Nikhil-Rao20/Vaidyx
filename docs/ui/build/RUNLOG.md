@@ -36,7 +36,7 @@ Legend: [ ] to do, [~] in progress, [x] done (commit), [!] blocked or partial (r
 - [ ] Tests pass (his_mock/tests) + new tests for the screens.
 
 ## Phase 3: demo PACS (:8042)
-- [ ] TCIA: pick CC BY collections for breast (mammo/MR), lung (CT, PET-CT), cervix (MR/CT), colorectal (CT), oral cavity/head-neck (CT/PET), CUP (CT); licence checked, manifest written.
+- [x] TCIA plan: 19 CC BY collections, 71 series, 4.23 GB (docs/ui/build/pacs/tcia_plan.md); [~] PACS agent phase 1 downloading + relabel library (pacs_public/).
 - [ ] Download 1 to 3 studies per demo patient; de-identify again; relabel PatientName/ID/StudyDate/Accession to our fake IDs; upload to Orthanc; credit line in OHIF/about page.
 - [ ] Vaidyx link: ImagingStudy in FHIR points to the Study UID; viewer link works from Case File and from the meeting room screen.
 
@@ -51,7 +51,7 @@ Legend: [ ] to do, [~] in progress, [x] done (commit), [!] blocked or partial (r
 - [ ] Admin: guided set-up (5 steps), department contacts, email logins, mailto with random password, forced change; department admin; auditor role; Settings > Activity.
 - [ ] Access: break-glass for Vaidyx admin; coordinator limited; archive instead of delete; outside experts consent view; chats never to supporting doctors.
 - [ ] LiveKit: config, token route (room per meeting), localhost server start script.
-- [ ] CUP protocol (draft, needs doctor approval) + demo patients to ~25 incl. CUP.
+- [x] CUP protocol draft (cup.json, 23 records, 72 quotes; commit) ; [ ] demo patients to ~25 incl. CUP (HIMS fixtures).
 - [ ] Published cases: search (local library + PubMed/Europe PMC), doctor picks, labelled.
 - [ ] Security: rate limits, CSRF, input validation, no secrets to client, audit of everything.
 - [ ] Tests: pytest for every new module + role matrix tests.
@@ -77,3 +77,6 @@ Legend: [ ] to do, [~] in progress, [x] done (commit), [!] blocked or partial (r
 
 ## Notes / decisions taken during the run
 - (append here)
+
+## Notes / decisions taken during the run (continued)
+- 18 Oct ~02:30: all seven agents stopped on the API session limit (reset 01:40 IST); at 09:30 the owner said "go on continue": every agent resumed by message from where it stopped (their files on disk intact).
