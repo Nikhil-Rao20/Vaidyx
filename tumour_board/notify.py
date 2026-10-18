@@ -25,7 +25,12 @@ log = logging.getLogger(__name__)
 # a new document may complete a Tumour Board action (a person decides)
 KINDS = ("request", "request_closed", "request_acknowledged", "request_done", "case_ready", "board_action", "board_action_suggestion", "decision_value_changed",
          "case_shared", "case_unshared", "referral", "referral_answered",  # case_shared / case_unshared: a department invited to take part, or no longer taking part (5.1); referral / referral_answered: a Case File referred, the answer (5.2)
-         "request_reminder", "owner_reminder", "board_ready")  # 6.1: a reminder to the department holding a request; a reminder to the owning department (unsent suggestions, overdue requests, the summary); the owner marked the Case File ready for the board (to the coordinator)
+         "request_reminder", "owner_reminder", "board_ready",  # 6.1: a reminder to the department holding a request; a reminder to the owning department (unsent suggestions, overdue requests, the summary); the owner marked the Case File ready for the board (to the coordinator)
+         # 18 Oct (new interface): a resident asks the consultant to sign off; someone asks to join a team; the board's outcome for the owner;
+         # the agenda sent to the members; a meeting starts in 15 minutes; the scheduler's reminder for an overdue request; the summary went
+         # stale; a record arrived; a board head is asked for its card after a case; the 08:00 digest of unread notifications
+         "sign_off", "join_request", "outcome", "agenda", "meeting_starting", "reminder_automatic", "summary_stale", "summary_ready", "record_arrived",
+         "card_requested", "digest", "team_changed", "break_glass")  # summary_ready: the summary and briefs were prepared at the ready mark; team_changed, break_glass: team.py (B1)
 UNSENT = "suggested"  # a request the gate proposed and nobody sent yet: in no inbox (V2 item 4.2)
 ROLES = ("coordinator",)
 CORE = ("id", "ts", "to", "kind", "case_id", "title", "text", "read_by")
@@ -127,6 +132,11 @@ def notify(to: dict, kind: str, case_id: str, title: str, text: str = "", **extr
             prune()
         except Exception as e:  # pruning is housekeeping: never fail the write for it
             log.warning("notification prune failed (%s)", e)
+    try:  # browser push to the people addressed, with a generic text (never a UHID or a name); best effort, off without keys (18 Oct)
+        from . import push
+        push.on_notification(rec)
+    except Exception as e:
+        log.debug("push skipped (%s)", e)
     return dict(rec)
 
 
@@ -148,6 +158,15 @@ def _mine(rec: dict, r: dict) -> bool:
     return False
 
 
+def _attach_scheduler() -> None:
+    """The bell is read on the app's event loop soon after a start: the scheduler learns that loop here, so its jobs run on it (18 Oct)."""
+    try:
+        from . import scheduler
+        scheduler.attach_loop()
+    except Exception:
+        pass
+
+
 def _user_key(r: dict) -> str:
     return str((r or {}).get("user") or "")
 
@@ -160,6 +179,7 @@ def _public(rec: dict, user: str) -> dict:
 
 def for_roles(r: dict, limit: int = 100, unread_only: bool = False) -> list[dict]:
     """My notifications, newest first, each with "read" for this user."""
+    _attach_scheduler()
     user = _user_key(r)
     with _lock:
         recs = _load()

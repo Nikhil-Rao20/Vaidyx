@@ -1,0 +1,26 @@
+# LiveKit server configuration for Vaidyx-TB meetings (localhost only).
+# scripts/livekit.sh copies this file to /data/vaidyx/tools/livekit/config.yaml and fills in the API key and secret from
+# data/tumour_board/livekit.json. The placeholders __API_KEY__ and __API_SECRET__ are replaced by the script; never commit a filled copy.
+port: 7880
+bind_addresses:
+  - 127.0.0.1
+rtc:
+  # localhost only: media on the loopback address (UDP 50000 to 50200), no ICE over TCP (that listener would bind every interface)
+  tcp_port: 0
+  port_range_start: 50000
+  port_range_end: 50200
+  use_external_ip: false
+  node_ip: 127.0.0.1
+  enable_loopback_candidate: true
+  ips:
+    includes:
+      - 127.0.0.1/32
+keys:
+  __API_KEY__: __API_SECRET__
+logging:
+  level: warn
+  json: false
+room:
+  auto_create: true
+  empty_timeout: 300
+  max_participants: 50

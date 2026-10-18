@@ -567,6 +567,67 @@ async def refetch(case_id: str, user: str) -> dict:
     return job
 
 
+AUTOMATIC = "Vaidyx (automatic)"  # the scheduler's half-hourly re-fetch (18 Oct)
+
+
+def _archived(case: dict) -> bool:
+    return bool(case.get("archived")) or (case.get("listing") or {}).get("status") == "archived" or case.get("status") == "archived"
+
+
+def _decided(case: dict, st: dict, today: str) -> bool:
+    """A Case File whose board decision is recorded and whose board date is not ahead any more: nothing to re-fetch for."""
+    recs = [b for b in (st or {}).get("board_records") or [] if isinstance(b, dict) and (b.get("outcome_type") or "decision") == "decision"]
+    if not recs:
+        return False
+    bd = str(case.get("board_date") or "")[:10]
+    return not bd or bd <= today
+
+
+def active_his_cases(today: str = "") -> list[str]:
+    """The HIS-connected Case Files the scheduler keeps fresh: not archived, not protected, not decided (18 Oct)."""
+    today = today or store.now_iso()[:10]
+    out = []
+    for c in store.list_cases():
+        cid = c.get("case_id")
+        if not cid or cid in config.PROTECTED_CASES or not c.get("his") or _archived(c):
+            continue
+        if _decided(c, store.get_state(cid), today):
+            continue
+        out.append(cid)
+    return out
+
+
+async def refetch_all_active(user: str = AUTOMATIC, skip=(), wait: bool = True) -> dict:
+    """Re-fetch every active HIS-connected Case File (the scheduler's job): each one from its watermark, by `user`; `skip` names Case
+    Files with a job already running. With wait=True the processing job of each fetch is awaited, so the caller's loop finishes the
+    work. Returns {case_id: {"job", "added", "updated"} | {"error"}}; a missing HIS connection stops the run after the first Case File."""
+    out = {}
+    for cid in active_his_cases():
+        if cid in skip:
+            out[cid] = {"skipped": "job running"}
+            continue
+        try:
+            job = await refetch(cid, user)
+        except HISCaseError as e:
+            out[cid] = {"error": str(e)}
+            if e.status == 409 and "No hospital information system" in str(e):
+                break
+            continue
+        except Exception as e:  # one Case File's failure never stops the others
+            out[cid] = {"error": f"{e.__class__.__name__}: {str(e)[:200]}"}
+            continue
+        task = job.get("task")
+        if wait and task is not None:
+            try:
+                await task
+            except Exception as e:
+                out[cid] = {"job": job.get("id"), "error": f"{e.__class__.__name__}: {str(e)[:200]}"}
+                continue
+        h = job.get("his") or {}
+        out[cid] = {"job": job.get("id"), "added": h.get("added", 0), "updated": h.get("updated", 0)}
+    return out
+
+
 async def fetch_older(case_id: str, window, user: str) -> dict:
     """Widen the fetch window without starting over: records dated before the current start and on or after the new one."""
     case, his = _his_case(case_id)

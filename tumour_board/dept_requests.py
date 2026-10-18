@@ -326,6 +326,52 @@ def remind(case_id: str, action_id: str, user: str, roles: dict | None = None, n
     return a
 
 
+AUTOMATIC = "Vaidyx (automatic)"  # the sender of the scheduler's reminders (audited as such, never as a person)
+
+
+def remind_automatic(case_id: str, action_id: str, today=None) -> dict | None:
+    """The scheduler's reminder (18 Oct): a sent request that nobody answered with "done" and whose due date has come (or passed) is
+    reminded once a day to the department holding it, by "Vaidyx (automatic)", kind reminder_automatic. Recorded on the request
+    (`reminders`, with automatic=True), in its history and in the Case File's audit log. None when nothing is due today."""
+    today = today or _today()
+    case = store.get_case(case_id)
+    if not case:
+        return None
+    st = store.get_state(case_id)
+    try:
+        a = find(st, action_id)
+    except RequestError:
+        return None
+    if a.get("status") == "completed" or not is_sent(a) or a.get("done"):
+        return None
+    due = str(a.get("due") or "")[:10]
+    if not due or due > today.isoformat():
+        return None
+    if any(r.get("automatic") and str(r.get("at") or "")[:10] == today.isoformat() for r in a.get("reminders") or []):
+        return None
+    to = _to(a)
+    if not to["department"] and not to["role"]:
+        return None
+    now = store.now_iso()
+    patient = (case.get("patient") or {}).get("name") or case_id
+    label = a.get("label") or "Request"
+    days = (today - date.fromisoformat(due)).days
+    text = (f"Automatic reminder: the request sent on {_dmy((a.get('sent') or {}).get('at'))} ({a.get('what') or label}) was due {_dmy(due)}"
+            + (f", {days} day(s) ago" if days > 0 else ", today") + " and has no answer yet."
+            + (f" The board is on {_dmy(case.get('board_date'))}." if case.get("board_date") else "") + f" Sent by {AUTOMATIC} on behalf of {_owner_name(case)}.")
+    n = notify.notify({"department": to["department"]} if to["department"] else {"role": "coordinator"}, "reminder_automatic", case_id,
+                      f"Reminder (automatic): {label} needed for {patient} ({case_id})", text, action_id=a["id"], requirement=a.get("requirement"), due=due,
+                      accession=a.get("accession"), sent_by=AUTOMATIC, automatic=True, on_behalf_of=case.get("department") or "",
+                      uhid=(case.get("patient") or {}).get("mrn") or "", encounter=encounter_numbers(case))
+    rec = {"by": AUTOMATIC, "at": now, "to": to["name"], "note": "", "notification_id": n.get("id"), "sent": True, "automatic": True}
+    a.setdefault("reminders", []).append(rec)
+    a.setdefault("history", []).append({"ts": now, "event": f"Automatic reminder to {to['name']} (due {_dmy(due)})"})
+    store.save_state(case_id, st)
+    store.audit(case_id, {"kind": "request_reminded", "action": a["id"], "requirement": a.get("requirement"), "to": to["name"], "by": AUTOMATIC,
+                          "automatic": True, "due": due})
+    return a
+
+
 def remind_owner(case_id: str, user: str, roles: dict | None = None, note: str = "") -> dict:
     """One reminder to the owning department about the Case File as a whole before the board: the suggested requests nobody sent, the
     overdue requests, the summary (missing or stale) and whether the owner has marked it ready (V2 item 6.1). Audited."""
