@@ -20,6 +20,9 @@ def test_prepare_session_agents_runs_per_case_file(cases, monkeypatch):
         st = store.get_state(case_id); st.setdefault("artefacts", {})[f"brief_{role}"] = brief; store.save_state(case_id, st)
         yield {"type": "brief", "brief": brief}
     monkeypatch.setattr(agents, "run_agent", fake)
+    import copy
+    from tumour_board import org as _org
+    _o = copy.deepcopy(_org.load()); _o["hospital"]["board_heads"] = list(_org.V2_BOARD_HEADS); _org.save(_o, by="test")  # the four V2 heads this count was written for
     s = board.create(DATE, "anil", case_ids=["TB-BR", "TB-MO"])
     for d in ("radiology", "medical_oncology"):
         board.set_attendance(s["id"], d, "present", "anil")

@@ -15,10 +15,10 @@ from tumour_board.tests.util import add, fact
 
 @pytest.fixture
 def people(data_root):
-    """A Breast Surgery doctor (treating), a Radiology doctor and head (supporting), an Anaesthesiology doctor, a coordinator, a root admin and a Vaidyx admin."""
+    """A Breast Surgery doctor (treating), a Radiology doctor and head (supporting), a Clinical Pharmacology doctor, a coordinator, a root admin and a Vaidyx admin."""
     o = copy.deepcopy(org.DEFAULT_ORG)
     o["users"] = {"meera": {"departments": {"breast_surgery": "member"}}, "ravi": {"departments": {"radiology": "member"}},
-                  "suresh": {"departments": {"radiology": "head"}}, "arun": {"departments": {"anaesthesiology": "member"}},
+                  "suresh": {"departments": {"radiology": "head"}}, "arun": {"departments": {"clinical_pharmacology": "member"}},
                   "anil": {"coordinator": True}, "root": {}}
     o["admins"] = ["root"]
     org.save(o, by="test")
@@ -230,7 +230,7 @@ def test_a_free_request_survives_every_re_check(unit_case, people):
     """Review S1: a free request has no protocol record, so no re-check (upload, re-fetch, listing, waiver) may close it."""
     _own(unit_case)
     add(unit_case, hist())
-    free = dept_requests.create_free(unit_case, "Anaesthesiology", "Pre-anaesthetic check-up", "meera", people["meera"])
+    free = dept_requests.create_free(unit_case, "Clinical Pharmacology", "Medication review", "meera", people["meera"])
     for _ in range(2):
         st = _sync(unit_case)
     add(unit_case, ct()); st = _sync(unit_case)
@@ -256,10 +256,10 @@ def test_a_sent_request_that_changes_level_in_the_same_department_tells_it(unit_
 
 def test_a_free_request_is_created_and_sent_in_one_step_and_closes_on_done(unit_case, people):
     _own(unit_case)
-    a = dept_requests.create_free(unit_case, "Anaesthesiology", "Pre-anaesthetic check-up", "meera", people["meera"], what="Planned for surgery next week")
-    assert a["origin"] == "doctor" and a["requirement"] is None and a["status"] == "pending" and a["department_id"] == "anaesthesiology" and dept_requests.is_free(a)
+    a = dept_requests.create_free(unit_case, "Clinical Pharmacology", "Medication review", "meera", people["meera"], what="Planned for surgery next week")
+    assert a["origin"] == "doctor" and a["requirement"] is None and a["status"] == "pending" and a["department_id"] == "clinical_pharmacology" and dept_requests.is_free(a)
     assert a["due"] == (date.today() + timedelta(days=3)).isoformat() and a["sent"]["by"] == "meera"
-    assert "Request: Pre-anaesthetic check-up" in a["sent"]["message"] and "Details: Planned for surgery next week" in a["sent"]["message"]
+    assert "Request: Medication review" in a["sent"]["message"] and "Details: Planned for surgery next week" in a["sent"]["message"]
     assert [e["kind"] for e in store.read_audit(unit_case) if e["kind"].startswith("request_")] == ["request_created", "request_sent"]
     rows = [q for d in notify.inbox(people["arun"])["departments"] for q in d["requests"]]
     assert len(rows) == 1 and rows[0]["free"] is True and rows[0]["requirement"] is None

@@ -49,6 +49,8 @@ def test_owner_participants_coordinator_and_admin_read_the_whole_case_file(peopl
     assert access.scope(people["pulmo"], c) == access.FULL
     assert access.scope(people["breast"], c) == access.FULL
     assert access.scope(people["anil"], c) == access.FULL
+    assert access.scope(people["admin"], c) is None and "break-glass" in access.refusal(people["admin"], c)  # the Vaidyx admin: only inside a window (18 Oct)
+    access.open_break_glass("tbadmin", "TB-A1", "test window")
     assert access.scope(people["admin"], c) == access.FULL
     assert access.scope(people["both"], c) == access.FULL  # a Radiology doctor who is also placed in Pulmonology
     for who in ("colo", "ravi", "kavya", "root", "stranger", "off"):
@@ -58,6 +60,7 @@ def test_owner_participants_coordinator_and_admin_read_the_whole_case_file(peopl
 
 def test_a_case_file_without_an_owner_stays_open_to_every_placed_account(people):
     c = _case(owner=None)
+    access.open_break_glass("tbadmin", "TB-A1", "test window")  # the Vaidyx admin needs a window even here (18 Oct)
     for who in ("pulmo", "colo", "ravi", "kavya", "anil", "admin"):
         assert access.scope(people[who], c) == access.FULL, who
     for who in ("root", "stranger", "off"):
@@ -123,6 +126,8 @@ def test_visible_filters_the_case_list(people):
 
 def test_clinical_actions_belong_to_the_owning_department(people):
     c = _case(participants=[{"department": "breast_surgery", "since": "x", "by": "pulmo"}])
+    assert not access.may(people["admin"], "send_request", c)  # the Vaidyx admin acts only inside a break-glass window (18 Oct)
+    access.open_break_glass("tbadmin", "TB-A1", "test window")
     for action in sorted(access.OWNER_ACTIONS - {"waive", "confirm", "dismiss_failed", "delete_document"}):
         assert access.may(people["pulmo"], action, c), action
         assert access.may(people["admin"], action, c), action
@@ -163,6 +168,8 @@ def test_without_an_owner_any_treating_doctor_acts_as_before(people):
 
 def test_the_listing_is_changed_by_the_coordinator_or_the_owner(people):
     c = _case()
+    assert not access.may_list(people["admin"], c)
+    access.open_break_glass("tbadmin", "TB-A1", "test window")
     assert access.may_list(people["anil"], c) and access.may_list(people["pulmo"], c) and access.may_list(people["admin"], c)
     assert not access.may_list(people["colo"], c) and not access.may_list(people["ravi"], c)
     assert not access.may_list(people["pulmo"], _case("TB-A2", owner=None)), "a Case File without an owner is listed by the coordinator (V1)"

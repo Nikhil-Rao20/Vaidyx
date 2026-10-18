@@ -23,6 +23,8 @@ def test_every_record_of_the_five_protocols_has_a_route(data_root):
         assert rkind in org.ROUTE_KINDS, (pid, r["id"])
         if rkind == org.COORDINATOR_ID:
             assert did is None and name == org.COORDINATOR_NAME, (pid, r["id"])
+        elif rkind == org.OWNER_ID and did is None:  # the owner's own work (a dental evaluation) before a Case File records its owner (18 Oct)
+            assert org.is_owner_alias(r.get("department")) and name == org.OWNER_NAME, (pid, r["id"])
         else:
             assert did and org.department(did), (pid, r["id"], r.get("department"))  # the department exists in the organisation
         if r.get("route"):
@@ -35,9 +37,9 @@ def test_every_record_of_the_five_protocols_has_a_route(data_root):
     ("colorectal_rectum", "cea", "biochemistry"),
     ("cervix", "viral_markers", "microbiology"),
     ("lung_nsclc", "driver_mutations", "pathology"), ("lung_nsclc", "met", "pathology"), ("colorectal_rectum", "ras_braf", "pathology"), ("colorectal_rectum", "mmr", "pathology"),
-    ("oral_cavity", "dental_evaluation", "dental_surgery"),
+    ("oral_cavity", "dental_evaluation", None),  # the owning department's own work from 18 Oct (R02-Q02)
     ("lung_nsclc", "bronchoscopy", "pulmonology"), ("lung_nsclc", "mediastinal_staging", "pulmonology"), ("lung_nsclc", "pft", "pulmonology"),
-    ("colorectal_rectum", "endoscopy", "medical_gastroenterology"),
+    ("colorectal_rectum", "endoscopy", "gastrointestinal_surgery"),
     ("cervix", "eua", "gynaecologic_oncology"), ("cervix", "cystoscopy_proctoscopy", "gynaecologic_oncology"),
     ("breast", "breast_imaging", "radiology"), ("breast", "bone_scan", "nuclear_medicine"), ("breast", "histopathology", "pathology"),
 ])

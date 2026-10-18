@@ -2,13 +2,15 @@
 (V1 item 2.1; V2 items 2.1, 2.2 and 2.4).
 
 data/tumour_board/org.json (edited by the root admin through the Organisation screen):
-  {"version": 2,
+  {"version": 3,
    "hospital": {"name": "", "level": "essential" | "optimal", "type": "" | "public" | "private",
-                "pmjay_empanelled": true, "fetch_window_months": 12},
+                "pmjay_empanelled": true, "fetch_window_months": 12,
+                "meeting_defaults": {"weekday": 0..6 | null, "time": "HH:MM", "room": "", "minutes_per_case": 10}},
    "departments": [{"id": "radiology", "name": "Radiology", "group": "supporting", "aliases": ["Radio-diagnosis", ...],
-                    "email": "radiology@hospital.example"}, ...],
-   "users": {"<username>": {"departments": {"<dept_id>": "member" | "head"}, "admin_of": ["<dept_id>", ...],
-                            "coordinator": false, "display_name": "", "disabled": false}},
+                    "email": "radiology@hospital.example", "phone": "", "receives_requests": true}, ...],
+   "users": {"<username>": {"departments": {"<dept_id>": "member" | "head" | "resident"}, "admin_of": ["<dept_id>", ...],
+                            "coordinator": false, "display_name": "", "disabled": false,
+                            "auditor": false, "outside_expert": false, "end_date": "YYYY-MM-DD" | ""}},
    "admins": ["<username>", ...],
    "routes": {"<protocol>.<record>": "<dept_id>" | "owner" | "coordinator"}}
 
@@ -20,9 +22,18 @@ Logins stay the existing Vaidyx accounts; this file only maps a username to Tumo
   MDT Coordinator   `coordinator`: board sessions, agendas, readiness, reminders, minutes. Not a department any more (V1 had
                     "Tumour Board coordination" as one); actions and notifications for the coordinator use the role.
   disabled          `disabled`: a Tumour Board flag that blocks every Tumour Board action (the Vaidyx login itself is untouched).
+  resident          `departments` value "resident" (V3, 18 Oct): a resident / PG / fellow on the treating doctor's team. Reads the Case
+                    Files of its department and the ones it joined, uploads, asks, proposes; never signs (waive, confirm, mark ready,
+                    send or close requests, refer, manage the team). A resident past `end_date` counts as disabled for clinical actions
+                    and is reported as expired.
+  auditor           `auditor`: read-only access to the activity log of the whole hospital (read_audit); no clinical action.
+  outside expert    `outside_expert`: a guest of a board meeting (the meeting screens check it); no placement, no Case File scope.
 
-Departments: the 22 treating and 8 supporting departments of the plan (section 4) are the defaults; the root admin adds, renames or
-moves them. hospital.level is the NCG resource tier (default essential); hospital.type decides the PM-JAY paperwork;
+Departments: the owner's settled list (18 Oct 2026): 23 treating and 6 supporting departments are the defaults; the root admin adds,
+renames or moves them. Medical Gastroenterology, Dental Surgery / OMFS and Anaesthesiology (added by the V2 build) are gone: endoscopy
+requests go to Gastrointestinal Surgery (its aliases), a dental evaluation and a pre-anaesthetic check go to the owning department
+(OWNER_ALIASES). Medical Genetics owns Case Files and receives requests (receives_requests); supporting departments always receive
+requests. A V2 file is migrated on load (migrate_v2, audited org_migrated) without losing a user. hospital.level is the NCG resource tier (default essential); hospital.type decides the PM-JAY paperwork;
 pmjay_empanelled turns the PM-JAY board-composition flag on (V2 item 6.4); fetch_window_months is the hospital default for the
 HIS fetch window (V2 item 3.2). Aliases map the protocols' "Responsible Department" names (Radiology, GI Oncology, Pulmonology,
 Laboratory Medicine, ...) and common variants onto a department. The V1 department ids and names stay as aliases, so documents,
@@ -34,6 +45,7 @@ PermissionError (the route answers 403 and the UI hides the control). Unknown ac
 can do nothing. Every change to the organisation and to accounts is appended to org_audit.jsonl.
 """
 import copy, json, logging, re, threading
+from datetime import date
 from pathlib import Path
 
 from . import config
@@ -41,40 +53,47 @@ from .store import _read_json, _write_json, now_iso
 
 log = logging.getLogger(__name__)
 
-VERSION = 2
+VERSION = 3
 GROUPS = ("treating", "supporting")
 PLACEHOLDER_DOMAIN = "hospital.example"  # reserved name (RFC 2606): a placeholder until the hospital gives its addresses (plan section 11)
 
 
-def _d(id_, name, group, aliases=()):
-    return {"id": id_, "name": name, "group": group, "aliases": list(aliases), "email": f"{id_}@{PLACEHOLDER_DOMAIN}"}
+def _d(id_, name, group, aliases=(), receives_requests=None):
+    """A default department. `receives_requests`: whether the request screens offer it; a supporting department always receives, a
+    treating one only when flagged (Medical Genetics, and the ones whose procedures the protocols route to them)."""
+    return {"id": id_, "name": name, "group": group, "aliases": list(aliases), "email": f"{id_}@{PLACEHOLDER_DOMAIN}", "phone": "",
+            "receives_requests": True if group == "supporting" else bool(receives_requests)}
 
 
-# The plan's section 4: 22 treating departments (20 from the hospital's list + 2 added) and 8 supporting (6 + 2). Aliases carry
-# the protocols' Responsible Department names, the V1 department names (whose ids normalise to the same key: "radio_diagnosis"
-# == "Radio-diagnosis") and common Indian variants. No alias may point at two departments (validate()).
+# The owner's settled list (docs/ui/questions/settled.json, R02): 23 treating departments (the hospital's 20 plus Paediatric Surgery,
+# Medical Genetics and Palliative Medicine; "Hematology" is an alias of Haematology) and 6 supporting. Aliases carry the protocols'
+# Responsible Department names, the V1 department names (whose ids normalise to the same key: "radio_diagnosis" == "Radio-diagnosis"),
+# the V2 departments removed on 18 Oct (Medical Gastroenterology's names resolve to Gastrointestinal Surgery) and common Indian
+# variants. No alias may point at two departments (validate()).
 DEFAULT_DEPARTMENTS = [
     _d("general_surgery", "General Surgery", "treating", ["Gen Surgery"]),
     _d("surgical_oncology", "Surgical Oncology", "treating", ["Surgery", "Oncosurgery", "Surgical Oncology Unit"]),
     _d("medical_oncology", "Medical Oncology", "treating", ["Oncology", "GI Oncology", "Medical Oncology Unit"]),
     _d("radiation_oncology", "Radiation Oncology", "treating", ["Radiotherapy"]),
     _d("breast_surgery", "Breast Surgery", "treating", ["Breast Surgical Oncology", "Breast Unit"]),
-    _d("gynaecologic_oncology", "Gynaecologic Oncology", "treating", ["Gynae Oncology", "Gynaecological Oncology", "Gyn Onc"]),
+    _d("gynaecologic_oncology", "Gynaecologic Oncology", "treating", ["Gynae Oncology", "Gynaecological Oncology", "Gyn Onc"], receives_requests=True),
     _d("ent_head_neck_surgery", "ENT / Head and Neck Surgery", "treating", ["ENT", "Head and Neck Surgery", "Head and Neck Oncology", "Otorhinolaryngology"]),
     _d("urology", "Urology", "treating", ["Uro-oncology"]),
-    _d("gastrointestinal_surgery", "Gastrointestinal Surgery", "treating", ["GI Surgery", "Surgical Gastroenterology"]),
-    _d("pulmonology", "Pulmonology", "treating", ["Pulmonary Medicine", "Chest Medicine", "Respiratory Medicine"]),
+    _d("gastrointestinal_surgery", "Gastrointestinal Surgery", "treating",
+       ["GI Surgery", "Surgical Gastroenterology", "Medical Gastroenterology", "Gastroenterology", "GI", "Endoscopy", "Gastro"], receives_requests=True),
+    _d("pulmonology", "Pulmonology", "treating", ["Pulmonary Medicine", "Chest Medicine", "Respiratory Medicine"], receives_requests=True),
     _d("thoracic_surgery", "Thoracic Surgery", "treating", ["Cardiothoracic Surgery", "CTVS"]),
     _d("neurosurgery", "Neurosurgery", "treating", ["Neurosurgical Oncology"]),
     _d("orthopaedic_oncology", "Orthopaedic Oncology", "treating", ["Orthopaedics", "Bone and Soft Tissue"]),
     _d("paediatric_oncology", "Paediatric Oncology", "treating", ["Pediatric Oncology"]),
+    _d("paediatric_surgery", "Paediatric Surgery", "treating", ["Pediatric Surgery", "Paediatric Surgical Oncology"]),
     _d("haematology", "Haematology", "treating", ["Hematology", "Clinical Haematology", "Haemato-oncology"]),
     _d("gynaecology", "Gynaecology", "treating", ["Obstetrics and Gynaecology", "OBG"]),
     _d("hepatobiliary_pancreatic_surgery", "Hepatobiliary and Pancreatic Surgery", "treating", ["HPB Surgery", "HPB"]),
     _d("colorectal_surgery", "Colorectal Surgery", "treating", ["Colorectal"]),
     _d("plastic_reconstructive_surgery", "Plastic and Reconstructive Surgery", "treating", ["Plastic Surgery"]),
     _d("dermatology", "Dermatology", "treating", ["Skin"]),
-    _d("medical_gastroenterology", "Medical Gastroenterology", "treating", ["Gastroenterology", "GI", "Endoscopy", "Gastro"]),
+    _d("medical_genetics", "Medical Genetics", "treating", ["Medical Geneticist", "Genetics", "Clinical Genetics", "Genetic Counselling"], receives_requests=True),
     _d("palliative_medicine", "Palliative Medicine", "treating", ["Palliative Care", "Pain and Palliative Medicine"]),
     _d("radiology", "Radiology", "supporting", ["Radio-diagnosis", "Radiodiagnosis", "Imaging"]),
     _d("pathology", "Pathology", "supporting", ["Histopathology", "Cytology", "Molecular Pathology", "Molecular", "Haematopathology", "Clinical Pathology"]),
@@ -82,26 +101,41 @@ DEFAULT_DEPARTMENTS = [
     _d("biochemistry", "Biochemistry", "supporting", ["Laboratory Medicine", "Laboratory", "Lab", "Clinical Biochemistry"]),
     _d("nuclear_medicine", "Nuclear Medicine", "supporting", ["Nuclear", "PET Centre"]),
     _d("clinical_pharmacology", "Clinical Pharmacology", "supporting", ["Pharmacology"]),
-    _d("dental_surgery", "Dental Surgery / Oral and Maxillofacial Surgery", "supporting", ["Dental Surgery", "Dental", "Oral and Maxillofacial Surgery", "OMFS", "Dentistry"]),
-    _d("anaesthesiology", "Anaesthesiology", "supporting", ["Anaesthesia", "Anesthesiology", "Pre-anaesthetic check-up", "PAC"]),
 ]
-# The board (V2 item 6.1 / 6.2 / 6.4): the four heads (each must have a specialty agent: board.ROLE_DEPARTMENT), the departments the
-# hospital's attendance sheet lists besides them and the owners of the Case Files on the agenda, the departments whose surgeon fills the
-# surgical seat for a Case File of its own, and the departments PM-JAY HBP 2.2 accepts as the surgical oncologist (plan section 8, 6.4).
-BOARD_HEADS = ["radiology", "medical_oncology", "surgical_oncology", "pathology"]
+# Names that route a record to the Case File's owning treating department (R02-Q02): the departments removed from the defaults on
+# 18 Oct whose work the treating team arranges itself. They are not departments: department_id() gives None for them, and
+# resolve_route() treats them as "owner". A hospital that adds such a department again gets it back as a real department.
+OWNER_ALIASES = {"dental surgery / oral and maxillofacial surgery", "dental surgery", "dental", "oral and maxillofacial surgery", "omfs",
+                 "dentistry", "dental evaluation", "anaesthesiology", "anaesthesia", "anesthesiology", "anesthesia", "pre anaesthetic check up",
+                 "pre anaesthetic check", "pre anesthetic check up", "pac"}
+# V2 -> V3 (18 Oct): where the users and stored ids of the removed V2 departments go; None means the owning department (OWNER_ALIASES),
+# so such a department is dropped unless someone is still placed in it (then it is kept as a hospital-added department: no loss).
+V2_REMOVED = {"medical_gastroenterology": "gastrointestinal_surgery", "dental_surgery": None, "anaesthesiology": None}
+# The board (V2 item 6.1 / 6.2 / 6.4; five heads from 18 Oct): the heads (each must have a specialty agent: board.ROLE_DEPARTMENT), the
+# departments the hospital's attendance sheet lists besides them and the owners of the Case Files on the agenda, the departments whose
+# surgeon fills the surgical seat for a Case File of its own, and the departments PM-JAY HBP 2.2 accepts as the surgical oncologist (plan
+# section 8, 6.4).
+BOARD_HEADS = ["radiology", "medical_oncology", "surgical_oncology", "pathology", "radiation_oncology"]
+V2_BOARD_HEADS = ["radiology", "medical_oncology", "surgical_oncology", "pathology"]  # the V2 default, replaced by the migration when unchanged
+MEETING_WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+DEFAULT_MEETING = {"weekday": None, "time": "", "room": "", "minutes_per_case": 10}  # the coordinator's defaults for a new meeting
+MINUTES_PER_CASE_RANGE = (1, 120)
 SURGICAL_DEPARTMENTS = ["surgical_oncology", "general_surgery", "breast_surgery", "gynaecologic_oncology", "ent_head_neck_surgery", "urology",
                         "gastrointestinal_surgery", "thoracic_surgery", "neurosurgery", "orthopaedic_oncology", "hepatobiliary_pancreatic_surgery",
                         "colorectal_surgery", "plastic_reconstructive_surgery"]
 PMJAY_SURGICAL_ONCOLOGY = ["surgical_oncology", "gynaecologic_oncology", "orthopaedic_oncology"]
 DEFAULT_HOSPITAL = {"name": "", "level": "essential", "type": "", "pmjay_empanelled": True, "fetch_window_months": 12,
                     "board_heads": list(BOARD_HEADS), "board_attendance": [], "surgical_departments": list(SURGICAL_DEPARTMENTS),
-                    "pmjay_surgical_oncology": list(PMJAY_SURGICAL_ONCOLOGY)}
+                    "pmjay_surgical_oncology": list(PMJAY_SURGICAL_ONCOLOGY), "meeting_defaults": dict(DEFAULT_MEETING)}
 BOARD_LISTS = ("board_heads", "board_attendance", "surgical_departments", "pmjay_surgical_oncology")  # hospital keys that list department ids
 DEFAULT_ORG = {"version": VERSION, "hospital": DEFAULT_HOSPITAL, "departments": DEFAULT_DEPARTMENTS, "users": {}, "admins": [], "routes": {}}
 LEVELS = ("essential", "optimal")
 TYPES = ("", "public", "private")
-DEPT_ROLES = ("member", "head")
-ROLE_SYNONYMS = {"doctor": "member"}  # the UI says "doctor"; the stored role stays "member" (V1 files)
+DEPT_ROLES = ("member", "head")  # the consultant placements: a treating or a supporting doctor
+PLACEMENTS = ("member", "head", "resident")  # every placement value, residents included (V3)
+RESIDENT = "resident"
+ROLE_SYNONYMS = {"doctor": "member", "consultant": "member", "pg": "resident", "fellow": "resident", "senior_resident": "resident"}  # the UI says "doctor"; the stored role stays "member" (V1 files)
+USER_FLAGS = ("coordinator", "disabled", "auditor", "outside_expert")
 FETCH_WINDOW_RANGE = (1, 120)  # months
 
 # V1 (12 departments) -> V2: where each V1 department's users and stored ids go (plan 2.1 migration table). An empty list means the
@@ -110,7 +144,7 @@ FETCH_WINDOW_RANGE = (1, 120)  # months
 V1_MIGRATION = {
     "radio_diagnosis": ["radiology"], "pathology": ["pathology"], "molecular_pathology": ["pathology"], "nuclear_medicine": ["nuclear_medicine"],
     "medical_oncology": ["medical_oncology"], "surgical_oncology": ["surgical_oncology"], "radiation_oncology": ["radiation_oncology"],
-    "laboratory_medicine": ["biochemistry", "pathology"], "gastroenterology": ["medical_gastroenterology"], "pulmonary_medicine": ["pulmonology"],
+    "laboratory_medicine": ["biochemistry", "pathology"], "gastroenterology": ["gastrointestinal_surgery"], "pulmonary_medicine": ["pulmonology"],
     "general_medicine": [], "tumour_board": [],
 }
 COORDINATOR_ID = "coordinator"  # the MDT Coordinator as an inbox / routing target (a role, not a department)
@@ -120,10 +154,13 @@ OWNER_ID = "owner"  # routing target: the Case File's owning treating department
 OWNER_NAME = "Owning department"
 
 # Who may do what. "who" lists the roles allowed: "member" / "head" mean of the department named in the call (for a
-# department-scoped action), "dept_admin" is a department admin of the department named in the call, "root_admin" the Tumour Board
-# super-admin (organisation and accounts, never a clinical action: plan section 4), "treating" / "supporting" is a member or head of
-# any department of that group, "coordinator" is the hospital-level flag, "known" is anyone placed (a doctor, coordinator or admin),
-# "any" is any logged-in user. Vaidyx admins (`admin`) may do everything listed.
+# department-scoped action), "resident" a resident of the department named (or, for an action without a department, any resident
+# placement; access.may() then limits it to the resident's own Case Files), "dept_admin" is a department admin of the department named
+# in the call, "root_admin" the Tumour Board super-admin (organisation and accounts, never a clinical action: plan section 4),
+# "treating" / "supporting" is a member or head (a consultant, never a resident) of any department of that group, "consultant" either of
+# those, "coordinator" is the hospital-level flag, "auditor" the read-only activity flag, "known" is anyone placed (a doctor, a
+# resident, coordinator or admin), "any" is any logged-in user. Vaidyx admins (`admin`) may do everything listed; an action whose "who"
+# is empty is theirs alone (break_glass).
 # A department-scoped action called without a department (a document uploaded straight into a Case File by the
 # coordinator, a document from before departments existed, an action with no Responsible Department) is decided by
 # "no_dept" alone: such an item belongs to the coordinator, never to a member / head of some other department. Every
@@ -132,9 +169,10 @@ OWNER_NAME = "Owning department"
 # coordinator (where "who" lists it) and admins qualify.
 ACTIONS = {
     "view": {"who": ("any",), "dept": False, "doc": "Open the Tumour Board pages (any logged-in user)"},
-    "upload": {"who": ("member", "head", "coordinator"), "dept": True, "no_dept": ("coordinator",),
+    "upload": {"who": ("member", "head", "resident", "coordinator"), "dept": True, "no_dept": ("coordinator",),
                "doc": "Upload a document for a department (no department: coordinator); the V1 path, kept for tests and outside-report intake (V2 item 3.7)"},
-    "upload_to_case": {"who": ("coordinator", "treating"), "dept": False, "doc": "Upload straight into a Case File (outside reports: treating doctors)"},
+    "upload_to_case": {"who": ("coordinator", "treating", "resident"), "dept": False,
+                       "doc": "Upload straight into a Case File (outside reports: treating doctors; a resident only into the Case Files of its team, access.may)"},
     "inbox": {"who": ("member", "head"), "dept": True, "no_dept": (),
               "doc": "See a department's inbox (no department: admin; an inbox always has a department)"},
     "confirm": {"who": ("member", "head", "treating"), "dept": True, "no_dept": ("treating",),
@@ -161,11 +199,12 @@ ACTIONS = {
                       "doc": "Close a request that has no protocol record behind it (treating doctors; a gap request closes by itself when the record arrives)"},
     "update_action": {"who": ("member", "head", "coordinator"), "dept": True, "no_dept": ("coordinator",),
                       "doc": "Update a pending action for a department (no department: coordinator)"},
-    "review": {"who": ("known",), "dept": False, "doc": "Expert review of an AI artefact (human oversight)"},
+    "review": {"who": ("consultant", "coordinator"), "dept": False, "doc": "Expert review of an AI artefact (human oversight): a consultant or the coordinator, never a resident"},
     "manage_org": {"who": ("root_admin",), "dept": False, "doc": "Edit the hospital, departments, routes, root admins, coordinators and department admins (root admin)"},
     "manage_department": {"who": ("dept_admin", "root_admin"), "dept": True, "no_dept": ("root_admin",),
                           "doc": "Create, disable and remove the doctor logins of a department (its department admins and the root admin)"},
-    "read_case": {"who": ("known",), "dept": False, "doc": "Read Case Files, board sessions, the intake queue and the dashboard (anyone placed: doctors, the coordinator, admins; not a department admin or root admin). Per Case File, access.scope() narrows this to the owner, the participants, the coordinator and the departments asked (V2 item 5.1)"},
+    "read_case": {"who": ("known",), "dept": False, "doc": "Read Case Files, board sessions, the intake queue and the dashboard (anyone placed: doctors, residents, the coordinator, admins; not a department admin, root admin or auditor). Per Case File, access.scope() narrows this to the owner, the participants, the coordinator and the departments asked (V2 item 5.1)"},
+    "ask": {"who": ("known",), "dept": False, "doc": "Ask the Case File (reading only: questions answered from the records with quotes); residents included"},
     "refer": {"who": ("treating",), "dept": False,
               "doc": "Refer the Case File to another treating department (the owning department's doctors; V2 item 5.2)"},
     "answer_referral": {"who": ("member", "head"), "dept": True, "no_dept": (),
@@ -176,14 +215,32 @@ ACTIONS = {
                    "doc": "Mark a Case File ready for the board, or take the mark back (the owning department's doctors; the MDT Coordinator builds the agenda from these; V2 item 6.1)"},
     "remind": {"who": ("coordinator", "treating"), "dept": False,
                "doc": "Send a reminder about an open request to the department holding it, or about unsent suggestions to the owning department: the MDT Coordinator on the owner's behalf, or the owner's doctors (access.may_remind; V2 item 6.1)"},
+    # ---- 18 Oct (V3): residents, the team, urgency, archive, consent, the auditor, break-glass
+    "propose": {"who": ("resident",), "dept": False,
+                "doc": "A resident asks the treating consultant to sign off an action (waive, not needed, confirm, mark ready, send a request, urgency, refer, a typed value, a published case); nothing changes until the consultant approves (access.may: the resident's own Case Files)"},
+    "approve_proposal": {"who": ("treating",), "dept": False,
+                         "doc": "Approve or return a resident's proposal: the owning department's consultants (the action then runs in the consultant's name)"},
+    "set_urgency": {"who": ("treating",), "dept": False,
+                    "doc": "Set the urgency tag (1 to 5) of a Case File: the owning department's consultants; a resident proposes. Urgency is set by people, never by Vaidyx"},
+    "manage_team": {"who": ("treating",), "dept": False,
+                    "doc": "Manage the Case File team: join code, approve or reject a resident's join request, remove a resident (the owning department's consultants; a department admin or the resident itself may also remove)"},
+    "archive": {"who": ("treating", "coordinator"), "dept": False,
+                "doc": "Archive a Case File (instead of deleting it) or take it back: the owning department's consultants, or the MDT Coordinator with a reason"},
+    "set_consent": {"who": ("treating",), "dept": False,
+                    "doc": "Record whether the patient consented to an outside expert seeing the Case File in a meeting (the owning department's consultants)"},
+    "read_audit": {"who": ("auditor", "coordinator", "root_admin"), "dept": False,
+                   "doc": "Read the activity log of every Case File and of the organisation (read only): the auditor, the MDT Coordinator and the root admin"},
+    "break_glass": {"who": (), "dept": False,
+                    "doc": "Open a break-glass window on one Case File with a reason (Vaidyx admin only; the owner is told; audited). Outside a window a Vaidyx admin has no clinical scope"},
 }
 
 _SLUG = re.compile(r"^[a-z0-9_]+$")
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_PHONE = re.compile(r"^[0-9+()\-/ ]{3,30}$")
 _UNKNOWN = object()  # a department name that does not resolve: matches no membership
 _cache: dict = {}
 _setup_lock = threading.Lock()  # the first set-up: load, check, save as one step (review Phase 7)
-HOSPITAL_AUDITED = ("name", "level", "type", "pmjay_empanelled", "fetch_window_months", "board_heads", "board_attendance", "surgical_departments", "pmjay_surgical_oncology", "first_setup")
+HOSPITAL_AUDITED = ("name", "level", "type", "pmjay_empanelled", "fetch_window_months", "board_heads", "board_attendance", "surgical_departments", "pmjay_surgical_oncology", "first_setup", "meeting_defaults")
 
 
 def path() -> Path:
@@ -240,15 +297,24 @@ def _stat_key(p: Path):
     return (str(p), st.st_mtime_ns, st.st_size)
 
 
+def file_version(org) -> int:
+    """The version a stored file declares (1 when it declares none or nonsense)."""
+    if not isinstance(org, dict):
+        return VERSION
+    try:
+        return int(org.get("version") or 1)
+    except (TypeError, ValueError):
+        return 1
+
+
 def is_v1(org) -> bool:
     """A V1 file: no version (or an older one) and departments without a group."""
-    if not isinstance(org, dict):
-        return False
-    try:
-        ver = int(org.get("version") or 1)
-    except (TypeError, ValueError):
-        ver = 1
-    return ver < VERSION
+    return isinstance(org, dict) and file_version(org) < 2
+
+
+def needs_migration(org) -> bool:
+    """Any file older than VERSION (a V1 file, or a V2 file from before 18 Oct 2026)."""
+    return isinstance(org, dict) and file_version(org) < VERSION
 
 
 def migrate_v1(org: dict) -> tuple[dict, dict]:
@@ -324,8 +390,116 @@ def migrate_v1(org: dict) -> tuple[dict, dict]:
     return validate(new), report
 
 
+def _default_by_id() -> dict:
+    return {d["id"]: d for d in DEFAULT_DEPARTMENTS}
+
+
+def migrate_v2(org: dict) -> tuple[dict, dict]:
+    """The V3 organisation built from a V2 file (18 Oct 2026): the removed departments (V2_REMOVED) go, their users re-placed in the mapped
+    department (Medical Gastroenterology -> Gastrointestinal Surgery) or, when there is no mapped department (Dental Surgery / OMFS,
+    Anaesthesiology: the owning department's work), the department is kept as a hospital-added one only while someone is still placed in
+    it; the new default departments (Paediatric Surgery, Medical Genetics) are added; every department gets phone and receives_requests;
+    every user the V3 flags; the V2 default board heads become the five V3 heads (a hospital's own list is kept); meeting defaults are
+    added. Nothing a hospital added or renamed is lost. Returns (org, report) without saving."""
+    old = _filled(org)
+    new = copy.deepcopy(old)
+    new["version"] = VERSION
+    report = {"departments": {}, "users": {}, "added": [], "kept": [], "dropped_aliases": []}
+    defaults = _default_by_id()
+    users = {u: v for u, v in (old.get("users") or {}).items() if isinstance(v, dict)}
+
+    def _placed_in(did):
+        return [u for u, v in users.items() if did in ((v.get("departments") or {}) if isinstance(v.get("departments"), dict) else {}) or did in (v.get("admin_of") or [])]
+
+    depts = []
+    present = {d.get("id") for d in old.get("departments") or [] if isinstance(d, dict)}
+    for d in old.get("departments") or []:
+        if not isinstance(d, dict) or not isinstance(d.get("id"), str):
+            continue
+        d = dict(d)
+        did = d["id"]
+        if did in V2_REMOVED:
+            target = V2_REMOVED[did]
+            if target and target in present | set(defaults):
+                report["departments"][did] = [target]
+                continue  # its users move; its names are aliases of the target already (defaults) or merged below
+            if _placed_in(did):  # nobody loses a placement: kept as a hospital-added department
+                report["kept"].append(did)
+                report["departments"][did] = [did]
+            else:
+                report["departments"][did] = []
+                continue
+        dd = defaults.get(did)
+        if dd:  # a default department: the V3 aliases join the hospital's own (unambiguous ones only, checked by validate below)
+            for a in dd["aliases"]:
+                if _norm(a) not in {_norm(x) for x in d.get("aliases") or []} and _norm(a) != _norm(d.get("name")):
+                    d.setdefault("aliases", []).append(a)
+            if "receives_requests" not in d:
+                d["receives_requests"] = dd["receives_requests"]
+        d.setdefault("phone", "")
+        d.setdefault("receives_requests", d.get("group") == "supporting")
+        depts.append(d)
+    have = {_norm(d["id"]) for d in depts} | {_norm(d.get("name")) for d in depts} | {_norm(a) for d in depts for a in d.get("aliases") or []}
+    for dd in DEFAULT_DEPARTMENTS:  # the new defaults, unless the hospital already has them under some name
+        if _norm(dd["id"]) in have or _norm(dd["name"]) in have:
+            continue
+        depts.append(copy.deepcopy(dd))
+        report["added"].append(dd["id"])
+    # a removed department's own aliases travel to the mapped department when they stay unambiguous
+    taken = {}
+    for d in depts:
+        for k in {_norm(d["id"]), _norm(d.get("name")), *(_norm(a) for a in d.get("aliases") or [])}:
+            taken.setdefault(k, d["id"])
+    for d in old.get("departments") or []:
+        if not isinstance(d, dict) or d.get("id") not in V2_REMOVED or report["departments"].get(d.get("id")) in ([], [d.get("id")]):
+            continue
+        target = next((x for x in depts if x["id"] == V2_REMOVED[d["id"]]), None)
+        for a in [d.get("name"), *(d.get("aliases") or [])]:
+            if not isinstance(a, str) or not a.strip():
+                continue
+            k = _norm(a)
+            if k in taken:
+                if target is None or taken[k] != target["id"]:
+                    report["dropped_aliases"].append(a)
+                continue
+            if target is not None:
+                target.setdefault("aliases", []).append(a.strip())
+                taken[k] = target["id"]
+    # the hospital-added departments the migration kept must not clash with the new defaults' names
+    for d in depts:
+        d["aliases"] = [a for a in d.get("aliases") or [] if taken.get(_norm(a), d["id"]) == d["id"]]
+    new["departments"] = depts
+    ids = {d["id"] for d in depts}
+    moved = {k: list(report["departments"][k]) for k in V2_REMOVED if report["departments"].get(k) not in (None, [k])}  # removed: [target] or [] (the owner)
+    for uname, u in users.items():
+        nu = dict(u)
+        dmap = {}
+        for did, role in ((u.get("departments") or {}) if isinstance(u.get("departments"), dict) else {}).items():
+            tgt = moved.get(did, [did] if did in ids else [])
+            for t in tgt:
+                if t in ids:
+                    dmap[t] = "head" if "head" in (role, dmap.get(t)) else (role if role != RESIDENT or dmap.get(t) is None else dmap[t])
+        nu["departments"] = dmap
+        nu["admin_of"] = list(dict.fromkeys(t for a in (u.get("admin_of") or []) for t in moved.get(a, [a] if a in ids else []) if t in ids))
+        for flag in ("auditor", "outside_expert"):
+            nu[flag] = nu.get(flag) is True
+        nu["end_date"] = str(nu.get("end_date") or "")[:10]
+        new["users"][uname] = nu
+        if dmap != (u.get("departments") or {}):
+            report["users"][uname] = dmap
+    h = new["hospital"]
+    if (h.get("board_heads") or []) in ([], V2_BOARD_HEADS):
+        h["board_heads"] = list(BOARD_HEADS)
+    if not isinstance(h.get("meeting_defaults"), dict):
+        h["meeting_defaults"] = dict(DEFAULT_MEETING)
+    for key in ("board_attendance", "surgical_departments", "pmjay_surgical_oncology"):
+        h[key] = [x for x in (h.get(key) or []) if x in ids]
+    new["routes"] = {k: (moved[v][0] if moved.get(v) else (OWNER_ID if v in moved else v)) for k, v in (old.get("routes") or {}).items()}
+    return validate(new), report
+
+
 def load() -> dict:
-    """The organisation. Created with the defaults on first use; a partly filled file gets the missing keys; a V1 file is migrated,
+    """The organisation. Created with the defaults on first use; a partly filled file gets the missing keys; a V1 or V2 file is migrated,
     saved and audited.
 
     Cached by file mtime: the same object is returned until org.json changes, so treat it as read-only (change a deep
@@ -345,16 +519,22 @@ def load() -> dict:
     except (ValueError, OSError) as e:
         log.warning("org.json could not be read (%s); using the default departments", e)
         return _filled(DEFAULT_ORG)
-    if is_v1(raw):
+    if needs_migration(raw):
+        was = file_version(raw)
         try:
-            org, report = migrate_v1(raw)
+            org, report = migrate_v1(raw) if is_v1(raw) else migrate_v2(raw)
         except ValueError as e:
-            log.warning("org.json (V1) could not be migrated (%s); using the default departments", e)
-            return _filled(DEFAULT_ORG)
+            if is_v1(raw):
+                log.warning("org.json (V1) could not be migrated (%s); using the default departments", e)
+                return _filled(DEFAULT_ORG)
+            log.warning("org.json (V%s) does not validate (%s); using it as read, not migrated", was, e)  # roles() honours known departments only
+            org = _filled(raw)
+            _cache.update(key=key, org=org)
+            return org
         _write_json(p, org)
-        audit("org_migrated", "system", from_version=1, to_version=VERSION, departments=report["departments"], users=report["users"],
-              kept=report["kept"], dropped_aliases=report["dropped_aliases"])
-        log.info("org.json migrated from V1 to V%s", VERSION)
+        audit("org_migrated", "system", from_version=was, to_version=VERSION, departments=report["departments"], users=report["users"],
+              kept=report["kept"], dropped_aliases=report["dropped_aliases"], added=report.get("added", []))
+        log.info("org.json migrated from V%s to V%s", was, VERSION)
         _cache.update(key=_stat_key(p), org=org)
         return org
     org = _filled(raw)
@@ -450,6 +630,30 @@ def validate(org: dict) -> dict:
     if not FETCH_WINDOW_RANGE[0] <= fw <= FETCH_WINDOW_RANGE[1]:
         raise ValueError(f"The fetch window must be {FETCH_WINDOW_RANGE[0]} to {FETCH_WINDOW_RANGE[1]} months.")
     h["fetch_window_months"] = fw
+    md = h.get("meeting_defaults")
+    md = dict(md) if isinstance(md, dict) else {}
+    wd = md.get("weekday")
+    if wd in (None, ""):
+        wd = None
+    elif isinstance(wd, str) and wd.strip().capitalize() in MEETING_WEEKDAYS:
+        wd = MEETING_WEEKDAYS.index(wd.strip().capitalize())
+    else:
+        try:
+            wd = int(wd)
+        except (TypeError, ValueError):
+            raise ValueError("The meeting weekday must be 0 (Monday) to 6 (Sunday), a weekday name or empty.")
+        if not 0 <= wd <= 6:
+            raise ValueError("The meeting weekday must be 0 (Monday) to 6 (Sunday), a weekday name or empty.")
+    tm = str(md.get("time") or "").strip()
+    if tm and not re.match(r"^([01]\d|2[0-3]):[0-5]\d$", tm):
+        raise ValueError("The meeting time must be HH:MM (24 hour clock) or empty.")
+    try:
+        mpc = int(md.get("minutes_per_case", DEFAULT_MEETING["minutes_per_case"]) or DEFAULT_MEETING["minutes_per_case"])
+    except (TypeError, ValueError):
+        raise ValueError("Minutes per case must be a number.")
+    if not MINUTES_PER_CASE_RANGE[0] <= mpc <= MINUTES_PER_CASE_RANGE[1]:
+        raise ValueError(f"Minutes per case must be {MINUTES_PER_CASE_RANGE[0]} to {MINUTES_PER_CASE_RANGE[1]}.")
+    h["meeting_defaults"] = {"weekday": wd, "time": tm, "room": str(md.get("room") or "").strip()[:80], "minutes_per_case": mpc}
     fs = h.get("first_setup")  # the stamp of the answered first set-up (V2 item 7.1); absent until the root admin answers it once
     if fs is None:
         h.pop("first_setup", None)
@@ -486,7 +690,14 @@ def validate(org: dict) -> dict:
         email = str(d.get("email") or "").strip()
         if email and not _EMAIL.match(email):
             raise ValueError(f"The email of department {name!r} does not look like an address.")
+        phone = str(d.get("phone") or "").strip()
+        if phone and not _PHONE.match(phone):
+            raise ValueError(f"The phone of department {name!r} may hold digits, spaces, +, -, / and brackets only (up to 30 characters).")
+        rr = d.get("receives_requests", group == "supporting")
+        if not isinstance(rr, bool):
+            raise ValueError(f"receives_requests of department {name!r} must be true or false.")
         d["name"], d["group"], d["aliases"], d["email"] = name, group, [a.strip() for a in aliases if a.strip()], email
+        d["phone"], d["receives_requests"] = phone, (True if group == "supporting" else rr)  # a supporting department always receives requests
         for k in {_norm(did), _norm(name), *(_norm(a) for a in d["aliases"])}:
             if k in _COORDINATOR_NAMES:
                 raise ValueError(f"{k!r} names the MDT Coordinator (a role) and cannot be a department.")
@@ -532,9 +743,10 @@ def validate(org: dict) -> dict:
             if not cid:
                 raise ValueError(f"User {uname!r} is mapped to unknown department {did!r}.")
             role = ROLE_SYNONYMS.get(role, role)
-            if role not in DEPT_ROLES:
-                raise ValueError(f"User {uname!r} has role {role!r} in {did!r}; the role must be member (doctor) or head.")
-            clean_map[cid] = "head" if "head" in (role, clean_map.get(cid)) else role
+            if role not in PLACEMENTS:
+                raise ValueError(f"User {uname!r} has role {role!r} in {did!r}; the role must be member (doctor), head or resident.")
+            prev = clean_map.get(cid)
+            clean_map[cid] = "head" if "head" in (role, prev) else ("member" if "member" in (role, prev) else role)  # the higher placement wins when an alias names the department twice
         adm = u.get("admin_of") or []
         if not isinstance(adm, list) or not all(isinstance(a, str) for a in adm):
             raise ValueError(f"admin_of for user {uname!r} must be a list of department ids.")
@@ -544,11 +756,18 @@ def validate(org: dict) -> dict:
             if not cid:
                 raise ValueError(f"User {uname!r} is department admin of unknown department {did!r}.")
             clean_adm.append(cid)
-        for flag in ("coordinator", "disabled"):
+        for flag in USER_FLAGS:
             if not isinstance(u.get(flag, False), bool):
                 raise ValueError(f"{flag} for user {uname!r} must be true or false.")
+        ed = str(u.get("end_date") or "").strip()[:10]
+        if ed:
+            try:
+                date.fromisoformat(ed)
+            except ValueError:
+                raise ValueError(f"end_date for user {uname!r} must be a date (YYYY-MM-DD).")
         u["departments"], u["admin_of"] = clean_map, list(dict.fromkeys(clean_adm))
         u["coordinator"], u["disabled"] = u.get("coordinator", False), u.get("disabled", False)
+        u["auditor"], u["outside_expert"], u["end_date"] = u.get("auditor", False), u.get("outside_expert", False), ed
         u["display_name"] = str(u.get("display_name") or "").strip()
         users[uname.strip()] = u
     out["users"] = users
@@ -683,17 +902,58 @@ def department_email(dept_id) -> str:
     return str(d.get("email") or "") if d else ""
 
 
+def department_phone(dept_id) -> str:
+    d = department(dept_id)
+    return str(d.get("phone") or "") if d else ""
+
+
+def receives_requests(dept_id) -> bool:
+    """Whether the request screens offer this department: every supporting department, and the treating ones flagged (V3)."""
+    d = department(dept_id)
+    return bool(d and (d.get("group") == "supporting" or d.get("receives_requests")))
+
+
+def is_owner_alias(name) -> bool:
+    """True for a name that routes to the owning treating department (a dental evaluation, a pre-anaesthetic check: OWNER_ALIASES) and
+    names no department of this hospital."""
+    s = str(name or "").strip()
+    if not s:
+        return False
+    s = _SUFFIX.sub("", _PREFIX.sub("", s)).strip()
+    return _norm(s) in OWNER_ALIASES and department_id(s) is None
+
+
+def display_name(username: str) -> str:
+    """The person's display name from org.json (the profile store may hold a newer one: profiles.display_name), else the login."""
+    u = (load().get("users") or {}).get(str(username or ""))
+    name = str(u.get("display_name") or "").strip() if isinstance(u, dict) else ""
+    return name or str(username or "")
+
+
+def _past(iso_date) -> bool:
+    """True when `iso_date` (YYYY-MM-DD) is before today; an unreadable date never expires anyone."""
+    s = str(iso_date or "")[:10]
+    if not s:
+        return False
+    try:
+        return date.fromisoformat(s) < date.today()
+    except ValueError:
+        return False
+
+
 def roles(username: str, vaidyx_admin: bool = False) -> dict:
     """The Tumour Board roles of a Vaidyx login.
 
-    admin: a Vaidyx admin (everything). root_admin: listed in org.json admins (organisation and accounts, no clinical action: plan
-    section 4). An empty username means authentication is off (single-user
-    mode): there is no login to tie a role to, so that user is treated as admin. This only happens when the main app
+    admin: a Vaidyx admin (everything the actions list; a Case File only inside a break-glass window, access.scope). root_admin: listed
+    in org.json admins (organisation and accounts, no clinical action: plan section 4). An empty username means authentication is off
+    (single-user mode): there is no login to tie a role to, so that user is treated as admin. This only happens when the main app
     runs with AUTH_ENABLED=false or through its localhost bypass; ~/vaidyx/start_vaidyx_app.sh sets neither, so a
-    normal deployment always has a username. Only existing departments and the roles member / head are honoured, even if
-    org.json was edited by hand. treating / supporting: the user's departments of that group. admin_of: the departments the
-    user administers. known: admin, coordinator or a doctor of at least one department. disabled: the Tumour Board flag; a
-    disabled user is known to nobody and can() refuses everything."""
+    normal deployment always has a username. Only existing departments and the placements member / head / resident are honoured,
+    even if org.json was edited by hand. treating / supporting: the user's consultant placements (member / head) of that group;
+    resident: its resident placements ({dept: "resident"}, also listed in departments). admin_of: the departments the user
+    administers. auditor / outside_expert: the V3 flags. end_date and expired: a placement past its end date is dropped (the person
+    counts as disabled for clinical actions) and reported as expired. known: admin, coordinator or a placement somewhere. disabled: the
+    Tumour Board flag; a disabled user is known to nobody and can() refuses everything."""
     username = str(username or "").strip()
     org = load()
     ds = departments()
@@ -702,17 +962,28 @@ def roles(username: str, vaidyx_admin: bool = False) -> dict:
     u = (org.get("users") or {}).get(username) if username else None
     u = u if isinstance(u, dict) else {}
     dmap = u.get("departments") if isinstance(u.get("departments"), dict) else {}
-    depts = {k: ROLE_SYNONYMS.get(v, v) for k, v in dmap.items() if k in ids and ROLE_SYNONYMS.get(v, v) in DEPT_ROLES}
+    placed = {k: ROLE_SYNONYMS.get(v, v) for k, v in dmap.items() if k in ids and ROLE_SYNONYMS.get(v, v) in PLACEMENTS}
+    end_date = str(u.get("end_date") or "")[:10]
+    expired = bool(placed) and _past(end_date)
+    if expired:  # past the end date: no placement counts any more (reported, not silently dropped)
+        placed = {}
     admin_of = [a for a in (u.get("admin_of") if isinstance(u.get("admin_of"), list) else []) if a in ids]
     root_admin = bool(username) and username in (org.get("admins") or [])
     admin = (not username) or bool(vaidyx_admin)  # everything: the Vaidyx admin (or no login at all); a root admin manages, never treats
     coordinator = u.get("coordinator") is True
+    auditor = u.get("auditor") is True
+    outside_expert = u.get("outside_expert") is True
     disabled = u.get("disabled") is True and not admin  # the Tumour Board flag never locks out the Vaidyx admin (review M3)
+    consult = {k: v for k, v in placed.items() if v in DEPT_ROLES}
+    resident = {k: v for k, v in placed.items() if v == RESIDENT}
     r = {"user": username, "admin": admin, "vaidyx_admin": bool(vaidyx_admin), "root_admin": root_admin, "coordinator": coordinator,
-         "departments": depts, "admin_of": admin_of,
-         "treating": {k: v for k, v in depts.items() if groups.get(k) == "treating"},
-         "supporting": {k: v for k, v in depts.items() if groups.get(k) == "supporting"},
-         "disabled": disabled, "known": (admin or coordinator or bool(depts)) and not disabled}
+         "departments": placed, "admin_of": admin_of,
+         "treating": {k: v for k, v in consult.items() if groups.get(k) == "treating"},
+         "supporting": {k: v for k, v in consult.items() if groups.get(k) == "supporting"},
+         "resident": resident, "resident_treating": {k: v for k, v in resident.items() if groups.get(k) == "treating"},
+         "auditor": auditor, "outside_expert": outside_expert, "end_date": end_date, "expired": expired,
+         "display_name": str(u.get("display_name") or "").strip(),
+         "disabled": disabled, "known": (admin or coordinator or bool(placed)) and not disabled}
     return r
 
 
@@ -725,15 +996,19 @@ def _allowed(r: dict, who, department) -> bool:
         return True
     if "root_admin" in who and r.get("root_admin"):
         return True
+    if "auditor" in who and r.get("auditor"):
+        return True
     if "treating" in who and r.get("treating"):
         return True
     if "supporting" in who and r.get("supporting"):
         return True
+    if "consultant" in who and (r.get("treating") or r.get("supporting")):
+        return True
     if department is None:  # no department named: no department role counts (can() passes None only for that case)
-        return False
+        return "resident" in who and bool(r.get("resident"))  # a resident placement anywhere (access.may narrows it to its Case Files)
     if "dept_admin" in who and department in (r.get("admin_of") or []):
         return True
-    want = {x for x in who if x in DEPT_ROLES}  # a head is also a member: rules open to members list both
+    want = {x for x in who if x in PLACEMENTS}  # a head is also a member: rules open to members list both
     return (r.get("departments") or {}).get(department) in want
 
 
@@ -762,8 +1037,8 @@ def can(r: dict, action: str, department: str | None = None) -> bool:
 
 
 def can_as_member(r: dict, action: str, department) -> bool:
-    """True if the user qualifies for a department-scoped action through a membership (member / head) of the department named, not
-    through a hospital-wide role: the uploading department confirms its own upload, its head deletes it (V2 item 5.1 owner rule)."""
+    """True if the user qualifies for a department-scoped action through a membership (member / head, never a resident) of the department
+    named, not through a hospital-wide role: the uploading department confirms its own upload, its head deletes it (V2 item 5.1 owner rule)."""
     rule = ACTIONS.get(action)
     if rule is None or not rule.get("dept") or not isinstance(r, dict) or r.get("disabled") or not department:
         return False
@@ -820,6 +1095,9 @@ def resolve_route(target: str | None, fallback_name: str, owner_dept: str | None
     t = str(target or "").strip()
     if t == COORDINATOR_ID or (t and is_coordinator_name(t)) or (not t and is_coordinator_name(fallback_name)):
         return COORDINATOR_NAME, None, COORDINATOR_ID
+    if (t and t != OWNER_ID and is_owner_alias(t)) or (not t and is_owner_alias(fallback_name)):  # a dental evaluation, a pre-anaesthetic check: the owner's own work (R02-Q02)
+        did = department_id(owner_dept) if owner_dept else None
+        return (department_name(did) if did else OWNER_NAME), did, OWNER_ID
     if t == OWNER_ID:
         did = department_id(owner_dept) if owner_dept else None
         if did:

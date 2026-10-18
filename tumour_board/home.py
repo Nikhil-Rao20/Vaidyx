@@ -7,6 +7,12 @@
   Department admin   its doctors (placed, heads, disabled, without a Vaidyx login)
   Root admin         the organisation and its settings; the first set-up question (hospital name, NCG level, PM-JAY empanelled) until
                      it is answered once (plan section 11: default yes, asked at first set-up)
+  Resident           (18 Oct) the Case Files it is on (its department's and the ones it joined), with its proposals waiting for the
+                     consultant ("waiting for Dr X") and the ones returned
+
+From 18 Oct every home also carries "waiting_for_me" (a consultant's residents' proposals, join requests and records needing a
+confirmation, proposals.waiting_for; for a resident, its proposals returned with a note) and each Case File row its urgency tag (set
+by people, team.urgency_view).
 
 One login may hold several roles (a department admin who is also a doctor): its home stacks the sections, the clinical one first.
 A Vaidyx admin (everything) sees every Case File, the coordinator's view and the organisation. An account placed nowhere sees no
@@ -14,9 +20,9 @@ section (the UI explains). Everything here is read from the store; nothing is de
 decides every permission on the routes behind the home (org.can, access.scope); the home only sums up what the user may open."""
 from datetime import date
 
-from . import access, accounts, board, his_client, metrics, notify, org, referral, store
+from . import access, accounts, board, his_client, metrics, notify, org, proposals, referral, store, team
 
-SECTIONS = ("treating", "supporting", "coordinator", "dept_admin", "root_admin")
+SECTIONS = ("treating", "resident", "supporting", "coordinator", "dept_admin", "root_admin")
 ADMIN_SECTIONS = ("treating", "coordinator", "root_admin")  # a Vaidyx admin: every Case File, the board, the organisation
 MAX_CASES = 60
 MAX_REQUESTS = 12
@@ -34,6 +40,8 @@ def sections_for(r: dict) -> list[str]:
     out = []
     if r.get("treating"):
         out.append("treating")
+    if r.get("resident"):
+        out.append("resident")
     if r.get("supporting"):
         out.append("supporting")
     if r.get("coordinator"):
@@ -71,7 +79,8 @@ def _case_row(c: dict, r: dict, mine: set) -> dict:
             "open_actions": c.get("open_actions", 0), "readiness": c.get("readiness"), "gate_passed": c.get("gate_passed"),
             "owner": own, "owner_name": org.department_name(own) if own else "", "relation": relation, "scope": sc,
             "ready": {"by": ready.get("by", ""), "at": ready.get("at", ""), "note": ready.get("note", "")} if ready else None,
-            "referral": org.department_name(ref.get("to")) if ref else "", "linked": len(c.get("linked_cases") or []), "created": c.get("created") or ""}
+            "referral": org.department_name(ref.get("to")) if ref else "", "linked": len(c.get("linked_cases") or []), "created": c.get("created") or "",
+            "urgency": team.urgency_view(c), "archived": access.is_archived(c)}  # 18 Oct: the urgency tag people set; archived Case Files stay listed, greyed
 
 
 def _date_key(board_date: str, today: str) -> tuple:
@@ -111,6 +120,31 @@ def treating(r: dict, cases: list | None = None) -> dict:
             "cases": rows[:MAX_CASES], "cases_more": max(0, len(rows) - MAX_CASES), "counts": counts, "referrals": refs[:MAX_REQUESTS], "referrals_to_answer": sum(1 for x in refs if x.get("can_answer")),
             "inbox": {"departments": depts, "open": sum(d["open"] for d in depts), "overdue": sum(d["overdue"] for d in depts)},
             "can_create": org.can(r, "create_case"), "his_enabled": bool(his_client.settings().get("enabled"))}
+
+
+# ---- resident (18 Oct) -----------------------------------------------------------------------------------------------------------
+
+def resident(r: dict, cases: list | None = None) -> dict:
+    """The Case Files the resident is on (its department's and the ones it joined by code), its proposals waiting for the consultant
+    or returned, and the join requests still pending."""
+    today = _today()
+    rows = []
+    pending = []
+    u = r.get("user")
+    for c in (cases if cases is not None else store.list_cases()):
+        if access.is_team_resident(r, c) and access.scope(r, c) == access.FULL:
+            row = _case_row(c, r, set(r.get("resident") or {}))
+            row["relation"] = "team"
+            rows.append(row)
+        elif any(x.get("user") == u for x in ((c.get("team") or {}).get("pending") or []) if isinstance(x, dict)):
+            pending.append({"case_id": c["case_id"], "patient": _patient(c), "owner_name": org.department_name(access.owner(c)) if access.owner(c) else ""})
+    rows.sort(key=lambda x: (_date_key(x["board_date"], today), x["case_id"]))
+    waiting = proposals.mine(r, cases)
+    return {"departments": [{"id": d, "name": org.department_name(d)} for d in (r.get("resident") or {})], "end_date": r.get("end_date") or "",
+            "cases": rows[:MAX_CASES], "cases_more": max(0, len(rows) - MAX_CASES), "waiting": waiting[:MAX_REQUESTS],
+            "counts": {"cases": len(rows), "waiting": sum(1 for w in waiting if w.get("status") == proposals.PENDING),
+                       "returned": sum(1 for w in waiting if w.get("status") == proposals.RETURNED), "pending_joins": len(pending)},
+            "pending_joins": pending, "can_join": True}
 
 
 # ---- supporting doctor ----------------------------------------------------------------------------------------------------------
@@ -220,9 +254,14 @@ def build(r: dict, mgr=None) -> dict:
            "departments": [{"id": d["id"], "name": d["name"], "group": d.get("group"), "role": d.get("role")} for d in org.my_departments(r)] if not (r or {}).get("admin") else [],
            "admin_of": [{"id": d["id"], "name": d["name"]} for d in org.departments() if d["id"] in ((r or {}).get("admin_of") or [])],
            "unread": notify.unread_count(r) if secs else 0, "notifications": notify.for_roles(r, limit=MAX_NOTIFICATIONS) if secs else []}
-    cases = store.list_cases() if ("treating" in secs or "coordinator" in secs) else None  # read once for both sections
+    cases = store.list_cases() if ("treating" in secs or "coordinator" in secs or "resident" in secs) else None  # read once for every section
     if "treating" in secs:
         out["treating"] = treating(r, cases)
+    # 18 Oct: a consultant's residents' proposals, join requests and confirmations; a resident's own proposals returned with a note
+    out["waiting_for_me"] = (proposals.waiting_for(r, cases) if "treating" in secs else
+                             [p for p in proposals.mine(r, cases) if p.get("status") == proposals.RETURNED] if "resident" in secs else [])
+    if "resident" in secs:
+        out["resident"] = resident(r, cases)
     if "supporting" in secs:
         out["supporting"] = supporting(r)
     if "coordinator" in secs:

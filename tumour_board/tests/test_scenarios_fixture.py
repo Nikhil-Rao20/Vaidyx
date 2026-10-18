@@ -110,6 +110,9 @@ def test_suggested_request_matches_a_gate_gap_its_level_and_the_routing_map(data
         assert rec is not None, f"{r['requirement']} is not a record of {g['protocol']}"
         name, did, kind = rules.routed(prot, rec)
         assert kind != org.COORDINATOR_ID, f"{g['protocol']}.{r['requirement']} goes to the MDT Coordinator, not a department"
+        if kind == org.OWNER_ID and org.is_owner_alias(r["department"]):  # a dental evaluation: the owning department's own work from 18 Oct (R02-Q02)
+            assert name == org.OWNER_NAME and did is None
+            continue
         assert name == r["department"], f"{g['protocol']}.{r['requirement']}: fixture names {r['department']}, the routing map {name}"
         assert org.department_id(r["department"]) == did and did, (r["department"], did)
     acc = r.get("accession")
@@ -123,7 +126,7 @@ def test_doctor_initiated_request_names_an_existing_department_and_no_requiremen
     assert r["patient"] in PATIENTS
     assert r.get("requirement") is None and r.get("level") is None
     did = org.department_id(r["department"])
-    assert did and org.department(did), r["department"]
+    assert (did and org.department(did)) or org.is_owner_alias(r["department"]), r["department"]  # a pre-anaesthetic check: the owner's own work from 18 Oct
     if r.get("test"):
         assert r["test"] in FIXTURE["tests"], r["test"]
 
@@ -195,7 +198,8 @@ def test_case_file_gaps_name_the_routed_department_and_the_requests_accession(da
             for gap in (cf.get("first_fetch") or {}).get("gaps") or []:
                 rec = _record(cf["protocol"], gap["requirement"])
                 assert rec is not None, (slot, gap["requirement"])
-                assert rules.routed(prot, rec)[0] == gap["department"], (slot, gap["requirement"], gap["department"], rules.routed(prot, rec)[0])
+                assert rules.routed(prot, rec)[0] == gap["department"] or (rules.routed(prot, rec)[2] == org.OWNER_ID and org.is_owner_alias(gap["department"])), \
+                    (slot, gap["requirement"], gap["department"], rules.routed(prot, rec)[0])
                 r = reqs.get((slot, gap["requirement"]))
                 if r:
                     assert r.get("accession") == gap.get("accession") and r["department"] == gap["department"], (slot, gap, r)
