@@ -40,6 +40,10 @@ _LIMITED_OK = ((("GET",), _re.compile(r"^$")), (("GET",), _re.compile(r"^/docume
                (("POST",), _re.compile(r"^/requests/[^/]+/(acknowledge|done)$")), (("POST",), _re.compile(r"^/actions/[^/]+(/close|/dismiss-suggestion)?$")))  # what a department that was only asked may call
 
 
+# What an archived Case File still accepts besides reading: taking it out of the archive, and questions that change nothing.
+_ARCHIVE_OK = _re.compile(r"^/(unarchive|archive|ask|search|chats|published/search|helpers/[^/]+/chat|documents/[^/]+/images)$")
+
+
 def _case_guard(rl, case_id, rest, method="GET"):
     """The Case File scope of this user (access.FULL / access.REQUESTS), or a 403 response. A Case File that does not exist is left to
     the route (404). A department that was only asked may read the Case File view (reduced by the route), open the records in its
@@ -87,6 +91,13 @@ class _ModelErrorRoute(APIRoute):
                         if isinstance(sc, JSONResponse):
                             return sc
                         request.state.tb_scope = sc
+                        if request.method in ("POST", "PUT", "PATCH", "DELETE") and not _ARCHIVE_OK.match(m.group(2) or ""):
+                            try:
+                                archived = access.is_archived(store.get_case(m.group(1)))
+                            except (ValueError, OSError):
+                                archived = False
+                            if archived:  # archived instead of deleted (18 Oct): readers keep reading, nothing changes until unarchived
+                                return JSONResponse({"detail": {"message": access.ARCHIVED_MESSAGE + ". Take it out of the archive first.", "code": "archived"}}, status_code=403)
             except Exception as e:  # the organisation file is unreadable: a Case File path is refused (never open), the other routes keep their own checks
                 log.warning("tumour board route guard failed (%s)", e)
                 if _CASE_PATH.match(request.url.path):
