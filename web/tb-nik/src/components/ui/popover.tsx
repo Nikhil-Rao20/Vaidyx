@@ -13,7 +13,9 @@ function Popover({
 function PopoverTrigger({
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Trigger>) {
-  return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />
+  // aria-controls is dropped: Radix points it at the content id even while the content is not mounted (a dangling
+  // reference for screen readers); aria-haspopup and aria-expanded carry the state.
+  return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} aria-controls={undefined} />
 }
 
 function PopoverContent({

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Bot, CheckCheck, Sparkles } from "lucide-react";
 import type { Citation, ProseSection, Slot, SlotsResponse } from "../types";
 import { SlotLine, type SlotContext, type SlotHandlers } from "./SlotLine";
-import { LoadingButton, NotYetState, SkeletonLines, StatusChip, docTitleOf, fmtDateTime, modelLabel } from "./common";
+import { LoadingButton, NotYetState, SkeletonLines, StatusChip, docTitleOf, fmtDateTime, indianDates, modelLabel } from "./common";
 
 type Docs = Array<{ doc_id: string; filename: string; classification?: { title?: string } }>;
 
@@ -24,14 +24,14 @@ function Cites({ cites, docs, h }: { cites?: Citation[]; docs?: Docs; h: SlotHan
 }
 
 function ProseBlock({ p, docs, h }: { p: string | ProseSection; docs?: Docs; h: SlotHandlers }) {
-  if (typeof p === "string") return <p className="text-foreground">{p}</p>;
+  if (typeof p === "string") return <p className="text-foreground">{indianDates(p)}</p>;
   const sentences = p.sentences ?? [];
   if (!sentences.length) return null;
   return (
     <section>
       {p.title ? <h3 className="text-sm font-semibold text-foreground">{p.title}</h3> : null}
       <p className="text-foreground">
-        {sentences.map((x, i) => (typeof x === "string" ? <span key={i}>{x} </span> : <span key={i}>{x.text}<Cites cites={x.citations} docs={docs} h={h} /> </span>))}
+        {sentences.map((x, i) => (typeof x === "string" ? <span key={i}>{indianDates(x)} </span> : <span key={i}>{indianDates(x.text)}<Cites cites={x.citations} docs={docs} h={h} /> </span>))}
       </p>
     </section>
   );
@@ -110,7 +110,7 @@ export function SummaryColumn({ slots, derived, ctx, h, onReviewProse, onPrepare
         {(prose.status === "ready" || prose.status === "stale") && (prose.points_for_review ?? []).length ? (
           <div className="mt-3">
             <h3 className="text-sm font-semibold text-foreground">Points for review</h3>
-            <ol className="mt-1 list-decimal pl-5 space-y-1 text-sm">{prose.points_for_review!.map((pt, i) => <li key={i} className="text-foreground">{pt.text}<Cites cites={pt.citations} docs={docs} h={h} /></li>)}</ol>
+            <ol className="mt-1 list-decimal pl-5 space-y-1 text-sm">{prose.points_for_review!.map((pt, i) => <li key={i} className="text-foreground">{indianDates(pt.text)}<Cites cites={pt.citations} docs={docs} h={h} /></li>)}</ol>
           </div>
         ) : null}
         {(prose.status === "ready" || prose.status === "stale") && !prose.reviewed && ctx.resident ? <p className="text-xs text-muted-foreground mt-2">Dr {ctx.consultantName} reads it against the lines above and marks it reviewed.</p> : null}

@@ -55,12 +55,12 @@ export function useCaseFile(id: string) {
   return { data: shown, latest: q.data, isLoading: q.isLoading && !shown, error: q.error, stale, newCount, show, refresh, refetch: q.refetch };
 }
 
-export function useSlots(id: string, cf: CaseFile | null) {
+export function useSlots(id: string, cf: CaseFile | null, enabled = true) {
   const q = useQuery({
     queryKey: ["slots", id],
     queryFn: () => getSlots(id),
     retry: false,
-    enabled: !!cf,
+    enabled: enabled && !!cf,
   });
   const notBuilt = q.isError && notBuiltYet(q.error);
   const data: SlotsResponse | null = useMemo(() => {

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Send } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/DateInput";
 import { Textarea } from "@/components/ui/textarea";
 import { getRequestDraft, sendRequest } from "../api";
 import type { Slot, SlotAction } from "../types";
@@ -34,7 +35,7 @@ export function RequestEditPanel({ caseId, slot, action, onSent }: { caseId: str
       </div>
       <div>
         <label htmlFor="req-due" className="text-sm font-medium">Needed by</label>
-        <Input id="req-due" type="date" value={due} min={today} onChange={(e) => setDue(e.target.value)} className="mt-1 h-9 text-sm w-48" aria-invalid={!!dueBad} aria-describedby="req-due-help" />
+        <DateInput id="req-due" value={due} min={today} onChange={setDue} wrapperClassName="mt-1 w-48" className="text-sm" aria-invalid={!!dueBad} aria-describedby="req-due-help" />
         <p id="req-due-help" className={`text-xs mt-0.5 ${dueBad ? "text-bad" : "text-muted-foreground"}`}>{dueBad ?? (d.due ? `Suggested: ${fmtDate(d.due)}` : "Suggested: 3 working days")}</p>
       </div>
       {send.isError ? <p role="alert" className="text-xs text-bad">{errorText(send.error)}</p> : null}

@@ -46,9 +46,9 @@ export function ControlView({ mid, state, onChanged }: { mid: string; state: Mee
   const outcome = cid ? state.outcomes?.[cid] : undefined;
 
   return (
-    <div className="grid gap-4 lg:grid-cols-12 items-start" data-testid="control-view">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 items-start" data-testid="control-view">
       {liveNode}
-      <div className="lg:col-span-7 space-y-4">
+      <div className="lg:col-span-7 space-y-4 min-w-0">
         <section className="surface p-4 space-y-3" aria-label="On the screen">
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" onClick={() => idx > 0 && go.mutate({ case_id: order[idx - 1].case_id })} disabled={idx <= 0 || go.isPending} aria-label="Previous case"><ChevronLeft className="size-4" />Previous</Button>
@@ -118,7 +118,7 @@ export function ControlView({ mid, state, onChanged }: { mid: string; state: Mee
         </section>
       </div>
 
-      <div className="lg:col-span-5 space-y-4">
+      <div className="lg:col-span-5 space-y-4 min-w-0">
         <section className="surface p-3 space-y-2" aria-label="People">
           <h2 className="text-sm font-semibold">People</h2>
           <MembersStrip attendance={state.attendance} hands={state.hands} />
@@ -146,7 +146,7 @@ export function ControlView({ mid, state, onChanged }: { mid: string; state: Mee
                 <span className="text-xs text-muted-foreground w-5 tabular-nums">{i + 1}.</span>
                 <button type="button" className="flex-1 text-left truncate hover:underline underline-offset-2 disabled:opacity-60" onClick={() => go.mutate({ case_id: r.case_id })} disabled={go.isPending || r.case_id === cid} title={r.case_id === cid ? "On the screen now" : "Put this case on the screen"}>{r.patient_line || r.case_id}</button>
                 {r.decided || r.outcome ? <StatusChip kind="ok">{r.outcome_label ?? r.outcome?.replace(/_/g, " ") ?? "decided"}</StatusChip> : null}
-                <Link to={`/cases/${r.case_id}`} className="text-xs text-link underline">file</Link>
+                <Link to={`/cases/${r.case_id}`} className="shrink-0 text-xs text-link underline" title="Open the Case File (this tab)">Case File</Link>
               </li>
             ))}
           </ol>

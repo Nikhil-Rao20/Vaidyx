@@ -19,6 +19,21 @@ export function fmtDateTime(iso?: string | null): string {
   const d = parseISO(String(iso));
   return isValid(d) ? format(d, "dd/MM/yyyy, HH:mm") : String(iso);
 }
+/** ISO dates inside a sentence written by the server or a model ("on 2026-09-17") shown as DD/MM/YYYY. Never used on quotes. */
+export function indianDates(text?: string | null): string {
+  return (text ?? "").replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (_m, y, mo, d) => `${d}/${mo}/${y}`);
+}
+
+const ACRONYMS = ["PET/CT", "PET-CT", "MRI", "CECT", "CT", "USG", "IHC", "HPE", "FNAC", "ECOG", "HER2", "CBC", "LFT", "RFT", "PSA", "CEA", "NCG", "UHID", "ABHA"];
+const ACRONYM_RE = ACRONYMS.map((a) => [new RegExp(`\\b${a.replace(/[/-]/g, (m) => `\\${m}`)}\\b`, "gi"), a] as const);
+
+/** A short server note for the screen ("No pet/ct in the Case File" reads "No PET/CT in the Case File"), dates as DD/MM/YYYY. */
+export function screenNote(text?: string | null): string {
+  let t = indianDates(text);
+  for (const [re, a] of ACRONYM_RE) t = t.replace(re, a);
+  return t;
+}
+
 /** Today as YYYY-MM-DD in the browser's own time zone (for date inputs). */
 export function todayIso(): string {
   return format(new Date(), "yyyy-MM-dd");

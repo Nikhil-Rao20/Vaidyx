@@ -65,7 +65,7 @@ export function AppShell() {
     <TooltipProvider delayDuration={300}>
       <div className="min-h-dvh bg-background">
         <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-[60] focus:rounded-md focus:bg-card focus:px-3 focus:py-2 focus:shadow-[var(--shadow-lift)]">Skip to content</a>
-        <header className="sticky top-0 z-40 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85">
+        <header className="sticky top-0 z-40 border-b border-border bg-card">
           <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-3 px-4">
             <Wordmark to={bare ? null : "/home"} />
             {bare ? (

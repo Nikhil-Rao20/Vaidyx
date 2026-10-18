@@ -24,7 +24,9 @@ import { useTheme, useTextSize } from "@/hooks/useTheme";
 import { isDoctor } from "@/lib/nav";
 import { errorMessage } from "@/hooks/useAsyncAction";
 
-const TITLES = ["Dr", "Prof", "Mr", "Ms", "Mrs"];
+// "none" stands for no title (a Select item cannot carry an empty value); it is saved as "".
+const TITLES = ["Dr", "Prof", "Mr", "Ms", "Mrs", "none"];
+const titleWord = (t: string) => (t === "none" ? "No title" : t);
 
 export default function Welcome() {
   const { me, update } = useProfile();
@@ -34,7 +36,8 @@ export default function Welcome() {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState(me?.display_name && me.display_name !== me.user ? me.display_name : "");
-  const [title, setTitle] = useState(me?.profile?.title || "Dr");
+  // Doctors start with "Dr"; the coordinator and the admins with no title (they pick one if they want).
+  const [title, setTitle] = useState(me?.profile?.title || (me && isDoctor(me) ? "Dr" : "none"));
   const [reg, setReg] = useState(me?.profile?.registration_no || "");
   const [photo, setPhoto] = useState(me?.profile?.photo || "");
   const [start, setStart] = useState<"home" | "last_case" | "meetings">(me?.profile?.start_page || "home");
@@ -76,7 +79,7 @@ export default function Welcome() {
     if (next > step) {
       if (!validate(step)) return;
       let ok = true;
-      if (step === 1) ok = await save({ display_name: name.trim(), title, registration_no: reg.trim(), photo: photo || initialsAvatar(name.trim(), AVATAR_COLOURS[0]) });
+      if (step === 1) ok = await save({ display_name: name.trim(), title: title === "none" ? "" : title, registration_no: reg.trim(), photo: photo || initialsAvatar(name.trim(), AVATAR_COLOURS[0]) });
       if (step === 2) ok = await save({ theme, text_size: size });
       if (step === 3) ok = await save({ start_page: start, phone: phone.trim(), phone_visible: visible });
       if (!ok) return;
@@ -109,7 +112,7 @@ export default function Welcome() {
               <Field id="title" label="Title">
                 <Select value={title} onValueChange={setTitle}>
                   <SelectTrigger className="w-full" id="title" aria-label="Title"><SelectValue /></SelectTrigger>
-                  <SelectContent>{TITLES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                  <SelectContent>{TITLES.map((t) => <SelectItem key={t} value={t}>{titleWord(t)}</SelectItem>)}</SelectContent>
                 </Select>
               </Field>
               <Field id="name" label="Name" required error={errors.name}>

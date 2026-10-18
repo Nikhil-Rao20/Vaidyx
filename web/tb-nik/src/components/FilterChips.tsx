@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, type ReactElement, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, Pin, PinOff, Plus, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -40,13 +40,17 @@ function chipText(chip: ChipDef, q: FilterQuery, filters?: CaseListFilters): str
   return `${chip.label}: ${describeValue(k, v, filters)}`;
 }
 
-function Chip({ active, children, onClear, onClick, ariaLabel }: { active: boolean; children: ReactNode; onClear?: () => void; onClick?: () => void; ariaLabel?: string }) {
+/** One filter chip. `trigger` wraps the main button (a popover trigger); without it the chip is an on / off toggle. */
+function Chip({ active, children, onClear, onClick, ariaLabel, trigger }: { active: boolean; children: ReactNode; onClear?: () => void; onClick?: () => void; ariaLabel?: string; trigger?: (button: ReactElement) => ReactNode }) {
+  const button = (
+    <button type="button" onClick={trigger ? undefined : onClick} className="inline-flex h-full items-center gap-1 pl-2.5 pr-2 outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.98]" aria-pressed={trigger ? undefined : active}>
+      {!active ? <Plus className="size-3.5 text-muted-foreground" aria-hidden /> : <Check className="size-3.5" aria-hidden />}
+      <span className="max-w-[16rem] truncate">{children}</span>
+    </button>
+  );
   return (
     <span className={cn("inline-flex h-8 items-center overflow-hidden rounded-full border text-sm transition-colors", active ? "border-primary bg-secondary text-secondary-foreground" : "border-border bg-card text-body hover:border-border-strong hover:bg-accent")}>
-      <button type="button" onClick={onClick} className="inline-flex h-full items-center gap-1 pl-2.5 pr-2 outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.98]" aria-label={ariaLabel} aria-pressed={active}>
-        {!active ? <Plus className="size-3.5 text-muted-foreground" aria-hidden /> : <Check className="size-3.5" aria-hidden />}
-        <span className="max-w-[16rem] truncate">{children}</span>
-      </button>
+      {trigger ? trigger(button) : button}
       {active && onClear ? (
         <button type="button" onClick={onClear} className="inline-flex h-full items-center border-l border-primary/30 px-1.5 hover:bg-primary/15" aria-label={`Clear ${ariaLabel ?? "filter"}`}>
           <X className="size-3.5" aria-hidden />
@@ -150,7 +154,8 @@ export function FilterChips({ query, onChange, filters, saved, onPin, onUnpin, p
           })}
         </div>
       ) : null}
-      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filters">
+      {/* One row that scrolls sideways on a phone, so the list starts higher up; wraps on a laptop. */}
+      <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0 [&>*]:shrink-0" role="group" aria-label="Filters">
         {chips.map((chip) => {
           const isActive = chip.keys.some((k) => Boolean(query[k]));
           if (chip.id === "mine") {
@@ -158,11 +163,7 @@ export function FilterChips({ query, onChange, filters, saved, onPin, onUnpin, p
           }
           return (
             <Popover key={chip.id} open={open === chip.id} onOpenChange={(o) => setOpen(o ? chip.id : null)}>
-              <PopoverTrigger asChild>
-                <span>
-                  <Chip active={isActive} onClick={() => setOpen(open === chip.id ? null : chip.id)} onClear={() => clearChip(chip)} ariaLabel={chip.label}>{chipText(chip, query, filters)}</Chip>
-                </span>
-              </PopoverTrigger>
+              <Chip active={isActive} onClear={() => clearChip(chip)} ariaLabel={chip.label} trigger={(b) => <PopoverTrigger asChild>{b}</PopoverTrigger>}>{chipText(chip, query, filters)}</Chip>
               <PopoverContent align="start" className="w-64 p-2">
                 <p className="px-1 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">{chip.label}</p>
                 {content(chip)}

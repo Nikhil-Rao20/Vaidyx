@@ -18,8 +18,18 @@ import { useAsyncAction } from "@/hooks/useAsyncAction";
 import { useCaseList } from "@/hooks/useQueries";
 import { api } from "@/lib/api";
 import { EP } from "@/lib/endpoints";
-import type { HisLookup } from "@/lib/types";
+import type { HisLookup, HisPatient } from "@/lib/types";
 import { ageSex, formatDate, plural } from "@/lib/format";
+
+const MATCH_WORDS: Record<string, string> = { uhid: "UHID", mrn: "UHID", ip: "IP No.", ip_no: "IP No.", op: "OP No.", op_no: "OP No.", abha: "ABHA", abha_address: "ABHA address", name: "Name, age and sex", demographics: "Name, age and sex", pmjay: "PM-JAY id", pmjay_id: "PM-JAY id" };
+
+/** "UHID VXH/26/004219" from {kind, value}; a plain string as it is. */
+function matchedOn(m: HisPatient["matched_on"]): string {
+  if (!m) return "";
+  if (typeof m === "string") return MATCH_WORDS[m.toLowerCase()] ?? m;
+  const kind = m.kind ? MATCH_WORDS[m.kind.toLowerCase()] ?? m.kind.replace(/_/g, " ") : "";
+  return [kind, m.value].filter(Boolean).join(" ");
+}
 import type { NewCaseForm } from "@/features/newcase/form";
 
 export function StepPatient({ form, onChange, autoLookup }: { form: NewCaseForm; onChange: (patch: Partial<NewCaseForm>) => void; autoLookup?: boolean }) {
@@ -76,7 +86,7 @@ export function StepPatient({ form, onChange, autoLookup }: { form: NewCaseForm;
               <KeyValue label="ABHA" value={p.abha || p.abha_address} mono />
               <KeyValue label="PM-JAY id" value={p.pmjay_id} mono />
               <KeyValue label="Registered" value={formatDate(p.registered_on)} />
-              <KeyValue label="Matched on" value={p.matched_on} />
+              <KeyValue label="Matched on" value={matchedOn(p.matched_on)} />
             </KeyValueList>
             <p className="mt-3 text-sm text-body">
               <span className="font-medium">{plural(form.lookup.reports ?? 0, "report")}</span> {form.lookup.window?.all ? "on record" : `in the last ${form.lookup.window?.months ?? (form.windowMonths === "all" ? 12 : form.windowMonths)} months`}
@@ -122,7 +132,7 @@ export function StepPatient({ form, onChange, autoLookup }: { form: NewCaseForm;
                     <span className="text-xs text-muted-foreground">from {c.owner?.doctor_name || c.owner?.department_label}</span>
                     <span className="ml-auto flex gap-1">
                       <Button type="button" size="sm" variant="outline" asChild><Link to={`/cases/${encodeURIComponent(c.case_id)}`}>Open it</Link></Button>
-                      <Button type="button" size="sm" variant="ghost" onClick={() => setJoinOpen(true)}>Join</Button>
+                      {c.mine ? <span className="self-center px-2 text-xs text-muted-foreground">yours</span> : <Button type="button" size="sm" variant="ghost" onClick={() => setJoinOpen(true)}>Join</Button>}
                     </span>
                   </li>
                 ))}

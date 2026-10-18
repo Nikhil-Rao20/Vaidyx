@@ -129,7 +129,7 @@ export default function MeetingAgendaPage() {
       <header className="surface p-4 flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-xs text-muted-foreground"><Link to="/meetings" className="hover:underline inline-flex items-center gap-1"><ArrowLeft className="size-3" aria-hidden />Meetings</Link></p>
-          <h1 className="truncate">Tumour Board, {fmtDate(s.meeting.date)}{s.meeting.time ? ` at ${s.meeting.time}` : ""}</h1>
+          <h1 className="break-words sm:truncate">Tumour Board, {fmtDate(s.meeting.date)}{s.meeting.time ? ` at ${s.meeting.time}` : ""}</h1>
           <p className="text-sm text-muted-foreground flex flex-wrap gap-x-3">
             {s.meeting.room ? <span>{s.meeting.room}</span> : null}
             <span>{total} on the agenda{s.meeting.minutes_per_case ? `, ${s.meeting.minutes_per_case} min each` : ""}</span>
@@ -142,6 +142,7 @@ export default function MeetingAgendaPage() {
           {!closed && !cancelled && (amIn || !canManage) ? <Button asChild size="sm" variant="outline"><Link to={`/meetings/${id}/member`}><Users className="size-4" />Member view</Link></Button> : null}
           {canManage && !closed && !cancelled ? <Button asChild size="sm" variant="outline"><Link to={`/meetings/${id}/room`} target="_blank" rel="noopener" title="Opens the full-screen room screen in a new tab, for the room computer"><MonitorPlay className="size-4" />Room screen</Link></Button> : null}
           {canManage && !inSession && !closed && !cancelled ? <LoadingButton size="sm" loading={start.isPending} loadingText="Starting" onClick={() => start.mutate()} disabled={total === 0} title={total === 0 ? "Add a Case File to the agenda first" : "Starts the meeting; this page becomes the control view"} data-testid="start-meeting"><Play className="size-4" />Start meeting</LoadingButton> : null}
+          {canManage && !inSession && !closed && !cancelled && total === 0 ? <p className="basis-full text-right text-xs text-muted-foreground">Add a Case File to the agenda to start.</p> : null}
         </div>
       </header>
       {err ? <p role="alert" className="text-sm text-bad rounded-md bg-bad-soft px-3 py-2">{err}</p> : null}
@@ -171,7 +172,7 @@ export default function MeetingAgendaPage() {
                     </div>
                   ) : <p className="text-xs text-muted-foreground mt-1">No code yet. Members join with it from Meetings, Join with a code.</p>}
                   {s.code ? <p className="text-xs text-muted-foreground mt-0.5">expires {fmtDateTime(s.code.expires_at)}</p> : null}
-                  <LoadingButton size="xs" variant="ghost" className="mt-1" loading={code.isPending} onClick={() => code.mutate()} data-testid="new-code">{s.code ? "New code (the old one stops working)" : "Create a code"}</LoadingButton>
+                  <LoadingButton size="xs" variant={s.code ? "ghost" : "outline"} className="mt-1.5" loading={code.isPending} loadingText="Making the code" onClick={() => code.mutate()} data-testid="new-code"><KeyRound className="size-3" aria-hidden />{s.code ? "New code (the old one stops working)" : "Create a code"}</LoadingButton>
                 </div>
                 <Button size="xs" variant="ghost" className="text-bad" onClick={() => setCancelOpen(true)}><XCircle className="size-3" />Cancel this meeting</Button>
               </section>

@@ -7,6 +7,7 @@ import { CalendarPlus, ChevronRight, KeyRound, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/DateInput";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useSession } from "@/lib/session";
@@ -33,7 +34,7 @@ function NewMeetingDialog({ open, onOpenChange, videoAvailable, onCreated }: { o
             <DialogDescription id="nm-desc">The agenda is built afterwards from the Case Files marked ready. No cut-off: late additions are flagged to members.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
-            <div><Label htmlFor="nm-date">Date</Label><Input id="nm-date" type="date" value={form.date} min={today} onChange={(e) => setForm({ ...form, date: e.target.value })} className="mt-1" aria-invalid={touched && !!dateBad} />{touched && dateBad ? <p className="text-xs text-bad mt-0.5">{dateBad}</p> : null}</div>
+            <div><Label htmlFor="nm-date">Date</Label><DateInput id="nm-date" value={form.date} min={today} onChange={(v) => setForm({ ...form, date: v })} wrapperClassName="mt-1" aria-invalid={touched && !!dateBad} />{touched && dateBad ? <p className="text-xs text-bad mt-0.5">{dateBad}</p> : null}</div>
             <div><Label htmlFor="nm-time">Time</Label><Input id="nm-time" type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} className="mt-1" aria-invalid={touched && !!timeBad} />{touched && timeBad ? <p className="text-xs text-bad mt-0.5">{timeBad}</p> : null}</div>
             <div className="col-span-2"><Label htmlFor="nm-room">Room</Label><Input id="nm-room" value={form.room} onChange={(e) => setForm({ ...form, room: e.target.value })} placeholder="for example: Oncology seminar room, 2nd floor" className="mt-1" maxLength={120} /></div>
             <div><Label htmlFor="nm-mins">Minutes per case</Label><Input id="nm-mins" type="number" min={1} max={60} value={form.minutes_per_case ?? ""} onChange={(e) => setForm({ ...form, minutes_per_case: Number(e.target.value) })} className="mt-1 w-28" aria-invalid={touched && !!minsBad} />{touched && minsBad ? <p className="text-xs text-bad mt-0.5">{minsBad}</p> : null}</div>
@@ -51,6 +52,13 @@ function NewMeetingDialog({ open, onOpenChange, videoAvailable, onCreated }: { o
       </DialogContent>
     </Dialog>
   );
+}
+
+/** "Thursday, " for a YYYY-MM-DD date (busy people plan by the day of the week). */
+function weekday(iso?: string): string {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "";
+  const d = new Date(`${iso}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? "" : `${d.toLocaleDateString("en-IN", { weekday: "long" })}, `;
 }
 
 function OldSessions() {
@@ -88,7 +96,10 @@ export default function MeetingsListPage() {
   const canManage = q.data?.can_manage ?? !!me?.roles?.coordinator;
   const rows = q.data?.meetings ?? [];
   const key = (m: MeetingRow) => `${m.date} ${m.time ?? ""}`;
-  const upcoming = rows.filter((m) => m.status === "planned" || m.status === "in_session").sort((a, b) => (a.status === "in_session" ? -1 : b.status === "in_session" ? 1 : key(a).localeCompare(key(b))));
+  // In session first, then the planned ones by date and time.
+  const rank = (m: MeetingRow) => (m.status === "in_session" ? 0 : 1);
+  const upcoming = rows.filter((m) => m.status === "planned" || m.status === "in_session").sort((a, b) => rank(a) - rank(b) || key(a).localeCompare(key(b)));
+  const today = todayIso();
   const past = rows.filter((m) => m.status !== "planned" && m.status !== "in_session").sort((a, b) => key(b).localeCompare(key(a)));
   return (
     <div className="space-y-4 max-w-5xl mx-auto" data-testid="meetings-page">
@@ -114,7 +125,11 @@ export default function MeetingsListPage() {
               <li key={m.id}>
                 <Link to={`/meetings/${m.id}`} className="row-lift group flex items-center gap-3 px-4 py-3 text-sm rounded-md">
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground">{fmtDate(m.date)}{m.time ? `, ${m.time}` : ""}{m.room ? `, ${m.room}` : ""}</p>
+                    <p className="font-medium text-foreground truncate">{m.title || m.room || "Tumour Board"}</p>
+                    <p className="text-sm text-body">
+                      {weekday(m.date)}{fmtDate(m.date)}{m.time ? `, ${m.time}` : ""}{m.room && m.title ? `, ${m.room}` : ""}
+                      {m.status === "planned" && m.date && m.date < today ? <span className="ml-2 rounded-md status-warn px-1.5 py-0.5 text-xs font-medium">date passed, not started</span> : null}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       {m.counts ? `${m.counts.discussion} for discussion, ${m.counts.noting} for noting${m.counts.not_ready ? `, ${m.counts.not_ready} not ready` : ""}` : ""}
                       <span className="block">{m.agenda_sent_at ? `Agenda sent ${fmtDateTime(m.agenda_sent_at)}` : "Agenda not sent"}{m.video ? ", video on" : ""}</span>

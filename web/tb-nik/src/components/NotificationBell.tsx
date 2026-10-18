@@ -45,7 +45,7 @@ export function NotificationBell({ className }: { className?: string }) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button type="button" variant="ghost" size="icon" className={cn("relative active:scale-95", className)} aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"}>
+        <Button type="button" variant="ghost" size="icon" className={cn("relative active:scale-95", className)} aria-label={unread ? `Notifications, ${unread > 99 ? "99+" : unread} unread` : "Notifications"} title={unread > 99 ? `${unread} unread` : undefined}>
           <motion.span animate={unread ? { rotate: [0, -12, 12, -8, 8, 0] } : { rotate: 0 }} transition={{ duration: 0.6 }} key={unread}>
             <Bell className="size-5" aria-hidden />
           </motion.span>

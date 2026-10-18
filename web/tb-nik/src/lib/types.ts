@@ -216,7 +216,8 @@ export interface HisPatient {
   pmjay_id?: string;
   registered_on?: string;
   last_updated?: string;
-  matched_on?: string;
+  /** The HIS adapter sends {kind, value}; older answers send a plain word. */
+  matched_on?: string | { kind?: string; value?: string } | null;
 }
 
 export interface HisEncounter {

@@ -15,7 +15,7 @@ export function CaseRow({ c }: { c: CaseListItem }) {
   const left = typeof c.left_before_board === "number" ? c.left_before_board : null;
   return (
     <DataRow to={`/cases/${encodeURIComponent(c.case_id)}`} ariaLabel={`${c.patient?.name || "Unnamed"}, ${cancer}, ${c.status?.label || c.status?.key}`}>
-      <div className="grid grid-cols-[2.75rem_1fr] items-center gap-x-3 gap-y-1 lg:grid-cols-[2.75rem_minmax(0,1.6fr)_minmax(0,1fr)_auto_7.5rem_6.5rem] lg:gap-x-4">
+      <div className="grid grid-cols-[2.75rem_1fr] items-center gap-x-3 gap-y-1 lg:grid-cols-[2.75rem_minmax(0,1.5fr)_minmax(0,1fr)_13rem_7.5rem_6.5rem] lg:gap-x-4">
         <UrgencyTag level={c.urgency?.level ?? null} proposed={c.urgency?.proposed ?? null} setByName={c.urgency?.set_by_name} className="flex-col items-start" />
         <div className="min-w-0">
           <PatientLine patient={c.patient} />
@@ -26,10 +26,10 @@ export function CaseRow({ c }: { c: CaseListItem }) {
           </p>
         </div>
         <p className="col-start-2 truncate text-xs text-muted-foreground lg:col-start-auto lg:text-sm">{owner}</p>
-        <div className="col-start-2 flex flex-wrap items-center gap-2 lg:col-start-auto lg:justify-end">
-          <StatusPill status={c.status} />
+        <div className="col-start-2 flex min-w-0 items-center gap-2 lg:col-start-auto">
+          <StatusPill status={c.status} className="min-w-0" />
           {left !== null && left > 0 && (c.status?.key === "needs_me" || c.status?.key === "waiting_department" || c.status?.key === "draft") ? (
-            <span className="text-xs text-muted-foreground tabular-nums">{left} left</span>
+            <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{left} left</span>
           ) : null}
         </div>
         <p className="col-start-2 hidden items-center gap-1 text-xs text-muted-foreground lg:col-start-auto lg:flex" title="Board date">

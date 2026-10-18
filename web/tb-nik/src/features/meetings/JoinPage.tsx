@@ -59,15 +59,14 @@ export default function JoinPage() {
         <p className="text-sm text-muted-foreground">Type the 6-digit code the MDT Coordinator shared. Hospital members only; you wait in the waiting room until admitted.</p>
         <label htmlFor="join-code" className="text-sm font-medium">Meeting code</label>
         <div className="relative" onClick={() => inputRef.current?.focus()}>
-          <input ref={inputRef} id="join-code" value={digits} onChange={(ev) => setCode(ev.target.value)} inputMode="numeric" pattern="[0-9]*" autoComplete="one-time-code" maxLength={6} className="absolute inset-0 h-full w-full opacity-0 cursor-text" aria-describedby="join-help" aria-invalid={!!err} />
+          <input ref={inputRef} id="join-code" value={digits} onChange={(ev) => setCode(ev.target.value)} inputMode="numeric" pattern="[0-9]*" autoComplete="one-time-code" maxLength={6} className="absolute inset-0 h-full w-full opacity-0 cursor-text" aria-describedby={err ? "join-error" : "join-help"} aria-invalid={!!err} />
           <div className="flex justify-between gap-2" aria-hidden>
             {Array.from({ length: 6 }).map((_, i) => (
               <span key={i} className={cn("grid h-14 flex-1 place-items-center rounded-md border-2 text-2xl font-mono bg-card transition-colors", err ? "border-bad/60" : i === digits.length ? "border-primary" : digits[i] ? "border-border-strong" : "border-border")}>{digits[i] ?? ""}</span>
             ))}
           </div>
         </div>
-        <p id="join-help" className="text-xs text-muted-foreground">{digits.length < 6 ? `${6 - digits.length} more digit${6 - digits.length === 1 ? "" : "s"}` : "Ready to join"}</p>
-        {err ? <p role="alert" className="text-sm text-bad">{err}</p> : null}
+        {err ? <p id="join-error" role="alert" className="rounded-md status-bad px-3 py-2 text-sm">{err}</p> : <p id="join-help" className="text-xs text-muted-foreground">{digits.length < 6 ? `${6 - digits.length} more digit${6 - digits.length === 1 ? "" : "s"}` : "Ready to join"}</p>}
         <LoadingButton type="submit" className="w-full" loading={join.isPending} loadingText="Joining" disabled={digits.length !== 6} data-testid="join-submit">Join</LoadingButton>
       </form>
     </div>

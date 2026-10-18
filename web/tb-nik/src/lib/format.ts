@@ -1,7 +1,5 @@
 // Small formatting helpers: dates as DD/MM/YYYY, "how long ago", patient lines, initials. All plain words, no jargon.
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
 export function parseDate(value?: string | number | Date | null): Date | null {
   if (value === undefined || value === null || value === "") return null;
   if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
@@ -22,11 +20,13 @@ export function formatDate(value?: string | number | Date | null, fallback = "")
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
 }
 
-/** 18 Oct 2026 */
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/** "Sunday 18/10/2026": the day of the week, then the date as Indian screens show it. */
 export function formatDateWords(value?: string | number | Date | null, fallback = ""): string {
   const d = parseDate(value);
   if (!d) return fallback;
-  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+  return `${WEEKDAYS[d.getDay()]} ${formatDate(d)}`;
 }
 
 /** 18/10/2026, 14:05 */
@@ -72,10 +72,11 @@ export function patientLine(p?: { name?: string; agesex?: string; uhid?: string;
   return parts.join(", ");
 }
 
-/** "LR" from "Lakshmi R." or "Dr Lakshmi Rao" (the "Dr" is skipped). */
+/** "LR" from "Lakshmi R." or "Dr Lakshmi Rao" (the "Dr" is skipped); "BS" from "Dr Breast Surgery (demo)". */
 export function initials(name?: string | null): string {
   if (!name) return "?";
-  const words = name.replace(/^(dr\.?|prof\.?|mr\.?|mrs\.?|ms\.?)\s+/i, "").trim().split(/\s+/).filter(Boolean);
+  // "(demo)" or "(SYNTHETIC)" and other bracketed notes are not part of the name; words must start with a letter.
+  const words = name.replace(/\([^)]*\)/g, " ").replace(/^(dr\.?|prof\.?|mr\.?|mrs\.?|ms\.?)\s+/i, "").trim().split(/\s+/).filter((w) => /^\p{L}/u.test(w));
   if (!words.length) return "?";
   const first = words[0][0] ?? "";
   const last = words.length > 1 ? words[words.length - 1][0] ?? "" : "";

@@ -5,6 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import { ArrowRight, Check, PenLine, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/DateInput";
 import { postConfirmation, slotNotNeeded } from "../api";
 import type { CaseFile, Slot } from "../types";
 import type { SourceTarget } from "./SourceViewer";
@@ -164,8 +165,8 @@ export function ReviewPanel({ caseId, cf, slot, queue, derived, resident, consul
         <div className="space-y-2 text-sm">
           <p className="text-muted-foreground">The dates printed on <span className="font-medium text-foreground">{c.title ?? doc.filename}</span> were not clear. Confirm them as printed.</p>
           <div className="grid grid-cols-2 gap-2">
-            <label className="text-xs">Report date<Input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} className="mt-1 h-8 text-sm" /></label>
-            <label className="text-xs">Event (sample, scan) date<Input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} className="mt-1 h-8 text-sm" /></label>
+            <label className="text-xs">Report date<DateInput value={reportDate} onChange={setReportDate} wrapperClassName="mt-1" className="h-8 text-sm" aria-label="Report date" /></label>
+            <label className="text-xs">Event (sample, scan) date<DateInput value={eventDate} onChange={setEventDate} wrapperClassName="mt-1" className="h-8 text-sm" aria-label="Event (sample, scan) date" /></label>
           </div>
           <button type="button" className="quote-chip hover:brightness-95" onClick={() => onOpenSource({ docId: doc.doc_id, page: 0, title: c.title })}>open the report</button>
         </div>

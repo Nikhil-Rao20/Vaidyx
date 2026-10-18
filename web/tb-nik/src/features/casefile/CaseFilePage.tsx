@@ -33,6 +33,7 @@ import type { SlotContext, SlotHandlers } from "./components/SlotLine";
 import { SourceViewer, type SourceTarget } from "./components/SourceViewer";
 import { SummaryColumn } from "./components/SummaryColumn";
 import { TeamPanel } from "./components/TeamPanel";
+import { RequestsOnlyView } from "./components/RequestsOnlyView";
 import "./print.css";
 
 type SideState =
@@ -60,12 +61,15 @@ export default function CaseFilePage() {
   useRememberCase(id);
   const cfq = useCaseFile(id);
   const cf = cfq.data;
-  const slotsq = useSlots(id, cf);
+  // A supporting department sees only what it was asked for (access scope "requests"): no summary, chats, team or helpers.
+  const requestsOnly = (cf?.access?.scope ?? "").toLowerCase() === "requests";
+  const full = !!cf && !requestsOnly;
+  const slotsq = useSlots(id, cf, !requestsOnly);
   const role = useMyRole(cf);
-  const teamq = useTeam(id, cf);
-  const proposalsq = useProposals(id, !!cf && !role.resident);
-  const helpersq = useHelpers(id, cf, !!cf);
-  const publishedq = useQuery({ queryKey: ["published", id], queryFn: () => getPublished(id), retry: false, enabled: !!cf });
+  const teamq = useTeam(id, cf, !requestsOnly);
+  const proposalsq = useProposals(id, full && !role.resident);
+  const helpersq = useHelpers(id, cf, full);
+  const publishedq = useQuery({ queryKey: ["published", id], queryFn: () => getPublished(id), retry: false, enabled: full });
   const deferred = useDeferred();
   const wide = useMinWidth(1024);
   const [announce, liveNode] = useAnnounce();
@@ -216,6 +220,7 @@ export default function CaseFilePage() {
     );
   }
   if (!cf) return null;
+  if (requestsOnly) return <RequestsOnlyView id={id} cf={cf} />;
 
   const prose = slots?.prose;
   const summaryArt = cf.state?.artefacts?.summary;
@@ -273,7 +278,11 @@ export default function CaseFilePage() {
         </div>
       ) : null}
       {!role.resident && proposalsq.proposals.length ? <ProposalsStrip caseId={id} proposals={proposalsq.proposals} onChanged={refresh} labelOf={(sid) => allSlots.find((x) => x.id === sid)?.label} /> : null}
-      {cf.access?.scope === "REQUESTS" ? <p className="text-sm text-muted-foreground rounded-md bg-muted px-3 py-2">You see this Case File because your department was asked for a record. Only those requests and records are shown.</p> : null}
+      {!canAct && !teamq.data?.archived ? (
+        <p role="note" className="flex items-center gap-2 text-sm text-muted-foreground rounded-md bg-muted px-3 py-2 print:hidden" data-testid="read-only-note">
+          <Eye className="size-4 shrink-0" aria-hidden />Read only for you: the owner's team ({teamq.data?.owner?.department_label || cf.access?.owner_name || "the Responsible Department"}) asks, enters values and marks it ready.
+        </p>
+      ) : null}
 
       {wide ? (
         <div className="grid gap-4 lg:grid-cols-12 items-start">
@@ -282,10 +291,10 @@ export default function CaseFilePage() {
         </div>
       ) : (
         <Tabs value={tab} onValueChange={setTab} className="print:block">
-          <div className="sticky top-0 z-20 -mx-4 px-4 py-2 bg-background/95 backdrop-blur border-b border-border print:hidden">
+          <div className="sticky top-14 z-20 -mx-4 px-4 py-2 bg-background/95 backdrop-blur border-b border-border print:hidden">
             <div className="flex items-center justify-between gap-2 text-sm">
               <span className="font-medium truncate">{cf.case.patient?.name}</span>
-              <span className="text-xs text-muted-foreground shrink-0">{left === null ? "" : left === 0 ? "nothing left" : `${left} left`}</span>
+              <span className="text-xs text-muted-foreground shrink-0">{cf.case.board_ready ? "ready for the board" : left === null ? "" : left === 0 ? "nothing left before the board" : `${left} left before the board`}</span>
             </div>
             <TabsList className="mt-1.5 w-full grid grid-cols-3">
               <TabsTrigger value="summary">Summary</TabsTrigger>

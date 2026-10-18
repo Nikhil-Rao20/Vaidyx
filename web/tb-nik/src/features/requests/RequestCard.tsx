@@ -2,7 +2,7 @@
 // due date, Open in RIS / PACS, Acknowledge, Done with a note.
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { CalendarClock, CheckCircle2, ExternalLink, Handshake, Hourglass, Images, MessageSquareText } from "lucide-react";
+import { CalendarClock, CheckCircle2, ExternalLink, FolderOpen, Handshake, Hourglass, Images, MessageSquareText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
@@ -48,7 +48,7 @@ export function RequestCard({ request: r, onChanged, canAnswer = true }: { reque
   const Icon = stateWord.icon;
   return (
     <article className={cn("surface-inner row-lift flex flex-col gap-3 p-4", completed && "opacity-80")} aria-label={`Request for ${r.patient?.name}: ${r.label}`}>
-      <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
         <div className="min-w-0">
           <PatientLine patient={{ name: r.patient?.name, agesex: r.patient?.agesex, uhid: r.uhid || r.patient?.mrn }} extra={encounter} />
           <p className="mt-1 text-sm">
@@ -61,8 +61,12 @@ export function RequestCard({ request: r, onChanged, canAnswer = true }: { reque
       </div>
       <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
         <div className="flex items-center gap-1"><dt className="text-muted-foreground">Asked by</dt><dd className="font-medium">{asked}</dd></div>
-        <div className="flex items-center gap-1"><dt className="flex items-center gap-1 text-muted-foreground"><CalendarClock className="size-3.5" aria-hidden /><span className="sr-only">Due</span></dt><dd><DateText value={r.due} mode="due" fallback="no due date" /></dd></div>
-        {r.accession ? <div className="flex items-center gap-1"><dt className="text-muted-foreground">Accession</dt><dd className="mono">{r.accession}</dd><CopyButton text={r.accession} label="Copy accession" size="icon-xs" /></div> : null}
+        {completed ? (
+          <div className="flex items-center gap-1"><dt className="text-muted-foreground">Closed</dt><dd><DateText value={r.completed || r.done?.at} fallback="closed" /></dd></div>
+        ) : (
+          <div className="flex items-center gap-1"><dt className="flex items-center gap-1 text-muted-foreground"><CalendarClock className="size-3.5" aria-hidden /><span className="sr-only">Due</span></dt><dd><DateText value={r.due} mode="due" fallback="no due date" /></dd></div>
+        )}
+        {r.accession ? <div className="flex items-center gap-1"><dt className="text-muted-foreground">Accession</dt><dd className="mono inline-flex items-center gap-1">{r.accession}<CopyButton text={r.accession} label="Copy accession" size="icon-xs" /></dd></div> : null}
         {r.sent?.at ? <div className="flex items-center gap-1"><dt className="text-muted-foreground">Sent</dt><dd><DateText value={r.sent.at} mode="ago" /></dd></div> : null}
         {r.done?.note ? <div className="sm:col-span-2 flex items-start gap-1"><dt className="text-muted-foreground">Your note</dt><dd>{r.done.note}</dd></div> : null}
       </dl>
@@ -78,7 +82,7 @@ export function RequestCard({ request: r, onChanged, canAnswer = true }: { reque
           </Button>
         ) : null}
         <Button type="button" variant="ghost" size="sm" asChild>
-          <Link to={`/cases/${encodeURIComponent(r.case_id)}`}>Case File</Link>
+          <Link to={`/cases/${encodeURIComponent(r.case_id)}`} title="What was asked, and your department's records in this Case File"><FolderOpen className="size-4" aria-hidden /> Case File</Link>
         </Button>
         {!completed && canAnswer ? (
           <span className="ml-auto flex items-center gap-2">

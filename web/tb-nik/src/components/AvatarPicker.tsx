@@ -8,6 +8,7 @@ import { initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export const AVATAR_COLOURS = ["#00c0b5", "#046483", "#3e5cad", "#5b3fc4", "#1e6b45", "#8a5300", "#b23a2f", "#52606d"];
+const COLOUR_WORDS = ["Teal", "Sea blue", "Indigo", "Violet", "Green", "Amber", "Red", "Slate"];
 
 /** Initials on a colour, drawn on a canvas as a small PNG (the server takes PNG, JPEG, WebP or GIF data URLs only). */
 export function initialsAvatar(name: string, colour: string): string {
@@ -110,7 +111,7 @@ export function AvatarPicker({ name, value, onChange, className }: { name: strin
         <div>
           <p className="text-sm font-medium">Pick a colour for your initials</p>
           <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="Colour">
-            {AVATAR_COLOURS.map((c) => {
+            {AVATAR_COLOURS.map((c, i) => {
               const on = !isPhoto && c === colour;
               return (
                 <button
@@ -118,7 +119,8 @@ export function AvatarPicker({ name, value, onChange, className }: { name: strin
                   type="button"
                   role="radio"
                   aria-checked={on}
-                  aria-label={`Colour ${c}`}
+                  aria-label={COLOUR_WORDS[i] ?? `Colour ${i + 1}`}
+                  title={COLOUR_WORDS[i]}
                   onClick={() => { setColour(c); onChange(initialsAvatar(name || "?", c)); }}
                   className={cn("grid size-8 place-items-center rounded-full outline-none ring-offset-2 ring-offset-background transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring active:scale-95", on && "ring-2 ring-foreground")}
                   style={{ background: c }}
@@ -130,7 +132,7 @@ export function AvatarPicker({ name, value, onChange, className }: { name: strin
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <input ref={fileRef} type="file" accept="image/*" className="sr-only" id="avatar-file" onChange={(e) => void pick(e.target.files?.[0])} />
+          <input ref={fileRef} type="file" accept="image/*" className="sr-only" id="avatar-file" aria-label="Upload a photo" tabIndex={-1} onChange={(e) => void pick(e.target.files?.[0])} />
           <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={busy} aria-busy={busy}>
             <Camera className="size-4" aria-hidden /> {busy ? "Shrinking the picture" : "Upload a photo"}
           </Button>

@@ -32,7 +32,12 @@ export const getQuoteBoxes = (id: string, doc: string, q: { fact?: string; text?
 };
 
 // ---- old routes the page still uses -----------------------------------------------------------------------------
-export const getRequestDraft = (id: string, action: string) => api.get<RequestDraft>(`${caseUrl(id)}/requests/${enc(action)}/draft`);
+// The server's draft names the internal checklist level ("(Level 1: Case File)"); the department does not need it.
+const noLevel = (t?: string) => (t ?? "").replace(/\s*\(Level \d+[^)]*\)/g, "");
+export const getRequestDraft = async (id: string, action: string): Promise<RequestDraft> => {
+  const d = await api.get<RequestDraft>(`${caseUrl(id)}/requests/${enc(action)}/draft`);
+  return { ...d, body: noLevel(d.body), subject: noLevel(d.subject) };
+};
 export const sendRequest = (id: string, action: string, body: { message?: string; due?: string; subject?: string }) => api.post(`${caseUrl(id)}/requests/${enc(action)}/send`, body);
 export const remindRequest = (id: string, action: string) => api.post(`${caseUrl(id)}/requests/${enc(action)}/remind`, {});
 export const createFreeRequest = (id: string, body: { department: string; label: string; what?: string; message?: string; due?: string }) => api.post(`${caseUrl(id)}/requests`, body);

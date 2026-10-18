@@ -25,6 +25,11 @@ import { BoardStep, DepartmentsStep, HisStep, HospitalStep, PeopleStep, departme
 const STEP_IDS = ["hospital", "departments", "people", "his", "board"] as const;
 const STEP_ICON = { hospital: Hospital, departments: Building2, people: Users, his: PlugZap, board: CalendarDays } as const;
 
+
+/** "13 login(s), 1 coordinator(s)" from the server reads "13 logins, 1 coordinator". */
+function plainCounts(text?: string): string {
+  return (text ?? "").replace(/\b(\d+) ([\w ]*?\w)\(s\)/g, (_m, n, w) => `${n} ${w}${n === "1" ? "" : "s"}`);
+}
 export default function AdminSetup() {
   const { me } = useSession();
   const setup = useSetup({ enabled: Boolean(me?.roles.root_admin || me?.roles.admin) });
@@ -230,7 +235,7 @@ export default function AdminSetup() {
                       </span>
                       <span className="min-w-0">
                         <span className="block text-sm font-medium text-foreground">{s.label}</span>
-                        <span className="block text-xs text-muted-foreground">{s.done ? s.summary : "not done yet"}</span>
+                        <span className="block text-xs text-muted-foreground">{s.done ? plainCounts(s.summary) : "not done yet"}</span>
                       </span>
                     </button>
                   </li>

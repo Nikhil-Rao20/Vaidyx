@@ -74,8 +74,8 @@ function AddPerson({ dept, onSaved }: { dept: string; onSaved: (mailto: string, 
     <form className="surface grid gap-3 p-4" onSubmit={submit} noValidate aria-label="Add a person">
       <p className="flex items-center gap-2 text-sm font-bold"><UserPlus className="size-4 text-primary" aria-hidden /> Add a person</p>
       <div className="grid gap-3 md:grid-cols-[1.3fr_1fr_140px_160px_auto] md:items-end">
-        <Field id="add-email" label="Email (the login)" error={err}><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@hospital.in" autoComplete="off" /></Field>
-        <Field id="add-name" label="Name" optional><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Dr Asha Menon" /></Field>
+        <Field id="add-email" label="Email (the login)" error={err}><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="e.g. name@hospital.in" autoComplete="off" /></Field>
+        <Field id="add-name" label="Name" optional><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Dr Asha Menon" /></Field>
         <Field id="add-role" label="Role">
           <Select value={role} onValueChange={(v) => setRole(v as Placement)}>
             <SelectTrigger className="w-full" id="add-role" aria-label="Role"><SelectValue /></SelectTrigger>
@@ -213,7 +213,7 @@ export default function PeoplePage() {
           <>
             {choices.length > 1 ? (
               <Select value={dept} onValueChange={(v) => setParams({ dept: v }, { replace: true })}>
-                <SelectTrigger className="w-56" aria-label="Department"><SelectValue placeholder="Department" /></SelectTrigger>
+                <SelectTrigger className="w-full sm:w-56" aria-label="Department"><SelectValue placeholder="Department" /></SelectTrigger>
                 <SelectContent>{choices.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
               </Select>
             ) : null}

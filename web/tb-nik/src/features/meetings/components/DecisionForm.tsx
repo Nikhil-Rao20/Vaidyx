@@ -6,6 +6,7 @@ import { Check, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/DateInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { Attendee } from "@/lib/live";
@@ -75,7 +76,7 @@ export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRe
         <div><Label htmlFor="d-resp">Responsible doctor</Label><Input id="d-resp" list="d-members" value={f.responsible_doctor} onChange={(e) => set("responsible_doctor", e.target.value)} className="mt-1 text-sm" maxLength={120} /><datalist id="d-members">{members.map((m) => <option key={m.user} value={m.name} />)}</datalist></div>
         <div className="grid grid-cols-[1fr_9rem] gap-2">
           <div><Label htmlFor="d-next">Next step</Label><Input id="d-next" value={f.next_step} onChange={(e) => set("next_step", e.target.value)} className="mt-1 text-sm" maxLength={300} /></div>
-          <div><Label htmlFor="d-date">By date</Label><Input id="d-date" type="date" value={f.next_step_date} onChange={(e) => set("next_step_date", e.target.value)} className="mt-1 text-sm" /></div>
+          <div><Label htmlFor="d-date">By date</Label><DateInput id="d-date" value={f.next_step_date ?? ""} onChange={(v) => set("next_step_date", v)} wrapperClassName="mt-1" className="text-sm" /></div>
         </div>
         {f.outcome === "deferred" ? (
           <>

@@ -516,7 +516,7 @@ export default function Stepper({
               type="button"
               className={`${SEGMENT_CLASS} ${rail ? SEGMENT_RAIL : SEGMENT_ROW}`}
               data-status={status}
-              aria-label={typeof title === 'string' ? `Step ${number}: ${title}` : `Step ${number}`}
+              title={typeof title === 'string' ? `Step ${number}: ${title}` : `Step ${number}`}
               aria-current={number === current ? 'step' : undefined}
               disabled={!reachable(number)}
               onClick={() => go(number)}

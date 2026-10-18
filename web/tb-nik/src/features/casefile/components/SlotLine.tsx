@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { Slot, SlotAction, SlotQuote } from "../types";
 import type { SourceTarget } from "./SourceViewer";
-import { LoadingButton, StatusChip, fmtDate } from "./common";
+import { LoadingButton, StatusChip, fmtDate, screenNote } from "./common";
 import { UndoBar, type Pending } from "./deferred";
 
 export interface SlotHandlers {
@@ -46,11 +46,11 @@ export function QuoteChip({ quote, onOpen, className }: { quote: SlotQuote; onOp
       onClick={() => onOpen({ docId: quote.doc_id, page: quote.page ?? 0, quote: quote.text || undefined, factId: quote.fact_id ?? undefined, title: quote.doc_title })}
       className={cn("quote-chip hover:brightness-95 active:scale-95 transition max-w-full", className)}
       title={quote.text ? `"${quote.text}"\nOpen ${title} with the quote marked` : `Open ${title}`}
-      aria-label={`Open the source: ${title}`}
+      aria-label={`${quote.doc_title || "record"} p. ${page}: open the source`}
       data-testid="quote-chip"
     >
       <FileText className="size-3 shrink-0" aria-hidden />
-      <span className="truncate">{quote.doc_title || "record"}</span>
+      <span className="truncate">{quote.doc_title || "record"}</span>{" "}
       <span className="opacity-80 shrink-0">p. {page}</span>
     </button>
   );
@@ -182,8 +182,8 @@ export function SlotLine({ slot, ctx, h }: { slot: Slot; ctx: SlotContext; h: Sl
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 min-w-0">
         <span className="text-foreground">{slot.value}{slot.unit ? ` ${slot.unit}` : ""}</span>
         {slot.as_of ? <span className="text-xs text-muted-foreground">{fmtDate(slot.as_of)}</span> : null}
-        {slot.quote ? <QuoteChip quote={slot.quote} onOpen={h.openSource} /> : <span className="text-xs text-muted-foreground">{slot.note || "no quote on file"}</span>}
-        {slot.quote && slot.note ? <span className="text-xs text-muted-foreground basis-full">{slot.note}</span> : null}
+        {slot.quote ? <QuoteChip quote={slot.quote} onOpen={h.openSource} /> : <span className="text-xs text-muted-foreground">{screenNote(slot.note) || "no quote on file"}</span>}
+        {slot.quote && slot.note ? <span className="text-xs text-muted-foreground basis-full">{screenNote(slot.note)}</span> : null}
       </div>
     );
   } else if (status === "entered") {
@@ -199,7 +199,7 @@ export function SlotLine({ slot, ctx, h }: { slot: Slot; ctx: SlotContext; h: Sl
     body = (
       <div className="flex flex-wrap items-center gap-2">
         <Blank kind="muted" testId="slot-not-needed">not needed</Blank>
-        <span className="text-xs text-muted-foreground">{optimistic?.label ?? slot.note ?? ""}</span>
+        <span className="text-xs text-muted-foreground">{optimistic?.label ?? screenNote(slot.note)}</span>
       </div>
     );
   } else if (status === "waiting") {
@@ -225,14 +225,14 @@ export function SlotLine({ slot, ctx, h }: { slot: Slot; ctx: SlotContext; h: Sl
         {slot.value ? <span className="text-sm text-foreground">{slot.value}</span> : null}
         {slot.quote ? <QuoteChip quote={slot.quote} onOpen={h.openSource} /> : null}
         <Button variant="secondary" size="xs" onClick={() => h.review(slot)} data-testid="slot-review"><ShieldCheck className="size-3" />{ctx.resident ? "Review and ask to sign off" : "Review"}</Button>
-        {slot.note || slot.confirmation?.why ? <span className="text-xs text-muted-foreground basis-full">{slot.confirmation?.why || slot.note}</span> : null}
+        {slot.note || slot.confirmation?.why ? <span className="text-xs text-muted-foreground basis-full">{screenNote(slot.confirmation?.why || slot.note)}</span> : null}
       </div>
     );
   } else if (status === "pending_ready") {
     body = (
       <div className="flex flex-wrap items-center gap-2">
         <Blank kind="muted">prepared at the ready mark</Blank>
-        {slot.note ? <span className="text-xs text-muted-foreground">{slot.note}</span> : null}
+        {slot.note ? <span className="text-xs text-muted-foreground">{screenNote(slot.note)}</span> : null}
       </div>
     );
   } else {
@@ -241,7 +241,7 @@ export function SlotLine({ slot, ctx, h }: { slot: Slot; ctx: SlotContext; h: Sl
       <div className="flex flex-col gap-1.5">
         <div className="flex flex-wrap items-center gap-2">
           <Blank kind="muted" testId="slot-not-found">not found in the file</Blank>
-          {slot.note && slot.note !== "Not found in the file" ? <span className="text-xs text-muted-foreground">{slot.note}</span> : null}
+          {slot.note && slot.note !== "Not found in the file" ? <span className="text-xs text-muted-foreground">{screenNote(slot.note)}</span> : null}
           {slot.draft?.doc_id ? <button type="button" className="quote-chip hover:brightness-95" onClick={() => h.openSource({ docId: slot.draft!.doc_id!, page: 0, title: slot.draft!.doc_title })}>{slot.draft.doc_title ?? "report"}: {String(slot.draft.status ?? "not final").toLowerCase()}</button> : null}
         </div>
         {mode === "idle" && ctx.canAct ? (
@@ -257,7 +257,6 @@ export function SlotLine({ slot, ctx, h }: { slot: Slot; ctx: SlotContext; h: Sl
             {ctx.resident && (askAction || canNotNeeded || typable) ? residentAsk(`Dr ${ctx.consultantName} signs off`) : null}
           </div>
         ) : null}
-        {mode === "idle" && !ctx.canAct ? <span className="text-xs text-muted-foreground">Only the owner's team acts on this line.</span> : null}
       </div>
     );
   }

@@ -31,16 +31,33 @@ function dayLabel(ts: string, now = new Date()): string {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
 }
 
-function EventRow({ e, showBy, first }: { e: ActivityEvent; showBy?: boolean; first?: string | null }) {
+// Plain words for the log: "His fetch" reads "Hospital system fetch", "registration_no" reads "registration number".
+const WORDS: Record<string, string> = { display_name: "name", registration_no: "registration number", start_page: "start page", phone_visible: "number shown", text_size: "text size", first_fetch: "first fetch", refetch: "re-fetch" };
+function plainTitle(t: string, source?: string): string {
+  const words = t.replace(/\bHis\b/g, "Hospital system").replace(/\bTb\b/g, "Tumour Board");
+  // A meeting event named by one word ("Started", "Attendance") says which thing it is about.
+  return source === "session" && !/board|meeting|session|agenda/i.test(words) ? `Meeting: ${words.charAt(0).toLowerCase()}${words.slice(1)}` : words;
+}
+function plainDetail(d: string, self?: string): string {
+  return d
+    .split("; ")
+    .filter((part) => !(self && part === `username: ${self}`))
+    .join("; ")
+    .replace(/\b[a-z]+(?:_[a-z0-9]+)+\b/g, (w) => WORDS[w] ?? w.replace(/_/g, " "))
+    .replace(/\b(first_fetch|refetch)\b/g, (w) => WORDS[w] ?? w);
+}
+
+function EventRow({ e, showBy, first, times = 1, self }: { e: ActivityEvent; showBy?: boolean; first?: string | null; times?: number; self?: string }) {
   const Icon = SOURCE_ICON[(e.source as keyof typeof SOURCE_ICON) ?? "case"] ?? FolderOpen;
+  const detail = e.detail ? plainDetail(e.detail, self) : "";
   return (
     <>
       {first ? <p className="pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">{first}</p> : null}
       <div className="surface-inner flex min-h-12 items-start gap-3 px-3 py-2.5">
         <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground"><Icon className="size-4" aria-hidden /></span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-foreground">{e.title}</p>
-          {e.detail ? <p className="break-words text-xs text-muted-foreground">{e.detail}</p> : null}
+          <p className="text-sm font-medium text-foreground">{plainTitle(e.title, e.source)}{times > 1 ? <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground tabular-nums">{times} times</span> : null}</p>
+          {detail ? <p className="break-words text-xs text-muted-foreground">{detail}</p> : null}
           <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
             <DateText value={e.ts} mode="datetime" />
             {showBy && e.by ? <span className="inline-flex items-center gap-1"><UserRound className="size-3" aria-hidden /> {e.by_name || e.by}</span> : null}
@@ -58,17 +75,25 @@ function filterText(list: ActivityEvent[], q: string): ActivityEvent[] {
   return list.filter((e) => [e.title, e.detail, e.case_id, e.by, e.kind].filter(Boolean).join(" ").toLowerCase().includes(n));
 }
 
-function grouped(list: ActivityEvent[]): Array<{ e: ActivityEvent; first: string | null }> {
+/** Day headings, and runs of the same action on the same Case File in the same minute folded into one row ("15 times"). */
+function grouped(list: ActivityEvent[]): Array<{ e: ActivityEvent; first: string | null; times: number }> {
+  const out: Array<{ e: ActivityEvent; first: string | null; times: number }> = [];
   let last = "";
-  return list.map((e) => {
+  for (const e of list) {
+    const prev = out[out.length - 1];
+    if (prev && !e.detail && !prev.e.detail && prev.e.title === e.title && prev.e.case_id === e.case_id && prev.e.by === e.by && String(prev.e.ts).slice(0, 16) === String(e.ts).slice(0, 16)) {
+      prev.times += 1;
+      continue;
+    }
     const label = dayLabel(e.ts);
-    const first = label !== last ? label : null;
+    out.push({ e, first: label !== last ? label : null, times: 1 });
     last = label;
-    return { e, first };
-  });
+  }
+  return out;
 }
 
 function Mine() {
+  const { me } = useSession();
   const mine = useMyActivity();
   const [q, setQ] = useState("");
   const rows = useMemo(() => grouped(filterText(mine.data?.events ?? [], q)), [mine.data, q]);
@@ -83,7 +108,7 @@ function Mine() {
         retrying={mine.isFetching}
         what="your activity"
         keyFor={(r, i) => `${r.e.ts}-${i}`}
-        renderRow={(r) => <EventRow e={r.e} first={r.first} />}
+        renderRow={(r) => <EventRow e={r.e} first={r.first} times={r.times} self={me?.user} />}
         empty={<EmptyState kind={q ? "search" : "empty"} title={q ? "Nothing matches" : "No actions yet"} text={q ? "Try another word." : "Everything you do on a Case File, a meeting or a setting is recorded here under your name."} />}
         footer={mine.data?.total && mine.data.total > (mine.data.events?.length ?? 0) ? <p className="pt-2 text-center text-xs text-muted-foreground">The newest {mine.data.events.length} of {mine.data.total}.</p> : null}
       />
@@ -120,7 +145,7 @@ function FullLog() {
         retrying={log.isFetching}
         what="the full activity log"
         keyFor={(r, i) => `${r.e.ts}-${i}`}
-        renderRow={(r) => <EventRow e={r.e} first={r.first} showBy />}
+        renderRow={(r) => <EventRow e={r.e} first={r.first} times={r.times} showBy />}
         empty={<EmptyState kind="search" title="Nothing in the log for this" text="Clear a filter to see more." action={caseId || user || q ? <Button type="button" variant="outline" size="sm" onClick={() => { setCaseId(""); setUser(""); setQ(""); }}>Clear filters</Button> : undefined} />}
         footer={log.data?.total && log.data.total > (log.data.events?.length ?? 0) ? <p className="pt-2 text-center text-xs text-muted-foreground">The newest {log.data.events.length} of {log.data.total}.</p> : null}
       />

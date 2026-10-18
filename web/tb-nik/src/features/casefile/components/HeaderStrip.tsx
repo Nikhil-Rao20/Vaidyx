@@ -80,6 +80,9 @@ export function HeaderStrip({ cf, team, left, resident, consultantName, canMarkR
   const ownerDept = team?.owner?.department_label || ownerOf(cf).name;
   const ownerName = team?.owner?.doctors?.[0]?.name ?? cf.access?.owner_name ?? "";
   const ready = !!c.board_ready;
+  // The login that marked it ready, shown as the person's name when the team knows it.
+  const readyLogin = c.board_ready?.by ?? "";
+  const readyBy = readyLogin ? ([...(team?.owner?.doctors ?? []), ...(team?.residents ?? [])].find((d) => d.user === readyLogin)?.name || readyLogin) : "";
   const teamCount = (team?.residents?.length ?? 0) + (team?.owner?.doctors?.length ?? 0) + (team?.departments?.length ?? 0);
   const panelBtn = (kind: Exclude<PanelKind, null>, icon: React.ReactNode, label: string) => (
     <Button size="sm" variant={activePanel === kind ? "secondary" : "outline"} aria-pressed={activePanel === kind} onClick={() => onOpenPanel(activePanel === kind ? null : kind)} className="print:hidden" data-testid={`open-${kind}`}>{icon}{label}</Button>
@@ -108,7 +111,7 @@ export function HeaderStrip({ cf, team, left, resident, consultantName, canMarkR
         <div className="flex flex-col items-start lg:items-end gap-2 shrink-0">
           <div className="flex items-center gap-2 flex-wrap" data-testid="left-counter">
             {ready ? (
-              <StatusChip kind="ok">ready for the board{c.board_ready?.by ? `, marked by ${c.board_ready.by}` : ""}</StatusChip>
+              <StatusChip kind="ok">ready for the board{readyBy ? `, marked by ${readyBy}` : ""}</StatusChip>
             ) : left === null ? (
               <span className="skeleton-line h-6 w-36" aria-label="Counting" />
             ) : (
@@ -125,7 +128,8 @@ export function HeaderStrip({ cf, team, left, resident, consultantName, canMarkR
           {markReadyReason && !canMarkReady && !ready ? <p className="text-xs text-muted-foreground print:hidden">{markReadyReason}</p> : null}
         </div>
       </div>
-      <div className="mt-3 flex flex-wrap gap-1.5 print:hidden">
+      {/* One row that scrolls sideways on a phone (the summary starts higher up); wraps on a laptop. */}
+      <div className="mt-3 -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0 print:hidden [&>*]:shrink-0">
         {panelBtn("helpers", <Sparkles className="size-4" />, `Specialty helpers (${helpersCount})`)}
         {panelBtn("team", <Users className="size-4" />, `Team${teamCount ? ` (${teamCount})` : ""}`)}
         {panelBtn("board", <ClipboardList className="size-4" />, "Board form")}

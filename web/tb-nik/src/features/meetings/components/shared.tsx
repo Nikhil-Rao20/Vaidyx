@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Bot, FileText, Hand, Images, Radio, Timer as TimerIcon, Wifi, WifiOff } from "lucide-react";
 import { answerText, handUsers, type AgentState, type Attendee, type LiveStatus, type MeetingQuestion, type MeetingState, type MeetingTimer } from "@/lib/live";
 import type { Slide, SlideCitation, SlideContentMap, SlideSentence } from "../types";
-import { StatusChip, fmtDate, initials } from "@/features/casefile/components/common";
+import { StatusChip, fmtDate, indianDates, initials } from "@/features/casefile/components/common";
 import { cn } from "@/lib/utils";
 
 export function MeetingStatusChip({ status }: { status: string }) {
@@ -142,7 +142,7 @@ export function QuestionsList({ questions, big, emptyText = "No questions yet.",
             <p className={cn("text-muted-foreground", big ? "text-sm" : "text-xs")}>{q.by_name}{q.role ? `, to the ${q.agent_label ?? q.role.replace(/_/g, " ")} stand-in` : ""}</p>
             {a && (a.statements ?? []).length ? (
               <div className={cn("mt-1 border-l-2 border-primary pl-2 space-y-1", big ? "text-base" : "text-sm")}>
-                {a.statements!.map((s, i) => <p key={i} className="text-foreground">{s.text}{(s.citations ?? []).map((c, j) => <Cite key={j} c={c} big={big} />)}</p>)}
+                {a.statements!.map((s, i) => <p key={i} className="text-foreground">{indianDates(s.text)}{(s.citations ?? []).map((c, j) => <Cite key={j} c={c} big={big} />)}</p>)}
                 <p className={cn("text-muted-foreground", big ? "text-xs" : "text-[10px]")}>{a.note ?? "From the records only; the stand-in is not a member of the board."}</p>
               </div>
             ) : text ? <p className={cn("mt-1 text-foreground border-l-2 border-primary pl-2", big ? "text-base" : "text-sm")}>{text}</p> : null}
@@ -157,8 +157,8 @@ export function QuestionsList({ questions, big, emptyText = "No questions yet.",
 
 // ---- slides -------------------------------------------------------------------------------------------------------------
 function Sentence({ s, big }: { s: SlideSentence | string; big?: boolean }) {
-  if (typeof s === "string") return <li className={cn("text-foreground", big ? "text-xl leading-snug" : "text-sm")}>{s}</li>;
-  return <li className={cn("text-foreground", big ? "text-xl leading-snug" : "text-sm")}>{s.text}{(s.citations ?? []).slice(0, 3).map((c, j) => <Cite key={j} c={c} big={big} />)}</li>;
+  if (typeof s === "string") return <li className={cn("text-foreground", big ? "text-xl leading-snug" : "text-sm")}>{indianDates(s)}</li>;
+  return <li className={cn("text-foreground", big ? "text-xl leading-snug" : "text-sm")}>{indianDates(s.text)}{(s.citations ?? []).slice(0, 3).map((c, j) => <Cite key={j} c={c} big={big} />)}</li>;
 }
 
 const GAP_WORD: Record<string, string> = { missing: "not found in the file", needs_confirmation: "needs confirmation", not_final: "not final", waived: "not needed", not_applicable: "not applicable" };
@@ -192,7 +192,7 @@ function SlideBody({ slide, c, big }: { slide: Slide; c: SlideContentMap; big?: 
         {(c.sections ?? []).filter((s) => s.text || (s.sentences ?? s.items ?? []).length).map((s, i) => (
           <section key={s.id ?? i}>
             <h4 className={cn("font-semibold text-foreground", big ? "text-xl" : "text-sm")}>{s.title ?? s.heading}</h4>
-            {s.text ? <p className={cn("text-foreground", t)}>{s.text}</p> : null}
+            {s.text ? <p className={cn("text-foreground", t)}>{indianDates(s.text)}</p> : null}
             <ul className="space-y-1">{(s.sentences ?? s.items ?? []).map((x, j) => <Sentence key={j} s={x} big={big} />)}</ul>
           </section>
         ))}
@@ -255,7 +255,7 @@ function SlideBody({ slide, c, big }: { slide: Slide; c: SlideContentMap; big?: 
     if (!pts.length) return <p className={cn("text-muted-foreground", t)}>No points for review yet.</p>;
     return (
       <div className="space-y-2">
-        <ol className="space-y-1.5 list-decimal pl-6">{pts.map((p, i) => <li key={i} className={cn("text-foreground", t)}>{p.text}{(p.citations ?? []).slice(0, 2).map((c2, j) => <Cite key={j} c={c2} big={big} />)}{p.label ? <span className={cn("ml-2 text-muted-foreground", small)}>({p.label})</span> : null}</li>)}</ol>
+        <ol className="space-y-1.5 list-decimal pl-6">{pts.map((p, i) => <li key={i} className={cn("text-foreground", t)}>{indianDates(p.text)}{(p.citations ?? []).slice(0, 2).map((c2, j) => <Cite key={j} c={c2} big={big} />)}{p.label ? <span className={cn("ml-2 text-muted-foreground", small)}>({p.label})</span> : null}</li>)}</ol>
         {c.note ? <p className={cn("text-muted-foreground", small)}>{c.note}</p> : null}
       </div>
     );

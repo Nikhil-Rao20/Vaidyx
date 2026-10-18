@@ -12,12 +12,17 @@ import { useProfile } from "@/hooks/useProfile";
 import { isDoctor, roleWords } from "@/lib/nav";
 import { SettingsCard } from "@/features/settings/SettingsCard";
 
-const TITLES = ["Dr", "Prof", "Mr", "Ms", "Mrs"];
+// "none" stands for no title (a Select item cannot carry an empty value); it is saved as "".
+const TITLES = ["Dr", "Prof", "Mr", "Ms", "Mrs", "none"];
+const titleWord = (t: string) => (t === "none" ? "No title" : t);
 
 export function ProfileSection() {
   const { me, update } = useProfile();
   const [name, setName] = useState(me?.display_name && me.display_name !== me.user ? me.display_name : "");
-  const [title, setTitle] = useState(me?.profile?.title || "Dr");
+  const doctorAtStart = me ? isDoctor(me) : false;
+  // A saved empty title means "no title" once the profile is set up; before that a doctor starts with "Dr".
+  const savedTitle = me?.profile?.title || (me?.setup_needed && doctorAtStart ? "Dr" : "none");
+  const [title, setTitle] = useState(savedTitle);
   const [reg, setReg] = useState(me?.profile?.registration_no || "");
   const [photo, setPhoto] = useState(me?.profile?.photo || "");
   const [phone, setPhone] = useState(me?.profile?.phone || "");
@@ -25,12 +30,12 @@ export function ProfileSection() {
   const [errors, setErrors] = useState<{ name?: string; reg?: string; phone?: string }>({});
   const doctor = me ? isDoctor(me) : false;
   const dirty = Boolean(me) && (
-    name !== (me?.display_name && me.display_name !== me.user ? me.display_name : "") || title !== (me?.profile?.title || "Dr") || reg !== (me?.profile?.registration_no || "") ||
+    name !== (me?.display_name && me.display_name !== me.user ? me.display_name : "") || title !== savedTitle || reg !== (me?.profile?.registration_no || "") ||
     photo !== (me?.profile?.photo || "") || phone !== (me?.profile?.phone || "") || visible !== Boolean(me?.profile?.phone_visible)
   );
   useEffect(() => { if (!phone.trim() && visible) setVisible(false); }, [phone, visible]);
   const save = useAsyncAction(async () => {
-    await update({ display_name: name.trim(), title, registration_no: reg.trim(), photo, phone: phone.trim(), phone_visible: visible && Boolean(phone.trim()) });
+    await update({ display_name: name.trim(), title: title === "none" ? "" : title, registration_no: reg.trim(), photo, phone: phone.trim(), phone_visible: visible && Boolean(phone.trim()) });
   });
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -50,7 +55,7 @@ export function ProfileSection() {
           <Field id="s-title" label="Title">
             <Select value={title} onValueChange={setTitle}>
               <SelectTrigger className="w-full" id="s-title" aria-label="Title"><SelectValue /></SelectTrigger>
-              <SelectContent>{TITLES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+              <SelectContent>{TITLES.map((t) => <SelectItem key={t} value={t}>{titleWord(t)}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
           <Field id="s-name" label="Name" required error={errors.name}>

@@ -12,7 +12,8 @@ import { useJob } from "../hooks";
 import type { CaseDocument, CaseFile, Job, RecordGroup, TimelineEvent } from "../types";
 import type { SourceTarget } from "./SourceViewer";
 import { docNeedsConfirmation, docStatusChip } from "./SourceViewer";
-import { EmptyState, LoadingButton, StatusChip, errorText, fmtDate, fmtDateTime, plural, useAnnounce } from "./common";
+import { EmptyState, LoadingButton, StatusChip, errorText, fmtDate, fmtDateTime, plural, screenNote, useAnnounce } from "./common";
+import { useOrg } from "@/hooks/useQueries";
 import { cn } from "@/lib/utils";
 
 function groupHeading(g: RecordGroup): string {
@@ -41,6 +42,12 @@ function JobSteps({ job }: { job: Job | null }) {
 
 export function ReportsPanel({ caseId, cf, onOpenSource, onChanged, compact }: { caseId: string; cf: CaseFile; onOpenSource: (t: SourceTarget) => void; onChanged: () => Promise<void>; compact?: boolean }) {
   const [view, setView] = useState<"grouped" | "timeline">("grouped");
+  const org = useOrg();
+  // "radiology" from the server reads "Radiology" (the hospital's own department name when set up).
+  const deptName = useMemo(() => {
+    const names = new Map((org.data?.departments ?? []).map((d) => [d.id, d.name]));
+    return (id: string) => names.get(id) ?? id.replace(/_/g, " ").replace(/\b\p{L}/gu, (m) => m.toUpperCase());
+  }, [org.data]);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [imgErr, setImgErr] = useState<string | null>(null);
@@ -93,9 +100,9 @@ export function ReportsPanel({ caseId, cf, onOpenSource, onChanged, compact }: {
             </button>
             <div className="text-xs text-muted-foreground flex flex-wrap gap-x-2">
               {c.event_date_iso ? <span>{fmtDate(c.event_date_iso)}</span> : null}
-              {c.doc_type ? <span>{String(c.doc_type).replace(/_/g, " ")}</span> : null}
+              {c.doc_type ? <span>{screenNote(String(c.doc_type).replace(/_/g, " "))}</span> : null}
               {ids ? <span className="mono">{ids}</span> : null}
-              {d.department ? <span>{d.his ? "from" : "uploaded by"} {d.department}</span> : null}
+              {d.department ? <span>{d.his ? "from" : "uploaded by"} {deptName(d.department)}</span> : null}
             </div>
             <div className="mt-1 flex flex-wrap gap-1">
               {docStatusChip(d)}

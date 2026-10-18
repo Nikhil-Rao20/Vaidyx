@@ -33,7 +33,7 @@ export default function SignIn() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const fe: typeof fieldError = {};
-    if (!email.trim()) fe.email = "Type your email address.";
+    if (!email.trim()) fe.email = "Type your email address or login name.";
     if (!password) fe.password = "Type your password.";
     if (needTotp && totp.replace(/\D/g, "").length !== 6) fe.totp = "The code has 6 digits.";
     setFieldError(fe);
@@ -76,8 +76,8 @@ export default function SignIn() {
         <form className="mt-6 grid gap-4" onSubmit={submit} noValidate>
           {!needTotp ? (
             <>
-              <Field id="email" label="Email" error={fieldError.email}>
-                <Input type="email" autoComplete="username" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@hospital.in" autoFocus />
+              <Field id="email" label="Email or login name" error={fieldError.email}>
+                <Input type="text" autoComplete="username" inputMode="email" autoCapitalize="none" spellCheck={false} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@hospital.in" autoFocus />
               </Field>
               <Field
                 id="password"

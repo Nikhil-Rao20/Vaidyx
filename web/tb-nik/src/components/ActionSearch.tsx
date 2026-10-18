@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Command as CommandPrimitive } from "cmdk";
-import { AnimatePresence, motion } from "motion/react";
+import { motion } from "motion/react";
 import { CalendarPlus, CornerDownLeft, FolderPlus, KeyRound, Loader2, Search, UserSearch, X } from "lucide-react";
 import { JoinDialog, type JoinKind } from "@/components/JoinDialog";
 import { UrgencyTag } from "@/components/UrgencyTag";
@@ -35,6 +35,9 @@ export function ActionSearch({ className, canCreate = true, compact }: { classNa
   const q = debounced.trim();
   const results = useMemo<CaseListItem[]>(() => (q ? applyFilters(list.data?.cases ?? [], { q }).slice(0, 8) : []), [list.data, q]);
   const commands = COMMANDS.filter((c) => canCreate || c.id !== "new");
+
+  // cmdk always writes aria-expanded="true" on its input; keep it true to the popup.
+  useEffect(() => { inputRef.current?.setAttribute("aria-expanded", String(open)); }, [open]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -70,7 +73,6 @@ export function ActionSearch({ className, canCreate = true, compact }: { classNa
             onBlur={() => window.setTimeout(() => setOpen(false), 120)}
             placeholder={compact ? "Search" : "UHID, name, IP or OP number, or a command"}
             aria-label="Search Case Files and commands"
-            aria-expanded={open}
             className={cn("h-9 w-full rounded-md border border-input bg-background pl-9 pr-16 text-sm text-foreground placeholder:text-muted-foreground transition-shadow hover:border-border-strong focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40")}
           />
           <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 hidden items-center gap-1 text-[11px] text-muted-foreground sm:flex" aria-hidden>
@@ -83,14 +85,13 @@ export function ActionSearch({ className, canCreate = true, compact }: { classNa
             </button>
           ) : null}
         </div>
-        <AnimatePresence>
-          {open ? (
+        {/* The list stays mounted (hidden when closed) so the input's aria-controls always points at it. */}
             <motion.div
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
+              initial={false}
+              animate={open ? { opacity: 1, y: 0 } : { opacity: 0, y: -4 }}
               transition={{ duration: 0.14 }}
-              className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-[var(--shadow-inner)]"
+              className={cn("absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-[var(--shadow-inner)]", !open && "pointer-events-none invisible")}
+              aria-hidden={!open || undefined}
             >
               <CommandPrimitive.List className="max-h-[min(60vh,420px)] overflow-auto p-1.5">
                 {q ? (
@@ -131,8 +132,6 @@ export function ActionSearch({ className, canCreate = true, compact }: { classNa
                 </CommandPrimitive.Group>
               </CommandPrimitive.List>
             </motion.div>
-          ) : null}
-        </AnimatePresence>
       </CommandPrimitive>
       <JoinDialog kind={join ?? "case"} open={join !== null} onOpenChange={(o) => { if (!o) setJoin(null); }} />
     </div>
