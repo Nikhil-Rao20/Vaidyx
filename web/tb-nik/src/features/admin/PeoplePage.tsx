@@ -92,6 +92,7 @@ function AddPerson({ dept, onSaved }: { dept: string; onSaved: (mailto: string, 
 
 function PersonRow({ p, dept, canReset, onChanged, onMail }: { p: DepartmentDoctor; dept: string; canReset: boolean; onChanged: () => void; onMail: (mailto: string, who: string) => void }) {
   const [removing, setRemoving] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [endOpen, setEndOpen] = useState(false);
   const [end, setEnd] = useState(p.end_date || "");
   const who = p.display_name || p.username;
@@ -112,7 +113,11 @@ function PersonRow({ p, dept, canReset, onChanged, onMail }: { p: DepartmentDoct
   const saveEnd = useAsyncAction(async () => { await api.put(EP.deptPerson(dept, p.username), { end_date: end }); setEndOpen(false); notify.success("End date saved", who); onChanged(); });
   const locked = p.root_admin || p.vaidyx_admin;
   return (
-    <div className="surface-inner flex min-h-12 flex-wrap items-center gap-3 px-3 py-2.5">
+    <div
+      className="surface-inner row-lift flex min-h-12 cursor-pointer flex-wrap items-center gap-3 px-3 py-2.5"
+      title={`Actions for ${who}`}
+      onClick={(e) => { if ((e.target as HTMLElement).closest("button, a, input, form, [role=menu]")) return; setMenuOpen(true); }}
+    >
       <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary text-sm font-bold text-secondary-foreground" aria-hidden>{initials(who)}</span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-foreground">{who}</p>
@@ -134,7 +139,7 @@ function PersonRow({ p, dept, canReset, onChanged, onMail }: { p: DepartmentDoct
           <Button type="button" variant="ghost" size="sm" onClick={() => setEndOpen(false)}>Cancel</Button>
         </form>
       ) : null}
-      <DropdownMenu>
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
           <Button type="button" variant="ghost" size="icon-sm" aria-label={`Actions for ${who}`} disabled={reset.state === "loading"}><MoreHorizontal className="size-4" aria-hidden /></Button>
         </DropdownMenuTrigger>
@@ -285,7 +290,10 @@ function EveryoneList({ accounts, loading, error, onRetry, deptName, onOpen }: {
           ].filter(Boolean);
           const first = depts[0]?.[0] || (a.admin_of ?? [])[0];
           return (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3">
+            <div
+              className={first ? "row-lift flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3" : "flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3"}
+              onClick={(e) => { if (!first || (e.target as HTMLElement).closest("button, a")) return; onOpen(first); }}
+            >
               <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary text-sm font-bold text-secondary-foreground" aria-hidden>{initials(a.display_name || a.username)}</span>
               <span className="min-w-0 flex-1">
                 <span className="block font-medium text-foreground">{a.display_name || a.username}</span>
