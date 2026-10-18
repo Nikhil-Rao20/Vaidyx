@@ -2,7 +2,7 @@
 chat thread per role (agents.ask). Rate limits: 10 preparations and 20 questions per 10 minutes per user."""
 from fastapi import Request
 
-from tumour_board import helpers
+from tumour_board import chats, helpers
 
 from . import common
 
@@ -38,16 +38,23 @@ async def prepare(case_id: str, role: str, request: Request):
     return helpers.prepare(case_id, role, u, refresh=bool(b.get("refresh")))
 
 
+def _chat_reader(request, rl):
+    """The helper threads follow the team chat's rule: the treating team and the MDT Coordinator, in FULL scope; never a supporting-only
+    doctor (security review #15)."""
+    if not chats.may_read(rl, common.scope(request)):
+        common.fail(403, chats.refusal(rl), "chat_forbidden")
+
+
 @router.get("/cases/{case_id}/helpers/{role}/chat")
 async def chat(case_id: str, role: str, request: Request):
-    common.roles(request); common.case(case_id); _role(role)
+    rl = common.roles(request); common.case(case_id); _role(role); _chat_reader(request, rl)
     return {"messages": helpers.messages(case_id, role), "role": role, "label": helpers.label(role)}
 
 
 @router.post("/cases/{case_id}/helpers/{role}/chat")
 async def ask(case_id: str, role: str, request: Request):
     """{question} -> the message (agents.ask: from the records and the specialty's guideline pack; never an opinion)."""
-    u = common.user(request); rl = common.roles(request); c = common.case(case_id); common.need_known(rl); _role(role)
+    u = common.user(request); rl = common.roles(request); c = common.case(case_id); common.need_known(rl); _role(role); _chat_reader(request, rl)
     b = await common.body(request)
     q = " ".join(str(b.get("question") or "").split())
     if not q:

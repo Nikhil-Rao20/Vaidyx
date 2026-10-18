@@ -13,6 +13,10 @@ import asyncio, logging, threading
 log = logging.getLogger(__name__)
 
 COOKIE = "vaidyx_session"
+MAX_SOCKETS_PER_USER = 5   # per meeting (security review #16)
+STATE_EVERY = 2.0          # seconds between two state messages a client asks for
+RECHECK_SECONDS = 60       # the session and roles are checked again this often on a quiet socket
+SEND_TIMEOUT = 2.0         # a client that does not take a message within this is dropped
 
 
 class Hub:
@@ -31,6 +35,16 @@ class Hub:
         with self._lock:
             self._rooms.setdefault(mid, {})[ws] = user
             self._info[ws] = info
+
+    def update(self, ws, info) -> None:
+        """The roles of a socket after its periodic re-check (the per-socket shape uses them)."""
+        with self._lock:
+            if ws in self._info:
+                self._info[ws] = info
+
+    def user_count(self, mid: str, user: str) -> int:
+        with self._lock:
+            return sum(1 for u in (self._rooms.get(mid) or {}).values() if u == user)
 
     def disconnect(self, mid: str, ws) -> None:
         with self._lock:
@@ -59,16 +73,25 @@ class Hub:
             return len(self._rooms.get(mid) or {})
 
     async def send_all(self, mid: str, event: dict, targets=None) -> int:
-        """Send one event to every socket of the meeting (or each of `targets`: [(websocket, its own event)]); a socket that fails is
-        dropped. Returns how many received it."""
-        n = 0
-        for ws, ev in (targets if targets is not None else [(w, event) for w in self.clients(mid)]):
+        """Send one event to every socket of the meeting (or each of `targets`: [(websocket, its own event)]), all at once, each with
+        SEND_TIMEOUT: a socket that fails or does not take the message in time is dropped and closed, so a slow client never holds
+        the others up (security review #16). Returns how many received it."""
+        pairs = list(targets if targets is not None else [(w, event) for w in self.clients(mid)])
+
+        async def one(ws, ev):
             try:
-                await ws.send_json(ev)
-                n += 1
+                await asyncio.wait_for(ws.send_json(ev), timeout=SEND_TIMEOUT)
+                return True
             except Exception:
                 self.disconnect(mid, ws)
-        return n
+                try:
+                    await asyncio.wait_for(ws.close(code=1011), timeout=SEND_TIMEOUT)
+                except Exception:
+                    pass
+                return False
+        if not pairs:
+            return 0
+        return sum(1 for ok in await asyncio.gather(*(one(ws, ev) for ws, ev in pairs)) if ok)
 
     def clear(self) -> None:
         with self._lock:

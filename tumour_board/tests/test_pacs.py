@@ -15,7 +15,7 @@ from tumour_board.tests import util
 
 UID = "1.2.826.0.1.3680043.8.498.1001"
 OTHER = "1.2.826.0.1.3680043.8.498.2002"
-DOCTOR = {"user": "dr.rao", "admin": False, "known": True, "disabled": False}
+DOCTOR = {"user": "dr.rao", "admin": False, "known": True, "disabled": False}  # creates the ownerless test Case Files: an ownerless Case File is open to its creator and the coordinator only (security review finding 0)
 
 
 @pytest.fixture(autouse=True)
@@ -89,7 +89,7 @@ def test_check_roles_grants_and_kinds():
     # a Vaidyx admin needs a grant like everyone (the audit trail stays honest)
     admin = {"user": "vx.admin", "admin": True, "known": True}
     assert pacs.check("ohif/viewer", q, admin) == no
-    store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="test")
+    store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="dr.rao")
     pacs.grant("dr.rao", UID, "TB-PACS", "d1")
     assert pacs.check("ohif/viewer", q, DOCTOR) is None
     assert pacs.check(f"dicom-web/studies/{UID}/series", "", DOCTOR) is None
@@ -120,13 +120,13 @@ def test_check_follows_the_case_file_scope():
 def test_revoke_ends_the_grants_of_a_deleted_case_file():
     q = f"StudyInstanceUIDs={UID}"
     for cid in ("TB-A", "TB-B"):
-        store.create_case(cid, util.PATIENT, "lung_nsclc", created_by="test")
+        store.create_case(cid, util.PATIENT, "lung_nsclc", created_by="dr.rao")
     pacs.grant("dr.rao", UID, "TB-A", "d1"); pacs.grant("dr.mehta", UID, "TB-A", "d1"); pacs.grant("dr.rao", OTHER, "TB-B", "d2")
     assert pacs.check("ohif/viewer", q, DOCTOR) is None
     assert pacs.revoke("TB-A") == 2 and pacs.revoke("TB-A") == 0
     assert pacs.check("ohif/viewer", q, DOCTOR) == (403, pacs.NO_GRANT) and pacs.granted("dr.mehta", UID) is None
     assert pacs.granted("dr.rao", OTHER)["case_id"] == "TB-B"  # another Case File's grant stays
-    store.create_case("TB-A", util.PATIENT, "lung_nsclc", created_by="test") if not store.get_case("TB-A") else None
+    store.create_case("TB-A", util.PATIENT, "lung_nsclc", created_by="dr.rao") if not store.get_case("TB-A") else None
     assert pacs.check("ohif/viewer", q, DOCTOR) == (403, pacs.NO_GRANT)  # a Case File re-created under the same id starts without grants
 
 
@@ -218,7 +218,7 @@ def test_proxy_forwards_the_granted_study_only(pacs_app):
     r = tc.get(f"/api/tb/pacs/dicom-web/studies/{UID}/series", headers={"Authorization": "Bearer app"})
     assert r.status_code == 403 and r.json()["detail"].startswith("Open the images") and not fake.seen
     assert tc.get("/api/tb/pacs/tools/find").status_code == 404 and not fake.seen
-    store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="test")
+    store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="dr.rao")
     pacs.grant("dr.rao", UID, "TB-PACS", "d1")
     r = tc.get(f"/api/tb/pacs/dicom-web/studies/{UID}/series?includefield=all&limit=5",
                headers={"Authorization": "Bearer app", "Accept": "application/dicom+json", "X-Custom": "no",
@@ -257,7 +257,7 @@ def test_proxy_forwards_the_granted_study_only(pacs_app):
 
 def test_proxy_range_head_post_and_errors(pacs_app):
     tc, fake, who = pacs_app
-    store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="test")
+    store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="dr.rao")
     pacs.grant("dr.rao", UID, "TB-PACS", "d1")
     frame = f"/api/tb/pacs/dicom-web/studies/{UID}/series/1.2.3/instances/1.2.4/frames/1"
     r = tc.get(frame, headers={"Range": "bytes=0-3"})
@@ -277,7 +277,7 @@ def test_proxy_range_head_post_and_errors(pacs_app):
 
 def test_proxy_viewer_open_is_audited_once_per_page(pacs_app):
     tc, fake, who = pacs_app
-    store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="test")
+    store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="dr.rao")
     pacs.grant("dr.rao", UID, "TB-PACS", "d1")
     r = tc.get(f"/api/tb/pacs/ohif/viewer?StudyInstanceUIDs={UID}")
     assert r.status_code == 200 and b"OHIF" in r.content
@@ -314,7 +314,7 @@ class FakeHIS:
 
 
 def _report(case_id="TB-PACS", ref="ImagingStudy/img-1"):
-    store.create_case(case_id, util.PATIENT, "lung_nsclc", created_by="test")
+    store.create_case(case_id, util.PATIENT, "lung_nsclc", created_by="dr.rao")
     doc = store.add_document_file(case_id, "ct_thorax_report.pdf", b"synthetic")
     if ref:
         doc["his"] = {"imaging_study_ref": ref}

@@ -197,12 +197,12 @@ def test_me_counts_waiting_and_open_requests(api, people):
 
 def test_me_setup_needed_until_name_and_registration(api):
     assert api.as_(RAO).get("/me").json()["setup_needed"] is True  # a doctor: no registration number yet
-    r = api.put("/me/profile", {"display_name": "Dr Rao (synthetic)", "registration_no": "TN/12345", "theme": "dark", "text_size": "large", "phone": "+91 98765 43210", "phone_visible": True})
+    r = api.put("/me/profile", {"display_name": "Dr Rao Synthetic", "registration_no": "TN/12345", "theme": "dark", "text_size": "large", "phone": "+91 98765 43210", "phone_visible": True})
     assert r.status_code == 200, r.text
     assert r.json()["setup_needed"] is False and r.json()["profile"]["theme"] == "dark" and r.json()["profile"]["registration_no"] == "TN/12345"
     assert api.get("/me").json()["setup_needed"] is False
     assert api.as_(ANIL).get("/me").json()["setup_needed"] is True  # the coordinator needs a display name only
-    assert api.put("/me/profile", {"display_name": "Anil Kumar (synthetic)"}).json()["setup_needed"] is False
+    assert api.put("/me/profile", {"display_name": "Anil Kumar Synthetic"}).json()["setup_needed"] is False
 
 
 def test_profile_validation_and_mirroring(api):
@@ -214,9 +214,14 @@ def test_profile_validation_and_mirroring(api):
     assert r.status_code == 400 and "200 KB" in r.json()["detail"]["message"]
     assert api.put("/me/profile", {"photo": "data:image/png;base64,iVBORw0KGgo="}).status_code == 200
     assert api.put("/me/profile", {"saved_filters": [{"name": "Mine", "query": {"mine": "1"}, "pinned": True}]}).json()["profile"]["saved_filters"][0]["pinned"] is True
-    r = api.put("/me/profile", {"display_name": "Dr Rao Renamed (synthetic)"})
+    assert api.put("/me/profile", {"display_name": "x" * 81}).status_code == 400
+    for bad in ("Dr Rao (synthetic)", "<b>Rao</b>", "R", "Dr Rao 2"):  # letters, spaces, dots, apostrophes, hyphens; 2 to 80 (review #19)
+        r = api.put("/me/profile", {"display_name": bad})
+        assert r.status_code == 400 and "letters, spaces, dots" in r.json()["detail"]["message"], bad
+    assert api.put("/me/profile", {"display_name": "Dr. K. O'Neil-Rao"}).status_code == 200
+    r = api.put("/me/profile", {"display_name": "Dr Rao Renamed Synthetic"})
     assert r.status_code == 200
-    assert org.load()["users"][RAO]["display_name"] == "Dr Rao Renamed (synthetic)" and profiles.display_name(RAO) == "Dr Rao Renamed (synthetic)"
+    assert org.load()["users"][RAO]["display_name"] == "Dr Rao Renamed Synthetic" and profiles.display_name(RAO) == "Dr Rao Renamed Synthetic"
     ev = [e for e in org.read_audit() if e["kind"] == "profile_updated"]
     assert ev and ev[0]["username"] == RAO and "display_name" in ev[0]["fields"] and "Renamed" not in json.dumps(ev)  # names of fields, never values
     assert not any("9876" in json.dumps(e) for e in org.read_audit())  # the phone never reaches the log
@@ -231,7 +236,7 @@ def test_password_change_clears_the_flag_checks_the_current_one_and_is_rate_limi
     assert r.status_code == 400 and r.json()["detail"]["code"] == "wrong_password"
     assert api.post("/me/password", {"current_password": "first-pass-1234", "new_password": "short"}).status_code == 400
     r = api.post("/me/password", {"current_password": "first-pass-1234", "new_password": "a-new-password-9"})
-    assert r.status_code == 200 and r.json() == {"ok": True, "must_change_password": False}
+    assert r.status_code == 200 and r.json() == {"ok": True, "must_change_password": False, "other_sessions_ended": 0}
     assert auth.users[RAO]["pw"] == "a-new-password-9" and api.get("/me").json()["must_change_password"] is False
     assert any(e["kind"] == "password_changed" and e["by"] == RAO for e in org.read_audit())
     assert "a-new-password-9" not in json.dumps(org.read_audit())

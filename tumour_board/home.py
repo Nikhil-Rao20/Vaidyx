@@ -175,9 +175,9 @@ def coordinator(r: dict, cases: list | None = None) -> dict:
     """The board sessions (open ones first), the readiness of the next board date with its chase list, the ready marks. Built for the
     MDT Coordinator and admins only (sections_for); anyone else gets no agenda and only the sessions it may open."""
     today = _today()
-    cases = cases if cases is not None else store.list_cases()
+    cases = [c for c in (cases if cases is not None else store.list_cases()) if not access.hidden(r, c)]  # finding 0
     nxt = _next_board_date(cases, today)
-    allowed = bool(r.get("admin") or r.get("coordinator"))
+    allowed = org.board_wide(r)  # never the Vaidyx admin (review #2)
     agenda = metrics.agenda(nxt) if nxt and allowed else None
     sessions = board.list_sessions()
     if not allowed:

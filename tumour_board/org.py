@@ -234,8 +234,13 @@ ACTIONS = {
                     "doc": "Open a break-glass window on one Case File with a reason (Vaidyx admin only; the owner is told; audited). Outside a window a Vaidyx admin has no clinical scope"},
 }
 
+# What a Vaidyx admin (the server administrator) never does through org.can (security review #2): run meetings, record the board, read
+# the whole activity log. The MDT Coordinator runs meetings; the auditor reads the log. Inside a break-glass window access.may() gives
+# the admin the read actions on that one Case File (read_audit included); nothing else changes for it.
+VAIDYX_ADMIN_NOT = frozenset({"session", "board_record", "read_audit"})
+
 _SLUG = re.compile(r"^[a-z0-9_]+$")
-_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_EMAIL = re.compile(r"^[^@\s?&%,;]+@[^@\s?&%,;]+\.[^@\s?&%,;]+$")  # no ? & % , ; or spaces: the address goes into mailto: links (review #18)
 _PHONE = re.compile(r"^[0-9+()\-/ ]{3,30}$")
 _UNKNOWN = object()  # a department name that does not resolve: matches no membership
 _cache: dict = {}
@@ -689,7 +694,7 @@ def validate(org: dict) -> dict:
             raise ValueError(f"Aliases of department {name!r} must be a list of text.")
         email = str(d.get("email") or "").strip()
         if email and not _EMAIL.match(email):
-            raise ValueError(f"The email of department {name!r} does not look like an address.")
+            raise ValueError(f"The email of department {name!r} does not look like an address (one address; no spaces, ?, &, %, commas or semicolons).")
         phone = str(d.get("phone") or "").strip()
         if phone and not _PHONE.match(phone):
             raise ValueError(f"The phone of department {name!r} may hold digits, spaces, +, -, / and brackets only (up to 30 characters).")
@@ -1025,7 +1030,7 @@ def can(r: dict, action: str, department: str | None = None) -> bool:
     if rule is None or not isinstance(r, dict) or r.get("disabled"):
         return False
     if r.get("admin"):
-        return True
+        return not (r.get("vaidyx_admin") and action in VAIDYX_ADMIN_NOT)  # no login at all (single-user mode) keeps everything
     who = rule["who"]
     dept = None
     if rule["dept"]:
@@ -1034,6 +1039,13 @@ def can(r: dict, action: str, department: str | None = None) -> bool:
         else:
             who = rule.get("no_dept", ())
     return _allowed(r, who, dept)
+
+
+def board_wide(r: dict) -> bool:
+    """The MDT Coordinator's hospital-wide view of the board (every session, agenda, room, chase list, the intake log): the coordinator,
+    and the admin of single-user mode (no login). Never the Vaidyx admin, which reads a Case File only inside a break-glass window
+    (security review #2)."""
+    return isinstance(r, dict) and not r.get("disabled") and (bool(r.get("coordinator")) or (bool(r.get("admin")) and not r.get("vaidyx_admin")))
 
 
 def can_as_member(r: dict, action: str, department) -> bool:

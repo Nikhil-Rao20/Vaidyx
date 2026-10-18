@@ -319,6 +319,9 @@ async def setup_board(request: Request):
         unknown = sorted(u for u in want if u not in o["users"])
         if unknown:
             fail(400, f"Not placed in the Tumour Board yet: {', '.join(unknown)}. Create the login first (People).", "bad_value")
+        mixed = sorted(u for u in want if u in (o.get("admins") or []))
+        if mixed:  # security review #5
+            fail(409, f"{accounts.SEPARATE_LOGINS}: {', '.join(mixed)} is a root admin. Choose another login as MDT Coordinator.", "separate_logins")
         for u, v in o["users"].items():
             if isinstance(v, dict):
                 v["coordinator"] = u in want

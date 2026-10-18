@@ -7,7 +7,9 @@ to the Case File team (team.py), the doctors of a participating department, of a
 owner of a linked Case File read the whole Case File (scope FULL); the doctors of a department that received a request (a sent
 Pre-Authorization request, a Tumour Board action) see only the items they were asked about (scope REQUESTS: their requests and the
 records their department produced or the request names); everyone else is refused. A Case File without an owning department (created by
-hand before 5.1, the demo Case Files) stays open to every placed account, as before.
+hand before 5.1, the demo Case Files) is open to the MDT Coordinator and its creator only (owner decision 16 Oct: Case Files without an
+owner should not exist). A protected Case File (config.PROTECTED_CASES, real patient data) is open to its creator and to a Vaidyx admin
+inside a break-glass window on it, nobody else, and no listing names it to anyone else (security review finding 0).
 
 The Vaidyx admin (the server administrator) has no clinical scope: it reads a Case File only inside an open break-glass window
 (break_glass.json: one window per admin, with the Case File, a reason and an end time; the owner is told, everything is audited; the
@@ -36,6 +38,7 @@ OWNER_ACTIONS = frozenset({"waive", "confirm", "dismiss_failed", "upload_to_case
                            "approve_proposal", "set_urgency", "manage_team", "set_consent"})  # 18 Oct: the owner's consultants only
 RESIDENT_ACTIONS = frozenset({"upload_to_case", "propose", "upload", "ask", "view", "read_case"})  # what a resident may do on its own Case Files
 ARCHIVE_ALLOWED = frozenset({"unarchive", "view", "read_case", "ask", "read_audit"})  # the only actions an archived Case File accepts
+BREAK_GLASS_ACTIONS = frozenset({"view", "read_case", "read_audit", "ask"})  # what a Vaidyx admin may do inside its window: read (review #6)
 ARCHIVED_MESSAGE = "This Case File is archived"
 RECENT_DAYS = 7  # a department that received a request keeps its limited view this long after the request closed (as its inbox lists it)
 REFERRAL_OPEN = "requested"
@@ -92,6 +95,32 @@ def linked_owners(case) -> list[str]:
         if did and did not in out:
             out.append(did)
     return out
+
+
+def is_protected(case) -> bool:
+    """A Case File holding real patient data (config.PROTECTED_CASES): never listed or opened for anyone but the login that created it
+    and a Vaidyx admin inside a break-glass window on it (security review finding 0)."""
+    cid = case.get("case_id") if isinstance(case, dict) else case
+    return bool(cid) and str(cid) in config.PROTECTED_CASES
+
+
+def is_creator(r: dict, case: dict) -> bool:
+    """The login that created this Case File (case.json created_by)."""
+    u = str((r or {}).get("user") or "") if isinstance(r, dict) else ""
+    return bool(u) and isinstance(case, dict) and u == str(case.get("created_by") or "")
+
+
+def hidden(r: dict, case) -> bool:
+    """True for a protected Case File this user may not open: listings (notifications, inboxes, waiting items) leave it out."""
+    if not is_protected(case):
+        return False
+    c = case if isinstance(case, dict) and "created_by" in case else None
+    if c is None:
+        try:
+            c = store.get_case(case.get("case_id") if isinstance(case, dict) else case)
+        except (ValueError, OSError):
+            c = None
+    return not isinstance(c, dict) or scope(r, c) is None
 
 
 def is_archived(case) -> bool:
@@ -280,6 +309,10 @@ def scope(r: dict, case: dict, state=None) -> str | None:
     """FULL, REQUESTS or None (refused) for the user with roles `r` on this Case File."""
     if not isinstance(r, dict) or r.get("disabled") or r.get("expired") or not isinstance(case, dict):
         return None
+    if is_protected(case):  # real patient data: its creator, and a Vaidyx admin inside a break-glass window on it; nobody else (finding 0)
+        if is_creator(r, case) or (r.get("vaidyx_admin") and break_glass_window(r.get("user") or "", case.get("case_id")) is not None):
+            return FULL
+        return None
     if r.get("admin"):
         return FULL if _admin_open(r, case) else None
     if not r.get("known") or (r.get("outside_expert") and not r.get("departments") and not r.get("coordinator")):
@@ -287,8 +320,8 @@ def scope(r: dict, case: dict, state=None) -> str | None:
     if r.get("coordinator"):
         return FULL
     own = owner(case)
-    if not own:  # no owning department recorded (before 5.1, a manual Case File): every placed account, as before
-        return FULL
+    if not own:  # no owning department recorded (before 5.1, a manual Case File): the coordinator (above) and its creator only (owner, 16 Oct)
+        return FULL if is_creator(r, case) else None
     mine = _mine(r) - set(r.get("resident") or {})  # the consultant placements; a resident reads through is_team_resident only
     if own in mine or (mine & set(participants(case))) or (mine & set(linked_owners(case))):
         return FULL
@@ -313,12 +346,16 @@ def can_see_chats(r: dict, case: dict) -> bool:
 
 
 def refusal(r: dict, case: dict) -> str:
+    if is_protected(case):  # never the patient's name
+        return "This Case File is restricted to the person who created it."
     if (r or {}).get("vaidyx_admin"):
         return "A Vaidyx admin opens a Case File only through break-glass: give a reason, the owner is told and it is recorded."
     if (r or {}).get("expired"):
         return "Your placement ended on " + str(r.get("end_date") or "")[:10] + ". Ask your department admin to extend it."
     own = owner(case)
-    name = org.department_name(own) if own else "another department"
+    if not own:
+        return "This Case File has no owning department yet: only the MDT Coordinator and the person who created it can open it."
+    name = org.department_name(own)
     return (f"This Case File belongs to {name}. Its doctors, the participating departments and the MDT Coordinator can open it; a department "
             "that received a request sees the items it was asked about.")
 
@@ -357,7 +394,7 @@ def limited_state(r: dict, case: dict, state: dict) -> dict:
 
 def is_owner_consultant(r: dict, case: dict) -> bool:
     """A consultant (member or head, never a resident) of the owning treating department; for a Case File without an owner, any
-    treating consultant. The Vaidyx admin does not count here (is_owner_doctor adds it, inside a window)."""
+    treating consultant. The Vaidyx admin never counts here."""
     if not isinstance(r, dict) or r.get("disabled") or r.get("expired"):
         return False
     own = owner(case)
@@ -366,19 +403,22 @@ def is_owner_consultant(r: dict, case: dict) -> bool:
 
 
 def is_owner_doctor(r: dict, case: dict) -> bool:
-    """A doctor of the owning treating department (a consultant), or the Vaidyx admin inside a break-glass window; for a Case File
-    without an owner, any treating doctor."""
+    """A doctor of the owning treating department (a consultant); for a Case File without an owner, any treating doctor. The Vaidyx
+    admin never counts (a break-glass window is read only, security review #6); the admin of single-user mode does."""
     if not isinstance(r, dict) or r.get("disabled"):
         return False
     if r.get("admin"):
-        return _admin_open(r, case)
+        return not r.get("vaidyx_admin") and _admin_open(r, case)  # a break-glass window is read only (review #6)
     return is_owner_consultant(r, case)
 
 
 def may(r: dict, action: str, case: dict, department: str | None = None) -> bool:
     """org.can() plus the owner rule: on a Case File with an owning department, an OWNER_ACTION is for the owner's consultants (and the
     Vaidyx admin inside a break-glass window); a department-scoped one stays open to a member or head of the department named (its own
-    upload). A resident does only RESIDENT_ACTIONS, and only on the Case Files of its team. An archived Case File refuses every change."""
+    upload). A resident does only RESIDENT_ACTIONS, and only on the Case Files of its team. An archived Case File refuses every change.
+    A Vaidyx admin inside its break-glass window only reads (BREAK_GLASS_ACTIONS, security review #6)."""
+    if isinstance(r, dict) and r.get("vaidyx_admin") and not r.get("disabled"):
+        return action in BREAK_GLASS_ACTIONS and _admin_open(r, case)
     if not org.can(r, action, department):
         return False
     if is_archived(case) and action not in ARCHIVE_ALLOWED:
@@ -413,7 +453,9 @@ def require(r: dict, action: str, case: dict, department: str | None = None) -> 
         raise PermissionError(ARCHIVED_MESSAGE + ". Take it out of the archive first.")
     if isinstance(r, dict) and r.get("expired"):
         raise PermissionError("Your placement ended on " + str(r.get("end_date") or "")[:10] + ". Ask your department admin to extend it.")
-    if isinstance(r, dict) and r.get("vaidyx_admin") and org.can(r, action, department):
+    if isinstance(r, dict) and r.get("vaidyx_admin"):
+        if _admin_open(r, case):
+            raise PermissionError("A break-glass window is read only: a Vaidyx admin reads the Case File, the owning department acts on it.")
         raise PermissionError("A Vaidyx admin acts on a Case File only inside an open break-glass window.")
     if isinstance(r, dict) and r.get("resident") and not (r.get("treating") or r.get("supporting") or r.get("coordinator")):
         if action in RESIDENT_ACTIONS and org.can(r, action, department):
@@ -428,20 +470,20 @@ def require(r: dict, action: str, case: dict, department: str | None = None) -> 
 
 
 def may_remind(r: dict, case: dict) -> bool:
-    """Send a reminder about a Case File's requests (V2 item 6.1): the MDT Coordinator on the owner's behalf, the Vaidyx admin (in a
-    window), and the owning department's consultants (any treating doctor on a Case File without an owner)."""
+    """Send a reminder about a Case File's requests (V2 item 6.1): the MDT Coordinator on the owner's behalf and the owning department's
+    consultants (any treating doctor on a Case File without an owner); never the Vaidyx admin (a break-glass window is read only)."""
     if not org.can(r, "remind") or is_archived(case):
         return False
     return bool(r.get("coordinator")) or is_owner_doctor(r, case)
 
 
 def may_list(r: dict, case: dict) -> bool:
-    """Change the listing (protocol, NCG setting, board date, hospital level): the MDT Coordinator, the Vaidyx admin (in a window), and
-    the owning department's consultants (the new owner picks the protocol after a referral, 5.2)."""
+    """Change the listing (protocol, NCG setting, board date, hospital level): the MDT Coordinator and the owning department's
+    consultants (the new owner picks the protocol after a referral, 5.2); never the Vaidyx admin (a break-glass window is read only)."""
     if is_archived(case):
         return False
     if (r or {}).get("admin"):
-        return _admin_open(r, case)
+        return not r.get("vaidyx_admin") and _admin_open(r, case)  # a break-glass window is read only (review #6)
     return org.can(r, "list_case") or (bool(owner(case)) and is_owner_doctor(r, case))
 
 

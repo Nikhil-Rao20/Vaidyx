@@ -58,13 +58,17 @@ def test_owner_participants_coordinator_and_admin_read_the_whole_case_file(peopl
     assert "Pulmonology" in access.refusal(people["colo"], c)
 
 
-def test_a_case_file_without_an_owner_stays_open_to_every_placed_account(people):
+def test_a_case_file_without_an_owner_is_open_to_the_coordinator_and_its_creator_only(people):
+    """Owner decision 16 Oct (security review finding 0): Case Files without an owner should not exist; the old "every placed account"
+    rule is gone."""
     c = _case(owner=None)
+    c["created_by"] = "pulmo"; store.save_case(c)
     access.open_break_glass("tbadmin", "TB-A1", "test window")  # the Vaidyx admin needs a window even here (18 Oct)
-    for who in ("pulmo", "colo", "ravi", "kavya", "anil", "admin"):
+    for who in ("pulmo", "anil", "admin"):
         assert access.scope(people[who], c) == access.FULL, who
-    for who in ("root", "stranger", "off"):
+    for who in ("colo", "ravi", "kavya", "both", "root", "stranger", "off"):
         assert access.scope(people[who], c) is None, who
+    assert "no owning department" in access.refusal(people["colo"], c)
 
 
 def test_a_department_that_received_a_request_sees_only_the_items_it_was_asked_about(people):
@@ -117,9 +121,9 @@ def test_an_open_referral_and_a_linked_case_file_open_the_whole_case_file(people
 
 def test_visible_filters_the_case_list(people):
     a = _case("TB-A1", owner="pulmonology"); b = _case("TB-A2", owner="colorectal_surgery"); n = _case("TB-A3", owner=None)
-    assert [c["case_id"] for c in access.visible(people["pulmo"], [a, b, n])] == ["TB-A1", "TB-A3"]
+    assert [c["case_id"] for c in access.visible(people["pulmo"], [a, b, n])] == ["TB-A1"]  # an ownerless Case File: coordinator and creator only (finding 0)
     assert [c["case_id"] for c in access.visible(people["anil"], [a, b, n])] == ["TB-A1", "TB-A2", "TB-A3"]
-    assert access.visible(people["ravi"], [a, b, n]) == [n]
+    assert access.visible(people["ravi"], [a, b, n]) == []
 
 
 # ---- acting ----------------------------------------------------------------------------------------------------------------
@@ -130,7 +134,7 @@ def test_clinical_actions_belong_to_the_owning_department(people):
     access.open_break_glass("tbadmin", "TB-A1", "test window")
     for action in sorted(access.OWNER_ACTIONS - {"waive", "confirm", "dismiss_failed", "delete_document"}):
         assert access.may(people["pulmo"], action, c), action
-        assert access.may(people["admin"], action, c), action
+        assert not access.may(people["admin"], action, c), (action, "a break-glass window is read only (security review #6)")
         assert not access.may(people["breast"], action, c), (action, "a participant reads and comments, never acts")
         assert not access.may(people["colo"], action, c), action
         assert not access.may(people["anil"], action, c), (action, "the coordinator does no clinical action on an owned Case File")
@@ -170,7 +174,7 @@ def test_the_listing_is_changed_by_the_coordinator_or_the_owner(people):
     c = _case()
     assert not access.may_list(people["admin"], c)
     access.open_break_glass("tbadmin", "TB-A1", "test window")
-    assert access.may_list(people["anil"], c) and access.may_list(people["pulmo"], c) and access.may_list(people["admin"], c)
+    assert access.may_list(people["anil"], c) and access.may_list(people["pulmo"], c) and not access.may_list(people["admin"], c)  # break-glass reads only (review #6)
     assert not access.may_list(people["colo"], c) and not access.may_list(people["ravi"], c)
     assert not access.may_list(people["pulmo"], _case("TB-A2", owner=None)), "a Case File without an owner is listed by the coordinator (V1)"
 

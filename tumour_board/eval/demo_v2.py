@@ -32,8 +32,9 @@ import httpx
 REPO = Path(__file__).resolve().parents[2]
 
 def _his_token_header():
-    """The demo HIMS JSON desk API needs a login or the integration token (18 Oct): the token file of the live mock, never printed."""
-    p = REPO / "data" / "his_mock" / "token"
+    """The demo HIMS JSON desk API needs a login or its write token (18 Oct; security review #13: the FHIR read token changes
+    nothing): the write token file of the live mock, never printed."""
+    p = REPO / "data" / "his_mock" / "write_token"
     try:
         return {"Authorization": "Bearer " + p.read_text().strip()}
     except OSError:

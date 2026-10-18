@@ -183,7 +183,8 @@ def listed_for_date(date: str) -> list[dict]:
     """The Case Files listed for a board date, in listing order, each with what the coordinator needs to build the agenda (V2 item 6.1):
     the owner, whether the owner marked it ready, the Pre-Authorization result and the summary state."""
     date = _check_date(date)
-    rows = [c for c in store.list_cases() if c.get("case_id") not in config.PROTECTED_CASES and _listed(c) and c.get("board_date") == date]
+    rows = [c for c in store.list_cases() if c.get("case_id") not in config.PROTECTED_CASES and _listed(c) and c.get("board_date") == date
+            and not (isinstance(c.get("archived"), dict) and c["archived"].get("at"))]  # an archived Case File is never a candidate (review #8)
     rows.sort(key=lambda c: ((c.get("listing") or {}).get("listed_at") or "", c["case_id"]))
     out = []
     for c in rows:
@@ -228,9 +229,10 @@ def mark_ready(case_id: str, user: str, ready: bool = True, note: str = "") -> d
     return c
 
 
-def _check_cases(case_ids, listed=True) -> list[str]:
+def _check_cases(case_ids, listed=True, keep=()) -> list[str]:
     """Explicit agenda: order kept, duplicates dropped; each Case File must exist, be listed (unless listed=False: the meeting's not-ready
-    list takes a Case File that is not listed yet) and not be protected."""
+    list takes a Case File that is not listed yet), not be protected and not be archived (security review #8; `keep`: the ids already
+    on this agenda, which stay even when archived since)."""
     if not isinstance(case_ids, (list, tuple)):
         raise ValueError("The agenda must be a list of Case File ids")
     out = []
@@ -249,6 +251,8 @@ def _check_cases(case_ids, listed=True) -> list[str]:
             raise ValueError(f"Case File {cid} not found")
         if listed and not _listed(c):
             raise ValueError(f"Case File {cid} is not listed for the board")
+        if cid not in keep and isinstance(c.get("archived"), dict) and c["archived"].get("at"):
+            raise ValueError(f"Case File {cid} is archived. Take it out of the archive first.")
         if cid not in out:
             out.append(cid)
     return out
@@ -476,7 +480,7 @@ def save_session(s) -> dict:
 
 def set_agenda(sid, case_ids, by) -> dict:
     s = _need(sid); _open(s)
-    ids = _check_cases(case_ids)
+    ids = _check_cases(case_ids, keep={a.get("case_id") for a in s.get("agenda") or []})
     if not ids:
         raise ValueError("A board session needs at least one Case File")
     old = {a["case_id"]: a for a in s["agenda"]}
@@ -623,12 +627,13 @@ def absent_roles_by_case(session) -> dict:
 
 
 def may_open(r: dict, session) -> bool:
-    """Who may open the Board room (V2 item 6.1, Phase 5 review decision): the MDT Coordinator and the Vaidyx admin; a doctor whose
-    department is on the session's attendance sheet or who may read a Case File on the agenda (owner, participant, linked owner)."""
+    """Who may open the Board room (V2 item 6.1, Phase 5 review decision): the MDT Coordinator; a doctor whose department is on the
+    session's attendance sheet or who may read a Case File on the agenda (owner, participant, linked owner; the Vaidyx admin only through
+    a break-glass window on one of them, security review #2)."""
     from . import access
     if not isinstance(r, dict) or r.get("disabled"):
         return False
-    if r.get("admin") or r.get("coordinator"):
+    if (r.get("admin") and not r.get("vaidyx_admin")) or r.get("coordinator"):  # a Vaidyx admin: only the Case Files of its break-glass window (review #2)
         return True
     if not r.get("known"):
         return False
@@ -643,11 +648,11 @@ def may_open(r: dict, session) -> bool:
 
 
 def allowed_cases(r: dict, session) -> set | None:
-    """The Case Files of the agenda a user may read in full, or None for the MDT Coordinator and the Vaidyx admin (everything). A
+    """The Case Files of the agenda a user may read in full, or None for the MDT Coordinator (everything; the Vaidyx admin only its window). A
     doctor whose department is on the attendance sheet opens the room, but sees the log, decisions, minutes and export of its own
     Case Files only (Phase 6 review S2)."""
     from . import access
-    if isinstance(r, dict) and (r.get("admin") or r.get("coordinator")):
+    if isinstance(r, dict) and ((r.get("admin") and not r.get("vaidyx_admin")) or r.get("coordinator")):
         return None
     out = set()
     for a in (session or {}).get("agenda") or []:

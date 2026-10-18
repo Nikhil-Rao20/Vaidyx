@@ -184,9 +184,17 @@ def for_roles(r: dict, limit: int = 100, unread_only: bool = False) -> list[dict
     with _lock:
         recs = _load()
     out = []
+    hidden = {}
     for rec in reversed(recs):
         if not _mine(rec, r):
             continue
+        cid = rec.get("case_id")
+        if cid and cid in config.PROTECTED_CASES:  # a protected Case File is never named to anyone but who may open it (finding 0)
+            if cid not in hidden:
+                from . import access
+                hidden[cid] = access.hidden(r, cid)
+            if hidden[cid]:
+                continue
         item = _public(rec, user)
         if unread_only and item["read"]:
             continue
@@ -374,7 +382,10 @@ def inbox(r: dict) -> dict:
         visible = visible + [org.COORDINATOR_ID]
     rows: dict[str, list] = {did: [] for did in visible}
     if rows:
+        from . import access
         for case, st in _cases():
+            if access.hidden(r, case):  # a protected Case File only for who may open it (finding 0)
+                continue
             for a in st.get("actions") or []:
                 if not isinstance(a, dict) or a.get("source") not in SOURCES:
                     continue

@@ -370,7 +370,7 @@ USERS = ("member", "head", "coordinator", "treating", "dept_admin", "root", "adm
 # department admin of radiology, root admin, Vaidyx admin, unknown). V2 plan section 4: supporting doctors receive and answer
 # requests only; treating doctors create Case Files, confirm and waive; the coordinator never confirms or waives; a department
 # admin has no clinical rights; the root admin edits the organisation and accounts and has no clinical action; the Vaidyx admin
-# may do everything.
+# may do everything except run meetings, record the board and read the whole activity log (security review #2).
 CAN = [
     ("view", None, (1, 1, 1, 1, 1, 1, 1, 1)),
     ("upload", "radiology", (1, 1, 1, 0, 0, 0, 1, 0)),
@@ -394,10 +394,10 @@ CAN = [
     ("waive", None, (0, 0, 0, 1, 0, 0, 1, 0)),
     ("list_case", None, (0, 0, 1, 0, 0, 0, 1, 0)),
     ("match", None, (0, 0, 1, 0, 0, 0, 1, 0)),
-    ("session", None, (0, 0, 1, 0, 0, 0, 1, 0)),
+    ("session", None, (0, 0, 1, 0, 0, 0, 0, 0)),  # the Vaidyx admin never runs meetings (security review #2)
     ("create_case", None, (0, 0, 1, 1, 0, 0, 1, 0)),
     ("delete_case", None, (0, 0, 1, 0, 0, 0, 1, 0)),
-    ("board_record", None, (0, 0, 1, 0, 0, 0, 1, 0)),
+    ("board_record", None, (0, 0, 1, 0, 0, 0, 0, 0)),  # nor records the board (review #2)
     ("delete_document", "radiology", (0, 1, 1, 1, 0, 0, 1, 0)),
     ("delete_document", "pathology", (0, 0, 1, 1, 0, 0, 1, 0)),
     ("delete_document", "Radiology", (0, 1, 1, 1, 0, 0, 1, 0)),
@@ -456,7 +456,7 @@ CAN = [
     ("manage_team", None, (0, 0, 0, 1, 0, 0, 1, 0)),
     ("archive", None, (0, 0, 1, 1, 0, 0, 1, 0)),
     ("set_consent", None, (0, 0, 0, 1, 0, 0, 1, 0)),
-    ("read_audit", None, (0, 0, 1, 0, 0, 1, 1, 0)),
+    ("read_audit", None, (0, 0, 1, 0, 0, 1, 0, 0)),  # nor reads the whole log: one Case File inside a break-glass window only (review #2)
     ("break_glass", None, (0, 0, 0, 0, 0, 0, 1, 0)),
 ]
 DEPT_ACTIONS = sorted(a for a, rule in org.ACTIONS.items() if rule["dept"])

@@ -300,13 +300,13 @@ async def create(identifier: str, protocol_id: str, setting: str, hospital_level
             raise HISCaseError("Case already exists", 409)
     else:
         case_id = intake.next_case_id()
-    dup = next((c["case_id"] for c in store.list_cases() if c.get("his") and str((c["his"] or {}).get("uhid") or "").upper() == str(p["uhid"]).upper()
+    dup = next((c["case_id"] for c in store.list_cases() if c.get("his") and c["case_id"] not in config.PROTECTED_CASES and str((c["his"] or {}).get("uhid") or "").upper() == str(p["uhid"]).upper()
                 and _same_cancer(c, protocol_id, cancer_name)), None)  # under the generic rule, two different typed cancers are not the same one
     try:
         encs = await client.encounters(p["id"])
     except his_client.HISError as e:
         raise HISCaseError(f"The hospital system did not answer: {e}", 502)
-    others = [c for c in store.list_cases() if c.get("his") and str((c["his"] or {}).get("uhid") or "").upper() == str(p["uhid"]).upper() and c["case_id"] != case_id
+    others = [c for c in store.list_cases() if c.get("his") and c["case_id"] not in config.PROTECTED_CASES and str((c["his"] or {}).get("uhid") or "").upper() == str(p["uhid"]).upper() and c["case_id"] != case_id
               and (c["his"] or {}).get("kind") == client.kind and str((c["his"] or {}).get("label") or "") == str(client.label or "")]  # the same hospital system (review Phase 5 minor 3)
     case = store.create_case(case_id, patient_record(p, encs), protocol_id, board_date, user, setting, hospital_level)
     case["department"] = owner

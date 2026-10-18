@@ -74,6 +74,16 @@ def _complete(p: dict, doctor: bool) -> bool:
     return bool(str(p.get("display_name") or "").strip()) and (bool(str(p.get("registration_no") or "").strip()) or not doctor)
 
 
+def name_ok(name: str) -> bool:
+    """A display name the screens show as it is (security review #19): 2 to 80 characters of letters (any script, with its vowel
+    signs), spaces, dots, apostrophes and hyphens; no digits, brackets or markup."""
+    import unicodedata
+    v = str(name or "")
+    if not 2 <= len(v) <= 80:
+        return False
+    return all(ch in " .'-\u2019" or unicodedata.category(ch)[0] in ("L", "M") for ch in v) and any(unicodedata.category(ch)[0] == "L" for ch in v)
+
+
 def clean(fields: dict) -> dict:
     """The fields of a profile update, checked; ValueError with a plain message. Unknown fields are ignored."""
     if not isinstance(fields, dict):
@@ -85,6 +95,8 @@ def clean(fields: dict) -> dict:
             limit = {"display_name": 80, "title": 60, "registration_no": 40, "phone": 20}[k]
             if len(v) > limit:
                 raise ValueError(f"{k.replace('_', ' ').capitalize()} is too long (at most {limit} characters).")
+            if k == "display_name" and v and not name_ok(v):
+                raise ValueError("The name may hold letters, spaces, dots, apostrophes and hyphens only (2 to 80 characters).")
             if k == "phone" and v and not _PHONE.match(v):
                 raise ValueError("The mobile number may hold digits, spaces and hyphens, with an optional leading +.")
             if k == "registration_no" and v and not _REG.match(v):

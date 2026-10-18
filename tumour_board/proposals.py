@@ -400,7 +400,7 @@ def waiting_for(r: dict, cases=None) -> list[dict]:
     if not isinstance(r, dict) or r.get("disabled") or not r.get("treating"):
         return out
     for c in (cases if cases is not None else store.list_cases()):
-        if not access.is_owner_consultant(r, c) or not access.owner(c) or access.is_archived(c):
+        if not access.is_owner_consultant(r, c) or not access.owner(c) or access.is_archived(c) or access.hidden(r, c):
             continue
         line = team.patient_line(c)
         for p in list_(c):
@@ -427,6 +427,8 @@ def mine(r: dict, cases=None) -> list[dict]:
     if not u:
         return out
     for c in (cases if cases is not None else store.list_cases()):
+        if access.hidden(r, c):
+            continue
         for p in list_(c):
             if p.get("by") == u and p.get("status") in (PENDING, RETURNED):
                 cons = team.owner_consultants(c)

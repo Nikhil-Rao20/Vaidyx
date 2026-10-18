@@ -157,7 +157,7 @@ def mailto(to: dict, subj: str, text: str) -> str:
     if not to.get("email"):
         return ""
     q = urllib.parse.urlencode({"subject": subj, "body": text.replace("\r\n", "\n").replace("\n", "\r\n")}, quote_via=urllib.parse.quote)  # CRLF line breaks (RFC 6068)
-    return f"mailto:{to['email']}?{q}"
+    return f"mailto:{urllib.parse.quote(str(to['email']), safe='@')}?{q}"  # the address encoded: it can never add fields (review #18)
 
 
 def draft(case: dict, a: dict, user: str = "") -> dict:

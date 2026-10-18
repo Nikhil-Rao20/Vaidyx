@@ -195,7 +195,7 @@ def _meeting_datetime(s) -> datetime | None:
 # ---- who may do what -----------------------------------------------------------------------------------------------------------
 
 def manage(r: dict) -> bool:
-    """The MDT Coordinator (and the Vaidyx admin) runs meetings: org action "session"."""
+    """The MDT Coordinator runs meetings: org action "session" (never the Vaidyx admin, security review #2)."""
     return org.can(r, "session")
 
 
@@ -558,11 +558,11 @@ def _entry(old: dict, cid: str, by: str, reason=None) -> dict:
             "added_at": o.get("added_at") or _now(), "added_by": o.get("added_by") or by}
 
 
-def _check(ids, listed=True) -> list[str]:
+def _check(ids, listed=True, keep=()) -> list[str]:
     try:
-        return board._check_cases(list(ids or []), listed=listed)
+        return board._check_cases(list(ids or []), listed=listed, keep=keep)
     except ValueError as e:
-        raise MeetingError(str(e), 400, "bad_case")
+        raise MeetingError(str(e), 409 if "archived" in str(e) else 400, "archived" if "archived" in str(e) else "bad_case")
 
 
 def _after_agenda_change(s, by, kind, **extra):
@@ -579,7 +579,7 @@ def _link_case(cid, s, by) -> None:
     if not cid or cid in config.PROTECTED_CASES:
         return
     c = store.get_case(cid)
-    if not c:
+    if not c or access.is_archived(c):  # nothing changes in an archived Case File (security review #8)
         return
     changed = {}
     if c.get("meeting_id") != s["id"]:
@@ -597,12 +597,12 @@ def set_agenda(mid: str, by: str, discussion, noting, not_ready=None) -> dict:
     s = need(mid); _active(s)
     lists = s.get("agenda_lists") or {}
     old = {it["case_id"]: it for k in LISTS for it in lists.get(k) or [] if it.get("case_id")}
-    disc = _check(discussion)
-    note = [c for c in _check(noting) if c not in disc]
+    disc = _check(discussion, keep=set(old))
+    note = [c for c in _check(noting, keep=set(old)) if c not in disc]
     if not_ready is None:
         nr = [it["case_id"] for it in lists.get("not_ready") or [] if it.get("case_id") and it["case_id"] not in disc + note]
     else:
-        nr = [c for c in _check(not_ready, listed=False) if c not in disc + note]
+        nr = [c for c in _check(not_ready, listed=False, keep=set(old)) if c not in disc + note]
     s["agenda_lists"] = {"discussion": [_entry(old, c, by) for c in disc], "noting": [_entry(old, c, by) for c in note], "not_ready": [_entry(old, c, by) for c in nr]}
     _after_agenda_change(s, by, "agenda_lists")
     return s
@@ -615,9 +615,9 @@ def add_to_agenda(mid: str, by: str, case_id: str, lst: str, reason: str = "") -
     reason = " ".join(str(reason or "").split())[:MAX_NOTE]
     if lst == "not_ready" and not reason:
         raise MeetingError("Say why the Case File is not ready.", 400, "reason_needed")
-    cid = _check([case_id], listed=(lst != "not_ready"))[0]
     lists = s.get("agenda_lists") or {}
     old = {it["case_id"]: it for k in LISTS for it in lists.get(k) or [] if it.get("case_id")}
+    cid = _check([case_id], listed=(lst != "not_ready"), keep=set(old))[0]
     for k in LISTS:
         lists[k] = [it for it in lists.get(k) or [] if it.get("case_id") != cid]
     lists.setdefault(lst, []).append(_entry(old, cid, by, reason))
@@ -672,6 +672,8 @@ def remind(mid: str, by: str, roles: dict, case_id: str) -> dict:
     s = need(mid); _active(s)
     if not _on_lists(s, case_id):
         raise MeetingError("This Case File is not on the meeting's lists.", 404, "not_on_agenda")
+    if access.is_archived(store.get_case(case_id)):  # security review #7
+        raise MeetingError(access.ARCHIVED_MESSAGE + ". Take it out of the archive first.", 409, "archived")
     try:
         res = dept_requests.remind_owner(case_id, by, roles)
     except dept_requests.RequestError as e:
@@ -1111,6 +1113,8 @@ async def record_decision(mid: str, cid: str, body: dict, user: str) -> dict:
     c = store.get_case(cid) if cid not in config.PROTECTED_CASES else None
     if not c:
         raise MeetingError("Case File not found.", 404, "no_case")
+    if access.is_archived(c):  # security review #8
+        raise MeetingError(access.ARCHIVED_MESSAGE + ". Take it out of the archive first.", 409, "archived")
     outcome = str(body.get("outcome") or "decision").strip()
     if outcome not in OUTCOMES:
         raise MeetingError(f"The outcome must be one of: {', '.join(OUTCOMES)}.", 400, "bad_outcome")
@@ -1280,6 +1284,67 @@ def cards(mid: str, r: dict) -> dict:
 
 # ---- slides for the room screen ------------------------------------------------------------------------------------------------------
 
+WITHHELD = "[withheld]"
+_NAME_STOP = {"patient", "test", "synthetic", "demo", "case", "file", "unknown", "baby", "master", "miss", "smt", "shri", "mrs", "kumari"}
+
+
+def outside_view(r: dict | None, case: dict) -> bool:
+    """An outside expert without the owner's recorded consent to an outside discussion: initials, age and sex, nothing that names the
+    patient (security review #9)."""
+    return bool(r and r.get("outside_expert") and not ((case or {}).get("consent") or {}).get("outside_discussion"))
+
+
+def _identity_patterns(case: dict) -> list:
+    """Regular expressions for what identifies the patient in slide text: the name (whole, and each longer name word), the UHID / MRN,
+    ABHA, PM-JAY and IP / OP numbers, and the date of birth in ISO and DD/MM/YYYY spellings."""
+    import re
+    p = (case or {}).get("patient") or {}
+    out, seen = [], set()
+
+    def add(text, words=False):
+        t = " ".join(str(text or "").split())
+        if len(t) < 3 or t.lower() in seen:
+            return
+        seen.add(t.lower())
+        body = re.escape(t).replace(r"\ ", r"\s+")
+        out.append(re.compile((r"(?<!\w)" + body + r"(?!\w)") if words else body, re.IGNORECASE))
+    name = str(p.get("name") or "")
+    add(name, words=True)
+    for w in re.split(r"[\s,.;:()/\-]+", name):
+        if len(w) >= 4 and w.isalpha() and w.lower() not in _NAME_STOP:
+            add(w, words=True)
+    for k in ("mrn", "uhid", "abha", "pmjay_id", "ip_no", "op_no"):
+        add(p.get(k))
+    for x in p.get("ids") or []:
+        if isinstance(x, dict):
+            add(x.get("value"))
+    his = (case or {}).get("his") or {}
+    add(his.get("uhid") if isinstance(his, dict) else "")
+    dob = str(p.get("dob") or "")[:10]
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", dob):
+        y, mo, d = dob.split("-")
+        for v in (dob, f"{d}/{mo}/{y}", f"{d}-{mo}-{y}", f"{d}.{mo}.{y}"):
+            add(v)
+    out.sort(key=lambda rx: len(rx.pattern), reverse=True)
+    return out
+
+
+def strip_identity(obj, case: dict):
+    """A copy of the slide content with the patient's name, UHID, IP / OP numbers and date of birth replaced by [withheld]."""
+    pats = _identity_patterns(case)
+
+    def walk(x):
+        if isinstance(x, str):
+            for rx in pats:
+                x = rx.sub(WITHHELD, x)
+            return x
+        if isinstance(x, dict):
+            return {k: walk(v) for k, v in x.items()}
+        if isinstance(x, list):
+            return [walk(v) for v in x]
+        return x
+    return walk(obj) if pats else obj
+
 def _doc_row(d: dict) -> dict:
     cl = d.get("classification") or {}
     h = d.get("his") or {}
@@ -1369,6 +1434,8 @@ def slides(cid: str, r: dict | None = None) -> list[dict]:
                             "content": {"items": items, "note": "Published case, not advice for this patient"}})
     except Exception:
         pass
+    if outside_view(r, c):  # an outside expert without consent: nothing that names the patient (security review #9)
+        out = strip_identity(out, c)
     return out
 
 

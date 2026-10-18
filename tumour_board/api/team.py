@@ -172,7 +172,7 @@ def _may_archive(r: dict, c: dict) -> bool:
     if not org.can(r, "archive"):
         return False
     if r.get("admin"):
-        return access.may(r, "view", c) and access.scope(r, c) is not None
+        return not r.get("vaidyx_admin") and access.may(r, "view", c) and access.scope(r, c) is not None  # break-glass is read only (review #6)
     return access.is_owner_consultant(r, c) or bool(r.get("coordinator"))
 
 

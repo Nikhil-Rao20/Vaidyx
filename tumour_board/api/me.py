@@ -15,6 +15,7 @@ from tumour_board import board, config, notify, org, profiles, proposals, store
 from tumour_board.api.common import RateLimit, auth_manager, body, fail, make_router, need, roles
 
 router = make_router()
+SESSION_COOKIE = "vaidyx_session"  # the main app's session cookie (core/auth.py)
 PASSWORD_LIMIT = RateLimit(5, 15 * 60)
 ACTIVITY_CAP = 200
 FULL_LOG_CAP = 1000
@@ -133,8 +134,15 @@ async def change_password(request: Request):
         ok = False
     if not ok:
         fail(400, "The current password is not right.", "wrong_password")
-    org.audit("password_changed", u, username=u)
-    return {"ok": True, "must_change_password": _must_change(mgr, u)}
+    ended = 0
+    revoke = getattr(mgr, "revoke_user_sessions", None)
+    if callable(revoke):  # every other session of this login ends with the old password (security review #4); this one stays
+        try:
+            ended = int(revoke(u, except_token=request.cookies.get(SESSION_COOKIE)) or 0)
+        except Exception:
+            ended = 0
+    org.audit("password_changed", u, username=u, other_sessions_ended=ended)
+    return {"ok": True, "must_change_password": _must_change(mgr, u), "other_sessions_ended": ended}
 
 
 @router.put("/me/profile")
@@ -233,11 +241,16 @@ async def my_activity(request: Request, limit: int = 100):
 async def activity(request: Request, case_id: str = "", user: str = "", limit: int = 100):
     """The whole log: the auditor, the MDT Coordinator and the root admin (read only). Reading it is itself recorded."""
     r = roles(request)
-    need(r, "read_audit")
     try:
         cid = store.safe_id(case_id) if case_id else None
     except ValueError:
         fail(400, "That is not a Case File id.", "bad_case")
+    if r.get("vaidyx_admin"):  # the Vaidyx admin: one Case File, inside its break-glass window only (security review #2)
+        from tumour_board import access
+        if not (cid and access.break_glass_window(r.get("user") or "", cid)):
+            fail(403, "A Vaidyx admin reads the activity of one Case File, inside a break-glass window on it.", "forbidden")
+    else:
+        need(r, "read_audit")
     n = max(1, min(int(limit or 100), FULL_LOG_CAP))
     evs = _events(user=(user or None), case_id=cid)
     org.audit("activity_read", r.get("user") or "", case_id=cid or "", user=user or "", count=min(n, len(evs)))

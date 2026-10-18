@@ -648,8 +648,13 @@ def test_outside_expert_sees_initials_without_consent(tc, monkeypatch):
     v = As(tc, "guest").get(f"/meetings/{mid}").json()
     row = v["agenda"]["discussion"][1]
     assert row["patient_line"] == "SLI., 48 Y / F" and "SYN-200417" not in row["patient_line"] and v["can"]["member"] is True
+    r = As(tc, "guest").get(f"/meetings/{mid}/cases/TB-002/slides")  # TB-001 is on the floor: a guest sees the current Case File only (review #9)
+    assert r.status_code == 403 and r.json()["detail"]["code"] == "not_current"
+    As(tc, "anil").post(f"/meetings/{mid}/current", json={"case_id": "TB-002"})
     slides = As(tc, "guest").get(f"/meetings/{mid}/cases/TB-002/slides").json()["slides"]
     assert slides[0]["content"]["patient_line"] == "SLI., 48 Y / F"
+    assert "SYN-200417" not in str(slides)  # the UHID is withheld from every slide without consent
+    As(tc, "anil").post(f"/meetings/{mid}/current", json={"case_id": "TB-001"})
     assert As(tc, "guest").post(f"/meetings/{mid}/questions", json={"text": "x"}).status_code == 403  # the shared screen only
     assert As(tc, "guest").post(f"/meetings/{mid}/cases/TB-001/card", json={"agree": True}).status_code == 403
     assert As(tc, "guest").post(f"/meetings/{mid}/hand", json={"raised": True}).status_code == 200

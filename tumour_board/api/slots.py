@@ -2,7 +2,7 @@
 where a quote sits on a page. Logic in tumour_board/slots.py and tumour_board/quote_boxes.py; no model call anywhere here."""
 from fastapi import Request
 
-from tumour_board import quote_boxes, slots, store
+from tumour_board import access, quote_boxes, slots, store
 
 from . import common
 
@@ -73,9 +73,12 @@ async def ask_department(case_id: str, slot: str, request: Request):
 async def quote(case_id: str, doc_id: str, request: Request, fact: str = "", text: str = ""):
     """?fact=<id> or ?text=<quote> -> {page, boxes[[x0, y0, x1, y1] fractions of the page], found, ...}: the page the quote sits on and, for a
     scanned page the OCR engine read, the word boxes to highlight. Never fails for an unknown quote: found is False."""
-    common.user(request); common.case(case_id)
+    common.user(request); c = common.case(case_id)
     if not store.get_doc(case_id, doc_id):
         common.fail(404, "document not found", "no_document")
+    if common.scope(request) == access.REQUESTS and not any(  # a department that was only asked: the records in its scope only (review #1)
+            x.get("doc_id") == doc_id for x in access.limited_docs(common.roles(request), c, store.list_docs(case_id))):
+        common.fail(403, "Your department sees only the records it produced or was asked about in this Case File.", "out_of_scope")
     if not (fact or text):
         return {"found": False, "page": None, "boxes": [], "reason": "give ?fact=<field id> or ?text=<quote>"}
     return quote_boxes.find(case_id, doc_id, fact_id=fact, text=text) or {"found": False, "page": None, "boxes": [], "reason": "document not found"}

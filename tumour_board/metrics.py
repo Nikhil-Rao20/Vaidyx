@@ -12,7 +12,7 @@ radiation and medical oncologist on the board); Abuelgasim and Jazieh 2024 (time
 import csv, io, statistics
 from datetime import date, datetime, timedelta
 
-from . import board, discord, org, postboard, rules, store
+from . import board, config, discord, org, postboard, rules, store
 
 REFERENCES = [
     {"metric": "quorum", "label": "Board quorate (surgical, radiation and medical oncologist present)", "target": 95, "unit": "%", "source": "NHS England 2020 (95 % of meetings quorate); PM-JAY HBP 2.2 s 3.9 (composition)"},
@@ -107,7 +107,7 @@ def agenda(board_date: str) -> dict:
     """Readiness of every Case File listed for a board date, and the chase list: what to ask which department before the board."""
     today = _today()
     bd = _d(board_date)
-    cases = [c for c in store.list_cases() if (c.get("board_date") or "")[:10] == (board_date or "")[:10]]
+    cases = [c for c in store.list_cases() if (c.get("board_date") or "")[:10] == (board_date or "")[:10] and c.get("case_id") not in config.PROTECTED_CASES]
     rows, chase = [], {}
     for c in cases:
         st = store.get_state(c["case_id"])
@@ -152,7 +152,7 @@ def dashboard(start: str = None, end: str = None) -> dict:
     def in_window(d):
         d = _d(d)
         return bool(d) and (not s or d >= s) and (not e or d <= e)
-    cases = [c for c in store.list_cases() if not (s or e) or in_window(c.get("created")) or in_window(c.get("board_date"))]
+    cases = [c for c in store.list_cases() if c.get("case_id") not in config.PROTECTED_CASES and (not (s or e) or in_window(c.get("created")) or in_window(c.get("board_date")))]
     before = {"cases": len(cases), "listed": 0, "awaiting_listing": 0, "ready_now": 0, "readiness": [], "ready_before_board_n": 0, "ready_before_board_d": 0,
               "days_listed_to_ready": [], "documents": 0, "final_signed": 0, "scanned": 0, "dates_unconfirmed": 0, "identity_flags": 0, "discordances_open": 0,
               "requests_open": 0, "requests_overdue": 0, "requests_closed": 0, "hours_to_close": [], "by_department": {}}

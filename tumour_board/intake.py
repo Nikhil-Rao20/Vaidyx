@@ -54,7 +54,8 @@ def read_identity(doc, known_ids=None):
 def patients_for_matching(exclude=()):
     """Every Case File's registered patient, for the matcher."""
     return [{"case_id": c["case_id"], "patient": c.get("patient") or {}, "listed": (c.get("listing") or {}).get("status") != "awaiting_listing"}
-            for c in store.list_cases() if c["case_id"] not in exclude and c["case_id"] not in config.PROTECTED_CASES]
+            for c in store.list_cases() if c["case_id"] not in exclude and c["case_id"] not in config.PROTECTED_CASES
+            and not (isinstance(c.get("archived"), dict) and c["archived"].get("at"))]  # an archived Case File receives no record (review #8)
 
 
 def known_ids(patients=None):
@@ -259,6 +260,10 @@ def file_to_case(doc_id, case_id, by, how="confirmed", reason="", patient=None):
         store.audit_intake({"kind": "case_created", "doc_id": doc_id, "case_id": case_id, "by": by})
     elif not store.get_case(case_id):
         raise KeyError(case_id)
+    else:
+        c = store.get_case(case_id)
+        if isinstance(c.get("archived"), dict) and c["archived"].get("at"):  # security review #8
+            raise ValueError("This Case File is archived. Take it out of the archive first.")
     dup = next((d for d in store.list_docs(case_id) if d.get("sha256") == doc.get("sha256")), None)
     if dup:
         doc.update(state="duplicate", filed={"case_id": case_id, "same_as": dup["doc_id"], "by": by, "at": store.now_iso(), "how": how})

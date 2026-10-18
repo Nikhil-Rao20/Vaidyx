@@ -67,7 +67,7 @@ def mailto_for(email: str, username: str, password: str, url: str = LOGIN_URL, h
         f"Login name: {username}", f"First password: {password}", f"Sign in: {url}", "",
         "You will be asked to choose your own password at the first sign-in. Do not forward this message."])
     q = urllib.parse.urlencode({"subject": MAIL_SUBJECT, "body": body}, quote_via=urllib.parse.quote)
-    return f"mailto:{email or ''}?{q}"
+    return f"mailto:{urllib.parse.quote(str(email or ''), safe='@')}?{q}"  # the address encoded: it can never add fields (review #18)
 
 
 def account_exists(mgr, username: str) -> bool:
@@ -182,6 +182,28 @@ def department_doctors(dept, mgr=None) -> list[dict]:
     return out
 
 
+SEPARATE_LOGINS = "Clinical roles and the root admin role stay on separate logins"
+
+
+def _clinical(user: dict) -> bool:
+    """The roles that never share a login with the root admin (security review #5): the MDT Coordinator, a department placement (doctor,
+    head, resident) and the auditor."""
+    u = user if isinstance(user, dict) else {}
+    return bool(u.get("coordinator") or u.get("departments") or u.get("auditor"))
+
+
+def mixed_logins(o: dict) -> set:
+    """The logins of an organisation that are root admins and hold a clinical role too."""
+    users = (o or {}).get("users") or {}
+    return {u for u in (o or {}).get("admins") or [] if _clinical(users.get(u))}
+
+
+def check_separate(o: dict, username: str) -> None:
+    """AccountError 409 when this login would be a root admin and hold a clinical role (create, place, update, set-up)."""
+    if username in mixed_logins(o):
+        raise AccountError(409, SEPARATE_LOGINS + ".")
+
+
 def check_placement(dept, role) -> tuple[str, str]:
     """(department id, role) for a placement, or AccountError: checked before a login is created so no orphan account is left behind."""
     did = _dept(dept)
@@ -212,6 +234,7 @@ def place_doctor(by: str, dept, username: str, role: str = "member", display_nam
     if ed is not None:
         user["end_date"] = ed
     o["users"][u] = user
+    check_separate(o, u)
     saved = org.save(o, by)
     return {"username": u, **saved["users"][u]}
 
@@ -310,6 +333,11 @@ def create_account(mgr, by: str, username: str, password: str | None = None, dis
     ed = _check_end_date(end_date)
     if not (coordinator or root_admin or depts or adm or auditor or outside_expert):
         raise AccountError(400, "Give the login at least one role: coordinator, root admin, department admin, doctor, resident, auditor or outside expert.")
+    o0 = org.load()  # checked before any login is created (no orphan account on a refusal)
+    u0 = clean_username(username)
+    cur = (o0.get("users") or {}).get(u0) or {}
+    if (root_admin or u0 in (o0.get("admins") or [])) and (coordinator or depts or auditor or _clinical(cur)):
+        raise AccountError(409, SEPARATE_LOGINS + ".")
     generated = ""
     if not str(password or "") and mgr is not None and not account_exists(mgr, clean_username(username)):
         generated = generate_password()
@@ -430,5 +458,6 @@ def update_account(mgr, by: str, caller: dict, username: str, fields: dict) -> d
     if user.get("disabled") and u in o["admins"]:
         raise AccountError(409, f"'{u}' is a root admin; remove the root admin role before disabling the login.")
     o["users"][u] = user
+    check_separate(o, u)
     saved = org.save(o, by)
     return {"username": u, "root_admin": u in saved["admins"], **saved["users"][u]}

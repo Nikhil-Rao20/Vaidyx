@@ -11,9 +11,18 @@ Checks, each printed as PASS / FAIL / SKIP with a one-line reason, then a summar
   8. Secrets on disk: data/his_mock/token, data/his_mock/logins.tsv, data/tumour_board/livekit.json, push_keys.json have mode 600 or stricter when they exist.
   9. No secret-looking strings in the built frontend (static/tb-nik/assets): api keys, tokens, passwords.
  10. WebSocket /api/tb/meetings/{id}/ws refuses a connection without a cookie.
+ Fixes of the security review (docs/ui/build/SECURITY_REVIEW.md), with the demo logins of ~/vaidyx/.tb_v2_demo_logins and the HIMS
+ logins of data/his_mock/logins.tsv (read from the files, never printed):
+ 11. Finding 0: no demo login (doctor, coordinator, supporting doctor) is shown a protected Case File id in /cases, /case-list,
+     /inbox, /notifications, /waiting or /home.
+ 12. Finding 1: a department that was only asked gets 403 on /documents/{doc}/quote for a record outside its scope.
+ 13. Finding 3: a HIMS staff session cannot write through the JSON APIs beyond its role (technician: no registration, no signature).
+ 14. Finding 13: the FHIR read token changes nothing on the JSON APIs (403), the write token file exists with mode 600.
+ 15. Finding 4: a password change ends the login's other sessions (a demo login, --revoke-user, changed and changed back).
 
 Usage: /data/vaidyx/venv/app/bin/python -m tumour_board.eval.security_audit [--base http://127.0.0.1:7000] [--his http://127.0.0.1:7130]
        [--user USER --password-file FILE]   (a Vaidyx login for the authenticated checks; the password is read from the file, never printed)
+       [--revoke-user tb-micro-doc] [--skip-password-change]
 """
 import argparse, json, os, re, socket, stat, subprocess, sys
 from pathlib import Path
@@ -176,7 +185,7 @@ def check_binding():
 
 
 def check_secret_modes():
-    for rel in ("data/his_mock/token", "data/his_mock/logins.tsv", "data/tumour_board/livekit.json", "data/tumour_board/push_keys.json"):
+    for rel in ("data/his_mock/token", "data/his_mock/write_token", "data/his_mock/logins.tsv", "data/tumour_board/livekit.json", "data/tumour_board/push_keys.json"):
         p = REPO / rel
         if not p.exists():
             mark(f"mode of {rel}", True, "absent", skip=True)
@@ -218,6 +227,151 @@ def check_ws(base):
         mark("WebSocket refuses an anonymous cross-site upgrade", True, f"not testable: {e}", skip=True)
 
 
+DEMO_LOGINS = Path.home() / "vaidyx" / ".tb_v2_demo_logins"
+PENDING = Path.home() / "vaidyx" / ".security_audit_password_pending"  # finding 4: a temporary password not yet changed back (mode 600)
+
+
+def read_tsv(path, key_col, val_col, skip_header=False):
+    """{key: value} from a tab-separated file (comments and blank lines skipped); passwords stay in memory only."""
+    out = {}
+    try:
+        lines = Path(path).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return out
+    for i, line in enumerate(lines):
+        if not line.strip() or line.startswith("#") or (skip_header and i == 0):
+            continue
+        parts = line.split("\t")
+        if len(parts) > max(key_col, val_col):
+            out[parts[key_col].strip()] = parts[val_col].strip()
+    return out
+
+
+def protected_ids():
+    sys.path.insert(0, str(REPO))
+    try:
+        from tumour_board import config
+        return sorted(config.PROTECTED_CASES)
+    except Exception:
+        return ["TB-2026-bharath"]
+
+
+def check_protected_listings(base, logins):
+    """Finding 0: the protected Case File (its id only is known here; nothing of it is read) is never listed to the demo logins."""
+    ids = protected_ids()
+    who = [u for u in ("tb-breast-doc", "tb-mdt", "tb-rad-doc", "tb-path-head", "tb-medonc-doc") if u in logins]
+    if not who:
+        mark("protected Case File listed to nobody else (finding 0)", True, "no demo logins", skip=True)
+        return
+    leaks = []
+    for u in who:
+        c = login(base, u, logins[u])
+        if c is None:
+            leaks.append(f"{u}: login failed")
+            continue
+        for path in ("/api/tb/cases", "/api/tb/case-list", "/api/tb/inbox", "/api/tb/notifications", "/api/tb/waiting", "/api/tb/home"):
+            r = c.get(path)
+            if any(i in r.text for i in ids):
+                leaks.append(f"{u} {path}")
+        for i in ids:
+            if c.get(f"/api/tb/cases/{i}").status_code == 200:
+                leaks.append(f"{u} opens it")
+    mark("protected Case File listed to nobody else (finding 0)", not leaks, f"{len(who)} logins" + (f"; seen: {leaks[:6]}" if leaks else ""))
+
+
+def check_quote_scope(base, logins):
+    """Finding 1: tb-rad-doc on a Case File where Radiology was only asked: /quote on a record outside its scope is 403."""
+    if not {"tb-mdt", "tb-rad-doc"} <= set(logins):
+        mark("/quote limited to the records in scope (finding 1)", True, "no demo logins", skip=True)
+        return
+    mdt, rad = login(base, "tb-mdt", logins["tb-mdt"]), login(base, "tb-rad-doc", logins["tb-rad-doc"])
+    if mdt is None or rad is None:
+        mark("/quote limited to the records in scope (finding 1)", False, "demo login failed")
+        return
+    for c in rad.get("/api/tb/cases").json().get("cases") or []:
+        if c.get("scope") != "requests":
+            continue
+        cid = c["case_id"]
+        mine = {d["doc_id"] for d in rad.get(f"/api/tb/cases/{cid}").json().get("documents") or []}
+        others = [d["doc_id"] for d in mdt.get(f"/api/tb/cases/{cid}").json().get("documents") or [] if d["doc_id"] not in mine]
+        if not others:
+            continue
+        r = rad.get(f"/api/tb/cases/{cid}/documents/{others[0]}/quote", params={"text": "x"})
+        mark("/quote limited to the records in scope (finding 1)", r.status_code == 403, f"{cid}: HTTP {r.status_code}")
+        return
+    mark("/quote limited to the records in scope (finding 1)", True, "no Case File where Radiology was only asked", skip=True)
+
+
+def check_his_api_roles(his):
+    """Findings 3 and 13: a technician's session and the read token write nothing through the JSON APIs."""
+    logins = read_tsv(REPO / "data" / "his_mock" / "logins.tsv", 1, 0, skip_header=True)  # role -> email
+    passwords = read_tsv(REPO / "data" / "his_mock" / "logins.tsv", 0, 2, skip_header=True)  # email -> password
+    email = logins.get("lab.tech")
+    if email and passwords.get(email) and "reset" not in passwords[email]:
+        c = httpx.Client(base_url=his, timeout=30, follow_redirects=False)
+        r = c.post("/his/login", data={"email": email, "password": passwords[email], "next": "/his"})
+        if r.status_code == 303 and c.cookies.get("vxhis_session"):
+            a = c.post("/his/api/registrations", json={"name": "Audit Never Registered (SYNTHETIC)"})
+            b = c.post("/desk/api/RAD/orders/none/sign", json={"signer": "prac-vxreg-20201"})
+            mark("HIMS JSON writes follow the session's role (finding 3)", a.status_code == 403 and b.status_code in (403, 404), f"registration {a.status_code}, sign {b.status_code}")
+            m = re.search(r'name="csrf" value="([^"]+)"', c.get("/his/logout").text)  # sign out again (a POST with the form token)
+            c.post("/his/logout", data={"csrf": m.group(1) if m else ""})
+        else:
+            mark("HIMS JSON writes follow the session's role (finding 3)", False, f"lab technician login: HTTP {r.status_code}")
+    else:
+        mark("HIMS JSON writes follow the session's role (finding 3)", True, "no lab technician login on file", skip=True)
+    tok = REPO / "data" / "his_mock" / "token"
+    wtok = REPO / "data" / "his_mock" / "write_token"
+    if not tok.exists():
+        mark("HIMS read token changes nothing (finding 13)", True, "no token file", skip=True)
+        return
+    read = tok.read_text().strip()
+    c = httpx.Client(base_url=his, timeout=30)
+    g = c.get("/his/api/search", params={"q": "VXH"}, headers={"Authorization": "Bearer " + read})
+    w = c.post("/his/api/registrations", json={"name": "Audit Never Registered (SYNTHETIC)"}, headers={"Authorization": "Bearer " + read})
+    ok = g.status_code == 200 and w.status_code == 403 and wtok.exists() and stat.S_IMODE(wtok.stat().st_mode) & 0o077 == 0
+    mark("HIMS read token changes nothing (finding 13)", ok, f"read {g.status_code}, write with the read token {w.status_code}, write token file {'present' if wtok.exists() else 'missing'}")
+
+
+def check_password_change_revokes(base, logins, user):
+    """Finding 4: two sessions of one demo login; a password change in the first ends the second; the password is then changed back."""
+    pw = logins.get(user)
+    if not pw:
+        mark("password change ends the other sessions (finding 4)", True, f"no demo login {user}", skip=True)
+        return
+    h = {"Origin": base}
+    pending = read_tsv(PENDING, 0, 1)
+    if pending.get(user):  # an earlier run could not change the password back (rate limit, a crash): do it first
+        c = login(base, user, pending[user])
+        if c is not None and c.post("/api/tb/me/password", json={"current_password": pending[user], "new_password": pw}, headers=h).status_code == 200:
+            PENDING.unlink(missing_ok=True)
+        else:
+            mark("password change ends the other sessions (finding 4)", False, f"the password of {user} from an earlier run is not changed back yet (see {PENDING})")
+            return
+    a, b = login(base, user, pw), login(base, user, pw)
+    if a is None or b is None:
+        mark("password change ends the other sessions (finding 4)", False, "demo login failed")
+        return
+    import secrets
+    tmp = "Audit-" + secrets.token_urlsafe(12)
+    fd = os.open(PENDING, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)  # kept (mode 600) until the password is changed back
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(f"{user}\t{tmp}\n")
+    r = a.post("/api/tb/me/password", json={"current_password": pw, "new_password": tmp}, headers=h)
+    if r.status_code != 200:
+        PENDING.unlink(missing_ok=True)
+        mark("password change ends the other sessions (finding 4)", False, f"change: HTTP {r.status_code}")
+        return
+    other = b.get("/api/tb/me").status_code
+    mine = a.get("/api/tb/me").status_code
+    back = a.post("/api/tb/me/password", json={"current_password": tmp, "new_password": pw}, headers=h).status_code
+    if back == 200:
+        PENDING.unlink(missing_ok=True)
+    again = login(base, user, pw) is not None
+    mark("password change ends the other sessions (finding 4)", other == 401 and mine == 200 and back == 200 and again,
+         f"other session {other}, this session {mine}, changed back {back}, original password works {again}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="http://127.0.0.1:7000")
@@ -226,6 +380,8 @@ def main():
     ap.add_argument("--password-file", default="")
     ap.add_argument("--out", default="")
     ap.add_argument("--skip-login-limit", action="store_true", help="skip the login flood check (it rate-limits 127.0.0.1 for a minute)")
+    ap.add_argument("--revoke-user", default="tb-micro-doc", help="the demo login whose password the finding 4 check changes and changes back")
+    ap.add_argument("--skip-password-change", action="store_true", help="skip the finding 4 check (it signs the demo login out elsewhere)")
     a = ap.parse_args()
     client = None
     if a.user and a.password_file:
@@ -246,6 +402,14 @@ def main():
     check_secret_modes()
     check_bundle_secrets()
     check_ws(a.base)
+    demo = read_tsv(DEMO_LOGINS, 0, 1)
+    check_protected_listings(a.base, demo)
+    check_quote_scope(a.base, demo)
+    check_his_api_roles(a.his)
+    if a.skip_password_change:
+        mark("password change ends the other sessions (finding 4)", True, "skipped on request", skip=True)
+    else:
+        check_password_change_revokes(a.base, demo, a.revoke_user)
     fails = [r for r in RESULTS if r[1] == "FAIL"]
     print(f"\n{len(RESULTS)} checks, {len(fails)} failed, {sum(1 for r in RESULTS if r[1] == 'SKIP')} skipped")
     if a.out:

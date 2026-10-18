@@ -24,6 +24,7 @@ from tumour_board import his_case, his_client  # HIS-connected Case Files: creat
 from tumour_board import access  # who may open a Case File and act on it: owner, participants, the departments asked (V2 item 5.1)
 from tumour_board import referral  # refer a Case File to another treating department: request, accept (ownership moves, new protocol), decline (V2 item 5.2)
 from tumour_board import pacs  # the image viewer (OHIF) and DICOMweb reached through the app only: logged in, granted per study, audited (V2 item 6.3)
+from tumour_board.api import common as _common  # the idle timeout and the JSON body cap (security review #11, #19)
 
 log = logging.getLogger("tumour_board")
 
@@ -42,6 +43,10 @@ _LIMITED_OK = ((("GET",), _re.compile(r"^$")), (("GET",), _re.compile(r"^/docume
 
 # What an account that still carries its first (or reset) password may call: who am I, and change the password.
 _PASSWORD_FIRST_OK = _re.compile(r"^/api/tb/(me|me/password|health)$")
+
+# What a Vaidyx admin may send inside a break-glass window besides reading (security review #6): questions that change nothing and
+# opening the images of a record (viewing). Everything else that writes is refused: the window is read only.
+_BREAK_GLASS_OK = _re.compile(r"^/(ask|search|published/search|documents/[^/]+/images)$")
 
 # What an archived Case File still accepts besides reading: taking it out of the archive, and questions that change nothing.
 _ARCHIVE_OK = _re.compile(r"^/(unarchive|archive|ask|search|chats|published/search|helpers/[^/]+/chat|documents/[^/]+/images)$")
@@ -83,6 +88,34 @@ def _case_guard(rl, case_id, rest, method="GET"):
     return sc
 
 
+_SESSION_COOKIE = "vaidyx_session"  # the main app's session cookie (core/auth.py)
+
+
+async def _json_too_big(request):
+    """A 413 for a JSON (or other non-upload) body over 1 MB on a Tumour Board route (security review #19); uploads (multipart) keep
+    their own limit. The body is read once here and kept for the route."""
+    ctype = (request.headers.get("content-type") or "").lower()
+    if ctype.startswith("multipart/"):
+        return None
+    message = {"detail": {"message": "The request is too large (over 1 MB).", "code": "too_large"}}
+    cl = request.headers.get("content-length")
+    if cl is not None:
+        try:
+            if int(cl) > _common.MAX_JSON_BYTES:
+                return JSONResponse(message, status_code=413)
+        except ValueError:
+            return JSONResponse({"detail": "The request has a bad Content-Length."}, status_code=400)
+        return None
+    chunks, n = [], 0
+    async for chunk in request.stream():  # no length given (chunked): read up to the cap only
+        n += len(chunk)
+        if n > _common.MAX_JSON_BYTES:
+            return JSONResponse(message, status_code=413)
+        chunks.append(chunk)
+    request._body = b"".join(chunks)
+    return None
+
+
 class _ModelErrorRoute(APIRoute):
     """Model-server problems become a clear 502 for the UI instead of a 500 stack trace. A login whose Tumour Board access is disabled
     (org.json `disabled`, V2 item 2.2) is refused on every Tumour Board route, whatever the route checks itself."""
@@ -98,8 +131,14 @@ class _ModelErrorRoute(APIRoute):
                     host = request.headers.get("host", "")
                     if origin.split("://", 1)[-1].rstrip("/") != host:
                         return JSONResponse({"detail": "Cross-site request refused."}, status_code=403)
+                too_big = await _json_too_big(request)
+                if too_big:
+                    return too_big
             try:
                 u = get_current_user(request)
+                if u and _common.idle_expired(request.cookies.get(_SESSION_COOKIE), touch=request.headers.get(_common.BACKGROUND_HEADER) != "1"):
+                    return JSONResponse({"detail": {"message": "You were away for more than 8 hours, so you were signed out of the Tumour Board. Please sign in again.",
+                                                    "code": "idle_timeout"}}, status_code=401)  # security review #11
                 if u:
                     rl = _roles(request)
                     if rl.get("disabled"):
@@ -116,6 +155,9 @@ class _ModelErrorRoute(APIRoute):
                         if isinstance(sc, JSONResponse):
                             return sc
                         request.state.tb_scope = sc
+                        if rl.get("vaidyx_admin") and request.method in ("POST", "PUT", "PATCH", "DELETE") and not _BREAK_GLASS_OK.match(m.group(2) or ""):
+                            return JSONResponse({"detail": {"message": "A break-glass window is read only: the Vaidyx admin reads the Case File, the owning department acts on it.",
+                                                            "code": "break_glass_read_only"}}, status_code=403)
                         if request.method in ("POST", "PUT", "PATCH", "DELETE") and not _ARCHIVE_OK.match(m.group(2) or ""):
                             try:
                                 archived = access.is_archived(store.get_case(m.group(1)))
@@ -198,6 +240,25 @@ def _account_call(fn, *a, **kw):
         raise HTTPException(e.status, str(e))
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+# Originals shown in the browser as they are: PDFs and the raster images the viewer draws. Anything else (an uploaded .xml, .html, .svg,
+# .txt, an office file) is sent as a download with a neutral type and a sandbox policy, so it never runs on this origin (security
+# review #10). The main app's CSP stays as it is (its pages load scripts from cdn.jsdelivr.net).
+_INLINE_ORIGINALS = {".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif", ".bmp": "image/bmp"}
+_SAFE_NAME = _re.compile(r"[^A-Za-z0-9._ -]+")
+
+
+def _original_response(p, filename=""):
+    from pathlib import Path as _P
+    p = _P(p)
+    ext = p.suffix.lower()
+    headers = {"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"}
+    if ext in _INLINE_ORIGINALS:
+        return FileResponse(p, media_type=_INLINE_ORIGINALS[ext], headers=headers)
+    name = _SAFE_NAME.sub("_", _P(str(filename or "")).name or p.name).strip(" .") or ("original" + ext)
+    headers["Content-Security-Policy"] = "sandbox; default-src 'none'"
+    return FileResponse(p, media_type="application/octet-stream", filename=name, content_disposition_type="attachment", headers=headers)
 
 
 def _doc_department(d):
@@ -423,7 +484,7 @@ def setup_tumour_board_routes():
         if date and not iso:
             raise HTTPException(400, f"Not a valid date: {date}")
         out = metrics.agenda(iso or store.now_iso()[:10])
-        if not (rl.get("admin") or rl.get("coordinator")):  # a doctor sees the readiness of the Case Files it may open (V2 item 5.1, review Phase 5 M1)
+        if not org.board_wide(rl):  # a doctor (and the Vaidyx admin, review #2) sees the readiness of the Case Files it may open (V2 item 5.1, review Phase 5 M1)
             vis = {c["case_id"] for c in access.visible(rl, store.list_cases())}
             out["cases"] = [x for x in out["cases"] if x.get("case_id") in vis]
             out["counts"] = {k: sum(1 for x in out["cases"] if x.get("forecast") == k) for k in (out.get("counts") or {})}
@@ -548,6 +609,12 @@ def setup_tumour_board_routes():
         cur = org.load()
         body = {k: (b[k] if k in b else cur.get(k)) for k in ("hospital", "departments", "users", "admins", "routes")}
         body.update({k: v for k, v in b.items() if k not in body})
+        try:
+            mixed = accounts.mixed_logins(body) - accounts.mixed_logins(cur)
+        except (AttributeError, TypeError):
+            mixed = set()
+        if mixed:  # a root admin never takes a clinical role, nor a clinical login the root admin role (security review #5)
+            raise HTTPException(409, f"{accounts.SEPARATE_LOGINS}: {', '.join(sorted(mixed))}.")
         try:
             o = org.save(body, by=rl["user"])
         except ValueError as e:
@@ -960,7 +1027,7 @@ def setup_tumour_board_routes():
         docs = intake.queue(rl)
         cases = [{"case_id": c["case_id"], "patient": c.get("patient") or {}, "protocol": c.get("protocol"), "listing": c.get("listing")} for c in access.visible(rl, store.list_cases())]  # only what the user may open (review Phase 5 M1)
         return {"documents": docs, "cases": cases, "can_match": org.can(rl, "match"), "can_create": org.can(rl, "create_case"),
-                "departments": org.my_departments(rl), "audit": store.read_intake_audit(200) if (rl["admin"] or rl["coordinator"]) else []}
+                "departments": org.my_departments(rl), "audit": store.read_intake_audit(200) if org.board_wide(rl) else []}
 
     @r.get("/intake/{doc_id}")
     async def intake_doc(doc_id: str, request: Request):
@@ -974,15 +1041,18 @@ def setup_tumour_board_routes():
         if out:
             from fastapi.responses import Response
             return Response(out[0], media_type=out[1])
-        return FileResponse(p)
+        return _original_response(p, (store.get_intake(doc_id) or {}).get("filename") or "")
 
     @r.post("/intake/{doc_id}/file-to-case")
     async def intake_file_to_case(doc_id: str, request: Request):
         """A person files the document into a Case File ({"case_id": ..., "reason": ...}); recorded as a confirm_match in that Case File."""
         u = _user(request); rl = _roles(request); _need(rl, "match"); _intake(doc_id, rl, actionable=True); b = await request.json()
         case_id = store.safe_id(str(b.get("case_id", "")))
-        if not store.get_case(case_id):
+        c = store.get_case(case_id)
+        if not c or access.hidden(rl, c):  # a protected Case File is not named to anyone else (finding 0)
             raise HTTPException(404, "Case not found")
+        if access.is_archived(c):  # security review #8
+            raise HTTPException(409, {"message": access.ARCHIVED_MESSAGE + ". Take it out of the archive first.", "code": "archived"})
         job = service.file_intake(doc_id, case_id, u, "confirmed", str(b.get("reason", "")))
         return {"job": job["id"], "case_id": case_id, "duplicate": job.get("duplicate")}
 
@@ -1221,7 +1291,7 @@ def setup_tumour_board_routes():
         if out:
             from fastapi.responses import Response
             return Response(out[0], media_type=out[1])
-        return FileResponse(p)
+        return _original_response(p, (store.get_doc(case_id, doc_id) or {}).get("filename") or "")
 
     @r.post("/cases/{case_id}/documents/{doc_id}/images")
     async def doc_images(case_id: str, doc_id: str, request: Request):
@@ -1764,7 +1834,7 @@ def setup_tumour_board_routes():
         records (6.3), its decision and the follow-up (6.1). A doctor sees the Case Files it may read; the others are restricted."""
         by_case = board.absent_roles_by_case(s)
         absent = board.absent_roles(s)
-        full = bool(rl.get("admin") or rl.get("coordinator"))
+        full = org.board_wide(rl)  # never the Vaidyx admin (review #2)
         cases = {}
         for a in s["agenda"]:
             cid = a["case_id"]; c = store.get_case(cid)
@@ -1804,7 +1874,7 @@ def setup_tumour_board_routes():
     async def sessions(request: Request):
         rl = _roles(request)
         rows = board.list_sessions()
-        if not (rl.get("admin") or rl.get("coordinator")):  # a doctor sees the sessions it may open (V2 item 6.1)
+        if not org.board_wide(rl):  # a doctor (and the Vaidyx admin, review #2) sees the sessions it may open (V2 item 6.1)
             rows = [x for x in rows if board.may_open(rl, board.get(x["id"]))]
         return {"sessions": rows, "can_manage": org.can(rl, "session"), "heads": board.heads()}
 
@@ -1903,7 +1973,7 @@ def setup_tumour_board_routes():
     async def session_ask(sid: str, case_id: str, role: str, request: Request):
         """The board asks an absent specialty's agent (V1 item 6.2); the answer goes to the session's agent log (6.3)."""
         u = _user(request); rl = _roles(request); _need_known(rl); s = _session(sid); sid = s["id"]; _on_agenda(s, case_id); c = _case(case_id); _need_open(rl, s)
-        if not (rl.get("admin") or rl.get("coordinator")) and access.scope(rl, c) != access.FULL:  # a doctor asks about the Case Files it may read (V2 item 5.1)
+        if not org.board_wide(rl) and access.scope(rl, c) != access.FULL:  # a doctor asks about the Case Files it may read (V2 item 5.1)
             raise HTTPException(403, access.refusal(rl, c))
         b = await request.json()
         if role not in agents.ROLES:
@@ -1924,7 +1994,9 @@ def setup_tumour_board_routes():
     async def session_decision(sid: str, case_id: str, request: Request):
         """The board's decision for a Case File on the agenda: recorded and checked like any board record (adjudication), with the session's
         attendance as participants, and linked to the session's agent log (V1 item 6.3)."""
-        u = _user(request); _need(_roles(request), "board_record"); s = _session(sid); sid = s["id"]; _on_agenda(s, case_id); _case(case_id); b = await request.json()
+        u = _user(request); _need(_roles(request), "board_record"); s = _session(sid); sid = s["id"]; _on_agenda(s, case_id); c = _case(case_id); b = await request.json()
+        if access.is_archived(c):  # security review #8
+            raise HTTPException(409, {"message": access.ARCHIVED_MESSAGE + ". Take it out of the archive first.", "code": "archived"})
         if not str(b.get("decision_text", "")).strip():
             raise HTTPException(400, "Write the board's decision")
         part = board.participants(s)

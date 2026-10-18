@@ -7,7 +7,7 @@ import pytest
 from tumour_board import notify, org, push
 from tumour_board.tests.test_nik_meetings import As, app, tc, hospital_org  # noqa: F401
 
-SUB = {"endpoint": "https://push.example/sub/ravi-1", "keys": {"p256dh": "BPdh-synthetic", "auth": "auth-synthetic"}, "expirationTime": None}
+SUB = {"endpoint": "https://fcm.googleapis.com/fcm/send/ravi-1", "keys": {"p256dh": "BPdh-synthetic", "auth": "auth-synthetic"}, "expirationTime": None}
 
 
 @pytest.fixture
@@ -52,10 +52,10 @@ def test_subscribe_unsubscribe_and_prefs_routes(tc, data_root):
     r = As(tc, "ravi").post("/push/subscribe", json={"subscription": SUB})
     assert r.status_code == 200 and r.json() == {"subscribed": True, "count": 1}
     assert As(tc, "ravi").post("/push/subscribe", json=SUB).json()["count"] == 1  # the same endpoint again replaces it
-    assert As(tc, "ravi").post("/push/subscribe", json={**SUB, "endpoint": "https://push.example/sub/ravi-2"}).json()["count"] == 2
+    assert As(tc, "ravi").post("/push/subscribe", json={**SUB, "endpoint": "https://fcm.googleapis.com/fcm/send/ravi-2"}).json()["count"] == 2
     assert stat.S_IMODE(os.stat(data_root / "push_subs.json").st_mode) == 0o600
     assert As(tc, "ravi").get("/me/notifications").json()["subscriptions"] == 2
-    r = As(tc, "ravi").delete("/push/subscribe?endpoint=https://push.example/sub/ravi-2")
+    r = As(tc, "ravi").delete("/push/subscribe?endpoint=https://fcm.googleapis.com/fcm/send/ravi-2")
     assert r.json() == {"removed": 1} and len(push.subscriptions("ravi")) == 1
     assert As(tc, "ravi").delete("/push/subscribe").status_code == 400
     p = As(tc, "ravi").get("/me/notifications").json()
@@ -69,17 +69,17 @@ def test_subscribe_unsubscribe_and_prefs_routes(tc, data_root):
     assert As(tc, "ravi").put("/me/notifications", json={"push": False}).json()["push"] is False and push.wants("ravi", "request") is False
     o = org.load(); o["users"]["ravi"]["disabled"] = True; org.save(o, by="test")
     assert As(tc, "ravi").post("/push/subscribe", json={"subscription": SUB}).status_code == 403  # a disabled account
-    assert As(tc, "tbroot").post("/push/subscribe", json={"subscription": {**SUB, "endpoint": "https://push.example/sub/root"}}).status_code == 200
+    assert As(tc, "tbroot").post("/push/subscribe", json={"subscription": {**SUB, "endpoint": "https://fcm.googleapis.com/fcm/send/root"}}).status_code == 200
 
 
 def test_a_notification_pushes_a_generic_text_to_the_people_addressed(data_root, sent):
     org.save(hospital_org(), by="test")
     push.keys(create=True)
     push.subscribe("ravi", SUB)
-    push.subscribe("suresh", {**SUB, "endpoint": "https://push.example/sub/suresh-1"})
-    push.subscribe("priya", {**SUB, "endpoint": "https://push.example/sub/priya-1"})
+    push.subscribe("suresh", {**SUB, "endpoint": "https://fcm.googleapis.com/fcm/send/suresh-1"})
+    push.subscribe("priya", {**SUB, "endpoint": "https://fcm.googleapis.com/fcm/send/priya-1"})
     rec = notify.notify({"department": "radiology"}, "request", "TB-001", "CT thorax needed for SYNTHETIC, Test Patient (TB-001)", "UHID SYN-900001", uhid="SYN-900001")
-    assert sorted(c["endpoint"] for c in sent) == ["https://push.example/sub/ravi-1", "https://push.example/sub/suresh-1"]  # the department's people, not priya
+    assert sorted(c["endpoint"] for c in sent) == ["https://fcm.googleapis.com/fcm/send/ravi-1", "https://fcm.googleapis.com/fcm/send/suresh-1"]  # the department's people, not priya
     for c in sent:
         assert c["data"]["body"] == "Vaidyx-TB: a request needs your attention" and c["data"]["title"] == "Vaidyx-TB" and c["data"]["kind"] == "request"
         assert "SYN-900001" not in json.dumps(c["data"]) and "Test Patient" not in json.dumps(c["data"]) and "TB-001" not in json.dumps(c["data"])
@@ -88,12 +88,12 @@ def test_a_notification_pushes_a_generic_text_to_the_people_addressed(data_root,
     sent.clear()
     notify.notify({"role": "coordinator"}, "board_ready", "TB-001", "Ready", "")
     assert sent == []  # anil has no subscription
-    push.subscribe("anil", {**SUB, "endpoint": "https://push.example/sub/anil-1"})
+    push.subscribe("anil", {**SUB, "endpoint": "https://fcm.googleapis.com/fcm/send/anil-1"})
     notify.notify({"role": "coordinator"}, "board_ready", "TB-001", "Ready", "")
-    assert [c["endpoint"] for c in sent] == ["https://push.example/sub/anil-1"] and sent[0]["data"]["body"] == push.TEXTS["board_ready"]
+    assert [c["endpoint"] for c in sent] == ["https://fcm.googleapis.com/fcm/send/anil-1"] and sent[0]["data"]["body"] == push.TEXTS["board_ready"]
     sent.clear()
     notify.notify({"user": "priya"}, "outcome", "TB-002", "Board outcome", "")
-    assert [c["endpoint"] for c in sent] == ["https://push.example/sub/priya-1"]
+    assert [c["endpoint"] for c in sent] == ["https://fcm.googleapis.com/fcm/send/priya-1"]
     sent.clear()
     push.set_prefs("priya", {"kinds": {"outcome": False}})
     notify.notify({"user": "priya"}, "outcome", "TB-002", "Board outcome", "")
@@ -106,12 +106,12 @@ def test_a_notification_pushes_a_generic_text_to_the_people_addressed(data_root,
 def test_gone_subscriptions_are_removed_and_failures_never_raise(data_root, sent):
     org.save(hospital_org(), by="test")
     push.keys(create=True)
-    push.subscribe("ravi", {**SUB, "endpoint": "https://push.example/sub/gone"})
-    push.subscribe("ravi", {**SUB, "endpoint": "https://push.example/sub/down"})
-    push.subscribe("ravi", {**SUB, "endpoint": "https://push.example/sub/ok"})
+    push.subscribe("ravi", {**SUB, "endpoint": "https://fcm.googleapis.com/fcm/send/gone"})
+    push.subscribe("ravi", {**SUB, "endpoint": "https://fcm.googleapis.com/fcm/send/down"})
+    push.subscribe("ravi", {**SUB, "endpoint": "https://fcm.googleapis.com/fcm/send/ok"})
     out = push.send_to_users(["ravi", "ravi", "nobody"], "request")
     assert out == {"sent": 1, "removed": 1, "skipped": 0, "failed": 1}
-    assert [s["endpoint"] for s in push.subscriptions("ravi")] == ["https://push.example/sub/down", "https://push.example/sub/ok"]
+    assert [s["endpoint"] for s in push.subscriptions("ravi")] == ["https://fcm.googleapis.com/fcm/send/down", "https://fcm.googleapis.com/fcm/send/ok"]
     assert push.users_for({"department": "Radiology"}) == ["ravi", "suresh"] and push.users_for({"role": "coordinator"}) == ["anil"]
     assert push.users_for({"user": "x"}) == ["x"] and push.users_for({"department": "MDT Coordinator"}) == ["anil"] and push.users_for({}) == []
 

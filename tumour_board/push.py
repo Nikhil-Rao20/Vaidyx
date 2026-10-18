@@ -143,9 +143,29 @@ def enabled() -> bool:
 
 # ---- subscriptions and preferences ------------------------------------------------------------------------------------------------------
 
+# The push services browsers subscribe with (security review #17): the server only ever posts to these hosts, over https.
+PUSH_HOSTS = ("fcm.googleapis.com", "updates.push.services.mozilla.com", "web.push.apple.com")
+PUSH_HOST_SUFFIXES = (".notify.windows.com",)
+
+
+def endpoint_allowed(endpoint) -> bool:
+    """True for an https URL on a known push service (Chrome / Edge FCM, Firefox, Safari, Windows WNS), default port, no user info."""
+    from urllib.parse import urlsplit
+    try:
+        u = urlsplit(str(endpoint or ""))
+        host, port = (u.hostname or "").lower(), u.port
+    except ValueError:
+        return False
+    if u.scheme != "https" or not host or u.username or u.password or port not in (None, 443):
+        return False
+    return host in PUSH_HOSTS or any(host.endswith(sfx) and len(host) > len(sfx) for sfx in PUSH_HOST_SUFFIXES)
+
+
 def _clean_subscription(sub) -> dict:
     if not isinstance(sub, dict) or not str(sub.get("endpoint") or "").startswith("https://") or not isinstance(sub.get("keys"), dict):
         raise ValueError("A push subscription needs an https endpoint and its keys (p256dh, auth).")
+    if not endpoint_allowed(sub.get("endpoint")):
+        raise ValueError("This browser's push service is not one this server sends to (Chrome, Edge, Firefox and Safari are).")
     k = sub["keys"]
     if not k.get("p256dh") or not k.get("auth"):
         raise ValueError("A push subscription needs its keys (p256dh, auth).")
@@ -250,6 +270,8 @@ def text_for(kind: str) -> str:
 def deliver(sub: dict, text: str, kind: str = "") -> int:
     """One push; returns the HTTP status (201 or 200 on success; 404 / 410 mean the subscription is gone). Raises on other failures."""
     from pywebpush import WebPushException, webpush
+    if not endpoint_allowed(sub.get("endpoint")):  # a subscription saved before the allow-list: dropped as gone (security review #17)
+        return 410
     k = keys()
     if not k:
         return 0

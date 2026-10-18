@@ -4,7 +4,7 @@ meetings.py. Also GET /scheduler/status for the root admin and the Vaidyx admin.
 from fastapi import Request
 
 from . import common
-from .. import meetings, org, scheduler, store
+from .. import access, config, meetings, org, scheduler, store
 
 router = common.make_router(["tumour-board-meetings"])
 JOIN_LIMIT = common.RateLimit(5, 15 * 60)
@@ -140,8 +140,16 @@ async def meetings_send_agenda(mid: str, request: Request):
 
 @router.post("/meetings/{mid}/remind")
 async def meetings_remind(mid: str, request: Request):
-    u, rl = _who(request); common.need(rl, "remind"); b = await common.body(request); s = _meeting(mid)
-    return _call(meetings.remind, s["id"], u, rl, _case_id(b.get("case_id")))
+    """{case_id}: one reminder to the owning department of a Case File on the agenda: whoever may open the meeting and may remind on that
+    Case File (the coordinator, the owner's consultants); never on an archived Case File (security review #7)."""
+    u, rl = _who(request); common.need(rl, "remind"); b = await common.body(request); s = _meeting(mid); _viewer(rl, s)
+    cid = _case_id(b.get("case_id"))
+    c = store.get_case(cid) if cid not in config.PROTECTED_CASES else None
+    if c and access.is_archived(c):
+        common.fail(409, access.ARCHIVED_MESSAGE + ". Take it out of the archive first.", "archived")
+    if c and not access.may_remind(rl, c):
+        common.fail(403, "Reminders are sent by the MDT Coordinator on the owner's behalf or by the owning department's doctors.", "forbidden")
+    return _call(meetings.remind, s["id"], u, rl, cid)
 
 
 # ---- code, waiting room ------------------------------------------------------------------------------------------------------------------
@@ -268,6 +276,10 @@ async def meetings_slides(mid: str, cid: str, request: Request):
     cid = _case_id(cid)
     if not meetings._on_lists(s, cid) and cid not in {a.get("case_id") for a in s.get("agenda") or []}:
         common.fail(404, "This Case File is not on the meeting's agenda.", "not_on_agenda")
+    if rl.get("outside_expert") and not meetings.manage(rl):  # an outside expert follows the shared screen only (security review #9)
+        c = store.get_case(cid) if cid not in config.PROTECTED_CASES else None
+        if not (c and access.scope(rl, c) == access.FULL) and (s.get("status") != "in_session" or s.get("current") != cid):
+            common.fail(403, "An outside expert sees the slides of the Case File on the floor, while the meeting is in session.", "not_current")
     from .. import board
     board.audit_event(s["id"], "slides_read", u, case_id=cid)
     return {"case_id": cid, "slides": _call(meetings.slides, cid, rl)}

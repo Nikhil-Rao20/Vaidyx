@@ -257,7 +257,8 @@ def test_vaidyx_admin_sees_every_case_file_the_board_and_the_organisation(people
     h = home.build(people["admin"])
     assert {c["case_id"] for c in h["treating"]["cases"]} == {"TB-H-A"}
     assert all(c["relation"] in ("all",) for c in h["treating"]["cases"]) and h["treating"]["counts"]["mine"] == 0
-    assert h["treating"]["counts"]["suggested_unsent"] == 1 and h["coordinator"]["can_manage"] is True and h["root_admin"]["setup_needed"] is True
+    assert h["treating"]["counts"]["suggested_unsent"] == 1 and h["root_admin"]["setup_needed"] is True
+    assert h["coordinator"]["can_manage"] is False and h["coordinator"]["agenda"] is None  # the coordinator runs the board, never the Vaidyx admin (review #2)
 
 
 def test_notifications_on_the_home(people, cases):

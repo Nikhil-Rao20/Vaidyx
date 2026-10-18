@@ -6,7 +6,7 @@ server: Vaidyx :7000, the demo HIMS :7130, Orthanc :8042, LiveKit :7880 and the 
     python -m tumour_board.eval.e2e_nik --clean    remove this run's Case Files (and cancel its meeting when still planned) at the end
 
 Every step goes through the APIs the screens use, as the person who would do it: the HIMS registration desk, OPD, laboratory,
-radiology and pathology (JSON APIs with the integration token, the OPD note and the pathology add-on and IHC through the screens with
+radiology and pathology (JSON APIs with the write token data/his_mock/write_token, the OPD note and the pathology add-on and IHC through the screens with
 a HIMS login and the form token); the PACS by DICOMweb; Vaidyx as the Breast Surgery consultant, a resident created for the run by the
 Breast Surgery department admin, the Pathology head, the Radiology doctor and the MDT Coordinator (demo logins from
 ~/vaidyx/.tb_v2_demo_logins). Synthetic data only: the patient is registered fresh in the demo HIMS ("E2E ... (SYNTHETIC)"), the Case
@@ -60,7 +60,7 @@ class Scenario:
         self.stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         self.vx_logins = self._read_tsv(DEMO_LOGINS, 0, 1)
         self.his_logins = self._read_tsv(HIS_DATA / "logins.tsv", 0, 2)
-        tok = HIS_DATA / "token"
+        tok = HIS_DATA / "write_token"  # the JSON write APIs take the write token; the FHIR read token changes nothing (security review #13)
         self.his_token = tok.read_text(encoding="utf-8").strip() if tok.exists() else ""
 
     # ---- bookkeeping ----------------------------------------------------------------------------------------------------------
@@ -208,8 +208,8 @@ class Scenario:
             except httpx.HTTPError:
                 ok[name] = False
         self.need(s, "Vaidyx, HIMS, Orthanc and LiveKit answer", all(ok.values()), ", ".join(f"{k} {'up' if v else 'DOWN'}" for k, v in ok.items()))
-        self.need(s, "demo logins and the HIMS token are on the server", bool(self.vx_logins) and bool(self.his_logins) and bool(self.his_token),
-                  f"{len(self.vx_logins)} Vaidyx demo logins, {len(self.his_logins)} HIMS logins, token present")
+        self.need(s, "demo logins and the HIMS write token are on the server", bool(self.vx_logins) and bool(self.his_logins) and bool(self.his_token),
+                  f"{len(self.vx_logins)} Vaidyx demo logins, {len(self.his_logins)} HIMS logins, write token present")
         models = {}
         for name, port in (("reasoner", 8100), ("reader", 8101)):
             try:

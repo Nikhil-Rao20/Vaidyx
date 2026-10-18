@@ -7,7 +7,7 @@ Rules every new route follows:
 - errors are plain JSON {"detail": message, "code": short_code}; the interface shows the message as it is;
 - heavy or repeated calls go through RateLimit.
 """
-import threading, time
+import hashlib, threading, time
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -114,3 +114,49 @@ def client_key(request: Request) -> str:
     except Exception:
         pass
     return u or (request.client.host if request.client else "unknown")
+
+
+# ---- the Tumour Board idle timeout (security review #11) ----------------------------------------------------------------------------
+# The sign-in keeps its "remember" cookie (7 days, the main app's rule); the Tumour Board routes refuse a session that has been idle
+# for more than IDLE_SECONDS (401, code idle_timeout) so an unattended workstation does not stay signed in to patient data. Last-seen
+# times live in memory per session token (kept as a hash, never the token itself); a restart forgets them (the next request starts a
+# new clock). A request the interface marks as background (header X-TB-Background: 1: a poll while nobody touched the page) is
+# checked but does not count as activity.
+IDLE_SECONDS = 8 * 3600
+BACKGROUND_HEADER = "x-tb-background"
+_seen: dict = {}
+_seen_lock = threading.Lock()
+_FORGET_AFTER = 8 * 24 * 3600  # past the longest cookie (7 days) a token is dead anyway
+
+
+def _token_key(token: str) -> str:
+    return hashlib.sha256(str(token).encode("utf-8")).hexdigest()
+
+
+def idle_expired(token, touch: bool = True, now: float | None = None) -> bool:
+    """True when this session token was last active more than IDLE_SECONDS ago (it stays refused); otherwise the activity is recorded
+    (touch=False: only a first sighting is recorded). No token: never expired (the routes' own login checks apply)."""
+    if not token:
+        return False
+    k = _token_key(token)
+    now = time.time() if now is None else now
+    with _seen_lock:
+        last = _seen.get(k)
+        if last is not None and now - last > IDLE_SECONDS:
+            return True
+        if touch or last is None:
+            _seen[k] = now
+        if len(_seen) > 20000:
+            for x in [x for x, t in _seen.items() if now - t > _FORGET_AFTER]:
+                _seen.pop(x, None)
+    return False
+
+
+def forget_sessions() -> None:
+    """Tests: start every session's clock again."""
+    with _seen_lock:
+        _seen.clear()
+
+
+# ---- the JSON body cap (security review #19) ----------------------------------------------------------------------------------------
+MAX_JSON_BYTES = 1024 * 1024  # 1 MB; uploads (multipart) keep their own limit
