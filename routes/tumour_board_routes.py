@@ -40,6 +40,9 @@ _LIMITED_OK = ((("GET",), _re.compile(r"^$")), (("GET",), _re.compile(r"^/docume
                (("POST",), _re.compile(r"^/requests/[^/]+/(acknowledge|done)$")), (("POST",), _re.compile(r"^/actions/[^/]+(/close|/dismiss-suggestion)?$")))  # what a department that was only asked may call
 
 
+# What an account that still carries its first (or reset) password may call: who am I, and change the password.
+_PASSWORD_FIRST_OK = _re.compile(r"^/api/tb/(me|me/password|health)$")
+
 # What an archived Case File still accepts besides reading: taking it out of the archive, and questions that change nothing.
 _ARCHIVE_OK = _re.compile(r"^/(unarchive|archive|ask|search|chats|published/search|helpers/[^/]+/chat|documents/[^/]+/images)$")
 
@@ -83,6 +86,10 @@ class _ModelErrorRoute(APIRoute):
                     rl = _roles(request)
                     if rl.get("disabled"):
                         return JSONResponse({"detail": "Your Tumour Board access is disabled. Ask your department admin or the root admin."}, status_code=403)
+                    mgr = getattr(request.app.state, "auth_manager", None)
+                    if (mgr is not None and callable(getattr(mgr, "must_change_password", None)) and mgr.must_change_password(u)
+                            and not _PASSWORD_FIRST_OK.match(request.url.path)):  # a first or reset password works only to choose a new one
+                        return JSONResponse({"detail": {"message": "Choose your own password first.", "code": "password_change_required"}}, status_code=409)
                     if _READ_CASE.match(request.url.path) and not org.can(rl, "read_case"):  # patient data only for placed accounts (review M6)
                         return JSONResponse({"detail": "Your account is not placed in any department yet, so it cannot open Case Files. Ask a Tumour Board admin."}, status_code=403)
                     m = _CASE_PATH.match(request.url.path)
