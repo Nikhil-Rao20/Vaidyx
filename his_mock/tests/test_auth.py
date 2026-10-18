@@ -239,7 +239,7 @@ def test_admin_module_is_admin_only(app):
 def test_protection_map():
     assert auth.protection("/his") == "screen" and auth.protection("/his/patients/x") == "screen"
     assert auth.protection("/his/login") is None and auth.protection("/his/logout") is None
-    assert auth.protection("/his/api/search") is None and auth.protection("/desk/api/RAD/pending") is None
+    assert auth.protection("/his/api/search") == "api" and auth.protection("/desk/api/RAD/pending") == "api"  # a login or the token (18 Oct)
     assert auth.protection("/desk") == "screen" and auth.protection("/desk/RAD") == "screen"
     assert auth.protection("/view/reports/x/1") == "view"
     assert auth.protection("/api/tb/pacs/ohif/viewer") == "pacs"
@@ -305,3 +305,16 @@ def test_admin_reset_shows_the_password_once_and_never_logs_it(app, data_dir, lo
     line = next(x for x in (Path(data_dir) / auth.LOGINS_NAME).read_text().splitlines() if x.startswith(email + "\t"))
     assert "reset by the admin" in line and pw not in line and logins["rad.tech"][1] not in line
     assert stat.S_IMODE((Path(data_dir) / auth.LOGINS_NAME).stat().st_mode) == 0o600
+
+
+def test_json_apis_need_a_login_or_the_token_on_a_live_hims(data_dir):
+    """A live HIMS (open_api off) refuses an anonymous JSON call, takes the integration token, and the test switch opens it."""
+    from fastapi.testclient import TestClient
+    closed = TestClient(app_module.create_app(data_dir, open_api=False))
+    assert closed.get("/his/api/search", params={"q": "VXH"}).status_code == 401
+    assert closed.post("/desk/api/RAD/orders/none/sign", json={}).status_code == 401
+    token = (Path(data_dir) / "token").read_text().strip()
+    assert closed.get("/his/api/search", params={"q": "VXH"}, headers={"Authorization": "Bearer " + token}).status_code == 200
+    assert closed.get("/his/api/search", params={"q": "VXH"}, headers={"Authorization": "Bearer wrong"}).status_code == 401
+    opened = TestClient(app_module.create_app(data_dir, open_api=True))
+    assert opened.get("/his/api/search", params={"q": "VXH"}).status_code == 200

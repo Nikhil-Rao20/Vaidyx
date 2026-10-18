@@ -469,16 +469,16 @@ class Accounts:
 
 # ---------------------------------------------------------------------- what needs a login (app.py middleware)
 def protection(path):
-    """None (open), "screen" (session cookie), "view" (session cookie or the FHIR bearer token), "pacs" (session cookie).
-    The JSON APIs under /his/api and /desk/api stay open for the tests and the demo script (localhost only, same-origin
-    writes); the FHIR API keeps its own bearer token; / and /health stay login-free."""
+    """None (open), "screen" (session cookie), "view" and "api" (session cookie or the integration bearer token), "pacs" (session
+    cookie). The JSON APIs under /his/api and /desk/api need a login or the token (18 Oct); a test app may open them
+    (create_app(open_api=True) or TB_HIS_MOCK_OPEN_API=1). The FHIR API keeps its own bearer token; / and /health stay login-free."""
     p = path.rstrip("/") or "/"
     if p in ("/his/login", "/his/logout"):
         return None
     if p == "/his" or p.startswith("/his/"):
-        return None if p.startswith("/his/api/") or p == "/his/api" else "screen"
+        return "api" if p.startswith("/his/api/") or p == "/his/api" else "screen"
     if p == "/desk" or p.startswith("/desk/"):
-        return None if p.startswith("/desk/api/") or p == "/desk/api" else "screen"
+        return "api" if p.startswith("/desk/api/") or p == "/desk/api" else "screen"
     if p.startswith("/view/reports"):
         return "view"
     if p == "/api/tb/pacs" or p.startswith("/api/tb/pacs/"):

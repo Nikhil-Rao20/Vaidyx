@@ -120,9 +120,12 @@ def _login_redirect(request):
                             status_code=303)
 
 
-def create_app(data_dir=None) -> FastAPI:
+def create_app(data_dir=None, open_api=None) -> FastAPI:
+    """open_api: the JSON APIs (/his/api, /desk/api) without a login or token, for unit tests and throw-away e2e copies only;
+    default from TB_HIS_MOCK_OPEN_API=1, otherwise closed."""
     app = FastAPI(title=NAME, version=VERSION, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.hospital = Hospital(data_dir)
+    app.state.open_api = (os.environ.get("TB_HIS_MOCK_OPEN_API") == "1") if open_api is None else bool(open_api)
 
     @app.middleware("http")
     async def security_headers(request, call_next):
@@ -150,12 +153,18 @@ def create_app(data_dir=None) -> FastAPI:
     async def require_login(request, call_next):
         """Every human screen needs the session cookie (auth.protection); /view/reports also takes the bearer token."""
         kind = auth.protection(request.url.path)
+        if kind == "api" and request.app.state.open_api:
+            kind = None
         if kind:
             hospital = request.app.state.hospital
             session = hospital.accounts.session_for(request)
             if session:
                 request.state.session = session
-            elif not (kind == "view" and bearer_ok(request, hospital)):
+            elif kind in ("view", "api") and bearer_ok(request, hospital):
+                pass
+            elif kind == "api":
+                return JSONResponse({"error": "login or integration token required"}, status_code=401)
+            else:
                 return _login_redirect(request)
         return await call_next(request)
 
