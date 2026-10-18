@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError } from "@/lib/api";
 import {
-  archiveCase, buildSummary, clearSlotValue, createFreeRequest, exportVtbUrl, getPublished, getRequestDraft, markReady, notBuiltYet, postConfirmation, unarchiveCase,
+  archiveCase, buildSummary, clearSlotValue, createFreeRequest, deckUrl, exportVtbUrl, getPublished, getRequestDraft, markReady, notBuiltYet, postConfirmation, unarchiveCase,
   postProposal, remindRequest, reviewArtefact, sendRequest, setSlotValue, setUrgency, slotAskDepartment, slotNotNeeded,
 } from "./api";
 import { useCaseFile, useMyRole, useProposals, useRememberCase, useSlots, useTeam } from "./hooks";
@@ -282,7 +282,7 @@ export default function CaseFilePage() {
         cf={cf} team={teamq.data} left={left} resident={role.resident} consultantName={consultantShort}
         canMarkReady={canMarkReady} markReadyReason={markReadyReason} onMarkReady={() => setReadyOpen(true)}
         onOpenPanel={(p) => (p ? openPanelLinked(p) : closeLinked())} activePanel={activePanel}
-        onPrint={() => window.print()} exportAllowed={exportAllowed} exportReason={exportReason} exportHref={exportVtbUrl(id)}
+        onPrint={() => window.print()} exportAllowed={exportAllowed} exportReason={exportReason} exportHref={exportVtbUrl(id)} deckHref={deckUrl(id)}
         onUrgency={onUrgency} urgencyBusy={urgencyBusy} canSetUrgency={canSetUrgency}
         helpersCount={helpersCount} publishedCount={publishedCount} protocolLabel={slots?.protocol_label} helpersReady={helpersReady} helpersPreparing={helpersPreparing}
         onArchive={teamq.data?.can?.archive && !teamq.data?.archived ? () => setArchiveOpen(true) : undefined}

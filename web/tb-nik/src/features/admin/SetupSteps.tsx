@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Field } from "@/components/Field";
 import { LoginHandover } from "@/components/LoginHandover";
+import { LogoUpload } from "@/components/LogoUpload";
 import { DateInput } from "@/components/DateInput";
 import { SwitchRow } from "@/components/SwitchRow";
 import { ActionButton } from "@/components/ActionButton";
@@ -32,6 +33,9 @@ export function HospitalStep({ value, onChange, setup, error }: { value: Hospita
     <div className="grid gap-5">
       <Field id="h-name" label="Hospital name" required error={error}>
         <Input value={value.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Vaidyx Demo Hospital" maxLength={120} autoFocus />
+      </Field>
+      <Field id="h-logo" label="Hospital logo" optional hint="Saved as soon as it is chosen; it goes on the cover of every board deck.">
+        <LogoUpload hasLogo={!!setup.hospital?.logo} />
       </Field>
       <fieldset className="grid gap-2">
         <legend className="mb-1 text-sm font-medium">NCG level</legend>

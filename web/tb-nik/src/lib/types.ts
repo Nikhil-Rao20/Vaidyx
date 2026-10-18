@@ -387,7 +387,7 @@ export interface SetupDepartment {
 export interface SetupResponse {
   steps: SetupStep[];
   complete: boolean;
-  hospital: { name?: string; level?: string; type?: string; pmjay_empanelled?: boolean; fetch_window_months?: number; meeting_defaults?: MeetingDefaults };
+  hospital: { name?: string; level?: string; type?: string; pmjay_empanelled?: boolean; fetch_window_months?: number; meeting_defaults?: MeetingDefaults; logo?: { file?: string; type?: string; at?: string } | null };
   departments: SetupDepartment[];
   board: { coordinators: string[]; heads: string[]; meeting_defaults?: MeetingDefaults };
   his: { url?: string; kind?: string; enabled?: boolean; has_token?: boolean; tested_at?: string | null; ok?: boolean | null; error?: string };

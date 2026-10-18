@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Check, Copy, KeyRound, ListPlus, MonitorPlay, Play, Send, Users, Video, XCircle } from "lucide-react";
+import { ArrowLeft, Check, Copy, KeyRound, ListPlus, MonitorPlay, Play, Presentation, Send, Users, Video, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { notify } from "@/components/Toasts";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { api, TB } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { useMeetingLive, type AgendaRow, type MeetingState } from "@/lib/live";
-import { addToAgenda, cancelMeeting, getOldSession, newCode, putAgenda, remindCase, sendAgenda, startMeeting } from "./api";
+import { addToAgenda, cancelMeeting, getOldSession, meetingDeckUrl, newCode, putAgenda, remindCase, sendAgenda, startMeeting } from "./api";
 import { AgendaLists } from "./components/AgendaLists";
 import { ControlView } from "./components/ControlView";
 import { LiveDot, MeetingStatusChip, MembersStrip } from "./components/shared";
@@ -144,6 +144,7 @@ export default function MeetingAgendaPage() {
           <div className="mt-1 flex flex-wrap items-center gap-2"><MeetingStatusChip status={s.meeting.status} /><LiveDot status={live.status} detail={live.statusDetail} /></div>
         </div>
         <div className="flex flex-wrap gap-1.5">
+          {(canManage || amIn) && !cancelled && !me?.roles?.outside_expert ? <Button asChild size="sm" variant="ghost" title={closed ? "The deck with the outcomes and the minutes (.pptx)" : "The agenda deck (.pptx)"}><a href={meetingDeckUrl(id)} download><Presentation className="size-4" />{closed ? "Deck with minutes" : "Deck"}</a></Button> : null}
           {!closed && !cancelled && (amIn || !canManage) ? <Button asChild size="sm" variant="outline"><Link to={`/meetings/${id}/member`}><Users className="size-4" />Member view</Link></Button> : null}
           {canManage && !closed && !cancelled ? <Button asChild size="sm" variant="outline"><Link to={`/meetings/${id}/room`} target="_blank" rel="noopener" title="Opens the full-screen room screen in a new tab, for the room computer"><MonitorPlay className="size-4" />Room screen</Link></Button> : null}
           {canManage && !inSession && !closed && !cancelled ? <LoadingButton size="sm" loading={start.isPending} loadingText="Starting" onClick={() => start.mutate()} disabled={total === 0} title={total === 0 ? "Add a Case File to the agenda first" : "Starts the meeting; this page becomes the control view"} data-testid="start-meeting"><Play className="size-4" />Start meeting</LoadingButton> : null}

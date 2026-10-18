@@ -3,7 +3,8 @@
 // checklist yet (protocol "generic") is named by case.cancer_name, "(no checklist yet)", with what the generic rule checks.
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Archive, BookOpen, CalendarDays, ChevronDown, ClipboardList, Download, Flag, Printer, Sparkles, Users } from "lucide-react";
+import { Archive, BookOpen, CalendarDays, ChevronDown, ClipboardList, Download, Flag, Presentation, Printer, Sparkles, Users } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
@@ -61,14 +62,14 @@ export function UrgencyTag({ urgency, resident, canSet, consultantName, onSet, b
   );
 }
 
-export function HeaderStrip({ cf, team, left, resident, consultantName, canMarkReady, markReadyReason, onMarkReady, onOpenPanel, activePanel, onPrint, exportAllowed, exportReason, exportHref, onUrgency, urgencyBusy, canSetUrgency, helpersCount, publishedCount, onArchive, protocolLabel, helpersReady = 0, helpersPreparing = 0 }: {
+export function HeaderStrip({ cf, team, left, resident, consultantName, canMarkReady, markReadyReason, onMarkReady, onOpenPanel, activePanel, onPrint, exportAllowed, exportReason, exportHref, onUrgency, urgencyBusy, canSetUrgency, helpersCount, publishedCount, onArchive, protocolLabel, helpersReady = 0, helpersPreparing = 0, deckHref }: {
   cf: CaseFile; team: Team | null; left: number | null; resident: boolean; consultantName: string;
   canMarkReady: boolean; markReadyReason: string | null; onMarkReady: () => void;
   onOpenPanel: (p: PanelKind) => void; activePanel: PanelKind; onPrint: () => void;
   exportAllowed: boolean; exportReason: string | null; exportHref: string;
   onUrgency: (level: number, note?: string) => Promise<void>; urgencyBusy: boolean; canSetUrgency: boolean;
   helpersCount: number; publishedCount: number; onArchive?: () => void; protocolLabel?: string;
-  helpersReady?: number; helpersPreparing?: number;
+  helpersReady?: number; helpersPreparing?: number; deckHref?: string;
 }) {
   const c = cf.case;
   const p = c.patient ?? { name: "", mrn: "", agesex: "" };
@@ -141,11 +142,19 @@ export function HeaderStrip({ cf, team, left, resident, consultantName, canMarkR
         <span className="flex-1" />
         {onArchive ? <Button size="sm" variant="ghost" onClick={onArchive} title="Archive the Case File (nothing is deleted)" data-testid="archive"><Archive className="size-4" />Archive</Button> : null}
         <Button size="sm" variant="ghost" onClick={onPrint} aria-label="Print the summary" title="Print the summary"><Printer className="size-4" />Print</Button>
-        <DisabledReason reason={exportReason ?? ""}>
-          <Button size="sm" variant="ghost" asChild={exportAllowed} disabled={!exportAllowed} title={exportReason ?? "Export the NCG Virtual Tumour Board template (.pptx)"}>
-            {exportAllowed ? <a href={exportHref} download><Download className="size-4" />Export .pptx</a> : <span className="inline-flex items-center gap-2"><Download className="size-4" />Export .pptx</span>}
-          </Button>
-        </DisabledReason>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="ghost" title="Download a deck of this Case File"><Download className="size-4" />Download<ChevronDown className="size-3 opacity-70" /></Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-72">
+            {deckHref ? <DropdownMenuItem asChild><a href={deckHref} download><Presentation className="size-4" />Board deck (.pptx)<span className="ml-auto text-xs text-muted-foreground">our design</span></a></DropdownMenuItem> : null}
+            {exportAllowed ? (
+              <DropdownMenuItem asChild><a href={exportHref} download><Download className="size-4" />NCG VTB template (.pptx)</a></DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled title={exportReason ?? undefined}><Download className="size-4" />NCG VTB template (.pptx)<span className="ml-auto text-xs">{exportReason ? "after review" : ""}</span></DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );

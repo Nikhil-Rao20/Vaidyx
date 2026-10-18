@@ -57,6 +57,7 @@ export const uploadDocuments = (id: string, files: File[], outside: boolean) => 
 };
 export const openImages = (id: string, doc: string) => api.post<{ available: boolean; viewer_url?: string; reason?: string; modality?: string; instances?: number }>(`${caseUrl(id)}/documents/${enc(doc)}/images`, {});
 export const docFileUrl = (id: string, doc: string, page?: number) => `${caseUrl(id)}/documents/${enc(doc)}/file` + (page !== undefined ? `?render=1&page=${page}` : "");
+export const deckUrl = (id: string) => `${caseUrl(id)}/deck`;
 export const exportVtbUrl = (id: string) => `${caseUrl(id)}/export/vtb`;
 export const askOld = (id: string, question: string) => api.post<{ status: string; statements: Array<{ text: string; citations: Array<{ doc_id: string; doc_title?: string; title?: string; page?: number; quote?: string }> }>; message?: string; seconds?: number }>(`${caseUrl(id)}/ask`, { question });
 

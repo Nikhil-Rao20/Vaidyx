@@ -37,6 +37,7 @@ export const saveDecision = (mid: string, cid: string, b: DecisionBody) => api.p
 export const endCase = (mid: string, cid: string) => api.post<{ case_id: string; cards_requested: string[] }>(`${mUrl(mid)}/cases/${enc(cid)}/end`, {});
 export const sendCard = (mid: string, cid: string, agree: boolean, note?: string) => api.post<{ card: MemberCard }>(`${mUrl(mid)}/cases/${enc(cid)}/card`, { agree, note });
 export const getCards = (mid: string) => api.get<CardsResponse>(`${mUrl(mid)}/cards`);
+export const meetingDeckUrl = (mid: string) => `${mUrl(mid)}/deck`;
 export const getSlides = (mid: string, cid: string) => api.get<SlidesResponse>(`${mUrl(mid)}/cases/${enc(cid)}/slides`);
 
 // Old sessions, read-only.

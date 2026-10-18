@@ -50,6 +50,8 @@ export const EP = {
 
   setup: `${TB}/setup`,
   setupHospital: `${TB}/setup/hospital`,
+  setupHospitalLogo: `${TB}/setup/hospital/logo`,
+  hospitalLogo: `${TB}/hospital/logo`,
   setupDepartments: `${TB}/setup/departments`,
   setupPeople: `${TB}/setup/people`,
   setupHis: `${TB}/setup/his`,
