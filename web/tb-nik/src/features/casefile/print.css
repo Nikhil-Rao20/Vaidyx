@@ -1,0 +1,21 @@
+/* Print: the summary only (header strip and the fill-in summary), no shell, no panels, no Ask, no Reports. */
+@media print {
+  body * { visibility: hidden; }
+  #casefile-print, #casefile-print * { visibility: visible; }
+  #casefile-print { position: absolute; left: 0; top: 0; width: 100%; padding: 0; margin: 0; }
+  #casefile-print [data-print-area] { display: block !important; grid-column: 1 / -1 !important; width: 100% !important; }
+  #casefile-print .surface { box-shadow: none !important; border: 0 !important; padding: 0 !important; margin-bottom: 12pt; }
+  #casefile-print h1 { font-size: 16pt; }
+  #casefile-print h2 { font-size: 12pt; margin-top: 10pt; border-bottom: 1px solid #c5d1dc; }
+  #casefile-print dl > div { page-break-inside: avoid; border-bottom: 1px dotted #c5d1dc; }
+  #casefile-print button, #casefile-print form, #casefile-print [role="status"] { display: none !important; }
+  #casefile-print .quote-chip { display: inline !important; background: none; color: #52606d; font-size: 9pt; padding: 0; white-space: normal; }
+  #casefile-print .quote-chip svg { display: none !important; }
+  #casefile-print .quote-chip span { display: inline !important; overflow: visible; white-space: normal; text-overflow: clip; }
+  #casefile-print .quote-chip span + span::before { content: ", "; }
+  #casefile-print .quote-chip::before { content: "(source: "; }
+  #casefile-print .quote-chip::after { content: ")"; }
+  [data-slot="tabs-content"][data-state="inactive"] { display: none !important; }
+  [data-slot="tabs-content"][data-print-area] { display: block !important; }
+  @page { margin: 14mm; }
+}

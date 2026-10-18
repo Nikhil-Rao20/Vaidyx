@@ -254,3 +254,6 @@ data/his_mock/
 
 # React build output of the new interface (built from web/tb-nik; committed separately when a release is cut)
 !web/tb-nik/src/lib/
+
+# Screenshots of the UI checks (large; kept on disk, not in git)
+docs/ui/build/shots/
