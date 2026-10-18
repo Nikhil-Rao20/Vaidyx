@@ -40,8 +40,13 @@ def api_routes():
         print("route table unavailable:", e)
         return [("GET", "/api/tb/cases"), ("GET", "/api/tb/home"), ("POST", "/api/tb/cases/TB-001/ask"), ("GET", "/api/tb/me")]
     out = []
-    for route in r.routes:
-        path = getattr(route, "path", "")
+    try:  # FastAPI includes sub-routers lazily: walk the expanded route list
+        from fastapi.routing import iter_route_contexts
+        all_routes = list(iter_route_contexts(r.routes))
+    except Exception:
+        all_routes = list(r.routes)
+    for route in all_routes:
+        path = getattr(route, "path", "")  # a RouteContext carries the full path with the router prefix
         methods = getattr(route, "methods", None) or {"GET"}
         if "/ws" in path or not path.startswith("/api/tb"):
             continue

@@ -253,3 +253,4 @@ data/his_mock/
 !docs/ui/build/
 
 # React build output of the new interface (built from web/tb-nik; committed separately when a release is cut)
+!web/tb-nik/src/lib/
