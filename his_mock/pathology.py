@@ -29,6 +29,15 @@ ADDON_DOC_TYPES = ("ihc", "molecular")
 RECENT_SIGNED = 25
 
 
+# The next step for each worklist tab, as a button straight to its form (18 Oct: the Lab No. link alone did not say what to do).
+NEXT_STEP = {'ordered': ('Receive specimen', '#receive'), 'received': ('Write report', '#report'), 'entered': ('Sign report', '#report'), 'signed': ('View', '#current')}
+
+
+def action_cell(o, tab):
+    label, anchor = NEXT_STEP.get(tab, ("Open", ""))
+    return f'<a class="btn primary" href="/his/pathology/orders/{ui.esc(o["id"])}{anchor}">{ui.esc(label)}</a>'
+
+
 # -------------------------------------------------------------------- the work list
 def tissue_orders(store):
     return [o for o in store.orders.values() if common.is_tissue(o)]
@@ -86,10 +95,10 @@ def pathology_home(request: Request, tab: str = "ordered", hospital: Hospital = 
         rows.append([f'<a href="/his/pathology/orders/{ui.esc(o["id"])}" class=mono>{ui.esc(o["accession"] or o["id"])}</a>',
                      common.patient_cell(store, o), common.encounter_cell(store, o), ui.esc(o["label"]),
                      ui.esc(dt(o["ordered_on"])), common.unit_cell(store, o), _specimen_cell(store, o),
-                     (ui.pill(r["status"]) if r else '<span class=muted>none</span>'), common.documents_cell(r)])
+                     (ui.pill(r["status"]) if r else '<span class=muted>none</span>'), common.documents_cell(r), action_cell(o, tab)])
     body = (ui.tabs([(k, l, n[k]) for k, l in TABS], tab, "/his/pathology") + '<div class=panel id=worklist>'
             + ui.table(["Lab No.", "Patient / UHID", "IP / OP No.", "Test", "Ordered on", "Ordering unit", "Specimen / block",
-                        "Report", "PDF"], rows, f"No order under '{dict(TABS)[tab]}'.") + '</div>')
+                        "Report", "PDF", "Action"], rows, f"No order under '{dict(TABS)[tab]}'.") + '</div>')
     return common.page(request, "Pathology", body, active="Pathology")
 
 

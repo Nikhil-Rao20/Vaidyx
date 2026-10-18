@@ -27,6 +27,15 @@ TABS = [("ordered", "Ordered"), ("collected", "Sample collected"), ("entered", "
 RECENT_VERIFIED = 25
 
 
+# The next step for each worklist tab, as a button straight to its form (18 Oct: the Lab No. link alone did not say what to do).
+NEXT_STEP = {'ordered': ('Collect sample', '#collect'), 'collected': ('Enter results', '#result'), 'entered': ('Verify and sign', '#verify'), 'verified': ('View', '#current')}
+
+
+def action_cell(o, tab):
+    label, anchor = NEXT_STEP.get(tab, ("Open", ""))
+    return f'<a class="btn primary" href="/his/lab/orders/{ui.esc(o["id"])}{anchor}">{ui.esc(label)}</a>'
+
+
 # -------------------------------------------------------------------- the work list
 def lab_orders(store, dept=None):
     out = [o for o in store.orders.values() if common.is_lab(o)]
@@ -102,11 +111,12 @@ def lab_home(request: Request, tab: str = "ordered", dept: str = "", hospital: H
         rows.append([f'<a href="/his/lab/orders/{ui.esc(o["id"])}" class=mono>{ui.esc(o["accession"] or o["id"])}</a>',
                      common.patient_cell(store, o), common.encounter_cell(store, o), ui.esc(o["label"]),
                      ui.esc(o["performing_department"]), ui.esc(dt(o["ordered_on"])), common.unit_cell(store, o),
-                     _sample_cell(store, o), _report_cell(store, o), common.documents_cell(store.report_for_order(o["id"]))])
+                     _sample_cell(store, o), _report_cell(store, o), common.documents_cell(store.report_for_order(o["id"])),
+                     action_cell(o, tab)])
     body = (filt + ui.tabs([(k, l, n[k]) for k, l in TABS], tab, base)
             + '<div class=panel id=worklist>'
             + ui.table(["Lab No.", "Patient / UHID", "IP / OP No.", "Test", "Laboratory", "Ordered on", "Ordering unit",
-                        "Sample", "Report", "PDF"], rows, f"No order under '{dict(TABS)[tab]}'.") + '</div>')
+                        "Sample", "Report", "PDF", "Action"], rows, f"No order under '{dict(TABS)[tab]}'.") + '</div>')
     return common.page(request, "Laboratory (LIS)", body, active="Laboratory")
 
 

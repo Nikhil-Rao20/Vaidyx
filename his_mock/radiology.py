@@ -32,6 +32,15 @@ ROOMS = {"ct": ("CT room 1", "CT room 2"), "mri": ("MRI 1",), "xray": ("X-ray ro
 RECENT_SIGNED = 25
 
 
+# The next step for each worklist tab, as a button straight to its form (18 Oct: the Lab No. link alone did not say what to do).
+NEXT_STEP = {'ordered': ('Schedule', '#schedule'), 'scheduled': ('Write report', '#report'), 'reported': ('Sign report', '#sign'), 'signed': ('View', '#current')}
+
+
+def action_cell(o, tab):
+    label, anchor = NEXT_STEP.get(tab, ("Open", ""))
+    return f'<a class="btn primary" href="/his/radiology/orders/{ui.esc(o["id"])}{anchor}">{ui.esc(label)}</a>'
+
+
 # -------------------------------------------------------------------- the work list
 def imaging_orders(store):
     return [o for o in store.orders.values() if common.is_imaging(o)]
@@ -133,10 +142,10 @@ def radiology_home(request: Request, tab: str = "ordered", hospital: Hospital = 
                      common.patient_cell(store, o), common.encounter_cell(store, o), ui.esc(o["label"]),
                      ui.esc(o["performing_department"]), ui.esc(dt(o["ordered_on"])), common.unit_cell(store, o),
                      study_cell(store, o), (ui.pill(r["status"]) if r else '<span class=muted>none</span>'),
-                     common.documents_cell(r)])
+                     common.documents_cell(r), action_cell(o, tab)])
     body = (ui.tabs([(k, l, n[k]) for k, l in TABS], tab, "/his/radiology") + '<div class=panel id=worklist>'
             + ui.table(["Accession No.", "Patient / UHID", "IP / OP No.", "Study", "Department", "Ordered on",
-                        "Ordering unit", "Study / images", "Report", "PDF"], rows, f"No order under '{dict(TABS)[tab]}'.")
+                        "Ordering unit", "Study / images", "Report", "PDF", "Action"], rows, f"No order under '{dict(TABS)[tab]}'.")
             + '</div>' + image_note(store))
     return common.page(request, "Radiology (RIS)", body, active="Radiology")
 
