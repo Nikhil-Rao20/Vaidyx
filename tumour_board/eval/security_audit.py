@@ -393,10 +393,6 @@ def main():
     check_shells(a.base)
     check_headers(a.base, client)
     check_csrf(a.base, client)
-    if a.skip_login_limit:
-        mark("login rate limit answers 429", True, "skipped on request", skip=True)
-    else:
-        check_login_limit(a.base)
     check_his(a.his)
     check_binding()
     check_secret_modes()
@@ -410,6 +406,11 @@ def main():
         mark("password change ends the other sessions (finding 4)", True, "skipped on request", skip=True)
     else:
         check_password_change_revokes(a.base, demo, a.revoke_user)
+    # last: the login flood rate-limits 127.0.0.1 for a minute, so every check that signs in runs before it
+    if a.skip_login_limit:
+        mark("login rate limit answers 429", True, "skipped on request", skip=True)
+    else:
+        check_login_limit(a.base)
     fails = [r for r in RESULTS if r[1] == "FAIL"]
     print(f"\n{len(RESULTS)} checks, {len(fails)} failed, {sum(1 for r in RESULTS if r[1] == 'SKIP')} skipped")
     if a.out:

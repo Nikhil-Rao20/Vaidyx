@@ -82,3 +82,9 @@ Legend: [ ] to do, [~] in progress, [x] done (commit), [!] blocked or partial (r
 - 18 Oct ~02:30: all seven agents stopped on the API session limit (reset 01:40 IST); at 09:30 the owner said "go on continue": every agent resumed by message from where it stopped (their files on disk intact).
 - 18 Oct 10:55: Fable agents hit the session limit again (reset 14:30). Owner switched the lead to Opus. Six continuation agents launched on Opus from the briefs in docs/ui/build/briefs/ (COMMON.md + H_hims, B1_accounts_team, B3_meetings_live, F1_shell_home, F2_casefile_meetings, P_pacs). B2 (slots, chats, helpers, published, ready hook) is DONE and committed (47ee3a8, test fix 440979f). CUP checklist committed (1cf6829). TCIA plan committed (a9ea0d3); 71 of 77 series downloaded (5.8 GB).
 - After a reset: for any area whose agent is gone, launch a new general-purpose agent (model opus) with: "Read docs/ui/build/briefs/COMMON.md, then docs/ui/build/briefs/<brief>.md, and do everything in it; the work so far is on disk."
+
+## Final state (18 Oct 2026, afternoon)
+- All phases done and committed (37 commits after 9c28ad6, author Nikhil-Rao20, nothing pushed). Owner's review guide: docs/ui/build/REVIEW.md. Security: docs/ui/build/SECURITY_REVIEW.md (findings 0 to 21 fixed, 22 for the owner). End-to-end: docs/ui/build/E2E_RESULT.md (97 of 97). Screenshots: docs/ui/build/shots/INDEX.md (local, not in git).
+- Tests: tumour_board 2551 passed; his_mock + pacs_public 416 passed; web type check and build clean.
+- Services: scripts/demo_services.sh status (app :7000, HIMS :7130, PACS :8042, LiveKit :7880, models :8100/:8101).
+- Next work, if asked: sign and lock API; after-the-board screens; update tumour_board/eval/e2e_api.py to the new access rules; the before-sharing security list.

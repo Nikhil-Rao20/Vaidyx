@@ -46,12 +46,45 @@ The same story runs automatically: `/data/vaidyx/venv/app/bin/python -m tumour_b
 
 ## 3. What was built (short)
 
-(filled in at the end of the run)
+| Part | What you get | Checked by |
+|---|---|---|
+| Demo HIMS (his_mock, :7130) | "Vaidyx Demo Hospital": its own sign-in (9 roles, lock-out after 5 wrong tries), classic blue-grey screens, modules Registration, OPD (notes, order entry, referral), IPD (admit, transfer, discharge summary), Laboratory (worklist, sample barcode, result templates in Indian units, verify and sign), Radiology (schedule, report, sign, open images), Pathology (block No., HPE, IHC, molecular, add-on orders), Exchange (HL7 v2 messages, FHIR), Admin. Every signed report is a PDF with the demo signature block, and goes out over FHIR R4 the same way as before. | 416 tests, conformance check, a browser walk of 80 pages |
+| Demo PACS (Orthanc + OHIF, :8042) | 27 of 43 studies are real-looking public scans (19 open-licence collections from The Cancer Imaging Archive, relabelled with our fake IDs, faces cropped in 9 series, credits page at /his/about/images); 16 stay synthetic where no public scan fits | relabel tests, QIDO check of every study, viewer opened through the HIMS and through Vaidyx |
+| Vaidyx backend (/api/tb) | residents and Case File teams with join codes, urgency set by the consultant, "ask Dr X to sign off" for residents, fill-in summary lines from verified quotes, shared Ask chat, six specialty helpers, published cases, guided hospital set-up, email logins with a mailed first password and a forced change, meetings with a live room channel, LiveKit video tokens, browser push, a scheduler (re-fetch every 30 minutes, automatic reminders, digests), a checklist for Cancer of Unknown Primary (draft) and "four core records" for cancers with no checklist | 2,551 tests; the end-to-end scenario (97 checks) |
+| New website (/tb-nik) | sign-in, first-login set-up, home list (newest first, filters, urgency), New Case File, the Case File page as a fill-in summary with sources, side panels, helpers, team, board form and published cases; requests for supporting doctors; meetings (agenda, coordinator control, room screen, member view, join by code); settings, activity, admin set-up, people; light and dark; Dock menu on phones | type check and build; Playwright journeys for 6 roles at 1366, 1920 and 390 wide (screenshots in docs/ui/build/shots, index in INDEX.md, kept out of git); accessibility check with no serious issues |
+| Security | live audit script (31 checks) and a code review with 23 findings, all fixed except one for you (see SECURITY_REVIEW.md) | `python -m tumour_board.eval.security_audit` |
 
-## 4. Decisions I took where answers collided
+Everything is in 37 local commits on `the-ui` after 9c28ad6, all authored Nikhil-Rao20. The briefs each part was built from are in docs/ui/build/briefs/, so any part can be rebuilt or extended.
 
-(filled in at the end of the run)
+## 4. Decisions I took where answers collided (real hospital practice first)
+
+| Topic | Decision |
+|---|---|
+| Summary timing | Lines from verified quotes are live from the first fetch; AI-written text and the five head briefs come at Mark ready (your check answer) |
+| Ownerless Case Files | Only the coordinator and the creator see them (your 16 Oct rule: every Case File has an owner). Side effect: the old demo Case Files TB-001 to TB-003 are no longer open to every doctor |
+| The real patient's Case File | Visible only to the login that created it (and a Vaidyx admin inside a break-glass window). Found during the UI review and fixed the same hour |
+| Vaidyx admin | No clinical or meeting rights; reads a Case File only inside a break-glass window with a reason, read only, the owner is told |
+| Outside experts | Slides of the current case only, while the meeting runs; name, UHID and dates withheld without the owner's consent tick |
+| Request drafts | No "Level 1 / Level 2" wording for departments |
+| Meetings left open | A meeting counts as running only for 12 hours after it starts, so a forgotten meeting never blocks summaries or the scheduler |
+| Idle sessions | The Tumour Board pages sign out after 8 hours without use |
+| HIMS data API | Needs a login (with the screen's role rules) or the integration token; a separate write token for scripts |
+| Departments | Vaidyx: 23 treating and 6 supporting as you listed; the demo HIMS keeps its 30 hospital departments (a hospital has them) |
+| Published cases | Only verbatim quotes the doctor adds are shown (no abstract snippets), labelled "Published case, not advice for this patient" |
 
 ## 5. Known gaps and things for you to decide
 
-(filled in at the end of the run)
+For you to decide:
+1. Old data files committed before this work (data/uploads/*, data/scheduled_emails.db, data/user_prefs.json, data/note_pings_nikhil.json, data/vaidyx-tmux/*): untrack them? They stay in the history either way.
+2. The admin password in ~/vaidyx/.vaidyx_admin_login no longer signs in as admin. I did not look further; the old gate scripts that use it will fail until it is fixed.
+3. A person should look once at the face-check sheets of the cropped scans (/data/vaidyx/tb_resources/dicom_public/qa/<series>/sheet.png) before doctors see the demo.
+4. The CUP checklist and the "four core records" rule are drafts: a named doctor must approve them before real use.
+
+Known gaps:
+- "Sign and lock" of the decision record has no backend yet; the after-the-board screens stay parked as you decided.
+- Text only: no voice anywhere (as decided). The stand-in agent answers typed questions.
+- All HIMS lung patients are men while most public lung scans are from women; 16 studies stay synthetic (ultrasound, bone scan, brain and oral cavity MRI, and a few mammograms and chest X-rays for women).
+- Starting a meeting can prepare stand-in briefs at the same time as the ready step: extra GPU work, no harm.
+- Two old meetings from 14 to 16 Oct are still marked in session; close them as the coordinator. The E2E patients stay in the HIMS until its next rebuild.
+- The old /tb interface is unchanged, but the new access rules apply to it too (admin, ownerless Case Files). Its old gate script (tumour_board/eval/e2e_api.py) was not rerun and will need updating for those rules.
+- Before sharing the website beyond this server: the list at the end of SECURITY_REVIEW.md (TLS and secure cookies, allowed-origin list, account lock-out and two-step sign-in for admins, Orthanc authentication, configurable LiveKit and PACS addresses, its own hostname for the HIMS).
