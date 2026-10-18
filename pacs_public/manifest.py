@@ -254,7 +254,7 @@ ROLES = {
     "1.3.6.1.4.1.14519.5.2.1.1078.3273.289058566670133314319890183759": "ct_chest",      # CUP-04 CHEST SOFT TISSUE
     "1.3.6.1.4.1.14519.5.2.1.297586689304226835368002003985734825718": "ct_cap",         # CUP-05 case_0005
 }
-ROLE_BY_MODALITY = {"DX": "cr_chest", "CR": "cr_chest"}   # the added LIDC-IDRI chest radiographs
+ROLE_BY_MODALITY = {"DX": "cr_chest", "CR": "cr_chest", "MG": "mg"}   # the added LIDC-IDRI chest radiographs, the CMMD mammograms added 18 Oct
 
 # Series that may reach the face (plan section 4 item 8): the whole FACE CHECK list, plus every series whose body part
 # is NECK, HEAD or WHOLEBODY and every PT or PET-CT series. qa_check also flags any volume longer than 60 cm.
