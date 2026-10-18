@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Field } from "@/components/Field";
+import { LoginHandover } from "@/components/LoginHandover";
 import { DateInput } from "@/components/DateInput";
 import { SwitchRow } from "@/components/FilterChips";
 import { ActionButton } from "@/components/ActionButton";
@@ -194,7 +195,10 @@ export function PeopleStep({ rows, onChange, departments, accounts, onCreate }: 
                   ) : null}
                   <span className="ml-auto flex items-center gap-2">
                     {r.created && r.mailto ? (
-                      <Button type="button" size="sm" asChild><a href={r.mailto}><Mail className="size-4" aria-hidden /> Send login by email</a></Button>
+                      <>
+                        <Button type="button" size="sm" asChild><a href={r.mailto}><Mail className="size-4" aria-hidden /> Send login by email</a></Button>
+                        <LoginHandover mailto={r.mailto} className="w-full" />
+                      </>
                     ) : r.created ? (
                       <Pill tone="ok" icon={CheckCircle2}>Placed (login existed)</Pill>
                     ) : (

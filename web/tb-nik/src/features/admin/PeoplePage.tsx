@@ -20,6 +20,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { SearchBox } from "@/components/SearchBox";
 import { Pill } from "@/components/StatusPill";
 import { DateText } from "@/components/DateText";
+import { LoginHandover } from "@/components/LoginHandover";
 import { notify } from "@/components/Toasts";
 import { useAsyncAction } from "@/hooks/useAsyncAction";
 import { keys, useAccounts, useDepartmentDoctors, useInvalidate, useOrg } from "@/hooks/useQueries";
@@ -41,6 +42,7 @@ function MailDraft({ mailto, who, onClose }: { mailto: string | null; who: strin
           <DialogTitle>Send the login to {who}</DialogTitle>
           <DialogDescription>Your mail program opens a draft with the login name and the first password. Vaidyx sends nothing and keeps no copy of the password. They choose their own at the first sign-in.</DialogDescription>
         </DialogHeader>
+        {mailto ? <LoginHandover mailto={mailto} /> : null}
         <DialogFooter className="gap-2 sm:gap-2">
           <Button type="button" variant="outline" onClick={onClose}>Done</Button>
           {mailto ? <Button type="button" asChild><a href={mailto} onClick={() => window.setTimeout(onClose, 400)}><Mail className="size-4" aria-hidden /> Open the mail draft</a></Button> : null}
