@@ -79,6 +79,7 @@ def build(out_dir=None, seed=DEFAULT_SEED, fixtures=None, clock=None, documents=
     store.save(files["store"], files["events"])
     files["fixture_index"].write_text(json.dumps(index, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     ensure_token(files["token"])
+    ensure_token(files["write_token"])  # the JSON write APIs have their own token (security review #13)
     # post-build steps, each in its own module (plan items 1.2, 1.4, 1.7); they update the store and save it again
     if documents and _module("documents"):
         from . import documents as _documents

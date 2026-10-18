@@ -48,6 +48,7 @@ class Hospital:
         self.store = model.Store.load(self.files["store"])
         self.lock = threading.RLock()
         self.token = self.files["token"].read_text(encoding="utf-8").strip() if self.files["token"].exists() else None
+        self.write_token = _ensure_write_token(self.files["write_token"])
         self.accounts = auth.Accounts(self.files["data_dir"])
         self.accounts.ensure(self.store)   # the 9 demo logins always exist (passwords in logins.tsv, mode 600)
 
@@ -73,15 +74,48 @@ class Hospital:
         return p
 
 
+def _ensure_write_token(path):
+    """The JSON write APIs' token (data/his_mock/write_token, mode 600): created when missing (an older data directory), never
+    printed. Separate from the FHIR read token, which can change nothing (security review #13)."""
+    path = Path(path)
+    if not path.exists():
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.write(secrets.token_hex(16) + "\n")
+        except FileExistsError:
+            pass
+        except OSError:
+            return None
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    return path.read_text(encoding="utf-8").strip() or None
+
+
 def get_hospital(request: Request) -> Hospital:
     return request.app.state.hospital
 
 
-def bearer_ok(request, hospital):
-    """True when the request carries the FHIR bearer token (header only; constant-time comparison)."""
+def _bearer(request):
     auth_header = request.headers.get("authorization") or ""
-    given = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else ""
+    return auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else ""
+
+
+def bearer_ok(request, hospital):
+    """True when the request carries the FHIR read token (header only; constant-time comparison)."""
+    given = _bearer(request)
     return bool(hospital.token and given and secrets.compare_digest(given, hospital.token))
+
+
+def write_bearer_ok(request, hospital):
+    """True when the request carries the write token of the JSON APIs (header only; constant-time comparison)."""
+    given = _bearer(request)
+    return bool(getattr(hospital, "write_token", None) and given and secrets.compare_digest(given, hospital.write_token))
+
+
+WRITE_METHODS = ("POST", "PUT", "PATCH", "DELETE")
 
 
 def require_token(request: Request, hospital: Hospital = Depends(get_hospital)) -> Hospital:
@@ -137,6 +171,8 @@ def create_app(data_dir=None, open_api=None) -> FastAPI:
             response.headers.setdefault("Referrer-Policy", "same-origin")
             if auth.protection(request.url.path) in ("screen", "view") or request.url.path.startswith("/his/login"):
                 response.headers.setdefault("Cache-Control", "no-store")
+            if (response.headers.get("content-type") or "").startswith("text/html"):
+                response.headers.setdefault("Content-Security-Policy", ui.CSP)  # security review #20
         return response
 
     @app.middleware("http")
@@ -151,19 +187,39 @@ def create_app(data_dir=None, open_api=None) -> FastAPI:
 
     @app.middleware("http")
     async def require_login(request, call_next):
-        """Every human screen needs the session cookie (auth.protection); /view/reports also takes the bearer token."""
+        """Every human screen needs the session cookie (auth.protection); /view/reports also takes the read token. The JSON APIs
+        (security review #3, #13): reads take the read or the write token or a staff session; writes take the write token (a machine
+        caller) or a staff session whose roles allow the same action on the screens (auth.api_permission). The FHIR read token
+        never changes anything."""
         kind = auth.protection(request.url.path)
         if kind == "api" and request.app.state.open_api:
             kind = None
+        if kind == "api":
+            hospital = request.app.state.hospital
+            write = request.method in WRITE_METHODS
+            if write_bearer_ok(request, hospital) or (not write and bearer_ok(request, hospital)):
+                request.state.api_token = "write" if write else "read"
+                return await call_next(request)
+            session = hospital.accounts.session_for(request)
+            if session:
+                if write:
+                    perm = auth.api_permission(request.url.path, hospital.store)
+                    if not perm or not auth.allowed(session.get("roles"), perm):
+                        return JSONResponse({"error": "forbidden", "detail": auth.refusal(perm) if perm else
+                                             f"{auth.REFUSED}: this change is made on the screens."}, status_code=403)
+                request.state.session = session
+                return await call_next(request)
+            if write and bearer_ok(request, hospital):
+                return JSONResponse({"error": "forbidden", "detail": "The read token changes nothing: send the write token (data/his_mock/write_token)."},
+                                    status_code=403)
+            return JSONResponse({"error": "login or integration token required"}, status_code=401)
         if kind:
             hospital = request.app.state.hospital
             session = hospital.accounts.session_for(request)
             if session:
                 request.state.session = session
-            elif kind in ("view", "api") and bearer_ok(request, hospital):
+            elif kind == "view" and (bearer_ok(request, hospital) or write_bearer_ok(request, hospital)):
                 pass
-            elif kind == "api":
-                return JSONResponse({"error": "login or integration token required"}, status_code=401)
             else:
                 return _login_redirect(request)
         return await call_next(request)
@@ -210,7 +266,8 @@ def create_app(data_dir=None, open_api=None) -> FastAPI:
 
     def _screen_page(request, status, title, message):
         session = getattr(request.state, "session", None)
-        body = '<p><a href="javascript:history.back()">Back</a> | <a href="/his">Registration</a></p>'
+        back = auth.safe_next(urlparse(request.headers.get("referer") or "").path) if request.headers.get("referer") else "/his"
+        body = f'<p><a href="{ui.esc(back)}">Back</a> | <a href="/his">Registration</a></p>'  # no javascript: link (the CSP refuses it)
         return _html(ui.page(title, body, active=None, user=session, flash=("bad", message)), status)
 
     def _html(text, status):

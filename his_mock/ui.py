@@ -38,6 +38,9 @@ header.top .brand { font-size: 18px; font-weight: bold; letter-spacing: .01em; }
 header.top .product { font-size: 11px; background: #ffffff; color: var(--band); padding: 1px 6px; border-radius: 2px; margin-left: 8px; vertical-align: middle; font-weight: bold; }
 header.top .who { margin-left: auto; font-size: 12px; }
 header.top .who a { color: #ffffff; margin-left: 10px; }
+header.top form.logout { display: inline; margin: 0 0 0 10px; }
+header.top button.logout { background: none; border: 0; color: #ffffff; text-decoration: underline; cursor: pointer; font: inherit; padding: 0; }
+header.top button.logout:hover, header.top button.logout:focus-visible { text-decoration: none; outline: 1px solid #ffffff; }
 .synthetic { background: #ffcc00; color: #3b2a00; font-size: 11px; font-weight: bold; padding: 2px 8px; border: 1px solid #b38f00; letter-spacing: .04em; }
 nav.modules { background: var(--bar); border-bottom: 1px solid var(--bar-line); padding: 0 8px; display: flex; flex-wrap: wrap; }
 nav.modules a { display: inline-block; padding: 5px 12px; color: var(--link); text-decoration: none; font-size: 12.5px; font-weight: bold; border-right: 1px solid var(--bar-line); }
@@ -129,6 +132,16 @@ window.addEventListener('pageshow', function () {
 });
 """
 
+def _csp_hash(text):
+    import base64, hashlib
+    return "'sha256-" + base64.b64encode(hashlib.sha256(text.encode("utf-8")).digest()).decode("ascii") + "'"
+
+
+# The policy of every HTML screen (security review #20): only this origin, the one inline style block and the one inline script of
+# page() by their hashes, images from here or data: URLs, framed by this origin only, forms post here only.
+CSP = (f"default-src 'self'; script-src 'self' {_csp_hash(SCRIPT)}; style-src 'self' {_csp_hash(CSS)}; img-src 'self' data:; "
+       "frame-ancestors 'self'; form-action 'self'; base-uri 'none'; object-src 'none'")
+
 STATUS_PILL = {"ordered": "info", "scheduled": "info", "sample_collected": "info", "completed": "ok", "cancelled": "bad",
                "preliminary": "warn", "final": "ok", "amended": "ok", "requested": "warn", "accepted": "ok",
                "in-progress": "info", "finished": "muted", "available": "ok", "registered": "info", "signed": "ok",
@@ -149,7 +162,8 @@ def page(title, body, *, active=None, flash=None, user=None, banner=None, hospit
     if user:
         roles = ", ".join(user.get("roles") or [])
         who = (f'<div class=who>Signed in: <b>{esc(user.get("label"))}</b> ({esc(roles)})'
-               f' <a href="/his/logout">Logout</a></div>')
+               f' <form method=post action="/his/logout" class=logout>{hidden("csrf", user.get("csrf") or "")}'
+               f'<button type=submit class=logout>Logout</button></form></div>')
     else:
         who = '<div class=who>Not signed in <a href="/his/login">Login</a></div>'
     msg = ""

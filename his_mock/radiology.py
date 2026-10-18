@@ -323,7 +323,7 @@ def _study_done(store, o):
 
 @router.post("/radiology/orders/{oid}/schedule")
 async def schedule_post(oid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-    o = common.order_or_404(hospital.store, oid)
+    o = common.module_order_or_404(hospital.store, oid, "radiology")
     form = await common.form(request)
     common.require(request, "rad.schedule")
     day, time_, room = common.text(form, "date"), common.text(form, "time"), common.text(form, "room")
@@ -356,7 +356,7 @@ async def schedule_post(oid: str, request: Request, hospital: Hospital = Depends
 @router.post("/radiology/orders/{oid}/report")
 async def report_post(oid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
     store = hospital.store
-    o = common.order_or_404(store, oid)
+    o = common.module_order_or_404(store, oid, "radiology")
     form = await common.form(request)
     common.require(request, "rad.report")
     try:
@@ -385,11 +385,11 @@ def _first_staff(store, dept):
 @router.post("/radiology/orders/{oid}/sign")
 async def sign_post(oid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
     store = hospital.store
-    o = common.order_or_404(store, oid)
+    o = common.module_order_or_404(store, oid, "radiology")
     form = await common.form(request)
     common.require(request, "rad.sign")
     try:
-        prac = common.signer(request, store)
+        prac = common.module_signer(request, store, "radiology", o)
         values = _report_values(form)
         _study_done(store, o)
         rec, notes = common.run(hospital, request, _dept(store, o), "sign",
@@ -406,12 +406,12 @@ async def sign_post(oid: str, request: Request, hospital: Hospital = Depends(get
 @router.post("/radiology/reports/{rid}/addendum")
 async def addendum_post(rid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
     store = hospital.store
-    r = common.report_or_404(store, rid)
+    r = common.module_report_or_404(store, rid, "radiology")
     o = store.orders[r["order_id"]]
     form = await common.form(request)
     common.require(request, "rad.sign")
     try:
-        prac = common.signer(request, store)
+        prac = common.module_signer(request, store, "radiology", o)
         values = _report_values(form)
         note = common.text(form, "note")
         if not note:
@@ -428,7 +428,7 @@ async def addendum_post(rid: str, request: Request, hospital: Hospital = Depends
 
 @router.post("/radiology/orders/{oid}/cancel")
 async def cancel_post(oid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-    o = common.order_or_404(hospital.store, oid)
+    o = common.module_order_or_404(hospital.store, oid, "radiology")
     form = await common.form(request)
     common.require(request, "rad.cancel")
     reason = common.text(form, "reason")

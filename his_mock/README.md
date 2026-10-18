@@ -57,9 +57,24 @@ sign-ins from one address in 15 minutes pause sign-ins from it. Every form carri
 same-origin check on every POST. Pages are `no-store`, framed only by the same origin, `nosniff`. Every login, logout and
 screen action is a line of `his_audit.jsonl`; every reporting action also of `desk_audit.jsonl`; neither ever holds a
 password or the token. What stays without a login: `GET /` and `/health` (JSON), `/fhir` (its own bearer token;
-`/fhir/metadata` open), `/documents/...` (bearer token, the path Vaidyx-TB uses), the JSON APIs `/his/api/...` and
-`/desk/api/...` (localhost only, used by the tests, the e2e and `tumour_board/eval/demo_v2.py`). `/view/reports/...`
-takes the login cookie or the bearer token.
+`/fhir/metadata` open), `/documents/...` (bearer token, the path Vaidyx-TB uses). `/view/reports/...` takes the login
+cookie or a bearer token. The JSON APIs `/his/api/...` and `/desk/api/...` (18 Oct, security review #3 and #13): reads take
+the read token, the write token or a staff session; writes take the **write token** (`data/his_mock/write_token`, mode 600,
+created by the build or at start when missing: the e2e scripts and `tumour_board/eval/demo_v2.py`) or a staff session whose
+roles allow the same action on the screens (a desk signature then carries the signed-in consultant, never a signer named in
+the body). The FHIR read token changes nothing. Signing out is a POST with the form token (GET `/his/logout` shows the
+button); a sign-in ends the browser's earlier session; every HTML page carries a Content-Security-Policy (this origin, the
+page's one style block and script by hash, images from here or `data:`); uvicorn runs with `--no-proxy-headers`, so
+`X-Forwarded-For` never changes the address the sign-in pause counts. A module form acts only on its own orders (a
+laboratory form never on an imaging order) and a signature needs a consultant of the order's department (any laboratory
+department for the laboratory; Radiology or Nuclear Medicine for imaging).
+
+**Deployment step (not enabled in the demo): Orthanc authentication.** `his_mock/orthanc.json` leaves Orthanc's REST API
+without a login on 127.0.0.1:8042, so any local user of this server can read or change the studies. Before anything beyond
+a single-user demo server: set `"AuthenticationEnabled": true` and `"RegisteredUsers": {"<user>": "<password>"}` in
+`orthanc.json` (the password from a mode-600 file, never in git), give the HIMS PACS proxy (`pacs_proxy.py`), the Vaidyx
+PACS proxy (`tumour_board/pacs.py`) and the upload in `dicom_studies.py` that user as HTTP basic credentials, restart
+Orthanc and run `python -m his_mock.build --upload` to check the upload and the viewer still work.
 
 ## The screens
 
@@ -113,7 +128,8 @@ with 404, so a HEAD is sent upstream as a GET and only its headers are returned.
 | `fixture_index.json` | fixture slot (`P03`, `P03-R07`) to store id |
 | `documents/` | one PDF per report version (`documents.py`, WeasyPrint in the pdf venv): NABL-style lab tables, radiology, HPE, IHC, molecular, cytology, OPD note, discharge summary layouts; signature block of the demo CA |
 | `dicom/` | synthetic DICOM per performed imaging study (`dicom_studies.py`; `--upload` sends them to Orthanc and verifies them by QIDO) |
-| `token` | the FHIR bearer token (mode 600, kept on rebuild) |
+| `token` | the FHIR bearer token, read only (mode 600, kept on rebuild) |
+| `write_token` | the token of the JSON write APIs for machine callers (mode 600, kept on rebuild; created at start when missing) |
 | `accounts.json`, `logins.tsv`, `sessions.json`, `his_audit.jsonl`, `desk_audit.jsonl` | logins (kept on rebuild) and the audit |
 
 New UHIDs, visit and admission numbers, accessions and barcodes are allocated above the fixture numbers. The build refuses

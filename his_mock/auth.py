@@ -110,6 +110,48 @@ PERMISSION_LABELS = {
     "path.cancel": "cancel a pathology order", "admin": "use the Admin module",
 }
 
+# The JSON write APIs for a signed-in staff session (security review #3): the permission the same action needs on the screens. A
+# path not listed is refused for a session (the write token is for machine callers).
+_API_WRITES = (
+    (r"^/his/api/registrations$", "register"),
+    (r"^/his/api/patients/[^/]+/visits$", "visit.open"),
+    (r"^/his/api/patients/[^/]+/admissions$", "admit"),
+    (r"^/his/api/encounters/[^/]+/refer$", "refer"),
+    (r"^/his/api/encounters/[^/]+/accept$", "accept_referral"),
+    (r"^/his/api/encounters/[^/]+/transfer$", "transfer"),
+    (r"^/his/api/encounters/[^/]+/discharge$", "discharge"),
+    (r"^/his/api/encounters/[^/]+/orders$", "order"),
+)
+_DESK_WRITE = r"^/desk/api/[^/]+/(orders|reports)/([^/]+)/(schedule|collect|preliminary|sign|addendum|cancel)$"
+_DESK_PERMISSIONS = {
+    "lab": {"schedule": "lab.collect", "collect": "lab.collect", "preliminary": "lab.result", "sign": "lab.sign", "addendum": "lab.sign", "cancel": "lab.cancel"},
+    "radiology": {"schedule": "rad.schedule", "collect": "rad.schedule", "preliminary": "rad.report", "sign": "rad.sign", "addendum": "rad.sign", "cancel": "rad.cancel"},
+    "pathology": {"schedule": "path.receive", "collect": "path.receive", "preliminary": "path.report", "sign": "path.sign", "addendum": "path.sign", "cancel": "path.cancel"},
+}
+
+
+def api_permission(path, store=None):
+    """The screen permission a JSON write on `path` needs from a staff session, or None (not open to sessions)."""
+    import re as _re
+    from . import common
+    p = path.rstrip("/")
+    for rx, perm in _API_WRITES:
+        if _re.match(rx, p):
+            return perm
+    m = _re.match(_DESK_WRITE, p)
+    if m and store is not None:
+        kind, ident, action = m.groups()
+        o = None
+        if kind == "orders":
+            o = store.orders.get(ident)
+        else:
+            r = store.reports.get(ident)
+            o = store.orders.get(r.get("order_id")) if r else None
+        if o:
+            return _DESK_PERMISSIONS.get(common.module_of(o), {}).get(action)
+    return None
+
+
 REFUSED = "Your role cannot do this"
 _DUMMY_HASH = bcrypt.hashpw(b"not-a-real-password", bcrypt.gensalt(BCRYPT_ROUNDS))
 
@@ -521,6 +563,12 @@ def login_form(request: Request):
                                     flash=((level or "ok"), flash) if flash else None))
 
 
+def client_address(request):
+    """The real peer address of the connection (security review #20): X-Forwarded-For and the like are never read, and serve.sh
+    starts uvicorn with --no-proxy-headers so they cannot rewrite it either."""
+    return request.client.host if request.client else None
+
+
 @router.post("/login")
 async def login_submit(request: Request):
     form = await request.form()
@@ -528,8 +576,13 @@ async def login_submit(request: Request):
     email = str(form.get("email") or "").strip().lower()
     password = str(form.get("password") or "")
     nxt = safe_next(form.get("next"))
+    old = request.cookies.get(COOKIE)
+    if old:  # a sign-in ends the session this browser had (security review #20)
+        gone = hospital.accounts.logout(old)
+        if gone:
+            audit(hospital.files["data_dir"], "logout", "replaced", user=gone.get("email"), roles=gone.get("roles"))
     try:
-        session = hospital.accounts.login(email, password, address=request.client.host if request.client else None)
+        session = hospital.accounts.login(email, password, address=client_address(request))
     except LoginError as e:
         audit(hospital.files["data_dir"], "login", "refused", user=email, detail=str(e))
         return HTMLResponse(_login_page(request, email=email, error=str(e), nxt=nxt), status_code=401)
@@ -540,12 +593,31 @@ async def login_submit(request: Request):
     return resp
 
 
-@router.get("/logout")
-def logout(request: Request):
+@router.get("/logout", response_class=HTMLResponse)
+def logout_page(request: Request):
+    """A page with the Sign out button: signing out is a POST with the form token, so a link on another site cannot sign anyone out
+    (security review #20)."""
+    hospital = request.app.state.hospital
+    s = hospital.accounts.session_for(request)
+    if not s:
+        return RedirectResponse("/his/login?flash=" + quote("You are signed out."), status_code=303)
+    body = ('<div class="panel login"><p>Sign out of the demo hospital system on this computer?</p>'
+            '<form method=post action="/his/logout">' + ui.hidden("csrf", s.get("csrf") or "")
+            + '<p><button type=submit class=primary>Sign out</button> <a href="/his">Back</a></p></form></div>')
+    return HTMLResponse(ui.page("Sign out", body, active=None, user=s))
+
+
+@router.post("/logout")
+async def logout(request: Request):
     hospital = request.app.state.hospital
     sid = request.cookies.get(COOKIE)
-    s = hospital.accounts.logout(sid) if sid else None
+    s = hospital.accounts.session(sid) if sid else None
     if s:
+        form = await request.form()
+        token = str(form.get("csrf") or "")
+        if not token or not secrets.compare_digest(token, str(s.get("csrf") or "")):
+            return RedirectResponse("/his/logout", status_code=303)  # a stale form: the page asks again
+        hospital.accounts.logout(sid)
         audit(hospital.files["data_dir"], "logout", "ok", user=s.get("email"), roles=s.get("roles"))
     resp = RedirectResponse("/his/login?flash=" + quote("Signed out."), status_code=303)
     resp.delete_cookie(COOKIE, path="/")

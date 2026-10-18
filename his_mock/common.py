@@ -195,6 +195,41 @@ def report_or_404(store, rid):
     return r
 
 
+def module_order_or_404(store, oid, module):
+    """An order this module works (lab, radiology, pathology, opd), else 404: a laboratory form never acts on an imaging order
+    (security review #12)."""
+    o = order_or_404(store, oid)
+    if module_of(o) != module:
+        raise HTTPException(404, "No such order in this module.")
+    return o
+
+
+def module_report_or_404(store, rid, module):
+    r = report_or_404(store, rid)
+    o = store.orders.get(r.get("order_id"))
+    if not o or module_of(o) != module:
+        raise HTTPException(404, "No such report in this module.")
+    return r
+
+
+SIGNING_DEPARTMENTS = {"radiology": ("Radiology", "Nuclear Medicine"), "pathology": ("Pathology",)}
+
+
+def module_signer(request, store, module, order):
+    """The signing consultant of the account for an order of this module (security review #12): a consultant of the order's performing
+    department; for the laboratory, a consultant of any laboratory department (the demo's laboratory consultant verifies the whole
+    laboratory); for radiology, Radiology or Nuclear Medicine. Else Forbidden with a plain message."""
+    p = signer(request, store)
+    if module == "lab":
+        allowed = {t.get("department") for t in store.tests.values() if t.get("doc_type") == "lab"}
+    else:
+        allowed = set(SIGNING_DEPARTMENTS.get(module, ()))
+    allowed.add(order.get("performing_department"))
+    if p.get("department") not in allowed:
+        raise auth.Forbidden(f"{auth.REFUSED}: {p['name']} signs for {p.get('department')}, not for {order.get('performing_department')}.")
+    return p
+
+
 def d(value):
     """DD/MM/YYYY of an ISO date or date-time ('' when empty)."""
     return ids.display_date(value) if value else ""

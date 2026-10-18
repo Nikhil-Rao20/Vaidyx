@@ -226,7 +226,7 @@ def _values(o, form):
 
 @router.post("/pathology/orders/{oid}/receive")
 async def receive_post(oid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-    o = common.order_or_404(hospital.store, oid)
+    o = common.module_order_or_404(hospital.store, oid, "pathology")
     form = await common.form(request)
     common.require(request, "path.receive")
     block = common.text(form, "block_no").upper() or None
@@ -251,7 +251,7 @@ async def receive_post(oid: str, request: Request, hospital: Hospital = Depends(
 @router.post("/pathology/orders/{oid}/report")
 async def report_post(oid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
     store = hospital.store
-    o = common.order_or_404(store, oid)
+    o = common.module_order_or_404(store, oid, "pathology")
     form = await common.form(request)
     common.require(request, "path.report")
     action = "sign" if common.text(form, "action", "sign") == "sign" else "preliminary"
@@ -260,7 +260,7 @@ async def report_post(oid: str, request: Request, hospital: Hospital = Depends(g
         dept = _dept(store, o)
         if action == "sign":
             common.require(request, "path.sign")
-            prac = common.signer(request, store)
+            prac = common.module_signer(request, store, "pathology", o)
             rec, notes = common.run(hospital, request, dept, "sign", lambda s: s.sign_final(o["id"], prac["id"], values=values),
                                     order_id=o["id"], report_id=(store.report_for_order(o["id"]) or {}).get("id"))
         else:
@@ -286,12 +286,12 @@ async def sign_post(oid: str, request: Request, hospital: Hospital = Depends(get
 @router.post("/pathology/reports/{rid}/addendum")
 async def addendum_post(rid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
     store = hospital.store
-    r = common.report_or_404(store, rid)
+    r = common.module_report_or_404(store, rid, "pathology")
     o = store.orders[r["order_id"]]
     form = await common.form(request)
     common.require(request, "path.sign")
     try:
-        prac = common.signer(request, store)
+        prac = common.module_signer(request, store, "pathology", o)
         values = _values(o, form)
         note = common.text(form, "note")
         if not note:
@@ -309,7 +309,7 @@ async def addendum_post(rid: str, request: Request, hospital: Hospital = Depends
 @router.post("/pathology/orders/{oid}/addon")
 async def addon_post(oid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
     store = hospital.store
-    o = common.order_or_404(store, oid)
+    o = common.module_order_or_404(store, oid, "pathology")
     form = await common.form(request)
     common.require(request, "path.addon")
     test = common.text(form, "test")
@@ -325,7 +325,7 @@ async def addon_post(oid: str, request: Request, hospital: Hospital = Depends(ge
 
 @router.post("/pathology/orders/{oid}/cancel")
 async def cancel_post(oid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-    o = common.order_or_404(hospital.store, oid)
+    o = common.module_order_or_404(hospital.store, oid, "pathology")
     form = await common.form(request)
     common.require(request, "path.cancel")
     reason = common.text(form, "reason")

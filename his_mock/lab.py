@@ -266,7 +266,7 @@ def _values_from(form, template, sex, state_name):
 
 @router.post("/lab/orders/{oid}/collect")
 async def collect_post(oid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-    o = common.order_or_404(hospital.store, oid)
+    o = common.module_order_or_404(hospital.store, oid, "lab")
     form = await common.form(request)
     common.require(request, "lab.collect")
 
@@ -285,7 +285,7 @@ async def collect_post(oid: str, request: Request, hospital: Hospital = Depends(
 @router.post("/lab/orders/{oid}/result")
 async def result_post(oid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
     store = hospital.store
-    o = common.order_or_404(store, oid)
+    o = common.module_order_or_404(store, oid, "lab")
     form = await common.form(request)
     common.require(request, "lab.result")
     p = store.patients[o["patient_id"]]
@@ -317,13 +317,13 @@ def _first_staff(store, dept):
 @router.post("/lab/orders/{oid}/verify")
 async def verify_post(oid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
     store = hospital.store
-    o = common.order_or_404(store, oid)
+    o = common.module_order_or_404(store, oid, "lab")
     form = await common.form(request)
     common.require(request, "lab.sign")
     p = store.patients[o["patient_id"]]
     template = templates.lab_template(o["test"])
     try:
-        prac = common.signer(request, store)
+        prac = common.module_signer(request, store, "lab", o)
         values = _values_from(form, template, p["sex"], "verify")
         rec, notes = common.run(hospital, request, _dept(store, o), "sign",
                                 lambda s: s.sign_final(o["id"], prac["id"], values=values), order_id=o["id"],
@@ -339,14 +339,14 @@ async def verify_post(oid: str, request: Request, hospital: Hospital = Depends(g
 @router.post("/lab/reports/{rid}/amend")
 async def amend_post(rid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
     store = hospital.store
-    r = common.report_or_404(store, rid)
+    r = common.module_report_or_404(store, rid, "lab")
     o = store.orders[r["order_id"]]
     form = await common.form(request)
     common.require(request, "lab.sign")
     p = store.patients[o["patient_id"]]
     template = templates.lab_template(o["test"])
     try:
-        prac = common.signer(request, store)
+        prac = common.module_signer(request, store, "lab", o)
         values = _values_from(form, template, p["sex"], "amend")
         note = common.text(form, "note")
         if not note:
@@ -363,7 +363,7 @@ async def amend_post(rid: str, request: Request, hospital: Hospital = Depends(ge
 
 @router.post("/lab/orders/{oid}/cancel")
 async def cancel_post(oid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-    o = common.order_or_404(hospital.store, oid)
+    o = common.module_order_or_404(hospital.store, oid, "lab")
     form = await common.form(request)
     common.require(request, "lab.cancel")
     reason = common.text(form, "reason")

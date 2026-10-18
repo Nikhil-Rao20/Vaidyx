@@ -40,17 +40,35 @@ ensure_keys() {
   chmod 600 "$KEYS_JSON" 2>/dev/null || true
 }
 
-read_key() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$KEYS_JSON" "$1"; }
+# The tools folder is writable by its owner only (the server binary and its config live there), the config is private.
+lock_down() {
+  chmod 755 "$TOOLS" 2>/dev/null || true
+  chmod -R go-w "$TOOLS" 2>/dev/null || true
+  [ -f "$CONFIG" ] && chmod 600 "$CONFIG"
+  return 0
+}
 
+# The config is written by Python reading the keys file itself: the secret never appears on a command line (ps, /proc), in a
+# shell variable or in the log (security review #21).
 write_config() {
   mkdir -p "$TOOLS"
   [ -f "$EXAMPLE" ] || { echo "missing $EXAMPLE" >&2; exit 1; }
-  local key secret
-  key="$(read_key api_key)"
-  secret="$(read_key api_secret)"
   umask 077
-  sed -e "s|__API_KEY__|$key|" -e "s|__API_SECRET__|$secret|" "$EXAMPLE" > "$CONFIG"
-  chmod 600 "$CONFIG"
+  python3 - "$KEYS_JSON" "$EXAMPLE" "$CONFIG" <<'PY'
+import json, os, sys
+keys_path, example, config = sys.argv[1:4]
+with open(keys_path, encoding="utf-8") as f:
+    keys = json.load(f)
+with open(example, encoding="utf-8") as f:
+    text = f.read().replace("__API_KEY__", str(keys["api_key"])).replace("__API_SECRET__", str(keys["api_secret"]))
+tmp = config + ".tmp"
+fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+with os.fdopen(fd, "w", encoding="utf-8") as f:
+    f.write(text)
+os.chmod(tmp, 0o600)
+os.replace(tmp, config)
+PY
+  lock_down
   echo "wrote $CONFIG"
 }
 
@@ -98,6 +116,7 @@ stop() {
 }
 
 status() {
+  lock_down
   if pid="$(running_pid)"; then echo "running (pid $pid)"; else echo "not running"; fi
   if answers; then echo "http://127.0.0.1:$PORT answers OK"; else echo "http://127.0.0.1:$PORT does not answer"; fi
   [ -s "$KEYS_JSON" ] && echo "keys: $KEYS_JSON (present)" || echo "keys: $KEYS_JSON (missing)"

@@ -59,7 +59,7 @@ def test_home_renders_with_banner_recent_and_form(client):
     for href in ("/his/opd", "/his/ipd", "/his/lab", "/his/radiology", "/his/pathology", "/his/exchange", "/his/admin"):
         assert f'href="{href}"' in r.text
     assert "Recent registrations" in r.text and "New registration" in r.text and 'name="csrf"' in r.text
-    assert "Signed in: <b>Registration desk</b>" in r.text and 'href="/his/logout"' in r.text
+    assert "Signed in: <b>Registration desk</b>" in r.text and 'action="/his/logout"' in r.text  # signing out is a POST (security review #20)
     recent = r.text.split('id=recent>', 1)[1].split("</table>", 1)[0]
     assert recent.count("<tr>") == 1 + screens.RECENT  # header row + the last 10
 

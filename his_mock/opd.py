@@ -316,7 +316,7 @@ def order_page(oid: str, request: Request, hospital: Hospital = Depends(get_hosp
 
 @router.post("/opd/orders/{oid}/report")
 async def report_post(oid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-    o = common.order_or_404(hospital.store, oid)
+    o = common.module_order_or_404(hospital.store, oid, "opd")
     form = await common.form(request)
     common.require(request, "note")
     action = "sign" if common.text(form, "action", "sign") == "sign" else "preliminary"
@@ -332,7 +332,7 @@ async def report_post(oid: str, request: Request, hospital: Hospital = Depends(g
 
 @router.post("/opd/orders/{oid}/addendum")
 async def addendum_post(oid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-    o = common.order_or_404(hospital.store, oid)
+    o = common.module_order_or_404(hospital.store, oid, "opd")
     r = hospital.store.report_for_order(o["id"])
     if not r:
         return common.redirect(f"/his/opd/orders/{oid}", "No report to amend yet.", bad=True)
@@ -350,7 +350,7 @@ async def addendum_post(oid: str, request: Request, hospital: Hospital = Depends
 
 @router.post("/opd/orders/{oid}/cancel")
 async def cancel_post(oid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-    o = common.order_or_404(hospital.store, oid)
+    o = common.module_order_or_404(hospital.store, oid, "opd")
     form = await common.form(request)
     common.require(request, "note")
     try:

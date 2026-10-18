@@ -367,55 +367,99 @@ def api_pending(dept: str, hospital: Hospital = Depends(get_hospital)):
                 "reports": [with_context(store, r) for r in w["reports"]]}
 
 
+def _session(request):
+    """The staff session behind a JSON call (None for a write-token caller and for the open test app)."""
+    return getattr(request.state, "session", None)
+
+
+def _session_person(request, hospital, dept, what):
+    """For a staff session the person is the account's own practitioner, never one named in the body (security review #3): a
+    consultant of the department (signing), or for a technician entering results the department's first practitioner (as the
+    screens record it). Raises Forbidden when the account has no practitioner of that department."""
+    from . import auth
+
+    s = _session(request) or {}
+    p = hospital.store.practitioner(s.get("practitioner_id")) if s.get("practitioner_id") else None
+    if what == "signing consultant":
+        if not p or p.get("role") != "consultant":
+            raise auth.Forbidden(f"{auth.REFUSED}: this account is not a consultant and cannot sign.")
+        if p["department"] != dept["name"]:
+            raise auth.Forbidden(f"{auth.REFUSED}: {p['name']} signs for {p['department']}, not for {dept['name']}.")
+        return p["id"]
+    if p and p["department"] == dept["name"]:
+        return p["id"]
+    people = staff(hospital.store, dept)
+    if not people:
+        raise DeskError(f"{dept['name']} has no practitioner to report under")
+    return people[0]["id"]
+
+
+def _by(request, hospital, given):
+    """Who did it for the desk audit: the session's Reg. No. or email; a token caller's own words."""
+    s = _session(request)
+    if not s:
+        return given
+    p = hospital.store.practitioner(s.get("practitioner_id")) if s.get("practitioner_id") else None
+    return p["reg_no"] if p else s.get("email")
+
+
 @router.post("/api/{dept}/orders/{order_id}/schedule")
-def api_schedule(dept: str, order_id: str, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
+def api_schedule(dept: str, order_id: str, request: Request, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
     b = _payload(payload)
-    return _api(hospital, do_schedule, _department(hospital.store, dept), order_id, b.get("date"), b.get("by"))
+    return _api(hospital, do_schedule, _department(hospital.store, dept), order_id, b.get("date"), _by(request, hospital, b.get("by")))
 
 
 @router.post("/api/{dept}/orders/{order_id}/collect")
-def api_collect(dept: str, order_id: str, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
+def api_collect(dept: str, order_id: str, request: Request, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
     b = _payload(payload)
     return _api(hospital, do_collect, _department(hospital.store, dept), order_id, b.get("barcode"), b.get("block_no"),
-                b.get("by"))
+                _by(request, hospital, b.get("by")))
 
 
 @router.post("/api/{dept}/orders/{order_id}/preliminary")
-def api_preliminary(dept: str, order_id: str, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
+def api_preliminary(dept: str, order_id: str, request: Request, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
     b = _payload(payload)
     try:
         values = _json_values(b.get("values"))
     except DeskError as exc:
         return JSONResponse({"error": "invalid", "detail": str(exc)}, status_code=400)
-    return _api(hospital, do_preliminary, _department(hospital.store, dept), order_id,
-                b.get("reporter") or b.get("by"), values)
+    d = _department(hospital.store, dept)
+    try:
+        reporter = _session_person(request, hospital, d, "reporting doctor") if _session(request) else (b.get("reporter") or b.get("by"))
+    except DeskError as exc:
+        return JSONResponse({"error": "invalid", "detail": str(exc)}, status_code=400)
+    return _api(hospital, do_preliminary, d, order_id, reporter, values)
 
 
 @router.post("/api/{dept}/orders/{order_id}/sign")
-def api_sign(dept: str, order_id: str, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
+def api_sign(dept: str, order_id: str, request: Request, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
+    """The signer is the signed-in consultant for a staff session; a write-token caller names it (a consultant of that department)."""
     b = _payload(payload)
     try:
         values = _json_values(b.get("values"))
     except DeskError as exc:
         return JSONResponse({"error": "invalid", "detail": str(exc)}, status_code=400)
-    return _api(hospital, do_sign, _department(hospital.store, dept), order_id, b.get("signer"), values)
+    d = _department(hospital.store, dept)
+    signer = _session_person(request, hospital, d, "signing consultant") if _session(request) else b.get("signer")
+    return _api(hospital, do_sign, d, order_id, signer, values)
 
 
 @router.post("/api/{dept}/reports/{report_id}/addendum")
-def api_addendum(dept: str, report_id: str, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
+def api_addendum(dept: str, report_id: str, request: Request, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
     b = _payload(payload)
     try:
         values = _json_values(b.get("values"))
     except DeskError as exc:
         return JSONResponse({"error": "invalid", "detail": str(exc)}, status_code=400)
-    return _api(hospital, do_addendum, _department(hospital.store, dept), report_id, b.get("signer"), values,
-                b.get("note"))
+    d = _department(hospital.store, dept)
+    signer = _session_person(request, hospital, d, "signing consultant") if _session(request) else b.get("signer")
+    return _api(hospital, do_addendum, d, report_id, signer, values, b.get("note"))
 
 
 @router.post("/api/{dept}/orders/{order_id}/cancel")
-def api_cancel(dept: str, order_id: str, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
+def api_cancel(dept: str, order_id: str, request: Request, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
     b = _payload(payload)
-    return _api(hospital, do_cancel, _department(hospital.store, dept), order_id, b.get("reason"), b.get("by"))
+    return _api(hospital, do_cancel, _department(hospital.store, dept), order_id, b.get("reason"), _by(request, hospital, b.get("by")))
 
 
 # ------------------------------------------------------------------------ HTML: a thin alias of the modules

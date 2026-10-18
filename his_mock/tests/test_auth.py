@@ -145,7 +145,11 @@ def test_logout_ends_the_session_and_sessions_survive_a_restart(app, data_dir, l
     assert sid in saved["sessions"] and saved["sessions"][sid]["email"] == logins["lab.tech"][0]
     fresh = auth.Accounts(data_dir)          # a restart loads sessions.json
     assert fresh.session(sid)["email"] == logins["lab.tech"][0]
-    r = c.get("/his/logout", follow_redirects=False)
+    r = c.get("/his/logout", follow_redirects=False)  # GET only shows the Sign out button (security review #20)
+    assert r.status_code == 200 and 'action="/his/logout"' in r.text and app.state.hospital.accounts.session(sid) is not None
+    r = c.post("/his/logout", data={"csrf": "stale"}, follow_redirects=False)  # a forged or stale form signs nobody out
+    assert r.status_code == 303 and app.state.hospital.accounts.session(sid) is not None
+    r = post(c, "/his/logout")
     assert r.status_code == 303 and r.headers["location"].startswith("/his/login?flash=")
     assert c.get("/his", follow_redirects=False).status_code == 303
     assert app.state.hospital.accounts.session(sid) is None
