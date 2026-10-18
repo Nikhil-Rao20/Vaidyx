@@ -4,7 +4,13 @@ Built 17 to 18 Oct 2026 on branch `the-ui`, all commits local as Nikhil-Rao20, n
 
 ## 1. Open everything
 
-Use VS Code port forwarding for ports 7000, 7130 and 7880 (and 8042 only if you want Orthanc itself).
+Everything answers only on the server itself (127.0.0.1). Your laptop reaches it through a tunnel, and then opens it as localhost (browsers allow camera, microphone and notifications on localhost):
+
+```
+ssh -N -L 7000:127.0.0.1:7000 -L 7130:127.0.0.1:7130 -L 7880:127.0.0.1:7880 -L 7881:127.0.0.1:7881 bharath.tangella@10.16.63.43
+```
+
+Keep that terminal open, then open http://localhost:7000/tb-nik (and http://localhost:7130/his for the HIMS) on the laptop. In VS Code the Ports panel does the same: forward 7000, 7130, 7880 and 7881 and keep the same port numbers (the video client expects 7880 and 7881). Port 7881 carries the meeting video over TCP; it is the one service that also listens on the server's network address (LiveKit cannot limit it to localhost), and it only carries media for people holding a meeting token.
 
 | System | Address | Sign in with |
 |---|---|---|

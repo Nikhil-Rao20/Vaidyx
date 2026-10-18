@@ -1,12 +1,13 @@
 # LiveKit server configuration for Vaidyx-TB meetings (localhost only).
 # scripts/livekit.sh copies this file to /data/vaidyx/tools/livekit/config.yaml and fills in the API key and secret from
-# data/tumour_board/livekit.json. The placeholders __API_KEY__ and __API_SECRET__ are replaced by the script; never commit a filled copy.
+# data/tumour_board/livekit.json (the two placeholders in the keys block below); never commit a filled copy. Comment lines are dropped.
 port: 7880
 bind_addresses:
   - 127.0.0.1
 rtc:
-  # localhost only: media on the loopback address (UDP 50000 to 50200), no ICE over TCP (that listener would bind every interface)
-  tcp_port: 0
+  # media on the loopback address: UDP 50000 to 50200 for browsers on this server, and TCP 7881 so a laptop that reaches the
+  # server through an ssh or VS Code tunnel (localhost:7880 and localhost:7881 forwarded) also gets audio and video (18 Oct)
+  tcp_port: 7881
   port_range_start: 50000
   port_range_end: 50200
   use_external_ip: false
