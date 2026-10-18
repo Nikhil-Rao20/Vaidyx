@@ -430,7 +430,7 @@ def test_new_accession_does_not_collide_with_fixtures(store, fx):
 def test_store_is_synthetic_and_clean(built):
     out, store, _ = built
     text = (out / "store.json").read_text(encoding="utf-8") + (out / "events.jsonl").read_text(encoding="utf-8")
-    assert "Sahyadri" not in text and "SYN-" not in text and "—" not in text
+    assert "Sahyadri" not in text and "SYN-" not in text and "\u2014" not in text
     assert not scenarios.AADHAAR_LIKE.search(text)
     assert all("(SYNTHETIC)" in p["name"] for p in store.patients.values())
     for _, s in scenarios.strings(store.data):

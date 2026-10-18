@@ -4,7 +4,8 @@
 
 Writes DIR (default data/his_mock/ or $TB_HIS_MOCK_DATA): store.json, fixture_index.json, events.jsonl, the report PDFs
 in documents/ (1.2, pdf venv subprocess), events.hl7 (1.4), synthetic DICOM in dicom/ (1.7) and a token (kept on rebuild).
-`--upload` then pushes the DICOM studies to Orthanc (127.0.0.1:8042) when it answers. Prints a one-line summary.
+`--upload` then pushes the DICOM studies to Orthanc (127.0.0.1:8042) when it answers. The 9 demo logins of the HIMS
+screens are ensured (accounts.json, logins.tsv mode 600; existing passwords kept). Prints a one-line summary.
 """
 import argparse
 import sys
@@ -34,7 +35,12 @@ def main(argv=None):
         ap.error("the mock hospital never writes under data/tumour_board/")
     store = generator.build(args.out, seed=args.seed, documents=not args.no_pdf, hl7=not args.no_hl7,
                             dicom=not args.no_dicom)
-    print(summary(store, args.out))
+    from . import auth   # the 9 demo logins (bcrypt), kept across rebuilds like the token
+
+    accounts = auth.Accounts(layout(args.out)["data_dir"])
+    created = accounts.ensure(store)
+    print(summary(store, args.out) + f"; accounts: {len(created)} created, {len(accounts.accounts)} total, passwords in "
+          f"{accounts.logins_path} (mode 600, never printed; python -m his_mock.auth --reset recreates them)")
     if args.upload:
         from . import dicom_studies
 

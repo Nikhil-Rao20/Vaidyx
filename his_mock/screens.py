@@ -1,46 +1,60 @@
-"""The mock hospital's HIS screens (plan item V2-1.6), mounted at /his by his_mock/app.py. SYNTHETIC data only.
+"""The Registration module and the shared patient / encounter pages of the demo HIMS, mounted at /his by app.py.
+SYNTHETIC data only.
 
     GET  /his                               registration search (UHID, temporary UHID, IP / OP No., ABHA number or
                                             address, accession / Lab No., or a name), recent registrations, new registration
-    GET  /his/patients/{patient id}         demographics, similar registrations, the timeline grouped by OP visit and IP
-                                            admission (newest first) with each encounter's orders and reports
-    GET  /his/encounters/{encounter id}     one encounter: ward history, referrals, orders and reports; refer, accept,
-                                            transfer ward, discharge
-    POST /his/registrations, /his/patients/{id}/visits | /admissions, /his/encounters/{id}/refer | /accept | /transfer |
-         /discharge                         the forms (303 back with ?flash=; a refused transition is a red flash)
-    /his/api/...                            the same as JSON for tests and the e2e
+    POST /his/registrations                 new registration (duplicate warning first; the desk confirms "register anyway")
+    GET  /his/patients/{patient id}         patient banner, demographics, similar registrations, the encounter timeline
+                                            (newest first) with each encounter's orders and reports; New OP visit, Admit
+    GET  /his/encounters/{encounter id}     one OP visit or IP admission: ward history, referrals, orders and reports, and
+                                            the forms of the OPD / IPD modules (OPD note, order entry, referral, transfer,
+                                            discharge summary, discharge)
+    POST /his/patients/{id}/visits | /admissions, /his/encounters/{id}/refer | /accept | /transfer | /discharge |
+         /orders | /notes | /discharge-summary
+    /his/api/...                            the same as JSON for tests and the e2e (login-free, localhost only)
 
 Every change goes through a Store transition under hospital.lock, then one HL7 message per new event is appended to
-events.hl7 (hl7.append) and the store is saved. A temporary or duplicate registration is shown next to its look-alikes
-for a person to link in Vaidyx-TB; the mock never merges registrations. No Aadhaar is ever shown or asked for. No em
-dashes in any UI string.
+events.hl7 and the store is saved (common.apply); report-producing forms go through the reporting engine (common.run).
+Every HTML form carries the session's CSRF token and is role-checked (auth.PERMISSIONS). A temporary or duplicate
+registration is shown next to its look-alikes for a person to link in Vaidyx-TB; the mock never merges registrations.
+No Aadhaar is ever shown or asked for. No em dashes in any UI string.
 """
 import re
-from urllib.parse import urlencode
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from . import hl7, ids, model, ui
+from . import common, ids, ipd, model, opd, ui
 from .app import Hospital, get_hospital
+from .common import FieldError, FormState, d
 
 router = APIRouter()
 
-NAV = [("HIS", "/his"), ("Reporting desk", "/desk")]
 UNITS = ("Unit I", "Unit II", "Unit III", "Casualty")
 VISIT_TYPES = (("new", "New"), ("follow_up", "Follow-up"), ("casualty", "Casualty"))
 PREAUTH_STATUSES = ("pending", "approved", "rejected")
 KINDS = ("permanent", "temporary")
-KIND_CLASS = {"permanent": "ok", "temporary": "warn", "duplicate": "bad"}
 ABHA_NUMBER = re.compile(r"^\d{2}-\d{4}-\d{4}-\d{4}$")
+PMJAY_ID = re.compile(r"^PMJAY-VX-\d{8}$")
+PIN = re.compile(r"^[1-9]\d{5}$")
+PHONE = re.compile(r"^(\+91[ -]?)?[6-9]\d{4}[ -]?\d{5}$")
 SIMILAR_NOTE = "Possible duplicate or temporary registration; link in Vaidyx-TB, not merged here"
 RECENT = 10
+STATES = ("Andhra Pradesh", "Karnataka", "Kerala", "Maharashtra", "Tamil Nadu", "Telangana", "Other")
+
+
+class DuplicateWarning(Exception):
+    """Similar registrations exist; the desk must confirm "register anyway"."""
+
+    def __init__(self, similar):
+        super().__init__(f"{len(similar)} similar registration(s) exist; confirm that this is a new person.")
+        self.similar = similar
 
 
 # -------------------------------------------------------------------- small helpers
 def _d(value):
-    """DD/MM/YYYY of an ISO date or date-time ('' when empty)."""
-    return ids.display_date(value) if value else ""
+    return d(value)
 
 
 def _plain(name):
@@ -49,12 +63,11 @@ def _plain(name):
 
 
 def _prac(store, pid):
-    p = store.practitioner(pid) if pid else None
-    return p["name"] if p else ""
+    return common.prac_name(store, pid)
 
 
 def _kind_pill(kind):
-    return f'<span class="pill {KIND_CLASS.get(kind, "info")}">{ui.esc(kind)}</span>'
+    return ui.pill(kind)
 
 
 def _enc_pill(e):
@@ -66,7 +79,7 @@ def _visit_type(v):
 
 
 def _age_sex(p):
-    return f"{p['age']} Y / {p['sex']}"
+    return common.age_sex(p)
 
 
 def _address(p):
@@ -78,49 +91,12 @@ def _address(p):
     return ", ".join(parts) + (f", PIN {a['pin']}" if a.get("pin") else "")
 
 
-def _table(headers, rows, empty):
-    """ui.table in a horizontally scrolling box, so a wide table never widens the page on a phone."""
-    return f'<div style="overflow-x:auto">{ui.table(headers, rows, empty=empty)}</div>'
-
-
-def _flash(request):
-    msg = request.query_params.get("flash")
-    if not msg:
-        return None
-    return ("bad" if request.query_params.get("level") == "bad" else "ok", msg)
-
-
-def _redirect(url, msg, bad=False):
-    q = {"flash": msg}
-    if bad:
-        q["level"] = "bad"
-    return RedirectResponse(f"{url}?{urlencode(q)}", status_code=303)
-
-
-def _html(title, body, request=None, flash=None):
-    return HTMLResponse(ui.page(title, body, nav=NAV, active="HIS", flash=flash or (_flash(request) if request else None)))
-
-
-def _patient_or_404(store, pid):
-    p = store.patients.get(pid)
-    if not p:
-        raise HTTPException(404, f"no registration {pid!r}")
-    return p
-
-
-def _encounter_or_404(store, eid):
-    e = store.encounters.get(eid)
-    if not e:
-        raise HTTPException(404, f"no encounter {eid!r}")
-    return e
-
-
 def _treating(store):
-    return sorted((d for d in store.departments.values() if d["group"] == "treating"), key=lambda d: d["name"])
+    return sorted((d_ for d_ in store.departments.values() if d_["group"] == "treating"), key=lambda x: x["name"])
 
 
 def _consultants(store, departments):
-    names = {d["name"] for d in departments}
+    names = {x["name"] for x in departments}
     return sorted((p for p in store.practitioners.values() if p["department"] in names and p["role"] == "consultant"),
                   key=lambda p: (p["department"], p["name"]))
 
@@ -129,17 +105,8 @@ def _wards(store):
     return sorted({h["ward"] for e in store.encounters.values() for h in e.get("ward_history") or [] if h.get("ward")})
 
 
-def _apply(hospital, change):
-    """Run one change under the lock; append one HL7 message per new event; save. Errors leave nothing appended."""
-    with hospital.lock:
-        store = hospital.store
-        n = len(store.events)
-        result = change(store)
-        for ev in store.events[n:]:
-            hl7.append(store, ev, hospital.files["hl7"])
-        if len(store.events) > n:
-            hospital.save()
-    return result
+def _apply(hospital, change, request=None, action="change"):
+    return common.apply(hospital, request, action, change)
 
 
 # -------------------------------------------------------------------- search
@@ -187,12 +154,12 @@ def _registrations_table(store, patients, empty):
         rows.append([f'<a href="/his/patients/{ui.esc(p["id"])}">{ui.esc(p["name"])}</a>{note}',
                      f'<span class=mono>{ui.esc(p["uhid"])}</span>', _kind_pill(p["registration_kind"]),
                      ui.esc(_age_sex(p)), ui.esc(_d(p["registered_on"])), "yes" if p.get("abha") else "no"])
-    return _table(["Name", "UHID", "Registration", "Age / Sex", "Registered on", "ABHA"], rows, empty=empty)
+    return ui.table(["Name", "UHID", "Registration", "Age / Sex", "Registered on", "ABHA"], rows, empty=empty)
 
 
-# -------------------------------------------------------------------- orders and reports
+# -------------------------------------------------------------------- orders and reports (JSON views)
 def _version_label(v):
-    return f"v{v['version']} ({v['status']})"
+    return common.version_label(v)
 
 
 def report_view(store, r):
@@ -222,49 +189,6 @@ def order_view(store, o):
 
 def _orders(store, encounter_id):
     return sorted(store.orders_for(encounter_id=encounter_id), key=lambda o: (o["ordered_on"], o["id"]))
-
-
-def _order_state(store, o):
-    if o["status"] == "scheduled" and o.get("scheduled_for"):
-        return f"scheduled for {_d(o['scheduled_for'])}"
-    if o["status"] == "sample_collected":
-        spec = store.specimens.get(o.get("specimen_id")) or {}
-        return f"sample collected {spec.get('barcode') or ''}".strip()
-    if o["status"] == "cancelled":
-        return f"cancelled {_d(o.get('cancelled_on'))}" + (f": {o['cancel_reason']}" if o.get("cancel_reason") else "")
-    return ""
-
-
-def _documents_cell(r):
-    if not r:
-        return '<span class=muted>no report yet</span>'
-    vs = r["versions"]
-    parts = []
-    for v in vs:
-        path = (v.get("document") or {}).get("path")
-        label = "PDF" if len(vs) == 1 else _version_label(v)
-        if path:
-            parts.append(f'<a href="/view/reports/{ui.esc(r["id"])}/{v["version"]}" target=_blank>{ui.esc(label)}</a>')
-        else:
-            parts.append(f'<span class=muted>{ui.esc(label if len(vs) > 1 else "PDF")} not rendered</span>')
-    return "<br>".join(parts)
-
-
-def _orders_table(store, orders):
-    rows = []
-    for o in orders:
-        r = store.report_for_order(o["id"])
-        cur = store.current_version(r) if r and r["versions"] else None
-        status = ui.pill(o["status"]) + (" " + ui.pill(r["status"]) if r else "")
-        state = _order_state(store, o)
-        if state:
-            status += f'<br><span class=muted>{ui.esc(state)}</span>'
-        acc = f'<span class=mono>{ui.esc(o["accession"])}</span>' if o["accession"] else '<span class=muted>none</span>'
-        rows.append([acc, ui.esc(o["label"]), ui.esc(o["performing_department"]), ui.esc(_d(o["ordered_on"])), status,
-                     ui.esc(_d(cur["reported_on"])) if cur else "", ("yes" if cur.get("signature_id") else "no") if cur else "",
-                     _documents_cell(r)])
-    return _table(["Accession / Lab No.", "Test", "Department", "Ordered on", "Status", "Reported on", "Signed",
-                     "Document"], rows, empty="No orders on this encounter.")
 
 
 # -------------------------------------------------------------------- encounters
@@ -321,43 +245,88 @@ def _timeline(store, p):
         st = ui.pill(e["status"]) if e["kind"] == "IP" else ""
         panels.append(f'<div class=panel data-encounter="{ui.esc(e["id"])}" data-kind="{ui.esc(e["kind"])}">'
                       f'<h3>{_enc_pill(e)} <a href="/his/encounters/{ui.esc(e["id"])}">{ui.esc(encounter_heading(store, e))}</a> {st}</h3>'
-                      f'{lines}{_orders_table(store, _orders(store, e["id"]))}</div>')
+                      f'{lines}{common.orders_table(store, _orders(store, e["id"]))}</div>')
     return "".join(panels)
 
 
 # -------------------------------------------------------------------- transitions shared by the forms and the API
 def _field(f, key, default=""):
     v = f.get(key) if f is not None else None
-    return default if v is None else str(v).strip()
+    return default if v is None else " ".join(str(v).split())
+
+
+def _dob(text_):
+    """A date of birth typed as DD/MM/YYYY or YYYY-MM-DD -> ISO date."""
+    s = text_.strip()
+    m = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{4})$", s)
+    try:
+        if m:
+            return date(int(m.group(3)), int(m.group(2)), int(m.group(1))).isoformat()
+        return date.fromisoformat(s).isoformat()
+    except ValueError:
+        raise FieldError("dob", "Date of birth must be DD/MM/YYYY.") from None
+
+
+def _age_on(dob_iso, today_iso):
+    b, t = date.fromisoformat(dob_iso), date.fromisoformat(today_iso)
+    return t.year - b.year - ((t.month, t.day) < (b.month, b.day))
 
 
 def do_register(store, f):
-    name = " ".join(_field(f, "name").split())
+    """Validate the registration form (FieldError names the field) and register. Similar registrations raise
+    DuplicateWarning unless `confirm_duplicate` is set."""
+    name = _field(f, "name")
     if not name.endswith("(SYNTHETIC)"):
-        raise ValueError('The name must end with "(SYNTHETIC)": the mock hospital holds synthetic patients only.')
+        raise FieldError("name", 'The name must end with "(SYNTHETIC)": the demo hospital holds synthetic patients only.')
     if not _plain(name):
-        raise ValueError("A name is required before (SYNTHETIC).")
+        raise FieldError("name", "A name is required before (SYNTHETIC).")
     sex = _field(f, "sex").upper()
     if sex not in ("F", "M"):
-        raise ValueError("Sex must be F or M.")
-    try:
-        age = int(_field(f, "age"))
-    except ValueError:
-        raise ValueError("Age must be a whole number of years.") from None
+        raise FieldError("sex", "Sex must be F or M.")
+    dob_text = _field(f, "dob")
+    dob = _dob(dob_text) if dob_text else None
+    age_text = _field(f, "age")
+    if dob and dob > common.today(store):
+        raise FieldError("dob", "The date of birth is in the future.")
+    if age_text:
+        try:
+            age = int(age_text)
+        except ValueError:
+            raise FieldError("age", "Age must be a whole number of years.") from None
+    elif dob:
+        age = _age_on(dob, common.today(store))
+    else:
+        raise FieldError("age", "Enter the age in years or the date of birth.")
     if not 0 <= age <= 120:
-        raise ValueError("Age must be between 0 and 120 years.")
+        raise FieldError("age", "Age must be between 0 and 120 years.")
     kind = _field(f, "kind", "permanent") or "permanent"
     if kind not in KINDS:
-        raise ValueError("Registration kind must be permanent or temporary.")
+        raise FieldError("kind", "Registration kind must be permanent or temporary.")
+    phone = _field(f, "phone")
+    if phone and not PHONE.match(phone):
+        raise FieldError("phone", "Phone must be a 10-digit Indian mobile number, optionally with +91.")
+    pin = _field(f, "pin")
+    if pin and not PIN.match(pin):
+        raise FieldError("pin", "PIN must be 6 digits.")
+    address = {k: _field(f, k) for k in ("line", "town", "district", "state")}
+    address["pin"] = pin
+    address = address if any(address.values()) else None
     abha = _field(f, "abha_number")
     if abha:
         if not ABHA_NUMBER.match(abha):
-            raise ValueError("ABHA number must be 14 digits written 2-4-4-4, for example 99-2600-0000-0001.")
+            raise FieldError("abha_number", "ABHA number must be 14 digits written 2-4-4-4, for example 99-2600-0000-0001.")
         if kind != "permanent":
-            raise ValueError("An ABHA number is linked to a permanent registration only.")
+            raise FieldError("abha_number", "An ABHA number is linked to a permanent registration only.")
         if store.patient_by_identifier(abha):
-            raise model.LifecycleError(f"ABHA number {abha} is already linked to another registration.")
-    return store.register_patient(name, sex, age, kind=kind, abha={"number": abha, "address": None} if abha else None)
+            raise FieldError("abha_number", f"ABHA number {abha} is already linked to another registration.")
+    pmjay = _field(f, "pmjay_id").upper()
+    if pmjay and not PMJAY_ID.match(pmjay):
+        raise FieldError("pmjay_id", "PM-JAY ID must look like PMJAY-VX-26000101 (synthetic pattern).")
+    similar = store.patients_by_name(name, sex=sex, age=age, tolerance=2)
+    if similar and not _field(f, "confirm_duplicate"):
+        raise DuplicateWarning(similar)
+    return store.register_patient(name, sex, age, kind=kind, dob=dob, phone=phone or None, address=address,
+                                  abha={"number": abha, "address": None} if abha else None, pmjay_id=pmjay or None)
 
 
 def _check_consultant(store, consultant_id, dept):
@@ -392,7 +361,7 @@ def do_visit(store, pid, f):
 
 def do_admit(store, pid, f):
     p = store.patients[pid]
-    current = next((e for e in store.encounters_for(pid) if e["kind"] == "IP" and e["status"] == "in-progress"), None)
+    current = common.current_admission(store, pid)
     if current:
         raise model.LifecycleError(f"{p['uhid']} is already admitted under {current['number']}; discharge first.")
     dept = _treating_department(store, _field(f, "department"))
@@ -441,18 +410,64 @@ def do_discharge(store, e, f=None):
 
 
 # -------------------------------------------------------------------- HTML: registration search
-def _register_form():
-    return ('<div class=panel><h2>New registration</h2>'
-            '<form method=post action="/his/registrations">'
-            '<label for=r-name>Name (must end with "(SYNTHETIC)")</label>'
-            '<input type=text id=r-name name=name required placeholder="Firstname Surname (SYNTHETIC)">'
-            '<label for=r-sex>Sex</label><select id=r-sex name=sex>' + ui.options([("F", "F"), ("M", "M")]) + '</select>'
-            '<label for=r-age>Age (years)</label><input type=text id=r-age name=age required inputmode=numeric>'
-            '<label for=r-kind>Registration</label><select id=r-kind name=kind>'
-            + ui.options([("permanent", "Permanent UHID"), ("temporary", "Temporary UHID (casualty)")]) + '</select>'
-            '<label for=r-abha>ABHA number (optional, permanent registration only)</label>'
-            '<input type=text id=r-abha name=abha_number placeholder="99-2600-0000-0001">'
-            '<p><button type=submit>Register</button></p></form></div>')
+def _register_form(request, store, state=None, similar=None):
+    st = state or common.EMPTY
+    warn = ""
+    if similar:
+        warn = ('<div class="flash warn">Possible duplicate: a registration with the same name, sex and age (within 2 '
+                'years) exists. Open it below, or tick "Register anyway" when this is a new person.</div>'
+                + _registrations_table(store, similar, "")
+                + '<p><label><input type=checkbox name=confirm_duplicate value=1> Register anyway (new person)</label></p>')
+    body = (f'<div class=panel id=register><h2>New registration</h2>'
+            '<form method=post action="/his/registrations">' + common.csrf_field(request) + warn
+            + ui.field("name", 'Name (ends with "(SYNTHETIC)")', ui.text_input("name", st.v("name"), required=True,
+                                                                              placeholder="Firstname Surname (SYNTHETIC)"), st.err("name"))
+            + ui.field("sex", "Sex", ui.select("sex", [("F", "F"), ("M", "M")], st.v("sex") or "F", short=True), st.err("sex"))
+            + ui.field("age", "Age (years)", ui.text_input("age", st.v("age"), short=True, extra=" inputmode=numeric"), st.err("age"),
+                       help="Leave blank when the date of birth is given.")
+            + ui.field("dob", "Date of birth (DD/MM/YYYY)", ui.text_input("dob", st.v("dob"), short=True, placeholder="DD/MM/YYYY"),
+                       st.err("dob"))
+            + ui.field("phone", "Mobile phone", ui.text_input("phone", st.v("phone"), short=True, placeholder="+91 98765 43210"),
+                       st.err("phone"))
+            + ui.field("line", "Address", ui.text_input("line", st.v("line"), placeholder="H. No., street, locality"), st.err("line"))
+            + ui.field("town", "Town / village", ui.text_input("town", st.v("town"), short=True), st.err("town"))
+            + ui.field("district", "District", ui.text_input("district", st.v("district"), short=True), st.err("district"))
+            + ui.field("state", "State", ui.select("state", [("", "Choose")] + [(s, s) for s in STATES], st.v("state"), short=True),
+                       st.err("state"))
+            + ui.field("pin", "PIN code", ui.text_input("pin", st.v("pin"), short=True, extra=" inputmode=numeric"), st.err("pin"))
+            + ui.field("kind", "Registration", ui.select("kind", [("permanent", "Permanent UHID"),
+                                                                  ("temporary", "Temporary UHID (casualty)")], st.v("kind") or "permanent"),
+                       st.err("kind"))
+            + ui.field("abha_number", "ABHA number (optional, permanent only)",
+                       ui.text_input("abha_number", st.v("abha_number"), short=True, placeholder="99-2600-0000-0001"), st.err("abha_number"),
+                       help="ABDM sandbox format, 14 digits written 2-4-4-4.")
+            + ui.field("pmjay_id", "PM-JAY ID (optional)", ui.text_input("pmjay_id", st.v("pmjay_id"), short=True,
+                                                                        placeholder="PMJAY-VX-26000101"), st.err("pmjay_id"))
+            + '<p><button type=submit class=primary>Register</button></p></form></div>')
+    return body
+
+
+def _search_box(q):
+    return ('<div class=panel><form method=get action="/his">'
+            '<label class=lbl for=q>UHID (permanent or temporary), IP No., OP No., ABHA number or address, Lab No., or name</label>'
+            f'<input type=text id=q name=q value="{ui.esc(q)}" placeholder="VXH/26/004201, IP/26/01872, OP/26/118701 or a name">'
+            ' <button type=submit>Search</button></form></div>')
+
+
+def home_page(request, hospital, q="", state=None, similar=None, status=200):
+    store = hospital.store
+    results = ""
+    if q.strip():
+        match, hits = search(store, q)
+        results = (f'<div class=panel id=results><h2>Registrations matching "{ui.esc(q.strip())}"</h2>'
+                   + _registrations_table(store, hits, "No registration matches this identifier or name.")
+                   + '<p class=muted>A person links similar registrations in Vaidyx-TB; the HIS never merges them.</p></div>')
+    rec = ('<div class=panel id=recent><h2>Recent registrations</h2>'
+           + _registrations_table(store, recent(store), "No registrations yet.") + '</div>')
+    form = _register_form(request, store, state, similar) if common.can(request, "register") else \
+        '<div class=panel id=register><h2>New registration</h2>' + common.refused_line(request, "register") + '</div>'
+    return common.page(request, "Registration search", _search_box(q) + results + rec + form, active="Registration",
+                       status=status)
 
 
 @router.get("", response_class=HTMLResponse)
@@ -461,73 +476,79 @@ def home(request: Request, q: str = "", hospital: Hospital = Depends(get_hospita
     match, hits = search(store, q)
     if match == "identifier":
         return RedirectResponse(f"/his/patients/{hits[0]['id']}", status_code=303)
-    box = ('<div class=panel><form method=get action="/his">'
-           '<label for=q>UHID (permanent or temporary), IP No., OP No., ABHA number or address, Lab No., or name</label>'
-           f'<input type=text id=q name=q value="{ui.esc(q)}" placeholder="VXH/26/004201, IP/26/01872, OP/26/118701 or a name">'
-           '<p><button type=submit>Search</button></p></form></div>')
-    results = ""
-    if q.strip():
-        results = (f'<div class=panel id=results><h2>Registrations matching "{ui.esc(q.strip())}"</h2>'
-                   + _registrations_table(store, hits, "No registration matches this identifier or name.")
-                   + '<p class=muted>A person links similar registrations in Vaidyx-TB; the HIS never merges them.</p></div>')
-    rec = ('<div class=panel id=recent><h2>Recent registrations</h2>'
-           + _registrations_table(store, recent(store), "No registrations yet.") + '</div>')
-    return _html("Registration search", box + results + rec + _register_form(), request)
+    return home_page(request, hospital, q)
 
 
 @router.post("/registrations")
 async def register(request: Request, hospital: Hospital = Depends(get_hospital)):
-    form = await request.form()
+    form = await common.form(request)
+    common.require(request, "register")
     try:
-        p = _apply(hospital, lambda s: do_register(s, form))
+        p = _apply(hospital, lambda s: do_register(s, form), request, "register")
+    except FieldError as e:
+        return home_page(request, hospital, state=FormState(common.values_of(form), {e.field: e.message}), status=422)
+    except DuplicateWarning as e:
+        return home_page(request, hospital, state=FormState(common.values_of(form)), similar=e.similar, status=409)
     except ValueError as e:
-        return _redirect("/his", str(e), bad=True)
-    return _redirect(f"/his/patients/{p['id']}", f"Registered {p['name']} as {p['uhid']} ({p['registration_kind']}).")
+        return common.redirect("/his", str(e), bad=True)
+    sim = hospital.store.similar_registrations(p["id"])
+    msg = f"Registered {p['name']} as {p['uhid']} ({p['registration_kind']})."
+    if sim:
+        return common.redirect(f"/his/patients/{p['id']}", msg + f" Note: {len(sim)} similar registration(s) exist.", warn=True)
+    return common.redirect(f"/his/patients/{p['id']}", msg)
 
 
 # -------------------------------------------------------------------- HTML: patient
 def _dept_options(departments, selected=None):
-    return ui.options([(d["name"], d["name"]) for d in departments], selected)
+    return ui.options([(x["name"], x["name"]) for x in departments], selected)
 
 
-def _consultant_options(store, departments):
+def _consultant_options(store, departments, selected=None):
     return ui.options([("", "Not assigned")] + [(c["id"], f"{c['name']} ({c['department']})")
-                                                 for c in _consultants(store, departments)])
+                                                 for c in _consultants(store, departments)], selected)
 
 
-def _patient_forms(store, p):
+def _patient_forms(request, store, p):
     tre = _treating(store)
     last = (store.encounters_for(p["id"]) or [None])[-1]
-    dsel = last["department"] if last else None
+    me = common.practitioner(request, store)
+    dsel = me["department"] if me else (last["department"] if last else None)
+    csel = me["id"] if me else None
     units = ui.options([(u, u) for u in UNITS])
-    visit = ('<div class=panel><h2>New OP visit</h2>'
-             f'<form method=post action="/his/patients/{ui.esc(p["id"])}/visits">'
-             '<label for=v-dept>Department</label><select id=v-dept name=department>' + _dept_options(tre, dsel) + '</select>'
-             '<label for=v-unit>Unit</label><select id=v-unit name=unit>' + units + '</select>'
-             '<label for=v-cons>Consultant (of that department)</label><select id=v-cons name=consultant_id>'
-             + _consultant_options(store, tre) + '</select>'
-             '<label for=v-type>Visit type</label><select id=v-type name=visit_type>' + ui.options(VISIT_TYPES) + '</select>'
-             '<p><button type=submit>Open OP visit</button></p></form></div>')
-    wards = "".join(f'<option value="{ui.esc(w)}">' for w in _wards(store))
-    pre = ui.options([("", "Not requested")] + [(s, s) for s in PREAUTH_STATUSES])
-    admit = ('<div class=panel><h2>Admit</h2>'
-             f'<form method=post action="/his/patients/{ui.esc(p["id"])}/admissions">'
-             '<label for=a-dept>Department</label><select id=a-dept name=department>' + _dept_options(tre, dsel) + '</select>'
-             '<label for=a-unit>Unit</label><select id=a-unit name=unit>' + units + '</select>'
-             '<label for=a-cons>Consultant (of that department)</label><select id=a-cons name=consultant_id>'
-             + _consultant_options(store, tre) + '</select>'
-             f'<label for=a-ward>Ward</label><input type=text id=a-ward name=ward list=wards required><datalist id=wards>{wards}</datalist>'
-             '<label for=a-bed>Bed</label><input type=text id=a-bed name=bed required>'
-             '<label for=a-pre>PM-JAY Pre-Authorization status (optional)</label><select id=a-pre name=pmjay_preauth>'
-             + pre + '</select>'
-             '<p><button type=submit>Admit</button></p></form></div>')
-    return f'<div class=grid>{visit}{admit}</div>'
+    csrf = common.csrf_field(request)
+    parts = []
+    if common.can(request, "visit.open"):
+        parts.append('<div class=panel id=visit><h2>New OP visit</h2>'
+                     f'<form method=post action="/his/patients/{ui.esc(p["id"])}/visits">{csrf}'
+                     + ui.field("department", "Department", f'<select id="f-department" name=department>{_dept_options(tre, dsel)}</select>')
+                     + ui.field("unit", "Unit", f'<select id="f-unit" name=unit class=short>{units}</select>')
+                     + ui.field("consultant_id", "Consultant", f'<select id="f-consultant_id" name=consultant_id>{_consultant_options(store, tre, csel)}</select>')
+                     + ui.field("visit_type", "Visit type", f'<select id="f-visit_type" name=visit_type class=short>{ui.options(VISIT_TYPES)}</select>')
+                     + '<p><button type=submit class=primary>Open OP visit</button></p></form></div>')
+    else:
+        parts.append('<div class=panel id=visit><h2>New OP visit</h2>' + common.refused_line(request, "visit.open") + '</div>')
+    if common.can(request, "admit"):
+        wards = "".join(f'<option value="{ui.esc(w)}">' for w in _wards(store))
+        pre = ui.options([("", "Not requested")] + [(s, s) for s in PREAUTH_STATUSES])
+        parts.append('<div class=panel id=admit><h2>Admit</h2>'
+                     f'<form method=post action="/his/patients/{ui.esc(p["id"])}/admissions">{csrf}'
+                     + ui.field("a-department", "Department", f'<select id="f-a-department" name=department>{_dept_options(tre, dsel)}</select>')
+                     + ui.field("a-unit", "Unit", f'<select id="f-a-unit" name=unit class=short>{units}</select>')
+                     + ui.field("a-consultant", "Consultant", f'<select id="f-a-consultant" name=consultant_id>{_consultant_options(store, tre, csel)}</select>')
+                     + ui.field("ward", "Ward", f'<input type=text id="f-ward" name=ward list=wards required class=short><datalist id=wards>{wards}</datalist>')
+                     + ui.field("bed", "Bed", ui.text_input("bed", required=True, short=True))
+                     + ui.field("pmjay_preauth", "PM-JAY Pre-Authorization", f'<select id="f-pmjay_preauth" name=pmjay_preauth class=short>{pre}</select>',
+                                help="Only a patient with a PM-JAY ID can carry a Pre-Authorization.")
+                     + '<p><button type=submit class=primary>Admit</button></p></form></div>')
+    else:
+        parts.append('<div class=panel id=admit><h2>Admit</h2>' + common.refused_line(request, "admit") + '</div>')
+    return f'<div class=grid>{"".join(parts)}</div>'
 
 
 @router.get("/patients/{pid}", response_class=HTMLResponse)
 def patient_page(pid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
     store = hospital.store
-    p = _patient_or_404(store, pid)
+    p = common.patient_or_404(store, pid)
     abha = p.get("abha") or {}
     demo = ui.dl([
         ("UHID", f'<span class=mono>{ui.esc(p["uhid"])}</span> {_kind_pill(p["registration_kind"])}'),
@@ -541,82 +562,98 @@ def patient_page(pid: str, request: Request, hospital: Hospital = Depends(get_ho
         ("Address", ui.esc(_address(p))),
         ("Registered on", ui.esc(_d(p["registered_on"]))),
     ] + ([("Note", ui.esc(p["note"]))] if p.get("note") else []))
-    body = f'<div class=panel id=demographics>{demo}</div>'
+    body = f'<div class=panel id=demographics><h2>Demographics</h2>{demo}</div>'
     sim = store.similar_registrations(p["id"])
     if sim:
         body += ('<div class=panel id=similar><h2>Similar registrations</h2>'
                  f'<p><span class="pill warn">Check</span> {ui.esc(SIMILAR_NOTE)}</p>'
                  + _registrations_table(store, sim, "") + '</div>')
     body += '<h2>Timeline (OP visits and IP admissions, newest first)</h2>' + _timeline(store, p)
-    body += _patient_forms(store, p)
-    return _html(f"{p['name']}, {p['uhid']}", body, request)
+    body += _patient_forms(request, store, p)
+    return common.page(request, f"{p['name']}, {p['uhid']}", body, active="Registration", banner=common.banner(store, p))
 
 
 @router.post("/patients/{pid}/visits")
 async def visit_form(pid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-    _patient_or_404(hospital.store, pid)
-    form = await request.form()
+    common.patient_or_404(hospital.store, pid)
+    form = await common.form(request)
+    common.require(request, "visit.open")
     try:
-        e = _apply(hospital, lambda s: do_visit(s, pid, form))
+        e = _apply(hospital, lambda s: do_visit(s, pid, form), request, "visit.open")
     except ValueError as ex:
-        return _redirect(f"/his/patients/{pid}", str(ex), bad=True)
-    return _redirect(f"/his/patients/{pid}", f"OP visit {e['number']} opened in {e['department']} {e['unit']}.")
+        return common.redirect(f"/his/patients/{pid}", str(ex), bad=True)
+    return common.redirect(f"/his/encounters/{e['id']}", f"OP visit {e['number']} opened in {e['department']} {e['unit']}.")
 
 
 @router.post("/patients/{pid}/admissions")
 async def admit_form(pid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-    _patient_or_404(hospital.store, pid)
-    form = await request.form()
+    common.patient_or_404(hospital.store, pid)
+    form = await common.form(request)
+    common.require(request, "admit")
     try:
-        e = _apply(hospital, lambda s: do_admit(s, pid, form))
+        e = _apply(hospital, lambda s: do_admit(s, pid, form), request, "admit")
     except ValueError as ex:
-        return _redirect(f"/his/patients/{pid}", str(ex), bad=True)
-    return _redirect(f"/his/encounters/{e['id']}", f"Admitted under {e['number']}, {e['ward']} bed {e['bed']}.")
+        return common.redirect(f"/his/patients/{pid}", str(ex), bad=True)
+    return common.redirect(f"/his/encounters/{e['id']}", f"Admitted under {e['number']}, {e['ward']} bed {e['bed']}.")
 
 
 # -------------------------------------------------------------------- HTML: encounter
-def _encounter_forms(store, e):
+def _encounter_forms(request, store, e, state=None):
     eid = ui.esc(e["id"])
-    others = sorted((d for d in store.departments.values() if d["name"] != e["department"]),
-                    key=lambda d: (d["group"] != "treating", d["name"]))
+    csrf = common.csrf_field(request)
+    parts = []
+    open_ip = e["kind"] == "IP" and e["status"] == "in-progress"
+    # OPD note and order entry (OPD module), discharge summary (IPD module)
+    if e["kind"] == "OP":
+        parts.append(opd.note_form(request, store, e, state))
+    parts.append(opd.order_form(request, store, e))
+    if e["kind"] == "IP":
+        parts.append(ipd.discharge_summary_form(request, store, e, state))
+    # referral
+    others = sorted((x for x in store.departments.values() if x["name"] != e["department"]),
+                    key=lambda x: (x["group"] != "treating", x["name"]))
     froms = [e["department"]] + [r["to"] for r in e.get("referrals") or [] if r["status"] == "accepted"]
     froms = list(dict.fromkeys(froms))
     from_field = ""
     if len(froms) > 1:
-        from_field = ('<label for=f-from>From</label><select id=f-from name=from>'
-                      + ui.options([(x, x) for x in froms]) + '</select>')
-    parts = [('<div class=panel id=refer><h2>Refer to department</h2>'
-              f'<form method=post action="/his/encounters/{eid}/refer">{from_field}'
-              '<label for=f-to>To</label><select id=f-to name=to>' + _dept_options(others) + '</select>'
-              '<label for=f-reason>Reason</label><textarea id=f-reason name=reason required></textarea>'
-              '<p><button type=submit>Refer</button></p></form></div>')]
+        from_field = ui.field("from", "From", f'<select id="f-from" name=from>{ui.options([(x, x) for x in froms])}</select>')
+    if common.can(request, "refer"):
+        parts.append('<div class=panel id=refer><h2>Refer to department</h2>'
+                     f'<form method=post action="/his/encounters/{eid}/refer">{csrf}{from_field}'
+                     + ui.field("to", "To", f'<select id="f-to" name=to>{_dept_options(others)}</select>')
+                     + ui.field("reason", "Reason", ui.textarea("reason", required=True, rows=2))
+                     + '<p><button type=submit>Refer</button></p></form></div>')
+    else:
+        parts.append('<div class=panel id=refer><h2>Refer to department</h2>' + common.refused_line(request, "refer") + '</div>')
     open_refs = [r for r in e.get("referrals") or [] if r["status"] == "requested"]
-    if open_refs:
-        btns = "".join(f'<form class=inline method=post action="/his/encounters/{eid}/accept">'
+    if open_refs and common.can(request, "accept_referral"):
+        btns = "".join(f'<form class=inline method=post action="/his/encounters/{eid}/accept">{csrf}'
                        f'<input type=hidden name=to value="{ui.esc(r["to"])}">'
-                       f'<button type=submit class=secondary>Accepted by {ui.esc(r["to"])}</button></form> '
+                       f'<button type=submit>Accepted by {ui.esc(r["to"])}</button></form> '
                        for r in open_refs)
         parts.append(f'<div class=panel id=accept><h2>Accept referral</h2><p>{btns}</p></div>')
-    if e["kind"] == "IP" and e["status"] == "in-progress":
-        wards = "".join(f'<option value="{ui.esc(w)}">' for w in _wards(store))
-        parts.append('<div class=panel id=transfer><h2>Transfer ward</h2>'
-                     f'<form method=post action="/his/encounters/{eid}/transfer">'
-                     f'<label for=t-ward>Ward</label><input type=text id=t-ward name=ward list=wards required value="{ui.esc(e.get("ward"))}">'
-                     f'<datalist id=wards>{wards}</datalist>'
-                     '<label for=t-bed>Bed</label><input type=text id=t-bed name=bed required>'
-                     '<label for=t-reason>Reason (optional)</label><input type=text id=t-reason name=reason>'
-                     '<p><button type=submit>Transfer</button></p></form></div>')
-        parts.append('<div class=panel id=discharge><h2>Discharge</h2>'
-                     f'<form method=post action="/his/encounters/{eid}/discharge">'
-                     f'<p class=muted>Discharge {ui.esc(e["number"])} from {ui.esc(e.get("ward"))}, bed {ui.esc(e.get("bed"))}.</p>'
-                     '<p><button type=submit class=danger>Discharge</button></p></form></div>')
+    if open_ip:
+        if common.can(request, "transfer"):
+            wards = "".join(f'<option value="{ui.esc(w)}">' for w in _wards(store))
+            parts.append('<div class=panel id=transfer><h2>Transfer ward</h2>'
+                         f'<form method=post action="/his/encounters/{eid}/transfer">{csrf}'
+                         + ui.field("t-ward", "Ward", f'<input type=text id=t-ward name=ward list=wards required class=short value="{ui.esc(e.get("ward"))}"><datalist id=wards>{wards}</datalist>')
+                         + ui.field("t-bed", "Bed", '<input type=text id=t-bed name=bed required class=short>')
+                         + ui.field("t-reason", "Reason (optional)", '<input type=text id=t-reason name=reason>')
+                         + '<p><button type=submit>Transfer</button></p></form></div>')
+        if common.can(request, "discharge"):
+            parts.append('<div class=panel id=discharge><h2>Discharge</h2>'
+                         f'<form method=post action="/his/encounters/{eid}/discharge">{csrf}'
+                         f'<p class=muted>Discharge {ui.esc(e["number"])} from {ui.esc(e.get("ward"))}, bed {ui.esc(e.get("bed"))}. '
+                         'Write the discharge summary first.</p>'
+                         '<p><button type=submit class=danger>Discharge</button></p></form></div>')
+        else:
+            parts.append('<div class=panel id=discharge><h2>Discharge</h2>' + common.refused_line(request, "discharge") + '</div>')
     return f'<div class=grid>{"".join(parts)}</div>'
 
 
-@router.get("/encounters/{eid}", response_class=HTMLResponse)
-def encounter_page(eid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
+def render_encounter(request, hospital, e, state=None, status=200):
     store = hospital.store
-    e = _encounter_or_404(store, eid)
     p = store.patients[e["patient_id"]]
     pairs = [("Patient", f'<a href="/his/patients/{ui.esc(p["id"])}">{ui.esc(p["name"])}</a>, '
                          f'<span class=mono>{ui.esc(p["uhid"])}</span> {_kind_pill(p["registration_kind"])}, {ui.esc(_age_sex(p))}'),
@@ -639,44 +676,106 @@ def encounter_page(eid: str, request: Request, hospital: Hospital = Depends(get_
         rows = [[ui.esc(h["ward"]), ui.esc(h["bed"]), ui.esc(ids.display_time(h["from"])), ui.esc(h.get("reason") or "")]
                 for h in e.get("ward_history") or []]
         body += ('<div class=panel id=wards><h2>Ward history</h2>'
-                 + _table(["Ward", "Bed", "From", "Reason"], rows, empty="No ward recorded.") + '</div>')
+                 + ui.table(["Ward", "Bed", "From", "Reason"], rows, empty="No ward recorded.") + '</div>')
     rows = [[ui.esc(r["from"]), ui.esc(r["to"]), ui.esc(_d(r["on"])), ui.esc(r.get("reason") or ""), ui.pill(r["status"]),
              ui.esc(_d(r.get("accepted_on")))] for r in e.get("referrals") or []]
     body += ('<div class=panel id=referrals><h2>Referrals</h2>'
-             + _table(["From", "To", "On", "Reason", "Status", "Accepted on"], rows, empty="No referral on this encounter.")
+             + ui.table(["From", "To", "On", "Reason", "Status", "Accepted on"], rows, empty="No referral on this encounter.")
              + '</div>')
-    body += ('<div class=panel id=orders><h2>Orders and reports</h2>' + _orders_table(store, _orders(store, e["id"])) + '</div>')
-    body += _encounter_forms(store, e)
-    return _html(encounter_heading(store, e), body, request)
+    body += ('<div class=panel id=orders><h2>Orders and reports</h2>' + common.orders_table(store, _orders(store, e["id"])) + '</div>')
+    body += _encounter_forms(request, store, e, state)
+    return common.page(request, encounter_heading(store, e), body, active="OPD" if e["kind"] == "OP" else "IPD",
+                       banner=common.banner(store, p, e), status=status)
 
 
-def _encounter_post(action, label):
+@router.get("/encounters/{eid}", response_class=HTMLResponse)
+def encounter_page(eid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
+    e = common.encounter_or_404(hospital.store, eid)
+    return render_encounter(request, hospital, e)
+
+
+def _encounter_post(action, label, permission):
     async def handler(eid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-        _encounter_or_404(hospital.store, eid)
-        form = await request.form()
+        common.encounter_or_404(hospital.store, eid)
+        form = await common.form(request)
+        common.require(request, permission)
         try:
-            res = _apply(hospital, lambda s: action(s, s.encounters[eid], form))
+            res = _apply(hospital, lambda s: action(s, s.encounters[eid], form), request, permission)
         except ValueError as ex:
-            return _redirect(f"/his/encounters/{eid}", str(ex), bad=True)
-        return _redirect(f"/his/encounters/{eid}", label(hospital.store.encounters[eid], res))
+            return common.redirect(f"/his/encounters/{eid}", str(ex), bad=True)
+        return common.redirect(f"/his/encounters/{eid}", label(hospital.store.encounters[eid], res))
     return handler
 
 
 router.add_api_route("/encounters/{eid}/refer", _encounter_post(
-    do_refer, lambda e, r: f"Referral from {r['from']} to {r['to']} requested."), methods=["POST"])
+    do_refer, lambda e, r: f"Referral from {r['from']} to {r['to']} requested.", "refer"), methods=["POST"])
 router.add_api_route("/encounters/{eid}/accept", _encounter_post(
-    do_accept, lambda e, r: f"Referral accepted by {r['to']}."), methods=["POST"])
+    do_accept, lambda e, r: f"Referral accepted by {r['to']}.", "accept_referral"), methods=["POST"])
 router.add_api_route("/encounters/{eid}/transfer", _encounter_post(
-    do_transfer, lambda e, r: f"{e['number']} transferred to {e['ward']}, bed {e['bed']}."), methods=["POST"])
+    do_transfer, lambda e, r: f"{e['number']} transferred to {e['ward']}, bed {e['bed']}.", "transfer"), methods=["POST"])
 router.add_api_route("/encounters/{eid}/discharge", _encounter_post(
-    do_discharge, lambda e, r: f"{e['number']} discharged."), methods=["POST"])
+    do_discharge, lambda e, r: f"{e['number']} discharged.", "discharge"), methods=["POST"])
 
 
-# -------------------------------------------------------------------- JSON API
+@router.post("/encounters/{eid}/orders")
+async def orders_form(eid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
+    """Order entry: the ticked tests, grouped by performing department on the form, placed one by one."""
+    e = common.encounter_or_404(hospital.store, eid)
+    form = await common.form(request)
+    common.require(request, "order")
+    tests = [t for t in form.getlist("tests") if t]
+    try:
+        placed = _apply(hospital, lambda s: opd.do_orders(s, e, tests), request, "order",)
+    except ValueError as ex:
+        return common.redirect(f"/his/encounters/{eid}", str(ex), bad=True)
+    what = "; ".join(f"{o['accession'] or o['id']} {o['label']}" for o in placed)
+    return common.redirect(f"/his/encounters/{eid}", f"Ordered: {what}.")
+
+
+@router.post("/encounters/{eid}/notes")
+async def note_form_post(eid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
+    """The OPD consultation note: an opd_note order signed at once by the consultant (PDF, HL7, FHIR DocumentReference)."""
+    e = common.encounter_or_404(hospital.store, eid)
+    form = await common.form(request)
+    common.require(request, "note")
+    try:
+        rec, notes = opd.do_note(hospital, request, e, form)
+    except FieldError as ex:
+        return render_encounter(request, hospital, e, state=FormState(common.values_of(form), {ex.field: ex.message}, "note"),
+                                status=422)
+    except ValueError as ex:
+        return common.redirect(f"/his/encounters/{eid}", str(ex), bad=True)
+    msg, warn = common.notes_flash(f"OPD note signed on {e['number']}", notes)
+    return common.redirect(f"/his/encounters/{eid}", msg, warn=warn)
+
+
+@router.post("/encounters/{eid}/discharge-summary")
+async def discharge_summary_post(eid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
+    e = common.encounter_or_404(hospital.store, eid)
+    form = await common.form(request)
+    common.require(request, "note")
+    try:
+        rec, notes = ipd.do_discharge_summary(hospital, request, e, form)
+    except FieldError as ex:
+        return render_encounter(request, hospital, e, state=FormState(common.values_of(form), {ex.field: ex.message}, "summary"),
+                                status=422)
+    except ValueError as ex:
+        return common.redirect(f"/his/encounters/{eid}", str(ex), bad=True)
+    msg, warn = common.notes_flash(f"Discharge summary signed for {e['number']}", notes)
+    return common.redirect(f"/his/encounters/{eid}", msg, warn=warn)
+
+
+# -------------------------------------------------------------------- JSON API (login-free, for tests and the e2e)
 def _error(ex):
+    if isinstance(ex, DuplicateWarning):
+        return JSONResponse({"error": "duplicate", "detail": str(ex), "similar": [x["id"] for x in ex.similar]},
+                            status_code=409)
     if isinstance(ex, model.LifecycleError):
         return JSONResponse({"error": "lifecycle", "detail": str(ex)}, status_code=409)
-    return JSONResponse({"error": "invalid", "detail": str(ex)}, status_code=422)
+    out = {"error": "invalid", "detail": str(ex)}
+    if isinstance(ex, FieldError):
+        out["field"] = ex.field
+    return JSONResponse(out, status_code=422)
 
 
 async def _body(request):
@@ -707,7 +806,7 @@ def api_search(q: str = "", hospital: Hospital = Depends(get_hospital)):
 @router.get("/api/patients/{pid}")
 def api_patient(pid: str, hospital: Hospital = Depends(get_hospital)):
     store = hospital.store
-    return patient_view(store, _patient_or_404(store, pid))
+    return patient_view(store, common.patient_or_404(store, pid))
 
 
 @router.get("/api/encounters")
@@ -723,25 +822,25 @@ def api_encounters(kind: str = "", status: str = "", hospital: Hospital = Depend
 @router.get("/api/encounters/{eid}")
 def api_encounter(eid: str, hospital: Hospital = Depends(get_hospital)):
     store = hospital.store
-    return encounter_view(store, _encounter_or_404(store, eid))
+    return encounter_view(store, common.encounter_or_404(store, eid))
 
 
 @router.post("/api/registrations")
 async def api_register(request: Request, hospital: Hospital = Depends(get_hospital)):
     data = await _body(request)
     try:
-        p = _apply(hospital, lambda s: do_register(s, data))
-    except ValueError as ex:
+        p = _apply(hospital, lambda s: do_register(s, data), request, "register")
+    except (ValueError, DuplicateWarning) as ex:
         return _error(ex)
     return {"ok": True, "patient": p, "event": hospital.store.events[-1]["id"]}
 
 
 def _patient_api(action, key):
     async def handler(pid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-        _patient_or_404(hospital.store, pid)
+        common.patient_or_404(hospital.store, pid)
         data = await _body(request)
         try:
-            e = _apply(hospital, lambda s: action(s, pid, data))
+            e = _apply(hospital, lambda s: action(s, pid, data), request, key)
         except ValueError as ex:
             return _error(ex)
         return {"ok": True, key: encounter_view(hospital.store, e), "event": hospital.store.events[-1]["id"]}
@@ -754,10 +853,10 @@ router.add_api_route("/api/patients/{pid}/admissions", _patient_api(do_admit, "e
 
 def _encounter_api(action, key):
     async def handler(eid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-        _encounter_or_404(hospital.store, eid)
+        common.encounter_or_404(hospital.store, eid)
         data = await _body(request)
         try:
-            res = _apply(hospital, lambda s: action(s, s.encounters[eid], data))
+            res = _apply(hospital, lambda s: action(s, s.encounters[eid], data), request, key or "change")
         except ValueError as ex:
             return _error(ex)
         out = {"ok": True, "encounter": encounter_view(hospital.store, hospital.store.encounters[eid]), "event": hospital.store.events[-1]["id"]}
@@ -771,3 +870,18 @@ router.add_api_route("/api/encounters/{eid}/refer", _encounter_api(do_refer, "re
 router.add_api_route("/api/encounters/{eid}/accept", _encounter_api(do_accept, "referral"), methods=["POST"])
 router.add_api_route("/api/encounters/{eid}/transfer", _encounter_api(do_transfer, None), methods=["POST"])
 router.add_api_route("/api/encounters/{eid}/discharge", _encounter_api(do_discharge, None), methods=["POST"])
+
+
+@router.post("/api/encounters/{eid}/orders")
+async def api_orders(eid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
+    """JSON order entry: {"tests": ["cbc", "lft"]} -> the placed orders."""
+    e = common.encounter_or_404(hospital.store, eid)
+    data = await _body(request)
+    tests = data.get("tests") or []
+    if not isinstance(tests, list):
+        return JSONResponse({"error": "invalid", "detail": "tests must be a list of test keys"}, status_code=422)
+    try:
+        placed = _apply(hospital, lambda s: opd.do_orders(s, e, [str(t) for t in tests]), request, "order")
+    except ValueError as ex:
+        return _error(ex)
+    return {"ok": True, "orders": [order_view(hospital.store, o) for o in placed]}

@@ -447,6 +447,10 @@ class Store:
         t = self._when(when)
         o["status"], o["scheduled_for"] = "scheduled", iso_date(date) if len(str(date)) == 10 else iso(date)
         self._ensure_imaging_study(o, o["scheduled_for"], t)
+        study = self.imaging_study_for(o["id"])
+        if study and study["status"] == "registered" and not study.get("series") and study["started"] != o["scheduled_for"]:
+            study["started"] = o["scheduled_for"]          # rescheduled before acquisition: the study moves with it
+            _bump(study, t)
         _bump(o, t)
         self._order_event("scheduled", o, t, f"Order {o['accession'] or o['id']} scheduled for {o['scheduled_for']}")
         return o

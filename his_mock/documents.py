@@ -119,7 +119,13 @@ LABELS = {
     "creatinine": "Serum creatinine", "bilirubin": "Serum bilirubin (total)", "urea": "Blood urea", "sgot": "SGOT (AST)",
     "sgpt": "SGPT (ALT)", "cea": "Carcinoembryonic antigen (CEA)", "hiv_status": "HIV 1 and 2 antibodies",
     "hbsag": "HBsAg", "anti_hcv": "Anti-HCV antibodies",
+    "technique": "Technique", "comparison": "Comparison", "findings": "Findings", "impression": "Impression",
+    "specimen": "Specimen", "gross": "Gross", "microscopy": "Microscopy", "diagnosis": "Diagnosis",
+    "examination": "Examination", "plan": "Plan", "course": "Course", "advice": "Advice", "remarks": "Remarks",
 }
+# values the HIMS entry forms type as free text: printed as paragraphs inside their own section, without a label
+PLAIN_KEYS = {"technique", "comparison", "findings", "impression", "specimen", "gross", "microscopy", "diagnosis",
+              "examination", "plan", "course", "advice"}
 
 # Biological reference intervals (plausible Indian adult ranges, SYNTHETIC; printed without the unit, which has its column)
 REFERENCE = {
@@ -208,8 +214,20 @@ def _reference(key, sex):
 
 
 def _rows(values, keys=None):
+    """Labelled rows ("<b>Label:</b> value"); a free-text value (PLAIN_KEYS) prints as plain paragraphs."""
     keys = list(values) if keys is None else keys
-    return "".join(f"<p><b>{_e(label(k))}:</b> {_e(values[k])}</p>" for k in keys)
+    out = []
+    for k in keys:
+        if k in PLAIN_KEYS:
+            out.append(_paragraphs(values[k]))
+        else:
+            out.append(f"<p><b>{_e(label(k))}:</b> {_e(values[k])}</p>")
+    return "".join(out)
+
+
+def _paragraphs(text):
+    lines = [x for x in str(text).replace("\r", "").split("\n") if x.strip()]
+    return "".join(f"<p>{_e(x)}</p>" for x in lines) or f"<p>{_e(text)}</p>"
 
 
 def _section(heading, body):
@@ -371,8 +389,12 @@ def _split_impression(vals):
 
 
 def _body_radiology(store, report, version, vals, **_):
-    find, imp = _split_impression(vals)
-    body = _section("Technique", f"<p>{_e(TECHNIQUE.get(report['doc_type'], 'As per the departmental protocol.'))}</p>")
+    rest = {k: v for k, v in vals.items() if k not in ("technique", "comparison")}
+    find, imp = _split_impression(rest)
+    technique = vals.get("technique") or TECHNIQUE.get(report["doc_type"], "As per the departmental protocol.")
+    body = _section("Technique", _paragraphs(technique))
+    if vals.get("comparison"):
+        body += _section("Comparison", _paragraphs(vals["comparison"]))
     body += _section("Findings", _rows(vals, find) or "<p>Described in the impression below.</p>")
     body += _section("Impression", _rows(vals, imp) or "<p>As described in the findings above.</p>")
     return body
@@ -387,11 +409,12 @@ def _specimen_block(spec, text):
 
 def _body_hpe(store, report, version, vals, spec=None, **_):
     review = report["test"] == "hpe_slide_review"
-    body = _specimen_block(spec, "Outside slides and paraffin blocks received for review." if review
-                           else "Biopsy received in 10% buffered formalin, labelled with the patient's name and UHID.")
-    body += _section("Gross", "<p>" + ("Slides and blocks as received, labelled with the outside laboratory's numbers."
-                                       if review else "Specimen received as labelled and submitted for processing.") + "</p>")
-    micro = [k for k in vals if k not in HPE_DIAGNOSIS_KEYS]
+    body = _specimen_block(spec, vals.get("specimen") or ("Outside slides and paraffin blocks received for review." if review
+                           else "Biopsy received in 10% buffered formalin, labelled with the patient's name and UHID."))
+    body += _section("Gross", _paragraphs(vals["gross"]) if vals.get("gross") else "<p>"
+                     + ("Slides and blocks as received, labelled with the outside laboratory's numbers."
+                        if review else "Specimen received as labelled and submitted for processing.") + "</p>")
+    micro = [k for k in vals if k not in HPE_DIAGNOSIS_KEYS and k not in ("specimen", "gross")]
     diag = [k for k in vals if k in HPE_DIAGNOSIS_KEYS]
     body += _section("Microscopy", _rows(vals, micro) or "<p>Sections studied.</p>")
     body += _section("Diagnosis", _rows(vals, diag) or "<p>As described in the microscopy above.</p>")
@@ -413,9 +436,10 @@ def _body_molecular(store, report, version, vals, spec=None, **_):
 
 
 def _body_cytology(store, report, version, vals, spec=None, **_):
-    body = _specimen_block(spec, "Aspirates received as smears and a cell block.")
-    body += _section("Microscopy", "<p>Smears studied.</p>")
-    body += _section("Diagnosis", _rows(vals) or "<p>As described in the microscopy above.</p>")
+    body = _specimen_block(spec, vals.get("specimen") or "Aspirates received as smears and a cell block.")
+    body += _section("Microscopy", _paragraphs(vals["microscopy"]) if vals.get("microscopy") else "<p>Smears studied.</p>")
+    rest = [k for k in vals if k not in ("specimen", "microscopy")]
+    body += _section("Diagnosis", _rows(vals, rest) or "<p>As described in the microscopy above.</p>")
     return body
 
 
@@ -430,7 +454,7 @@ def _body_endoscopy(store, report, version, vals, **_):
 
 def _clinical_sections(vals):
     pc = [k for k in vals if k == "presenting_complaint"]
-    plan = [k for k in vals if k == "clinical_question"]
+    plan = [k for k in vals if k in ("clinical_question", "plan")]
     exam = [k for k in vals if k not in pc + plan]
     body = _section("Presenting complaint", _rows(vals, pc) or "<p>As recorded in the case sheet.</p>")
     body += _section("Examination", _rows(vals, exam) or "<p>As recorded in the case sheet.</p>")
@@ -479,9 +503,12 @@ def _body_discharge(store, report, version, vals, patient=None, enc=None, **_):
         adm.append(f"<p>{_e(line)}</p>")
     body = _section("Admission", "".join(adm))
     body += _section("Referrals", _referral_lines(enc) or "<p>No inter-department referral during this admission.</p>")
-    body += _section("Diagnosis", "<p>As per the investigation reports filed under this IP No.</p>")
-    body += _section("Course", _rows(vals) + "<p>Course in the ward as per the movements above.</p>")
-    body += _section("Advice", f"<p>Review in the {_e(enc.get('department'))} OPD, {_e(enc.get('unit'))}, with all reports.</p>")
+    body += _section("Diagnosis", _paragraphs(vals["diagnosis"]) if vals.get("diagnosis")
+                     else "<p>As per the investigation reports filed under this IP No.</p>")
+    course = [k for k in vals if k not in ("diagnosis", "advice")]
+    body += _section("Course", _rows(vals, course) + "<p>Course in the ward as per the movements above.</p>")
+    body += _section("Advice", _paragraphs(vals["advice"]) if vals.get("advice")
+                     else f"<p>Review in the {_e(enc.get('department'))} OPD, {_e(enc.get('unit'))}, with all reports.</p>")
     return body
 
 
