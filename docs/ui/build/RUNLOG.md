@@ -80,3 +80,5 @@ Legend: [ ] to do, [~] in progress, [x] done (commit), [!] blocked or partial (r
 
 ## Notes / decisions taken during the run (continued)
 - 18 Oct ~02:30: all seven agents stopped on the API session limit (reset 01:40 IST); at 09:30 the owner said "go on continue": every agent resumed by message from where it stopped (their files on disk intact).
+- 18 Oct 10:55: Fable agents hit the session limit again (reset 14:30). Owner switched the lead to Opus. Six continuation agents launched on Opus from the briefs in docs/ui/build/briefs/ (COMMON.md + H_hims, B1_accounts_team, B3_meetings_live, F1_shell_home, F2_casefile_meetings, P_pacs). B2 (slots, chats, helpers, published, ready hook) is DONE and committed (47ee3a8, test fix 440979f). CUP checklist committed (1cf6829). TCIA plan committed (a9ea0d3); 71 of 77 series downloaded (5.8 GB).
+- After a reset: for any area whose agent is gone, launch a new general-purpose agent (model opus) with: "Read docs/ui/build/briefs/COMMON.md, then docs/ui/build/briefs/<brief>.md, and do everything in it; the work so far is on disk."
