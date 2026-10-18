@@ -1,0 +1,11 @@
+{
+  "name": "Vaidyx-TB",
+  "short_name": "Vaidyx-TB",
+  "description": "Tumour Board Case File assistant",
+  "start_url": "/tb-nik/",
+  "scope": "/tb-nik/",
+  "display": "standalone",
+  "background_color": "#f5f7fa",
+  "theme_color": "#00c0b5",
+  "icons": [{ "src": "/static/tb-nik/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

@@ -1,0 +1,1 @@
+function e(e){let t=[{ok:e.length>=8,text:`At least 8 characters`},{ok:e.length>=12,text:`12 or more is better`},{ok:/[a-z]/.test(e)&&/[A-Z]/.test(e),text:`Small and capital letters`},{ok:/\d/.test(e)||/[^A-Za-z0-9]/.test(e),text:`A number or a sign`}],n=t.filter(e=>e.ok).length;return{score:n,word:n<=1?`weak`:n===2?`fair`:n===3?`good`:`strong`,checks:t}}export{e as t};
