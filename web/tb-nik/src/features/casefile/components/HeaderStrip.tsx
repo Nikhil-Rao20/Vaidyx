@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import { Archive, BookOpen, CalendarDays, ChevronDown, ClipboardList, Download, Flag, Presentation, Printer, Sparkles, Users } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { ProgressRing } from "@/components/ProgressRing";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { ownerOf } from "../api";
@@ -62,14 +63,14 @@ export function UrgencyTag({ urgency, resident, canSet, consultantName, onSet, b
   );
 }
 
-export function HeaderStrip({ cf, team, left, resident, consultantName, canMarkReady, markReadyReason, onMarkReady, onOpenPanel, activePanel, onPrint, exportAllowed, exportReason, exportHref, onUrgency, urgencyBusy, canSetUrgency, helpersCount, publishedCount, onArchive, protocolLabel, helpersReady = 0, helpersPreparing = 0, deckHref }: {
+export function HeaderStrip({ cf, team, left, resident, consultantName, canMarkReady, markReadyReason, onMarkReady, onOpenPanel, activePanel, onPrint, exportAllowed, exportReason, exportHref, onUrgency, urgencyBusy, canSetUrgency, helpersCount, publishedCount, onArchive, protocolLabel, helpersReady = 0, helpersPreparing = 0, deckHref, readiness }: {
   cf: CaseFile; team: Team | null; left: number | null; resident: boolean; consultantName: string;
   canMarkReady: boolean; markReadyReason: string | null; onMarkReady: () => void;
   onOpenPanel: (p: PanelKind) => void; activePanel: PanelKind; onPrint: () => void;
   exportAllowed: boolean; exportReason: string | null; exportHref: string;
   onUrgency: (level: number, note?: string) => Promise<void>; urgencyBusy: boolean; canSetUrgency: boolean;
   helpersCount: number; publishedCount: number; onArchive?: () => void; protocolLabel?: string;
-  helpersReady?: number; helpersPreparing?: number; deckHref?: string;
+  helpersReady?: number; helpersPreparing?: number; deckHref?: string; readiness?: number | null;
 }) {
   const c = cf.case;
   const p = c.patient ?? { name: "", mrn: "", agesex: "" };
@@ -115,6 +116,7 @@ export function HeaderStrip({ cf, team, left, resident, consultantName, canMarkR
         </div>
         <div className="flex flex-col items-start lg:items-end gap-2 shrink-0">
           <div className="flex items-center gap-2 flex-wrap" data-testid="left-counter">
+            {typeof readiness === "number" ? <ProgressRing value={ready ? 100 : readiness} done={ready} size={40} label={`Records ready: ${Math.round(readiness)} percent`} /> : null}
             {ready ? (
               <StatusChip kind="ok">ready for the board{readyBy ? `, marked by ${readyBy}` : ""}</StatusChip>
             ) : left === null ? (

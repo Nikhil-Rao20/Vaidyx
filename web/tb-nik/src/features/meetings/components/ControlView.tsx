@@ -93,8 +93,8 @@ export function ControlView({ mid, state, onChanged, liveStatus = "open", liveDe
         </>}
       />
 
-      <main className="flex min-h-0 flex-1 gap-3 p-3">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+      <main className="scroll-thin flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 lg:flex-row lg:overflow-hidden">
+        <div className="flex min-h-[46vh] min-w-0 flex-1 flex-col gap-2 lg:min-h-0">
           <SharedScreen cid={cid} opened={opened} slide={all[slideIdx] ?? null} empty={cid ? "Pick a slide, a record or the images in the Share tab." : "Waiting for the first case."} label={<span className="rounded-full bg-black/50 px-2.5 py-1 text-xs font-medium text-white">What the room sees</span>}>
             <SlideDots slides={all} index={slideIdx} className="absolute bottom-2 right-3" />
             {waiting.length && tab !== "people" ? (
@@ -113,12 +113,12 @@ export function ControlView({ mid, state, onChanged, liveStatus = "open", liveDe
           <div className="shrink-0"><TileGrid room={video.room} people={people} layout="row" size="sm" max={10} /></div>
         </div>
 
-        <aside className="flex w-[26rem] shrink-0 flex-col rounded-xl border border-stage-line bg-stage-panel" data-testid="conduct-panel">
-          <div className="flex items-center gap-0.5 border-b border-stage-line p-1" role="tablist" aria-label="Conduct">
+        <aside className="flex min-h-[50vh] w-full shrink-0 flex-col rounded-xl border border-stage-line bg-stage-panel lg:min-h-0 lg:w-[26rem]" data-testid="conduct-panel">
+          <div className="scroll-thin flex items-center gap-0.5 overflow-x-auto border-b border-stage-line p-1" role="tablist" aria-label="Conduct">
             {TABS.map((t) => {
               const badge = t.id === "people" ? waiting.length : t.id === "questions" ? questions.filter((q) => !q.answer).length : 0;
               return (
-                <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)} className={cn("relative flex flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] font-medium transition-colors", tab === t.id ? "bg-stage-raised text-stage-fg" : "text-stage-muted hover:text-stage-fg")}>
+                <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)} className={cn("relative flex min-w-[4.2rem] flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] font-medium transition-colors", tab === t.id ? "bg-stage-raised text-stage-fg" : "text-stage-muted hover:text-stage-fg")}>
                   <t.icon className="size-4" aria-hidden />{t.label}
                   {badge ? <span className="absolute right-1.5 top-1 min-w-4 rounded-full bg-warn px-1 text-center text-[10px] font-bold leading-4 text-white">{badge}</span> : null}
                 </button>

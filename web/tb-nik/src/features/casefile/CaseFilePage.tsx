@@ -284,7 +284,7 @@ export default function CaseFilePage() {
         onOpenPanel={(p) => (p ? openPanelLinked(p) : closeLinked())} activePanel={activePanel}
         onPrint={() => window.print()} exportAllowed={exportAllowed} exportReason={exportReason} exportHref={exportVtbUrl(id)} deckHref={deckUrl(id)}
         onUrgency={onUrgency} urgencyBusy={urgencyBusy} canSetUrgency={canSetUrgency}
-        helpersCount={helpersCount} publishedCount={publishedCount} protocolLabel={slots?.protocol_label} helpersReady={helpersReady} helpersPreparing={helpersPreparing}
+        helpersCount={helpersCount} publishedCount={publishedCount} protocolLabel={slots?.protocol_label} helpersReady={helpersReady} helpersPreparing={helpersPreparing} readiness={slots?.gate?.readiness ?? null}
         onArchive={teamq.data?.can?.archive && !teamq.data?.archived ? () => setArchiveOpen(true) : undefined}
       />
       {teamq.data?.archived ? (

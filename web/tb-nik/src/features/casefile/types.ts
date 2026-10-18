@@ -122,6 +122,8 @@ export interface SlotsResponse {
   listed?: boolean;
   message?: string;
   board_ready?: { by?: string; at?: string; note?: string } | null;
+  /** The Pre-Authorization gate as evaluated: readiness in percent, satisfied of total. */
+  gate?: { passed?: boolean | null; readiness?: number; satisfied?: number; total?: number; evaluated?: string } | null;
   /** Set by the page when the slots came from the old checklist instead of slots.py. */
   derived?: boolean;
 }

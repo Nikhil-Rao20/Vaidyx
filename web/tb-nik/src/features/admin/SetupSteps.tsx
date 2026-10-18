@@ -34,7 +34,7 @@ export function HospitalStep({ value, onChange, setup, error }: { value: Hospita
       <Field id="h-name" label="Hospital name" required error={error}>
         <Input value={value.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Vaidyx Demo Hospital" maxLength={120} autoFocus />
       </Field>
-      <Field id="h-logo" label="Hospital logo" optional hint="Saved as soon as it is chosen; it goes on the cover of every board deck.">
+      <Field id="h-logo" label="Hospital logo" optional>
         <LogoUpload hasLogo={!!setup.hospital?.logo} />
       </Field>
       <fieldset className="grid gap-2">
