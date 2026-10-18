@@ -3,6 +3,9 @@ the proxy (headers both ways, streaming, errors, the viewer_opened audit) and th
 
 Hermetic: the PACS is an httpx.MockTransport, the hospital system a fake client. No image is ever read (humans view them)."""
 import asyncio
+import base64
+import gzip
+import hashlib
 import json
 
 import httpx
@@ -183,6 +186,7 @@ class PACS:
     def __init__(self):
         self.seen = []
         self.fail = None
+        self.page = b""
 
     def handler(self, request: httpx.Request):
         if self.fail:
@@ -194,6 +198,8 @@ class PACS:
                                 "Accept-Ranges": "bytes"}, b"DICM")
         if request.url.path.endswith("/viewer"):
             return answer(200, {**h, "Content-Type": "text/html"}, b"<html>OHIF</html>")
+        if request.url.path.endswith(".html"):  # an OHIF page with inline scripts, gzipped like Orthanc may send it
+            return answer(200, {**h, "Content-Type": "text/html; charset=utf-8", "Content-Encoding": "gzip"}, gzip.compress(self.page))
         return answer(200, {**h, "Content-Type": "application/dicom+json"}, b'[{"study": 1}]')
 
 
@@ -253,6 +259,30 @@ def test_proxy_forwards_the_granted_study_only(pacs_app):
     who["roles"] = {"user": "nobody", "admin": False, "known": False}
     n = len(fake.seen)
     assert tc.get("/api/tb/pacs/ohif/app-config.js").status_code == 403 and len(fake.seen) == n
+
+
+def test_proxy_gives_the_viewer_its_own_policy(pacs_app):
+    """The OHIF files carry the viewer's own policy (the app's would stop its inline start-up scripts and the room screen's frame):
+    the inline scripts of its page by hash only, WebAssembly decoders, workers, framed by this app only. DICOMweb answers get none."""
+    tc, fake, who = pacs_app
+    fake.page = b"<html><script>var a=1;</script><script src='./app.js'></script><script type=module>b()</script></html>"
+    r = tc.get("/api/tb/pacs/ohif/start.html")
+    assert r.status_code == 200 and r.content == fake.page and "content-encoding" not in r.headers
+    assert r.headers["content-length"] == str(len(fake.page))
+    csp = r.headers["content-security-policy"]
+    for js in (b"var a=1;", b"b()"):
+        assert f"'sha256-{base64.b64encode(hashlib.sha256(js).digest()).decode()}'" in csp
+    script = csp.split("script-src")[1].split(";")[0]
+    assert csp.count("'sha256-") == 2 and "unsafe-inline" not in script and "'unsafe-eval'" not in csp and "'wasm-unsafe-eval'" in script
+    assert "frame-ancestors 'self'" in csp and "worker-src 'self' blob:" in csp and "object-src 'none'" in csp
+    assert tc.get("/api/tb/pacs/ohif/app-config.js").headers["content-security-policy"] == pacs.viewer_csp()
+    assert "'sha256-" not in pacs.viewer_csp()
+    store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="dr.rao")
+    pacs.grant("dr.rao", UID, "TB-PACS", "d1")
+    r = tc.get(f"/api/tb/pacs/dicom-web/studies/{UID}/series")
+    assert r.status_code == 200 and "content-security-policy" not in r.headers
+    r = tc.head("/api/tb/pacs/ohif/app-config.js")
+    assert r.status_code == 200 and r.headers["content-security-policy"] == pacs.viewer_csp()
 
 
 def test_proxy_range_head_post_and_errors(pacs_app):

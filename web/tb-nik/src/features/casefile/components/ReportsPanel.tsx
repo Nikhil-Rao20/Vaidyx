@@ -88,8 +88,10 @@ export function ReportsPanel({ caseId, cf, onOpenSource, onChanged, compact }: {
     onSuccess: (r) => {
       setImgErr(null); setBlocked(null);
       if (!r.available || !r.viewer_url) { setImgErr(r.reason ?? "The images are not available in the image viewer."); return; }
-      const w = window.open(r.viewer_url, "_blank", "noopener");
-      if (!w) setBlocked(r.viewer_url);
+      // Not the "noopener" feature: with it window.open always returns null, so every open read as "blocked" (18 Oct walkthrough).
+      const w = window.open(r.viewer_url, "_blank");
+      if (w) w.opener = null;
+      else setBlocked(r.viewer_url);
       announce(`Image viewer opened${r.modality ? `: ${r.modality}` : ""}. Images are viewed by people; no model reads them.`);
     },
     onError: (e) => setImgErr(errorText(e)),
