@@ -16,6 +16,8 @@ from pathlib import Path
 from . import config
 
 _locks: dict[str, asyncio.Lock] = {}
+_deleted: set = set()  # Case File directories deleted by this process (until a Case File is created there again): see gone()
+log = __import__("logging").getLogger("tumour_board")
 
 
 def now_iso():
@@ -67,10 +69,31 @@ def list_cases():
     return out
 
 
+def gone(case_id) -> bool:
+    """True when this Case File was deleted while something was still working on it (the ready hook, an agent, a reading job): its writes
+    are dropped, so no directory comes back with an orphan state.json or audit.jsonl that a later Case File of the same id would inherit
+    (18 Oct, e2e: the ready hook of a deleted Case File re-created its directory). A Case File created there again (case.json) clears it."""
+    d = str(case_dir(case_id))
+    if d not in _deleted:
+        return False
+    if (Path(d) / "case.json").exists():
+        _deleted.discard(d)
+        return False
+    return True
+
+
+def _dropped(case_id, what) -> bool:
+    if gone(case_id):
+        log.warning("Case File %s was deleted: %s not written", case_id, what)
+        return True
+    return False
+
+
 def create_case(case_id, patient: dict, protocol: str, board_date: str = "", created_by: str = "", setting: str = "", hospital_level: str = ""):
     d = case_dir(case_id)
     if (d / "case.json").exists():
         raise FileExistsError(case_id)
+    _deleted.discard(str(d))
     c = {"case_id": case_id, "patient": patient, "protocol": protocol, "setting": setting, "hospital_level": hospital_level, "board_date": board_date,
          "created": now_iso(), "created_by": created_by,
          # a Case File without a protocol waits for the coordinator to list it (V1 item 2.5)
@@ -81,12 +104,16 @@ def create_case(case_id, patient: dict, protocol: str, board_date: str = "", cre
 
 
 def save_case(case):
+    if _dropped(case["case_id"], "case.json"):
+        return
     _write_json(case_dir(case["case_id"]) / "case.json", case)
 
 
 def delete_case(case_id):
     _last_hash.pop(str(case_dir(case_id) / "audit.jsonl"), None)  # a re-created Case File starts a fresh audit chain
     shutil.rmtree(case_dir(case_id), ignore_errors=True)
+    _deleted.add(str(case_dir(case_id)))
+    _docs_cache.pop(case_id, None)
 
 
 def get_case(case_id):
@@ -98,6 +125,8 @@ def get_state(case_id):
 
 
 def save_state(case_id, st):
+    if _dropped(case_id, "state.json"):
+        return
     _write_json(case_dir(case_id) / "state.json", st)
 
 
@@ -115,6 +144,8 @@ def delete_document(case_id, doc_id):
 
 
 def add_document_file(case_id, src_name: str, data: bytes, rel_path: str = ""):
+    if gone(case_id):
+        raise FileNotFoundError(f"Case File {case_id} was deleted")
     doc_id = "D" + uuid.uuid4().hex[:8]
     ext = Path(src_name).suffix.lower()
     dd = case_dir(case_id) / "docs" / doc_id
@@ -136,6 +167,8 @@ def get_doc(case_id, doc_id):
 
 
 def save_doc(case_id, doc):
+    if _dropped(case_id, f"document {doc.get('doc_id')}"):
+        return
     _write_json(case_dir(case_id) / "docs" / doc["doc_id"] / "doc.json", doc)
 
 
@@ -185,6 +218,8 @@ def _tail_hash(p: Path) -> str:
 
 
 def audit(case_id, event: dict):
+    if _dropped(case_id, f"audit event {event.get('kind')}"):
+        return
     event = {"ts": now_iso(), **{k: v for k, v in event.items() if k not in ("prev", "hash")}}
     p = case_dir(case_id) / "audit.jsonl"
     p.parent.mkdir(parents=True, exist_ok=True)

@@ -47,6 +47,22 @@ _PASSWORD_FIRST_OK = _re.compile(r"^/api/tb/(me|me/password|health)$")
 _ARCHIVE_OK = _re.compile(r"^/(unarchive|archive|ask|search|chats|published/search|helpers/[^/]+/chat|documents/[^/]+/images)$")
 
 
+MEETING_SCOPE = "meeting"  # one record open on the shared screen of a running meeting, for its admitted members (read only, that record only)
+_MEETING_FILE = _re.compile(r"^/documents/([^/]+)/file$")
+
+
+def _meeting_record(rl, case_id, rest):
+    """The meeting that shows this record on its shared screen to this admitted member (meetings.shows_record), else None."""
+    m = _MEETING_FILE.match(rest or "")
+    if not m:
+        return None
+    try:
+        from tumour_board import meetings
+        return meetings.shows_record(rl, case_id, m.group(1))
+    except Exception:
+        return None
+
+
 def _case_guard(rl, case_id, rest, method="GET"):
     """The Case File scope of this user (access.FULL / access.REQUESTS), or a 403 response. A Case File that does not exist is left to
     the route (404). A department that was only asked may read the Case File view (reduced by the route), open the records in its
@@ -58,6 +74,8 @@ def _case_guard(rl, case_id, rest, method="GET"):
     if not c:
         return None
     sc = access.scope(rl, c)
+    if sc is None and method == "GET" and _meeting_record(rl, case_id, rest):  # the record on a meeting's shared screen, for its admitted members
+        return MEETING_SCOPE
     if sc is None:
         return JSONResponse({"detail": access.refusal(rl, c)}, status_code=403)
     if sc == access.REQUESTS and not any(method in ms and p.match(rest or "") for ms, p in _LIMITED_OK):
@@ -1160,8 +1178,16 @@ def setup_tumour_board_routes():
                             headers={"Content-Disposition": f'attachment; filename="{c["case_id"]}_case_file.json"'})
 
     def _in_scope(request, c, doc_id):
-        """A department that was only asked opens only the records in its scope (V2 item 5.1)."""
-        if _scope(request) == access.REQUESTS and not any(x["doc_id"] == doc_id for x in access.limited_docs(_roles(request), c, store.list_docs(c["case_id"]))):
+        """A department that was only asked opens only the records in its scope (V2 item 5.1); a meeting member only the record on the
+        shared screen (the guard checked it)."""
+        sc = _scope(request)
+        if sc == MEETING_SCOPE:
+            if not _meeting_record(_roles(request), c["case_id"], f"/documents/{doc_id}/file"):
+                raise HTTPException(403, "Only the record shown on the meeting's shared screen is open to you.")
+            return
+        if sc == access.REQUESTS and not any(x["doc_id"] == doc_id for x in access.limited_docs(_roles(request), c, store.list_docs(c["case_id"]))):
+            if request.method == "GET" and _meeting_record(_roles(request), c["case_id"], f"/documents/{doc_id}/file") and request.url.path.endswith("/file"):
+                return  # the record on the shared screen of a meeting this member was admitted to
             raise HTTPException(403, "Your department sees only the records it produced or was asked about in this Case File.")
 
     @r.get("/cases/{case_id}/documents/{doc_id}")

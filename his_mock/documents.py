@@ -458,7 +458,9 @@ def _clinical_sections(vals):
     exam = [k for k in vals if k not in pc + plan]
     body = _section("Presenting complaint", _rows(vals, pc) or "<p>As recorded in the case sheet.</p>")
     body += _section("Examination", _rows(vals, exam) or "<p>As recorded in the case sheet.</p>")
-    body += _section("Clinical question / Plan", _rows(vals, plan) or "<p>Continue as per the treating unit.</p>")
+    # the heading names a clinical question only when one is recorded: a plan alone under "Clinical question / Plan" was read as the
+    # question for the board (18 Oct, e2e)
+    body += _section("Clinical question / Plan" if "clinical_question" in vals else "Plan", _rows(vals, plan) or "<p>Continue as per the treating unit.</p>")
     return body
 
 

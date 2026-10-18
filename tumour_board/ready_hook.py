@@ -32,10 +32,11 @@ def running(case_id) -> bool:
 
 
 def meeting_in_session() -> bool:
-    """A board session is running (data/tumour_board/sessions): nothing heavy starts until it ends."""
+    """A board session is running now (data/tumour_board/sessions; board.running_now: one left in session from an earlier day does not
+    count): nothing heavy starts until it ends."""
     try:
         from . import board
-        return any(s.get("status") == "in_session" for s in board.list_sessions())
+        return bool(board.running_sessions())
     except Exception:
         return False
 
@@ -104,6 +105,9 @@ async def run(case_id, user) -> dict:
             except Exception as e:
                 out["failed"].append("summary"); _audit(case_id, step="summary_failed", why=f"{e.__class__.__name__}: {str(e)[:200]}", by=user)
         for role in HEADS:
+            if store.gone(case_id) or not store.get_case(case_id):  # the Case File was deleted meanwhile: stop (nothing is written for it)
+                out["failed"].append("deleted")
+                return out
             RUNNING[case_id]["step"] = role
             st = store.get_state(case_id)
             art = (st.get("artefacts") or {}).get(f"brief_{role}")

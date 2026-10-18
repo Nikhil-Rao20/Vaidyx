@@ -62,8 +62,9 @@ def viewer_url(study_uid: str) -> str:
 _grants: dict[tuple, dict] = {}
 
 
-def grant(user: str, study_uid: str, case_id: str, doc_id: str, ttl_hours: float = 12, now: float | None = None) -> dict:
-    """Let `user` view `study_uid` for `ttl_hours` (opened from document `doc_id` of Case File `case_id`). ValueError on a bad UID."""
+def grant(user: str, study_uid: str, case_id: str, doc_id: str, ttl_hours: float = 12, now: float | None = None, session: str = "") -> dict:
+    """Let `user` view `study_uid` for `ttl_hours` (opened from document `doc_id` of Case File `case_id`; `session`: the meeting whose
+    shared screen opened it, so its admitted members view it while the meeting runs). ValueError on a bad UID."""
     if not valid_uid(study_uid):
         raise ValueError("not a valid study UID")
     now = time.time() if now is None else now
@@ -71,6 +72,8 @@ def grant(user: str, study_uid: str, case_id: str, doc_id: str, ttl_hours: float
         _grants.pop(k, None)
     g = {"user": str(user or ""), "study_uid": study_uid, "case_id": case_id, "doc_id": doc_id, "granted": now,
          "expires": now + ttl_hours * 3600}
+    if session:
+        g["session"] = str(session)
     _grants[(g["user"], study_uid)] = g
     return dict(g)
 
@@ -194,8 +197,31 @@ def _still_allowed(roles: dict, g: dict, now: float) -> bool:
     from . import access
     case = store.get_case(key[1]) if key[1] else None
     ok = bool(case) and access.scope(roles, case) is not None
+    if not ok and case and g.get("session"):  # opened on a meeting's shared screen (18 Oct, e2e: a Radiology member admitted to the meeting got 403)
+        ok = _meeting_member(roles, g["session"], key[1])
     _access_cache[key] = (now + _ACCESS_TTL, ok)
     return ok
+
+
+def end_session(mid: str) -> int:
+    """The meeting ended: its viewing answers are asked again at the next request (a member without the Case File's scope loses the
+    viewer at once, not after the one-minute cache). Returns how many cached answers went."""
+    keys = {(g.get("user") or "", g.get("case_id") or "") for g in _grants.values() if g.get("session") == str(mid)}
+    for k in keys:
+        _access_cache.pop(k, None)
+    return len(keys)
+
+
+def _meeting_member(roles: dict, mid: str, case_id: str) -> bool:
+    """The user is still an admitted member of the meeting, the meeting has not ended, and the Case File is on its agenda."""
+    from . import meetings
+    try:
+        s = meetings.get(mid)
+    except Exception:
+        return False
+    if not s or s.get("status") not in ("planned", "in_session") or not meetings.is_member(roles, s):
+        return False
+    return s.get("current") == case_id or meetings._on_lists(s, case_id)
 
 
 def check(path: str, query: str, roles: dict) -> tuple | None:

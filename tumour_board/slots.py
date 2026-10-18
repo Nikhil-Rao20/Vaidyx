@@ -36,6 +36,7 @@ FACT_SECTION = {"presenting_complaint": "presenting", "ecog": "presenting", "smo
                 "haemoglobin": "labs", "wbc": "labs", "platelets": "labs", "creatinine": "labs", "bilirubin": "labs", "hiv_status": "labs", "cea": "labs",
                 "treatment_received": "prior_treatment", "treatment_completion_date": "prior_treatment"}
 TYPABLE = {"ecog", "menopausal_status", "weight", "height", "clinical_question"}  # plus any protocol fact flagged "typable": true
+DOCTOR_FIRST = {"clinical_question"}  # a typed value stands before a value read from a report: the question for the board is the treating doctor's own
 EXTRA_FACTS = {"weight": "Weight", "height": "Height"}  # typed only: no report carries them as protocol facts
 OPEN = ("not_found", "waiting", "needs_confirmation")  # a required line in one of these states is "left before the board"
 MENOPAUSE = {"pre": "premenopausal", "peri": "perimenopausal", "post": "postmenopausal"}
@@ -348,6 +349,8 @@ def _actions_for(s, row, action):
     if st == "found":
         if s.get("quote") and s["quote"].get("doc_id"):
             acts.append({"kind": "open_source", "label": "Open the source page", "doc_id": s["quote"]["doc_id"], "page": s["quote"].get("page")})
+        if s.get("fact_id") in DOCTOR_FIRST and s.get("typable"):  # the treating doctor states the board question, even when a note carries one
+            acts.append({"kind": "enter_value", "label": "Type the question", "fact_id": s.get("fact_id")})
     elif st == "entered":
         acts.append({"kind": "enter_value", "label": "Change the value", "fact_id": s.get("fact_id")})
     elif st == "not_found":
@@ -390,7 +393,20 @@ def _record_slot(rec, r, action, by_doc, required, cat):
         s["status"] = "not_needed"; s["note"] = r.get("tier_note") or "Not applicable in this NCG setting"
     else:
         l1s = l1.get("status") or "satisfied"
-        if l1s == "satisfied" and src:
+        # a record of values only (no document type of its own: receptor status, grade, Ki-67) is as complete as its values; the gate's
+        # source document may be a report that only says the values are pending (18 Oct, e2e: the line said "found" from the HPE report
+        # "IHC to follow" while ER, PR and HER2 were not in the file). Its value lines are counted "left before the board", not this line too.
+        facts_only = l1s == "satisfied" and not (rec.get("doc_types") or [])
+        if facts_only:
+            s["facts_only"] = True
+        if facts_only and r["status"] in ("needs_confirmation", "needs_review"):
+            s["status"] = "needs_confirmation"; s["note"] = "; ".join(r.get("problems") or [])
+        elif facts_only and r["status"] != "satisfied":
+            s["status"] = "waiting" if action and dept_requests.is_sent(action) else "not_found"
+            s["note"] = "; ".join(r.get("problems") or []) or "Not found in the file"
+            if r.get("pending_order"):
+                s["value"] = ""
+        elif l1s == "satisfied" and src:
             c = src.get("classification") or {}
             s["status"] = "found"
             s["value"] = ", ".join(x for x in [c.get("title") or src.get("filename"), _dmy((_doc_quote(src).get("date") or "")), (c.get("status") or "").lower() or ""] if x)
@@ -398,7 +414,7 @@ def _record_slot(rec, r, action, by_doc, required, cat):
             s["as_of"] = s["quote"].get("date")
             if r.get("notes"):
                 s["note"] = "; ".join(r["notes"])
-        elif l1s == "satisfied":  # a facts-only record whose carriers hold the values (no single source document)
+        elif l1s == "satisfied":  # a record whose carriers hold the values (no single source document)
             s["status"] = "found"; s["value"] = "see the values below"
         elif l1s in ("needs_confirmation", "needs_review"):
             need = next((n for n in l1.get("needs") or []), None) or ({"type": "confirm_match", "doc_id": src["doc_id"]} if src else None)
@@ -441,7 +457,12 @@ def _fact_slot(fid, recs, rows, facts, typed, needs, disc, typable, required_ids
     t = typed.get(fid) if isinstance(typed.get(fid), dict) and str(typed.get(fid, {}).get("value") or "").strip() else None
     if t:
         s["typed"] = {"value": t.get("value"), "by": t.get("by"), "by_name": display_name(t.get("by")), "at": t.get("at"), "note": t.get("note") or ""}
-    if good:
+    if good and t and fid in DOCTOR_FIRST:  # the doctor typed the question for the board: it stands; the note's line is kept beside it
+        g = sorted(good, key=lambda h: ((h.get("date") or ""), (h.get("report_date") or "")))[-1]
+        s["status"] = "entered"; s["value"] = t.get("value") or ""; s["typed_by"] = t.get("by"); s["typed_by_name"] = display_name(t.get("by")); s["typed_at"] = t.get("at")
+        s["note"] = ENTERED_LABEL.format(who=display_name(t.get("by")) or "the treating doctor") + (f"; {t['note']}" if t.get("note") else "")
+        s["report_value"] = {"value": g.get("value") or "", "quote": _quote(g, fid), "as_of": g.get("date")}
+    elif good:
         g = sorted(good, key=lambda h: ((h.get("date") or ""), (h.get("report_date") or "")))[-1]
         s["status"] = "found"; s["value"] = g.get("value") or ""; s["as_of"] = g.get("date"); s["quote"] = _quote(g, fid)
         if g.get("confirmed_by"):
@@ -619,7 +640,7 @@ def build(case_id, roles=None) -> dict:
         sections[fs["section"]].append(fs)
     out_sections = [{"id": sid, "label": label, "slots": sections[sid]} for sid, label in SECTIONS if sections[sid] or sid != "other"]
     slots = [s for sec in out_sections for s in sec["slots"]]
-    left = sum(1 for s in slots if s.get("required") and s.get("status") in OPEN)
+    left = sum(1 for s in slots if s.get("required") and s.get("status") in OPEN and not s.get("facts_only"))
     blockers = []
     for b in gate.get("blockers") or []:
         blockers.append({"slot_id": f"document:{b.get('doc_id')}", "why": f"{b.get('filename') or b.get('doc_id')} could not be read ({b.get('error') or 'error'}): re-process or dismiss it", "doc_id": b.get("doc_id")})

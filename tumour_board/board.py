@@ -418,6 +418,34 @@ def sync_agenda_lists(s, by) -> list[str]:
     return ids
 
 
+LIVE_HOURS = 12  # a session still "in_session" this long after it started was left open (nobody closed it): it no longer counts as running
+
+
+def running_now(s, now: datetime | None = None, hours: float = LIVE_HOURS) -> bool:
+    """True when the session is in session and was started within the last `hours` (a session without a start time counts on its own
+    date only). A session left in session from an earlier day must not hold back the background work (the ready hook, the scheduler)
+    for ever; it stays in session for the coordinator to close."""
+    if not isinstance(s, dict) or s.get("status") != "in_session":
+        return False
+    now = now or datetime.now()
+    started = str(s.get("started_at") or "")
+    if started:
+        try:
+            t = datetime.fromisoformat(started)
+        except ValueError:
+            t = None
+        if t is not None:
+            if t.tzinfo is not None:
+                t = t.astimezone().replace(tzinfo=None)
+            return (now - t).total_seconds() < hours * 3600
+    return str(s.get("date") or "") == now.date().isoformat()
+
+
+def running_sessions(now: datetime | None = None) -> list[dict]:
+    """The sessions running now (running_now), from the stored files."""
+    return [s for s in all_sessions() if running_now(s, now)]
+
+
 def planned_sessions() -> list[dict]:
     """The planned sessions (meetings not started, not closed, not cancelled), earliest first by date and time."""
     rows = [s for s in all_sessions() if s.get("status") == "planned"]

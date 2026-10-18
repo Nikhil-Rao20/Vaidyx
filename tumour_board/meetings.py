@@ -282,15 +282,29 @@ def patient_line(case: dict, r: dict | None = None, restricted: bool = False) ->
     return ", ".join(x for x in (p.get("name"), p.get("agesex"), f"UHID {p['mrn']}" if p.get("mrn") else "") if x)
 
 
-def _board_question(case: dict) -> str:
+def _board_question(case: dict, st: dict | None = None) -> str:
+    """The question for the board: as the treating doctor typed it on its line (case.json typed_values {fact: {value, ...}}, slots.py), else
+    the verified value the gate rests on (a quote from a note), else "". (18 Oct, e2e: typed_values was read as a list, so a typed
+    question never reached the agenda.)"""
     q = case.get("board_question")
     if isinstance(q, dict):
         q = q.get("text") or q.get("value")
     if q:
         return str(q)
-    for v in case.get("typed_values") or []:
-        if isinstance(v, dict) and v.get("id") in ("clinical_question", "board_question") and v.get("value"):
-            return str(v["value"])
+    typed = case.get("typed_values")
+    if isinstance(typed, dict):
+        for k in ("clinical_question", "board_question"):
+            v = typed.get(k)
+            if isinstance(v, dict) and str(v.get("value") or "").strip():
+                return str(v["value"])
+    elif isinstance(typed, list):  # an older shape: [{id, value}]
+        for v in typed:
+            if isinstance(v, dict) and v.get("id") in ("clinical_question", "board_question") and v.get("value"):
+                return str(v["value"])
+    for r in ((st or {}).get("gate") or {}).get("requirements") or []:
+        for e in (r.get("evidence") or []) if isinstance(r, dict) else []:
+            if isinstance(e, dict) and e.get("fact") == "clinical_question" and str(e.get("value") or "").strip():
+                return str(e["value"])
     return ""
 
 
@@ -343,7 +357,7 @@ def row(s: dict, it: dict, order: int, r: dict | None = None, restricted: bool =
     return {"case_id": cid, "patient_line": patient_line(c, r, restricted), "protocol": c.get("protocol"), "restricted": bool(restricted),
             "owner_name": display_name(ou) if ou else (org.department_name(own) if own else ""), "owner_department": own or "",
             "owner_department_name": org.department_name(own) if own else "", "presenter_name": display_name(pres) if pres else "",
-            "board_question": "" if restricted else _board_question(c), "left_before_board": _left(st), "minutes": _minutes_for(s, it), "order": order,
+            "board_question": "" if restricted else _board_question(c, st), "left_before_board": _left(st), "minutes": _minutes_for(s, it), "order": order,
             "reason": it.get("reason") or "", "ready": bool(c.get("board_ready")), "status": (item or {}).get("status") or "waiting",
             "ended": cid in (s.get("ended") or {}), "outcome": oc.get("outcome"), "outcome_label": OUTCOMES.get(oc.get("outcome") or "", ""),
             "added_after_send": bool(s.get("agenda_sent_at")) and cid not in (s.get("agenda_sent_cases") or []), "urgency": urg.get("level")}
@@ -837,6 +851,7 @@ def end(mid: str, by: str) -> dict:
     _save(s)
     LIVE_DECISION.pop(mid, None)
     AGENT_STATE.pop(mid, None)
+    pacs.end_session(mid)
     board.audit_event(mid, "meeting_ended", by, outcomes=len(s.get("outcomes") or {}), cards=sum(len(v) for v in (s.get("cards") or {}).values()))
     _send(s, {"type": "ended", "meeting": summary_row(s)})
     return {"meeting": summary_row(s)}
@@ -911,7 +926,7 @@ async def open_item(mid: str, by: str, kind: str, doc_id: str = "") -> dict | No
             consent = bool(((store.get_case(cid) or {}).get("consent") or {}).get("outside_discussion"))  # images carry the patient's identity
             users = sorted({u for u, p in (s.get("people") or {}).items() if p.get("status") in ADMITTED and (consent or not p.get("outside_expert"))} | {by})
             for u in users:
-                pacs.grant(u, uid, cid, doc_id)
+                pacs.grant(u, uid, cid, doc_id, session=mid)
             opened = {"kind": "images", "doc_id": doc_id, "title": title, "study_uid": uid, "url": pacs.viewer_url(uid), "modality": study.get("modality"),
                       "granted": users, "by": by, "at": _now()}
             store.audit(cid, {"kind": "images_opened", "by": by, "doc_id": doc_id, "study_uid": uid, "accession": study.get("accession") or "", "available": True,
@@ -921,6 +936,22 @@ async def open_item(mid: str, by: str, kind: str, doc_id: str = "") -> dict | No
     board.audit_event(mid, "opened", by, cid, what=kind, doc_id=doc_id)
     _send(s, {"type": "open", "case_id": cid, "opened": opened})
     return opened
+
+
+def shows_record(r: dict, case_id: str, doc_id: str) -> str | None:
+    """The meeting whose shared screen shows this record of this Case File now, when `r` is one of its admitted members (an outside
+    expert only with the patient's consent to an outside discussion); else None. The room screen and the remote members follow the shared
+    screen even when their own department has no scope on the Case File (18 Oct, e2e: such a member got 403 on the record)."""
+    if not isinstance(r, dict) or r.get("disabled") or not case_id or not doc_id:
+        return None
+    for s in board.running_sessions():
+        opened = (s.get("live") or {}).get("opened") or {}
+        if s.get("current") != case_id or opened.get("kind") != "record" or opened.get("doc_id") != doc_id or not is_member(r, s):
+            continue
+        if r.get("outside_expert") and not bool(((store.get_case(case_id) or {}).get("consent") or {}).get("outside_discussion")):
+            continue
+        return s["id"]
+    return None
 
 
 def timer(mid: str, by: str, action: str, minutes=None) -> dict | None:
@@ -1285,7 +1316,7 @@ def slides(cid: str, r: dict | None = None) -> list[dict]:
                                 "label": "Reviewed" if review == "reviewed" else "AI draft, not reviewed", "model": summ.get("model"), "generated": summ.get("generated")}})
     else:
         out.append({"id": "summary", "title": "Summary", "kind": "summary",
-                    "content": {"from": "gate", "patient_line": patient_line(c, r), "protocol": c.get("protocol"), "setting": c.get("setting"), "board_question": _board_question(c),
+                    "content": {"from": "gate", "patient_line": patient_line(c, r), "protocol": c.get("protocol"), "setting": c.get("setting"), "board_question": _board_question(c, st),
                                 "readiness": g.get("readiness"), "satisfied": g.get("satisfied"), "total": g.get("total"), "passed": g.get("passed"),
                                 "requirements": [{"id": q.get("id"), "label": q.get("label"), "department": q.get("department"), "status": q.get("status")} for q in g.get("requirements") or []],
                                 "note": "No Case File summary compiled yet: the Pre-Authorization result is shown instead."}})
@@ -1380,4 +1411,5 @@ def notify_starting(now: datetime | None = None, minutes: int = 15) -> list[str]
 
 
 def any_in_session() -> bool:
-    return any(s.get("status") == "in_session" for s in board.all_sessions())
+    """A meeting is running now (board.running_now: a session left in session from an earlier day does not hold the scheduler back)."""
+    return bool(board.running_sessions())

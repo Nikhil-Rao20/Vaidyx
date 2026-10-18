@@ -67,12 +67,34 @@ def list_helpers(case_id, roles=None) -> list:
     chats = load_chats(case_id)
     allowed = bool(isinstance(roles, dict) and (roles.get("admin") or org.can(roles, "list_case") or access.may(roles, "upload_to_case", case)
                                                  or (roles.get("resident_treating") and access.owner(case) in roles["resident_treating"])))
+    hook = _ready_hook_queue(case_id)
     out = []
     for role in ROLES:
+        art = _artefact(st, role)
+        queued = role in hook and not agents.fresh(art, sig)  # the ready mark's run will write it (18 Oct, e2e: these showed "none" meanwhile)
+        b = brief_view(art, sig, (case_id, role) in PREPARING or queued)
+        if queued:
+            b["message"] = "Being prepared from the records" if hook[role] == "running" else "Queued at the ready mark: prepared after the summary, one head at a time"
+            b["queued"] = hook[role] != "running"
         out.append({"role": role, "label": label(role), "department": agents.ROLES[role]["department"], "head": role in HEADS,
-                    "brief": brief_view(_artefact(st, role), sig, (case_id, role) in PREPARING), "job": PREPARING.get((case_id, role)),
+                    "brief": b, "job": PREPARING.get((case_id, role)),
                     "thread_count": len(chats.get(role) or []), "prepare_allowed": allowed, "prepared_at_ready": role in HEADS})
     return out
+
+
+def _ready_hook_queue(case_id) -> dict:
+    """{role: "running" | "queued"} for the heads the ready hook still has to prepare for this Case File ({} when it is not running)."""
+    try:
+        from . import ready_hook
+        run = ready_hook.RUNNING.get(case_id)
+    except Exception:
+        return {}
+    if not run:
+        return {}
+    step = run.get("step") or ""
+    heads = list(ready_hook.HEADS)
+    start = heads.index(step) if step in heads else 0  # waiting or the summary: every head is still to come
+    return {r: ("running" if r == step else "queued") for r in heads[start:]}
 
 
 def _job(case_id, role, user, refresh):
