@@ -55,6 +55,19 @@ export function ReportsPanel({ caseId, cf, onOpenSource, onChanged, compact }: {
   const [announce, liveNode] = useAnnounce();
   const docs = cf.documents ?? [];
   const byId = useMemo(() => Object.fromEntries(docs.map((d) => [d.doc_id, d])), [docs]);
+  // One row per report: an earlier version (a preliminary entry, the version an amendment replaced) folds under the version
+  // that replaced it (18 Oct). The head of a chain is the version nothing supersedes.
+  const earlierOf = useMemo(() => {
+    const out: Record<string, CaseDocument[]> = {};
+    const head = (d: CaseDocument): string => {
+      let cur = d, hops = 0;
+      while (cur.superseded?.by_doc && byId[cur.superseded.by_doc] && hops < 20) { cur = byId[cur.superseded.by_doc]; hops += 1; }
+      return cur.doc_id;
+    };
+    for (const d of docs) if (d.superseded?.by_doc) (out[head(d)] ??= []).push(d);
+    return out;
+  }, [docs, byId]);
+  const currentCount = docs.filter((d) => !d.superseded).length;
   const groups = useMemo<RecordGroup[]>(() => {
     const gs = cf.groups ?? [];
     const seen = new Set(gs.flatMap((g) => g.docs));
@@ -85,7 +98,7 @@ export function ReportsPanel({ caseId, cf, onOpenSource, onChanged, compact }: {
   const canUpload = !!cf.permissions?.upload;
   const canRefetch = !!cf.permissions?.refetch;
 
-  const DocRow = ({ d }: { d: CaseDocument }) => {
+  const DocRow = ({ d, earlier = [] }: { d: CaseDocument; earlier?: CaseDocument[] }) => {
     const c = d.classification ?? {};
     const needs = docNeedsConfirmation(d);
     const ids = [d.his?.encounter_number, d.his?.accession].filter(Boolean).join(" / ");
@@ -111,6 +124,19 @@ export function ReportsPanel({ caseId, cf, onOpenSource, onChanged, compact }: {
               {d.superseded ? <StatusChip kind="muted">earlier version</StatusChip> : null}
               {(d.page_flags ?? []).map((f) => <StatusChip key={f} kind="warn">{f}</StatusChip>)}
             </div>
+            {earlier.length ? (
+              <details className="mt-1 text-xs text-muted-foreground">
+                <summary className="cursor-pointer hover:text-foreground">Earlier versions ({earlier.length})</summary>
+                <ul className="mt-1 space-y-0.5 pl-3">
+                  {earlier.map((e) => (
+                    <li key={e.doc_id} className="flex items-center gap-2">
+                      <span>{e.his?.version ? `Version ${e.his.version}` : "Earlier version"}{e.classification?.status ? `, ${String(e.classification.status).toLowerCase()}` : ""}</span>
+                      <Button size="xs" variant="ghost" onClick={() => onOpenSource({ docId: e.doc_id, page: 0, title: (e.classification?.title ?? e.filename) + " (earlier version)" })} disabled={e.state !== "ready"}><FolderOpen className="size-3" />Open</Button>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
           </div>
           <div className="flex flex-col sm:flex-row gap-1 shrink-0 opacity-80 group-hover:opacity-100">
             <Button size="xs" variant="outline" onClick={() => onOpenSource({ docId: d.doc_id, page: 0, title: c.title ?? d.filename })} disabled={!isPage} aria-label={`Open ${c.title ?? d.filename}`}><FolderOpen className="size-3" />Open</Button>
@@ -130,7 +156,7 @@ export function ReportsPanel({ caseId, cf, onOpenSource, onChanged, compact }: {
       {liveNode}
       <header className="flex flex-wrap items-center gap-2 mb-2">
         <h2 id="h-reports" className="text-base">Reports</h2>
-        <span className="text-xs text-muted-foreground">{plural(docs.length, "record")}</span>
+        <span className="text-xs text-muted-foreground">{plural(currentCount, "record")}</span>
         <span className="flex-1" />
         <div role="group" aria-label="View" className="inline-flex rounded-md border border-border p-0.5 bg-muted">
           <button type="button" aria-pressed={view === "grouped"} onClick={() => setView("grouped")} className={cn("px-2 py-0.5 text-xs rounded transition", view === "grouped" ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>By visit</button>
@@ -152,7 +178,7 @@ export function ReportsPanel({ caseId, cf, onOpenSource, onChanged, compact }: {
       {docs.length > 0 && view === "grouped" ? (
         <div className="space-y-3">
           {groups.map((g) => {
-            const ds = g.docs.map((id) => byId[id]).filter(Boolean);
+            const ds = g.docs.map((id) => byId[id]).filter((d): d is CaseDocument => Boolean(d) && !d.superseded);
             return (
               <div key={g.key} data-testid="record-group">
                 <h3 className="text-sm font-semibold text-foreground flex flex-wrap items-center gap-1.5">
@@ -161,7 +187,7 @@ export function ReportsPanel({ caseId, cf, onOpenSource, onChanged, compact }: {
                   <span className="text-xs font-normal text-muted-foreground">{plural(ds.length, "record")}</span>
                 </h3>
                 {g.consultant ? <p className="text-xs text-muted-foreground">Consultant: {g.consultant}</p> : null}
-                {ds.length ? <ul className="mt-1 space-y-0.5">{ds.map((d) => <DocRow key={d.doc_id} d={d} />)}</ul> : <p className="text-xs text-muted-foreground mt-1">No record of this visit in the Case File.</p>}
+                {ds.length ? <ul className="mt-1 space-y-0.5">{ds.map((d) => <DocRow key={d.doc_id} d={d} earlier={earlierOf[d.doc_id]} />)}</ul> : <p className="text-xs text-muted-foreground mt-1">No record of this visit in the Case File.</p>}
               </div>
             );
           })}

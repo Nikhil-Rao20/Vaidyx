@@ -310,7 +310,7 @@ export interface CaseDocument {
     amendment_note?: string;
     title?: string;
   };
-  superseded?: unknown;
+  superseded?: { by_doc?: string; version?: number; at?: string } | null;
   outside?: unknown;
   identity_confirmed_by?: string;
 }

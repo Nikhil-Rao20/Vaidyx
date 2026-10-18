@@ -373,6 +373,13 @@ def _actions_for(s, row, action):
     return acts
 
 
+def _same_label(a, b) -> bool:
+    """Two labels that say the same thing once case, brackets and punctuation are set aside ("Ki-67" and "Ki-67")."""
+    import re as _re
+    norm = lambda s: _re.sub(r"[^a-z0-9]+", "", _re.sub(r"\(.*?\)", "", str(s or "").lower()))
+    return bool(norm(a)) and norm(a) == norm(b)
+
+
 def _record_slot(rec, r, action, by_doc, required, cat):
     name, did = _dept(r)
     l1 = r.get("level1") or {}
@@ -609,12 +616,21 @@ def build(case_id, roles=None) -> dict:
         if r is None:
             continue
         rs = _record_slot(rec, r, actions.get(rec["id"]), by_doc, rec["id"] in required_ids, cat)
-        sections[rs["section"]].append(rs)
+        only = rec.get("required_facts") or []
+        merge = len(only) == 1 and only[0] not in made and _same_label(rec["label"], (cat.get(only[0]) or {}).get("label") or only[0])
+        if not merge:
+            sections[rs["section"]].append(rs)
         for fid in rec.get("required_facts") or []:
             if fid in made:
                 continue
             made.add(fid)
             fs = _fact_slot(fid, fact_recs.get(fid) or [rec], rows, facts, typed, needs, disc, typable, required_ids, actions, cat)
+            if merge:  # "Ki-67" the record and "Ki-67" the value: one line, the value's, carrying the record's request (18 Oct)
+                fs["record_id"], fs["required"] = rec["id"], bool(fs.get("required") or rs.get("required"))
+                fs["note"] = fs.get("note") or rs.get("note") or ""
+                fs["request"] = fs.get("request") or rs.get("request")
+                kinds = {a.get("kind") for a in fs.get("actions") or []}
+                fs["actions"] = list(fs.get("actions") or []) + [a for a in rs.get("actions") or [] if a.get("kind") not in kinds]
             sections[fs["section"]].append(fs)
     extra = list(dict.fromkeys(list(prot.get("extract_facts") or []) + [f for c in prot.get("core_data") or [] for f in c.get("facts") or []]))
     for fid in extra:

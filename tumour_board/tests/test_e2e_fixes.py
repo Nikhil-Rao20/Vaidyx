@@ -70,7 +70,8 @@ def test_a_record_of_values_only_is_not_found_while_its_values_are_missing(demo_
     assert {_slot(v, f"fact:{f}")["status"] for f in ("er", "pr", "her2")} == {"not_found"}
     # the line itself is not counted on top of its three values
     assert v["left_before_board"] == sum(1 for s in slots._all_slots(v) if s.get("required") and s["status"] in slots.OPEN and not s.get("facts_only"))
-    assert _slot(v, "record:ki67")["status"] == "found"  # Ki-67 kept in the report: its line stays found
+    ki = _slot(v, "fact:ki67")  # Ki-67 the record and Ki-67 the value are one line now (18 Oct), kept in the report: found
+    assert ki["status"] == "found" and ki.get("record_id") == "ki67" and _slot(v, "record:ki67") is None
     # the gate names a source document that only says the values are pending (the HPE report "IHC to follow"): still not found
     st = store.get_state(cid)
     hpe = next(d["doc_id"] for d in store.list_docs(cid) if (d.get("classification") or {}).get("doc_type") == "histopathology")

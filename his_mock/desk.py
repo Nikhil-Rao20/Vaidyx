@@ -251,7 +251,7 @@ def run_action(hospital, dept, action, change, *, order_id=None, report_id=None,
         notes = []
         report = rec if "versions" in rec else store.report_for_order(rec["id"])
         order = store.orders[report["order_id"]] if report else rec
-        if report and action in ("preliminary", "sign", "addendum"):
+        if report and action in ("preliminary", "sign", "addendum", "cancel"):  # a cancelled report prints "Report cancelled" (18 Oct)
             _render(hospital, report, notes)
         if is_imaging(order) and (report or action == "exam_done"):  # the technician's exam done sends the images first (18 Oct)
             _images(hospital, order, notes)
