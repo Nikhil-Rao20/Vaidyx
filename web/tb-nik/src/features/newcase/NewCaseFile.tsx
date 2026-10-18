@@ -106,7 +106,7 @@ export default function NewCaseFile() {
   if (!canCreate) {
     return (
       <div className="mx-auto max-w-2xl">
-        <PageHeader title="New Case File" back={{ to: "/home", label: "Home" }} />
+        <PageHeader title="New Case File" back={{ to: "/cases", label: "Case Files" }} />
         <div className="surface">
           <EmptyState kind="lock" title="Only treating doctors start a Case File" text="A Case File is owned by a treating department. Ask a consultant of the department, or the MDT Coordinator, to start it." action={<Button type="button" variant="outline" asChild><Link to="/home"><ArrowLeft className="size-4" aria-hidden /> Back to Home</Link></Button>} />
         </div>
@@ -119,7 +119,7 @@ export default function NewCaseFile() {
       <PageHeader
         title="New Case File"
         subtitle={created ? "Created. The records come in from the hospital system now." : "Three short steps. Nothing is created until you press Create."}
-        back={{ to: "/home", label: "Home" }}
+        back={{ to: "/cases", label: "Case Files" }}
       />
       {created ? (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="surface p-5 sm:p-6">

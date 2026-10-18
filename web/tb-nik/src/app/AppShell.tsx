@@ -1,10 +1,10 @@
-// The shell around every signed-in page: slim top bar on a laptop (wordmark, 3 to 5 items per role, action search,
-// bell, profile), a top bar with wordmark + bell + avatar and the Dock at the bottom on a phone. Global toasts,
-// the offline banner and a page error boundary live here. A 401 anywhere clears the session (lib/session.tsx) and the
-// guard sends the person to /sign-in with the page they wanted.
+// The shell around every signed-in page: a slim top bar on a laptop (brand lockup, the role's 2 to 5 items as a segmented nav
+// with a gliding pill, the action search, bell, profile), a top bar with the icon + bell + avatar and the floating Dock on a
+// phone. Pages arrive with a short rise and fade. Global toasts, the offline banner, the splash after a sign-in and a page error
+// boundary live here. A 401 anywhere clears the session (lib/session.tsx) and the guard sends the person to /sign-in.
 import { useEffect, useMemo, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { LogOut, Search, X } from "lucide-react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -17,12 +17,16 @@ import { Toasts } from "@/components/Toasts";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { Splash } from "@/components/Splash";
 import { ErrorPage } from "@/app/ErrorPage";
 import { useSession } from "@/lib/session";
 import { navItems } from "@/lib/nav";
+import { pageVariants, spring } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 const BARE_PATHS = new Set(["/first-login", "/welcome"]);
+/** Pages that draw their own full-screen layer (the meeting room screen): no page transition, no Dock padding. */
+const FULLSCREEN = (p: string) => /^\/meetings\/[^/]+\/room$/.test(p);
 
 function useScrollToHash() {
   const { pathname, hash } = useLocation();
@@ -52,6 +56,7 @@ export function AppShell() {
   }, [location.pathname]);
   if (!me) return null;
   const bare = BARE_PATHS.has(location.pathname);
+  const full = FULLSCREEN(location.pathname);
   const canCreate = (me.roles.treating || []).length > 0 || me.roles.coordinator;
   const unread = me.counts?.unread ?? 0;
 
@@ -65,9 +70,9 @@ export function AppShell() {
     <TooltipProvider delayDuration={300}>
       <div className="min-h-dvh bg-background">
         <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-[60] focus:rounded-md focus:bg-card focus:px-3 focus:py-2 focus:shadow-[var(--shadow-lift)]">Skip to content</a>
-        <header className="sticky top-0 z-40 border-b border-border bg-card">
-          <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-3 px-4">
-            <Wordmark to={bare ? null : "/home"} />
+        <header className="sticky top-0 z-40 border-b border-border bg-card/90 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+          <div className="mx-auto flex h-14 max-w-[1440px] items-center gap-3 px-4 lg:gap-5">
+            <Wordmark to={bare ? null : "/cases"} />
             {bare ? (
               <div className="ml-auto flex items-center gap-2">
                 <ThemeToggle saveToProfile={false} />
@@ -77,7 +82,7 @@ export function AppShell() {
               </div>
             ) : (
               <>
-                <nav aria-label="Main" className="hidden items-center gap-1 lg:flex">
+                <nav aria-label="Main" className="hidden items-center gap-0.5 rounded-full bg-muted p-0.5 lg:flex">
                   {items.map((it) => {
                     const active = it.match(location.pathname);
                     const Icon = it.icon;
@@ -86,17 +91,17 @@ export function AppShell() {
                         key={it.key}
                         to={it.to}
                         aria-current={active ? "page" : undefined}
-                        className={cn("relative inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.98]", active ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
+                        className={cn("relative inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring", active ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
                       >
-                        <Icon className="size-4" aria-hidden />
-                        {it.label}
-                        {it.badge ? <span className="ml-0.5 rounded-full bg-primary px-1.5 text-[11px] font-bold leading-4 text-primary-foreground">{it.badge}</span> : null}
-                        {active ? <motion.span layoutId="topnav-underline" className="absolute inset-x-2 -bottom-[13px] h-0.5 rounded-full bg-primary" transition={{ type: "spring", stiffness: 500, damping: 40 }} aria-hidden /> : null}
+                        {active ? <motion.span layoutId="topnav-pill" className="absolute inset-0 rounded-full bg-card shadow-[var(--shadow-outer)]" transition={spring} aria-hidden /> : null}
+                        <Icon className="relative size-4" aria-hidden />
+                        <span className="relative">{it.label}</span>
+                        {it.badge ? <span className="relative ml-0.5 rounded-full bg-primary px-1.5 text-[11px] font-bold leading-4 text-primary-foreground">{it.badge}</span> : null}
                       </NavLink>
                     );
                   })}
                 </nav>
-                <div className="ml-auto hidden w-full max-w-xl lg:block">
+                <div className="ml-auto hidden w-full max-w-lg lg:block">
                   <ActionSearch canCreate={canCreate} />
                 </div>
                 <div className="ml-auto flex items-center gap-1 lg:ml-0">
@@ -109,20 +114,29 @@ export function AppShell() {
               </>
             )}
           </div>
-          {searchOpen && !bare ? (
-            <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="border-t border-border px-4 py-2 lg:hidden">
-              <ActionSearch canCreate={canCreate} compact />
-            </motion.div>
-          ) : null}
+          <AnimatePresence initial={false}>
+            {searchOpen && !bare ? (
+              <motion.div key="msearch" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden border-t border-border lg:hidden">
+                <div className="px-4 py-2"><ActionSearch canCreate={canCreate} compact /></div>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
           <OfflineBanner />
         </header>
-        <main id="main" className={cn("mx-auto w-full max-w-[1400px] px-4 py-4 md:py-6", !bare && "pb-24 lg:pb-8")} tabIndex={-1}>
-          {page}
+        <main id="main" className={cn("mx-auto w-full max-w-[1440px] px-4 py-4 md:py-6", !bare && !full && "pb-28 lg:pb-10")} tabIndex={-1}>
+          {full ? page : (
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div key={location.pathname} variants={pageVariants} initial="initial" animate="animate" exit="exit">
+                {page}
+              </motion.div>
+            </AnimatePresence>
+          )}
         </main>
-        {!bare ? <Dock items={items} /> : null}
+        {!bare && !full ? <Dock items={items} /> : null}
         <Toasts />
+        <Splash />
         <span className="sr-only" aria-live="polite">{unread ? `${unread} unread notifications` : ""}</span>
-        {!bare && location.pathname !== "/home" ? <span className="sr-only"><Link to="/home">Home</Link></span> : null}
+        {!bare && !location.pathname.startsWith("/cases") ? <span className="sr-only"><Link to="/cases">Case Files</Link></span> : null}
       </div>
     </TooltipProvider>
   );

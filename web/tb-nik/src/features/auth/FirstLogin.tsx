@@ -34,7 +34,7 @@ export default function FirstLogin() {
       throw e;
     }
     const m = await refresh();
-    window.setTimeout(() => navigate(m?.setup_needed ? "/welcome" : "/home", { replace: true }), 500);
+    window.setTimeout(() => navigate(m?.setup_needed ? "/welcome" : "/cases", { replace: true }), 500);
   });
 
   const submit = (e: FormEvent) => {

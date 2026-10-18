@@ -23,7 +23,7 @@ const routes: RouteObject[] = [
       {
         element: <AppShell />,
         children: [
-          { index: true, element: <Navigate to="/home" replace /> },
+          { index: true, element: <Navigate to="/cases" replace /> },
           ...homeRoutes,
           ...casefileRoutes,
           ...meetingRoutes,

@@ -1,7 +1,7 @@
 // The full-page error (404 / 500 / 403) with the React Bits FuzzyText (vendor, MIT) for the number.
 import { lazy, Suspense, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Home, RefreshCw } from "lucide-react";
+import { ArrowLeft, FolderOpen, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/Wordmark";
 import { useTheme } from "@/hooks/useTheme";
@@ -45,7 +45,7 @@ export function ErrorPage({ code = 500, title, text, detail, actions, embedded }
         <div className="flex flex-wrap justify-center gap-2">
           {actions}
           {code === 500 ? <Button type="button" onClick={() => window.location.reload()}><RefreshCw className="size-4" aria-hidden /> Reload</Button> : null}
-          <Button type="button" variant={code === 500 ? "outline" : "default"} asChild><Link to="/home"><Home className="size-4" aria-hidden /> Go to Home</Link></Button>
+          <Button type="button" variant={code === 500 ? "outline" : "default"} asChild><Link to="/cases"><FolderOpen className="size-4" aria-hidden /> Go to the Case Files</Link></Button>
           <Button type="button" variant="ghost" onClick={() => navigate(-1)}><ArrowLeft className="size-4" aria-hidden /> Go back</Button>
         </div>
       </div>

@@ -135,7 +135,7 @@ export function FetchProgress({ caseId, jobId, total, patientLine, followUps, jo
             </motion.span>
           ) : null}
         </AnimatePresence>
-        <Button type="button" variant="ghost" asChild><Link to="/home">Back to Home</Link></Button>
+        <Button type="button" variant="ghost" asChild><Link to="/cases">Back to the Case Files</Link></Button>
       </div>
     </div>
   );

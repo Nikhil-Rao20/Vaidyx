@@ -1,11 +1,11 @@
 {
-  "name": "Vaidyx-TB",
-  "short_name": "Vaidyx-TB",
-  "description": "Tumour Board Case File assistant",
+  "name": "Vaidyx Tumour Board",
+  "short_name": "Vaidyx TB",
+  "description": "The Case File assistant for the hospital's Tumour Board",
   "start_url": "/tb-nik/",
   "scope": "/tb-nik/",
   "display": "standalone",
   "background_color": "#f5f7fa",
-  "theme_color": "#00c0b5",
+  "theme_color": "#f5f7fa",
   "icons": [{ "src": "/static/tb-nik/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
 }

@@ -1,6 +1,6 @@
-// The 3 to 5 items of the top bar and the Dock, per role (SPEC 3.1). Several roles give the union, in a fixed order.
+// The 2 to 5 items of the top bar and the Dock, per role: Case Files and Meetings for everyone clinical, plus the role items. Several roles give the union, in a fixed order.
 import type { LucideIcon } from "lucide-react";
-import { Activity, CalendarDays, FolderOpen, Home, Inbox, Settings2, Users } from "lucide-react";
+import { Activity, CalendarDays, FolderOpen, Inbox, Settings2, Users } from "lucide-react";
 import type { Me } from "@/lib/session";
 
 export interface NavItem {
@@ -39,13 +39,10 @@ export function navItems(me: Me): NavItem[] {
   const primary = me.primary_role;
   const doctor = isDoctor(me);
   const clinical = doctor || Boolean(r.coordinator);
-  const resident = Object.values(r.departments || {}).includes("resident");
 
+  // One list, not two: "Case Files" is the home of every clinical role (the owner, 19 Oct: Home and Case Files were the same page).
   if (clinical) {
-    items.push({ key: "home", label: "Home", to: "/home", icon: Home, match: (p) => p === "/home" || p === "/" });
-  }
-  if ((r.treating || []).length > 0 || r.coordinator || resident) {
-    items.push({ key: "cases", label: "Case Files", to: "/home#cases", icon: FolderOpen, match: startsWith("/cases") });
+    items.push({ key: "cases", label: "Case Files", to: "/cases", icon: FolderOpen, match: (p) => p === "/" || p === "/home" || startsWith("/cases")(p) });
   }
   if (hasInbox(me) && primary !== "supporting") {
     items.push({ key: "requests", label: "Requests", to: "/requests", icon: Inbox, match: startsWith("/requests"), badge: me.counts?.open_requests || undefined });
@@ -63,19 +60,14 @@ export function navItems(me: Me): NavItem[] {
   if (r.auditor || (!clinical && (r.root_admin || isDeptAdmin(me)))) {
     items.push({ key: "activity", label: "Activity", to: "/activity", icon: Activity, match: startsWith("/activity") });
   }
-  // Five fit the Dock; the Case Files item is the Home list anyway, so it goes first when there are too many.
-  if (items.length > 5) {
-    const i = items.findIndex((x) => x.key === "cases");
-    if (i >= 0) items.splice(i, 1);
-  }
-  return items.slice(0, 5);
+  return items.slice(0, 5);  // five fit the Dock
 }
 
 /** Where "Home" goes for this person. */
 export function homePath(me: Me): string {
   if (isRootAdminOnly(me)) return "/admin";
   if (me.primary_role === "auditor" && !isDoctor(me)) return "/activity";
-  return "/home";
+  return "/cases";
 }
 
 /** Plain words for the role list in the profile menu. */

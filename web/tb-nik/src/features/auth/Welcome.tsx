@@ -91,7 +91,7 @@ export default function Welcome() {
     const ok = await save({ start_page: start });
     if (!ok) return;
     if (withUhid && uhid.trim()) navigate(`/cases/new?identifier=${encodeURIComponent(uhid.trim())}`, { replace: true });
-    else navigate("/home", { replace: true });
+    else navigate("/cases", { replace: true });
   };
 
   // Momentum: the bar never starts at zero (owner's UX note 5).

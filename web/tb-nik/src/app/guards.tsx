@@ -26,5 +26,5 @@ export function startPage(pref?: string) {
   if (pref === "last_case") {
     try { const last = localStorage.getItem("tbnik.lastCase"); if (last) return `/cases/${last}`; } catch { /* no storage */ }
   }
-  return "/home";
+  return "/cases";
 }

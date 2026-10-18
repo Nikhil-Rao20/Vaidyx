@@ -1,98 +1,98 @@
 @import "tailwindcss";
 
-/* Fonts are the same self-hosted files the old interface uses (SIL OFL 1.1). */
-@font-face { font-family: "Atkinson Hyperlegible"; src: url("/static/tb/fonts/AtkinsonHyperlegible-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
-@font-face { font-family: "Atkinson Hyperlegible"; src: url("/static/tb/fonts/AtkinsonHyperlegible-Bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
-@font-face { font-family: "Atkinson Hyperlegible"; src: url("/static/tb/fonts/AtkinsonHyperlegible-Italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
-@font-face { font-family: "Atkinson Hyperlegible"; src: url("/static/tb/fonts/AtkinsonHyperlegible-BoldItalic.woff2") format("woff2"); font-weight: 700; font-style: italic; font-display: swap; }
+/* Type: Inter (variable, SIL OFL 1.1, public/fonts) for everything on screen; JetBrains Mono only for code and keys.
+   Identifiers (UHID, IP / OP No., accession) are Inter with tabular figures, never a mono face: the doctor reads them as words. */
+@font-face { font-family: "Inter Variable"; src: url("/static/tb-nik/fonts/inter-latin-wght-normal.woff2") format("woff2-variations"); font-weight: 100 900; font-style: normal; font-display: swap; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Inter Variable"; src: url("/static/tb-nik/fonts/inter-latin-ext-wght-normal.woff2") format("woff2-variations"); font-weight: 100 900; font-style: normal; font-display: swap; unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
 @font-face { font-family: "JetBrains Mono"; src: url("/static/tb/fonts/JetBrainsMono-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
 @font-face { font-family: "JetBrains Mono"; src: url("/static/tb/fonts/JetBrainsMono-Medium.woff2") format("woff2"); font-weight: 500; font-display: swap; }
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
-/* The Vaidyx-TB theme (MONAI teal), carried over from static/tb/tb.css. Colour is always paired with an icon and a word. */
+/* The Vaidyx-TB theme ("clinical calm", 19 Oct 2026). Teal #00c0b5 is the brand and the one primary action on a screen; everything
+   else is a quiet grey-blue. Status colour is always paired with an icon and a word. */
 :root {
   --background: #f5f7fa;
-  --foreground: #1f2933;
-  --body: #3e4c59;
+  --foreground: #121a24;
+  --body: #3b4754;
   --card: #ffffff;
-  --card-foreground: #1f2933;
+  --card-foreground: #121a24;
   --popover: #ffffff;
-  --popover-foreground: #1f2933;
+  --popover-foreground: #121a24;
   --primary: #00c0b5;
   --primary-hover: #00ada3;
-  --primary-foreground: #0b1f24;
-  --accent-brand: #009c94;
-  --secondary: #e6f3f7;
-  --secondary-foreground: #0b4f5a;
-  --muted: #f2f9fb;
-  --muted-foreground: #52606d;
-  --accent: #e6f3f7;
-  --accent-foreground: #1f2933;
-  --destructive: #b23a2f;
+  --primary-foreground: #06292c;
+  --accent-brand: #008f87;
+  --secondary: #e4f6f4;
+  --secondary-foreground: #0a4d52;
+  --muted: #f1f4f8;
+  --muted-foreground: #5f6b78;
+  --accent: #eef2f6;
+  --accent-foreground: #121a24;
+  --destructive: #b2362b;
   --destructive-foreground: #ffffff;
-  --border: #d9e2ec;
-  --border-strong: #c5d1dc;
-  --tint-line: #b6dde4;
-  --input: #c5d1dc;
+  --border: #e2e8ef;
+  --border-strong: #c9d3de;
+  --tint-line: #bfe3e6;
+  --input: #cfd8e2;
   --ring: #00c0b5;
-  --link: #046483;
+  --link: #0a6a86;
   --indigo: #3e5cad;
-  --ok: #1e6b45;
-  --ok-soft: #e5f4ec;
-  --warn: #8a5300;
-  --warn-soft: #fdf1d8;
-  --bad: #b23a2f;
-  --bad-soft: #fbe9e6;
+  --ok: #1d6a44;
+  --ok-soft: #e4f4ea;
+  --warn: #8a5200;
+  --warn-soft: #fdf1d6;
+  --bad: #b2362b;
+  --bad-soft: #fbe8e5;
   --review: #5b3fc4;
-  --review-soft: #efebff;
-  --radius: 10px;
-  --shadow-outer: 0 1px 2px rgba(16, 42, 67, 0.06), 0 4px 12px rgba(16, 42, 67, 0.05);
-  --shadow-inner: 0 2px 4px rgba(16, 42, 67, 0.1), 0 8px 24px rgba(16, 42, 67, 0.1);
-  --shadow-lift: 0 6px 18px rgba(16, 42, 67, 0.14);
-  --font-sans: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --review-soft: #eeebff;
+  --radius: 12px;
+  --shadow-outer: 0 1px 2px rgba(18, 26, 36, 0.05), 0 2px 8px rgba(18, 26, 36, 0.04);
+  --shadow-inner: 0 1px 2px rgba(18, 26, 36, 0.06), 0 6px 18px rgba(18, 26, 36, 0.07);
+  --shadow-lift: 0 10px 30px rgba(18, 26, 36, 0.14), 0 2px 6px rgba(18, 26, 36, 0.06);
+  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   color-scheme: light;
 }
 
 [data-theme="dark"] {
-  --background: #0f1720;
-  --foreground: #e6edf3;
-  --body: #c9d4de;
-  --card: #16212b;
-  --card-foreground: #e6edf3;
-  --popover: #16212b;
-  --popover-foreground: #e6edf3;
-  --primary: #00c0b5;
-  --primary-hover: #19d2c7;
-  --primary-foreground: #0b1f24;
-  --accent-brand: #38d4c9;
-  --secondary: #15303a;
-  --secondary-foreground: #bfeef0;
-  --muted: #1b2733;
-  --muted-foreground: #9aa8b5;
-  --accent: #1b2f3a;
-  --accent-foreground: #e6edf3;
-  --destructive: #ff8a7a;
+  --background: #0b1117;
+  --foreground: #e8eef4;
+  --body: #c3cdd7;
+  --card: #121a23;
+  --card-foreground: #e8eef4;
+  --popover: #141d27;
+  --popover-foreground: #e8eef4;
+  --primary: #10cfc3;
+  --primary-hover: #2fdbd0;
+  --primary-foreground: #06292c;
+  --accent-brand: #3fd6cc;
+  --secondary: #12343a;
+  --secondary-foreground: #b9edea;
+  --muted: #171f29;
+  --muted-foreground: #97a4b2;
+  --accent: #1a2430;
+  --accent-foreground: #e8eef4;
+  --destructive: #ff8b7b;
   --destructive-foreground: #1b0906;
-  --border: #263241;
-  --border-strong: #324255;
-  --tint-line: #2a4a55;
-  --input: #324255;
-  --ring: #38d4c9;
-  --link: #7fc9e8;
+  --border: #202b37;
+  --border-strong: #2e3c4b;
+  --tint-line: #234a51;
+  --input: #2e3c4b;
+  --ring: #3fd6cc;
+  --link: #7ec8e6;
   --indigo: #9fb3ff;
-  --ok: #6ccf96;
-  --ok-soft: #12301f;
-  --warn: #f0b35b;
-  --warn-soft: #3a2a05;
-  --bad: #ff8a7a;
-  --bad-soft: #3b1511;
-  --review: #b4a3ff;
-  --review-soft: #231a4a;
-  --shadow-outer: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 12px rgba(0, 0, 0, 0.3);
-  --shadow-inner: 0 2px 4px rgba(0, 0, 0, 0.45), 0 8px 24px rgba(0, 0, 0, 0.4);
-  --shadow-lift: 0 6px 18px rgba(0, 0, 0, 0.5);
+  --ok: #6fd19a;
+  --ok-soft: #10301f;
+  --warn: #f0b45c;
+  --warn-soft: #382806;
+  --bad: #ff8b7b;
+  --bad-soft: #3a1612;
+  --review: #b6a6ff;
+  --review-soft: #241b4b;
+  --shadow-outer: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-inner: 0 1px 2px rgba(0, 0, 0, 0.45), 0 6px 18px rgba(0, 0, 0, 0.4);
+  --shadow-lift: 0 10px 30px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.4);
   color-scheme: dark;
 }
 
@@ -131,15 +131,17 @@
   --color-bad-soft: var(--bad-soft);
   --color-review: var(--review);
   --color-review-soft: var(--review-soft);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 6px);
+  --radius-md: calc(var(--radius) - 3px);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl: calc(var(--radius) + 6px);
+  --radius-2xl: calc(var(--radius) + 12px);
   --shadow-outer: var(--shadow-outer);
   --shadow-inner: var(--shadow-inner);
   --shadow-lift: var(--shadow-lift);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @layer base {
@@ -149,18 +151,22 @@
   html[data-text="small"] { font-size: 15px; }
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    font-size: 0.9375rem;
     line-height: 1.5;
-    letter-spacing: 0.005em;
     min-height: 100dvh;
+    font-feature-settings: "cv11", "ss01", "calt";
   }
-  h1, h2, h3, h4 { @apply font-bold tracking-tight text-foreground; line-height: 1.25; }
-  h1 { font-size: 1.5rem; }
-  h2 { font-size: 1.25rem; }
-  h3 { font-size: 1.0625rem; }
+  h1, h2, h3, h4 { @apply font-semibold tracking-[-0.01em] text-foreground; line-height: 1.25; text-wrap: balance; }
+  h1 { font-size: 1.5rem; letter-spacing: -0.02em; }
+  h2 { font-size: 1.125rem; }
+  h3 { font-size: 1rem; }
   p, li { color: var(--body); }
-  code, kbd, .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 4px; }
-  ::selection { background: color-mix(in srgb, var(--primary) 30%, transparent); }
+  code, kbd { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  /* Identifiers: Inter with tabular figures and a little air (the old `.mono` class keeps working, it is no longer a mono face). */
+  .mono, .id { font-family: var(--font-sans); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
+  .num { font-variant-numeric: tabular-nums; }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 6px; }
+  ::selection { background: color-mix(in srgb, var(--primary) 28%, transparent); }
   button, [role="button"] { cursor: pointer; }
   button:disabled, [aria-disabled="true"] { cursor: not-allowed; }
   @media (prefers-reduced-motion: reduce) {
@@ -169,12 +175,14 @@
 }
 
 @layer components {
-  /* Surfaces: the page card has the lighter outer shadow, a box inside a box the stronger one. */
+  /* Surfaces: one card level on the page, a quieter inner box for a box inside a box. */
   .surface { @apply bg-card rounded-lg border border-border; box-shadow: var(--shadow-outer); }
-  .surface-inner { @apply bg-card rounded-md border border-border; box-shadow: var(--shadow-inner); }
-  .row-lift { transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease; }
-  .row-lift:hover { transform: translateY(-1px); box-shadow: var(--shadow-lift); }
-  .quote-chip { @apply inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium; background: var(--secondary); color: var(--secondary-foreground); }
+  .surface-inner { @apply bg-card rounded-md border border-border; box-shadow: none; }
+  .row-lift { transition: transform 180ms var(--ease-out-soft), box-shadow 180ms var(--ease-out-soft), background-color 180ms ease, border-color 180ms ease; }
+  .row-lift:hover { transform: translateY(-1px); box-shadow: var(--shadow-inner); border-color: var(--border-strong); }
+  /* A source mark: quiet, so the value stays the thing read first. */
+  .quote-chip { @apply inline-flex items-center gap-1 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground; transition: color 150ms ease, border-color 150ms ease, background-color 150ms ease; }
+  .quote-chip:hover { color: var(--foreground); border-color: var(--border-strong); background: var(--accent); }
   .status-ok { color: var(--ok); background: var(--ok-soft); }
   .status-warn { color: var(--warn); background: var(--warn-soft); }
   .status-bad { color: var(--bad); background: var(--bad-soft); }
@@ -182,6 +190,11 @@
   .skeleton-line { @apply rounded-md bg-muted; position: relative; overflow: hidden; }
   .skeleton-line::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--foreground) 6%, transparent), transparent); animation: shimmer 1.4s infinite; }
   @keyframes shimmer { 100% { transform: translateX(100%); } }
+  /* The brand gradient (the icon's own two blues) for hero surfaces. */
+  .brand-gradient { background: linear-gradient(135deg, #00183c 0%, #0b4e74 45%, #01b4c2 100%); }
+  .brand-glow { filter: drop-shadow(0 0 18px rgba(1, 180, 194, 0.28)); }
+  /* Thin scrollbars inside panels. */
+  .scroll-thin { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--foreground) 18%, transparent) transparent; }
 }
 
 /* The animated theme toggle (vendor/AnimatedThemeToggler) drives the view transition itself. */
