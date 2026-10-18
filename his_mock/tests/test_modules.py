@@ -518,3 +518,25 @@ def test_every_module_page_has_the_classic_shell(users):
         assert "#00c0b5" not in r.text.lower()          # clearly not Vaidyx: no teal
         assert r.headers["x-frame-options"] == "SAMEORIGIN" and r.headers["cache-control"] == "no-store"
     assert c.get("/his/admin").status_code == 403
+
+
+def test_exam_done_sends_images_before_the_report(users, visit, store):
+    """The technician's Exam done builds the study's images (and tries the PACS) before any report; the worklist then offers
+    Write report, and the patient page shows Open images (18 Oct)."""
+    doc = users("opd.doctor")
+    location(post(doc, f"/his/encounters/{visit['id']}/orders", {"tests": ["chest_xray"]}))
+    o = next(x for x in store.orders.values() if x["encounter_id"] == visit["id"] and x["test"] == "chest_xray")
+    base = f"/his/radiology/orders/{o['id']}"
+    tech = users("rad.tech")
+    location(post(tech, f"{base}/schedule", {"date": store.now()[:10], "time": "08:00", "room": "X-ray room 1"}))
+    sched = tech.get("/his/radiology", params={"tab": "scheduled"}).text.split("id=worklist>", 1)[1]
+    row = next(r for r in sched.split("<tr>") if o["accession"] in r)
+    assert "Exam done" in row and "#examdone" in row
+    path, q = location(post(tech, f"{base}/exam-done"))
+    study = store.imaging_study_for(o["id"])
+    assert study.get("acquired_at") and study.get("series"), study
+    assert "exam done" in q["flash"] and not store.report_for_order(o["id"])
+    sched = tech.get("/his/radiology", params={"tab": "scheduled"}).text.split("id=worklist>", 1)[1]
+    row = next(r for r in sched.split("<tr>") if o["accession"] in r)
+    assert "Write report" in row
+    assert "Open images" in tech.get(f"/his/encounters/{visit['id']}").text

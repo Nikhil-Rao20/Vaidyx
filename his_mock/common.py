@@ -418,9 +418,20 @@ def orders_table(store, orders, empty="No orders on this encounter."):
                else f'<a href="{order_url(o)}" class=muted>none</a>')
         rows.append([acc, ui.esc(o["label"]), ui.esc(o["performing_department"]), ui.esc(d(o["ordered_on"])), status,
                      ui.esc(dt(cur["reported_on"])) if cur else "", ("yes" if cur.get("signature_id") else "no") if cur else "",
-                     documents_cell(r)])
+                     documents_cell(r) + _images_button(store, o)])
     return ui.table(["Accession / Lab No.", "Test", "Department", "Ordered on", "Status", "Reported on", "Signed",
                      "Document"], rows, empty=empty)
+
+
+def _images_button(store, o):
+    """Open images for an imaging order whose study is in the PACS (series built or uploaded)."""
+    if not is_imaging(o):
+        return ""
+    s = store.imaging_study_for(o["id"]) or {}
+    if not (s.get("series") or s.get("uploaded")):
+        return ""
+    return f' <a class="btn" href="{viewer_url(s["study_uid"])}" target=_blank>Open images</a>'
+
 
 
 def patient_cell(store, rec):

@@ -253,7 +253,7 @@ def run_action(hospital, dept, action, change, *, order_id=None, report_id=None,
         order = store.orders[report["order_id"]] if report else rec
         if report and action in ("preliminary", "sign", "addendum"):
             _render(hospital, report, notes)
-        if report and is_imaging(order):
+        if is_imaging(order) and (report or action == "exam_done"):  # the technician's exam done sends the images first (18 Oct)
             _images(hospital, order, notes)
         for ev in store.events[n_events:]:
             try:

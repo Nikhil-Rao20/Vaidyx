@@ -36,8 +36,12 @@ RECENT_SIGNED = 25
 NEXT_STEP = {'ordered': ('Schedule', '#schedule'), 'scheduled': ('Write report', '#report'), 'reported': ('Sign report', '#sign'), 'signed': ('View', '#current')}
 
 
-def action_cell(o, tab):
+def action_cell(o, tab, store=None):
     label, anchor = NEXT_STEP.get(tab, ("Open", ""))
+    if tab == "scheduled" and store is not None:
+        s = store.imaging_study_for(o["id"]) or {}
+        if not (s.get("series") or s.get("uploaded")):
+            label, anchor = "Exam done", "#examdone"
     return f'<a class="btn primary" href="/his/radiology/orders/{ui.esc(o["id"])}{anchor}">{ui.esc(label)}</a>'
 
 
@@ -142,7 +146,7 @@ def radiology_home(request: Request, tab: str = "ordered", hospital: Hospital = 
                      common.patient_cell(store, o), common.encounter_cell(store, o), ui.esc(o["label"]),
                      ui.esc(o["performing_department"]), ui.esc(dt(o["ordered_on"])), common.unit_cell(store, o),
                      study_cell(store, o), (ui.pill(r["status"]) if r else '<span class=muted>none</span>'),
-                     common.documents_cell(r), action_cell(o, tab)])
+                     common.documents_cell(r), action_cell(o, tab, store)])
     body = (ui.tabs([(k, l, n[k]) for k, l in TABS], tab, "/his/radiology") + '<div class=panel id=worklist>'
             + ui.table(["Accession No.", "Patient / UHID", "IP / OP No.", "Study", "Department", "Ordered on",
                         "Ordering unit", "Study / images", "Report", "PDF", "Action"], rows, f"No order under '{dict(TABS)[tab]}'.")
@@ -263,6 +267,14 @@ def render_order(request, hospital, o, state=None, status=200):
                       '<p><button type=submit class=primary>Schedule</button></p></form></div>')
         else:
             forms += '<div class=panel id=schedule><h2>Schedule</h2>' + common.refused_line(request, "rad.schedule") + '</div>'
+    study = store.imaging_study_for(o["id"]) or {}
+    if b == "scheduled" and not (study.get("series") or study.get("uploaded")):
+        if common.can(request, "rad.schedule"):
+            forms += (f'<div class=panel id=examdone><h2>Exam done</h2><form method=post action="{base}/exam-done">{csrf}'
+                      '<p class=small>When the patient has been imaged: the images go to the PACS now, so the radiologist '
+                      'reports while viewing them.</p><p><button type=submit class=primary>Exam done, send images to PACS</button></p></form></div>')
+        else:
+            forms += '<div class=panel id=examdone><h2>Exam done</h2>' + common.refused_line(request, "rad.schedule") + '</div>'
     if b in ("ordered", "scheduled", "reported"):
         presets = dict(store.current_version(r)["values"]) if r else {}
         if common.can(request, "rad.report") and not r:
@@ -360,6 +372,32 @@ async def schedule_post(oid: str, request: Request, hospital: Hospital = Depends
     return common.redirect(f"/his/radiology/orders/{oid}",
                            f"{o['accession'] or o['id']} scheduled for {dt(rec['scheduled_for'])}" + (f", {room}" if room else "")
                            + (f"; Study UID {s['study_uid']}." if s else "."))
+
+
+@router.post("/radiology/orders/{oid}/exam-done")
+async def exam_done_post(oid: str, request: Request, hospital: Hospital = Depends(get_hospital)):
+    """The technician marks the exam done: the study is acquired and its images are built and uploaded to the PACS before any
+    report (as a real RIS / modality does). Booked for a later day: refused with the cause."""
+    o = common.module_order_or_404(hospital.store, oid, "radiology")
+    await common.form(request)
+    common.require(request, "rad.schedule")
+    try:
+        if o["status"] != "scheduled":
+            raise ValueError("Schedule the study first; the exam is done on a scheduled study.")
+        _study_done(hospital.store, o)
+
+        def change(s):
+            st = s.imaging_study_for(o["id"])
+            if not st:
+                raise ValueError("This order has no imaging study yet; schedule it first.")
+            st["acquired_at"] = s.now()
+            return s.orders[o["id"]]
+
+        rec, notes = common.run(hospital, request, _dept(hospital.store, o), "exam_done", change, order_id=o["id"])
+    except ValueError as ex:
+        return common.redirect(f"/his/radiology/orders/{oid}", str(ex), bad=True)
+    bad = [m for k, m in notes if k == "bad"]
+    return common.redirect(f"/his/radiology/orders/{oid}", f"{o['accession'] or o['id']}: exam done. " + ("; ".join(bad) if bad else "Images are in the PACS."), warn=bool(bad))
 
 
 @router.post("/radiology/orders/{oid}/report")

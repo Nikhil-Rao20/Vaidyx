@@ -453,7 +453,9 @@ def performed(store, study):
     """True when the study was acquired: its order is completed (reported). A scheduled study is only booked and has no
     images yet; the reporting desk (1.5) builds them when the report is entered."""
     order = store.orders.get(study["order_id"])
-    return bool(order) and order["status"] == "completed" and study.get("status") != "cancelled"
+    if not order or study.get("status") == "cancelled":
+        return False
+    return order["status"] == "completed" or bool(study.get("acquired_at"))  # reported, or the exam is done (images first)
 
 
 def build_all(store, dicom_dir, source=None, library=None):
