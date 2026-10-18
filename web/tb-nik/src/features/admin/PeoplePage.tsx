@@ -22,11 +22,11 @@ import { Pill } from "@/components/StatusPill";
 import { DateText } from "@/components/DateText";
 import { notify } from "@/components/Toasts";
 import { useAsyncAction } from "@/hooks/useAsyncAction";
-import { keys, useDepartmentDoctors, useInvalidate, useOrg } from "@/hooks/useQueries";
+import { keys, useAccounts, useDepartmentDoctors, useInvalidate, useOrg } from "@/hooks/useQueries";
 import { api } from "@/lib/api";
 import { EP } from "@/lib/endpoints";
 import { useSession } from "@/lib/session";
-import type { DepartmentDoctor, Placement, PersonSaved, ResetResult } from "@/lib/types";
+import type { AccountRow, DepartmentDoctor, Placement, PersonSaved, ResetResult } from "@/lib/types";
 import { initials, plural } from "@/lib/format";
 import { EMAIL } from "@/features/admin/state";
 
@@ -175,14 +175,16 @@ export default function PeoplePage() {
   const root = Boolean(me?.roles.root_admin || me?.roles.admin);
   const choices = useMemo(() => {
     const all = org.data?.departments ?? [];
-    if (root) return all.map((d) => ({ id: d.id, name: d.name }));
+    if (root) return [{ id: EVERYONE, name: "Everyone" }, ...all.map((d) => ({ id: d.id, name: d.name }))];  // the root admin starts with every login
     const mine = new Set(me?.roles.admin_of ?? []);
     const named = (org.data?.admin_departments ?? []).map((d) => ({ id: d.id, name: d.name }));
     return named.length ? named : all.filter((d) => mine.has(d.id)).map((d) => ({ id: d.id, name: d.name }));
   }, [org.data, root, me]);
   const dept = params.get("dept") || choices[0]?.id || me?.roles.admin_of?.[0] || "";
   useEffect(() => { if (!params.get("dept") && dept) setParams({ dept }, { replace: true }); }, [dept]); // eslint-disable-line react-hooks/exhaustive-deps
-  const people = useDepartmentDoctors(dept || null);
+  const everyone = dept === EVERYONE;
+  const people = useDepartmentDoctors(dept && !everyone ? dept : null);
+  const accounts = useAccounts({ enabled: root && everyone });
   const list = useMemo(() => {
     const n = q.trim().toLowerCase();
     const rows = [...(people.data?.doctors ?? [])].sort((a, b) => Number(a.disabled) - Number(b.disabled) || (a.role === "head" ? -1 : 0) - (b.role === "head" ? -1 : 0) || (a.display_name || a.username).localeCompare(b.display_name || b.username));
@@ -208,7 +210,7 @@ export default function PeoplePage() {
     <div className="mx-auto max-w-5xl">
       <PageHeader
         title="People"
-        subtitle={people.data ? `${deptName}: ${plural(counts.doctors, "doctor")}, ${plural(counts.residents, "resident")}${counts.away ? `, ${counts.away} away` : ""}` : deptName}
+        subtitle={everyone ? "Every login, with its roles. Pick a department to add or change someone." : people.data ? `${deptName}: ${plural(counts.doctors, "doctor")}, ${plural(counts.residents, "resident")}${counts.away ? `, ${counts.away} away` : ""}` : deptName}
         actions={
           <>
             {choices.length > 1 ? (
@@ -221,7 +223,9 @@ export default function PeoplePage() {
           </>
         }
       />
-      {dept ? (
+      {everyone ? (
+        <EveryoneList accounts={accounts.data?.accounts ?? []} loading={accounts.isLoading} error={accounts.error} onRetry={() => void accounts.refetch()} deptName={(id) => (org.data?.departments ?? []).find((d) => d.id === id)?.name || id} onOpen={(d) => setParams({ dept: d }, { replace: true })} />
+      ) : dept ? (
         <div className="grid gap-4">
           <AddPerson dept={dept} onSaved={(mailto, who) => { setMail({ mailto, who }); refresh(); }} />
           {people.data?.department && (people.data.department.email || people.data.department.phone) ? (
@@ -244,6 +248,58 @@ export default function PeoplePage() {
         <div className="surface"><EmptyState kind="people" title="No department to manage" text="The root admin makes you the admin of a department." /></div>
       )}
       <MailDraft mailto={mail?.mailto ?? null} who={mail?.who ?? ""} onClose={() => setMail(null)} />
+    </div>
+  );
+}
+
+const EVERYONE = "all";
+
+/** The root admin's first view: every placed login across departments, so nobody looks missing because the first department is empty. */
+function EveryoneList({ accounts, loading, error, onRetry, deptName, onOpen }: {
+  accounts: AccountRow[]; loading: boolean; error: Error | null; onRetry: () => void; deptName: (id: string) => string; onOpen: (dept: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  const rows = useMemo(() => {
+    const n = q.trim().toLowerCase();
+    const list = [...accounts].sort((a, b) => (a.display_name || a.username).localeCompare(b.display_name || b.username));
+    return n ? list.filter((a) => [a.display_name, a.username, ...Object.keys(a.departments ?? {}).map(deptName)].filter(Boolean).join(" ").toLowerCase().includes(n)) : list;
+  }, [accounts, q, deptName]);
+  return (
+    <div className="grid gap-4">
+      <SearchBox value={q} onChange={setQ} placeholder="Find a person or department" wrapperClassName="sm:max-w-sm" />
+      <DataList
+        items={rows}
+        loading={loading}
+        error={error}
+        onRetry={onRetry}
+        what="the logins"
+        keyFor={(a) => a.username}
+        renderRow={(a) => {
+          const depts = Object.entries(a.departments ?? {});
+          const roles = [
+            ...depts.map(([d, r]) => `${ROLE_WORD[r] || r}, ${deptName(d)}`),
+            ...(a.admin_of ?? []).map((d) => `Department admin, ${deptName(d)}`),
+            a.coordinator ? "MDT Coordinator" : "",
+            a.root_admin ? "Root admin" : "",
+            a.auditor ? "Auditor" : "",
+          ].filter(Boolean);
+          const first = depts[0]?.[0] || (a.admin_of ?? [])[0];
+          return (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary text-sm font-bold text-secondary-foreground" aria-hidden>{initials(a.display_name || a.username)}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-medium text-foreground">{a.display_name || a.username}</span>
+                <span className="block text-xs text-muted-foreground"><span className="mono">{a.username}</span>{roles.length ? `: ${roles.join("; ")}` : ""}</span>
+              </span>
+              {a.end_date ? <Pill tone={a.expired ? "bad" : "neutral"} icon={CalendarClock}>{a.expired ? "Ended " : "Until "}<DateText value={a.end_date} /></Pill> : null}
+              {a.must_change_password ? <Pill tone="warn" icon={KeyRound}>Not signed in yet</Pill> : null}
+              {a.disabled ? <Pill tone="bad" icon={UserMinus}>Away</Pill> : null}
+              {first ? <Button type="button" variant="outline" size="sm" onClick={() => onOpen(first)}>Manage in {deptName(first)}</Button> : null}
+            </div>
+          );
+        }}
+        empty={<EmptyState kind="people" title={q ? "Nobody matches" : "No logins yet"} text={q ? "Try another name." : "Add people in the hospital set-up or pick a department above."} />}
+      />
     </div>
   );
 }

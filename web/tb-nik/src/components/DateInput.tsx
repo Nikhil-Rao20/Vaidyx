@@ -11,7 +11,8 @@ export function isoToDmy(iso: string): string {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
 }
 
-/** "21/10/2026", "21-10-2026", "21.10.26" or "2026-10-21" to "2026-10-21"; null when it is not a real date. */
+/** "21/10/2026", "21-10-2026", "21.10.2026" or "2026-10-21" to "2026-10-21"; null when it is not a real date. The year is always
+ * typed in full: a two-digit year ("31") is ambiguous and was once read as 2031 for a rotation that ends in 2027. */
 export function dmyToIso(text: string): string | null {
   const t = text.trim();
   if (!t) return "";
@@ -19,9 +20,9 @@ export function dmyToIso(text: string): string | null {
   let y: number, mo: number, d: number;
   if (m) { y = +m[1]; mo = +m[2]; d = +m[3]; }
   else {
-    m = /^(\d{1,2})[/.\-\s](\d{1,2})[/.\-\s](\d{2}|\d{4})$/.exec(t);
+    m = /^(\d{1,2})[/.\-\s](\d{1,2})[/.\-\s](\d{4})$/.exec(t);
     if (!m) return null;
-    d = +m[1]; mo = +m[2]; y = m[3].length === 2 ? 2000 + +m[3] : +m[3];
+    d = +m[1]; mo = +m[2]; y = +m[3];
   }
   const dt = new Date(y, mo - 1, d);
   if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;
@@ -56,7 +57,7 @@ export const DateInput = forwardRef<HTMLInputElement, Omit<ComponentProps<"input
         value={text}
         disabled={disabled}
         aria-invalid={bad || props["aria-invalid"] || undefined}
-        title={bad ? "Type the date as DD/MM/YYYY" : undefined}
+        title={bad ? "Type the date as DD/MM/YYYY, with the year in full" : undefined}
         onChange={(e) => { setText(e.target.value); if (/^\d{1,2}[/.\-\s]\d{1,2}[/.\-\s]\d{4}$/.test(e.target.value.trim()) || !e.target.value.trim()) commit(e.target.value); }}
         onBlur={(e) => { commit(text); onBlur?.(e); }}
         className={cn(

@@ -21,6 +21,7 @@ import type { HisTestResult, SetupPeopleResult, SetupResponse } from "@/lib/type
 import { cn } from "@/lib/utils";
 import { formFrom, newRow, type PersonRow, type SetupForm } from "@/features/admin/state";
 import { BoardStep, DepartmentsStep, HisStep, HospitalStep, PeopleStep, departmentsInvalid } from "@/features/admin/SetupSteps";
+import { SetupReview } from "@/features/admin/SetupReview";
 
 const STEP_IDS = ["hospital", "departments", "people", "his", "board"] as const;
 const STEP_ICON = { hospital: Hospital, departments: Building2, people: Users, his: PlugZap, board: CalendarDays } as const;
@@ -46,7 +47,7 @@ export default function AdminSetup() {
     if (setup.data && !form) {
       setForm(formFrom(setup.data));
       const firstOpen = setup.data.steps.findIndex((s) => !s.done);
-      setStep(firstOpen < 0 ? 1 : firstOpen + 1);
+      setStep(firstOpen < 0 ? 6 : firstOpen + 1);  // all done: open on the review of every choice
     }
   }, [setup.data, form]);
 
@@ -188,12 +189,12 @@ export default function AdminSetup() {
               nextButtonText={saving ? "Saving" : "Save and continue"}
               completeButtonText={saving ? "Saving" : "Save and finish"}
               completedContent={
-                <div className="flex flex-col items-center gap-3 py-6 text-center">
+                <div className="flex flex-col items-center gap-3 py-4 text-center">
                   <CheckCircle2 className="size-10 text-ok" aria-hidden />
                   <h2 className="text-lg">{setup.data.complete ? "The hospital is set up" : "Saved. Some steps still need a look"}</h2>
-                  <p className="max-w-md text-sm text-muted-foreground">{setup.data.complete ? "Doctors can sign in and start Case Files from a UHID. Department admins manage their people from People." : "The list shows which steps are not done yet; open one to finish it."}</p>
-                  <div className="flex flex-wrap justify-center gap-2">
-                    <Button type="button" variant="outline" onClick={() => setStep(1)}>Review the steps</Button>
+                  <p className="max-w-md text-sm text-muted-foreground">{setup.data.complete ? "Here is everything you chose. Edit any part; each step saves again on its own." : "Here is what is saved so far; open the steps marked not done to finish them."}</p>
+                  <SetupReview setup={setup.data} accounts={accounts.data?.accounts ?? []} onEdit={(n) => { setStepError(null); setStep(n); }} />
+                  <div className="flex flex-wrap justify-center gap-2 pt-2">
                     <Button type="button" asChild><Link to="/people">Open People</Link></Button>
                   </div>
                 </div>
