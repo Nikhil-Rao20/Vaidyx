@@ -9,3 +9,5 @@
 | 19 Oct 03:40 | R3 | built (uncommitted): lib/video (pre-join choice, room identity), Stage.tsx, VideoTiles (tiles), PreJoin, People, MemberViewPage, MeetingRoomPage, ControlView (conduct), agenda ack toast, TimeInput on new meeting; backend video-token {screen: room} | shots review, meetings.spec fixes, commit; then R4 deck |
 | 19 Oct 04:30 | R3 | committed 6b4aa16 (stage, tiles, pre-join, conduct panel, room screen) | |
 | 19 Oct 05:20 | R4 | built (uncommitted): tumour_board/deck (python-pptx design, assets), api/deck.py (meeting + case decks, hospital logo upload), tests 4/4, LogoUpload in set-up, Download menu on the Case File, Deck button on the meeting page; LibreOffice portable at /data/vaidyx/tools/libreoffice for rendering (deck/render.py); docs DECK.md | set-up shot, full suite, commit, restart :7000; then R5 |
+| 19 Oct 06:10 | R4 | committed fafaae5; :7000 restarted | |
+| 19 Oct 06:40 | R5 | committed (ring, phone conduct, live video check passed: live-*.png) | R6: REVIEW.md for the owner, final suites, memory |

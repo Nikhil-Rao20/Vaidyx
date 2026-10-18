@@ -245,6 +245,11 @@ export default function CaseFilePage() {
   const exportAllowed = !!reviewed;
   const exportReason = exportAllowed ? null : summaryArt || prose?.status === "ready" ? "Review the narrative first, then export." : "Prepare and review the narrative first.";
   const left = slots ? slots.left_before_board : null;
+  // The ring: the gate's readiness; when the gate is silent or disagrees with the open lines, the share of required lines that are done.
+  const requiredTotal = allSlots.filter((s) => s.required !== false && s.kind !== "prose").length;
+  const derivedReadiness = requiredTotal && left !== null ? Math.round((100 * Math.max(0, requiredTotal - left)) / requiredTotal) : null;
+  const gateReadiness = typeof slots?.gate?.readiness === "number" ? slots.gate.readiness : null;
+  const readiness = cf.case.board_ready ? 100 : gateReadiness !== null && !(left && gateReadiness >= 100) ? gateReadiness : derivedReadiness;
   const blockersNow = !slotsq.derived ? slots?.blockers ?? [] : [];
   const mayMark = role.resident || !!cf.permissions?.mark_ready;
   const canMarkReady = !cf.case.board_ready && mayMark && blockersNow.length === 0;
@@ -284,7 +289,7 @@ export default function CaseFilePage() {
         onOpenPanel={(p) => (p ? openPanelLinked(p) : closeLinked())} activePanel={activePanel}
         onPrint={() => window.print()} exportAllowed={exportAllowed} exportReason={exportReason} exportHref={exportVtbUrl(id)} deckHref={deckUrl(id)}
         onUrgency={onUrgency} urgencyBusy={urgencyBusy} canSetUrgency={canSetUrgency}
-        helpersCount={helpersCount} publishedCount={publishedCount} protocolLabel={slots?.protocol_label} helpersReady={helpersReady} helpersPreparing={helpersPreparing} readiness={slots?.gate?.readiness ?? null}
+        helpersCount={helpersCount} publishedCount={publishedCount} protocolLabel={slots?.protocol_label} helpersReady={helpersReady} helpersPreparing={helpersPreparing} readiness={readiness}
         onArchive={teamq.data?.can?.archive && !teamq.data?.archived ? () => setArchiveOpen(true) : undefined}
       />
       {teamq.data?.archived ? (
