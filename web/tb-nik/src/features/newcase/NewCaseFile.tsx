@@ -19,6 +19,7 @@ import { EP } from "@/lib/endpoints";
 import { useSession } from "@/lib/session";
 import { ageSex } from "@/lib/format";
 import type { CreateFromHisResponse } from "@/lib/types";
+import { isGeneric } from "@/lib/cancers";
 import { DEFAULT_FORM, createBody, type NewCaseForm } from "@/features/newcase/form";
 import { StepPatient } from "@/features/newcase/StepPatient";
 import { NOT_RECORDED, StepCancer, cancerStepDone } from "@/features/newcase/StepCancer";
@@ -34,9 +35,10 @@ interface Created {
 
 function createError(e: unknown, form: NewCaseForm): string {
   if (e instanceof ApiError) {
-    if (e.status === 400 && /protocol/i.test(e.message) && !form.protocol) {
-      return `The server does not start a Case File without a built checklist yet (${form.cancerName || "this cancer"}). Pick the closest built checklist, or ask the root admin to add one.`;
+    if (e.status === 400 && /unknown protocol/i.test(e.message) && (!form.protocol || isGeneric(form.protocol))) {
+      return `This server cannot start a Case File for a cancer with no checklist yet (${form.cancerName || "this cancer"}). Ask the root admin to update Vaidyx, or pick the closest built checklist.`;
     }
+    if (e.status === 400 && /cancer's name/i.test(e.message)) return `${e.message}. Go back to the Cancer step to correct it.`;
     if (e.status === 409 && /hospital information system/i.test(e.message)) return "No hospital system is connected yet. The root admin connects it in Admin, Hospital system.";
     if (e.status === 502) return "The hospital system did not answer. Nothing was created; try again in a minute.";
     if (e.status === 403) return e.message || "You may not start a Case File for this department.";
@@ -60,7 +62,8 @@ export default function NewCaseFile() {
   const invalidate = useInvalidate();
   const onChange = (patch: Partial<NewCaseForm>) => setForm((f) => ({ ...f, ...patch }));
 
-  const protocol = useMemo(() => (protocols.data?.protocols ?? []).find((p) => p.id === form.protocol), [protocols.data, form.protocol]);
+  // the built checklist only: a cancer with no checklist yet is named by its own name, not the generic rule's label
+  const protocol = useMemo(() => (isGeneric(form.protocol) ? undefined : (protocols.data?.protocols ?? []).find((p) => p.id === form.protocol)), [protocols.data, form.protocol]);
   const settingLabel = protocol?.settings.find((s) => s.id === form.setting)?.label;
   const canCreate = Boolean(me && ((me.roles.treating || []).length || me.roles.coordinator));
   const stepOk = step === 1 ? Boolean(form.lookup?.found && form.lookup.patient) : step === 2 ? cancerStepDone(form) : logisticsDone(form, owners.length > 1);

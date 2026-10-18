@@ -101,6 +101,38 @@ def window_label(window: dict) -> str:
     return f"last {window.get('months', 12)} months"
 
 
+# ---- the cancer's name (owner decision R05-Q04) -------------------------------------------------------------------------
+
+CANCER_NAME_MIN, CANCER_NAME_MAX = 2, 80
+
+
+def clean_cancer_name(value, protocol_id: str = "") -> str:
+    """The cancer's name as the doctor picked or typed it (case.json "cancer_name"): trimmed, inner spaces collapsed, 2 to 80
+    characters. Required under the generic rule (a cancer with no built checklist: protocol "generic", four core records), optional
+    under a built checklist. Returns "" when none is given and none is needed; HISCaseError (400) with a plain message otherwise."""
+    from .protocol import GENERIC
+    if value is not None and not isinstance(value, str):
+        raise HISCaseError("The cancer's name must be text")
+    name = " ".join(str(value or "").split())
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in name):
+        raise HISCaseError("The cancer's name has characters that cannot be shown: type it again")
+    if not name:
+        if protocol_id == GENERIC:
+            raise HISCaseError(f"Type the cancer's name: a cancer with no checklist yet needs it ({CANCER_NAME_MIN} to {CANCER_NAME_MAX} characters)")
+        return ""
+    if not CANCER_NAME_MIN <= len(name) <= CANCER_NAME_MAX:
+        raise HISCaseError(f"The cancer's name must be {CANCER_NAME_MIN} to {CANCER_NAME_MAX} characters (it has {len(name)})")
+    return name
+
+
+def _same_cancer(c: dict, protocol_id: str, cancer_name: str) -> bool:
+    """Another Case File of the same UHID is for the same cancer: the same protocol and, under the generic rule, the same typed name."""
+    if c.get("protocol") != protocol_id:
+        return False
+    from .protocol import GENERIC
+    return protocol_id != GENERIC or " ".join(str(c.get("cancer_name") or "").split()).lower() == cancer_name.lower()
+
+
 # ---- helpers ---------------------------------------------------------------------------------------------------------
 
 def _day(s) -> str:
@@ -230,8 +262,9 @@ async def lookup(identifier: str, window=None) -> dict:
 
 
 async def create(identifier: str, protocol_id: str, setting: str, hospital_level: str, board_date: str, window, user: str, roles: dict,
-                 department=None, case_id: str = "") -> dict:
-    """Create the Case File from the HIS registration and start the first fetch. Returns {"case", "job"}."""
+                 department=None, case_id: str = "", cancer_name=None) -> dict:
+    """Create the Case File from the HIS registration and start the first fetch. Returns {"case", "job"}. `cancer_name`: the cancer as
+    the doctor picked or typed it, required under the generic rule (protocol "generic", owner decision R05-Q04), stored and audited."""
     from . import protocol, service
     identifier = str(identifier or "").strip()
     if not identifier:
@@ -240,6 +273,7 @@ async def create(identifier: str, protocol_id: str, setting: str, hospital_level
         raise HISCaseError(f"Unknown protocol: {protocol_id}")
     if setting and setting not in {x["id"] for x in protocol.settings(protocol_id)}:
         raise HISCaseError(f"Unknown NCG setting for {protocol_id}: {setting}")
+    cancer_name = clean_cancer_name(cancer_name, protocol_id)
     hospital_level = hospital_level or (org.load().get("hospital") or {}).get("level") or "essential"
     if hospital_level not in org.LEVELS:
         raise HISCaseError("Hospital level must be essential or optimal")
@@ -267,7 +301,7 @@ async def create(identifier: str, protocol_id: str, setting: str, hospital_level
     else:
         case_id = intake.next_case_id()
     dup = next((c["case_id"] for c in store.list_cases() if c.get("his") and str((c["his"] or {}).get("uhid") or "").upper() == str(p["uhid"]).upper()
-                and (c.get("protocol") == protocol_id)), None)
+                and _same_cancer(c, protocol_id, cancer_name)), None)  # under the generic rule, two different typed cancers are not the same one
     try:
         encs = await client.encounters(p["id"])
     except his_client.HISError as e:
@@ -276,6 +310,8 @@ async def create(identifier: str, protocol_id: str, setting: str, hospital_level
               and (c["his"] or {}).get("kind") == client.kind and str((c["his"] or {}).get("label") or "") == str(client.label or "")]  # the same hospital system (review Phase 5 minor 3)
     case = store.create_case(case_id, patient_record(p, encs), protocol_id, board_date, user, setting, hospital_level)
     case["department"] = owner
+    if cancer_name:
+        case["cancer_name"] = cancer_name
     if others:  # the same patient's other cancer episodes (two primaries, V2 item 5.3): linked both ways, each with its own owner and protocol
         case["linked_cases"] = [{"case_id": o["case_id"], "protocol": o.get("protocol") or "", "department": o.get("department") or "", "linked_at": store.now_iso(),
                                  "reason": "same UHID"} for o in others]
@@ -289,6 +325,7 @@ async def create(identifier: str, protocol_id: str, setting: str, hospital_level
         case["his"]["same_uhid_case"] = dup  # another Case File of this UHID under the same protocol: shown, never blocked (two primaries are 5.3)
     store.save_case(case)
     store.audit(case_id, {"kind": "case_created", "by": user, "listing": case["listing"]["status"], "protocol": protocol_id, "setting": setting,
+                          **({"cancer_name": cancer_name} if cancer_name else {}),
                           "from_his": {"label": client.label, "identifier": identifier, "matched_on": p.get("matched_on"), "uhid": p["uhid"],
                                        "registration_kind": p.get("registration_kind"), "similar": [s.get("uhid") for s in p.get("similar") or []]},
                           "owner": owner, "window": window, "same_uhid_case": dup, "linked_cases": [o["case_id"] for o in others]})

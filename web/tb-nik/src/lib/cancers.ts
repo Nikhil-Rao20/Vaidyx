@@ -1,14 +1,16 @@
 // The cancer picker of the New Case File flow: the ten commonest cancers per group and the checklist (protocol) each one
 // maps to. Source of the lists: Report of National Cancer Registry Programme 2020 (ICMR-NCDIR, Bengaluru), leading sites
-// by sex and the childhood cancers chapter. A cancer without a built checklist maps to protocol null: the generic rule
-// applies and the doctor types the name. Cancer of Unknown Primary maps to the "cup" protocol (draft).
+// by sex and the childhood cancers chapter. A cancer without a built checklist (protocol null here, or a checklist the server
+// does not list) maps to protocol "generic": four core records are checked (histopathology, staging imaging, a clinical note with
+// performance status, the question for the board; owner decision R05-Q04) and the picked or typed name is sent as cancer_name.
+// Cancer of Unknown Primary maps to the "cup" protocol (draft).
 
 export type CancerGroup = "men" | "women" | "children" | "general";
 
 export interface CancerEntry {
   id: string;
   label: string;
-  /** The protocol id (GET /protocols) with a built checklist, or null for the generic rule. */
+  /** The protocol id (GET /protocols) with a built checklist, or null: no checklist yet, the generic rule (see protocolFor). */
   protocol: string | null;
   /** Words a search box matches on. */
   keywords?: string[];
@@ -19,6 +21,39 @@ export interface CancerEntry {
 }
 
 export const SOURCE_NOTE = "Top 10 lists from the National Cancer Registry Programme report 2020 (ICMR-NCDIR).";
+
+/** The protocol of a cancer with no checklist yet (tumour_board/protocols/generic.json) and its one setting. */
+export const GENERIC_PROTOCOL = "generic";
+export const GENERIC_SETTING = "as_recorded";
+/** What the generic rule checks, word for word on the review step and the Case File header. */
+export const GENERIC_RULE = "No disease-specific Indian protocol: four core records are checked";
+/** How lists and the Case File name a cancer with no checklist yet: "<name> (no checklist yet)". */
+export const NO_CHECKLIST_WORDS = "no checklist yet";
+export const GENERIC_RECORDS = [
+  "Histopathology or cytology report",
+  "Staging imaging report (CT, MRI or PET-CT, any one)",
+  "Clinical note with performance status",
+  "The question for the board (you can type it)",
+];
+/** The cancer's name as the server accepts it: 2 to 80 characters after trimming. */
+export const CANCER_NAME_MIN = 2;
+export const CANCER_NAME_MAX = 80;
+
+export function isGeneric(protocol?: string | null): boolean {
+  return protocol === GENERIC_PROTOCOL;
+}
+
+/** The protocol a picked cancer is created under: its built checklist when the server lists it (or the list has not arrived yet),
+ * otherwise the generic rule. */
+export function protocolFor(c: CancerEntry, built?: { has(id: string): boolean } | null): string {
+  if (c.protocol && c.protocol !== GENERIC_PROTOCOL && (!built || built.has(c.protocol))) return c.protocol;
+  return GENERIC_PROTOCOL;
+}
+
+/** The cancer's name cleaned as the server cleans it (trimmed, inner spaces collapsed). */
+export function cleanCancerName(name: string): string {
+  return name.replace(/\s+/g, " ").trim();
+}
 
 export const CANCERS: CancerEntry[] = [
   { id: "lung", label: "Lung", protocol: "lung_nsclc", keywords: ["nsclc", "bronchus", "chest"], groups: ["men", "women", "general"] },

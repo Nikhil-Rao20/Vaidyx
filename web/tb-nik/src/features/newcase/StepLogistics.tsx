@@ -1,10 +1,11 @@
 // Step 3: the logistics, pre-filled as recommendations: the fetch window (12 months), the board question (needed
 // before the Case File can be marked ready), the urgency tag 1 to 5 (required, no default: the consultant's own call),
 // the board date (the next planned meeting when there is one), the presenter (you), a join code for residents, and the
-// consent to discuss with outside experts. A read-back of the whole Case File sits at the end.
+// consent to discuss with outside experts. A read-back of the whole Case File sits at the end; for a cancer with no checklist
+// yet it says what the generic rule checks (four core records, owner decision R05-Q04).
 import { useEffect, useMemo } from "react";
 import { motion } from "motion/react";
-import { CalendarDays, Flame, KeyRound, ShieldCheck, TriangleAlert, UserRound } from "lucide-react";
+import { CalendarDays, ClipboardList, Flame, KeyRound, ShieldCheck, TriangleAlert, UserRound } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Field } from "@/components/Field";
@@ -15,6 +16,7 @@ import { useMeetings, useOrg } from "@/hooks/useQueries";
 import { useSession } from "@/lib/session";
 import { ageSex, drName, formatDate, parseDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { GENERIC_RULE, NO_CHECKLIST_WORDS, cleanCancerName, isGeneric } from "@/lib/cancers";
 import { WINDOW_CHOICES, type NewCaseForm } from "@/features/newcase/form";
 import { NOT_RECORDED } from "@/features/newcase/StepCancer";
 
@@ -29,6 +31,15 @@ const URGENCY: Array<{ level: number; word: string }> = [
 function isoDay(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** How the read-back names the cancer: "<name> (no checklist yet)" under the generic rule, else the checklist, with the picked name
+ * when the checklist is named differently (Tongue uses the oral cavity checklist). */
+export function cancerWords(form: NewCaseForm, protocolLabel?: string): string {
+  const name = cleanCancerName(form.cancerName);
+  if (isGeneric(form.protocol)) return name ? `${name} (${NO_CHECKLIST_WORDS})` : "";
+  if (!protocolLabel) return name;  // the checklist list has not arrived yet
+  return name && !protocolLabel.toLowerCase().includes(name.toLowerCase()) ? `${name} (${protocolLabel} checklist)` : `${protocolLabel} checklist`;
 }
 
 /** The treating departments this person may own a Case File for: their own, or every treating department for a coordinator. */
@@ -71,6 +82,7 @@ export function StepLogistics({ form, onChange, settingLabel, protocolLabel }: {
   }, [owners.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const p = form.lookup?.patient;
+  const generic = isGeneric(form.protocol);
   const meName = me?.display_name ? drName(me.display_name) : me?.user ?? "you";
   return (
     <div className="grid gap-5">
@@ -118,7 +130,8 @@ export function StepLogistics({ form, onChange, settingLabel, protocolLabel }: {
         </div>
       </fieldset>
 
-      <Field id="board-question" label="The question for the board" hint="Needed before the Case File can be marked ready. You can type it later.">
+      <Field id="board-question" label="The question for the board"
+        hint={generic ? "One of the four core records of a cancer with no checklist yet: needed before the Case File can be marked ready. You can type it later." : "Needed before the Case File can be marked ready. You can type it later."}>
         <Textarea rows={3} value={form.boardQuestion} onChange={(e) => onChange({ boardQuestion: e.target.value })} placeholder="e.g. Upfront surgery or neoadjuvant therapy?" maxLength={600} />
       </Field>
 
@@ -142,8 +155,12 @@ export function StepLogistics({ form, onChange, settingLabel, protocolLabel }: {
         <KeyValueList>
           <KeyValue label="Patient" value={p ? `${p.name ?? ""}, ${ageSex(p.age, p.sex)}` : form.identifier} />
           <KeyValue label="UHID" value={p?.uhid} mono />
-          <KeyValue label="Cancer" value={protocolLabel ? `${protocolLabel} checklist` : form.cancerName ? `${form.cancerName} (no checklist yet)` : ""} />
-          <KeyValue label="Setting" value={form.setting === NOT_RECORDED ? "not recorded yet" : settingLabel} fallback="none" />
+          <KeyValue label="Cancer" value={cancerWords(form, protocolLabel)} />
+          {generic ? (
+            <KeyValue label="Checked" value={<span className="inline-flex items-start gap-1" data-testid="generic-readback"><ClipboardList className="mt-0.5 size-3.5 shrink-0" aria-hidden /> {GENERIC_RULE}</span>} />
+          ) : (
+            <KeyValue label="Setting" value={form.setting === NOT_RECORDED ? "not recorded yet" : settingLabel} fallback="none" />
+          )}
           <KeyValue label="Records" value={form.windowMonths === "all" ? "everything on record" : `last ${form.windowMonths} months`} />
           <KeyValue label="Board date" value={form.boardDate ? <span className="inline-flex items-center gap-1"><CalendarDays className="size-3.5" aria-hidden /> {formatDate(form.boardDate)}</span> : ""} fallback="not set" />
           <KeyValue label="Urgency" value={form.urgency ? String(form.urgency) : ""} fallback="choose one above" />

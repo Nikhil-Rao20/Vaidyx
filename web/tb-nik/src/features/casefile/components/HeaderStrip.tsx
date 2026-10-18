@@ -1,5 +1,6 @@
 // The header strip: who the patient is, the cancer and setting, the owner, the board date, the urgency tag, the
-// "N left before the board" counter with Mark ready, and the one-click panels. Sticky mini-header on mobile.
+// "N left before the board" counter with Mark ready, and the one-click panels. Sticky mini-header on mobile. A cancer with no
+// checklist yet (protocol "generic") is named by case.cancer_name, "(no checklist yet)", with what the generic rule checks.
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Archive, BookOpen, CalendarDays, ChevronDown, ClipboardList, Download, Flag, Printer, Sparkles, Users } from "lucide-react";
@@ -10,6 +11,7 @@ import { ownerOf } from "../api";
 import type { CaseFile, Team, Urgency } from "../types";
 import { DisabledReason, LoadingButton, StatusChip, fmtDate, plural } from "./common";
 import { cn } from "@/lib/utils";
+import { GENERIC_RULE, NO_CHECKLIST_WORDS, isGeneric } from "@/lib/cancers";
 
 export type PanelKind = "helpers" | "team" | "board" | "published" | null;
 
@@ -69,6 +71,11 @@ export function HeaderStrip({ cf, team, left, resident, consultantName, canMarkR
 }) {
   const c = cf.case;
   const p = c.patient ?? { name: "", mrn: "", agesex: "" };
+  const generic = isGeneric(c.protocol);
+  const cancerName = ((c as { cancer_name?: string }).cancer_name ?? "").trim();
+  const cancer = generic
+    ? `${cancerName || "Other cancer"} (${NO_CHECKLIST_WORDS})`
+    : protocolLabel || c.protocol_label || (c.protocol ? c.protocol.replace(/_/g, " ") : "cancer not listed yet");
   const ids = (p.ids ?? []).filter((x) => x.kind === "ip_no" || x.kind === "op_no").map((x) => x.value);
   const ownerDept = team?.owner?.department_label || ownerOf(cf).name;
   const ownerName = team?.owner?.doctors?.[0]?.name ?? cf.access?.owner_name ?? "";
@@ -87,8 +94,10 @@ export function HeaderStrip({ cf, team, left, resident, consultantName, canMarkR
             {ids.map((v) => <span key={v} className="mono">{v}</span>)}
           </p>
           <p className="text-sm mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
-            <span className="font-medium text-foreground">{protocolLabel || c.protocol_label || (c.protocol ? c.protocol.replace(/_/g, " ") : "cancer not listed yet")}</span>
-            {c.setting ? <span className="text-muted-foreground">{c.setting.replace(/_/g, " ")} (as recorded)</span> : null}
+            <span className="font-medium text-foreground break-words" data-testid="header-cancer">{cancer}</span>
+            {generic ? (
+              <span className="text-muted-foreground" title="Owner decision R05-Q04: histopathology, staging imaging, a clinical note with performance status, the question for the board">{GENERIC_RULE}</span>
+            ) : c.setting ? <span className="text-muted-foreground">{c.setting.replace(/_/g, " ")} (as recorded)</span> : null}
             <span className="text-muted-foreground">{ownerName ? `${ownerName}, ` : ""}{ownerDept || "no owner yet"}</span>
             <span className="inline-flex items-center gap-1 text-muted-foreground"><CalendarDays className="size-3.5" aria-hidden />{c.board_date ? `Board ${fmtDate(c.board_date)}` : "Board date not set"}{c.meeting_id ? <Link className="text-link underline underline-offset-2 ml-1" to={`/meetings/${c.meeting_id}`}>meeting</Link> : null}</span>
           </p>

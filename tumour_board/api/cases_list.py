@@ -155,7 +155,9 @@ def row(c: dict, r: dict, sched: dict, labels: dict) -> dict:
     p = c.get("patient") if isinstance(c.get("patient"), dict) else {}
     sc = sched.get(cid)
     return {"case_id": cid, "patient": {"name": p.get("name") or "", "agesex": p.get("agesex") or "", "uhid": p.get("mrn") or ""},
-            "protocol": c.get("protocol") or "", "protocol_label": labels.get(c.get("protocol") or "", c.get("protocol") or ""), "setting": c.get("setting") or "",
+            "protocol": c.get("protocol") or "", "setting": c.get("setting") or "",
+            # a cancer with no checklist yet (generic rule, R05-Q04) reads "<cancer name> (no checklist yet)"; the name is kept as typed
+            "protocol_label": protocol.case_label(c, labels.get(c.get("protocol") or "", c.get("protocol") or "")), "cancer_name": c.get("cancer_name") or "",
             "owner": {"department": own or "", "department_label": org.department_name(own) if own else "", "doctor": doc_owner, "doctor_name": profiles.display_name(doc_owner) if doc_owner else ""},
             "urgency": team.urgency_view(c), "status": status, "board_date": (sc or {}).get("date") or c.get("board_date") or "", "meeting_id": (sc or {}).get("meeting_id"),
             "left_before_board": sum(1 for q in gate.get("requirements") or [] if isinstance(q, dict) and q.get("status") not in ("satisfied", "not_applicable", "waived")),
@@ -184,7 +186,7 @@ async def case_list(request: Request, q: str = "", urgency: str = "", status: st
             continue
         rows.append(row(c, r, sched, labels))
     filters = {"departments": sorted({(x["owner"]["department"], x["owner"]["department_label"]) for x in rows if x["owner"]["department"]}),
-               "organs": sorted({(x["protocol"], x["protocol_label"]) for x in rows if x["protocol"]}),
+               "organs": sorted({(x["protocol"], labels.get(x["protocol"], x["protocol"])) for x in rows if x["protocol"]}),  # one entry per checklist (all generic Case Files together)
                "owners": sorted({(x["owner"]["doctor"], x["owner"]["doctor_name"]) for x in rows if x["owner"]["doctor"]}),
                "statuses": [{"key": k, "label": STATUS_LABELS[k]} for k in STATUSES]}
     filters = {k: ([{"id": a, "label": b} for a, b in v] if k != "statuses" else v) for k, v in filters.items()}

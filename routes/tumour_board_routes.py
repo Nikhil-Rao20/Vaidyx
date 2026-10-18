@@ -725,12 +725,14 @@ def setup_tumour_board_routes():
     async def create_from_his(request: Request):
         """A treating doctor creates a Case File from a UHID (or an IP / OP No.): {"identifier", "protocol", "setting"?, "hospital_level"?,
         "board_date"?, "window"?: {"months" | "all" | "from"}, "department"? (the owning treating department when the doctor has several
-        or the caller is an admin), "case_id"?}. The first fetch runs as a job."""
+        or the caller is an admin), "case_id"?, "cancer_name"? (the cancer as picked or typed, 2 to 80 characters; required with protocol
+        "generic", the four core records of a cancer with no checklist yet)}. The first fetch runs as a job."""
         u = _user(request); rl = _roles(request); _need(rl, "create_case"); b = await request.json()
         if not isinstance(b, dict):
             raise HTTPException(400, "Send the identifier and the protocol")
         out = await _his_call(his_case.create(str(b.get("identifier") or ""), str(b.get("protocol") or ""), str(b.get("setting") or ""), str(b.get("hospital_level") or ""),
-                                              str(b.get("board_date") or ""), b.get("window"), u, rl, department=b.get("department"), case_id=str(b.get("case_id") or "")))
+                                              str(b.get("board_date") or ""), b.get("window"), u, rl, department=b.get("department"), case_id=str(b.get("case_id") or ""),
+                                              cancer_name=b.get("cancer_name")))
         job = out["job"]
         return {"case": out["case"], "job": job["id"], "total": job["total"], "his": job.get("his")}
 
@@ -786,14 +788,22 @@ def setup_tumour_board_routes():
         level = b.get("hospital_level") or ((org.load().get("hospital") or {}).get("level") if prot else "")
         if level and level not in org.LEVELS:
             raise HTTPException(400, "Hospital level must be essential or optimal")
+        try:  # the cancer as picked or typed; required with protocol "generic" (a cancer with no checklist yet, owner decision R05-Q04)
+            cancer_name = his_case.clean_cancer_name(b.get("cancer_name"), prot)
+        except his_case.HISCaseError as e:
+            raise HTTPException(e.status, str(e))
         try:
             c = store.create_case(store.safe_id(b["case_id"]), b.get("patient", {}), prot, b.get("board_date", ""), u, b.get("setting", ""), level or "")
         except FileExistsError:
             raise HTTPException(409, "Case already exists")
-        if owner_dept:
-            c["department"] = owner_dept
+        if owner_dept or cancer_name:
+            if owner_dept:
+                c["department"] = owner_dept
+            if cancer_name:
+                c["cancer_name"] = cancer_name
             store.save_case(c)
-        store.audit(c["case_id"], {"kind": "case_created", "by": u, "listing": c["listing"]["status"], "protocol": prot, "setting": c.get("setting"), "owner": owner_dept})
+        store.audit(c["case_id"], {"kind": "case_created", "by": u, "listing": c["listing"]["status"], "protocol": prot, "setting": c.get("setting"), "owner": owner_dept,
+                                   **({"cancer_name": cancer_name} if cancer_name else {})})
         return c
 
     @r.post("/cases/{case_id}/listing")

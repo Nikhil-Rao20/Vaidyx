@@ -6,7 +6,7 @@ import pytest
 
 from tumour_board import org, protocol, rules
 
-PROTOCOLS = ("breast", "cervix", "colorectal_rectum", "cup", "lung_nsclc", "oral_cavity")
+PROTOCOLS = ("breast", "cervix", "colorectal_rectum", "cup", "generic", "lung_nsclc", "oral_cavity")
 
 
 def _all_records():
