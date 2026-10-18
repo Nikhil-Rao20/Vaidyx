@@ -346,8 +346,12 @@ def _evaluate_record(req, ready, facts, overrides, cat, orders=(), site="", othe
             else:
                 r["status"] = l1["status"] = "not_final"
                 his_why = [n[len("HIS: "):] for n in (c.get("status_notes") or []) if n.startswith("HIS: ")]  # the hospital system's reason (V2 item 3.3)
-                p = (f"{c.get('title') or d['filename']} is {c.get('status', 'UNKNOWN')}" + (" and unsigned" if c.get("signed") == "no" else "")
-                     + ": a final, signed version is required" + (" (" + "; ".join(his_why) + ")" if his_why else ""))
+                if c.get("status") == "CANCELLED":  # plain words for a doctor (18 Oct): a cancelled report is not a draft to sign
+                    p = (f"{c.get('title') or d['filename']} was cancelled in the hospital system: a new order and a final, signed report "
+                         "are needed" + (" (" + "; ".join(his_why) + ")" if his_why else ""))
+                else:
+                    p = (f"{c.get('title') or d['filename']} is {c.get('status', 'UNKNOWN')}" + (" and unsigned" if c.get("signed") == "no" else "")
+                         + ": a final, signed version is required" + (" (" + "; ".join(his_why) + ")" if his_why else ""))
                 r["problems"].append(p); l1["problems"].append(p)
             r["evidence"].append({"doc_id": d["doc_id"], "quote": c.get("status_quote") or c.get("signature_quote")})
         else:
