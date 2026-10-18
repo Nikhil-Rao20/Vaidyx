@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Field } from "@/components/Field";
 import { DateInput } from "@/components/DateInput";
-import { SwitchRow } from "@/components/FilterChips";
+import { SwitchRow } from "@/components/SwitchRow";
 import { KeyValue, KeyValueList } from "@/components/KeyValue";
 import { useMeetings, useOrg } from "@/hooks/useQueries";
 import { useSession } from "@/lib/session";

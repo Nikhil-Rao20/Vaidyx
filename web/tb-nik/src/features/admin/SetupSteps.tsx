@@ -13,7 +13,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Field } from "@/components/Field";
 import { LoginHandover } from "@/components/LoginHandover";
 import { DateInput } from "@/components/DateInput";
-import { SwitchRow } from "@/components/FilterChips";
+import { SwitchRow } from "@/components/SwitchRow";
 import { ActionButton } from "@/components/ActionButton";
 import { SearchBox } from "@/components/SearchBox";
 import { Pill } from "@/components/StatusPill";

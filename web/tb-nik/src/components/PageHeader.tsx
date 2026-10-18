@@ -40,7 +40,7 @@ export function PageHeader({ title, subtitle, back, crumbs, actions, className, 
           <h1 className="break-words sm:truncate">{title}</h1>
           {subtitle ? <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p> : null}
         </div>
-        {actions ? <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 sm:shrink-0">{actions}</div> : null}
+        {actions ? <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 sm:shrink-0 sm:flex-nowrap">{actions}</div> : null}
       </div>
       {children}
     </header>

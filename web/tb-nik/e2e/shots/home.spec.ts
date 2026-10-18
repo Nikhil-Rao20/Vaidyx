@@ -10,10 +10,12 @@ test.describe("home", () => {
     await expect(page.getByRole("region", { name: "Case Files" })).toBeVisible();
     await shoot(page, "home", "treating");
     await page.setViewportSize(SIZES[0]);
-    await page.getByRole("button", { name: "Status", exact: true }).click();
+    await page.getByRole("button", { name: /^Filters/ }).click();
     await shoot(page, "home", "filter-open", { sizes: [SIZES[0]], fullPage: false });
     await page.keyboard.press("Escape");
-    await visit(page, "/home?urgency=high");
+    await page.getByRole("searchbox").first().fill("118");
+    await shoot(page, "home", "search", { sizes: [SIZES[0]], fullPage: false });
+    await visit(page, "/cases?urgency=5,4&status=needs_me,waiting_department");
     await shoot(page, "home", "filtered", { sizes: [SIZES[0], SIZES[2]] });
   });
 

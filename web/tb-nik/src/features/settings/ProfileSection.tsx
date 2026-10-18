@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Field } from "@/components/Field";
 import { ActionButton } from "@/components/ActionButton";
 import { AvatarPicker } from "@/components/AvatarPicker";
-import { SwitchRow } from "@/components/FilterChips";
+import { SwitchRow } from "@/components/SwitchRow";
 import { useAsyncAction } from "@/hooks/useAsyncAction";
 import { useProfile } from "@/hooks/useProfile";
 import { isDoctor, roleWords } from "@/lib/nav";

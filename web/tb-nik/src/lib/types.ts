@@ -56,6 +56,10 @@ export interface CaseListItem {
   scope?: "FULL" | "REQUESTS" | string | null;
   documents?: number;
   gate_passed?: boolean | null;
+  /** Every identifier the patient and the file carry (UHID, IP / OP numbers, ABHA, PM-JAY id), for the search. */
+  ids?: string[];
+  /** Accession / Lab numbers of the records in the file, for the search. */
+  accessions?: string[];
 }
 
 export type FilterOption = string | { id: string; label: string } | { key: string; label: string };

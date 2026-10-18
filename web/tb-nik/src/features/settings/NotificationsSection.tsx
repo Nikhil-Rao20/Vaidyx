@@ -5,7 +5,7 @@ import { BellRing, BellOff, Clock, MonitorSmartphone, ShieldAlert } from "lucide
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ActionButton } from "@/components/ActionButton";
-import { SwitchRow } from "@/components/FilterChips";
+import { SwitchRow } from "@/components/SwitchRow";
 import { ErrorState } from "@/components/ErrorState";
 import { Pill } from "@/components/StatusPill";
 import { notify } from "@/components/Toasts";

@@ -15,7 +15,7 @@ import { Stepper, Step, StepTitle } from "@/components/Stepper";
 import { AvatarPicker, initialsAvatar, AVATAR_COLOURS } from "@/components/AvatarPicker";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { TextSizeToggle } from "@/components/TextSizeToggle";
-import { SwitchRow } from "@/components/FilterChips";
+import { SwitchRow } from "@/components/SwitchRow";
 import { Illustration } from "@/components/Illustration";
 import { notify } from "@/components/Toasts";
 import { useProfile } from "@/hooks/useProfile";

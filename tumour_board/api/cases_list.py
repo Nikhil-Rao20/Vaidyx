@@ -10,6 +10,7 @@ For anyone but the owner's consultants and the team's residents the needs_me lab
 are listed only with status=archived. Filters are simple server-side matches; the client may filter further. Sorted newest first.
 Nothing here judges the patient: the words describe the paperwork."""
 
+import re
 from fastapi import Request
 
 from tumour_board import access, board, org, profiles, proposals, protocol, service, store, team
@@ -163,14 +164,70 @@ def row(c: dict, r: dict, sched: dict, labels: dict) -> dict:
             "left_before_board": sum(1 for q in gate.get("requirements") or [] if isinstance(q, dict) and q.get("status") not in ("satisfied", "not_applicable", "waived")),
             "gate_passed": gate.get("passed"), "readiness": gate.get("readiness"),
             "imaging_present": any(((d.get("classification") or {}).get("doc_type") in IMAGING_TYPES) and d.get("state") == "ready" and not d.get("dismissed") for d in docs),
+            "ids": _identifiers(c), "accessions": _accessions(docs),
             "documents": len(docs), "last_change": _last_change(cid), "created": c.get("created") or "", "created_by": c.get("created_by") or "",
             "residents_count": len(access.team_residents(c)), "scope": access.scope(r, c), "archived": access.is_archived(c),
             "mine": bool(own and (own in (r.get("treating") or {}) or own in (r.get("resident") or {}))) or access.is_team_resident(r, c) or c.get("created_by") == r.get("user")}
 
 
+def _compact(s: str) -> str:
+    """Letters and digits only, lower case: "VXH/26/004327" -> "vxh26004327"."""
+    return re.sub(r"[^a-z0-9]+", "", (s or "").lower())
+
+
+def _loose(s: str) -> str:
+    """_compact() of the text with the leading zeros of every digit run dropped first: "VXH/26/004327" -> "vxh264327", so "4327" and
+    "VXH/26/4327" match too (the zeros go before the separators do, else "26/004327" would read as one run)."""
+    return _compact(re.sub(r"(?<![0-9])0+(?=[0-9])", "", s or ""))
+
+
+def _dmy(iso: str) -> str:
+    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})", iso or "")
+    return f"{m.group(3)}/{m.group(2)}/{m.group(1)}" if m else ""
+
+
 def _match(x: dict, q: str) -> bool:
-    hay = " ".join(str(v) for v in (x["patient"]["name"], x["patient"]["uhid"], x["case_id"], x["protocol_label"], x["owner"]["doctor_name"], x["owner"]["department_label"])).lower()
-    return all(w in hay for w in q.lower().split())
+    """The same matching as the website (web/tb-nik/src/lib/search.ts): case-insensitive, every typed word found somewhere, and an
+    identifier found by any part of it with the separators ignored ("00764", "vdx", "VDX/2026/00764", "vdx 764" all find
+    VDX/2026/00764; the owner, 19 Oct 2026)."""
+    ids = [x["patient"]["uhid"], *x.get("ids", []), *x.get("accessions", []), x["case_id"]]
+    parts = [x["patient"]["name"], x["patient"].get("agesex"), *ids, x["protocol_label"], x.get("cancer_name"), (x.get("setting") or "").replace("_", " "),
+             x["owner"]["doctor_name"], x["owner"]["department_label"], (x.get("status") or {}).get("label"), _dmy(x.get("board_date") or "")]
+    words = " ".join(str(v) for v in parts if v).lower()
+    id_text = " ".join(str(v) for v in ids if v)
+    comp, loose = _compact(id_text), _loose(id_text)
+    for t in q.lower().split():
+        tc, tl = _compact(t), _loose(t)
+        if t in words or (tc and tc in comp) or (tl and tl in loose):
+            continue
+        return False
+    return True
+
+
+def _identifiers(c: dict) -> list:
+    """Every identifier the file carries, in order: the UHID / MRN, the patient's other ids from the hospital system (ABHA, PM-JAY,
+    IP / OP numbers) and the IP / OP numbers of the fetched encounters."""
+    p = c.get("patient") if isinstance(c.get("patient"), dict) else {}
+    out = []
+    for v in [p.get("mrn"), *[i.get("value") for i in (p.get("ids") or []) if isinstance(i, dict)],
+              *[e.get("number") for e in ((c.get("his") or {}).get("encounters") or []) if isinstance(e, dict)]]:
+        v = str(v or "").strip()
+        if v and v not in out:
+            out.append(v)
+    return out
+
+
+def _accessions(docs: list) -> list:
+    out = []
+    for d in docs:
+        v = str(((d.get("his") or {}) if isinstance(d.get("his"), dict) else {}).get("accession") or "").strip()
+        if v and v not in out:
+            out.append(v)
+    return out
+
+
+def _csv(value: str) -> list:
+    return [s.strip() for s in (value or "").split(",") if s.strip()]
 
 
 @router.get("/case-list")
@@ -200,13 +257,15 @@ async def case_list(request: Request, q: str = "", urgency: str = "", status: st
     if urgency.strip():
         levels = {int(u) for u in urgency.replace(" ", "").split(",") if u.isdigit()}
         rows = [x for x in rows if (x["urgency"] or {}).get("level") in levels]
-    if department.strip():
-        did = org.department_id(department) or department.strip()
-        rows = [x for x in rows if x["owner"]["department"] == did]
+    if department.strip():  # comma-separated lists on department, organ and owner (the filter panel ticks several)
+        dids = {org.department_id(d) or d for d in _csv(department)}
+        rows = [x for x in rows if x["owner"]["department"] in dids]
     if organ.strip():
-        rows = [x for x in rows if x["protocol"] == organ.strip()]
+        organs = set(_csv(organ))
+        rows = [x for x in rows if x["protocol"] in organs]
     if owner.strip():
-        rows = [x for x in rows if x["owner"]["doctor"] == owner.strip().lower()]
+        owners = {o.lower() for o in _csv(owner)}
+        rows = [x for x in rows if x["owner"]["doctor"] in owners]
     if board_from.strip():
         rows = [x for x in rows if x["board_date"] and x["board_date"][:10] >= board_from.strip()[:10]]
     if board_to.strip():

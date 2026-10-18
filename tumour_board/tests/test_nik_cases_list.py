@@ -114,3 +114,26 @@ def test_case_list_follows_get_cases_visibility(api, cases, people):
     assert api.as_(VX).get("/case-list").json()["cases"] == []  # no clinical scope outside a break-glass window
     access.open_break_glass(VX, cases["gaps"], "support (synthetic)")
     assert [x["case_id"] for x in api.as_(VX).get("/case-list").json()["cases"]] == [cases["gaps"]]
+
+
+def test_search_finds_any_part_of_an_identifier(api, people):
+    """The owner (19 Oct 2026): "00764" or "vdx" must find VDX/2026/00764; case does not matter; every typed word must be found."""
+    make_case("TB-S1", patient={"name": "SYNTHETIC, Search Patient", "mrn": "VDX/2026/00764", "agesex": "52 Y / F",
+                                "ids": [{"kind": "uhid", "value": "VDX/2026/00764"}, {"kind": "op_no", "value": "OP/26/118736"}]},
+              his={"encounters": [{"number": "IP/26/000451"}]})
+    make_case("TB-S2", patient={"name": "SYNTHETIC, Other Patient", "mrn": "VDX/2026/00912", "agesex": "60 Y / M"})
+
+    def ids(q):
+        r = api.as_(RAO).get("/case-list", params={"q": q})
+        assert r.status_code == 200, r.text
+        return sorted(x["case_id"] for x in r.json()["cases"] if x["case_id"].startswith("TB-S"))
+
+    row = next(x for x in api.as_(RAO).get("/case-list").json()["cases"] if x["case_id"] == "TB-S1")
+    assert row["ids"] == ["VDX/2026/00764", "OP/26/118736", "IP/26/000451"] and row["accessions"] == []
+    for q in ("00764", "VDX/2026/00764", "vdx 764", "2026 00764", "764", "vdx/2026/764", "op/26/118736", "118736", "ip 451", "search patient", "SEARCH"):
+        assert ids(q) == ["TB-S1"], q
+    assert ids("vdx") == ["TB-S1", "TB-S2"] and ids("VDX 2026") == ["TB-S1", "TB-S2"]
+    assert ids("search other") == [] and ids("zzz") == []
+    # the list filters take comma-separated values
+    r = api.as_(RAO).get("/case-list", params={"organ": "breast,lung_nsclc"})
+    assert r.status_code == 200 and {x["case_id"] for x in r.json()["cases"]} >= {"TB-S1", "TB-S2"}
