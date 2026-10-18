@@ -285,6 +285,36 @@ def test_proxy_gives_the_viewer_its_own_policy(pacs_app):
     assert r.status_code == 200 and r.headers["content-security-policy"] == pacs.viewer_csp()
 
 
+def test_app_headers_keep_the_viewer_policy_and_let_this_app_frame_it(monkeypatch):
+    """core/middleware.py (owner's go, 18 Oct): under /api/tb/pacs/ the proxy's viewer policy is kept and only this app may frame
+    it (the meeting room screen); every other answer keeps nonce-only scripts and no framing at all."""
+    from core.middleware import SecurityHeadersMiddleware
+    fake = PACS()
+    fake.page = b"<html><script>start()</script></html>"
+    client = httpx.AsyncClient(transport=httpx.MockTransport(fake.handler))
+    monkeypatch.setattr(pacs, "_client", lambda: client)
+    app = FastAPI()
+    app.add_middleware(SecurityHeadersMiddleware)
+
+    @app.api_route("/api/tb/pacs/{path:path}", methods=["GET", "HEAD"])
+    async def route(request: Request, path: str):
+        return await pacs.proxy(request, path, DOCTOR)
+
+    @app.get("/tb-nik/x")
+    def page():
+        return {"ok": True}
+    with TestClient(app) as tc:
+        r = tc.get("/api/tb/pacs/ohif/start.html")
+        assert r.status_code == 200 and r.headers["x-frame-options"] == "SAMEORIGIN"
+        assert r.headers["content-security-policy"] == pacs.viewer_csp(fake.page)
+        r = tc.get(f"/api/tb/pacs/dicom-web/studies/{UID}/series")  # refused (no grant): still framed by this app only
+        assert r.status_code == 403 and r.headers["x-frame-options"] == "SAMEORIGIN"
+        assert r.headers["content-security-policy"] == "default-src 'self'; frame-ancestors 'self'"
+        r = tc.get("/tb-nik/x")
+        assert r.headers["x-frame-options"] == "DENY" and "frame-ancestors 'none'" in r.headers["content-security-policy"]
+        assert "'nonce-" in r.headers["content-security-policy"] and "'wasm-unsafe-eval'" not in r.headers["content-security-policy"]
+
+
 def test_proxy_range_head_post_and_errors(pacs_app):
     tc, fake, who = pacs_app
     store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="dr.rao")

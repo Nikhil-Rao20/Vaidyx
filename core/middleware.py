@@ -73,6 +73,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         is_document_pdf_preview = path.startswith("/api/document/") and path.endswith("/render-pdf")
         # Visual report pages are self-contained HTML — need inline scripts + external images
         is_report = path.startswith("/api/research/report/")
+        # Tumour Board image viewer (OHIF through the PACS proxy, tumour_board/pacs.py): the meeting room screen of this
+        # same app shows it in a frame, and the proxy sets the viewer's own script policy (its inline start-up scripts by
+        # hash, WebAssembly image decoders, workers), which is kept here.
+        is_pacs_viewer = path.startswith("/api/tb/pacs/")
 
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
@@ -101,6 +105,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         elif is_tool_render:
             # Skip framing headers for tools.
             pass
+        elif is_pacs_viewer:
+            response.headers["X-Frame-Options"] = "SAMEORIGIN"
+            response.headers.setdefault("Content-Security-Policy", "default-src 'self'; frame-ancestors 'self'")
         elif is_document_pdf_preview:
             response.headers["X-Frame-Options"] = "SAMEORIGIN"
             response.headers["Content-Security-Policy"] = (
