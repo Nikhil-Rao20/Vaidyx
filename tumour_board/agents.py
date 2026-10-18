@@ -610,6 +610,29 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
     yield {"type": "brief", "brief": brief}
 
 
+async def prepare(case_id, role, focus_question="", max_steps=5):
+    """Run the agent to the end, for a preparation in the background (18 Oct: the Specialty helpers of the fill-in summary and the ready
+    hook): the brief it wrote (also saved under state.artefacts.brief_<role> by run_agent), or the error it stopped on."""
+    brief, err, steps = None, None, 0
+    async for ev in run_agent(case_id, role, focus_question, max_steps):
+        if ev.get("type") == "brief":
+            brief = ev.get("brief")
+        elif ev.get("type") == "error":
+            err = ev.get("message") or "The agent wrote no brief"
+        elif ev.get("type") == "step":
+            steps += 1
+    return {"role": role, "brief": brief, "error": None if brief else (err or "The agent wrote no brief"), "steps": steps}
+
+
+def fresh(art, sig) -> bool:
+    """A stored brief still stands for the Case File (the rule service._prepare_one reuses): same Case File signature, current format,
+    no focus question, same near-match setting."""
+    if not isinstance(art, dict) or not art.get("signature") or not isinstance(sig, dict):
+        return False
+    return (not rules.stale_reason(art["signature"], sig) and art.get("version") == BRIEF_VERSION and not art.get("focus")
+            and bool(art.get("near_match")) == config.near_match())
+
+
 # V1 item 6.2: the agent of an absent specialty answers the board's questions live, from the Case File records and its guideline pack
 LIVE_LABEL = "AI support (role-specific)"
 LIVE_SCHEMA = {"type": "object", "additionalProperties": False, "properties": {

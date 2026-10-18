@@ -79,8 +79,9 @@ async def body(request: Request) -> dict:
 
 
 def audit(case_id: str, kind: str, by: str, **fields):
+    """One hash-chained event in the Case File's audit log (store.audit takes one event dict)."""
     from tumour_board import store
-    store.audit(case_id, kind, by=by, **fields)
+    store.audit(case_id, {"kind": kind, "by": by, **fields})
 
 
 class RateLimit:

@@ -35,7 +35,7 @@ from fastapi.responses import JSONResponse
 import re as _re
 _READ_CASE = _re.compile(r"^/api/tb/(cases|sessions|intake|metrics)(/|$)")  # routes that show patient data: a placed account only
 _CASE_PATH = _re.compile(r"^/api/tb/cases/([^/]+)(/.*)?$")  # one Case File: its owner, participants, the coordinator and the departments asked (V2 item 5.1)
-_LIMITED_OK = ((("GET",), _re.compile(r"^$")), (("GET",), _re.compile(r"^/documents/[^/]+(/file)?$")),  # read only: a delete is never in scope (review Phase 5 S1)
+_LIMITED_OK = ((("GET",), _re.compile(r"^$")), (("GET",), _re.compile(r"^/documents/[^/]+(/file|/quote)?$")),  # read only: a delete is never in scope (review Phase 5 S1); /quote = highlight boxes on a record in scope
                (("POST",), _re.compile(r"^/documents/[^/]+/images$")),  # Open images on a record in its scope (V2 item 6.3, Phase 6 review M2)
                (("POST",), _re.compile(r"^/requests/[^/]+/(acknowledge|done)$")), (("POST",), _re.compile(r"^/actions/[^/]+(/close|/dismiss-suggestion)?$")))  # what a department that was only asked may call
 
@@ -1207,6 +1207,12 @@ def setup_tumour_board_routes():
             c = board.mark_ready(case_id, u, ready=bool(b.get("ready", True)), note=str(b.get("note") or ""))
         except ValueError as e:
             raise HTTPException(400, str(e))
+        if bool(b.get("ready", True)):  # the summary prose and the heads' briefs are prepared in the background (18 Oct, tumour_board/ready_hook.py)
+            try:
+                from tumour_board import ready_hook
+                ready_hook.on_ready(case_id, u)
+            except Exception as e:
+                log.warning("ready hook failed for %s (%s: %s)", case_id, e.__class__.__name__, e)
         return {"case_id": case_id, "board_ready": c.get("board_ready") or None, "history": c.get("board_ready_history") or []}
 
     @r.post("/cases/{case_id}/requests/{action_id}/remind")
@@ -1900,4 +1906,11 @@ def setup_tumour_board_routes():
         cards = json.loads(f.read_text()) if f.exists() else []
         return {"health": await llm.health(), "cards": cards, "embedder": search.EMBED_MODEL}
 
+    try:  # the in-process scheduler (re-fetch, reminders, digests, meeting codes; 18 Oct); TB_SCHEDULER=0 keeps it off
+        import os as _os
+        if _os.getenv("TB_SCHEDULER", "1") != "0":
+            from tumour_board import scheduler as _scheduler
+            _scheduler.start()
+    except Exception as e:
+        log.warning("tumour board scheduler not started: %s", e)
     return r
