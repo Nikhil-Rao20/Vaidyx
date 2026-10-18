@@ -1,0 +1,37 @@
+# Security review of the new work (18 Oct 2026)
+
+Read-only code review of everything since commit 9c28ad6 (backend, demo HIMS, React app, secrets), plus the live audit script (`python -m tumour_board.eval.security_audit`: 25 checks, 0 failed). Authorization findings come from reading the code. Status column: filled in as fixes land.
+
+| # | Severity | Where | Problem | Fix | Status |
+|---|---|---|---|---|---|
+| 1 | high | routes/tumour_board_routes.py (_LIMITED_OK) + api/slots.py | /documents/{doc}/quote is open to REQUESTS scope without the record-in-scope check: a department asked one thing could read quotes from other records | check the record is in scope (or remove /quote from the limited list) | open |
+| 2 | high | meetings.py, org.py, api/meetings.py, api/me.py | the Vaidyx admin passes org.can, so it sees meeting rows, slides, decisions and the full activity log without break-glass | exclude the Vaidyx admin from manage, board_record and read_audit unless a break-glass window is open | open |
+| 3 | high | his_mock/app.py, desk.py | any HIMS staff session passes the JSON API paths and the desk sign API takes the signer from the body with no role check | api paths: token only for machine calls, sessions go through role checks; the signer comes from the session | open |
+| 4 | medium | api/me.py, routes guard, api/live.py | changing the password does not end other sessions; the password-first guard covers /api/tb only (not the WebSocket) | revoke other sessions after the change; enforce in the socket | open |
+| 5 | medium | accounts.py, api/setup.py | a root admin can give its own login clinical roles (coordinator, treating) | refuse clinical roles on root-admin logins | open |
+| 6 | medium | access.py | inside a break-glass window every action is allowed (the spec says read only) | allow only read actions inside the window | open |
+| 7 | medium | api/meetings.py, meetings.py | /meetings/{mid}/remind checks only "remind", not may_remind, the meeting view rule or the archive | check may_remind and the viewer rule | open |
+| 8 | medium | meetings.py, routes (sessions, intake) | an archived Case File can still change through agenda linking, meeting or session decisions and intake file-to-case | check not archived in those functions | open |
+| 9 | medium | api/meetings.py, meetings.py | an admitted outside expert can fetch slides of every agenda Case File at any time | outside experts: current case only, in session only, identity stripped without consent | open |
+| 10 | medium | ingest.py, routes (document file), core/middleware.py | an uploaded .xml is served inline on the same origin; the CSP allows cdn.jsdelivr.net for scripts | serve non-PDF, non-image originals as attachments with a sandbox CSP | open |
+| 11 | medium | web session.tsx | remember is always on (7-day cookie); no idle timeout; logout keeps caches | idle timeout (server side for TB routes), clear caches on logout | open |
+| 12 | medium | his_mock lab, radiology, pathology, model | module POST routes do not check the order belongs to the module | 404 unless the order belongs to the module; check the department on signing | open |
+| 13 | medium | his_mock/app.py, orthanc.json | the FHIR read token also signs through /desk/api; Orthanc has no authentication (any local user) | separate write token; Orthanc auth noted for deployment | open |
+| 14 | low | api/published.py, access.py | a resident adds or removes published cases directly (skips sign-off) | require the owner's consultant; residents propose | open |
+| 15 | low | api/helpers.py | helper chat threads have no chat rule (supporting participants could read) | apply the chats rule | open |
+| 16 | low | api/live.py, live.py | socket roles cached at connect; no per-user socket cap; unthrottled state requests; slow clients stall broadcasts | re-check the session, cap sockets, throttle, send with timeouts | open |
+| 17 | low | push.py | a push endpoint may be any https host | allow-list known push services | open |
+| 18 | low | accounts.py, dept_requests.py | mailto address not encoded; department email allows ? and & | reject or encode those characters | open |
+| 19 | low | api/common.py, profiles.py | no JSON body size cap | body cap on the TB routes | open |
+| 20 | low | his_mock/auth.py | login pause bypassable with X-Forwarded-For; GET logout; old session kept on re-login; no CSP | ignore proxy headers, POST logout, drop the old session, add a CSP | open |
+| 21 | low | scripts/livekit.sh, /data/vaidyx/tools/livekit | the secret is briefly on the sed command line; the tools folder is group writable | write the config without the secret on the command line; folder 755 | open |
+| 22 | low | git history (commit 4aaaf8d, before this work) | data/uploads/* (4 files), data/scheduled_emails.db, data/user_prefs.json, data/note_pings_nikhil.json, data/vaidyx-tmux/* are tracked | owner decision: untrack them (they stay in history) | owner |
+
+## Before the website is shared beyond localhost
+- Use a configured allowed-origin list plus a CSRF token, not only the Host header comparison; check X-Requested-With.
+- Account lockout in the main app login; TOTP enforced for coordinators and admins; rate limiters keyed by user and real client address.
+- SECURE_COOKIES=true and HSTS behind TLS; the CSP and the bundle hard-code 127.0.0.1 addresses for LiveKit, the PACS and the HIMS: make them configurable.
+- Give the HIMS its own hostname (it shares the 127.0.0.1 cookie site with the app today); turn on Orthanc authentication; rotate the LiveKit keys; LiveKit needs TLS and TURN; never tunnel :7000.
+
+## Checked and fine
+TB HTTP writes refuse a cross-site or other-port Origin; the WebSocket refuses a handshake without a cookie or with a foreign Origin (probed live), checks may_view and shapes private events per socket; REQUESTS scope is refused on the new slots, chats, team, helpers, published and proposals paths (except #1); team chat needs FULL scope and a treating role or the coordinator; residents are limited to their actions and proposal approval re-checks with the consultant's roles; removed or expired residents lose access; the Vaidyx admin has no access to Case Files outside break-glass (except #2); ids are scoped to their Case File; images are granted only to admitted members and to outside experts only with consent; join codes (6 digits, secrets, 7 days, 5 tries per 15 minutes) and meeting codes (12 hours, waiting room) are sound; the LiveKit token is HS256, 2 hours, one room, no admin grant; outbound calls use fixed hosts and strip identifiers; passwords are generated with secrets and only travel in the mailto; no secrets in responses, logs, audit, the bundle or git; the React app has no unsafe HTML sinks; the HIMS escapes everything and checks CSRF on every form.
