@@ -3,6 +3,8 @@ SYNTHETIC data only.
 
     GET  /his                               registration search (UHID, temporary UHID, IP / OP No., ABHA number or
                                             address, accession / Lab No., or a name), recent registrations, new registration
+    GET  /his/open?accession=..&uhid=..     a deep link (a Vaidyx-TB request card): the order page of the accession / Lab No.,
+                                            else the patient page of the UHID; signed out, the login comes first, then here
     POST /his/registrations                 new registration (duplicate warning first; the desk confirms "register anyway")
     GET  /his/patients/{patient id}         patient banner, demographics, similar registrations, the encounter timeline
                                             (newest first) with each encounter's orders and reports; New OP visit, Admit
@@ -477,6 +479,23 @@ def home(request: Request, q: str = "", hospital: Hospital = Depends(get_hospita
     if match == "identifier":
         return RedirectResponse(f"/his/patients/{hits[0]['id']}", status_code=303)
     return home_page(request, hospital, q)
+
+
+@router.get("/open", response_class=HTMLResponse)
+def open_record(accession: str = "", uhid: str = "", hospital: Hospital = Depends(get_hospital)):
+    """The order of an accession / Lab No. on its own department page (Pathology, Radiology, Lab, OPD), else the patient
+    of a UHID (or any identifier the registration search knows). A signed-out user is sent to the login with this link as
+    "next" (app._login_redirect) and lands here again; the order page itself checks the role."""
+    store = hospital.store
+    acc = accession.strip().upper()
+    o = next((o for o in store.orders.values() if acc and (o.get("accession") or "").upper() == acc), None)
+    if o:
+        return RedirectResponse(common.order_url(o), status_code=303)
+    q = uhid.strip() or accession.strip()
+    match, hits = search(store, q)
+    if match == "identifier":
+        return RedirectResponse(f"/his/patients/{hits[0]['id']}", status_code=303)
+    return common.redirect("/his", f"Nothing found for {q}: search by UHID, IP / OP No. or name." if q else None, warn=True)
 
 
 @router.post("/registrations")

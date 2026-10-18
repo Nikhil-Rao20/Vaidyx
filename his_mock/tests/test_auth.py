@@ -4,6 +4,7 @@ or the bearer token, the reset CLI. SYNTHETIC accounts only (a temporary build).
 import json
 import stat
 from pathlib import Path
+from urllib.parse import quote, urlencode
 
 import pytest
 from fastapi.testclient import TestClient
@@ -194,6 +195,36 @@ def test_permission_matrix():
         auth.require({"roles": ["reception"]}, "lab.sign")
     assert str(e.value) == "Your role cannot do this: only the Laboratory consultant can verify and sign a laboratory report."
     assert auth.who_can("visit.open") == "the Registration desk, OPD consultant or Ward doctor"
+
+
+def test_open_link_lands_on_the_order_after_the_login(app, logins, open_orders):
+    """The request card of Vaidyx-TB links /his/open?accession=..: signed out, the login comes first and returns to the same
+    link; signed in, it lands on the order's own department page; an unknown accession falls back to the UHID, then /his."""
+    s = app.state.hospital.store
+    po = s.orders[open_orders["path"]]
+    link = "/his/open?" + urlencode({"accession": po["accession"]})
+    c = TestClient(app)
+    r = c.get(link, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].startswith("/his/login?next=" + quote(link, safe=""))
+    email, pw = logins["pathologist"]
+    r = c.post("/his/login", data={"email": email, "password": pw, "next": link}, follow_redirects=False)
+    path, q = helpers.location(r)
+    assert path == "/his/open" and q["accession"] == po["accession"]
+    r = c.get(r.headers["location"], follow_redirects=False)
+    assert helpers.location(r)[0] == f"/his/pathology/orders/{po['id']}"
+    page = c.get(r.headers["location"])
+    assert page.status_code == 200 and po["accession"] in page.text
+    for key, module in (("rad", "radiology"), ("lab", "lab")):
+        o = s.orders[open_orders[key]]
+        r = c.get("/his/open?" + urlencode({"accession": o["accession"].lower()}), follow_redirects=False)
+        assert helpers.location(r)[0] == f"/his/{module}/orders/{o['id']}"
+    uhid = s.patients[po["patient_id"]]["uhid"]
+    r = c.get("/his/open?" + urlencode({"accession": "PATH/26/99999", "uhid": uhid}), follow_redirects=False)
+    assert helpers.location(r)[0] == f"/his/patients/{po['patient_id']}"
+    r = c.get("/his/open?" + urlencode({"accession": "PATH/26/99999"}), follow_redirects=False)
+    path, q = helpers.location(r)
+    assert path == "/his" and "Nothing found for PATH/26/99999" in q["flash"]
+    assert helpers.location(c.get("/his/open", follow_redirects=False))[0] == "/his"
 
 
 @pytest.fixture(scope="module")

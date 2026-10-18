@@ -1,5 +1,5 @@
 // A request card for the supporting doctor (SPEC 3.6): patient, UHID, IP/OP, accession, what is missing, who asked,
-// due date, Open in RIS / PACS, Acknowledge, Done with a note.
+// due date, Open order in HIS (straight to the order, after the HIS login if needed), Acknowledge, Done with a note.
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { CalendarClock, CheckCircle2, ExternalLink, FolderOpen, Handshake, Hourglass, Images, MessageSquareText } from "lucide-react";
@@ -72,8 +72,9 @@ export function RequestCard({ request: r, onChanged, canAnswer = true }: { reque
       </dl>
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="outline" size="sm" asChild>
-          <a href={himsLink(r.accession || r.uhid || r.patient?.mrn)} target="_blank" rel="noopener noreferrer">
-            <ExternalLink className="size-4" aria-hidden /> Open in RIS / PACS
+          <a href={himsLink({ accession: r.accession, uhid: r.uhid || r.patient?.mrn })} target="_blank" rel="noopener noreferrer"
+            title={r.accession ? `Opens ${r.accession} in the hospital system; sign in there first if it asks` : "Opens the patient in the hospital system"}>
+            <ExternalLink className="size-4" aria-hidden /> {r.accession ? "Open order in HIS" : "Open patient in HIS"}
           </a>
         </Button>
         {r.viewer_url ? (

@@ -72,9 +72,19 @@ export const EP = {
   pushSubscribe: `${TB}/push/subscribe`,
 };
 
-/** The hospital system desk (RIS / LIS) for a request's accession number; the old interface opens the same screen. */
-export const HIMS_DESK = "http://127.0.0.1:7130/his";
+/** The demo hospital system on this machine, on the host name this page was opened with: the HIMS login is a cookie of
+ *  that host, and 127.0.0.1 and localhost keep separate logins, so a fixed 127.0.0.1 looked signed out over the tunnel. */
+export function himsBase(): string {
+  const host = typeof window !== "undefined" && window.location.hostname ? window.location.hostname : "127.0.0.1";
+  return `${typeof window !== "undefined" && window.location.protocol === "https:" ? "https" : "http"}://${host}:7130/his`;
+}
 
-export function himsLink(q?: string | null): string {
-  return q ? `${HIMS_DESK}?q=${encodeURIComponent(q)}` : HIMS_DESK;
+/** Straight to the order of a request in the hospital system (its Pathology, Radiology or Lab page), else to the patient.
+ *  Signed out, the HIMS asks for the login first and then opens the same order. */
+export function himsLink(t: { accession?: string | null; uhid?: string | null } = {}): string {
+  const p = new URLSearchParams();
+  if (t.accession) p.set("accession", t.accession);
+  if (t.uhid) p.set("uhid", t.uhid);
+  const qs = p.toString();
+  return qs ? `${himsBase()}/open?${qs}` : himsBase();
 }
