@@ -1,25 +1,21 @@
-// The problem: why the work before the meeting matters, in three plain statements.
+// The problem: three items, the observed context and the national figures with their source. The layout is one of the three in
+// sections/problem (the design lab at /lab shows all three); Option B is the one on the product page.
 import { CHALLENGE } from "../content";
 import { SectionHead } from "../components/SectionHead";
-import { Stagger } from "../components/Reveal";
+import { OptionA } from "./problem/OptionA";
+import { OptionB } from "./problem/OptionB";
+import { OptionC } from "./problem/OptionC";
 
-export function Problem() {
+export type ProblemVariant = "A" | "B" | "C";
+const LAYOUTS = { A: OptionA, B: OptionB, C: OptionC };
+
+export function Problem({ variant = "B", head = true }: { variant?: ProblemVariant; head?: boolean }) {
+  const Layout = LAYOUTS[variant];
   return (
-    <section id="why" className="l-section py-24 sm:py-32">
+    <section id="why" className="l-section py-24 sm:py-32" data-variant={variant}>
       <div className="mx-auto max-w-[1280px] px-5 sm:px-8">
-        <SectionHead eyebrow={CHALLENGE.eyebrow} title={[CHALLENGE.title[0], CHALLENGE.title[1]]} lead={CHALLENGE.lead} />
-        <Stagger className="mt-16 grid gap-5 md:grid-cols-3" itemClassName="h-full">
-          {CHALLENGE.points.map((p) => {
-            const Icon = p.icon;
-            return (
-              <article key={p.title} className="l-card flex h-full flex-col p-7 sm:p-8">
-                <span className="l-icon"><Icon className="size-5" aria-hidden /></span>
-                <h3 className="l-title mt-6 text-[1.45rem]">{p.title}</h3>
-                <p className="l-muted mt-3">{p.text}</p>
-              </article>
-            );
-          })}
-        </Stagger>
+        {head ? <SectionHead eyebrow={CHALLENGE.eyebrow} title={[CHALLENGE.title[0], CHALLENGE.title[1]]} lead={CHALLENGE.lead} /> : null}
+        <div className={head ? "mt-16" : ""}><Layout /></div>
       </div>
     </section>
   );

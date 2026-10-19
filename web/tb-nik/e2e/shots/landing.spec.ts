@@ -49,6 +49,13 @@ test.describe("landing", () => {
     await expect(page.getByTestId("contact-done")).toBeVisible();
   });
 
+  test("design lab", async ({ page }) => {
+    await visit(page, "/lab", { signedOut: true });
+    for (const v of ["A", "B", "C"]) await expect(page.getByTestId(`lab-${v}`)).toBeAttached();
+    await expect(page.locator('a[href="https://doi.org/10.3332/ecancer.2026.2090"]').first()).toBeAttached();
+    await shoot(page, "site", "lab", { fullPage: true, sizes: [SIZES[0]], themes: ["light"] });
+  });
+
   test("signed in", async ({ page }) => {
     await visit(page, "/", { role: "treating" });
     await expect(page.getByTestId("landing-signin")).toHaveText(/Open Case Files/);

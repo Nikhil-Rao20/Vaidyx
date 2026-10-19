@@ -71,3 +71,7 @@ Proof: `docs/ui/build/shots/landing-*.png` (hero at 1366 / 1920 / 390, the whole
 | 31 | Contact | the enquiry form only; it posts to the site's own endpoint, which stores the enquiry and emails it when SMTP is set up; the direct address under the form | "only the enquiry; make the sending work" |
 
 Email sending needs one file from you, `data/tumour_board/site_mail.json` (never committed): `{"host": "smtp...", "port": 587, "username": "...", "password": "...", "from": "...", "to": "sulake.nikhileswararao@tanuh.ai", "starttls": true}`. Until then every enquiry is saved in `data/tumour_board/enquiries/` and the visitor sees "received".
+
+## 20 Oct: the problem section, three ways (design lab)
+
+Open http://localhost:7000/tb-nik/lab: the same content (your three items, the observed-context note, the three national figures with the Sarveswaran et al. 2026 link) in three layouts. Option B (bento tiles, gauges, the tinted tile) is on the product page now; A (ledger) and C (flow) wait for your choice. Two of the three figures are derived from the paper rather than stated in it: 88.3 % is 63.5 % physical plus 24.8 % mixed records; 53.3 % is the complement of 46.7 % radiologist participation; 48.2 % is stated.

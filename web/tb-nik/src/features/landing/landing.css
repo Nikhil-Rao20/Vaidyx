@@ -221,3 +221,20 @@ html.lenis, html.lenis body { height: auto; }
   .l-skeleton::after { animation: none; }
   .landing * { transition-duration: 0.01ms !important; }
 }
+
+/* The problem: tiles, ghost numerals, gauges and bars (sections/problem/*). */
+.l-tile { position: relative; overflow: hidden; background: var(--l-surface); border: 1px solid var(--l-line); border-radius: 22px; box-shadow: var(--l-shadow); }
+.l-tile::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: linear-gradient(90deg, var(--cyan), var(--violet)); opacity: 0.9; }
+.l-tile-tint { background: linear-gradient(160deg, var(--l-accent-bg), transparent 70%), var(--l-surface); }
+.l-ghost { position: absolute; right: 1.1rem; top: 0.2rem; font-family: var(--serif); font-style: italic; font-size: 6.5rem; line-height: 1; color: var(--l-fg); opacity: 0.05; pointer-events: none; user-select: none; }
+.l-badge { display: grid; place-items: center; width: 3rem; height: 3rem; border-radius: 14px; color: #fff; background: var(--badge, linear-gradient(145deg, #0a8fb0, #0a6a86)); box-shadow: 0 10px 22px -10px var(--badge-shadow, rgba(10,106,134,0.55)), inset 0 1px 0 rgba(255,255,255,0.35); }
+.l-figure { font-weight: 600; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; color: var(--l-fg); }
+.l-barline { height: 6px; border-radius: 999px; background: var(--l-surface-2); overflow: hidden; }
+.l-barline > i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--teal), var(--cyan)); transform-origin: left; }
+.l-quote-bar { border-left: 3px solid var(--cyan); padding-left: 1.1rem; }
+.l-source { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--l-accent); font-weight: 600; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: text-decoration-color 200ms ease; }
+.l-source:hover { text-decoration-color: currentColor; }
+.l-ledger-row { display: grid; grid-template-columns: 4.5rem 1fr; gap: 1rem; padding: 1.6rem 0; border-top: 1px solid var(--l-line); }
+.l-ledger-row:last-child { border-bottom: 1px solid var(--l-line); }
+.l-ledger-n { font-family: var(--serif); font-style: italic; font-size: 2.6rem; line-height: 1; color: var(--l-accent); }
+.l-flow-line { position: absolute; left: 10%; right: 10%; top: 1.5rem; height: 0; border-top: 2px dashed var(--l-line-2); }

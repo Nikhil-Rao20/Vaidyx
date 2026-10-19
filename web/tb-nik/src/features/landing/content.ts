@@ -2,7 +2,7 @@
 // Register: plain, everyday English; short sentences; no jargon where a common word will do. British spelling.
 // Constraints: no accuracy or validation claims; no model names; every patient detail is synthetic.
 import type { LucideIcon } from "lucide-react";
-import { Activity, Building2, CalendarDays, FileSearch, FlaskConical, Layers, MapPin, Stethoscope, UserRound, Users } from "lucide-react";
+import { Activity, Building2, CalendarDays, FileSearch, FlaskConical, FolderInput, Layers, MapPin, PenLine, Stethoscope, UserRound, Users, Workflow } from "lucide-react";
 
 export type Icon = LucideIcon;
 
@@ -34,7 +34,7 @@ export const HERO = {
 };
 
 export const STRIP = [
-  "Follows NCG guides, ICMR listed cancer",
+  "Follows NCG guides",
   "ICMR cancer lists",
   "Clinican-led AI framework",
   "Fullly offline and secure",
@@ -54,6 +54,34 @@ export const CHALLENGE = {
     { icon: FileSearch, title: "Gaps found too late", text: "A missing report is noticed in the meeting, and the patient waits for the next Board." },
     { icon: Activity, title: "Decisions that get lost", text: "The decision is written in a register. The ward, the insurer and the next clinic each ask for it again." },
   ],
+};
+
+/* The problem, as the owner set it out (20 Oct): three items, the observed context, and the national figures with their source. */
+export const PROBLEM = {
+  items: [
+    { n: "01", icon: FolderInput, title: "Manual Case File assembly", text: "Mandatory reports and results may need to be gathered from several systems before the Case File is ready for Tumour Board discussion." },
+    { n: "02", icon: PenLine, title: "Subjective summary preparation", text: "A concise narrative summary may need to be written from the available reports so that key findings, clinical context, complications and points for discussion are ready for the Board." },
+    { n: "03", icon: Workflow, title: "Coordination across several departments", text: "Radiology, pathology, PET / staging, laboratory, clinical and other inputs may need to be brought together in the required sequence and format, each on its own timeline." },
+  ],
+  observed: {
+    label: "Observed workflow context",
+    figure: "about a week",
+    text: "Preparation may extend to around a week when required records are still being assembled.",
+    note: "Observed in this team's setting, not a general Tumour Board figure.",
+  },
+  national: {
+    label: "National context, India",
+    stats: [
+      { value: 88.3, text: "still rely on physical records, fully or in part" },
+      { value: 53.3, text: "do not report radiologist participation in the Tumour Board" },
+      { value: 48.2, text: "have no system to monitor recommended treatments" },
+    ],
+    source: {
+      short: "Sarveswaran et al., 2026",
+      text: "Sarveswaran et al., ecancermedicalscience 2026;20:2090. Cross-sectional survey of 172 hospitals registered under the National Cancer Registry Programme, India.",
+      href: "https://doi.org/10.3332/ecancer.2026.2090",
+    },
+  },
 };
 
 export interface Phase {
