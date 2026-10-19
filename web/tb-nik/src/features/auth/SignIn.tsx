@@ -36,7 +36,7 @@ function BrandPanel() {
       ) : null}
       <Link to="/" className="relative flex w-fit items-center gap-3 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-white" aria-label="Vaidyx Tumour Board: the home page">
         <VaidyxIcon tone="white" className="h-8" />
-        <VaidyxWordmark tone="white" className="h-6" />
+        <VaidyxWordmark tone="white" className="h-8" />
       </Link>
       <div className="relative max-w-md">
         <motion.h2 className="text-3xl font-semibold leading-tight tracking-[-0.02em] text-white" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}>

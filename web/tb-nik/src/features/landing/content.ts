@@ -27,18 +27,20 @@ export const SITE = {
 export const HERO = {
   eyebrow: "Vaidyx Tumour Board",
   // The second line is set in the serif face.
-  title: ["Every patient ready", "for the Tumour Board."],
-  lead: "Vaidyx brings a patient's reports into one Case File, checks what is missing, shows where every value came from, and keeps the Board's decision for the care that follows.",
+  title: ["AI Agent for","Tumour Board meetings."],
+  lead: "Vaidyx is an AI agentic workflow assisting clinicans in making their patient case ready for the Tumor Board, with inteligent pre-authorization and connectivity to all other doctors.",
   primary: "How it works",
   scroll: "Scroll",
 };
 
 export const STRIP = [
-  "Follows NCG guidelines",
+  "Follows NCG guides, ICMR listed cancer",
   "ICMR cancer lists",
+  "Clinican-led AI framework",
+  "Fullly offline and secure",
+  "Clinically-Validated models",
   "UHID, IP and OP numbers, ABHA",
   "Works with the HIS, RIS, LIS and PACS",
-  "Laptop and phone",
   "Runs inside the hospital",
   "Every value shows its source",
 ];

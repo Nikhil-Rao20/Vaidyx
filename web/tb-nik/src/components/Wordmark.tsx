@@ -26,11 +26,12 @@ export function VaidyxWordmark({ className, tone = "theme" }: { className?: stri
   );
 }
 
-/** Icon + wordmark + "Tumour Board". A link to the Case Files unless `to` is null. `size` sm is the phone top bar. The icon carries
+/** Icon + wordmark (the same height) + "Tumour Board". A link to the Case Files unless `to` is null. `size` sm is the phone top bar. The icon carries
  * data-brand-anchor: the splash after a sign-in flies the mark to it. */
 export function Wordmark({ to = "/cases", size = "md", className, product = true }: { to?: string | null; size?: "sm" | "md" | "lg"; className?: string; product?: boolean }) {
   const icon = size === "lg" ? "h-9" : size === "sm" ? "h-6" : "h-7";
-  const word = size === "lg" ? "h-7" : size === "sm" ? "h-[18px]" : "h-[21px]";
+  // The wordmark stands as tall as the icon (the owner's eye, 20 Oct): top of the mark to bottom of the mark.
+  const word = icon;
   const label = size === "lg" ? "text-base" : size === "sm" ? "text-xs" : "text-[13px]";
   const inner = (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
