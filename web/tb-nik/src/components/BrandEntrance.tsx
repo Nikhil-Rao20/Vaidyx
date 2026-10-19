@@ -5,8 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { BrandLockup, BrandMark, BrandWord } from "@/components/BrandReveal";
 
-export const ENTRANCE_SPEED = 2;          // the brand file's 6 s sequence at 2x
-export const ENTRANCE_LENGTH = 3150;      // ms until the dissolve starts
+export const ENTRANCE_SPEED = 1.35;       // the brand file's 6 s sequence at 1.35x, the same pace as the sign-in entrance
+export const ENTRANCE_LENGTH = 4600;      // ms until the dissolve starts
 export const ENTRANCE_STILL = 1700;
 export const MARK_W = "clamp(170px, 30vmin, 300px)";
 export const WORD_H = "clamp(64px, 11vmin, 118px)";
