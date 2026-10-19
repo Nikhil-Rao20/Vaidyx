@@ -31,8 +31,8 @@ export function Hero() {
         <span className="l-grid-lines" />
         <span className="l-grain" />
       </div>
-      <div className="relative mx-auto grid min-h-[100svh] max-w-[1280px] items-center gap-8 px-5 pb-32 pt-24 sm:px-8 lg:grid-cols-[1.02fr_0.98fr] lg:gap-4 lg:pb-44 lg:pt-20">
-        <motion.div style={{ y: textY, opacity: textO }} className="relative z-10">
+      <div className="relative mx-auto grid min-h-[100svh] max-w-[1280px] items-start gap-8 px-5 pb-32 pt-24 sm:px-8 lg:grid-cols-[1.02fr_0.98fr] lg:gap-4 lg:pb-40 lg:pt-24">
+        <motion.div style={{ y: textY, opacity: textO }} className="relative z-10 lg:pt-10">
           <h1 className="l-display text-[clamp(2.6rem,6.2vw,5.6rem)]">
             <Words text={HERO.title[0]} start={d(0.35)} />
             <span className="l-serif block" style={{ fontSize: "1.08em" }}><Words text={HERO.title[1]} start={d(0.75)} /></span>
