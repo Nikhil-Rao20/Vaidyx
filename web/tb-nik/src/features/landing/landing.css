@@ -220,7 +220,13 @@ html.lenis, html.lenis body { height: auto; }
 @media (prefers-reduced-motion: reduce) {
   .l-skeleton::after { animation: none; }
   .landing *:not(.l-marquee-track) { transition-duration: 0.01ms !important; }
-  .landing .l-marquee-track { animation-duration: 30s !important; }  /* the app's global rule would stop it */
+}
+/* The app's global reduced-motion rule (index.css, layer base, !important) would stop the strip; among important declarations an
+   earlier layer wins over unlayered styles, so the exception has to sit in the same layer with higher specificity. */
+@layer base {
+  @media (prefers-reduced-motion: reduce) {
+    .landing .l-marquee-track { animation-duration: 30s !important; }
+  }
 }
 
 /* The problem: tiles, ghost numerals, gauges and bars (sections/problem/*). */
