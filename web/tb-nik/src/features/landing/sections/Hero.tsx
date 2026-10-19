@@ -33,11 +33,7 @@ export function Hero() {
       </div>
       <div className="relative mx-auto grid min-h-[100svh] max-w-[1280px] items-center gap-8 px-5 pb-24 pt-28 sm:px-8 lg:grid-cols-[1.02fr_0.98fr] lg:gap-4 lg:pt-24">
         <motion.div style={{ y: textY, opacity: textO }} className="relative z-10">
-          <motion.div className="flex flex-wrap items-center gap-2" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: d(0.15), duration: 0.7, ease: L_EASE }}>
-            <span className="l-pill"><span className="size-1.5 rounded-full bg-[var(--cyan)] shadow-[0_0_12px_var(--cyan)]" aria-hidden />{HERO.eyebrow}</span>
-            <span className="l-pill"><span className="sm:hidden">TANUH</span><span className="hidden sm:inline">{SITE.by}</span></span>
-          </motion.div>
-          <h1 className="l-display mt-7 text-[clamp(2.6rem,6.2vw,5.6rem)]">
+          <h1 className="l-display text-[clamp(2.6rem,6.2vw,5.6rem)]">
             <Words text={HERO.title[0]} start={d(0.35)} />
             <span className="l-serif block" style={{ fontSize: "1.08em" }}><Words text={HERO.title[1]} start={d(0.75)} /></span>
           </h1>
