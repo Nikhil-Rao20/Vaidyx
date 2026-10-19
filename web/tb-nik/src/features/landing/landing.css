@@ -120,7 +120,7 @@
 
 /* The marquee strip under the hero. */
 .l-marquee { display: flex; overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); }
-.l-marquee-track { display: flex; flex-shrink: 0; align-items: center; animation: l-marquee 42s linear infinite; }
+.l-marquee-track { display: flex; flex-shrink: 0; align-items: center; animation: l-marquee 30s linear infinite; }
 .l-marquee:hover .l-marquee-track { animation-play-state: paused; }
 @keyframes l-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
@@ -216,10 +216,11 @@ html.lenis, html.lenis body { height: auto; }
 .lenis.lenis-smooth { scroll-behavior: auto !important; }
 .lenis.lenis-stopped { overflow: hidden; }
 
+/* Reduced motion: the strip keeps rolling (slow, pausable, the owner's wish); the rest goes still. */
 @media (prefers-reduced-motion: reduce) {
-  .l-marquee-track { animation: none; }
   .l-skeleton::after { animation: none; }
-  .landing * { transition-duration: 0.01ms !important; }
+  .landing *:not(.l-marquee-track) { transition-duration: 0.01ms !important; }
+  .landing .l-marquee-track { animation-duration: 30s !important; }  /* the app's global rule would stop it */
 }
 
 /* The problem: tiles, ghost numerals, gauges and bars (sections/problem/*). */
