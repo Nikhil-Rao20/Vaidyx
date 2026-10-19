@@ -181,9 +181,9 @@ export const ROLES = {
 };
 
 export const SAFETY = {
-  eyebrow: "Principles",
-  title: ["Trust,", "by design."],
-  lead: "Six things Vaidyx does so the Board can rely on it. Doctors decide; Vaidyx prepares, shows and records.",
+  eyebrow: "Design principles",
+  title: ["Designed for clinical safety", "and hospital control."],
+  lead: "Vaidyx supports the Tumour Board without taking decisions away from doctors. Six principles guide how it is built and how it runs in the hospital.",
   principles: [
     { key: "people", title: "People decide", text: "A summary is a draft until a doctor has reviewed it." },
     { key: "sources", title: "Sources first", text: "Every value and every statement comes with a quote from the record." },
@@ -207,7 +207,7 @@ export const FOOTER = {
   scope: "Vaidyx checks, routes, summarises and flags. Doctors make the decisions.",
   copyright: `© ${new Date().getFullYear()} TANUH, The AI Centre of Excellence in Healthcare.`,
   columns: [
-    { title: "Product", links: [{ label: "How it works", to: "/#how" }, { label: "Traceability", to: "/#sources" }, { label: "Roles", to: "/#roles" }, { label: "Trust", to: "/#safety" }] },
+    { title: "Product", links: [{ label: "How it works", to: "/#how" }, { label: "Traceability", to: "/#sources" }, { label: "Roles", to: "/#roles" }, { label: "Design principles", to: "/#safety" }] },
     { title: "About", links: [{ label: "Our team", to: "/about" }, { label: "TANUH", to: "/about#tanuh" }, { label: "Contact", to: "/contact" }] },
     { title: "Resources", links: [{ label: "Documentation", to: "/docs" }, { label: "Visit TANUH", to: "https://tanuh.ai" }] },
     { title: "Account", links: [{ label: "Sign in", to: "/sign-in" }] },
