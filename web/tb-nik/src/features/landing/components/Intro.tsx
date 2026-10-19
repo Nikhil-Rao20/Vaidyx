@@ -1,6 +1,7 @@
 // The site's own entrance: the Vaidyx reveal (the mark, then the wordmark) on the page's field, about three seconds, then it
-// dissolves into the hero. Plays every time the landing page is opened; a click, a tap or Escape skips it. Reduced motion: the
-// finished lockup fades in and out instead of the sweep.
+// dissolves into the hero. Plays once per page load, the first time the Product page is shown: a reload plays it again, moving
+// from About back to Product does not (the owner, 20 Oct). A click, a tap or Escape skips it. Reduced motion: the finished
+// lockup fades in and out instead of the sweep.
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { BrandLockup, BrandMark, BrandWord } from "@/components/BrandReveal";
@@ -9,17 +10,21 @@ import { SITE } from "../content";
 const SPEED = 2;         // the brand file's 6 s sequence at 2x
 const LENGTH = 3150;     // ms until the dissolve starts
 const LENGTH_STILL = 1700;
+let played = false;      // per page load, not per visit of the route
 
 export function Intro({ onDone }: { onDone: () => void }) {
   const reduce = useReducedMotion();
-  const [show, setShow] = useState(true);
+  const [show, setShow] = useState(() => !played);
   const finish = useCallback(() => { setShow(false); onDone(); }, [onDone]);
   useEffect(() => {
+    if (!show) { onDone(); return; }
+    played = true;
     const t = window.setTimeout(finish, reduce ? LENGTH_STILL : LENGTH);
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") finish(); };
     window.addEventListener("keydown", onKey);
     return () => { window.clearTimeout(t); window.removeEventListener("keydown", onKey); };
-  }, [finish, reduce]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
     <AnimatePresence>
       {show ? (
