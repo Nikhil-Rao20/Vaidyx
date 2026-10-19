@@ -79,3 +79,7 @@ Open http://localhost:7000/tb-nik/lab: the same content (your three items, the o
 ## 20 Oct: the entrance, five ways (design lab)
 
 http://localhost:7000/tb-nik/lab: the lockup, now large and on the plain field with no glow, arriving in five ways, each with a Replay button. A, Assemble (the brand's own reveal, on the site now); B, Particles (points gather into the mark, letters rise); C, Line draw (a line draws the mark and letters, then they fill); D, Wipe (mark from the left, wordmark from the right, a hairline between); E, Iris (opens through a circle, a light passes over the wordmark). Choose one; the choice is one line in components/Intro.tsx.
+
+## 20 Oct: the entrance everywhere, and the meeting scene
+
+Option A (the brand reveal) is the entrance in all three places: the website once per page load, after every sign-in (large, no glow, then the mark glides into the top bar), and after every sign-out (over the sign-in form, then it dissolves). The During screen of How it works now shows a pointer opening "Report + scan": the slide gives way to the report and the CT image side by side, then returns; the step "Reports and scans, in the meeting" is added.

@@ -12,7 +12,8 @@ import { VaidyxIcon, VaidyxWordmark, Wordmark } from "@/components/Wordmark";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Toasts } from "@/components/Toasts";
 import { requestSplash } from "@/components/Splash";
-import { useSession } from "@/lib/session";
+import { BrandEntrance } from "@/components/BrandEntrance";
+import { OUT_FLAG, useSession } from "@/lib/session";
 import { ApiError } from "@/lib/api";
 import { EASE } from "@/lib/motion";
 import type { ActionState } from "@/hooks/useAsyncAction";
@@ -59,8 +60,15 @@ function BrandPanel() {
   );
 }
 
+function takeOutFlag(): boolean {
+  try { const v = sessionStorage.getItem(OUT_FLAG) === "1"; if (v) sessionStorage.removeItem(OUT_FLAG); return v; } catch { return false; }
+}
+
 export default function SignIn() {
   const { signIn, error: sessionError } = useSession();
+  // After a sign-out the entrance plays once over the form, then dissolves into it.
+  const [bye, setBye] = useState(false);
+  useEffect(() => { if (takeOutFlag()) setBye(true); }, []);
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: string } | null)?.from;
@@ -109,6 +117,7 @@ export default function SignIn() {
 
   return (
     <main className="grid min-h-dvh bg-background lg:grid-cols-[5fr_7fr] lg:grid-rows-1">
+      {bye ? <BrandEntrance onDone={() => setBye(false)} tagline="Tumour Board" testId="signout-entrance" /> : null}
       <BrandPanel />
       <section className="relative grid place-items-center p-4 sm:p-8">
         <div className="absolute right-4 top-4"><ThemeToggle saveToProfile={false} /></div>

@@ -8,6 +8,9 @@ import { applyTheme, applyTextSize, type Theme, type TextSize } from "@/lib/appe
 
 export type RoleKind = "member" | "head" | "resident";
 
+/** Set by signOut; the sign-in page takes it and plays the Vaidyx entrance once. */
+export const OUT_FLAG = "tbnik.splash.out";
+
 export interface Me {
   user: string;
   display_name: string;
@@ -112,6 +115,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setMe(null);
     queryClient.clear();  // no Case File, list or meeting of this person stays in memory for the next one
     forgetLocal();
+    try { sessionStorage.setItem(OUT_FLAG, "1"); } catch { /* no storage */ }   // the sign-in page plays the entrance once
   }, [queryClient]);
 
   const value = useMemo(() => ({ me, loading, error, refresh, signIn, signOut, setMe }), [me, loading, error, refresh, signIn, signOut]);

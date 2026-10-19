@@ -1,10 +1,11 @@
-// The cinematic entrance after a sign-in: the official Vaidyx reveal (brand/animation.html) plays on a clean field, the product
+// The entrance after a sign-in: the official Vaidyx reveal (brand/animation.html) plays large on a clean field, the product
 // name settles under it, then the mark glides into its place in the top bar as the field dissolves into the app. About 5.5 s;
 // a click, a tap or Escape skips it. Shown once per sign-in (sessionStorage flag set by the sign-in page), never on a reload.
 // Reduced motion: the finished lockup for a moment, then a fade.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { BrandLockup, BrandMark, BrandWord } from "@/components/BrandReveal";
+import { MARK_W, WORD_H } from "@/components/BrandEntrance";
 
 const FLAG = "tbnik.splash";
 const SPEED = 1.35;
@@ -82,17 +83,6 @@ export function Splash() {
           exit={{ opacity: 0, transition: { duration: 0.3 } }}
           onClick={finish}
         >
-          {/* a calm field: one slow teal bloom behind the mark */}
-          {!reduce ? (
-            <motion.span
-              aria-hidden
-              className="pointer-events-none absolute left-1/2 top-1/2 size-[70vmin] -translate-x-1/2 -translate-y-1/2 rounded-full"
-              style={{ background: "radial-gradient(circle, rgba(1, 203, 211, 0.18) 0%, rgba(1, 203, 211, 0) 65%)" }}
-              initial={{ opacity: 0, scale: 0.6 }}
-              animate={{ opacity: morph ? 0 : 1, scale: morph ? 1.4 : 1 }}
-              transition={{ duration: morph ? 0.6 : 2.2, delay: morph ? 0 : 0.8, ease: [0.22, 1, 0.36, 1] }}
-            />
-          ) : null}
           <div className="absolute inset-0 grid place-items-center">
             <BrandLockup play={!reduce} still={!!reduce} speed={SPEED}>
               <motion.div
@@ -101,10 +91,10 @@ export function Splash() {
                 animate={morph ? { x: morph.x, y: morph.y, scale: morph.scale } : { x: 0, y: 0, scale: 1 }}
                 transition={{ duration: T_MORPH_LEN / 1000, ease: [0.65, 0, 0.35, 1] }}
               >
-                <BrandMark style={{ "--br-mark-w": "clamp(150px, 26vmin, 240px)" } as React.CSSProperties} />
+                <BrandMark style={{ "--br-mark-w": MARK_W } as React.CSSProperties} />
               </motion.div>
               <motion.div animate={{ opacity: morph ? 0 : 1, y: morph ? 10 : 0 }} transition={{ duration: 0.35 }}>
-                <BrandWord style={{ "--br-word-h": "clamp(38px, 6.5vmin, 60px)" } as React.CSSProperties} />
+                <BrandWord style={{ "--br-word-h": WORD_H } as React.CSSProperties} />
               </motion.div>
               <motion.p
                 className="text-[13px] font-medium uppercase text-brand"

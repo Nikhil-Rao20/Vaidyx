@@ -31,3 +31,22 @@ test.describe("splash", () => {
     });
   }
 });
+
+test.describe("entrance after a sign-out", () => {
+  test.skip(!MOCK, "mocked");
+  test.use({ reducedMotion: "no-preference" });
+  test("plays once on the sign-in page", async ({ page }) => {
+    await page.addInitScript(() => { try { sessionStorage.setItem("tbnik.splash.out", "1"); } catch { /* none */ } });
+    await prepare(page, { signedOut: true });
+    await page.goto("/tb-nik/sign-in", { waitUntil: "domcontentloaded" });
+    const e = page.getByTestId("signout-entrance");
+    await expect(e).toBeVisible();
+    await page.waitForTimeout(2200);
+    await page.screenshot({ path: path.join(SHOTS, "signout-entrance-light-1366.png") });
+    await expect(e).toHaveCount(0, { timeout: 6000 });
+    await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(800);
+    await expect(page.getByTestId("signout-entrance")).toHaveCount(0);
+  });
+});

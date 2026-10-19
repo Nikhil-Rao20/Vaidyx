@@ -1,9 +1,12 @@
 // The three screens of "How it works", built from the product's own shapes with synthetic data: a Case File filling itself,
 // the meeting with the case summary slide on the room display, and what follows. Each plays its small sequence when it appears.
-import { motion, useReducedMotion, type Variants } from "motion/react";
-import { Check, Clock3, FileText, Hand, Mic, MonitorUp, PhoneOff, Presentation, Video } from "lucide-react";
+import { useEffect, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion, type Variants } from "motion/react";
+import { Check, Clock3, FileText, Hand, Mic, MonitorUp, MousePointer2, PhoneOff, Presentation, Video } from "lucide-react";
 import { ICON_SRC } from "@/components/Wordmark";
 import { cn } from "@/lib/utils";
+
+const CT_SRC = "/static/tb-nik/brand/art/ct-chest.png";
 
 const list: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.12, delayChildren: 0.2 } } };
 const row: Variants = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } } };
@@ -108,19 +111,81 @@ export function SceneBefore() {
   );
 }
 
+/** The room display: the slide, then a pointer clicks "Report + scan" and the report and the CT image take its place side by side. */
+function RoomDisplay() {
+  const reduce = useReducedMotion();
+  const [view, setView] = useState<"slide" | "docs">(reduce ? "docs" : "slide");
+  const [pressed, setPressed] = useState(false);
+  useEffect(() => {
+    if (reduce) return;
+    let alive = true;
+    const timers: number[] = [];
+    const cycle = () => {
+      timers.push(window.setTimeout(() => alive && setPressed(true), 2300));
+      timers.push(window.setTimeout(() => alive && setView("docs"), 2500));
+      timers.push(window.setTimeout(() => alive && setPressed(false), 2700));
+      timers.push(window.setTimeout(() => alive && setView("slide"), 8200));
+      timers.push(window.setTimeout(() => alive && cycle(), 9200));
+    };
+    cycle();
+    return () => { alive = false; timers.forEach((t) => window.clearTimeout(t)); };
+  }, [reduce]);
+  const docs = view === "docs";
+  return (
+    <div className="relative">
+      {/* the display's toolbar */}
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <span className={cn("rounded-full px-2.5 py-1 text-[10.5px] font-semibold transition-colors", !docs ? "bg-white/15 text-white" : "text-white/55")}>Slide</span>
+        <span className={cn("relative rounded-full px-2.5 py-1 text-[10.5px] font-semibold transition-colors", docs ? "bg-[var(--cyan)] text-[#03262b]" : "text-white/55", pressed && "scale-95")} data-testid="open-docs">Report + scan</span>
+        <span className="ml-auto text-[10px] text-white/45">Room display</span>
+      </div>
+      <div className="relative" style={{ aspectRatio: "16 / 9" }}>
+        <AnimatePresence mode="wait" initial={false}>
+          {!docs ? (
+            <motion.div key="slide" className="absolute inset-0" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.25 } }} transition={{ duration: 0.4 }}>
+              <SlideCase />
+            </motion.div>
+          ) : (
+            <motion.div key="docs" className="absolute inset-0 grid grid-cols-[0.95fr_1.05fr] gap-2" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.25 } }}>
+              <motion.div className="l-win flex flex-col overflow-hidden" initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}>
+                <div className="flex items-center gap-1.5 border-b border-[rgba(11,25,48,0.08)] px-2.5 py-1.5"><span className="rounded bg-[#b2362b] px-1 text-[8px] font-bold text-white">PDF</span><span className="truncate text-[9.5px] font-semibold">Histopathology report</span><span className="ml-auto text-[8px] text-[#5f6b78]">p. 1 of 2</span></div>
+                <div className="flex-1 space-y-[5px] p-2.5">
+                  <p className="text-[8px] font-semibold">Specimen: core needle biopsy, left breast.</p>
+                  {[88, 72, 94, 0, 80, 66, 90, 58, 76].map((w, i) => i === 3
+                    ? <p key={i} className="rounded bg-[rgba(1,203,211,0.2)] px-1 text-[8px] font-semibold">Tumour size on core: 2.8 cm.</p>
+                    : <span key={i} className="block h-[5px] rounded-full bg-[#e2e8ef]" style={{ width: `${w}%` }} />)}
+                </div>
+              </motion.div>
+              <motion.div className="l-win-ink relative overflow-hidden" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.45, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}>
+                <img src={CT_SRC} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                <span className="absolute left-2 top-1.5 rounded bg-black/50 px-1.5 py-0.5 text-[8.5px] font-medium text-white/85">CT chest · axial · PACS</span>
+                <span className="absolute bottom-1.5 right-2 rounded bg-black/50 px-1.5 py-0.5 text-[8px] text-white/70">W 1500 · L -600</span>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {/* the pointer that opens the report and the scan */}
+        {!reduce ? (
+          <motion.span className="pointer-events-none absolute z-10 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]" initial={{ left: "62%", top: "70%", opacity: 0 }} animate={{ left: docs ? "22%" : ["62%", "22%"], top: docs ? "-8%" : ["70%", "-8%"], opacity: [0, 1, 1] }} transition={{ duration: 1.2, delay: docs ? 0 : 0.9, ease: [0.22, 1, 0.36, 1] }} aria-hidden>
+            <motion.span className="block" animate={{ scale: pressed ? 0.85 : 1 }} transition={{ duration: 0.12 }}><MousePointer2 className="size-4 fill-white" strokeWidth={1.5} /></motion.span>
+          </motion.span>
+        ) : null}
+      </div>
+      <span className="mt-1.5 block text-[10px] text-white/45">Room display · the slide, then the report and the scan opened inside the meeting</span>
+    </div>
+  );
+}
+
 export function SceneDuring() {
   const reduce = useReducedMotion();
   const people = [["LR", "Dr Lakshmi Rao", true], ["IK", "Dr Iqbal Khan", false], ["PN", "Priya Nair", false], ["TJ", "Dr Thomas Joseph", false]] as const;
   return (
     <Frame title="Meeting · Tuesday Board · Case File 4 of 9 · synthetic">
       <div className="grid grid-cols-[1.55fr_1fr] gap-2">
-        <motion.div className="relative" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }}>
-          <SlideCase />
-          <span className="absolute -bottom-1.5 left-2 translate-y-full text-[10px] text-white/45">Room display · case summary slide · from the Case File</span>
-        </motion.div>
-        <motion.div className="grid grid-rows-4 gap-2" variants={list} initial="hidden" animate="show">
+        <RoomDisplay />
+        <motion.div className="grid grid-rows-4 gap-2 self-start pt-6" variants={list} initial="hidden" animate="show">
           {people.map(([ini, name, speaking], i) => (
-            <motion.div key={ini} variants={row} className={cn("l-win-ink relative flex items-center gap-2 px-2.5", speaking && "ring-2 ring-[var(--mint)]")}>
+            <motion.div key={ini} variants={row} className={cn("l-win-ink relative flex items-center gap-2 px-2.5 py-2", speaking && "ring-2 ring-[var(--mint)]")}>
               <span className="grid size-7 place-items-center rounded-full text-[10px] font-semibold text-white" style={{ background: `linear-gradient(135deg, ${["#0b4e74", "#5b3fc4", "#01b4c2", "#1d6a44"][i]}, #0a1630)` }}>{ini}</span>
               <span className="truncate text-[11px] text-white/85">{name}</span>
               {speaking ? <motion.span className="ml-auto size-1.5 rounded-full bg-[var(--mint)]" animate={reduce ? undefined : { scale: [1, 1.6, 1] }} transition={{ duration: 1.1, repeat: Infinity }} aria-hidden /> : null}
@@ -129,7 +194,7 @@ export function SceneDuring() {
           ))}
         </motion.div>
       </div>
-      <motion.div className="l-win l-mini mt-5 flex items-center gap-2.5 px-3 py-2.5" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.1, duration: 0.5 }}>
+      <motion.div className="l-win l-mini mt-3 flex items-center gap-2.5 px-3 py-2.5" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.1, duration: 0.5 }}>
         <span className="l-chip l-chip-ok"><Check className="size-3" strokeWidth={3} aria-hidden />Decision recorded</span>
         <span className="truncate text-[var(--text-2)]">14:32 · 6 members present · 1 question raised · minutes updating</span>
       </motion.div>

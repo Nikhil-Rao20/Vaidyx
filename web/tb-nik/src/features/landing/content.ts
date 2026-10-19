@@ -114,6 +114,7 @@ export const HOW = {
       steps: [
         { title: "The agenda", text: "The MDT Coordinator sets the agenda. Each Case File is ready, or shows what is still missing." },
         { title: "In the room or online", text: "Members join in person or by video. The room display shows the case summary and the scans from the PACS." },
+        { title: "Reports and scans, in the meeting", text: "Any report or scan in the Case File opens inside the meeting, beside the slide on the room display, without leaving the room." },
         { title: "The decision, recorded", text: "The decision is recorded during the discussion, with who was present and what was asked." },
       ],
     },

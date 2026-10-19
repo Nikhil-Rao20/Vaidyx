@@ -21,7 +21,7 @@ test.describe("landing", () => {
     await page.screenshot({ path: `${SHOTS}/landing-menu-light-390.png` });
     await page.getByRole("button", { name: "Close the menu" }).click();
     for (const id of ["how", "sources", "roles", "safety"]) await expect(page.locator(`#${id}`)).toHaveCount(1);
-    await expect(page.getByTestId("slide-case").first()).toBeAttached();
+    await expect(page.getByTestId("open-docs").first()).toBeAttached();
     await expect(page.getByTestId("ask-demo")).toBeAttached();
     await expect(page.getByTestId("roles-table")).toBeAttached();
     await expect(page.locator('#why a[href="https://doi.org/10.3332/ecancer.2026.2090"]').first()).toBeAttached();
@@ -48,11 +48,6 @@ test.describe("landing", () => {
     await page.getByLabel("Message").fill("We would like to try Vaidyx for our breast Tumour Board.");
     await page.getByRole("button", { name: "Send enquiry" }).click();
     await expect(page.getByTestId("contact-done")).toBeVisible();
-  });
-
-  test("design lab", async ({ page }) => {
-    await visit(page, "/lab", { signedOut: true });
-    for (const v of ["A", "B", "C", "D", "E"]) await expect(page.getByTestId(`lab-${v}`)).toBeAttached();
   });
 
   test("signed in", async ({ page }) => {
