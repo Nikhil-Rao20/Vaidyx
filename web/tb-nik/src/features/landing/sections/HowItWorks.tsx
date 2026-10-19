@@ -55,7 +55,7 @@ export function HowItWorks() {
   const [active, setActive] = useState<Key>("before");
   const onActive = useCallback((k: Key) => setActive(k), []);
   return (
-    <section id="how" className="l-section-2 py-24 sm:py-32">
+    <section id="how" className="l-section-2 pt-14 pb-24 sm:pt-16 sm:pb-32">
       <div className="mx-auto max-w-[1280px] px-5 sm:px-8">
         <SectionHead eyebrow={HOW.eyebrow} title={[HOW.title[0], HOW.title[1]]} lead={HOW.lead} />
         <div className="mt-12 lg:mt-4 lg:grid lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:gap-16 xl:gap-24">

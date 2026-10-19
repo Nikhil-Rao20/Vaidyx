@@ -59,7 +59,7 @@ export function Nav() {
         <div className={cn("flex h-14 items-center gap-2 rounded-full border pl-4 pr-2 transition-[background-color,border-color,box-shadow] duration-300", scrolled || open ? "border-[var(--l-line)] bg-[var(--l-nav-bg)] shadow-[var(--l-shadow)] backdrop-blur-xl" : "border-transparent")}>
           <Link to="/" className="flex items-center gap-2.5 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[var(--cyan)]" aria-label={`${SITE.name}, home`}>
             <VaidyxIcon className="h-7" />
-            <VaidyxWordmark className="h-7" />
+            <VaidyxWordmark className="h-8" />
             <span className="l-faint hidden items-center gap-2.5 text-[13px] md:inline-flex"><span className="h-4 w-px bg-[var(--l-line-2)]" aria-hidden />{SITE.product}</span>
           </Link>
           <nav aria-label="Pages" className="ml-auto hidden items-center gap-0.5 lg:flex">

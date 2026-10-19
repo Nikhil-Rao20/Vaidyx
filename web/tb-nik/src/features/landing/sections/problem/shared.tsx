@@ -2,10 +2,11 @@
 import { PROBLEM } from "../../content";
 import { SourceLink } from "../../components/Stats";
 
-export const BADGES: Array<{ bg: string; shadow: string }> = [
-  { bg: "linear-gradient(145deg, #0a8fb0, #0a6a86)", shadow: "rgba(10,106,134,0.55)" },
-  { bg: "linear-gradient(145deg, #8f64fd, #5b3fc4)", shadow: "rgba(91,63,196,0.55)" },
-  { bg: "linear-gradient(145deg, #1b7fb5, #0b4e74)", shadow: "rgba(11,78,116,0.55)" },
+/** A tone per item: the glyph colour and its tint. */
+export const BADGES: Array<{ tone: string; bg2: string }> = [
+  { tone: "#0a6a86", bg2: "rgba(1, 180, 194, 0.14)" },
+  { tone: "#5b3fc4", bg2: "rgba(143, 100, 253, 0.14)" },
+  { tone: "#0b4e74", bg2: "rgba(11, 78, 116, 0.12)" },
 ];
 
 export function Source({ className }: { className?: string }) {

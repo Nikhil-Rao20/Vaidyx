@@ -2,7 +2,7 @@
 // Register: plain, everyday English; short sentences; no jargon where a common word will do. British spelling.
 // Constraints: no accuracy or validation claims; no model names; every patient detail is synthetic.
 import type { LucideIcon } from "lucide-react";
-import { Activity, Building2, CalendarDays, FileSearch, FlaskConical, FolderInput, Layers, MapPin, PenLine, Stethoscope, UserRound, Users, Workflow } from "lucide-react";
+import { Activity, Building2, CalendarDays, FileSearch, FileStack, FlaskConical, Layers, MapPin, Network, NotebookPen, Stethoscope, UserRound, Users } from "lucide-react";
 
 export type Icon = LucideIcon;
 
@@ -59,9 +59,9 @@ export const CHALLENGE = {
 /* The problem, as the owner set it out (20 Oct): three items, the observed context, and the national figures with their source. */
 export const PROBLEM = {
   items: [
-    { n: "01", icon: FolderInput, title: "Manual Case File assembly", text: "Mandatory reports and results may need to be gathered from several systems before the Case File is ready for Tumour Board discussion." },
-    { n: "02", icon: PenLine, title: "Subjective summary preparation", text: "A concise narrative summary may need to be written from the available reports so that key findings, clinical context, complications and points for discussion are ready for the Board." },
-    { n: "03", icon: Workflow, title: "Coordination across several departments", text: "Radiology, pathology, PET / staging, laboratory, clinical and other inputs may need to be brought together in the required sequence and format, each on its own timeline." },
+    { n: "01", icon: FileStack, title: "Manual Case File assembly", text: "Mandatory reports and results may need to be gathered from several systems before the Case File is ready for Tumour Board discussion." },
+    { n: "02", icon: NotebookPen, title: "Subjective summary preparation", text: "A concise narrative summary may need to be written from the available reports so that key findings, clinical context, complications and points for discussion are ready for the Board." },
+    { n: "03", icon: Network, title: "Coordination across several departments", text: "Radiology, pathology, PET / staging, laboratory, clinical and other inputs may need to be brought together in the required sequence and format, each on its own timeline." },
   ],
   observed: {
     label: "Observed workflow context",
@@ -73,7 +73,7 @@ export const PROBLEM = {
     label: "National context, India",
     stats: [
       { value: 88.3, text: "still rely on physical records, fully or in part" },
-      { value: 53.3, text: "radiologist do not report participation in the Tumour Board" },
+      { value: 53.3, text: "have no radiologist taking part in the Board" },
       { value: 48.2, text: "have no system to monitor recommended treatments" },
     ],
     source: {
