@@ -236,8 +236,13 @@ export const TEAM = {
 
 export const TANUH = {
   eyebrow: "TANUH",
-  title: ["The AI Centre of Excellence", "in Healthcare."],
-  text: "TANUH, Translational AI for Networked Universal Healthcare, is the AI Centre of Excellence in Healthcare at the Indian Institute of Science, Bengaluru, funded by the Ministry of Education, Government of India. Vaidyx is built at the Centre with the doctors who will use it.",
+  title: "The AI Centre of Excellence in Healthcare",
+  // The centre's own words (tanuh.ai), as the owner pasted them.
+  summary: "An AI Center of Excellence focused on creating scalable solutions for the effective management of non-communicable diseases (NCDs) at the point of care. It serves as a multidisciplinary hub uniting clinicians, data scientists, and AI technologists to develop tools for early diagnosis, risk prediction, continuous monitoring, and personalised interventions for major NCDs.",
+  sections: [
+    { title: "Our Mission", text: "To advance the early detection, prevention, and management of non-communicable diseases through scalable, AI-driven innovation. The centre is committed to empowering healthcare providers and systems with data-centric decision support that strengthens universal healthcare delivery, reduces disparities, and ensures equitable, accessible, and high-quality care for all populations." },
+    { title: "Our Vision", text: "To build a reliable and trustworthy digital health ecosystem powered by scalable and culturally attuned AI solutions. The centre goal is to transform clinical and frontline care to make healthcare timely, accessible, and effective for every citizen of India." },
+  ],
   visit: "Visit TANUH",
   href: "https://tanuh.ai",
   place: { icon: MapPin, text: "Indian Institute of Science, Bengaluru" },
