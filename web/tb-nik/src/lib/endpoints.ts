@@ -74,11 +74,15 @@ export const EP = {
   pushSubscribe: `${TB}/push/subscribe`,
 };
 
-/** The demo hospital system on this machine, on the host name this page was opened with: the HIMS login is a cookie of
- *  that host, and 127.0.0.1 and localhost keep separate logins, so a fixed 127.0.0.1 looked signed out over the tunnel. */
+/** The demo hospital system. On this machine (localhost or 127.0.0.1, with the ssh tunnel) it is on port 7130 of the host
+ *  name this page was opened with: the HIMS login is a cookie of that host, and 127.0.0.1 and localhost keep separate
+ *  logins. Anywhere else (the public link) the gate serves the hospital system under the same address at /his. */
 export function himsBase(): string {
-  const host = typeof window !== "undefined" && window.location.hostname ? window.location.hostname : "127.0.0.1";
-  return `${typeof window !== "undefined" && window.location.protocol === "https:" ? "https" : "http"}://${host}:7130/his`;
+  if (typeof window === "undefined") return "http://127.0.0.1:7130/his";
+  const host = window.location.hostname || "127.0.0.1";
+  const local = host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+  if (!local) return `${window.location.origin}/his`;
+  return `${window.location.protocol === "https:" ? "https" : "http"}://${host}:7130/his`;
 }
 
 /** Straight to the order of a request in the hospital system (its Pathology, Radiology or Lab page), else to the patient.
