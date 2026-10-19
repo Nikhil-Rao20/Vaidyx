@@ -1,7 +1,7 @@
 // Sign in: a brand panel (the Vaidyx mark on the icon's own blues, three plain promises) beside the form on a laptop, a compact
 // brand header above it on a phone. A successful sign-in asks for the splash (components/Splash) and hands over to the guard.
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "motion/react";
 import { Eye, EyeOff, FileCheck2, KeyRound, LogIn, ShieldCheck, Smartphone, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -34,10 +34,10 @@ function BrandPanel() {
           <motion.span className="absolute -right-20 bottom-16 size-80 rounded-full bg-[#01c0c8]/25 blur-3xl" animate={{ x: [0, -24, 0], y: [0, -28, 0] }} transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }} />
         </>
       ) : null}
-      <div className="relative flex items-center gap-3">
+      <Link to="/" className="relative flex w-fit items-center gap-3 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-white" aria-label="Vaidyx Tumour Board: the home page">
         <VaidyxIcon tone="white" className="h-8" />
         <VaidyxWordmark tone="white" className="h-6" />
-      </div>
+      </Link>
       <div className="relative max-w-md">
         <motion.h2 className="text-3xl font-semibold leading-tight tracking-[-0.02em] text-white" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}>
           The hospital's Tumour Board, one Case File per patient.
@@ -113,7 +113,7 @@ export default function SignIn() {
       <section className="relative grid place-items-center p-4 sm:p-8">
         <div className="absolute right-4 top-4"><ThemeToggle saveToProfile={false} /></div>
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, ease: EASE }} className="w-full max-w-sm">
-          <div className="mb-8 lg:hidden"><Wordmark to={null} size="lg" /></div>
+          <div className="mb-8 lg:hidden"><Wordmark to="/" size="lg" /></div>
           <h1 className="text-2xl">{needTotp ? "One more step" : "Sign in"}</h1>
           <p className="mt-1.5 text-sm text-muted-foreground">
             {needTotp ? "Your account asks for a 6-digit code from your authenticator app." : "Use the email address or login name your department admin set up."}

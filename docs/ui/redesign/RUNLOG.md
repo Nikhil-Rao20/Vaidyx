@@ -12,3 +12,9 @@
 | 19 Oct 06:10 | R4 | committed fafaae5; :7000 restarted | |
 | 19 Oct 06:40 | R5 | committed (ring, phone conduct, live video check passed: live-*.png) | R6: REVIEW.md for the owner, final suites, memory |
 | 19 Oct 07:00 | R6 | REVIEW.md written; ring fallback; committed; :7000 restarted with the final build | owner's review; parked: eslint has no v9 config (lint not run) |
+
+## 19 Oct, evening: landing page + cinematic entrance
+- Entrance (components/Splash.tsx): the brand's own reveal ported as CSS (components/brand-reveal.css, BrandReveal.tsx, path data generated into brand-paths.ts from brand/animation.html); speed 1.35; tagline at 3.2 s; at 5.0 s the mark flies to the top bar's icon (`data-brand-anchor` on the Wordmark icon) while the field fades. Bug found on the way: the sessionStorage flag was consumed inside a useState initializer, and a first render that suspends (lazy page chunk) is thrown away, so the splash never showed after a cold load; the flag is now read in the initializer and cleared in an effect.
+- Landing (features/landing): own palette in landing.css (ink, the logo's teal/cyan/mint, the wordmark's violet, paper sections), Instrument Serif (OFL, self-hosted) for one accent word per title, Lenis smooth scroll (MIT) only on this page, a 2D-canvas particle mark (points sampled from the icon paths, perspective, pointer lean, scroll disperse), scroll-driven scenes, source lines drawn in SVG, tilt cards, word-by-word scope statement, magnetic buttons. Every word in content.ts. Synthetic data only.
+- Gotchas: element rules in a page stylesheet must sit in `@layer base`, or they beat Tailwind's utilities (unlayered > layered); `.l-float` must not be absolute inside its positioned wrapper; `whileInView` never fires in a full-page screenshot, so reduced motion renders the finished state (paths at full length).
+- Checks: tsc, vite build, 55 mock checks (new: landing.spec.ts, splash.spec.ts), live hero captured from :7000.

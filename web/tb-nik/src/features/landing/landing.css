@@ -1,0 +1,139 @@
+/* The landing page's own look: deep ink and the logo's teal, paper sections for reading, Instrument Serif for one accent word
+   per title. Scoped under .landing so the app's theme tokens are untouched; the page looks the same in both app themes. */
+@font-face { font-family: "Instrument Serif"; src: url("/static/tb-nik/fonts/instrument-serif-latin-400-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "Instrument Serif"; src: url("/static/tb-nik/fonts/instrument-serif-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+
+.landing {
+  --ink: #050b18;
+  --ink-2: #0a1630;
+  --ink-3: #10203f;
+  --navy: #00183c;
+  --blue: #0b4e74;
+  --teal: #01b4c2;
+  --cyan: #01cbd3;
+  --mint: #5fdcd6;
+  --violet: #8f64fd;
+  --paper: #f7f9fc;
+  --paper-2: #edf2f7;
+  --line: rgba(11, 25, 48, 0.1);
+  --line-dark: rgba(255, 255, 255, 0.1);
+  --text: #0f1a2b;
+  --text-2: #4b5666;
+  --text-on-ink: #eaf2f7;
+  --text-on-ink-2: rgba(234, 242, 247, 0.68);
+  --serif: "Instrument Serif", "Iowan Old Style", "Times New Roman", serif;
+  --sans: "Inter Variable", "Inter", system-ui, sans-serif;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  font-family: var(--sans);
+  color: var(--text);
+  background: var(--paper);
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+}
+@layer base {
+  .landing h1, .landing h2, .landing h3, .landing p, .landing li { color: inherit; }
+  .landing ::selection { background: rgba(1, 203, 211, 0.3); }
+}
+
+/* Type scale: display titles tight, body relaxed. */
+.l-display { font-weight: 600; letter-spacing: -0.035em; line-height: 0.98; text-wrap: balance; }
+.l-title { font-weight: 600; letter-spacing: -0.03em; line-height: 1.04; text-wrap: balance; }
+.l-serif { font-family: var(--serif); font-style: italic; font-weight: 400; letter-spacing: -0.01em; }
+.l-eyebrow { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; }
+.l-lead { font-size: clamp(1.0625rem, 1.3vw, 1.25rem); line-height: 1.6; text-wrap: pretty; }
+.l-muted { color: var(--text-2); }
+.on-ink { color: var(--text-on-ink); }
+.on-ink .l-muted { color: var(--text-on-ink-2); }
+
+/* Surfaces */
+.l-ink { background: var(--ink); color: var(--text-on-ink); }
+.l-paper { background: var(--paper); }
+.l-paper-2 { background: var(--paper-2); }
+.l-card { background: #fff; border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 1px 2px rgba(11, 25, 48, 0.04), 0 10px 30px -18px rgba(11, 25, 48, 0.18); }
+.l-card-ink { background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)); border: 1px solid var(--line-dark); border-radius: 20px; backdrop-filter: blur(6px); }
+.l-pill { display: inline-flex; align-items: center; gap: 0.5rem; border-radius: 999px; border: 1px solid var(--line); padding: 0.35rem 0.8rem; font-size: 0.8125rem; font-weight: 500; }
+.on-ink .l-pill { border-color: var(--line-dark); }
+
+/* Buttons: one filled teal, one quiet. Both have a magnetic pull (components/Magnetic). */
+.l-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; height: 3rem; padding: 0 1.4rem; border-radius: 999px; font-weight: 600; font-size: 0.95rem; letter-spacing: -0.005em; transition: transform 240ms var(--ease), box-shadow 240ms var(--ease), background-color 200ms ease, color 200ms ease, border-color 200ms ease; will-change: transform; white-space: nowrap; }
+.l-btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+.l-btn-primary { background: var(--cyan); color: #03262b; box-shadow: 0 10px 30px -10px rgba(1, 203, 211, 0.6), inset 0 1px 0 rgba(255,255,255,0.35); }
+.l-btn-primary:hover { background: #2ad7de; box-shadow: 0 16px 40px -12px rgba(1, 203, 211, 0.75), inset 0 1px 0 rgba(255,255,255,0.35); }
+.l-btn-ghost { background: rgba(255,255,255,0.06); color: var(--text-on-ink); border: 1px solid var(--line-dark); backdrop-filter: blur(8px); }
+.l-btn-ghost:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.22); }
+.l-btn-dark { background: var(--ink); color: #fff; }
+.l-btn-dark:hover { background: var(--ink-3); }
+.l-btn-light { background: #fff; color: var(--text); border: 1px solid var(--line); }
+.l-btn-light:hover { border-color: rgba(11,25,48,0.25); }
+
+/* The hero's living background: two slow colour fields and a film grain, under the particles. */
+.l-hero-bg { position: absolute; inset: 0; overflow: hidden; background: radial-gradient(120% 80% at 70% 10%, #0a2a4e 0%, var(--ink) 55%); }
+.l-orb { position: absolute; border-radius: 999px; filter: blur(70px); opacity: 0.55; mix-blend-mode: screen; }
+.l-orb-teal { background: radial-gradient(circle, rgba(1, 203, 211, 0.55) 0%, rgba(1, 203, 211, 0) 70%); }
+.l-orb-violet { background: radial-gradient(circle, rgba(143, 100, 253, 0.42) 0%, rgba(143, 100, 253, 0) 70%); }
+.l-orb-blue { background: radial-gradient(circle, rgba(11, 78, 116, 0.8) 0%, rgba(11, 78, 116, 0) 70%); }
+.l-grain { position: absolute; inset: 0; opacity: 0.07; pointer-events: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); background-size: 160px 160px; }
+.l-grid-lines { position: absolute; inset: 0; pointer-events: none; opacity: 0.35; background-image: linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px); background-size: 72px 72px; mask-image: radial-gradient(70% 60% at 50% 40%, #000 20%, transparent 80%); }
+
+/* A thin teal rule that draws itself when a section arrives. */
+.l-rule { height: 1px; background: linear-gradient(90deg, var(--cyan), rgba(1,203,211,0)); transform-origin: left; }
+
+/* The marquee strip under the hero. */
+.l-marquee { display: flex; gap: 0; overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); }
+.l-marquee-track { display: flex; flex-shrink: 0; gap: 0; align-items: center; animation: l-marquee 42s linear infinite; }
+.l-marquee:hover .l-marquee-track { animation-play-state: paused; }
+@keyframes l-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* The scene screens in "How it works": a laptop-like frame in the brand gradient. */
+.l-screen { position: relative; border-radius: 22px; background: linear-gradient(160deg, #0b2447 0%, #061a35 60%, #04142a 100%); border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 30px 80px -30px rgba(2, 10, 25, 0.7), inset 0 1px 0 rgba(255,255,255,0.08); overflow: hidden; }
+.l-screen-bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.l-screen-bar i { display: block; width: 9px; height: 9px; border-radius: 999px; background: rgba(255,255,255,0.18); }
+.l-win { background: #fff; color: var(--text); border-radius: 14px; border: 1px solid rgba(11,25,48,0.08); box-shadow: 0 10px 30px -14px rgba(2,10,25,0.5); }
+.l-win-ink { background: #0f1720; color: #eef2f6; border-radius: 14px; border: 1px solid rgba(255,255,255,0.08); }
+.l-mini { font-size: 12.5px; line-height: 1.35; }
+.l-chip { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.01em; }
+.l-chip-ok { background: #e4f4ea; color: #1d6a44; }
+.l-chip-warn { background: #fdf1d6; color: #8a5200; }
+.l-chip-info { background: #e4f6f4; color: #0a4d52; }
+.l-chip-review { background: #eeebff; color: #5b3fc4; }
+.l-bar { height: 8px; border-radius: 999px; background: var(--paper-2); overflow: hidden; }
+.l-bar > i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--teal), var(--cyan)); }
+
+/* The floating record chips in the hero. */
+.l-float { position: relative; display: flex; align-items: center; gap: 10px; padding: 10px 14px 10px 10px; border-radius: 14px; background: rgba(10, 22, 48, 0.72); border: 1px solid rgba(255,255,255,0.12); color: var(--text-on-ink); backdrop-filter: blur(10px); box-shadow: 0 20px 50px -20px rgba(0,0,0,0.6); white-space: nowrap; }
+.l-float .ic { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: rgba(1, 203, 211, 0.14); color: var(--mint); }
+.l-float b { display: block; font-size: 13px; font-weight: 600; }
+.l-float span { display: block; font-size: 11.5px; color: var(--text-on-ink-2); }
+
+/* The source lines (sources section): a quote mark highlights when its field is active. */
+.l-quote-line { border-radius: 8px; padding: 3px 6px; margin: 0 -6px; transition: background-color 300ms var(--ease), color 300ms ease; }
+.l-quote-line[data-on="true"] { background: rgba(1, 203, 211, 0.18); color: var(--text); }
+
+/* The roles' tilt cards: a soft spotlight follows the pointer (set by Tilt as --mx / --my). */
+.l-tilt { transform-style: preserve-3d; }
+.l-spot { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; background: radial-gradient(360px circle at var(--mx, 50%) var(--my, 50%), rgba(1, 203, 211, 0.16), transparent 55%); opacity: 0; transition: opacity 300ms ease; }
+.l-tilt:hover .l-spot { opacity: 1; }
+
+/* Team avatars without a photo: a brand ring with the initials. */
+.l-avatar { display: grid; place-items: center; width: 84px; height: 84px; border-radius: 999px; background: linear-gradient(135deg, #0b4e74, #01cbd3); color: #fff; font-weight: 600; font-size: 1.35rem; letter-spacing: -0.02em; box-shadow: 0 0 0 4px #fff, 0 0 0 5px rgba(1,203,211,0.35); }
+
+/* Links in body text. */
+.l-link { color: #0a6a86; text-decoration: underline; text-decoration-color: rgba(10,106,134,0.3); text-underline-offset: 3px; transition: text-decoration-color 200ms ease; }
+.l-link:hover { text-decoration-color: currentColor; }
+.on-ink .l-link { color: var(--mint); text-decoration-color: rgba(95,220,214,0.35); }
+
+/* The big wordmark in the footer: a quiet, huge brand sign-off. */
+.l-footer-mark { mask-image: linear-gradient(180deg, rgba(0,0,0,0.5), rgba(0,0,0,0.05)); }
+
+.landing [data-lenis-prevent] { overscroll-behavior: contain; }
+html.lenis, html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
+.lenis.lenis-smooth [data-lenis-prevent] { overscroll-behavior: contain; }
+.lenis.lenis-stopped { overflow: hidden; }
+
+@media (prefers-reduced-motion: reduce) {
+  .l-marquee-track { animation: none; }
+  .landing * { transition-duration: 0.01ms !important; }
+}

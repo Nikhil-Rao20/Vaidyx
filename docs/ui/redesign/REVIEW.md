@@ -33,3 +33,13 @@ then http://localhost:7000/tb-nik (the HIMS stays at http://localhost:7130/his).
 - The hospital's real logo: upload it in Admin, Hospital (the demo emblem is synthetic).
 - The deck design is ours; the NCG VTB template export stays as before.
 - Finding 22 (old data files tracked in git), the broken admin password file, a human face-check of the cropped scans, a doctor's approval of the CUP and generic checklists: as listed on 18 Oct.
+
+## 19 Oct, evening: the landing page and the entrance
+
+| # | Where | What to look at | Your note it answers |
+|---|---|---|---|
+| 14 | http://localhost:7000/tb-nik (signed out or in) | the public landing page: the mark gathers from points, the title, "How it works" with a screen that changes as you scroll, "Every fact has its source" with the lines from each value to its line in the report, roles, "What Vaidyx will never do", the team (placeholders), TANUH, the close. Smooth scrolling; the top bar hides while you scroll down. Try it on the phone (F12, Ctrl+Shift+M, Pixel 7): the menu, every section. | "a landing page, informative, creative, professional; inspiration from dpi.tanuh.ai and project-monai.github.io; brand TANUH too" |
+| 15 | Sign in, then watch | the cinematic entrance: the official Vaidyx reveal (brand/animation.html), the name "Tumour Board", then the mark glides into its place in the top bar. About 5.5 s, click or Escape to skip. Light and dark. | "the vaidyx chat animation after sign-in is better; a cinematic entrance for a while" |
+
+Words to check (all in one file, `web/tb-nik/src/features/landing/content.ts`): the titles, the three "why" statements, the steps, the scope line, the six principles, the TANUH paragraph. The team cards are placeholders until you send names, roles and photos (`public/brand/team/`).
+Proof: `docs/ui/build/shots/landing-*.png` (hero at 1366 / 1920 / 390, the whole page, the phone menu) and `splash-*.png` (five frames, light, dark, phone); 55 mock checks pass.

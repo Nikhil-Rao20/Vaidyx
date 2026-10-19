@@ -115,11 +115,11 @@ async function settle(page: Page) {
 }
 
 /** Every width, light and dark: docs/ui/build/shots/<page>-<state>-<theme>-<width>.png. `before` runs after each resize. */
-export async function shoot(page: Page, name: string, state: string, opts: { before?: (page: Page) => Promise<void>; sizes?: typeof SIZES; fullPage?: boolean } = {}) {
+export async function shoot(page: Page, name: string, state: string, opts: { before?: (page: Page) => Promise<void>; sizes?: typeof SIZES; fullPage?: boolean; themes?: readonly ("light" | "dark")[] } = {}) {
   fs.mkdirSync(SHOTS, { recursive: true });
   for (const size of opts.sizes ?? SIZES) {
     await page.setViewportSize(size);
-    for (const theme of THEMES) {
+    for (const theme of opts.themes ?? THEMES) {
       await page.evaluate((t) => { document.documentElement.setAttribute("data-theme", t); try { localStorage.setItem("tbnik.theme", t); } catch { /* none */ } }, theme);
       await settle(page);
       if (opts.fullPage ?? true) await page.evaluate(() => window.scrollTo(0, 0));
