@@ -235,6 +235,7 @@ export const CONTACT = {
     received: "Thank you. Your enquiry has been received.",
     failed: "The enquiry could not be sent. Please write to us directly.",
     invalid: "Please fill in your name, a valid email address and a message.",
+    notice: "Email sending from this form is not built yet. To be sure we see your message, write to us directly at",
   },
   direct: "To reach us directly, write to",
   subject: "[Vaidyx] Website enquiry",

@@ -38,6 +38,7 @@ test.describe("landing", () => {
     await shoot(page, "site", "docs", { fullPage: true, sizes: [SIZES[0], SIZES[2]], themes: ["light"] });
     await visit(page, "/contact", { signedOut: true });
     await expect(page.getByTestId("contact-email")).toHaveAttribute("href", /mailto:.*subject=/);
+    await expect(page.getByTestId("contact-notice")).toContainText("not built yet");
     await shoot(page, "site", "contact", { fullPage: true, sizes: [SIZES[0], SIZES[2]], themes: ["light"] });
     // the enquiry form posts to the site's own endpoint (answered by the mock) and thanks the visitor
     await page.getByLabel("Your name").fill("Dr Test Person");

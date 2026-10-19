@@ -2,7 +2,7 @@
 // server cannot send it, the visitor is given the direct address instead.
 import { useState, type FormEvent } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowRight, Check, Mail } from "lucide-react";
+import { ArrowRight, Check, Info, Mail } from "lucide-react";
 import { SiteFrame } from "../components/SiteFrame";
 import { PageHead } from "../components/PageHead";
 import { Reveal } from "../components/Reveal";
@@ -59,6 +59,10 @@ export default function ContactPage() {
                   {/* a field people never see; a bot fills it */}
                   <input type="text" name="website" value={f.website} onChange={set("website")} tabIndex={-1} autoComplete="off" aria-hidden className="absolute -left-[9999px] h-0 w-0 opacity-0" />
                   <div className="sm:col-span-2">
+                    <p className="l-box l-muted mb-4 flex items-start gap-2.5 px-3.5 py-3 text-[13.5px]" data-testid="contact-notice">
+                      <Info className="mt-0.5 size-4 shrink-0 text-[var(--l-accent)]" aria-hidden />
+                      <span>{CONTACT.form.notice} <a href={mailto()} className="font-semibold text-[var(--l-fg)] underline decoration-[var(--l-line-2)] underline-offset-4 hover:decoration-current">{SITE.email}</a>.</span>
+                    </p>
                     <button type="submit" className="l-btn l-btn-primary" disabled={state === "sending"}>{state === "sending" ? CONTACT.form.sending : CONTACT.form.submit} <ArrowRight className="size-4" aria-hidden /></button>
                     {state === "invalid" ? <p className="mt-3 text-[13.5px]" style={{ color: "var(--l-warn)" }}>{CONTACT.form.invalid}</p> : null}
                     {state === "failed" ? <p className="mt-3 text-[13.5px]" style={{ color: "var(--l-warn)" }}>{CONTACT.form.failed} <a className="underline" href={mailto()}>{SITE.email}</a></p> : null}
