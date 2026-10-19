@@ -38,9 +38,8 @@ export function SlideCase({ className }: { className?: string }) {
         <div className="s-right">
           <div className="s-h">Question for the Board</div>
           <div className="s-box"><p>Confirmation of staging and of the HER2 result before the treatment decision.</p></div>
-          <div className="s-h">Staging as recorded</div>
-          <div className="s-stage"><div><b>cT3</b><span>T</span></div><div><b>cN1</b><span>N</span></div><div><b>cM0</b><span>M</span></div></div>
-          <span className="s-review"><b>Point for review</b> HER2 FISH result pending</span>
+          <div className="s-stage"><div><b>cT3</b><span>T, recorded</span></div><div><b>cN1</b><span>N, recorded</span></div><div><b>cM0</b><span>M, recorded</span></div></div>
+          <span className="s-review"><b>For review</b> HER2 FISH pending</span>
         </div>
       </div>
       <div className="s-foot"><span>Every value verified against its source · Synthetic data</span><span style={{ display: "flex", alignItems: "center", gap: "1.2cqw" }}><img src={ICON_SRC} alt="" />Vaidyx · 4 / 9</span></div>
