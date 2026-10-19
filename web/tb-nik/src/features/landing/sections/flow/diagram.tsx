@@ -2,7 +2,7 @@
 // Radiology, the coordinator and the Board); time runs left to right through three phases (before the Board, the meeting,
 // after). Stations are rounded cards; the main route is drawn with right-angled, rounded lines and arrowheads; three loops are
 // dashed: a report returning into the file, a deferral for more information, re-discussion at progression. A step lights its
-// stations and segments and sends a dot along them. Fixed coordinates in an 800 x 540 box; the drawing scales as a whole.
+// stations and segments and sends a dot along them. Fixed coordinates in a 1016 x 600 box; the drawing scales as a whole.
 import { motion, useReducedMotion } from "motion/react";
 import {
   BrainCircuit, CalendarDays, Database, FileCheck2, FilePlus2, FileText, FlaskConical, Gavel, HardDrive, Images, ListChecks,
@@ -10,10 +10,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export const W = 800, H = 540;
-const AX = 10, AW = 780;                 // the chart area
-const CW = AW / 8, NW = 86, NH = 60;     // eight columns; node width and height
-const LY = 30, LH = 92;                  // first lane's top, lane height
+export const W = 1016, H = 600;
+const AX = 12, AW = 992;                 // the chart area
+const CW = AW / 8, NW = 90, NH = 60;     // eight columns; node width and height (the gaps are a third of a node)
+const LY = 30, LH = 104;                 // first lane's top, lane height
 const col = (i: number) => AX + i * CW + (CW - NW) / 2;
 const laneY = (k: number) => LY + k * LH;
 const nodeY = (k: number) => laneY(k) + (LH - NH) / 2;
@@ -23,12 +23,12 @@ const gapX = (c: number) => px(c);       // the centre of the gap before column 
 export const LANES = ["systems", "dept", "vaidyx", "support", "board"] as const;
 export const PHASES = [{ key: "before", from: 0, to: 4 }, { key: "meeting", from: 5, to: 6 }, { key: "after", from: 7, to: 7 }] as const;
 
-export interface Node { id: string; x: number; y: number; w?: number; label: string; sub: string; icon: LucideIcon; lane: (typeof LANES)[number]; items?: { icon: LucideIcon; label: string }[] }
+export interface Node { id: string; x: number; y: number; w?: number; label: string; sub: string; icon: LucideIcon; lane: (typeof LANES)[number]; items?: { icon: LucideIcon; label: string }[]; labelSize?: number }
 export const NODES: Node[] = [
   { id: "systems", x: col(0), y: nodeY(0), w: NW + CW, label: "Hospital systems", sub: "", icon: Database, lane: "systems", items: [{ icon: Database, label: "HIS" }, { icon: HardDrive, label: "LIS / RIS" }, { icon: Images, label: "PACS" }] },
   { id: "opened", x: col(0), y: nodeY(1), label: "Case File", sub: "opened by UHID", icon: FilePlus2, lane: "dept" },
   { id: "records", x: col(1), y: nodeY(2), label: "Records in", sub: "every value quoted", icon: FileText, lane: "vaidyx" },
-  { id: "checklist", x: col(2), y: nodeY(2), label: "Checklist", sub: "against the protocol", icon: ListChecks, lane: "vaidyx" },
+  { id: "checklist", x: col(2), y: nodeY(2), label: "Pre-Authorization", sub: "against the protocol", icon: ListChecks, lane: "vaidyx", labelSize: 9.4 },
   { id: "request", x: col(3), y: nodeY(2), label: "Request", sub: "to a department", icon: Send, lane: "vaidyx" },
   { id: "report", x: col(3), y: nodeY(3), label: "Report filed", sub: "at the HIS desk", icon: FlaskConical, lane: "support" },
   { id: "briefs", x: col(4), y: nodeY(2), label: "Briefs", sub: "six specialties", icon: BrainCircuit, lane: "vaidyx" },
@@ -36,7 +36,7 @@ export const NODES: Node[] = [
   { id: "agenda", x: col(5), y: nodeY(4), label: "Agenda", sub: "the coordinator", icon: CalendarDays, lane: "board" },
   { id: "meeting", x: col(6), y: nodeY(4), label: "Meeting", sub: "slide, report, scan", icon: MonitorPlay, lane: "board" },
   { id: "decision", x: col(7), y: nodeY(4), label: "Decision", sub: "the Board's", icon: Gavel, lane: "board" },
-  { id: "outputs", x: col(7), y: nodeY(2), label: "Minutes, forms", sub: "deck, NCG, pre-auth", icon: FileCheck2, lane: "vaidyx" },
+  { id: "outputs", x: col(7), y: nodeY(2), label: "Minutes, forms", sub: "deck, NCG, PM-JAY", icon: FileCheck2, lane: "vaidyx" },
   { id: "followup", x: col(7), y: nodeY(1), label: "Follow-up", sub: "in the clinic", icon: Stethoscope, lane: "dept" },
 ];
 
@@ -92,7 +92,7 @@ function Station({ node, on }: { node: Node; on: boolean }) {
       ) : (
         <>
           <Icon x={node.x + w / 2 - 9} y={node.y + 8} width={18} height={18} strokeWidth={1.8} className="jy-node-icon" />
-          <text x={node.x + w / 2} y={node.y + 39} textAnchor="middle" className="jy-node-label">{node.label}</text>
+          <text x={node.x + w / 2} y={node.y + 39} textAnchor="middle" className="jy-node-label" style={node.labelSize ? { fontSize: node.labelSize, letterSpacing: "-0.02em" } : undefined}>{node.label}</text>
           <text x={node.x + w / 2} y={node.y + 51} textAnchor="middle" className="jy-node-sub">{node.sub}</text>
         </>
       )}

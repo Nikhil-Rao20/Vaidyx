@@ -34,10 +34,10 @@ export function Journey() {
 
   return (
     <section id="journey" ref={ref} className="l-section-2 py-24 sm:py-32" data-testid="journey">
-      <div className="mx-auto max-w-[1400px] px-5 sm:px-8">
+      <div className="mx-auto max-w-[1520px] px-5 sm:px-8">
         <SectionHead eyebrow={FLOW.eyebrow} title={[FLOW.title[0], FLOW.title[1]]} lead={FLOW.lead} />
         <Reveal y={20} className="l-card mt-14 overflow-hidden" testId="journey-card">
-          <div className="grid lg:grid-cols-[7fr_3fr]" style={{ gridAutoRows: "minmax(0, 1fr)" }}>
+          <div className="grid lg:grid-cols-[72fr_28fr]" style={{ gridAutoRows: "minmax(0, 1fr)" }}>
             <div className="jy-scroll l-section-2 min-w-0 border-b border-[var(--l-line)] p-4 sm:p-6 lg:border-b-0 lg:border-r">
               <Diagram activeNodes={step.nodes} activePaths={step.paths} lanes={FLOW.lanes} phases={FLOW.phases} frame={FLOW.frame} />
             </div>
@@ -47,7 +47,7 @@ export function Journey() {
                 <span className="l-eyebrow">{FLOW.labels.step} {String(i + 1).padStart(2, "0")}</span>
                 <span className="l-pill !py-1 text-[12px]">{i + 1} {FLOW.labels.of} {n}</span>
               </div>
-              <div className="mt-4 min-h-[8.5rem]">
+              <div className="mt-4 min-h-[7rem]">
                 <AnimatePresence mode="wait" initial={false}>
                   <motion.div key={step.id} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, transition: { duration: 0.15 } }} transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}>
                     <h3 className="l-title text-[clamp(1.2rem,1.6vw,1.45rem)]">{step.title}</h3>
@@ -55,12 +55,13 @@ export function Journey() {
                   </motion.div>
                 </AnimatePresence>
               </div>
-              <div className="mt-3 flex min-h-[2.25rem] flex-wrap items-center gap-2">
-                <span className="l-pill !py-1 text-[12.5px]"><UserRound className="size-3.5 text-[var(--l-accent)]" aria-hidden />{FLOW.labels.who}: <b className="font-semibold text-[var(--l-fg)]">{step.who}</b></span>
-                {step.chip ? <span className="l-chip l-chip-info !py-1 !text-[12px]">{step.chip}</span> : null}
+              {/* two fixed lines: who acts, then the chip (or an empty line), so the height never changes */}
+              <div className="mt-2 h-[3.75rem]">
+                <div className="flex h-7 items-center"><span className="l-pill !py-0.5 text-[12.5px]"><UserRound className="size-3.5 text-[var(--l-accent)]" aria-hidden />{FLOW.labels.who}: <b className="font-semibold text-[var(--l-fg)]">{step.who}</b></span></div>
+                <div className="flex h-7 items-center">{step.chip ? <span className="l-chip l-chip-info !py-0.5 !text-[12px]">{step.chip}</span> : null}</div>
               </div>
               {/* a fixed slot for the preview, so the actions below never move */}
-              <div className="mt-3 h-[168px] overflow-hidden">
+              <div className="mt-3 h-[160px] overflow-hidden" data-testid="journey-preview">
                 <AnimatePresence mode="wait" initial={false}>
                   {Preview ? (
                     <motion.div key={step.id} initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.15 } }} transition={{ duration: 0.35 }} className="origin-top-left">
@@ -69,7 +70,7 @@ export function Journey() {
                   ) : null}
                 </AnimatePresence>
               </div>
-              <div className="mt-auto pt-6">
+              <div className="mt-auto pt-5">
                 <div className="flex items-center gap-1.5" role="tablist" aria-label="Steps">
                   {FLOW.steps.map((s, k) => <button key={s.id} type="button" role="tab" aria-selected={k === i} aria-label={`Step ${k + 1}: ${s.title}`} className="jy-seg" data-state={k < i ? "done" : k === i ? "current" : "todo"} onClick={() => go(k)} />)}
                 </div>
