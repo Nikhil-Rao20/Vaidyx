@@ -44,7 +44,7 @@ export function Tanuh() {
             <div>
               <span className="l-eyebrow">{TANUH.eyebrow}</span>
               <h2 className="l-title mt-4 text-[clamp(1.8rem,3.2vw,2.6rem)]">{TANUH.title}</h2>
-              <p className="l-lead l-muted mt-5">{TANUH.summary}</p>
+              <div className="mt-5 space-y-4">{TANUH.summary.map((t, i) => <p key={i} className={i === 0 ? "l-lead l-muted" : "l-muted text-[15.5px]"}>{t}</p>)}</div>
               <div className="mt-7 border-b border-[var(--l-line)]">
                 {TANUH.sections.map((sec, i) => <Fold key={sec.title} title={sec.title} text={sec.text} open={open === i} onToggle={() => setOpen(open === i ? null : i)} />)}
               </div>

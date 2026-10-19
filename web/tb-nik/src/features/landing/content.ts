@@ -238,7 +238,11 @@ export const TANUH = {
   eyebrow: "TANUH",
   title: "The AI Centre of Excellence in Healthcare",
   // The centre's own words (tanuh.ai), as the owner pasted them.
-  summary: "An AI Center of Excellence focused on creating scalable solutions for the effective management of non-communicable diseases (NCDs) at the point of care. It serves as a multidisciplinary hub uniting clinicians, data scientists, and AI technologists to develop tools for early diagnosis, risk prediction, continuous monitoring, and personalised interventions for major NCDs.",
+  summary: [
+    "TANUH (Translational AI for Networked Universal Healthcare) is an AI Centre of Excellence under the Ministry of Education, Government of India, hosted at the Indian Institute of Science, Bengaluru.",
+    "We develop and deploy AI-driven diagnostics and decision-support tools for early detection and management of high-burden non-communicable diseases (NCDs) across India.",
+    "TANUH is a non-profit organization registered under Section 8 of the Companies Act, 2013, and holds valid registrations under Sections 12A and 80G of the Income-tax Act, 1961, as well as CSR registration with the Ministry of Corporate Affairs.",
+  ],
   sections: [
     { title: "Our Mission", text: "To advance the early detection, prevention, and management of non-communicable diseases through scalable, AI-driven innovation. The centre is committed to empowering healthcare providers and systems with data-centric decision support that strengthens universal healthcare delivery, reduces disparities, and ensures equitable, accessible, and high-quality care for all populations." },
     { title: "Our Vision", text: "To build a reliable and trustworthy digital health ecosystem powered by scalable and culturally attuned AI solutions. The centre goal is to transform clinical and frontline care to make healthcare timely, accessible, and effective for every citizen of India." },
