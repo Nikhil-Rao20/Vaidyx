@@ -8,7 +8,7 @@ import { Strip } from "./sections/Strip";
 import { Problem } from "./sections/Problem";
 import { HowItWorks } from "./sections/HowItWorks";
 import { Sources } from "./sections/Sources";
-import { Roles } from "./sections/Roles";
+import { Journey } from "./sections/Journey";
 import { Safety } from "./sections/Safety";
 import { Cta } from "./sections/Cta";
 
@@ -23,7 +23,7 @@ export default function LandingPage() {
       <Problem />
       <HowItWorks />
       <Sources />
-      <Roles />
+      <Journey />
       <Safety />
       <Cta />
     </SiteFrame>

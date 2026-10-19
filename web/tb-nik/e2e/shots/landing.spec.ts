@@ -20,10 +20,14 @@ test.describe("landing", () => {
     await page.waitForTimeout(400);
     await page.screenshot({ path: `${SHOTS}/landing-menu-light-390.png` });
     await page.getByRole("button", { name: "Close the menu" }).click();
-    for (const id of ["how", "sources", "roles", "safety"]) await expect(page.locator(`#${id}`)).toHaveCount(1);
+    for (const id of ["how", "sources", "journey", "safety"]) await expect(page.locator(`#${id}`)).toHaveCount(1);
     await expect(page.getByTestId("open-docs").first()).toBeAttached();
     await expect(page.getByTestId("ask-demo")).toBeAttached();
-    await expect(page.getByTestId("roles-table")).toBeAttached();
+    await expect(page.getByTestId("journey-diagram")).toBeAttached();
+    await page.getByTestId("journey-next").click();
+    await expect(page.getByTestId("journey-panel")).toHaveAttribute("data-step", "quote");
+    await page.getByTestId("journey-restart").click();
+    await expect(page.getByTestId("journey-panel")).toHaveAttribute("data-step", "uhid");
     await expect(page.locator('#why a[href="https://doi.org/10.3332/ecancer.2026.2090"]').first()).toBeAttached();
     await expect(page.getByTestId("safety")).toBeAttached();
     expect(errors, errors.join("\n")).toEqual([]);

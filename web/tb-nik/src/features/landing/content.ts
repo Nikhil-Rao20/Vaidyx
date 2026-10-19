@@ -2,13 +2,14 @@
 // Register: plain, everyday English; short sentences; no jargon where a common word will do. British spelling.
 // Constraints: no accuracy or validation claims; no model names; every patient detail is synthetic.
 import type { LucideIcon } from "lucide-react";
-import { Activity, Building2, CalendarDays, FileSearch, FileStack, FlaskConical, Layers, MapPin, Network, NotebookPen, Stethoscope, UserRound, Users } from "lucide-react";
+import { Activity, FileSearch, FileStack, Layers, MapPin, Network, NotebookPen } from "lucide-react";
 
 export type Icon = LucideIcon;
 
 /** The pages of the top bar. Product is the landing page and the default. */
 export const PAGES = [
   { to: "/", label: "Product" },
+  { to: "/research", label: "Research" },
   { to: "/docs", label: "Docs" },
   { to: "/about", label: "About" },
   { to: "/contact", label: "Contact" },
@@ -166,19 +167,38 @@ export const SOURCES = {
   },
 };
 
-export const ROLES = {
-  eyebrow: "Roles",
-  title: ["Made for everyone", "on the Board."],
-  lead: "Each person sees their own work first. Choose a seat at the table.",
-  centre: "Case File",
-  cards: [
-    { key: "doctor", icon: Stethoscope, title: "Treating doctor", short: "Doctor", text: "Your patients, what is still missing, and the question for the Board. Approve from your phone between patients.", points: ["A view of what needs you", "One-tap requests to Pathology and Radiology", "The decision back in the Case File"] },
-    { key: "resident", icon: UserRound, title: "Resident", short: "Resident", text: "Build a Case File in minutes, not an afternoon.", points: ["Pull the records by UHID", "The checklist shows what to chase", "Propose; the consultant signs off"] },
-    { key: "lab", icon: FlaskConical, title: "Pathologist and Radiologist", short: "Pathology", text: "Requests come with the clinical context. Answer from the Case File or open the order in the HIS.", points: ["An inbox of requests", "A direct link to the order", "Your report lands in the Case File"] },
-    { key: "coordinator", icon: CalendarDays, title: "MDT Coordinator", short: "Coordinator", text: "Agenda, people, room and minutes in one place.", points: ["An agenda with readiness", "Video meeting and room display", "Minutes and exports"] },
-    { key: "expert", icon: Users, title: "External expert", short: "Expert", text: "Join a Board with a code and see only the cases shown to you.", points: ["A code, no account", "Admitted by the coordinator", "Nothing to install"] },
-    { key: "it", icon: Building2, title: "Hospital IT and department admins", short: "Admin", text: "Set up departments and people in an afternoon. Patient data stays in the hospital.", points: ["Roles by department", "An audit log of every action", "Runs on your own server"] },
-  ],
+/* The journey of one patient, step by step (the interactive flow that replaced the roles section, 20 Oct). Each step lights
+   nodes and lines of the diagram (ids in sections/flow/diagram.tsx), names who acts, and may show a small preview. */
+export interface FlowStep {
+  id: string;
+  title: string;
+  body: string;
+  who: string;
+  chip?: string;
+  nodes: string[];
+  paths: string[];
+  preview?: "casefile" | "request" | "brief" | "slide" | "room" | "after";
+}
+
+export const FLOW = {
+  eyebrow: "The journey",
+  title: ["One patient,", "from UHID to decision."],
+  lead: "Follow a patient through Vaidyx: where the records come from, what Vaidyx does with them, who decides, and what leaves the room.",
+  frame: "Inside the hospital · nothing leaves",
+  zones: { systems: "Hospital systems", vaidyx: "Vaidyx Case File · checks, routes, summarises, flags", doctors: "Doctors decide", after: "After the Board" },
+  labels: { step: "Step", of: "of", who: "Who acts", next: "Next step", restart: "Start over", auto: "Playing · click to take over" },
+  steps: [
+    { id: "uhid", title: "It starts with a UHID", body: "The resident types the patient's hospital number. Vaidyx pulls the reports from the HIS and the lab and radiology systems, and lists the scans on the PACS.", who: "Resident", nodes: ["systems", "records"], paths: ["systems-records"], preview: "casefile" },
+    { id: "quote", title: "Every value with its source", body: "Each value is kept together with the line of the report it came from. A value without a source is dropped or marked for review. Nothing is read from the images.", who: "Vaidyx", chip: "Every value quoted", nodes: ["records", "quote"], paths: ["records-quote"], preview: "casefile" },
+    { id: "checklist", title: "The checklist shows what is missing", body: "The checklist for this cancer, built on NCG guidance, lists what the Board needs. Missing reports are named, with the department that holds them.", who: "Vaidyx", nodes: ["quote", "checklist"], paths: ["quote-checklist"], preview: "casefile" },
+    { id: "request", title: "A request to Pathology, answered in the file", body: "One tap sends the request, with its clinical context, to the Pathology desk in the HIS. The report comes back into the Case File and the item closes.", who: "Pathologist", chip: "Report back in the file", nodes: ["checklist", "request", "systems"], paths: ["checklist-request", "request-systems"], preview: "request" },
+    { id: "briefs", title: "Specialty briefs, ready before the meeting", body: "Six specialty helpers each prepare a brief from the records: radiology, pathology, medical, surgical and radiation oncology, nuclear medicine. Every sentence carries its quote.", who: "Vaidyx", nodes: ["request", "briefs"], paths: ["request-briefs"], preview: "brief" },
+    { id: "question", title: "The doctor writes the question", body: "The treating doctor reads the brief, writes the question for the Board and marks the Case File ready. From here on, people decide.", who: "Treating doctor", chip: "Doctors decide", nodes: ["briefs", "question", "ready"], paths: ["briefs-question", "question-ready"] },
+    { id: "agenda", title: "On the agenda", body: "The MDT Coordinator sets the meeting and adds the ready Case Files. Each one is ready, or says what is still missing.", who: "MDT Coordinator", nodes: ["ready", "agenda"], paths: ["ready-agenda"] },
+    { id: "meeting", title: "The meeting, on one screen", body: "In the room or by video. The room display shows the slide, and any report or scan opens beside it, from the Case File, without leaving the meeting.", who: "The Board", nodes: ["agenda", "meeting"], paths: ["agenda-meeting"], preview: "room" },
+    { id: "decision", title: "The decision, recorded as it is made", body: "The decision is written during the discussion, with the members present and the questions asked. It is the Board's, not Vaidyx's.", who: "The Board", chip: "Doctors decide", nodes: ["meeting", "decision"], paths: ["meeting-decision"], preview: "slide" },
+    { id: "after", title: "What leaves the room", body: "Minutes and the board deck when the meeting ends; the NCG template and pre-authorization papers from the same record; follow-ups tracked; every action in the audit log. Patient data stays in the hospital.", who: "MDT Coordinator", chip: "Nothing leaves the hospital", nodes: ["decision", "minutes", "deck", "ncg", "preauth", "audit"], paths: ["decision-minutes", "minutes-deck", "deck-ncg", "ncg-preauth", "preauth-audit"], preview: "after" },
+  ] satisfies FlowStep[],
 };
 
 export const SAFETY = {
@@ -208,9 +228,9 @@ export const FOOTER = {
   scope: "Vaidyx checks, routes, summarises and flags. Doctors make the decisions.",
   copyright: `© ${new Date().getFullYear()} TANUH, The AI Centre of Excellence in Healthcare.`,
   columns: [
-    { title: "Product", links: [{ label: "How it works", to: "/#how" }, { label: "Traceability", to: "/#sources" }, { label: "Roles", to: "/#roles" }, { label: "Design principles", to: "/#safety" }] },
+    { title: "Product", links: [{ label: "How it works", to: "/#how" }, { label: "Traceability", to: "/#sources" }, { label: "The journey", to: "/#journey" }, { label: "Design principles", to: "/#safety" }] },
     { title: "About", links: [{ label: "Our team", to: "/about" }, { label: "TANUH", to: "/about#tanuh" }, { label: "Contact", to: "/contact" }] },
-    { title: "Resources", links: [{ label: "Documentation", to: "/docs" }, { label: "Visit TANUH", to: "https://tanuh.ai" }] },
+    { title: "Resources", links: [{ label: "Research", to: "/research" }, { label: "Documentation", to: "/docs" }, { label: "Visit TANUH", to: "https://tanuh.ai" }] },
     { title: "Account", links: [{ label: "Sign in", to: "/sign-in" }] },
   ],
 };
@@ -259,6 +279,12 @@ export const DOCS = {
   eyebrow: "Documentation",
   title: ["Documentation", "coming soon."],
   text: "Installation, hospital system integration, roles and the audit log will be documented here.",
+};
+
+export const RESEARCH = {
+  eyebrow: "Research",
+  title: ["Research", "coming soon."],
+  text: "Benchmarking results, evaluations and publications on Vaidyx will be published here.",
 };
 
 export const CONTACT = {
