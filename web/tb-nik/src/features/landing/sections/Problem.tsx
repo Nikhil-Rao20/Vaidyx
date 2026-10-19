@@ -1,5 +1,5 @@
-// Why: the day before the board, in three honest statements.
-import { PROBLEM } from "../content";
+// The challenge: why preparation matters, in three statements.
+import { CHALLENGE } from "../content";
 import { SectionHead } from "../components/SectionHead";
 import { Stagger } from "../components/Reveal";
 
@@ -7,9 +7,9 @@ export function Problem() {
   return (
     <section id="why" className="l-paper py-24 sm:py-32">
       <div className="mx-auto max-w-[1280px] px-5 sm:px-8">
-        <SectionHead eyebrow={PROBLEM.eyebrow} title={[PROBLEM.title[0], PROBLEM.title[1]]} lead={PROBLEM.lead} />
+        <SectionHead eyebrow={CHALLENGE.eyebrow} title={[CHALLENGE.title[0], CHALLENGE.title[1]]} lead={CHALLENGE.lead} />
         <Stagger className="mt-16 grid gap-5 md:grid-cols-3" itemClassName="h-full">
-          {PROBLEM.points.map((p) => {
+          {CHALLENGE.points.map((p) => {
             const Icon = p.icon;
             return (
               <article key={p.title} className="l-card flex h-full flex-col p-7 sm:p-8">

@@ -6,13 +6,14 @@ import { cn } from "@/lib/utils";
 
 export const L_EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
-export function Reveal({ children, className, delay = 0, y = 28, amount = 0.25, blur = false, once = true, style }: { children: ReactNode; className?: string; delay?: number; y?: number; amount?: number; blur?: boolean; once?: boolean; style?: React.CSSProperties }) {
+export function Reveal({ children, className, delay = 0, y = 28, amount = 0.25, blur = false, once = true, style, testId }: { children: ReactNode; className?: string; delay?: number; y?: number; amount?: number; blur?: boolean; once?: boolean; style?: React.CSSProperties; testId?: string }) {
   const reduce = useReducedMotion();
-  if (reduce) return <div className={className} style={style}>{children}</div>;
+  if (reduce) return <div className={className} style={style} data-testid={testId}>{children}</div>;
   return (
     <motion.div
       className={className}
       style={style}
+      data-testid={testId}
       initial={{ opacity: 0, y, filter: blur ? "blur(8px)" : "blur(0px)" }}
       whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
       viewport={{ once, amount, margin: "0px 0px -6% 0px" }}

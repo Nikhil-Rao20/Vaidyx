@@ -43,3 +43,16 @@ then http://localhost:7000/tb-nik (the HIMS stays at http://localhost:7130/his).
 
 Words to check (all in one file, `web/tb-nik/src/features/landing/content.ts`): the titles, the three "why" statements, the steps, the scope line, the six principles, the TANUH paragraph. The team cards are placeholders until you send names, roles and photos (`public/brand/team/`).
 Proof: `docs/ui/build/shots/landing-*.png` (hero at 1366 / 1920 / 390, the whole page, the phone menu) and `splash-*.png` (five frames, light, dark, phone); 55 mock checks pass.
+
+## 19 Oct, night: round 2 of the public site (your notes)
+
+| # | Where | What changed | Your note it answers |
+|---|---|---|---|
+| 16 | http://localhost:7000/tb-nik, every load | the site's own entrance: the mark, then the wordmark, about 3 s, click to skip; then the hero's mark gathers from the four corners of the screen | "the website entrance should have a logo and name animation"; "the logo comes from every corner and forms" |
+| 17 | Top bar | pages, not sections: Product (default), Docs (in preparation), About (team, TANUH), Contact | "items in the nav bar should be separate pages" |
+| 18 | Every sentence | rewritten in a formal register for clinicians and academic readers; all in `content.ts` | "the English should be professional, on the point" |
+| 19 | How it works, During | the room display shows a designed case summary slide (deck style) instead of the CT placeholder | "a PPT slide, design one slide" |
+| 20 | Traceability | after the values, "Ask the Case File": the question is typed, the answer appears sentence by sentence, each sentence linked to its report line | "show how asking questions works" |
+| 21 | Clinical safety | positive wording (what Vaidyx does), the statement removed, the six boxes kept with an index | "write what Vaidyx does, not what it does not" |
+| 22 | Contact | your address with the fixed subject "[Vaidyx] Website enquiry", a copy button and an enquiry form that composes the email | "design the contact with my email, fixed subject" |
+| 23 | Hero | the floating record chips removed | "remove those boxes" |

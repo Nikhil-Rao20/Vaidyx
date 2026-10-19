@@ -18,3 +18,12 @@
 - Landing (features/landing): own palette in landing.css (ink, the logo's teal/cyan/mint, the wordmark's violet, paper sections), Instrument Serif (OFL, self-hosted) for one accent word per title, Lenis smooth scroll (MIT) only on this page, a 2D-canvas particle mark (points sampled from the icon paths, perspective, pointer lean, scroll disperse), scroll-driven scenes, source lines drawn in SVG, tilt cards, word-by-word scope statement, magnetic buttons. Every word in content.ts. Synthetic data only.
 - Gotchas: element rules in a page stylesheet must sit in `@layer base`, or they beat Tailwind's utilities (unlayered > layered); `.l-float` must not be absolute inside its positioned wrapper; `whileInView` never fires in a full-page screenshot, so reduced motion renders the finished state (paths at full length).
 - Checks: tsc, vite build, 55 mock checks (new: landing.spec.ts, splash.spec.ts), live hero captured from :7000.
+
+## 19 Oct, night: public site round 2
+- Owner notes applied: site intro on every load (components/Intro.tsx, module flag so in-app navigation does not replay it), pages
+  (routes /, /about, /docs, /contact with a shared SiteFrame and PageHead), all copy rewritten formally (content.ts), the case summary
+  slide (Scenes.tsx SlideCase, cqw-sized, flex layout after an absolute first cut overlapped), the Ask the Case File sequence
+  (Sources.tsx: a step machine, typing, sentence lines in violet, hover pins a value), Clinical safety positive, Contact page with
+  mailto and a fixed subject, hero chips removed, particles start at the four screen corners with a curved flight.
+- Checks: tsc, vite build, landing.spec (product, about/docs/contact, signed in), live captures of the intro, the slide and the Ask
+  sequence from :7000 (scratch script with Playwright, scrolling to the phase).

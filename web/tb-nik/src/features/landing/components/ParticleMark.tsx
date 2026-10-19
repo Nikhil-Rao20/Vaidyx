@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 import { useReducedMotion, type MotionValue } from "motion/react";
 import { ICON_BOX, ICON_PATHS } from "@/components/brand-paths";
 
-interface Dot { tx: number; ty: number; tz: number; sx: number; sy: number; sz: number; d: number; ph: number; r: number; col: string; spark: boolean }
+interface Dot { tx: number; ty: number; tz: number; sx: number; sy: number; sz: number; corner: number; jx: number; jy: number; d: number; ph: number; r: number; col: string; spark: boolean; arc: number }
 
 const COLOURS: [string, string][] = [["#2e7fc9", "#19c1da"], ["#1db7cc", "#8fefe9"], ["#06cfd6", "#b8f6f7"]];
 const VIOLET = "#9d7cff";
@@ -41,12 +41,11 @@ function sample(count: number): Dot[] {
     const tx = (x - W / 2) / (W / 2) + (Math.random() - 0.5) * 0.004;
     const ty = (y - H / 2) / (W / 2) + (Math.random() - 0.5) * 0.004;
     const tz = (Math.random() - 0.5) * 0.22;
-    // scattered start: a wide shell around the mark
-    const a = Math.random() * Math.PI * 2, b = Math.acos(2 * Math.random() - 1), rad = 1.7 + Math.random() * 1.4;
+    // the start is set per corner of the screen once the canvas knows where it sits (placeStarts)
     const spark = Math.random() < 0.014;
     const t = (tx + 1) / 2;
     const [c0, c1] = COLOURS[g];
-    return { tx, ty, tz, sx: rad * Math.sin(b) * Math.cos(a), sy: rad * Math.sin(b) * Math.sin(a) * 0.7, sz: rad * Math.cos(b), d: Math.random() * 0.9, ph: Math.random() * Math.PI * 2, r: spark ? 1.8 + Math.random() * 1.2 : 1.1 + Math.random() * 1.3, col: spark ? VIOLET : mix(c0, c1, t), spark };
+    return { tx, ty, tz, sx: tx, sy: ty, sz: tz, corner: Math.floor(Math.random() * 4), jx: (Math.random() - 0.5) * 0.5, jy: (Math.random() - 0.5) * 0.5, d: Math.random() * 0.7, ph: Math.random() * Math.PI * 2, r: spark ? 1.8 + Math.random() * 1.2 : 1.1 + Math.random() * 1.3, col: spark ? VIOLET : mix(c0, c1, t), spark, arc: (Math.random() - 0.5) * 0.6 };
   });
   dots.sort((p, q) => (p.col < q.col ? -1 : p.col > q.col ? 1 : 0));
   return dots;
@@ -78,12 +77,24 @@ export function ParticleMark({ className, progress, count }: { className?: strin
     let mx = 0, my = 0, tmx = 0, tmy = 0;
     const t0 = performance.now();
 
+    /** Every point starts at one of the four corners of the screen (in the mark's unit space), with a little spread. */
+    const placeStarts = (r: DOMRect) => {
+      const R = Math.min(w * 0.46, h * 0.6) || 1;
+      const ox = w / 2, oy = h / 2;
+      const corners = [[-r.left, -r.top], [window.innerWidth - r.left, -r.top], [-r.left, window.innerHeight - r.top], [window.innerWidth - r.left, window.innerHeight - r.top]];
+      for (const p of dots) {
+        const [cx, cy] = corners[p.corner];
+        p.sx = (cx - ox) / R + p.jx; p.sy = (cy - oy) / R + p.jy; p.sz = (Math.random() - 0.5) * 0.8;
+      }
+    };
+    let placed = false;
     const resize = () => {
       const r = canvas.getBoundingClientRect();
       dpr = Math.min(window.devicePixelRatio || 1, 2);
       w = Math.max(1, Math.round(r.width)); h = Math.max(1, Math.round(r.height));
       canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (!placed && w > 1) { placeStarts(r); placed = true; }
       if (reduce) draw(performance.now());
     };
 
@@ -105,10 +116,12 @@ export function ParticleMark({ className, progress, count }: { className?: strin
       let last = "";
       for (let i = 0; i < dots.length; i++) {
         const p = dots[i];
-        const k = still ? 1 : easeOut(Math.min(1, Math.max(0, (t - 0.15 - p.d) / 1.9)));
-        const fl = still ? 0 : (1 - 0.0) * 0.012;
-        let x = p.sx + (p.tx - p.sx) * k + Math.sin(t * 0.9 + p.ph) * fl * k;
-        let y = p.sy + (p.ty - p.sy) * k + Math.cos(t * 0.8 + p.ph * 1.3) * fl * k;
+        const k = still ? 1 : easeOut(Math.min(1, Math.max(0, (t - 0.1 - p.d) / 2.0)));
+        const fl = still ? 0 : 0.012;
+        const bend = still ? 0 : Math.sin(k * Math.PI) * p.arc;   // a curved flight, straight at both ends
+        const dx = p.tx - p.sx, dy = p.ty - p.sy;
+        let x = p.sx + dx * k - dy * bend + Math.sin(t * 0.9 + p.ph) * fl * k;
+        let y = p.sy + dy * k + dx * bend + Math.cos(t * 0.8 + p.ph * 1.3) * fl * k;
         let z = p.sz + (p.tz - p.sz) * k;
         // rotate about Y, then X
         const x1 = x * cy + z * sy; const z1 = -x * sy + z * cy;
