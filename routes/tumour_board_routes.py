@@ -2039,4 +2039,18 @@ def setup_tumour_board_routes():
             _scheduler.start()
     except Exception as e:
         log.warning("tumour board scheduler not started: %s", e)
-    return r
+    return _with_site(r)
+
+
+def _with_site(r):
+    """The API router plus the website's public router (tumour_board/api/site.py, paths under /tb-nik/api which the auth
+    middleware leaves open): both under one router so app.py keeps its single include. A site router that fails to import
+    is logged and skipped."""
+    root = APIRouter()
+    root.include_router(r)
+    try:
+        from tumour_board.api import site as _site
+        root.include_router(_site.router)
+    except Exception as e:
+        log.warning("tumour_board.api.site not loaded: %s", e)
+    return root
