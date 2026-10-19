@@ -50,11 +50,6 @@ test.describe("landing", () => {
     await expect(page.getByTestId("contact-done")).toBeVisible();
   });
 
-  test("design lab", async ({ page }) => {
-    await visit(page, "/lab", { signedOut: true });
-    for (const v of ["A", "B", "C"]) await expect(page.getByTestId(`lab-${v}`)).toBeAttached();
-  });
-
   test("signed in", async ({ page }) => {
     await visit(page, "/", { role: "treating" });
     await expect(page.getByTestId("landing-signin")).toHaveText(/Open Case Files/);

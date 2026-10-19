@@ -3,6 +3,7 @@
    never names a colour. The device frames of "How it works" stay dark in both themes, as a screen is. */
 @font-face { font-family: "Instrument Serif"; src: url("/static/tb-nik/fonts/instrument-serif-latin-400-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
 @font-face { font-family: "Instrument Serif"; src: url("/static/tb-nik/fonts/instrument-serif-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Caveat"; src: url("/static/tb-nik/fonts/caveat-latin-600-normal.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
 
 .landing {
   /* brand */
@@ -33,6 +34,7 @@
   --l-highlight: rgba(1, 203, 211, 0.2);
   --l-ok: #1d6a44; --l-ok-bg: #e4f4ea; --l-warn: #8a5200; --l-warn-bg: #fdf1d6; --l-info: #0a4d52; --l-info-bg: #e4f6f4; --l-review: #5b3fc4; --l-review-bg: #eeebff;
   --serif: "Instrument Serif", "Iowan Old Style", "Times New Roman", serif;
+  --hand: "Caveat", "Segoe Script", "Bradley Hand", cursive;
   --sans: "Inter Variable", "Inter", system-ui, sans-serif;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   font-family: var(--sans);
