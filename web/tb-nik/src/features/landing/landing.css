@@ -231,10 +231,5 @@ html.lenis, html.lenis body { height: auto; }
 .l-figure { font-weight: 600; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; color: var(--l-fg); }
 .l-barline { height: 6px; border-radius: 999px; background: var(--l-surface-2); overflow: hidden; }
 .l-barline > i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--teal), var(--cyan)); transform-origin: left; }
-.l-quote-bar { border-left: 3px solid var(--cyan); padding-left: 1.1rem; }
 .l-source { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--l-accent); font-weight: 600; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: text-decoration-color 200ms ease; }
 .l-source:hover { text-decoration-color: currentColor; }
-.l-ledger-row { display: grid; grid-template-columns: 4.5rem 1fr; gap: 1rem; padding: 1.6rem 0; border-top: 1px solid var(--l-line); }
-.l-ledger-row:last-child { border-bottom: 1px solid var(--l-line); }
-.l-ledger-n { font-family: var(--serif); font-style: italic; font-size: 2.6rem; line-height: 1; color: var(--l-accent); }
-.l-flow-line { position: absolute; left: 10%; right: 10%; top: 1.5rem; height: 0; border-top: 2px dashed var(--l-line-2); }

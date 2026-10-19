@@ -1,21 +1,15 @@
-// The problem: three items, the observed context and the national figures with their source. The layout is one of the three in
-// sections/problem (the design lab at /lab shows all three); Option B is the one on the product page.
+// The problem: the owner's three items, the observed context and the national figures with their source, laid out as bento
+// tiles (sections/problem/OptionB, the layout the owner chose on 20 Oct).
 import { CHALLENGE } from "../content";
 import { SectionHead } from "../components/SectionHead";
-import { OptionA } from "./problem/OptionA";
 import { OptionB } from "./problem/OptionB";
-import { OptionC } from "./problem/OptionC";
 
-export type ProblemVariant = "A" | "B" | "C";
-const LAYOUTS = { A: OptionA, B: OptionB, C: OptionC };
-
-export function Problem({ variant = "B", head = true }: { variant?: ProblemVariant; head?: boolean }) {
-  const Layout = LAYOUTS[variant];
+export function Problem() {
   return (
-    <section id="why" className="l-section py-24 sm:py-32" data-variant={variant}>
+    <section id="why" className="l-section py-24 sm:py-32">
       <div className="mx-auto max-w-[1280px] px-5 sm:px-8">
-        {head ? <SectionHead eyebrow={CHALLENGE.eyebrow} title={[CHALLENGE.title[0], CHALLENGE.title[1]]} lead={CHALLENGE.lead} /> : null}
-        <div className={head ? "mt-16" : ""}><Layout /></div>
+        <SectionHead eyebrow={CHALLENGE.eyebrow} title={[CHALLENGE.title[0], CHALLENGE.title[1]]} lead={CHALLENGE.lead} />
+        <div className="mt-16"><OptionB /></div>
       </div>
     </section>
   );
