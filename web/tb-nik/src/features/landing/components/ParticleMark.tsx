@@ -68,7 +68,7 @@ function glowSprite(): HTMLCanvasElement {
   return s;
 }
 
-export function ParticleMark({ className, progress, count }: { className?: string; progress?: MotionValue<number>; count?: number }) {
+export function ParticleMark({ className, progress, count, centre, radius }: { className?: string; progress?: MotionValue<number>; count?: number; centre?: { x: number; y: number }; radius?: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const reduce = useReducedMotion();
   useEffect(() => {
@@ -90,8 +90,8 @@ export function ParticleMark({ className, progress, count }: { className?: strin
 
     /** Every point starts at one of the four corners of the screen (in the mark's unit space), with a little spread. */
     const placeStarts = (r: DOMRect) => {
-      const R = Math.min(w * 0.46, h * 0.6) || 1;
-      const ox = w / 2, oy = h / 2;
+      const R = radius ?? (Math.min(w * 0.46, h * 0.6) || 1);
+      const ox = centre?.x ?? w / 2, oy = centre?.y ?? h / 2;
       const corners = [[-r.left, -r.top], [window.innerWidth - r.left, -r.top], [-r.left, window.innerHeight - r.top], [window.innerWidth - r.left, window.innerHeight - r.top]];
       for (const p of dots) {
         const [cx, cy] = corners[p.corner];
@@ -119,8 +119,8 @@ export function ParticleMark({ className, progress, count }: { className?: strin
       const rotY = still ? 0 : Math.sin(t * 0.22) * 0.28 + mx * 0.55;
       const rotX = still ? 0 : -my * 0.32 + Math.sin(t * 0.17) * 0.05;
       const cy = Math.cos(rotY), sy = Math.sin(rotY), cx = Math.cos(rotX), sx = Math.sin(rotX);
-      const R = Math.min(w * 0.46, h * 0.6);
-      const ox = w / 2, oy = h / 2;
+      const R = radius ?? Math.min(w * 0.46, h * 0.6);
+      const ox = centre?.x ?? w / 2, oy = centre?.y ?? h / 2;
       const f = 2.6;
       const spread = 1 + dis * 2.4;
       const fade = 1 - dis;
@@ -179,6 +179,6 @@ export function ParticleMark({ className, progress, count }: { className?: strin
       window.removeEventListener("pointermove", onMove);
       unsub?.();
     };
-  }, [reduce, progress, count]);
+  }, [reduce, progress, count, centre?.x, centre?.y, radius]);
   return <canvas ref={ref} className={className} aria-hidden />;
 }

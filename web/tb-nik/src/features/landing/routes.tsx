@@ -5,6 +5,7 @@ const LandingPage = lazy(() => import("@/features/landing/LandingPage"));
 const AboutPage = lazy(() => import("@/features/landing/pages/AboutPage"));
 const DocsPage = lazy(() => import("@/features/landing/pages/DocsPage"));
 const ContactPage = lazy(() => import("@/features/landing/pages/ContactPage"));
+const LabPage = lazy(() => import("@/features/landing/pages/LabPage"));
 
 /** The public site at the root of /tb-nik (no guard: visitors and signed-in people both see it). Product is the default page. */
 export const landingRoutes: RouteObject[] = [
@@ -12,4 +13,5 @@ export const landingRoutes: RouteObject[] = [
   { path: "/about", element: <AboutPage /> },
   { path: "/docs", element: <DocsPage /> },
   { path: "/contact", element: <ContactPage /> },
+  { path: "/lab", element: <LabPage /> },
 ];

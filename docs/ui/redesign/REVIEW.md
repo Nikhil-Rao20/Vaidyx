@@ -75,3 +75,7 @@ Email sending needs one file from you, `data/tumour_board/site_mail.json` (never
 ## 20 Oct: the problem section, three ways (design lab)
 
 Open http://localhost:7000/tb-nik/lab: the same content (your three items, the observed-context note, the three national figures with the Sarveswaran et al. 2026 link) in three layouts. Option B (bento tiles, gauges, the tinted tile) is on the product page now; A (ledger) and C (flow) wait for your choice. Two of the three figures are derived from the paper rather than stated in it: 88.3 % is 63.5 % physical plus 24.8 % mixed records; 53.3 % is the complement of 46.7 % radiologist participation; 48.2 % is stated.
+
+## 20 Oct: the entrance, five ways (design lab)
+
+http://localhost:7000/tb-nik/lab: the lockup, now large and on the plain field with no glow, arriving in five ways, each with a Replay button. A, Assemble (the brand's own reveal, on the site now); B, Particles (points gather into the mark, letters rise); C, Line draw (a line draws the mark and letters, then they fill); D, Wipe (mark from the left, wordmark from the right, a hairline between); E, Iris (opens through a circle, a light passes over the wordmark). Choose one; the choice is one line in components/Intro.tsx.
