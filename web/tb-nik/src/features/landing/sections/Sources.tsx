@@ -1,18 +1,17 @@
 // Every value shows where it came from: the synthetic report on the left, "Ask the Case File" on the right. A question is typed;
-// lines then run from the report lines that answer it to the answer area; the answer appears sentence by sentence, each with its
-// source. The sequence runs while the section is in view and repeats. Under reduced motion the finished state is shown.
+// lines then run from the report lines that answer it to the answer area; the whole answer arrives at once, each sentence with
+// its source. The sequence runs while the section is in view and repeats. Under reduced motion the finished state is shown.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useInView, useReducedMotion } from "motion/react";
 import { Eye, MessageSquareText, Quote } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { SOURCES } from "../content";
 import { SectionHead } from "../components/SectionHead";
 import { Reveal } from "../components/Reveal";
 
 const A = SOURCES.ask.answer.length;
-// steps: 0 an empty question; 1 the question is typed; 2 the lines run to the report; 3..2+A the sentences; then a pause.
-const STEPS = 3 + A + 1;
-const dur = (step: number) => (step === 0 ? 1200 : step === 1 ? 2600 : step === 2 ? 1700 : step <= 2 + A ? 1500 : 3800);
+// steps: 0 an empty question; 1 the question is typed; 2 the lines run to the report; 3 the answer, all at once; 4 a pause.
+const STEPS = 5;
+const dur = (step: number) => (step === 0 ? 1000 : step === 1 ? 2200 : step === 2 ? 1200 : step === 3 ? 600 : 4200);
 
 export function Sources() {
   const wrap = useRef<HTMLDivElement>(null);
@@ -25,10 +24,10 @@ export function Sources() {
 
   const typing = step === 1 && !reduce;
   const asked = reduce || step >= 2;
-  const shown = reduce ? A : Math.max(0, Math.min(A, step - 2));
-  const current = reduce ? null : step >= 3 && step <= 2 + A ? step - 3 : null;
+  const answered = reduce || step >= 3;
+  const shown = answered ? A : 0;
   const typed = reduce || step >= 2 ? ask.question : typing ? ask.question.slice(0, chars) : "";
-  const onQuote = (i: number) => (reduce ? false : step === 2 ? ask.answer.some((a) => a.quote === i) : current !== null && ask.answer[current].quote === i);
+  const onQuote = (i: number) => !reduce && step >= 2 && ask.answer.some((a) => a.quote === i);
 
   useEffect(() => {
     if (!inView || reduce) return;
@@ -39,7 +38,7 @@ export function Sources() {
   useEffect(() => {
     if (!typing) { setChars(0); return; }
     const n = ask.question.length;
-    const t = window.setInterval(() => setChars((c) => (c >= n ? c : c + 1)), 34);
+    const t = window.setInterval(() => setChars((c) => (c >= n ? c : c + 1)), 28);
     return () => window.clearInterval(t);
   }, [typing, ask.question.length]);
 
@@ -96,8 +95,8 @@ export function Sources() {
                   stroke="var(--violet)"
                   strokeWidth={1.5}
                   initial={reduce ? false : { pathLength: 0, opacity: 0 }}
-                  animate={{ pathLength: 1, opacity: current === null ? 0.5 : current === i ? 1 : 0.3 }}
-                  transition={{ pathLength: { duration: 1.1, delay: i * 0.18, ease: [0.22, 1, 0.36, 1] }, opacity: { duration: 0.4 } }}
+                  animate={{ pathLength: 1, opacity: answered ? 0.9 : 0.5 }}
+                  transition={{ pathLength: { duration: 0.8, delay: i * 0.12, ease: [0.22, 1, 0.36, 1] }, opacity: { duration: 0.4 } }}
                 />
               )) : null}
             </svg>
@@ -124,12 +123,14 @@ export function Sources() {
                       </p>
                     ) : null}
                     {ask.answer.map((s, i) => (
-                      <div key={i} data-ans={i} className={cn("flex items-start gap-3 rounded-xl px-3 py-2 transition-colors", current === i && "bg-[var(--l-surface-2)]")}>
+                      <div key={i} data-ans={i} className="flex items-start gap-3 rounded-xl px-3 py-2">
                         <span className="l-faint mt-[3px] grid size-5 shrink-0 place-items-center rounded-full bg-[var(--l-surface-2)] text-[11px] font-semibold tabular-nums">{i + 1}</span>
                         {shown > i ? (
                           <>
-                            <motion.span className="min-w-0 flex-1 text-[15px]" initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}>{s.text}</motion.span>
-                            {s.review ? <span className="l-chip l-chip-review shrink-0"><Eye className="size-3" aria-hidden />{ask.labels.review}</span> : <span className="l-chip l-chip-ok shrink-0"><Quote className="size-3" aria-hidden />{ask.labels.source}</span>}
+                            <motion.span className="min-w-0 flex-1 text-[15px]" initial={reduce ? false : { opacity: 0, y: 8, filter: "blur(4px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} transition={{ duration: 0.4, delay: i * 0.07, ease: [0.22, 1, 0.36, 1] }}>{s.text}</motion.span>
+                            <motion.span className="shrink-0" initial={reduce ? false : { opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3, delay: 0.25 + i * 0.07 }}>
+                              {s.review ? <span className="l-chip l-chip-review"><Eye className="size-3" aria-hidden />{ask.labels.review}</span> : <span className="l-chip l-chip-ok"><Quote className="size-3" aria-hidden />{ask.labels.source}</span>}
+                            </motion.span>
                           </>
                         ) : (
                           <span className="flex-1 space-y-1.5 py-1"><span className="l-skeleton block h-3 w-11/12" /><span className="l-skeleton block h-3 w-7/12" /></span>
@@ -137,7 +138,7 @@ export function Sources() {
                       </div>
                     ))}
                     <AnimatePresence>
-                      {shown >= A ? <motion.p key="note" initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="l-faint mt-2 px-3 text-[12.5px]">{ask.note}</motion.p> : null}
+                      {shown >= A ? <motion.p key="note" initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ delay: 0.4 }} className="l-faint mt-2 px-3 text-[12.5px]">{ask.note}</motion.p> : null}
                     </AnimatePresence>
                   </motion.div>
                 ) : null}

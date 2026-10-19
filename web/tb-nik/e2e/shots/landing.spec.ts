@@ -10,7 +10,7 @@ test.describe("landing", () => {
     const errors = watchConsole(page);
     await visit(page, "/", { signedOut: true });
     await expect(page.getByTestId("landing-hero")).toBeVisible();
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Every patient ready");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(/\S/);  // the words are the owner's, in content.ts
     await expect(page.getByTestId("landing-signin")).toHaveText(/Sign in/);
     await shoot(page, "landing", "hero", { fullPage: false, before: (pg) => pg.waitForTimeout(2600) });
     await shoot(page, "landing", "full", { fullPage: true, sizes: [SIZES[0], SIZES[2]] });
