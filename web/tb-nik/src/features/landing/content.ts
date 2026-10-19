@@ -223,13 +223,14 @@ export const ABOUT = {
 
 export interface Member { name: string; photo: string | null }
 export const TEAM = {
-  // The six, in the owner's order (20 Oct). Photographs in public/brand/team (originals in web/tb-nik/brand-src/team).
+  // The six, in alphabetical order of the name as shown (the owner, 20 Oct). Photographs in public/brand/team (originals in
+  // web/tb-nik/brand-src/team).
   members: [
-    { name: "Phaneendra K Yalavarthy", photo: "/static/tb-nik/brand/team/phaneendra-k-yalavarthy.jpg" },
-    { name: "Nikhileswara Rao Sulake", photo: "/static/tb-nik/brand/team/nikhileswara-rao-sulake.jpg" },
-    { name: "Sai Manikanta Eswar Machara", photo: "/static/tb-nik/brand/team/sai-manikanta-eswar-machara.jpg" },
     { name: "Bharath Tangella", photo: "/static/tb-nik/brand/team/bharath-tangella.jpg" },
     { name: "Minmini Selvam", photo: "/static/tb-nik/brand/team/minmini-selvam.jpg" },
+    { name: "Nikhileswara Rao Sulake", photo: "/static/tb-nik/brand/team/nikhileswara-rao-sulake.jpg" },
+    { name: "Phaneendra K Yalavarthy", photo: "/static/tb-nik/brand/team/phaneendra-k-yalavarthy.jpg" },
+    { name: "Sai Manikanta Eswar Machara", photo: "/static/tb-nik/brand/team/sai-manikanta-eswar-machara.jpg" },
     { name: "Usha Adiga", photo: "/static/tb-nik/brand/team/usha-adiga.jpg" },
   ] satisfies Member[],
 };
