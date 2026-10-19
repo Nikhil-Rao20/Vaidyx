@@ -115,7 +115,7 @@ export function ScansForDoctors() {
           <text x={Number(x) + 11} y={233.5} fontSize={8.5} fontWeight={600} fill={FG}>{t}</text>
         </motion.g>
       ))}
-      <text x={200} y={254} textAnchor="middle" fontSize={9} fill={FG3}>Presented from the Case File · viewed by doctors · no model reads the images</text>
+      <text x={200} y={254} textAnchor="middle" fontSize={9} fill={FG3}>Slide, report and scan from one Case File, on one screen</text>
     </Frame>
   );
 }

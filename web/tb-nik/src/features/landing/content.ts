@@ -187,7 +187,7 @@ export const SAFETY = {
   principles: [
     { key: "people", title: "People decide", text: "A summary is a draft until a doctor has reviewed it." },
     { key: "sources", title: "Sources first", text: "Every value and every statement comes with a quote from the record." },
-    { key: "scans", title: "Shown in the meeting", text: "In the meeting, Vaidyx presents the slides, the reports and the scans from the Case File. Doctors view them. No model reads the images." },
+    { key: "scans", title: "One screen in the meeting", text: "The slide, the report and the scan are presented from the Case File on the room display, so the whole Board looks at the same material. Doctors read the images; no model does." },
     { key: "onsite", title: "Inside the hospital", text: "Runs on the hospital's own server. Patient records stay on site." },
     { key: "india", title: "India first", text: "NCG, ICMR and PM-JAY come before international sources. Indian IDs, names, units and dates." },
     { key: "audit", title: "Everything is logged", text: "Every AI step and every user action is recorded, with who and when." },
