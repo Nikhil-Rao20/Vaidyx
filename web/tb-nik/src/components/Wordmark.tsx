@@ -11,8 +11,8 @@ export const WORDMARK_DARK_SRC = `${BRAND}vaidyx-wordmark-dark.svg`;
 export const WORDMARK_WHITE_SRC = `${BRAND}vaidyx-wordmark-white.svg`;
 
 /** The icon alone (the "V" mark). `tone` white is for dark or brand-coloured backgrounds. */
-export function VaidyxIcon({ className, tone = "colour" }: { className?: string; tone?: "colour" | "white" }) {
-  return <img src={tone === "white" ? ICON_WHITE_SRC : ICON_SRC} alt="" aria-hidden className={cn("inline-block select-none", className)} draggable={false} />;
+export function VaidyxIcon({ className, tone = "colour", anchor }: { className?: string; tone?: "colour" | "white"; anchor?: boolean }) {
+  return <img src={tone === "white" ? ICON_WHITE_SRC : ICON_SRC} alt="" aria-hidden className={cn("inline-block select-none", className)} draggable={false} data-brand-anchor={anchor ? "" : undefined} />;
 }
 
 /** The wordmark alone, following the theme (or forced white on a brand surface). */
@@ -26,14 +26,15 @@ export function VaidyxWordmark({ className, tone = "theme" }: { className?: stri
   );
 }
 
-/** Icon + wordmark + "Tumour Board". A link to the Case Files unless `to` is null. `size` sm is the phone top bar. */
+/** Icon + wordmark + "Tumour Board". A link to the Case Files unless `to` is null. `size` sm is the phone top bar. The icon carries
+ * data-brand-anchor: the splash after a sign-in flies the mark to it. */
 export function Wordmark({ to = "/cases", size = "md", className, product = true }: { to?: string | null; size?: "sm" | "md" | "lg"; className?: string; product?: boolean }) {
   const icon = size === "lg" ? "h-9" : size === "sm" ? "h-6" : "h-7";
   const word = size === "lg" ? "h-7" : size === "sm" ? "h-[18px]" : "h-[21px]";
   const label = size === "lg" ? "text-base" : size === "sm" ? "text-xs" : "text-[13px]";
   const inner = (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
-      <VaidyxIcon className={icon} />
+      <VaidyxIcon className={icon} anchor />
       <VaidyxWordmark className={word} />
       {product ? (
         <span className={cn("hidden items-center gap-2.5 sm:inline-flex", label)}>

@@ -1,65 +1,124 @@
-// The Vaidyx splash after a sign-in (the main app shows the same sequence): the icon pops in with a glow, the wordmark rises,
-// the product name spreads. Shown once per sign-in (sessionStorage flag set by the sign-in page), 1.6 s, skippable, never
-// on a reload. Reduced motion: a short fade only.
-import { useEffect, useState } from "react";
+// The cinematic entrance after a sign-in: the official Vaidyx reveal (brand/animation.html) plays on a clean field, the product
+// name settles under it, then the mark glides into its place in the top bar as the field dissolves into the app. About 5.5 s;
+// a click, a tap or Escape skips it. Shown once per sign-in (sessionStorage flag set by the sign-in page), never on a reload.
+// Reduced motion: the finished lockup for a moment, then a fade.
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { VaidyxIcon, VaidyxWordmark } from "@/components/Wordmark";
+import { BrandLockup, BrandMark, BrandWord } from "@/components/BrandReveal";
 
 const FLAG = "tbnik.splash";
+const SPEED = 1.35;
+const T_TAGLINE = 3200;   // "Tumour Board" settles under the wordmark
+const T_MORPH = 5000;     // the mark glides to the top bar
+const T_MORPH_LEN = 800;
 
 export function requestSplash() {
   try { sessionStorage.setItem(FLAG, "1"); } catch { /* no storage */ }
 }
 
-function takeFlag(): boolean {
-  try {
-    const v = sessionStorage.getItem(FLAG) === "1";
-    if (v) sessionStorage.removeItem(FLAG);
-    return v;
-  } catch { return false; }
+function hasFlag(): boolean {
+  try { return sessionStorage.getItem(FLAG) === "1"; } catch { return false; }
+}
+function clearFlag() {
+  try { sessionStorage.removeItem(FLAG); } catch { /* no storage */ }
 }
 
+/* Where the icon sits inside the reveal's view box (the paths do not fill it): the centre, as fractions of the SVG box. */
+const ICON_CX = 0.5052;
+const ICON_CY = 0.5278;
+const ICON_H = 454.462 / 485;
+
+interface Morph { x: number; y: number; scale: number }
+
 export function Splash() {
-  const [show, setShow] = useState(() => takeFlag());
+  // Read only: a first render that suspends (a lazy page chunk) is thrown away, so the flag is cleared after the mount instead.
+  const [show, setShow] = useState(() => hasFlag());
+  const [tagline, setTagline] = useState(false);
+  const [morph, setMorph] = useState<Morph | null>(null);
   const reduce = useReducedMotion();
+  const markRef = useRef<HTMLDivElement>(null);
+
+  const finish = useCallback(() => setShow(false), []);
+
+  // The mark's flight to the top bar's icon ([data-brand-anchor]); a plain fade when there is none.
+  const startMorph = useCallback(() => {
+    const anchor = document.querySelector<HTMLElement>("[data-brand-anchor]");
+    const svg = markRef.current?.querySelector("svg");
+    if (!anchor || !svg) { setShow(false); return; }
+    const a = anchor.getBoundingClientRect();
+    const s = svg.getBoundingClientRect();
+    if (!a.width || !s.width) { setShow(false); return; }
+    const iconH = s.height * ICON_H;
+    setMorph({ x: a.left + a.width / 2 - (s.left + s.width * ICON_CX), y: a.top + a.height / 2 - (s.top + s.height * ICON_CY), scale: a.height / iconH });
+    window.setTimeout(() => setShow(false), T_MORPH_LEN);
+  }, []);
+
+  useEffect(() => { if (show) clearFlag(); }, [show]);
+
   useEffect(() => {
     if (!show) return;
-    const t = window.setTimeout(() => setShow(false), reduce ? 500 : 1700);
-    return () => window.clearTimeout(t);
-  }, [show, reduce]);
+    if (reduce) {
+      const t = window.setTimeout(finish, 900);
+      return () => window.clearTimeout(t);
+    }
+    const t1 = window.setTimeout(() => setTagline(true), T_TAGLINE);
+    const t2 = window.setTimeout(startMorph, T_MORPH);
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") finish(); };
+    window.addEventListener("keydown", onKey);
+    return () => { window.clearTimeout(t1); window.clearTimeout(t2); window.removeEventListener("keydown", onKey); };
+  }, [show, reduce, finish, startMorph]);
+
   return (
     <AnimatePresence>
       {show ? (
         <motion.div
           key="splash"
           role="presentation"
-          className="fixed inset-0 z-[100] grid place-items-center bg-background"
+          data-testid="splash"
+          data-phase={morph ? "morph" : tagline ? "tagline" : "reveal"}
+          className="fixed inset-0 z-[100] overflow-hidden bg-background"
           initial={{ opacity: 1 }}
-          exit={{ opacity: 0, transition: { duration: 0.35 } }}
-          onClick={() => setShow(false)}
+          animate={{ opacity: morph ? 0 : 1, transition: { duration: morph ? 0.55 : 0, delay: morph ? 0.25 : 0, ease: "easeInOut" } }}
+          exit={{ opacity: 0, transition: { duration: 0.3 } }}
+          onClick={finish}
         >
-          <div className="flex flex-col items-center gap-5">
-            <motion.div
-              className="brand-glow"
-              initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.5, rotate: -10 }}
-              animate={reduce ? { opacity: 1 } : { opacity: 1, scale: 1, rotate: 0 }}
-              transition={{ duration: 0.8, ease: [0.34, 1.56, 0.64, 1] }}
-            >
-              <VaidyxIcon className="h-[72px]" />
-            </motion.div>
-            <motion.div initial={{ opacity: 0, y: reduce ? 0 : 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.45, ease: "easeOut" }}>
-              <VaidyxWordmark className="h-14" />
-            </motion.div>
-            <motion.p
-              className="text-[13px] font-medium uppercase text-brand"
-              initial={{ opacity: 0, letterSpacing: "0.5em" }}
-              animate={{ opacity: 0.75, letterSpacing: "0.28em" }}
-              transition={{ duration: 0.8, delay: 0.9, ease: "easeOut" }}
-            >
-              Tumour Board
-            </motion.p>
+          {/* a calm field: one slow teal bloom behind the mark */}
+          {!reduce ? (
+            <motion.span
+              aria-hidden
+              className="pointer-events-none absolute left-1/2 top-1/2 size-[70vmin] -translate-x-1/2 -translate-y-1/2 rounded-full"
+              style={{ background: "radial-gradient(circle, rgba(1, 203, 211, 0.18) 0%, rgba(1, 203, 211, 0) 65%)" }}
+              initial={{ opacity: 0, scale: 0.6 }}
+              animate={{ opacity: morph ? 0 : 1, scale: morph ? 1.4 : 1 }}
+              transition={{ duration: morph ? 0.6 : 2.2, delay: morph ? 0 : 0.8, ease: [0.22, 1, 0.36, 1] }}
+            />
+          ) : null}
+          <div className="absolute inset-0 grid place-items-center">
+            <BrandLockup play={!reduce} still={!!reduce} speed={SPEED}>
+              <motion.div
+                ref={markRef}
+                style={{ transformOrigin: `${ICON_CX * 100}% ${ICON_CY * 100}%` }}
+                animate={morph ? { x: morph.x, y: morph.y, scale: morph.scale } : { x: 0, y: 0, scale: 1 }}
+                transition={{ duration: T_MORPH_LEN / 1000, ease: [0.65, 0, 0.35, 1] }}
+              >
+                <BrandMark style={{ "--br-mark-w": "clamp(150px, 26vmin, 240px)" } as React.CSSProperties} />
+              </motion.div>
+              <motion.div animate={{ opacity: morph ? 0 : 1, y: morph ? 10 : 0 }} transition={{ duration: 0.35 }}>
+                <BrandWord style={{ "--br-word-h": "clamp(38px, 6.5vmin, 60px)" } as React.CSSProperties} />
+              </motion.div>
+              <motion.p
+                className="text-[13px] font-medium uppercase text-brand"
+                initial={{ opacity: 0, letterSpacing: "0.55em", y: 6 }}
+                animate={tagline && !morph ? { opacity: 0.8, letterSpacing: "0.3em", y: 0 } : reduce ? { opacity: 0.8, letterSpacing: "0.3em", y: 0 } : { opacity: 0, letterSpacing: "0.55em", y: 6 }}
+                transition={{ duration: 0.9, ease: "easeOut" }}
+              >
+                Tumour Board
+              </motion.p>
+            </BrandLockup>
           </div>
-          <span className="absolute bottom-6 right-6 text-xs text-muted-foreground">Click to skip</span>
+          <motion.span className="absolute bottom-6 right-6 text-xs text-muted-foreground" initial={{ opacity: 0 }} animate={{ opacity: morph ? 0 : 1 }} transition={{ delay: morph ? 0 : 1.2, duration: 0.5 }}>
+            Click to skip
+          </motion.span>
         </motion.div>
       ) : null}
     </AnimatePresence>

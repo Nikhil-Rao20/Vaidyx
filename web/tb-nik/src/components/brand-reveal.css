@@ -1,0 +1,41 @@
+/* The Vaidyx cinematic reveal (brand/animation.html, v5), as CSS classes: the V stroke sweeps in from the left, the two X slants
+   from the right, the icon locks with a small pulse, a light sweeps across it, the wordmark wipes in, a softer light crosses it.
+   Timing scales with --br-ts (1 = the brand file's 6 s; 1.35 = the sign-in splash). Nothing plays until .br-run is set. */
+.br { --br-ts: 1; --br-ease: cubic-bezier(0.22, 1, 0.36, 1); --br-ease-back: cubic-bezier(0.34, 1.56, 0.64, 1); --br-letter: #000; --br-x-from: #009eb1; --br-x-to: #000; --br-edge: #5fdcd6; --br-shadow: rgba(15, 30, 50, 0.14); }
+[data-theme="dark"] .br, .br.br-on-dark { --br-letter: #e0f0f8; --br-x-from: #5fdcd6; --br-x-to: #009eb1; --br-shadow: rgba(1, 203, 211, 0.22); }
+.br-lockup { display: flex; flex-direction: column; align-items: center; gap: 24px; will-change: transform; }
+.br-run .br-lockup { animation: br-settle calc(2s / var(--br-ts)) var(--br-ease) calc(0.2s / var(--br-ts)) both; }
+.br-mark { position: relative; width: var(--br-mark-w, 240px); filter: drop-shadow(0 10px 22px rgba(15, 30, 50, 0)); }
+.br-mark svg { width: 100%; height: auto; display: block; overflow: visible; }
+.br-v, .br-x1, .br-x2, .br-icon { transform-box: fill-box; transform-origin: center; }
+.br-v, .br-x1, .br-x2, .br-shine, .br-word-shine { opacity: 0; }
+.br-run .br-v { animation: br-v-in calc(1.5s / var(--br-ts)) var(--br-ease) calc(0.3s / var(--br-ts)) both; }
+.br-run .br-x2 { animation: br-x2-in calc(1.5s / var(--br-ts)) var(--br-ease) calc(0.55s / var(--br-ts)) both; }
+.br-run .br-x1 { animation: br-x1-in calc(1.5s / var(--br-ts)) var(--br-ease) calc(0.8s / var(--br-ts)) both; }
+.br-run .br-icon { animation: br-lock calc(0.45s / var(--br-ts)) var(--br-ease-back) calc(2.3s / var(--br-ts)) both; }
+.br-run .br-shine { animation: br-shine calc(1.4s / var(--br-ts)) var(--br-ease) calc(2.6s / var(--br-ts)) both; }
+.br-run .br-mark { animation: br-shadow calc(1.2s / var(--br-ts)) var(--br-ease) calc(3s / var(--br-ts)) both; }
+.br-word { position: relative; display: inline-block; }
+.br-word svg { height: var(--br-word-h, 60px); width: auto; display: block; overflow: hidden; }
+.br-word-group { opacity: 0; clip-path: inset(0 100% 0 0); }
+.br-run .br-word-group { animation: br-word-in calc(0.85s / var(--br-ts)) var(--br-ease) calc(3.4s / var(--br-ts)) both; }
+.br-run .br-word-shine { animation: br-word-shine calc(1.6s / var(--br-ts)) var(--br-ease) calc(4.4s / var(--br-ts)) both; }
+.br-letter { fill: var(--br-letter); }
+.br-still .br-v, .br-still .br-x1, .br-still .br-x2 { opacity: 1; }
+.br-still .br-word-group { opacity: 1; clip-path: none; }
+
+@keyframes br-v-in { 0% { opacity: 0; transform: translateX(-150px) translateY(30px) rotate(-15deg) scale(0.78); filter: blur(5px); } 60% { opacity: 1; filter: blur(0); } 100% { opacity: 1; transform: none; filter: blur(0); } }
+@keyframes br-x2-in { 0% { opacity: 0; transform: translateX(120px) translateY(-130px) rotate(12deg) scale(0.78); filter: blur(5px); } 60% { opacity: 1; filter: blur(0); } 100% { opacity: 1; transform: none; filter: blur(0); } }
+@keyframes br-x1-in { 0% { opacity: 0; transform: translateX(130px) translateY(80px) rotate(18deg) scale(0.78); filter: blur(5px); } 60% { opacity: 1; filter: blur(0); } 100% { opacity: 1; transform: none; filter: blur(0); } }
+@keyframes br-lock { 0% { transform: scale(1); } 50% { transform: scale(1.06); } 100% { transform: scale(1); } }
+@keyframes br-shine { 0% { transform: translateX(50px); opacity: 0; } 18% { opacity: 0.85; } 82% { opacity: 0.85; } 100% { transform: translateX(1000px); opacity: 0; } }
+@keyframes br-word-in { 0% { opacity: 0; clip-path: inset(0 100% 0 0); transform: translateX(-8px); } 100% { opacity: 1; clip-path: inset(0 0 0 0); transform: translateX(0); } }
+@keyframes br-word-shine { 0% { transform: translateX(-200px); opacity: 0; } 15% { opacity: 0.7; } 85% { opacity: 0.7; } 100% { transform: translateX(1100px); opacity: 0; } }
+@keyframes br-settle { 0% { transform: translateY(16px); } 100% { transform: translateY(0); } }
+@keyframes br-shadow { 0% { filter: drop-shadow(0 4px 10px rgba(15, 30, 50, 0)); } 100% { filter: drop-shadow(0 12px 24px var(--br-shadow)); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .br-v, .br-x1, .br-x2 { opacity: 1; transform: none; animation: none !important; }
+  .br-word-group { opacity: 1; clip-path: none; animation: none !important; }
+  .br-shine, .br-word-shine { display: none; }
+}
