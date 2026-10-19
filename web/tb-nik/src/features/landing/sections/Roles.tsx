@@ -32,7 +32,7 @@ export function Roles() {
   const role = ROLES.cards[active];
   const pos = (i: number) => { const a = (-90 + (360 / n) * i) * (Math.PI / 180); return { x: 50 + R * Math.cos(a), y: 50 + R * Math.sin(a) }; };
   return (
-    <section id="roles" ref={ref} className="l-section py-24 sm:py-32">
+    <section id="roles" ref={ref} className="l-section-2 py-24 sm:py-32">
       <div className="mx-auto max-w-[1280px] px-5 sm:px-8">
         <SectionHead eyebrow={ROLES.eyebrow} title={[ROLES.title[0], ROLES.title[1]]} lead={ROLES.lead} />
         <div className="mt-14 grid items-center gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16">

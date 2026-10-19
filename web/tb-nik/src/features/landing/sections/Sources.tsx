@@ -69,7 +69,7 @@ export function Sources() {
   }, [ask.answer, shown, asked]);
 
   return (
-    <section id="sources" className="l-section-2 relative overflow-hidden py-24 sm:py-32">
+    <section id="sources" className="l-section relative overflow-hidden py-24 sm:py-32">
       <span className="l-orb l-orb-teal" style={{ width: 700, height: 700, right: "-14%", top: "-20%", opacity: 0.35 }} aria-hidden />
       <div className="relative mx-auto max-w-[1280px] px-5 sm:px-8">
         <SectionHead eyebrow={SOURCES.eyebrow} title={[SOURCES.title[0], SOURCES.title[1]]} lead={SOURCES.lead} />

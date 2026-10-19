@@ -9,7 +9,7 @@ import { Magnetic } from "../components/Magnetic";
 export function Cta() {
   const { me } = useSession();
   return (
-    <section className="l-section relative overflow-hidden py-28 sm:py-36">
+    <section className="l-section-2 relative overflow-hidden py-28 sm:py-36">
       <span className="l-orb l-orb-teal" style={{ width: 900, height: 900, left: "50%", top: "50%", transform: "translate(-50%,-50%)", opacity: 0.5 }} aria-hidden />
       <span className="l-grid-lines" aria-hidden />
       <div className="relative mx-auto max-w-[1280px] px-5 text-center sm:px-8">

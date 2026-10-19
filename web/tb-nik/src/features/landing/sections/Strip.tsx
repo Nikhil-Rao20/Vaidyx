@@ -4,7 +4,7 @@ import { STRIP } from "../content";
 export function Strip() {
   const items = [...STRIP, ...STRIP, ...STRIP, ...STRIP];
   return (
-    <div className="l-section-2 relative border-y border-[var(--l-line)] py-5" aria-label="What Vaidyx stands on">
+    <div className="l-section-2 l-solid relative border-y border-[var(--l-line)] py-5" aria-label="What Vaidyx stands on">
       <div className="l-marquee">
         <div className="l-marquee-track">
           {items.map((t, i) => (

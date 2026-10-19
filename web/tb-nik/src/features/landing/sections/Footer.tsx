@@ -7,7 +7,7 @@ const TANUH_LOGO = "/static/tb-nik/brand/tanuh.png";
 
 export function Footer() {
   return (
-    <footer className="l-section-2 relative overflow-hidden border-t border-[var(--l-line)]">
+    <footer className="l-section-2 l-solid relative overflow-hidden border-t border-[var(--l-line)]">
       <div className="relative mx-auto max-w-[1280px] px-5 pb-10 pt-16 sm:px-8">
         <div className="grid gap-10 md:grid-cols-[1.4fr_repeat(4,minmax(0,1fr))]">
           <div>

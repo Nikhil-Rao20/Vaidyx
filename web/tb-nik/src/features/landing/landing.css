@@ -90,7 +90,10 @@
 
 /* Surfaces */
 .l-section { background: var(--l-bg); }
-.l-section-2 { background: var(--l-bg-2); }
+/* The alternate section melts into its neighbours instead of starting with an edge: it fades in from the page colour over the
+   first 10 rem and fades out over the last 10 rem. Sections strictly alternate on the product page so no two of them touch. */
+.l-section-2 { background: linear-gradient(180deg, var(--l-bg) 0, var(--l-bg-2) 10rem, var(--l-bg-2) calc(100% - 10rem), var(--l-bg) 100%); }
+.l-section-2.l-solid { background: var(--l-bg-2); }
 .l-card { background: var(--l-surface); border: 1px solid var(--l-line); border-radius: 20px; box-shadow: var(--l-shadow); }
 .l-box { background: var(--l-surface-2); border: 1px solid var(--l-line); border-radius: 14px; }
 .l-icon { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 0.75rem; background: var(--l-accent-bg); color: var(--l-accent); }
