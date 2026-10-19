@@ -83,15 +83,15 @@ export function ScansForDoctors() {
       <motion.g {...enter(1.1)}>
         <rect x={244} y={58} width={92} height={92} rx={6} fill="#000" />
         <image href={CT} x={244} y={58} width={92} height={92} preserveAspectRatio="xMidYMid slice" clipPath="url(#l-art-ct)" />
-        <text x={250} y={68} fontSize={6.5} fill="rgba(255,255,255,0.75)">CT chest · PACS</text>
+        <text x={332} y={68} textAnchor="end" fontSize={6.5} fill="rgba(255,255,255,0.8)">CT chest · PACS</text>
       </motion.g>
       {/* the report, in the middle */}
       <motion.g {...enter(0.7)}>
         <rect x={176} y={64} width={92} height={118} rx={6} fill="#fff" stroke={L2} />
         <rect x={196} y={70} width={22} height={10} rx={3} fill="#b2362b" /><text x={207} y={77.5} textAnchor="middle" fontSize={6.5} fontWeight={700} fill="#fff">PDF</text>
         <text x={222} y={78} fontSize={6.5} fontWeight={600} fill="#121a24">Report</text>
-        <text x={196} y={92} fontSize={6.5} fontWeight={600} fill="#121a24">Histopathology</text>
-        {[100, 108, 116, 124, 132, 140, 148, 156, 164, 172].map((y, i) => <rect key={y} x={196} y={y} width={[64, 58, 66, 52, 62, 48, 60, 54, 44, 50][i]} height={3.5} rx={1.75} fill={i === 3 ? "#01cbd3" : "#e2e8ef"} />)}
+        <text x={204} y={92} fontSize={6.5} fontWeight={600} fill="#121a24">Histopathology</text>
+        {[100, 108, 116, 124, 132, 140, 148, 156, 164, 172].map((y, i) => <rect key={y} x={204} y={y} width={[64, 58, 66, 52, 62, 48, 60, 54, 44, 50][i]} height={3.5} rx={1.75} fill={i === 3 ? "#01cbd3" : "#e2e8ef"} />)}
       </motion.g>
       {/* the slide, in front on the left */}
       <motion.g {...enter(0.25)}>
@@ -101,7 +101,7 @@ export function ScansForDoctors() {
         <text x={70} y={79} fontSize={7} fontWeight={600} fill="#121a24">Lakshmi R., 58 F · Breast cancer</text>
         {[88, 96, 104, 112].map((y, i) => <g key={y}><circle cx={73} cy={y - 1.5} r={1.4} fill="#01b4c2" /><rect x={77} y={y - 3.5} width={[52, 44, 56, 38][i]} height={3.5} rx={1.75} fill="#e2e8ef" /></g>)}
         <rect x={134} y={84} width={52} height={24} rx={3} fill="#f7f9fc" stroke="#e2e8ef" />
-        <text x={138} y={92} fontSize={4.6} fontWeight={600} fill="#0a6a86" letterSpacing={0.4}>QUESTION FOR THE BOARD</text>
+        <text x={138} y={92} fontSize={4} fontWeight={600} fill="#0a6a86" letterSpacing={0.2}>QUESTION FOR THE BOARD</text>
         <rect x={138} y={96} width={42} height={3} rx={1.5} fill="#e2e8ef" /><rect x={138} y={101} width={30} height={3} rx={1.5} fill="#e2e8ef" />
         {[["cT3", 134], ["cN1", 152], ["cM0", 170]].map(([t, x]) => <g key={t}><rect x={Number(x)} y={112} width={16} height={12} rx={2} fill="#fff" stroke="#e2e8ef" /><text x={Number(x) + 8} y={120.5} textAnchor="middle" fontSize={6} fontWeight={600} fill="#121a24">{t}</text></g>)}
         <text x={70} y={133} fontSize={5} fill="#5f6b78">Every value verified against its source</text>
