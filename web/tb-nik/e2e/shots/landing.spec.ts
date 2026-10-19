@@ -10,10 +10,10 @@ test.describe("landing", () => {
     const errors = watchConsole(page);
     await visit(page, "/", { signedOut: true });
     await expect(page.getByTestId("landing-hero")).toBeVisible();
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Tumour Board preparation");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Every patient ready");
     await expect(page.getByTestId("landing-signin")).toHaveText(/Sign in/);
-    await shoot(page, "landing", "hero", { fullPage: false, themes: ["light"], before: (pg) => pg.waitForTimeout(2600) });
-    await shoot(page, "landing", "full", { fullPage: true, sizes: [SIZES[0], SIZES[2]], themes: ["light"] });
+    await shoot(page, "landing", "hero", { fullPage: false, before: (pg) => pg.waitForTimeout(2600) });
+    await shoot(page, "landing", "full", { fullPage: true, sizes: [SIZES[0], SIZES[2]] });
     await page.setViewportSize(SIZES[2]);
     await page.getByRole("button", { name: "Open the menu" }).click();
     await expect(page.getByRole("navigation", { name: "Pages" }).last()).toBeVisible();
@@ -23,12 +23,14 @@ test.describe("landing", () => {
     for (const id of ["how", "sources", "roles", "safety"]) await expect(page.locator(`#${id}`)).toHaveCount(1);
     await expect(page.getByTestId("slide-case").first()).toBeAttached();
     await expect(page.getByTestId("ask-demo")).toBeAttached();
+    await expect(page.getByTestId("roles-table")).toBeAttached();
+    await expect(page.getByTestId("safety-art")).toBeAttached();
     expect(errors, errors.join("\n")).toEqual([]);
   });
 
   test("about, docs and contact", async ({ page }) => {
     await visit(page, "/about", { signedOut: true });
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Developed with the clinicians");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Meet");
     for (const id of ["team", "tanuh"]) await expect(page.locator(`#${id}`)).toHaveCount(1);
     await shoot(page, "site", "about", { fullPage: true, sizes: [SIZES[0], SIZES[2]], themes: ["light"] });
     await visit(page, "/docs", { signedOut: true });
@@ -37,6 +39,13 @@ test.describe("landing", () => {
     await visit(page, "/contact", { signedOut: true });
     await expect(page.getByTestId("contact-email")).toHaveAttribute("href", /mailto:.*subject=/);
     await shoot(page, "site", "contact", { fullPage: true, sizes: [SIZES[0], SIZES[2]], themes: ["light"] });
+    // the enquiry form posts to the site's own endpoint (answered by the mock) and thanks the visitor
+    await page.getByLabel("Your name").fill("Dr Test Person");
+    await page.getByLabel("Your email").fill("test.person@example.org");
+    await page.getByLabel("Hospital or institution").fill("Example Hospital");
+    await page.getByLabel("Message").fill("We would like to try Vaidyx for our breast Tumour Board.");
+    await page.getByRole("button", { name: "Send enquiry" }).click();
+    await expect(page.getByTestId("contact-done")).toBeVisible();
   });
 
   test("signed in", async ({ page }) => {

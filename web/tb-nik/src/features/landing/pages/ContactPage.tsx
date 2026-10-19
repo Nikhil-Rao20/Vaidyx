@@ -1,67 +1,77 @@
-// Contact: the address with a fixed subject line, and an enquiry form that composes the email in the visitor's own mail
-// application. Nothing is sent from the page.
+// Contact: the enquiry form. It is sent to the Vaidyx team through the site's own endpoint (/tb-nik/api/enquiry); when the
+// server cannot send it, the visitor is given the direct address instead.
 import { useState, type FormEvent } from "react";
-import { ArrowUpRight, Check, Copy, Mail } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { ArrowRight, Check, Mail } from "lucide-react";
 import { SiteFrame } from "../components/SiteFrame";
 import { PageHead } from "../components/PageHead";
 import { Reveal } from "../components/Reveal";
-import { CONTACT } from "../content";
+import { CONTACT, SITE } from "../content";
 
-function mailto(body?: string): string {
-  const q = new URLSearchParams();
-  q.set("subject", CONTACT.subject);
-  if (body) q.set("body", body);
-  return `mailto:${CONTACT.email}?${q.toString().replace(/\+/g, "%20")}`;
+type State = "idle" | "sending" | "sent" | "received" | "failed" | "invalid";
+
+function mailto(): string {
+  return `mailto:${SITE.email}?subject=${encodeURIComponent(CONTACT.subject)}`;
 }
 
 export default function ContactPage() {
-  const [copied, setCopied] = useState(false);
-  const [f, setF] = useState({ name: "", hospital: "", role: "", message: "" });
-  const Place = CONTACT.place.icon;
-  const copy = async () => {
-    try { await navigator.clipboard.writeText(CONTACT.email); setCopied(true); window.setTimeout(() => setCopied(false), 1800); } catch { /* no clipboard */ }
-  };
-  const submit = (e: FormEvent) => {
+  const [f, setF] = useState({ name: "", email: "", hospital: "", message: "", website: "" });
+  const [state, setState] = useState<State>("idle");
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value });
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const body = [`${CONTACT.form.name}: ${f.name}`, `${CONTACT.form.hospital}: ${f.hospital}`, `${CONTACT.form.role}: ${f.role}`, "", f.message].join("\n");
-    window.location.href = mailto(body);
+    if (f.name.trim().length < 2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim()) || f.message.trim().length < 10) { setState("invalid"); return; }
+    setState("sending");
+    try {
+      const r = await fetch("/tb-nik/api/enquiry", { method: "POST", headers: { "Content-Type": "application/json", "X-Requested-With": "tb-nik" }, body: JSON.stringify(f) });
+      if (!r.ok) { setState("failed"); return; }
+      const body = (await r.json()) as { ok: boolean; sent: boolean };
+      setState(body.sent ? "sent" : "received");
+    } catch { setState("failed"); }
   };
-  const field = (key: keyof typeof f, label: string, textarea = false) => (
+  const field = (key: keyof typeof f, label: string, type = "text", textarea = false) => (
     <label className="block">
-      <span className="mb-1.5 block text-[13px] font-medium text-[var(--text-2)]">{label}</span>
+      <span className="mb-1.5 block text-[13px] font-medium text-[var(--l-fg-2)]">{label}</span>
       {textarea
-        ? <textarea className="l-input min-h-[8rem]" value={f[key]} onChange={(e) => setF({ ...f, [key]: e.target.value })} />
-        : <input className="l-input" value={f[key]} onChange={(e) => setF({ ...f, [key]: e.target.value })} />}
+        ? <textarea className="l-input min-h-[9rem]" value={f[key]} onChange={set(key)} required />
+        : <input className="l-input" type={type} value={f[key]} onChange={set(key)} required={key !== "hospital"} autoComplete={key === "email" ? "email" : key === "name" ? "name" : "organization"} />}
     </label>
   );
+  const done = state === "sent" || state === "received";
   return (
     <SiteFrame title="Contact the Vaidyx team" testId="contact">
       <PageHead eyebrow={CONTACT.eyebrow} title={[CONTACT.title[0], CONTACT.title[1]]} lead={CONTACT.lead} compact />
-      <section className="l-paper py-20 sm:py-24">
-        <div className="mx-auto grid max-w-[1280px] gap-6 px-5 sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:gap-10">
-          <Reveal className="l-card p-7 sm:p-8">
-            <span className="grid size-11 place-items-center rounded-xl bg-[rgba(1,180,194,0.12)] text-[#0a6a86]"><Mail className="size-5" aria-hidden /></span>
-            <p className="l-eyebrow mt-6 text-[#0a6a86]">{CONTACT.emailTitle}</p>
-            <a href={mailto()} className="mt-2 block break-all text-[1.2rem] font-semibold tracking-[-0.01em] text-[var(--text)] underline decoration-[rgba(10,106,134,0.3)] underline-offset-4 hover:decoration-current" data-testid="contact-email">{CONTACT.email}</a>
-            <p className="l-muted mt-2 text-[14px]">Subject line: <span className="font-medium text-[var(--text)]">{CONTACT.subject}</span></p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <a href={mailto()} className="l-btn l-btn-dark">{CONTACT.write} <ArrowUpRight className="size-4" aria-hidden /></a>
-              <button type="button" className="l-btn l-btn-light" onClick={copy}>{copied ? <Check className="size-4" aria-hidden /> : <Copy className="size-4" aria-hidden />} {copied ? CONTACT.copied : CONTACT.copy}</button>
-            </div>
-            <p className="l-muted mt-8 flex items-center gap-2 text-[14.5px]"><Place className="size-4 text-[#0a6a86]" aria-hidden />{CONTACT.place.text}</p>
+      <section className="l-section py-20 sm:py-24">
+        <div className="mx-auto max-w-[1280px] px-5 sm:px-8">
+          <Reveal className="l-card mx-auto max-w-2xl p-7 sm:p-10">
+            <AnimatePresence mode="wait" initial={false}>
+              {done ? (
+                <motion.div key="done" className="py-6 text-center" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} data-testid="contact-done">
+                  <span className="mx-auto grid size-14 place-items-center rounded-full" style={{ background: "var(--l-ok-bg)", color: "var(--l-ok)" }}><Check className="size-7" strokeWidth={2.5} aria-hidden /></span>
+                  <p className="l-title mt-5 text-[1.5rem]">{state === "sent" ? CONTACT.form.sent : CONTACT.form.received}</p>
+                </motion.div>
+              ) : (
+                <motion.form key="form" className="grid gap-4 sm:grid-cols-2" onSubmit={submit} data-testid="contact-form" initial={false} exit={{ opacity: 0 }}>
+                  {field("name", CONTACT.form.name)}
+                  {field("email", CONTACT.form.email, "email")}
+                  <div className="sm:col-span-2">{field("hospital", CONTACT.form.hospital)}</div>
+                  <div className="sm:col-span-2">{field("message", CONTACT.form.message, "text", true)}</div>
+                  {/* a field people never see; a bot fills it */}
+                  <input type="text" name="website" value={f.website} onChange={set("website")} tabIndex={-1} autoComplete="off" aria-hidden className="absolute -left-[9999px] h-0 w-0 opacity-0" />
+                  <div className="sm:col-span-2">
+                    <button type="submit" className="l-btn l-btn-primary" disabled={state === "sending"}>{state === "sending" ? CONTACT.form.sending : CONTACT.form.submit} <ArrowRight className="size-4" aria-hidden /></button>
+                    {state === "invalid" ? <p className="mt-3 text-[13.5px]" style={{ color: "var(--l-warn)" }}>{CONTACT.form.invalid}</p> : null}
+                    {state === "failed" ? <p className="mt-3 text-[13.5px]" style={{ color: "var(--l-warn)" }}>{CONTACT.form.failed} <a className="underline" href={mailto()}>{SITE.email}</a></p> : null}
+                  </div>
+                </motion.form>
+              )}
+            </AnimatePresence>
           </Reveal>
-          <Reveal delay={0.1} className="l-card p-7 sm:p-8">
-            <h2 className="l-title text-[1.45rem]">{CONTACT.form.title}</h2>
-            <form className="mt-6 grid gap-4 sm:grid-cols-2" onSubmit={submit} data-testid="contact-form">
-              {field("name", CONTACT.form.name)}
-              {field("hospital", CONTACT.form.hospital)}
-              <div className="sm:col-span-2">{field("role", CONTACT.form.role)}</div>
-              <div className="sm:col-span-2">{field("message", CONTACT.form.message, true)}</div>
-              <div className="sm:col-span-2">
-                <button type="submit" className="l-btn l-btn-primary">{CONTACT.form.submit} <ArrowUpRight className="size-4" aria-hidden /></button>
-                <p className="l-muted mt-3 text-[13px]">{CONTACT.form.note}</p>
-              </div>
-            </form>
+          <Reveal delay={0.1} className="mx-auto mt-6 max-w-2xl">
+            <p className="l-muted flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-[15px]">
+              <Mail className="size-4 text-[var(--l-accent)]" aria-hidden />
+              {CONTACT.direct} <a href={mailto()} className="font-semibold text-[var(--l-fg)] underline decoration-[var(--l-line-2)] underline-offset-4 hover:decoration-current" data-testid="contact-email">{SITE.email}</a>
+            </p>
           </Reveal>
         </div>
       </section>

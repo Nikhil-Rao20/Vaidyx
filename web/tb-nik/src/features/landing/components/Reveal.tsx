@@ -1,7 +1,7 @@
 // Scroll reveals for the landing page: a block rises as it enters (once), groups stagger their children, a title arrives word by
 // word. Under reduced motion everything is simply there.
-import { Children, type ReactNode } from "react";
-import { motion, useReducedMotion, type Variants } from "motion/react";
+import { Children, useRef, type ReactNode } from "react";
+import { motion, useInView, useReducedMotion, type Variants } from "motion/react";
 import { cn } from "@/lib/utils";
 
 export const L_EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -38,24 +38,28 @@ export function Stagger({ children, className, amount = 0.2, itemClassName }: { 
   );
 }
 
-/** A line of text that arrives word by word (the hero title). `start` delays the whole line. */
+/** A line of text that arrives word by word (titles). With `inView` it waits until the line itself scrolls into view: the
+ * wrapper is observed, never the clipped, translated words, which would never intersect. `start` delays the whole line. */
 export function Words({ text, className, start = 0, step = 0.055, inView = false }: { text: string; className?: string; start?: number; step?: number; inView?: boolean }) {
   const reduce = useReducedMotion();
+  const ref = useRef<HTMLSpanElement>(null);
+  const seen = useInView(ref, { once: true, amount: 0.4, margin: "0px 0px -6% 0px" });
   const words = text.split(" ");
   if (reduce) return <span className={className}>{text}</span>;
+  const on = !inView || seen;
   return (
-    <span className={cn("inline", className)} aria-label={text}>
+    <span ref={ref} className={cn("inline", className)} aria-label={text}>
       {words.map((w, i) => (
         <span key={i} className="inline-block overflow-hidden align-bottom pb-[0.08em] -mb-[0.08em]" aria-hidden>
           <motion.span
             className="inline-block will-change-transform"
             initial={{ y: "110%", opacity: 0, filter: "blur(6px)" }}
-            {...(inView ? { whileInView: { y: 0, opacity: 1, filter: "blur(0px)" }, viewport: { once: true, amount: 0.6 } } : { animate: { y: 0, opacity: 1, filter: "blur(0px)" } })}
+            animate={on ? { y: 0, opacity: 1, filter: "blur(0px)" } : { y: "110%", opacity: 0, filter: "blur(6px)" }}
             transition={{ duration: 0.9, delay: start + i * step, ease: L_EASE }}
           >
             {w}
           </motion.span>
-          {i < words.length - 1 ? " " : ""}
+          {i < words.length - 1 ? "\u00a0" : ""}
         </span>
       ))}
     </span>

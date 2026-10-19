@@ -84,6 +84,7 @@ export async function prepare(page: Page, { role = "treating", overrides = {}, s
         const a = mockAnswer(method, url.pathname, role);
         return json(route, a.body, a.status);
       }
+      if (url.pathname.startsWith("/tb-nik/api/")) return json(route, { ok: true, sent: true, id: "mock" });
       if (url.pathname.startsWith("/static/")) return serveFile(route, path.join(STATIC, decodeURIComponent(url.pathname.slice("/static/".length))));
       if (url.pathname === "/tb-nik" || url.pathname.startsWith("/tb-nik/")) return serveFile(route, path.join(STATIC, "tb-nik/index.html"));
       return route.fulfill({ status: 404, body: "" });

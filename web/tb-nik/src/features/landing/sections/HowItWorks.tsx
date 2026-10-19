@@ -29,9 +29,9 @@ function PhaseBlock({ phase, index, onActive }: { phase: Phase; index: number; o
     <div ref={ref} className="lg:flex lg:min-h-[86vh] lg:flex-col lg:justify-center lg:py-10" data-phase={phase.key}>
       <Reveal>
         <div className="flex items-center gap-3">
-          <span className="l-eyebrow text-[#0a6a86]">0{index + 1}</span>
-          <span className="h-px w-8 bg-[rgba(11,25,48,0.15)]" aria-hidden />
-          <span className="l-eyebrow l-muted">{phase.label}</span>
+          <span className="l-eyebrow">0{index + 1}</span>
+          <span className="h-px w-8 bg-[var(--l-line-2)]" aria-hidden />
+          <span className="l-eyebrow !text-[var(--l-fg-3)]">{phase.label}</span>
         </div>
         <h3 className="l-title mt-4 text-[clamp(1.6rem,2.6vw,2.25rem)]">{phase.title}</h3>
       </Reveal>
@@ -39,7 +39,7 @@ function PhaseBlock({ phase, index, onActive }: { phase: Phase; index: number; o
       <Stagger className="mt-8 space-y-6">
         {phase.steps.map((s, j) => (
           <div key={s.title} className="flex gap-4">
-            <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full border border-[rgba(1,180,194,0.45)] bg-white text-[12px] font-semibold tabular-nums text-[#0a6a86]">{j + 1}</span>
+            <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full border border-[var(--l-line-2)] bg-[var(--l-surface)] text-[12px] font-semibold tabular-nums text-[var(--l-accent)]">{j + 1}</span>
             <div>
               <p className="text-[1.05rem] font-semibold tracking-[-0.01em]">{s.title}</p>
               <p className="l-muted mt-1">{s.text}</p>
@@ -55,7 +55,7 @@ export function HowItWorks() {
   const [active, setActive] = useState<Key>("before");
   const onActive = useCallback((k: Key) => setActive(k), []);
   return (
-    <section id="how" className="l-paper-2 py-24 sm:py-32">
+    <section id="how" className="l-section-2 py-24 sm:py-32">
       <div className="mx-auto max-w-[1280px] px-5 sm:px-8">
         <SectionHead eyebrow={HOW.eyebrow} title={[HOW.title[0], HOW.title[1]]} lead={HOW.lead} />
         <div className="mt-12 lg:mt-4 lg:grid lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:gap-16 xl:gap-24">

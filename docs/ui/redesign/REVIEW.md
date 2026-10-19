@@ -56,3 +56,18 @@ Proof: `docs/ui/build/shots/landing-*.png` (hero at 1366 / 1920 / 390, the whole
 | 21 | Clinical safety | positive wording (what Vaidyx does), the statement removed, the six boxes kept with an index | "write what Vaidyx does, not what it does not" |
 | 22 | Contact | your address with the fixed subject "[Vaidyx] Website enquiry", a copy button and an enquiry form that composes the email | "design the contact with my email, fixed subject" |
 | 23 | Hero | the floating record chips removed | "remove those boxes" |
+
+## 20 Oct: round 3 of the public site (your notes)
+
+| # | Where | What changed | Your note it answers |
+|---|---|---|---|
+| 24 | Every title and lead | plain everyday English ("Every patient ready for the Tumour Board", "Most of the work happens before the meeting") | "make the titles simple" |
+| 25 | The whole site | light theme by default, dark theme on the switch in the top bar (the same switch as the app); the hero too | "make all the website light theme, with light and dark" |
+| 26 | /tb-nik, every visit | the logo and name reveal plays each time the Product page is opened (about 3 s, click to skip), then the hero's mark gathers from the corners | "the entrance animation every time users enter" |
+| 27 | Traceability | two boxes: the report on the left, Ask the Case File on the right; the question is typed, lines run to the report lines, the answer arrives sentence by sentence; the values card and the three points are gone | "remove extracted values; typewriter first, then connect, then the answer" |
+| 28 | Roles | a table: six seats around the Case File, each with its own badge; a seat lights its connector and shows its card; the seats take turns until you choose | "typical UI; make our own, graphic, interactive" |
+| 29 | Safety | six principles on the left, a drawing of the chosen one on the right (draft to reviewed, value to its line, scans for doctors, on-site server, India first, the audit log) | "the same for clinical safety" |
+| 30 | About | "Meet our team", the six portraits with name only, the TANUH box with one button, Visit TANUH | "meet our team; photo and name; visit TANUH" |
+| 31 | Contact | the enquiry form only; it posts to the site's own endpoint, which stores the enquiry and emails it when SMTP is set up; the direct address under the form | "only the enquiry; make the sending work" |
+
+Email sending needs one file from you, `data/tumour_board/site_mail.json` (never committed): `{"host": "smtp...", "port": 587, "username": "...", "password": "...", "from": "...", "to": "sulake.nikhileswararao@tanuh.ai", "starttls": true}`. Until then every enquiry is saved in `data/tumour_board/enquiries/` and the visitor sees "received".

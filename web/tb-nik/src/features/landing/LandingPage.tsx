@@ -1,5 +1,5 @@
-// The product page at /tb-nik, the site's default: the intro (the Vaidyx reveal on every page load), then the hero and the sections
-// in order. Signed-in people see "Open Case Files" where visitors see "Sign in".
+// The product page at /tb-nik, the site's default: the intro (the Vaidyx reveal, every time the page is opened), then the hero
+// and the sections in order. Signed-in people see "Open Case Files" where visitors see "Sign in".
 import { useCallback, useState } from "react";
 import { SiteFrame } from "./components/SiteFrame";
 import { Intro } from "./components/Intro";
@@ -16,9 +16,9 @@ export default function LandingPage() {
   const [ready, setReady] = useState(false);
   const onDone = useCallback(() => setReady(true), []);
   return (
-    <SiteFrame title="Vaidyx Tumour Board: the Case File for the Tumour Board" ready={ready} testId="landing">
+    <SiteFrame title="Vaidyx Tumour Board: every patient ready for the Tumour Board" ready={ready} testId="landing">
       <Intro onDone={onDone} />
-      {ready ? <Hero /> : <div className="l-ink min-h-[100svh]" aria-hidden />}
+      {ready ? <Hero /> : <div className="l-section min-h-[100svh]" aria-hidden />}
       <Strip />
       <Problem />
       <HowItWorks />

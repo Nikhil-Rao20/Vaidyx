@@ -5,10 +5,13 @@ import { useEffect, useRef } from "react";
 import { useReducedMotion, type MotionValue } from "motion/react";
 import { ICON_BOX, ICON_PATHS } from "@/components/brand-paths";
 
-interface Dot { tx: number; ty: number; tz: number; sx: number; sy: number; sz: number; corner: number; jx: number; jy: number; d: number; ph: number; r: number; col: string; spark: boolean; arc: number }
+interface Dot { tx: number; ty: number; tz: number; sx: number; sy: number; sz: number; corner: number; jx: number; jy: number; d: number; ph: number; r: number; col: string; spark: boolean; arc: number; g: number; t: number }
 
-const COLOURS: [string, string][] = [["#2e7fc9", "#19c1da"], ["#1db7cc", "#8fefe9"], ["#06cfd6", "#b8f6f7"]];
-const VIOLET = "#9d7cff";
+const PALETTES: Record<"light" | "dark", { groups: [string, string][]; spark: string }> = {
+  light: { groups: [["#0b4e74", "#0a8fb0"], ["#0a6a86", "#01b4c2"], ["#01a0b4", "#01cbd3"]], spark: "#7c5cf0" },
+  dark: { groups: [["#2e7fc9", "#19c1da"], ["#1db7cc", "#8fefe9"], ["#06cfd6", "#b8f6f7"]], spark: "#9d7cff" },
+};
+const theme = (): "light" | "dark" => (document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light");
 
 function hex(h: string): [number, number, number] { return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]; }
 function mix(a: string, b: string, t: number): string {
@@ -44,18 +47,23 @@ function sample(count: number): Dot[] {
     // the start is set per corner of the screen once the canvas knows where it sits (placeStarts)
     const spark = Math.random() < 0.014;
     const t = (tx + 1) / 2;
-    const [c0, c1] = COLOURS[g];
-    return { tx, ty, tz, sx: tx, sy: ty, sz: tz, corner: Math.floor(Math.random() * 4), jx: (Math.random() - 0.5) * 0.5, jy: (Math.random() - 0.5) * 0.5, d: Math.random() * 0.7, ph: Math.random() * Math.PI * 2, r: spark ? 1.8 + Math.random() * 1.2 : 1.1 + Math.random() * 1.3, col: spark ? VIOLET : mix(c0, c1, t), spark, arc: (Math.random() - 0.5) * 0.6 };
+    return { tx, ty, tz, sx: tx, sy: ty, sz: tz, corner: Math.floor(Math.random() * 4), jx: (Math.random() - 0.5) * 0.5, jy: (Math.random() - 0.5) * 0.5, d: Math.random() * 0.7, ph: Math.random() * Math.PI * 2, r: spark ? 1.8 + Math.random() * 1.2 : 1.1 + Math.random() * 1.3, col: "", spark, arc: (Math.random() - 0.5) * 0.6, g, t };
   });
-  dots.sort((p, q) => (p.col < q.col ? -1 : p.col > q.col ? 1 : 0));
+  dots.sort((p, q) => (p.g - q.g) || (p.t - q.t));
   return dots;
+}
+
+/** Colours for the current theme. */
+function paint(dots: Dot[], mode: "light" | "dark") {
+  const pal = PALETTES[mode];
+  for (const p of dots) p.col = p.spark ? pal.spark : mix(pal.groups[p.g][0], pal.groups[p.g][1], p.t);
 }
 
 function glowSprite(): HTMLCanvasElement {
   const s = document.createElement("canvas"); s.width = 64; s.height = 64;
   const g = s.getContext("2d")!;
   const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  grd.addColorStop(0, "rgba(255,255,255,0.95)"); grd.addColorStop(0.25, "rgba(170,140,255,0.55)"); grd.addColorStop(1, "rgba(143,100,253,0)");
+  grd.addColorStop(0, "rgba(190,170,255,0.95)"); grd.addColorStop(0.25, "rgba(143,100,253,0.5)"); grd.addColorStop(1, "rgba(143,100,253,0)");
   g.fillStyle = grd; g.fillRect(0, 0, 64, 64);
   return s;
 }
@@ -72,6 +80,9 @@ export function ParticleMark({ className, progress, count }: { className?: strin
     const n = count ?? (window.innerWidth < 768 ? 1300 : 2600);
     const dots = sample(n);
     if (!dots.length) return;
+    paint(dots, theme());
+    const themeObs = new MutationObserver(() => { paint(dots, theme()); if (reduce) draw(performance.now()); });
+    themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     const sprite = glowSprite();
     let w = 0, h = 0, dpr = 1, raf = 0, visible = true, running = true;
     let mx = 0, my = 0, tmx = 0, tmy = 0;
@@ -164,7 +175,7 @@ export function ParticleMark({ className, progress, count }: { className?: strin
     return () => {
       running = false;
       cancelAnimationFrame(raf);
-      ro.disconnect(); io.disconnect();
+      ro.disconnect(); io.disconnect(); themeObs.disconnect();
       window.removeEventListener("pointermove", onMove);
       unsub?.();
     };

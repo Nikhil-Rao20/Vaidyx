@@ -10,7 +10,7 @@ export default function DocsPage() {
   return (
     <SiteFrame title="Vaidyx documentation" testId="docs">
       <PageHead eyebrow={DOCS.eyebrow} title={[DOCS.title[0], DOCS.title[1]]} compact />
-      <section className="l-paper py-20 sm:py-28">
+      <section className="l-section py-20 sm:py-28">
         <div className="mx-auto max-w-[1280px] px-5 sm:px-8">
           <Reveal className="l-card max-w-3xl p-7 sm:p-10">
             <p className="l-lead l-muted">{DOCS.text}</p>

@@ -1,11 +1,8 @@
 // Every word on the public site, in one place, so the wording can be reviewed and changed without touching the layout.
-// Register: formal British English for clinicians and academic readers; no contractions; short declarative sentences.
+// Register: plain, everyday English; short sentences; no jargon where a common word will do. British spelling.
 // Constraints: no accuracy or validation claims; no model names; every patient detail is synthetic.
 import type { LucideIcon } from "lucide-react";
-import {
-  Activity, Building2, CalendarDays, Eye, FileSearch, FlaskConical, Hospital, Landmark, Layers, LockKeyhole, MapPin, MonitorPlay,
-  Quote, ShieldCheck, Stethoscope, UserRound, Users,
-} from "lucide-react";
+import { Activity, Building2, CalendarDays, FileSearch, FlaskConical, Layers, MapPin, Stethoscope, UserRound, Users } from "lucide-react";
 
 export type Icon = LucideIcon;
 
@@ -24,35 +21,36 @@ export const SITE = {
   signIn: "Sign in",
   open: "Open Case Files",
   skip: "Click to skip",
+  email: "sulake.nikhileswararao@tanuh.ai",
 };
 
 export const HERO = {
   eyebrow: "Vaidyx Tumour Board",
   // The second line is set in the serif face.
-  title: ["Tumour Board preparation,", "complete and traceable."],
-  lead: "Vaidyx assembles each patient's records into a single Case File, verifies every extracted value against its source document, checks completeness against Indian protocols, and records the Board's decision for the care that follows.",
+  title: ["Every patient ready", "for the Tumour Board."],
+  lead: "Vaidyx brings a patient's reports into one Case File, checks what is missing, shows where every value came from, and keeps the Board's decision for the care that follows.",
   primary: "How it works",
   scroll: "Scroll",
 };
 
 export const STRIP = [
-  "Aligned with NCG guidelines",
-  "ICMR cancer registry lists",
+  "Follows NCG guidelines",
+  "ICMR cancer lists",
   "UHID, IP and OP numbers, ABHA",
-  "Integrates with HIS, RIS, LIS and PACS",
-  "Desktop and mobile",
-  "Deployed within the hospital",
-  "Every value traceable to its source",
+  "Works with the HIS, RIS, LIS and PACS",
+  "Laptop and phone",
+  "Runs inside the hospital",
+  "Every value shows its source",
 ];
 
 export const CHALLENGE = {
-  eyebrow: "The challenge",
-  title: ["Preparation determines", "the quality of the decision."],
-  lead: "A Tumour Board allots a few minutes to each patient. Preparing a patient for discussion takes hours: reports from several departments, imaging on a separate system, and a presentation that is out of date before the meeting begins.",
+  eyebrow: "The problem",
+  title: ["Most of the work happens", "before the meeting."],
+  lead: "A Tumour Board spends a few minutes on each patient. Getting a patient ready takes hours: reports from several departments, scans on another system, and slides that are out of date before the meeting starts.",
   points: [
-    { icon: Layers, title: "Fragmented records", text: "Patient records are distributed across the HIS, the laboratory and radiology systems and the PACS. No single view presents the complete clinical picture." },
-    { icon: FileSearch, title: "Gaps identified late", text: "Missing reports and pending investigations are discovered during the meeting, and the patient is deferred to a later Board." },
-    { icon: Activity, title: "Decisions not carried forward", text: "The Board's decision is entered in a register. The ward, the insurer and the follow-up clinic each request it separately." },
+    { icon: Layers, title: "Records in many places", text: "Patient records sit in the HIS, the lab system, the PACS and paper files. No one sees the whole picture in one place." },
+    { icon: FileSearch, title: "Gaps found too late", text: "A missing report is noticed in the meeting, and the patient waits for the next Board." },
+    { icon: Activity, title: "Decisions that get lost", text: "The decision is written in a register. The ward, the insurer and the next clinic each ask for it again." },
   ],
 };
 
@@ -65,18 +63,18 @@ export interface Phase {
 
 export const HOW = {
   eyebrow: "How it works",
-  title: ["Before, during and after", "the Tumour Board."],
-  lead: "Vaidyx supports the complete cycle of the Tumour Board, from case preparation to the follow-up of its decision.",
+  title: ["Before, during and after", "the meeting."],
+  lead: "Vaidyx stays with the patient through the whole Tumour Board, from preparation to follow-up.",
   phases: [
     {
       key: "before",
       label: "Before",
-      title: "Case preparation",
+      title: "Getting the patient ready",
       steps: [
-        { title: "Retrieval by UHID", text: "Vaidyx retrieves the patient's reports from the HIS and the laboratory and radiology systems, and lists the imaging studies available on the PACS." },
-        { title: "Verified extraction", text: "Each value is extracted together with the line of the report from which it was taken. A value that cannot be traced to its source is discarded or marked for review." },
-        { title: "Protocol checklist", text: "The checklist for the cancer type lists the records a Tumour Board requires. Pending items are requested from Pathology or Radiology directly from the Case File." },
-        { title: "Readiness", text: "Specialty briefs are prepared for each department. The treating clinician records the question for the Board and marks the Case File as ready." },
+        { title: "Start with the UHID", text: "Vaidyx collects the patient's reports from the HIS, the lab and radiology systems, and lists the scans on the PACS." },
+        { title: "Every value with its source", text: "Each value is kept together with the line of the report it came from. A value without a source is dropped or marked for review." },
+        { title: "A checklist for the cancer", text: "The checklist shows which reports the Board needs. Missing items are requested from Pathology or Radiology from inside the Case File." },
+        { title: "Ready for the Board", text: "Specialty briefs are prepared for each department. The treating doctor writes the question for the Board and marks the file as ready." },
       ],
     },
     {
@@ -84,19 +82,19 @@ export const HOW = {
       label: "During",
       title: "The meeting",
       steps: [
-        { title: "Agenda", text: "The MDT Coordinator sets the agenda. Each Case File is either ready or shows its pending items." },
-        { title: "Participation", text: "Members join in person or by video. The room display presents the case summary and the imaging from the PACS." },
-        { title: "Decision record", text: "The decision is recorded during the discussion, with the members present and the questions raised." },
+        { title: "The agenda", text: "The MDT Coordinator sets the agenda. Each Case File is ready, or shows what is still missing." },
+        { title: "In the room or online", text: "Members join in person or by video. The room display shows the case summary and the scans from the PACS." },
+        { title: "The decision, recorded", text: "The decision is recorded during the discussion, with who was present and what was asked." },
       ],
     },
     {
       key: "after",
       label: "After",
-      title: "Follow-through",
+      title: "After the meeting",
       steps: [
-        { title: "Minutes", text: "The decision record and the minutes are available when the meeting closes." },
-        { title: "Exports", text: "The Board presentation and the NCG Virtual Tumour Board template are generated under the hospital's identity." },
-        { title: "Follow-up and audit", text: "Follow-up actions are tracked, and every action is entered in the audit log." },
+        { title: "Minutes", text: "The decision record and the minutes are ready when the meeting ends." },
+        { title: "Exports", text: "The Board presentation and the NCG Virtual Tumour Board template are exported with the hospital's name and logo." },
+        { title: "Follow-up and audit", text: "Follow-up actions are tracked, and every action is kept in the audit log." },
       ],
     },
   ] satisfies Phase[],
@@ -104,8 +102,8 @@ export const HOW = {
 
 export const SOURCES = {
   eyebrow: "Traceability",
-  title: ["Every value,", "traceable to its source."],
-  lead: "Vaidyx presents a value only when it can point to the line of the report from which it was taken. Each value opens its source on request. A value that cannot be verified is discarded or marked for review, and a clinician's confirmation takes precedence over any extracted value.",
+  title: ["Every value shows", "where it came from."],
+  lead: "Vaidyx shows a value only when it can point to the line of the report it came from. Ask the Case File a question, and each sentence of the answer links back to its source.",
   // A synthetic report. `quote` below is the index of the supporting line.
   report: {
     title: "Histopathology report",
@@ -121,76 +119,67 @@ export const SOURCES = {
       "Ki-67: 22 %.",
     ],
   },
-  valuesTitle: "Extracted values",
-  fields: [
-    { label: "Tumour size", value: "2.8 cm", quote: 2, state: "verified" as const },
-    { label: "Grade", value: "2", quote: 3, state: "verified" as const },
-    { label: "ER", value: "Positive, 80 %", quote: 4, state: "verified" as const },
-    { label: "HER2", value: "Equivocal (2+)", quote: 6, state: "review" as const, note: "FISH advised; for confirmation by the pathologist" },
-  ],
   ask: {
     title: "Ask the Case File",
+    placeholder: "Ask a question about this Case File",
     who: "Dr L. Rao, Breast Surgery",
     question: "What are the hormone receptor and HER2 results?",
+    reading: "Finding the lines that answer this",
     answer: [
       { text: "ER is positive in 80 % of tumour cells, with strong intensity.", quote: 4 },
       { text: "PR is positive in 60 % of tumour cells, with moderate intensity.", quote: 5 },
-      { text: "HER2 is equivocal (2+); FISH has been advised.", quote: 6, review: true },
+      { text: "HER2 is equivocal (2+). FISH has been advised.", quote: 6, review: true },
     ],
-    note: "Each sentence carries a verified quotation from the report. The HER2 result is marked for review pending FISH.",
-    labels: { verified: "verified", review: "for review", source: "source" },
+    note: "Each sentence links to a line of the report. The HER2 result stays marked for review until the FISH result arrives.",
+    labels: { source: "source", review: "for review" },
   },
-  rules: [
-    { icon: Quote, title: "Verification before display", text: "A value is shown only with the report line that supports it." },
-    { icon: UserRound, title: "Clinical precedence", text: "A clinician's confirmation is retained, including when the records are processed again." },
-    { icon: Eye, title: "Points for review", text: "Uncertain items are marked for review rather than omitted." },
-  ],
 };
 
 export const ROLES = {
   eyebrow: "Roles",
-  title: ["Designed for every member", "of the Tumour Board."],
-  lead: "Each role sees its own responsibilities first.",
+  title: ["Made for everyone", "on the Board."],
+  lead: "Each person sees their own work first. Choose a seat at the table.",
+  centre: "Case File",
   cards: [
-    { icon: Stethoscope, title: "Treating clinician", text: "Your patients, their pending items and the question for the Board. Approvals from a phone between consultations.", points: ["Needs-attention view", "Direct requests to Pathology and Radiology", "The decision returned to the Case File"] },
-    { icon: UserRound, title: "Resident", text: "Case Files prepared in minutes rather than an afternoon.", points: ["Retrieval of records by UHID", "Checklist of pending items", "Proposals submitted for the consultant's approval"] },
-    { icon: FlaskConical, title: "Pathologist and Radiologist", text: "Requests arrive with their clinical context. Respond from the Case File or open the order in the HIS.", points: ["Request inbox", "Direct link to the order", "Reports filed to the Case File"] },
-    { icon: CalendarDays, title: "MDT Coordinator", text: "Agenda, participants, room and minutes in one place.", points: ["Agenda with readiness status", "Video meeting and room display", "Minutes and exports"] },
-    { icon: Users, title: "External expert", text: "Join a Board with an access code and view only the cases presented.", points: ["Access by code, no account required", "Admission by the coordinator", "No installation"] },
-    { icon: Building2, title: "Department administrator and hospital IT", text: "Departments and users configured in an afternoon. Patient data remains within the hospital.", points: ["Role assignment by department", "Audit log of every action", "Self-hosted deployment"] },
+    { key: "doctor", icon: Stethoscope, title: "Treating doctor", short: "Doctor", text: "Your patients, what is still missing, and the question for the Board. Approve from your phone between patients.", points: ["A view of what needs you", "One-tap requests to Pathology and Radiology", "The decision back in the Case File"] },
+    { key: "resident", icon: UserRound, title: "Resident", short: "Resident", text: "Build a Case File in minutes, not an afternoon.", points: ["Pull the records by UHID", "The checklist shows what to chase", "Propose; the consultant signs off"] },
+    { key: "lab", icon: FlaskConical, title: "Pathologist and Radiologist", short: "Pathology", text: "Requests come with the clinical context. Answer from the Case File or open the order in the HIS.", points: ["An inbox of requests", "A direct link to the order", "Your report lands in the Case File"] },
+    { key: "coordinator", icon: CalendarDays, title: "MDT Coordinator", short: "Coordinator", text: "Agenda, people, room and minutes in one place.", points: ["An agenda with readiness", "Video meeting and room display", "Minutes and exports"] },
+    { key: "expert", icon: Users, title: "External expert", short: "Expert", text: "Join a Board with a code and see only the cases shown to you.", points: ["A code, no account", "Admitted by the coordinator", "Nothing to install"] },
+    { key: "it", icon: Building2, title: "Hospital IT and department admins", short: "Admin", text: "Set up departments and people in an afternoon. Patient data stays in the hospital.", points: ["Roles by department", "An audit log of every action", "Runs on your own server"] },
   ],
 };
 
 export const SAFETY = {
-  eyebrow: "Clinical safety",
-  title: ["Clinical safety", "by design."],
-  lead: "Vaidyx supports the work of the Tumour Board without replacing clinical judgement.",
+  eyebrow: "Safety",
+  title: ["Safe", "by design."],
+  lead: "Vaidyx helps the Board prepare and keep records. Doctors make the decisions.",
   principles: [
-    { icon: ShieldCheck, title: "Human oversight", text: "Expert-in-the-loop by design. Every summary is a draft until a clinician has reviewed it." },
-    { icon: Quote, title: "Verified sources", text: "Every value and every statement presented as fact carries a verified quotation from the record." },
-    { icon: MonitorPlay, title: "Imaging for clinicians", text: "PACS images are presented to clinicians for their own review and interpretation." },
-    { icon: LockKeyhole, title: "Deployed within the hospital", text: "Designed to run on the hospital's own infrastructure. Patient records remain on site." },
-    { icon: Landmark, title: "India first", text: "NCG, ICMR and PM-JAY references take precedence over international sources. Indian identifiers, names, units and date formats." },
-    { icon: Hospital, title: "Complete audit trail", text: "Every AI operation and every user action is logged with the user and the time." },
+    { key: "people", title: "People decide", text: "A summary is a draft until a doctor has reviewed it." },
+    { key: "sources", title: "Sources first", text: "Every value and every statement comes with a quote from the record." },
+    { key: "scans", title: "Scans are for doctors", text: "PACS images are shown to doctors. No model reads them." },
+    { key: "onsite", title: "Inside the hospital", text: "Runs on the hospital's own server. Patient records stay on site." },
+    { key: "india", title: "India first", text: "NCG, ICMR and PM-JAY come before international sources. Indian IDs, names, units and dates." },
+    { key: "audit", title: "Everything is logged", text: "Every AI step and every user action is recorded, with who and when." },
   ],
 };
 
 export const CTA = {
-  title: ["Vaidyx for", "your Tumour Board."],
-  text: "Vaidyx is being developed with hospitals in India. Hospitals interested in a pilot are invited to contact TANUH.",
+  title: ["Bring Vaidyx to", "your Tumour Board."],
+  text: "Vaidyx is being built with hospitals in India. If your Board would like to try it, send us an enquiry.",
   signIn: "Sign in",
-  contact: "Contact TANUH",
+  contact: "Send an enquiry",
   contactTo: "/contact",
 };
 
 export const FOOTER = {
   note: "All patient names, identifiers and values shown on this site are synthetic.",
-  scope: "Vaidyx checks, routes, summarises and flags. Clinical decisions remain with the clinician.",
+  scope: "Vaidyx checks, routes, summarises and flags. Doctors make the decisions.",
   copyright: `© ${new Date().getFullYear()} TANUH, The AI Centre of Excellence in Healthcare.`,
   columns: [
-    { title: "Product", links: [{ label: "How it works", to: "/#how" }, { label: "Traceability", to: "/#sources" }, { label: "Roles", to: "/#roles" }, { label: "Clinical safety", to: "/#safety" }] },
-    { title: "Organisation", links: [{ label: "About", to: "/about" }, { label: "Team", to: "/about#team" }, { label: "TANUH", to: "/about#tanuh" }, { label: "Contact", to: "/contact" }] },
-    { title: "Resources", links: [{ label: "Documentation", to: "/docs" }, { label: "tanuh.ai", to: "https://tanuh.ai" }, { label: "TANUH DPI", to: "https://dpi.tanuh.ai" }] },
+    { title: "Product", links: [{ label: "How it works", to: "/#how" }, { label: "Traceability", to: "/#sources" }, { label: "Roles", to: "/#roles" }, { label: "Safety", to: "/#safety" }] },
+    { title: "About", links: [{ label: "Our team", to: "/about" }, { label: "TANUH", to: "/about#tanuh" }, { label: "Contact", to: "/contact" }] },
+    { title: "Resources", links: [{ label: "Documentation", to: "/docs" }, { label: "Visit TANUH", to: "https://tanuh.ai" }] },
     { title: "Account", links: [{ label: "Sign in", to: "/sign-in" }] },
   ],
 };
@@ -198,68 +187,55 @@ export const FOOTER = {
 /* About */
 export const ABOUT = {
   eyebrow: "About",
-  title: ["Developed with the clinicians", "who will use it."],
-  lead: "Vaidyx is developed at TANUH, The AI Centre of Excellence in Healthcare at the Indian Institute of Science, Bengaluru, together with Tumour Boards at hospitals in India.",
-  mission: [
-    { title: "Purpose", text: "To give every patient discussed at a Tumour Board a complete, verified Case File, and to carry the Board's decision through to the care that follows." },
-    { title: "Approach", text: "Vaidyx assists with preparation, verification and record-keeping. Clinical judgement remains with the clinician at every step." },
-    { title: "Setting", text: "Designed for Indian hospitals: NCG and ICMR references, Indian identifiers and formats, and deployment within the hospital." },
-  ],
+  title: ["Meet", "our team."],
+  lead: "Vaidyx is built at TANUH, the AI Centre of Excellence in Healthcare at IISc Bengaluru, together with the doctors who will use it.",
 };
 
-export interface Member { name: string; role: string; photo: string | null }
+export interface Member { name: string; photo: string | null }
 export const TEAM = {
-  eyebrow: "Team",
-  title: ["The people behind", "Vaidyx."],
-  lead: "A multidisciplinary team at TANUH.",
-  // Names, roles and photographs to be supplied. Photographs: public/brand/team/<file>.
+  // Names and photographs to be supplied by the owner. Photographs: public/brand/team/<file>.
   members: [
-    { name: "Team member", role: "Role", photo: null },
-    { name: "Team member", role: "Role", photo: null },
-    { name: "Team member", role: "Role", photo: null },
-    { name: "Team member", role: "Role", photo: null },
-    { name: "Team member", role: "Role", photo: null },
-    { name: "Team member", role: "Role", photo: null },
+    { name: "Team member", photo: null },
+    { name: "Team member", photo: null },
+    { name: "Team member", photo: null },
+    { name: "Team member", photo: null },
+    { name: "Team member", photo: null },
+    { name: "Team member", photo: null },
   ] satisfies Member[],
 };
 
 export const TANUH = {
   eyebrow: "TANUH",
   title: ["The AI Centre of Excellence", "in Healthcare."],
-  text: "TANUH, Translational AI for Networked Universal Healthcare, is the AI Centre of Excellence in Healthcare at the Indian Institute of Science, Bengaluru, funded by the Ministry of Education, Government of India. Vaidyx is developed at the Centre with the clinicians who will use it.",
-  links: [
-    { label: "tanuh.ai", href: "https://tanuh.ai", text: "The Centre, its mission and its programmes" },
-    { label: "dpi.tanuh.ai", href: "https://dpi.tanuh.ai", text: "Open digital public infrastructure for healthcare AI" },
-  ],
+  text: "TANUH, Translational AI for Networked Universal Healthcare, is the AI Centre of Excellence in Healthcare at the Indian Institute of Science, Bengaluru, funded by the Ministry of Education, Government of India. Vaidyx is built at the Centre with the doctors who will use it.",
+  visit: "Visit TANUH",
+  href: "https://tanuh.ai",
   place: { icon: MapPin, text: "Indian Institute of Science, Bengaluru" },
 };
 
 /* Placeholder pages */
 export const DOCS = {
   eyebrow: "Documentation",
-  title: ["Documentation", "in preparation."],
-  text: "The documentation will cover installation, integration with hospital information systems, roles and permissions, and the audit model. It will be published on this page.",
+  title: ["Documentation", "coming soon."],
+  text: "Installation, hospital system integration, roles and the audit log will be documented here.",
 };
 
 export const CONTACT = {
   eyebrow: "Contact",
-  title: ["Write to", "the Vaidyx team."],
-  lead: "Hospitals interested in Vaidyx, and clinicians who would like to take part in its development, are invited to write to us.",
-  email: "sulake.nikhileswararao@tanuh.ai",
-  // Fixed, so that enquiries from the site can be filtered in the mailbox.
-  subject: "[Vaidyx] Website enquiry",
-  emailTitle: "Email",
-  write: "Write an email",
-  copy: "Copy address",
-  copied: "Copied",
+  title: ["Send us", "an enquiry."],
+  lead: "Tell us about your hospital and your Tumour Board. We reply by email.",
   form: {
-    title: "Enquiry",
-    name: "Name",
+    name: "Your name",
+    email: "Your email",
     hospital: "Hospital or institution",
-    role: "Role",
     message: "Message",
-    submit: "Compose email",
-    note: "The enquiry opens in your email application, addressed to the Vaidyx team with a fixed subject line. Nothing is sent from this page.",
+    submit: "Send enquiry",
+    sending: "Sending",
+    sent: "Thank you. Your enquiry has been sent.",
+    received: "Thank you. Your enquiry has been received.",
+    failed: "The enquiry could not be sent. Please write to us directly.",
+    invalid: "Please fill in your name, a valid email address and a message.",
   },
-  place: { icon: MapPin, text: "TANUH, Indian Institute of Science, Bengaluru" },
+  direct: "To reach us directly, write to",
+  subject: "[Vaidyx] Website enquiry",
 };

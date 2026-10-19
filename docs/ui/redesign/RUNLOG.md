@@ -27,3 +27,15 @@
   mailto and a fixed subject, hero chips removed, particles start at the four screen corners with a curved flight.
 - Checks: tsc, vite build, landing.spec (product, about/docs/contact, signed in), live captures of the intro, the slide and the Ask
   sequence from :7000 (scratch script with Playwright, scrolling to the phase).
+
+## 20 Oct: public site round 3
+- Theme tokens: landing.css now defines --l-* for light (default) and dark under [data-theme="dark"]; no section names a colour.
+  ParticleMark repaints on the theme attribute. The device frames in "How it works" stay dark in both themes.
+- Words (titles) observed the clipped, translated word spans, which never intersect the viewport: live titles never appeared.
+  The wrapper is observed now (useInView) and the words animate from state.
+- Roles table (Roles.tsx), Safety explorer (Safety.tsx + SafetyArt.tsx SVG drawings), the two-box traceability flow
+  (Sources.tsx), the every-visit intro (Intro.tsx), team portraits (Team.tsx), the enquiry form (ContactPage.tsx).
+- Backend: tumour_board/api/site.py (POST /tb-nik/api/enquiry, honeypot, limits, rate limit, stored under
+  data/tumour_board/enquiries/), tumour_board/site_mail.py (SMTP from data/tumour_board/site_mail.json, fixed subject,
+  Reply-To the sender), mounted beside /api/tb by _with_site() in routes/tumour_board_routes.py (the /tb-nik prefix is
+  auth-exempt in app.py, so no app.py change). 4 tests in tumour_board/tests/test_nik_site.py.

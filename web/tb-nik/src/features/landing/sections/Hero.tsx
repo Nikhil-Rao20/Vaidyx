@@ -23,7 +23,7 @@ export function Hero() {
   const d = (t: number) => (reduce ? 0 : t);
   const drift = (dx: number, dy: number, dur: number) => (reduce ? {} : { animate: { x: [0, dx, 0], y: [0, dy, 0] }, transition: { duration: dur, repeat: Infinity, ease: "easeInOut" as const } });
   return (
-    <section id="top" ref={ref} className="l-ink on-ink relative overflow-hidden" data-testid="landing-hero">
+    <section id="top" ref={ref} className="relative overflow-hidden" data-testid="landing-hero">
       <div className="l-hero-bg" aria-hidden>
         <motion.span className="l-orb l-orb-teal" style={{ width: 760, height: 760, left: "52%", top: "-16%" }} {...drift(50, 36, 24)} />
         <motion.span className="l-orb l-orb-violet" style={{ width: 600, height: 600, left: "-14%", bottom: "-22%" }} {...drift(36, -40, 28)} />
@@ -34,12 +34,12 @@ export function Hero() {
       <div className="relative mx-auto grid min-h-[100svh] max-w-[1280px] items-center gap-8 px-5 pb-24 pt-28 sm:px-8 lg:grid-cols-[1.02fr_0.98fr] lg:gap-4 lg:pt-24">
         <motion.div style={{ y: textY, opacity: textO }} className="relative z-10">
           <motion.div className="flex flex-wrap items-center gap-2" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: d(0.15), duration: 0.7, ease: L_EASE }}>
-            <span className="l-pill bg-white/[0.04] text-white/85"><span className="size-1.5 rounded-full bg-[var(--mint)] shadow-[0_0_12px_var(--mint)]" aria-hidden />{HERO.eyebrow}</span>
-            <span className="l-pill text-white/60"><span className="sm:hidden">TANUH</span><span className="hidden sm:inline">{SITE.by}</span></span>
+            <span className="l-pill"><span className="size-1.5 rounded-full bg-[var(--cyan)] shadow-[0_0_12px_var(--cyan)]" aria-hidden />{HERO.eyebrow}</span>
+            <span className="l-pill"><span className="sm:hidden">TANUH</span><span className="hidden sm:inline">{SITE.by}</span></span>
           </motion.div>
-          <h1 className="l-display mt-7 text-[clamp(2.6rem,6.2vw,5.6rem)] text-white">
+          <h1 className="l-display mt-7 text-[clamp(2.6rem,6.2vw,5.6rem)]">
             <Words text={HERO.title[0]} start={d(0.35)} />
-            <span className="l-serif block" style={{ color: "var(--mint)", fontSize: "1.08em" }}><Words text={HERO.title[1]} start={d(0.75)} /></span>
+            <span className="l-serif block" style={{ fontSize: "1.08em" }}><Words text={HERO.title[1]} start={d(0.75)} /></span>
           </h1>
           <motion.p className="l-lead l-muted mt-7 max-w-xl" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: d(1.05), duration: 0.8, ease: L_EASE }}>{HERO.lead}</motion.p>
           <motion.div className="mt-9 flex flex-wrap items-center gap-3" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: d(1.25), duration: 0.8, ease: L_EASE }}>
@@ -51,10 +51,10 @@ export function Hero() {
           <ParticleMark className="absolute inset-0 h-full w-full" progress={disperse} />
         </div>
       </div>
-      <motion.div className="absolute bottom-6 left-1/2 hidden -translate-x-1/2 flex-col items-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-white/45 sm:flex" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: d(2.2), duration: 0.8 }} aria-hidden>
+      <motion.div className="l-faint absolute bottom-6 left-1/2 hidden -translate-x-1/2 flex-col items-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] sm:flex" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: d(2.2), duration: 0.8 }} aria-hidden>
         <span>{HERO.scroll}</span>
-        <span className="relative h-9 w-px overflow-hidden bg-white/15">
-          <motion.span className="absolute inset-x-0 top-0 h-3 bg-[var(--mint)]" animate={reduce ? undefined : { y: [-14, 40] }} transition={{ duration: 1.7, repeat: Infinity, ease: "easeInOut" }} />
+        <span className="relative h-9 w-px overflow-hidden bg-[var(--l-line-2)]">
+          <motion.span className="absolute inset-x-0 top-0 h-3 bg-[var(--l-accent)]" animate={reduce ? undefined : { y: [-14, 40] }} transition={{ duration: 1.7, repeat: Infinity, ease: "easeInOut" }} />
         </span>
       </motion.div>
     </section>
