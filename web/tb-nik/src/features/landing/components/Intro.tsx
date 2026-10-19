@@ -14,7 +14,9 @@ export function Intro({ onDone }: { onDone: () => void }) {
   const reduce = useReducedMotion();
   const [show, setShow] = useState(() => !played);
   const finish = useCallback(() => { setShow(false); onDone(); }, [onDone]);
-  const option = INTROS.find((o) => o.key === CHOSEN) ?? INTROS[0];
+  // ?intro=B previews another option on the real page (used to record the lab's videos); the site itself uses CHOSEN.
+  const wanted = (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("intro")) || CHOSEN;
+  const option = INTROS.find((o) => o.key === wanted) ?? INTROS[0];
   useEffect(() => {
     if (!show) { onDone(); return; }
     played = true;
