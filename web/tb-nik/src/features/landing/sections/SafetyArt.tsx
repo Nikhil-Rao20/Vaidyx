@@ -67,21 +67,55 @@ export function SourcesFirst() {
 
 export function ScansForDoctors() {
   const r = useReducedMotion();
+  const enter = (delay: number) => ({ initial: r ? false : { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { delay: r ? 0 : delay, duration: 0.55, ease: E } });
   return (
-    <Frame label="A CT slice shown to doctors on a monitor; no model reads it">
-      <rect x={78} y={26} width={244} height={158} rx={12} fill="#0f1720" />
-      <motion.image href={CT} x={132} y={32} width={136} height={136} preserveAspectRatio="xMidYMid slice" initial={{ opacity: r ? 1 : 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.9, delay: 0.2 }} />
-      <text x={90} y={44} fontSize={8.5} fill="rgba(255,255,255,0.7)">CT chest · axial · PACS</text>
-      <text x={90} y={176} fontSize={7.5} fill="rgba(255,255,255,0.45)">TCGA-LUAD, The Cancer Imaging Archive, CC BY 3.0</text>
-      <rect x={186} y={184} width={28} height={10} fill={L2} /><rect x={160} y={194} width={80} height={6} rx={3} fill={L2} />
-      {[["LR", 118], ["IK", 158], ["TJ", 198]].map(([ini, x], i) => (
-        <motion.g key={ini} initial={{ opacity: r ? 1 : 0, y: r ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 + i * 0.15, duration: 0.5 }}>
-          <circle cx={Number(x)} cy={230} r={14} fill={["#0b4e74", "#5b3fc4", "#01b4c2"][i]} />
-          <text x={Number(x)} y={234} textAnchor="middle" fontSize={9.5} fontWeight={600} fill="#fff">{ini}</text>
+    <Frame label="The room display in a meeting: the slide, the report and the CT image, all presented from the Case File">
+      <defs><clipPath id="l-art-ct"><rect x={244} y={58} width={92} height={92} rx={6} /></clipPath></defs>
+      {/* the room display */}
+      <rect x={52} y={22} width={296} height={178} rx={12} fill="#0f1720" />
+      <rect x={52} y={22} width={296} height={22} rx={12} fill="#18222e" /><rect x={52} y={34} width={296} height={10} fill="#18222e" />
+      <text x={68} y={37} fontSize={8.5} fontWeight={600} fill="#fff">Presentation</text>
+      <rect x={68} y={40} width={50} height={1.5} fill="var(--cyan)" />
+      <text x={134} y={37} fontSize={8.5} fill="rgba(255,255,255,0.55)">Report</text>
+      <text x={172} y={37} fontSize={8.5} fill="rgba(255,255,255,0.55)">Images</text>
+      <text x={340} y={37} textAnchor="end" fontSize={7.5} fill="rgba(255,255,255,0.45)">Case File 4 of 9</text>
+      {/* the CT image, at the back on the right */}
+      <motion.g {...enter(1.1)}>
+        <rect x={244} y={58} width={92} height={92} rx={6} fill="#000" />
+        <image href={CT} x={244} y={58} width={92} height={92} preserveAspectRatio="xMidYMid slice" clipPath="url(#l-art-ct)" />
+        <text x={250} y={68} fontSize={6.5} fill="rgba(255,255,255,0.75)">CT chest · PACS</text>
+      </motion.g>
+      {/* the report, in the middle */}
+      <motion.g {...enter(0.7)}>
+        <rect x={176} y={64} width={92} height={118} rx={6} fill="#fff" stroke={L2} />
+        <rect x={196} y={70} width={22} height={10} rx={3} fill="#b2362b" /><text x={207} y={77.5} textAnchor="middle" fontSize={6.5} fontWeight={700} fill="#fff">PDF</text>
+        <text x={222} y={78} fontSize={6.5} fontWeight={600} fill="#121a24">Report</text>
+        <text x={196} y={92} fontSize={6.5} fontWeight={600} fill="#121a24">Histopathology</text>
+        {[100, 108, 116, 124, 132, 140, 148, 156, 164, 172].map((y, i) => <rect key={y} x={196} y={y} width={[64, 58, 66, 52, 62, 48, 60, 54, 44, 50][i]} height={3.5} rx={1.75} fill={i === 3 ? "#01cbd3" : "#e2e8ef"} />)}
+      </motion.g>
+      {/* the slide, in front on the left */}
+      <motion.g {...enter(0.25)}>
+        <rect x={64} y={56} width={126} height={84} rx={6} fill="#fff" stroke={L2} />
+        <rect x={64} y={56} width={126} height={11} rx={6} fill="#00183c" /><rect x={64} y={62} width={126} height={5} fill="#00183c" />
+        <text x={70} y={64} fontSize={5.5} fill="#fff">Vaidyx Demo Hospital · Tumour Board</text>
+        <text x={70} y={79} fontSize={7} fontWeight={600} fill="#121a24">Lakshmi R., 58 F · Breast cancer</text>
+        {[88, 96, 104, 112].map((y, i) => <g key={y}><circle cx={73} cy={y - 1.5} r={1.4} fill="#01b4c2" /><rect x={77} y={y - 3.5} width={[52, 44, 56, 38][i]} height={3.5} rx={1.75} fill="#e2e8ef" /></g>)}
+        <rect x={134} y={84} width={52} height={24} rx={3} fill="#f7f9fc" stroke="#e2e8ef" />
+        <text x={138} y={92} fontSize={4.6} fontWeight={600} fill="#0a6a86" letterSpacing={0.4}>QUESTION FOR THE BOARD</text>
+        <rect x={138} y={96} width={42} height={3} rx={1.5} fill="#e2e8ef" /><rect x={138} y={101} width={30} height={3} rx={1.5} fill="#e2e8ef" />
+        {[["cT3", 134], ["cN1", 152], ["cM0", 170]].map(([t, x]) => <g key={t}><rect x={Number(x)} y={112} width={16} height={12} rx={2} fill="#fff" stroke="#e2e8ef" /><text x={Number(x) + 8} y={120.5} textAnchor="middle" fontSize={6} fontWeight={600} fill="#121a24">{t}</text></g>)}
+        <text x={70} y={133} fontSize={5} fill="#5f6b78">Every value verified against its source</text>
+      </motion.g>
+      <rect x={186} y={200} width={28} height={8} fill={L2} /><rect x={160} y={208} width={80} height={5} rx={2.5} fill={L2} />
+      {/* what is on the display, named */}
+      {[["Slide", 86, 0.25], ["Report, PDF", 170, 0.7], ["CT image", 262, 1.1]].map(([t, x, d]) => (
+        <motion.g key={String(t)} {...enter(Number(d) + 0.15)}>
+          <rect x={Number(x) - 4} y={222} width={String(t).length * 5.6 + 14} height={16} rx={8} fill={S} stroke={L} />
+          <circle cx={Number(x) + 4} cy={230} r={2.5} fill={ACC} />
+          <text x={Number(x) + 11} y={233.5} fontSize={8.5} fontWeight={600} fill={FG}>{t}</text>
         </motion.g>
       ))}
-      <text x={226} y={228} fontSize={11.5} fontWeight={600} fill={FG}>Viewed by doctors</text>
-      <text x={226} y={243} fontSize={10} fill={FG3}>No model reads the image</text>
+      <text x={200} y={254} textAnchor="middle" fontSize={9} fill={FG3}>Presented from the Case File · viewed by doctors · no model reads the images</text>
     </Frame>
   );
 }
