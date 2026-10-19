@@ -1,6 +1,7 @@
-// The journey of one patient, step by step: the diagram on the left lights the nodes and lines of the current step and sends a
-// dot along them; the panel on the right tells the step, names who acts, shows a small preview, and carries Next step and
-// Start over. It advances on its own while in view until the visitor takes over. On a phone the panel sits under the drawing.
+// The Tumour Board workflow, step by step: the swimlane map on the left lights the stations and lines of the current step and
+// sends a dot along them; the panel on the right tells the step, names who acts, shows a small preview, and carries Next step
+// and Start over, pinned to its bottom so they never move. It advances on its own while in view until the visitor takes over.
+// On a phone the map scrolls sideways and the panel sits under it.
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useInView, useReducedMotion } from "motion/react";
 import { ArrowRight, RotateCcw, UserRound } from "lucide-react";
@@ -33,38 +34,51 @@ export function Journey() {
 
   return (
     <section id="journey" ref={ref} className="l-section-2 py-24 sm:py-32" data-testid="journey">
-      <div className="mx-auto max-w-[1280px] px-5 sm:px-8">
+      <div className="mx-auto max-w-[1400px] px-5 sm:px-8">
         <SectionHead eyebrow={FLOW.eyebrow} title={[FLOW.title[0], FLOW.title[1]]} lead={FLOW.lead} />
-        <Reveal y={20} className="l-card mt-14 overflow-hidden">
-          <div className="grid lg:grid-cols-[1.25fr_0.95fr]">
-            <div className="jy-scroll l-section-2 border-b border-[var(--l-line)] p-4 sm:p-6 lg:border-b-0 lg:border-r">
-              <Diagram activeNodes={step.nodes} activePaths={step.paths} zones={FLOW.zones} frame={FLOW.frame} />
+        <Reveal y={20} className="l-card mt-14 overflow-hidden" testId="journey-card">
+          <div className="grid lg:grid-cols-[7fr_3fr]" style={{ gridAutoRows: "minmax(0, 1fr)" }}>
+            <div className="jy-scroll l-section-2 min-w-0 border-b border-[var(--l-line)] p-4 sm:p-6 lg:border-b-0 lg:border-r">
+              <Diagram activeNodes={step.nodes} activePaths={step.paths} lanes={FLOW.lanes} phases={FLOW.phases} frame={FLOW.frame} />
             </div>
-            <div className="flex flex-col p-6 sm:p-8" data-testid="journey-panel" data-step={step.id}>
+            {/* the panel: as tall as the drawing on a laptop; the actions are pinned to its bottom so they never move */}
+            <div className="flex min-w-0 flex-col overflow-hidden p-5 sm:p-6 lg:min-h-0" data-testid="journey-panel" data-step={step.id}>
               <div className="flex items-center justify-between gap-3">
                 <span className="l-eyebrow">{FLOW.labels.step} {String(i + 1).padStart(2, "0")}</span>
                 <span className="l-pill !py-1 text-[12px]">{i + 1} {FLOW.labels.of} {n}</span>
               </div>
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.div key={step.id} className="mt-5 flex-1" initial={reduce ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8, transition: { duration: 0.2 } }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}>
-                  <h3 className="l-title text-[clamp(1.4rem,2.2vw,1.85rem)]">{step.title}</h3>
-                  <p className="l-muted mt-3 text-[15.5px]">{step.body}</p>
-                  <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <span className="l-pill !py-1 text-[12.5px]"><UserRound className="size-3.5 text-[var(--l-accent)]" aria-hidden />{FLOW.labels.who}: <b className="font-semibold text-[var(--l-fg)]">{step.who}</b></span>
-                    {step.chip ? <span className="l-chip l-chip-info !py-1 !text-[12px]">{step.chip}</span> : null}
-                  </div>
-                  {Preview ? <div className="mt-5"><Preview /></div> : null}
-                </motion.div>
-              </AnimatePresence>
-              <div className="mt-6">
+              <div className="mt-4 min-h-[8.5rem]">
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.div key={step.id} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, transition: { duration: 0.15 } }} transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}>
+                    <h3 className="l-title text-[clamp(1.2rem,1.6vw,1.45rem)]">{step.title}</h3>
+                    <p className="l-muted mt-2 text-[14px]">{step.body}</p>
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+              <div className="mt-3 flex min-h-[2.25rem] flex-wrap items-center gap-2">
+                <span className="l-pill !py-1 text-[12.5px]"><UserRound className="size-3.5 text-[var(--l-accent)]" aria-hidden />{FLOW.labels.who}: <b className="font-semibold text-[var(--l-fg)]">{step.who}</b></span>
+                {step.chip ? <span className="l-chip l-chip-info !py-1 !text-[12px]">{step.chip}</span> : null}
+              </div>
+              {/* a fixed slot for the preview, so the actions below never move */}
+              <div className="mt-3 h-[168px] overflow-hidden">
+                <AnimatePresence mode="wait" initial={false}>
+                  {Preview ? (
+                    <motion.div key={step.id} initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.15 } }} transition={{ duration: 0.35 }} className="origin-top-left">
+                      <Preview />
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
+              </div>
+              <div className="mt-auto pt-6">
                 <div className="flex items-center gap-1.5" role="tablist" aria-label="Steps">
                   {FLOW.steps.map((s, k) => <button key={s.id} type="button" role="tab" aria-selected={k === i} aria-label={`Step ${k + 1}: ${s.title}`} className="jy-seg" data-state={k < i ? "done" : k === i ? "current" : "todo"} onClick={() => go(k)} />)}
                 </div>
                 <div className="mt-4 flex flex-wrap items-center gap-3">
-                  <button type="button" className="l-btn l-btn-primary !h-11" onClick={() => go(i + 1)} data-testid="journey-next">{FLOW.labels.next} <ArrowRight className="size-4" aria-hidden /></button>
-                  <button type="button" className={cn("l-btn l-btn-ghost !h-11", i === 0 && !manual && "opacity-60")} onClick={() => go(0)} data-testid="journey-restart"><RotateCcw className="size-4" aria-hidden /> {FLOW.labels.restart}</button>
-                  {!manual && !reduce ? <span className="l-faint ml-auto text-[12px]">{FLOW.labels.auto}</span> : null}
+                  <button type="button" className="l-btn l-btn-primary !h-10 !px-4 text-[14px]" onClick={() => go(i + 1)} data-testid="journey-next">{FLOW.labels.next} <ArrowRight className="size-4" aria-hidden /></button>
+                  <button type="button" className={cn("l-btn l-btn-ghost !h-10 !px-4 text-[14px]", i === 0 && !manual && "opacity-60")} onClick={() => go(0)} data-testid="journey-restart"><RotateCcw className="size-4" aria-hidden /> {FLOW.labels.restart}</button>
                 </div>
+                {/* a line that is always there, so the buttons never move when the label goes */}
+                <span className="l-faint mt-3 block h-5 text-[12px]" aria-live="polite">{!manual && !reduce ? FLOW.labels.auto : ""}</span>
               </div>
             </div>
           </div>

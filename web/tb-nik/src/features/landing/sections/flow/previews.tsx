@@ -8,7 +8,7 @@ const CT_SRC = "/static/tb-nik/brand/art/ct-chest.png";
 
 function Win({ children, className, title }: { children: React.ReactNode; className?: string; title?: string }) {
   return (
-    <div className={cn("l-card overflow-hidden text-[12px] leading-[1.35]", className)}>
+    <div className={cn("l-card min-w-0 overflow-hidden text-[12px] leading-[1.35]", className)}>
       {title ? <div className="l-faint border-b border-[var(--l-line)] px-3 py-1.5 text-[10.5px] font-semibold uppercase tracking-[0.1em]">{title}</div> : null}
       <div className="p-3">{children}</div>
     </div>
@@ -40,7 +40,7 @@ export function PreviewRequest() {
       <p className="l-faint mt-0.5">Asked by Dr L. Rao · Breast Surgery · due 16/10/2026</p>
       <div className="mt-2 flex items-center gap-2">
         <span className="l-chip l-chip-warn">Waiting on Pathology</span>
-        <motion.span className="l-chip l-chip-ok" initial={r ? false : { opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 1.4, duration: 0.4 }}><Check className="size-3" strokeWidth={3} />Report received · 3 values quoted</motion.span>
+        <motion.span className="l-chip l-chip-ok !whitespace-normal" initial={r ? false : { opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 1.4, duration: 0.4 }}><Check className="size-3 shrink-0" strokeWidth={3} />Report received, 3 values quoted</motion.span>
       </div>
     </Win>
   );

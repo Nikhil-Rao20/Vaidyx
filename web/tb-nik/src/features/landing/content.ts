@@ -181,23 +181,23 @@ export interface FlowStep {
 }
 
 export const FLOW = {
-  eyebrow: "The journey",
-  title: ["One patient,", "from UHID to decision."],
-  lead: "Follow a patient through Vaidyx: where the records come from, what Vaidyx does with them, who decides, and what leaves the room.",
+  eyebrow: "Workflow",
+  title: ["The Tumour Board workflow,", "from records to follow-up."],
+  lead: "Who does what, and when: a Case File moves from the hospital's records to the Board's decision and the care that follows, and loops back when the Board needs more.",
   frame: "Inside the hospital · nothing leaves",
-  zones: { systems: "Hospital systems", vaidyx: "Vaidyx Case File · checks, routes, summarises, flags", doctors: "Doctors decide", after: "After the Board" },
+  lanes: { systems: "Hospital systems", dept: "Treating department", vaidyx: "Vaidyx", support: "Pathology · Radiology", board: "Coordinator · Board" },
+  phases: { before: "Before the Board", meeting: "The meeting", after: "After" },
   labels: { step: "Step", of: "of", who: "Who acts", next: "Next step", restart: "Start over", auto: "Playing · click to take over" },
   steps: [
-    { id: "uhid", title: "It starts with a UHID", body: "The resident types the patient's hospital number. Vaidyx pulls the reports from the HIS and the lab and radiology systems, and lists the scans on the PACS.", who: "Resident", nodes: ["systems", "records"], paths: ["systems-records"], preview: "casefile" },
-    { id: "quote", title: "Every value with its source", body: "Each value is kept together with the line of the report it came from. A value without a source is dropped or marked for review. Nothing is read from the images.", who: "Vaidyx", chip: "Every value quoted", nodes: ["records", "quote"], paths: ["records-quote"], preview: "casefile" },
-    { id: "checklist", title: "The checklist shows what is missing", body: "The checklist for this cancer, built on NCG guidance, lists what the Board needs. Missing reports are named, with the department that holds them.", who: "Vaidyx", nodes: ["quote", "checklist"], paths: ["quote-checklist"], preview: "casefile" },
-    { id: "request", title: "A request to Pathology, answered in the file", body: "One tap sends the request, with its clinical context, to the Pathology desk in the HIS. The report comes back into the Case File and the item closes.", who: "Pathologist", chip: "Report back in the file", nodes: ["checklist", "request", "systems"], paths: ["checklist-request", "request-systems"], preview: "request" },
-    { id: "briefs", title: "Specialty briefs, ready before the meeting", body: "Six specialty helpers each prepare a brief from the records: radiology, pathology, medical, surgical and radiation oncology, nuclear medicine. Every sentence carries its quote.", who: "Vaidyx", nodes: ["request", "briefs"], paths: ["request-briefs"], preview: "brief" },
-    { id: "question", title: "The doctor writes the question", body: "The treating doctor reads the brief, writes the question for the Board and marks the Case File ready. From here on, people decide.", who: "Treating doctor", chip: "Doctors decide", nodes: ["briefs", "question", "ready"], paths: ["briefs-question", "question-ready"] },
-    { id: "agenda", title: "On the agenda", body: "The MDT Coordinator sets the meeting and adds the ready Case Files. Each one is ready, or says what is still missing.", who: "MDT Coordinator", nodes: ["ready", "agenda"], paths: ["ready-agenda"] },
-    { id: "meeting", title: "The meeting, on one screen", body: "In the room or by video. The room display shows the slide, and any report or scan opens beside it, from the Case File, without leaving the meeting.", who: "The Board", nodes: ["agenda", "meeting"], paths: ["agenda-meeting"], preview: "room" },
-    { id: "decision", title: "The decision, recorded as it is made", body: "The decision is written during the discussion, with the members present and the questions asked. It is the Board's, not Vaidyx's.", who: "The Board", chip: "Doctors decide", nodes: ["meeting", "decision"], paths: ["meeting-decision"], preview: "slide" },
-    { id: "after", title: "What leaves the room", body: "Minutes and the board deck when the meeting ends; the NCG template and pre-authorization papers from the same record; follow-ups tracked; every action in the audit log. Patient data stays in the hospital.", who: "MDT Coordinator", chip: "Nothing leaves the hospital", nodes: ["decision", "minutes", "deck", "ncg", "preauth", "audit"], paths: ["decision-minutes", "minutes-deck", "deck-ncg", "ncg-preauth", "preauth-audit"], preview: "after" },
+    { id: "uhid", title: "A Case File is opened by UHID", body: "The records arrive from the HIS, the lab and radiology systems and the PACS, each value stored with its source line.", who: "Resident · Vaidyx", chip: "Every value quoted", nodes: ["systems", "opened", "records"], paths: ["opened-records", "systems-records"], preview: "casefile" },
+    { id: "quote", title: "Completeness checked against the protocol", body: "The NCG-based checklist for this cancer lists what the Board needs and which department holds it.", who: "Vaidyx", nodes: ["records", "checklist"], paths: ["records-checklist"], preview: "casefile" },
+    { id: "request", title: "Missing reports requested and returned", body: "A request reaches the Pathology or Radiology desk in the HIS; the filed report returns into the Case File and the item closes.", who: "Pathologist · Radiologist", chip: "The loop closes in the file", nodes: ["checklist", "request", "report", "records"], paths: ["checklist-request", "request-report", "report-records"], preview: "request" },
+    { id: "briefs", title: "Specialty briefs prepared", body: "Six specialty helpers prepare briefs from the records, every sentence with its quote.", who: "Vaidyx", nodes: ["request", "briefs"], paths: ["request-briefs"], preview: "brief" },
+    { id: "question", title: "The question for the Board", body: "The treating doctor reads the briefs, writes the question and marks the Case File ready.", who: "Treating doctor", chip: "Doctors decide", nodes: ["briefs", "question"], paths: ["briefs-question"] },
+    { id: "meeting", title: "The agenda and the meeting", body: "The MDT Coordinator lists the ready Case Files; in the room the display shows the slide, and any report or scan opens beside it.", who: "MDT Coordinator · the Board", nodes: ["question", "agenda", "meeting"], paths: ["question-agenda", "agenda-meeting"], preview: "room" },
+    { id: "decision", title: "The decision, or a deferral", body: "The Board's decision is recorded during the discussion; when more information is needed, the Case File goes back to the treating doctor.", who: "The Board", chip: "Doctors decide", nodes: ["meeting", "decision", "question"], paths: ["meeting-decision", "decision-question"], preview: "slide" },
+    { id: "after", title: "Minutes, deck and forms from one record", body: "Minutes, the board deck, the NCG form and pre-authorization papers come from the same record, and every action is logged.", who: "MDT Coordinator", chip: "Nothing leaves the hospital", nodes: ["decision", "outputs"], paths: ["decision-outputs"], preview: "after" },
+    { id: "followup", title: "Follow-up, and back to the Board when needed", body: "The treating department tracks the follow-up; at progression the same Case File is re-discussed.", who: "Treating department", nodes: ["outputs", "followup", "opened"], paths: ["outputs-followup", "followup-opened"] },
   ] satisfies FlowStep[],
 };
 
@@ -228,7 +228,7 @@ export const FOOTER = {
   scope: "Vaidyx checks, routes, summarises and flags. Doctors make the decisions.",
   copyright: `© ${new Date().getFullYear()} TANUH, The AI Centre of Excellence in Healthcare.`,
   columns: [
-    { title: "Product", links: [{ label: "How it works", to: "/#how" }, { label: "Traceability", to: "/#sources" }, { label: "The journey", to: "/#journey" }, { label: "Design principles", to: "/#safety" }] },
+    { title: "Product", links: [{ label: "How it works", to: "/#how" }, { label: "Traceability", to: "/#sources" }, { label: "Workflow", to: "/#journey" }, { label: "Design principles", to: "/#safety" }] },
     { title: "About", links: [{ label: "Our team", to: "/about" }, { label: "TANUH", to: "/about#tanuh" }, { label: "Contact", to: "/contact" }] },
     { title: "Resources", links: [{ label: "Research", to: "/research" }, { label: "Documentation", to: "/docs" }, { label: "Visit TANUH", to: "https://tanuh.ai" }] },
     { title: "Account", links: [{ label: "Sign in", to: "/sign-in" }] },

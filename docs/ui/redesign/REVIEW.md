@@ -83,3 +83,7 @@ http://localhost:7000/tb-nik/lab: the lockup, now large and on the plain field w
 ## 20 Oct: the entrance everywhere, and the meeting scene
 
 Option A (the brand reveal) is the entrance in all three places: the website once per page load, after every sign-in (large, no glow, then the mark glides into the top bar), and after every sign-out (over the sign-in form, then it dissolves). The During screen of How it works now shows a pointer opening "Report + scan": the slide gives way to the report and the CT image side by side, then returns; the step "Reports and scans, in the meeting" is added.
+
+## 20 Oct: the workflow map (in the roles section's place)
+
+"The Tumour Board workflow, from records to follow-up": a swimlane chart (rows: hospital systems, treating department, Vaidyx, Pathology and Radiology, coordinator and Board; columns: before the Board, the meeting, after) with three dashed loops (a report returning into the file, a deferral for more information, re-discussion at progression). Nine steps on the right with who acts, a chip and a small preview; the actions are pinned so they never move; it plays on its own until you click. The card is wider than the other sections so the map has room; on a phone the map scrolls sideways. Live on the public link too. Words in content.ts under FLOW.
