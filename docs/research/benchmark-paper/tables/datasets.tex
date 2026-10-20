@@ -1,0 +1,18 @@
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.2cm}>{\raggedright\arraybackslash}p{6.6cm}>{\raggedright\arraybackslash}p{3.0cm}>{\raggedright\arraybackslash}p{2.2cm}>{\raggedright\arraybackslash}p{1.3cm}@{}}
+\toprule
+Dataset & What it tests & Questions & Format & Chance \\
+\midrule
+MedQA & US medical licensing exam (USMLE) style clinical vignettes: diagnosis, next step, mechanism & 1,273 (test) & 4 options & 25 \% \\
+MedMCQA & Indian postgraduate medical entrance exams (AIIMS, NEET-PG) across 21 subjects; the most India-relevant text test & 4,183 (validation; test answers are hidden) & 4 options & 25 \% \\
+PubMedQA & Reading a research abstract and answering a yes / no / maybe question about it (evidence reading, not recall) & 1,000 (expert-labelled) & yes / no / maybe & 33 \% \\
+MMLU-Med & Six medical subjects of MMLU: anatomy, clinical knowledge, college biology, college medicine, medical genetics, professional medicine & 1,089 (test) & 4 options & 25 \% \\
+MedXpertQA & Expert-level, deliberately hard questions from 17 specialty board exams, filtered so that strong models fail them; text subset & 2,450 (test) & 10 options & 10 \% \\
+\midrule
+VQA-RAD & Radiology images (CT, MRI, X-ray) with clinician-written questions & 451 (test) & yes/no and short answer & varies \\
+SLAKE & Radiology images with organ, position and abnormality questions (English subset) & 1,061 (test) & yes/no and short answer & varies \\
+PathVQA & Pathology images and textbook figures; open answers are long medical phrases, so exact match is strict & 6,719 (test) & yes/no and short answer & varies \\
+PMC-VQA & Figures from PubMed Central papers (all modalities), cleaned test set & 2,000 (test\_clean) & 4 options & 25 \% \\
+MedXpertQA-MM & Expert board-exam questions that need one or more clinical images plus a vignette & 2,000 (test) & 5 options & 20 \% \\
+OmniMedVQA & Open-access part of OmniMedVQA: 42 public datasets, 8 modalities (MRI, CT, ultrasound, X-ray, dermoscopy, microscopy, fundus, OCT); mostly modality, anatomy and disease recognition & 88,996 & 2 to 4 options & about 27 \% \\
+\bottomrule
+\end{tabular}

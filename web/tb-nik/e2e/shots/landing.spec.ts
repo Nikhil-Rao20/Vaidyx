@@ -54,6 +54,25 @@ test.describe("landing", () => {
     await expect(page.getByTestId("contact-done")).toBeVisible();
   });
 
+  test("research", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await visit(page, "/research", { signedOut: true });
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(/\S/);
+    await expect(page.getByTestId("research-download")).toHaveAttribute("href", "/static/tb-nik/research/vaidyx-benchmark-2026.pdf");
+    const pdf = await page.request.get("/static/tb-nik/research/vaidyx-benchmark-2026.pdf");
+    expect(pdf.status()).toBe(200);
+    expect((await pdf.body()).subarray(0, 5).toString()).toBe("%PDF-");
+    await expect(page.locator("figure table")).toHaveCount(16); // Tables 1 and 3-17; Table 2 is the data cards
+    await expect(page.getByTestId("research-datacards")).toContainText("Table 2.");
+    await expect(page.getByTestId("research-datacards").locator(".l-box")).toHaveCount(11);
+    await expect(page.getByTestId("research-text-cot").locator("tbody tr")).toHaveCount(13);
+    await expect(page.getByTestId("research-text-cot").locator("tbody tr").first()).toContainText("Gemma-4-31B-it");
+    await expect(page.getByTestId("research-table-models")).toContainText("China");
+    await shoot(page, "site", "research", { fullPage: true, sizes: [SIZES[0], SIZES[2]], themes: ["light", "dark"] });
+    expect(errors, errors.join("\n")).toEqual([]);
+  });
+
   test("signed in", async ({ page }) => {
     await visit(page, "/", { role: "treating" });
     await expect(page.getByTestId("landing-signin")).toHaveText(/Open Case Files/);
