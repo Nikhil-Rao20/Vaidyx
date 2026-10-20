@@ -1899,6 +1899,892 @@ export const RESEARCH_DATA = {
    "dels": "87.9"
   }
  ],
+ "experiments": {
+  "ciText": [
+   {
+    "key": "gemma-4-31b-it",
+    "cot": [
+     76.64,
+     75.87,
+     77.41
+    ],
+    "direct": [
+     59.24,
+     58.45,
+     60.04
+    ],
+    "medxpertqa": [
+     55.14,
+     53.22,
+     57.02
+    ]
+   },
+   {
+    "key": "huatuogpt-3-27b",
+    "cot": [
+     71.24,
+     70.43,
+     72.06
+    ],
+    "direct": [
+     66.04,
+     65.19,
+     66.88
+    ],
+    "medxpertqa": [
+     40.37,
+     38.41,
+     42.29
+    ]
+   },
+   {
+    "key": "qwen3.5-4b",
+    "cot": [
+     62.37,
+     61.55,
+     63.22
+    ],
+    "direct": [
+     53.11,
+     52.24,
+     54.01
+    ],
+    "medxpertqa": [
+     24.29,
+     22.57,
+     25.96
+    ]
+   },
+   {
+    "key": "medgemma-27b-text-it",
+    "cot": [
+     62.05,
+     61.22,
+     62.87
+    ],
+    "direct": [
+     30.08,
+     29.24,
+     30.87
+    ],
+    "medxpertqa": [
+     19.31,
+     17.8,
+     20.86
+    ]
+   },
+   {
+    "key": "medgemma-27b-it",
+    "cot": [
+     61.69,
+     60.87,
+     62.53
+    ],
+    "direct": [
+     53.42,
+     52.57,
+     54.26
+    ],
+    "medxpertqa": [
+     21.18,
+     19.59,
+     22.82
+    ]
+   },
+   {
+    "key": "baichuan-m2-32b",
+    "cot": [
+     61.21,
+     60.35,
+     62.02
+    ],
+    "direct": [
+     58.6,
+     57.75,
+     59.43
+    ],
+    "medxpertqa": [
+     21.39,
+     19.8,
+     23.06
+    ]
+   },
+   {
+    "key": "lingshu-32b",
+    "cot": [
+     58.17,
+     57.32,
+     59.05
+    ],
+    "direct": [
+     59.85,
+     58.99,
+     60.73
+    ],
+    "medxpertqa": [
+     20.24,
+     18.57,
+     21.84
+    ]
+   },
+   {
+    "key": "medgemma-4b-it",
+    "cot": [
+     50.79,
+     49.92,
+     51.64
+    ],
+    "direct": [
+     46.61,
+     45.71,
+     47.48
+    ],
+    "medxpertqa": [
+     14.45,
+     13.06,
+     15.88
+    ]
+   },
+   {
+    "key": "med42-8b",
+    "cot": [
+     49.73,
+     48.87,
+     50.66
+    ],
+    "direct": [
+     52.44,
+     51.55,
+     53.33
+    ],
+    "medxpertqa": [
+     13.84,
+     12.49,
+     15.22
+    ]
+   },
+   {
+    "key": "jsl-med-8b",
+    "cot": [
+     49.37,
+     48.49,
+     50.24
+    ],
+    "direct": [
+     46.96,
+     46.08,
+     47.83
+    ],
+    "medxpertqa": [
+     12.53,
+     11.22,
+     13.84
+    ]
+   },
+   {
+    "key": "medgemma-1.5-4b-it",
+    "cot": [
+     42.73,
+     41.84,
+     43.62
+    ],
+    "direct": [
+     29.84,
+     29.04,
+     30.64
+    ],
+    "medxpertqa": [
+     10.2,
+     9.02,
+     11.35
+    ]
+   },
+   {
+    "key": "openbiollm-8b",
+    "cot": [
+     41.94,
+     41.05,
+     42.81
+    ],
+    "direct": [
+     35.45,
+     34.56,
+     36.32
+    ],
+    "medxpertqa": [
+     11.8,
+     10.53,
+     13.1
+    ]
+   },
+   {
+    "key": "medllama2-7b",
+    "cot": [
+     34.3,
+     33.4,
+     35.16
+    ],
+    "direct": [
+     28.19,
+     27.39,
+     28.98
+    ],
+    "medxpertqa": [
+     10.53,
+     9.31,
+     11.76
+    ]
+   }
+  ],
+  "paired": [
+   {
+    "comparison": "Gemma-4-31B vs HuatuoGPT-3, CoT overall",
+    "diff": 5.4,
+    "lo": 4.61,
+    "hi": 6.15,
+    "a_only": 1068,
+    "b_only": 528,
+    "p_mcnemar": 2.85e-42
+   },
+   {
+    "comparison": "HuatuoGPT-3 vs Qwen3.5-4B, CoT overall",
+    "diff": 8.86,
+    "lo": 7.97,
+    "hi": 9.74,
+    "a_only": 1471,
+    "b_only": 585,
+    "p_mcnemar": 1.33e-87
+   },
+   {
+    "comparison": "Qwen3.5-4B vs MedGemma-27B-it, CoT overall ('matches')",
+    "diff": 0.68,
+    "lo": -0.17,
+    "hi": 1.54,
+    "a_only": 1012,
+    "b_only": 944,
+    "p_mcnemar": 0.13
+   },
+   {
+    "comparison": "Qwen3.5-4B vs MedGemma-27B-it, CoT MedQA",
+    "diff": -0.94,
+    "lo": -3.22,
+    "hi": 1.34,
+    "a_only": 107,
+    "b_only": 119,
+    "p_mcnemar": 0.464
+   },
+   {
+    "comparison": "Qwen3.5-4B vs MedGemma-27B-text-it, CoT overall",
+    "diff": 0.32,
+    "lo": -0.57,
+    "hi": 1.19,
+    "a_only": 1033,
+    "b_only": 1001,
+    "p_mcnemar": 0.492
+   },
+   {
+    "comparison": "MedGemma-27B-text-it vs MedGemma-27B-it, CoT overall",
+    "diff": 0.36,
+    "lo": -0.41,
+    "hi": 1.14,
+    "a_only": 817,
+    "b_only": 781,
+    "p_mcnemar": 0.381
+   },
+   {
+    "comparison": "MedGemma-27B-it vs Baichuan-M2, CoT overall",
+    "diff": 0.48,
+    "lo": -0.39,
+    "hi": 1.36,
+    "a_only": 1017,
+    "b_only": 969,
+    "p_mcnemar": 0.292
+   },
+   {
+    "comparison": "Baichuan-M2 vs Lingshu-32B, CoT overall",
+    "diff": 3.04,
+    "lo": 2.16,
+    "hi": 3.95,
+    "a_only": 1180,
+    "b_only": 876,
+    "p_mcnemar": 2.17e-11
+   },
+   {
+    "comparison": "Med42-8B vs JSL-MedLlama, CoT overall",
+    "diff": 0.36,
+    "lo": -0.59,
+    "hi": 1.35,
+    "a_only": 1304,
+    "b_only": 1268,
+    "p_mcnemar": 0.49
+   },
+   {
+    "comparison": "MedGemma-1.5-4B vs OpenBioLLM-8B, CoT overall",
+    "diff": 0.79,
+    "lo": -0.38,
+    "hi": 1.88,
+    "a_only": 1735,
+    "b_only": 1656,
+    "p_mcnemar": 0.18
+   },
+   {
+    "comparison": "Qwen3.5-4B vs MedGemma-4B-it, CoT overall",
+    "diff": 11.59,
+    "lo": 10.6,
+    "hi": 12.6,
+    "a_only": 1961,
+    "b_only": 803,
+    "p_mcnemar": 1.21e-110
+   },
+   {
+    "comparison": "Gemma-4-31B vs HuatuoGPT-3, CoT MedXpertQA",
+    "diff": 14.78,
+    "lo": 12.69,
+    "hi": 16.86,
+    "a_only": 549,
+    "b_only": 187,
+    "p_mcnemar": 4.11e-42
+   },
+   {
+    "comparison": "HuatuoGPT-3 vs Lingshu-32B, direct overall",
+    "diff": 6.19,
+    "lo": 5.34,
+    "hi": 7.05,
+    "a_only": 1359,
+    "b_only": 740,
+    "p_mcnemar": 4.64e-42
+   },
+   {
+    "comparison": "gemma-4-31b-it: CoT vs direct overall",
+    "diff": 17.4,
+    "lo": 16.63,
+    "hi": 18.15,
+    "a_only": 1946,
+    "b_only": 207,
+    "p_mcnemar": 0.0
+   },
+   {
+    "comparison": "huatuogpt-3-27b: CoT vs direct overall",
+    "diff": 5.19,
+    "lo": 4.37,
+    "hi": 5.98,
+    "a_only": 1084,
+    "b_only": 565,
+    "p_mcnemar": 7.15e-38
+   },
+   {
+    "comparison": "lingshu-32b: CoT vs direct overall",
+    "diff": -1.68,
+    "lo": -2.52,
+    "hi": -0.88,
+    "a_only": 786,
+    "b_only": 954,
+    "p_mcnemar": 6.16e-05
+   },
+   {
+    "comparison": "med42-8b: CoT vs direct overall",
+    "diff": -2.7,
+    "lo": -3.49,
+    "hi": -1.89,
+    "a_only": 779,
+    "b_only": 1049,
+    "p_mcnemar": 2.92e-10
+   },
+   {
+    "comparison": "HuatuoGPT-3 vs Lingshu-32B, OmniMedVQA first-token",
+    "diff": 0.49,
+    "lo": 0.19,
+    "hi": 0.77,
+    "a_only": 8638,
+    "b_only": 8203,
+    "p_mcnemar": 0.000824
+   },
+   {
+    "comparison": "Lingshu-32B vs Gemma-4-31B, OmniMedVQA first-token",
+    "diff": 0.91,
+    "lo": 0.62,
+    "hi": 1.21,
+    "a_only": 9708,
+    "b_only": 8902,
+    "p_mcnemar": 3.59e-09
+   },
+   {
+    "comparison": "Lingshu-32B vs HuatuoGPT-3, SLAKE",
+    "diff": 24.6,
+    "lo": 21.58,
+    "hi": 27.62,
+    "a_only": 298,
+    "b_only": 37,
+    "p_mcnemar": 8.02e-52
+   },
+   {
+    "comparison": "Lingshu-32B vs MedGemma-4B, VQA-RAD",
+    "diff": 10.64,
+    "lo": 5.99,
+    "hi": 15.08,
+    "a_only": 82,
+    "b_only": 34,
+    "p_mcnemar": 9.69e-06
+   },
+   {
+    "comparison": "Gemma-4-31B vs HuatuoGPT-3, MedXpertQA-MM CoT",
+    "diff": 5.75,
+    "lo": 3.5,
+    "hi": 8.1,
+    "a_only": 348,
+    "b_only": 233,
+    "p_mcnemar": 2.09e-06
+   },
+   {
+    "comparison": "Gemma-4-31B vs Lingshu-32B, PMC-VQA CoT",
+    "diff": 6.0,
+    "lo": 3.75,
+    "hi": 8.2,
+    "a_only": 332,
+    "b_only": 212,
+    "p_mcnemar": 3.02e-07
+   }
+  ],
+  "oncology": {
+   "sizes": {
+    "medqa": 159,
+    "medmcqa": 189,
+    "medxpertqa": 326
+   },
+   "n": 674,
+   "rows": [
+    {
+     "key": "gemma-4-31b-it",
+     "oncology": [
+      74.04,
+      70.92,
+      77.0
+     ],
+     "rest": [
+      73.62,
+      72.64,
+      74.6
+     ],
+     "direct": [
+      45.1,
+      42.43,
+      47.92
+     ]
+    },
+    {
+     "key": "huatuogpt-3-27b",
+     "oncology": [
+      67.51,
+      64.24,
+      70.62
+     ],
+     "rest": [
+      66.98,
+      66.0,
+      68.0
+     ],
+     "direct": [
+      61.87,
+      58.61,
+      64.99
+     ]
+    },
+    {
+     "key": "qwen3.5-4b",
+     "oncology": [
+      54.75,
+      51.48,
+      58.01
+     ],
+     "rest": [
+      56.9,
+      55.83,
+      57.9
+     ],
+     "direct": [
+      43.77,
+      40.5,
+      46.88
+     ]
+    },
+    {
+     "key": "baichuan-m2-32b",
+     "oncology": [
+      54.75,
+      51.63,
+      57.87
+     ],
+     "rest": [
+      56.61,
+      55.61,
+      57.61
+     ],
+     "direct": [
+      47.48,
+      44.51,
+      50.74
+     ]
+    },
+    {
+     "key": "medgemma-27b-it",
+     "oncology": [
+      52.67,
+      49.41,
+      55.93
+     ],
+     "rest": [
+      56.53,
+      55.53,
+      57.56
+     ],
+     "direct": [
+      44.51,
+      41.54,
+      47.63
+     ]
+    },
+    {
+     "key": "lingshu-32b",
+     "oncology": [
+      50.45,
+      47.18,
+      53.71
+     ],
+     "rest": [
+      51.94,
+      50.88,
+      52.93
+     ],
+     "direct": [
+      50.15,
+      47.03,
+      53.26
+     ]
+    },
+    {
+     "key": "medgemma-27b-text-it",
+     "oncology": [
+      50.3,
+      47.18,
+      53.41
+     ],
+     "rest": [
+      57.36,
+      56.36,
+      58.34
+     ],
+     "direct": [
+      14.69,
+      12.46,
+      16.91
+     ]
+    },
+    {
+     "key": "med42-8b",
+     "oncology": [
+      43.03,
+      39.76,
+      46.15
+     ],
+     "rest": [
+      45.62,
+      44.58,
+      46.67
+     ],
+     "direct": [
+      42.73,
+      39.47,
+      45.99
+     ]
+    },
+    {
+     "key": "medgemma-4b-it",
+     "oncology": [
+      40.8,
+      37.24,
+      44.07
+     ],
+     "rest": [
+      45.17,
+      44.14,
+      46.23
+     ],
+     "direct": [
+      36.2,
+      32.94,
+      39.32
+     ]
+    },
+    {
+     "key": "jsl-med-8b",
+     "oncology": [
+      37.24,
+      34.12,
+      40.36
+     ],
+     "rest": [
+      43.24,
+      42.2,
+      44.28
+     ],
+     "direct": [
+      30.12,
+      27.0,
+      33.09
+     ]
+    },
+    {
+     "key": "medgemma-1.5-4b-it",
+     "oncology": [
+      33.23,
+      30.27,
+      36.5
+     ],
+     "rest": [
+      37.8,
+      36.78,
+      38.87
+     ],
+     "direct": [
+      17.36,
+      14.99,
+      19.73
+     ]
+    },
+    {
+     "key": "openbiollm-8b",
+     "oncology": [
+      31.45,
+      28.04,
+      34.57
+     ],
+     "rest": [
+      37.6,
+      36.56,
+      38.62
+     ],
+     "direct": [
+      27.6,
+      24.48,
+      30.71
+     ]
+    },
+    {
+     "key": "medllama2-7b",
+     "oncology": [
+      25.52,
+      22.4,
+      28.78
+     ],
+     "rest": [
+      28.08,
+      27.09,
+      29.11
+     ],
+     "direct": [
+      14.69,
+      12.17,
+      17.21
+     ]
+    }
+   ]
+  },
+  "tcgaScale": {
+   "reports": 2102,
+   "by_project": {
+    "BRCA": 1034,
+    "LUAD": 488,
+    "COAD": 418,
+    "READ": 162
+   },
+   "errors": 3,
+   "seconds": 470.8,
+   "claims": 10883,
+   "ungrounded": 151,
+   "ungrounded_rate_pct": 1.387,
+   "ungrounded_upper95_pct": 1.625,
+   "claims_per_field": {
+    "histologic_type": 2091,
+    "grade": 1985,
+    "lvi": 1482,
+    "margins": 1875,
+    "er": 601,
+    "pr": 596,
+    "her2": 584,
+    "recorded_stage": 1629,
+    "mmr": 40
+   },
+   "stated_in_extracted_stage": {
+    "pT": 1280,
+    "pN": 571,
+    "stage group": 77
+   },
+   "report_says_pending": {
+    "ER": 49,
+    "PR": 49,
+    "HER2 (IHC)": 63
+   },
+   "her2_fish_only": 50,
+   "disagreements_with_verified_quote": {
+    "PR": {
+     "verified": 52,
+     "of": 53
+    },
+    "Histology": {
+     "verified": 49,
+     "of": 51
+    },
+    "HER2 (IHC)": {
+     "verified": 63,
+     "of": 65
+    },
+    "pT": {
+     "verified": 35,
+     "of": 36
+    },
+    "ER": {
+     "verified": 46,
+     "of": 47
+    },
+    "Stage group": {
+     "verified": 5,
+     "of": 5
+    },
+    "pN": {
+     "verified": 15,
+     "of": 15
+    }
+   },
+   "agreement": {
+    "Histology": {
+     "agree": 1961,
+     "n": 2012,
+     "pct": 97.5,
+     "lower95_pct": 96.7
+    },
+    "pT": {
+     "agree": 1244,
+     "n": 1280,
+     "pct": 97.2,
+     "lower95_pct": 96.1
+    },
+    "pN": {
+     "agree": 556,
+     "n": 571,
+     "pct": 97.4,
+     "lower95_pct": 95.7
+    },
+    "ER": {
+     "agree": 495,
+     "n": 542,
+     "pct": 91.3,
+     "lower95_pct": 88.7
+    },
+    "PR": {
+     "agree": 485,
+     "n": 538,
+     "pct": 90.1,
+     "lower95_pct": 87.3
+    },
+    "Stage group": {
+     "agree": 70,
+     "n": 75,
+     "pct": 93.3,
+     "lower95_pct": 85.3
+    },
+    "HER2 (IHC)": {
+     "agree": 346,
+     "n": 411,
+     "pct": 84.2,
+     "lower95_pct": 80.3
+    }
+   },
+   "model": "extractor role (Qwen3.5-4B, Chinese, non-medical), as shipped",
+   "details_file": "/data/vaidyx/research_experiments/tcga_scale_details.jsonl"
+  },
+  "probesScale": {
+   "ans": {
+    "n": 118,
+    "pass": 117,
+    "missed": 1,
+    "wrong": 0
+   },
+   "absent_true_trap": {
+    "n": 205,
+    "pass": 205,
+    "fabrication": 0
+   },
+   "absent_documented_after_all": 64,
+   "scope": {
+    "n": 32,
+    "pass": 32
+   },
+   "hand_written": {
+    "n": 57,
+    "pass": 57
+   },
+   "statements_removed_by_grounding": [
+    {
+     "case": "TB-003",
+     "probe": "absent",
+     "field": "lesion_size",
+     "reason": "quote_not_found",
+     "text": "The primary tumour in the mid rectum has a craniocaudal length of 5.5 cm.",
+     "review": "true, quote did not match",
+     "note": "5.5 cm craniocaudal length is in the MRI report"
+    },
+    {
+     "case": "TB-004",
+     "probe": "absent",
+     "field": "comparison_prior",
+     "reason": "number_not_in_quote",
+     "text": "No chest imaging older than the chest X-ray from 28/08/2026 is available for comparison.",
+     "review": "statement of absence",
+     "note": "no older chest imaging; a date not in the quote"
+    },
+    {
+     "case": "TB-004",
+     "probe": "absent",
+     "field": "treatment_received",
+     "reason": "quote_not_found",
+     "text": "The patient received T ab. Amoxicillin-clavulanate 625 mg 8-hourly from 12/09/2026.",
+     "review": "true, quote did not match",
+     "note": "amoxicillin-clavulanate 625 mg 8-hourly is in the discharge summary"
+    },
+    {
+     "case": "TB-006",
+     "probe": "ans",
+     "field": "histologic_type",
+     "reason": "number_not_in_quote",
+     "text": "Histopathology from 2026-05-15 recorded the diagnosis as Adenocarcinoma, well to moderately differentiated.",
+     "review": "wrong date caught",
+     "note": "dates the histopathology 2026-05-15; the report is of 25/05/2026"
+    },
+    {
+     "case": "TB-006",
+     "probe": "absent",
+     "field": "lesion_size",
+     "reason": "number_not_in_quote",
+     "text": "A colonoscopy on 2026-05-12 recorded an ulceroproliferative growth from 8 cm to 13 cm from the anal verge.",
+     "review": "wrong number caught",
+     "note": "says 8 cm to 13 cm from the anal verge; the colonoscopy report says 8 cm to 12 cm"
+    }
+   ],
+   "removed_by_review": {
+    "statement of absence": 1,
+    "true, quote did not match": 2,
+    "wrong date caught": 1,
+    "wrong number caught": 1
+   },
+   "statements_removed_by_output_guardrail": [
+    {
+     "case": "TB-001",
+     "field": "histologic_type"
+    }
+   ],
+   "generated": 419
+  }
+ },
  "totals": {
   "models": 13,
   "textQuestions": 9995,

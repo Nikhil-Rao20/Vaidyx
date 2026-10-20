@@ -1,0 +1,113 @@
+{
+ "reports": 2102,
+ "by_project": {
+  "BRCA": 1034,
+  "LUAD": 488,
+  "COAD": 418,
+  "READ": 162
+ },
+ "errors": 3,
+ "seconds": 470.8,
+ "claims": 10883,
+ "ungrounded": 151,
+ "ungrounded_rate_pct": 1.387,
+ "ungrounded_upper95_pct": 1.625,
+ "claims_per_field": {
+  "histologic_type": 2091,
+  "grade": 1985,
+  "lvi": 1482,
+  "margins": 1875,
+  "er": 601,
+  "pr": 596,
+  "her2": 584,
+  "recorded_stage": 1629,
+  "mmr": 40
+ },
+ "stated_in_extracted_stage": {
+  "pT": 1280,
+  "pN": 571,
+  "stage group": 77
+ },
+ "report_says_pending": {
+  "ER": 49,
+  "PR": 49,
+  "HER2 (IHC)": 63
+ },
+ "her2_fish_only": 50,
+ "disagreements_with_verified_quote": {
+  "PR": {
+   "verified": 52,
+   "of": 53
+  },
+  "Histology": {
+   "verified": 49,
+   "of": 51
+  },
+  "HER2 (IHC)": {
+   "verified": 63,
+   "of": 65
+  },
+  "pT": {
+   "verified": 35,
+   "of": 36
+  },
+  "ER": {
+   "verified": 46,
+   "of": 47
+  },
+  "Stage group": {
+   "verified": 5,
+   "of": 5
+  },
+  "pN": {
+   "verified": 15,
+   "of": 15
+  }
+ },
+ "agreement": {
+  "Histology": {
+   "agree": 1961,
+   "n": 2012,
+   "pct": 97.5,
+   "lower95_pct": 96.7
+  },
+  "pT": {
+   "agree": 1244,
+   "n": 1280,
+   "pct": 97.2,
+   "lower95_pct": 96.1
+  },
+  "pN": {
+   "agree": 556,
+   "n": 571,
+   "pct": 97.4,
+   "lower95_pct": 95.7
+  },
+  "ER": {
+   "agree": 495,
+   "n": 542,
+   "pct": 91.3,
+   "lower95_pct": 88.7
+  },
+  "PR": {
+   "agree": 485,
+   "n": 538,
+   "pct": 90.1,
+   "lower95_pct": 87.3
+  },
+  "Stage group": {
+   "agree": 70,
+   "n": 75,
+   "pct": 93.3,
+   "lower95_pct": 85.3
+  },
+  "HER2 (IHC)": {
+   "agree": 346,
+   "n": 411,
+   "pct": 84.2,
+   "lower95_pct": 80.3
+  }
+ },
+ "model": "extractor role (Qwen3.5-4B, Chinese, non-medical), as shipped",
+ "details_file": "/data/vaidyx/research_experiments/tcga_scale_details.jsonl"
+}

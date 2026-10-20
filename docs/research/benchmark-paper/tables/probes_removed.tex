@@ -1,0 +1,11 @@
+\begin{tabular}{@{}l>{\raggedright\arraybackslash}p{7.2cm}l>{\raggedright\arraybackslash}p{4.2cm}@{}}
+\toprule
+Case & Statement the reasoner wrote & Why removed & Review against the document \\
+\midrule
+TB-003 & The primary tumour in the mid rectum has a craniocaudal length of 5.5 cm. & quote not found & true, quote did not match: 5.5 cm craniocaudal length is in the MRI report \\
+TB-004 & No chest imaging older than the chest X-ray from 28/08/2026 is available for comparison. & number not in quote & statement of absence: no older chest imaging; a date not in the quote \\
+TB-004 & The patient received T ab. Amoxicillin-clavulanate 625 mg 8-hourly from 12/09/2026. & quote not found & true, quote did not match: amoxicillin-clavulanate 625 mg 8-hourly is in the discharge summary \\
+TB-006 & Histopathology from 2026-05-15 recorded the diagnosis as Adenocarcinoma, well to moderately differentiated. & number not in quote & wrong date caught: dates the histopathology 2026-05-15; the report is of 25/05/2026 \\
+TB-006 & A colonoscopy on 2026-05-12 recorded an ulceroproliferative growth from 8 cm to 13 cm from the anal verge. & number not in quote & wrong number caught: says 8 cm to 13 cm from the anal verge; the colonoscopy report says 8 cm to 12 cm \\
+\bottomrule
+\end{tabular}

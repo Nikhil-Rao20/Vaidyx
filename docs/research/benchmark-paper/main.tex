@@ -14,6 +14,7 @@
 \usepackage{array}
 \usepackage{xcolor}
 \usepackage{caption}
+\graphicspath{{./}}
 \usepackage{url}
 \usepackage{hyperref}
 \usepackage{natbib}
@@ -52,7 +53,7 @@
 \maketitle
 
 \begin{abstract}
-Vaidyx-TB is an assistant for hospital Tumour Boards in India. It checks, routes and summarises the records of a Case File and keeps every fact it shows tied to a verbatim quote from a source document; it does not interpret images, stage disease or advise treatment. Choosing the open-weight models behind it needs scores that are comparable with the published model cards and that reflect the exact weights the system runs. We benchmarked 13 open models (11 medical fine-tunes and 2 general models, 4B to 32B parameters, from developers in the USA, China and the UAE) on 11 public benchmarks, 5 text (9,995 questions) and 6 image (101,227 questions), with the published bf16 weights on one NVIDIA H200, greedy decoding, full test splits and no quantisation, under two protocols (step-by-step and direct answer): about one million graded answers. The harness reproduces published scores: MedGemma-27B-it lands within 2.5 points of its model card on all five text sets, and Lingshu-32B scores 82.4\pct{} against a published 83.4\pct{} on OmniMedVQA. Gemma-4-31B-it, a general model, is the strongest text model at 76.6\pct{} overall and 55.1\pct{} on MedXpertQA, where every medical model stays below 41\pct{}. HuatuoGPT-3-27B is the best medical model (71.2\pct{}) and leads OmniMedVQA (82.9\pct{}). Qwen3.5-4B matches MedGemma-27B-it on text at a seventh of the size, and Lingshu-32B leads radiology and pathology VQA. Full precision removes most of the gap seen in an earlier 4-bit run (older fine-tunes gain 11 to 30 points). We then report the grounded evaluations that decide what Vaidyx-TB ships: a reader and extractor bake-off on synthetic Case Files, 33 answerability probes with no fabrication from any of three candidate reasoners, 166 values extracted from 30 real TCGA pathology reports with none ungrounded, report-status detection measured on 9,523 real reports, a summary omission check, and an independent OCR number check (98.6\pct{} number recall; 99.4\pct{} of planted digit substitutions caught with no false alarm). Every answer is saved per question, so every number here can be re-scored.
+Vaidyx-TB is an assistant for hospital Tumour Boards in India. It checks, routes and summarises the records of a Case File and keeps every fact it shows tied to a verbatim quote from a source document; it does not interpret images, stage disease or advise treatment. Choosing the open-weight models behind it needs scores that are comparable with the published model cards and that reflect the exact weights the system runs. We benchmarked 13 open models (11 medical fine-tunes and 2 general models, 4B to 32B parameters, from developers in the USA, China and the UAE) on 11 public benchmarks, 5 text (9,995 questions) and 6 image (101,227 questions), with the published bf16 weights on one NVIDIA H200, greedy decoding, full test splits and no quantisation, under two protocols (step-by-step and direct answer): about one million graded answers. The harness reproduces published scores: MedGemma-27B-it lands within 2.5 points of its model card on all five text sets, and Lingshu-32B scores 82.4\pct{} against a published 83.4\pct{} on OmniMedVQA. Gemma-4-31B-it, a general model, is the strongest text model at 76.6\pct{} overall and 55.1\pct{} on MedXpertQA, where every medical model stays below 41\pct{}. HuatuoGPT-3-27B is the best medical model (71.2\pct{}) and leads OmniMedVQA (82.9\pct{}). Qwen3.5-4B matches MedGemma-27B-it on text at a seventh of the size, and Lingshu-32B leads radiology and pathology VQA. Full precision removes most of the gap seen in an earlier 4-bit run (older fine-tunes gain 11 to 30 points). Bootstrap intervals and paired tests show which differences hold: ranks 3 to 6 on text are statistically tied, and the top two lead firmly, also on the 674 questions that mention cancer. We then report the grounded evaluations that decide what Vaidyx-TB ships: a reader and extractor bake-off on synthetic Case Files; 476 questions to the Case File with no fabricated value shown, where an ablation shows that the reasoner itself rarely writes an unsupported statement (the grounding layer removed five, two of them with a wrong detail); 10,883 values read from 2,102 real TCGA pathology reports, of which 1.4\pct{} could not be tied to a quote and are flagged, with agreement with the clinical record of 90 to 98\pct{} for histology, pT, pN, ER and PR and 84\pct{} for HER2, the disagreements almost all stated in the reports themselves; report-status detection on 9,523 real reports; a summary omission check; and an independent OCR number check (98.6\pct{} number recall; 99.4\pct{} of planted digit substitutions caught with no false alarm). Every answer is saved per question, so every number here can be re-scored.
 \end{abstract}
 
 \keywords{medical language models \and benchmark \and multimodal \and tumour board \and grounding \and India}
@@ -119,8 +120,15 @@ Table~\ref{tab:datasets} gives a data card for each of the 11 benchmarks: five t
 
 \subsection{Step-by-step accuracy}
 
-Table~\ref{tab:text-cot} ranks the 13 models by their overall step-by-step accuracy. Gemma-4-31B-it, a general model, leads every column except PubMedQA: MedQA 93.2, MedMCQA 78.5, MMLU-Med 94.6, and 55.1 on MedXpertQA, where every medical model stays below 41. HuatuoGPT-3-27B is the best medical model at 71.2\pct{} overall and has the highest PubMedQA score (81.4). Qwen3.5-4B, a 4B general model, reaches 62.4\pct{}, ahead of MedGemma-27B-it (61.7\pct{}) and within one point on MedQA (82.2 against 83.1). MedMCQA is the hardest of the four standard sets: the seven strongest models score 9 to 16 points lower on it than on MedQA. Two scores are held down by format rather than knowledge, which the last column shows: Med42-8B parses only 75\pct{} of its PubMedQA replies and MedGemma-1.5-4B only 71\pct{} of its MedQA replies.
+Table~\ref{tab:text-cot} ranks the 13 models by their overall step-by-step accuracy. Gemma-4-31B-it, a general model, leads every column except PubMedQA: MedQA 93.2, MedMCQA 78.5, MMLU-Med 94.6, and 55.1 on MedXpertQA, where every medical model stays below 41. HuatuoGPT-3-27B is the best medical model at 71.2\pct{} overall and has the highest PubMedQA score (81.4). Qwen3.5-4B, a 4B general model, reaches 62.4\pct{}, statistically tied with MedGemma-27B-it (61.7\pct{}; Section~\ref{sec:uncertainty}) and within one point on MedQA (82.2 against 83.1). MedMCQA is the hardest of the four standard sets: the seven strongest models score 9 to 16 points lower on it than on MedQA. Two scores are held down by format rather than knowledge, which the last column shows: Med42-8B parses only 75\pct{} of its PubMedQA replies and MedGemma-1.5-4B only 71\pct{} of its MedQA replies.
 
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/ranking.pdf}
+\caption{Overall step-by-step accuracy over all 9,995 text questions, with 95\,\% bootstrap confidence intervals (Section~\ref{sec:uncertainty}). The shaded models are statistically tied. Teal: medical fine-tunes; violet: general models, not medically validated.}
+\label{fig:ranking}
+\end{figure}
 \begin{table}[htbp]
 \centering\small\setlength{\tabcolsep}{4pt}
 \caption{Step-by-step (CoT) accuracy in \pct{}, ranked by overall accuracy over all 9,995 text questions. Bold = best in column. Min parsed = the lowest parse rate across the five sets.}
@@ -132,6 +140,13 @@ Table~\ref{tab:text-cot} ranks the 13 models by their overall step-by-step accur
 
 Table~\ref{tab:text-direct} gives the direct-answer scores, the first-token score, the parse rate and the gain from reasoning (step-by-step minus direct, in points). HuatuoGPT-3-27B is the best direct-answer model (66.0\pct{}), which matters for a system that asks short, structured questions. Reasoning helps the general models most: Gemma-4-31B-it gains 17.4 points overall and 44.1 points on MedXpertQA (11.1 to 55.1), and Qwen3.5-4B gains 9.3 points. Two Google models cannot follow the letter-only instruction: MedGemma-27B-text-it scores 8.0 on MedQA under the direct protocol with 25\pct{} of replies parseable, against 80.2 with reasoning, and MedGemma-1.5-4B behaves the same way; their first-token scores (46.7 and 35.7 overall) show what they knew. Baichuan-M2's direct replies all began with a stray \texttt{</think>} tag that the parser rejected; the saved replies were re-scored with the tag removed, and nothing was regenerated (dagger in the table).
 
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/reasoning.pdf}
+\caption{What reasoning adds: overall text accuracy with a one-letter answer (open dot) and step by step (filled dot); the number is the gain in points. $^{\dagger}$Re-scored from the saved replies.}
+\label{fig:reasoning}
+\end{figure}
 \begin{table}[htbp]
 \centering\footnotesize\setlength{\tabcolsep}{3.5pt}
 \caption{Direct-answer accuracy in \pct{} (at most 32 new tokens), ranked by overall. First-token = the format-free score. Parsed = the lowest parse rate across the five sets. CoT gain = overall step-by-step minus overall direct, in points. $^{\dagger}$Re-scored from the saved replies after removing a stray thinking tag.}
@@ -143,6 +158,13 @@ Table~\ref{tab:text-direct} gives the direct-answer scores, the first-token scor
 
 Table~\ref{tab:text-pub} sets our step-by-step scores against the published ones for the eight models that report any of these five sets. MedGemma-27B-it lands within 2.5 points of its card on all five sets (mean $-1.1$), MedGemma-4B-it slightly above its card (mean $+1.2$), and Lingshu-32B within 3.4 points on every set (mean $-0.4$); these three confirm that the harness is like for like with a generated-answer protocol. MedGemma-27B-text-it is 3.4 points below its card on average, mostly on MedQA and MedXpertQA. MedGemma-1.5-4B is 10 points below its card, mainly because 29\pct{} of its MedQA replies never reach a final \texttt{Answer:} line within 2,048 tokens. Med42, JSL-MedLlama and OpenBioLLM are scored on their cards by answer likelihood with the lm-evaluation-harness \citep{gao2023harness}, not by generated answers, which usually gives a few points more than a generated-answer test; OpenBioLLM is 12.3 points below its card on average and its PubMedQA gap is 21.5 points. No published scores on these sets exist for Gemma-4-31B, Qwen3.5-4B, HuatuoGPT-3-27B, Baichuan-M2-32B or MedLlama2-7B.
 
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/published.pdf}
+\caption{This run against the published model-card scores, one dot per model and text set; the dashed line is equality and the band is $\pm$3 points. Orange: cards that score by answer likelihood rather than generated answers.}
+\label{fig:published}
+\end{figure}
 \begin{table}[htbp]
 \centering\footnotesize\setlength{\tabcolsep}{4pt}
 \caption{This run (bf16, step-by-step) against the published scores, in \pct{}. Difference = this run minus published, in points; the mean is over the sets the source reports.}
@@ -155,6 +177,13 @@ Table~\ref{tab:text-pub} sets our step-by-step scores against the published ones
 
 Table~\ref{tab:q4} compares the seven models of the September 2026 report, run then as Q4\_K\_M weights on a GB10 workstation, with this run on the same five splits. With the same weights at full precision and allowed to reason, MedGemma-27B-it rises from 69.8 to 83.1 on MedQA, and the older 7B to 8B fine-tunes gain between 10.6 and 30.1 points on average over the five sets (JSL-MedLlama $+30.1$, OpenBioLLM $+20.6$, MedGemma-1.5-4B $+15.9$, MedLlama2 $+10.6$). Under the direct protocol, which is closest to the earlier prompt, the gains are smaller and in two cases negative, so most of the earlier gap was the combination of 4-bit compression and a short-answer format, not the models themselves.
 
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/q4.pdf}
+\caption{The same weights at 4 bits (September 2026) and at full precision, direct and step by step; mean over the five text sets. The number is the step-by-step gain over the 4-bit run.}
+\label{fig:q4}
+\end{figure}
 \begin{table}[htbp]
 \centering\footnotesize\setlength{\tabcolsep}{4pt}
 \caption{The earlier 4-bit run against this run, in \pct{}. Mean gain = the average of the five scores minus the Q4 average, in points.}
@@ -162,13 +191,59 @@ Table~\ref{tab:q4} compares the seven models of the September 2026 report, run t
 \fit{\input{tables/text_vs_q4}}
 \end{table}
 
+
+\subsection{Uncertainty and ties}
+\label{sec:uncertainty}
+
+Every score above is an estimate from a finite set of questions. Table~\ref{tab:ci} gives 95\,\% percentile bootstrap intervals (4,000 resamples of questions, stratified by dataset for the overall score) and Table~\ref{tab:paired} the comparisons the text makes, as paired bootstrap intervals of the difference and McNemar's exact test on the questions where exactly one of the two models is right. An overall text score is uncertain by about $\pm$0.8 points, a MedXpertQA score by about $\pm$1.8, a MedQA score by $\pm$1.3 to $\pm$2.8. Ranks 3 to 6 (Qwen3.5-4B, MedGemma-27B-text-it, MedGemma-27B-it and Baichuan-M2) form one group within a point of each other that cannot be separated: Qwen3.5-4B is +0.7 points above MedGemma-27B-it with an interval of $-0.2$ to $+1.5$ ($p = 0.13$), which is what ``matches'' means here. Med42-8B and JSL-MedLlama, and MedGemma-1.5-4B and OpenBioLLM-8B, are also tied. The leads of Gemma-4-31B-it (+5.4 over HuatuoGPT-3) and HuatuoGPT-3 (+8.9 over Qwen3.5-4B) are firm, and so are the gains and losses from reasoning. On images, HuatuoGPT-3's OmniMedVQA lead over Lingshu-32B is real but only half a point; Lingshu's SLAKE lead is 24.6 points. The Baichuan-M2 direct scores, re-scored from the saved replies with the harness parser after removing the stray thinking tag, reproduce the published table exactly.
+
+\begin{table}[htbp]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\caption{Overall text accuracy with 95\,\% bootstrap confidence intervals, in \%.}
+\label{tab:ci}
+\fit{\input{tables/ci_text}}
+\end{table}
+
+\begin{table}[htbp]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\caption{Paired comparisons: the difference in points (first model minus second), its 95\,\% paired bootstrap interval, the questions only one model gets right, and McNemar's exact $p$.}
+\label{tab:paired}
+\fit{\input{tables/paired}}
+\end{table}
+
+\subsection{Questions about cancer}
+\label{sec:oncology}
+
+A Tumour Board assistant should be judged on cancer above all. A keyword filter over the question and its options (cancer, carcinoma, tumour, neoplasm, lymphoma, leukaemia, sarcoma, metastasis, malignancy, oncology, chemotherapy, radiotherapy, melanoma, myeloma) marks 674 questions of the three sets with clinical vignettes: MedQA 159, MedMCQA 189 and MedXpertQA 326. Figure~\ref{fig:oncology} and Table~\ref{tab:oncology} compare each model on these against the other questions of the same sets. The top two are unchanged (Gemma-4-31B-it 74.0, HuatuoGPT-3-27B 67.5) and score as well on cancer as on the rest. Most medical fine-tunes score lower on cancer: MedGemma-27B-text-it by 7.1 points, OpenBioLLM by 6.2, JSL-MedLlama by 6.0, MedGemma-4B by 4.4. Within the tied middle group, Qwen3.5-4B and Baichuan-M2 move ahead of the two MedGemma-27B models, but the intervals (about $\pm$3 points on 674 questions) overlap. The filter has not yet been checked by a clinician; a fixed sample of 100 questions is prepared for that check, and until then the slice is ``questions that mention cancer''.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/oncology.pdf}
+\caption{Step-by-step accuracy on the 674 questions that mention cancer (filled dot, with its 95\,\% interval) against the other questions of MedQA, MedMCQA and MedXpertQA (open dot); the number is the difference in points.}
+\label{fig:oncology}
+\end{figure}
+
+\begin{table}[htbp]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\caption{Accuracy on the 674 questions that mention cancer, in \%, ranked by the step-by-step score.}
+\label{tab:oncology}
+\fit{\input{tables/oncology}}
+\end{table}
+
 \section{Image results}
 \label{sec:image}
 
 \subsection{All datasets}
 
-Table~\ref{tab:img-all} gives the seven vision models on the six image sets, sorted by the OmniMedVQA first-token score. Lingshu-32B is clearly the best model on the radiology and pathology sets: SLAKE 84.9, VQA-RAD 67.4 and PathVQA 59.9, where the next best SLAKE score is 60.3. HuatuoGPT-3-27B leads OmniMedVQA (82.9) and, with reasoning, is second on MedXpertQA-MM (49.7). Gemma-4-31B-it leads the two expert multiple-choice sets once it is allowed to reason: PMC-VQA 66.2 and MedXpertQA-MM 55.5, against 2.4 on MedXpertQA-MM under the direct protocol, where it explains instead of answering. Two OmniMedVQA strict scores are formatting failures, not knowledge failures: MedGemma-1.5-4B (19.1) and Qwen3.5-4B (27.6) describe the image before answering and are cut at 32 tokens; their first-token scores are 68.2 and 74.2, and on the replies that could be read they score 86\pct{} and 78\pct{}.
+Table~\ref{tab:img-all} gives the seven vision models on the six image sets, sorted by the OmniMedVQA first-token score. Lingshu-32B is clearly the best model on the radiology and pathology sets: SLAKE 84.9, VQA-RAD 67.4 and PathVQA 59.9, where the next best SLAKE score is 60.3. HuatuoGPT-3-27B leads OmniMedVQA (82.9), by half a point over Lingshu, and with reasoning is second on MedXpertQA-MM (49.7). Gemma-4-31B-it leads the two expert multiple-choice sets once it is allowed to reason: PMC-VQA 66.2 and MedXpertQA-MM 55.5, against 2.4 on MedXpertQA-MM under the direct protocol, where it explains instead of answering. Two OmniMedVQA strict scores are formatting failures, not knowledge failures: MedGemma-1.5-4B (19.1) and Qwen3.5-4B (27.6) describe the image before answering and are cut at 32 tokens; their first-token scores are 68.2 and 74.2, and on the replies that could be read they score 86\pct{} and 78\pct{}.
 
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/images.pdf}
+\caption{Image question accuracy of the seven vision models; darker is higher and the ring marks the best model of each column. Direct protocol unless marked CoT; OmniMedVQA uses the first-token score.}
+\label{fig:images}
+\end{figure}
 \begin{table}[htbp]
 \centering\footnotesize\setlength{\tabcolsep}{3pt}
 \caption{Image question accuracy in \pct{}. The first five score columns use the direct protocol; the two CoT columns use the step-by-step protocol on the two multiple-choice sets. Sorted by OmniMedVQA first-token score.}
@@ -240,7 +315,7 @@ The corpus has three Case Files and 31 documents (PDF text layers, five scanned 
 
 \subsection{Answerability of questions to the Case File}
 
-The reasoner answers questions about a prepared Case File. Thirty-three probes cover answerable questions, absent values (fabrication traps, where the right answer is that the file does not say) and out-of-scope requests (a treatment recommendation, which must be declined). Table~\ref{tab:answerability} gives the three candidates. Gemma-4-31B-it passes all 33 and is the fastest, so it is the reasoner, labelled non-medical everywhere in the product; HuatuoGPT-3-27B and MedGemma-27B-it are one configuration switch away. All three produced zero fabrications, which is the grounding layer's doing rather than the models'. The same 33 probes are re-run at every release on freshly prepared cases and still pass with zero fabrications.
+The reasoner answers questions about a prepared Case File. Thirty-three probes cover answerable questions, absent values (fabrication traps, where the right answer is that the file does not say) and out-of-scope requests (a treatment recommendation, which must be declined). Table~\ref{tab:answerability} gives the three candidates. Gemma-4-31B-it passes all 33 and is the fastest, so it is the reasoner, labelled non-medical everywhere in the product; HuatuoGPT-3-27B and MedGemma-27B-it are one configuration switch away. All three produced zero fabrications. The same 33 probes are re-run at every release on freshly prepared cases and still pass with zero fabrications. How much of that is the reasoner and how much the grounding layer is measured next.
 
 \begin{table}[htbp]
 \centering\small
@@ -249,15 +324,53 @@ The reasoner answers questions about a prepared Case File. Thirty-three probes c
 \input{tables/answerability}
 \end{table}
 
-\subsection{Real pathology reports}
+\subsection{A larger probe set, and what the grounding layer removes}
+\label{sec:probes}
 
-To check the pipeline on real text, 30 pathology reports from TCGA (OCR text of the public de-identified PDFs) were processed with the shipped reader and extractor and compared with the TCGA clinical ground truth. The extractor produced 166 values; none was ungrounded. Agreement with the ground truth was ER 7/8, PR 7/8, histology 27/29 and pT as recorded 24/26 (Table~\ref{tab:tcga}). Every disagreement is a metric artefact rather than a wrong reading: the report says ``95\pct{} nuclear staining with moderate intensity'' where the ground truth says ER positive, the report states a stage group where the ground truth gives a pT, and the ground truth says ``Other, specify''. The run took 6.7\,s for the 30 reports.
+Thirty-three probes bound the fabrication rate only below about 9\pct{} (zero events in $n$ give a one-sided 95\pct{} upper bound near $3/n$). We generated 419 more from the answer keys of the eight synthetic Case Files: an answerable probe for every answer-key field with a value (``What is recorded for \emph{field}?''), a trap for every field of the catalogue that no answer key of that case has and that Vaidyx did not find in the file, and four out-of-scope requests per case (a treatment, a prognosis, reading an image, assigning a stage). Each ran through the shipped Ask pipeline, unchanged. The pipeline returns both the statements it shows and the ones the grounding step removed with the reason, so a single run gives both arms of the ablation: \emph{grounding off} is everything the reasoner wrote. Table~\ref{tab:probes} and Figure~\ref{fig:grounding} give the result. 117 of the 118 answerable probes were answered with the value and its quote; the one miss was a correct statement removed by the separate output guardrail. All 205 true traps were answered ``not documented'' and all 32 out-of-scope requests were declined. Sixty-four of the generated traps turned out to be documented in the file under a related name (smoking history for ``tobacco use'', nodal findings, comorbidities): the answer key has gaps, the reasoner answered them with verified quotes, and we count them separately rather than as fabrications. With the 57 hand-written probes, 476 probes in all and zero fabricated values shown; the one-sided 95\pct{} upper bound on the rate of a fabricated value on a true trap is now about 1.5\pct{} (0 of 205).
+
+The ablation corrects an impression the 33-probe run left. The reasoner itself rarely writes an unsupported statement: across the 419 probes the grounding layer removed five (Table~\ref{tab:probes-removed}), all reviewed by hand against the documents. Two carried a wrong detail that the layer caught (a tumour extent of 8 to 13\,cm where the report says 8 to 12\,cm, and a report date off by ten days); two were true statements removed because their quote did not match the document exactly, which is the layer's cost in recall; one was a statement that something was absent. Without the layer, two answers would have shown a wrong number or date. On the real pathology reports below the layer matters more, because OCR text is noisy.
 
 \begin{table}[htbp]
 \centering\small
-\caption{Thirty real TCGA pathology reports through the shipped pipeline: extracted values, grounding and agreement with the clinical ground truth.}
-\label{tab:tcga}
-\input{tables/tcga}
+\caption{The larger probe set through the shipped Ask pipeline (Gemma-4-31B-it, non-medical, with the verbatim-quote check).}
+\label{tab:probes}
+\fit{\input{tables/probes_scale}}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/grounding.pdf}
+\caption{Ask-the-Case-File probes: right answers per kind, and the five statements the grounding layer removed, by what a hand review found.}
+\label{fig:grounding}
+\end{figure}
+
+\begin{table}[htbp]
+\centering\footnotesize
+\caption{Every statement the grounding layer removed on the 419 generated probes, with the reason and a hand review against the document.}
+\label{tab:probes-removed}
+\fit{\input{tables/probes_removed}}
+\end{table}
+
+\subsection{Real pathology reports}
+\label{sec:tcga}
+
+The first check on real text used 30 TCGA pathology reports: 166 values, none ungrounded, and agreement with the clinical ground truth of ER 7/8, PR 7/8, histology 27/29 and pT 24/26. Thirty reports bound the ungrounded rate only below about 1.8\pct{}, so we ran the shipped reader and extractor, unchanged, on every TCGA report that has clinical ground truth in cBioPortal: 2,102 reports (1,034 breast, 488 lung adenocarcinoma, 580 colorectal), on the OCR text of the public de-identified PDFs \citep{kefeli2024tcga}. Three failed to process. The extractor read 10,883 values; 151 (1.4\pct{}, upper 95\pct{} bound 1.6\pct{}) had no quote that the grounding check could find in the report, mostly because OCR damage made the quote and the text differ (``Hastologic grade: Boorly''), and are flagged for review rather than shown as fact. This is where the grounding layer matters most: on clean synthetic text the reasoner and the extractor rarely produce an unverifiable value, on real OCR text one value in seventy cannot be tied to its line.
+
+Agreement with the clinical record is counted only where both sides state the field (Table~\ref{tab:tcga-scale}, Figure~\ref{fig:tcga}): histology 97.5\pct{}, pT 97.2\pct{}, pN 97.4\pct{}, stage group 93.3\pct{}, ER 91.3\pct{}, PR 90.1\pct{} and the HER2 IHC score 84.2\pct{}. Reports that say the result is to follow (``ordered'', ``pending'', ``previously reported''; 49 for ER and PR, 63 for HER2) and HER2 results given only as in situ hybridisation (50) are not readings of the IHC field and are counted apart. The disagreements are mostly not reading errors: 265 of the 272 carry a verified quote, so the report itself states what Vaidyx read and the clinical record differs from it, for example a pT from a later resection or a receptor status from another specimen. The comparison rules (ER and PR positive at 1\pct{} of stained cells or more, HER2 0 and 1+ negative, 2+ equivocal, 3+ positive; histology by key words) were refined after inspecting a sample of disagreements from a first scoring; with the first, stricter rules the agreement was 92.1\pct{} for histology, 88.6\pct{} for ER, 87.3\pct{} for PR and 74.0\pct{} for HER2, the other fields unchanged within a point. Every reading is saved, so the scoring can be redone under other rules.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/tcga.pdf}
+\caption{Agreement of the shipped extractor with the TCGA clinical record on 2,102 real pathology reports, with the lower 95\,\% bound (tick); right: the share of the differences in which the report itself states the extracted value (a verified quote).}
+\label{fig:tcga}
+\end{figure}
+
+\begin{table}[htbp]
+\centering\small
+\caption{The shipped extractor on 2,102 real TCGA pathology reports against the cBioPortal clinical record.}
+\label{tab:tcga-scale}
+\fit{\input{tables/tcga_scale}}
 \end{table}
 
 \subsection{Report status on 9,523 real reports}
@@ -305,13 +418,21 @@ On the power-capped H200, Gemma-4-31B-it decodes at about 30 tokens a second. Pr
 
 \paragraph{The harness is like for like.} Where the published protocol matches ours (generated answers, no thinking mode, the same scoring rule), our scores agree with the cards within a few points in both directions (Tables~\ref{tab:text-pub} and \ref{tab:img-pub}). The disagreements are explained by protocol: answer likelihood against generated answers, a language-model judge against exact match, thinking mode against a visible chain of thought, and one model that runs out of its 2,048-token budget. The numbers in this report can therefore be read as like for like with each other, which is what a model choice needs.
 
-\paragraph{Model generation matters more than size or medical fine-tuning.} The two best text models and the best small model are general models or recent medical models built on current base weights. Qwen3.5-4B, a 4B general model, matches a 27B medical model on text and beats every 7B to 8B medical fine-tune of the previous generation by 10 to 28 points. The older fine-tunes (MedLlama2, OpenBioLLM, JSL-MedLlama, Med42) are superseded and need not be benchmarked again.
+\paragraph{Model generation matters more than size or medical fine-tuning.} Figure~\ref{fig:size} shows it at a glance. The two best text models and the best small model are general models or recent medical models built on current base weights. Qwen3.5-4B, a 4B general model, matches a 27B medical model on text and beats every 7B to 8B medical fine-tune of the previous generation by 10 to 28 points. The older fine-tunes (MedLlama2, OpenBioLLM, JSL-MedLlama, Med42) are superseded and need not be benchmarked again.
+
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.92\textwidth]{figures/size.pdf}
+\caption{Parameters (log scale) against overall step-by-step accuracy. The ring marks the models of the earlier 4-bit report.}
+\label{fig:size}
+\end{figure}
 
 \paragraph{The hard sets separate the models.} On MedQA and MMLU-Med the top models are close to the ceiling. MedXpertQA (10 options, filtered to be hard) and MedMCQA (the Indian entrance examinations) spread them out: 55.1 against at most 40.4 on MedXpertQA, and 9 to 16 points lower on MedMCQA than on MedQA for the seven strongest models. An India-specific test is the obvious next addition.
 
 \paragraph{Format discipline is a separate property.} Several strong models cannot reply with a letter when asked to (MedGemma-27B-text-it, MedGemma-1.5-4B, Qwen3.5-4B and MedGemma-1.5-4B on images). The first-token and parse-rate columns separate this from knowledge. For a system that asks structured questions, the direct-answer columns are as informative as the step-by-step ones, and they favour HuatuoGPT-3-27B and Lingshu-32B.
 
-\paragraph{Benchmarks do not measure grounding.} All three candidate reasoners produced zero fabrications on the 33 probes, and the 166 values from real pathology reports were all grounded, because the grounding layer, not the model, decides what is shown. The benchmark picks the model with the most knowledge and the best reasoning; the grounded evaluations decide whether the product may show its output. Both are needed, and the second is the one that keeps the system within its declared scope.
+\paragraph{Benchmarks do not measure grounding, and grounding earns its place on real text.} On clean synthetic Case Files the reasoner rarely writes an unsupported statement: the grounding layer removed five statements in 419 probes, two of them with a wrong number or date, and no fabricated value reached the user in 476 probes (Section~\ref{sec:probes}). On real OCR text the picture changes: one value in seventy read from 2,102 TCGA reports could not be tied to its line and is flagged instead of shown (Section~\ref{sec:tcga}). The benchmark picks the model with the most knowledge and the best reasoning; the grounded evaluations decide whether the product may show its output. Both are needed, and the second is the one that keeps the system within its declared scope.
 
 \section{Caveats}
 
@@ -322,7 +443,8 @@ On the power-capped H200, Gemma-4-31B-it decodes at about 30 tokens a second. Pr
   \item \textbf{The short-answer format penalises explaining models.} Use the step-by-step columns to judge ability and the direct columns to judge format discipline.
   \item \textbf{Baichuan-M2's direct scores were re-scored} from the saved replies after a stray thinking tag broke the parser; no answer was regenerated. The parser will strip thinking tags in the next round.
   \item \textbf{Possible training overlap.} Lingshu was trained on the training splits of VQA-RAD, SLAKE and PathVQA, and newer models may have seen public test items. Benchmarks measure examination knowledge, not safety on real patient documents.
-  \item \textbf{The grounded evaluations are small and mostly synthetic.} Three Case Files, 31 documents, 33 probes, 111 synthetic scanned pages, and 30 real reports for the pipeline check. They are release gates for one product, not a clinical validation, and no clinical claim is made from them. Indic-language OCR is installed but not measured.
+  \item \textbf{The grounded evaluations are synthetic or American.} The probes come from eight synthetic Case Files and their answer keys, which have gaps (64 traps were documented after all); the real reports are American (TCGA), in English, and their ground truth is a research database, not the report. They are release gates for one product, not a clinical validation, and no clinical claim is made from them. Indic-language OCR is installed but not measured; real Indian documents are the next test.
+  \item \textbf{Scoring rules.} The TCGA comparison rules were refined after inspecting a sample of disagreements (both scorings are reported), and the cancer-question slice is a keyword filter that a clinician has not yet checked.
   \item \textbf{One GPU, power-capped.} Timings are specific to an H200 at 300\,W; scores are not affected.
 \end{itemize}
 
@@ -333,7 +455,7 @@ Gemma-4-31B-it (non-medical) is the reasoner: the strongest text model, with the
 \section{Reproducibility and sources}
 \label{sec:sources}
 
-Every model ran from its published bf16 Hugging Face checkpoint with vLLM 0.30, greedy decoding, seed 0, its own chat template and thinking mode off; datasets are the full public test splits named in Table~\ref{tab:datasets}. Every reply is stored per question with the parsed answer, so any score in this report can be recomputed from the saved outputs, and the Baichuan-M2 re-scoring was done that way. Published numbers were opened on 9 October 2026 from: the MedGemma model card (27B, 27B-text and 4B tables) and the MedGemma 1.5 4B card (closed-question accuracy for 4B and 27B) \citep{sellergren2025medgemma}; the Lingshu-32B card and technical report, Tables I and II \citep{xu2025lingshu}; the Gemma 4 31B card and technical report, Tables 5, 6 and 12 \citep{gemma4}; the Qwen3.5-4B card \citep{qwen35}; the Llama3-Med42-8B card \citep{christophe2024med42}; the Llama3-OpenBioLLM-8B card \citep{openbiollm}; the JSL-MedLlama-3-8B-v2.0 card \citep{jslmedllama}; the HuatuoGPT-3 repository \citep{huatuogpt3}; and the Baichuan-M2-32B card \citep{baichuanm2}. The earlier 4-bit figures are from the Vaidyx benchmark report of September 2026 (Q4\_K\_M, GB10, Ollama). The benchmarks are MedQA \citep{jin2021medqa}, MedMCQA \citep{pal2022medmcqa}, PubMedQA \citep{jin2019pubmedqa}, MMLU \citep{hendrycks2021mmlu}, MedXpertQA \citep{zuo2025medxpertqa}, VQA-RAD \citep{lau2018vqarad}, SLAKE \citep{liu2021slake}, PathVQA \citep{he2020pathvqa}, PMC-VQA \citep{zhang2023pmcvqa} and OmniMedVQA \citep{hu2024omnimedvqa}. The real reports are the TCGA pathology reports \citep{kefeli2024tcga}. The OCR engines are Tesseract 5.5.3 \citep{smith2007tesseract} and docTR 1.1.0 \citep{doctr}.
+The experiments of Sections~\ref{sec:uncertainty}, \ref{sec:oncology}, \ref{sec:probes} and \ref{sec:tcga} are scripts in \texttt{experiments/} next to this paper; they read the saved replies and readings and write only numbers to the repository (question and report text stays outside it). Every model ran from its published bf16 Hugging Face checkpoint with vLLM 0.30, greedy decoding, seed 0, its own chat template and thinking mode off; datasets are the full public test splits named in Table~\ref{tab:datasets}. Every reply is stored per question with the parsed answer, so any score in this report can be recomputed from the saved outputs, and the Baichuan-M2 re-scoring was done that way. Published numbers were opened on 9 October 2026 from: the MedGemma model card (27B, 27B-text and 4B tables) and the MedGemma 1.5 4B card (closed-question accuracy for 4B and 27B) \citep{sellergren2025medgemma}; the Lingshu-32B card and technical report, Tables I and II \citep{xu2025lingshu}; the Gemma 4 31B card and technical report, Tables 5, 6 and 12 \citep{gemma4}; the Qwen3.5-4B card \citep{qwen35}; the Llama3-Med42-8B card \citep{christophe2024med42}; the Llama3-OpenBioLLM-8B card \citep{openbiollm}; the JSL-MedLlama-3-8B-v2.0 card \citep{jslmedllama}; the HuatuoGPT-3 repository \citep{huatuogpt3}; and the Baichuan-M2-32B card \citep{baichuanm2}. The earlier 4-bit figures are from the Vaidyx benchmark report of September 2026 (Q4\_K\_M, GB10, Ollama). The benchmarks are MedQA \citep{jin2021medqa}, MedMCQA \citep{pal2022medmcqa}, PubMedQA \citep{jin2019pubmedqa}, MMLU \citep{hendrycks2021mmlu}, MedXpertQA \citep{zuo2025medxpertqa}, VQA-RAD \citep{lau2018vqarad}, SLAKE \citep{liu2021slake}, PathVQA \citep{he2020pathvqa}, PMC-VQA \citep{zhang2023pmcvqa} and OmniMedVQA \citep{hu2024omnimedvqa}. The real reports are the TCGA pathology reports \citep{kefeli2024tcga}. The OCR engines are Tesseract 5.5.3 \citep{smith2007tesseract} and docTR 1.1.0 \citep{doctr}.
 
 \bibliographystyle{unsrtnat}
 \bibliography{refs}

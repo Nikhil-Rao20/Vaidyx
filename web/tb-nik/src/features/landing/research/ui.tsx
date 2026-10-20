@@ -142,3 +142,16 @@ export function DataCard({ name, kind, tests, n, fmt, chance, scoring, labels }:
     </div>
   );
 }
+
+/** A figure drawn by docs/research/benchmark-paper/experiments/figures.py: inline SVG whose colours follow the theme tokens. */
+export function Fig({ n, svg, caption, testId }: { n: number; svg: string; caption: string; testId?: string }) {
+  return (
+    <Reveal y={16} amount={0.1}>
+      <figure className="l-card overflow-hidden" data-testid={testId}>
+        <div className="r-fig px-5 pb-2 pt-6 sm:px-7" dangerouslySetInnerHTML={{ __html: svg }} />
+        <p className="r-note px-5 pb-2 sm:hidden">{RESEARCH.swipe}</p>
+        <figcaption className="r-cap border-t px-5 py-3 sm:px-7" style={{ borderColor: "var(--l-line)" }}><b>Figure {n}.</b> {caption}</figcaption>
+      </figure>
+    </Reveal>
+  );
+}

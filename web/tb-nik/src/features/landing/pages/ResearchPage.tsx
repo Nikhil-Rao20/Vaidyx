@@ -7,10 +7,11 @@ import { Reveal, Stagger } from "../components/Reveal";
 import { Cta } from "../sections/Cta";
 import { RESEARCH as R } from "../content";
 import { RESEARCH_DATA as D } from "../research/data";
-import { DataCard, Items, P, Sec, Sub } from "../research/ui";
+import { DataCard, Fig, Items, P, Sec, Sub } from "../research/ui";
+import { FIG } from "../research/figures";
 import {
-  AnswerabilityTable, BakeoffTable, ImageAllTable, ImagePublishedTable, ImageSplitTable, ModelsTable, OcrTables, OmniTable, Q4Table, StatusTable,
-  TcgaTable, TextCotTable, TextDirectTable, TextPublishedTable, ThroughputTable,
+  AnswerabilityTable, BakeoffTable, CiTable, ImageAllTable, ImagePublishedTable, ImageSplitTable, ModelsTable, OcrTables, OmniTable, OncologyTable, PairedTable,
+  ProbesTable, Q4Table, RemovedTable, StatusTable, TcgaScaleTable, TextCotTable, TextDirectTable, TextPublishedTable, ThroughputTable,
 } from "../research/tables";
 import "../research/research.css";
 
@@ -98,14 +99,16 @@ export default function ResearchPage() {
               </Sec>
 
               <Sec id="text" n={6} title={R.text.title}>
-                <Sub n="6.1" title={R.text.cot.title}><P>{R.text.cot.text}</P><TextCotTable /></Sub>
-                <Sub n="6.2" title={R.text.direct.title}><P>{R.text.direct.text}</P><TextDirectTable /></Sub>
-                <Sub n="6.3" title={R.text.published.title}><P>{R.text.published.text}</P><TextPublishedTable /></Sub>
-                <Sub n="6.4" title={R.text.q4.title}><P>{R.text.q4.text}</P><Q4Table /></Sub>
+                <Sub n="6.1" title={R.text.cot.title}><P>{R.text.cot.text}</P><Fig n={1} svg={FIG.ranking} caption={R.figures.ranking} testId="fig-ranking" /><TextCotTable /></Sub>
+                <Sub n="6.2" title={R.text.direct.title}><P>{R.text.direct.text}</P><Fig n={2} svg={FIG.reasoning} caption={R.figures.reasoning} testId="fig-reasoning" /><TextDirectTable /></Sub>
+                <Sub n="6.3" title={R.text.published.title}><P>{R.text.published.text}</P><Fig n={3} svg={FIG.published} caption={R.figures.published} testId="fig-published" /><TextPublishedTable /></Sub>
+                <Sub n="6.4" title={R.text.q4.title}><P>{R.text.q4.text}</P><Fig n={4} svg={FIG.q4} caption={R.figures.q4} testId="fig-q4" /><Q4Table /></Sub>
+                <Sub n="6.5" title={R.text.uncertainty.title}><P>{R.text.uncertainty.text}</P><CiTable /><PairedTable /></Sub>
+                <Sub n="6.6" title={R.text.oncology.title}><P>{R.text.oncology.text}</P><Fig n={5} svg={FIG.oncology} caption={R.figures.oncology} testId="fig-oncology" /><OncologyTable /></Sub>
               </Sec>
 
               <Sec id="image" n={7} title={R.image.title}>
-                <Sub n="7.1" title={R.image.all.title}><P>{R.image.all.text}</P><ImageAllTable /></Sub>
+                <Sub n="7.1" title={R.image.all.title}><P>{R.image.all.text}</P><Fig n={6} svg={FIG.images} caption={R.figures.images} testId="fig-images" /><ImageAllTable /></Sub>
                 <Sub n="7.2" title={R.image.split.title}><P>{R.image.split.text}</P><ImageSplitTable /></Sub>
                 <Sub n="7.3" title={R.image.omni.title}><P>{R.image.omni.text}</P><OmniTable /></Sub>
                 <Sub n="7.4" title={R.image.published.title}><P>{R.image.published.text}</P><ImagePublishedTable /></Sub>
@@ -120,15 +123,17 @@ export default function ResearchPage() {
                 <P>{R.grounded.intro}</P>
                 <Sub n="9.1" title={R.grounded.bakeoff.title}><P>{R.grounded.bakeoff.text}</P><BakeoffTable /></Sub>
                 <Sub n="9.2" title={R.grounded.answerability.title}><P>{R.grounded.answerability.text}</P><AnswerabilityTable /></Sub>
-                <Sub n="9.3" title={R.grounded.tcga.title}><P>{R.grounded.tcga.text}</P><TcgaTable /></Sub>
-                <Sub n="9.4" title={R.grounded.status.title}><P>{R.grounded.status.text}</P><StatusTable /></Sub>
-                <Sub n="9.5" title={R.grounded.summary.title}><P>{R.grounded.summary.text}</P></Sub>
-                <Sub n="9.6" title={R.grounded.ocr.title}>{R.grounded.ocr.text.map((t) => <P key={t.slice(0, 24)}>{t}</P>)}<OcrTables /></Sub>
-                <Sub n="9.7" title={R.grounded.speed.title}><P>{R.grounded.speed.text}</P></Sub>
+                <Sub n="9.3" title={R.grounded.probes.title}>{R.grounded.probes.text.map((t) => <P key={t.slice(0, 24)}>{t}</P>)}<ProbesTable /><Fig n={7} svg={FIG.grounding} caption={R.figures.grounding} testId="fig-grounding" /><RemovedTable /></Sub>
+                <Sub n="9.4" title={R.grounded.tcga.title}>{R.grounded.tcga.text.map((t) => <P key={t.slice(0, 24)}>{t}</P>)}<Fig n={8} svg={FIG.tcga} caption={R.figures.tcga} testId="fig-tcga" /><TcgaScaleTable /></Sub>
+                <Sub n="9.5" title={R.grounded.status.title}><P>{R.grounded.status.text}</P><StatusTable /></Sub>
+                <Sub n="9.6" title={R.grounded.summary.title}><P>{R.grounded.summary.text}</P></Sub>
+                <Sub n="9.7" title={R.grounded.ocr.title}>{R.grounded.ocr.text.map((t) => <P key={t.slice(0, 24)}>{t}</P>)}<OcrTables /></Sub>
+                <Sub n="9.8" title={R.grounded.speed.title}><P>{R.grounded.speed.text}</P></Sub>
               </Sec>
 
               <Sec id="findings" n={10} title={R.findings.title}>
                 <Reveal y={10}><Items items={R.findings.items} as="ul" /></Reveal>
+                <Fig n={9} svg={FIG.size} caption={R.figures.size} testId="fig-size" />
               </Sec>
 
               <Sec id="caveats" n={11} title={R.caveats.title}>

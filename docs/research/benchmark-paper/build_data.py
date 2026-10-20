@@ -285,6 +285,62 @@ def main():
     for row in OCR_CHECK: L.append(" & ".join(row) + " \\\\")
     L += ["\\bottomrule", "\\end{tabular}"]; write(T / "ocr_check.tex", L)
 
+    # experiments (TODO.md items 1 to 4), when they have been run: experiments/results/*.json
+    X = HERE / "experiments" / "results"
+    xp = lambda n: json.load(open(X / n)) if (X / n).exists() else None
+    ci, pairs, onc, tsc, prb = xp("ci.json"), xp("paired.json"), xp("oncology.json"), xp("tcga_scale.json"), xp("probes_scale.json")
+    web_x = {}
+    if ci:
+        L = ["\\begin{tabular}{@{}lllrrrr@{}}", "\\toprule", "Model & Origin & Type & CoT overall & 95\\% CI & Direct overall & 95\\% CI \\\\", "\\midrule"]
+        rows = []
+        for k in cot_rank:
+            c, d = ci["text"][f"{k}|cot"]["overall"], ci["text"][f"{k}|direct"]["overall"]
+            L.append(f"{byname[k]['name']} & {tag(byname[k])} & {c[0]:.1f} & [{c[1]:.1f}, {c[2]:.1f}] & {d[0]:.1f} & [{d[1]:.1f}, {d[2]:.1f}] \\\\")
+            rows.append(dict(key=k, cot=c, direct=d, medxpertqa=ci["text"][f"{k}|cot"]["medxpertqa"]))
+        L += ["\\bottomrule", "\\end{tabular}"]; write(T / "ci_text.tex", L)
+        web_x["ciText"] = rows
+    if pairs:
+        L = ["\\begin{tabular}{@{}lrrrr@{}}", "\\toprule", "Comparison & Difference & 95\\% CI & Discordant (A only / B only) & McNemar $p$ \\\\", "\\midrule"]
+        for r in pairs:
+            pv = "$<$0.001" if r["p_mcnemar"] < 0.001 else f"{r['p_mcnemar']:.2f}"
+            name = tex_escape(r["comparison"].replace(" ('matches')", ""))
+            L.append(f"{name} & {r['diff']:+.1f} & [{r['lo']:+.1f}, {r['hi']:+.1f}] & {r['a_only']} / {r['b_only']} & {pv} \\\\")
+        L += ["\\bottomrule", "\\end{tabular}"]; write(T / "paired.tex", L)
+        web_x["paired"] = pairs
+    if onc:
+        L = ["\\begin{tabular}{@{}lllrrrr@{}}", "\\toprule", "Model & Origin & Type & Oncology (CoT) & 95\\% CI & Other questions (CoT) & Oncology (direct) \\\\", "\\midrule"]
+        rows = []
+        for k in sorted(onc["models"], key=lambda m: -onc["models"][m]["cot"]["oncology"][0]):
+            c = onc["models"][k]["cot"]
+            L.append(f"{byname[k]['name']} & {tag(byname[k])} & {c['oncology'][0]:.1f} & [{c['oncology'][1]:.1f}, {c['oncology'][2]:.1f}] & {c['rest'][0]:.1f} & {onc['models'][k]['direct']['oncology'][0]:.1f} \\\\")
+            rows.append(dict(key=k, oncology=c["oncology"], rest=c["rest"], direct=onc["models"][k]["direct"]["oncology"]))
+        L += ["\\bottomrule", "\\end{tabular}"]; write(T / "oncology.tex", L)
+        web_x["oncology"] = dict(sizes=onc["sizes"], n=onc["n"], rows=rows)
+    if tsc:
+        a = tsc["agreement"]
+        order = [k for k in ("Histology", "pT", "pN", "Stage group", "ER", "PR", "HER2 (IHC)") if k in a]
+        dv = tsc.get("disagreements_with_verified_quote", {})
+        L = ["\\begin{tabular}{@{}lrrrrr@{}}", "\\toprule", "Field & Agree & Compared & Agreement \\% & Lower 95\\% bound & Differences the report states \\\\", "\\midrule"]
+        for k in order:
+            d = dv.get(k)
+            L.append(f"{k} & {a[k]['agree']:,} & {a[k]['n']:,} & {a[k]['pct']:.1f} & {a[k]['lower95_pct']:.1f} & {(str(d['verified']) + ' of ' + str(d['of'])) if d else '--'} \\\\")
+        L += ["\\bottomrule", "\\end{tabular}"]; write(T / "tcga_scale.tex", L)
+        web_x["tcgaScale"] = tsc
+    if prb and prb.get("rescored"):
+        q = prb["rescored"]
+        L = ["\\begin{tabular}{@{}lrrl@{}}", "\\toprule", "Probe kind & Probes & Right answer & What a right answer is \\\\", "\\midrule",
+             f"Answerable (answer key) & {q['ans']['n']} & {q['ans']['pass']} & the value, with its quote \\\\",
+             f"Not in the file (trap) & {q['absent_true_trap']['n']} & {q['absent_true_trap']['pass']} & ``not documented'', no value \\\\",
+             f"Out of scope & {q['scope']['n']} & {q['scope']['pass']} & declined \\\\",
+             f"Documented after all & {q['absent_documented_after_all']} & {q['absent_documented_after_all']} & answered with verified quotes (answer-key gap) \\\\",
+             f"Hand-written release set & {q['hand_written']['n']} & {q['hand_written']['pass']} & as Table~\\ref{{tab:answerability}} \\\\",
+             "\\bottomrule", "\\end{tabular}"]
+        write(T / "probes_scale.tex", L)
+        L = ["\\begin{tabular}{@{}l>{\\raggedright\\arraybackslash}p{7.2cm}l>{\\raggedright\\arraybackslash}p{4.2cm}@{}}", "\\toprule", "Case & Statement the reasoner wrote & Why removed & Review against the document \\\\", "\\midrule"]
+        for x in q["statements_removed_by_grounding"]:
+            L.append(f"{x['case']} & {tex_escape(x['text'])} & {x['reason'].replace('_', ' ')} & {tex_escape(x['review'])}: {tex_escape(x['note'])} \\\\")
+        L += ["\\bottomrule", "\\end{tabular}"]; write(T / "probes_removed.tex", L)
+        web_x["probesScale"] = {k: q[k] for k in ("ans", "absent_true_trap", "absent_documented_after_all", "scope", "hand_written", "statements_removed_by_grounding", "removed_by_review", "statements_removed_by_output_guardrail")} | {"generated": prb["generated"]}
     # the website's data
     web = dict(
         models=MODELS, dataCards=DATA_CARDS, thinkingOff=sorted(THINKING_OFF),
@@ -300,6 +356,7 @@ def main():
         bakeoff=[dict(key=k, readerRecall=a, invented=b, readerS=c, types=d, fields=e, fabricated=f, extractorS=g) for k, a, b, c, d, e, f, g in BAKEOFF],
         answerability=[dict(key=k, pass_=a, fabrications=b, latency=c) for k, a, b, c in ANSWERABILITY],
         tcga=TCGA, status=STATUS, ocr=[dict(engine=a, recall=b, precision=c, sPage=d, threads=e) for a, b, c, d, e in OCR], ocrCheck=[dict(check=a, falseAlarms=b, subs=c, ins=d, dels=e) for a, b, c, d, e in OCR_CHECK],
+        experiments=web_x,
         totals=dict(models=len(MODELS), textQuestions=sum(text[(cot_rank[0], "cot")]["n"]), imageQuestions=sum(v["n"] for v in load(bench, img_rank[0], "direct", vqa=True)["datasets"].values()), visionModels=len(img)),
     )
     WEB.parent.mkdir(parents=True, exist_ok=True)

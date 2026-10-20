@@ -1,17 +1,19 @@
 # Experiments still to run for the paper
 
-Status (20 Oct 2026): **on hold.** The owner starts these after the website work is finished ("once we are done with the website
-then i will tell u when we can do this"). Do not start any of them without the owner's go.
+Status (20 Oct 2026, evening): **items 1 to 4 run** on the owner's word ("then we will work on the benchmark tasks"); results in
+[experiments/RESULTS.md](experiments/RESULTS.md), the paper and the Research page. Still open: the doctor's check of the oncology
+filter (item 4), the other extractor and reasoner candidates on items 1 and 2 (they need the GPU swapped: agree a time with the
+owner), and item 5 (the owner's decision).
 
 Why: the benchmark half of the paper is solid. The grounded half carries our own claim (a general model plus the grounding layer
 is safe enough to show Board facts) and today rests on small samples. Items 1 to 4 fix that; item 5 is the owner's decision.
 
 | # | Experiment | Needs the GPU | Rough time | Changes |
 |---|---|---|---|---|
-| 1 | Grounding switched off, larger probe set | yes | half a day | evaluation scripts only |
-| 2 | Real TCGA reports at scale | yes | a few hours per model | evaluation scripts only |
-| 3 | Confidence intervals and paired tests | no | an hour | a new analysis script |
-| 4 | Oncology slice of the exam questions | no | an hour, plus a doctor's check | a new analysis script |
+| 1 | Grounding switched off, larger probe set | yes | half a day | **done** for the shipped reasoner (`experiments/probes_scale.py`) |
+| 2 | Real TCGA reports at scale | yes | a few hours per model | **done** for the shipped extractor (`experiments/tcga_scale.py`) |
+| 3 | Confidence intervals and paired tests | no | an hour | **done** (`experiments/stats.py`) |
+| 4 | Oncology slice of the exam questions | no | an hour, plus a doctor's check | **done**; the doctor's check is open |
 | 5 | Real Indian documents, clinician review | no | owner's decision | data and approvals |
 
 Runs with our two shipped models (Qwen3.5-4B reader on :8101, Gemma-4-31B reasoner on :8100) use the servers already running.

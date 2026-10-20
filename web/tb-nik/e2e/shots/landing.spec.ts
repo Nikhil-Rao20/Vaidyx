@@ -63,7 +63,9 @@ test.describe("landing", () => {
     const pdf = await page.request.get("/static/tb-nik/research/vaidyx-benchmark-2026.pdf");
     expect(pdf.status()).toBe(200);
     expect((await pdf.body()).subarray(0, 5).toString()).toBe("%PDF-");
-    await expect(page.locator("figure table")).toHaveCount(16); // Tables 1 and 3-17; Table 2 is the data cards
+    await expect(page.locator("figure table")).toHaveCount(21); // Tables 1 and 3-22; Table 2 is the data cards
+    await expect(page.locator(".r-fig svg.vfig")).toHaveCount(9);
+    await expect(page.getByTestId("fig-ranking")).toContainText("Figure 1.");
     await expect(page.getByTestId("research-datacards")).toContainText("Table 2.");
     await expect(page.getByTestId("research-datacards").locator(".l-box")).toHaveCount(11);
     await expect(page.getByTestId("research-text-cot").locator("tbody tr")).toHaveCount(13);

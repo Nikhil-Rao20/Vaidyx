@@ -63,7 +63,7 @@ export function Q4Table() {
 
 export function ImageAllTable() {
   return (
-    <Tbl n={7} caption={RESEARCH.image.all.caption} testId="research-image-all" size="sm"
+    <Tbl n={10} caption={RESEARCH.image.all.caption} testId="research-image-all" size="sm"
       head={["Model", "Origin", "Type", "VQA-RAD", "SLAKE", "PathVQA", "PMC-VQA", "MedXpertQA\nMM", "PMC-VQA\nCoT", "MedXpertQA\nMM, CoT", "OmniMedVQA\nstrict", "OmniMedVQA\nfirst-token"]}
       numeric={[3, 4, 5, 6, 7, 8, 9, 10, 11]}
       rows={D.image.map((r) => {
@@ -75,7 +75,7 @@ export function ImageAllTable() {
 
 export function ImageSplitTable() {
   return (
-    <Tbl n={8} caption={RESEARCH.image.split.caption} testId="research-image-split"
+    <Tbl n={11} caption={RESEARCH.image.split.caption} testId="research-image-split"
       head={["Model", "Origin", "Type", "VQA-RAD\nyes/no", "VQA-RAD\nopen", "SLAKE\nyes/no", "SLAKE\nopen", "PathVQA\nyes/no", "PathVQA\nopen"]} numeric={[3, 4, 5, 6, 7, 8]}
       rows={D.image.map((r) => [name(r.key), ...tags(r.key), ...r.split.vqa_rad, ...r.split.slake, ...r.split.pathvqa])} />
   );
@@ -83,7 +83,7 @@ export function ImageSplitTable() {
 
 export function OmniTable() {
   return (
-    <Tbl n={9} caption={RESEARCH.image.omni.caption} testId="research-omni" size="sm"
+    <Tbl n={12} caption={RESEARCH.image.omni.caption} testId="research-omni" size="sm"
       head={["Model", "Origin", "Type", "Strict", "First-token", "Parsed %", "Errors", ...D.omniTypes.map((t) => t.replace(" ", "\n"))]} numeric={[3, 4, 5, 6, 7, 8, 9, 10, 11]}
       rows={D.image.map((r) => [name(r.key), ...tags(r.key), (r.overall as Record<string, number>).omnimedvqa, r.omniFt, r.omniParsed, int(r.omniErrors), ...r.byType])} />
   );
@@ -91,7 +91,7 @@ export function OmniTable() {
 
 export function ImagePublishedTable() {
   return (
-    <Tbl n={10} caption={RESEARCH.image.published.caption} testId="research-image-published" size="sm"
+    <Tbl n={13} caption={RESEARCH.image.published.caption} testId="research-image-published" size="sm"
       head={["Model", "Benchmark", "This run", "Our protocol", "Published", "Source", "Diff.", "Like for like?"]} numeric={[2, 4, 6]} wrap={[7]}
       rows={D.publishedImage.map((r) => [name(r.key), r.benchmark, r.ours, r.protocol, r.published, r.src, signed(r.ours - r.published), r.like])} />
   );
@@ -99,7 +99,7 @@ export function ImagePublishedTable() {
 
 export function ThroughputTable() {
   return (
-    <Tbl n={11} caption={RESEARCH.throughput.caption} testId="research-table-throughput" maxW="52rem"
+    <Tbl n={14} caption={RESEARCH.throughput.caption} testId="research-table-throughput" maxW="52rem"
       head={["Model", "Protocol", "Load (s)", "Run (s)", "Mean generated tokens"]} numeric={[2, 3, 4]}
       rows={D.throughput.map((r) => [name(r.key), r.protocol === "cot" ? "step-by-step" : "direct", int(Math.round(r.load ?? 0)), int(Math.round(r.total ?? 0)), int(Math.round(r.genTokens))])} />
   );
@@ -107,7 +107,7 @@ export function ThroughputTable() {
 
 export function BakeoffTable() {
   return (
-    <Tbl n={12} caption={RESEARCH.grounded.bakeoff.caption} testId="research-bakeoff" size="sm"
+    <Tbl n={15} caption={RESEARCH.grounded.bakeoff.caption} testId="research-bakeoff" size="sm"
       head={["Model", "Origin", "Type", "Reader\nword recall", "Invented\nnumbers", "Reader s\n(5 scans)", "Doc. types", "Fields", "Fabricated", "Extractor s\n(31 docs)"]} numeric={[3, 4, 5, 6, 7, 8, 9]}
       rows={D.bakeoff.map((r) => [name(r.key), ...tags(r.key), r.readerRecall, r.invented, r.readerS, r.types, r.fields, r.fabricated, r.extractorS])} />
   );
@@ -115,7 +115,7 @@ export function BakeoffTable() {
 
 export function AnswerabilityTable() {
   return (
-    <Tbl n={13} caption={RESEARCH.grounded.answerability.caption} testId="research-answerability" maxW="52rem"
+    <Tbl n={16} caption={RESEARCH.grounded.answerability.caption} testId="research-answerability" maxW="52rem"
       head={["Reasoner", "Origin", "Type", "Pass", "Fabrications", "Mean latency (s)"]} numeric={[3, 4, 5]}
       rows={D.answerability.map((r) => [name(r.key), ...tags(r.key), r.pass_, r.fabrications, r.latency])} />
   );
@@ -124,7 +124,7 @@ export function AnswerabilityTable() {
 export function TcgaTable() {
   const t = D.tcga; const L = RESEARCH.grounded.tcga.labels;
   return (
-    <Tbl n={14} caption={RESEARCH.grounded.tcga.caption} testId="research-tcga" maxW="52rem"
+    <Tbl n={18} caption={RESEARCH.grounded.tcga.caption} testId="research-tcga" maxW="52rem"
       head={[L.reports, L.claims, L.ungrounded, ...t.agreement.map(([k]) => k)]} numeric={[0, 1, 2, 3, 4, 5, 6]}
       rows={[[String(t.reports), String(t.claims), String(t.ungrounded), ...t.agreement.map(([, v]) => v)]]} />
   );
@@ -132,7 +132,7 @@ export function TcgaTable() {
 
 export function StatusTable() {
   return (
-    <Tbl n={15} caption={RESEARCH.grounded.status.caption} testId="research-status" maxW="34rem" head={["Evidence in the report", "Share of the 9,523 reports"]} numeric={[1]}
+    <Tbl n={20} caption={RESEARCH.grounded.status.caption} testId="research-status" maxW="34rem" head={["Evidence in the report", "Share of the 9,523 reports"]} numeric={[1]}
       rows={D.status.rows.map(([k, v]) => [k, v])} />
   );
 }
@@ -140,10 +140,82 @@ export function StatusTable() {
 export function OcrTables() {
   return (
     <>
-      <Tbl n={16} caption={RESEARCH.grounded.ocr.captionEngines} testId="research-ocr" maxW="52rem" head={["Engine", "Number recall %", "Number precision %", "s / page (median)", "Threads per page"]} numeric={[1, 2, 3, 4]}
+      <Tbl n={21} caption={RESEARCH.grounded.ocr.captionEngines} testId="research-ocr" maxW="52rem" head={["Engine", "Number recall %", "Number precision %", "s / page (median)", "Threads per page"]} numeric={[1, 2, 3, 4]}
         rows={D.ocr.map((r) => [r.engine, r.recall, r.precision, r.sPage, r.threads])} />
-      <Tbl n={17} caption={RESEARCH.grounded.ocr.captionCheck} testId="research-ocr-check" maxW="60rem" head={["Check", "False alarms", "Substitutions caught %", "Insertions caught %", "Deletions caught %"]} numeric={[1, 2, 3, 4]} wrap={[0]}
+      <Tbl n={22} caption={RESEARCH.grounded.ocr.captionCheck} testId="research-ocr-check" maxW="60rem" head={["Check", "False alarms", "Substitutions caught %", "Insertions caught %", "Deletions caught %"]} numeric={[1, 2, 3, 4]} wrap={[0]}
         rows={D.ocrCheck.map((r) => [r.check, r.falseAlarms, r.subs, r.ins, r.dels])} />
     </>
+  );
+}
+
+const X = (D as unknown as { experiments?: Record<string, any> }).experiments ?? {};
+
+export function CiTable() {
+  const rows = (X.ciText ?? []) as { key: string; cot: number[]; direct: number[] }[];
+  if (!rows.length) return null;
+  const ci = (v: number[]) => `${f1(v[1])} to ${f1(v[2])}`;
+  return (
+    <Tbl n={7} caption={RESEARCH.text.uncertainty.captionCi} testId="research-ci" maxW="60rem"
+      head={["Model", "Origin", "Type", "CoT overall", "95 % CI", "Direct overall", "95 % CI"]} numeric={[3, 4, 5, 6]}
+      rows={rows.map((r) => [name(r.key), ...tags(r.key), r.cot[0], ci(r.cot), r.direct[0], ci(r.direct)])} />
+  );
+}
+
+export function PairedTable() {
+  const rows = (X.paired ?? []) as { comparison: string; diff: number; lo: number; hi: number; a_only: number; b_only: number; p_mcnemar: number }[];
+  if (!rows.length) return null;
+  return (
+    <Tbl n={8} caption={RESEARCH.text.uncertainty.captionPaired} testId="research-paired" size="sm"
+      head={["Comparison", "Difference", "95 % CI", "Only first right", "Only second right", "McNemar p"]} numeric={[1, 2, 3, 4, 5]} wrap={[0]}
+      rows={rows.map((r) => [r.comparison.replace(" ('matches')", ""), signed(r.diff), `${signed(r.lo)} to ${signed(r.hi)}`, int(r.a_only), int(r.b_only), r.p_mcnemar < 0.001 ? "< 0.001" : r.p_mcnemar.toFixed(2)])} />
+  );
+}
+
+export function OncologyTable() {
+  const o = X.oncology as { rows: { key: string; oncology: number[]; rest: number[]; direct: number[] }[] } | undefined;
+  if (!o) return null;
+  return (
+    <Tbl n={9} caption={RESEARCH.text.oncology.caption} testId="research-oncology" maxW="60rem"
+      head={["Model", "Origin", "Type", "Cancer, CoT", "95 % CI", "Other questions, CoT", "Cancer, direct"]} numeric={[3, 4, 5, 6]}
+      rows={o.rows.map((r) => [name(r.key), ...tags(r.key), r.oncology[0], `${f1(r.oncology[1])} to ${f1(r.oncology[2])}`, r.rest[0], r.direct[0]])} />
+  );
+}
+
+export function ProbesTable() {
+  const p = X.probesScale as Record<string, any> | undefined;
+  if (!p) return null;
+  const L = RESEARCH.grounded.probes.rows;
+  return (
+    <Tbl n={17} caption={RESEARCH.grounded.probes.caption} testId="research-probes" maxW="56rem"
+      head={["Probe kind", "Probes", "Right answer", "What a right answer is"]} numeric={[1, 2]} wrap={[3]}
+      rows={[
+        [L.ans, int(p.ans.n), int(p.ans.pass), L.ansWhat],
+        [L.trap, int(p.absent_true_trap.n), int(p.absent_true_trap.pass), L.trapWhat],
+        [L.scope, int(p.scope.n), int(p.scope.pass), L.scopeWhat],
+        [L.documented, int(p.absent_documented_after_all), int(p.absent_documented_after_all), L.documentedWhat],
+        [L.hand, int(p.hand_written.n), int(p.hand_written.pass), L.handWhat],
+      ]} />
+  );
+}
+
+export function RemovedTable() {
+  const p = X.probesScale as Record<string, any> | undefined;
+  if (!p) return null;
+  return (
+    <Tbl n={18} caption={RESEARCH.grounded.probes.captionRemoved} testId="research-removed" size="sm"
+      head={["Case", "Statement the reasoner wrote", "Why removed", "Review against the document"]} wrap={[1, 3]}
+      rows={(p.statements_removed_by_grounding as any[]).map((x) => [x.case, x.text, String(x.reason).replace(/_/g, " "), `${x.review}: ${x.note}`])} />
+  );
+}
+
+export function TcgaScaleTable() {
+  const t = X.tcgaScale as Record<string, any> | undefined;
+  if (!t) return null;
+  const order = ["ER", "PR", "HER2 (IHC)", "Histology", "pT", "pN", "Stage group"].filter((k) => t.agreement[k]);
+  const dv = (t.disagreements_with_verified_quote ?? {}) as Record<string, { verified: number; of: number }>;
+  return (
+    <Tbl n={19} caption={RESEARCH.grounded.tcga.caption} testId="research-tcga-scale" maxW="60rem"
+      head={["Field", "Agree", "Compared", "Agreement %", "Lower 95 % bound", "Disagreements the report states"]} numeric={[1, 2, 3, 4, 5]}
+      rows={order.map((k) => [k, int(t.agreement[k].agree), int(t.agreement[k].n), t.agreement[k].pct, t.agreement[k].lower95_pct, dv[k] ? `${dv[k].verified} of ${dv[k].of}` : "–"])} />
   );
 }

@@ -303,7 +303,7 @@ export const RESEARCH = {
     text: [
       "Vaidyx-TB is an assistant for hospital Tumour Boards in India. It checks, routes and summarises the records of a Case File and keeps every fact it shows tied to a verbatim quote from a source document; it does not interpret images, stage disease or advise treatment. Choosing the open-weight models behind it needs scores that are comparable with the published model cards and that reflect the exact weights the system runs.",
       "We benchmarked 13 open models (11 medical fine-tunes and 2 general models, 4B to 32B parameters, from developers in the USA, China and the UAE) on 11 public benchmarks, 5 text (9,995 questions) and 6 image (101,227 questions), with the published bf16 weights on one NVIDIA H200, greedy decoding, full test splits and no quantisation, under two protocols: about one million graded answers. The harness reproduces published scores: MedGemma-27B-it lands within 2.5 points of its model card on all five text sets, and Lingshu-32B scores 82.4 % against a published 83.4 % on OmniMedVQA. Gemma-4-31B-it, a general model, is the strongest text model at 76.6 % overall and 55.1 % on MedXpertQA, where every medical model stays below 41 %. HuatuoGPT-3-27B is the best medical model (71.2 %) and leads OmniMedVQA (82.9 %). Qwen3.5-4B matches MedGemma-27B-it on text at a seventh of the size, and Lingshu-32B leads radiology and pathology VQA. Full precision removes most of the gap seen in an earlier 4-bit run.",
-      "We then report the grounded evaluations that decide what Vaidyx-TB ships: a reader and extractor bake-off on synthetic Case Files, 33 answerability probes with no fabrication from any of three candidate reasoners, 166 values extracted from 30 real TCGA pathology reports with none ungrounded, report-status detection measured on 9,523 real reports, a summary omission check, and an independent OCR number check. Every answer is saved per question, so every number here can be re-scored.",
+      "Bootstrap intervals and paired tests show which differences hold: ranks 3 to 6 on text are statistically tied, and the top two lead firmly, also on the 674 questions that mention cancer. We then report the grounded evaluations that decide what Vaidyx-TB ships: a reader and extractor bake-off on synthetic Case Files; 476 questions to the Case File with no fabricated value shown, where an ablation shows that the reasoner itself rarely writes an unsupported statement (the grounding layer removed five, two of them with a wrong detail); 10,883 values read from 2,102 real TCGA pathology reports, of which 1.4 % could not be tied to a quote and are flagged, with agreement with the clinical record of 90 to 98 % for histology, pT, pN, ER and PR and 84 % for HER2, the disagreements almost all stated in the reports themselves; report-status detection on 9,523 real reports; a summary omission check; and an independent OCR number check. Every answer is saved per question, so every number here can be re-scored.",
     ],
   },
   why: {
@@ -368,6 +368,28 @@ export const RESEARCH = {
       caption: "The earlier 4-bit run against this run, in %. Mean gain = the average of the five scores minus the Q4 average, in points.",
       rows: ["Q4_K_M, GB10 (Sept. 2026)", "bf16, H200, direct", "bf16, H200, CoT"],
     },
+    uncertainty: {
+      title: "Uncertainty and ties",
+      text: "Every score is an estimate from a finite set of questions. An overall text score is uncertain by about ±0.8 points, MedXpertQA by about ±1.8. Ranks 3 to 6 (Qwen3.5-4B, MedGemma-27B-text-it, MedGemma-27B-it, Baichuan-M2) form one group within a point of each other that cannot be separated: Qwen3.5-4B is +0.7 points above MedGemma-27B-it, with an interval of −0.2 to +1.5, which is what \"matches\" means here. The leads of Gemma-4-31B-it and HuatuoGPT-3-27B are firm. On images, HuatuoGPT-3's OmniMedVQA lead over Lingshu is real but only half a point.",
+      captionCi: "Overall text accuracy with 95 % bootstrap confidence intervals (4,000 resamples of questions, stratified by dataset), in %.",
+      captionPaired: "Paired comparisons: the difference in points (first model minus second), its 95 % paired bootstrap interval, the questions only one model gets right, and McNemar's exact p.",
+    },
+    oncology: {
+      title: "Questions about cancer",
+      text: "A keyword filter over the question and its options marks 674 questions that mention cancer: MedQA 159, MedMCQA 189, MedXpertQA 326. The top two are unchanged and score as well on cancer as on the rest. Most medical fine-tunes score lower on cancer: MedGemma-27B-text-it by 7.1 points, OpenBioLLM by 6.2, JSL-MedLlama by 6.0. The filter has not yet been checked by a clinician; until then the slice is \"questions that mention cancer\".",
+      caption: "Accuracy on the 674 questions that mention cancer, in %, ranked by the step-by-step score.",
+    },
+  },
+  figures: {
+    ranking: "Overall step-by-step accuracy over all 9,995 text questions with 95 % confidence intervals. The shaded models are statistically tied.",
+    reasoning: "Overall text accuracy with a one-letter answer and step by step; the number is the gain in points. † re-scored from the saved replies.",
+    published: "This run against the published model-card scores, one dot per model and text set; the dashed line is equality, the band ±3 points.",
+    q4: "The same weights at 4 bits and at full precision, mean over the five text sets.",
+    oncology: "Step-by-step accuracy on the questions that mention cancer against the other questions of the same three sets.",
+    images: "Image question accuracy of the seven vision models; the ring marks the best model of each column.",
+    grounding: "Right answers per kind of probe, and the five statements the grounding layer removed, by what a hand review found.",
+    tcga: "Agreement with the TCGA clinical record on the real pathology reports, with the lower 95 % bound.",
+    size: "Parameters (log scale) against overall step-by-step accuracy.",
   },
   image: {
     title: "Image results",
@@ -407,13 +429,33 @@ export const RESEARCH = {
     },
     answerability: {
       title: "Answerability of questions to the Case File",
-      text: "Thirty-three probes cover answerable questions, absent values (fabrication traps, where the right answer is that the file does not say) and out-of-scope requests (a treatment recommendation, which must be declined). Gemma-4-31B-it passes all 33 and is the fastest, so it is the reasoner, labelled non-medical everywhere in the product. All three produced zero fabrications, which is the grounding layer's doing rather than the models'. The same probes are re-run at every release.",
+      text: "Thirty-three probes cover answerable questions, absent values (fabrication traps, where the right answer is that the file does not say) and out-of-scope requests (a treatment recommendation, which must be declined). Gemma-4-31B-it passes all 33 and is the fastest, so it is the reasoner, labelled non-medical everywhere in the product. All three produced zero fabrications. The same probes are re-run at every release. How much of that is the reasoner and how much the grounding layer is measured next.",
       caption: "Ask-the-Case-File answerability, 33 probes. Latency is the mean per answer on the H200 at 300 W; Gemma's figure is after the parallel scope check.",
+    },
+    probes: {
+      title: "A larger probe set, and what the grounding layer removes",
+      text: [
+        "Thirty-three probes bound the fabrication rate only below about 9 %. We generated 419 more from the answer keys of the eight synthetic Case Files: an answerable probe for every answer-key field, a trap for every catalogue field the case does not have, and four out-of-scope requests per case. Each ran through the shipped Ask pipeline, unchanged. The pipeline returns both the statements it shows and the ones the grounding step removed, so one run gives both arms of the comparison: grounding off is everything the reasoner wrote.",
+        "117 of the 118 answerable probes were answered with the value and its quote; the one miss was a correct statement removed by the separate output guardrail. All 205 true traps were answered \"not documented\" and all 32 out-of-scope requests were declined. Sixty-four generated traps turned out to be documented under a related name (smoking history for \"tobacco use\", nodal findings, comorbidities); they were answered with verified quotes and are counted apart. With the 57 hand-written probes: 476 probes and no fabricated value shown.",
+        "The reasoner itself rarely writes an unsupported statement: across the 419 probes the grounding layer removed five, all reviewed by hand. Two carried a wrong detail that the layer caught (a tumour extent of 8 to 13 cm where the report says 8 to 12 cm, and a report date off by ten days); two were true but their quote did not match the document exactly, the layer's cost in recall; one was a statement of absence.",
+      ],
+      caption: "The larger probe set through the shipped Ask pipeline (Gemma-4-31B-it, non-medical, with the verbatim-quote check).",
+      captionRemoved: "Every statement the grounding layer removed on the 419 generated probes, with the reason and a hand review against the document.",
+      rows: {
+        ans: "Answerable (answer key)", ansWhat: "the value, with its quote",
+        trap: "Not in the file (trap)", trapWhat: "\"not documented\", no value",
+        scope: "Out of scope", scopeWhat: "declined",
+        documented: "Documented after all", documentedWhat: "answered with verified quotes (a gap in the answer key)",
+        hand: "Hand-written release set", handWhat: "the 57 probes of every release",
+      },
     },
     tcga: {
       title: "Real pathology reports",
-      text: "Thirty pathology reports from TCGA (OCR text of the public de-identified PDFs) were processed with the shipped reader and extractor and compared with the TCGA clinical ground truth. Every disagreement is a metric artefact rather than a wrong reading: the report says \"95 % nuclear staining with moderate intensity\" where the ground truth says ER positive, or states a stage group where the ground truth gives a pT.",
-      caption: "Thirty real TCGA pathology reports through the shipped pipeline: extracted values, grounding and agreement with the clinical ground truth.",
+      text: [
+        "The first check on real text used 30 TCGA pathology reports: 166 values, none ungrounded. Thirty reports bound the ungrounded rate only below about 1.8 %, so the shipped reader and extractor ran, unchanged, on every TCGA report with clinical ground truth: 2,102 reports (1,034 breast, 488 lung adenocarcinoma, 580 colorectal), on the OCR text of the public de-identified PDFs. The extractor read 10,883 values; 151 (1.4 %, upper 95 % bound 1.6 %) had no quote the grounding check could find, mostly because OCR damage made quote and text differ (\"Hastologic grade: Boorly\"), and are flagged for review rather than shown as fact. On real OCR text, one value in seventy cannot be tied to its line: this is where the grounding layer matters most.",
+        "Agreement with the clinical record, counted only where both sides state the field: histology 97.5 %, pT 97.2 %, pN 97.4 %, stage group 93.3 %, ER 91.3 %, PR 90.1 %, HER2 IHC score 84.2 %. Reports that say the result is to follow, and HER2 given only as in situ hybridisation, are counted apart. The disagreements are mostly not reading errors: 265 of the 272 carry a verified quote, so the report itself states what Vaidyx read and the research record differs. The comparison rules were refined after inspecting a sample of disagreements; with the first, stricter rules histology was 92.1 %, ER 88.6 %, PR 87.3 % and HER2 74.0 %.",
+      ],
+      caption: "The shipped extractor on 2,102 real TCGA pathology reports against the cBioPortal clinical record. Right: the disagreements in which the report itself states the extracted value (a verified quote).",
       labels: { reports: "Reports", claims: "Extracted values", ungrounded: "Ungrounded", seconds: "Run time" },
     },
     status: {
@@ -446,7 +488,7 @@ export const RESEARCH = {
       ["Model generation matters more than size or medical fine-tuning.", "Qwen3.5-4B, a 4B general model, matches a 27B medical model on text and beats every 7B to 8B medical fine-tune of the previous generation by 10 to 28 points. The older fine-tunes are superseded."],
       ["The hard sets separate the models.", "On MedQA and MMLU-Med the top models are close to the ceiling. MedXpertQA and MedMCQA spread them out: 55.1 against at most 40.4 on MedXpertQA. An India-specific test is the obvious next addition."],
       ["Format discipline is a separate property.", "Several strong models cannot reply with a letter when asked to. The first-token and parse-rate columns separate this from knowledge; for a system that asks structured questions, the direct-answer columns favour HuatuoGPT-3-27B and Lingshu-32B."],
-      ["Benchmarks do not measure grounding.", "All three candidate reasoners produced zero fabrications on the 33 probes, and the 166 values from real pathology reports were all grounded, because the grounding layer, not the model, decides what is shown. The benchmark picks the model with the most knowledge; the grounded evaluations decide whether the product may show its output."],
+      ["Benchmarks do not measure grounding, and grounding earns its place on real text.", "On clean synthetic Case Files the reasoner rarely writes an unsupported statement: the grounding layer removed five statements in 419 probes, two with a wrong number or date, and no fabricated value reached the user in 476 probes. On real OCR text one value in seventy read from 2,102 TCGA reports could not be tied to its line and is flagged instead of shown. The benchmark picks the model with the most knowledge; the grounded evaluations decide whether the product may show its output."],
     ],
   },
   caveats: {
@@ -457,7 +499,8 @@ export const RESEARCH = {
       ["Engine errors count as wrong.", "HuatuoGPT-3 (922), Lingshu (1,043) and Qwen3.5 (922) had OmniMedVQA questions refused because large images exceed the context window. Excluding them adds about one point."],
       ["Baichuan-M2's direct scores were re-scored", "from the saved replies after a stray thinking tag broke the parser; no answer was regenerated."],
       ["Possible training overlap.", "Lingshu was trained on the training splits of VQA-RAD, SLAKE and PathVQA, and newer models may have seen public test items. Benchmarks measure examination knowledge, not safety on real patient documents."],
-      ["The grounded evaluations are small and mostly synthetic.", "Three Case Files, 31 documents, 33 probes, 111 synthetic scanned pages and 30 real reports. They are release gates for one product, not a clinical validation, and no clinical claim is made from them."],
+      ["The grounded evaluations are synthetic or American.", "The probes come from eight synthetic Case Files whose answer keys have gaps; the real reports are American (TCGA), in English, and their ground truth is a research database. They are release gates for one product, not a clinical validation, and no clinical claim is made from them. Real Indian documents are the next test."],
+      ["Scoring rules.", "The TCGA comparison rules were refined after inspecting a sample of disagreements (both scorings are reported), and the cancer-question slice is a keyword filter a clinician has not yet checked."],
     ],
   },
   uses: {

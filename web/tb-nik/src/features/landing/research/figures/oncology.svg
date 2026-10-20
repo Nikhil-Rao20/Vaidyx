@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="vfig" viewBox="0 0 960 578" width="960" height="578" role="img" aria-label="Accuracy on questions about cancer against the other questions"><style>.vfig .fg{fill:var(--l-fg,#0f172a)}.vfig .fg2{fill:var(--l-fg-2,#475569)}.vfig .fg3{fill:var(--l-fg-3,#94a3b8)}.vfig .ln{stroke:var(--l-line,#e2e8f0)}.vfig .ln2{stroke:var(--l-line-2,#cbd5e1)}.vfig .ax{stroke:var(--l-fg-3,#94a3b8)}.vfig .bg{fill:var(--l-surface,#ffffff)}.vfig .band{fill:var(--l-accent-bg,rgba(1,180,194,.09))}.vfig .neu{fill:var(--l-line-2,#cbd5e1)}.vfig .med{fill:#0e9aa7}.vfig .gen{fill:#7c5cf0}.vfig .medS{stroke:#0e9aa7}.vfig .genS{stroke:#7c5cf0}.vfig .warm{fill:#e8973a}.vfig .warmS{stroke:#e8973a}.vfig .bad{fill:#e35d6a}.vfig text{font-family:'Inter Variable', Inter, system-ui, sans-serif}.vfig .t-num,.vfig .t-ax{font-variant-numeric:tabular-nums}.vfig .t-title{font-size:19px;font-weight:650;letter-spacing:-.01em}.vfig .t-sub{font-size:13.5px}.vfig .t-lab{font-size:13.5px;font-weight:550}.vfig .t-tag{font-size:11.5px}.vfig .t-num{font-size:12.5px;font-weight:600}.vfig .t-ax{font-size:12px} </style>
+<text x="0.0" y="22.0" class="fg t-title" text-anchor="start" >Cancer questions against the rest (674 of the MedQA, MedMCQA and MedXpertQA questions)</text>
+<text x="0.0" y="44.0" class="fg2 t-sub" text-anchor="start" >Step by step. Open dot: the other questions of the same sets; filled dot: questions that mention cancer, with its 95 % interval.</text>
+<line x1="300.0" y1="86.0" x2="300.0" y2="508.0" class="ln" stroke-width="1" />
+<text x="300.0" y="526.0" class="fg3 t-ax" text-anchor="middle" >20</text>
+<line x1="398.3" y1="86.0" x2="398.3" y2="508.0" class="ln" stroke-width="1" />
+<text x="398.3" y="526.0" class="fg3 t-ax" text-anchor="middle" >30</text>
+<line x1="496.7" y1="86.0" x2="496.7" y2="508.0" class="ln" stroke-width="1" />
+<text x="496.7" y="526.0" class="fg3 t-ax" text-anchor="middle" >40</text>
+<line x1="595.0" y1="86.0" x2="595.0" y2="508.0" class="ln" stroke-width="1" />
+<text x="595.0" y="526.0" class="fg3 t-ax" text-anchor="middle" >50</text>
+<line x1="693.3" y1="86.0" x2="693.3" y2="508.0" class="ln" stroke-width="1" />
+<text x="693.3" y="526.0" class="fg3 t-ax" text-anchor="middle" >60</text>
+<line x1="791.7" y1="86.0" x2="791.7" y2="508.0" class="ln" stroke-width="1" />
+<text x="791.7" y="526.0" class="fg3 t-ax" text-anchor="middle" >70</text>
+<line x1="890.0" y1="86.0" x2="890.0" y2="508.0" class="ln" stroke-width="1" />
+<text x="890.0" y="526.0" class="fg3 t-ax" text-anchor="middle" >80</text>
+<text x="595.0" y="546.0" class="fg2 t-ax" text-anchor="middle" >Accuracy, %</text>
+<text x="0.0" y="109.0" class="fg t-lab" text-anchor="start" >Gemma-4-31B-it</text>
+<text x="0.0" y="123.0" class="fg3 t-tag" text-anchor="start" >USA · Non-medical</text>
+<line x1="800.7" y1="108.0" x2="860.5" y2="108.0" class="genS" stroke-width="3" stroke-linecap="round" opacity=".35"/>
+<circle cx="827.3" cy="108.0" r="5.5" class="bg" stroke="var(--l-fg-3,#94a3b8)" stroke-width="2"/>
+<circle cx="831.4" cy="108.0" r="6.5" class="gen" stroke="var(--l-surface,#fff)" stroke-width="2"/>
+<text x="870.5" y="112.5" class="fg t-num" text-anchor="start" >+0.4</text>
+<text x="0.0" y="141.0" class="fg t-lab" text-anchor="start" >HuatuoGPT-3-27B</text>
+<text x="0.0" y="155.0" class="fg3 t-tag" text-anchor="start" >China · Medical</text>
+<line x1="735.0" y1="140.0" x2="797.8" y2="140.0" class="medS" stroke-width="3" stroke-linecap="round" opacity=".35"/>
+<circle cx="762.0" cy="140.0" r="5.5" class="bg" stroke="var(--l-fg-3,#94a3b8)" stroke-width="2"/>
+<circle cx="767.2" cy="140.0" r="6.5" class="med" stroke="var(--l-surface,#fff)" stroke-width="2"/>
+<text x="807.8" y="144.5" class="fg t-num" text-anchor="start" >+0.5</text>
+<text x="0.0" y="173.0" class="fg t-lab" text-anchor="start" >Qwen3.5-4B</text>
+<text x="0.0" y="187.0" class="fg3 t-tag" text-anchor="start" >China · Non-medical</text>
+<line x1="609.6" y1="172.0" x2="673.8" y2="172.0" class="genS" stroke-width="3" stroke-linecap="round" opacity=".35"/>
+<circle cx="662.9" cy="172.0" r="5.5" class="bg" stroke="var(--l-fg-3,#94a3b8)" stroke-width="2"/>
+<circle cx="641.7" cy="172.0" r="6.5" class="gen" stroke="var(--l-surface,#fff)" stroke-width="2"/>
+<text x="683.8" y="176.5" class="fg2 t-num" text-anchor="start" >-2.1</text>
+<text x="0.0" y="205.0" class="fg t-lab" text-anchor="start" >Baichuan-M2-32B</text>
+<text x="0.0" y="219.0" class="fg3 t-tag" text-anchor="start" >China · Medical</text>
+<line x1="611.0" y1="204.0" x2="672.4" y2="204.0" class="medS" stroke-width="3" stroke-linecap="round" opacity=".35"/>
+<circle cx="660.0" cy="204.0" r="5.5" class="bg" stroke="var(--l-fg-3,#94a3b8)" stroke-width="2"/>
+<circle cx="641.7" cy="204.0" r="6.5" class="med" stroke="var(--l-surface,#fff)" stroke-width="2"/>
+<text x="682.4" y="208.5" class="fg2 t-num" text-anchor="start" >-1.9</text>
+<text x="0.0" y="237.0" class="fg t-lab" text-anchor="start" >MedGemma-27B-it</text>
+<text x="0.0" y="251.0" class="fg3 t-tag" text-anchor="start" >USA · Medical</text>
+<line x1="589.2" y1="236.0" x2="653.3" y2="236.0" class="medS" stroke-width="3" stroke-linecap="round" opacity=".35"/>
+<circle cx="659.2" cy="236.0" r="5.5" class="bg" stroke="var(--l-fg-3,#94a3b8)" stroke-width="2"/>
+<circle cx="621.3" cy="236.0" r="6.5" class="med" stroke="var(--l-surface,#fff)" stroke-width="2"/>
+<text x="669.2" y="240.5" class="fg2 t-num" text-anchor="start" >-3.9</text>
+<text x="0.0" y="269.0" class="fg t-lab" text-anchor="start" >Lingshu-32B</text>
+<text x="0.0" y="283.0" class="fg3 t-tag" text-anchor="start" >China · Medical</text>
+<line x1="567.3" y1="268.0" x2="631.5" y2="268.0" class="medS" stroke-width="3" stroke-linecap="round" opacity=".35"/>
+<circle cx="614.1" cy="268.0" r="5.5" class="bg" stroke="var(--l-fg-3,#94a3b8)" stroke-width="2"/>
+<circle cx="599.4" cy="268.0" r="6.5" class="med" stroke="var(--l-surface,#fff)" stroke-width="2"/>
+<text x="641.5" y="272.5" class="fg2 t-num" text-anchor="start" >-1.5</text>
+<text x="0.0" y="301.0" class="fg t-lab" text-anchor="start" >MedGemma-27B-text-it</text>
+<text x="0.0" y="315.0" class="fg3 t-tag" text-anchor="start" >USA · Medical</text>
+<line x1="567.3" y1="300.0" x2="628.5" y2="300.0" class="medS" stroke-width="3" stroke-linecap="round" opacity=".35"/>
+<circle cx="667.4" cy="300.0" r="5.5" class="bg" stroke="var(--l-fg-3,#94a3b8)" stroke-width="2"/>
+<circle cx="598.0" cy="300.0" r="6.5" class="med" stroke="var(--l-surface,#fff)" stroke-width="2"/>
+<text x="677.4" y="304.5" class="fg2 t-num" text-anchor="start" >-7.1</text>
+<text x="0.0" y="333.0" class="fg t-lab" text-anchor="start" >Med42-8B (v2)</text>
+<text x="0.0" y="347.0" class="fg3 t-tag" text-anchor="start" >UAE · Medical</text>
+<line x1="494.3" y1="332.0" x2="557.1" y2="332.0" class="medS" stroke-width="3" stroke-linecap="round" opacity=".35"/>
+<circle cx="551.9" cy="332.0" r="5.5" class="bg" stroke="var(--l-fg-3,#94a3b8)" stroke-width="2"/>
+<circle cx="526.5" cy="332.0" r="6.5" class="med" stroke="var(--l-surface,#fff)" stroke-width="2"/>
+<text x="567.1" y="336.5" class="fg2 t-num" text-anchor="start" >-2.6</text>
+<text x="0.0" y="365.0" class="fg t-lab" text-anchor="start" >MedGemma-4B-it</text>
+<text x="0.0" y="379.0" class="fg3 t-tag" text-anchor="start" >USA · Medical</text>
+<line x1="469.5" y1="364.0" x2="536.7" y2="364.0" class="medS" stroke-width="3" stroke-linecap="round" opacity=".35"/>
+<circle cx="547.5" cy="364.0" r="5.5" class="bg" stroke="var(--l-fg-3,#94a3b8)" stroke-width="2"/>
+<circle cx="504.5" cy="364.0" r="6.5" class="med" stroke="var(--l-surface,#fff)" stroke-width="2"/>
+<text x="557.5" y="368.5" class="fg2 t-num" text-anchor="start" >-4.4</text>
+<text x="0.0" y="397.0" class="fg t-lab" text-anchor="start" >JSL-MedLlama-3-8B-v2.0</text>
+<text x="0.0" y="411.0" class="fg3 t-tag" text-anchor="start" >USA · Medical</text>
+<line x1="438.8" y1="396.0" x2="500.2" y2="396.0" class="medS" stroke-width="3" stroke-linecap="round" opacity=".35"/>
+<circle cx="528.5" cy="396.0" r="5.5" class="bg" stroke="var(--l-fg-3,#94a3b8)" stroke-width="2"/>
+<circle cx="469.5" cy="396.0" r="6.5" class="med" stroke="var(--l-surface,#fff)" stroke-width="2"/>
+<text x="538.5" y="400.5" class="fg2 t-num" text-anchor="start" >-6.0</text>
+<text x="0.0" y="429.0" class="fg t-lab" text-anchor="start" >MedGemma-1.5-4B-it</text>
+<text x="0.0" y="443.0" class="fg3 t-tag" text-anchor="start" >USA · Medical</text>
+<line x1="401.0" y1="428.0" x2="462.2" y2="428.0" class="medS" stroke-width="3" stroke-linecap="round" opacity=".35"/>
+<circle cx="475.0" cy="428.0" r="5.5" class="bg" stroke="var(--l-fg-3,#94a3b8)" stroke-width="2"/>
+<circle cx="430.1" cy="428.0" r="6.5" class="med" stroke="var(--l-surface,#fff)" stroke-width="2"/>
+<text x="485.0" y="432.5" class="fg2 t-num" text-anchor="start" >-4.6</text>
+<text x="0.0" y="461.0" class="fg t-lab" text-anchor="start" >OpenBioLLM-8B</text>
+<text x="0.0" y="475.0" class="fg3 t-tag" text-anchor="start" >USA · Medical</text>
+<line x1="379.1" y1="460.0" x2="443.3" y2="460.0" class="medS" stroke-width="3" stroke-linecap="round" opacity=".35"/>
+<circle cx="473.1" cy="460.0" r="5.5" class="bg" stroke="var(--l-fg-3,#94a3b8)" stroke-width="2"/>
+<circle cx="412.6" cy="460.0" r="6.5" class="med" stroke="var(--l-surface,#fff)" stroke-width="2"/>
+<text x="483.1" y="464.5" class="fg2 t-num" text-anchor="start" >-6.2</text>
+<text x="0.0" y="493.0" class="fg t-lab" text-anchor="start" >MedLlama2-7B</text>
+<text x="0.0" y="507.0" class="fg3 t-tag" text-anchor="start" >USA · Medical</text>
+<line x1="323.6" y1="492.0" x2="386.3" y2="492.0" class="medS" stroke-width="3" stroke-linecap="round" opacity=".35"/>
+<circle cx="379.5" cy="492.0" r="5.5" class="bg" stroke="var(--l-fg-3,#94a3b8)" stroke-width="2"/>
+<circle cx="354.3" cy="492.0" r="6.5" class="med" stroke="var(--l-surface,#fff)" stroke-width="2"/>
+<text x="396.3" y="496.5" class="fg2 t-num" text-anchor="start" >-2.6</text>
+</svg>

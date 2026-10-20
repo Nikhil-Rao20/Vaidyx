@@ -30,3 +30,7 @@
   .r-byline b { color: var(--l-fg); font-weight: 600; }
   .r-fact { font-size: clamp(1.5rem, 2.6vw, 2rem); font-weight: 600; letter-spacing: -0.03em; line-height: 1; color: var(--l-fg); font-variant-numeric: tabular-nums; }
 }
+@layer base {
+  .r-fig svg { display: block; width: 100%; height: auto; }
+  @media (max-width: 640px) { .r-fig { overflow-x: auto; } .r-fig svg { min-width: 700px; } }
+}

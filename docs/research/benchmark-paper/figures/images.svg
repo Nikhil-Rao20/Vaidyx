@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="vfig" viewBox="0 0 960 426" width="960" height="426" role="img" aria-label="Image question accuracy of the seven vision models"><style>.vfig .fg{fill:var(--l-fg,#0f172a)}.vfig .fg2{fill:var(--l-fg-2,#475569)}.vfig .fg3{fill:var(--l-fg-3,#94a3b8)}.vfig .ln{stroke:var(--l-line,#e2e8f0)}.vfig .ln2{stroke:var(--l-line-2,#cbd5e1)}.vfig .ax{stroke:var(--l-fg-3,#94a3b8)}.vfig .bg{fill:var(--l-surface,#ffffff)}.vfig .band{fill:var(--l-accent-bg,rgba(1,180,194,.09))}.vfig .neu{fill:var(--l-line-2,#cbd5e1)}.vfig .med{fill:#0e9aa7}.vfig .gen{fill:#7c5cf0}.vfig .medS{stroke:#0e9aa7}.vfig .genS{stroke:#7c5cf0}.vfig .warm{fill:#e8973a}.vfig .warmS{stroke:#e8973a}.vfig .bad{fill:#e35d6a}.vfig text{font-family:'Inter Variable', Inter, system-ui, sans-serif}.vfig .t-num,.vfig .t-ax{font-variant-numeric:tabular-nums}.vfig .t-title{font-size:19px;font-weight:650;letter-spacing:-.01em}.vfig .t-sub{font-size:13.5px}.vfig .t-lab{font-size:13.5px;font-weight:550}.vfig .t-tag{font-size:11.5px}.vfig .t-num{font-size:12.5px;font-weight:600}.vfig .t-ax{font-size:12px} </style>
+<g transform="translate(0,-50)">
+<text x="300.7" y="114.0" class="fg2 t-tag" text-anchor="middle" >VQA-RAD</text>
+<text x="402.1" y="114.0" class="fg2 t-tag" text-anchor="middle" >SLAKE</text>
+<text x="503.6" y="114.0" class="fg2 t-tag" text-anchor="middle" >PathVQA</text>
+<text x="605.0" y="114.0" class="fg2 t-tag" text-anchor="middle" >PMC-VQA</text>
+<text x="706.4" y="100.0" class="fg2 t-tag" text-anchor="middle" >PMC-VQA</text>
+<text x="706.4" y="115.0" class="fg3 t-tag" text-anchor="middle" >CoT</text>
+<text x="807.9" y="100.0" class="fg2 t-tag" text-anchor="middle" >MedXpertQA-MM</text>
+<text x="807.9" y="115.0" class="fg3 t-tag" text-anchor="middle" >CoT</text>
+<text x="909.3" y="114.0" class="fg2 t-tag" text-anchor="middle" >OmniMedVQA</text>
+<text x="0.0" y="151.0" class="fg t-lab" text-anchor="start" >HuatuoGPT-3-27B</text>
+<text x="0.0" y="165.0" class="fg3 t-tag" text-anchor="start" >China · Medical</text>
+<rect x="253.0" y="131.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.54"/>
+<text x="300.7" y="155.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">54.5</text>
+<rect x="354.4" y="131.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.59"/>
+<text x="402.1" y="155.0" class="t-num" text-anchor="middle" fill="#ffffff" font-weight="600">60.3</text>
+<rect x="455.9" y="131.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.41"/>
+<text x="503.6" y="155.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">38.9</text>
+<rect x="557.3" y="131.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.58"/>
+<text x="605.0" y="155.0" class="t-num" text-anchor="middle" fill="#ffffff" font-weight="600">59.3</text>
+<rect x="658.7" y="131.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.61"/>
+<text x="706.4" y="155.0" class="t-num" text-anchor="middle" fill="#ffffff" font-weight="600">62.7</text>
+<rect x="760.1" y="131.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.50"/>
+<text x="807.9" y="155.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">49.7</text>
+<rect x="861.6" y="131.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.78"/>
+<rect x="859.6" y="129.0" width="99.4" height="42.0" rx="10" class="" fill="none" stroke="var(--l-fg,#0f172a)" stroke-width="2.2"/>
+<text x="909.3" y="155.0" class="t-num" text-anchor="middle" fill="#ffffff" font-weight="800">82.9</text>
+<text x="0.0" y="195.0" class="fg t-lab" text-anchor="start" >Lingshu-32B</text>
+<text x="0.0" y="209.0" class="fg3 t-tag" text-anchor="start" >China · Medical</text>
+<rect x="253.0" y="175.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.65"/>
+<rect x="251.0" y="173.0" width="99.4" height="42.0" rx="10" class="" fill="none" stroke="var(--l-fg,#0f172a)" stroke-width="2.2"/>
+<text x="300.7" y="199.0" class="t-num" text-anchor="middle" fill="#ffffff" font-weight="800">67.4</text>
+<rect x="354.4" y="175.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.80"/>
+<rect x="352.4" y="173.0" width="99.4" height="42.0" rx="10" class="" fill="none" stroke="var(--l-fg,#0f172a)" stroke-width="2.2"/>
+<text x="402.1" y="199.0" class="t-num" text-anchor="middle" fill="#ffffff" font-weight="800">84.9</text>
+<rect x="455.9" y="175.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.59"/>
+<rect x="453.9" y="173.0" width="99.4" height="42.0" rx="10" class="" fill="none" stroke="var(--l-fg,#0f172a)" stroke-width="2.2"/>
+<text x="503.6" y="199.0" class="t-num" text-anchor="middle" fill="#ffffff" font-weight="800">59.9</text>
+<rect x="557.3" y="175.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.63"/>
+<rect x="555.3" y="173.0" width="99.4" height="42.0" rx="10" class="" fill="none" stroke="var(--l-fg,#0f172a)" stroke-width="2.2"/>
+<text x="605.0" y="199.0" class="t-num" text-anchor="middle" fill="#ffffff" font-weight="800">64.9</text>
+<rect x="658.7" y="175.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.59"/>
+<text x="706.4" y="199.0" class="t-num" text-anchor="middle" fill="#ffffff" font-weight="600">60.1</text>
+<rect x="760.1" y="175.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.35"/>
+<text x="807.9" y="199.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">31.5</text>
+<rect x="861.6" y="175.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.78"/>
+<text x="909.3" y="199.0" class="t-num" text-anchor="middle" fill="#ffffff" font-weight="600">82.4</text>
+<text x="0.0" y="239.0" class="fg t-lab" text-anchor="start" >Gemma-4-31B-it</text>
+<text x="0.0" y="253.0" class="fg3 t-tag" text-anchor="start" >USA · Non-medical</text>
+<rect x="253.0" y="219.0" width="95.4" height="38.0" rx="8" class="" fill="#7c5cf0" fill-opacity="0.52"/>
+<text x="300.7" y="243.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">51.4</text>
+<rect x="354.4" y="219.0" width="95.4" height="38.0" rx="8" class="" fill="#7c5cf0" fill-opacity="0.52"/>
+<text x="402.1" y="243.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">51.5</text>
+<rect x="455.9" y="219.0" width="95.4" height="38.0" rx="8" class="" fill="#7c5cf0" fill-opacity="0.39"/>
+<text x="503.6" y="243.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">36.8</text>
+<rect x="557.3" y="219.0" width="95.4" height="38.0" rx="8" class="" fill="#7c5cf0" fill-opacity="0.46"/>
+<text x="605.0" y="243.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">45.1</text>
+<rect x="658.7" y="219.0" width="95.4" height="38.0" rx="8" class="" fill="#7c5cf0" fill-opacity="0.64"/>
+<rect x="656.7" y="217.0" width="99.4" height="42.0" rx="10" class="" fill="none" stroke="var(--l-fg,#0f172a)" stroke-width="2.2"/>
+<text x="706.4" y="243.0" class="t-num" text-anchor="middle" fill="#ffffff" font-weight="800">66.2</text>
+<rect x="760.1" y="219.0" width="95.4" height="38.0" rx="8" class="" fill="#7c5cf0" fill-opacity="0.55"/>
+<rect x="758.1" y="217.0" width="99.4" height="42.0" rx="10" class="" fill="none" stroke="var(--l-fg,#0f172a)" stroke-width="2.2"/>
+<text x="807.9" y="243.0" class="t-num" text-anchor="middle" fill="#ffffff" font-weight="800">55.5</text>
+<rect x="861.6" y="219.0" width="95.4" height="38.0" rx="8" class="" fill="#7c5cf0" fill-opacity="0.77"/>
+<text x="909.3" y="243.0" class="t-num" text-anchor="middle" fill="#ffffff" font-weight="600">81.5</text>
+<text x="0.0" y="283.0" class="fg t-lab" text-anchor="start" >Qwen3.5-4B</text>
+<text x="0.0" y="297.0" class="fg3 t-tag" text-anchor="start" >China · Non-medical</text>
+<rect x="253.0" y="263.0" width="95.4" height="38.0" rx="8" class="" fill="#7c5cf0" fill-opacity="0.55"/>
+<text x="300.7" y="287.0" class="t-num" text-anchor="middle" fill="#ffffff" font-weight="600">55.6</text>
+<rect x="354.4" y="263.0" width="95.4" height="38.0" rx="8" class="" fill="#7c5cf0" fill-opacity="0.59"/>
+<text x="402.1" y="287.0" class="t-num" text-anchor="middle" fill="#ffffff" font-weight="600">59.6</text>
+<rect x="455.9" y="263.0" width="95.4" height="38.0" rx="8" class="" fill="#7c5cf0" fill-opacity="0.42"/>
+<text x="503.6" y="287.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">39.8</text>
+<rect x="557.3" y="263.0" width="95.4" height="38.0" rx="8" class="" fill="#7c5cf0" fill-opacity="0.22"/>
+<text x="605.0" y="287.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">16.2</text>
+<rect x="658.7" y="263.0" width="95.4" height="38.0" rx="8" class="" fill="#7c5cf0" fill-opacity="0.59"/>
+<text x="706.4" y="287.0" class="t-num" text-anchor="middle" fill="#ffffff" font-weight="600">60.0</text>
+<rect x="760.1" y="263.0" width="95.4" height="38.0" rx="8" class="" fill="#7c5cf0" fill-opacity="0.38"/>
+<text x="807.9" y="287.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">35.5</text>
+<rect x="861.6" y="263.0" width="95.4" height="38.0" rx="8" class="" fill="#7c5cf0" fill-opacity="0.71"/>
+<text x="909.3" y="287.0" class="t-num" text-anchor="middle" fill="#ffffff" font-weight="600">74.2</text>
+<text x="0.0" y="327.0" class="fg t-lab" text-anchor="start" >MedGemma-4B-it</text>
+<text x="0.0" y="341.0" class="fg3 t-tag" text-anchor="start" >USA · Medical</text>
+<rect x="253.0" y="307.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.56"/>
+<text x="300.7" y="331.0" class="t-num" text-anchor="middle" fill="#ffffff" font-weight="600">56.8</text>
+<rect x="354.4" y="307.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.53"/>
+<text x="402.1" y="331.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">52.8</text>
+<rect x="455.9" y="307.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.36"/>
+<text x="503.6" y="331.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">33.1</text>
+<rect x="557.3" y="307.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.47"/>
+<text x="605.0" y="331.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">46.2</text>
+<rect x="658.7" y="307.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.48"/>
+<text x="706.4" y="331.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">46.5</text>
+<rect x="760.1" y="307.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.30"/>
+<text x="807.9" y="331.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">25.4</text>
+<rect x="861.6" y="307.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.68"/>
+<text x="909.3" y="331.0" class="t-num" text-anchor="middle" fill="#ffffff" font-weight="600">70.4</text>
+<text x="0.0" y="371.0" class="fg t-lab" text-anchor="start" >MedGemma-27B-it</text>
+<text x="0.0" y="385.0" class="fg3 t-tag" text-anchor="start" >USA · Medical</text>
+<rect x="253.0" y="351.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.51"/>
+<text x="300.7" y="375.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">50.5</text>
+<rect x="354.4" y="351.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.50"/>
+<text x="402.1" y="375.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">50.0</text>
+<rect x="455.9" y="351.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.35"/>
+<text x="503.6" y="375.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">32.1</text>
+<rect x="557.3" y="351.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.40"/>
+<text x="605.0" y="375.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">38.2</text>
+<rect x="658.7" y="351.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.48"/>
+<text x="706.4" y="375.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">47.1</text>
+<rect x="760.1" y="351.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.36"/>
+<text x="807.9" y="375.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">33.2</text>
+<rect x="861.6" y="351.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.66"/>
+<text x="909.3" y="375.0" class="t-num" text-anchor="middle" fill="#ffffff" font-weight="600">68.6</text>
+<text x="0.0" y="415.0" class="fg t-lab" text-anchor="start" >MedGemma-1.5-4B-it</text>
+<text x="0.0" y="429.0" class="fg3 t-tag" text-anchor="start" >USA · Medical</text>
+<rect x="253.0" y="395.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.43"/>
+<text x="300.7" y="419.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">41.2</text>
+<rect x="354.4" y="395.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.38"/>
+<text x="402.1" y="419.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">35.7</text>
+<rect x="455.9" y="395.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.32"/>
+<text x="503.6" y="419.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">27.7</text>
+<rect x="557.3" y="395.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.23"/>
+<text x="605.0" y="419.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">17.6</text>
+<rect x="658.7" y="395.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.46"/>
+<text x="706.4" y="419.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">45.0</text>
+<rect x="760.1" y="395.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.16"/>
+<text x="807.9" y="419.0" class="t-num" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">9.6</text>
+<rect x="861.6" y="395.0" width="95.4" height="38.0" rx="8" class="" fill="#0e9aa7" fill-opacity="0.66"/>
+<text x="909.3" y="419.0" class="t-num" text-anchor="middle" fill="#ffffff" font-weight="600">68.2</text>
+</g>
+</svg>

@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="vfig" viewBox="0 0 960 432" width="960" height="432" role="img" aria-label="Agreement with the TCGA clinical record on real pathology reports"><style>.vfig .fg{fill:var(--l-fg,#0f172a)}.vfig .fg2{fill:var(--l-fg-2,#475569)}.vfig .fg3{fill:var(--l-fg-3,#94a3b8)}.vfig .ln{stroke:var(--l-line,#e2e8f0)}.vfig .ln2{stroke:var(--l-line-2,#cbd5e1)}.vfig .ax{stroke:var(--l-fg-3,#94a3b8)}.vfig .bg{fill:var(--l-surface,#ffffff)}.vfig .band{fill:var(--l-accent-bg,rgba(1,180,194,.09))}.vfig .neu{fill:var(--l-line-2,#cbd5e1)}.vfig .med{fill:#0e9aa7}.vfig .gen{fill:#7c5cf0}.vfig .medS{stroke:#0e9aa7}.vfig .genS{stroke:#7c5cf0}.vfig .warm{fill:#e8973a}.vfig .warmS{stroke:#e8973a}.vfig .bad{fill:#e35d6a}.vfig text{font-family:'Inter Variable', Inter, system-ui, sans-serif}.vfig .t-num,.vfig .t-ax{font-variant-numeric:tabular-nums}.vfig .t-title{font-size:19px;font-weight:650;letter-spacing:-.01em}.vfig .t-sub{font-size:13.5px}.vfig .t-lab{font-size:13.5px;font-weight:550}.vfig .t-tag{font-size:11.5px}.vfig .t-num{font-size:12.5px;font-weight:600}.vfig .t-ax{font-size:12px} </style>
+<g transform="translate(0,-50)">
+<text x="710.0" y="98.0" class="fg2 t-tag" text-anchor="start" >Differences the report itself states</text>
+<line x1="190.0" y1="106.0" x2="190.0" y2="406.0" class="ln" stroke-width="1" />
+<text x="190.0" y="424.0" class="fg3 t-ax" text-anchor="middle" >0</text>
+<line x1="284.0" y1="106.0" x2="284.0" y2="406.0" class="ln" stroke-width="1" />
+<text x="284.0" y="424.0" class="fg3 t-ax" text-anchor="middle" >20</text>
+<line x1="378.0" y1="106.0" x2="378.0" y2="406.0" class="ln" stroke-width="1" />
+<text x="378.0" y="424.0" class="fg3 t-ax" text-anchor="middle" >40</text>
+<line x1="472.0" y1="106.0" x2="472.0" y2="406.0" class="ln" stroke-width="1" />
+<text x="472.0" y="424.0" class="fg3 t-ax" text-anchor="middle" >60</text>
+<line x1="566.0" y1="106.0" x2="566.0" y2="406.0" class="ln" stroke-width="1" />
+<text x="566.0" y="424.0" class="fg3 t-ax" text-anchor="middle" >80</text>
+<line x1="660.0" y1="106.0" x2="660.0" y2="406.0" class="ln" stroke-width="1" />
+<text x="660.0" y="424.0" class="fg3 t-ax" text-anchor="middle" >100</text>
+<text x="425.0" y="444.0" class="fg2 t-ax" text-anchor="middle" >Agreement with the record, %</text>
+<text x="0.0" y="134.0" class="fg t-lab" text-anchor="start" >Histology</text>
+<text x="0.0" y="148.0" class="fg3 t-tag" text-anchor="start" >1,961 of 2,012</text>
+<rect x="190.0" y="124.0" width="458.2" height="18.0" rx="6" class="med" opacity=".9"/>
+<line x1="644.5" y1="120.0" x2="644.5" y2="146.0" class="ax" stroke-width="2" />
+<text x="658.2" y="137.5" class="fg t-num" text-anchor="start" >97.5</text>
+<rect x="710.0" y="127.0" width="120.0" height="12.0" rx="6" class="neu" />
+<rect x="710.0" y="127.0" width="115.3" height="12.0" rx="6" class="warm" />
+<text x="840.0" y="137.5" class="fg t-num" text-anchor="start" >49 of 51</text>
+<text x="0.0" y="176.0" class="fg t-lab" text-anchor="start" >pT</text>
+<text x="0.0" y="190.0" class="fg3 t-tag" text-anchor="start" >1,244 of 1,280</text>
+<rect x="190.0" y="166.0" width="456.8" height="18.0" rx="6" class="med" opacity=".9"/>
+<line x1="641.7" y1="162.0" x2="641.7" y2="188.0" class="ax" stroke-width="2" />
+<text x="656.8" y="179.5" class="fg t-num" text-anchor="start" >97.2</text>
+<rect x="710.0" y="169.0" width="120.0" height="12.0" rx="6" class="neu" />
+<rect x="710.0" y="169.0" width="116.7" height="12.0" rx="6" class="warm" />
+<text x="840.0" y="179.5" class="fg t-num" text-anchor="start" >35 of 36</text>
+<text x="0.0" y="218.0" class="fg t-lab" text-anchor="start" >pN</text>
+<text x="0.0" y="232.0" class="fg3 t-tag" text-anchor="start" >556 of 571</text>
+<rect x="190.0" y="208.0" width="457.8" height="18.0" rx="6" class="med" opacity=".9"/>
+<line x1="639.8" y1="204.0" x2="639.8" y2="230.0" class="ax" stroke-width="2" />
+<text x="657.8" y="221.5" class="fg t-num" text-anchor="start" >97.4</text>
+<rect x="710.0" y="211.0" width="120.0" height="12.0" rx="6" class="neu" />
+<rect x="710.0" y="211.0" width="120.0" height="12.0" rx="6" class="warm" />
+<text x="840.0" y="221.5" class="fg t-num" text-anchor="start" >15 of 15</text>
+<text x="0.0" y="260.0" class="fg t-lab" text-anchor="start" >Stage group</text>
+<text x="0.0" y="274.0" class="fg3 t-tag" text-anchor="start" >70 of 75</text>
+<rect x="190.0" y="250.0" width="438.5" height="18.0" rx="6" class="med" opacity=".9"/>
+<line x1="590.9" y1="246.0" x2="590.9" y2="272.0" class="ax" stroke-width="2" />
+<text x="638.5" y="263.5" class="fg t-num" text-anchor="start" >93.3</text>
+<rect x="710.0" y="253.0" width="120.0" height="12.0" rx="6" class="neu" />
+<rect x="710.0" y="253.0" width="120.0" height="12.0" rx="6" class="warm" />
+<text x="840.0" y="263.5" class="fg t-num" text-anchor="start" >5 of 5</text>
+<text x="0.0" y="302.0" class="fg t-lab" text-anchor="start" >ER</text>
+<text x="0.0" y="316.0" class="fg3 t-tag" text-anchor="start" >495 of 542</text>
+<rect x="190.0" y="292.0" width="429.1" height="18.0" rx="6" class="med" opacity=".9"/>
+<line x1="606.9" y1="288.0" x2="606.9" y2="314.0" class="ax" stroke-width="2" />
+<text x="629.1" y="305.5" class="fg t-num" text-anchor="start" >91.3</text>
+<rect x="710.0" y="295.0" width="120.0" height="12.0" rx="6" class="neu" />
+<rect x="710.0" y="295.0" width="117.4" height="12.0" rx="6" class="warm" />
+<text x="840.0" y="305.5" class="fg t-num" text-anchor="start" >46 of 47</text>
+<text x="0.0" y="344.0" class="fg t-lab" text-anchor="start" >PR</text>
+<text x="0.0" y="358.0" class="fg3 t-tag" text-anchor="start" >485 of 538</text>
+<rect x="190.0" y="334.0" width="423.5" height="18.0" rx="6" class="med" opacity=".9"/>
+<line x1="600.3" y1="330.0" x2="600.3" y2="356.0" class="ax" stroke-width="2" />
+<text x="623.5" y="347.5" class="fg t-num" text-anchor="start" >90.1</text>
+<rect x="710.0" y="337.0" width="120.0" height="12.0" rx="6" class="neu" />
+<rect x="710.0" y="337.0" width="117.7" height="12.0" rx="6" class="warm" />
+<text x="840.0" y="347.5" class="fg t-num" text-anchor="start" >52 of 53</text>
+<text x="0.0" y="386.0" class="fg t-lab" text-anchor="start" >HER2 (IHC)</text>
+<text x="0.0" y="400.0" class="fg3 t-tag" text-anchor="start" >346 of 411</text>
+<rect x="190.0" y="376.0" width="395.7" height="18.0" rx="6" class="med" opacity=".9"/>
+<line x1="567.4" y1="372.0" x2="567.4" y2="398.0" class="ax" stroke-width="2" />
+<text x="595.7" y="389.5" class="fg t-num" text-anchor="start" >84.2</text>
+<rect x="710.0" y="379.0" width="120.0" height="12.0" rx="6" class="neu" />
+<rect x="710.0" y="379.0" width="116.3" height="12.0" rx="6" class="warm" />
+<text x="840.0" y="389.5" class="fg t-num" text-anchor="start" >63 of 65</text>
+</g>
+</svg>

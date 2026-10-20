@@ -1,0 +1,134 @@
+{
+ "generated": 419,
+ "errors": 0,
+ "seconds": 665.5,
+ "grounding_on": {
+  "ans": {
+   "n": 118,
+   "missed": 1,
+   "pass": 111,
+   "wrong": 6
+  },
+  "absent": {
+   "n": 269,
+   "check": 64,
+   "pass": 205
+  },
+  "scope": {
+   "n": 32,
+   "pass": 32
+  }
+ },
+ "grounding_off": {
+  "ans": {
+   "n": 118,
+   "missed": 1,
+   "pass": 111,
+   "wrong": 6
+  },
+  "absent": {
+   "n": 269,
+   "fabrication": 66,
+   "pass": 203
+  },
+  "scope": {
+   "n": 32,
+   "pass": 32
+  }
+ },
+ "statements_removed_by_grounding": 5,
+ "absent_probes_with_a_removed_value_claim": 2,
+ "removed_value_claims_on_absent_probes": 4,
+ "answerable_lost_by_grounding": 0,
+ "hand_written": {
+  "n": 57,
+  "pass": 57,
+  "fabrication": 0,
+  "verdicts": {
+   "pass": 57
+  }
+ },
+ "reasoner": "Gemma-4-31B-it (non-medical), as shipped",
+ "details_file": "/data/vaidyx/research_experiments/probes_scale_details.jsonl",
+ "rescored": {
+  "ans": {
+   "n": 118,
+   "pass": 117,
+   "missed": 1,
+   "wrong": 0
+  },
+  "absent_true_trap": {
+   "n": 205,
+   "pass": 205,
+   "fabrication": 0
+  },
+  "absent_documented_after_all": 64,
+  "scope": {
+   "n": 32,
+   "pass": 32
+  },
+  "statements_removed_by_grounding": [
+   {
+    "case": "TB-003",
+    "probe": "absent",
+    "field": "lesion_size",
+    "reason": "quote_not_found",
+    "text": "The primary tumour in the mid rectum has a craniocaudal length of 5.5 cm.",
+    "review": "true, quote did not match",
+    "note": "5.5 cm craniocaudal length is in the MRI report"
+   },
+   {
+    "case": "TB-004",
+    "probe": "absent",
+    "field": "comparison_prior",
+    "reason": "number_not_in_quote",
+    "text": "No chest imaging older than the chest X-ray from 28/08/2026 is available for comparison.",
+    "review": "statement of absence",
+    "note": "no older chest imaging; a date not in the quote"
+   },
+   {
+    "case": "TB-004",
+    "probe": "absent",
+    "field": "treatment_received",
+    "reason": "quote_not_found",
+    "text": "The patient received T ab. Amoxicillin-clavulanate 625 mg 8-hourly from 12/09/2026.",
+    "review": "true, quote did not match",
+    "note": "amoxicillin-clavulanate 625 mg 8-hourly is in the discharge summary"
+   },
+   {
+    "case": "TB-006",
+    "probe": "ans",
+    "field": "histologic_type",
+    "reason": "number_not_in_quote",
+    "text": "Histopathology from 2026-05-15 recorded the diagnosis as Adenocarcinoma, well to moderately differentiated.",
+    "review": "wrong date caught",
+    "note": "dates the histopathology 2026-05-15; the report is of 25/05/2026"
+   },
+   {
+    "case": "TB-006",
+    "probe": "absent",
+    "field": "lesion_size",
+    "reason": "number_not_in_quote",
+    "text": "A colonoscopy on 2026-05-12 recorded an ulceroproliferative growth from 8 cm to 13 cm from the anal verge.",
+    "review": "wrong number caught",
+    "note": "says 8 cm to 13 cm from the anal verge; the colonoscopy report says 8 cm to 12 cm"
+   }
+  ],
+  "statements_removed_by_output_guardrail": [
+   {
+    "case": "TB-001",
+    "field": "histologic_type"
+   }
+  ],
+  "removed_by_review": {
+   "statement of absence": 1,
+   "true, quote did not match": 2,
+   "wrong date caught": 1,
+   "wrong number caught": 1
+  },
+  "hand_written": {
+   "n": 57,
+   "pass": 57
+  }
+ }
+}
