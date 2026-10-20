@@ -9,6 +9,7 @@ The arXiv-style technical report behind the website's Research page.
 | `refs.bib` | References (natbib, `unsrtnat`). |
 | `arxiv.sty` | The arXiv preprint style by George Kour (github.com/kourgeorge/arxiv-style, MIT licence). |
 | `build.sh` | Compiles `main.pdf` with Tectonic (`/data/vaidyx/tools/tectonic/tectonic`). |
+| `TODO.md` | Experiments still to run before the paper goes out (on hold until the owner says go). |
 
 Rebuild after a change:
 
