@@ -120,7 +120,8 @@ def test_slots_shape_found_not_found_and_pending(nik_app, tb001):
     assert w["status"] == "not_found" and w["required"] is False and [a["kind"] for a in w["actions"]] == ["enter_value"]
     # the counter: unmet required lines; the prose waits for the ready mark
     assert v["left_before_board"] == sum(1 for s in slots._all_slots(v) if s["required"] and s["status"] in slots.OPEN) > 0
-    assert v["blockers"] == [] and v["ready_allowed"] is True
+    # the question in the OPD note is shown, but the board question counts only when the doctor types it (owner, 21 Oct 2026, B3)
+    assert [b["slot_id"] for b in v["blockers"]] == ["fact:clinical_question"] and v["ready_allowed"] is False
     assert v["prose"]["status"] == "none" and slot_of(v, "prose:history")["status"] == "pending_ready"
     assert v["permissions"]["enter_value"] and v["permissions"]["not_needed"] and v["permissions"]["ask_department"]
     assert v["gate"]["total"] == 6 and v["gate"]["satisfied"] == 3

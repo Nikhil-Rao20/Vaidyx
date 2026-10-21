@@ -3,7 +3,7 @@ decided, scheduled, ready, waiting on a department, needs you, draft), the urgen
 the last change; newest first; the same visibility as GET /cases. Synthetic Case Files in the conftest temporary data root; no model."""
 import pytest
 
-from tumour_board import access, board, store, team
+from tumour_board import access, board, steps, store, team
 from tumour_board.tests import util
 from tumour_board.tests.test_nik_me import (ANIL, ASHA, AUDIT, MEHTA, NEXT_YEAR, RAO, RAVI, VIJAY, VX, Api, FakeAuth, api, auth,  # noqa: F401
                                             make_case, people)
@@ -67,10 +67,12 @@ def test_case_list_statuses_for_the_owner(api, cases):
     assert {k: rows[cases[k]]["status"]["key"] for k in want} == want
     assert rows[cases["waiting"]]["status"]["label"] == "Waiting on Radiology"
     assert rows[cases["proposal"]]["status"]["label"] == "Needs you" and "proposal" in rows[cases["proposal"]]["status"]["detail"]
-    assert "mark it ready" in rows[cases["met"]]["status"]["detail"]
+    # one count everywhere (21 Oct): the row says what the Case File's own steps say is left
+    assert rows[cases["met"]]["status"]["detail"] == f"{steps.open_count(cases['met'])} left before the board"
     assert rows[cases["scheduled"]]["status"]["label"] == f"Scheduled {NEXT_YEAR}" and rows[cases["scheduled"]]["meeting_id"] == cases["session"]
     assert rows[cases["scheduled"]]["board_date"] == NEXT_YEAR
-    assert rows[cases["gaps"]]["left_before_board"] == 2 and rows[cases["met"]]["left_before_board"] == 0
+    assert rows[cases["gaps"]]["left_before_board"] == steps.open_count(cases["gaps"]) >= 2
+    assert rows[cases["met"]]["left_before_board"] == steps.open_count(cases["met"]) >= 1  # the board question is not typed yet
     assert rows[cases["met"]]["imaging_present"] is True and rows[cases["gaps"]]["imaging_present"] is False
     assert rows[cases["met"]]["urgency"]["level"] == 4 and rows[cases["met"]]["urgency"]["set_by_name"] == "Dr Rao (synthetic)"
     assert rows[cases["proposal"]]["urgency"]["level"] is None and rows[cases["proposal"]]["urgency"]["proposed"]["level"] == 3

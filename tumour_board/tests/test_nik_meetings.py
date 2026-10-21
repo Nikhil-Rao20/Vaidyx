@@ -9,7 +9,7 @@ import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
-from tumour_board import access, agents, board, his_client, live, llm, meetings, notify, org, pacs, store
+from tumour_board import access, agents, board, his_client, live, llm, meetings, notify, org, pacs, steps, store
 from tumour_board.api import meetings as api_meetings
 
 TOKENS = {f"tok-{u}": u for u in ("anil", "priya", "asha", "ravi", "suresh", "meena", "dev", "lata", "kiran", "mohan", "tbroot", "admin", "guest")}
@@ -195,7 +195,7 @@ def test_agenda_lists_keep_the_old_agenda_in_sync(tc):
     assert [x["case_id"] for x in v["agenda"]["noting"]] == ["TB-003"]  # a Case File in both lists is for discussion
     row = v["agenda"]["discussion"][0]
     assert row["patient_line"].startswith("SYNTHETIC, Lakshmi Iyer") and "UHID SYN-200417" in row["patient_line"] and row["minutes"] == 10
-    assert row["status"] == "waiting" and row["added_after_send"] is False and row["left_before_board"] is None
+    assert row["status"] == "waiting" and row["added_after_send"] is False and row["left_before_board"] == steps.open_count("TB-002")  # one count (21 Oct)
     s = board.get(mid)
     assert [a["case_id"] for a in s["agenda"]] == ["TB-002", "TB-001", "TB-003"]  # the old agenda: discussion then noting
     assert store.get_case("TB-002")["meeting_id"] == mid and store.get_case("TB-002")["board_date"] == s["date"]

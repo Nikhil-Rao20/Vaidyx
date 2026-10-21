@@ -28,7 +28,7 @@ function Cites({ cites, docs, h }: { cites?: Citation[]; docs?: Docs; h: SlotHan
   );
 }
 
-function ProseBlock({ p, docs, h }: { p: string | ProseSection; docs?: Docs; h: SlotHandlers }) {
+export function ProseBlock({ p, docs, h }: { p: string | ProseSection; docs?: Docs; h: SlotHandlers }) {
   if (typeof p === "string") return <p className="text-foreground">{indianDates(p)}</p>;
   const sentences = p.sentences ?? [];
   if (!sentences.length) return null;

@@ -308,6 +308,13 @@ def _board_question(case: dict, st: dict | None = None) -> str:
     return ""
 
 
+def _left_of(cid, st: dict):
+    """The one count of what is left before the board (steps.open_count, 21 Oct); the gate's own count only when that cannot be built."""
+    from . import steps
+    n = steps.open_count(cid)
+    return n if n is not None else _left(st)
+
+
 def _left(st: dict):
     g = st.get("gate") or {}
     if g.get("total") is None:
@@ -357,7 +364,7 @@ def row(s: dict, it: dict, order: int, r: dict | None = None, restricted: bool =
     return {"case_id": cid, "patient_line": patient_line(c, r, restricted), "protocol": c.get("protocol"), "restricted": bool(restricted),
             "owner_name": display_name(ou) if ou else (org.department_name(own) if own else ""), "owner_department": own or "",
             "owner_department_name": org.department_name(own) if own else "", "presenter_name": display_name(pres) if pres else "",
-            "board_question": "" if restricted else _board_question(c, st), "left_before_board": _left(st), "minutes": _minutes_for(s, it), "order": order,
+            "board_question": "" if restricted else _board_question(c, st), "left_before_board": _left_of(cid, st), "minutes": _minutes_for(s, it), "order": order,
             "reason": it.get("reason") or "", "ready": bool(c.get("board_ready")), "status": (item or {}).get("status") or "waiting",
             "ended": cid in (s.get("ended") or {}), "outcome": oc.get("outcome"), "outcome_label": OUTCOMES.get(oc.get("outcome") or "", ""),
             "added_after_send": bool(s.get("agenda_sent_at")) and cid not in (s.get("agenda_sent_cases") or []), "urgency": urg.get("level")}

@@ -22,7 +22,7 @@ function groupHeading(g: RecordGroup): string {
   return enc ? [g.label, g.department, g.unit, when].filter(Boolean).join(", ") : g.label;
 }
 
-function JobSteps({ job }: { job: Job | null }) {
+export function JobSteps({ job }: { job: Job | null }) {
   if (!job) return null;
   const running = job.state === "running";
   const last = job.events.slice(-4);
@@ -224,7 +224,7 @@ export function ReportsPanel({ caseId, cf, onOpenSource, onChanged, compact }: {
   );
 }
 
-function UploadDialog({ open, onOpenChange, caseId, hisCase, onStarted }: { open: boolean; onOpenChange: (o: boolean) => void; caseId: string; hisCase: boolean; onStarted: (job: string) => void }) {
+export function UploadDialog({ open, onOpenChange, caseId, hisCase, onStarted }: { open: boolean; onOpenChange: (o: boolean) => void; caseId: string; hisCase: boolean; onStarted: (job: string) => void }) {
   const [files, setFiles] = useState<File[]>([]);
   const [outside, setOutside] = useState(true);
   const [err, setErr] = useState<string | null>(null);

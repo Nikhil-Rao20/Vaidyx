@@ -1,4 +1,4 @@
-// Mark ready: a modal that reads back what is still open before the Case File goes to the board.
+// Send to the board: a modal that reads back what is still open before the Case File goes to the board.
 import { useState } from "react";
 import { CheckCircle2, CircleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,8 +26,8 @@ export function MarkReadyDialog({ open, onOpenChange, slots, resident, consultan
     <Dialog open={open} onOpenChange={(o) => { if (!busy) onOpenChange(o); }}>
       <DialogContent aria-describedby="ready-desc" data-testid="mark-ready-dialog">
         <DialogHeader>
-          <DialogTitle>{resident ? `Ask Dr ${consultantName} to mark ready` : "Mark ready for the board"}</DialogTitle>
-          <DialogDescription id="ready-desc">{left === 0 ? "Every line of the summary is filled, confirmed or marked not needed." : `${left} ${left === 1 ? "item is" : "items are"} still open. The board will see them as open.`}</DialogDescription>
+          <DialogTitle>{resident ? `Send to Dr ${consultantName} for sign-off` : "Send to the board"}</DialogTitle>
+          <DialogDescription id="ready-desc">{left === 0 ? "Everything the board needs is in the reports, confirmed or marked not needed." : `${left} ${left === 1 ? "item is" : "items are"} still open. The board will see them as open.`}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           {blockers.length ? (
@@ -46,7 +46,7 @@ export function MarkReadyDialog({ open, onOpenChange, slots, resident, consultan
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>Not yet</Button>
-          <LoadingButton onClick={confirm} loading={busy} loadingText="Marking" disabled={boardQuestionMissing}>{resident ? `Ask Dr ${consultantName} to sign off` : left === 0 ? "Mark ready" : `Mark ready with ${left} open`}</LoadingButton>
+          <LoadingButton onClick={confirm} loading={busy} loadingText="Sending" disabled={boardQuestionMissing}>{resident ? `Send to Dr ${consultantName} for sign-off` : left === 0 ? "Send to the board" : `Send with ${left} open`}</LoadingButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -25,7 +25,7 @@ DOC_SECTION = {"clinical_note": "presenting", "referral": "presenting", "dischar
                "lab": "labs", "treatment_summary": "prior_treatment", "tumour_board_record": "prior_treatment",
                "endoscopy": "other", "operative_note": "other", "pulmonary_function": "other", "other": "other"}
 FACT_SECTION = {"presenting_complaint": "presenting", "ecog": "presenting", "smoking_history": "presenting", "tobacco_use": "presenting",
-                "menopausal_status": "presenting", "comorbidities": "presenting", "diagnosis_date_mode": "presenting", "patient_preference": "presenting",
+                "menopausal_status": "presenting", "comorbidities": "presenting", "diagnosis_date_mode": "presenting", "patient_preference": "presenting", "patient_awareness": "presenting",
                 "clinical_trial_note": "presenting", "weight": "presenting", "height": "presenting", "dental_evaluation": "other",
                 "clinical_question": "question", "recorded_stage": "staging", "figo_stage": "staging",
                 "histologic_type": "pathology", "grade": "pathology", "lvi": "pathology", "pni": "pathology", "margins": "pathology", "depth_of_invasion": "pathology",
@@ -35,9 +35,14 @@ FACT_SECTION = {"presenting_complaint": "presenting", "ecog": "presenting", "smo
                 "parametrial_involvement": "imaging", "distance_from_anal_verge": "imaging", "mrf_status": "imaging", "emvi": "imaging",
                 "haemoglobin": "labs", "wbc": "labs", "platelets": "labs", "creatinine": "labs", "bilirubin": "labs", "hiv_status": "labs", "cea": "labs",
                 "treatment_received": "prior_treatment", "treatment_completion_date": "prior_treatment"}
-TYPABLE = {"ecog", "menopausal_status", "weight", "height", "clinical_question"}  # plus any protocol fact flagged "typable": true
-DOCTOR_FIRST = {"clinical_question"}  # a typed value stands before a value read from a report: the question for the board is the treating doctor's own
-EXTRA_FACTS = {"weight": "Weight", "height": "Height"}  # typed only: no report carries them as protocol facts
+# The doctor may also type the patient's wishes, the comorbidities and whether the patient knows the diagnosis (owner, 21 Oct 2026, B3):
+# facts reports rarely carry; shown "entered by Dr X, no report", never as a verified value.
+DOCTOR_FACTS = {"patient_preference", "comorbidities", "patient_awareness"}
+TYPABLE = {"ecog", "menopausal_status", "weight", "height", "clinical_question"} | DOCTOR_FACTS  # plus any protocol fact flagged "typable": true
+DOCTOR_FIRST = {"clinical_question"} | DOCTOR_FACTS  # a typed value stands before a value read from a report: the question for the board is the treating doctor's own
+EXTRA_FACTS = {"weight": "Weight", "height": "Height", "patient_preference": "Patient's wishes", "comorbidities": "Comorbidities",
+               "patient_awareness": "Patient knows the diagnosis"}  # typed lines every Case File has (a protocol fact of the same id keeps its own line)
+AWARENESS = {"yes": "Yes", "no": "No", "partly": "Partly"}
 OPEN = ("not_found", "waiting", "needs_confirmation")  # a required line in one of these states is "left before the board"
 MENOPAUSE = {"pre": "premenopausal", "peri": "perimenopausal", "post": "postmenopausal"}
 ENTERED_LABEL = "entered by {who}, no report"
@@ -144,6 +149,14 @@ def validate_value(fid, value):
         if not 50 <= n <= 250:
             raise ValueError("Height is a number of centimetres (50 to 250)")
         return f"{n:g} cm"
+    if fid == "patient_awareness":
+        if v.lower() not in AWARENESS:
+            raise ValueError("Whether the patient knows the diagnosis is Yes, No or Partly")
+        return AWARENESS[v.lower()]
+    if fid in ("patient_preference", "comorbidities"):
+        if len(v) < 2:
+            raise ValueError("Type a few words")
+        return v[:MAX_TEXT]
     if fid == "clinical_question":
         if len(v) < 5:
             raise ValueError("The question for the Tumour Board needs a few words")
@@ -663,8 +676,8 @@ def build(case_id, roles=None) -> dict:
     if (gate.get("documents") or {}).get("processing"):
         blockers.append({"slot_id": "", "why": f"{gate['documents']['processing']} document(s) still being read: wait for them"})
     q = next((s for s in slots if s.get("id") == "fact:clinical_question"), None)
-    if q is None or q.get("status") not in ("found", "entered"):
-        blockers.append({"slot_id": "fact:clinical_question", "why": "The question for the Tumour Board is not recorded: type it, or ask the treating team to record it"})
+    if q is None or q.get("status") != "entered":  # the treating doctor's own words; a question copied from a note does not count (owner, 21 Oct, B3)
+        blockers.append({"slot_id": "fact:clinical_question", "why": "The question for the Tumour Board is not written yet: the treating doctor writes it in the Question step"})
     ready_allowed = bool(isinstance(roles, dict) and access.may(roles, "mark_ready", case) and not blockers)
     return {**base, "listed": True, "sections": out_sections, "left_before_board": left, "blockers": blockers, "ready_allowed": ready_allowed,
             "gate": {k: gate.get(k) for k in ("passed", "readiness", "satisfied", "total", "evaluated")}, "typed_values": typed}

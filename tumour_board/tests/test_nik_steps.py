@@ -1,0 +1,176 @@
+"""The guided Case File (21 Oct 2026, docs/ui/casefile-steps/DESIGN.md): GET /cases/{id}/steps (six sections with their status, the next
+action, To do and Waiting, warnings, the patient at a glance, every document's check), the reason for discussion, the key-value checks,
+setting aside the cancer warning, and the one count of what is left before the board. Synthetic Case Files only (the TB-001 fixture and
+hand-made documents); no model is ever called."""
+from tumour_board import service, steps, store
+from tumour_board.tests import util
+from tumour_board.tests.test_nik_slots import CASE, FakeAuth, nik_app, people, tb001  # noqa: F401
+
+
+def section(v, sid):
+    return next(s for s in v["sections"] if s["id"] == sid)
+
+
+def get(tc, case=CASE):
+    r = tc.get(f"/api/tb/cases/{case}/steps")
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+# ---- the view ----------------------------------------------------------------------------------------------------------------------
+
+def test_the_consultant_prepares_in_six_sections(nik_app, tb001):
+    tc, who = nik_app
+    v = get(tc)
+    assert v["mode"] == "prepare" and v["role"] == "consultant"
+    assert [s["id"] for s in v["sections"]] == ["overview", "question", "reports", "check", "pre_authorization", "summary"]
+    # the OPD note carries a question, but it counts only when the doctor writes it (owner, B3)
+    assert section(v, "question")["status"] == "not_started" and v["question"]["text"] == "" and v["question"]["note_text"]
+    assert v["next"]["section"] == "question" and v["todo"][0]["id"] == "question"
+    assert v["left"] == steps.open_count(CASE) >= 1
+    # the draft histopathology report: what the board still needs, grouped by the department that receives the request
+    groups = {g["department"]["label"]: [i["label"] for i in g["items"]] for g in v["pre_authorization"]["groups"]}
+    assert "Pathology department" in groups and section(v, "pre_authorization")["status"] == "todo"
+    req = next(t for t in v["todo"] if t["section"] == "pre_authorization")
+    assert req["action"]["kind"] == "ask_department" and req["action"]["label"] == "Send request to Pathology department"
+    # typing the question settles it, and the next thing is sending the requests (they take days)
+    r = tc.post(f"/api/tb/cases/{CASE}/slots/fact:clinical_question/value", json={"value": "Fitness for surgery?"})
+    assert r.status_code == 200, r.text
+    v2 = get(tc)
+    assert section(v2, "question")["status"] == "done" and v2["question"]["text"] == "Fitness for surgery?"
+    assert v2["left"] == v["left"] - 1 == steps.open_count(CASE)
+    assert v2["next"]["section"] == "pre_authorization" and v2["next"]["label"].startswith("Send ")
+
+
+def test_others_read_three_sections(nik_app, tb001):
+    tc, who = nik_app
+    who["user"] = "anil"  # the MDT Coordinator reads; a doctor of a department not on the Case File cannot open it at all
+    v = get(tc)
+    assert v["mode"] == "read" and [s["id"] for s in v["sections"]] == ["overview", "reports", "summary"]
+    assert v["todo"] == [] and v["next"] is None
+    who["user"] = "dr.nair"
+    assert tc.get(f"/api/tb/cases/{CASE}/steps").status_code == 403
+
+
+def test_the_reason_for_discussion(nik_app, tb001):
+    tc, who = nik_app
+    assert tc.put(f"/api/tb/cases/{CASE}/reason", json={"value": "whatever"}).status_code == 400
+    r = tc.put(f"/api/tb/cases/{CASE}/reason", json={"value": "after_surgery"})
+    assert r.status_code == 200 and r.json()["label"] == "After surgery: plan next"
+    assert get(tc)["question"]["reason"]["value"] == "after_surgery"
+    assert "board_reason" in [e.get("kind") for e in store.read_audit(CASE)]
+    who["user"] = "dr.nair"
+    assert tc.put(f"/api/tb/cases/{CASE}/reason", json={"value": "other"}).status_code == 403
+
+
+def test_typed_facts_reports_rarely_carry(nik_app, tb001):
+    tc, who = nik_app
+    for fid, value, want in (("patient_awareness", "partly", "Partly"), ("patient_preference", "Wants breast conservation", "Wants breast conservation"),
+                             ("comorbidities", "Type 2 diabetes on metformin", "Type 2 diabetes on metformin")):
+        r = tc.post(f"/api/tb/cases/{CASE}/slots/fact:{fid}/value", json={"value": value})
+        assert r.status_code == 200, r.text
+        assert r.json()["status"] == "entered" and r.json()["value"] == want
+    assert tc.post(f"/api/tb/cases/{CASE}/slots/fact:patient_awareness/value", json={"value": "maybe"}).status_code == 400
+    extras = {x["fact_id"]: x for x in get(tc)["question"]["extras"]}
+    assert extras["patient_awareness"]["value"] == "Partly" and extras["patient_awareness"]["entered_by"] == "Dr Rao"
+
+
+# ---- documents ---------------------------------------------------------------------------------------------------------------------
+
+def test_a_signature_flag_alone_never_makes_a_draft_final():
+    d = util.make_doc("D9", "ct", status="UNSTATED", signed="unclear"); d["his"] = {"signed": True}
+    assert steps.final_status(d)["final"] is False and steps.final_status(d)["label"] == "Status not stated" and steps.final_status(d)["warn"]
+    assert steps.final_status(util.make_doc("D9", "ct"))["label"] == "Final, signed" and not steps.final_status(util.make_doc("D9", "ct"))["warn"]
+    assert steps.final_status(util.make_doc("D9", "mammogram", status="PRELIMINARY", signed="no"))["label"] == "Preliminary, not signed yet"
+    d = util.make_doc("D9", "ct"); d["his"] = {"status": "preliminary", "signed": False}
+    assert steps.final_status(d)["preliminary"] is True  # the stricter of the text and the hospital system
+
+
+def test_the_check_of_one_document():
+    case = {"protocol": "lung_nsclc"}
+    good = util.make_doc("D2", "ct", facts={"lesion_size": util.fact("3.2 cm", quote="Size: 3.2 cm")}); good["extracted_under"] = "lung_nsclc"
+    c = steps.doc_check(good, case)
+    assert c["status"] == "checked" and c["reasons"] == [] and [x["value"] for x in c["values"]] == ["3.2 cm"]
+    bad = util.make_doc("D1", "histopathology", identity="id_differs",
+                        facts={"grade": util.fact("2", verification="needs_review"), "egfr": util.fact("Exon 19", verification="unverified")})
+    bad["extracted_under"] = "breast"
+    c = steps.doc_check(bad, case)
+    assert c["status"] == "please_check" and c["values"] == []
+    assert c["reasons"] == ["The patient's name or number does not match this Case File", "1 line unclear", "1 value could not be matched to a line",
+                            "Read before the cancer was changed: read it again for this cancer"]
+    assert steps.doc_check(util.make_doc("D3", "ct", state="reading"), case)["status"] == "reading"
+    assert steps.doc_check({**util.make_doc("D4", "ct", state="error"), "error": "bad pdf"}, case)["status"] == "failed"
+
+
+def test_reports_are_grouped_by_type(nik_app, tb001):
+    tc, who = nik_app
+    docs = get(tc)["documents"]
+    assert docs and all(d["group"] in {g for g, _, _ in steps.DOC_GROUPS} for d in docs)
+    hp = next(d for d in docs if d["doc_type"] == "histopathology")
+    assert hp["group"] == "pathology" and hp["final"]["final"] is False  # the fixture's histopathology report is a draft
+
+
+# ---- warnings ----------------------------------------------------------------------------------------------------------------------
+
+def _doc(doc_id, title):
+    return {"doc_id": doc_id, "title": title, "date": "2026-10-20", "check": {"status": "checked", "reasons": []}, "final": {"preliminary": False}}
+
+
+def _view(**facts):
+    return {"sections": [{"slots": [{"kind": "fact", "fact_id": k, "status": "found", "value": v, "label": k.replace("_", " ").title()} for k, v in facts.items()]}]}
+
+
+def test_the_cancer_chosen_against_the_reports():
+    case = {"protocol": "cervix"}
+    docs = [_doc("D1", "BILATERAL MAMMOGRAPHY REPORT"), _doc("D2", "HISTOPATHOLOGY REPORT"), _doc("D3", "CECT CHEST, ABDOMEN AND PELVIS")]
+    w = steps.warnings(case, docs, _view(histologic_type="Invasive breast carcinoma of no special type"))
+    assert [x["kind"] for x in w] == ["cancer_mismatch"]
+    assert w[0]["text"].startswith("The reports mention the breast (Bilateral mammography report; histologic type:")
+    assert w[0]["text"].endswith("none mention the cervix. This Case File is set to Cervix cancer.")
+    assert [f["kind"] for f in w[0]["fixes"]] == ["change_cancer", "dismiss"]
+    # one mention is not enough; a report that names the cervix settles it (a second primary is real)
+    assert steps.warnings(case, docs, _view()) == []
+    assert steps.warnings(case, docs + [_doc("D4", "MRI PELVIS (CERVIX PROTOCOL)")], _view(histologic_type="Invasive breast carcinoma")) == []
+    # set aside once, it stays set aside
+    assert steps.warnings({**case, "warnings_dismissed": {w[0]["id"]: {"by": "dr.rao"}}}, docs, _view(histologic_type="Invasive breast carcinoma")) == []
+
+
+def test_only_the_cancer_warning_can_be_set_aside(nik_app, tb001):
+    tc, who = nik_app
+    assert tc.post(f"/api/tb/cases/{CASE}/warnings/identity:D1/dismiss").status_code == 409
+    r = tc.post(f"/api/tb/cases/{CASE}/warnings/cancer:lung_nsclc:breast/dismiss")
+    assert r.status_code == 200 and store.get_case(CASE)["warnings_dismissed"]["cancer:lung_nsclc:breast"]["by"] == "dr.rao"
+
+
+# ---- key values ----------------------------------------------------------------------------------------------------------------------
+
+def test_key_values_stay_confirmed_while_the_same_value_stands(nik_app, tb001):
+    tc, who = nik_app
+    util.add(CASE, util.make_doc("DK1", "ihc", title="PD-L1 IHC REPORT", facts={"pdl1": util.fact("TPS 60 %", quote="PD-L1 (22C3): TPS 60 %")}))
+    service.recheck(CASE, "test")
+    keys = [k for k in get(tc)["check"]["keys"] if k["fact_id"] == "pdl1"]
+    assert keys, "a verified PD-L1 from a final report is a key value to confirm"
+    k = keys[0]
+    assert k["confirmed"] is False
+    left = get(tc)["left"]
+    r = tc.post(f"/api/tb/cases/{CASE}/key-checks", json={"fact_id": k["fact_id"], "value": k["value"], "doc_id": k["quote"]["doc_id"]})
+    assert r.status_code == 200, r.text
+    v = get(tc)
+    k2 = next(x for x in v["check"]["keys"] if x["fact_id"] == k["fact_id"])
+    assert k2["confirmed"] is True and k2["confirmed_by"] == "Dr Rao" and v["left"] == left - 1
+    # a different value (a new report) makes it a to-do again; the confirmation never changes the value
+    st = store.get_state(CASE); st["key_checks"][k["fact_id"]]["value"] = "something else"; store.save_state(CASE, st)
+    assert next(x for x in get(tc)["check"]["keys"] if x["fact_id"] == k["fact_id"])["confirmed"] is False
+    assert tc.delete(f"/api/tb/cases/{CASE}/key-checks/{k['fact_id']}").status_code == 200
+    assert tc.delete(f"/api/tb/cases/{CASE}/key-checks/{k['fact_id']}").status_code == 404
+    assert "key_value_confirmed" in [e.get("kind") for e in store.read_audit(CASE)]
+    who["user"] = "dr.nair"
+    assert tc.post(f"/api/tb/cases/{CASE}/key-checks", json={"fact_id": k["fact_id"], "value": k["value"]}).status_code == 403
+
+
+def test_the_count_is_one_everywhere(nik_app, tb001):
+    tc, who = nik_app
+    n = steps.open_count(CASE)
+    assert n == get(tc)["left"]
+    rows = {x["case_id"]: x for x in tc.get("/api/tb/case-list").json()["cases"]}
+    assert rows[CASE]["left_before_board"] == n

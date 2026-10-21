@@ -68,14 +68,14 @@ export function AskPanel({ caseId, docs, onOpenSource, compact }: { caseId: stri
       {liveNode}
       <header className="flex items-center gap-2 mb-2">
         <MessageSquareText className="size-4 text-brand" aria-hidden />
-        <h2 id="h-ask" className="text-base">Ask this Case File</h2>
+        <h2 id="h-ask" className="text-base">Ask about this patient</h2>
         <span className="text-xs text-muted-foreground ml-auto">shared with the team, saved</span>
       </header>
       <form className="flex flex-col gap-1.5" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <label htmlFor="ask-input" className="sr-only">Your question about the records</label>
-        <Textarea id="ask-input" value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }} placeholder="Ask about the records, for example: what did the HPE report say about margins?" className="min-h-14 text-sm resize-y" maxLength={600} disabled={ask.isPending} />
+        <Textarea id="ask-input" value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }} placeholder="For example: what did the HPE report say about the margins? Is ECOG noted?" className="min-h-14 text-sm resize-y" maxLength={600} disabled={ask.isPending} />
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground flex-1">Answers come only from the records, each with its quote.</span>
+          <span className="text-xs text-muted-foreground flex-1">Answers come only from the reports, each with its line.</span>
           <LoadingButton type="submit" size="sm" loading={ask.isPending} loadingText="Reading the records" disabled={question.trim().length < 3}><SendHorizontal className="size-4" />Ask</LoadingButton>
         </div>
         {askErr ? <p role="alert" className="text-xs text-bad">{askErr}</p> : null}

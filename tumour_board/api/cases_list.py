@@ -137,12 +137,21 @@ def status_of(c: dict, st: dict, docs: list, r: dict, sched: dict) -> dict:
         return {"key": "draft", "label": STATUS_LABELS["draft"], "detail": f"{reading} record(s) being read"}
     if not c.get("protocol"):
         return needs("no cancer chosen yet")
-    if gate.get("passed") is False:
-        open_rows = [q for q in gate.get("requirements") or [] if isinstance(q, dict) and q.get("status") not in ("satisfied", "not_applicable", "waived")]
-        return needs(f"{len(open_rows)} required record(s) open, nobody asked yet")
-    if gate.get("passed"):
-        return needs("every required record is met: mark it ready for the board")
+    if gate.get("passed") is not None:  # the one count of what is left (steps.open_count, 21 Oct), so the row never says "ready" beside "7 left"
+        n = _left_of(cid, gate)
+        if n:
+            return needs(f"{n} left before the board" + (", nobody asked yet" if gate.get("passed") is False else ""))
+        return needs("everything is settled: send it to the board")
     return {"key": "draft", "label": STATUS_LABELS["draft"], "detail": "records not checked yet"}
+
+
+def _left_of(cid, gate) -> int:
+    """The one count of what is left before the board (steps.open_count, 21 Oct); the gate's open records only when that cannot be built."""
+    from tumour_board import steps
+    n = steps.open_count(cid)
+    if n is not None:
+        return n
+    return sum(1 for q in gate.get("requirements") or [] if isinstance(q, dict) and q.get("status") not in ("satisfied", "not_applicable", "waived"))
 
 
 def row(c: dict, r: dict, sched: dict, labels: dict) -> dict:
@@ -161,7 +170,7 @@ def row(c: dict, r: dict, sched: dict, labels: dict) -> dict:
             "protocol_label": protocol.case_label(c, labels.get(c.get("protocol") or "", c.get("protocol") or "")), "cancer_name": c.get("cancer_name") or "",
             "owner": {"department": own or "", "department_label": org.department_name(own) if own else "", "doctor": doc_owner, "doctor_name": profiles.display_name(doc_owner) if doc_owner else ""},
             "urgency": team.urgency_view(c), "status": status, "board_date": (sc or {}).get("date") or c.get("board_date") or "", "meeting_id": (sc or {}).get("meeting_id"),
-            "left_before_board": sum(1 for q in gate.get("requirements") or [] if isinstance(q, dict) and q.get("status") not in ("satisfied", "not_applicable", "waived")),
+            "left_before_board": _left_of(cid, gate),
             "gate_passed": gate.get("passed"), "readiness": gate.get("readiness"),
             "imaging_present": any(((d.get("classification") or {}).get("doc_type") in IMAGING_TYPES) and d.get("state") == "ready" and not d.get("dismissed") for d in docs),
             "ids": _identifiers(c), "accessions": _accessions(docs),
