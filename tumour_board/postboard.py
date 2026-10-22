@@ -404,6 +404,9 @@ def update_communication(case_id, record_id, fields: dict, user="") -> dict:
 
 
 async def record_decision(case_id, record, user=""):
+    c = store.get_case(case_id)
+    if isinstance(c, dict) and isinstance(c.get("archived"), dict) and c["archived"].get("at"):  # nothing changes in an archived Case File (review #8)
+        raise ValueError("This Case File is archived. Take it out of the archive first.")
     record = clean_record_fields(record)
     record = {**record, "id": "B" + uuid.uuid4().hex[:6], "recorded_at": store.now_iso(), "entered_by": user}
     if record.get("members") and not record.get("attendance"):  # members typed with their departments on the Board tab (V1 item 7.1)

@@ -1,0 +1,208 @@
+@import "tailwindcss";
+
+/* Type: Inter (variable, SIL OFL 1.1, public/fonts) for everything on screen; JetBrains Mono only for code and keys.
+   Identifiers (UHID, IP / OP No., accession) are Inter with tabular figures, never a mono face: the doctor reads them as words. */
+@font-face { font-family: "Inter Variable"; src: url("/static/tb-nik/fonts/inter-latin-wght-normal.woff2") format("woff2-variations"); font-weight: 100 900; font-style: normal; font-display: swap; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Inter Variable"; src: url("/static/tb-nik/fonts/inter-latin-ext-wght-normal.woff2") format("woff2-variations"); font-weight: 100 900; font-style: normal; font-display: swap; unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "JetBrains Mono"; src: url("/static/tb/fonts/JetBrainsMono-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "JetBrains Mono"; src: url("/static/tb/fonts/JetBrainsMono-Medium.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* The Vaidyx-TB theme ("clinical calm", 19 Oct 2026). Teal #00c0b5 is the brand and the one primary action on a screen; everything
+   else is a quiet grey-blue. Status colour is always paired with an icon and a word. */
+:root {
+  --background: #f5f7fa;
+  --foreground: #121a24;
+  --body: #3b4754;
+  --card: #ffffff;
+  --card-foreground: #121a24;
+  --popover: #ffffff;
+  --popover-foreground: #121a24;
+  --primary: #00c0b5;
+  --primary-hover: #00ada3;
+  --primary-foreground: #06292c;
+  --accent-brand: #008f87;
+  --secondary: #e4f6f4;
+  --secondary-foreground: #0a4d52;
+  --muted: #f1f4f8;
+  --muted-foreground: #5f6b78;
+  --accent: #eef2f6;
+  --accent-foreground: #121a24;
+  --destructive: #b2362b;
+  --destructive-foreground: #ffffff;
+  --border: #e2e8ef;
+  --border-strong: #c9d3de;
+  --tint-line: #bfe3e6;
+  --input: #cfd8e2;
+  --ring: #00c0b5;
+  --link: #0a6a86;
+  --indigo: #3e5cad;
+  --ok: #1d6a44;
+  --ok-soft: #e4f4ea;
+  --warn: #8a5200;
+  --warn-soft: #fdf1d6;
+  --bad: #b2362b;
+  --bad-soft: #fbe8e5;
+  --review: #5b3fc4;
+  --review-soft: #eeebff;
+  --radius: 12px;
+  --shadow-outer: 0 1px 2px rgba(18, 26, 36, 0.05), 0 2px 8px rgba(18, 26, 36, 0.04);
+  --shadow-inner: 0 1px 2px rgba(18, 26, 36, 0.06), 0 6px 18px rgba(18, 26, 36, 0.07);
+  --shadow-lift: 0 10px 30px rgba(18, 26, 36, 0.14), 0 2px 6px rgba(18, 26, 36, 0.06);
+  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --background: #0b1117;
+  --foreground: #e8eef4;
+  --body: #c3cdd7;
+  --card: #121a23;
+  --card-foreground: #e8eef4;
+  --popover: #141d27;
+  --popover-foreground: #e8eef4;
+  --primary: #10cfc3;
+  --primary-hover: #2fdbd0;
+  --primary-foreground: #06292c;
+  --accent-brand: #3fd6cc;
+  --secondary: #12343a;
+  --secondary-foreground: #b9edea;
+  --muted: #171f29;
+  --muted-foreground: #97a4b2;
+  --accent: #1a2430;
+  --accent-foreground: #e8eef4;
+  --destructive: #ff8b7b;
+  --destructive-foreground: #1b0906;
+  --border: #202b37;
+  --border-strong: #2e3c4b;
+  --tint-line: #234a51;
+  --input: #2e3c4b;
+  --ring: #3fd6cc;
+  --link: #7ec8e6;
+  --indigo: #9fb3ff;
+  --ok: #6fd19a;
+  --ok-soft: #10301f;
+  --warn: #f0b45c;
+  --warn-soft: #382806;
+  --bad: #ff8b7b;
+  --bad-soft: #3a1612;
+  --review: #b6a6ff;
+  --review-soft: #241b4b;
+  --shadow-outer: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-inner: 0 1px 2px rgba(0, 0, 0, 0.45), 0 6px 18px rgba(0, 0, 0, 0.4);
+  --shadow-lift: 0 10px 30px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.4);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-body: var(--body);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-brand: var(--accent-brand);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-tint-line: var(--tint-line);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-link: var(--link);
+  --color-indigo: var(--indigo);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-review: var(--review);
+  --color-review-soft: var(--review-soft);
+  --radius-sm: calc(var(--radius) - 6px);
+  --radius-md: calc(var(--radius) - 3px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 6px);
+  --radius-2xl: calc(var(--radius) + 12px);
+  --shadow-outer: var(--shadow-outer);
+  --shadow-inner: var(--shadow-inner);
+  --shadow-lift: var(--shadow-lift);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  /* The meeting stage is dark in both themes, as a video call is. */
+  --color-stage: #0b0f14;
+  --color-stage-panel: #141a21;
+  --color-stage-raised: #1b232d;
+  --color-stage-line: #28323e;
+  --color-stage-fg: #eef2f6;
+  --color-stage-muted: #9aa6b3;
+}
+
+@layer base {
+  * { @apply border-border; }
+  html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+  html[data-text="large"] { font-size: 18px; }
+  html[data-text="small"] { font-size: 15px; }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    min-height: 100dvh;
+    font-feature-settings: "cv11", "ss01", "calt";
+  }
+  h1, h2, h3, h4 { @apply font-semibold tracking-[-0.01em] text-foreground; line-height: 1.25; text-wrap: balance; }
+  h1 { font-size: 1.5rem; letter-spacing: -0.02em; }
+  h2 { font-size: 1.125rem; }
+  h3 { font-size: 1rem; }
+  p, li { color: var(--body); }
+  code, kbd { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  /* Identifiers: Inter with tabular figures and a little air (the old `.mono` class keeps working, it is no longer a mono face). */
+  .mono, .id { font-family: var(--font-sans); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
+  .num { font-variant-numeric: tabular-nums; }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 6px; }
+  ::selection { background: color-mix(in srgb, var(--primary) 28%, transparent); }
+  button, [role="button"] { cursor: pointer; }
+  button:disabled, [aria-disabled="true"] { cursor: not-allowed; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+}
+
+@layer components {
+  /* Surfaces: one card level on the page, a quieter inner box for a box inside a box. */
+  .surface { @apply bg-card rounded-lg border border-border; box-shadow: var(--shadow-outer); }
+  .surface-inner { @apply bg-card rounded-md border border-border; box-shadow: none; }
+  .row-lift { transition: transform 180ms var(--ease-out-soft), box-shadow 180ms var(--ease-out-soft), background-color 180ms ease, border-color 180ms ease; }
+  .row-lift:hover { transform: translateY(-1px); box-shadow: var(--shadow-inner); border-color: var(--border-strong); }
+  /* A source mark: quiet, so the value stays the thing read first. */
+  .quote-chip { @apply inline-flex items-center gap-1 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground; transition: color 150ms ease, border-color 150ms ease, background-color 150ms ease; }
+  .quote-chip:hover { color: var(--foreground); border-color: var(--border-strong); background: var(--accent); }
+  .status-ok { color: var(--ok); background: var(--ok-soft); }
+  .status-warn { color: var(--warn); background: var(--warn-soft); }
+  .status-bad { color: var(--bad); background: var(--bad-soft); }
+  .status-review { color: var(--review); background: var(--review-soft); }
+  .skeleton-line { @apply rounded-md bg-muted; position: relative; overflow: hidden; }
+  .skeleton-line::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--foreground) 6%, transparent), transparent); animation: shimmer 1.4s infinite; }
+  @keyframes shimmer { 100% { transform: translateX(100%); } }
+  /* The brand gradient (the icon's own two blues) for hero surfaces. */
+  .brand-gradient { background: linear-gradient(135deg, #00183c 0%, #0b4e74 45%, #01b4c2 100%); }
+  .brand-glow { filter: drop-shadow(0 0 18px rgba(1, 180, 194, 0.28)); }
+  /* Thin scrollbars inside panels. */
+  .scroll-thin { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--foreground) 18%, transparent) transparent; }
+}
+
+/* The animated theme toggle (vendor/AnimatedThemeToggler) drives the view transition itself. */
+::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }

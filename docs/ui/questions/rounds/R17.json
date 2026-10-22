@@ -1,0 +1,762 @@
+{
+ "round": 17,
+ "title": "Screens per role (UI)",
+ "intro": "What each person sees first and how the pages are arranged. Asked after every other round, so the answers of rounds 1 to 16 shape these choices.",
+ "questions": [
+  {
+   "id": "R17-Q01",
+   "topic": "Treating doctor's home",
+   "core": true,
+   "type": "decision",
+   "question": "What should a treating doctor see first after logging in?",
+   "header": "Doctor home",
+   "multi": false,
+   "options": [
+    {
+     "label": "One to-do list across patients (Recommended)",
+     "description": "Each row is one next step for one Case File (send 2 requests, re-fetch, approve a resident's draft) with its button; nothing else above it."
+    },
+    {
+     "label": "My Case Files with status",
+     "description": "A list of patients with one status each; the doctor opens one to see what to do."
+    },
+    {
+     "label": "Next board date first",
+     "description": "The coming board with my Case Files and what each still needs."
+    },
+    {
+     "label": "Search box first",
+     "description": "A big UHID or name box, for doctors who come with one patient in mind."
+    }
+   ],
+   "why": "Your note on screens: think as a treating doctor, very simple, few clicks. Today the home stacks Case Files, requests, referrals and notifications in sections (DESIGN 7.1, U01). I16 liked; research: 55% of preparation time goes on the system itself (Hartmann 2026).",
+   "depends_on": [
+    "R01-Q05"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Neat, filtered Case File list with an urgency tag 1 to 5",
+   "own_words": "The doctor's first screen should be neat and clean, arranged in a neat order; all Case Files have filters: date, name, treated by, imaging, organ and many more. Each has an urgency tag, a rating from 1 to 5 (5 most urgent): a simple, understandable UI to show all Case Files. They can be cards or list items; you can discuss more or show it directly in the UI mock-up, up to you.",
+   "notes": "Follow-up needed: who sets urgency (a person, never the AI judging clinical urgency). Show in the mock-up.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R17-Q02",
+   "topic": "Case File page",
+   "core": true,
+   "type": "decision",
+   "question": "How should the Case File page be organised instead of today's 7 tabs?",
+   "header": "Case File",
+   "multi": false,
+   "options": [
+    {
+     "label": "One page, next step on top (Recommended)",
+     "description": "Header, next-step card, what is missing, records, summary in one scroll; Ask, specialty briefs and audit under a More menu; a loop simply brings its step back to the top."
+    },
+    {
+     "label": "Numbered steps (checklist)",
+     "description": "Steps 1 to 5 with ticks; clear the first time, but loops (a new report, a referral) reopen earlier steps."
+    },
+    {
+     "label": "Three or four tabs",
+     "description": "For example To do, Records, Summary, Board; less scrolling, one more tap to switch."
+    }
+   ],
+   "why": "U16 (seven tabs, jargon on every row), U02 (Case File about 9,500 px tall on a phone), U09 (scroll lost after each action). Your note: the workflow is not linear, it has loops. T16 kept: restructure around what the doctor must do.",
+   "depends_on": [
+    "R07-Q04"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "own_words": "Organise it neat and clear; think in depth about the user experience rather than 'next step on top'; create a new UI / UX component for this, invent something new that doctors and residents use easily, not complex. Ideate with me: first tell me what is there, then take my suggestions.",
+   "notes": "Chosen after the owner's views (R17-Q15 to Q20) and the layout research (17 Oct): the summary is the checklist; each value the board needs is a line with its source quote; a value not found is a blank with its action button in place; right side: shared saved Ask chat (opens the quoted page) and the compact report list by visit with a Timeline view; top: patient strip with urgency, buttons for Specialty helpers (6), Team, Board form; audit in profile settings. Alternatives shown: patient story timeline, reading desk 3 columns.",
+   "answered_on": "17/10/2026",
+   "answer": "Fill-in summary (new concept, chosen 17 Oct)"
+  },
+  {
+   "id": "R17-Q03",
+   "topic": "Phone-first roles",
+   "core": false,
+   "type": "decision",
+   "question": "Supporting doctors are already phone-first: which other roles should be designed phone-first?",
+   "header": "Phone-first",
+   "multi": true,
+   "options": [
+    {
+     "label": "Board members joining by code (Recommended)",
+     "description": "Join, current case, call button and the closing pop-up are laid out for a phone first."
+    },
+    {
+     "label": "Residents / PG / fellows",
+     "description": "Their Case File work (collecting reports, drafts) is laid out for a phone first."
+    },
+    {
+     "label": "Treating doctors",
+     "description": "Home and next steps phone-first; the full Case File stays best on a desktop."
+    },
+    {
+     "label": "MDT Coordinator",
+     "description": "Agenda and chasing on the phone; recording the decision stays on a laptop."
+    }
+   ],
+   "why": "T17 and I12 settled phone-first for supporting doctors; settled: board members join from anywhere, phone too, with a six-digit code and a call button. Atlas devices: treating doctors OPD desktop and phone, residents ward desktop and phone, coordinator desktop and room screen. What phone members can do comes from R12-Q14.",
+   "depends_on": [
+    "R12-Q14"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Laptop first for everyone; phones later",
+   "own_words": "This is not phone first. Don't make it complex: build for the laptop first; ideally everyone in the hospital has a laptop; then we get to the phone.",
+   "notes": "Overrides 'phone first' in I12 and T17 and R03 / R17 phone wording: every role laptop-first in the first build.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R17-Q04",
+   "topic": "Next-step card",
+   "core": false,
+   "type": "decision",
+   "question": "When the next-step card says what to do, what should its button do?",
+   "header": "Next step",
+   "multi": false,
+   "options": [
+    {
+     "label": "Finish it in a small panel (Recommended)",
+     "description": "For example 'Send 2 requests' opens both drafts in one panel with one Send; the doctor stays on the page."
+    },
+    {
+     "label": "Jump to the right section",
+     "description": "Scrolls to the place on the page where the doctor does it."
+    },
+    {
+     "label": "Show the step only",
+     "description": "One line of text, no button; the doctor finds the control."
+    }
+   ],
+   "why": "I16 liked: one line saying what to do now. One-panel actions cut clicks (R01 targets). Steps a resident may not do become a send-for-sign-off (R17-Q09).",
+   "depends_on": [
+    "R01-Q05"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "own_words": "First research that UI component in depth, then ask me correctly.",
+   "notes": "Asked 17 Oct after the research the owner asked for: small undoable steps in place with a 10 s Undo (no confirm); steps that need checking open a non-modal right panel with the source quote and Approve / Edit / Not needed, then the next item; only sign and lock opens a pop-up; the page never jumps, scroll and focus kept.",
+   "answered_on": "17/10/2026",
+   "answer": "Ladder: in place, panel, pop-up (Recommended)"
+  },
+  {
+   "id": "R17-Q05",
+   "topic": "Lists and search",
+   "core": false,
+   "type": "decision",
+   "question": "Below one search box (UHID, name, IP / OP No.), how should the treating doctor's Case Files be grouped?",
+   "header": "Case list",
+   "multi": false,
+   "options": [
+    {
+     "label": "By who must act (Recommended)",
+     "description": "Needs me, waiting on a department, ready for the board, done; the top group is what to do today."
+    },
+    {
+     "label": "By board date",
+     "description": "Upcoming boards nearest first, then Case Files without a date."
+    },
+    {
+     "label": "One table with filters",
+     "description": "Sortable columns and filters; powerful, more to learn."
+    }
+   ],
+   "why": "U18: no search, names written two ways. Today the list is grouped owned, referred, participating and only asked about (DESIGN 7.1 M3). The coordinator's triage lists (I05) are a separate view (R17-Q11).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Own words: newest first; filters for urgency, who must act and the rest",
+   "own_words": "Default should be the newest one first, then filters like the ones above: urgency, who must act; that would be great. Who must act is not what the doctor needs to see first: parallel running Case Files are rare, so that is not the case scenario.",
+   "notes": "Asked 17 Oct with laptop options (grouped by who must act / urgency first / board date). Key fact from the owner: a doctor rarely has many Case Files running at the same time.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R17-Q06",
+   "topic": "Navigation",
+   "core": false,
+   "type": "decision",
+   "question": "How should people move between the main areas of the app?",
+   "header": "Navigation",
+   "multi": false,
+   "options": [
+    {
+     "label": "Phone bottom bar, desktop top bar (Recommended)",
+     "description": "3 to 5 items per role (for example Home, Case Files, Meetings, Alerts); rare items such as admin and help under the profile menu."
+    },
+    {
+     "label": "Left menu plus phone bar",
+     "description": "A left menu on desktop with room for more items, taking width from the Case File; bottom bar on phones."
+    },
+    {
+     "label": "Home only, no menu",
+     "description": "Everything starts from home cards; simplest, but more back taps."
+    }
+   ],
+   "why": "Today up to 9 buttons sit in the top bar (UI_PLAN A1, A10) and the bar scrolls sideways on phones. Each role sees only its own items (R03).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Slim top bar (laptop)",
+   "notes": "Asked 17 Oct re-worded for laptop: slim top bar with 3 to 5 items per role, search in the middle, bell and profile (settings, audit) on the right; Case File gets the full width.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R17-Q07",
+   "topic": "Switching Case Files",
+   "core": false,
+   "type": "decision",
+   "question": "On a desktop, should a list of Case Files stay beside the open Case File?",
+   "header": "Side list",
+   "multi": false,
+   "options": [
+    {
+     "label": "No, a quick switcher instead (Recommended)",
+     "description": "The Case File uses the full width; a search box in the top bar jumps to any patient by UHID or name."
+    },
+    {
+     "label": "Yes, a narrow list on desktop",
+     "description": "Today's 300 px side list; quick to hop between patients, less room for records."
+    },
+    {
+     "label": "Yes, and a drawer on phones",
+     "description": "The same list everywhere; on phones it slides in from the side."
+    }
+   ],
+   "why": "Today the 300 px side list sits beside the Case File on desktop and hides behind a button on phones (U02, UI_PLAN A10).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Skipped",
+   "notes": "Settled by R17-Q06 (search in the top bar) and R17-Q05 (parallel Case Files are rare): no side list beside the open Case File.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R17-Q08",
+   "topic": "Timeline",
+   "core": false,
+   "type": "decision",
+   "question": "Should the Case File show a dated timeline of the patient's records?",
+   "header": "Timeline",
+   "multi": false,
+   "options": [
+    {
+     "label": "Compact strip above records (Recommended)",
+     "description": "Visits, scans, biopsy and reports as dots on one dated line; tap a dot to open that record."
+    },
+    {
+     "label": "As a separate view",
+     "description": "A full timeline one tap away; the main page stays shorter."
+    },
+    {
+     "label": "No timeline",
+     "description": "Records stay grouped by OP visit and IP admission, as today."
+    }
+   ],
+   "why": "From Dr Minmini's Tempus link (W6): a dated patient timeline is an idea worth borrowing for the screens. Records are already grouped by visit and admission, and a timeline exists on the Board tab (A6). Dates and record names only, no interpretation.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Skipped",
+   "notes": "Settled by R17-Q02 (fill-in summary): the timeline is a view inside the report list.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R17-Q09",
+   "topic": "Resident's screens",
+   "core": false,
+   "type": "decision",
+   "question": "Where a resident cannot act (sign, waive, mark ready), what should the screen show?",
+   "header": "Resident",
+   "multi": false,
+   "options": [
+    {
+     "label": "'Send for sign-off' button (Recommended)",
+     "description": "The resident prepares it and sends it; the consultant approves with one tap from their to-do list; the audit shows both names."
+    },
+    {
+     "label": "Greyed button with a reason",
+     "description": "Visible but disabled, 'Only Dr X can sign'; the resident tells the consultant outside the app."
+    },
+    {
+     "label": "Hidden",
+     "description": "The resident sees only what they may do; cleaner, but they may not know the step exists."
+    }
+   ],
+   "why": "Settled: residents join a Case File with a code, have role-based access and cannot sign, 'same as PACS systems'. I03: drafts approved by the consultant, audit shows both names. Which actions are blocked comes from R03 (resident limits) and R06 (team).",
+   "depends_on": [
+    "R03-Q04",
+    "R06-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "'Send for sign-off' button (Recommended)",
+   "own_words": "Every such button needs a little thing that asks the doctor: the resident can fill up to the last step, the next step is done by the doctor; that button raises an alert to the doctor so that the doctor acts on it.",
+   "notes": "Pattern for every consultant-only step: resident completes everything, one 'Ask Dr X to sign off' button, alert to the consultant, approve or return.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R17-Q10",
+   "topic": "Supporting doctor on the phone",
+   "core": false,
+   "type": "decision",
+   "question": "When a supporting doctor taps a request alert on the phone, what should open?",
+   "header": "Request tap",
+   "multi": false,
+   "options": [
+    {
+     "label": "The request card itself (Recommended)",
+     "description": "Patient IDs, accession No., what is missing, due date, a link into the RIS / PACS (I14) and the answer button on one screen."
+    },
+    {
+     "label": "The department inbox",
+     "description": "The list of all open requests, with the tapped one highlighted."
+    },
+    {
+     "label": "The limited Case File view",
+     "description": "The patient's page showing only the items asked about."
+    }
+   ],
+   "why": "I12 (phone-first supporting views) and I14 (deep link) liked; U02: the supporting home is about 7,000 px tall on a phone; J2: two systems, no link. The answer steps come from R08 (supporting flow); the alert channel from R14-Q01.",
+   "depends_on": [
+    "R08-Q06",
+    "R14-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "The request card itself (Recommended)",
+   "notes": "Asked 17 Oct re-worded for laptop (click, not phone tap).",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R17-Q11",
+   "topic": "Coordinator's agenda board",
+   "core": false,
+   "type": "decision",
+   "question": "How should the coordinator see the Case Files of the next board?",
+   "header": "Agenda",
+   "multi": false,
+   "options": [
+    {
+     "label": "Columns by triage list (Recommended)",
+     "description": "For discussion, for noting and not ready side by side; each card shows the owner, what is missing and a Remind button."
+    },
+    {
+     "label": "One table with readiness",
+     "description": "Rows marked ready, on track, at risk or blocked with chase buttons; today's view, tidied."
+    },
+    {
+     "label": "Calendar, then the day's list",
+     "description": "Board dates (per site board) on a calendar; a date opens its agenda."
+    }
+   ],
+   "why": "I05 (triage lists) and I06 (cut-off) liked; T13 site boards kept; G22 to G24. Which boards exist and who places a Case File in a triage list come from R10-Q01 and R10-Q11.",
+   "depends_on": [
+    "R10-Q01",
+    "R10-Q11"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Two short lists, one page (Recommended)",
+   "notes": "Asked 17 Oct re-worded to the R10 answers (one general board, ready marks fill the agenda, doctor picks the list): for discussion on top, for noting below, coordinator's order by drag; each row patient, owner, presenter, board question, gap left, Remind; not ready folded at the end.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R17-Q12",
+   "topic": "Room screen layout",
+   "core": true,
+   "type": "decision",
+   "question": "How should the meeting-room screen be laid out for the current case?",
+   "header": "Room screen",
+   "multi": false,
+   "options": [
+    {
+     "label": "Case sheet left, record right (Recommended)",
+     "description": "Left: patient line, board question, key values with sources and gaps in large type; right: the record or image being opened; a thin agenda and timer strip at the bottom."
+    },
+    {
+     "label": "Full-screen slides",
+     "description": "One section per slide, like the NCG Virtual Tumour Board template; clean, but a record opens as a separate step."
+    },
+    {
+     "label": "One large scrolling page",
+     "description": "The presenter scrolls a big-type version of the Case File."
+    }
+   ],
+   "why": "I01 presenter mode liked; G25: no presenter view today, and the room page turns into one long column below 1100 px; research: 2 to 6 minutes per case. What the view holds and shows first comes from R12-Q04 and R12-Q05; the timer from R12-Q07.",
+   "depends_on": [
+    "R12-Q04",
+    "R12-Q05",
+    "R12-Q07"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Own words: full-screen slides with the summary on the left; when a stand-in agent is active, an animated agent tile (listening, thinking, answering) and the members online",
+   "own_words": "If no Vaidyx agent is active in the backend replacing any role, then only the direct full-screen slide, with the summary on the left. If any Vaidyx replacing agent is there, an active Vaidyx agent logo listening to each and every discussion should be there, animating; when the agent is unmuted so the doctors ask questions (right now only text input; in much later phases text and voice), it animates: listening, then a thinking animation, then a speaking action when the answer comes out (right now only text). That is how I see the meeting screen. Apart from that, the other members online are shown there.",
+   "notes": "Follow-up asked 17 Oct: in the text-only first build the agent cannot hear the room (R13-Q15: hearing only later, with voice), so the states must not claim listening to the discussion.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R17-Q13",
+   "topic": "Recording during the meeting",
+   "core": false,
+   "type": "decision",
+   "question": "Where should the coordinator type the decision while the room screen shows the case?",
+   "header": "Recording",
+   "multi": false,
+   "options": [
+    {
+     "label": "Own laptop, text shown live (Recommended)",
+     "description": "A control view on the coordinator's laptop; the typed decision appears in a strip on the room screen so the board can read it back before saving."
+    },
+    {
+     "label": "Own laptop, shown once saved",
+     "description": "The room sees the decision only after it is saved."
+    },
+    {
+     "label": "On the room screen itself",
+     "description": "One screen for everything; the case is partly covered while typing."
+    }
+   ],
+   "why": "Settled: the coordinator records the decision. Victoria framework: a scribe records in real time and may ask the chair to slow down. Who drives the shared screen and how the wording is confirmed come from R12-Q01 and R13-Q01.",
+   "depends_on": [
+    "R12-Q01",
+    "R13-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Own laptop, shown live (Recommended)",
+   "notes": "The room computer drives the big screen (one camera, one microphone, R11-Q11); the coordinator types on their own laptop; the words show live in a strip at the bottom of the room screen marked not saved; saved after the read-back (R13-Q01).",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R17-Q14",
+   "topic": "Admin screens",
+   "core": false,
+   "type": "decision",
+   "question": "How should the root admin's hospital set-up look?",
+   "header": "Admin setup",
+   "multi": false,
+   "options": [
+    {
+     "label": "Short guided steps, then settings (Recommended)",
+     "description": "About 5 steps once (hospital, departments, people, hospital system, board lists), each saved as you go; later a plain settings page."
+    },
+    {
+     "label": "One settings page in sections",
+     "description": "Like today but with one Save; quick for experts, hard the first time."
+    },
+    {
+     "label": "Set up by the Vaidyx team",
+     "description": "We fill it from a form the hospital sends; admins only manage people."
+    }
+   ],
+   "why": "T20 kept: set-up as a short guided flow, department doctors list with confirmation and undo. J4: one long page of separate Save buttons; K07: the live app was never set up. What set-up asks comes from R04 (root admin set-up).",
+   "depends_on": [
+    "R04-Q12"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Short guided steps, then settings (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Case File first look",
+   "core": false,
+   "type": "view",
+   "question": "When a doctor opens a Case File, what must they see straight away, without any click?",
+   "header": "First look",
+   "multi": true,
+   "options": [
+    {
+     "label": "Patient line and what's missing",
+     "description": "Name, UHID, cancer, board date, urgency, plus the short list of reports still missing or unsigned (today's tab 1)."
+    },
+    {
+     "label": "All the reports",
+     "description": "The list of reports by visit and admission (today's tab 2)."
+    },
+    {
+     "label": "The summary",
+     "description": "The compiled one-page summary of the patient (today's tab 5)."
+    },
+    {
+     "label": "The Ask box",
+     "description": "A box to type a question about this patient and get quoted answers (today's tab 3)."
+    }
+   ],
+   "why": "Added in interview (17 Oct): owner's view of today's Case File page before a new layout is designed (R17-Q02).",
+   "depends_on": [
+    "R17-Q02"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R17-Q15",
+   "status": "Answered",
+   "answer": "Patient line and what's missing; The summary; All the reports (compact); The Ask box",
+   "own_words": "Patient line and what's missing, the summary, all the reports in a small form that opens on click but is organised structurally. The Ask box is an advanced chat box or more: you get your answer, the referenced area of the document, and more clickable things. Place it strategically so that when the doctor has a doubt they want to open it and chat; the conversations must be saved properly.",
+   "notes": "Follow-ups: who sees saved chats; the cited passage shown highlighted in the source page.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Case File one click away",
+   "core": false,
+   "type": "view",
+   "question": "Which parts can stay one click away, opened only when needed?",
+   "header": "One click",
+   "multi": true,
+   "options": [
+    {
+     "label": "Audit log",
+     "description": "Every action ever taken on the Case File (today's tab 7)."
+    },
+    {
+     "label": "Specialty briefs",
+     "description": "The 6 AI helper briefs (today's tab 4)."
+    },
+    {
+     "label": "Board decision form",
+     "description": "Filled by the coordinator in the meeting (today's tab 6)."
+    },
+    {
+     "label": "Team list",
+     "description": "Who is on this Case File: residents added by code, other departments."
+    }
+   ],
+   "why": "Added in interview (17 Oct): owner's view of today's Case File page before a new layout is designed (R17-Q02).",
+   "depends_on": [
+    "R17-Q02"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R17-Q16",
+   "status": "Answered",
+   "answer": "Board decision form; Team list; Specialty briefs",
+   "own_words": "Board decision form, team list, and the 6 AI helpers: if the doctor needs that role's summary, or what that type of doctor might be thinking about, they ask it. Why does the audit log need to be seen by the doctor?",
+   "notes": "Follow-ups: audit hidden from doctors? Specialty helpers must stay in scope (records and guideline points per specialty, never an opinion on diagnosis or treatment).",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Case File pain points",
+   "core": false,
+   "type": "view",
+   "question": "What bothers you most on today's Case File page?",
+   "header": "Pain point",
+   "multi": true,
+   "options": [
+    {
+     "label": "Too many tabs",
+     "description": "Seven tabs; the doctor has to hunt for things."
+    },
+    {
+     "label": "Hard words",
+     "description": "Level 1 / Level 2, tier chips, accession chips; not plain English."
+    },
+    {
+     "label": "Too long to scroll",
+     "description": "One very long page; the place is lost after each action."
+    },
+    {
+     "label": "Not clear what to do",
+     "description": "The doctor cannot tell at a glance what is left before the board."
+    }
+   ],
+   "why": "Added in interview (17 Oct): owner's view of today's Case File page before a new layout is designed (R17-Q02).",
+   "depends_on": [
+    "R17-Q02"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R17-Q17",
+   "status": "Answered",
+   "answer": "Too many tabs; Hard words; Too long to scroll; Not clear what to do",
+   "own_words": "All of them, and very clumsy. Doctors are not tech people: they need a simple UI and powerful UX, beautifully organised, easier to use.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Audit log place",
+   "core": false,
+   "type": "decision",
+   "question": "Who should see the audit log on screen (it is always recorded in the background)?",
+   "header": "Audit log",
+   "multi": false,
+   "options": [
+    {
+     "label": "Hide it; show who-and-when lines (Recommended)",
+     "description": "Doctors never see the log; a small grey line beside each confirmed or waived item says who and when; full log for the root admin and coordinator."
+    },
+    {
+     "label": "Hide it completely",
+     "description": "Doctors see nothing of the log; only the root admin sees it."
+    },
+    {
+     "label": "Keep it one click away",
+     "description": "A small History link at the bottom of the Case File opens the full log for anyone on the team."
+    }
+   ],
+   "why": "Added in interview (17 Oct): follow-up to the owner's view of the Case File page (R17-Q15, Q16).",
+   "depends_on": [
+    "R17-Q16"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R17-Q18",
+   "status": "Answered",
+   "answer": "Own words: in the doctor's profile settings and for an audit person; never on the main screens",
+   "own_words": "Keep it for the audit person, or in the settings of the doctor's profile, where they can see the audit; that would be very nice. Not on the main screens.",
+   "notes": "Mock-up: Settings > Activity (audit) for each doctor; an auditor view. Detail to confirm at mock-up: own actions only or the full log of their Case Files.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Saved Ask chats",
+   "core": false,
+   "type": "decision",
+   "question": "Who should be able to read the saved Ask conversations on a Case File?",
+   "header": "Saved chats",
+   "multi": false,
+   "options": [
+    {
+     "label": "Private, with a Share button (Recommended)",
+     "description": "Each doctor sees only their own chats; Share pins a useful answer for the team."
+    },
+    {
+     "label": "Shared with the whole team",
+     "description": "Everyone on the Case File (owner, residents, departments added) reads every chat."
+    },
+    {
+     "label": "Private only",
+     "description": "Each doctor sees only their own chats; nothing can be shared."
+    }
+   ],
+   "why": "Added in interview (17 Oct): follow-up to the owner's view of the Case File page (R17-Q15, Q16).",
+   "depends_on": [
+    "R17-Q16"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R17-Q19",
+   "status": "Answered",
+   "answer": "Shared with the whole team",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Specialty helpers place",
+   "core": false,
+   "type": "decision",
+   "question": "Where should the 6 specialty helpers live on the new Case File page?",
+   "header": "Helpers",
+   "multi": false,
+   "options": [
+    {
+     "label": "Inside the Ask chat as a lens (Recommended)",
+     "description": "Pick a specialty above the chat box and ask from that angle, or tap Brief."
+    },
+    {
+     "label": "Separate panel, one click away",
+     "description": "A Specialty briefs button opens a side panel with 6 cards."
+    },
+    {
+     "label": "Brief cards under the summary",
+     "description": "Each specialty brief is a folded card below the summary."
+    }
+   ],
+   "why": "Added in interview (17 Oct): follow-up to the owner's view of the Case File page (R17-Q15, Q16).",
+   "depends_on": [
+    "R17-Q16"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R17-Q20",
+   "status": "Answered",
+   "answer": "Own words: Ask stays general; a separate place with 6 specialty buttons or cards: pick one, get its brief, then ask it questions",
+   "own_words": "The Ask is a general one. The 6 agents are there separately: first the option is to select one; there are 6 buttons or cards; that gives a brief, clear, nice and on the point, and then the doctor's questions can be taken.",
+   "notes": "Brief = what that specialty checks in the records (quotes, missing, not final, disagreements); never an opinion on diagnosis, stage or treatment (scope explained to the owner 17 Oct).",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Urgency tag",
+   "core": false,
+   "type": "decision",
+   "question": "Who sets the urgency tag (1 to 5) on a Case File?",
+   "header": "Urgency",
+   "multi": false,
+   "options": [
+    {
+     "label": "Treating doctor; resident proposes (Recommended)",
+     "description": "The owner sets it when creating the Case File and can change it; a resident can suggest a change, the owner accepts with one click; shown with who and when."
+    },
+    {
+     "label": "Treating doctor only",
+     "description": "Only the owner sets and changes it."
+    },
+    {
+     "label": "Anyone on the Case File team",
+     "description": "Owner, residents and the coordinator can all set it; the last change wins."
+    },
+    {
+     "label": "MDT Coordinator",
+     "description": "The coordinator sets it for every Case File, as part of planning the board."
+    }
+   ],
+   "why": "Added in interview (17 Oct): the owner asked for an urgency tag 1 to 5 (R17-Q01); by scope the AI never judges clinical urgency, so a person sets it.",
+   "depends_on": [
+    "R17-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R17-Q21",
+   "status": "Answered",
+   "answer": "Treating doctor; resident proposes (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Stand-in agent tile",
+   "core": false,
+   "type": "decision",
+   "question": "In the text-only first build, what should the stand-in agent's animated tile show on the meeting screen?",
+   "header": "Agent tile",
+   "multi": false,
+   "options": [
+    {
+     "label": "True states for text (Recommended)",
+     "description": "Ready (soft glow), Reading the question, Thinking, Answering (text appears); muted icon when muted; 'Listening to the room' added only when voice comes."
+    },
+    {
+     "label": "Listening animation from the start",
+     "description": "The tile always shows listening to the discussion, though in the first build it only reads typed questions."
+    },
+    {
+     "label": "Plain badge, no animation",
+     "description": "A still badge 'present'; answers appear as text."
+    }
+   ],
+   "why": "Added in interview (17 Oct): the owner wants an animated agent tile on the meeting screen (R17-Q12); the first build is text only and agents hear the room only later with voice (R13-Q15), so the tile must not claim to listen.",
+   "depends_on": [
+    "R17-Q12",
+    "R13-Q15"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R17-Q22",
+   "status": "Answered",
+   "answer": "True states for text (Recommended)",
+   "answered_on": "17/10/2026"
+  }
+ ],
+ "status": "Done"
+}

@@ -1,0 +1,450 @@
+{
+ "round": 6,
+ "title": "The Case File team",
+ "intro": "Settled: residents, PGs and fellows are part of the treating doctor's team, are added to each Case File by the doctor (from any department), join with a code, get limited access and never sign. These questions settle how the code and the team work; what they may do inside is R03.",
+ "questions": [
+  {
+   "id": "R06-Q01",
+   "topic": "Join code",
+   "core": true,
+   "type": "decision",
+   "question": "You said residents join a Case File with a code: how should the code work?",
+   "header": "Join code",
+   "multi": false,
+   "options": [
+    {
+     "label": "Doctor picks, code confirms (Recommended)",
+     "description": "The doctor picks the resident by name; Vaidyx makes a code only that person can use; entering it is their acceptance."
+    },
+    {
+     "label": "One code, any registered trainee",
+     "description": "The doctor shares one code; any resident, PG or fellow with a login who enters it joins; the doctor sees who joined."
+    },
+    {
+     "label": "Code, then doctor approves",
+     "description": "Anyone with the code asks to join; the doctor taps Approve for each."
+    }
+   ],
+   "why": "Settled (notes role-treating, role-resident): the treating doctor adds residents per Case File from their own or other departments, and they join with a code. I03 liked. Today residents use the consultant's login (G14).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Code, then doctor approves",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R06-Q02",
+   "topic": "Adding residents",
+   "core": false,
+   "type": "decision",
+   "question": "Who may add a resident to a Case File and create the code?",
+   "header": "Who adds",
+   "multi": false,
+   "options": [
+    {
+     "label": "Any owner-department consultant (Recommended)",
+     "description": "Covers leave and OPD days; each addition is audited with the name of who added whom."
+    },
+    {
+     "label": "Only the doctor who created it",
+     "description": "One person controls the team; when they are away nobody can add."
+    },
+    {
+     "label": "Creator and head of department",
+     "description": "The head can step in; other consultants cannot."
+    }
+   ],
+   "why": "A Case File is created by one treating doctor and owned by that doctor's department (settled; access.py, B2). What residents may then do is R03.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Any consultant of the owner's team (Recommended)",
+   "notes": "Options adapted to R03-Q01 (owner consultant and co-owner consultant).",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R06-Q03",
+   "topic": "Resident list",
+   "core": true,
+   "type": "decision",
+   "question": "Settled: each treating doctor has at least one resident. Who keeps each doctor's 'my residents' list current?",
+   "header": "My residents",
+   "multi": false,
+   "options": [
+    {
+     "label": "Admin sets, consultant adds (Recommended)",
+     "description": "The department admin updates it when postings change; the consultant can add a resident too."
+    },
+    {
+     "label": "Only the department admin",
+     "description": "One list kept by the department office; the consultant asks for changes."
+    },
+    {
+     "label": "Only the consultant",
+     "description": "The doctor manages their own team; the office has no part."
+    }
+   ],
+   "why": "Settled (notes role-treating: each treating doctor linked with at least one PG, fellow or resident). Residents change units with postings. This list decides who is offered first when adding (R06-Q04). Builds on R04-Q02 (who creates trainee logins).",
+   "depends_on": [
+    "R04-Q02"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Admin sets, consultant adds (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R06-Q04",
+   "topic": "Adding residents",
+   "core": true,
+   "type": "decision",
+   "question": "When a doctor creates a Case File, should their own residents be pre-ticked for its team?",
+   "header": "Pre-tick",
+   "multi": false,
+   "options": [
+    {
+     "label": "Pre-ticked, doctor can untick (Recommended)",
+     "description": "Codes are made on Create; the team exists from the first minute with one step less."
+    },
+    {
+     "label": "Listed but not ticked",
+     "description": "The create form shows them; the doctor ticks each one."
+    },
+    {
+     "label": "Only after creation",
+     "description": "The team is added later from the Case File page."
+    }
+   ],
+   "why": "Answers whether a resident can be on a Case File from its creation. Settled: the treating doctor adds residents per Case File; a pre-tick is still the doctor's choice. UX note 1 (sensible defaults).",
+   "depends_on": [
+    "R06-Q03"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Listed but not ticked",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R06-Q05",
+   "topic": "Other departments",
+   "core": false,
+   "type": "decision",
+   "question": "When you add a resident or fellow from another department, who else must know or agree?",
+   "header": "Other dept",
+   "multi": false,
+   "options": [
+    {
+     "label": "Their consultant is told (Recommended)",
+     "description": "The code is enough; the trainee's own consultant gets a note, with nothing to approve."
+    },
+    {
+     "label": "Nobody, the code is enough",
+     "description": "No one else hears about it."
+    },
+    {
+     "label": "Their head of department approves",
+     "description": "The trainee joins only after their head of department approves."
+    }
+   ],
+   "why": "Settled: fellows from other departments may be added (notes role-treating). Their access is the same limited role (R03).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Nobody else",
+   "own_words": "The resident gets added to their doctor's Case File: the doctor shares the code with everyone, the resident enters it, the doctor approves, and that is it, they are in.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R06-Q06",
+   "topic": "Join code",
+   "core": false,
+   "type": "decision",
+   "question": "What should the join code look like?",
+   "header": "Code format",
+   "multi": false,
+   "options": [
+    {
+     "label": "Six digits, like meetings (Recommended)",
+     "description": "One pattern for everyone, easy to read out or type on a phone; labelled 'Case File code' so it is not mixed up with a meeting code."
+    },
+    {
+     "label": "Eight letters and digits",
+     "description": "Harder to guess; harder to read out over the phone."
+    },
+    {
+     "label": "A link plus six digits",
+     "description": "Tap the link on the phone, or type the digits."
+    }
+   ],
+   "why": "Settled: board members join meetings with a six-digit code (R11). One code style keeps things simple (notes plan, screens).",
+   "depends_on": [
+    "R06-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Six digits, like meetings (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R06-Q07",
+   "topic": "Join code",
+   "core": false,
+   "type": "decision",
+   "question": "How should the code reach the resident?",
+   "header": "Send code",
+   "multi": false,
+   "options": [
+    {
+     "label": "Doctor shares it (Recommended)",
+     "description": "Vaidyx shows the code to the doctor, who reads it out or sends it any way; the code carries no patient data."
+    },
+    {
+     "label": "SMS from Vaidyx",
+     "description": "Sent to the resident's mobile; needs the SMS gateway of R04-Q04."
+    },
+    {
+     "label": "WhatsApp from Vaidyx",
+     "description": "Needs a WhatsApp Business account, a paid outside service."
+    }
+   ],
+   "why": "Vaidyx sends no SMS, email or WhatsApp today; notifications are in-app first (changes_v2 section 3). Channels in general are R14.",
+   "depends_on": [
+    "R06-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Doctor shares it (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R06-Q08",
+   "topic": "Join code",
+   "core": false,
+   "type": "decision",
+   "question": "How long should an unused join code stay valid?",
+   "header": "Code expiry",
+   "multi": false,
+   "options": [
+    {
+     "label": "24 hours (Recommended)",
+     "description": "Enough for a busy day; an expired code is made again with one tap."
+    },
+    {
+     "label": "7 days",
+     "description": "Covers weekends and leave; an old code lingers longer."
+    },
+    {
+     "label": "15 minutes",
+     "description": "Like an OTP; the resident must be at hand."
+    },
+    {
+     "label": "Until the doctor cancels it",
+     "description": "Never expires by itself."
+    }
+   ],
+   "why": "No join code exists today. A short life limits a code passed on by mistake; one-tap re-issue keeps it cheap (UX note 12, a response for every state).",
+   "depends_on": [
+    "R06-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "24 hours (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R06-Q09",
+   "topic": "Join code",
+   "core": false,
+   "type": "decision",
+   "question": "Can one join code be used by more than one person?",
+   "header": "Single use",
+   "multi": false,
+   "options": [
+    {
+     "label": "Single use (Recommended)",
+     "description": "Each code admits one person once, then stops working."
+    },
+    {
+     "label": "Reusable until it expires",
+     "description": "One code for a whole batch of residents on the same Case File."
+    }
+   ],
+   "why": "Only open when the code is not tied to a named person (R06-Q01).",
+   "depends_on": [
+    "R06-Q01"
+   ],
+   "skip_if": "Skip if R06-Q01 answered 'Doctor picks, code confirms' (that code is single use for one named person).",
+   "resource": null,
+   "status": "Skipped",
+   "answer": "Reusable until it expires",
+   "notes": "Settled by R06-Q01 and R06-Q05: one code shared with the whole team, each person who enters it is approved by the doctor.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R06-Q10",
+   "topic": "Guests",
+   "core": false,
+   "type": "decision",
+   "question": "Can a code bring in someone with no Vaidyx login, such as a visiting fellow or observer?",
+   "header": "Guests",
+   "multi": false,
+   "options": [
+    {
+     "label": "No, a login comes first (Recommended)",
+     "description": "The department admin creates the login, then the code works; every action has a known name."
+    },
+    {
+     "label": "Yes, a temporary guest login",
+     "description": "The code creates a login that ends with the Case File or after 30 days."
+    }
+   ],
+   "why": "Settled: the doctor adds residents 'registered in their respective department' (notes role-treating). R04-Q02 decides who creates trainee logins; R15 covers outside people seeing patient data.",
+   "depends_on": [
+    "R04-Q02"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "No, a login comes first (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R06-Q11",
+   "topic": "Removal",
+   "core": false,
+   "type": "decision",
+   "question": "Who can end a resident's place on a Case File?",
+   "header": "Removal",
+   "multi": true,
+   "options": [
+    {
+     "label": "The doctors who can add (Recommended)",
+     "description": "Removal follows the R06-Q02 rule, with a confirmation; the resident is told."
+    },
+    {
+     "label": "The resident, by leaving",
+     "description": "They can step off a Case File themselves; the doctor is told."
+    },
+    {
+     "label": "The MDT Coordinator",
+     "description": "Can tidy teams before a board session."
+    },
+    {
+     "label": "The department admin",
+     "description": "Can remove a trainee who has left the unit from all its Case Files at once."
+    }
+   ],
+   "why": "No resident role exists today; removals act without confirmation (U07). What access remains when someone leaves a department is R03.",
+   "depends_on": [
+    "R06-Q02"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "The consultants who can add; The resident, by leaving; The department admin",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R06-Q12",
+   "topic": "Workload",
+   "core": false,
+   "type": "decision",
+   "question": "Can one resident be on the Case Files of several consultants at once?",
+   "header": "Many files",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, any number (Recommended)",
+     "description": "Their home lists every Case File they joined, grouped by consultant."
+    },
+    {
+     "label": "Yes, up to a set number",
+     "description": "A cap per resident, for example 20 open Case Files; a code beyond it is refused."
+    }
+   ],
+   "why": "Residents carry much of the preparation (role-resident: 39% to 72% of preparation hours in US data). Settled: fellows from other departments may join, so a resident may serve several consultants.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Yes, any number (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R06-Q13",
+   "topic": "Referral",
+   "core": false,
+   "type": "decision",
+   "question": "When a Case File is referred to another department, what happens to the residents on it?",
+   "header": "On referral",
+   "multi": false,
+   "options": [
+    {
+     "label": "Read-only, like their department (Recommended)",
+     "description": "They keep reading as the referring department does but can no longer prepare anything; the new owner adds their own team."
+    },
+    {
+     "label": "They leave the Case File",
+     "description": "Their access ends when the referral is accepted."
+    },
+    {
+     "label": "They keep their place",
+     "description": "The new owner decides whether to remove them."
+    }
+   ],
+   "why": "On acceptance ownership moves and the referring department stays a read-only participant (B10, DESIGN V2 Phase 5).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Read-only, like their department (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R06-Q14",
+   "topic": "Team notices",
+   "core": false,
+   "type": "decision",
+   "question": "Which events should reach a resident on a Case File?",
+   "header": "Told about",
+   "multi": true,
+   "options": [
+    {
+     "label": "Added or removed (Recommended)",
+     "description": "They hear when they join, leave or are removed."
+    },
+    {
+     "label": "A department answered",
+     "description": "A Done or an arriving record, so they can continue preparing."
+    },
+    {
+     "label": "Their draft approved or returned",
+     "description": "The consultant's answer on what they prepared."
+    },
+    {
+     "label": "Listed for a board date",
+     "description": "The date and session, so they can prepare to present."
+    }
+   ],
+   "why": "Residents get nothing today (no role). The owner liked I15 (re-fetch from the notification) and I16 (next-step card). Channels, grouping and quiet hours are R14; who approves drafts is R09.",
+   "depends_on": [
+    "R06-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Approved or removed; A department answered; Their proposal approved or returned; Listed for a board date",
+   "notes": "First option adapted to R06-Q01 (approval flow): 'approved or removed'.",
+   "answered_on": "17/10/2026"
+  }
+ ],
+ "status": "Done"
+}

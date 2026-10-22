@@ -3,6 +3,9 @@ the proxy (headers both ways, streaming, errors, the viewer_opened audit) and th
 
 Hermetic: the PACS is an httpx.MockTransport, the hospital system a fake client. No image is ever read (humans view them)."""
 import asyncio
+import base64
+import gzip
+import hashlib
 import json
 
 import httpx
@@ -15,7 +18,7 @@ from tumour_board.tests import util
 
 UID = "1.2.826.0.1.3680043.8.498.1001"
 OTHER = "1.2.826.0.1.3680043.8.498.2002"
-DOCTOR = {"user": "dr.rao", "admin": False, "known": True, "disabled": False}
+DOCTOR = {"user": "dr.rao", "admin": False, "known": True, "disabled": False}  # creates the ownerless test Case Files: an ownerless Case File is open to its creator and the coordinator only (security review finding 0)
 
 
 @pytest.fixture(autouse=True)
@@ -89,7 +92,7 @@ def test_check_roles_grants_and_kinds():
     # a Vaidyx admin needs a grant like everyone (the audit trail stays honest)
     admin = {"user": "vx.admin", "admin": True, "known": True}
     assert pacs.check("ohif/viewer", q, admin) == no
-    store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="test")
+    store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="dr.rao")
     pacs.grant("dr.rao", UID, "TB-PACS", "d1")
     assert pacs.check("ohif/viewer", q, DOCTOR) is None
     assert pacs.check(f"dicom-web/studies/{UID}/series", "", DOCTOR) is None
@@ -120,13 +123,13 @@ def test_check_follows_the_case_file_scope():
 def test_revoke_ends_the_grants_of_a_deleted_case_file():
     q = f"StudyInstanceUIDs={UID}"
     for cid in ("TB-A", "TB-B"):
-        store.create_case(cid, util.PATIENT, "lung_nsclc", created_by="test")
+        store.create_case(cid, util.PATIENT, "lung_nsclc", created_by="dr.rao")
     pacs.grant("dr.rao", UID, "TB-A", "d1"); pacs.grant("dr.mehta", UID, "TB-A", "d1"); pacs.grant("dr.rao", OTHER, "TB-B", "d2")
     assert pacs.check("ohif/viewer", q, DOCTOR) is None
     assert pacs.revoke("TB-A") == 2 and pacs.revoke("TB-A") == 0
     assert pacs.check("ohif/viewer", q, DOCTOR) == (403, pacs.NO_GRANT) and pacs.granted("dr.mehta", UID) is None
     assert pacs.granted("dr.rao", OTHER)["case_id"] == "TB-B"  # another Case File's grant stays
-    store.create_case("TB-A", util.PATIENT, "lung_nsclc", created_by="test") if not store.get_case("TB-A") else None
+    store.create_case("TB-A", util.PATIENT, "lung_nsclc", created_by="dr.rao") if not store.get_case("TB-A") else None
     assert pacs.check("ohif/viewer", q, DOCTOR) == (403, pacs.NO_GRANT)  # a Case File re-created under the same id starts without grants
 
 
@@ -183,6 +186,7 @@ class PACS:
     def __init__(self):
         self.seen = []
         self.fail = None
+        self.page = b""
 
     def handler(self, request: httpx.Request):
         if self.fail:
@@ -194,6 +198,8 @@ class PACS:
                                 "Accept-Ranges": "bytes"}, b"DICM")
         if request.url.path.endswith("/viewer"):
             return answer(200, {**h, "Content-Type": "text/html"}, b"<html>OHIF</html>")
+        if request.url.path.endswith(".html"):  # an OHIF page with inline scripts, gzipped like Orthanc may send it
+            return answer(200, {**h, "Content-Type": "text/html; charset=utf-8", "Content-Encoding": "gzip"}, gzip.compress(self.page))
         return answer(200, {**h, "Content-Type": "application/dicom+json"}, b'[{"study": 1}]')
 
 
@@ -218,7 +224,7 @@ def test_proxy_forwards_the_granted_study_only(pacs_app):
     r = tc.get(f"/api/tb/pacs/dicom-web/studies/{UID}/series", headers={"Authorization": "Bearer app"})
     assert r.status_code == 403 and r.json()["detail"].startswith("Open the images") and not fake.seen
     assert tc.get("/api/tb/pacs/tools/find").status_code == 404 and not fake.seen
-    store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="test")
+    store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="dr.rao")
     pacs.grant("dr.rao", UID, "TB-PACS", "d1")
     r = tc.get(f"/api/tb/pacs/dicom-web/studies/{UID}/series?includefield=all&limit=5",
                headers={"Authorization": "Bearer app", "Accept": "application/dicom+json", "X-Custom": "no",
@@ -255,16 +261,70 @@ def test_proxy_forwards_the_granted_study_only(pacs_app):
     assert tc.get("/api/tb/pacs/ohif/app-config.js").status_code == 403 and len(fake.seen) == n
 
 
+def test_proxy_gives_the_viewer_its_own_policy(pacs_app):
+    """The OHIF files carry the viewer's own policy (the app's would stop its inline start-up scripts and the room screen's frame):
+    the inline scripts of its page by hash only, WebAssembly decoders, workers, framed by this app only. DICOMweb answers get none."""
+    tc, fake, who = pacs_app
+    fake.page = b"<html><script>var a=1;</script><script src='./app.js'></script><script type=module>b()</script></html>"
+    r = tc.get("/api/tb/pacs/ohif/start.html")
+    assert r.status_code == 200 and r.content == fake.page and "content-encoding" not in r.headers
+    assert r.headers["content-length"] == str(len(fake.page))
+    csp = r.headers["content-security-policy"]
+    for js in (b"var a=1;", b"b()"):
+        assert f"'sha256-{base64.b64encode(hashlib.sha256(js).digest()).decode()}'" in csp
+    script = csp.split("script-src")[1].split(";")[0]
+    assert csp.count("'sha256-") == 2 and "unsafe-inline" not in script and "'unsafe-eval'" not in csp and "'wasm-unsafe-eval'" in script
+    assert "frame-ancestors 'self'" in csp and "worker-src 'self' blob:" in csp and "object-src 'none'" in csp
+    assert tc.get("/api/tb/pacs/ohif/app-config.js").headers["content-security-policy"] == pacs.viewer_csp()
+    assert "'sha256-" not in pacs.viewer_csp()
+    store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="dr.rao")
+    pacs.grant("dr.rao", UID, "TB-PACS", "d1")
+    r = tc.get(f"/api/tb/pacs/dicom-web/studies/{UID}/series")
+    assert r.status_code == 200 and "content-security-policy" not in r.headers
+    r = tc.head("/api/tb/pacs/ohif/app-config.js")
+    assert r.status_code == 200 and r.headers["content-security-policy"] == pacs.viewer_csp()
+
+
+def test_app_headers_keep_the_viewer_policy_and_let_this_app_frame_it(monkeypatch):
+    """core/middleware.py (owner's go, 18 Oct): under /api/tb/pacs/ the proxy's viewer policy is kept and only this app may frame
+    it (the meeting room screen); every other answer keeps nonce-only scripts and no framing at all."""
+    from core.middleware import SecurityHeadersMiddleware
+    fake = PACS()
+    fake.page = b"<html><script>start()</script></html>"
+    client = httpx.AsyncClient(transport=httpx.MockTransport(fake.handler))
+    monkeypatch.setattr(pacs, "_client", lambda: client)
+    app = FastAPI()
+    app.add_middleware(SecurityHeadersMiddleware)
+
+    @app.api_route("/api/tb/pacs/{path:path}", methods=["GET", "HEAD"])
+    async def route(request: Request, path: str):
+        return await pacs.proxy(request, path, DOCTOR)
+
+    @app.get("/tb-nik/x")
+    def page():
+        return {"ok": True}
+    with TestClient(app) as tc:
+        r = tc.get("/api/tb/pacs/ohif/start.html")
+        assert r.status_code == 200 and r.headers["x-frame-options"] == "SAMEORIGIN"
+        assert r.headers["content-security-policy"] == pacs.viewer_csp(fake.page)
+        r = tc.get(f"/api/tb/pacs/dicom-web/studies/{UID}/series")  # refused (no grant): still framed by this app only
+        assert r.status_code == 403 and r.headers["x-frame-options"] == "SAMEORIGIN"
+        assert r.headers["content-security-policy"] == "default-src 'self'; frame-ancestors 'self'"
+        r = tc.get("/tb-nik/x")
+        assert r.headers["x-frame-options"] == "DENY" and "frame-ancestors 'none'" in r.headers["content-security-policy"]
+        assert "'nonce-" in r.headers["content-security-policy"] and "'wasm-unsafe-eval'" not in r.headers["content-security-policy"]
+
+
 def test_proxy_range_head_post_and_errors(pacs_app):
     tc, fake, who = pacs_app
-    store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="test")
+    store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="dr.rao")
     pacs.grant("dr.rao", UID, "TB-PACS", "d1")
     frame = f"/api/tb/pacs/dicom-web/studies/{UID}/series/1.2.3/instances/1.2.4/frames/1"
     r = tc.get(frame, headers={"Range": "bytes=0-3"})
     assert r.status_code == 206 and r.content == b"DICM"
     assert r.headers["content-range"] == "bytes 0-3/10" and r.headers["accept-ranges"] == "bytes"
     assert fake.seen[-1].headers["range"] == "bytes=0-3"
-    assert tc.head(frame).status_code == 200 and fake.seen[-1].method == "HEAD"
+    assert tc.head(frame).status_code == 200 and fake.seen[-1].method == "GET"  # Orthanc answers HEAD with 404: asked with GET, headers only (18 Oct)
     n = len(fake.seen)
     r = tc.post(frame, content=b"x")
     assert r.status_code == 405 and len(fake.seen) == n
@@ -277,7 +337,7 @@ def test_proxy_range_head_post_and_errors(pacs_app):
 
 def test_proxy_viewer_open_is_audited_once_per_page(pacs_app):
     tc, fake, who = pacs_app
-    store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="test")
+    store.create_case("TB-PACS", util.PATIENT, "lung_nsclc", created_by="dr.rao")
     pacs.grant("dr.rao", UID, "TB-PACS", "d1")
     r = tc.get(f"/api/tb/pacs/ohif/viewer?StudyInstanceUIDs={UID}")
     assert r.status_code == 200 and b"OHIF" in r.content
@@ -314,7 +374,7 @@ class FakeHIS:
 
 
 def _report(case_id="TB-PACS", ref="ImagingStudy/img-1"):
-    store.create_case(case_id, util.PATIENT, "lung_nsclc", created_by="test")
+    store.create_case(case_id, util.PATIENT, "lung_nsclc", created_by="dr.rao")
     doc = store.add_document_file(case_id, "ct_thorax_report.pdf", b"synthetic")
     if ref:
         doc["his"] = {"imaging_study_ref": ref}

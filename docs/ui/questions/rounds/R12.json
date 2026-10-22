@@ -1,0 +1,477 @@
+{
+ "round": 12,
+ "title": "Meeting: presenting and AI support",
+ "intro": "How each case is shown in the meeting: who controls the screen, what comes first, order and timing, records and images, absent heads' agents and live questions. You liked presenter mode (I01); screen layout comes later in R17.",
+ "questions": [
+  {
+   "id": "R12-Q01",
+   "topic": "Shared screen",
+   "core": true,
+   "type": "decision",
+   "question": "Who should control the shared screen during a case?",
+   "header": "Screen",
+   "multi": false,
+   "options": [
+    {
+     "label": "Coordinator, presenter can take over (Recommended)",
+     "description": "The coordinator moves between cases; the case's presenter takes control with one tap for their case and hands it back."
+    },
+    {
+     "label": "Presenter drives their case",
+     "description": "Control passes to each case's presenter when their case starts."
+    },
+    {
+     "label": "Coordinator only",
+     "description": "The presenter talks; the coordinator clicks everything."
+    }
+   ],
+   "why": "I01 liked (presenter mode), G25 (no presenter view today). Today the coordinator moves through the agenda (Make current, D3). Settled: the coordinator runs the board (T19 note).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Coordinator, presenter can take over (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R12-Q02",
+   "topic": "Presenter",
+   "core": false,
+   "type": "decision",
+   "question": "Who should be named presenter of each case?",
+   "header": "Presenter",
+   "multi": false,
+   "options": [
+    {
+     "label": "Doctor picks at mark-ready (Recommended)",
+     "description": "The treating doctor names themselves or one of the Case File's residents; the name shows on the agenda."
+    },
+    {
+     "label": "Always the treating doctor",
+     "description": "Residents help prepare but do not present."
+    },
+    {
+     "label": "Decided in the meeting",
+     "description": "Whoever takes the screen presents; nothing named before."
+    }
+   ],
+   "why": "Real world: the resident often presents (D3); settled: residents are on the treating doctor's team per Case File. The NCG Virtual Tumour Board template has a 'presenter' field.",
+   "depends_on": [
+    "R06-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Doctor picks at mark-ready (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R12-Q03",
+   "topic": "Remote view",
+   "core": false,
+   "type": "decision",
+   "question": "Should remote members' screens follow the shared screen?",
+   "header": "Follow me",
+   "multi": false,
+   "options": [
+    {
+     "label": "Follow, can step away (Recommended)",
+     "description": "Their view follows the presenter; they may look at another part of the same case and tap 'back to presenter'."
+    },
+    {
+     "label": "Always follow",
+     "description": "They see only what the room sees."
+    },
+    {
+     "label": "Browse freely",
+     "description": "They open any part of the agenda's cases themselves."
+    }
+   ],
+   "why": "Settled: members join from anywhere, phones included. Hybrid boards (24.8% in India) need remote members to stay on the case being discussed.",
+   "depends_on": [
+    "R12-Q01",
+    "R11-Q10"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Follow, can step away (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R12-Q04",
+   "topic": "Presenter view",
+   "core": false,
+   "type": "decision",
+   "question": "What should the presenter view show for each case?",
+   "header": "Case view",
+   "multi": true,
+   "options": [
+    {
+     "label": "Question for the board (Recommended)",
+     "description": "The one or two lines the doctor wrote saying what the board should decide."
+    },
+    {
+     "label": "Key values with sources",
+     "description": "Diagnosis, stage and markers as recorded, each with its verified quote one tap away."
+    },
+    {
+     "label": "Gaps and waivers",
+     "description": "Badges for records missing, waived (with the reason) or not final."
+    },
+    {
+     "label": "Absent heads' agent points",
+     "description": "The Points for review from each absent head's agent, labelled AI support."
+    }
+   ],
+   "why": "I01 liked: one case per screen, large type, the board question, key values with sources one click away, gap badges, a timer. Layout is R17; this is only the content. Stage is only shown as recorded, never computed.",
+   "depends_on": [
+    "R10-Q06"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Question for the board; Key values with sources; Gaps and waivers",
+   "notes": "Agent points not on the presenter view by default (see R12-Q09).",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R12-Q05",
+   "topic": "Presenter view",
+   "core": true,
+   "type": "decision",
+   "question": "What should come first when a case opens on the shared screen?",
+   "header": "First view",
+   "multi": false,
+   "options": [
+    {
+     "label": "Patient line and question (Recommended)",
+     "description": "Age, sex, cancer as recorded and the question for the board; the summary sits below."
+    },
+    {
+     "label": "Case File summary",
+     "description": "The cited summary in the six NCG sections, as today."
+    },
+    {
+     "label": "Key values",
+     "description": "The main recorded values with their sources."
+    },
+    {
+     "label": "Images",
+     "description": "The key study opened in the image viewer."
+    }
+   ],
+   "why": "I01; Hartmann 2026: case preparation takes 13 min and the summary is rewritten 3.5 times, so the room needs the point first. CRUK: more than half of cases get 2 minutes or less. If R10-Q06 left the question optional, a case without one shows 'no question written'.",
+   "depends_on": [
+    "R12-Q04",
+    "R10-Q06"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Case File summary",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R12-Q06",
+   "topic": "Case order",
+   "core": false,
+   "type": "decision",
+   "question": "In what order should cases be taken on the day?",
+   "header": "Case order",
+   "multi": false,
+   "options": [
+    {
+     "label": "Grouped by presenter (Recommended)",
+     "description": "Each team's cases come together so busy doctors can leave after; 'for noting' cases at the end; the coordinator can reorder."
+    },
+    {
+     "label": "Most complex first",
+     "description": "The coordinator ranks cases; 'for noting' ones at the end."
+    },
+    {
+     "label": "Order marked ready",
+     "description": "First ready, first discussed (close to today's listing order)."
+    }
+   ],
+   "why": "Today the agenda follows listing order and the coordinator can reorder. I05 triage lists (for discussion, for noting) set by R10-Q11.",
+   "depends_on": [
+    "R10-Q11",
+    "R12-Q02"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Ordered by the coordinator",
+   "own_words": "Ordered by the coordinator.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R12-Q07",
+   "topic": "Timer",
+   "core": false,
+   "type": "decision",
+   "question": "Should each case show a timer?",
+   "header": "Timer",
+   "multi": false,
+   "options": [
+    {
+     "label": "Visible, soft warning (Recommended)",
+     "description": "A 5-minute timer per case changes colour when time is up; nothing stops; time is kept for the minutes."
+    },
+    {
+     "label": "Each board sets minutes",
+     "description": "Each board picks its own target (3 to 6 minutes); same soft warning."
+    },
+    {
+     "label": "Recorded, not shown (today)",
+     "description": "Time per case is kept for the minutes and the dashboard only."
+    }
+   ],
+   "why": "I01 included a case timer. Research: 3 to 6 minutes per case; CRUK 2017: more than half of patients discussed for 2 minutes or less. Time per case is already recorded (12 Oct, board.py timing).",
+   "depends_on": [
+    "R10-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Coordinator sets the minutes",
+   "notes": "Adapted to one general board: the coordinator sets the target per meeting.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R12-Q08",
+   "topic": "Records and images",
+   "core": false,
+   "type": "decision",
+   "question": "Who may open records and images on the shared screen?",
+   "header": "Open images",
+   "multi": false,
+   "options": [
+    {
+     "label": "Presenter and coordinator (Recommended)",
+     "description": "Either opens a report or the images (OHIF image viewer through the app, audited); others ask them to."
+    },
+    {
+     "label": "Any hospital member joined",
+     "description": "Any joined member with access may put a record or image on the shared screen."
+    },
+    {
+     "label": "Coordinator only",
+     "description": "Only the coordinator opens records and images."
+    }
+   ],
+   "why": "D3, V2 6.3: records with HIS status and signature, PDF fetched live if missing; images open in OHIF through the app (12 h grant, audited); people view images, no model reads them. K03: grants are lost on restart.",
+   "depends_on": [
+    "R12-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Presenter and coordinator (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R12-Q09",
+   "topic": "AI support",
+   "core": false,
+   "type": "decision",
+   "question": "When should an absent head's agent come in during a case?",
+   "header": "Agent turn",
+   "multi": false,
+   "options": [
+    {
+     "label": "After the presenter, on a tap (Recommended)",
+     "description": "Once the presenter finishes, the coordinator opens that agent's Points for review, labelled 'AI support, not a board member'."
+    },
+    {
+     "label": "Shown from the start",
+     "description": "The agent's points sit beside the case from the first moment."
+    },
+    {
+     "label": "Only when asked",
+     "description": "Nothing shows until someone asks the agent a question."
+    }
+   ],
+   "why": "D2: every head not recorded present gets its agent per Case File; Eswar (10 Oct): the agent gives its view, the board re-thinks and decides. Scope: Points for review are questions about the records, never findings or treatment.",
+   "depends_on": [
+    "R11-Q13"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Shown from the start",
+   "notes": "Text only for now (voice deferred). Agent points sit beside the case from the start, labelled AI support.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R12-Q10",
+   "topic": "AI support",
+   "core": true,
+   "type": "decision",
+   "question": "How should an absent head's agent give its points to the room: spoken or as text?",
+   "header": "Agent voice",
+   "multi": false,
+   "options": [
+    {
+     "label": "Text, read aloud on tap (Recommended)",
+     "description": "Points show as text; a speaker button reads that same text aloud (local voice, English first, nothing new said)."
+    },
+    {
+     "label": "Text only",
+     "description": "Nothing is spoken; the presenter or coordinator reads them out."
+    },
+    {
+     "label": "Read aloud automatically",
+     "description": "Each point is spoken when the agent's turn comes."
+    }
+   ],
+   "why": "audio_feature.md: text-to-speech (Kokoro-82M, on the H200) reads only text already on screen; units and stage strings need a text normaliser first; researched, not built yet.",
+   "depends_on": [
+    "R12-Q09",
+    "R09-Q13"
+   ],
+   "skip_if": "Skip if R09-Q13 ticked nothing (nothing is read aloud).",
+   "resource": null,
+   "status": "Skipped",
+   "notes": "Voice deferred (R09-Q13 own words): agent points shown as text only for now.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R12-Q11",
+   "topic": "Live questions",
+   "core": false,
+   "type": "decision",
+   "question": "How should live questions to the Case File or an agent be asked in the meeting?",
+   "header": "Ask live",
+   "multi": false,
+   "options": [
+    {
+     "label": "Text or hold-to-speak (Recommended)",
+     "description": "Type, or hold the mic button and speak; the words land in the box to check before sending; audio is not stored."
+    },
+    {
+     "label": "Text only (today)",
+     "description": "Typing only."
+    },
+    {
+     "label": "Coordinator asks for the room",
+     "description": "Members say it aloud; the coordinator types or dictates it."
+    }
+   ],
+   "why": "D4: Ask the Case File and Ask an agent answer with citations or 'not documented' and refuse out-of-scope questions. audio_feature.md: speech to text runs locally (Whisper large-v3-turbo), English first, spoken text passes the same scope guard as typed text; the microphone needs HTTPS or localhost.",
+   "depends_on": [
+    "R09-Q12"
+   ],
+   "skip_if": "Skip if R09-Q12 answered 'Not yet' (no voice input).",
+   "resource": null,
+   "status": "Skipped",
+   "answer": "Text only",
+   "notes": "Voice deferred (R09-Q13 own words): live questions are typed.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R12-Q12",
+   "topic": "Live questions",
+   "core": false,
+   "type": "decision",
+   "question": "Who may ask live questions during the meeting?",
+   "header": "Who asks",
+   "multi": false,
+   "options": [
+    {
+     "label": "Hospital members joined (Recommended)",
+     "description": "Anyone joined with a Vaidyx login who may read that case; outside experts listen only."
+    },
+    {
+     "label": "Presenter and coordinator",
+     "description": "Others ask them to put the question."
+    },
+    {
+     "label": "Everyone joined",
+     "description": "Outside experts may ask too."
+    }
+   ],
+   "why": "Today any account placed in a department may ask the agents (matrix 'ask'). Outside experts joining by code (R11-Q05) are new.",
+   "depends_on": [
+    "R11-Q05"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Hospital members joined (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R12-Q13",
+   "topic": "Live questions",
+   "core": false,
+   "type": "decision",
+   "question": "Where should a live answer appear?",
+   "header": "Answer shows",
+   "multi": false,
+   "options": [
+    {
+     "label": "Asker first, then share (Recommended)",
+     "description": "The asker sees the cited answer and can put it on the shared screen with one tap."
+    },
+    {
+     "label": "Always on the shared screen",
+     "description": "Every answer shows to the whole room."
+    },
+    {
+     "label": "Only to the asker",
+     "description": "Answers never go on the shared screen."
+    }
+   ],
+   "why": "Answers take 1.6 to 5.9 s and carry verified quotes (D4); showing them to the asker first keeps the shared screen on the case.",
+   "depends_on": [
+    "R12-Q11"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Always on the shared screen",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R12-Q14",
+   "topic": "Remote view",
+   "core": false,
+   "type": "decision",
+   "question": "What should a member on a phone be able to do during the meeting?",
+   "header": "On a phone",
+   "multi": true,
+   "options": [
+    {
+     "label": "Follow the current case (Recommended)",
+     "description": "The case's key lines and the agent points, sized for a phone."
+    },
+    {
+     "label": "Ask questions",
+     "description": "Text or voice to the Case File or an agent."
+    },
+    {
+     "label": "Raise a hand",
+     "description": "A hand shows on the room screen so the coordinator brings them in."
+    },
+    {
+     "label": "Open images",
+     "description": "The image viewer on the phone; small screen, every view audited."
+    }
+   ],
+   "why": "Settled: members join from anywhere, phones included. U02: phone pages are about 9,500 px tall today. R17 designs the screens; R15 decides patient data on phones.",
+   "depends_on": [
+    "R11-Q10",
+    "R12-Q03"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Follow the current case; Type questions; Raise a hand",
+   "notes": "Images not opened on phones.",
+   "answered_on": "17/10/2026"
+  }
+ ],
+ "status": "Done"
+}

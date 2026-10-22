@@ -37,7 +37,7 @@ def test_every_record_has_tier_source_and_valid_fields(pid):
         assert all(f in cat for f in r.get("required_facts", [])), r["id"]
         assert set(r.get("doc_types", [])) <= doc_types and set(r.get("fact_doc_types", [])) <= doc_types, r["id"]
         assert r.get("doc_types") or (r.get("facts_only") and r.get("fact_doc_types")), r["id"]
-        assert org.department_id(r["department"]), (r["id"], r["department"])
+        assert org.department_id(r["department"]) or org.is_owner_alias(r["department"]), (r["id"], r["department"])  # a dental evaluation goes to the owner (18 Oct)
         for k in ("tier_basis", "note"):
             assert "—" not in r.get(k, ""), r["id"]
         if r.get("condition"):  # NCG's own tier under a condition the system never judges: the record itself is shown only

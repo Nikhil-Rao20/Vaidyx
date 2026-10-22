@@ -1,0 +1,628 @@
+{
+ "reviewed": "2026-10-18",
+ "how": "pacs_public/qa_check.py renders (contact sheets and single PNGs) viewed one by one during the Phase 1 build, 2026-10-18; rule: a series whose field shows the orbits, nose or mouth loses every slice from its top down to just below the lowest teeth, and the PET of the same PET-CT is cut at the same level; a human confirmation pass on the cropped and head reaching series is advised before the Phase 2 import",
+ "series": {
+  "1.3.6.1.4.1.14519.5.2.1.1239.1759.623006463861567934606116970244": {
+   "slot": "BR-01",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.1239.1759.115060983843511037348481244160": {
+   "slot": "BR-02",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.9203.4002.997993139263721918674259792020": {
+   "slot": "BR-03",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.9203.4002.819947422704003839421250353099": {
+   "slot": "BR-03",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.9203.4002.112501477437352839202306368352": {
+   "slot": "BR-03",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.9203.4002.179993109981592527027438512275": {
+   "slot": "BR-03",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.207776098961005429284467902411167871841": {
+   "slot": "BR-04",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.154688781059619045804962302064173369383": {
+   "slot": "BR-04",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.155063585747407232218562393551620497758": {
+   "slot": "BR-05",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.290018009822688313704261576268270809186": {
+   "slot": "BR-05",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.13128581328072645760787522095632373905": {
+   "slot": "BR-05",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.6655.2359.306347497946607687703883357991": {
+   "slot": "LU-01",
+   "face": "crop",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "crop_from_z": -207.5,
+   "note": "nose and mouth in the field: removed instances 1 to 17 (top of the series down to 6 mm below the lowest teeth)"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.6655.2359.226901752069119903728752256048": {
+   "slot": "LU-01",
+   "face": "crop",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "crop_from_z": -207.5,
+   "note": "cropped at the same level as the CT of this PET-CT (no face recognisable at PET resolution)"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.6655.2359.359821213786510431287657873278": {
+   "slot": "LU-02",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "field starts at the chin below the teeth; no face"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.6655.2359.937028802602237888558910984814": {
+   "slot": "LU-02",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "head in the field; no facial feature recognisable at PET resolution (its CT starts below the chin)"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.4334.1501.273321321773433141847217168170": {
+   "slot": "LU-03",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "field starts at the mandible below the teeth; no face"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.4334.1501.171727643865200403165802871787": {
+   "slot": "LU-03",
+   "face": "crop",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "crop_from_z": -124.3,
+   "note": "whole head in the field (brain, orbits, nose, mouth): removed every slice down to 6 mm below the lowest teeth"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.4334.1501.239170050903449705007919719283": {
+   "slot": "LU-03",
+   "face": "crop",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "crop_from_z": -124.3,
+   "note": "cropped at the same level as the CT of this PET-CT (head in the field, no face recognisable at PET resolution)"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.4320.5885.671795264090307480092408242633": {
+   "slot": "LU-04",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.4320.5885.179042670650173689920449824438": {
+   "slot": "LU-04",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.4320.5885.101839196455054321363367605040": {
+   "slot": "LU-04",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "the submitter removed the head slices (instances start at 46); field starts at the mandible below the teeth"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.4320.5885.187939005020729072620603626461": {
+   "slot": "LU-04",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "the submitter removed the head slices (instances start at 46); field starts at the chin"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.7777.9002.332002723476583484085948161666": {
+   "slot": "LU-05",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.7777.9002.390781160863053487650899552351": {
+   "slot": "LU-05",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.7777.9002.282617070529060301401540230240": {
+   "slot": "LU-05",
+   "face": "crop",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "crop_from_z": -362.0,
+   "note": "whole head in the field (brain, orbits, nose, mouth): removed every slice down to 5 mm below the lowest teeth"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.7777.9002.329793444034925460865246705358": {
+   "slot": "LU-05",
+   "face": "crop",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "crop_from_z": -362.0,
+   "note": "cropped at the same level as the CT of this PET-CT (same study and z range; head in the field, no face recognisable at PET resolution)"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.6279.6001.179049373636438705059720603192": {
+   "slot": "LU-06",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.4334.1501.164951610473301901732855875499": {
+   "slot": "LU-R1 reserve",
+   "face": "crop",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "crop_from_z": -122.0,
+   "note": "whole head in the field (brain, orbits, nose, mouth): removed every slice down to 8 mm below the lowest teeth"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.4334.1501.178204039327031545530855872090": {
+   "slot": "LU-R1 reserve",
+   "face": "crop",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "crop_from_z": -122.0,
+   "note": "cropped at the same level as the CT of this PET-CT (head in the field, no face recognisable at PET resolution)"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.6354.4022.619064565773374397139264312004": {
+   "slot": "CX-01",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.6354.4022.658390582597899341719337128517": {
+   "slot": "CX-01",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.6354.4022.336021808554888695201022910492": {
+   "slot": "CX-01",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.6354.4022.121131259519940900711834612890": {
+   "slot": "CX-02",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.6354.4022.142936626424478151296049116871": {
+   "slot": "CX-02",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.6354.4022.271125206506988143963552262668": {
+   "slot": "CX-03",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.6354.4022.138493966832366180383338541857": {
+   "slot": "CX-03",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.6354.4022.115707171012444336626752486507": {
+   "slot": "CX-03",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.319364372935035748697625768741573857103": {
+   "slot": "CX-04",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "the submitter removed the head slices (instances start at 54); field starts at the mandible below the teeth"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.315077523559674293758223337866925186907": {
+   "slot": "CX-04",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "top at the lower head and neck; no facial feature recognisable at PET resolution"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.40195598971044314651886312758228421927": {
+   "slot": "CX-04",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.234078588023419285450137167472556934506": {
+   "slot": "CX-04",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.8421.4018.275902923659804018150231723509": {
+   "slot": "CR-01",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.8421.4018.330077288186441027275998687603": {
+   "slot": "CR-01",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.8421.4018.206096527423871496086339173610": {
+   "slot": "CR-01",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.8421.4018.338658711874561200877677046725": {
+   "slot": "CR-01",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.3671.4018.169401970460996734655625885771": {
+   "slot": "CR-02",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.3671.4018.310318219902633450127700883338": {
+   "slot": "CR-02",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.8421.4017.576800355117178104124255800432": {
+   "slot": "CR-03",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.8421.4017.787305079077841007172123472811": {
+   "slot": "CR-03",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.9203.8273.455038217313067138673184936282": {
+   "slot": "CR-04",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.274448496026915359878669995943742612095": {
+   "slot": "CR-05",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.22235547254509296594804873769836180829": {
+   "slot": "CR-06",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.135798829041572223187967857947866824460": {
+   "slot": "CR-06",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.312661079690700362158785873824210500817": {
+   "slot": "CR-06",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.279488501981467128626160105260850280776": {
+   "slot": "CR-06",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "by body part (field cannot reach the head); mid slice viewed"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.7085.5885.265283649568652998885984796148": {
+   "slot": "HN-01",
+   "face": "crop",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "crop_from_z": -148.0,
+   "note": "orbits in the field below the brain slices: removed the brain and orbit slices (instances 1 to 18) and the 38 slices the submitter had already blanked over the nose and mouth (instances 19 to 56); the series now starts at the mandible below the teeth"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.7085.5885.762247069614920946855231242756": {
+   "slot": "HN-01",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "head region blacked out by the submitter in every coronal slice; only the chin tip and neck remain"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.7085.5885.340056541303503730469332484198": {
+   "slot": "HN-01",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "top slices hold only noise (head region emptied by the submitter); no face"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.23846379035204500340958459297466932910": {
+   "slot": "HN-02",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "field starts at the lower neck (thyroid level) and ends in the upper abdomen; no face"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.285110630815678685275642769384221232441": {
+   "slot": "HN-03",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "field starts at the larynx and ends in the upper abdomen; no face"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.34396790779504476964035972928166943532": {
+   "slot": "HN-04",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "defaced by the submitter (head region emptied); top slices show only the raised arms"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.34994113673213434627138532167525494455": {
+   "slot": "HN-04",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "defaced by the submitter (head region emptied); top slices show only the raised arms"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.111876236207536139065956127623181501702": {
+   "slot": "CUP-01",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "defaced by the submitter (head region emptied); top slices show only the raised arms"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.212851949757273249879468776364398875276": {
+   "slot": "CUP-01",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "defaced by the submitter (head region emptied); top slices show only the raised arms"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.239537544060707922869401739533283658263": {
+   "slot": "CUP-02",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "defaced by the submitter (head region emptied); top slices empty"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.250262599227532712559738773326631678839": {
+   "slot": "CUP-02",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "defaced by the submitter (head region emptied); top slices hold only noise"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.1.29527738786432406266587619077510624166": {
+   "slot": "CUP-03",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.1.99924087997900740903375384971900443824": {
+   "slot": "CUP-03",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.1078.3273.116096825250924485225275072755": {
+   "slot": "CUP-04",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.1078.3273.289058566670133314319890183759": {
+   "slot": "CUP-04",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.297586689304226835368002003985734825718": {
+   "slot": "CUP-05",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.6279.6001.159487863629600617733659914437": {
+   "slot": "CXR-01",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "lead marker letters of the radiograph (laterality and technologist marker, for example LADC) are in the pixels; no patient name, date or ID"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.6279.6001.237855417502750555158013448483": {
+   "slot": "CXR-02",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "lead marker letters of the radiograph (laterality and technologist marker, for example LADC) are in the pixels; no patient name, date or ID"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.6279.6001.114643134991547510142488707241": {
+   "slot": "CXR-03",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "lead marker letters of the radiograph (laterality and technologist marker, for example LADC) are in the pixels; no patient name, date or ID"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.6279.6001.849055435546135376228232912205": {
+   "slot": "CXR-04",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "lead marker letters of the radiograph (laterality and technologist marker, for example LADC) are in the pixels; no patient name, date or ID"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.6279.6001.330361562313025994674404156967": {
+   "slot": "CXR-05",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "lead marker letters of the radiograph (laterality and technologist marker, for example LADC) are in the pixels; no patient name, date or ID"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.6279.6001.240282537530757534746798814586": {
+   "slot": "CXR-06",
+   "face": "clear",
+   "text": "pass",
+   "burned_in": "no",
+   "method": "visual",
+   "note": "lead marker letters of the radiograph (laterality and technologist marker, for example LADC) are in the pixels; no patient name, date or ID"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.1239.1759.679840241695376722961441325211": {
+   "slot": "BR-X1",
+   "face": "clear",
+   "text": "pass (DICOM BurnedInAnnotation NO)",
+   "burned_in": "no",
+   "method": "by body part (a mammogram cannot reach the head); BurnedInAnnotation read from the header, pixels not viewed (18 Oct)"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.1239.1759.292414050434029491184377518176": {
+   "slot": "BR-X2",
+   "face": "clear",
+   "text": "pass (DICOM BurnedInAnnotation NO)",
+   "burned_in": "no",
+   "method": "by body part (a mammogram cannot reach the head); BurnedInAnnotation read from the header, pixels not viewed (18 Oct)"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.1239.1759.284574625964405229090721485987": {
+   "slot": "BR-X3",
+   "face": "clear",
+   "text": "pass (DICOM BurnedInAnnotation NO)",
+   "burned_in": "no",
+   "method": "by body part (a mammogram cannot reach the head); BurnedInAnnotation read from the header, pixels not viewed (18 Oct)"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.1239.1759.202560247507806254869717375973": {
+   "slot": "BR-X4",
+   "face": "clear",
+   "text": "pass (DICOM BurnedInAnnotation NO)",
+   "burned_in": "no",
+   "method": "by body part (a mammogram cannot reach the head); BurnedInAnnotation read from the header, pixels not viewed (18 Oct)"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.1239.1759.874758826952877022247107081189": {
+   "slot": "BR-X5",
+   "face": "clear",
+   "text": "pass (DICOM BurnedInAnnotation NO)",
+   "burned_in": "no",
+   "method": "by body part (a mammogram cannot reach the head); BurnedInAnnotation read from the header, pixels not viewed (18 Oct)"
+  },
+  "1.3.6.1.4.1.14519.5.2.1.1239.1759.140316239289681764863390092030": {
+   "slot": "BR-X6",
+   "face": "clear",
+   "text": "pass (DICOM BurnedInAnnotation NO)",
+   "burned_in": "no",
+   "method": "by body part (a mammogram cannot reach the head); BurnedInAnnotation read from the header, pixels not viewed (18 Oct)"
+  }
+ }
+}

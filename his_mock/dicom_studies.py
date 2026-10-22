@@ -1,15 +1,33 @@
-"""The mock PACS images (plan item V2-1.7): one synthetic DICOM study per imaging study of the store. SYNTHETIC only.
+"""The mock PACS images (plan item V2-1.7): one DICOM study per imaging study of the store.
 
     from his_mock import dicom_studies
     dicom_studies.build_all(store, dicom_dir)        # write the files, mark the studies available (generator.build calls it)
+    dicom_studies.build_all(store, dicom_dir, source="public")   # public library images where pacs_public maps them
     dicom_studies.upload_all(store, dicom_dir)       # POST every file to Orthanc (127.0.0.1:8042)
     dicom_studies.verify(store)                      # QIDO finds every study by Study UID with its accession and counts
 
-    python -m his_mock.dicom_studies --build | --upload | --verify   [--data DIR] [--orthanc URL]
+    python -m his_mock.dicom_studies --build [--images public|synthetic] | --upload | --verify   [--data DIR] [--orthanc URL]
 
-No real image is ever used or read: the pixels are abstract test patterns (a gradient, concentric rings, a rectangle,
-seeded noise and the burned-in word SYNTHETIC), drawn from the accession number. Nothing in them looks like anatomy or
-implies a finding (scope: humans view PACS images, no model reads them, and the mock carries no clinical content).
+Two image sources (the switch, pacs_public/README.md "Phase 2"):
+
+- synthetic (the default of build_all, so tests and fresh clones never read a downloaded file): abstract test patterns
+  (a gradient, concentric rings, a rectangle, seeded noise and the burned-in word SYNTHETIC) drawn from the accession
+  number. Nothing in them looks like anatomy or implies a finding.
+- public (`python -m his_mock.build` asks for it; build_all(source="public") records it in store.meta.image_source so the
+  reporting desk keeps it for studies reported live): when pacs_public/assignment.json maps the study's accession to a
+  series of the public library (/data/vaidyx/tb_resources/dicom_public, de-identified CC BY images from TCIA), that
+  series is copied and relabelled with the HIMS identity (pacs_public.relabel.relabel_series: UHID, name, birth date,
+  sex, the study UID of ids.study_uid(accession), series / instance UIDs of this module, accession, the HIMS study date
+  and time, institution, referring consultant, the test label as StudyDescription) and checked with
+  relabel.verify_relabelled. An accession the plan does not know (a study scheduled live at the HIMS desk) gets an
+  unused source series of the right modality and body part from the manifest, recorded in pacs_public/
+  assignment_live.json (for data/his_mock; another data directory keeps its own beside its store). Everything else
+  stays synthetic: a missing library (quietly), a test with no public series
+  (ultrasound, bone scan, brain MRI), or a series that fails to relabel or verify (logged, reason recorded).
+  Every study records "image_source": {"kind": "public", collection, licence, doi, source_series_uid, ...} or
+  {"kind": "synthetic", optional reason}. The env TB_HIS_MOCK_IMAGES=public|synthetic overrides the store's choice.
+
+Scope: humans view PACS images, no model reads them; nothing here interprets pixels (the relabeller rewrites headers only).
 
 Deterministic: the same store gives byte-identical files. Every UID is 2.25.<uuid5 as integer> in ids.STUDY_UID_NAMESPACE:
 the Study UID is ids.study_uid(accession) (the store's study_uid), a series is uuid5("<accession>|series|<n>"), an
@@ -19,6 +37,8 @@ Dates and times come from the store (the study's day, kept after the order and b
 import argparse
 import hashlib
 import json
+import logging
+import os
 import shutil
 import sys
 import urllib.error
@@ -33,11 +53,18 @@ from pydicom.dataset import Dataset, FileDataset, FileMetaDataset
 from pydicom.sequence import Sequence
 from pydicom.uid import PYDICOM_IMPLEMENTATION_UID, ExplicitVRLittleEndian
 
-from . import ids
+from . import ids, ui
 from .ids import IST, parse_time
 from .model import _bump
 
+LOG = logging.getLogger("his_mock.dicom_studies")
 ORTHANC_URL = "http://127.0.0.1:8042"
+REPO = Path(__file__).resolve().parent.parent
+PUBLIC_ASSIGNMENT = REPO / "pacs_public" / "assignment.json"          # the plan (python -I pacs_public/relabel.py --plan)
+LIVE_ASSIGNMENT = REPO / "pacs_public" / "assignment_live.json"       # picks for accessions the plan does not know
+LIVE_NAME = "assignment_live.json"           # another HIMS data directory (a throw-away copy) keeps its picks beside its store
+SOURCES = ("public", "synthetic")
+IMAGES_ENV = "TB_HIS_MOCK_IMAGES"
 INSTITUTION = "Vaidyx Demo Hospital (SYNTHETIC)"
 MANUFACTURER = "Vaidyx Synthetic"
 IMAGE_COMMENTS = "SYNTHETIC image, no clinical content"
@@ -366,19 +393,21 @@ def instance_dataset(store, study, series_no, instance_no, n_instances, sop_clas
 
 # ------------------------------------------------------------------------ build
 def series_plan(study):
-    """[(series number, instances)] for a study: one series with the modality's instance count."""
+    """[(series number, instances)] for a synthetic study: one series with the modality's instance count."""
     return [(1, SPECS[study["modality"]]["n"])]
 
 
-def build_study(store, study, dicom_dir, when=None):
-    """Write one study's files under dicom_dir/<accession slug>/ (replacing what was there) and update the store study:
-    series, counts, path and the Orthanc id. The study stays `registered` (images exist in the mock, not yet in the PACS)
-    until upload_all / upload_study marks it `available`. `when` (ISO) bumps meta.lastUpdated (the desk passes its
-    clock; the initial build leaves the clinical time)."""
-    d = Path(dicom_dir) / study_dirname(study)
-    if d.exists():
-        shutil.rmtree(d)
-    d.mkdir(parents=True)
+def image_mode(store, source=None):
+    """The image source of a build: `source` when given, else $TB_HIS_MOCK_IMAGES, else the store's recorded choice
+    (store.meta.image_source, written by build_all(source=...)), else synthetic."""
+    mode = source or os.environ.get(IMAGES_ENV) or (store.meta.get("image_source") if hasattr(store, "meta") else None) \
+        or "synthetic"
+    if mode not in SOURCES:
+        raise ValueError(f"image source {mode!r}: choose one of {', '.join(SOURCES)}")
+    return mode
+
+
+def _synthetic_series(store, study, d):
     series = []
     for series_no, n in series_plan(study):
         instances = []
@@ -388,6 +417,24 @@ def build_study(store, study, dicom_dir, when=None):
             instances.append({"uid": ds.SOPInstanceUID, "sop_class": ds.SOPClassUID, "number": k})
         series.append({"uid": series_uid(study_key(study), series_no), "number": series_no, "modality": study["modality"],
                        "instances": instances})
+    return series
+
+
+def build_study(store, study, dicom_dir, when=None, source=None, library=None):
+    """Write one study's files under dicom_dir/<accession slug>/ (replacing what was there) and update the store study:
+    series, counts, path, the Orthanc id and image_source. The study stays `registered` (images exist in the mock, not
+    yet in the PACS) until upload_all / upload_study marks it `available`. `when` (ISO) bumps meta.lastUpdated (the desk
+    passes its clock; the initial build leaves the clinical time). `source` and `library`: see image_mode and
+    PublicLibrary (the desk passes neither: the store's recorded choice and the installed library apply)."""
+    d = Path(dicom_dir) / study_dirname(study)
+    if d.exists():
+        shutil.rmtree(d)
+    d.mkdir(parents=True)
+    series, image_source = None, {"kind": "synthetic"}
+    if image_mode(store, source) == "public":
+        series, image_source = _public_series(store, study, d, library or PublicLibrary.for_dicom(dicom_dir))
+    if series is None:
+        series = _synthetic_series(store, study, d)
     patient = store.patients[study["patient_id"]]
     study["status"] = "registered"
     study["uploaded"] = False
@@ -396,6 +443,7 @@ def build_study(store, study, dicom_dir, when=None):
     study["series"] = series
     study["path"] = f"{Path(dicom_dir).name}/{d.name}"
     study["orthanc_id"] = orthanc_study_id(patient["uhid"], study["study_uid"])
+    study["image_source"] = image_source
     if when:
         _bump(study, when)
     return study
@@ -405,14 +453,20 @@ def performed(store, study):
     """True when the study was acquired: its order is completed (reported). A scheduled study is only booked and has no
     images yet; the reporting desk (1.5) builds them when the report is entered."""
     order = store.orders.get(study["order_id"])
-    return bool(order) and order["status"] == "completed" and study.get("status") != "cancelled"
+    if not order or study.get("status") == "cancelled":
+        return False
+    return order["status"] == "completed" or bool(study.get("acquired_at"))  # reported, or the exam is done (images first)
 
 
-def build_all(store, dicom_dir):
+def build_all(store, dicom_dir, source=None, library=None):
     """Build every performed imaging study (order completed); a cancelled or not yet performed study's directory is
-    removed. Returns the number of studies written."""
+    removed. `source` ("public" or "synthetic") is recorded in store.meta.image_source for the studies the desk builds
+    later; without it the store's choice applies (synthetic for a fresh store). Returns the number of studies written."""
+    if source is not None:
+        store.meta["image_source"] = image_mode(store, source)
     dicom_dir = Path(dicom_dir)
     dicom_dir.mkdir(parents=True, exist_ok=True)
+    library = library or (PublicLibrary.for_dicom(dicom_dir) if image_mode(store, source) == "public" else None)
     n = 0
     for study in sorted(store.imaging_studies.values(), key=lambda s: s["id"]):
         if not performed(store, study):
@@ -420,9 +474,288 @@ def build_all(store, dicom_dir):
             if stale.is_dir():
                 shutil.rmtree(stale)
             continue
-        build_study(store, study, dicom_dir)
+        build_study(store, study, dicom_dir, source=source, library=library)
         n += 1
     return n
+
+
+def image_counts(store):
+    """{"public": n, "synthetic": n, "fallback": [(accession, reason)]} over the studies with images."""
+    out = {"public": 0, "synthetic": 0, "fallback": []}
+    for s in sorted(store.imaging_studies.values(), key=lambda s: s["id"]):
+        if not s.get("series"):
+            continue
+        src = s.get("image_source") or {"kind": "synthetic"}
+        out["public" if src.get("kind") == "public" else "synthetic"] += 1
+        if str(src.get("reason") or "").startswith("public series not used"):
+            out["fallback"].append((study_key(s), src["reason"]))
+    return out
+
+
+# ------------------------------------------------------------------------ public library images
+class PublicLibrary:
+    """The public image library of pacs_public: MANIFEST.json (one row per downloaded series, with its raw_dir) under
+    `root`, the planned assignment (accession -> source series) and the live picks. Tests pass a tiny synthetic library
+    made in a temporary folder; the defaults are the installed library and pacs_public/assignment*.json."""
+
+    def __init__(self, root=None, assignment=None, live=None):
+        self.root = Path(root or ui.PUBLIC_LIBRARY)
+        self.assignment_path = Path(assignment or PUBLIC_ASSIGNMENT)
+        self.live_path = Path(live or LIVE_ASSIGNMENT)
+        self._rows = None
+
+    @classmethod
+    def for_dicom(cls, dicom_dir):
+        """The installed library, with the live picks of the HIMS data directory that holds dicom_dir: the demo HIMS of
+        this checkout (data/his_mock) writes pacs_public/assignment_live.json; any other directory (a throw-away copy
+        under $TB_HIS_MOCK_DATA, a test build) its own assignment_live.json beside its store."""
+        data_dir = Path(dicom_dir).resolve().parent
+        demo = (REPO / "data" / "his_mock").resolve()
+        return cls(live=LIVE_ASSIGNMENT if data_dir == demo else data_dir / LIVE_NAME)
+
+    @property
+    def manifest_path(self):
+        return self.root / "MANIFEST.json"
+
+    def available(self):
+        return self.manifest_path.is_file()
+
+    def rows(self):
+        """{source series UID: manifest row}."""
+        if self._rows is None:
+            data = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+            rows = data["series"] if isinstance(data, dict) else data
+            self._rows = {r["source_series_uid"]: r for r in rows}
+        return self._rows
+
+    @staticmethod
+    def _read(path):
+        try:
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def plan(self):
+        return self._read(self.assignment_path)
+
+    def live(self):
+        return self._read(self.live_path)
+
+    def save_live(self, data):
+        tmp = self.live_path.with_name(self.live_path.name + ".tmp")
+        tmp.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+        os.replace(tmp, self.live_path)
+
+    def source_dir(self, row):
+        """The extracted (face-checked) series folder of a manifest row: its raw_dir, else root/raw/<collection>/<uid>."""
+        d = Path(row.get("raw_dir") or "")
+        if row.get("raw_dir") and d.is_dir():
+            return d
+        return self.root / "raw" / str(row.get("collection")) / str(row["source_series_uid"])
+
+
+def _relabel_module():
+    try:
+        from pacs_public import relabel
+    except ImportError:          # a checkout without pacs_public: synthetic images
+        return None
+    return relabel
+
+
+def _consultant(store, order):
+    encounter = store.encounters.get(order.get("encounter_id")) or {}
+    cid = encounter.get("consultant_id")
+    return store.practitioners.get(cid) if cid else None
+
+
+def _person(store, patient, relabel):
+    """The planner's view of a HIMS patient: sex, age and cancer group (scenarios protocol, else from the orders)."""
+    group = relabel.PROTOCOL_GROUP.get(str(relabel._protocols().get(patient.get("uhid")) or "").lower())
+    if not group:
+        orders = [o for o in store.orders.values() if o.get("patient_id") == patient.get("id")]
+        group = relabel._infer_group([o.get("test") or "" for o in orders],
+                                     [o["ordering_department"] for o in orders if o.get("ordering_department")])
+    return {"sex": patient.get("sex"), "age": patient.get("age"), "group": group}
+
+
+def _plan_problem(store, study, entry, lib, relabel):
+    """Why a planned entry cannot serve this study (the plan was made for another store), or None."""
+    order = store.orders.get(study["order_id"]) or {}
+    need = relabel.need_key(order.get("test") or "", study.get("modality"))
+    roles = {s.get("role") for s in entry.get("series") or []}
+    if not need or not any(set(r) <= roles for _, r in relabel.NEEDS[need][1]):
+        return "the planned public series do not fit this test (rerun python -I pacs_public/relabel.py --plan)"
+    rows = lib.rows()
+    missing = [s["source_series_uid"] for s in entry["series"] if s["source_series_uid"] not in rows]
+    if missing:
+        return f"{len(missing)} planned series are not in the library manifest"
+    patient = store.patients[study["patient_id"]]
+    person = {"sex": patient.get("sex")}
+    source = {"sex": relabel._source_sex(rows[entry["source_series_uid"]])}
+    if not relabel._compatible(person, source, need):
+        return "the planned source patient's sex does not match this patient"
+    return None
+
+
+def _live_pick(store, study, lib, relabel):
+    """An entry for an accession the plan does not know (a study scheduled live at the HIMS desk): an unused source
+    series of the right modality and body part (the planner's roles), the same sex rules, never a source patient who
+    already serves another HIMS patient (the plan and the live picks of this store), the patient's own source patients
+    and cancer group preferred. Deterministic. The choice (public or synthetic) is recorded in assignment_live.json."""
+    acc = study_key(study)
+    order = store.orders.get(study["order_id"]) or {}
+    test = order.get("test") or ""
+    patient = store.patients[study["patient_id"]]
+    built = store.meta.get("built_at")
+    live = lib.live()
+    old = live.get(acc)
+    if old and old.get("uhid") == patient["uhid"] and old.get("test") == test and old.get("store_built_at") == built:
+        return old                                   # the same study again (a rebuild of this store)
+    need = relabel.need_key(test, study.get("modality"))
+    entry = None
+    if need is None:
+        reason = "stays synthetic: " + relabel._no_fit_reason(test, study.get("modality"))
+    else:
+        me = relabel._person_key(patient)
+        current = {study_key(s): s for s in store.imaging_studies.values()}
+
+        def holder(a):
+            st = current.get(a)
+            p = store.patients.get(st["patient_id"]) if st else None
+            return relabel._person_key(p) if p else "accession|" + a
+        owner, used = {}, set()
+        taken = [(a, e) for a, e in lib.plan().items()]
+        taken += [(a, e) for a, e in live.items() if a != acc and e.get("store_built_at") == built]
+        for a, e in taken:
+            if e.get("source_series_uid"):
+                owner.setdefault(e.get("source_patient_id"), holder(a))
+                used.update(s["source_series_uid"] for s in e.get("series") or [])
+        person = _person(store, patient, relabel)
+        sources = relabel._sources(list(lib.rows().values()))
+        best, fits, fits_sex = None, False, False
+        for sid in sorted(sources, key=lambda k: (sources[k]["slot"] or "", k)):
+            src = sources[sid]
+            if not relabel._best_option(need, src, set()):
+                continue
+            fits = True
+            if not relabel._compatible(person, src, need):
+                continue
+            fits_sex = True
+            if owner.get(sid) not in (None, me):
+                continue
+            opt = relabel._best_option(need, src, used)
+            if not opt:
+                continue
+            score = (opt[0] + (relabel.GROUP_BONUS if src["group"] and src["group"] == person["group"] else 0)
+                     + (1.0 if owner.get(sid) == me else 0.0) - relabel._source_penalty(person, src))
+            if best is None or score > best[0] + 1e-9:
+                best = (score, sid, opt)
+        if best:
+            _, sid, (_, src_study, take) = best
+            src = sources[sid]
+            prim = take[0]
+            desc = ", ".join(f"{r['modality']} {r.get('series_description') or r['role']}" for r in take)
+            entry = {"collection": prim["collection"], "source_series_uid": prim["source_series_uid"],
+                     "source_patient_id": sid, "slot": src["slot"], "source_study_uid": src_study,
+                     "reason": f"live pick for {order.get('label') or test}: {desc}; from {src['slot']} "
+                               f"{src['collection']}; source {src['sex'] or 'sex not recorded'}",
+                     "series": [{"source_series_uid": r["source_series_uid"], "role": r["role"],
+                                 "modality": r["modality"], "series_description": r.get("series_description"),
+                                 "instances": r.get("instances"), "deface_check": r.get("deface_check")}
+                                for r in take]}
+        elif not fits:
+            reason = f"stays synthetic: no public series in the library fits {order.get('label') or test}"
+        elif not fits_sex:
+            reason = (f"stays synthetic: no public series that fits {order.get('label') or test} suits a "
+                      f"{'female' if patient.get('sex') == 'F' else 'male' if patient.get('sex') == 'M' else ''} "
+                      "patient" + (" (mammograms are assigned to women only)" if need == "mammogram" else ""))
+        else:
+            reason = ("stays synthetic: every public series that fits this test is assigned to another study or "
+                      "patient (one source patient never serves two HIMS patients)")
+    if entry is None:
+        entry = {"collection": None, "source_series_uid": None, "source_patient_id": None, "reason": reason}
+    entry.update({"uhid": patient["uhid"], "test": test, "store_built_at": built, "picked_at": store.now()})
+    live[acc] = entry
+    lib.save_live(live)
+    return entry
+
+
+def _first_frame(src_dir):
+    import pydicom
+    first = next(iter(sorted(Path(src_dir).glob("*.dcm"))), None)
+    if first is None:
+        return ""
+    return str(pydicom.dcmread(str(first), stop_before_pixels=True, force=True).get("FrameOfReferenceUID", "") or "")
+
+
+def _public_series(store, study, d, lib):
+    """(series, image_source) of a study built from the public library, or (None, {"kind": "synthetic", "reason"}) when it
+    stays synthetic. A failure leaves d empty for the synthetic fallback."""
+    if not lib.available():
+        return None, {"kind": "synthetic", "reason": "public image library not installed"}
+    relabel = _relabel_module()
+    if relabel is None:
+        return None, {"kind": "synthetic", "reason": "pacs_public is not available"}
+    acc = study_key(study)
+    try:
+        plan = lib.plan()
+        if acc in plan:
+            entry, how = plan[acc], "planned"
+            problem = _plan_problem(store, study, entry, lib, relabel) if entry.get("source_series_uid") else None
+            if problem:
+                LOG.warning("%s: planned public images not used: %s", acc, problem)
+                return None, {"kind": "synthetic", "reason": "public series not used: " + problem}
+        else:
+            entry, how = _live_pick(store, study, lib, relabel), "live"
+        if not entry.get("source_series_uid"):
+            return None, {"kind": "synthetic", "reason": entry.get("reason") or "no public series assigned"}
+        rows = lib.rows()
+        patient = store.patients[study["patient_id"]]
+        consultant = _consultant(store, store.orders.get(study["order_id"]) or {})
+        t0 = study_time(store, study)
+        identity = {"name": _person_name(patient["name"]), "uhid": patient["uhid"], "sex": patient.get("sex"),
+                    "dob_iso": patient.get("dob_iso"), "age": patient.get("age"), "issuer": INSTITUTION}
+        referring = _person_name(consultant["name"], prefix="Dr") if consultant else ""
+        uid_map, series, source_uids, hashes = {}, [], [], {}
+        for n, s in enumerate(entry["series"], start=1):
+            row = rows[s["source_series_uid"]]
+            src = lib.source_dir(row)
+            frame = _first_frame(src)          # one new frame of reference per source frame (series may differ)
+            if frame and frame in uid_map:
+                new_frame = uid_map[frame]
+            elif frame_of_reference_uid(acc) not in uid_map.values():
+                new_frame = frame_of_reference_uid(acc)
+            else:
+                new_frame = uid_for(acc, "frame-of-reference", n)
+            res = relabel.relabel_series(
+                src, d, identity, study["study_uid"], lambda k: series_uid(acc, k),
+                lambda k, m: instance_uid(acc, k, m), acc, t0.date(), t0.strftime("%H%M%S"), INSTITUTION, referring,
+                study.get("description") or "", series_number=n, frame_of_reference_uid=new_frame, uid_map=uid_map)
+            source_uids += res["source_uids"]
+            hashes.update(res["pixel_sha256"])
+            series.append({"uid": res["series_uid"], "number": n, "modality": res["modality"] or study["modality"],
+                           "description": s.get("series_description") or "",
+                           "instances": [{"uid": u, "sop_class": c, "number": k} for u, c, k in
+                                         zip(res["sop_uids"], res["sop_classes"], res["instance_numbers"])]})
+        total = sum(len(x["instances"]) for x in series)
+        problems = relabel.verify_relabelled(d, {
+            "source_patient_id": entry["source_patient_id"], "collection": entry["collection"],
+            "source_uids": source_uids, "patient_id": patient["uhid"], "accession": acc,
+            "study_uid": study["study_uid"], "instances": total, "pixel_sha256": hashes})
+        if problems:
+            raise relabel.RelabelError(f"verify found {len(problems)} problems: " + "; ".join(problems[:3]))
+    except Exception as exc:   # never fails the build or the desk action: the study keeps synthetic images
+        LOG.warning("%s: public images not used, synthetic instead: %s", acc, exc)
+        shutil.rmtree(d, ignore_errors=True)
+        d.mkdir(parents=True, exist_ok=True)
+        return None, {"kind": "synthetic", "reason": f"public series not used: {type(exc).__name__}: {exc}"[:300]}
+    row = rows[entry["source_series_uid"]]
+    return series, {"kind": "public", "collection": entry["collection"], "licence": row.get("licence_name"),
+                    "licence_url": row.get("licence_url"), "doi": row.get("collection_doi"),
+                    "source_series_uid": entry["source_series_uid"],
+                    "source_series_uids": [s["source_series_uid"] for s in entry["series"]],
+                    "slot": entry.get("slot"), "assignment": how, "verified": True}
 
 
 # ------------------------------------------------------------------------ Orthanc
@@ -445,18 +778,42 @@ def study_files(dicom_dir, study=None):
     return sorted(root.rglob("*.dcm"))
 
 
+def stale_instances(study, orthanc_url=ORTHANC_URL):
+    """SOP Instance UIDs Orthanc holds for this study (its Orthanc id) that the store does not list: left by an older
+    build of the same accession (synthetic before public, or another source series). Empty when Orthanc has no copy."""
+    if not study.get("orthanc_id"):
+        return set()
+    try:
+        held = _request(f"{orthanc_url.rstrip('/')}/studies/{study['orthanc_id']}/instances", timeout=120) or []
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return set()
+        raise
+    have = {(i.get("MainDicomTags") or {}).get("SOPInstanceUID") for i in held} - {None}
+    want = {i["uid"] for se in study.get("series") or [] for i in se.get("instances") or []}
+    return have - want
+
+
 def upload_all(store, dicom_dir, orthanc_url=ORTHANC_URL, studies=None, when=None):
     """POST every .dcm of the built studies (or of `studies`) to <orthanc>/instances. Idempotent: Orthanc keeps one copy
-    per SOP Instance UID. A study whose files all went in is marked `available` / `uploaded` (meta bumped when `when` is
-    given). Returns {"files", "stored", "already_stored", "failed", "studies"} (Orthanc study ids)."""
+    per SOP Instance UID. A study Orthanc already holds with instances the store does not list (an older build) is
+    deleted first, so the PACS shows exactly the built images. A study whose files all went in is marked `available` /
+    `uploaded` (meta bumped when `when` is given). Returns {"files", "stored", "already_stored", "failed", "replaced",
+    "studies"} (Orthanc study ids)."""
     base = orthanc_url.rstrip("/")
-    counts = {"files": 0, "stored": 0, "already_stored": 0, "failed": 0, "studies": []}
+    counts = {"files": 0, "stored": 0, "already_stored": 0, "failed": 0, "replaced": 0, "studies": []}
     seen = set()
     todo = studies if studies is not None else sorted(store.imaging_studies.values(), key=lambda s: s["id"])
     for study in todo:
         if study.get("status") == "cancelled" or not study.get("series"):
             continue
         failed_before = counts["failed"]
+        try:
+            if stale_instances(study, base):
+                delete_study(study["orthanc_id"], base)
+                counts["replaced"] += 1
+        except (urllib.error.URLError, OSError, ValueError):
+            pass                                     # the posts below report an unreachable PACS
         files = study_files(dicom_dir, study)
         for f in files:
             counts["files"] += 1
@@ -555,26 +912,32 @@ def main(argv=None):
 
     ap = argparse.ArgumentParser(prog="python -m his_mock.dicom_studies", description=__doc__.splitlines()[0])
     g = ap.add_mutually_exclusive_group(required=True)
-    g.add_argument("--build", action="store_true", help="write the synthetic DICOM and save the store")
+    g.add_argument("--build", action="store_true", help="write the DICOM studies and save the store")
     g.add_argument("--upload", action="store_true", help="upload every available study to Orthanc")
     g.add_argument("--verify", action="store_true", help="check every available study is in Orthanc")
     ap.add_argument("--data", default=None, help="mock data directory (default data/his_mock/ or $TB_HIS_MOCK_DATA)")
     ap.add_argument("--orthanc", default=ORTHANC_URL, help="Orthanc base URL (default %(default)s)")
+    ap.add_argument("--images", choices=SOURCES, default=None,
+                    help="--build: image source (default: the store's recorded choice, else synthetic)")
     args = ap.parse_args(argv)
     files = layout(args.data)
     if "tumour_board" in str(files["data_dir"]).replace("\\", "/").split("/"):
         ap.error("the mock hospital never touches data/tumour_board/")
     store = Store.load(files["store"])
     if args.build:
-        n = build_all(store, files["dicom"])
+        n = build_all(store, files["dicom"], source=args.images)
         store.save(files["store"], files["events"])
-        print(f"built {n} synthetic studies into {files['dicom']}")
+        c = image_counts(store)
+        print(f"built {n} studies into {files['dicom']}: {c['public']} with public library images, "
+              f"{c['synthetic']} synthetic studies")
+        for acc, reason in c["fallback"]:
+            print(f"  {acc}: {reason}")
         return 0
     if args.upload:
         c = upload_all(store, files["dicom"], args.orthanc)
         store.save(files["store"], files["events"])   # the studies are now available (uploaded)
         print(f"uploaded {c['files']} files: {c['stored']} stored, {c['already_stored']} already stored, "
-              f"{c['failed']} failed, {len(c['studies'])} studies")
+              f"{c['failed']} failed, {len(c['studies'])} studies ({c['replaced']} older copies replaced)")
         return 1 if c["failed"] else 0
     problems = verify(store, args.orthanc)
     for p in problems:

@@ -1,242 +1,173 @@
-# his_mock: the mock Indian hospital (SYNTHETIC)
+# his_mock: DemoHIMS, the hospital system of the Vaidyx Demo Hospital (SYNTHETIC)
 
-A separate app standing in for a hospital's HIS, LIS, RIS and PACS in the Vaidyx-TB V2 demo and tests. Vaidyx-TB never imports
-it; it reads the mock only through `tumour_board/his_client.py`. Data lives in `data/his_mock/` (gitignored, rebuilt from a seed).
-Everything here is synthetic: fake IDs (`VXH/…`, `IP/…`, `OP/…`, `VXREG-…`), the fictitious "Vaidyx Demo CA", every patient
-marked SYNTHETIC.
+A separate app that stands in for an Indian hospital's HIMS (registration, OPD, IPD), LIS, RIS, pathology system and the
+link to the PACS, in the look of the government systems many doctors know (e-Hospital, e-Sushrut). It is named "Vaidyx
+Demo Hospital", product label "DemoHIMS", and runs on 127.0.0.1:7130 only (never tunnelled). Vaidyx-TB never imports it:
+it reads the hospital only through the FHIR API with the bearer token (`tumour_board/his_client.py`), exactly as it would
+read a real HIS. Data lives in `data/his_mock/` (gitignored, rebuilt from a seed).
 
-## scenarios.json (plan item V2-0.3)
+**Everything is synthetic.** Every patient name ends in "(SYNTHETIC)"; identifiers are invented (`VXH/26/...` UHIDs,
+`VXH/T/26/...` temporary UHIDs, `OP/26/...`, `IP/26/...`, accessions `RAD/26/...`, sample barcodes `VXS...`, block Nos.
+`PATH/26/00412-A1`, ABHA sandbox numbers and `@sbx` addresses, `PMJAY-VX-...`, council numbers `VXREG-...`); signatures
+come from the fictitious "Vaidyx Demo CA"; every page carries the yellow SYNTHETIC DATA ribbon and every PDF the
+watermark "SYNTHETIC - DEMO ONLY". No Aadhaar number is ever asked for or shown. The PACS holds synthetic test patterns
+(and, when loaded, public research images relabelled with these fake IDs, credited in the PACS); no model ever reads them.
 
-The list of every V2 scenario the mock must generate and the outcome Vaidyx-TB must show for each. Built for item 1.1
-(generator) and the e2e of Phases 3 to 6.
+## Run it
 
-| Key | What it holds |
-|---|---|
-| `hospital` | Settings the scenarios assume: NCG level **optimal** (Essential and Optimal records required; set per mock Case File as `hospital_level`, the V1 hospital default stays essential), PM-JAY empanelled, the surgical oncology list, the four board heads |
-| `identifier_patterns` | Regex and example for every synthetic identifier (UHID, temporary UHID, IP / OP No., accession, block No., barcode, ABHA, PM-JAY ID, Reg. No., CA, masked Aadhaar) |
-| `document_types`, `tests` | Vaidyx-TB document types, and each orderable test with its document type and producing department (`any_treating` = clinical records) |
-| `departments` | The 22 treating and 8 supporting departments of plan section 4, with code (accession prefix), the tests they produce, consultants |
-| `patients` | 19 patients (P01 to P19) across the five protocols, with encounters (OP visits, IP admissions), records and Case Files |
-| `scenarios` | 31 scenarios: 11 of the plan 1.1 table (`plan_1_1: true`), 19 for the orchestration checklist, and 1 for the plan 8.1 demo (`demo_breast_preliminary_radiology`, P19: both Radiology reports preliminary, phase 8) |
-| `checklist` | The orchestration.md "V2 scenario checklist" as tags, grouped |
-
-**A record** carries `test`, `type`, `producing_department`, `encounter` (OP or IP No.; `registration` when filed under a
-temporary or duplicate UHID), `order_status` (never_ordered, ordered, scheduled, sample_collected, completed, cancelled),
-`report_status` (none, preliminary, final, amended, cancelled), `signed` with its `signature` (signer, Reg. No., time, demo CA,
-serial, the printed block), `accession`, `values` as printed (Indian units) and `serves` (protocol: requirement ids it is meant
-to satisfy). Special fields: `versions` (amended reports, oldest first), `omitted_values` (a value the signed report leaves out),
-`observation_values` (the HIS Observation disagrees with the PDF), `source: outside_upload` (not in the HIS; the doctor uploads it).
-A `never_ordered` record is a placeholder: the generator must **not** create it.
-
-**A Case File** (`patients[].case_files`) names protocol, NCG setting, owner and its `first_fetch` gate: the gaps (requirement,
-level 1 / 2, reason, department, accession No. or null) Vaidyx-TB must show right after the first HIS fetch.
-
-**A scenario** has `patients`, `setup` (what the mock holds), `expected` (in Vaidyx-TB terms: `text`, `gate`, `requests` with
-or without accession No., `labels`, `flags`, `steps`, `board`, `never`), `phase` (the phase whose e2e asserts it), `also_phases`,
-`checklist` tags and, where a decision is still open, `open_questions`.
-
-## How to use it
-
-```python
-from his_mock import scenarios
-data = scenarios.load()
-assert scenarios.validate(data) == []          # ids, patterns, dates, departments, coverage, no Aadhaar
-for s in data["scenarios"]:
-    pts = scenarios.patients_for(s, data)       # 1.1 builds these; e2e asserts s["expected"]
+```bash
+/data/vaidyx/venv/app/bin/python -m his_mock.build --upload   # rebuild data/his_mock from the fixtures, PDFs, HL7, DICOM,
+                                                              # upload the studies to Orthanc (127.0.0.1:8042), logins
+his_mock/serve.sh restart                                     # uvicorn on 127.0.0.1:7130 (start | stop | status | restart)
+curl -s http://127.0.0.1:7130/health                          # public JSON: {"ok": true, "patients": ..., "accounts": 9}
 ```
 
-- **1.1 generator:** build every patient's registrations, encounters and records exactly as listed (statuses, signatures,
-  accession Nos., values), skipping `never_ordered` and `outside_upload` records (the outside ones become upload files for 3.6).
-- **e2e (3.2 onward):** for each scenario of its phase, create the Case File from the UHID (or the IP / OP No. given), then
-  assert `expected`.
+Then open http://127.0.0.1:7130/his and sign in. Orthanc: `his_mock/orthanc.sh start | stop | status | load`. Log:
+`~/vaidyx/logs/his_mock.log`. A rebuild replaces the store (every change made on the screens is gone) but keeps the token,
+the accounts and their passwords, the sessions and the audit files.
 
-**The demo (plan item V2-8.1):** `python -m tumour_board.eval.demo_v2 --fresh` rebuilds this store (`his_mock.build --upload`, `serve.sh restart`) and runs the V2 story on it with the role logins: P19 (`VXH/26/004219`, both radiology reports preliminary) through notify, the desk sign, re-fetch, the board session and the images, then P14 (referral) and P18 (two primaries); `docs/tumour-board/DEMO_V2.md` is the walkthrough. The desk sign changes the live store, so rebuild (or run the demo with `--fresh`) before the scenario check (`python -m tumour_board.eval.his_scenarios`, 21 Case Files) or a second run.
+## Logins and roles
 
-Tests: `/data/vaidyx/venv/app/bin/python -m pytest his_mock/tests -q`. They also cross-check every first-fetch gate against
-`tumour_board/protocols/*.json` (read as files, never imported), so a protocol change that moves a gap shows up here. That
-cross-check is a simplified model of `rules.py` (tiers, NCG setting, hospital level, `applies_if`, facts-only records); it does not
-reproduce region keywords or document-type disputes. The Phase 3 and 4 e2e is the real check.
+The build (and `python -m his_mock.auth`) creates 9 synthetic staff accounts in `data/his_mock/accounts.json` (bcrypt
+hashes). Their passwords (12 random characters) are written once to **`data/his_mock/logins.tsv`** (email, role,
+password; mode 600) and never printed or logged. `python -m his_mock.auth --reset` gives every account a new password
+(the file is rewritten, every session ends). A password reset in the Admin module is shown once on the screen; the file
+then says that the account was reset.
 
-Signatures: one certificate serial per signer (the DSC belongs to the person); `document_hash` is filled by 1.2 from the rendered PDF
-and `verification_status` is `verified` unless a scenario says otherwise.
+| Email (`@vaidyx-demo.invalid`) | Role | Signs as | What the role does |
+|---|---|---|---|
+| `reception` | Registration desk | cannot sign | registers (permanent or temporary UHID), opens OP visits, admits, transfers |
+| `opd.doctor` | OPD consultant, also ward work | Dr Kavitha Raghunathan, Breast Surgery | OP visits, OPD note, order entry, referral, admission, transfer, discharge summary, discharge |
+| `ward.doctor` | Ward doctor | the same Breast Surgery consultant | the ward round: orders, transfer, discharge summary, discharge |
+| `lab.tech` | Laboratory technician | cannot sign | collects samples, enters results, receives pathology specimens, cancels |
+| `lab.doctor` | Laboratory consultant | Dr Anil Saxena, Biochemistry | collects samples, enters results, verifies and signs, amends, cancels |
+| `rad.tech` | Radiology technician | cannot sign | schedules studies, saves preliminary reports, cancels |
+| `radiologist` | Radiologist | Dr Sanjay Joshi, Radiology | everything of the technician plus sign and addendum |
+| `pathologist` | Pathologist | Dr Revathi Krishnan, Pathology | specimen receipt, HPE / IHC / molecular / cytology entry, sign, add-on orders, addendum |
+| `admin` | Hospital IT admin | cannot sign | the Admin module only (departments, practitioners, accounts, audit) |
 
-## The hospital store (plan item V2-1.1)
+A signature carries the practitioner's Reg. No. and the demo CA serial. A consultant writes and signs only the notes and
+reports of their own department (the Breast Surgery consultant cannot sign an ENT discharge summary or a Pulmonology
+bronchoscopy report; the page says so). Every signed-in user may look at every module; each action is checked against
+the role and a refusal is a plain page: "Your role cannot do this: only the Radiologist can sign a radiology report."
 
-`python -m his_mock.build [--out DIR] [--seed N]` (app venv) replays every fixture patient through the lifecycle
-transitions of `model.Store` (register, OP visit, admission, ward transfer, referral, order, schedule, sample, preliminary,
-final signed, amendment, cancellation) in time order and writes `data/his_mock/` (gitignored):
+**Security.** Session cookie `vxhis_session` (HttpOnly, SameSite=Lax, 12 hours; sessions survive a restart in
+`sessions.json`). Five wrong passwords lock an account for 15 minutes, said plainly on the login page; more than 30 failed
+sign-ins from one address in 15 minutes pause sign-ins from it. Every form carries a per-session CSRF token, next to the
+same-origin check on every POST. Pages are `no-store`, framed only by the same origin, `nosniff`. Every login, logout and
+screen action is a line of `his_audit.jsonl`; every reporting action also of `desk_audit.jsonl`; neither ever holds a
+password or the token. What stays without a login: `GET /` and `/health` (JSON), `/fhir` (its own bearer token;
+`/fhir/metadata` open), `/documents/...` (bearer token, the path Vaidyx-TB uses). `/view/reports/...` takes the login
+cookie or a bearer token. The JSON APIs `/his/api/...` and `/desk/api/...` (18 Oct, security review #3 and #13): reads take
+the read token, the write token or a staff session; writes take the **write token** (`data/his_mock/write_token`, mode 600,
+created by the build or at start when missing: the e2e scripts and `tumour_board/eval/demo_v2.py`) or a staff session whose
+roles allow the same action on the screens (a desk signature then carries the signed-in consultant, never a signer named in
+the body). The FHIR read token changes nothing. Signing out is a POST with the form token (GET `/his/logout` shows the
+button); a sign-in ends the browser's earlier session; every HTML page carries a Content-Security-Policy (this origin, the
+page's one style block and script by hash, images from here or `data:`); uvicorn runs with `--no-proxy-headers`, so
+`X-Forwarded-For` never changes the address the sign-in pause counts. A module form acts only on its own orders (a
+laboratory form never on an imaging order) and a signature needs a consultant of the order's department (any laboratory
+department for the laboratory; Radiology or Nuclear Medicine for imaging).
+
+**Deployment step (not enabled in the demo): Orthanc authentication.** `his_mock/orthanc.json` leaves Orthanc's REST API
+without a login on 127.0.0.1:8042, so any local user of this server can read or change the studies. Before anything beyond
+a single-user demo server: set `"AuthenticationEnabled": true` and `"RegisteredUsers": {"<user>": "<password>"}` in
+`orthanc.json` (the password from a mode-600 file, never in git), give the HIMS PACS proxy (`pacs_proxy.py`), the Vaidyx
+PACS proxy (`tumour_board/pacs.py`) and the upload in `dicom_studies.py` that user as HTTP basic credentials, restart
+Orthanc and run `python -m his_mock.build --upload` to check the upload and the viewer still work.
+
+## The screens
+
+Classic look (`ui.py`): dark blue header band with the hospital name, the DemoHIMS label, the signed-in user and role and
+Logout; a grey module bar with the active module underlined; a yellow patient banner on every patient page (Name, UHID,
+Age / Sex, IP / OP No., Ward / Bed, Consultant); dense bordered tables with alternating rows; 13 px Verdana / Arial;
+grey buttons (hover, pressed, disabled and "working" states; a form is sent once), blue links, small status pills;
+validation errors next to the field with what was typed kept; an empty-state line in every list. No teal: it is clearly
+not Vaidyx. Readable at 1024 px; tables scroll inside their box on a phone.
+
+| Module | Path | What it holds |
+|---|---|---|
+| Registration | `/his` | search by UHID (permanent or temporary), IP / OP No., ABHA number or address, accession / Lab No. (an exact hit opens the patient) or name; recent registrations; new registration (Indian address fields, PIN, mobile, ABHA optional and permanent only, PM-JAY ID optional, permanent or temporary; a possible duplicate is shown first, "Register anyway"); patient page with demographics, similar registrations (linked in Vaidyx-TB, never merged here) and the timeline of OP visits and admissions with their orders and PDFs |
+| OPD | `/his/opd` | today's OPD list by date, department and unit; recent visits; the clinical and procedure reports still to write. The visit page (`/his/encounters/{id}`) holds the OPD consultation note (an `opd_note` record signed at once: PDF, HL7 ORU, FHIR DocumentReference), **order entry** (tick tests grouped by performing department, supporting departments first, consultations included; one order and accession each through `model.place_order`), referral and accept referral |
+| IPD | `/his/ipd` | ward census with the PM-JAY Pre-Authorization line, recent discharges. Admit is on the patient page; transfer, the discharge summary form (diagnosis, course, advice; signed once) and discharge on the admission page, which also has order entry |
+| Laboratory | `/his/lab` | work list tabs Ordered / Sample collected / Results entered / Verified, by laboratory (Pathology CBC, Biochemistry LFT / RFT / CEA, Microbiology viral markers); collect sample (barcode allocated, printable label); result entry per test template (`templates.py`: value keys, Indian units, reference intervals, sex-specific haemoglobin; numbers checked, choices from a list); verify and sign by the laboratory consultant only; amendment with a note; cancel with a reason; PDF links |
+| Radiology | `/his/radiology` | work list tabs Ordered / Scheduled / Reported (preliminary) / Signed (Radiology and Nuclear Medicine); schedule with date, time and room (registers the ImagingStudy and its Study UID under the accession; a study booked for a later day takes no report yet); report entry Technique / Comparison / Findings / Impression saved as preliminary; sign by the radiologist; addendum; cancel; **Open images** once the study has images |
+| Pathology | `/his/pathology` | work list tabs Ordered / Specimen received / Entered / Signed; specimen receipt with block No. (an add-on offers the block already received); HPE entry (specimen, gross, microscopy, type, grade, diagnosis); IHC panels per template (ER, PR, HER2, Ki-67; PD-L1) or as `marker: result` lines; molecular; cytology; preliminary or sign; add-on IHC / molecular orders by the pathologist on the same encounter; addendum |
+| Exchange | `/his/exchange` | the HL7 v2 viewer (last 200 messages of `events.hl7`, newest first, filter by patient and type, raw text per message at `/his/exchange/hl7/{control id}`), the FHIR R4 base and example searches, the events log, whether the token file exists (never its value) |
+| Admin | `/his/admin` | departments (30), practitioners with an add form, the 9 accounts with a password reset shown once, the audit of `his_audit.jsonl` and `desk_audit.jsonl` |
+
+The old reporting desk links still work: `/desk` lists the supporting departments with their counts and links into the
+modules; `/desk/{code}`, `/desk/{code}/orders/{id}` and `/desk/{code}/reports/{id}` open the module page.
+
+Every action runs one `model.Store` transition under the hospital lock. Report actions go through the reporting engine
+(`desk.run_action`): render the new version's PDF, build the synthetic DICOM of an imaging order that is now reported and
+upload it when Orthanc answers (a PACS that is down never fails a sign: an amber message says "images not uploaded"),
+append the HL7 message, save, audit. Results a technician enters are recorded under the performing department's first
+consultant until the laboratory consultant verifies and signs (the audit names the technician).
+
+## The PACS viewer through the HIMS
+
+`GET / HEAD /api/tb/pacs/{path}` (`pacs_proxy.py`, login required) streams to Orthanc at 127.0.0.1:8042, for
+`ohif/...` (the viewer) and `dicom-web/...` (QIDO / WADO-RS) only; Orthanc's REST API, the explorer, plugins and odd paths
+are refused with a plain message; writes get 405. The path looks like the Vaidyx one on purpose: the OHIF plugin is built
+with `RouterBasename /api/tb/pacs/ohif/` and the DICOMweb `PublicRoot /api/tb/pacs/dicom-web/` because the Vaidyx app
+proxies the viewer under that prefix, so any second host must serve the same prefix. "Open images" therefore links
+`/api/tb/pacs/ohif/viewer?StudyInstanceUIDs=<study uid>`, which opens OHIF on :7130 as on :7000. Orthanc answers HEAD
+with 404, so a HEAD is sent upstream as a GET and only its headers are returned. `TB_HIS_MOCK_ORTHANC` overrides the URL.
+
+## Data and build
+
+`python -m his_mock.build [--out DIR] [--seed N] [--no-pdf] [--no-hl7] [--no-dicom] [--upload]` replays every fixture of
+`scenarios.json` (v0.3.5: 19 patients, 21 registrations, 31 scenarios; 30 departments, 22 treating and 8 supporting;
+38 tests; 22 practitioners) through the transitions of `model.Store` in time order, deterministic per seed, and writes:
 
 | File | What |
 |---|---|
-| `store.json` | Tables keyed by deterministic ids (`vxh-26-004201`, `op-26-118701`, `rad-26-00981`): departments, practitioners, tests, patients (one per registration; a temporary or duplicate UHID is a separate, unlinked patient), encounters, orders, specimens, reports (every version kept), signatures, imaging studies; `hospital` settings (NCG level optimal, PM-JAY empanelled, fetch window) and `meta` (seed, fixture version, counters) |
-| `events.jsonl` | One HL7 v2-style event per state change (ADT A28 / A04 / A01 / A02 / A03, REF I12 / I13, ORM O01, ORU R01 with OBR-25 O / S / I / P / F / C / X), the source of `meta.lastUpdated` (1.4 renders them) |
-| `fixture_index.json` | Fixture slot (`P03`, `P03-R07`) to store id, plus the never-ordered and outside-report records the store must not hold |
-| `documents/`, `dicom/` | Report PDFs (1.2) and synthetic DICOM (1.7) |
-| `token` | The API token for 1.3 (mode 600, kept on rebuild) |
+| `store.json` | departments, practitioners, tests, patients (one per registration), encounters, orders, specimens, reports (every version), signatures, imaging studies, `hospital` settings, `meta` (seed, counters) |
+| `events.jsonl`, `events.hl7` | one event and one HL7 v2.5-style message per change (ADT A28 / A04 / A01 / A02 / A03, REF I12 / I13, ORM O01, ORU R01) |
+| `fixture_index.json` | fixture slot (`P03`, `P03-R07`) to store id |
+| `documents/` | one PDF per report version (`documents.py`, WeasyPrint in the pdf venv): NABL-style lab tables, radiology, HPE, IHC, molecular, cytology, OPD note, discharge summary layouts; signature block of the demo CA |
+| `dicom/` | synthetic DICOM per performed imaging study (`dicom_studies.py`; `--upload` sends them to Orthanc and verifies them by QIDO) |
+| `token` | the FHIR bearer token, read only (mode 600, kept on rebuild) |
+| `write_token` | the token of the JSON write APIs for machine callers (mode 600, kept on rebuild; created at start when missing) |
+| `accounts.json`, `logins.tsv`, `sessions.json`, `his_audit.jsonl`, `desk_audit.jsonl` | logins (kept on rebuild) and the audit |
 
-`model.py` is pure stdlib and never imports `tumour_board`. Allocation of new UHIDs, OP / IP Nos., accession Nos. and barcodes
-starts above the fixture numbers, so the reporting desk (1.5) and the HIS screens (1.6) never collide with them. Store ids
-are the identifier slugs; `Store.patient_by_identifier()` resolves a UHID, IP / OP No., ABHA number or address, and
-`Store.similar_registrations()` lists the other registrations with the same name, sex and age (a person links them; nothing
-is merged). The hospital's `today` is 13/10/2026; P12 has an OPD note from 14/07/2025, older than the 12-month window.
+New UHIDs, visit and admission numbers, accessions and barcodes are allocated above the fixture numbers. The build refuses
+to wipe a store without the SYNTHETIC marker and never writes under `data/tumour_board/`. The fixture hospital's "today"
+is 13/10/2026; actions on the screens carry the real time.
 
-## Report documents (plan item V2-1.2)
+## FHIR, HL7 and the JSON APIs (what Vaidyx-TB and the scripts use)
 
-`generator.build()` renders every version of every report to `documents/<report id>-v<n>.pdf` (`documents.render_all`, one
-subprocess of the pdf venv running `render_cli.py` with WeasyPrint 69; byte-for-byte reproducible) and fills
-`versions[].document {path, sha256}` and `signatures[].document_hash`. `documents.html_for(store, report, version)` builds
-the page from the store only: hospital and department, a title that names one document type, an identity grid (patient, UHID,
-Age / Sex, IP No. or OP No., ABHA No., Accession No. or Lab No., Sample ID, Block No., Ordered / Collected / Reported on in
-DD/MM/YYYY HH:MM, Ref. by, Unit), the body in the layout of its type (NABL-style lab table with Biological reference interval;
-radiology Technique / Findings / Impression; HPE Specimen / Block No. / Gross / Microscopy / Diagnosis; IHC and molecular
-tables; cytology; endoscopy; OPD note; referral; discharge summary with ward / bed movements and referrals) and a footer that
-starts with `Report status: FINAL | PRELIMINARY | AMENDED | CANCELLED`, then the signature block verbatim (signed), "Reported
-by: Dr X (preliminary, verification awaited)" (preliminary) or "Signature pending" (final, never signed). Every value of
-`values` is printed as given; `omitted_values` and `observation_values` never are. Every page carries the watermark
-"SYNTHETIC - DEMO ONLY" and a SYNTHETIC footer.
+- **FHIR R4** at `/fhir` in NRCeS (ABDM) IG v6.5.0 shapes, bearer token in the `Authorization` header only (a token in the
+  query is refused): Patient, Encounter, ServiceRequest, Specimen, DiagnosticReport (versioned, `_history`), Observation,
+  DocumentReference (one per version, PDF inside), Provenance (the signature), ImagingStudy (viewer and DICOMweb links),
+  Media, Practitioner, Organization; `$document`, `Patient/$everything`, `Patient/$similar`; search by identifier,
+  patient, encounter, status, `_lastUpdated` (the delta re-fetch), `_count` / `_offset`. Notes and discharge summaries
+  written on the screens appear as DocumentReferences, reports as DiagnosticReports, at once.
+- **Conformance:** `python -m his_mock.eval.conformance --data data/his_mock` (or `--url ... --token-file ...`) prints
+  `CONFORMANCE OK: <n> resources checked`.
+- **HL7 v2** feed in `data/his_mock/events.hl7` (no network endpoint), shown in Exchange; `hl7.py` reads and parses it.
+- **JSON:** `/his/api/search`, `/his/api/patients/{id}`, `/his/api/encounters`, POST `/his/api/registrations`,
+  `/his/api/patients/{id}/visits | admissions`, `/his/api/encounters/{id}/refer | accept | transfer | discharge | orders`;
+  `/desk/api/{code}/pending`, POST `/desk/api/{code}/orders/{id}/schedule | collect | preliminary | sign | cancel`,
+  `/desk/api/{code}/reports/{id}/addendum` (409 lifecycle, 400 or 422 bad input, 404 unknown).
 
-- **Tamper scenario** (`signature_fails_verification`, P03-R10, the discharge summary of IP/26/01872): its signature has
-  `verification_status: failed`; the store keeps the PDF untouched and records as `document_hash` the sha256 of the PDF with its
-  last byte flipped, so a verifier sees the mismatch. Every other signed version's `document_hash` equals its PDF's sha256.
-  `scenarios.json` keeps `document_hash: null` (the store is the source of truth for hashes).
-- **Outside reports** (P06-R06, P17-R10): `documents/outside/<record id>.pdf` with the outside laboratory's name, the printed
-  identifiers (the masked Aadhaar "XXXX XXXX 1234" exactly as given), printed status and signature lines, no demo CA; the
-  scanned one also gets `<record id>-scan.png` (slight rotation, paper tone, noise) for the OCR path (3.6).
-- **Reporting desk (1.5):** `documents.render_versions(store, files, [(report, version)])` renders only those versions with
-  the same naming and hash bookkeeping (well under a second for one).
-- **Check:** `python -m his_mock.documents --check [--data DIR]` (app venv, pypdf) lists missing PDFs, values not in the text
-  layer, printed omitted values, signed versions without the block, hash mismatches, and any "Sahyadri", `SYN-`, em dash or
-  Aadhaar-like number; `--render` re-renders into an existing store.
+## Tests
 
-## The event feed (plan item V2-1.4)
+```bash
+/data/vaidyx/venv/app/bin/python -m pytest his_mock/tests -q
+/data/vaidyx/venv/app/bin/python -m his_mock.eval.conformance --data data/his_mock
+LD_LIBRARY_PATH=/data/vaidyx/venv/pdf/lib /data/vaidyx/venv/app/bin/python -m his_mock.eval.ui_test \
+    --base http://127.0.0.1:7130 --data data/his_mock          # Playwright, 1366 / 1920 / 1024 / 390 px
+```
 
-`his_mock/hl7.py` renders every store event as one HL7 v2.5-style message (segments split by `\r`, pipe-delimited) and
-`generator.build()` writes them to `data/his_mock/events.hl7` in event order, each followed by a blank line (`\r\n\r\n`).
-MSH names `VXHIS` / `VXDEMO`, the event time (`YYYYMMDDHHMMSS+0530`) and the event id as control id.
+`test_auth.py` (accounts, login file, lock-out, cookie, CSRF, role refusals, /view/reports, reset), `test_modules.py`
+(OPD order entry and note, IPD, Laboratory templates and signing, Radiology, Pathology, Exchange, Admin, the classic
+shell), `test_screens.py` (registration, timeline, ADT forms, JSON API), `test_desk.py` (reporting engine JSON, desk
+aliases), `test_pacs_proxy.py` (allow-list, login, HEAD, Orthanc down), `test_templates.py`, `test_documents.py`,
+`test_fhir.py`, `test_conformance.py`, `test_hl7.py`, `test_dicom.py` (Orthanc tests run only when 8042 answers),
+`test_model.py`, `test_generator.py`, `test_scenarios.py`, `test_app.py`. Tests build into temporary directories; none
+touches `data/his_mock` or the live Orthanc studies they did not add.
 
-| Event | Message | Segments |
-|---|---|---|
-| Registration, OP visit, admission, ward transfer, discharge | `ADT^A28` / `A04` / `A01` / `A02` / `A03` | MSH, EVN, PID, PV1 |
-| Referral requested / accepted | `REF^I12` / `I13` | MSH, RF1 (status P / A, from^to department, reason), PRD RP / RT, PID, PV1 |
-| Order placed, scheduled, sample collected, cancelled | `ORM^O01` | MSH, PID, PV1, ORC (NW / SC / CA, ORC-5 IP / SC / CA), OBR (OBR-25 O / S / I / X) |
-| Preliminary, final signed, amended, cancelled report | `ORU^R01` | MSH, PID, PV1, ORC, OBR (OBR-22 reported, OBR-25 P / F / C / X, OBR-32 signer), one OBX per printed value (OBX-11 P / F / C), NTE with the signature block and the amendment note |
-
-PID-3 holds the UHID (`VXH`, MR), the ABHA number (NH) and the PM-JAY ID when present; never an Aadhaar number. The name is
-`SURNAME^GIVEN` with "(SYNTHETIC)" kept. `hl7.append()` adds one message after a transition (the reporting desk, 1.5),
-`hl7.read_feed()` / `hl7.parse()` read it back. Deltas: `hl7.changed_since(store, since)` returns the reports whose
-`meta.lastUpdated` is after the watermark, `hl7.events_since()` the events behind them (plus ADT / REF / ORM changes) and
-`hl7.last_event_time()` the next watermark; the FHIR `_lastUpdated` search (1.3) gives the same reports.
-
-## The PACS images (plan item V2-1.7)
-
-`his_mock/dicom_studies.py` (app venv; pydicom, numpy) writes one synthetic DICOM study per imaging study that is not cancelled,
-under `dicom/<accession slug>/<series>-<instance>.dcm` (Explicit VR Little Endian). `generator.build()` calls `build_all()`
-after the store is built; uploading is a separate step. Pixels are abstract test patterns only (gradient, concentric rings, a
-rectangle, seeded noise, the burned-in word SYNTHETIC): no real image is used and nothing looks like anatomy or a finding.
-
-| Modality | SOP class | Instances | Matrix |
-|---|---|---|---|
-| CT / MR | CT / MR Image Storage | 8 slices (image plane, frame of reference; CT 12 bits stored, rescale -1024) | 256 x 256 |
-| CR / MG | CR / Digital Mammography For Presentation | 1 / 2 (MG: R and L cranio-caudal) | 512 x 512 |
-| US | Ultrasound Image Storage | 4 frames as separate instances, 8 bits | 256 x 256 |
-| PT / NM | PET / NM Image Storage | 6 slices / 2 images | 128 / 256 |
-
-- **Links:** StudyInstanceUID = the store's `study_uid` (`ids.study_uid(accession)`), AccessionNumber = the order's accession,
-  PatientID = the UHID (a temporary UHID when the study was done under one), ReferringPhysicianName = the encounter consultant.
-  PatientName keeps `(SYNTHETIC)` on the family name; ImageComments "SYNTHETIC image, no clinical content".
-- **Deterministic:** series, instance and frame-of-reference UIDs are `2.25.<uuid5>` of `<accession>|series|<n>[|instance|<m>]`
-  in `ids.STUDY_UID_NAMESPACE`; the study time lies on the study's day, after the order and before the first report. The same
-  store gives byte-identical files.
-- **Store:** each built study gets `status: available`, `number_of_series`, `number_of_instances`, `series` (uid, number,
-  modality, instances with uid, SOP class, number), `path` and `orthanc_id` (SHA-1 of `UHID|StudyInstanceUID` as Orthanc
-  prints it), so 6.3 links without a query. `meta` is not touched.
-- **Orthanc:** `python -m his_mock.dicom_studies --build | --upload | --verify [--data DIR] [--orthanc URL]`, or
-  `his_mock/orthanc.sh load` (upload, then verify: every study found by Study UID through QIDO-RS with its accession and instance
-  count). Upload is idempotent. `viewer_url(study_uid)` gives `/ohif/viewer?StudyInstanceUIDs=<uid>` relative to Orthanc; Vaidyx-TB
-  builds its own viewer URL under its proxy (below).
-- **Behind the Vaidyx-TB app (plan item V2-6.3):** the browser never reaches Orthanc. The app forwards `/api/tb/pacs/ohif/...` and
-  `/api/tb/pacs/dicom-web/...` to Orthanc for a logged-in user who opened the study from an imaging report (`tumour_board/pacs.py`),
-  so the Orthanc config (`/data/vaidyx/tools/orthanc/config/orthanc.json`, a reference copy in `his_mock/orthanc.json`) sets
-  `"OHIF": {"RouterBasename": "/api/tb/pacs/ohif/"}` and `"DicomWeb": {"PublicRoot": "/api/tb/pacs/dicom-web/"}`; OHIF's own
-  asset paths and its DICOMweb roots (`../dicom-web`) are relative, so the one generated absolute value is the router base. After a
-  change: `his_mock/orthanc.sh stop`, then `start` (wait for the port to free). Opening `127.0.0.1:8042/ohif/` directly no longer
-  routes (by design); QIDO-RS at `127.0.0.1:8042/dicom-web/` still answers for `--verify`.
-- **Tests:** `his_mock/tests/test_dicom.py`. The Orthanc tests run only when `127.0.0.1:8042/system` answers (skipped otherwise);
-  they upload a temporary build and delete only the studies they added.
-
-## The web app and the FHIR API (plan item V2-1.3)
-
-`his_mock/serve.sh start|stop|status|restart` runs the mock hospital's FastAPI app (`his_mock/app.py`, uvicorn, app venv) on
-127.0.0.1:7130 only, never tunnelled: one process holds one `model.Store` behind a lock, and the routers below are mounted
-when their module exists. `GET /` and `/health` describe it; `GET /documents/<store path>` serves a report PDF with the
-token; `GET /view/reports/<id>/<version>` serves it inline for the human screens (desk, HIS screens; no token, the port is
-localhost and the demo reaches them through the Vaidyx-TB app's logged-in routes). `his_mock/ui.py` is the shared page shell.
-
-`his_mock/fhir.py` serves the store as a read-only FHIR R4 API at `/fhir` (bearer token from `data/his_mock/token`, also
-`?token=`; `GET /fhir/metadata` needs none), in NRCeS (ABDM) FHIR IG v6.5.0 shapes: Patient (UHID type MR, a temporary
-UHID with `use: temp`, ABHA number and `@sbx` address, PM-JAY ID, never an Aadhaar), Encounter (IP / OP No. type VN, class
-IMP / AMB, ward and bed history as `location[]`, PM-JAY pre-authorisation extension), ServiceRequest (orders with accession
-type ACSN; inter-department referrals with SNOMED 3457005), Specimen, DiagnosticReport (Lab or Imaging profile, versioned:
-`meta.versionId` = report version, `/_history`), Observation (one per printed value; LOINC only where certain, else
-`code.text`; `observation_values` override, `omitted_values` absent; candidates, the PDF wins), DocumentReference (one per
-version, `current` / `superseded`, PDF as base64 with SHA-1 `hash` and the store's sha256 as an extension), Provenance (base
-R4, NRCeS has no profile: the signature block, demo CA, serial, document hash, verification status), ImagingStudy (Study
-UID, series, OHIF viewer and DICOMweb URLs as extensions), Media (base R4, the DICOMweb link), Practitioner (Reg. No. type
-MD), Organization (the hospital and its departments). Clinical notes, referral notes and discharge summaries are
-DocumentReferences only. `$document` returns the NRCeS DocumentBundle (Composition `DiagnosticReportRecord` first, absolute
-synthetic `fullUrl`s so every `Type/id` reference resolves inside); `Patient/$everything` and the custom `Patient/$similar`
-(other registrations to link, never merged). Search by identifier (`value` or `system|value`), patient, encounter, status
-and `_lastUpdated` (`gt` / `ge` / `lt` / `le`: the delta re-fetch, equal to `hl7.changed_since`), `_sort`, `_count` /
-`_offset`; an unknown parameter is a 400 OperationOutcome. Identifier systems are synthetic
-(`https://his.vaidyx-demo.invalid/identifier/...`) except the ABHA system, which carries sandbox values. Ids: Observation
-`obs-<report>-v<n>-<key>`, DocumentReference `doc-<report>-v<n>`, Provenance `sig-<report>-v<n>`, Media `media-<study id>`,
-referral ServiceRequest `ref-<encounter id>-<n>`. Client flow for 3.1: `Patient?identifier=<UHID>` (or Encounter by IP / OP
-No.), `Patient/<id>/$similar`, `Encounter?patient=`, `DocumentReference?patient=&status=current` then `$document` each;
-deltas with `DiagnosticReport?_lastUpdated=gt<watermark>` (`+` encoded as `%2B`).
-
-**Conformance:** `python -m his_mock.eval.conformance [--data DIR] [--url http://127.0.0.1:7130 --token-file DIR/token]`
-checks every resource and every report version's DocumentBundle against our own light schema built from the NRCeS profile
-tables (`fhir.resources` is not used): required elements, statuses, fixed code systems, identifiers and the synthetic id
-patterns, `meta.profile` / `meta.lastUpdated`, no Aadhaar, SYNTHETIC names, signature fields and the viewer URL. It prints
-`CONFORMANCE OK: <n> resources checked` (exit 0), or up to 50 problems and `CONFORMANCE FAILED: <k> problems` (exit 1); the
-V2 gate runs it. Deliberate deviations: Observation and ServiceRequest `code` may be text-only when no code is certain;
-DiagnosticReportImaging `media` is required only when there is an ImagingStudy (endoscopy has none); Provenance and Media
-claim no NRCeS profile. Tests: `his_mock/tests/test_app.py`, `test_fhir.py`, `test_conformance.py`.
-
-## The reporting desk (plan item V2-1.5)
-
-`his_mock/desk.py` (mounted at `/desk` on 127.0.0.1:7130) stands in for the supporting departments' own reporting systems
-(RIS, LIS, Pathology). `/desk` lists the supporting departments with their counts of pending orders and preliminary reports;
-`/desk/<code>` (RAD, PATH, MIC, BIO, NM, ...) shows Pending orders, Preliminary reports (oldest first, patient name and UHID
-prominent, the identifiers used to find the patient in the department's own PACS / LIS) and the last 10 signed reports with
-their PDF. Actions, each on the order or report page: Schedule (imaging), Collect sample (laboratory / pathology; barcode
-and block No. optional), Enter preliminary (any practitioner of the department), Complete and sign (a consultant; junior
-residents are listed but cannot sign), Addendum (new values, note, consultant) and Cancel (reason). Values are typed one
-`key: value` per line and printed exactly as typed. Every action runs a Store transition under the hospital lock, renders
-the new version's PDF (`documents.render_versions`; on failure the change is still saved and the desk says "PDF not
-rendered"), builds the synthetic DICOM of an imaging order that is now reported and has no images, uploading it when Orthanc
-answers ("images not uploaded" otherwise, never a failed sign), appends the HL7 message to `events.hl7`, saves the store and
-writes one line to `desk_audit.jsonl` ({time, department, action, order_id, report_id, by, outcome}; refused actions too).
-JSON for tests and the e2e: `GET /desk/api/<code>/pending`, `POST /desk/api/<code>/orders/<order id>/schedule | collect |
-preliminary | sign | cancel` and `/desk/api/<code>/reports/<report id>/addendum` (409 on a lifecycle error, 400 on bad input,
-404 for another department's order). `TB_HIS_MOCK_ORTHANC` overrides the Orthanc URL. Tests: `his_mock/tests/test_desk.py`.
-
-## The HIS screens (plan item V2-1.6)
-
-`his_mock/screens.py` (mounted at `/his`) stands in for the hospital's registration, OPD and IPD screens. `GET /his` searches
-by UHID (permanent or temporary), IP / OP No., ABHA number or address, accession / Lab No. (an exact hit opens the patient)
-or by name (each registration with its kind, age / sex, ABHA and "n similar registration(s)"). It also lists the last 10
-registrations and has a new registration form (the name must end with "(SYNTHETIC)"; ABHA only on a permanent
-registration). The patient page shows demographics (UHID and kind, ABHA, PM-JAY ID; never an Aadhaar) and the other
-registrations with the same name, sex and age, linked in Vaidyx-TB and never merged here. Its timeline is grouped by OP visit
-and IP admission, newest first, each with its orders and reports (accession / Lab No., order and report status, scheduled
-date or sample barcode, signed, a PDF link per version, "v2 (amended)"), plus the New OP visit and Admit forms. The encounter
-page adds ward history and referrals and the Refer, Accept referral, Transfer ward and Discharge forms. Every form runs one
-`model.Store` transition under the lock, appends its HL7 message (`hl7.append`) and saves; a refused transition shows as a
-red flash. The same functions are JSON under `/his/api` (`search`, `patients/{id}`, `encounters`, `encounters/{id}`, and
-POST `registrations`, `patients/{id}/visits | admissions`, `encounters/{id}/refer | accept | transfer | discharge`; 409
-refused, 422 invalid, 404 unknown). Browser check: `LD_LIBRARY_PATH=/data/vaidyx/venv/pdf/lib python -m his_mock.eval.ui_test
-[--base http://127.0.0.1:7130] [--out DIR] [--viewports desktop,tablet,phone]` (app venv; it starts nothing, so run
-`his_mock/serve.sh start` first). It visits the HIS screens and the reporting desk at three widths, fails on any page error,
-missing SYNTHETIC banner, em dash or sideways scroll, submits one no-move ward transfer on an open admission, and writes
-`<page>-<viewport>.png` to `data/his_mock/ui_shots/`. Tests: `his_mock/tests/test_screens.py`.
+**The demo story:** `python -m tumour_board.eval.demo_v2 --fresh` rebuilds this store and runs the V2 story on it; a demo
+changes the live store, so rebuild before the scenario check (`python -m tumour_board.eval.his_scenarios`).

@@ -394,18 +394,26 @@ MOCK_PORT = 7131
 LIVE_HIS = {"kind": "fhir", "label": "Vaidyx Demo Hospital HIS (SYNTHETIC)", "url": "http://127.0.0.1:7130", "token_file": str(REPO / "data" / "his_mock" / "token"), "enabled": True}
 
 
+def _his_write_header():
+    """The JSON write APIs of the demo HIMS take the write token (security review #13); the e2e copy carries the live one. Never printed."""
+    try:
+        return {"Authorization": "Bearer " + (REPO / "data" / "his_mock" / "write_token").read_text().strip()}
+    except OSError:
+        return {}
+
+
 def _mock_copy():
     """A throw-away copy of data/his_mock (store, events, documents, token; no DICOM) and the mock app on 127.0.0.1:7131 over it."""
     src = REPO / "data" / "his_mock"
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="tb-e2e-his-"))
-    for name in ("store.json", "events.jsonl", "events.hl7", "fixture_index.json", "token"):
+    for name in ("store.json", "events.jsonl", "events.hl7", "fixture_index.json", "token", "write_token"):
         if (src / name).exists():
             shutil.copy2(src / name, tmp / name)
     shutil.copytree(src / "documents", tmp / "documents")
     (tmp / "dicom").mkdir()
-    env = {**os.environ, "TB_HIS_MOCK_DATA": str(tmp), "TB_HIS_MOCK_PORT": str(MOCK_PORT), "TB_HIS_MOCK_ORTHANC": "http://127.0.0.1:1"}  # never the live Orthanc
+    env = {**os.environ, "TB_HIS_MOCK_DATA": str(tmp), "TB_HIS_MOCK_PORT": str(MOCK_PORT), "TB_HIS_MOCK_ORTHANC": "http://127.0.0.1:1", "TB_HIS_MOCK_OPEN_API": "1", "TB_HIS_MOCK_IMAGES": "synthetic"}  # a throw-away copy: JSON desk API open, synthetic images only  # never the live Orthanc
     log = open(tmp / "mock.log", "w")
-    proc = subprocess.Popen([sys.executable, "-m", "uvicorn", "--factory", "his_mock.app:create_app", "--host", "127.0.0.1", "--port", str(MOCK_PORT), "--log-level", "warning"],
+    proc = subprocess.Popen([sys.executable, "-m", "uvicorn", "--factory", "his_mock.app:create_app", "--host", "127.0.0.1", "--port", str(MOCK_PORT), "--log-level", "warning", "--no-proxy-headers"],
                             cwd=str(REPO), env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     for _ in range(60):
         try:
@@ -533,7 +541,7 @@ def v2_phase3(c, base, ctx):
         op = next((gr for gr in d["groups"] if gr.get("number") == "OP/26/118716"), {})
         check("3.4 P12 the CT done at the OP visit before admission is grouped under that visit and labelled pre-admission OPD", op.get("pre_admission") is True and ct["doc_id"] in op.get("docs", []))
         # the radiologist completes and signs on the RIS desk of the e2e copy
-        rs = httpx.post(f"http://127.0.0.1:{MOCK_PORT}/desk/api/RAD/orders/rad-26-01004/sign", json={"signer": "prac-vxreg-20201"}, timeout=60)
+        rs = httpx.post(f"http://127.0.0.1:{MOCK_PORT}/desk/api/RAD/orders/rad-26-01004/sign", json={"signer": "prac-vxreg-20201"}, timeout=60, headers=_his_write_header())
         check("1.5 desk: Complete and sign makes the CT final with a signature (e2e copy)", rs.status_code == 200 and rs.json().get("status") == "final" and rs.json().get("signature"), rs.text[:160])
         r = medonc.post(f"/api/tb/cases/{cid}/his/refetch")
         body, jj, secs = _job(medonc, r)
@@ -681,7 +689,7 @@ def v2_phase3(c, base, ctx):
         cid = "TB-H-P11"; hp = _req(d, "histopathology")
         check("3.3 P11 a final report without a digital signature is a Level 1 gap (not signed) with its accession No.", _gaps(d) == [("histopathology", 1)] and hp["accession"] == "PATH/26/00434"
               and "no digital signature" in " ".join(hp["problems"]), json.dumps(hp.get("problems"))[:200])
-        rs = httpx.post(f"http://127.0.0.1:{MOCK_PORT}/desk/api/PATH/orders/path-26-00434/sign", json={"signer": "prac-vxreg-20204"}, timeout=60)
+        rs = httpx.post(f"http://127.0.0.1:{MOCK_PORT}/desk/api/PATH/orders/path-26-00434/sign", json={"signer": "prac-vxreg-20204"}, timeout=60, headers=_his_write_header())
         check("1.5 desk: a final report that was never signed can be signed (a new signed version)", rs.status_code == 200 and rs.json().get("status") == "final" and rs.json().get("signature")
               and rs.json().get("current_version") == 2, rs.text[:160])
         r = gyn.post(f"/api/tb/cases/{cid}/his/refetch")
@@ -2029,7 +2037,7 @@ def v2_phase4(c, base, ctx):
         sm = medonc.post(f"/api/tb/cases/{cid}/summary", json={}).json()
         check("4.4 P12 the Case File summary is not compiled while a Pre-Authorization check is open", sm.get("status") == "gate_not_met" and "CECT" in " ".join(sm.get("open") or []), json.dumps(sm)[:160])
         # the radiologist completes and signs on the RIS desk of the e2e copy; the treating doctor re-fetches
-        rs = httpx.post(f"http://127.0.0.1:{MOCK_PORT}/desk/api/RAD/orders/rad-26-01004/sign", json={"signer": "prac-vxreg-20201"}, timeout=60)
+        rs = httpx.post(f"http://127.0.0.1:{MOCK_PORT}/desk/api/RAD/orders/rad-26-01004/sign", json={"signer": "prac-vxreg-20201"}, timeout=60, headers=_his_write_header())
         r = medonc.post(f"/api/tb/cases/{cid}/his/refetch")
         body_, jj, secs = _job(medonc, r)
         d2 = medonc.get(f"/api/tb/cases/{cid}").json()
@@ -2045,7 +2053,7 @@ def v2_phase4(c, base, ctx):
         stale = medonc.get(f"/api/tb/cases/{cid}").json()["stale"].get("summary")
         check("4.4 P12 the summary compiles once the gate passes, every sentence cited, not stale", sm.get("status") == "ready" and sm.get("paragraphs") and all(x.get("citations") for p_ in sm["paragraphs"] for x in p_) and stale == "",
               f"{sm.get('status')} {sm.get('seconds')} s stale {stale!r}")
-        ra = httpx.post(f"http://127.0.0.1:{MOCK_PORT}/desk/api/RAD/reports/p12-r02/addendum", json={"signer": "prac-vxreg-20201", "note": "Addendum (synthetic e2e): measurements re-checked, no change in impression."}, timeout=60)
+        ra = httpx.post(f"http://127.0.0.1:{MOCK_PORT}/desk/api/RAD/reports/p12-r02/addendum", json={"signer": "prac-vxreg-20201", "note": "Addendum (synthetic e2e): measurements re-checked, no change in impression."}, timeout=60, headers=_his_write_header())
         r = medonc.post(f"/api/tb/cases/{cid}/his/refetch")
         body_, jj, secs = _job(medonc, r)
         d3 = medonc.get(f"/api/tb/cases/{cid}").json()
@@ -2067,7 +2075,7 @@ def v2_phase4(c, base, ctx):
         r = gyn.post(f"/api/tb/cases/{cid}/requests/{a.get('id')}/send", json={})
         rows = _open_rows(path, "pathology", cid, "histopathology")
         check("4.3 P11 the request to Pathology sits in its inbox with the accession No.", r.status_code == 200 and len(rows) == 1 and rows[0]["accession"] == "PATH/26/00434" and rows[0]["uhid"] == "VXH/26/004211", r.text[:120])
-        rs = httpx.post(f"http://127.0.0.1:{MOCK_PORT}/desk/api/PATH/orders/path-26-00434/sign", json={"signer": "prac-vxreg-20204"}, timeout=60)
+        rs = httpx.post(f"http://127.0.0.1:{MOCK_PORT}/desk/api/PATH/orders/path-26-00434/sign", json={"signer": "prac-vxreg-20204"}, timeout=60, headers=_his_write_header())
         r = gyn.post(f"/api/tb/cases/{cid}/his/refetch")
         body_, jj, secs = _job(gyn, r)
         d2 = gyn.get(f"/api/tb/cases/{cid}").json()

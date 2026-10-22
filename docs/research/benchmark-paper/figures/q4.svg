@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="vfig" viewBox="0 0 960 392" width="960" height="392" role="img" aria-label="The same weights at 4 bits and at full precision"><style>.vfig .fg{fill:var(--l-fg,#0f172a)}.vfig .fg2{fill:var(--l-fg-2,#475569)}.vfig .fg3{fill:var(--l-fg-3,#94a3b8)}.vfig .ln{stroke:var(--l-line,#e2e8f0)}.vfig .ln2{stroke:var(--l-line-2,#cbd5e1)}.vfig .ax{stroke:var(--l-fg-3,#94a3b8)}.vfig .bg{fill:var(--l-surface,#ffffff)}.vfig .band{fill:var(--l-accent-bg,rgba(1,180,194,.09))}.vfig .neu{fill:var(--l-line-2,#cbd5e1)}.vfig .med{fill:#0e9aa7}.vfig .gen{fill:#7c5cf0}.vfig .medS{stroke:#0e9aa7}.vfig .genS{stroke:#7c5cf0}.vfig .warm{fill:#e8973a}.vfig .warmS{stroke:#e8973a}.vfig .bad{fill:#e35d6a}.vfig text{font-family:'Inter Variable', Inter, system-ui, sans-serif}.vfig .t-num,.vfig .t-ax{font-variant-numeric:tabular-nums}.vfig .t-title{font-size:19px;font-weight:650;letter-spacing:-.01em}.vfig .t-sub{font-size:13.5px}.vfig .t-lab{font-size:13.5px;font-weight:550}.vfig .t-tag{font-size:11.5px}.vfig .t-num{font-size:12.5px;font-weight:600}.vfig .t-ax{font-size:12px} </style>
+<g transform="translate(0,-50)">
+<circle cx="6.0" cy="65.5" r="6" class="fg3" />
+<text x="18.0" y="70.0" class="fg2 t-tag" text-anchor="start" >4-bit (Q4_K_M)</text>
+<circle cx="156.0" cy="65.5" r="6" class="fg2" />
+<text x="168.0" y="70.0" class="fg2 t-tag" text-anchor="start" >bf16, direct</text>
+<circle cx="276.0" cy="65.5" r="6" class="med" />
+<text x="288.0" y="70.0" class="fg2 t-tag" text-anchor="start" >bf16, step by step</text>
+<line x1="300.0" y1="86.0" x2="300.0" y2="372.0" class="ln" stroke-width="1" />
+<text x="300.0" y="390.0" class="fg3 t-ax" text-anchor="middle" >10</text>
+<line x1="384.3" y1="86.0" x2="384.3" y2="372.0" class="ln" stroke-width="1" />
+<text x="384.3" y="390.0" class="fg3 t-ax" text-anchor="middle" >20</text>
+<line x1="468.6" y1="86.0" x2="468.6" y2="372.0" class="ln" stroke-width="1" />
+<text x="468.6" y="390.0" class="fg3 t-ax" text-anchor="middle" >30</text>
+<line x1="552.9" y1="86.0" x2="552.9" y2="372.0" class="ln" stroke-width="1" />
+<text x="552.9" y="390.0" class="fg3 t-ax" text-anchor="middle" >40</text>
+<line x1="637.1" y1="86.0" x2="637.1" y2="372.0" class="ln" stroke-width="1" />
+<text x="637.1" y="390.0" class="fg3 t-ax" text-anchor="middle" >50</text>
+<line x1="721.4" y1="86.0" x2="721.4" y2="372.0" class="ln" stroke-width="1" />
+<text x="721.4" y="390.0" class="fg3 t-ax" text-anchor="middle" >60</text>
+<line x1="805.7" y1="86.0" x2="805.7" y2="372.0" class="ln" stroke-width="1" />
+<text x="805.7" y="390.0" class="fg3 t-ax" text-anchor="middle" >70</text>
+<line x1="890.0" y1="86.0" x2="890.0" y2="372.0" class="ln" stroke-width="1" />
+<text x="890.0" y="390.0" class="fg3 t-ax" text-anchor="middle" >80</text>
+<text x="595.0" y="410.0" class="fg2 t-ax" text-anchor="middle" >Mean accuracy over the five sets, %</text>
+<text x="0.0" y="113.0" class="fg t-lab" text-anchor="start" >MedGemma-27B-it</text>
+<text x="0.0" y="127.0" class="fg3 t-tag" text-anchor="start" >USA · Medical</text>
+<line x1="717.2" y1="112.0" x2="784.3" y2="112.0" class="ln2" stroke-width="3" stroke-linecap="round"/>
+<path d="M727.8,112.0 L784.3,112.0" class="medS" stroke-width="3.5" stroke-linecap="round" opacity=".45"/>
+<circle cx="727.8" cy="112.0" r="6.5" class="fg3" />
+<circle cx="717.2" cy="112.0" r="6.5" class="fg2" />
+<circle cx="784.3" cy="112.0" r="7.5" class="med" stroke="var(--l-surface,#fff)" stroke-width="2"/>
+<text x="796.3" y="116.5" class="fg t-num" text-anchor="start" >+6.7</text>
+<text x="0.0" y="153.0" class="fg t-lab" text-anchor="start" >MedGemma-4B-it</text>
+<text x="0.0" y="167.0" class="fg3 t-tag" text-anchor="start" >USA · Medical</text>
+<line x1="627.0" y1="152.0" x2="693.9" y2="152.0" class="ln2" stroke-width="3" stroke-linecap="round"/>
+<path d="M627.0,152.0 L693.9,152.0" class="medS" stroke-width="3.5" stroke-linecap="round" opacity=".45"/>
+<circle cx="627.0" cy="152.0" r="6.5" class="fg3" />
+<circle cx="654.4" cy="152.0" r="6.5" class="fg2" />
+<circle cx="693.9" cy="152.0" r="7.5" class="med" stroke="var(--l-surface,#fff)" stroke-width="2"/>
+<text x="705.9" y="156.5" class="fg t-num" text-anchor="start" >+7.9</text>
+<text x="0.0" y="193.0" class="fg t-lab" text-anchor="start" >JSL-MedLlama-3-8B-v2.0</text>
+<text x="0.0" y="207.0" class="fg3 t-tag" text-anchor="start" >USA · Medical</text>
+<line x1="427.3" y1="192.0" x2="681.1" y2="192.0" class="ln2" stroke-width="3" stroke-linecap="round"/>
+<path d="M427.3,192.0 L681.1,192.0" class="medS" stroke-width="3.5" stroke-linecap="round" opacity=".45"/>
+<circle cx="427.3" cy="192.0" r="6.5" class="fg3" />
+<circle cx="648.3" cy="192.0" r="6.5" class="fg2" />
+<circle cx="681.1" cy="192.0" r="7.5" class="med" stroke="var(--l-surface,#fff)" stroke-width="2"/>
+<text x="693.1" y="196.5" class="fg t-num" text-anchor="start" >+30.1</text>
+<text x="0.0" y="233.0" class="fg t-lab" text-anchor="start" >Med42-8B (v2)</text>
+<text x="0.0" y="247.0" class="fg3 t-tag" text-anchor="start" >UAE · Medical</text>
+<line x1="665.4" y1="232.0" x2="700.2" y2="232.0" class="ln2" stroke-width="3" stroke-linecap="round"/>
+<path d="M684.3,232.0 L665.4,232.0" class="medS" stroke-width="3.5" stroke-linecap="round" opacity=".45"/>
+<circle cx="684.3" cy="232.0" r="6.5" class="fg3" />
+<circle cx="700.2" cy="232.0" r="6.5" class="fg2" />
+<circle cx="665.4" cy="232.0" r="7.5" class="med" stroke="var(--l-surface,#fff)" stroke-width="2"/>
+<text x="712.2" y="236.5" class="fg t-num" text-anchor="start" >-2.2</text>
+<text x="0.0" y="273.0" class="fg t-lab" text-anchor="start" >MedGemma-1.5-4B-it</text>
+<text x="0.0" y="287.0" class="fg3 t-tag" text-anchor="start" >USA · Medical</text>
+<line x1="475.0" y1="272.0" x2="608.7" y2="272.0" class="ln2" stroke-width="3" stroke-linecap="round"/>
+<path d="M475.0,272.0 L608.7,272.0" class="medS" stroke-width="3.5" stroke-linecap="round" opacity=".45"/>
+<circle cx="475.0" cy="272.0" r="6.5" class="fg3" />
+<circle cx="481.6" cy="272.0" r="6.5" class="fg2" />
+<circle cx="608.7" cy="272.0" r="7.5" class="med" stroke="var(--l-surface,#fff)" stroke-width="2"/>
+<text x="620.7" y="276.5" class="fg t-num" text-anchor="start" >+15.9</text>
+<text x="0.0" y="313.0" class="fg t-lab" text-anchor="start" >OpenBioLLM-8B</text>
+<text x="0.0" y="327.0" class="fg3 t-tag" text-anchor="start" >USA · Medical</text>
+<line x1="429.3" y1="312.0" x2="603.0" y2="312.0" class="ln2" stroke-width="3" stroke-linecap="round"/>
+<path d="M429.3,312.0 L603.0,312.0" class="medS" stroke-width="3.5" stroke-linecap="round" opacity=".45"/>
+<circle cx="429.3" cy="312.0" r="6.5" class="fg3" />
+<circle cx="545.6" cy="312.0" r="6.5" class="fg2" />
+<circle cx="603.0" cy="312.0" r="7.5" class="med" stroke="var(--l-surface,#fff)" stroke-width="2"/>
+<text x="615.0" y="316.5" class="fg t-num" text-anchor="start" >+20.6</text>
+<text x="0.0" y="353.0" class="fg t-lab" text-anchor="start" >MedLlama2-7B</text>
+<text x="0.0" y="367.0" class="fg3 t-tag" text-anchor="start" >USA · Medical</text>
+<line x1="466.9" y1="352.0" x2="555.9" y2="352.0" class="ln2" stroke-width="3" stroke-linecap="round"/>
+<path d="M466.9,352.0 L555.9,352.0" class="medS" stroke-width="3.5" stroke-linecap="round" opacity=".45"/>
+<circle cx="466.9" cy="352.0" r="6.5" class="fg3" />
+<circle cx="488.9" cy="352.0" r="6.5" class="fg2" />
+<circle cx="555.9" cy="352.0" r="7.5" class="med" stroke="var(--l-surface,#fff)" stroke-width="2"/>
+<text x="567.9" y="356.5" class="fg t-num" text-anchor="start" >+10.6</text>
+</g>
+</svg>

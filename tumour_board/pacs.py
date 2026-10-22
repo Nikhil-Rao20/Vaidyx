@@ -15,12 +15,16 @@ hands an image to any agent; the app only forwards the viewer's own requests to 
                                                 scope once a minute
     proxy(request, path, roles)                 GET / HEAD only, a short header allow-list both ways (never cookies or the app's
                                                 Authorization), the body streamed; the viewer page open is audited on the Case
-                                                File (`viewer_opened`), the hundreds of image requests of a study are not
+                                                File (`viewer_opened`), the hundreds of image requests of a study are not;
+                                                the OHIF files carry the viewer's own script policy (viewer_csp), which the
+                                                app's security headers keep for this prefix
     study_for_doc(case_id, doc, client)         the imaging report's study from the hospital system, cached on the document
 
 Grants live in memory (a restart asks the user to open the images from the report again). A Vaidyx admin needs a grant like
 everyone, so every study viewed has an "opened from this report" entry behind it.
 """
+import base64
+import hashlib
 import re
 import time
 from urllib.parse import parse_qsl, quote, urlencode
@@ -41,6 +45,19 @@ RESP_HEADERS = ("content-type", "content-length", "content-encoding", "content-r
 NOT_PLACED = "Your account is not placed in any department."
 NOT_REACHABLE = "Only the image viewer and the study it was opened on are reached through this route."
 NO_GRANT = "Open the images from the imaging report in the Case File first."
+# The OHIF viewer under the app's origin: the app's own policy (scripts by nonce only, no frames) stops it, since its start page has
+# two inline scripts, its image decoders are WebAssembly and it runs workers; the meeting room screen shows it in a frame of this
+# same app. Inline scripts are allowed by their hash only (viewer_csp), so nothing else inline can run.
+_INLINE_SCRIPT = re.compile(rb"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", re.S | re.I)
+VIEWER_CSP = ("default-src 'self'; script-src 'self' {hashes}'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; "
+              "img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; "
+              "frame-ancestors 'self'; base-uri 'self'; form-action 'none'; object-src 'none'")
+
+
+def viewer_csp(html: bytes = b"") -> str:
+    """The policy of an OHIF file; for its HTML page, with the sha256 of each inline script on it."""
+    hashes = "".join(f"'sha256-{base64.b64encode(hashlib.sha256(m.group(1)).digest()).decode()}' " for m in _INLINE_SCRIPT.finditer(html or b""))
+    return VIEWER_CSP.format(hashes=hashes)
 
 
 def base_url() -> str:
@@ -62,8 +79,9 @@ def viewer_url(study_uid: str) -> str:
 _grants: dict[tuple, dict] = {}
 
 
-def grant(user: str, study_uid: str, case_id: str, doc_id: str, ttl_hours: float = 12, now: float | None = None) -> dict:
-    """Let `user` view `study_uid` for `ttl_hours` (opened from document `doc_id` of Case File `case_id`). ValueError on a bad UID."""
+def grant(user: str, study_uid: str, case_id: str, doc_id: str, ttl_hours: float = 12, now: float | None = None, session: str = "") -> dict:
+    """Let `user` view `study_uid` for `ttl_hours` (opened from document `doc_id` of Case File `case_id`; `session`: the meeting whose
+    shared screen opened it, so its admitted members view it while the meeting runs). ValueError on a bad UID."""
     if not valid_uid(study_uid):
         raise ValueError("not a valid study UID")
     now = time.time() if now is None else now
@@ -71,6 +89,8 @@ def grant(user: str, study_uid: str, case_id: str, doc_id: str, ttl_hours: float
         _grants.pop(k, None)
     g = {"user": str(user or ""), "study_uid": study_uid, "case_id": case_id, "doc_id": doc_id, "granted": now,
          "expires": now + ttl_hours * 3600}
+    if session:
+        g["session"] = str(session)
     _grants[(g["user"], study_uid)] = g
     return dict(g)
 
@@ -194,8 +214,31 @@ def _still_allowed(roles: dict, g: dict, now: float) -> bool:
     from . import access
     case = store.get_case(key[1]) if key[1] else None
     ok = bool(case) and access.scope(roles, case) is not None
+    if not ok and case and g.get("session"):  # opened on a meeting's shared screen (18 Oct, e2e: a Radiology member admitted to the meeting got 403)
+        ok = _meeting_member(roles, g["session"], key[1])
     _access_cache[key] = (now + _ACCESS_TTL, ok)
     return ok
+
+
+def end_session(mid: str) -> int:
+    """The meeting ended: its viewing answers are asked again at the next request (a member without the Case File's scope loses the
+    viewer at once, not after the one-minute cache). Returns how many cached answers went."""
+    keys = {(g.get("user") or "", g.get("case_id") or "") for g in _grants.values() if g.get("session") == str(mid)}
+    for k in keys:
+        _access_cache.pop(k, None)
+    return len(keys)
+
+
+def _meeting_member(roles: dict, mid: str, case_id: str) -> bool:
+    """The user is still an admitted member of the meeting, the meeting has not ended, and the Case File is on its agenda."""
+    from . import meetings
+    try:
+        s = meetings.get(mid)
+    except Exception:
+        return False
+    if not s or s.get("status") not in ("planned", "in_session") or not meetings.is_member(roles, s):
+        return False
+    return s.get("current") == case_id or meetings._on_lists(s, case_id)
 
 
 def check(path: str, query: str, roles: dict) -> tuple | None:
@@ -254,11 +297,26 @@ async def proxy(request, path: str, roles: dict) -> Response:
     headers |= {"X-Forwarded-Host": host, "X-Forwarded-Proto": scheme, "X-Forwarded-Prefix": PREFIX,
                 "Forwarded": f"host={host};proto={scheme}"}
     c = _client()
+    head = request.method == "HEAD"  # Orthanc answers HEAD with 404: ask with GET and send back the headers only
     try:
-        up = await c.send(c.build_request(request.method, url, headers=headers), stream=True)
+        up = await c.send(c.build_request("GET" if head else request.method, url, headers=headers), stream=True)
     except httpx.TransportError as e:  # connect, timeout, network
         return JSONResponse({"detail": f"The PACS did not answer: {type(e).__name__}"}, status_code=502)
     out = {k: v for k, v in up.headers.items() if k.lower() in RESP_HEADERS}
+    ohif = kind in ("ohif_static", "ohif_viewer")
+    if ohif and not head and (up.headers.get("content-type") or "").lower().startswith("text/html"):
+        try:  # a small page: read whole (decoded) to hash its inline scripts
+            body = await up.aread()
+        finally:
+            await up.aclose()
+        out = {k: v for k, v in out.items() if k.lower() not in ("content-length", "content-encoding")}
+        out["Content-Security-Policy"] = viewer_csp(body)
+        return Response(body, status_code=up.status_code, headers=out)
+    if ohif:
+        out["Content-Security-Policy"] = viewer_csp()  # the workers' own policy (WebAssembly decoders)
+    if head:
+        await up.aclose()
+        return Response(status_code=up.status_code, headers=out)
     return StreamingResponse(up.aiter_raw(), status_code=up.status_code, headers=out, background=BackgroundTask(up.aclose))
 
 

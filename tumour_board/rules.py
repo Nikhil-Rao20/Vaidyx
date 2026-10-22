@@ -198,6 +198,40 @@ def resolve_facts(docs, overrides=None):
     return out
 
 
+# ---- fill-in summary (18 Oct, tumour_board/slots.py): values a treating doctor typed where no report carries them ----------------
+ENTERED = "entered_by_doctor"  # the verification of a typed value: never a verified quote; it counts for the gate as a documented value only
+
+
+def typed_overlay(case, facts, prot, cat):
+    """A clearly marked overlay on the case-level facts for the gate: a value the treating doctor typed (case.json "typed_values":
+    ECOG, menopausal status, the board question ...; audited "typed_value") counts as present for a required field that no verified,
+    final record documents. The entry carries verification "entered_by_doctor", no quote and no document: it never stands in a summary,
+    a brief or a citation (those read resolve_facts without this overlay), and a verified value from a final report always comes before
+    it (the entry sorts first, with an empty date). Returns the facts dict with the entries added."""
+    typed = (case or {}).get("typed_values") or {}
+    if not isinstance(typed, dict) or not typed:
+        return facts
+    recs = protocol.records(prot) if prot else []
+    for fid, t in typed.items():
+        if not isinstance(t, dict) or not str(t.get("value") or "").strip() or fid not in cat:
+            continue
+        allowed = set()
+        for r in recs:
+            if fid in (r.get("required_facts") or []):
+                allowed |= set(r.get("fact_doc_types") or r.get("doc_types") or [])
+        types = [x for x in cat[fid].get("doc_types") or [] if x in allowed] or list(cat[fid].get("doc_types") or [])[:1]
+        entry = {"value": str(t["value"]), "quote": "", "model_quote": "", "verification": ENTERED, "reason": None, "location": None, "state": "present",
+                 "polarity": "affirmed", "source_method": "", "doc_id": "", "doc_title": f"entered by {t.get('by') or 'the treating doctor'}, no report",
+                 "doc_type": None, "doc_types": types[:1], "type_note": "", "date": "", "report_date": "", "date_unconfirmed": False, "date_questionable": False,
+                 "date_flags": [], "doc_final": True, "doc_status": "ENTERED", "superseded": False, "unconfirmed_outside": False,
+                 "entered_by_doctor": True, "entered_by": t.get("by") or "", "entered_at": t.get("at") or ""}
+        f = facts.setdefault(fid, {"current": None, "history": []})
+        f["history"] = [entry] + list(f.get("history") or [])
+        if not f.get("current"):
+            f["current"] = entry
+    return facts
+
+
 LEVEL_LABEL = {1: "Level 1: Case File", 2: "Level 2: Records"}  # V1 item 4.2: records present, final, signed, right patient; then the values in them
 LEVEL_WHAT = {1: "the record is missing, not final or not this patient", 2: "a required value is missing, pending or not verified in the record"}
 
@@ -312,8 +346,12 @@ def _evaluate_record(req, ready, facts, overrides, cat, orders=(), site="", othe
             else:
                 r["status"] = l1["status"] = "not_final"
                 his_why = [n[len("HIS: "):] for n in (c.get("status_notes") or []) if n.startswith("HIS: ")]  # the hospital system's reason (V2 item 3.3)
-                p = (f"{c.get('title') or d['filename']} is {c.get('status', 'UNKNOWN')}" + (" and unsigned" if c.get("signed") == "no" else "")
-                     + ": a final, signed version is required" + (" (" + "; ".join(his_why) + ")" if his_why else ""))
+                if c.get("status") == "CANCELLED":  # plain words for a doctor (18 Oct): a cancelled report is not a draft to sign
+                    p = (f"{c.get('title') or d['filename']} was cancelled in the hospital system: a new order and a final, signed report "
+                         "are needed" + (" (" + "; ".join(his_why) + ")" if his_why else ""))
+                else:
+                    p = (f"{c.get('title') or d['filename']} is {c.get('status', 'UNKNOWN')}" + (" and unsigned" if c.get("signed") == "no" else "")
+                         + ": a final, signed version is required" + (" (" + "; ".join(his_why) + ")" if his_why else ""))
                 r["problems"].append(p); l1["problems"].append(p)
             r["evidence"].append({"doc_id": d["doc_id"], "quote": c.get("status_quote") or c.get("signature_quote")})
         else:
@@ -348,7 +386,7 @@ def _evaluate_record(req, ready, facts, overrides, cat, orders=(), site="", othe
         hist = [h for h in facts.get(fid, {}).get("history", []) if not allowed or set(h["doc_types"]) & allowed]
         type_needs += [(h, 2) for h in hist if allowed and len(h["doc_types"]) > 1 and len(set(h["doc_types"]) & allowed) == 1
                        and h["doc_id"] not in {x["doc_id"] for x, _ in type_needs}]
-        good = [h for h in hist if h["verification"] in VERIFIED and h["doc_final"] and h["state"] == "present" and not h.get("superseded")]  # history never counts (review M7)
+        good = [h for h in hist if (h["verification"] in VERIFIED or h.get("entered_by_doctor")) and h["doc_final"] and h["state"] == "present" and not h.get("superseded")]  # history never counts (review M7); a typed value counts here only (typed_overlay)
         good = prefer(good, allowed, lambda h: by_id.get(h["doc_id"]))  # the other cancer's value steps aside (V2 item 5.3)
         documenting += [h["doc_id"] for h in good if h["doc_id"] in carrier_ids]
         match_needs += [(h, 2) for h in good if h["doc_id"] in unconfirmed and h["doc_id"] not in {x["doc_id"] for x, _ in match_needs}]
@@ -363,7 +401,8 @@ def _evaluate_record(req, ready, facts, overrides, cat, orders=(), site="", othe
                 else:
                     scan_needs.append((g, fid)); open_doc = open_doc or g
             scan = g["verification"] != "confirmed" and g.get("source_method") == scanned.SCAN_METHOD  # read from a scan (V1 item 8.1); a confirmed value is the clinician's reading
-            r["evidence"].append({"doc_id": g["doc_id"], "fact": fid, "value": g["value"], "quote": g["quote"], **({"source_method": scanned.SCAN_METHOD} if scan else {})})
+            r["evidence"].append({"doc_id": g["doc_id"], "fact": fid, "value": g["value"], "quote": g["quote"], **({"source_method": scanned.SCAN_METHOD} if scan else {}),
+                                  **({"verification": ENTERED, "entered_by": g.get("entered_by") or ""} if g.get("entered_by_doctor") else {})})  # a typed value: no quote, named as such
             if len({h["doc_id"] for h in good}) > 1 and len({grounding.norm(h["value"]) for h in good}) > 1:  # which value is current depends on the dates
                 seen = set()
                 for h in good:
@@ -523,7 +562,7 @@ def evaluate(case_id):
     docs = case_docs(case_id, state)
     ready = [d for d in docs if d.get("state") == "ready" and not d.get("superseded")]  # an earlier version of an amended HIS report is history (V2 item 3.5)
     overrides = state.get("overrides") or {}
-    facts = resolve_facts(docs, overrides)
+    facts = typed_overlay(case, resolve_facts(docs, overrides), prot, cat)  # values the doctor typed count for the gate only (18 Oct, slots.py)
     his = case.get("his") or {}
     orders = list(his.get("orders") or []) + [o for os_ in (his.get("linked_orders") or {}).values() for o in os_]  # open HIS orders (V2 item 3.3)
     if his.get("window_start"):  # an order placed before the fetch window (an old cancelled scan) never stands for a gap

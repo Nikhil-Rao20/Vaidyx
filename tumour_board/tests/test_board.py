@@ -5,8 +5,17 @@ import json
 
 import pytest
 
-from tumour_board import board, config, store
+from tumour_board import board, config, org, store
 from tumour_board.tests import util
+
+
+@pytest.fixture(autouse=True)
+def four_heads(data_root):
+    """These session tests were written for the four V2 heads; a V3 hospital has five (Radiation Oncology joined on 18 Oct)."""
+    import copy
+    o = copy.deepcopy(org.load())
+    o["hospital"]["board_heads"] = list(org.V2_BOARD_HEADS)
+    org.save(o, by="test")
 
 DATE = "2026-10-20"
 

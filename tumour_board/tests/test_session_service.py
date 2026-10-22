@@ -46,6 +46,9 @@ def _start(sid, **kw):
 
 
 def test_start_prepares_every_absent_specialty_for_every_case_in_parallel(monkeypatch):
+    import copy
+    from tumour_board import org as _org
+    _o = copy.deepcopy(_org.load()); _o["hospital"]["board_heads"] = list(_org.V2_BOARD_HEADS); _org.save(_o, by="test")  # the four V2 heads this count was written for
     sid = _session(); runs = _fake_agent(monkeypatch, fail={("TB-S2", "pathology")})
     board.start(sid, "coord")
     pairs = _start(sid)

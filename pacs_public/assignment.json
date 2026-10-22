@@ -1,0 +1,678 @@
+{
+ "RAD/26/00981": {
+  "collection": "CMMD",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.1239.1759.623006463861567934606116970244",
+  "source_patient_id": "D1-0001",
+  "reason": "Bilateral mammogram: MG mg; from BR-01 CMMD; source F 44; same cancer group (breast)",
+  "slot": "BR-01",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.1239.1759.335790956129760663091398779377",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.1239.1759.623006463861567934606116970244",
+    "role": "mg",
+    "modality": "MG",
+    "series_description": "",
+    "instances": 2,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "RAD/26/00982": {
+  "collection": null,
+  "source_series_uid": null,
+  "source_patient_id": null,
+  "reason": "stays synthetic: no ultrasound series in the public library"
+ },
+ "RAD/26/00983": {
+  "collection": null,
+  "source_series_uid": null,
+  "source_patient_id": null,
+  "reason": "stays synthetic: every public series that fits Bilateral mammogram for a F is assigned to another study or patient (one source patient never serves two HIMS patients)"
+ },
+ "RAD/26/00984": {
+  "collection": null,
+  "source_series_uid": null,
+  "source_patient_id": null,
+  "reason": "stays synthetic: no ultrasound series in the public library"
+ },
+ "RAD/26/00985": {
+  "collection": "CMB-BRCA",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.13128581328072645760787522095632373905",
+  "source_patient_id": "MSB-07863",
+  "reason": "CECT chest, abdomen and pelvis: CT ENHANCED; from BR-05 CMB-BRCA; source F; same cancer group (breast)",
+  "slot": "BR-05",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.253378065209369186316289882849664271343",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.13128581328072645760787522095632373905",
+    "role": "ct_cap_contrast",
+    "modality": "CT",
+    "series_description": "ENHANCED",
+    "instances": 130,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "NM/26/00151": {
+  "collection": null,
+  "source_series_uid": null,
+  "source_patient_id": null,
+  "reason": "stays synthetic: no nuclear medicine (bone scan) series in the public library"
+ },
+ "RAD/26/00986": {
+  "collection": "CMMD",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.1239.1759.115060983843511037348481244160",
+  "source_patient_id": "D2-0140",
+  "reason": "Bilateral mammogram: MG mg; from BR-02 CMMD; source F 58; same cancer group (breast)",
+  "slot": "BR-02",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.1239.1759.598888059044635576254843278173",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.1239.1759.115060983843511037348481244160",
+    "role": "mg",
+    "modality": "MG",
+    "series_description": "",
+    "instances": 4,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "RAD/26/00987": {
+  "collection": null,
+  "source_series_uid": null,
+  "source_patient_id": null,
+  "reason": "stays synthetic: no ultrasound series in the public library"
+ },
+ "RAD/26/00988": {
+  "collection": "CMB-BRCA",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.207776098961005429284467902411167871841",
+  "source_patient_id": "MSB-08876",
+  "reason": "Bilateral mammogram: MG Diagnostic digital bilateral mammo; from BR-04 CMB-BRCA; source F; same cancer group (breast)",
+  "slot": "BR-04",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.144734068299006541363548570440590809268",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.207776098961005429284467902411167871841",
+    "role": "mg",
+    "modality": "MG",
+    "series_description": "Diagnostic digital bilateral mammo",
+    "instances": 4,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "RAD/26/00989": {
+  "collection": "CMB-BRCA",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.154688781059619045804962302064173369383",
+  "source_patient_id": "MSB-08876",
+  "reason": "CECT chest, abdomen and pelvis: CT 2.5MM STD 50% ASIR; from BR-04 CMB-BRCA; source F; same cancer group (breast)",
+  "slot": "BR-04",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.248421274998286136526119942490393006821",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.154688781059619045804962302064173369383",
+    "role": "ct_chest",
+    "modality": "CT",
+    "series_description": "2.5MM STD 50% ASIR",
+    "instances": 117,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "NM/26/00152": {
+  "collection": null,
+  "source_series_uid": null,
+  "source_patient_id": null,
+  "reason": "stays synthetic: no nuclear medicine (bone scan) series in the public library"
+ },
+ "RAD/26/00990": {
+  "collection": "Mediastinal-Lymph-Node-SEG",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.23846379035204500340958459297466932910",
+  "source_patient_id": "case_0256",
+  "reason": "CECT face and neck: CT ct_neck_lower; from HN-02 Mediastinal-Lymph-Node-SEG; source M; same cancer group (head_neck)",
+  "slot": "HN-02",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.307340746124313499908466317125663440261",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.23846379035204500340958459297466932910",
+    "role": "ct_neck_lower",
+    "modality": "CT",
+    "series_description": "",
+    "instances": 121,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "RAD/26/00992": {
+  "collection": "LIDC-IDRI",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.6279.6001.159487863629600617733659914437",
+  "source_patient_id": "LIDC-IDRI-0090",
+  "reason": "Chest X-ray PA view: DX CHEST, PA & LATERAL; from CXR-01 LIDC-IDRI; source M 49; source group general, patient group head_neck",
+  "slot": "CXR-01",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.6279.6001.947931114419452690702774815136",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.6279.6001.159487863629600617733659914437",
+    "role": "cr_chest",
+    "modality": "DX",
+    "series_description": "CHEST, PA & LATERAL",
+    "instances": 2,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "RAD/26/00991": {
+  "collection": null,
+  "source_series_uid": null,
+  "source_patient_id": null,
+  "reason": "stays synthetic: no head and neck MRI in the public library (TCIA head and neck images are under controlled access)"
+ },
+ "RAD/26/00994": {
+  "collection": "LIDC-IDRI",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.6279.6001.237855417502750555158013448483",
+  "source_patient_id": "LIDC-IDRI-0129",
+  "reason": "Chest X-ray PA view: DX CHEST, PA & LATERAL; from CXR-02 LIDC-IDRI; source M 62; source group general, patient group head_neck; this patient's studies use 2 source patients",
+  "slot": "CXR-02",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.6279.6001.432136098658162630578328533224",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.6279.6001.237855417502750555158013448483",
+    "role": "cr_chest",
+    "modality": "DX",
+    "series_description": "CHEST, PA & LATERAL",
+    "instances": 2,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "RAD/26/00993": {
+  "collection": "CPTAC-LUAD",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.7085.5885.265283649568652998885984796148",
+  "source_patient_id": "C3N-02948",
+  "reason": "CECT face and neck: CT NECK  3.0  I31s  3, CT CORONAL; from HN-01 CPTAC-LUAD; source M 67; same cancer group (head_neck); this patient's studies use 2 source patients",
+  "slot": "HN-01",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.7085.5885.256579142282257599422502094020",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.7085.5885.265283649568652998885984796148",
+    "role": "ct_neck",
+    "modality": "CT",
+    "series_description": "NECK  3.0  I31s  3",
+    "instances": 54,
+    "deface_check": "cropped:56"
+   },
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.7085.5885.762247069614920946855231242756",
+    "role": "ct_neck_coronal",
+    "modality": "CT",
+    "series_description": "CORONAL",
+    "instances": 106,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "RAD/26/00996": {
+  "collection": null,
+  "source_series_uid": null,
+  "source_patient_id": null,
+  "reason": "stays synthetic: every public series that fits Chest X-ray PA view for a F is assigned to another study or patient (one source patient never serves two HIMS patients)"
+ },
+ "RAD/26/00995": {
+  "collection": "TCGA-COAD",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.8421.4017.787305079077841007172123472811",
+  "source_patient_id": "TCGA-AY-4070A",
+  "reason": "CECT abdomen and pelvis: CT Abd/Pelvis  5.0  B30f; from CR-03 TCGA-COAD; source F 50; source group colorectal, patient group cervix",
+  "slot": "CR-03",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.8421.4017.206944705526266221852495854472",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.8421.4017.787305079077841007172123472811",
+    "role": "ct_ap",
+    "modality": "CT",
+    "series_description": "Abd/Pelvis  5.0  B30f",
+    "instances": 98,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "RAD/26/00998": {
+  "collection": null,
+  "source_series_uid": null,
+  "source_patient_id": null,
+  "reason": "stays synthetic: every public series that fits Chest X-ray PA view for a F is assigned to another study or patient (one source patient never serves two HIMS patients)"
+ },
+ "RAD/26/00997": {
+  "collection": "TCGA-READ",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.3671.4018.169401970460996734655625885771",
+  "source_patient_id": "TCGA-CL-4957",
+  "reason": "CECT abdomen and pelvis: CT ABD/PEL  5.0  B30f, CT ABD/PEL  3.0  coronal; from CR-02 TCGA-READ; source F 79; source group colorectal, patient group cervix; same body for both registrations of this person (VXH/26/004209, VXH/T/26/00412)",
+  "slot": "CR-02",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.3671.4018.495294737070259623679665574402",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.3671.4018.169401970460996734655625885771",
+    "role": "ct_ap",
+    "modality": "CT",
+    "series_description": "ABD/PEL  5.0  B30f",
+    "instances": 79,
+    "deface_check": "clear"
+   },
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.3671.4018.310318219902633450127700883338",
+    "role": "ct_ap_coronal",
+    "modality": "CT",
+    "series_description": "ABD/PEL  3.0  coronal",
+    "instances": 78,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "RAD/26/00999": {
+  "collection": "LIDC-IDRI",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.6279.6001.330361562313025994674404156967",
+  "source_patient_id": "LIDC-IDRI-0148",
+  "reason": "Chest X-ray PA view: DX CHEST, PA & LATERAL; from CXR-05 LIDC-IDRI; source F 63; source group general, patient group cervix",
+  "slot": "CXR-05",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.6279.6001.106598357424358739010923260353",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.6279.6001.330361562313025994674404156967",
+    "role": "cr_chest",
+    "modality": "DX",
+    "series_description": "CHEST, PA & LATERAL",
+    "instances": 2,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "RAD/26/01001": {
+  "collection": null,
+  "source_series_uid": null,
+  "source_patient_id": null,
+  "reason": "stays synthetic: no ultrasound series in the public library"
+ },
+ "RAD/26/01003": {
+  "collection": "LIDC-IDRI",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.6279.6001.849055435546135376228232912205",
+  "source_patient_id": "LIDC-IDRI-0143",
+  "reason": "Chest X-ray PA view: DX CHEST, PA & LATERAL; from CXR-04 LIDC-IDRI; source F 23; source group general, patient group cervix; this patient's studies use 2 source patients",
+  "slot": "CXR-04",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.6279.6001.205363451310959466721573977155",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.6279.6001.849055435546135376228232912205",
+    "role": "cr_chest",
+    "modality": "DX",
+    "series_description": "CHEST, PA & LATERAL",
+    "instances": 2,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "RAD/26/01002": {
+  "collection": "TCGA-CESC",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.6354.4022.336021808554888695201022910492",
+  "source_patient_id": "TCGA-VS-A8EB",
+  "reason": "MRI pelvis: MR AXI T1 5mm, MR AXI T2 3mm HR, MR SAG T2; from CX-01 TCGA-CESC; source F; same cancer group (cervix); this patient's studies use 2 source patients",
+  "slot": "CX-01",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.6354.4022.138433740004929571174776420151",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.6354.4022.336021808554888695201022910492",
+    "role": "mr_pelvis",
+    "modality": "MR",
+    "series_description": "AXI T1 5mm",
+    "instances": 45,
+    "deface_check": "clear"
+   },
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.6354.4022.658390582597899341719337128517",
+    "role": "mr_pelvis",
+    "modality": "MR",
+    "series_description": "AXI T2 3mm HR",
+    "instances": 32,
+    "deface_check": "clear"
+   },
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.6354.4022.619064565773374397139264312004",
+    "role": "mr_pelvis",
+    "modality": "MR",
+    "series_description": "SAG T2",
+    "instances": 30,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "RAD/26/01004": {
+  "collection": "FDG-PET-CT-Lesions",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.34396790779504476964035972928166943532",
+  "source_patient_id": "PETCT_0143bab87a",
+  "reason": "CECT thorax, abdomen and pelvis: CT GK p.v.3 s; from HN-04 FDG-PET-CT-Lesions; source M 84; head and neck stand-in (not a head and neck cancer patient)",
+  "slot": "HN-04",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.4219.6651.335264930457989722278222033529",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.34396790779504476964035972928166943532",
+    "role": "ct_cap_contrast",
+    "modality": "CT",
+    "series_description": "GK p.v.3 s",
+    "instances": 345,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "NM/26/00153": {
+  "collection": "FDG-PET-CT-Lesions",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.34994113673213434627138532167525494455",
+  "source_patient_id": "PETCT_0143bab87a",
+  "reason": "Whole-body FDG PET-CT: PT PET corr.; from HN-04 FDG-PET-CT-Lesions; source M 84; head and neck stand-in (not a head and neck cancer patient); PET only: the CT of this source PET-CT serves another study of this patient",
+  "slot": "HN-04",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.4219.6651.335264930457989722278222033529",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.34994113673213434627138532167525494455",
+    "role": "pt_wb",
+    "modality": "PT",
+    "series_description": "PET corr.",
+    "instances": 288,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "RAD/26/01005": {
+  "collection": null,
+  "source_series_uid": null,
+  "source_patient_id": null,
+  "reason": "stays synthetic: no brain MRI in the public library"
+ },
+ "RAD/26/01006": {
+  "collection": "TCGA-LUAD",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.7777.9002.332002723476583484085948161666",
+  "source_patient_id": "TCGA-17-Z053",
+  "reason": "CECT thorax, abdomen and pelvis: CT CHEST ROUTINE  5.0  B20f, CT CHEST ROUTINE  5.0  B60f; from LU-05 TCGA-LUAD; source M 70; same cancer group (lung)",
+  "slot": "LU-05",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.7777.9002.202618697820572701792835874057",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.7777.9002.332002723476583484085948161666",
+    "role": "ct_chest",
+    "modality": "CT",
+    "series_description": "CHEST ROUTINE  5.0  B20f",
+    "instances": 61,
+    "deface_check": "clear"
+   },
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.7777.9002.390781160863053487650899552351",
+    "role": "ct_chest",
+    "modality": "CT",
+    "series_description": "CHEST ROUTINE  5.0  B60f",
+    "instances": 58,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "NM/26/00154": {
+  "collection": "TCGA-LUAD",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.7777.9002.329793444034925460865246705358",
+  "source_patient_id": "TCGA-17-Z053",
+  "reason": "Whole-body FDG PET-CT: PT PET WB, CT Abd.CT 5.0 B30s; from LU-05 TCGA-LUAD; source M 70; same cancer group (lung)",
+  "slot": "LU-05",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.7777.9002.271808960320077551697919992033",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.7777.9002.329793444034925460865246705358",
+    "role": "pt_wb",
+    "modality": "PT",
+    "series_description": "PET WB",
+    "instances": 300,
+    "deface_check": "cropped:55"
+   },
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.7777.9002.282617070529060301401540230240",
+    "role": "ct_cap_petct",
+    "modality": "CT",
+    "series_description": "Abd.CT 5.0 B30s",
+    "instances": 301,
+    "deface_check": "cropped:55"
+   }
+  ]
+ },
+ "RAD/26/01007": {
+  "collection": null,
+  "source_series_uid": null,
+  "source_patient_id": null,
+  "reason": "stays synthetic: no brain MRI in the public library"
+ },
+ "RAD/26/01008": {
+  "collection": "LIDC-IDRI",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.6279.6001.179049373636438705059720603192",
+  "source_patient_id": "LIDC-IDRI-0001",
+  "reason": "CECT thorax, abdomen and pelvis: CT ct_chest; from LU-06 LIDC-IDRI; source sex not recorded; same cancer group (lung)",
+  "slot": "LU-06",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.6279.6001.298806137288633453246975630178",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.6279.6001.179049373636438705059720603192",
+    "role": "ct_chest",
+    "modality": "CT",
+    "series_description": "",
+    "instances": 133,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "RAD/26/01009": {
+  "collection": "FDG-PET-CT-Lesions",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.111876236207536139065956127623181501702",
+  "source_patient_id": "PETCT_01140d52d8",
+  "reason": "CECT thorax, abdomen and pelvis: CT GK p.v.3 s; from CUP-01 FDG-PET-CT-Lesions; source M 61; source group cup, patient group lung",
+  "slot": "CUP-01",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.4219.6651.316964892168994707041803056839",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.111876236207536139065956127623181501702",
+    "role": "ct_cap_contrast",
+    "modality": "CT",
+    "series_description": "GK p.v.3 s",
+    "instances": 366,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "NM/26/00155": {
+  "collection": "FDG-PET-CT-Lesions",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.212851949757273249879468776364398875276",
+  "source_patient_id": "PETCT_01140d52d8",
+  "reason": "Whole-body FDG PET-CT: PT PET corr.; from CUP-01 FDG-PET-CT-Lesions; source M 61; source group cup, patient group lung; PET only: the CT of this source PET-CT serves another study of this patient",
+  "slot": "CUP-01",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.4219.6651.316964892168994707041803056839",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.212851949757273249879468776364398875276",
+    "role": "pt_wb",
+    "modality": "PT",
+    "series_description": "PET corr.",
+    "instances": 305,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "RAD/26/01010": {
+  "collection": null,
+  "source_series_uid": null,
+  "source_patient_id": null,
+  "reason": "stays synthetic: no brain MRI in the public library"
+ },
+ "RAD/26/01012": {
+  "collection": "CMB-CRC",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.312661079690700362158785873824210500817",
+  "source_patient_id": "MSB-07414",
+  "reason": "CECT thorax, abdomen and pelvis: CT AXIAL ST 3.0 X 3.0; from CR-06 CMB-CRC; source sex not recorded; same cancer group (colorectal)",
+  "slot": "CR-06",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.6776760914487716476338693147105885138",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.312661079690700362158785873824210500817",
+    "role": "ct_chest",
+    "modality": "CT",
+    "series_description": "AXIAL ST 3.0 X 3.0",
+    "instances": 116,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "RAD/26/01011": {
+  "collection": "CMB-CRC",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.22235547254509296594804873769836180829",
+  "source_patient_id": "MSB-07414",
+  "reason": "MRI pelvis (rectal protocol): MR T2 AXIAL SFOV (rectum), MR T2 SAG SFOV (rectum); from CR-06 CMB-CRC; source sex not recorded; same cancer group (colorectal)",
+  "slot": "CR-06",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.193715959163749462772504621355846239569",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.22235547254509296594804873769836180829",
+    "role": "mr_rectum",
+    "modality": "MR",
+    "series_description": "T2 AXIAL SFOV (rectum)",
+    "instances": 43,
+    "deface_check": "clear"
+   },
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.135798829041572223187967857947866824460",
+    "role": "mr_rectum",
+    "modality": "MR",
+    "series_description": "T2 SAG SFOV (rectum)",
+    "instances": 35,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "RAD/26/01014": {
+  "collection": "CPTAC-PDA",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.1078.3273.289058566670133314319890183759",
+  "source_patient_id": "C3L-04480",
+  "reason": "CECT thorax, abdomen and pelvis: CT CHEST SOFT TISSUE, CT 5 X 2.5 AXIAL ABDOMEN; from CUP-04 CPTAC-PDA; source M 64; source group cup, patient group colorectal; this patient's studies use 2 source patients",
+  "slot": "CUP-04",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.1078.3273.167979511297133459052931282918",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.1078.3273.289058566670133314319890183759",
+    "role": "ct_chest",
+    "modality": "CT",
+    "series_description": "CHEST SOFT TISSUE",
+    "instances": 74,
+    "deface_check": "clear"
+   },
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.1078.3273.116096825250924485225275072755",
+    "role": "ct_ap",
+    "modality": "CT",
+    "series_description": "5 X 2.5 AXIAL ABDOMEN",
+    "instances": 194,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "RAD/26/01013": {
+  "collection": "TCGA-READ",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.8421.4018.206096527423871496086339173610",
+  "source_patient_id": "TCGA-BM-6198",
+  "reason": "MRI pelvis (rectal protocol): MR t1_vibe_fs_tra_p2_320_BH POST, MR t2_haste__tra_p2_mbh_320, MR t2_haste_sag_p2_mbh_320; from CR-01 TCGA-READ; source M 73; same cancer group (colorectal); this patient's studies use 2 source patients",
+  "slot": "CR-01",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.8421.4018.304030957341830836628192929917",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.8421.4018.206096527423871496086339173610",
+    "role": "mr_rectum",
+    "modality": "MR",
+    "series_description": "t1_vibe_fs_tra_p2_320_BH POST",
+    "instances": 64,
+    "deface_check": "clear"
+   },
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.8421.4018.330077288186441027275998687603",
+    "role": "mr_rectum",
+    "modality": "MR",
+    "series_description": "t2_haste__tra_p2_mbh_320",
+    "instances": 44,
+    "deface_check": "clear"
+   },
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.8421.4018.275902923659804018150231723509",
+    "role": "mr_rectum",
+    "modality": "MR",
+    "series_description": "t2_haste_sag_p2_mbh_320",
+    "instances": 36,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "RAD/26/01016": {
+  "collection": "FDG-PET-CT-Lesions",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.239537544060707922869401739533283658263",
+  "source_patient_id": "PETCT_0011f3deaf",
+  "reason": "CECT thorax, abdomen and pelvis: CT GK p.v.3; from CUP-02 FDG-PET-CT-Lesions; source F 63; source group cup, patient group colorectal",
+  "slot": "CUP-02",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.4219.6651.389860614478618826979455610445",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.239537544060707922869401739533283658263",
+    "role": "ct_cap_contrast",
+    "modality": "CT",
+    "series_description": "GK p.v.3",
+    "instances": 391,
+    "deface_check": "clear"
+   }
+  ]
+ },
+ "RAD/26/01015": {
+  "collection": null,
+  "source_series_uid": null,
+  "source_patient_id": null,
+  "reason": "stays synthetic: every public series that fits MRI pelvis (rectal protocol) for a F is assigned to another study or patient (one source patient never serves two HIMS patients)"
+ },
+ "RAD/26/01017": {
+  "collection": null,
+  "source_series_uid": null,
+  "source_patient_id": null,
+  "reason": "stays synthetic: every public series that fits Bilateral mammogram for a F is assigned to another study or patient (one source patient never serves two HIMS patients)"
+ },
+ "RAD/26/01018": {
+  "collection": null,
+  "source_series_uid": null,
+  "source_patient_id": null,
+  "reason": "stays synthetic: no ultrasound series in the public library"
+ },
+ "RAD/26/01020": {
+  "collection": null,
+  "source_series_uid": null,
+  "source_patient_id": null,
+  "reason": "stays synthetic: no ultrasound series in the public library"
+ },
+ "RAD/26/01019": {
+  "collection": "TCGA-BRCA",
+  "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.9203.4002.997993139263721918674259792020",
+  "source_patient_id": "TCGA-AO-A0JI",
+  "reason": "Bilateral mammogram: MG DIAG MAMMOGRAM U, MG DIAG MAMMOGRAM U; from BR-03 TCGA-BRCA; source F 56; same cancer group (breast)",
+  "slot": "BR-03",
+  "source_study_uid": "1.3.6.1.4.1.14519.5.2.1.9203.4002.167926431715892466505720332428",
+  "series": [
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.9203.4002.997993139263721918674259792020",
+    "role": "mg",
+    "modality": "MG",
+    "series_description": "DIAG MAMMOGRAM U",
+    "instances": 2,
+    "deface_check": "clear"
+   },
+   {
+    "source_series_uid": "1.3.6.1.4.1.14519.5.2.1.9203.4002.819947422704003839421250353099",
+    "role": "mg",
+    "modality": "MG",
+    "series_description": "DIAG MAMMOGRAM U",
+    "instances": 2,
+    "deface_check": "clear"
+   }
+  ]
+ }
+}

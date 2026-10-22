@@ -1,0 +1,514 @@
+{
+ "round": 9,
+ "title": "AI drafts before the board",
+ "intro": "This round is about what the AI drafts before the board: the Case File summary, specialty briefs, Ask the Case File, review marks, the NCG export and voice. How they are used in the meeting comes in Round 12.",
+ "questions": [
+  {
+   "id": "R09-Q01",
+   "topic": "When the summary compiles",
+   "core": true,
+   "type": "decision",
+   "question": "Should the Case File summary compile by itself once the check is met?",
+   "header": "Compile",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, by itself (Recommended)",
+     "description": "The summary (24 to 34 s) compiles in the background the moment the check is met, so the doctor opens a ready draft."
+    },
+    {
+     "label": "When the owner marks ready",
+     "description": "Compiled at the ready mark, so it uses the latest records; the owner sees it only after marking."
+    },
+    {
+     "label": "Doctor presses Compile",
+     "description": "As today: nothing runs until someone asks."
+    }
+   ],
+   "why": "V2 4.4: the summary compiles only once every check is met; today a person presses Compile (J1). UX_notes.md point 3: give some initial analysis first without asking anything. K02: slow AI steps need progress feedback.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "When the owner marks ready",
+   "notes": "Order is: check met, then ready mark, then the summary compiles. R10-Q06 must not require a reviewed summary before ready (adapt its options).",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R09-Q02",
+   "topic": "Draft before the check is met",
+   "core": false,
+   "type": "decision",
+   "question": "Should a summary draft be allowed before the check is met?",
+   "header": "Early draft",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, marked incomplete (Recommended)",
+     "description": "Like today's 'Compile draft anyway': every page names the missing records, and it cannot be exported or used to mark ready."
+    },
+    {
+     "label": "No, only after the check",
+     "description": "The summary stays locked until the check is met; urgent cases wait or waive."
+    }
+   ],
+   "why": "The 'Compile draft anyway (marked incomplete)' button and summary.build(force) exist today (tb.js, routes). Cancer of Unknown Primary work-ups are often incomplete by nature (W4, T09).",
+   "depends_on": [
+    "R09-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "No, only after the check",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R09-Q03",
+   "topic": "Records change after review",
+   "core": false,
+   "type": "decision",
+   "question": "When records change after the summary was reviewed, what should happen?",
+   "header": "After change",
+   "multi": false,
+   "options": [
+    {
+     "label": "New draft, reviewed one kept (Recommended)",
+     "description": "A fresh draft compiles in the background; the reviewed version stays visible, marked 'changed since review', until a doctor reviews the new one."
+    },
+    {
+     "label": "Banner only, as today",
+     "description": "A stale banner with Regenerate; the doctor decides when."
+    },
+    {
+     "label": "Replace and clear review",
+     "description": "The new draft replaces the old at once and the review mark is removed."
+    }
+   ],
+   "why": "V1 4.5 Case File signature: the summary and briefs go stale when documents, confirmations, setting or level change; Regenerate is manual; the NCG export is refused while stale.",
+   "depends_on": [
+    "R09-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "New draft, reviewed one kept (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R09-Q04",
+   "topic": "Who approves the summary",
+   "core": true,
+   "type": "decision",
+   "question": "Who may mark the Case File summary reviewed?",
+   "header": "Approver",
+   "multi": false,
+   "options": [
+    {
+     "label": "The owning consultant (Recommended)",
+     "description": "Only the treating doctor who owns the Case File; their name goes on the print and the NCG export."
+    },
+    {
+     "label": "Any owning-department consultant",
+     "description": "Any consultant of the owning department; quicker when the owner is away."
+    },
+    {
+     "label": "No mark, always AI draft",
+     "description": "The summary is never marked reviewed; it is labelled an AI draft wherever it appears."
+    }
+   ],
+   "why": "Today any placed reader may mark an AI draft reviewed or flag it for correction (G09, matrix 'review'); the export footer says 'reviewed by X' or 'AI draft, awaiting expert review'. Settled: 'expert over the loop'; R01 defines who approves what.",
+   "depends_on": [
+    "R01-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "The owning consultant (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R09-Q05",
+   "topic": "Residents and the summary",
+   "core": false,
+   "type": "decision",
+   "question": "What may a resident, PG or fellow do with the summary?",
+   "header": "Resident",
+   "multi": false,
+   "options": [
+    {
+     "label": "Prepare; consultant approves (Recommended)",
+     "description": "The resident compiles, adds notes and removes sentences; it shows 'prepared by Dr R, awaiting Dr C' until the consultant marks it reviewed."
+    },
+    {
+     "label": "Compile only",
+     "description": "The resident may start the compile and read it, but not change it."
+    },
+    {
+     "label": "Read only",
+     "description": "The resident sees the summary; the consultant does everything."
+    }
+   ],
+   "why": "I03 liked (resident prepares drafts, consultant approves, both names in the audit). Research: in India residents usually prepare the case summary and slides (widely assumed, not found in published sources); US residents carried 39% to 72% of preparation hours. R03 sets resident rights in general.",
+   "depends_on": [
+    "R03-Q03",
+    "R03-Q04",
+    "R09-Q04"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Prepare; consultant approves (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R09-Q06",
+   "topic": "Editing the summary",
+   "core": true,
+   "type": "decision",
+   "question": "How may doctors change the summary text?",
+   "header": "Edits",
+   "multi": false,
+   "options": [
+    {
+     "label": "Notes added, AI text locked (Recommended)",
+     "description": "Doctors remove sentences and add their own notes, labelled with their name; AI sentences cannot be reworded, so each keeps its verified quote."
+    },
+    {
+     "label": "Edit any sentence, labelled",
+     "description": "Any sentence may be reworded; edited ones show 'edited by Dr X' and link to the original quote."
+    },
+    {
+     "label": "No edits, flag and regenerate",
+     "description": "The only fix is 'flag for correction' and compiling again."
+    }
+   ],
+   "why": "Lajmi 2026: an editable LLM summary took 6:55 vs 8:47 min manual; Hartmann 2026: summaries rewritten 3.5 times. Invariant: every value shown as fact carries a verified verbatim quote, so a reworded sentence becomes the doctor's statement, not a verified one.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Notes added, AI text locked (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R09-Q07",
+   "topic": "Removed items",
+   "core": false,
+   "type": "decision",
+   "question": "What should doctors see of the items the AI wrote but verification removed?",
+   "header": "Removed",
+   "multi": false,
+   "options": [
+    {
+     "label": "A count, list on tap (Recommended)",
+     "description": "'3 items removed: could not be verified' opens the list with each reason; never in the print, the export or the room screen."
+    },
+    {
+     "label": "Audit only",
+     "description": "Removed items are hidden from screens and kept in the audit for the Vaidyx team."
+    },
+    {
+     "label": "Shown struck through",
+     "description": "Removed items stay in place, crossed out, with the reason beside them."
+    }
+   ],
+   "why": "V1 6.4: the summary, briefs and answers keep removed items with the reason (quote not found, number not in the source, scope guardrail); reviewers open 'N removed items (failed verification, not facts)'. AI role need (data.js): see quickly which statements are verified and which were removed.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "A count, or a short summary of what was removed",
+   "own_words": "A count is enough, or a summary of what was deleted, so that it becomes an active learning opportunity for Vaidyx: a good opportunity for us in the backend.",
+   "notes": "Removed items are also stored for the team's quality review and prompt / rule improvement (active learning). Real patient data used only under the hospital's data rules (round 15).",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R09-Q08",
+   "topic": "Approximate quotes",
+   "core": false,
+   "type": "decision",
+   "question": "Should items whose quote matches the record only approximately be shown at all?",
+   "header": "Near match",
+   "multi": false,
+   "options": [
+    {
+     "label": "No, exact quotes only (Recommended)",
+     "description": "As today: an item is shown only when its quote is found word for word; others are removed."
+    },
+    {
+     "label": "Yes, flagged 'check source'",
+     "description": "Shown with a warning and left out of print and export until a doctor reviews; more content, more checking."
+    }
+   ],
+   "why": "V1 6.5 near-match (TB_NEAR_MATCH) is built and off by default 'until the clinical team accepts it': same numbers and negation words required, small spelling or spacing differences allowed. Project rule: no lossy layer.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "No, exact quotes only (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R09-Q09",
+   "topic": "Specialty briefs before the board",
+   "core": false,
+   "type": "decision",
+   "question": "When should the specialty briefs be prepared?",
+   "header": "Briefs",
+   "multi": false,
+   "options": [
+    {
+     "label": "Before, for all four heads (Recommended)",
+     "description": "Radiology, Pathology, Medical and Surgical Oncology briefs (13 to 17 s each) are ready with the summary, readable before the meeting; absent heads' agents reuse them."
+    },
+    {
+     "label": "At session start, absent only",
+     "description": "As today: only the agent of a head not recorded present prepares, when the coordinator starts the session."
+    },
+    {
+     "label": "On request only",
+     "description": "A doctor presses Prepare on the Specialty support tab when wanted."
+    }
+   ],
+   "why": "D2: briefs run at session start for heads not recorded present; a current brief (same signature) is reused; the Specialty support tab can prepare one any time. One shared H200: four briefs add about a minute of reasoner time per Case File. R12 decides how agents speak in the meeting.",
+   "depends_on": [
+    "R09-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "With the summary, all five heads (Recommended)",
+   "notes": "Prepared when the owner marks ready (with the summary, R09-Q01); five heads incl. Radiation Oncology (R02-Q04).",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R09-Q10",
+   "topic": "Who reviews a brief",
+   "core": false,
+   "type": "decision",
+   "question": "Who may mark a specialty brief reviewed?",
+   "header": "Brief review",
+   "multi": false,
+   "options": [
+    {
+     "label": "A doctor of that specialty (Recommended)",
+     "description": "The Radiology brief only by a Radiology doctor, and so on; until then it shows 'AI draft' in the meeting."
+    },
+    {
+     "label": "The owning consultant",
+     "description": "The treating doctor reviews every brief of the Case File."
+    },
+    {
+     "label": "Nobody, always AI draft",
+     "description": "Briefs are never marked reviewed; the board treats them as role-specific AI support."
+    }
+   ],
+   "why": "G09: any placed reader can mark any AI draft reviewed, not tied to the specialty. The agent log uses 'reviewed' to decide what prints. R01 defines 'expert over the loop'; R08-Q10 may let the specialist do this with the confirmation.",
+   "depends_on": [
+    "R01-Q01",
+    "R09-Q09"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "A doctor of that specialty (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R09-Q11",
+   "topic": "Ask the Case File",
+   "core": false,
+   "type": "decision",
+   "question": "Should useful answers from Ask the Case File be kept on the Case File?",
+   "header": "Answers",
+   "multi": false,
+   "options": [
+    {
+     "label": "Doctor pins chosen answers (Recommended)",
+     "description": "A doctor pins a cited answer; it shows under 'Notes' in the summary and in the room; unpinned answers are not kept (the audit keeps the question)."
+    },
+    {
+     "label": "Keep every answer",
+     "description": "A history of all questions and cited answers on the Case File, visible to its team."
+    },
+    {
+     "label": "Not kept, as today",
+     "description": "Ask again when needed."
+    }
+   ],
+   "why": "Stage 6: cited statements, 'not documented' or a scope refusal, median 6 s; the audit stores the question. Residents prepare the board pack (I03), so answers found before the meeting can save time in it (R12).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Doctor pins chosen answers (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R09-Q12",
+   "topic": "Voice input",
+   "core": false,
+   "type": "decision",
+   "question": "Where should voice input for questions be offered first?",
+   "header": "Voice in",
+   "multi": false,
+   "options": [
+    {
+     "label": "Every question box (Recommended)",
+     "description": "Push-to-talk on Ask the Case File and each agent box; the words appear for editing before Ask; the audio is discarded after transcription."
+    },
+    {
+     "label": "Board room only",
+     "description": "Voice only in the meeting, where typing is hardest."
+    },
+    {
+     "label": "Not yet",
+     "description": "Text only until the new interface is built."
+    }
+   ],
+   "why": "audio_feature.md: research complete 15 Oct, waiting for 'proceed'; Whisper large-v3-turbo on our GPU (2.3 GB, about 0.1 to 0.2 s per utterance), English first, audio not stored, the microphone needs HTTPS or localhost. Voice only fills text boxes, never runs a command. Settled: board members' end-of-meeting pop-up has voice (R13).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Not yet",
+   "notes": "No voice in question boxes for now. The settled end-of-meeting pop-up keeps its voice option (text and voice).",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R09-Q13",
+   "topic": "Voice read-out",
+   "core": false,
+   "type": "decision",
+   "question": "What may Vaidyx read aloud when a doctor asks?",
+   "header": "Voice out",
+   "multi": true,
+   "options": [
+    {
+     "label": "Verified answers (Recommended)",
+     "description": "Ask the Case File and agent answers, statement by statement, with their sources named."
+    },
+    {
+     "label": "Case File summary",
+     "description": "The whole summary or one section, for a doctor away from the screen."
+    },
+    {
+     "label": "Points for review",
+     "description": "Only the items flagged for a clinician to look at."
+    },
+    {
+     "label": "Specialty briefs",
+     "description": "An absent head's brief read out, for example in the room."
+    }
+   ],
+   "why": "audio_feature.md: Kokoro-82M reads only text already on screen (first audio under 100 ms on the GPU); units, TNM strings and drug names need a clinical text normaliser first (section 5a). Read-out adds nothing that is not shown.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Skipped",
+   "own_words": "Don't talk about voice now; work only with text for the initial build of the new interface. After I confirm it over several iterations, I will talk about speech and giving Vaidyx ears and a mouth.",
+   "notes": "Voice deferred everywhere (owner, 17 Oct).",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R09-Q14",
+   "topic": "NCG Virtual Tumour Board export",
+   "core": false,
+   "type": "decision",
+   "question": "When may the NCG Virtual Tumour Board slides (.pptx) be exported?",
+   "header": "NCG export",
+   "multi": false,
+   "options": [
+    {
+     "label": "Only after review (Recommended)",
+     "description": "Export needs the summary marked reviewed; the footer names the reviewer."
+    },
+    {
+     "label": "Any current summary, as today",
+     "description": "Allowed while it is an AI draft; the footer says 'AI draft, awaiting expert review'."
+    },
+    {
+     "label": "Reviewed and de-identified by default",
+     "description": "Needs review, and removes name, UHID and date of birth unless the doctor turns that off, for hub and spoke referral (I18)."
+    }
+   ],
+   "why": "V1 4.6: fills NCG's own 6-slide case template from the verified summary, every sentence cited; refused while missing, stale or flagged for correction, allowed as an AI draft. I18 (de-identified export) proposed; the NCG VTB template asks for de-identified clinical details.",
+   "depends_on": [
+    "R09-Q04"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Only after review (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Summary timing",
+   "core": false,
+   "type": "decision",
+   "question": "Earlier (R09-Q01) the summary is written only when the doctor marks ready, but the new Case File page IS the summary. When should its lines appear?",
+   "header": "Summary",
+   "multi": false,
+   "options": [
+    {
+     "label": "Lines live now, AI text at ready (Recommended)",
+     "description": "From the first fetch each line is filled straight from verified report quotes (no AI writing), blanks show gaps; AI-written parts (history paragraph, specialty briefs) come at the ready mark."
+    },
+    {
+     "label": "Everything live from the start",
+     "description": "AI writes all text from the first fetch and rewrites on change."
+    },
+    {
+     "label": "Page shows only gaps until ready",
+     "description": "Summary appears at the ready mark."
+    }
+   ],
+   "why": "Added in the final answer check (17 Oct): resolves a conflict or gap found by the check.",
+   "depends_on": [
+    "R09-Q01",
+    "R17-Q02"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R09-Q15",
+   "status": "Answered",
+   "answer": "Lines live now, AI text at ready (Recommended)",
+   "notes": "Supersedes R09-Q01 / Q02 for the fill-in summary: slot lines from verified facts are live; AI prose and briefs at the ready mark.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Briefs in advance",
+   "core": false,
+   "type": "decision",
+   "question": "Which specialty briefs should be prepared in advance at the ready mark?",
+   "header": "Briefs",
+   "multi": false,
+   "options": [
+    {
+     "label": "5 heads at ready, Nuclear Med on click (Recommended)",
+     "description": "Radiology, Pathology, Medical, Surgical, Radiation Oncology at the ready mark; Nuclear Medicine when its card is opened."
+    },
+    {
+     "label": "All 6 at ready",
+     "description": "More GPU time."
+    },
+    {
+     "label": "None in advance",
+     "description": "Each on click."
+    }
+   ],
+   "why": "Added in the final answer check (17 Oct): resolves a conflict or gap found by the check.",
+   "depends_on": [
+    "R09-Q09",
+    "R17-Q20"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R09-Q16",
+   "status": "Answered",
+   "answer": "5 heads at ready, Nuclear Med on click (Recommended)",
+   "answered_on": "17/10/2026"
+  }
+ ],
+ "status": "Done"
+}

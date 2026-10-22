@@ -1,0 +1,514 @@
+{
+ "round": 13,
+ "title": "Meeting: closing a case",
+ "intro": "How a case is closed at the board: who confirms the record, the minimum to close, what deferral needs, and the end-of-meeting pop-up for each board member. After-the-board checks stay parked.",
+ "questions": [
+  {
+   "id": "R13-Q01",
+   "topic": "Decision record",
+   "core": false,
+   "type": "decision",
+   "question": "The coordinator records the decision. Before it is saved, how is the wording confirmed?",
+   "header": "Read-back",
+   "multi": false,
+   "options": [
+    {
+     "label": "Read back in the room (Recommended)",
+     "description": "The text shows on the shared screen, the board hears or reads it, then the coordinator saves it."
+    },
+    {
+     "label": "Saved, then owner confirms",
+     "description": "The treating doctor confirms the text within a day; until then the record shows 'awaiting owner'."
+    },
+    {
+     "label": "Saved as typed, final",
+     "description": "No confirmation step; any correction comes only through the later checks."
+    }
+   ],
+   "why": "Closes the sign-off gap G02 now that the coordinator does the chair's job (notes on T19, role-chair). Victoria framework: a scribe records in real time and the chair confirms the recommendation. Today the record is final once flags are resolved (D6, A2).",
+   "depends_on": [
+    "R01-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Read back in the room (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R13-Q02",
+   "topic": "Dictation",
+   "core": false,
+   "type": "decision",
+   "question": "Should the coordinator be able to dictate the decision by voice, turned into text they read and save?",
+   "header": "Dictate",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, voice to editable text (Recommended)",
+     "description": "Push to talk, the words land in the decision box, the coordinator corrects and saves; the audio is discarded."
+    },
+    {
+     "label": "Typed only",
+     "description": "No microphone on the decision form; voice stays for questions only."
+    },
+    {
+     "label": "Later, after voice questions",
+     "description": "Typed for now; dictation is added once voice questions have been used in real meetings."
+    }
+   ],
+   "why": "audio_feature.md: dictating decisions 'later, as text only', the coordinator still reads and submits; Whisper turbo, English first, audio not stored; the microphone needs HTTPS or localhost. Voice commands that change records stay out.",
+   "depends_on": [
+    "R09-Q12"
+   ],
+   "skip_if": "Skip if R09-Q12 answered 'Not yet' (no voice input).",
+   "resource": null,
+   "status": "Skipped",
+   "notes": "Voice deferred (R09-Q13 own words): decisions are typed.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R13-Q03",
+   "topic": "Minimum to close",
+   "core": true,
+   "type": "decision",
+   "question": "What is the minimum the coordinator must fill before a case can be closed?",
+   "header": "Close rule",
+   "multi": false,
+   "options": [
+    {
+     "label": "Outcome and decision text (Recommended)",
+     "description": "Members come from the attendance; every other field is optional and can be added later."
+    },
+    {
+     "label": "Plus one action with owner",
+     "description": "Each closed case also names a Responsible Department and a due date for the next step."
+    },
+    {
+     "label": "Every field of today's form",
+     "description": "All 17 fields filled in the room; slower while people are talking."
+    }
+   ],
+   "why": "Today the Board tab form has 17 fields and the Board room form fewer (G27, J7). The answer also sets one decision form for both places: required fields shown, the rest folded away. Research: a minimum dataset per case (NHS England 2020, Greater Manchester pro-forma).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Every field of today's form, condensed to about 10",
+   "own_words": "Every field of today's form, but not 17: make it about 10; mix up and combine.",
+   "notes": "Design task: merge the 17 record fields into about 10 (one form used in the Board room and on the Case File, fixing G27).",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R13-Q04",
+   "topic": "Outcome types",
+   "core": false,
+   "type": "decision",
+   "question": "Today a case ends as decision, deferred, referred or not discussed. Should 'Noted' be added for cases on the 'for noting' list (standard cases listed without discussion)?",
+   "header": "Outcomes",
+   "multi": false,
+   "options": [
+    {
+     "label": "Add 'Noted' (Recommended)",
+     "description": "Cases the clinicians put on the for-noting list close in one click, without discussion."
+    },
+    {
+     "label": "Keep the four types",
+     "description": "A for-noting case is closed as a decision with a short text."
+    }
+   ],
+   "why": "OCT12 feature 5 built four outcome types (CRUK 2017). I05 triage lists (liked) add a 'for noting' list (NHS England 2020: standard of care, not for discussion). Clinicians assign the list; the AI never says 'standard of care'.",
+   "depends_on": [
+    "R10-Q11"
+   ],
+   "skip_if": "Skip if R10-Q11 set no 'for noting' list.",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Add 'Noted' (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R13-Q05",
+   "topic": "Deferred",
+   "core": false,
+   "type": "decision",
+   "question": "When the board defers a case, what must the coordinator record?",
+   "header": "Deferred",
+   "multi": false,
+   "options": [
+    {
+     "label": "What is awaited, from whom (Recommended)",
+     "description": "Each awaited record or result names its department and becomes a suggested request for the owner to send."
+    },
+    {
+     "label": "A reason only",
+     "description": "Free text; the owner works out which requests to send."
+    },
+    {
+     "label": "Awaited items and next date",
+     "description": "Also a target board date, so the coordinator can plan that agenda."
+    }
+   ],
+   "why": "Today a deferred outcome without an action is only a review flag (postboard outcome_flags). UK lung MDTs: 24% of cases deferred, mostly awaiting results. Keeps V2 4.2: nothing is sent automatically, the owner sends.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "What is awaited, from whom (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R13-Q06",
+   "topic": "Back on the agenda",
+   "core": false,
+   "type": "decision",
+   "question": "After a case is deferred or not discussed, how does it get back on an agenda?",
+   "header": "Re-listing",
+   "multi": false,
+   "options": [
+    {
+     "label": "Split by outcome (Recommended)",
+     "description": "Deferred goes back to the owner as not ready and returns when marked ready; not discussed goes first on the next session."
+    },
+    {
+     "label": "Owner re-marks ready, both",
+     "description": "Both go back to the owner's list and wait until the owner marks them ready again."
+    },
+    {
+     "label": "Coordinator re-lists by hand",
+     "description": "Both go to the coordinator's candidates; nothing moves by itself."
+    }
+   ],
+   "why": "The workflow has loops (owner's note on the workflow). Today no outcome puts a Case File back anywhere. CRUK 2017: a case not discussed must be recorded with the reason.",
+   "depends_on": [
+    "R13-Q05",
+    "R10 (agenda and late additions)"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Dropped",
+   "notes": "Dropped in validation (17 Oct): same as R10-Q13 (what happens to deferred and not-reached cases)."
+  },
+  {
+   "id": "R13-Q07",
+   "topic": "Members' pop-up",
+   "core": true,
+   "type": "decision",
+   "question": "You said each board member gets a pop-up at the end for a summary or suggestions. When does it appear?",
+   "header": "Pop-up time",
+   "multi": false,
+   "options": [
+    {
+     "label": "One card per case (Recommended)",
+     "description": "One pop-up after the last case lists every case discussed, each with its own box; it stays open for 24 hours."
+    },
+    {
+     "label": "At the end, reminder if skipped",
+     "description": "The same end-of-meeting pop-up; a member who skips it gets one reminder the next morning, and it stays open for 24 hours."
+    },
+    {
+     "label": "One box per session",
+     "description": "One summary for the whole meeting, not tied to any patient's Case File."
+    }
+   ],
+   "why": "Settled by the owner (notes on role-boardheads): a pop-up at the end, text and voice. This decides whether inputs attach to each Case File. Victoria framework: recommendations within 24 hours, hence the 24-hour window.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "One card per case, at the end (Recommended)",
+   "notes": "Text only in the first build.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R13-Q08",
+   "topic": "Members' pop-up",
+   "core": false,
+   "type": "decision",
+   "question": "Is the pop-up optional for members?",
+   "header": "Required?",
+   "multi": false,
+   "options": [
+    {
+     "label": "Optional, one tap to skip (Recommended)",
+     "description": "Members may close it; the record shows who added input and who did not."
+    },
+    {
+     "label": "Required for board heads",
+     "description": "Radiology, Pathology, Medical and Surgical Oncology must answer or tick 'nothing to add'."
+    },
+    {
+     "label": "Required for everyone present",
+     "description": "Every member answers or ticks 'nothing to add' before leaving."
+    }
+   ],
+   "why": "Few clicks (owner's note on screens). Attendance in India is low (radiologist 46.7%, pathologist 28.5%, ICMR-NCDIR survey); a forced step may push members away from the board.",
+   "depends_on": [
+    "R13-Q07"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Required for board heads",
+   "notes": "The five head departments' members answer or tick 'nothing to add'.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R13-Q09",
+   "topic": "Members' pop-up",
+   "core": false,
+   "type": "decision",
+   "question": "What should the pop-up ask each member?",
+   "header": "Pop-up asks",
+   "multi": false,
+   "options": [
+    {
+     "label": "Agree or concern, plus notes (Recommended)",
+     "description": "Two taps ('I agree with the recorded decision' or 'I have a concern') and a free box for a summary or suggestions."
+    },
+    {
+     "label": "One free box only",
+     "description": "Members write or speak whatever they want; nothing structured."
+    },
+    {
+     "label": "Two boxes: summary, suggestions",
+     "description": "Fixed parts, no agree or concern choice."
+    }
+   ],
+   "why": "The owner asked for members' summaries or suggestions. An agree or concern choice also captures divergent views with names (Victoria framework), today a free-text field the coordinator types. Members' own words; the AI adds nothing.",
+   "depends_on": [
+    "R13-Q07"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Agree or concern, plus notes (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R13-Q10",
+   "topic": "Voice input",
+   "core": false,
+   "type": "decision",
+   "question": "When a member answers the pop-up by voice, what is kept?",
+   "header": "Voice kept",
+   "multi": false,
+   "options": [
+    {
+     "label": "Text only, member checks it (Recommended)",
+     "description": "The speech becomes text the member reads, edits and submits; the audio is discarded."
+    },
+    {
+     "label": "Text and the audio",
+     "description": "The recording is kept with the record; needs a hospital policy for storing voice."
+    },
+    {
+     "label": "Text sent without checking",
+     "description": "One step less; transcription slips go into the record unseen."
+    }
+   ],
+   "why": "audio_feature.md: dictation only fills text boxes, the person reads and submits, audio not stored unless the hospital asks. English first, other languages later. The microphone needs HTTPS, which the phone link has.",
+   "depends_on": [
+    "R13-Q07"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Skipped",
+   "notes": "Voice deferred (R09-Q13 own words): the end-of-meeting pop-up is text only in the first build.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R13-Q11",
+   "topic": "Members' inputs",
+   "core": false,
+   "type": "decision",
+   "question": "Who may read the members' pop-up inputs?",
+   "header": "Who sees",
+   "multi": false,
+   "options": [
+    {
+     "label": "Coordinator and owner's team (Recommended)",
+     "description": "The treating doctor, the residents on that Case File and the coordinator see them, with names."
+    },
+    {
+     "label": "All members of the session",
+     "description": "Every member who attended can read the others' inputs."
+    },
+    {
+     "label": "Coordinator only",
+     "description": "The coordinator reads them and passes on what is needed."
+    }
+   ],
+   "why": "Today participants read the whole Case File and the owner is not told of the decision (G04; I10 liked). Outside members who join by code see only what R15 allows.",
+   "depends_on": [
+    "R13-Q07",
+    "R06-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Coordinator and owner's team (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R13-Q12",
+   "topic": "Members' inputs",
+   "core": true,
+   "type": "decision",
+   "question": "Are the members' inputs part of the board's record?",
+   "header": "In record?",
+   "multi": false,
+   "options": [
+    {
+     "label": "Attached, labelled, not the decision (Recommended)",
+     "description": "Shown under the decision as 'members' inputs' with name and time; they never change the decision text."
+    },
+    {
+     "label": "Coordinator copies what counts",
+     "description": "Inputs stay as notes; the coordinator decides what goes into the record."
+    },
+    {
+     "label": "Separate notes, not recorded",
+     "description": "Kept apart from the record, the minutes and the exports."
+    }
+   ],
+   "why": "Decides whether inputs appear in the minutes and exports (D8). The decision stays the board's, recorded by the coordinator (notes on T19). Concerns can feed 'Divergent opinions' (R13-Q13).",
+   "depends_on": [
+    "R13-Q07"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Coordinator copies what counts",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R13-Q13",
+   "topic": "Divergent views",
+   "core": false,
+   "type": "decision",
+   "question": "When a member disagrees with the decision, how is it recorded?",
+   "header": "Dissent",
+   "multi": false,
+   "options": [
+    {
+     "label": "Named, in their own words (Recommended)",
+     "description": "The member's concern from the pop-up, or the coordinator's note, is saved with the member's name."
+    },
+    {
+     "label": "Coordinator's summary, named",
+     "description": "The coordinator writes it in their own words with the member's name."
+    },
+    {
+     "label": "Without names",
+     "description": "Only that a divergent view was raised and what it was."
+    }
+   ],
+   "why": "Today 'Divergent opinions' is a free-text field ('recorded verbatim, with names'). Victoria framework: divergent views recorded with names. Ties to the concern choice in R13-Q09.",
+   "depends_on": [
+    "R13-Q09"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Named, in their own words (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R13-Q14",
+   "topic": "Agent points",
+   "core": false,
+   "type": "decision",
+   "question": "Must every agent Point for review be marked Discussed, Accepted or Not relevant before the case closes?",
+   "header": "Agent marks",
+   "multi": false,
+   "options": [
+    {
+     "label": "Optional, unmarked shown so (Recommended)",
+     "description": "The coordinator marks what was raised; the rest shows 'not marked' in the agent log."
+    },
+    {
+     "label": "Points for review only",
+     "description": "Each Point for review needs a mark; brief items and live answers stay optional."
+    },
+    {
+     "label": "Every item, required",
+     "description": "Every brief item, point and live answer is marked before the case closes."
+    }
+   ],
+   "why": "D7: the marks are reporting only and never measure accuracy. Agents stand in for absent heads (D2). A required step adds clicks in the room.",
+   "depends_on": [
+    "R13-Q03"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Optional, unmarked shown so (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Agents during the meeting",
+   "core": false,
+   "type": "decision",
+   "question": "You want the agents standing in for absent heads to keep hearing the discussion for more context. How should that work, given voice is deferred and agents must speak only from the records?",
+   "header": "Agent listen",
+   "multi": false,
+   "options": [
+    {
+     "label": "Typed notes now, transcript later (Recommended)",
+     "description": "First build: the coordinator's live notes feed the agent's context; later, with voice, the meeting is transcribed locally; it only steers what the agent looks up; every statement still cites a record."
+    },
+    {
+     "label": "Only later, with voice",
+     "description": "Nothing until voice is on; then the local transcript feeds the agents' context, same rules."
+    },
+    {
+     "label": "Typed notes only, never audio",
+     "description": "Agents get the coordinator's notes and typed questions; the meeting is never transcribed."
+    }
+   ],
+   "why": "Added in interview (17 Oct) from the owner's message: replacing agents should keep hearing the discussion to get more context.",
+   "depends_on": [
+    "R09-Q13",
+    "R11-Q15"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R13-Q15",
+   "status": "Answered",
+   "answer": "Only later, with voice",
+   "notes": "Later: the meeting transcribed locally (LiveKit + local speech-to-text), audio discarded; the transcript steers what the agent looks up; every agent statement still cites a record.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Clinical flags",
+   "core": false,
+   "type": "decision",
+   "question": "When the coordinator is not a doctor, who resolves clinical flags (dose mismatch, two different values)?",
+   "header": "Flags",
+   "multi": false,
+   "options": [
+    {
+     "label": "A doctor resolves, coordinator records (Recommended)",
+     "description": "Owning consultant or a board doctor resolves clinical flags; the coordinator records decision and logistics."
+    },
+    {
+     "label": "Coordinator may resolve",
+     "description": "As today."
+    }
+   ],
+   "why": "Added in the final answer check (17 Oct): resolves a conflict or gap found by the check.",
+   "depends_on": [
+    "R02-Q08",
+    "R13-Q14"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R13-Q16",
+   "status": "Answered",
+   "answer": "A doctor resolves, coordinator records (Recommended)",
+   "answered_on": "17/10/2026"
+  }
+ ],
+ "status": "Done"
+}

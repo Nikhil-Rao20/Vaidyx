@@ -1,0 +1,63 @@
+{
+  "_note": "Clinical TNM and the anatomic stage group for breast cancer, transcribed from the AJCC Cancer Staging Manual, 8th edition (2017), chapter 48, pages 619 to 620 (licensed copy; internal instance only). 'text' is the criterion as printed (symbols restored where the scan's text layer lost them); 'find' is a phrase of the scan's own text layer that locates the line on the page for the highlight. Not switched on until a clinician has checked this file (docs/staging/DECISION.md, guard 5).",
+  "id": "breast_ajcc8",
+  "protocol": "breast",
+  "label": "Breast cancer, AJCC 8th edition, clinical stage",
+  "system": "AJCC TNM, 8th edition",
+  "signed_off": null,
+  "t_order": ["TX", "T0", "Tis", "T1mi", "T1a", "T1b", "T1c", "T2", "T3", "T4a", "T4b", "T4c", "T4d"],
+  "book": {"id": "ajcc8_breast", "title": "AJCC Cancer Staging Manual, 8th edition: 48 Breast", "short": "AJCC 8, Breast", "file": "ajcc/AJCC8_Ch48_Breast_pp589-628.pdf", "first_page": 589, "licensed": true},
+  "inputs": {
+    "T": {"facts": ["lesion_size"], "doc_types": ["mammogram", "ultrasound", "mri", "ct", "clinical_note"], "ask": "the size of the primary breast tumour (greatest dimension) and any direct extension to the chest wall or skin (ulceration, satellite skin nodules, oedema or peau d'orange, inflammatory carcinoma)"},
+    "N": {"facts": ["nodal_findings"], "doc_types": ["ultrasound", "mammogram", "mri", "ct", "pet_ct", "clinical_note"], "ask": "the regional lymph nodes on imaging or clinical examination: which level (axillary level I or II, infraclavicular level III, internal mammary, supraclavicular), whether movable or fixed or matted"},
+    "M": {"facts": ["distant_findings"], "doc_types": ["ct", "pet_ct", "bone_scan", "xray", "ultrasound", "mri", "clinical_note"], "ask": "distant metastases on clinical or radiographic work-up"}
+  },
+  "T": [
+    {"cat": "TX", "text": "Primary tumor cannot be assessed", "page": 619, "find": "Primary tum or cannot be assessed"},
+    {"cat": "T0", "text": "No evidence of primary tumor", "page": 619, "find": "No evidence o f primary tumor"},
+    {"cat": "T1mi", "group": "T1", "text": "Tumor ≤ 1 mm in greatest dimension", "page": 619, "find": "Tum or < 1 mm", "max_mm": 1},
+    {"cat": "T1a", "group": "T1", "text": "Tumor > 1 mm but ≤ 5 mm in greatest dimension (round any measurement 1.0-1.9 mm to 2 mm)", "page": 619, "find": "1 mm but < 5 mm", "min_mm": 1, "max_mm": 5},
+    {"cat": "T1b", "group": "T1", "text": "Tumor > 5 mm but ≤ 10 mm in greatest dimension", "page": 619, "find": "5 mm but < 1 0 mm", "min_mm": 5, "max_mm": 10},
+    {"cat": "T1c", "group": "T1", "text": "Tumor > 10 mm but ≤ 20 mm in greatest dimension", "page": 619, "find": "10 mm but < 20 mm", "min_mm": 10, "max_mm": 20},
+    {"cat": "T2", "group": "T2", "text": "Tumor > 20 mm but ≤ 50 mm in greatest dimension", "page": 619, "find": "20 mm but < 50 mm", "min_mm": 20, "max_mm": 50},
+    {"cat": "T3", "group": "T3", "text": "Tumor > 50 mm in greatest dimension", "page": 619, "find": "Tumor > 50 mm", "min_mm": 50},
+    {"cat": "T4a", "group": "T4", "feature": true, "text": "Extension to the chest wall; invasion or adherence to pectoralis muscle in the absence of invasion of chest wall structures does not qualify as T4", "page": 619, "find": "invasión or adherence to"},
+    {"cat": "T4b", "group": "T4", "feature": true, "text": "Ulceration and/or ipsilateral macroscopic satellite nodules and/or edema (including peau d'orange) of the skin that does not meet the criteria for inflammatory carcinoma", "page": 619, "find": "Ulceration and/or ipsilateral"},
+    {"cat": "T4c", "group": "T4", "feature": true, "text": "Both T4a and T4b are present", "page": 619, "find": "Both T4a and T4b"},
+    {"cat": "T4d", "group": "T4", "feature": true, "text": "Inflammatory carcinoma", "page": 619, "find": "Inflammatory carcinoma (see"}
+  ],
+  "N": [
+    {"cat": "cNX", "text": "Regional lymph nodes cannot be assessed (e.g., previously removed)", "page": 619, "find": "No regional lymph node metastases (by imaging", "rare": true},
+    {"cat": "cN0", "group": "N0", "text": "No regional lymph node metastases (by imaging or clinical examination)", "page": 619, "find": "No regional lymph node metastases (by imaging"},
+    {"cat": "cN1", "group": "N1", "text": "Metastases to movable ipsilateral Level I, II axillary lymph node(s)", "page": 619, "find": "movable ipsilateral Level I. II axillary"},
+    {"cat": "cN2a", "group": "N2", "text": "Metastases in ipsilateral Level I, II axillary lymph nodes fixed to one another (matted) or to other structures", "page": 619, "find": "fixed to one another (matted)"},
+    {"cat": "cN2b", "group": "N2", "text": "Metastases only in ipsilateral internal mammary nodes in the absence of axillary lymph node metastases", "page": 619, "find": "Metastases only in ipsilateral internal mammary"},
+    {"cat": "cN3a", "group": "N3", "text": "Metastases in ipsilateral infraclavicular lymph node(s)", "page": 619, "find": "ipsilateral infraclavicular (Level III"},
+    {"cat": "cN3b", "group": "N3", "text": "Metastases in ipsilateral internal mammary lymph node(s) and axillary lymph node(s)", "page": 619, "find": "node(s) and axillary lymph node(s)"},
+    {"cat": "cN3c", "group": "N3", "text": "Metastases in ipsilateral supraclavicular lymph node(s)", "page": 619, "find": "ipsilateral supraclavicular lymph"}
+  ],
+  "M": [
+    {"cat": "cM0", "group": "M0", "text": "No clinical or radiographic evidence of distant metastases", "page": 620, "find": "No clinical or radiographic evidence of distant"},
+    {"cat": "cM1", "group": "M1", "text": "Distant metastases detected by clinical and radiographic means (cM) and/or histologically proven metastases larger than 0.2 mm (pM)", "page": 620, "find": "Distant metastases detected by clinical and"}
+  ],
+  "groups": {
+    "title": "AJCC Anatomic Stage Groups",
+    "page": 620,
+    "find": "AJCC Anatomic Stage Groups",
+    "note": "The anatomic stage group table, used where tumour grade and biomarker testing are not routinely available (AJCC 8, p. 620). The prognostic stage group (grade, HER2, ER, PR) is not worked out by Vaidyx yet.",
+    "rows": [
+      {"T": ["Tis"], "N": ["N0"], "M": ["M0"], "stage": "0"},
+      {"T": ["T1"], "N": ["N0"], "M": ["M0"], "stage": "IA", "find": "TI NO M0 IA"},
+      {"T": ["T0", "T1"], "N": ["N1mi"], "M": ["M0"], "stage": "IB"},
+      {"T": ["T0", "T1"], "N": ["N1"], "M": ["M0"], "stage": "IIA", "find": "TI NI M0 IIA"},
+      {"T": ["T2"], "N": ["N0"], "M": ["M0"], "stage": "IIA", "find": "T2 NO M0 IIA"},
+      {"T": ["T2"], "N": ["N1"], "M": ["M0"], "stage": "IIB", "find": "T2 NI M0 IIB"},
+      {"T": ["T3"], "N": ["N0"], "M": ["M0"], "stage": "IIB", "find": "T3 NO M0 IIB"},
+      {"T": ["T0", "T1", "T2"], "N": ["N2"], "M": ["M0"], "stage": "IIIA", "find": "T2 N2 M0 IIIA"},
+      {"T": ["T3"], "N": ["N1", "N2"], "M": ["M0"], "stage": "IIIA", "find": "T3 NI M0 IIIA"},
+      {"T": ["T4"], "N": ["N0", "N1", "N2"], "M": ["M0"], "stage": "IIIB"},
+      {"T": ["T0", "T1", "T2", "T3", "T4"], "N": ["N3"], "M": ["M0"], "stage": "IIIC"},
+      {"T": ["*"], "N": ["*"], "M": ["M1"], "stage": "IV"}
+    ]
+  }
+}

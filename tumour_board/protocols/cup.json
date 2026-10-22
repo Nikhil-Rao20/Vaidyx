@@ -1,0 +1,1252 @@
+{
+ "id": "cup",
+ "label": "Cancer of Unknown Primary (CUP)",
+ "version": "0.1-draft",
+ "approval": {
+  "status": "draft",
+  "note": "Needs a named doctor's approval before real use (owner decision 17 Oct 2026)"
+ },
+ "note": "DRAFT, not approved for real use. Configurable by the clinical team. Required records derived from NICE CG104 (metastatic malignant disease of unknown primary origin in adults, 2010, last updated 26 April 2023, reviewed 16 July 2025 with no change) and the ESMO 2023 cancer of unknown primary guideline (Kramer et al.), quoted verbatim with the section or page on every record. No Indian source exists: NCG India has no CUP guideline, and neither ICMR, TMC nor the MoHFW STGs cover it (owner, 17 Oct 2026). Where NICE and ESMO differ (mammography, tumour markers) the owner chose NICE (R05-Q07). The checklist grows with the NICE diagnostic phase the doctor records (MUO, provisional CUP, confirmed CUP). Nothing here computes a stage, names a likely primary or suggests treatment. To be confirmed by a named doctor and the hospital Tumour Board (clinical review before real use). ESMO page numbers are the PDF page numbers (1 to 19) as the guideline library reads the file; the journal page is given under where.",
+ "settings_note": "The setting is the NICE CG104 diagnostic phase as the doctor records it (the definitions below are NICE's own words from 'Terms used in this guideline'); the system never decides the phase, never computes a stage and never names a likely primary. Item 4.1 derives the required records per setting from the tiers; the gate's labels 'NCG setting' and 'NCG tier' come from rules.py and apply to every protocol, but for this protocol the tiers rest on NICE and ESMO (see tier_basis on each record). When the primary is found, the existing referral moves the Case File to that site's checklist and this check stays as read-only history (R05-Q08).",
+ "settings": [
+  {
+   "id": "muo",
+   "label": "MUO (malignancy of undefined primary origin), as recorded",
+   "definition": "Metastatic malignancy identified on the basis of a limited number of tests, without an obvious primary site, before comprehensive investigation.",
+   "definition_source": "NICE CG104, Terms used in this guideline: malignancy of undefined primary origin (MUO)"
+  },
+  {
+   "id": "provisional_cup",
+   "label": "Provisional CUP (after the initial screen, before specialist review), as recorded",
+   "definition": "Metastatic epithelial or neuro-endocrine malignancy identified on the basis of histology or cytology, with no primary site detected despite a selected initial screen of investigations, before specialist review and possible further specialised investigations.",
+   "definition_source": "NICE CG104, Terms used in this guideline: provisional carcinoma of unknown primary origin (provisional CUP)"
+  },
+  {
+   "id": "confirmed_cup",
+   "label": "Confirmed CUP (after specialist review and special investigations), as recorded",
+   "definition": "Metastatic epithelial or neuro-endocrine malignancy identified on the basis of final histology, with no primary site detected despite a selected initial screen of investigations, specialist review, and further specialised investigations as appropriate.",
+   "definition_source": "NICE CG104, Terms used in this guideline: confirmed carcinoma of unknown primary origin (confirmed CUP)"
+  }
+ ],
+ "applies_if_note": "applies_if on a record is the doctor question that settles whether a conditional record applies (owner decision R07-Q10, 17 Oct 2026: the doctor answers yes or no, audited; sex comes from the registration). It is a specification only: rules.py (V2) reads applies_if_doc_type_present and nothing else, so today every record that carries applies_if is tier c with a condition (shown with the source's own tier and the condition, never counted), as the conditional records of the lung, oral cavity and cervix protocols are. Fields: question (asked of the treating doctor), sex (female, male or null: a registration sex that does not match makes the record not applicable without asking), yes (the tier when the answer is yes), no (the tier when the answer is no, 'none' = not applicable with the reason recorded, R07-Q06), unsettled (the tier while unanswered), source (the guideline line behind the question).",
+ "guideline_sources": [
+  {
+   "id": "nice_cg104",
+   "label": "NICE CG104, Metastatic malignant disease of unknown primary origin in adults: diagnosis and management",
+   "publisher": "National Institute for Health and Care Excellence (UK)",
+   "published": "26 July 2010",
+   "last_updated": "26 April 2023",
+   "last_reviewed": "16 July 2025 (surveillance decision: no update)",
+   "url": "https://www.nice.org.uk/guidance/cg104",
+   "cited_as": "page n/a, where = the recommendation number or the term defined, quoted from the Recommendations web page as read on 18 October 2026"
+  },
+  {
+   "id": "esmo_2023_cup",
+   "label": "Cancer of unknown primary: ESMO Clinical Practice Guideline for diagnosis, treatment and follow-up",
+   "publisher": "European Society for Medical Oncology",
+   "citation": "Kramer A, Bochtler T, Pauli C, et al. Annals of Oncology 2023;34(3):228-246",
+   "doi": "10.1016/j.annonc.2022.11.013",
+   "file": "esmo/ESMO_2023_cancer_of_unknown_primary_Kramer.pdf",
+   "cited_as": "page = PDF page number (1 to 19) as the guideline library reads the file; where names the section and the journal page"
+  },
+  {
+   "id": "ncg_india",
+   "label": "National Cancer Grid (NCG), India",
+   "status": "no guideline for cancer of unknown primary (owner, 17 Oct 2026; none in the NCG library on disk)"
+  }
+ ],
+ "records": [
+  {
+   "id": "clinical_history",
+   "label": "Clinical history and examination, with performance status and the question for the board",
+   "tier": "a",
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ],
+   "department": "Medical Oncology",
+   "required_facts": [
+    "ecog",
+    "clinical_question"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.1.1",
+     "quote": "Offer the following investigations to patients with MUO, as clinically appropriate, guided by the patient's symptoms:"
+    },
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.1.1",
+     "quote": "comprehensive history and physical examination including breast, nodal areas, skin, genital, rectal and pelvic examination"
+    },
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.3.2.1",
+     "quote": "Take account of prognostic factors, in particular performance status, presence of liver metastases, lactate dehydrogenase levels and serum albumin, when making decisions about further diagnostic investigations and treatment."
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 3,
+     "where": "CUP diagnosis: clinical work-up (journal page 230)",
+     "quote": "Thorough patient history and physical examination."
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 8,
+     "where": "Risk assessment: recommendations (journal page 235)",
+     "quote": "prognosis should be assessed by a risk score combining ECOG PS and serum LDH levels [IV, A]."
+    }
+   ],
+   "tier_basis": "first item of the NICE initial diagnostic phase and of the ESMO minimal mandatory work-up; the performance status is the prognostic factor both name (NICE 1.3.2.1, ESMO risk score): Essential in every setting. Vaidyx records the ECOG as written and never computes the ESMO risk score or a prognosis",
+   "route": "owner",
+   "note": "V2 item 2.4: a clinical record of the owning treating department (route owner); NICE 1.1.1.1 puts an oncologist in the CUP team as a minimum, so Medical Oncology is the default before a Case File has an owner"
+  },
+  {
+   "id": "cbc",
+   "label": "Complete blood count (full blood count)",
+   "tier": "a",
+   "doc_types": [
+    "lab"
+   ],
+   "region": "cbc|cbp|blood count|haemogram|hemogram|haematolog|hematolog|blood tests|routine labs",
+   "department": "Pathology",
+   "required_facts": [
+    "haemoglobin",
+    "wbc",
+    "platelets"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.1.1",
+     "quote": "full blood count; urea, electrolytes and creatinine; liver function tests; calcium; urinalysis; lactate dehydrogenase"
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 3,
+     "where": "CUP diagnosis: clinical work-up (journal page 230)",
+     "quote": "Blood draw with basic blood and biochemical analyses."
+    }
+   ],
+   "tier_basis": "NICE initial diagnostic phase and ESMO minimal mandatory work-up: Essential in every setting",
+   "note": "V2 item 2.4: the NICE blood line is split by test so each request reaches the desk that does it (CBC and urinalysis: Pathology; LFT, RFT, calcium, LDH and the tumour markers: Biochemistry)"
+  },
+  {
+   "id": "liver_renal_function",
+   "label": "Liver function tests and urea, electrolytes and creatinine (LFT, RFT)",
+   "tier": "a",
+   "doc_types": [
+    "lab"
+   ],
+   "region": "lft|rft|kft|liver|renal|kidney|biochem|creatinine|bilirubin|urea|sgot|sgpt",
+   "department": "Biochemistry",
+   "required_facts": [
+    "creatinine",
+    "bilirubin"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.1.1",
+     "quote": "full blood count; urea, electrolytes and creatinine; liver function tests; calcium; urinalysis; lactate dehydrogenase"
+    },
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.3.2.1",
+     "quote": "Take account of prognostic factors, in particular performance status, presence of liver metastases, lactate dehydrogenase levels and serum albumin, when making decisions about further diagnostic investigations and treatment."
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 3,
+     "where": "CUP diagnosis: clinical work-up (journal page 230)",
+     "quote": "Blood draw with basic blood and biochemical analyses."
+    }
+   ],
+   "tier_basis": "NICE initial diagnostic phase and ESMO minimal mandatory work-up: Essential in every setting; the liver function tests are checked by the total bilirubin and the renal function by the creatinine, as in the other protocols",
+   "note": "V2 item 2.4: the NICE blood line is split by test so each request reaches the desk that does it (CBC and urinalysis: Pathology; LFT, RFT, calcium, LDH and the tumour markers: Biochemistry); NICE also names serum albumin among the prognostic factors (1.3.2.1): no albumin field exists in the fact catalogue yet"
+  },
+  {
+   "id": "serum_calcium",
+   "label": "Serum calcium",
+   "tier": "a",
+   "doc_types": [
+    "lab"
+   ],
+   "region": "calcium|ca\\+\\+",
+   "department": "Biochemistry",
+   "required_facts": [],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.1.1",
+     "quote": "full blood count; urea, electrolytes and creatinine; liver function tests; calcium; urinalysis; lactate dehydrogenase"
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 3,
+     "where": "CUP diagnosis: clinical work-up (journal page 230)",
+     "quote": "Blood draw with basic blood and biochemical analyses."
+    }
+   ],
+   "tier_basis": "NICE initial diagnostic phase: Essential in every setting",
+   "note": "V2 item 2.4: the NICE blood line is split by test so each request reaches the desk that does it (CBC and urinalysis: Pathology; LFT, RFT, calcium, LDH and the tumour markers: Biochemistry); no calcium field in the fact catalogue: the record counts when a final signed report names calcium in its header or file name; a calcium reported inside a renal profile whose header does not name it is not recognised (the clinician confirms or waives)"
+  },
+  {
+   "id": "urinalysis",
+   "label": "Urinalysis (urine routine examination)",
+   "tier": "a",
+   "doc_types": [
+    "lab"
+   ],
+   "region": "urinalysis|urine|cue\\b",
+   "department": "Pathology",
+   "required_facts": [],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.1.1",
+     "quote": "full blood count; urea, electrolytes and creatinine; liver function tests; calcium; urinalysis; lactate dehydrogenase"
+    }
+   ],
+   "tier_basis": "NICE initial diagnostic phase: Essential in every setting",
+   "note": "V2 item 2.4: the NICE blood line is split by test so each request reaches the desk that does it (CBC and urinalysis: Pathology; LFT, RFT, calcium, LDH and the tumour markers: Biochemistry); no urinalysis field in the fact catalogue: the record counts when a final signed urine report is in the Case File"
+  },
+  {
+   "id": "ldh",
+   "label": "Lactate dehydrogenase (LDH)",
+   "tier": "a",
+   "doc_types": [
+    "lab"
+   ],
+   "region": "ldh|lactate dehydrogenase",
+   "department": "Biochemistry",
+   "required_facts": [],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.1.1",
+     "quote": "full blood count; urea, electrolytes and creatinine; liver function tests; calcium; urinalysis; lactate dehydrogenase"
+    },
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.3.2.1",
+     "quote": "Take account of prognostic factors, in particular performance status, presence of liver metastases, lactate dehydrogenase levels and serum albumin, when making decisions about further diagnostic investigations and treatment."
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 8,
+     "where": "Risk assessment: recommendations (journal page 235)",
+     "quote": "prognosis should be assessed by a risk score combining ECOG PS and serum LDH levels [IV, A]."
+    }
+   ],
+   "tier_basis": "NICE initial diagnostic phase, and the laboratory prognostic factor both guidelines name: Essential in every setting. Vaidyx shows the LDH as reported and never computes the ESMO risk score (ECOG PS with LDH) or a prognosis",
+   "note": "V2 item 2.4: the NICE blood line is split by test so each request reaches the desk that does it (CBC and urinalysis: Pathology; LFT, RFT, calcium, LDH and the tumour markers: Biochemistry); no LDH field in the fact catalogue: the record counts when a final signed report names LDH in its header or file name"
+  },
+  {
+   "id": "chest_xray",
+   "label": "Chest X-ray",
+   "tier": "a",
+   "doc_types": [
+    "xray",
+    "ct",
+    "pet_ct"
+   ],
+   "region": "chest|thorax|lung|whole body",
+   "department": "Radiology",
+   "required_facts": [],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.1.1",
+     "quote": "Offer the following investigations to patients with MUO, as clinically appropriate, guided by the patient's symptoms:"
+    },
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.1.1",
+     "quote": "chest X-ray"
+    }
+   ],
+   "tier_basis": "NICE initial diagnostic phase: Essential in every setting",
+   "note": "a CT or PET-CT report that images the chest also counts (clinical review), as in the oral cavity and cervix protocols"
+  },
+  {
+   "id": "ct_chest_abdomen_pelvis",
+   "label": "CT chest, abdomen and pelvis with contrast (sites of disease and nodes as written)",
+   "tier": "a",
+   "doc_types": [
+    "ct",
+    "mri",
+    "pet_ct"
+   ],
+   "region": "chest|thorax|abdomen|abdo|pelvis|whole body",
+   "department": "Radiology",
+   "required_facts": [
+    "distant_findings",
+    "nodal_findings"
+   ],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.1.1",
+     "quote": "computed tomography (CT) scan of the chest, abdomen and pelvis"
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 3,
+     "where": "CUP diagnosis: clinical work-up (journal page 230)",
+     "quote": "Either computed tomography (CT) with intravenous (i.v.) contrast agent infusion or magnetic resonance imaging (MRI) scans of the neck, thorax, abdomen and pelvis."
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 6,
+     "where": "Recommendations: histology, IHC and molecular biology; clinical work-up (journal page 233)",
+     "quote": "physical examination, basic blood analyses, CT or MRI imaging of neck, thorax, abdomen and pelvis for all patients, with additional mammography in females [IV, A]."
+    }
+   ],
+   "tier_basis": "NICE initial diagnostic phase and ESMO minimal mandatory work-up: Essential in every setting. ESMO accepts MRI in place of CT and adds the neck, so an MRI or a PET-CT report covering these regions also counts (clinical review)",
+   "note": "the required values are the sites of metastatic disease and the nodal findings as the radiologist wrote them (a CUP has no primary lesion to measure); a report that names only one region counts here and the clinician checks its coverage, as in the lung protocol"
+  },
+  {
+   "id": "histopathology",
+   "label": "Biopsy with histopathology or cytology (histologic type as written)",
+   "tier": "a",
+   "tiers": {
+    "muo": "b",
+    "provisional_cup": "a",
+    "confirmed_cup": "a"
+   },
+   "doc_types": [
+    "histopathology",
+    "cytology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.1.1",
+     "quote": "biopsy and standard histological examination, with immunohistochemistry where necessary, to distinguish carcinoma from other malignant diagnoses."
+    },
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "Terms used in this guideline: provisional carcinoma of unknown primary origin (provisional CUP)",
+     "quote": "Metastatic epithelial or neuro-endocrine malignancy identified on the basis of histology or cytology, with no primary site detected despite a selected initial screen of investigations, before specialist review and possible further specialised investigations."
+    },
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.3.3",
+     "quote": "Obtain a tissue sample for histological examination in patients with MUO who present with ascites, if technically possible."
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 6,
+     "where": "Recommendations: histology, IHC and molecular biology; clinical work-up (journal page 233)",
+     "quote": "Histology and IHC on good quality tissue specimens are required [III, A]."
+    }
+   ],
+   "tier_basis": "NICE lists the biopsy in the initial diagnostic phase, and by NICE's definition a provisional CUP is identified on histology or cytology, so the owner's design (R05-Q06, 17 Oct 2026) asks for it from the provisional setting: Essential in provisional and confirmed CUP; Optimal in MUO (shown; required at an Optimal hospital) until the doctor settles whether MUO should already require it"
+  },
+  {
+   "id": "ihc_panel",
+   "label": "Immunohistochemistry on the metastasis (NICE panel: CK7, CK20, TTF-1, PLAP; ER in women; PSA in men)",
+   "tier": "a",
+   "tiers": {
+    "muo": "none",
+    "provisional_cup": "a",
+    "confirmed_cup": "a"
+   },
+   "doc_types": [
+    "ihc",
+    "histopathology"
+   ],
+   "region": "ihc|immunohistochem|immunoprofile|immunostain|immunomarker|cytokeratin|ck ?7|ck ?20|ttf",
+   "department": "Pathology",
+   "required_facts": [],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.2.7",
+     "quote": "Use a panel of antibodies comprising cytokeratin 7 (CK7), CK20, thyroid transcription factor-1 (TTF-1), placental alkaline phosphatase (PLAP), oestrogen receptor (ER; women only) and PSA (men only) in all patients with adenocarcinoma of unknown origin."
+    },
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.2.8",
+     "quote": "Use additional immunohistochemistry to refine the differential diagnosis, guided by the results of the panel of antibodies in recommendation 1.2.2.7 and the clinical picture."
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 6,
+     "where": "Recommendations: histology, IHC and molecular biology; clinical work-up (journal page 233)",
+     "quote": "Histology and IHC on good quality tissue specimens are required [III, A]."
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 6,
+     "where": "Recommendations: histology, IHC and molecular biology; clinical work-up (journal page 233)",
+     "quote": "a stepwise approach using further IHC markers"
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 2,
+     "where": "CUP diagnosis: histology and immunohistochemistry (journal page 229)",
+     "quote": "For female patients, GATA3 should be used to screen for breast cancer and SOX10 for triple-negative breast cancer."
+    }
+   ],
+   "tier_basis": "ESMO requires IHC on every CUP specimen [III, A]; NICE names the panel for adenocarcinoma of unknown origin as a second-phase special investigation. Essential from the provisional setting, once histology exists; not applicable in MUO. Which antibodies belong in the panel is for the pathologist: the system never judges the histology or the sex",
+   "note": "counts when a final signed IHC report, or a histopathology report whose header names IHC, is in the Case File; the ER, PR, HER2, PD-L1 and MMR values are extracted when present and none is required (ER applies to women only)"
+  },
+  {
+   "id": "specialist_review",
+   "label": "Specialist review of all investigations (CUP team or oncology review, with the pathology and radiology review it rests on)",
+   "tier": "a",
+   "tiers": {
+    "muo": "none",
+    "provisional_cup": "c",
+    "confirmed_cup": "a"
+   },
+   "doc_types": [
+    "clinical_note",
+    "referral",
+    "tumour_board_record",
+    "histopathology"
+   ],
+   "region": "review|second opinion|cup\\b|unknown primary|tumou?r board|mdt|multidisciplinary|oncolog",
+   "department": "Medical Oncology",
+   "required_facts": [],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.1.1.5",
+     "quote": "The CUP team should actively review the outcome of all investigations with a nominated pathologist and radiologist as appropriate."
+    },
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.1.1.6",
+     "quote": "A CUP network MDT should be set up to review the treatment and care of patients with confirmed CUP, or with MUO or provisional CUP and complex diagnostic or treatment issues."
+    },
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "Terms used in this guideline: confirmed carcinoma of unknown primary origin (confirmed CUP)",
+     "quote": "Metastatic epithelial or neuro-endocrine malignancy identified on the basis of final histology, with no primary site detected despite a selected initial screen of investigations, specialist review, and further specialised investigations as appropriate."
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 3,
+     "where": "CUP diagnosis: clinical work-up (journal page 230)",
+     "quote": "The most important diagnostic tool for this purpose is sound clinical reasoning."
+    }
+   ],
+   "tier_basis": "NICE's confirmed CUP is reached only after specialist review, so the owner's design (R05-Q06) makes the record that documents it Essential in the confirmed setting, shown in provisional CUP and not applicable in MUO",
+   "note": "the document is the CUP team's or the oncologist's note, a board record or a pathology slide review that names the review; the header words in region decide, so an oncology consultation note counts as the review (NICE 1.1.1.1: an oncologist is in the CUP team) and the clinician checks it"
+  },
+  {
+   "id": "molecular_profiling",
+   "label": "Molecular profiling (panel NGS, MSI), as the team decides",
+   "tier": "c",
+   "tiers": {
+    "muo": "none",
+    "provisional_cup": "c",
+    "confirmed_cup": "c"
+   },
+   "doc_types": [
+    "molecular"
+   ],
+   "department": "Pathology",
+   "required_facts": [],
+   "sla_days": 10,
+   "sources": [
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 6,
+     "where": "Recommendations: histology, IHC and molecular biology; clinical work-up (journal page 233)",
+     "quote": "NGS may be carried out routinely in CUP [IV, B]."
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 6,
+     "where": "Recommendations: histology, IHC and molecular biology; clinical work-up (journal page 233)",
+     "quote": "Consequently, it is not generally recommended outside of clinical research [II, D]."
+    },
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.2.9 (withdrawn; the note that replaces it)",
+     "quote": "For information on genomic diagnostic tests to identify primary tumours in patients with provisional CUP, see the NHS Genomic Medicine Service's national genomic test directory for cancer."
+    }
+   ],
+   "tier_basis": "ESMO: panel NGS may be carried out routinely [IV, B] (a may-statement) while gene expression profiling to find the primary is not recommended outside research [II, D]; NICE withdrew its own recommendation and points to a national test directory: Optional (shown only) from the provisional setting. The MMR, RAS / BRAF, KRAS, EGFR, ALK, ROS1 and PD-L1 values are extracted when a molecular report exists; Vaidyx never suggests a treatment from them"
+  },
+  {
+   "id": "pet_ct",
+   "label": "FDG PET-CT (selected cases only: primary not found after the initial tests and a treatment decision depends on it)",
+   "tier": "c",
+   "tiers": {
+    "muo": "c",
+    "provisional_cup": "c",
+    "confirmed_cup": "c"
+   },
+   "doc_types": [
+    "pet_ct"
+   ],
+   "department": "Nuclear Medicine",
+   "required_facts": [],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.2.5",
+     "quote": "to patients with provisional CUP presenting with cervical lymphadenopathy with no primary tumour identified on ear, nose and throat panendoscopy if radical treatment is considered to be an option."
+    },
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.2.6",
+     "quote": "Consider 18F-FDG PET-CT in patients with provisional CUP with extra-cervical presentations after discussion with the CUP team or CUP network MDT."
+    },
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.3.1.2",
+     "quote": "the results are likely to affect a treatment decision"
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 3,
+     "where": "CUP diagnosis: clinical work-up (journal page 230)",
+     "quote": "is optional in the routine CUP diagnostic work-up."
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 6,
+     "where": "Recommendations: histology, IHC and molecular biology; clinical work-up (journal page 233)",
+     "quote": "imaging is generally recommended for single-site/oligometastatic cases that warrant ablative locoregional treatment as well as for patients with head and neck CUP [IV, B]."
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 7,
+     "where": "Recommendations: clinical work-up, continued (journal page 234)",
+     "quote": "imaging is optional in all other cases [III, C]."
+    }
+   ],
+   "tier_basis": "a second-phase special investigation in NICE (offered for a cervical node presentation when radical treatment is an option, considered for other presentations after CUP team discussion) and optional in ESMO's routine work-up (generally recommended for single-site or oligometastatic and for head and neck CUP): conditional on the sex or the presentation, which the system never judges: shown with the source's own tier and the condition, never counted, until the doctor answers the question in applies_if (R07-Q10, not built yet; see applies_if_note)",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "for provisional CUP with cervical lymphadenopathy and no primary on ENT panendoscopy when radical treatment is an option (NICE: offer); for extra-cervical presentations after CUP team discussion (NICE: consider); ESMO: single-site or oligometastatic and head and neck CUP, optional otherwise"
+   },
+   "applies_if": {
+    "question": "Has the primary not been found after the initial tests, and does a treatment decision depend on the PET-CT result (radical or local treatment considered)?",
+    "sex": null,
+    "yes": "a",
+    "no": "none",
+    "unsettled": "c",
+    "source": "NICE CG104 1.2.2.5, 1.2.2.6 and 1.3.1.2; ESMO 2023 clinical work-up (owner: optional, doctor-settled, 17 Oct 2026)"
+   }
+  },
+  {
+   "id": "mammography",
+   "label": "Mammography (women, only when clinical or pathological features are compatible with breast cancer)",
+   "tier": "c",
+   "tiers": {
+    "muo": "c",
+    "provisional_cup": "c",
+    "confirmed_cup": "c"
+   },
+   "doc_types": [
+    "mammogram",
+    "ultrasound"
+   ],
+   "region": "mammo|breast",
+   "department": "Radiology",
+   "required_facts": [],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.2.3",
+     "quote": "Do not offer mammography routinely to women presenting with MUO, unless clinical or pathological features are compatible with breast cancer."
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 3,
+     "where": "CUP diagnosis: clinical work-up (journal page 230)",
+     "quote": "Mammography in females."
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 6,
+     "where": "Recommendations: histology, IHC and molecular biology; clinical work-up (journal page 233)",
+     "quote": "physical examination, basic blood analyses, CT or MRI imaging of neck, thorax, abdomen and pelvis for all patients, with additional mammography in females [IV, A]."
+    }
+   ],
+   "tier_basis": "NICE and ESMO disagree (NICE: not routinely; ESMO: every female patient); the owner chose NICE's rule (R05-Q07, 17 Oct 2026): required only when the doctor records that the features fit breast cancer, otherwise not applicable with a reason: conditional on the sex or the presentation, which the system never judges: shown with the source's own tier and the condition, never counted, until the doctor answers the question in applies_if (R07-Q10, not built yet; see applies_if_note)",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "for women whose clinical or pathological features are compatible with breast cancer (NICE); ESMO 2023 lists mammography for every female patient"
+   },
+   "applies_if": {
+    "question": "Are clinical or pathological features compatible with breast cancer?",
+    "sex": "female",
+    "yes": "a",
+    "no": "none",
+    "unsettled": "c",
+    "source": "NICE CG104 1.2.2.3 (owner decision R05-Q07: NICE's rule, not ESMO's)"
+   },
+   "note": "a breast ultrasound report also counts (sonomammography is common in India; clinical review)"
+  },
+  {
+   "id": "mri_breast",
+   "label": "Breast MRI (adenocarcinoma in the axillary nodes with no breast primary on standard breast investigations)",
+   "tier": "c",
+   "tiers": {
+    "muo": "none",
+    "provisional_cup": "c",
+    "confirmed_cup": "c"
+   },
+   "doc_types": [
+    "mri"
+   ],
+   "region": "breast|mammary",
+   "department": "Radiology",
+   "required_facts": [],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.2.4",
+     "quote": "If no breast primary tumour is identified after standard breast investigations, consider dynamic contrast-enhanced breast magnetic resonance imaging (MRI) to identify lesions suitable for targeted biopsy."
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 11,
+     "where": "Classification and management of favourable CUP (journal page 238)",
+     "quote": "breast MRI has been shown to identify the primary in around two-thirds of patients with negative clinical examination"
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 11,
+     "where": "Classification and management of favourable CUP (journal page 238)",
+     "quote": "is therefore mandatory before reaching the diagnosis of breast-like CUP"
+    }
+   ],
+   "tier_basis": "NICE: consider; ESMO: mandatory before a breast-like CUP diagnosis: conditional on the sex or the presentation, which the system never judges: shown with the source's own tier and the condition, never counted, until the doctor answers the question in applies_if (R07-Q10, not built yet; see applies_if_note)",
+   "condition": {
+    "ncg_tier": "b",
+    "text": "for adenocarcinoma involving the axillary nodes with no breast primary after standard breast investigations (NICE: consider; ESMO: mandatory before a breast-like CUP diagnosis)"
+   },
+   "applies_if": {
+    "question": "Adenocarcinoma involving the axillary nodes, with no breast primary found on standard breast investigations?",
+    "sex": null,
+    "yes": "b",
+    "no": "none",
+    "unsettled": "c",
+    "source": "NICE CG104 1.2.2.4; ESMO 2023 breast-like CUP"
+   }
+  },
+  {
+   "id": "myeloma_screen",
+   "label": "Myeloma screen (only when there are isolated or multiple lytic bone lesions)",
+   "tier": "c",
+   "tiers": {
+    "muo": "c",
+    "provisional_cup": "c",
+    "confirmed_cup": "c"
+   },
+   "doc_types": [
+    "lab"
+   ],
+   "region": "myeloma|electrophoresis|spep|immunofixation|free light chain|bence ?jones|m ?band|m-protein|paraprotein",
+   "department": "Biochemistry",
+   "required_facts": [],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.1.1",
+     "quote": "myeloma screen (when there are isolated or multiple lytic bone lesions)"
+    }
+   ],
+   "tier_basis": "NICE initial diagnostic phase, under a condition on the imaging: conditional on the sex or the presentation, which the system never judges: shown with the source's own tier and the condition, never counted, until the doctor answers the question in applies_if (R07-Q10, not built yet; see applies_if_note)",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "when there are isolated or multiple lytic bone lesions (NICE)"
+   },
+   "applies_if": {
+    "question": "Isolated or multiple lytic bone lesions on imaging?",
+    "sex": null,
+    "yes": "a",
+    "no": "none",
+    "unsettled": "c",
+    "source": "NICE CG104 1.2.1.1"
+   }
+  },
+  {
+   "id": "gi_endoscopy",
+   "label": "Upper or lower GI endoscopy (only when symptoms, histology or radiology suggest a GI primary)",
+   "tier": "c",
+   "tiers": {
+    "muo": "c",
+    "provisional_cup": "c",
+    "confirmed_cup": "c"
+   },
+   "doc_types": [
+    "endoscopy"
+   ],
+   "region": "colonoscop|gastroscop|ugi|ogd|oesophag|esophag|sigmoid|procto|enteroscop|endoscop|eus\\b|ercp",
+   "department": "Medical Gastroenterology",
+   "required_facts": [],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.1.1",
+     "quote": "symptom-directed endoscopy"
+    },
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.2.2",
+     "quote": "Do not carry out upper or lower gastrointestinal (GI) endoscopy in patients with MUO unless the symptoms, histology or radiology suggest a GI primary tumour."
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 3,
+     "where": "CUP diagnosis: clinical work-up (journal page 230)",
+     "quote": "Gastroscopy and colonoscopy are generally recommended whenever a putative GI primary is deemed possible."
+    }
+   ],
+   "tier_basis": "NICE's symptom-directed endoscopy, split by the desk that does it (V2 item 2.4): conditional on the sex or the presentation, which the system never judges: shown with the source's own tier and the condition, never counted, until the doctor answers the question in applies_if (R07-Q10, not built yet; see applies_if_note)",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "when the symptoms, histology or radiology suggest a GI primary tumour (NICE); ESMO: whenever a GI primary is deemed possible"
+   },
+   "applies_if": {
+    "question": "Do the symptoms, histology or radiology suggest a GI primary?",
+    "sex": null,
+    "yes": "a",
+    "no": "none",
+    "unsettled": "c",
+    "source": "NICE CG104 1.2.1.1 and 1.2.2.2; ESMO 2023 clinical work-up"
+   }
+  },
+  {
+   "id": "bronchoscopy",
+   "label": "Bronchoscopy (intrapulmonary nodules unsuitable for percutaneous biopsy, or a suspected lung primary)",
+   "tier": "c",
+   "tiers": {
+    "muo": "c",
+    "provisional_cup": "c",
+    "confirmed_cup": "c"
+   },
+   "doc_types": [
+    "endoscopy"
+   ],
+   "region": "bronch|ebus",
+   "department": "Pulmonology",
+   "required_facts": [],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.3.1",
+     "quote": "Offer flexible bronchoscopy with biopsy, brushings and washings to patients presenting with intrapulmonary nodules of probable metastatic origin that are unsuitable for percutaneous biopsy, even in the absence of endobronchial or central nodal disease on imaging."
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 3,
+     "where": "CUP diagnosis: clinical work-up (journal page 230)",
+     "quote": "may be withheld unless IHC or the clinical picture for lung lesions and/or mediastinal lymph nodes implies a lung primary."
+    }
+   ],
+   "tier_basis": "NICE's symptom-directed endoscopy, split by the desk that does it (V2 item 2.4): conditional on the sex or the presentation, which the system never judges: shown with the source's own tier and the condition, never counted, until the doctor answers the question in applies_if (R07-Q10, not built yet; see applies_if_note)",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "for intrapulmonary nodules of probable metastatic origin unsuitable for percutaneous biopsy (NICE: offer); ESMO withholds it unless IHC or the clinical picture implies a lung primary"
+   },
+   "applies_if": {
+    "question": "Intrapulmonary nodules unsuitable for percutaneous biopsy, or does the IHC or the clinical picture imply a lung primary?",
+    "sex": null,
+    "yes": "a",
+    "no": "none",
+    "unsettled": "c",
+    "source": "NICE CG104 1.2.3.1; ESMO 2023 clinical work-up"
+   }
+  },
+  {
+   "id": "ent_panendoscopy",
+   "label": "ENT panendoscopy (cervical lymph node presentation with no primary found)",
+   "tier": "c",
+   "tiers": {
+    "muo": "c",
+    "provisional_cup": "c",
+    "confirmed_cup": "c"
+   },
+   "doc_types": [
+    "endoscopy",
+    "operative_note"
+   ],
+   "region": "panendoscop|laryngoscop|pharyngoscop|nasopharyng|nasal endoscop|tonsillectom|examination under|eua\\b",
+   "department": "ENT / Head and Neck Surgery",
+   "required_facts": [],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.2.5",
+     "quote": "to patients with provisional CUP presenting with cervical lymphadenopathy with no primary tumour identified on ear, nose and throat panendoscopy if radical treatment is considered to be an option."
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 11,
+     "where": "Classification and management of favourable CUP (journal page 238)",
+     "quote": "In cases where the primary has remained elusive after these examinations,"
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 11,
+     "where": "Classification and management of favourable CUP (journal page 238)",
+     "quote": "panendoscopy with biopsies of the naso-, hypo- and oropharynx, as well as bilateral tonsillectomy, should be carried out."
+    }
+   ],
+   "tier_basis": "NICE's symptom-directed endoscopy, split by the desk that does it (V2 item 2.4); NICE 1.2.2.5 presupposes it before PET-CT in a cervical node presentation: conditional on the sex or the presentation, which the system never judges: shown with the source's own tier and the condition, never counted, until the doctor answers the question in applies_if (R07-Q10, not built yet; see applies_if_note)",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "for a cervical lymph node presentation with no primary found (NICE 1.2.2.5; ESMO: after flexible endoscopy, imaging and PET when the primary stays elusive)"
+   },
+   "applies_if": {
+    "question": "Cervical lymph node presentation with no primary found on examination and imaging?",
+    "sex": null,
+    "yes": "a",
+    "no": "none",
+    "unsettled": "c",
+    "source": "NICE CG104 1.2.2.5; ESMO 2023 head and neck-like CUP"
+   }
+  },
+  {
+   "id": "psa",
+   "label": "Serum PSA (men with a presentation compatible with prostate cancer)",
+   "tier": "c",
+   "tiers": {
+    "muo": "c",
+    "provisional_cup": "c",
+    "confirmed_cup": "c"
+   },
+   "doc_types": [
+    "lab"
+   ],
+   "region": "psa|prostate",
+   "department": "Biochemistry",
+   "required_facts": [],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.1.1",
+     "quote": "prostate-specific antigen (PSA) in men (see recommendation 1.2.2.1)"
+    },
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.2.1",
+     "quote": "Do not measure tumour markers during diagnosis except for:"
+    },
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.2.1",
+     "quote": "PSA in men with presentations compatible with prostate cancer."
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 3,
+     "where": "CUP diagnosis: clinical work-up (journal page 230)",
+     "quote": "(PSA) in males with a possible prostate cancer"
+    }
+   ],
+   "tier_basis": "NICE initial diagnostic phase for men, restricted by 1.2.2.1 to presentations compatible with prostate cancer: conditional on the sex or the presentation, which the system never judges: shown with the source's own tier and the condition, never counted, until the doctor answers the question in applies_if (R07-Q10, not built yet; see applies_if_note)",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "in men with presentations compatible with prostate cancer (NICE); ESMO: in males with a possible prostate cancer"
+   },
+   "applies_if": {
+    "question": "Male patient with a presentation compatible with prostate cancer?",
+    "sex": "male",
+    "yes": "a",
+    "no": "none",
+    "unsettled": "c",
+    "source": "NICE CG104 1.2.1.1 and 1.2.2.1; ESMO 2023 clinical work-up"
+   },
+   "note": "V2 item 2.4: the NICE blood line is split by test so each request reaches the desk that does it (CBC and urinalysis: Pathology; LFT, RFT, calcium, LDH and the tumour markers: Biochemistry)"
+  },
+  {
+   "id": "ca125",
+   "label": "Serum CA 125 (women with peritoneal malignancy, ascites or another presentation compatible with ovarian cancer)",
+   "tier": "c",
+   "tiers": {
+    "muo": "c",
+    "provisional_cup": "c",
+    "confirmed_cup": "c"
+   },
+   "doc_types": [
+    "lab"
+   ],
+   "region": "ca ?-?125|cancer antigen 125",
+   "department": "Biochemistry",
+   "required_facts": [],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.1.1",
+     "quote": "cancer antigen 125 (CA125) in women with peritoneal malignancy or ascites (see recommendation 1.2.2.1)"
+    },
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.2.1",
+     "quote": "Do not measure tumour markers during diagnosis except for:"
+    },
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.2.1",
+     "quote": "CA125 in women with presentations compatible with ovarian cancer (including those with inguinal node, chest, pleural, peritoneal or retroperitoneal presentations). Carefully interpret the results because of limited test specificity."
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 3,
+     "where": "CUP diagnosis: clinical work-up (journal page 230)",
+     "quote": "CA125 in females with a suspected gynaeco- logical primary"
+    }
+   ],
+   "tier_basis": "NICE initial diagnostic phase for women with peritoneal malignancy or ascites, widened by 1.2.2.1 to presentations compatible with ovarian cancer: conditional on the sex or the presentation, which the system never judges: shown with the source's own tier and the condition, never counted, until the doctor answers the question in applies_if (R07-Q10, not built yet; see applies_if_note)",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "in women with peritoneal malignancy or ascites, or another presentation compatible with ovarian cancer (NICE)"
+   },
+   "applies_if": {
+    "question": "Peritoneal malignancy, ascites or another presentation compatible with ovarian cancer?",
+    "sex": "female",
+    "yes": "a",
+    "no": "none",
+    "unsettled": "c",
+    "source": "NICE CG104 1.2.1.1 and 1.2.2.1; ESMO 2023 clinical work-up"
+   },
+   "note": "V2 item 2.4: the NICE blood line is split by test so each request reaches the desk that does it (CBC and urinalysis: Pathology; LFT, RFT, calcium, LDH and the tumour markers: Biochemistry); the ESMO quote is copied as the guideline library's PDF text layer breaks the word at the line end, so the quote stays verifiable by script"
+  },
+  {
+   "id": "afp_hcg",
+   "label": "Serum AFP and hCG (presentation compatible with a germ-cell tumour, particularly midline nodal disease; AFP also for hepatocellular cancer)",
+   "tier": "c",
+   "tiers": {
+    "muo": "c",
+    "provisional_cup": "c",
+    "confirmed_cup": "c"
+   },
+   "doc_types": [
+    "lab"
+   ],
+   "region": "afp|alpha ?-?feto|hcg|chorionic|germ cell|tumou?r markers?",
+   "department": "Biochemistry",
+   "required_facts": [],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.1.1",
+     "quote": "alpha-fetoprotein (AFP) and human chorionic gonadotrophin (hCG) (particularly in the presence of midline nodal disease) (see recommendation 1.2.2.1)"
+    },
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.2.1",
+     "quote": "Do not measure tumour markers during diagnosis except for:"
+    },
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.2.1",
+     "quote": "AFP and hCG in patients with presentations compatible with germ-cell tumours (particularly those with mediastinal and/or retroperitoneal masses and in young men)."
+    },
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.2.1",
+     "quote": "AFP in patients with presentations compatible with hepatocellular cancer."
+    },
+    {
+     "guideline": "ESMO Clinical Practice Guideline: cancer of unknown primary (Kramer et al., Annals of Oncology 34:228-246, 2023)",
+     "page": 3,
+     "where": "CUP diagnosis: clinical work-up (journal page 230)",
+     "quote": "in males with a suspected germ cell tumour"
+    }
+   ],
+   "tier_basis": "NICE initial diagnostic phase, restricted by 1.2.2.1 to presentations compatible with germ-cell tumours (AFP also for hepatocellular cancer): conditional on the sex or the presentation, which the system never judges: shown with the source's own tier and the condition, never counted, until the doctor answers the question in applies_if (R07-Q10, not built yet; see applies_if_note)",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "for presentations compatible with germ-cell tumours, particularly midline (mediastinal or retroperitoneal) disease and young men; AFP also for presentations compatible with hepatocellular cancer (NICE)"
+   },
+   "applies_if": {
+    "question": "Presentation compatible with a germ-cell tumour (midline, mediastinal or retroperitoneal disease, young man) or with hepatocellular cancer?",
+    "sex": null,
+    "yes": "a",
+    "no": "none",
+    "unsettled": "c",
+    "source": "NICE CG104 1.2.1.1 and 1.2.2.1; ESMO 2023 clinical work-up"
+   },
+   "note": "V2 item 2.4: the NICE blood line is split by test so each request reaches the desk that does it (CBC and urinalysis: Pathology; LFT, RFT, calcium, LDH and the tumour markers: Biochemistry); a tumour marker panel report that names AFP or hCG in its header also counts (clinical review)"
+  },
+  {
+   "id": "testicular_ultrasound",
+   "label": "Testicular ultrasound (men with a presentation compatible with a germ-cell tumour)",
+   "tier": "c",
+   "tiers": {
+    "muo": "c",
+    "provisional_cup": "c",
+    "confirmed_cup": "c"
+   },
+   "doc_types": [
+    "ultrasound"
+   ],
+   "region": "testi|scrot",
+   "department": "Radiology",
+   "required_facts": [],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NICE CG104 Metastatic malignant disease of unknown primary origin in adults: diagnosis and management (2010, last updated 26 April 2023)",
+     "page": "n/a",
+     "where": "recommendation 1.2.1.1",
+     "quote": "testicular ultrasound in men with presentations compatible with germ-cell tumours"
+    }
+   ],
+   "tier_basis": "NICE initial diagnostic phase for men with a germ-cell presentation: conditional on the sex or the presentation, which the system never judges: shown with the source's own tier and the condition, never counted, until the doctor answers the question in applies_if (R07-Q10, not built yet; see applies_if_note)",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "in men with presentations compatible with germ-cell tumours (NICE)"
+   },
+   "applies_if": {
+    "question": "Male patient with a presentation compatible with a germ-cell tumour?",
+    "sex": "male",
+    "yes": "a",
+    "no": "none",
+    "unsettled": "c",
+    "source": "NICE CG104 1.2.1.1"
+   }
+  }
+ ],
+ "optional": [
+  {
+   "id": "prior_treatment",
+   "label": "Treatment summary of any earlier cancer (a relapse is always considered)",
+   "doc_types": [
+    "treatment_summary"
+   ],
+   "department": "Medical Oncology",
+   "route": "owner",
+   "note": "ESMO 2023, p. 5 of the PDF: 'About 25% of patients with presumed CUP have had a prior malignancy.'; NICE CG104 covers people who have had treatment for cancer before"
+  },
+  {
+   "id": "prior_imaging",
+   "label": "Previous imaging for comparison",
+   "doc_types": [
+    "ct",
+    "mri",
+    "xray",
+    "pet_ct"
+   ],
+   "department": "Radiology"
+  },
+  {
+   "id": "discharge",
+   "label": "Discharge summary",
+   "doc_types": [
+    "discharge_summary"
+   ],
+   "department": "Medical Oncology",
+   "route": "owner"
+  },
+  {
+   "id": "previous_board",
+   "label": "Previous Tumour Board record",
+   "doc_types": [
+    "tumour_board_record"
+   ],
+   "department": "MDT Coordinator",
+   "route": "coordinator"
+  }
+ ],
+ "extract_facts": [
+  "presenting_complaint",
+  "ecog",
+  "smoking_history",
+  "comorbidities",
+  "clinical_question",
+  "recorded_stage",
+  "nodal_findings",
+  "distant_findings",
+  "comparison_prior",
+  "suv_max",
+  "histologic_type",
+  "grade",
+  "er",
+  "pr",
+  "her2",
+  "pdl1",
+  "mmr",
+  "egfr",
+  "alk",
+  "ros1",
+  "kras",
+  "ras_braf",
+  "haemoglobin",
+  "wbc",
+  "platelets",
+  "creatinine",
+  "bilirubin",
+  "cea",
+  "treatment_received",
+  "patient_preference",
+  "clinical_trial_note",
+  "diagnosis_date_mode"
+ ],
+ "post_board": {
+  "required_record_fields": [
+   "decision_text",
+   "recorded_by",
+   "participants",
+   "actions"
+  ],
+  "follow_up_default_days": 14,
+  "record_fields_source": "EUSOMA 2020 (names of all participants, evidence on decisions); Victorian Cancer MDM quality framework 2018 (report errors/changes raised, divergent recommendations and dissenting clinicians); PM-JAY HBP 2.2 s.3.9 (tumour board decision and treatment plan)"
+ },
+ "core_data": [
+  {
+   "id": "diagnosis",
+   "label": "Histopathological / cytological diagnosis (histologic type of the metastasis as written)",
+   "facts": [
+    "histologic_type"
+   ]
+  },
+  {
+   "id": "diagnosis_date_mode",
+   "label": "Date and mode of diagnosis",
+   "facts": [
+    "diagnosis_date_mode"
+   ]
+  },
+  {
+   "id": "stage",
+   "label": "Extent of disease as recorded (sites of metastases and nodes, with the investigations used)",
+   "facts": [
+    "recorded_stage",
+    "distant_findings",
+    "nodal_findings"
+   ]
+  },
+  {
+   "id": "performance_status",
+   "label": "Performance status",
+   "facts": [
+    "ecog"
+   ]
+  },
+  {
+   "id": "comorbidities",
+   "label": "Co-morbidities",
+   "facts": [
+    "comorbidities"
+   ]
+  },
+  {
+   "id": "biomarkers",
+   "label": "Relevant immunohistochemistry / molecular results documented",
+   "facts": [
+    "er",
+    "pr",
+    "her2",
+    "pdl1",
+    "mmr",
+    "ras_braf",
+    "kras",
+    "egfr",
+    "alk",
+    "ros1"
+   ]
+  },
+  {
+   "id": "treatment_history",
+   "label": "Treatment history, including any earlier cancer",
+   "facts": [
+    "treatment_received"
+   ]
+  },
+  {
+   "id": "patient_preference",
+   "label": "Patient preference / special circumstances",
+   "facts": [
+    "patient_preference"
+   ]
+  },
+  {
+   "id": "clinical_trial",
+   "label": "Clinical trial availability / suitability recorded",
+   "facts": [
+    "clinical_trial_note"
+   ]
+  },
+  {
+   "id": "question",
+   "label": "Question for the Tumour Board",
+   "facts": [
+    "clinical_question"
+   ]
+  }
+ ],
+ "core_data_source": "NHS England, Streamlining MDT meetings (2020), p.11 'minimum core data requirements'; aligned with the NCG Virtual Tumour Board case template (India); the clinical trial item also rests on NICE CG104 1.5.1.2 ('Offer patients with confirmed CUP the opportunity to enter clinical trials.') and ESMO 2023 ('inclusion in clinical trials is encouraged [V, A].', PDF p. 14)",
+ "policy_basis": "PM-JAY Health Benefit Package 2.2 user guidelines (NHA, 2021), section 3.9: pre-authorization is mandatory at each step of cancer care and the decision on appropriate care is to be taken by a multidisciplinary tumour board; NHS England MDT streamlining guidance (2020) pre-listing conditions. Guideline basis of this checklist: NCG India has no guideline for cancer of unknown primary (owner, 17 Oct 2026; none in the NCG library on disk), and neither ICMR, TMC nor the MoHFW STGs cover it, so the records rest on NICE CG104 (UK, 2010, last updated 26 April 2023, reviewed 16 July 2025) and the ESMO 2023 CUP guideline (Kramer et al.), quoted verbatim; an Indian source replaces them as soon as one exists."
+}

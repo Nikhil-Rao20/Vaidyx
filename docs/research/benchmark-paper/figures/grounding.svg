@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="vfig" viewBox="0 0 960 416" width="960" height="416" role="img" aria-label="Ask-the-Case-File probes and what the grounding layer removed"><style>.vfig .fg{fill:var(--l-fg,#0f172a)}.vfig .fg2{fill:var(--l-fg-2,#475569)}.vfig .fg3{fill:var(--l-fg-3,#94a3b8)}.vfig .ln{stroke:var(--l-line,#e2e8f0)}.vfig .ln2{stroke:var(--l-line-2,#cbd5e1)}.vfig .ax{stroke:var(--l-fg-3,#94a3b8)}.vfig .bg{fill:var(--l-surface,#ffffff)}.vfig .band{fill:var(--l-accent-bg,rgba(1,180,194,.09))}.vfig .neu{fill:var(--l-line-2,#cbd5e1)}.vfig .med{fill:#0e9aa7}.vfig .gen{fill:#7c5cf0}.vfig .medS{stroke:#0e9aa7}.vfig .genS{stroke:#7c5cf0}.vfig .warm{fill:#e8973a}.vfig .warmS{stroke:#e8973a}.vfig .bad{fill:#e35d6a}.vfig text{font-family:'Inter Variable', Inter, system-ui, sans-serif}.vfig .t-num,.vfig .t-ax{font-variant-numeric:tabular-nums}.vfig .t-title{font-size:19px;font-weight:650;letter-spacing:-.01em}.vfig .t-sub{font-size:13.5px}.vfig .t-lab{font-size:13.5px;font-weight:550}.vfig .t-tag{font-size:11.5px}.vfig .t-num{font-size:12.5px;font-weight:600}.vfig .t-ax{font-size:12px} </style>
+<g transform="translate(0,-50)">
+<rect x="0.0" y="61.0" width="12.0" height="12.0" rx="3" class="med" />
+<text x="18.0" y="71.0" class="fg2 t-tag" text-anchor="start" >Right answer</text>
+<rect x="130.0" y="61.0" width="12.0" height="12.0" rx="3" class="neu" />
+<text x="148.0" y="71.0" class="fg2 t-tag" text-anchor="start" >Missed</text>
+<rect x="230.0" y="61.0" width="12.0" height="12.0" rx="3" class="bad" />
+<text x="248.0" y="71.0" class="fg2 t-tag" text-anchor="start" >Fabricated value shown</text>
+<text x="0.0" y="114.0" class="fg t-lab" text-anchor="start" >Answerable</text>
+<text x="0.0" y="129.0" class="fg3 t-tag" text-anchor="start" >the value, with its quote</text>
+<rect x="250.0" y="104.0" width="322.3" height="20.0" rx="6" class="neu" />
+<rect x="250.0" y="104.0" width="319.6" height="20.0" rx="6" class="med" />
+<text x="582.3" y="119.0" class="fg t-num" text-anchor="start" >117 of 118</text>
+<text x="0.0" y="160.0" class="fg t-lab" text-anchor="start" >Not in the file (trap)</text>
+<text x="0.0" y="175.0" class="fg3 t-tag" text-anchor="start" >said “not documented”, no value</text>
+<rect x="250.0" y="150.0" width="560.0" height="20.0" rx="6" class="neu" />
+<rect x="250.0" y="150.0" width="560.0" height="20.0" rx="6" class="med" />
+<text x="820.0" y="165.0" class="fg t-num" text-anchor="start" >205 of 205</text>
+<text x="0.0" y="206.0" class="fg t-lab" text-anchor="start" >Out of scope</text>
+<text x="0.0" y="221.0" class="fg3 t-tag" text-anchor="start" >declined</text>
+<rect x="250.0" y="196.0" width="87.4" height="20.0" rx="6" class="neu" />
+<rect x="250.0" y="196.0" width="87.4" height="20.0" rx="6" class="med" />
+<text x="347.4" y="211.0" class="fg t-num" text-anchor="start" >32 of 32</text>
+<text x="0.0" y="252.0" class="fg t-lab" text-anchor="start" >Documented after all</text>
+<text x="0.0" y="267.0" class="fg3 t-tag" text-anchor="start" >answered with verified quotes</text>
+<rect x="250.0" y="242.0" width="174.8" height="20.0" rx="6" class="neu" />
+<rect x="250.0" y="242.0" width="174.8" height="20.0" rx="6" class="med" />
+<text x="434.8" y="257.0" class="fg t-num" text-anchor="start" >64 of 64</text>
+<text x="0.0" y="298.0" class="fg t-lab" text-anchor="start" >Hand-written release set</text>
+<text x="0.0" y="313.0" class="fg3 t-tag" text-anchor="start" >the 57 gate probes</text>
+<rect x="250.0" y="288.0" width="155.7" height="20.0" rx="6" class="neu" />
+<rect x="250.0" y="288.0" width="155.7" height="20.0" rx="6" class="med" />
+<text x="415.7" y="303.0" class="fg t-num" text-anchor="start" >57 of 57</text>
+<text x="0.0" y="360.0" class="fg t-lab" text-anchor="start" >The grounding layer removed 5 statements in all, reviewed by hand against the documents:</text>
+<rect x="0.0" y="380.0" width="187.0" height="28.0" rx="14" class="neu" opacity=".7"/>
+<text x="93.5" y="398.5" class="t-tag" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">true, quote did not match</text>
+<rect x="197.0" y="380.0" width="152.0" height="28.0" rx="14" class="neu" opacity=".7"/>
+<text x="273.0" y="398.5" class="t-tag" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">statement of absence</text>
+<rect x="359.0" y="380.0" width="187.0" height="28.0" rx="14" class="neu" opacity=".7"/>
+<text x="452.5" y="398.5" class="t-tag" text-anchor="middle" fill="var(--l-fg,#0f172a)" font-weight="600">true, quote did not match</text>
+<rect x="556.0" y="380.0" width="131.0" height="28.0" rx="14" class="bad" opacity=".9"/>
+<text x="621.5" y="398.5" class="t-tag" text-anchor="middle" fill="#ffffff" font-weight="600">wrong date caught</text>
+<rect x="697.0" y="380.0" width="145.0" height="28.0" rx="14" class="bad" opacity=".9"/>
+<text x="769.5" y="398.5" class="t-tag" text-anchor="middle" fill="#ffffff" font-weight="600">wrong number caught</text>
+<text x="0.0" y="432.0" class="fg2 t-tag" text-anchor="start" >Without the layer, two answers would have carried a wrong detail (8 to 13 cm for 8 to 12 cm; a date off by ten days); two true statements were lost.</text>
+</g>
+</svg>

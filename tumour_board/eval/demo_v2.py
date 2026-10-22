@@ -30,6 +30,16 @@ from pathlib import Path
 import httpx
 
 REPO = Path(__file__).resolve().parents[2]
+
+def _his_token_header():
+    """The demo HIMS JSON desk API needs a login or its write token (18 Oct; security review #13: the FHIR read token changes
+    nothing): the write token file of the live mock, never printed."""
+    p = REPO / "data" / "his_mock" / "write_token"
+    try:
+        return {"Authorization": "Bearer " + p.read_text().strip()}
+    except OSError:
+        return {}
+
 DEFAULT_LOGINS = os.path.expanduser("~/vaidyx/.tb_v2_demo_logins")
 DEFAULT_BASE = "http://127.0.0.1:7000"
 DEFAULT_HIS = "http://127.0.0.1:7130"
@@ -288,7 +298,7 @@ def step3(cl, base, pause_on):
     signed = {}
     for acc in (MG_ACCESSION, US_ACCESSION):
         try:
-            rs = httpx.post(f"{his}/desk/api/RAD/orders/{order_id(acc)}/sign", json={"signer": RAD_SIGNER}, timeout=120)
+            rs = httpx.post(f"{his}/desk/api/RAD/orders/{order_id(acc)}/sign", json={"signer": RAD_SIGNER}, timeout=120, headers=_his_token_header())
             signed[acc] = (rs.status_code, rs.text[:160])
         except Exception as e:
             signed[acc] = (0, str(e)[:160])

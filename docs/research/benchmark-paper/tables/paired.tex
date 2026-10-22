@@ -1,0 +1,29 @@
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+Comparison & Difference & 95\% CI & Discordant (A only / B only) & McNemar $p$ \\
+\midrule
+Gemma-4-31B vs HuatuoGPT-3, CoT overall & +5.4 & [+4.6, +6.2] & 1068 / 528 & $<$0.001 \\
+HuatuoGPT-3 vs Qwen3.5-4B, CoT overall & +8.9 & [+8.0, +9.7] & 1471 / 585 & $<$0.001 \\
+Qwen3.5-4B vs MedGemma-27B-it, CoT overall & +0.7 & [-0.2, +1.5] & 1012 / 944 & 0.13 \\
+Qwen3.5-4B vs MedGemma-27B-it, CoT MedQA & -0.9 & [-3.2, +1.3] & 107 / 119 & 0.46 \\
+Qwen3.5-4B vs MedGemma-27B-text-it, CoT overall & +0.3 & [-0.6, +1.2] & 1033 / 1001 & 0.49 \\
+MedGemma-27B-text-it vs MedGemma-27B-it, CoT overall & +0.4 & [-0.4, +1.1] & 817 / 781 & 0.38 \\
+MedGemma-27B-it vs Baichuan-M2, CoT overall & +0.5 & [-0.4, +1.4] & 1017 / 969 & 0.29 \\
+Baichuan-M2 vs Lingshu-32B, CoT overall & +3.0 & [+2.2, +4.0] & 1180 / 876 & $<$0.001 \\
+Med42-8B vs JSL-MedLlama, CoT overall & +0.4 & [-0.6, +1.4] & 1304 / 1268 & 0.49 \\
+MedGemma-1.5-4B vs OpenBioLLM-8B, CoT overall & +0.8 & [-0.4, +1.9] & 1735 / 1656 & 0.18 \\
+Qwen3.5-4B vs MedGemma-4B-it, CoT overall & +11.6 & [+10.6, +12.6] & 1961 / 803 & $<$0.001 \\
+Gemma-4-31B vs HuatuoGPT-3, CoT MedXpertQA & +14.8 & [+12.7, +16.9] & 549 / 187 & $<$0.001 \\
+HuatuoGPT-3 vs Lingshu-32B, direct overall & +6.2 & [+5.3, +7.0] & 1359 / 740 & $<$0.001 \\
+gemma-4-31b-it: CoT vs direct overall & +17.4 & [+16.6, +18.1] & 1946 / 207 & $<$0.001 \\
+huatuogpt-3-27b: CoT vs direct overall & +5.2 & [+4.4, +6.0] & 1084 / 565 & $<$0.001 \\
+lingshu-32b: CoT vs direct overall & -1.7 & [-2.5, -0.9] & 786 / 954 & $<$0.001 \\
+med42-8b: CoT vs direct overall & -2.7 & [-3.5, -1.9] & 779 / 1049 & $<$0.001 \\
+HuatuoGPT-3 vs Lingshu-32B, OmniMedVQA first-token & +0.5 & [+0.2, +0.8] & 8638 / 8203 & $<$0.001 \\
+Lingshu-32B vs Gemma-4-31B, OmniMedVQA first-token & +0.9 & [+0.6, +1.2] & 9708 / 8902 & $<$0.001 \\
+Lingshu-32B vs HuatuoGPT-3, SLAKE & +24.6 & [+21.6, +27.6] & 298 / 37 & $<$0.001 \\
+Lingshu-32B vs MedGemma-4B, VQA-RAD & +10.6 & [+6.0, +15.1] & 82 / 34 & $<$0.001 \\
+Gemma-4-31B vs HuatuoGPT-3, MedXpertQA-MM CoT & +5.8 & [+3.5, +8.1] & 348 / 233 & $<$0.001 \\
+Gemma-4-31B vs Lingshu-32B, PMC-VQA CoT & +6.0 & [+3.8, +8.2] & 332 / 212 & $<$0.001 \\
+\bottomrule
+\end{tabular}

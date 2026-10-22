@@ -42,6 +42,9 @@ CLOSED_EARLY = "The session was closed before the brief was ready"
 NOTE = "Reporting only: what the AI support agents said and what the board decided. It does not measure accuracy."
 MAX_NAME, MAX_TITLE, MAX_NOTE = 120, 200, 2000
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# the five board heads of the new interface, used when the hospital settings carry no board_heads key (org.json written before 18 Oct)
+DEFAULT_HEADS = ["radiology", "medical_oncology", "surgical_oncology", "pathology", "radiation_oncology"]
+MEETING_LISTS = ("discussion", "noting", "not_ready")  # the meeting's agenda lists (18 Oct); the old agenda[] follows discussion + noting
 
 
 def sessions_dir() -> Path:
@@ -109,10 +112,11 @@ def specialties() -> list[dict]:
 
 
 def heads() -> list[dict]:
-    """The board's heads (hospital setting board_heads, default Radiology, Medical Oncology, Surgical Oncology, Pathology; V2 item 6.2),
-    each with the agent role that stands in for it (None when no agent exists for that department)."""
+    """The board's heads (hospital setting board_heads; when the setting is missing the five of the new interface: Radiology, Medical
+    Oncology, Surgical Oncology, Pathology, Radiation Oncology; V2 item 6.2), each with the agent role that stands in for it (None when
+    no agent exists for that department)."""
     out = []
-    for raw in org.hospital().get("board_heads") or org.BOARD_HEADS:
+    for raw in org.hospital().get("board_heads") or getattr(org, "BOARD_HEADS", None) or DEFAULT_HEADS:
         did = org.department_id(raw)
         if did and did not in [h["id"] for h in out]:
             out.append({"id": did, "name": org.department_name(did), "role": DEPARTMENT_ROLE.get(did)})
@@ -179,7 +183,8 @@ def listed_for_date(date: str) -> list[dict]:
     """The Case Files listed for a board date, in listing order, each with what the coordinator needs to build the agenda (V2 item 6.1):
     the owner, whether the owner marked it ready, the Pre-Authorization result and the summary state."""
     date = _check_date(date)
-    rows = [c for c in store.list_cases() if c.get("case_id") not in config.PROTECTED_CASES and _listed(c) and c.get("board_date") == date]
+    rows = [c for c in store.list_cases() if c.get("case_id") not in config.PROTECTED_CASES and _listed(c) and c.get("board_date") == date
+            and not (isinstance(c.get("archived"), dict) and c["archived"].get("at"))]  # an archived Case File is never a candidate (review #8)
     rows.sort(key=lambda c: ((c.get("listing") or {}).get("listed_at") or "", c["case_id"]))
     out = []
     for c in rows:
@@ -224,8 +229,10 @@ def mark_ready(case_id: str, user: str, ready: bool = True, note: str = "") -> d
     return c
 
 
-def _check_cases(case_ids) -> list[str]:
-    """Explicit agenda: order kept, duplicates dropped; each Case File must exist, be listed and not be protected."""
+def _check_cases(case_ids, listed=True, keep=()) -> list[str]:
+    """Explicit agenda: order kept, duplicates dropped; each Case File must exist, be listed (unless listed=False: the meeting's not-ready
+    list takes a Case File that is not listed yet), not be protected and not be archived (security review #8; `keep`: the ids already
+    on this agenda, which stay even when archived since)."""
     if not isinstance(case_ids, (list, tuple)):
         raise ValueError("The agenda must be a list of Case File ids")
     out = []
@@ -242,8 +249,10 @@ def _check_cases(case_ids) -> list[str]:
         c = store.get_case(cid)
         if not c:
             raise ValueError(f"Case File {cid} not found")
-        if not _listed(c):
+        if listed and not _listed(c):
             raise ValueError(f"Case File {cid} is not listed for the board")
+        if cid not in keep and isinstance(c.get("archived"), dict) and c["archived"].get("at"):
+            raise ValueError(f"Case File {cid} is archived. Take it out of the archive first.")
         if cid not in out:
             out.append(cid)
     return out
@@ -330,9 +339,148 @@ def list_sessions() -> list[dict]:
              "created": s.get("created"), "created_by": s.get("created_by")} for s in rows]
 
 
+# ---- meetings of the new interface (18 Oct): the same session files, a few more fields ------------------------------------------
+
+def all_sessions() -> list[dict]:
+    """Every session file as stored, newest date first (meetings.py reads the meeting fields from them)."""
+    base = sessions_dir()
+    rows = [s for s in (store._read_json(p) for p in base.glob("S*.json")) if s] if base.exists() else []
+    rows.sort(key=lambda s: (s.get("date") or "", s.get("time") or "", s.get("created") or ""), reverse=True)
+    return rows
+
+
+def ensure_meeting_fields(s) -> dict:
+    """A session written before the meetings existed gets the meeting fields in memory (saved by the next change): the lists are
+    derived from its agenda (every Case File for discussion). In place; returns the session (None stays None)."""
+    if not isinstance(s, dict):
+        return s
+    for k, v in (("time", ""), ("room", ""), ("video", False), ("minutes_per_case", None), ("code", None), ("agenda_sent_at", None)):
+        s.setdefault(k, v)
+    for k in ("agenda_sent_cases", "questions", "hands"):
+        if not isinstance(s.get(k), list):
+            s[k] = []
+    for k in ("people", "cards", "outcomes", "ended"):
+        if not isinstance(s.get(k), dict):
+            s[k] = {}
+    if not isinstance(s.get("agenda_lists"), dict):
+        s["agenda_lists"] = {"discussion": [{"case_id": a["case_id"], "reason": ""} for a in s.get("agenda") or [] if a.get("case_id")],
+                             "noting": [], "not_ready": []}
+    for k in MEETING_LISTS:
+        if not isinstance(s["agenda_lists"].get(k), list):
+            s["agenda_lists"][k] = []
+    if not isinstance(s.get("live"), dict):
+        s["live"] = {"slide": 0, "opened": None, "timer": None}
+    return s
+
+
+def new_session(date: str, by: str, title: str = "", **fields) -> dict:
+    """A session with an empty agenda (the MDT Coordinator fills the lists later): the meeting of the new interface. Same file, same
+    shape as create(), plus the meeting fields given (time, room, video, minutes_per_case)."""
+    date = _check_date(date)
+    title = str(title or "").strip()
+    if len(title) > MAX_TITLE:
+        raise ValueError(f"Session title is too long (at most {MAX_TITLE} characters)")
+    sid = "S" + date.replace("-", "") + "-" + uuid.uuid4().hex[:4]
+    while _path(sid).exists():
+        sid = "S" + date.replace("-", "") + "-" + uuid.uuid4().hex[:4]
+    now = store.now_iso()
+    s = {"id": sid, "date": date, "title": title, "status": "planned", "created": now, "created_by": by or "",
+         "started_at": None, "started_by": None, "closed_at": None, "closed_by": None, "current": None,
+         "agenda": [], "attendance": {}, "members": [], "agents": {}, "log": [], "decisions": {}, **fields}
+    ensure_meeting_fields(s)
+    s["attendance"] = {d["id"]: "not_marked" for d in attendance_list(s)}
+    _save(s)
+    _audit(sid, "created", by, date=date, cases=[], meeting=True, time=s.get("time") or "", room=s.get("room") or "", video=bool(s.get("video")))
+    return s
+
+
+def sync_agenda_lists(s, by) -> list[str]:
+    """The old agenda[] (what the old /tb room, the minutes and the exports read) follows the meeting's lists: the Case Files for
+    discussion, then for noting, in order; a Case File only in the not-ready list is not on the old agenda. Existing items keep their
+    status; the attendance sheet gains the owners of new Case Files; a current Case File taken off the agenda is cleared. Audits every
+    addition and removal. Returns the ids now on the agenda. The caller saves."""
+    lists = s.get("agenda_lists") or {}
+    ids = []
+    for k in ("discussion", "noting"):
+        for it in lists.get(k) or []:
+            cid = (it or {}).get("case_id")
+            if cid and cid not in ids and cid not in config.PROTECTED_CASES:
+                ids.append(cid)
+    old = {a["case_id"]: a for a in s.get("agenda") or []}
+    now = store.now_iso()
+    s["agenda"] = [old.get(c) or _agenda_item(c, now, by) for c in ids]
+    for d in attendance_list(s):
+        s.setdefault("attendance", {}).setdefault(d["id"], "not_marked")
+    if s.get("current") and s["current"] not in ids:
+        s["current"] = None
+    for a in s["agenda"]:
+        if a["case_id"] not in old:
+            _audit(s["id"], "agenda_added", by, a["case_id"], "agenda_added", owner_ready=a.get("owner_ready"))
+    for c in old:
+        if c not in ids:
+            _audit(s["id"], "agenda_removed", by, c, "agenda_removed")
+    return ids
+
+
+LIVE_HOURS = 12  # a session still "in_session" this long after it started was left open (nobody closed it): it no longer counts as running
+
+
+def running_now(s, now: datetime | None = None, hours: float = LIVE_HOURS) -> bool:
+    """True when the session is in session and was started within the last `hours` (a session without a start time counts on its own
+    date only). A session left in session from an earlier day must not hold back the background work (the ready hook, the scheduler)
+    for ever; it stays in session for the coordinator to close."""
+    if not isinstance(s, dict) or s.get("status") != "in_session":
+        return False
+    now = now or datetime.now()
+    started = str(s.get("started_at") or "")
+    if started:
+        try:
+            t = datetime.fromisoformat(started)
+        except ValueError:
+            t = None
+        if t is not None:
+            if t.tzinfo is not None:
+                t = t.astimezone().replace(tzinfo=None)
+            return (now - t).total_seconds() < hours * 3600
+    return str(s.get("date") or "") == now.date().isoformat()
+
+
+def running_sessions(now: datetime | None = None) -> list[dict]:
+    """The sessions running now (running_now), from the stored files."""
+    return [s for s in all_sessions() if running_now(s, now)]
+
+
+def planned_sessions() -> list[dict]:
+    """The planned sessions (meetings not started, not closed, not cancelled), earliest first by date and time."""
+    rows = [s for s in all_sessions() if s.get("status") == "planned"]
+    rows.sort(key=lambda s: (s.get("date") or "", s.get("time") or "", s.get("created") or ""))
+    return rows
+
+
+def next_planned_after(s) -> dict | None:
+    """The next planned session after this one (by date, then time): where a Case File not discussed moves to; None when none is planned."""
+    key = (str((s or {}).get("date") or ""), str((s or {}).get("time") or ""))
+    for cand in planned_sessions():
+        if cand.get("id") == (s or {}).get("id"):
+            continue
+        if (str(cand.get("date") or ""), str(cand.get("time") or "")) > key:
+            return cand
+    return None
+
+
+def audit_event(sid, kind, by, case_id=None, case_kind=None, **extra) -> None:
+    """sessions/audit.jsonl, and the Case File's audit.jsonl when case_kind is given (as board_session_<case_kind>): for meetings.py."""
+    _audit(sid, kind, by, case_id, case_kind, **extra)
+
+
+def save_session(s) -> dict:
+    """Write a session changed outside this module (meetings.py): the same atomic write as every function here."""
+    return _save(s)
+
+
 def set_agenda(sid, case_ids, by) -> dict:
     s = _need(sid); _open(s)
-    ids = _check_cases(case_ids)
+    ids = _check_cases(case_ids, keep={a.get("case_id") for a in s.get("agenda") or []})
     if not ids:
         raise ValueError("A board session needs at least one Case File")
     old = {a["case_id"]: a for a in s["agenda"]}
@@ -479,12 +627,13 @@ def absent_roles_by_case(session) -> dict:
 
 
 def may_open(r: dict, session) -> bool:
-    """Who may open the Board room (V2 item 6.1, Phase 5 review decision): the MDT Coordinator and the Vaidyx admin; a doctor whose
-    department is on the session's attendance sheet or who may read a Case File on the agenda (owner, participant, linked owner)."""
+    """Who may open the Board room (V2 item 6.1, Phase 5 review decision): the MDT Coordinator; a doctor whose department is on the
+    session's attendance sheet or who may read a Case File on the agenda (owner, participant, linked owner; the Vaidyx admin only through
+    a break-glass window on one of them, security review #2)."""
     from . import access
     if not isinstance(r, dict) or r.get("disabled"):
         return False
-    if r.get("admin") or r.get("coordinator"):
+    if (r.get("admin") and not r.get("vaidyx_admin")) or r.get("coordinator"):  # a Vaidyx admin: only the Case Files of its break-glass window (review #2)
         return True
     if not r.get("known"):
         return False
@@ -499,11 +648,11 @@ def may_open(r: dict, session) -> bool:
 
 
 def allowed_cases(r: dict, session) -> set | None:
-    """The Case Files of the agenda a user may read in full, or None for the MDT Coordinator and the Vaidyx admin (everything). A
+    """The Case Files of the agenda a user may read in full, or None for the MDT Coordinator (everything; the Vaidyx admin only its window). A
     doctor whose department is on the attendance sheet opens the room, but sees the log, decisions, minutes and export of its own
     Case Files only (Phase 6 review S2)."""
     from . import access
-    if isinstance(r, dict) and (r.get("admin") or r.get("coordinator")):
+    if isinstance(r, dict) and ((r.get("admin") and not r.get("vaidyx_admin")) or r.get("coordinator")):
         return None
     out = set()
     for a in (session or {}).get("agenda") or []:

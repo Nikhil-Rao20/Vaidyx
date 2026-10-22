@@ -10,29 +10,27 @@ Addendum and Cancel. Every action goes through the Store transitions of model.py
     (dicom_studies.build_study) and upload it when Orthanc answers (never fails the action, "images not uploaded") ->
     append the HL7 message of the new event to events.hl7 -> Hospital.save() -> one audit line in desk_audit.jsonl.
 
-Pages (human, through ui.page):  GET /desk, /desk/{dept}, /desk/{dept}/orders/{order id}, /desk/{dept}/reports/{report id};
-forms POST to /desk/{dept}/orders/{order id}/schedule | collect | preliminary | sign | cancel and
-/desk/{dept}/reports/{report id}/addendum, then redirect 303 to /desk/{dept}?flash=...
+Pages (human): GET /desk lists the supporting departments with their counts and links into the HIMS modules; /desk/{dept},
+/desk/{dept}/orders/{order id} and /desk/{dept}/reports/{report id} redirect to the module page (Laboratory, Radiology,
+Pathology, OPD) of that department, order or report, so the old links keep working. The forms live in the modules.
 JSON (tests, e2e):  GET /desk/api/{dept}/pending; POST /desk/api/{dept}/orders/{order id}/schedule | collect | preliminary |
 sign | cancel and /desk/api/{dept}/reports/{report id}/addendum. A LifecycleError is 409 (app.py), bad input 400, an order
-or report of another department 404.
-
-No login of its own (localhost only; the demo reaches it through the Vaidyx-TB app's logged-in routes). Never shows or asks
-for an Aadhaar number. No em dashes in any UI string.
+or report of another department 404. The JSON API carries no login (localhost only, same-origin writes; the demo script
+and the tests call it); the pages need the HIMS session like every human screen. `run_action` is the reporting engine
+every module action runs through. Never shows or asks for an Aadhaar number. No em dashes in any UI string.
 """
 import json
 import os
 import re
 from pathlib import Path
-from urllib.parse import parse_qs, quote
+from urllib.parse import quote
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
-from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from . import documents, hl7, model, ui
 from .app import Hospital, get_hospital
-from .ids import display_date, display_time, iso_date, parse_time
+from .ids import iso_date, parse_time
 
 router = APIRouter()
 
@@ -253,9 +251,9 @@ def run_action(hospital, dept, action, change, *, order_id=None, report_id=None,
         notes = []
         report = rec if "versions" in rec else store.report_for_order(rec["id"])
         order = store.orders[report["order_id"]] if report else rec
-        if report and action in ("preliminary", "sign", "addendum"):
+        if report and action in ("preliminary", "sign", "addendum", "cancel"):  # a cancelled report prints "Report cancelled" (18 Oct)
             _render(hospital, report, notes)
-        if report and is_imaging(order):
+        if is_imaging(order) and (report or action == "exam_done"):  # the technician's exam done sends the images first (18 Oct)
             _images(hospital, order, notes)
         for ev in store.events[n_events:]:
             try:
@@ -369,379 +367,154 @@ def api_pending(dept: str, hospital: Hospital = Depends(get_hospital)):
                 "reports": [with_context(store, r) for r in w["reports"]]}
 
 
+def _session(request):
+    """The staff session behind a JSON call (None for a write-token caller and for the open test app)."""
+    return getattr(request.state, "session", None)
+
+
+def _session_person(request, hospital, dept, what):
+    """For a staff session the person is the account's own practitioner, never one named in the body (security review #3): a
+    consultant of the department (signing), or for a technician entering results the department's first practitioner (as the
+    screens record it). Raises Forbidden when the account has no practitioner of that department."""
+    from . import auth
+
+    s = _session(request) or {}
+    p = hospital.store.practitioner(s.get("practitioner_id")) if s.get("practitioner_id") else None
+    if what == "signing consultant":
+        if not p or p.get("role") != "consultant":
+            raise auth.Forbidden(f"{auth.REFUSED}: this account is not a consultant and cannot sign.")
+        if p["department"] != dept["name"]:
+            raise auth.Forbidden(f"{auth.REFUSED}: {p['name']} signs for {p['department']}, not for {dept['name']}.")
+        return p["id"]
+    if p and p["department"] == dept["name"]:
+        return p["id"]
+    people = staff(hospital.store, dept)
+    if not people:
+        raise DeskError(f"{dept['name']} has no practitioner to report under")
+    return people[0]["id"]
+
+
+def _by(request, hospital, given):
+    """Who did it for the desk audit: the session's Reg. No. or email; a token caller's own words."""
+    s = _session(request)
+    if not s:
+        return given
+    p = hospital.store.practitioner(s.get("practitioner_id")) if s.get("practitioner_id") else None
+    return p["reg_no"] if p else s.get("email")
+
+
 @router.post("/api/{dept}/orders/{order_id}/schedule")
-def api_schedule(dept: str, order_id: str, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
+def api_schedule(dept: str, order_id: str, request: Request, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
     b = _payload(payload)
-    return _api(hospital, do_schedule, _department(hospital.store, dept), order_id, b.get("date"), b.get("by"))
+    return _api(hospital, do_schedule, _department(hospital.store, dept), order_id, b.get("date"), _by(request, hospital, b.get("by")))
 
 
 @router.post("/api/{dept}/orders/{order_id}/collect")
-def api_collect(dept: str, order_id: str, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
+def api_collect(dept: str, order_id: str, request: Request, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
     b = _payload(payload)
     return _api(hospital, do_collect, _department(hospital.store, dept), order_id, b.get("barcode"), b.get("block_no"),
-                b.get("by"))
+                _by(request, hospital, b.get("by")))
 
 
 @router.post("/api/{dept}/orders/{order_id}/preliminary")
-def api_preliminary(dept: str, order_id: str, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
+def api_preliminary(dept: str, order_id: str, request: Request, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
     b = _payload(payload)
     try:
         values = _json_values(b.get("values"))
     except DeskError as exc:
         return JSONResponse({"error": "invalid", "detail": str(exc)}, status_code=400)
-    return _api(hospital, do_preliminary, _department(hospital.store, dept), order_id,
-                b.get("reporter") or b.get("by"), values)
+    d = _department(hospital.store, dept)
+    try:
+        reporter = _session_person(request, hospital, d, "reporting doctor") if _session(request) else (b.get("reporter") or b.get("by"))
+    except DeskError as exc:
+        return JSONResponse({"error": "invalid", "detail": str(exc)}, status_code=400)
+    return _api(hospital, do_preliminary, d, order_id, reporter, values)
 
 
 @router.post("/api/{dept}/orders/{order_id}/sign")
-def api_sign(dept: str, order_id: str, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
+def api_sign(dept: str, order_id: str, request: Request, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
+    """The signer is the signed-in consultant for a staff session; a write-token caller names it (a consultant of that department)."""
     b = _payload(payload)
     try:
         values = _json_values(b.get("values"))
     except DeskError as exc:
         return JSONResponse({"error": "invalid", "detail": str(exc)}, status_code=400)
-    return _api(hospital, do_sign, _department(hospital.store, dept), order_id, b.get("signer"), values)
+    d = _department(hospital.store, dept)
+    signer = _session_person(request, hospital, d, "signing consultant") if _session(request) else b.get("signer")
+    return _api(hospital, do_sign, d, order_id, signer, values)
 
 
 @router.post("/api/{dept}/reports/{report_id}/addendum")
-def api_addendum(dept: str, report_id: str, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
+def api_addendum(dept: str, report_id: str, request: Request, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
     b = _payload(payload)
     try:
         values = _json_values(b.get("values"))
     except DeskError as exc:
         return JSONResponse({"error": "invalid", "detail": str(exc)}, status_code=400)
-    return _api(hospital, do_addendum, _department(hospital.store, dept), report_id, b.get("signer"), values,
-                b.get("note"))
+    d = _department(hospital.store, dept)
+    signer = _session_person(request, hospital, d, "signing consultant") if _session(request) else b.get("signer")
+    return _api(hospital, do_addendum, d, report_id, signer, values, b.get("note"))
 
 
 @router.post("/api/{dept}/orders/{order_id}/cancel")
-def api_cancel(dept: str, order_id: str, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
+def api_cancel(dept: str, order_id: str, request: Request, payload: dict = Body(None), hospital: Hospital = Depends(get_hospital)):
     b = _payload(payload)
-    return _api(hospital, do_cancel, _department(hospital.store, dept), order_id, b.get("reason"), b.get("by"))
+    return _api(hospital, do_cancel, _department(hospital.store, dept), order_id, b.get("reason"), _by(request, hospital, b.get("by")))
 
 
-# ------------------------------------------------------------------------ HTML pages
-def _base(request):
-    return request.scope.get("root_path", "") + "/desk"
+# ------------------------------------------------------------------------ HTML: a thin alias of the modules
+# The reporting desk's own pages moved into the Laboratory, Radiology, Pathology and OPD modules of the HIMS. The old
+# links keep working: /desk lists the departments with their counts and links into the modules, /desk/{dept} and the
+# order / report pages redirect to the module page of that department, order or report.
+MODULE_OF_DEPARTMENT = {"RAD": "/his/radiology", "NM": "/his/radiology", "PATH": "/his/pathology"}
 
 
-def _nav(request):
-    root = request.scope.get("root_path", "")
-    return [("Reporting desk", root + "/desk"), ("HIS", root + "/his")]
-
-
-def _page(request, title, body, flash=None):
-    return HTMLResponse(ui.page(title, body, nav=_nav(request), active="Reporting desk", flash=flash))
-
-
-def _a(href, label):
-    return f'<a href="{ui.esc(href)}">{ui.esc(label)}</a>'
-
-
-def _patient_cell(store, rec):
-    p = store.patients.get(rec["patient_id"]) or {}
-    return (f"<strong>{ui.esc(p.get('name'))}</strong><br><span class=mono>{ui.esc(p.get('uhid'))}</span>"
-            f" <span class=muted>{ui.esc(p.get('age'))} Y / {ui.esc(p.get('sex'))}</span>")
-
-
-def _encounter_cell(store, rec):
-    e = store.encounters.get(rec["encounter_id"]) or {}
-    return f"<span class=mono>{ui.esc(e.get('number'))}</span>"
-
-
-def _unit(store, order):
-    e = store.encounters.get(order["encounter_id"]) or {}
-    return ui.esc(order["ordering_department"] + (f", {e['unit']}" if e.get("unit") else ""))
-
-
-def _when(value, with_time=False):
-    if not value:
-        return ""
-    return display_time(value) if with_time and len(str(value)) > 10 else display_date(value)
-
-
-def _who(store, pid):
-    p = store.practitioner(pid)
-    return p["name"] if p else ""
-
-
-def _sample_or_slot(store, o):
-    if o.get("specimen_id"):
-        s = store.specimens.get(o["specimen_id"]) or {}
-        out = f"<span class=mono>{ui.esc(s.get('barcode'))}</span>"
-        if s.get("block_no"):
-            out += f"<br>Block No. <span class=mono>{ui.esc(s['block_no'])}</span>"
-        return out
-    if o.get("scheduled_for"):
-        return f"Scheduled {ui.esc(_when(o['scheduled_for']))}"
-    return '<span class=muted>Not yet</span>'
-
-
-def _order_actions(base, o):
-    href = f"{base}/orders/{quote(o['id'])}"
-    links = [_a(href + ("#schedule" if is_imaging(o) else "#collect"), "Schedule" if is_imaging(o) else "Collect sample"),
-             _a(href + "#preliminary", "Enter preliminary"), _a(href + "#sign", "Complete and sign"),
-             _a(href + "#cancel", "Cancel")]
-    return " | ".join(links)
-
-
-def _pdf_link(request, report, v):
-    if (v.get("document") or {}).get("path"):
-        root = request.scope.get("root_path", "")
-        return _a(f"{root}/view/reports/{quote(report['id'])}/{v['version']}", "PDF")
-    return '<span class=muted>not rendered</span>'
-
-
-def _flash(request):
-    text = request.query_params.get("flash")
-    if not text:
-        return None
-    return ("bad" if request.query_params.get("kind") == "bad" else "ok", text)
+def _module_for(store, d):
+    if d["code"] in MODULE_OF_DEPARTMENT:
+        return MODULE_OF_DEPARTMENT[d["code"]]
+    if any(t["doc_type"] == "lab" and t["department"] == d["name"] for t in store.tests.values()):
+        return f"/his/lab?dept={quote(d['code'])}"
+    return "/his/opd"
 
 
 @router.get("", response_class=HTMLResponse)
 def desk_home(request: Request, hospital: Hospital = Depends(get_hospital)):
+    from . import common
+
     with hospital.lock:
         store = hospital.store
         rows = []
         for d in sorted((d for d in store.departments.values() if d.get("group") == SUPPORTING), key=lambda d: d["name"]):
             w = store.pending_for_department(d["code"])
-            rows.append([_a(f"{_base(request)}/{quote(d['code'])}", d["name"]), f"<span class=mono>{ui.esc(d['code'])}</span>",
-                         str(len(w["orders"])), str(len(w["reports"]))])
-    body = ('<div class=panel><p class=muted>The reporting systems of the supporting departments (RIS, LIS, Pathology). '
-            'Pending orders and preliminary reports per department; Complete and sign makes a report final with the '
-            "consultant's digital signature (Vaidyx Demo CA) and sends it to the HIS.</p>"
-            + ui.table(["Department", "Code", "Pending orders", "Preliminary reports"], rows) + "</div>")
-    return _page(request, "Reporting desk", body, flash=_flash(request))
+            rows.append([f'<a href="{ui.esc(_module_for(store, d))}">{ui.esc(d["name"])}</a>',
+                         f"<span class=mono>{ui.esc(d['code'])}</span>", str(len(w["orders"])), str(len(w["reports"]))])
+    body = ('<div class=panel><p class=muted>The reporting desk of the supporting departments now lives in the modules: '
+            '<a href="/his/lab">Laboratory</a>, <a href="/his/radiology">Radiology</a>, <a href="/his/pathology">Pathology</a>; '
+            'clinical notes of the consulting departments under <a href="/his/opd">OPD</a>.</p>'
+            + ui.table(["Department", "Code", "Pending orders", "Preliminary reports"], rows, "No supporting department.")
+            + "</div>")
+    return common.page(request, "Reporting desk", body, active=None)
 
 
 @router.get("/{dept}", response_class=HTMLResponse)
 def desk_department(dept: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-    with hospital.lock:
-        store = hospital.store
-        d = _department(store, dept)
-        base = f"{_base(request)}/{quote(d['code'])}"
-        w = worklist(store, d)
-        orders = [[f"<span class=mono>{ui.esc(o['accession'] or o['id'])}</span>", _patient_cell(store, o),
-                   _encounter_cell(store, o), ui.esc(o["label"]), ui.esc(_when(o["ordered_on"])), _unit(store, o),
-                   ui.pill(o["status"]), _sample_or_slot(store, o), _order_actions(base, o)] for o in w["orders"]]
-        prelim = []
-        for r in w["reports"]:
-            o, v = store.orders[r["order_id"]], model.Store.current_version(r)
-            href = f"{base}/reports/{quote(r['id'])}"
-            prelim.append([f"<span class=mono>{ui.esc(o['accession'] or o['id'])}</span>", _patient_cell(store, r),
-                           ui.esc(r["title"]), ui.esc(_when(v["reported_on"], True)), ui.esc(_who(store, v["reported_by"])),
-                           " | ".join([_a(href + "#sign", "Complete and sign"), _a(href + "#cancel", "Cancel"),
-                                       _pdf_link(request, r, v)])])
-        recent = []
-        for r in recently_signed(store, d):
-            o, v = store.orders[r["order_id"]], model.Store.current_version(r)
-            sig = store.signatures.get(v.get("signature_id") or "") or {}
-            recent.append([f"<span class=mono>{ui.esc(o['accession'] or o['id'])}</span>", _patient_cell(store, r),
-                           _a(f"{base}/reports/{quote(r['id'])}", r["title"]), ui.pill(r["status"]),
-                           ui.esc(_who(store, sig.get("signer_id")) or "Signature pending"),
-                           ui.esc(_when(sig.get("signed_at") or v["reported_on"], True)), _pdf_link(request, r, v)])
-    body = (f'<p class=muted>{ui.esc(d["name"])} ({ui.esc(d["code"])}). Find the patient in your own PACS / LIS by '
-            "name and UHID or by the accession No.</p>"
-            '<div class=panel><h2>Pending orders</h2>'
-            + ui.table(["Accession No.", "Patient / UHID", "IP / OP No.", "Test", "Ordered on", "Ordering unit", "Status",
-                        "Sample / schedule", "Actions"], orders, "No pending orders.")
-            + '</div><div class=panel><h2>Preliminary reports</h2>'
-            + ui.table(["Accession No.", "Patient / UHID", "Test", "Reported on", "Reported by", "Actions"], prelim,
-                       "No preliminary reports.")
-            + '</div><div class=panel><h2>Signed recently</h2>'
-            + ui.table(["Accession No.", "Patient / UHID", "Report", "Status", "Signed by", "Signed on", "PDF"], recent,
-                       "Nothing signed yet.")
-            + "</div>")
-    return _page(request, f"Reporting desk: {d['name']}", body, flash=_flash(request))
-
-
-def _signer_select(store, dept, name="signer"):
-    opts = []
-    for p in staff(store, dept):
-        if p["role"] == "consultant":
-            opts.append(f'<option value="{ui.esc(p["reg_no"])}">{ui.esc(p["name"])}, {ui.esc(p["qualification"])}, '
-                        f'Reg. No. {ui.esc(p["reg_no"])}</option>')
-        else:
-            opts.append(f'<option value="{ui.esc(p["reg_no"])}" disabled>{ui.esc(p["name"])}, junior resident '
-                        f"(cannot sign)</option>")
-    return f'<select name="{ui.esc(name)}" required>{"".join(opts)}</select>'
-
-
-def _reporter_select(store, dept):
-    items = [(p["reg_no"], f"{p['name']}, {p['qualification']}" + (" (junior resident)" if p["role"] != "consultant" else ""))
-             for p in staff(store, dept)]
-    return f'<select name="reporter" required>{ui.options(items)}</select>'
-
-
-def _textarea(name, text, rows=6):
-    return f'<textarea name="{ui.esc(name)}" rows={rows} placeholder="key: value (one per line)">{ui.esc(text)}</textarea>'
-
-
-def _form(action, anchor, title, fields, button, cls=""):
-    return (f'<div class=panel id="{ui.esc(anchor)}"><h2>{ui.esc(title)}</h2>'
-            f'<form method=post action="{ui.esc(action)}">{fields}'
-            f'<p><button type=submit{f" class={cls}" if cls else ""}>{ui.esc(button)}</button></p></form></div>')
-
-
-def _order_panel(store, o):
-    p = store.patients.get(o["patient_id"]) or {}
-    e = store.encounters.get(o["encounter_id"]) or {}
-    consultant = _who(store, e.get("consultant_id"))
-    pairs = [("Patient", f"<strong>{ui.esc(p.get('name'))}</strong>"),
-             ("UHID", f"<span class=mono>{ui.esc(p.get('uhid'))}</span>"),
-             ("Age / Sex", f"{ui.esc(p.get('age'))} Y / {ui.esc(p.get('sex'))}"),
-             ("IP / OP No.", f"<span class=mono>{ui.esc(e.get('number'))}</span>"),
-             ("Ordering unit", _unit(store, o) + (f", {ui.esc(consultant)}" if consultant else "")),
-             ("Test", ui.esc(o["label"])),
-             ("Accession No.", f"<span class=mono>{ui.esc(o['accession'] or 'none')}</span>"),
-             ("Ordered on", ui.esc(_when(o["ordered_on"], True))),
-             ("Status", ui.pill(o["status"])),
-             ("Sample / schedule", _sample_or_slot(store, o))]
-    if o.get("cancel_reason"):
-        pairs.append(("Cancelled", ui.esc(f"{_when(o['cancelled_on'], True)}: {o['cancel_reason']}")))
-    return '<div class=panel>' + ui.dl(pairs) + "</div>"
+    d = _department(hospital.store, dept)
+    return RedirectResponse(_module_for(hospital.store, d), status_code=303)
 
 
 @router.get("/{dept}/orders/{order_id}", response_class=HTMLResponse)
 def desk_order(dept: str, order_id: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-    with hospital.lock:
-        store = hospital.store
-        d = _department(store, dept)
-        o = _order(store, d, order_id)
-        r = store.report_for_order(o["id"])
-        base = f"{_base(request)}/{quote(d['code'])}"
-        if r:
-            return RedirectResponse(f"{base}/reports/{quote(r['id'])}", status_code=303)
-        act = f"{base}/orders/{quote(o['id'])}"
-        forms = ""
-        if o["status"] in model.OPEN_ORDER:
-            if is_imaging(o):
-                forms += _form(act + "/schedule", "schedule", "Schedule",
-                               f'<label>Date</label><input type=date name=date required '
-                               f'value="{ui.esc(o["scheduled_for"] or store.now()[:10])}">', "Schedule", "secondary")
-            elif o["status"] in ("ordered", "scheduled"):
-                forms += _form(act + "/collect", "collect", "Collect sample",
-                               '<label>Sample barcode (optional; allocated when empty, VXS and 8 digits)</label>'
-                               '<input type=text name=barcode pattern="VXS[0-9]{8}">'
-                               '<label>Block No. (optional, tissue)</label><input type=text name=block_no>',
-                               "Collect sample", "secondary")
-            forms += _form(act + "/preliminary", "preliminary", "Enter preliminary",
-                           "<label>Values (one per line, key: value, printed exactly as typed)</label>"
-                           + _textarea("values", "") + "<label>Reported by</label>" + _reporter_select(store, d),
-                           "Save preliminary", "secondary")
-            forms += _form(act + "/sign", "sign", "Complete and sign",
-                           "<label>Values (one per line, key: value, printed exactly as typed)</label>"
-                           + _textarea("values", "") + "<label>Signing consultant</label>" + _signer_select(store, d),
-                           "Complete and sign")
-            forms += _form(act + "/cancel", "cancel", "Cancel order",
-                           "<label>Reason</label><input type=text name=reason required>", "Cancel order", "danger")
-        else:
-            forms = f'<p class=muted>This order is {ui.esc(o["status"])}; no action is open.</p>'
-        body = _order_panel(store, o) + forms + f'<p>{_a(base, "Back to the work list")}</p>'
-    return _page(request, f"Order {o['accession'] or o['id']}", body, flash=_flash(request))
+    from . import common
+
+    d = _department(hospital.store, dept)
+    o = _order(hospital.store, d, order_id)
+    return RedirectResponse(common.order_url(o), status_code=303)
 
 
 @router.get("/{dept}/reports/{report_id}", response_class=HTMLResponse)
 def desk_report(dept: str, report_id: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-    with hospital.lock:
-        store = hospital.store
-        d = _department(store, dept)
-        r = _report(store, d, report_id)
-        o = store.orders[r["order_id"]]
-        base = f"{_base(request)}/{quote(d['code'])}"
-        v = model.Store.current_version(r)
-        rows = []
-        for x in r["versions"]:
-            sig = store.signatures.get(x.get("signature_id") or "") or {}
-            rows.append([str(x["version"]), ui.pill(x["status"]), ui.esc(_when(x["reported_on"], True)),
-                         ui.esc(_who(store, x["reported_by"])),
-                         ui.esc(sig.get("block") or ("Signature pending" if x["status"] != "preliminary" else "Not signed")),
-                         ui.esc(x.get("amendment_note") or ""), _pdf_link(request, r, x)])
-        values = ui.table(["Value", "As printed"], [[f"<span class=mono>{ui.esc(k)}</span>", ui.esc(val)]
-                                                    for k, val in v["values"].items()], "No values.")
-        forms = ""
-        if r["status"] == "preliminary" or (r["status"] == "final" and not v.get("signature_id")):  # preliminary, or final awaiting its signature
-            forms += _form(f"{base}/orders/{quote(o['id'])}/sign", "sign", "Complete and sign",
-                           "<label>Values (prefilled from the preliminary; one per line, key: value)</label>"
-                           + _textarea("values", values_text(v["values"])) + "<label>Signing consultant</label>"
-                           + _signer_select(store, d), "Complete and sign")
-            forms += _form(f"{base}/orders/{quote(o['id'])}/cancel", "cancel", "Cancel order and report",
-                           "<label>Reason</label><input type=text name=reason required>", "Cancel", "danger")
-        elif r["status"] in ("final", "amended"):
-            forms += _form(f"{base}/reports/{quote(r['id'])}/addendum", "addendum", "Addendum",
-                           "<label>Values of the amended report (one per line, key: value)</label>"
-                           + _textarea("values", values_text(v["values"]))
-                           + "<label>Amendment note</label><input type=text name=note required>"
-                           + "<label>Signing consultant</label>" + _signer_select(store, d), "Sign addendum")
-        body = (_order_panel(store, o) + f'<div class=panel><h2>{ui.esc(r["title"])} {ui.pill(r["status"])}</h2>'
-                + values + "<h3>Versions</h3>"
-                + ui.table(["Version", "Status", "Reported on", "Reported by", "Signature", "Amendment note", "PDF"], rows)
-                + "</div>" + forms + f'<p>{_a(base, "Back to the work list")}</p>')
-    return _page(request, f"Report {o['accession'] or r['id']}", body, flash=_flash(request))
+    from . import common
 
-
-# ------------------------------------------------------------------------ HTML form posts
-async def _form_fields(request):
-    raw = (await request.body()).decode("utf-8", errors="replace")
-    return {k: v[-1] for k, v in parse_qs(raw, keep_blank_values=True).items()}
-
-
-async def _post(request, hospital, dept, fn, *args_from_form):
-    """Run a desk action from a form and redirect 303 to the department page with a flash message."""
-    f = await _form_fields(request)
     d = _department(hospital.store, dept)
-    target = f"{_base(request)}/{quote(d['code'])}"
-
-    def go():
-        args = [a(f) if callable(a) else a for a in args_from_form]
-        return fn(hospital, d, *args)
-
-    try:
-        rec, notes = await run_in_threadpool(go)
-    except (model.LifecycleError, ValueError) as exc:  # DeskError is a ValueError
-        return RedirectResponse(f"{target}?kind=bad&flash={quote(str(exc))}", status_code=303)
-    ident = rec.get("accession") or (hospital.store.orders.get(rec.get("order_id")) or {}).get("accession") or rec["id"]
-    status = rec.get("status")
-    msg = f"{ident}: {status}." + "".join(f" {t}." for _, t in notes)
-    kind = "bad" if any(k == "bad" for k, _ in notes) else "ok"
-    return RedirectResponse(f"{target}?kind={kind}&flash={quote(msg)}", status_code=303)
-
-
-def _vals(name="values", empty_none=False):
-    def get(f):
-        v = parse_values(f.get(name, ""))
-        return (v or None) if empty_none else v
-    return get
-
-
-@router.post("/{dept}/orders/{order_id}/schedule")
-async def post_schedule(dept: str, order_id: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-    return await _post(request, hospital, dept, do_schedule, order_id, lambda f: f.get("date"))
-
-
-@router.post("/{dept}/orders/{order_id}/collect")
-async def post_collect(dept: str, order_id: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-    return await _post(request, hospital, dept, do_collect, order_id, lambda f: f.get("barcode"),
-                       lambda f: f.get("block_no"))
-
-
-@router.post("/{dept}/orders/{order_id}/preliminary")
-async def post_preliminary(dept: str, order_id: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-    return await _post(request, hospital, dept, do_preliminary, order_id, lambda f: f.get("reporter"), _vals())
-
-
-@router.post("/{dept}/orders/{order_id}/sign")
-async def post_sign(dept: str, order_id: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-    return await _post(request, hospital, dept, do_sign, order_id, lambda f: f.get("signer"), _vals(empty_none=True))
-
-
-@router.post("/{dept}/reports/{report_id}/addendum")
-async def post_addendum(dept: str, report_id: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-    return await _post(request, hospital, dept, do_addendum, report_id, lambda f: f.get("signer"),
-                       _vals(empty_none=True), lambda f: f.get("note"))
-
-
-@router.post("/{dept}/orders/{order_id}/cancel")
-async def post_cancel(dept: str, order_id: str, request: Request, hospital: Hospital = Depends(get_hospital)):
-    return await _post(request, hospital, dept, do_cancel, order_id, lambda f: f.get("reason"))
+    r = _report(hospital.store, d, report_id)
+    return RedirectResponse(common.report_url(hospital.store, r), status_code=303)

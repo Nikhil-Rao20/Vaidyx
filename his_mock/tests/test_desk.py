@@ -1,17 +1,17 @@
-"""The mock RIS / LIS reporting desk (his_mock/desk.py, plan item V2-1.5): work lists, Complete and sign, Addendum, Cancel,
-the imaging sign path (synthetic DICOM, Orthanc only when it answers) and the HL7 / audit side effects. SYNTHETIC data only,
-built into a temporary directory."""
+"""The mock RIS / LIS reporting desk (his_mock/desk.py, plan item V2-1.5): the JSON work lists, Complete and sign, Addendum,
+Cancel, the imaging sign path (synthetic DICOM, Orthanc only when it answers) and the HL7 / audit side effects; the old
+/desk pages, now thin aliases of the HIMS modules (Laboratory, Radiology, Pathology, OPD). SYNTHETIC data only, built into
+a temporary directory. The module forms themselves are tested in test_modules.py."""
 import importlib.util
 import json
-import re
 from pathlib import Path
-from urllib.parse import unquote
 
 import pytest
 from fastapi.testclient import TestClient
 
 from his_mock import app as app_module
-from his_mock import desk, documents, generator, hl7, paths, ui
+from his_mock import common, desk, documents, generator, hl7, paths, ui
+from his_mock.tests import helpers
 
 DEAD_ORTHANC = "http://127.0.0.1:9"   # nothing listens: the desk must say "images not uploaded" and carry on
 
@@ -33,7 +33,14 @@ def data_dir(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def client(data_dir):
+    """The JSON API carries no login (the demo script and the e2e call it)."""
     return TestClient(app_module.create_app(data_dir))
+
+
+@pytest.fixture(scope="module")
+def staff_client(client):
+    """A signed-in radiologist on the same app (the /desk pages are human screens: login required)."""
+    return helpers.login(client.app, "radiologist")
 
 
 def hospital(client):
@@ -84,16 +91,17 @@ def no_em_dash_and_synthetic(html):
 
 
 # ------------------------------------------------------------------------ work lists
-def test_department_list_shows_supporting_departments_with_counts(client):
+def test_department_list_shows_supporting_departments_with_counts(client, staff_client):
     s = hospital(client).store
-    html = client.get("/desk").text
+    assert client.get("/desk", follow_redirects=False).status_code == 303      # a human screen: login first
+    html = staff_client.get("/desk").text
     no_em_dash_and_synthetic(html)
     supporting = [d for d in s.departments.values() if d["group"] == "supporting"]
     busy = []
     for d in supporting:
         w = s.pending_for_department(d["code"])
         n_o, n_r = len(w["orders"]), len(w["reports"])
-        row = (f'<a href="/desk/{d["code"]}">{ui.esc(d["name"])}</a></td><td><span class=mono>{d["code"]}</span></td>'
+        row = (f'<a href="{ui.esc(desk._module_for(s, d))}">{ui.esc(d["name"])}</a></td><td><span class=mono>{d["code"]}</span></td>'
                f"<td>{n_o}</td><td>{n_r}</td>")
         assert row in html, d["code"]
         if n_o or n_r:
@@ -103,23 +111,29 @@ def test_department_list_shows_supporting_departments_with_counts(client):
     assert {"RAD", "PATH", "MIC", "NM"} <= set(busy)
     treating = next(d for d in s.departments.values() if d["group"] != "supporting")
     assert f'href="/desk/{treating["code"]}"' not in html
+    # the modules of the departments
+    assert desk._module_for(s, s.department("RAD")) == "/his/radiology" == desk._module_for(s, s.department("NM"))
+    assert desk._module_for(s, s.department("PATH")) == "/his/pathology"
+    assert desk._module_for(s, s.department("BIO")) == "/his/lab?dept=BIO"
+    assert desk._module_for(s, s.department("MIC")) == "/his/lab?dept=MIC"
 
 
-def test_department_page_shows_preliminary_and_scheduled_order(client):
+def test_department_page_shows_preliminary_and_scheduled_order(client, staff_client):
     r, dept = the_preliminary(client)
     s = hospital(client).store
     o = place(client, dept["code"], doc_types=set(desk.model.IMAGING_MODALITY))
     resp = client.post(f"/desk/api/{dept['code']}/orders/{o['id']}/schedule", json={"date": "2026-10-20"})
     assert resp.status_code == 200, resp.text
     assert resp.json()["status"] == "scheduled" and s.events[-1]["status"] == "S"
-    html = client.get(f"/desk/{dept['code']}").text
-    no_em_dash_and_synthetic(html)
+    old = staff_client.get(f"/desk/{dept['code']}", follow_redirects=False)
+    assert old.status_code == 303 and old.headers["location"] == "/his/radiology"   # the old link opens the RIS work list
     pat = s.patients[r["patient_id"]]
-    prelim_part = html.split("<h2>Preliminary reports</h2>")[1].split("<h2>Signed recently</h2>")[0]
-    pending_part = html.split("<h2>Pending orders</h2>")[1].split("<h2>Preliminary reports</h2>")[0]
+    prelim_part = staff_client.get("/his/radiology", params={"tab": "reported"}).text
+    pending_part = staff_client.get("/his/radiology", params={"tab": "scheduled"}).text
+    no_em_dash_and_synthetic(prelim_part)
     assert s.orders[r["order_id"]]["accession"] in prelim_part
     assert pat["uhid"] in prelim_part and "Venkatesh Rao" in prelim_part
-    assert o["accession"] in pending_part and "Scheduled 20/10/2026" in pending_part and "scheduled" in pending_part
+    assert o["accession"] in pending_part and "20/10/2026" in pending_part
     api = client.get(f"/desk/api/{dept['code']}/pending").json()
     rep = next(x for x in api["reports"] if x["id"] == r["id"])
     assert {x["id"] for x in api["reports"]} == {x["id"] for x in s.reports.values() if x["status"] == "preliminary"
@@ -174,7 +188,7 @@ def test_sign_makes_the_report_final_with_a_signature(client, signed):
     assert line["outcome"] == "done" and line["order_id"] == r["order_id"] and line["time"]
 
 
-def test_sign_renders_the_pdf(client, signed):
+def test_sign_renders_the_pdf(client, staff_client, signed):
     if not Path(documents.PDF_PYTHON).exists():
         pytest.skip(f"pdf venv not available ({documents.PDF_PYTHON}); the desk saves the sign and says PDF not rendered")
     doc = signed["resp"]["document"]
@@ -185,12 +199,12 @@ def test_sign_renders_the_pdf(client, signed):
     sig = s.signatures[signed["resp"]["signature_id"]]
     assert sig["document_hash"] == doc["sha256"]
     v = s.current_version(s.reports[signed["report_id"]])
-    assert client.get(f"/view/reports/{signed['report_id']}/{v['version']}").status_code == 200
-    page = client.get(f"/desk/{signed['dept']['code']}").text
-    assert f"/view/reports/{signed['report_id']}/{v['version']}" in page.split("<h2>Signed recently</h2>")[1]
+    assert staff_client.get(f"/view/reports/{signed['report_id']}/{v['version']}").status_code == 200
+    page = staff_client.get("/his/radiology", params={"tab": "signed"}).text
+    assert f"/view/reports/{signed['report_id']}/{v['version']}" in page
 
 
-def test_junior_resident_cannot_sign(client):
+def test_junior_resident_cannot_sign(client, staff_client):
     junior = staff(client, "RAD", "junior_resident")
     if not junior:
         pytest.skip("no junior resident in Radiology")
@@ -202,21 +216,16 @@ def test_junior_resident_cannot_sign(client):
                        json={"signer": junior["reg_no"], "values": {"impression": "Synthetic test value"}})
     assert resp.status_code == 409 and "junior resident" in resp.json()["detail"]
     assert len(s.events) == n and s.orders[o["id"]]["status"] == "ordered"
-    # the form lists the junior resident disabled
-    form = client.get(f"/desk/RAD/orders/{o['id']}").text
-    assert re.search(rf'<option value="{junior["reg_no"]}" disabled>[^<]*cannot sign', form)
-    # a crafted form post gets the LifecycleError message as a flash
-    r = client.post(f"/desk/RAD/orders/{o['id']}/sign", data={"signer": junior["reg_no"], "values": "impression: x"},
-                    follow_redirects=False)
-    assert r.status_code == 303 and r.headers["location"].startswith("/desk/RAD?")
-    assert "junior resident" in unquote(r.headers["location"]) and "kind=bad" in r.headers["location"]
-    page = client.get(r.headers["location"]).text
-    assert 'class="flash bad"' in page and "junior resident" in page
-    assert len(s.events) == n
     assert audit_lines(client)[-1]["outcome"] == "refused"
+    # the old desk order page opens the RIS order page; the old form posts are gone (the forms live in the modules)
+    old = staff_client.get(f"/desk/RAD/orders/{o['id']}", follow_redirects=False)
+    assert old.status_code == 303 and old.headers["location"] == f"/his/radiology/orders/{o['id']}"
+    r = helpers.post(staff_client, f"/desk/RAD/orders/{o['id']}/sign", {"signer": junior["reg_no"]})
+    assert r.status_code in (404, 405) and "Traceback" not in r.text
+    assert len(s.events) == n
 
 
-def test_addendum_adds_a_version_and_keeps_the_earlier(client, signed):
+def test_addendum_adds_a_version_and_keeps_the_earlier(client, staff_client, signed):
     s = hospital(client).store
     rid, code = signed["report_id"], signed["dept"]["code"]
     n = len(s.reports[rid]["versions"])
@@ -231,9 +240,11 @@ def test_addendum_adds_a_version_and_keeps_the_earlier(client, signed):
     assert r["versions"][-1]["values"] == values and r["versions"][-1]["amendment_note"].startswith("Addendum")
     assert (s.events[-1]["kind"], s.events[-1]["status"]) == ("ORU", "C")
     assert hl7.read_feed(files(client)["hl7"])[-1].count("ORU^R01") == 1
-    page = client.get(f"/desk/{code}/reports/{rid}").text
+    old = staff_client.get(f"/desk/{code}/reports/{rid}", follow_redirects=False)
+    assert old.status_code == 303 and old.headers["location"] == f"/his/radiology/orders/{r['order_id']}"
+    page = staff_client.get(old.headers["location"]).text
     no_em_dash_and_synthetic(page)
-    assert "Addendum after review (SYNTHETIC)" in page and f"/desk/{code}/reports/{rid}/addendum" in page
+    assert "Addendum after review (SYNTHETIC)" in page and f'action="/his/radiology/reports/{rid}/addendum"' in page
     # an addendum needs a note
     bad = client.post(f"/desk/api/{code}/reports/{rid}/addendum", json={"signer": signed["consultant"]["reg_no"]})
     assert bad.status_code == 400
@@ -253,78 +264,56 @@ def test_cancel_an_open_order_gives_x(client):
     assert client.post(f"/desk/api/MIC/orders/{o['id']}/cancel", json={"reason": "again"}).status_code == 409
 
 
-def test_lab_order_through_the_html_forms(client):
-    """Collect sample, enter preliminary and Complete and sign through the forms (303 + flash each time)."""
+def test_lab_order_link_opens_the_laboratory_module(client):
+    """The old desk order link of a laboratory order opens the Laboratory order page with its forms (lab.doctor)."""
     o = place(client, "BIO")
-    s = hospital(client).store
-    page = client.get(f"/desk/BIO/orders/{o['id']}").text
+    lab = helpers.login(client.app, "lab.doctor")
+    r = lab.get(f"/desk/BIO/orders/{o['id']}", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == f"/his/lab/orders/{o['id']}"
+    page = lab.get(r.headers["location"]).text
     no_em_dash_and_synthetic(page)
-    for action in ("collect", "preliminary", "sign", "cancel"):
-        assert f'action="/desk/BIO/orders/{o["id"]}/{action}"' in page, action
-    assert f"/orders/{o['id']}/schedule" not in page          # a laboratory order is not scheduled at the desk
-    r = client.post(f"/desk/BIO/orders/{o['id']}/collect", data={"barcode": "", "block_no": ""}, follow_redirects=False)
-    assert r.status_code == 303 and "kind=ok" in r.headers["location"], unquote(r.headers["location"])
-    assert s.orders[o["id"]]["status"] == "sample_collected" and s.events[-1]["status"] == "I"
-    reporter = desk.staff(s, s.department("BIO"))[0]
-    r = client.post(f"/desk/BIO/orders/{o['id']}/preliminary",
-                    data={"reporter": reporter["reg_no"], "values": "s_creatinine: 0.9 mg/dL\nNote Line: as typed: kept"},
-                    follow_redirects=False)
-    assert r.status_code == 303
-    rep = s.report_for_order(o["id"])
-    assert rep["status"] == "preliminary"
-    assert rep["versions"][0]["values"] == {"s_creatinine": "0.9 mg/dL", "note_line": "as typed: kept"}
-    # the report page prefills the sign form with the preliminary values
-    rp = client.get(f"/desk/BIO/reports/{rep['id']}").text
-    assert "s_creatinine: 0.9 mg/dL" in rp and f'action="/desk/BIO/orders/{o["id"]}/sign"' in rp
-    r = client.post(f"/desk/BIO/orders/{o['id']}/sign",
-                    data={"signer": reporter["reg_no"], "values": "s_creatinine: 0.9 mg/dL"}, follow_redirects=False)
-    assert r.status_code == 303 and "final" in unquote(r.headers["location"])
-    assert rep["status"] == "final" and rep["versions"][-1]["values"] == {"s_creatinine": "0.9 mg/dL"}
-    assert s.events[-1]["status"] == "F"
-    # a values line without a colon is refused without touching the store
-    o2 = place(client, "BIO")
-    n = len(s.events)
-    r = client.post(f"/desk/BIO/orders/{o2['id']}/preliminary", data={"reporter": reporter["reg_no"], "values": "no colon"},
-                    follow_redirects=False)
-    assert r.status_code == 303 and "kind=bad" in r.headers["location"] and len(s.events) == n
+    for action in ("collect", "result", "verify", "cancel"):
+        assert f'action="/his/lab/orders/{o["id"]}/{action}"' in page, action
+    assert "/schedule" not in page          # a laboratory order is not scheduled
 
 
-def test_wrong_department_is_404(client, signed):
+def test_wrong_department_is_404(client, staff_client, signed):
     s = hospital(client).store
     rid = signed["report_id"]
     oid = s.reports[rid]["order_id"]
     assert client.post(f"/desk/api/PATH/orders/{oid}/sign", json={"signer": "VXREG-20201"}).status_code == 404
     assert client.post(f"/desk/api/PATH/reports/{rid}/addendum", json={"signer": "x", "note": "x"}).status_code == 404
-    assert client.get(f"/desk/PATH/reports/{rid}").status_code == 404
-    assert client.get(f"/desk/PATH/orders/{oid}").status_code == 404
-    assert client.post(f"/desk/PATH/orders/{oid}/cancel", data={"reason": "x"}, follow_redirects=False).status_code == 404
-    assert client.get("/desk/NOPE").status_code == 404
+    assert staff_client.get(f"/desk/PATH/reports/{rid}", follow_redirects=False).status_code == 404
+    assert staff_client.get(f"/desk/PATH/orders/{oid}", follow_redirects=False).status_code == 404
+    assert staff_client.get("/desk/NOPE", follow_redirects=False).status_code == 404
     assert client.get("/desk/api/NOPE/pending").status_code == 404
     treating = next(d for d in s.departments.values() if d["group"] != "supporting")
-    assert client.get(f"/desk/{treating['code']}").status_code == 404
+    r = staff_client.get(f"/desk/{treating['code']}", follow_redirects=False)
+    assert r.status_code == 404 and "SYNTHETIC DATA" in r.text and "Traceback" not in r.text
 
 
-def test_pages_render_without_em_dashes(client):
+def test_pages_render_without_em_dashes(client, staff_client):
+    """Every old desk link (department, pending order, recent report) opens a module page that renders clean."""
     s = hospital(client).store
     for d in s.departments.values():
         if d["group"] != "supporting":
             continue
-        html = client.get(f"/desk/{d['code']}").text
+        r = staff_client.get(f"/desk/{d['code']}", follow_redirects=False)
+        assert r.status_code == 303 and r.headers["location"] == desk._module_for(s, d), d["code"]
+        html = staff_client.get(r.headers["location"]).text
         no_em_dash_and_synthetic(html)
-        assert "<h2>Pending orders</h2>" in html and "<h2>Preliminary reports</h2>" in html
-        assert 'href="/desk"' in html and 'href="/his"' in html
+        assert 'href="/his"' in html and 'class=active' in html
         w = desk.worklist(s, d)
         for o in w["orders"]:
-            page = client.get(f"/desk/{d['code']}/orders/{o['id']}").text
+            r = staff_client.get(f"/desk/{d['code']}/orders/{o['id']}", follow_redirects=False)
+            assert r.status_code == 303 and r.headers["location"] == common.order_url(o)
+            page = staff_client.get(r.headers["location"]).text
             no_em_dash_and_synthetic(page)
-            want = ["preliminary", "sign", "cancel"] + (["schedule"] if desk.is_imaging(o) else [])
-            for action in want:
-                assert f'/orders/{o["id"]}/{action}"' in page, (o["id"], action)
-            assert "Complete and sign" in page
-        for r in desk.recently_signed(s, d, n=3):
-            page = client.get(f"/desk/{d['code']}/reports/{r['id']}").text
-            no_em_dash_and_synthetic(page)
-            assert f"/reports/{r['id']}/addendum" in page
+            assert o["label"] in page and "class=banner" in page
+        for rep_ in desk.recently_signed(s, d, n=3):
+            r = staff_client.get(f"/desk/{d['code']}/reports/{rep_['id']}", follow_redirects=False)
+            assert r.status_code == 303 and r.headers["location"] == common.report_url(s, rep_)
+            no_em_dash_and_synthetic(staff_client.get(r.headers["location"]).text)
 
 
 def test_parse_values():

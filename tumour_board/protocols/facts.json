@@ -444,6 +444,14 @@
     "tumour_board_record"
    ]
   },
+  "patient_awareness": {
+   "label": "Patient knows the diagnosis",
+   "desc": "whether the patient has been told the diagnosis (yes, no, partly), as the treating doctor states it",
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ]
+  },
   "clinical_trial_note": {
    "label": "Clinical trial availability / suitability",
    "desc": "any documented statement about clinical trial availability or suitability, as written",

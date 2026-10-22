@@ -11,6 +11,27 @@ from . import config
 TIERS = ("a", "b", "c")
 TIER_LABEL = {"a": "Essential", "b": "Optimal", "c": "Optional", "none": "Not applicable"}
 STRICTNESS = {"a": 3, "b": 2, "c": 1, "none": 0}
+# A cancer with no built checklist (a typed name, or a listed cancer not built yet): four core records (owner decision R05-Q04,
+# protocols/generic.json). The cancer's name is kept on the Case File as the doctor wrote it (case.json "cancer_name").
+GENERIC = "generic"
+NO_CHECKLIST = "no checklist yet"
+NO_PROTOCOL_LABEL = "No disease-specific Indian protocol"
+
+
+def case_label(case, label: str = "") -> str:
+    """How a list names the cancer of a Case File: "<cancer name> (no checklist yet)" under the generic rule when the name is recorded,
+    else `label` (the protocol's label as the caller already has it) or the protocol's own label; "" for a Case File not listed yet."""
+    case = case if isinstance(case, dict) else {}
+    pid = str(case.get("protocol") or "")
+    name = " ".join(str(case.get("cancer_name") or "").split())
+    if pid == GENERIC and name:
+        return f"{name} ({NO_CHECKLIST})"
+    if label or not pid:
+        return label
+    try:
+        return get(pid).get("label") or pid
+    except (OSError, ValueError, TypeError):
+        return pid
 
 
 @lru_cache(maxsize=1)

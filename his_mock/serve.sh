@@ -10,7 +10,8 @@ pid_on_port() { ss -ltnp 2>/dev/null | awk -v p="127.0.0.1:$PORT " '$0 ~ p {prin
 start() {
   if [ -n "$(pid_on_port)" ]; then echo "his_mock already listening on $PORT (pid $(pid_on_port))"; return 0; fi
   [ -f "${TB_HIS_MOCK_DATA:-data/his_mock}/store.json" ] || { echo "no store: run $PY -m his_mock.build first"; return 1; }
-  setsid nohup $PY -m uvicorn --factory his_mock.app:create_app --host 127.0.0.1 --port "$PORT" --log-level warning \
+  # --no-proxy-headers: X-Forwarded-For never rewrites the client address (the sign-in pause counts real addresses, review #20)
+  setsid nohup $PY -m uvicorn --factory his_mock.app:create_app --host 127.0.0.1 --port "$PORT" --log-level warning --no-proxy-headers \
     > "$LOG/his_mock.log" 2>&1 < /dev/null &
   for i in $(seq 1 30); do curl -s -m 2 -o /dev/null "http://127.0.0.1:$PORT/health" && { echo "his_mock started on $PORT (pid $(pid_on_port))"; return 0; }; sleep 1; done
   echo "his_mock did not answer on $PORT within 30 s; see $LOG/his_mock.log"; return 1

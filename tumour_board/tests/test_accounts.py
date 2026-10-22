@@ -136,7 +136,7 @@ def test_update_and_remove_refuse_the_unplaced_and_bad_roles(setup):
     with pytest.raises(AccountError) as e:
         accounts.update_doctor("deepak", me, "radiology", "stranger", role="head")
     assert e.value.status == 404
-    with pytest.raises(AccountError, match="doctor or head"):
+    with pytest.raises(AccountError, match="doctor, head or resident"):
         accounts.update_doctor("deepak", me, "radiology", "ravi", role="owner")
     with pytest.raises(AccountError, match="department admin here"):
         accounts.update_doctor("deepak", me, "radiology", "deepak", role="head")
@@ -145,7 +145,7 @@ def test_update_and_remove_refuse_the_unplaced_and_bad_roles(setup):
     with pytest.raises(AccountError) as e:
         accounts.place_doctor("deepak", "cardiology", "ravi")
     assert e.value.status == 404
-    with pytest.raises(AccountError, match="doctor or head"):
+    with pytest.raises(AccountError, match="doctor, head or resident"):
         accounts.place_doctor("deepak", "radiology", "ravi", role="boss")
 
 
@@ -167,7 +167,7 @@ def test_root_admin_creates_a_coordinator_and_a_department_admin(setup):
 def test_root_admin_create_refuses_no_role_bad_role_and_vaidyx_admin(setup):
     with pytest.raises(AccountError, match="at least one role"):
         accounts.create_account(setup, "tbroot", "nobody", "x" * 8)
-    with pytest.raises(AccountError, match="doctor or head"):
+    with pytest.raises(AccountError, match="doctor, head or resident"):
         accounts.create_account(setup, "tbroot", "nobody", "x" * 8, departments={"pathology": "owner"})
     with pytest.raises(AccountError, match="Vaidyx admin"):
         accounts.create_account(setup, "tbroot", "admin", None, coordinator=True)
@@ -213,7 +213,7 @@ def test_vaidyx_admin_is_never_disabled_here(setup):
 
 
 def test_check_placement_before_any_login_is_created(setup):
-    with pytest.raises(AccountError, match="doctor or head"):
+    with pytest.raises(AccountError, match="doctor, head or resident"):
         accounts.check_placement("radiology", "boss")
     with pytest.raises(AccountError) as e:
         accounts.check_placement("cardiology", "doctor")

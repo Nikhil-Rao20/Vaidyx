@@ -1,0 +1,67 @@
+{
+  "_note": "Clinical TNM and the stage group for lung cancer (non-small cell), transcribed from the AJCC Cancer Staging Manual, 8th edition (2017), chapter 36, pages 447 to 448 (licensed copy; internal instance only). 'text' is the criterion as printed (symbols restored where the scan's text layer lost them); 'find' is a phrase of the scan's own text layer that locates the line for the highlight. T is the higher of the size category and a described feature (rank in t_order). Not switched on until a clinician has checked this file (docs/staging/DECISION.md, guard 5).",
+  "id": "lung_ajcc8",
+  "protocol": "lung_nsclc",
+  "label": "Lung cancer, AJCC 8th edition, clinical stage",
+  "system": "AJCC TNM, 8th edition",
+  "signed_off": null,
+  "book": {"id": "ajcc8_lung", "title": "AJCC Cancer Staging Manual, 8th edition: 36 Lung", "short": "AJCC 8, Lung", "file": "ajcc/AJCC8_Ch36_Lung_pp431-456.pdf", "first_page": 431, "licensed": true},
+  "t_order": ["TX", "T0", "Tis", "T1mi", "T1a", "T1b", "T1c", "T2a", "T2b", "T3", "T4"],
+  "inputs": {
+    "T": {"facts": ["lesion_size"], "doc_types": ["ct", "pet_ct", "mri", "xray", "endoscopy", "clinical_note"], "ask": "the size of the primary lung tumour (greatest dimension), and any of: involvement of the main bronchus, visceral pleural invasion, atelectasis or obstructive pneumonitis to the hilum; invasion of the parietal pleura, chest wall, phrenic nerve or parietal pericardium, a separate nodule in the same lobe; invasion of the diaphragm, mediastinum, heart, great vessels, trachea, recurrent laryngeal nerve, oesophagus, vertebral body or carina, a separate nodule in a different ipsilateral lobe"},
+    "N": {"facts": ["nodal_findings"], "doc_types": ["ct", "pet_ct", "endoscopy", "cytology", "clinical_note"], "ask": "the regional lymph nodes on imaging, EBUS or mediastinoscopy: ipsilateral peribronchial or hilar, ipsilateral mediastinal or subcarinal, contralateral mediastinal or hilar, scalene or supraclavicular"},
+    "M": {"facts": ["distant_findings"], "doc_types": ["ct", "pet_ct", "mri", "bone_scan", "cytology", "clinical_note"], "ask": "distant metastases: a nodule in the other lung, pleural or pericardial nodules or malignant effusion; a single extrathoracic metastasis; several extrathoracic metastases"}
+  },
+  "T": [
+    {"cat": "TX", "text": "Primary tumor cannot be assessed, or tumor proven by the presence of malignant cells in sputum or bronchial washings but not visualized by imaging or bronchoscopy", "page": 447, "find": "Primary tum or cannot be assessed", "rare": true},
+    {"cat": "T0", "text": "No evidence of primary tumor", "page": 447, "find": "No evidence of primary tumor", "rare": true},
+    {"cat": "T1mi", "group": "T1", "feature": true, "text": "Minimally invasive adenocarcinoma: adenocarcinoma (≤ 3 cm in greatest dimension) with a predominantly lepidic pattern and ≤ 5 mm invasion in greatest dimension", "page": 447, "find": "M inimally invasive adenocarcinoma"},
+    {"cat": "T1a", "group": "T1", "text": "Tumor ≤ 1 cm in greatest dimension", "page": 447, "find": "Tum or <1 cm in greatest", "max_mm": 10},
+    {"cat": "T1b", "group": "T1", "text": "Tumor > 1 cm but ≤ 2 cm in greatest dimension", "page": 447, "find": "1 cm but < 2 cm", "min_mm": 10, "max_mm": 20},
+    {"cat": "T1c", "group": "T1", "text": "Tumor > 2 cm but ≤ 3 cm in greatest dimension", "page": 447, "find": "Tumor >2 cm but <3 cm", "min_mm": 20, "max_mm": 30},
+    {"cat": "T2a", "group": "T2", "text": "Tumor > 3 cm but ≤ 4 cm in greatest dimension", "page": 447, "find": "Tum or >3 cm but < 4 cm", "min_mm": 30, "max_mm": 40},
+    {"cat": "T2b", "group": "T2", "text": "Tumor > 4 cm but ≤ 5 cm in greatest dimension", "page": 447, "find": "4 cm but <5 cm", "min_mm": 40, "max_mm": 50},
+    {"cat": "T3", "group": "T3", "text": "Tumor > 5 cm but ≤ 7 cm in greatest dimension", "page": 447, "find": "Tumor >5 cm but <7 cm", "min_mm": 50, "max_mm": 70},
+    {"cat": "T4", "group": "T4", "text": "Tumor > 7 cm in greatest dimension", "page": 447, "find": "Tumor >7 cm or tum or", "min_mm": 70},
+    {"cat": "T2-features", "group": "T2", "feature": true, "by_size": [{"cat": "T2a", "max_mm": 40}, {"cat": "T2b", "min_mm": 40}], "text": "Involves the main bronchus regardless of distance to the carina, but without involvement of the carina; invades visceral pleura (PL1 or PL2); associated with atelectasis or obstructive pneumonitis that extends to the hilar region, involving part or all of the lung. T2 tumors with these features are classified as T2a if ≤ 4 cm or if the size cannot be determined and T2b if > 4 cm but ≤ 5 cm.", "page": 447, "find": "Involves the main bronchus"},
+    {"cat": "T3-invades", "group": "T3", "feature": true, "assign": "T3", "text": "Directly invading any of the following: parietal pleura (PL3), chest wall (including superior sulcus tumors), phrenic nerve, parietal pericardium; or separate tumor nodule(s) in the same lobe as the primary", "page": 447, "find": "parietal pleura (PL3), chest wall"},
+    {"cat": "T4-invades", "group": "T4", "feature": true, "assign": "T4", "text": "Tumor of any size invading one or more of the following: diaphragm, mediastinum, heart, great vessels, trachea, recurrent laryngeal nerve, esophagus, vertebral body, or carina; separate tumor nodule(s) in an ipsilateral lobe different from that of the primary", "page": 447, "find": "ipsilateral lobe different"}
+  ],
+  "N": [
+    {"cat": "NX", "text": "Regional lymph nodes cannot be assessed", "page": 448, "find": "Regional lymph nodes cannot be assessed", "rare": true},
+    {"cat": "N0", "group": "N0", "text": "No regional lymph node metastasis", "page": 448, "find": "No regional lymph node metástasis"},
+    {"cat": "N1", "group": "N1", "text": "Metastasis in ipsilateral peribronchial and/or ipsilateral hilar lymph nodes and intrapulmonary nodes, including involvement by direct extension", "page": 448, "find": "ipsilateral peribronchial and/or"},
+    {"cat": "N2", "group": "N2", "text": "Metastasis in ipsilateral mediastinal and/or subcarinal lymph node(s)", "page": 448, "find": "ipsilateral m ediastinal and/or subcarinal"},
+    {"cat": "N3", "group": "N3", "text": "Metastasis in contralateral mediastinal, contralateral hilar, ipsilateral or contralateral scalene, or supraclavicular lymph node(s)", "page": 448, "find": "contralateral mediastinal, contralateral"}
+  ],
+  "M": [
+    {"cat": "M0", "group": "M0", "text": "No distant metastasis", "page": 448, "find": "No distant metástasis"},
+    {"cat": "M1a", "group": "M1", "text": "Separate tumor nodule(s) in a contralateral lobe; tumor with pleural or pericardial nodules or malignant pleural or pericardial effusion", "page": 448, "find": "Separate tum or nodule(s) in a contralateral"},
+    {"cat": "M1b", "group": "M1", "text": "Single extrathoracic metastasis in a single organ (including involvement of a single nonregional node)", "page": 448, "find": "Single extrathoracic metástasis"},
+    {"cat": "M1c", "group": "M1", "text": "Multiple extrathoracic metastases in a single organ or in multiple organs", "page": 448, "find": "ltiple extrathoracic"}
+  ],
+  "groups": {
+    "title": "AJCC Prognostic Stage Groups",
+    "page": 448,
+    "find": "AJCC PROGNOSTIC STAGE GROUPS",
+    "note": "The stage group table for lung cancer (AJCC 8, p. 448).",
+    "rows": [
+      {"T": ["Tis"], "N": ["N0"], "M": ["M0"], "stage": "0"},
+      {"T": ["T1mi", "T1a"], "N": ["N0"], "M": ["M0"], "stage": "IA1", "find": "T ía NO MO IA1"},
+      {"T": ["T1b"], "N": ["N0"], "M": ["M0"], "stage": "IA2", "find": "T lb NO MO IA2"},
+      {"T": ["T1c"], "N": ["N0"], "M": ["M0"], "stage": "IA3", "find": "T ic NO MO IA3"},
+      {"T": ["T2a"], "N": ["N0"], "M": ["M0"], "stage": "IB", "find": "T2a NO MO IB"},
+      {"T": ["T2b"], "N": ["N0"], "M": ["M0"], "stage": "IIA", "find": "T2b NO MO IIA"},
+      {"T": ["T1", "T2"], "N": ["N1"], "M": ["M0"], "stage": "IIB", "find": "T2a NI MO IIB"},
+      {"T": ["T3"], "N": ["N0"], "M": ["M0"], "stage": "IIB", "find": "T3 NO MO IIB"},
+      {"T": ["T1", "T2"], "N": ["N2"], "M": ["M0"], "stage": "IIIA", "find": "T ía N2 MO IIIA"},
+      {"T": ["T3"], "N": ["N1"], "M": ["M0"], "stage": "IIIA", "find": "T3 NI MO IIIA"},
+      {"T": ["T4"], "N": ["N0", "N1"], "M": ["M0"], "stage": "IIIA", "find": "T4 NO MO IIIA"},
+      {"T": ["T1", "T2"], "N": ["N3"], "M": ["M0"], "stage": "IIIB", "find": "T ía N3 MO IIIB"},
+      {"T": ["T3", "T4"], "N": ["N2"], "M": ["M0"], "stage": "IIIB", "find": "T4 N2 MO IIIB"},
+      {"T": ["T3", "T4"], "N": ["N3"], "M": ["M0"], "stage": "IIIC", "find": "T3 N3 MO IIIC"},
+      {"T": ["*"], "N": ["*"], "M": ["M1a", "M1b"], "stage": "IVA", "find": "Any T Any N M ía IVA"},
+      {"T": ["*"], "N": ["*"], "M": ["M1c"], "stage": "IVB", "find": "Any T Any N M lc IVB"}
+    ]
+  }
+}

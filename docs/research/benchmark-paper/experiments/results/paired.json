@@ -1,0 +1,209 @@
+[
+ {
+  "comparison": "Gemma-4-31B vs HuatuoGPT-3, CoT overall",
+  "diff": 5.4,
+  "lo": 4.61,
+  "hi": 6.15,
+  "a_only": 1068,
+  "b_only": 528,
+  "p_mcnemar": 2.85e-42
+ },
+ {
+  "comparison": "HuatuoGPT-3 vs Qwen3.5-4B, CoT overall",
+  "diff": 8.86,
+  "lo": 7.97,
+  "hi": 9.74,
+  "a_only": 1471,
+  "b_only": 585,
+  "p_mcnemar": 1.33e-87
+ },
+ {
+  "comparison": "Qwen3.5-4B vs MedGemma-27B-it, CoT overall ('matches')",
+  "diff": 0.68,
+  "lo": -0.17,
+  "hi": 1.54,
+  "a_only": 1012,
+  "b_only": 944,
+  "p_mcnemar": 0.13
+ },
+ {
+  "comparison": "Qwen3.5-4B vs MedGemma-27B-it, CoT MedQA",
+  "diff": -0.94,
+  "lo": -3.22,
+  "hi": 1.34,
+  "a_only": 107,
+  "b_only": 119,
+  "p_mcnemar": 0.464
+ },
+ {
+  "comparison": "Qwen3.5-4B vs MedGemma-27B-text-it, CoT overall",
+  "diff": 0.32,
+  "lo": -0.57,
+  "hi": 1.19,
+  "a_only": 1033,
+  "b_only": 1001,
+  "p_mcnemar": 0.492
+ },
+ {
+  "comparison": "MedGemma-27B-text-it vs MedGemma-27B-it, CoT overall",
+  "diff": 0.36,
+  "lo": -0.41,
+  "hi": 1.14,
+  "a_only": 817,
+  "b_only": 781,
+  "p_mcnemar": 0.381
+ },
+ {
+  "comparison": "MedGemma-27B-it vs Baichuan-M2, CoT overall",
+  "diff": 0.48,
+  "lo": -0.39,
+  "hi": 1.36,
+  "a_only": 1017,
+  "b_only": 969,
+  "p_mcnemar": 0.292
+ },
+ {
+  "comparison": "Baichuan-M2 vs Lingshu-32B, CoT overall",
+  "diff": 3.04,
+  "lo": 2.16,
+  "hi": 3.95,
+  "a_only": 1180,
+  "b_only": 876,
+  "p_mcnemar": 2.17e-11
+ },
+ {
+  "comparison": "Med42-8B vs JSL-MedLlama, CoT overall",
+  "diff": 0.36,
+  "lo": -0.59,
+  "hi": 1.35,
+  "a_only": 1304,
+  "b_only": 1268,
+  "p_mcnemar": 0.49
+ },
+ {
+  "comparison": "MedGemma-1.5-4B vs OpenBioLLM-8B, CoT overall",
+  "diff": 0.79,
+  "lo": -0.38,
+  "hi": 1.88,
+  "a_only": 1735,
+  "b_only": 1656,
+  "p_mcnemar": 0.18
+ },
+ {
+  "comparison": "Qwen3.5-4B vs MedGemma-4B-it, CoT overall",
+  "diff": 11.59,
+  "lo": 10.6,
+  "hi": 12.6,
+  "a_only": 1961,
+  "b_only": 803,
+  "p_mcnemar": 1.21e-110
+ },
+ {
+  "comparison": "Gemma-4-31B vs HuatuoGPT-3, CoT MedXpertQA",
+  "diff": 14.78,
+  "lo": 12.69,
+  "hi": 16.86,
+  "a_only": 549,
+  "b_only": 187,
+  "p_mcnemar": 4.11e-42
+ },
+ {
+  "comparison": "HuatuoGPT-3 vs Lingshu-32B, direct overall",
+  "diff": 6.19,
+  "lo": 5.34,
+  "hi": 7.05,
+  "a_only": 1359,
+  "b_only": 740,
+  "p_mcnemar": 4.64e-42
+ },
+ {
+  "comparison": "gemma-4-31b-it: CoT vs direct overall",
+  "diff": 17.4,
+  "lo": 16.63,
+  "hi": 18.15,
+  "a_only": 1946,
+  "b_only": 207,
+  "p_mcnemar": 0.0
+ },
+ {
+  "comparison": "huatuogpt-3-27b: CoT vs direct overall",
+  "diff": 5.19,
+  "lo": 4.37,
+  "hi": 5.98,
+  "a_only": 1084,
+  "b_only": 565,
+  "p_mcnemar": 7.15e-38
+ },
+ {
+  "comparison": "lingshu-32b: CoT vs direct overall",
+  "diff": -1.68,
+  "lo": -2.52,
+  "hi": -0.88,
+  "a_only": 786,
+  "b_only": 954,
+  "p_mcnemar": 6.16e-05
+ },
+ {
+  "comparison": "med42-8b: CoT vs direct overall",
+  "diff": -2.7,
+  "lo": -3.49,
+  "hi": -1.89,
+  "a_only": 779,
+  "b_only": 1049,
+  "p_mcnemar": 2.92e-10
+ },
+ {
+  "comparison": "HuatuoGPT-3 vs Lingshu-32B, OmniMedVQA first-token",
+  "diff": 0.49,
+  "lo": 0.19,
+  "hi": 0.77,
+  "a_only": 8638,
+  "b_only": 8203,
+  "p_mcnemar": 0.000824
+ },
+ {
+  "comparison": "Lingshu-32B vs Gemma-4-31B, OmniMedVQA first-token",
+  "diff": 0.91,
+  "lo": 0.62,
+  "hi": 1.21,
+  "a_only": 9708,
+  "b_only": 8902,
+  "p_mcnemar": 3.59e-09
+ },
+ {
+  "comparison": "Lingshu-32B vs HuatuoGPT-3, SLAKE",
+  "diff": 24.6,
+  "lo": 21.58,
+  "hi": 27.62,
+  "a_only": 298,
+  "b_only": 37,
+  "p_mcnemar": 8.02e-52
+ },
+ {
+  "comparison": "Lingshu-32B vs MedGemma-4B, VQA-RAD",
+  "diff": 10.64,
+  "lo": 5.99,
+  "hi": 15.08,
+  "a_only": 82,
+  "b_only": 34,
+  "p_mcnemar": 9.69e-06
+ },
+ {
+  "comparison": "Gemma-4-31B vs HuatuoGPT-3, MedXpertQA-MM CoT",
+  "diff": 5.75,
+  "lo": 3.5,
+  "hi": 8.1,
+  "a_only": 348,
+  "b_only": 233,
+  "p_mcnemar": 2.09e-06
+ },
+ {
+  "comparison": "Gemma-4-31B vs Lingshu-32B, PMC-VQA CoT",
+  "diff": 6.0,
+  "lo": 3.75,
+  "hi": 8.2,
+  "a_only": 332,
+  "b_only": 212,
+  "p_mcnemar": 3.02e-07
+ }
+]

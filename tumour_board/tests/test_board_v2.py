@@ -60,7 +60,7 @@ def cases(data_root):
 # ---- 6.1 / 6.2: heads and the attendance sheet ---------------------------------------------------------------------------------------
 
 def test_heads_default_and_hospital_setting(data_root):
-    assert [h["id"] for h in board.heads()] == ["radiology", "medical_oncology", "surgical_oncology", "pathology"]
+    assert [h["id"] for h in board.heads()] == ["radiology", "medical_oncology", "surgical_oncology", "pathology", "radiation_oncology"]  # five heads from 18 Oct
     assert all(h["role"] == h["id"] for h in board.heads()) and board.heads()[0]["name"] == "Radiology"
     _hospital(board_heads=["pathology", "radiology", "pulmonology"])  # a hospital may name its own heads; Pulmonology has no agent
     assert [(h["id"], h["role"]) for h in board.heads()] == [("pathology", "pathology"), ("radiology", "radiology"), ("pulmonology", None)]
@@ -73,7 +73,7 @@ def test_heads_default_and_hospital_setting(data_root):
 
 
 def test_attendance_sheet_heads_first_then_on_demand_hospital_list_and_owners(cases):
-    _hospital(board_attendance=["palliative_medicine"])
+    _hospital(board_heads=org.V2_BOARD_HEADS, board_attendance=["palliative_medicine"])  # the four V2 heads this sheet was written for
     s = board.create(DATE, "anil")
     sheet = board.attendance_list(s)
     ids = [d["id"] for d in sheet]
@@ -125,6 +125,7 @@ def test_mark_ready_is_the_owners_action(cases):
 # ---- 6.2: agents for a head not recorded present, the surgical seat per Case File, on demand ---------------------------------------
 
 def test_a_head_not_recorded_present_has_its_agent_active_on_demand_roles_only_when_absent(cases):
+    _hospital(board_heads=org.V2_BOARD_HEADS)  # the four V2 heads (Radiation Oncology on demand); a V3 hospital has five
     s = board.create(DATE, "anil")
     assert board.absent_roles(s) == ["radiology", "pathology", "medical_oncology", "surgical_oncology"]  # nothing recorded yet
     for d in ("radiology", "pathology", "medical_oncology"):
@@ -138,6 +139,7 @@ def test_a_head_not_recorded_present_has_its_agent_active_on_demand_roles_only_w
 
 
 def test_surgical_seat_filled_per_case_file_by_the_case_files_own_surgeon(cases):
+    _hospital(board_heads=org.V2_BOARD_HEADS)
     s = board.create(DATE, "anil")
     for d in ("radiology", "pathology", "medical_oncology"):
         board.set_attendance(s["id"], d, "present", "anil")

@@ -1,0 +1,723 @@
+{
+ "round": 8,
+ "title": "Requests and the supporting side",
+ "intro": "This round is about requests to the Responsible Department: how they go out, how supporting doctors answer, reminders, re-fetch and outside reports. It ends with the demo PACS and hospital system the supporting side needs.",
+ "questions": [
+  {
+   "id": "R08-Q01",
+   "topic": "Records never ordered",
+   "core": true,
+   "type": "decision",
+   "question": "When a required record was never ordered in the hospital system (no CT order at all), what should Vaidyx suggest?",
+   "header": "No order",
+   "multi": false,
+   "options": [
+    {
+     "label": "Tell the doctor to order (Recommended)",
+     "description": "The row says 'not ordered: place the order in the HIS'; requests go only to departments holding an order (pending, preliminary, unsigned). Vaidyx never places orders."
+    },
+    {
+     "label": "Request the department anyway",
+     "description": "As today: a suggested request to Radiology, who must arrange the test with the treating team."
+    },
+    {
+     "label": "Order reminder and heads-up",
+     "description": "The doctor is told to order it and the department gets an advance note."
+    }
+   ],
+   "why": "Today every gap becomes a suggested request to the Responsible Department; the accession and stage (ordered, scheduled, sample collected, cancelled) appear only when an order exists (V2 Phase 3). In the Indian HIS flow a report follows an order from the treating side (B1, docs_Eswar/research/indian_his.md). Vaidyx only reads the HIS.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Tell the doctor to order (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R08-Q02",
+   "topic": "Sending requests",
+   "core": false,
+   "type": "decision",
+   "question": "How should the suggested requests go out once the check has listed them?",
+   "header": "Send",
+   "multi": false,
+   "options": [
+    {
+     "label": "One tap sends all (Recommended)",
+     "description": "The doctor sees every suggested request with its draft, may edit or untick any, and sends them together; nothing goes without that tap."
+    },
+    {
+     "label": "One by one, as today",
+     "description": "Each 'Notify <department>' is opened, edited and sent separately."
+    },
+    {
+     "label": "Automatic unless held",
+     "description": "Requests go out by themselves after a set time (for example 2 hours) unless the doctor holds them."
+    }
+   ],
+   "why": "V2 4.2: the check only suggests; the doctor edits and sends each one, in-app or 'Open in mail'; nothing automatic. J1: one Notify dialog per gap. The owner wants few clicks; R01 decides what the AI may do without a click ('expert over the loop').",
+   "depends_on": [
+    "R01-Q02",
+    "R08-Q01"
+   ],
+   "skip_if": "Skip if R01-Q02 answered 'Everything, including sending' or 'Sends after a hold' (sending is then automatic).",
+   "resource": null,
+   "status": "Answered",
+   "answer": "One by one, as today",
+   "notes": "Question adapted to R01-Q02 (Vaidyx writes, the doctor presses Send).",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R08-Q03",
+   "topic": "Channels",
+   "core": false,
+   "type": "decision",
+   "question": "Through which channels should a request reach the supporting department?",
+   "header": "Channels",
+   "multi": true,
+   "options": [
+    {
+     "label": "In-app inbox (Recommended)",
+     "description": "Always on; the department sees the request with UHID, IP / OP No. and accession in Vaidyx."
+    },
+    {
+     "label": "Email sent by Vaidyx",
+     "description": "Vaidyx sends the mail itself through a hospital mail server, instead of today's draft in the doctor's own mail app."
+    },
+    {
+     "label": "WhatsApp or SMS alert",
+     "description": "A short alert with no patient name and a link into Vaidyx; needs a paid business gateway and the hospital's consent rules."
+    },
+    {
+     "label": "Phone call button",
+     "description": "On a phone, one tap opens the dialer with the department's number, like the board members' call option."
+    }
+   ],
+   "why": "Today: in-app plus a mailto draft or Copy draft; the server sends no email (V2 §3, §13). Settled: calls open the phone's dialer for board members. Unverified in research: whether Indian boards share cases on WhatsApp (data.js research.unverified). R14 sets channels for all other notifications; R15 sets patient data on phones.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "In-app inbox (messages inside Vaidyx)",
+   "own_words": "Right now let us build in-app email sending to the existing people.",
+   "notes": "Clarified by R08-Q15: an email-like inbox inside Vaidyx to every registered doctor of the department; nothing leaves the server. No real email, WhatsApp, SMS for requests for now.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R08-Q04",
+   "topic": "Who receives a request",
+   "core": false,
+   "type": "decision",
+   "question": "Should a request go to the department as a whole or to a named doctor?",
+   "header": "Receiver",
+   "multi": false,
+   "options": [
+    {
+     "label": "Department, first to take (Recommended)",
+     "description": "Any doctor of the department takes it; the others see who has it, so nothing waits on one person on leave."
+    },
+    {
+     "label": "Named doctor",
+     "description": "The treating doctor picks a person, for example the radiologist who reported the scan; the rest of the department sees it read-only."
+    },
+    {
+     "label": "Head assigns it",
+     "description": "The department head receives it and passes it to a doctor; one more step, clear ownership."
+    }
+   ],
+   "why": "Today requests reach the department inbox and any member acknowledges (B7, matrix answer_request). Signed reports name their signer ('Digitally signed by Dr X', V2 §3), so the reporting doctor is known. I12 phone-first supporting views liked. R02 defines what 'head' means.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Department, first to take (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R08-Q05",
+   "topic": "Automatic re-fetch",
+   "core": true,
+   "type": "decision",
+   "question": "Should Vaidyx re-fetch records from the hospital system by itself?",
+   "header": "Re-fetch",
+   "multi": false,
+   "options": [
+    {
+     "label": "On Done, plus half-hourly (Recommended)",
+     "description": "Re-fetches when a department sends Done and every 30 minutes for Case Files with open requests; requests close when the signed report arrives, even with no Done."
+    },
+    {
+     "label": "Only when Done is sent",
+     "description": "One automatic re-fetch per Done; a report signed without a Done waits for a manual re-fetch."
+    },
+    {
+     "label": "Manual, one tap in notice",
+     "description": "The doctor taps 'Re-fetch now' in the Done notification (I15); nothing runs by itself."
+    }
+   ],
+   "why": "G21: re-fetch is manual only, so the owner must remember it. I15 (one-tap re-fetch from the notification) liked ('i15 is okay'). Re-fetch pulls only changed versions and re-runs the check in milliseconds (B8). Background polling was out of scope for V2 (changes_v2 §13).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "On Done, plus half-hourly (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R08-Q06",
+   "topic": "Supporting doctor's clicks",
+   "core": false,
+   "type": "decision",
+   "question": "What must a supporting doctor do inside Vaidyx for each request?",
+   "header": "Their clicks",
+   "multi": false,
+   "options": [
+    {
+     "label": "Nothing required, Done optional (Recommended)",
+     "description": "They sign in their own RIS / LIS / PACS as usual; the request closes when the signed report arrives. Take up and Done with a note stay optional."
+    },
+    {
+     "label": "Take up and Done",
+     "description": "As today: two taps in Vaidyx plus signing in their own system; the owner sees each step."
+    },
+    {
+     "label": "Done only",
+     "description": "One tap after signing; no take-up step."
+    }
+   ],
+   "why": "Eswar 13 Oct: 'a radiologist won't upload anything ... our platform is a notification carrier'. G20: two systems; J2 friction: 'the request looks open until someone else acts'. The first option needs automatic re-fetch (R08-Q05).",
+   "depends_on": [
+    "R08-Q05"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Nothing required, Done optional (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R08-Q07",
+   "topic": "Sending a request back",
+   "core": false,
+   "type": "decision",
+   "question": "Can a supporting department send a request back to the treating doctor?",
+   "header": "Send back",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, with a reason list (Recommended)",
+     "description": "Reasons such as 'wrong department', 'no order in the HIS', 'patient must come', 'already reported'; the owner is told and can re-send elsewhere."
+    },
+    {
+     "label": "Yes, free text only",
+     "description": "Any reason typed; harder to count on the quality dashboard."
+    },
+    {
+     "label": "No, as today",
+     "description": "They can only acknowledge or send Done; a wrong request waits until the owner closes it."
+    }
+   ],
+   "why": "dept_requests.py has acknowledge, done, remind and close by the owner, but no return. A request reaching the wrong desk (route overrides V2 2.4, G12) has no way back today.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Yes, free text only",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R08-Q08",
+   "topic": "Reminders",
+   "core": false,
+   "type": "decision",
+   "question": "Should overdue requests send reminders by themselves?",
+   "header": "Reminders",
+   "multi": false,
+   "options": [
+    {
+     "label": "Due day, then daily (Recommended)",
+     "description": "The department is reminded on the due date and each working day after; the owner's list shows 'overdue'."
+    },
+    {
+     "label": "Once, when overdue",
+     "description": "One automatic reminder the day after the due date; any more by hand."
+    },
+    {
+     "label": "Manual only, as today",
+     "description": "Only the owner's team or the coordinator presses Remind."
+    }
+   ],
+   "why": "K09: overdue never notifies; it is worked out only when a page is shown. I13 proposed overdue reminders and digests; U17: the coordinator had 536 unread notifications, so R14 groups them. Due dates today: the record's days from sending (CBC 2, molecular 10), calendar days.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Due day, then daily (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R08-Q09",
+   "topic": "Escalation",
+   "core": false,
+   "type": "decision",
+   "question": "When a request stays overdue, who should be told next?",
+   "header": "Escalation",
+   "multi": false,
+   "options": [
+    {
+     "label": "Head, then coordinator (Recommended)",
+     "description": "After 2 working days overdue the supporting department's head is told, and it shows on the coordinator's chase list for the board date."
+    },
+    {
+     "label": "Coordinator only",
+     "description": "Overdue requests go on the coordinator's chase list; the coordinator chases by phone or Remind."
+    },
+    {
+     "label": "No escalation",
+     "description": "Only the reminders chosen above; the owner decides what to do."
+    }
+   ],
+   "why": "Today the coordinator reminds on the owner's behalf (B15, Remind / Remind owner); nothing escalates. R02 defines 'head of department'; R10 covers the coordinator's chasing before the agenda.",
+   "depends_on": [
+    "R08-Q08",
+    "R02-Q06"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Head, then coordinator (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R08-Q10",
+   "topic": "Specialist confirmation (I08)",
+   "core": false,
+   "type": "decision",
+   "question": "When the treating doctor asks a radiologist or pathologist to confirm a report before the board, what do they give back?",
+   "header": "Confirmation",
+   "multi": false,
+   "options": [
+    {
+     "label": "Report stands or addendum (Recommended)",
+     "description": "One tap, 'Report stands' or 'Addendum pending', with an optional note; the board sees it with their name and time."
+    },
+    {
+     "label": "Plus a comment for board",
+     "description": "They may also type or speak a short comment in their own words, shown to the board as theirs."
+    },
+    {
+     "label": "Plus review of AI brief",
+     "description": "They also mark their specialty's AI brief reviewed or flagged (see R09)."
+    }
+   ],
+   "why": "I08 liked, 'specially requested from the treatment doctor' (notes, role-supporting). ICMR-NCDIR survey: radiologists attend 46.7% and pathologists 28.5% of Indian boards, so an answer before the meeting helps. Vaidyx records their words; it never writes an opinion for them.",
+   "depends_on": [
+    "R08-Q04"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Plus a comment for the board",
+   "notes": "Report stands / addendum pending, plus a short typed or spoken comment shown to the board as theirs.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R08-Q11",
+   "topic": "Outside reports",
+   "core": false,
+   "type": "decision",
+   "question": "Can a report from another hospital or private lab meet a required record?",
+   "header": "Outside",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, after doctor attests (Recommended)",
+     "description": "Counts once the treating doctor attests it final; labelled 'outside report' everywhere, including the summary and the room."
+    },
+    {
+     "label": "Pathology needs in-house review",
+     "description": "Outside histopathology counts only with this hospital's Pathology review report; other outside reports count after attest."
+    },
+    {
+     "label": "Same rules as today",
+     "description": "Counts when its text shows final and a signature line (Sd/-), like any report; attest only when both are missing."
+    }
+   ],
+   "why": "B9 / V2 3.6: the treating doctor uploads outside reports; they are read, labelled and patient-matched, and a name-only match counts only after the doctor confirms. Validation sheet check 3: uploads need a signature line or Sd/-. Patients visit 2 to 3 hospitals per episode (data.js patient role).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Yes, after the doctor attests (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R08-Q12",
+   "topic": "Demo PACS and hospital system",
+   "core": true,
+   "type": "decision",
+   "question": "Which open-source base should the demo PACS and hospital system for supporting doctors use?",
+   "header": "Demo HIS",
+   "multi": false,
+   "options": [
+    {
+     "label": "Extend our own mock (Recommended)",
+     "description": "Add a worklist and 'sign' screen for radiologists and pathologists to the e-Hospital-style mock HIS, keep Orthanc + OHIF; synthetic, localhost, quickest."
+    },
+    {
+     "label": "Bahmni",
+     "description": "India-built system (OpenMRS, OpenELIS lab, PACS link, ABDM ready); realistic, but heavy and usually installed with Docker, not allowed on this server."
+    },
+    {
+     "label": "OpenMRS 3 with radiology",
+     "description": "OpenMRS plus its radiology module sending HL7 orders to Orthanc; lighter than Bahmni, more set-up than our mock."
+    },
+    {
+     "label": "GNU Health",
+     "description": "Hospital-wide open-source system with lab and imaging; less India-specific, limited FHIR."
+    }
+   ],
+   "why": "Settled: supporting doctors need a demo PACS and HIS, built later (notes role-supporting). Held: his_mock (FHIR R4 NRCeS, RIS / LIS desk 'Complete and sign') and Orthanc + OHIF (CLAUDE.md: no Docker, no sudo). NIC e-Hospital is a government cloud service (SaaS), not downloadable, so only its style can be copied. Web check 17 Oct: Bahmni wiki (pacs-integration with dcm4chee, Bahmni Lite, ABDM), OpenMRS radiology module (HL7 ORM to any PACS), Orthanc worklists plugin, openIMIS EMR benchmark (GNU Health FHIR limited), informatics.nic.in e-Hospital brochure.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "own_words": "I want demo systems so that in the real world I can use the hospital's HIMS and PACS here. If Bahmni is very useful for us, install it; the main motive is to replicate a real-world hospital HIMS and PACS.",
+   "notes": "Settled through R08-Q16: Bahmni not installable here (no Docker / sudo).",
+   "answered_on": "17/10/2026",
+   "answer": "Extend our own mock, to real standards"
+  },
+  {
+   "id": "R08-Q13",
+   "topic": "Demo timing",
+   "core": false,
+   "type": "decision",
+   "question": "When should the demo PACS and hospital system for supporting doctors be built?",
+   "header": "Demo timing",
+   "multi": false,
+   "options": [
+    {
+     "label": "With supporting doctor screens (Recommended)",
+     "description": "Built in the same step as the new phone-first supporting views (T17), so the whole request loop can be shown."
+    },
+    {
+     "label": "Before the UI rebuild",
+     "description": "Built first, so every new screen is designed against it; the rebuild starts later."
+    },
+    {
+     "label": "After all role screens",
+     "description": "The supporting side is shown with today's mock desk until the end."
+    }
+   ],
+   "why": "T17 (supporting doctor: phone first) kept; I12 and I14 liked. R16 sets the overall build order and demo dates; this only places the demo systems.",
+   "depends_on": [
+    "R08-Q12"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Before the UI rebuild",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R08-Q14",
+   "topic": "Hospital systems in use",
+   "core": false,
+   "type": "resource",
+   "question": "Can you find out which HIS, RIS, LIS and PACS the doctors' hospital uses, with any interface notes?",
+   "header": "Vendor",
+   "multi": false,
+   "options": [
+    {
+     "label": "I'll ask the hospital (Recommended)",
+     "description": "The demo copies the order and words of their screens, and we learn whether a deep link to an order (I14) is possible."
+    },
+    {
+     "label": "Skip for now",
+     "description": "The demo follows the generic e-Hospital style; deep links work only in our mock."
+    },
+    {
+     "label": "Use e-Hospital public documents",
+     "description": "We model the demo on NIC e-Hospital's published module list (registration, OPD, IPD, LIS, RIS)."
+    }
+   ],
+   "why": "changes_v2 §12 lists 'the hospital's real HIS / PACS vendor and interface notes, from the hospital IT team' as still to obtain. I14 (deep link to the department's own system) liked; it needs the vendor's link format.",
+   "depends_on": [
+    "R08-Q12"
+   ],
+   "skip_if": "",
+   "resource": {
+    "item": "Names and versions of the hospital's HIS, RIS, LIS and PACS, and any interface notes (FHIR or HL7 endpoints, the link format that opens an order or a study)",
+    "source_url": "No public URL: the hospital IT team, through Dr Minmini (Radiology) or Dr Usha (Biochemistry); fallback https://informatics.nic.in/uploads/pdfs/4d85cc7c_04_11_ehospital_suite_folder_new.pdf",
+    "target_folder": "hospital documents",
+    "why": "Makes the demo look like the systems the supporting doctors use and tells us if I14 deep links are possible."
+   },
+   "status": "Answered",
+   "answer": "Use e-Hospital public documents",
+   "resource_status": "No download needed: model the demo on NIC e-Hospital's published modules",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Channels",
+   "core": false,
+   "type": "decision",
+   "question": "By 'in-app email sending to the existing people', which do you mean?",
+   "header": "Email kind",
+   "multi": false,
+   "options": [
+    {
+     "label": "Messages inside Vaidyx (Recommended)",
+     "description": "An email-like inbox inside Vaidyx: the request arrives as a message to every registered doctor of that department; nothing leaves the server."
+    },
+    {
+     "label": "Real email sent by Vaidyx",
+     "description": "The Vaidyx server sends a real email through the hospital's mail server."
+    },
+    {
+     "label": "Both",
+     "description": "The in-app message, plus a real email copy."
+    }
+   ],
+   "why": "Added in interview (17 Oct) to clarify the owner's answer to R08-Q03.",
+   "depends_on": [
+    "R08-Q03"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R08-Q15",
+   "status": "Answered",
+   "answer": "Messages inside Vaidyx (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Demo HIS and PACS",
+   "core": false,
+   "type": "decision",
+   "question": "Bahmni needs Docker, which this server does not have (no admin rights). How should we build demo hospital systems that replicate the real world, so a real hospital's HIMS and PACS can be plugged in later?",
+   "header": "Real HIMS",
+   "multi": false,
+   "options": [
+    {
+     "label": "Real standards, our own mock (Recommended)",
+     "description": "Extend our mock to behave like an Indian HIMS (e-Hospital modules) and speak the real interfaces (FHIR R4 NRCeS, HL7 v2, DICOMweb); Orthanc is itself a real PACS. A real hospital later = swap one adapter."
+    },
+    {
+     "label": "OpenMRS 3 here, no Docker",
+     "description": "The open-source EMR Bahmni is built on, in user space; several days of set-up, some risk."
+    },
+    {
+     "label": "Bahmni on another machine",
+     "description": "Bahmni with Docker on a laptop or cloud VM, connected over FHIR."
+    },
+    {
+     "label": "Ask IT for Docker here",
+     "description": "The server admin installs Docker; then Bahmni here."
+    }
+   ],
+   "why": "Added in interview (17 Oct): the owner asked for Bahmni if useful; the server has no Docker, no sudo, no database.",
+   "depends_on": [
+    "R08-Q12"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R08-Q16",
+   "status": "Answered",
+   "answer": "Real standards, our own mock (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Demo HIS base",
+   "core": false,
+   "type": "decision",
+   "question": "For the demo hospital system, should we extend what we have or start again?",
+   "header": "HIS base",
+   "multi": false,
+   "options": [
+    {
+     "label": "Extend it, new real-looking screens (Recommended)",
+     "description": "Keep the data, standards (FHIR R4, HL7, DICOM) and the Vaidyx link; rebuild the screens module by module like a real Indian HIS (e-Hospital style) with role logins; own name 'Vaidyx Demo Hospital', no NIC logos."
+    },
+    {
+     "label": "Rebuild from scratch",
+     "description": "New code for the whole demo hospital; the Vaidyx link and tests redone. Slower, more risk."
+    },
+    {
+     "label": "Keep as is, polish only",
+     "description": "Only tidy today's screens."
+    }
+   ],
+   "why": "Added after the interview (17 Oct): discussing the demo HIS / PACS build before it starts (R08-Q12, Q13, Q16).",
+   "depends_on": [
+    "R08-Q16"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R08-Q17",
+   "status": "Answered",
+   "answer": "Extend it, new real-looking screens (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Demo HIS modules",
+   "core": false,
+   "type": "decision",
+   "question": "Which hospital modules must the demo HIS show?",
+   "header": "Modules",
+   "multi": true,
+   "options": [
+    {
+     "label": "Registration, OPD, IPD",
+     "description": "UHID registration, OP visits, admissions, ward and bed, transfers, discharge."
+    },
+    {
+     "label": "Lab (LIS)",
+     "description": "Order, sample with barcode, result entry, verification and digital signature."
+    },
+    {
+     "label": "Radiology (RIS) + PACS",
+     "description": "Order, study worklist, report preliminary to final signed, images in the viewer."
+    },
+    {
+     "label": "Pathology",
+     "description": "Biopsy, block No., HPE report, IHC and molecular tests that arrive later."
+    }
+   ],
+   "why": "Added after the interview (17 Oct): discussing the demo HIS / PACS build before it starts (R08-Q12, Q13, Q16).",
+   "depends_on": [
+    "R08-Q16"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R08-Q18",
+   "status": "Answered",
+   "answer": "All four: Registration, OPD, IPD; Lab (LIS); Radiology (RIS) + PACS; Pathology",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Demo PACS images",
+   "core": false,
+   "type": "decision",
+   "question": "What images should the demo PACS show?",
+   "header": "PACS images",
+   "multi": false,
+   "options": [
+    {
+     "label": "Public de-identified scans (Recommended)",
+     "description": "Real-looking CT, MRI, mammogram, PET-CT from open public research datasets (licence checked), relabelled with our fake IDs; changes the synthetic-only rule for images; no model reads them."
+    },
+    {
+     "label": "Generated images (today)",
+     "description": "Fully synthetic images; rule unchanged; look fake to a radiologist."
+    }
+   ],
+   "why": "Added after the interview (17 Oct): discussing the demo HIS / PACS build before it starts (R08-Q12, Q13, Q16).",
+   "depends_on": [
+    "R08-Q16"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R08-Q19",
+   "status": "Answered",
+   "answer": "Public de-identified scans (Recommended)",
+   "notes": "Owner approved 17 Oct a rule change: PACS images may come from open-licence public de-identified datasets (licence checked and logged), relabelled with fake IDs; never the real case. Recorded in CLAUDE.md.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Demo HIS logins",
+   "core": false,
+   "type": "decision",
+   "question": "Who should log in to the demo hospital system?",
+   "header": "HIS logins",
+   "multi": false,
+   "options": [
+    {
+     "label": "Real roles, kept small (Recommended)",
+     "description": "About 8 demo logins: registration desk, OPD / ward doctor, and for Lab, Radiology, Pathology a technician who enters and a doctor who checks and signs."
+    },
+    {
+     "label": "One login per department",
+     "description": "One login each that both enters and signs."
+    },
+    {
+     "label": "No login (today)",
+     "description": "Anyone on the demo opens any screen."
+    }
+   ],
+   "why": "Added after the interview (17 Oct): discussing the demo HIS / PACS build before it starts.",
+   "depends_on": [
+    "R08-Q17"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R08-Q20",
+   "status": "Answered",
+   "answer": "Real roles, kept small (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Demo HIS look",
+   "core": false,
+   "type": "decision",
+   "question": "How should the demo hospital system look?",
+   "header": "HIS look",
+   "multi": false,
+   "options": [
+    {
+     "label": "Classic hospital-system look (Recommended)",
+     "description": "Plain, dense, blue-grey menus like real Indian HIS screens (e-Hospital style), clearly different from Vaidyx."
+    },
+    {
+     "label": "Same look as Vaidyx",
+     "description": "Teal and modern like the new Vaidyx."
+    },
+    {
+     "label": "Modern, different colour",
+     "description": "Clean modern screens in its own colour."
+    }
+   ],
+   "why": "Added after the interview (17 Oct): discussing the demo HIS / PACS build before it starts.",
+   "depends_on": [
+    "R08-Q17"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R08-Q21",
+   "status": "Answered",
+   "answer": "Classic hospital-system look (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "topic": "Demo cancers",
+   "core": false,
+   "type": "decision",
+   "question": "Which cancers should the demo patients and checklists cover in this first build?",
+   "header": "Cancers",
+   "multi": false,
+   "options": [
+    {
+     "label": "5 built + CUP (Recommended)",
+     "description": "About 25 demo patients for breast, cervix, colorectal rectum, lung NSCLC, oral cavity plus a new CUP checklist (NICE CG104, ESMO 2023); other top-10 cancers follow the no-checklist rule (R05-Q04)."
+    },
+    {
+     "label": "Top 10 + CUP, drafts",
+     "description": "Also draft the missing top-10 checklists from NCG, each needing a named doctor's approval."
+    },
+    {
+     "label": "Only the 5 built",
+     "description": "No CUP yet."
+    }
+   ],
+   "why": "Added after the interview (17 Oct): discussing the demo HIS / PACS build before it starts.",
+   "depends_on": [
+    "R08-Q17"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "id": "R08-Q22",
+   "status": "Answered",
+   "answer": "5 built + CUP (Recommended)",
+   "answered_on": "17/10/2026"
+  }
+ ],
+ "status": "Done"
+}

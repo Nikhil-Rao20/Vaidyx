@@ -45,20 +45,23 @@ def people():
 
 def test_default_departments_follow_the_plan():
     ids = [d["id"] for d in org.DEFAULT_DEPARTMENTS]
-    assert len(ids) == 30 and len(set(ids)) == 30
-    assert sum(1 for d in org.DEFAULT_DEPARTMENTS if d["group"] == "treating") == 22
-    assert sum(1 for d in org.DEFAULT_DEPARTMENTS if d["group"] == "supporting") == 8
+    assert len(ids) == 29 and len(set(ids)) == 29  # the owner's settled list (18 Oct 2026): 23 treating, 6 supporting
+    assert sum(1 for d in org.DEFAULT_DEPARTMENTS if d["group"] == "treating") == 23
+    assert sum(1 for d in org.DEFAULT_DEPARTMENTS if d["group"] == "supporting") == 6
     assert [d["id"] for d in org.DEFAULT_DEPARTMENTS if d["group"] == "supporting"] == [
-        "radiology", "pathology", "microbiology", "biochemistry", "nuclear_medicine", "clinical_pharmacology", "dental_surgery", "anaesthesiology"]
-    for name in ("Medical Gastroenterology", "Palliative Medicine", "Dental Surgery / Oral and Maxillofacial Surgery", "Anaesthesiology"):
+        "radiology", "pathology", "microbiology", "biochemistry", "nuclear_medicine", "clinical_pharmacology"]
+    for name in ("Medical Genetics", "Paediatric Surgery", "Palliative Medicine"):
         assert any(d["name"] == name for d in org.DEFAULT_DEPARTMENTS), name
+    for name in ("Medical Gastroenterology", "Dental Surgery / Oral and Maxillofacial Surgery", "Anaesthesiology"):  # removed on 18 Oct (R02-Q02)
+        assert not any(d["name"] == name for d in org.DEFAULT_DEPARTMENTS), name
+    assert all(d["receives_requests"] for d in org.DEFAULT_DEPARTMENTS if d["group"] == "supporting") and next(d for d in org.DEFAULT_DEPARTMENTS if d["id"] == "medical_genetics")["receives_requests"]
     assert all(d["email"] == f"{d['id']}@{org.PLACEHOLDER_DOMAIN}" for d in org.DEFAULT_DEPARTMENTS)  # placeholders until the hospital gives them
     assert not any(d["id"] in ("tumour_board", "general_medicine") for d in org.DEFAULT_DEPARTMENTS)  # the coordinator is a role; General Medicine was removed
     assert org.validate(org.DEFAULT_ORG)["departments"] == org.DEFAULT_DEPARTMENTS
 
 
 def test_departments_by_group(data_root):
-    assert len(org.departments("treating")) == 22 and len(org.departments("supporting")) == 8 and len(org.departments()) == 30
+    assert len(org.departments("treating")) == 23 and len(org.departments("supporting")) == 6 and len(org.departments()) == 29
     assert org.department_group("radiology") == "supporting" and org.department_group("breast_surgery") == "treating"
     assert org.department_group("cardiology") == "supporting"  # unknown: the safer group
     assert org.department_email("radiology") == "radiology@hospital.example" and org.department_email("cardiology") == ""
@@ -72,17 +75,17 @@ def test_load_creates_default_file_and_caches(data_root):
     o = org.load()
     assert org.path().exists()
     raw = json.loads(org.path().read_text())
-    assert raw["version"] == 2 and raw["hospital"]["level"] == "essential" and raw["hospital"]["pmjay_empanelled"] is True and raw["hospital"]["fetch_window_months"] == 12
+    assert raw["version"] == 3 and raw["hospital"]["level"] == "essential" and raw["hospital"]["pmjay_empanelled"] is True and raw["hospital"]["fetch_window_months"] == 12
     assert [d["id"] for d in o["departments"]] == [d["id"] for d in org.DEFAULT_DEPARTMENTS]
     assert o["users"] == {} and o["admins"] == [] and o["routes"] == {}
     assert org.load() is o
 
 
 def test_load_fills_a_partly_filled_v2_file(data_root):
-    (data_root / "org.json").write_text(json.dumps({"version": 2, "hospital": {"name": "Synthetic Cancer Centre"}, "users": {"a": {"departments": {"pathology": "head"}}}}))
+    (data_root / "org.json").write_text(json.dumps({"version": 3, "hospital": {"name": "Synthetic Cancer Centre"}, "users": {"a": {"departments": {"pathology": "head"}}}}))
     o = org.load()
     assert o["hospital"] == {**org.DEFAULT_HOSPITAL, "name": "Synthetic Cancer Centre", "level": "essential", "type": "", "pmjay_empanelled": True, "fetch_window_months": 12}
-    assert o["hospital"]["board_heads"] == ["radiology", "medical_oncology", "surgical_oncology", "pathology"]  # the board lists filled in (V2 item 6.1)
+    assert o["hospital"]["board_heads"] == ["radiology", "medical_oncology", "surgical_oncology", "pathology", "radiation_oncology"]  # the board lists filled in (V2 item 6.1; five heads from 18 Oct)
     assert len(o["departments"]) == len(org.DEFAULT_DEPARTMENTS) and o["admins"] == []
     assert org.roles("a")["departments"] == {"pathology": "head"}
     assert not (data_root / "org_audit.jsonl").exists()  # not a migration
@@ -165,7 +168,8 @@ def test_validate_returns_a_cleaned_copy():
     o["admins"] = [" a ", "a", ""]
     o["routes"] = {"breast.cbc": "Pathology", "lung_nsclc.clinical_history": "owner", "breast.previous_board": "coordinator"}
     clean = org.validate(o)
-    assert clean is not o and clean["users"]["ravi"] == {"departments": {"pathology": "head"}, "admin_of": [], "coordinator": False, "disabled": False, "display_name": ""}
+    assert clean is not o and clean["users"]["ravi"] == {"departments": {"pathology": "head"}, "admin_of": [], "coordinator": False, "disabled": False, "display_name": "",
+                                                         "auditor": False, "outside_expert": False, "end_date": ""}
     assert clean["users"]["asha"]["departments"] == {"radiology": "member"} and clean["users"]["asha"]["admin_of"] == ["biochemistry"]  # V1 ids, aliases and "doctor" normalised
     assert clean["admins"] == ["a"] and clean["hospital"]["fetch_window_months"] == 24
     assert clean["routes"] == {"breast.cbc": "pathology", "lung_nsclc.clinical_history": "owner", "breast.previous_board": "coordinator"}
@@ -209,7 +213,7 @@ def test_v1_hospital_added_department_colliding_with_a_v2_name_is_merged(data_ro
     v1["users"]["mic"] = {"departments": {"micro": "head"}, "coordinator": False}
     (data_root / "org.json").write_text(json.dumps(v1))
     o = org.load()
-    assert [d["id"] for d in o["departments"]][30:] == ["cardiology"] and o["users"]["mic"]["departments"] == {"microbiology": "head"}
+    assert [d["id"] for d in o["departments"]][len(org.DEFAULT_DEPARTMENTS):] == ["cardiology"] and o["users"]["mic"]["departments"] == {"microbiology": "head"}
     ev = org.read_audit()[0]
     assert ev["kind"] == "org_migrated" and ev["departments"]["micro"] == ["microbiology"] and "Micro lab" not in json.dumps(o["departments"])
 
@@ -218,14 +222,15 @@ def test_v1_file_is_migrated_on_load_and_audited(data_root):
     (data_root / "org.json").write_text(json.dumps(V1_FILE))
     o = org.load()
     raw = json.loads(org.path().read_text())
-    assert raw["version"] == 2 and o["version"] == 2
+    assert raw["version"] == 3 and o["version"] == 3
     assert o["hospital"] == {**org.DEFAULT_HOSPITAL, "name": "Synthetic Cancer Centre", "level": "optimal", "type": "public", "pmjay_empanelled": True, "fetch_window_months": 12}
     ids = [d["id"] for d in o["departments"]]
-    assert ids[:30] == [d["id"] for d in org.DEFAULT_DEPARTMENTS] and ids[30:] == ["cardiology"]
+    assert ids[:len(org.DEFAULT_DEPARTMENTS)] == [d["id"] for d in org.DEFAULT_DEPARTMENTS] and ids[len(org.DEFAULT_DEPARTMENTS):] == ["cardiology"]
     assert org.department("cardiology")["group"] == "supporting" and org.department("cardiology")["aliases"] == ["Cardio"]
     assert "X-ray wing" in org.department("radiology")["aliases"]  # a custom V1 alias travels with its department
     assert org.department_id("Haematology") == "haematology"  # the V1 lab alias that now names a treating department is dropped
-    assert o["users"]["rad"] == {"departments": {"radiology": "head"}, "admin_of": [], "coordinator": False, "disabled": False, "display_name": "Dr R"}
+    assert o["users"]["rad"] == {"departments": {"radiology": "head"}, "admin_of": [], "coordinator": False, "disabled": False, "display_name": "Dr R",
+                                 "auditor": False, "outside_expert": False, "end_date": ""}
     assert o["users"]["lab"]["departments"] == {"biochemistry": "member", "pathology": "member"}
     assert o["users"]["coord"]["coordinator"] is True and o["users"]["coord"]["departments"] == {}
     assert o["users"]["med"]["departments"] == {"medical_oncology": "member"}
@@ -242,7 +247,7 @@ def test_stored_v1_ids_still_resolve(data_root):
     assert org.department_id("radio_diagnosis") == "radiology" and org.department("radio_diagnosis")["id"] == "radiology"
     assert org.department_name("radio_diagnosis") == "Radiology" and org.department_name("laboratory_medicine") == "Biochemistry"
     assert org.department_id("molecular_pathology") == "pathology" and org.department_id("pulmonary_medicine") == "pulmonology"
-    assert org.department_id("gastroenterology") == "medical_gastroenterology"
+    assert org.department_id("gastroenterology") == "gastrointestinal_surgery"  # Medical Gastroenterology was removed on 18 Oct: endoscopy goes to GI Surgery
     assert org.department_id("general_medicine") is None and org.department_id("Medicine") is None  # removed: the owning department's records
     assert org.department_id("tumour_board") is None and org.department_id("Tumour Board coordination") is None  # a role now
     assert org.is_coordinator_name("tumour_board") and org.is_coordinator_name("MDT Coordinator") and not org.is_coordinator_name("Radiology")
@@ -274,14 +279,14 @@ def test_is_v1():
     ("Laboratory Medicine", "biochemistry"),
     ("Biochemistry", "biochemistry"),
     ("Microbiology", "microbiology"),
-    ("Gastroenterology", "medical_gastroenterology"),
+    ("Gastroenterology", "gastrointestinal_surgery"),
     ("Pulmonology", "pulmonology"),
     ("Pulmonary Medicine", "pulmonology"),
     ("Breast Surgery", "breast_surgery"),
     ("Gynaecologic Oncology", "gynaecologic_oncology"),
     ("ENT", "ent_head_neck_surgery"),
-    ("Dental Surgery", "dental_surgery"),
-    ("Anaesthesiology", "anaesthesiology"),
+    ("Dental Surgery", None),  # the owning department's own work from 18 Oct (org.is_owner_alias)
+    ("Anaesthesiology", None),
     ("Clinical Pharmacology", "clinical_pharmacology"),
     ("Medicine", None),
     ("Tumour Board coordinator", None),
@@ -319,13 +324,15 @@ def test_roles(people):
     assert not org.can(root, "read_case") and not org.can(root, "create_case") and not org.can(root, "waive", "radiology") and not org.can(root, "session") and not org.can(root, "inbox", "radiology")
     assert people["two_dept"] == {"user": "meena", "admin": False, "vaidyx_admin": False, "root_admin": False, "coordinator": False,
                                   "departments": {"radiology": "member", "pathology": "member"}, "admin_of": [],
-                                  "treating": {}, "supporting": {"radiology": "member", "pathology": "member"}, "disabled": False, "known": True}
+                                  "treating": {}, "supporting": {"radiology": "member", "pathology": "member"}, "disabled": False, "known": True,
+                                  "resident": {}, "resident_treating": {}, "auditor": False, "outside_expert": False, "end_date": "", "expired": False, "display_name": "Dr Meena Iyer"}
     assert people["head"]["departments"] == {"radiology": "head"} and people["head"]["known"]
     assert people["coordinator"]["coordinator"] and people["coordinator"]["departments"] == {} and people["coordinator"]["known"]
     assert people["vaidyx_admin"]["admin"] and people["vaidyx_admin"]["vaidyx_admin"] and not people["vaidyx_admin"]["root_admin"] and people["vaidyx_admin"]["known"]
     assert people["admin"]["admin"] and not people["admin"]["root_admin"] and people["admin"]["known"]
     assert people["unknown"] == {"user": "stranger", "admin": False, "vaidyx_admin": False, "root_admin": False, "coordinator": False, "departments": {},
-                                 "admin_of": [], "treating": {}, "supporting": {}, "disabled": False, "known": False}
+                                 "admin_of": [], "treating": {}, "supporting": {}, "disabled": False, "known": False,
+                                 "resident": {}, "resident_treating": {}, "auditor": False, "outside_expert": False, "end_date": "", "expired": False, "display_name": ""}
     empty = org.roles("")
     assert empty["admin"] and empty["known"]
     assert org.roles(None)["admin"]
@@ -363,7 +370,7 @@ USERS = ("member", "head", "coordinator", "treating", "dept_admin", "root", "adm
 # department admin of radiology, root admin, Vaidyx admin, unknown). V2 plan section 4: supporting doctors receive and answer
 # requests only; treating doctors create Case Files, confirm and waive; the coordinator never confirms or waives; a department
 # admin has no clinical rights; the root admin edits the organisation and accounts and has no clinical action; the Vaidyx admin
-# may do everything.
+# may do everything except run meetings, record the board and read the whole activity log (security review #2).
 CAN = [
     ("view", None, (1, 1, 1, 1, 1, 1, 1, 1)),
     ("upload", "radiology", (1, 1, 1, 0, 0, 0, 1, 0)),
@@ -387,10 +394,10 @@ CAN = [
     ("waive", None, (0, 0, 0, 1, 0, 0, 1, 0)),
     ("list_case", None, (0, 0, 1, 0, 0, 0, 1, 0)),
     ("match", None, (0, 0, 1, 0, 0, 0, 1, 0)),
-    ("session", None, (0, 0, 1, 0, 0, 0, 1, 0)),
+    ("session", None, (0, 0, 1, 0, 0, 0, 0, 0)),  # the Vaidyx admin never runs meetings (security review #2)
     ("create_case", None, (0, 0, 1, 1, 0, 0, 1, 0)),
     ("delete_case", None, (0, 0, 1, 0, 0, 0, 1, 0)),
-    ("board_record", None, (0, 0, 1, 0, 0, 0, 1, 0)),
+    ("board_record", None, (0, 0, 1, 0, 0, 0, 0, 0)),  # nor records the board (review #2)
     ("delete_document", "radiology", (0, 1, 1, 1, 0, 0, 1, 0)),
     ("delete_document", "pathology", (0, 0, 1, 1, 0, 0, 1, 0)),
     ("delete_document", "Radiology", (0, 1, 1, 1, 0, 0, 1, 0)),
@@ -439,6 +446,18 @@ CAN = [
     # or by the owner's doctors (access.may_remind)
     ("mark_ready", None, (0, 0, 0, 1, 0, 0, 1, 0)),
     ("remind", None, (0, 0, 1, 1, 0, 0, 1, 0)),
+    # 18 Oct (V3): residents propose (none of these logins is one), the owner's consultants approve, set urgency, manage the team and
+    # consent; archive is the owner's or the coordinator's; the activity log is read by the auditor, the coordinator and the root admin;
+    # break-glass is the Vaidyx admin's alone
+    ("ask", None, (1, 1, 1, 1, 0, 0, 1, 0)),
+    ("propose", None, (0, 0, 0, 0, 0, 0, 1, 0)),
+    ("approve_proposal", None, (0, 0, 0, 1, 0, 0, 1, 0)),
+    ("set_urgency", None, (0, 0, 0, 1, 0, 0, 1, 0)),
+    ("manage_team", None, (0, 0, 0, 1, 0, 0, 1, 0)),
+    ("archive", None, (0, 0, 1, 1, 0, 0, 1, 0)),
+    ("set_consent", None, (0, 0, 0, 1, 0, 0, 1, 0)),
+    ("read_audit", None, (0, 0, 1, 0, 0, 1, 0, 0)),  # nor reads the whole log: one Case File inside a break-glass window only (review #2)
+    ("break_glass", None, (0, 0, 0, 0, 0, 0, 1, 0)),
 ]
 DEPT_ACTIONS = sorted(a for a, rule in org.ACTIONS.items() if rule["dept"])
 

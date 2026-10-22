@@ -480,8 +480,37 @@ class AuthManager:
             return False
         with self._config_lock:
             self._config["users"][username]["password_hash"] = _hash_password(new_password)
+            self._config["users"][username].pop("must_change_password", None)
             self._save()
         return True
+
+    def reset_password(self, username: str, new_password: str, must_change: bool = True) -> bool:
+        """Set a new password without knowing the current one.
+
+        The caller has already authorised the reset (for example a department
+        admin in Vaidyx-TB resetting a doctor's login, or an admin creating an
+        account with a random first password). The account is marked so the
+        person must choose their own password at the next sign-in, and every
+        existing browser session of that account is revoked.
+        """
+        username = username.strip().lower()
+        if username not in self.users or not new_password:
+            return False
+        with self._config_lock:
+            self._config["users"][username]["password_hash"] = _hash_password(new_password)
+            if must_change:
+                self._config["users"][username]["must_change_password"] = True
+            else:
+                self._config["users"][username].pop("must_change_password", None)
+            self._save()
+        self.revoke_user_sessions(username)
+        logger.info("Password reset for '%s' (must_change=%s)", username, must_change)
+        return True
+
+    def must_change_password(self, username: str) -> bool:
+        """True while the account still carries the first or reset password."""
+        username = (username or "").strip().lower()
+        return bool(self.users.get(username, {}).get("must_change_password"))
 
     # ------------------------------------------------------------------
     # TOTP two-factor authentication
@@ -684,4 +713,5 @@ class AuthManager:
         }
         if authenticated:
             result["privileges"] = self.get_privileges(username)
+            result["must_change_password"] = self.must_change_password(username)
         return result

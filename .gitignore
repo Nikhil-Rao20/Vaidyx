@@ -246,3 +246,17 @@ docs_Eswar/
 
 # Vaidyx-TB V2 mock hospital data (synthetic, rebuilt from a seed)
 data/his_mock/
+
+# Workflow atlas: the reader's marks and comments (local only)
+
+# Build docs for the UI rebuild (the generic build/ rule above must not hide them)
+!docs/ui/build/
+
+# React build output of the new interface (built from web/tb-nik; committed separately when a release is cut)
+!web/tb-nik/src/lib/
+
+# Screenshots of the UI checks (large; kept on disk, not in git)
+docs/ui/build/shots/
+
+# Runtime picks of public images for live desk orders
+pacs_public/assignment_live.json

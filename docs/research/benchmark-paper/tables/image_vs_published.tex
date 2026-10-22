@@ -1,0 +1,27 @@
+\begin{tabular}{@{}llrlrlrl@{}}
+\toprule
+Model & Benchmark & This run & Our protocol & Published & Source & Diff. & Like for like? \\
+\midrule
+Lingshu-32B & OmniMedVQA & 82.4 & first-token & 83.4 & Lingshu paper & -1.0 & Yes \\
+Lingshu-32B & PMC-VQA & 64.9 & direct & 57.9 & Lingshu paper & +7.0 & Yes \\
+Lingshu-32B & MedXpertQA-MM & 31.5 & CoT & 30.9 & Lingshu paper & +0.6 & Yes \\
+Lingshu-32B & SLAKE & 84.9 & exact match & 89.2 & Lingshu paper & -4.3 & No: GPT-4.1 judges open answers \\
+Lingshu-32B & VQA-RAD & 67.4 & exact match & 76.5 & Lingshu paper & -9.1 & No: GPT-4.1 judges open answers \\
+Lingshu-32B & PathVQA & 59.9 & exact match & 65.9 & Lingshu paper & -6.0 & No: GPT-4.1 judges open answers \\
+MedGemma-4B-it & OmniMedVQA & 70.4 & first-token & 69.8 & Lingshu paper & +0.6 & Yes \\
+MedGemma-4B-it & PMC-VQA & 46.2 & direct & 49.9 & Lingshu paper & -3.7 & Yes \\
+MedGemma-4B-it & SLAKE closed (yes/no) & 86.8 & yes/no & 87.6 & Google card & -0.8 & Yes \\
+MedGemma-4B-it & VQA-RAD closed (yes/no) & 80.9 & yes/no & 69.1 & Google card & +11.8 & Yes \\
+MedGemma-4B-it & MedXpertQA-MM & 25.4 & CoT & 18.8 & Google card & +6.6 & Yes \\
+MedGemma-27B-it & SLAKE closed (yes/no) & 82.2 & yes/no & 85.9 & Google 1.5 card & -3.7 & Yes \\
+MedGemma-27B-it & VQA-RAD closed (yes/no) & 76.9 & yes/no & 67.1 & Google 1.5 card & +9.8 & Yes \\
+MedGemma-27B-it & MedXpertQA-MM & 33.2 & CoT & 26.8 & Google card & +6.4 & Roughly: card mixes text and image items \\
+MedGemma-1.5-4B-it & SLAKE closed (yes/no) & 77.8 & yes/no & 82.8 & Google 1.5 card & -5.0 & Yes \\
+MedGemma-1.5-4B-it & VQA-RAD closed (yes/no) & 62.1 & yes/no & 70.2 & Google 1.5 card & -8.1 & Yes \\
+MedGemma-1.5-4B-it & MedXpertQA-MM & 9.6 & CoT & 20.9 & Google 1.5 card & -11.3 & Yes \\
+Gemma-4-31B-it & MedXpertQA-MM & 55.5 & CoT & 61.3 & Gemma 4 report & -5.8 & Roughly: report uses thinking mode \\
+Qwen3.5-4B & PMC-VQA & 60.0 & CoT & 55.5 & Qwen card & +4.5 & Roughly: card uses thinking mode \\
+Qwen3.5-4B & MedXpertQA-MM & 35.5 & CoT & 42.9 & Qwen card & -7.4 & Roughly: card uses thinking mode \\
+Qwen3.5-4B & SLAKE & 59.6 & exact match & 76.1 & Qwen card & -16.5 & No: scoring not stated \\
+\bottomrule
+\end{tabular}

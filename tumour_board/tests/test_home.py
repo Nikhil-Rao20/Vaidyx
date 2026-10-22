@@ -190,9 +190,9 @@ def test_dept_admin_home_counts_missing_logins_with_the_auth_manager(people):
 def test_root_admin_home_sums_up_the_organisation(people, cases):
     r = home.build(people["tbroot"])["root_admin"]
     assert r["hospital"]["pmjay_empanelled"] is True and r["hospital"]["level"] == "essential" and r["setup_needed"] is True and r["first_setup"] is None
-    assert r["departments"]["treating"] == 22 and r["departments"]["supporting"] == 8 and r["departments"]["placeholder_emails"] == 30
+    assert r["departments"]["treating"] == 23 and r["departments"]["supporting"] == 6 and r["departments"]["placeholder_emails"] == 29
     assert r["accounts"] == {"placed": 7, "doctors": 5, "dept_admins": 2, "coordinators": 1, "root_admins": 1, "disabled": 1, "no_login": 0}
-    assert r["board_heads"] == ["Radiology", "Medical Oncology", "Surgical Oncology", "Pathology"] and r["routes_overridden"] == 0
+    assert r["board_heads"] == ["Radiology", "Medical Oncology", "Surgical Oncology", "Pathology", "Radiation Oncology"] and r["routes_overridden"] == 0
     assert set(r["his"]) == {"enabled", "label", "kind", "url", "pacs_url"} and "token" not in str(r["his"])
 
 
@@ -248,11 +248,17 @@ def test_a_hospital_save_from_the_organisation_screen_keeps_the_stamp(people):
 # ---- a Vaidyx admin, a disabled login -------------------------------------------------------------------------------------------
 
 def test_vaidyx_admin_sees_every_case_file_the_board_and_the_organisation(people, cases):
+    """From 18 Oct the Vaidyx admin has no clinical scope: it sees a Case File only inside a break-glass window (one at a time)."""
+    from tumour_board import access
     h = home.build(people["admin"])
     assert h["sections"] == ["treating", "coordinator", "root_admin"]
-    assert {c["case_id"] for c in h["treating"]["cases"]} == {"TB-H-A", "TB-H-B", "TB-H-C"}
+    assert h["treating"]["cases"] == [] and h["treating"]["counts"]["mine"] == 0
+    access.open_break_glass("vx", "TB-H-A", "test window")
+    h = home.build(people["admin"])
+    assert {c["case_id"] for c in h["treating"]["cases"]} == {"TB-H-A"}
     assert all(c["relation"] in ("all",) for c in h["treating"]["cases"]) and h["treating"]["counts"]["mine"] == 0
-    assert h["treating"]["counts"]["suggested_unsent"] == 1 and h["coordinator"]["can_manage"] is True and h["root_admin"]["setup_needed"] is True
+    assert h["treating"]["counts"]["suggested_unsent"] == 1 and h["root_admin"]["setup_needed"] is True
+    assert h["coordinator"]["can_manage"] is False and h["coordinator"]["agenda"] is None  # the coordinator runs the board, never the Vaidyx admin (review #2)
 
 
 def test_notifications_on_the_home(people, cases):

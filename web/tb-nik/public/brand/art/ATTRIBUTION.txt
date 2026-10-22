@@ -1,0 +1,5 @@
+ct-chest.png: one axial CT slice from the TCGA-LUAD collection (patient TCGA-17-Z053, series "Abd.CT 5.0 B30s"),
+The Cancer Imaging Archive (TCIA), licensed under the Creative Commons Attribution 3.0 Unported License
+(https://creativecommons.org/licenses/by/3.0/). Rendered from the de-identified DICOM with a display window; no patient
+identity is shown. Used as an illustration on the public website only; no model reads it.
+Collection: https://doi.org/10.7937/K9/TCIA.2016.JGNIHEP5

@@ -1,0 +1,468 @@
+{
+ "round": 4,
+ "title": "Logins and hospital set-up",
+ "intro": "How people get into Vaidyx-TB and how a hospital is set up the first time. Today every account is a plain Vaidyx login typed in by an admin, and a forgotten password needs the Vaidyx admin.",
+ "questions": [
+  {
+   "id": "R04-Q01",
+   "topic": "Account creation",
+   "core": true,
+   "type": "decision",
+   "question": "How should a new doctor get a Vaidyx-TB account?",
+   "header": "Accounts",
+   "multi": false,
+   "options": [
+    {
+     "label": "Admin invites, doctor completes (Recommended)",
+     "description": "The department admin enters name, mobile and role; the doctor opens a one-time invite, sets a password and fills the profile."
+    },
+    {
+     "label": "Admin creates it fully (today)",
+     "description": "The admin types the login name and password and hands them over; the doctor fills nothing."
+    },
+    {
+     "label": "Self sign-up, admin approves",
+     "description": "Doctors register and pick their department; nothing opens until the department admin approves."
+    }
+   ],
+   "why": "Today the department admin creates plain Vaidyx logins (login, password, display name, Doctor or Head) and hands the credentials over (S5, J5, tumour_board/accounts.py). The main app has an open sign-up switch, off by default. UX note 4 (IKEA effect: people value what they build themselves). Shapes T20 (admin screens).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Admin invites, doctor completes (Recommended)",
+   "notes": "Refined by R04-Q04: the admin creates the account with a random password and sends it by mailto from their own email; the doctor changes it at first login and completes the profile.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R04-Q02",
+   "topic": "Account creation",
+   "core": false,
+   "type": "decision",
+   "question": "Who should create the logins of residents, PGs and fellows?",
+   "header": "Trainees",
+   "multi": false,
+   "options": [
+    {
+     "label": "Department admin, like doctors (Recommended)",
+     "description": "All logins of a department stay in one list; the admin marks the person Resident, PG or fellow."
+    },
+    {
+     "label": "Their consultant invites them",
+     "description": "Faster when a new PG batch arrives; the department admin can still see and disable them."
+    },
+    {
+     "label": "Self sign-up, consultant approves",
+     "description": "Residents register, name their consultant, and wait for that consultant's approval."
+    }
+   ],
+   "why": "Settled: residents are registered in their department and join Case Files with a code (notes role-treating, role-resident; I03). Today they use the consultant's login, so the audit shows only the consultant (G14, S5). R02 (role list) defines the role; R06 builds the team on top.",
+   "depends_on": [
+    "R04-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Department admin, like doctors (Recommended)",
+   "own_words": "Doctors will be busy; the admin creates every account and assigns them, in the right way possible.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R04-Q03",
+   "topic": "Account creation",
+   "core": false,
+   "type": "decision",
+   "question": "Should resident, PG and fellow logins carry an end date?",
+   "header": "Login end",
+   "multi": false,
+   "options": [
+    {
+     "label": "Yes, course or posting end (Recommended)",
+     "description": "Access stops by itself on that date (for example the end of a 3-year MD or MS); the admin can extend it."
+    },
+    {
+     "label": "No end date",
+     "description": "Logins stay until an admin disables them; leavers depend on someone remembering."
+    },
+    {
+     "label": "End date for visiting fellows only",
+     "description": "Short-term fellows and observers expire; the hospital's own PGs do not."
+    }
+   ],
+   "why": "Disabling is manual and global today (G17, J5). Trainees leave on known dates, unlike consultants. R03 (access ending when someone leaves a team) decides what happens to their Case File access.",
+   "depends_on": [
+    "R04-Q02"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Yes, course or posting end (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R04-Q04",
+   "topic": "Sign-in",
+   "core": true,
+   "type": "decision",
+   "question": "How should people sign in?",
+   "header": "Sign-in",
+   "multi": false,
+   "options": [
+    {
+     "label": "Password; SMS OTP when available (Recommended)",
+     "description": "Works today on the hospital network with no outside service; phone OTP is switched on once the hospital has an SMS gateway."
+    },
+    {
+     "label": "Mobile number and SMS OTP",
+     "description": "No password to forget; needs a DLT-registered SMS gateway (a monthly cost) and phone signal at every sign-in."
+    },
+    {
+     "label": "Password and OTP every time",
+     "description": "Strongest; adds an SMS wait to every sign-in, also on the OPD desktop."
+    },
+    {
+     "label": "Email OTP",
+     "description": "Needs the server to send mail, which Vaidyx does not do today."
+    }
+   ],
+   "why": "Today: password (8 characters minimum), sessions of 7 days; the main app also has optional authenticator-app codes (core/auth.py, TOTP). Phone OTP is common in Indian apps; commercial SMS in India needs TRAI DLT registration. Vaidyx sends no email or SMS (changes_v2 section 3, in-app first).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Password set by the admin, changed at first login",
+   "own_words": "When the admin creates a fresh account, the credentials are sent to the person by email: the admin has a mailto option to send from their own email to the person's email, with a randomly generated password. At the first login the person must change the password. That ends the login procedure.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R04-Q05",
+   "topic": "Sign-in",
+   "core": false,
+   "type": "decision",
+   "question": "What should people type as their login name?",
+   "header": "Login ID",
+   "multi": false,
+   "options": [
+    {
+     "label": "Mobile number (Recommended)",
+     "description": "Easy to remember; the same number fills the phone call button and any later SMS OTP."
+    },
+    {
+     "label": "A login name (today)",
+     "description": "For example dr.meena.rad, chosen by the admin; people forget the spelling."
+    },
+    {
+     "label": "Hospital employee ID",
+     "description": "Matches the hospital's staff records; new residents and visiting fellows may not have one yet."
+    }
+   ],
+   "why": "Login names today are 2 to 63 lower-case letters, digits, dots or hyphens (accounts.py). Settled: on phones a call option opens the dialer with the person's number (R11), so the mobile number is needed anyway.",
+   "depends_on": [
+    "R04-Q04"
+   ],
+   "skip_if": "Skip if R04-Q04 answered 'Mobile number and SMS OTP' (the mobile number is then the login).",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Their email address",
+   "notes": "Options adapted in the interview to the email-based flow of R04-Q04 (email added and recommended).",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R04-Q06",
+   "topic": "Sign-in",
+   "core": false,
+   "type": "decision",
+   "question": "Which accounts should need a second step at sign-in?",
+   "header": "2nd step",
+   "multi": false,
+   "options": [
+    {
+     "label": "Admins only (Recommended)",
+     "description": "Root, department and Vaidyx admins also enter a code from an authenticator app (already in Vaidyx); doctors sign in with one step."
+    },
+    {
+     "label": "Admins and MDT Coordinators",
+     "description": "Coordinators open every Case File, so they get the second step too."
+    },
+    {
+     "label": "Everyone",
+     "description": "Every sign-in takes one more step, also for busy treating and supporting doctors."
+    },
+    {
+     "label": "No one",
+     "description": "Fastest; a leaked password opens the account."
+    }
+   ],
+   "why": "The Vaidyx admin holds a server shell tool and sees everything (role-vaidyxadmin); the coordinator may open every Case File (matrix read_case). Passwords were exposed before (K06). Authenticator codes already exist in core/auth.py.",
+   "depends_on": [
+    "R04-Q04"
+   ],
+   "skip_if": "Skip if R04-Q04 answered 'Password and OTP every time' (everyone already has a second step).",
+   "resource": null,
+   "status": "Answered",
+   "answer": "No one",
+   "own_words": "Keep it simple for now; no one needs a second step.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R04-Q07",
+   "topic": "Password reset",
+   "core": true,
+   "type": "decision",
+   "question": "Who should reset a forgotten password?",
+   "header": "Reset",
+   "multi": false,
+   "options": [
+    {
+     "label": "Department admin, one-time password (Recommended)",
+     "description": "The admin issues a one-time password; the doctor must set a new one at the next sign-in; audited. Needs a small change to the Vaidyx login system."
+    },
+    {
+     "label": "Self-service by SMS OTP",
+     "description": "No admin needed; works only once the hospital has an SMS gateway."
+    },
+    {
+     "label": "Vaidyx admin only (today)",
+     "description": "One person for the whole hospital; doctors wait until they are reached."
+    }
+   ],
+   "why": "Today a reset needs the Vaidyx admin: the login system changes a password only with the current one (accounts.py RESET_NOTE; J5 friction; role-deptadmin 'Reset a password' under cannot). The V2 plan (section 4, item 2.3) meant department admins to reset.",
+   "depends_on": [
+    "R04-Q04"
+   ],
+   "skip_if": "Skip if R04-Q04 answered 'Mobile number and SMS OTP' (there are no passwords).",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Department admin sends a new password by mail",
+   "notes": "Options adapted to the R04-Q04 flow: fresh random password mailed from the admin's own email, changed at the next sign-in, audited.",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R04-Q08",
+   "topic": "Session",
+   "core": false,
+   "type": "decision",
+   "question": "When should Vaidyx sign people out on its own?",
+   "header": "Idle logout",
+   "multi": false,
+   "options": [
+    {
+     "label": "30 min idle on shared PCs (Recommended)",
+     "description": "The sign-in screen asks 'shared computer?'; shared OPD computers sign out after 30 idle minutes; a personal phone stays signed in up to 7 days."
+    },
+    {
+     "label": "Keep 7 days everywhere (today)",
+     "description": "Fewer sign-ins; a shared computer stays open for the next person."
+    },
+    {
+     "label": "When the browser closes",
+     "description": "Safest on shared computers; a sign-in every time."
+    }
+   ],
+   "why": "Sessions last 7 days today (core/auth.py TOKEN_TTL). Treating doctors work on OPD desktops and phones (role-treating devices). R15 (patient data on phones) builds on this.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "When the browser closes",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R04-Q09",
+   "topic": "Profile",
+   "core": false,
+   "type": "decision",
+   "question": "Which details should each person's profile hold?",
+   "header": "Profile",
+   "multi": true,
+   "options": [
+    {
+     "label": "Name, designation and photo (Recommended)",
+     "description": "Shown on Case Files, team lists and the board room, so people see who did what."
+    },
+    {
+     "label": "Mobile number",
+     "description": "Fills the call button and any SMS codes; seen only by colleagues."
+    },
+    {
+     "label": "Medical registration number",
+     "description": "The State Medical Council or NMC number, shown beside the name; never used to sign."
+    },
+    {
+     "label": "Qualification and unit",
+     "description": "For example MD, MS, DNB, DM or MCh, and the consultant's unit; helps link residents to their unit."
+    }
+   ],
+   "why": "Today only a display name is stored (org.py users). UX note 4 (IKEA effect): ask more than email and password. The mobile number serves the settled phone call option (R11).",
+   "depends_on": [
+    "R04-Q01"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Name, designation and photo; Mobile number; Medical registration number; Qualification and unit",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R04-Q10",
+   "topic": "First login",
+   "core": false,
+   "type": "decision",
+   "question": "How long should the set-up at the first sign-in be?",
+   "header": "Onboarding",
+   "multi": false,
+   "options": [
+    {
+     "label": "Three short steps, skippable (Recommended)",
+     "description": "Profile and photo, then a theme, with a progress bar that does not start at 0; about one minute; anything skipped can be done later."
+    },
+    {
+     "label": "Only set a new password",
+     "description": "Straight to work; the profile stays bare."
+    },
+    {
+     "label": "Full profile before any use",
+     "description": "Nothing opens until every profile field is filled."
+    }
+   ],
+   "why": "UX note 4 (IKEA effect: name, theme, design) and note 5 (progress bar not from 0). The theme choices themselves and any tour style are R18; this sets only how much the first sign-in asks.",
+   "depends_on": [
+    "R04-Q09"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Full profile before any use",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R04-Q11",
+   "topic": "First login",
+   "core": false,
+   "type": "decision",
+   "question": "What should a doctor see right after the first sign-in?",
+   "header": "First screen",
+   "multi": false,
+   "options": [
+    {
+     "label": "A ready sample Case File (Recommended)",
+     "description": "A SYNTHETIC patient, already fetched and checked, shows what Vaidyx does before the doctor does any work; kept apart from real Case Files and hidden with one tap."
+    },
+    {
+     "label": "Their own work list",
+     "description": "My Case Files and the inbox, empty at first, with one Create button."
+    },
+    {
+     "label": "A short guided tour",
+     "description": "Tips point at the parts of the real home, one by one."
+    },
+    {
+     "label": "Check one patient now",
+     "description": "Type one UHID and see the records fetched and what is missing in seconds; the profile comes after."
+    }
+   ],
+   "why": "UX note 3 (gift first, like Duolingo). Today the home shows '3 steps to start' and one section per role (home.py, UI_PLAN_OCT15). Demo and real Case Files are mixed today (U18), so a sample must stay clearly separate (R15). Merged with R18 'gift first' in validation (17 Oct).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Their department's Case Files, tagged and filterable",
+   "own_words": "They see their department's Case Files, each with a tag 'from Dr XX, Dept XX' showing who created it. Everything must have filtering, not everything placed at once: by date, name, treating doctor, supporting doctor and many more filters, so doctors see and do everything neat and clear. This is the first screen: simple, neat and clear.",
+   "notes": "Screen decision: feeds R17-Q01 (doctor home) and R17-Q05 (case list grouping).",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R04-Q12",
+   "topic": "Hospital set-up",
+   "core": false,
+   "type": "decision",
+   "question": "What must the root admin finish before doctors can start?",
+   "header": "Set-up",
+   "multi": false,
+   "options": [
+    {
+     "label": "Name, NCG level, PM-JAY only (Recommended)",
+     "description": "As today; the rest starts from defaults (12-month fetch window, four board heads, placeholder emails) and is changed later."
+    },
+    {
+     "label": "Also a working HIS test",
+     "description": "No Case File can be created until a test lookup in the hospital system succeeds."
+    },
+    {
+     "label": "Every set-up step",
+     "description": "Departments, emails, department admins, the coordinator and board heads are all done before any doctor signs in."
+    }
+   ],
+   "why": "The first set-up today asks hospital name, NCG level (Essential or Optimal: decides which records are required) and PM-JAY empanelled, answered once (S2, home.py); the live app never answered it (K07). T20 kept: set-up as a short guided flow. UX note 1 (sensible defaults).",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Also a working HIS test",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R04-Q13",
+   "topic": "Hospital set-up",
+   "core": false,
+   "type": "decision",
+   "question": "Which contact should each department have in the set-up?",
+   "header": "Dept contact",
+   "multi": false,
+   "options": [
+    {
+     "label": "Email and desk phone (Recommended)",
+     "description": "Request mail drafts and a call button both reach the department's reporting desk."
+    },
+    {
+     "label": "Email only (today)",
+     "description": "Placeholder addresses until the hospital gives real ones; no call button for departments."
+    },
+    {
+     "label": "A named person with mobile",
+     "description": "Requests and calls go to one person per department, who must be kept current."
+    }
+   ],
+   "why": "Department emails are placeholders today (id@hospital.example; S3, changes_v2 section 11). Settled: a call option on phones. How requests travel (in-app, mail, phone, WhatsApp) is R08; notification channels are R14.",
+   "depends_on": [],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Email and desk phone (Recommended)",
+   "answered_on": "17/10/2026"
+  },
+  {
+   "id": "R04-Q14",
+   "topic": "Department admin",
+   "core": false,
+   "type": "decision",
+   "question": "Besides creating logins, what else may a department admin do?",
+   "header": "Dept admin",
+   "multi": true,
+   "options": [
+    {
+     "label": "Edit department contacts (Recommended)",
+     "description": "Email and desk phone change without asking the root admin."
+    },
+    {
+     "label": "See last sign-in per login",
+     "description": "Spots unused or shared logins in the department."
+    },
+    {
+     "label": "Mark a doctor on leave",
+     "description": "That doctor's Case File alerts go to a named colleague until they return."
+    }
+   ],
+   "why": "Department admins create, disable and remove doctor logins and have no clinical access (role-deptadmin, matrix manage_department, G05). Password reset is R04-Q07; the residents' list is R06.",
+   "depends_on": [
+    "R04-Q13"
+   ],
+   "skip_if": "",
+   "resource": null,
+   "status": "Answered",
+   "answer": "Edit department contacts; Mark a doctor on leave",
+   "answered_on": "17/10/2026"
+  }
+ ],
+ "status": "Done"
+}

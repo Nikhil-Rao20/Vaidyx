@@ -1,0 +1,157 @@
+[
+ {
+  "check": "api routes refuse anonymous calls",
+  "result": "PASS",
+  "note": "221 routes checked"
+ },
+ {
+  "check": "/tb redirects to /login when not signed in",
+  "result": "PASS",
+  "note": "302"
+ },
+ {
+  "check": "/tb-nik shell is public and carries no data",
+  "result": "PASS",
+  "note": "200"
+ },
+ {
+  "check": "/tb-nik client routes serve the shell",
+  "result": "PASS",
+  "note": "200"
+ },
+ {
+  "check": "security headers on /tb-nik",
+  "result": "PASS",
+  "note": ""
+ },
+ {
+  "check": "CSP has no unsafe-inline for scripts",
+  "result": "PASS",
+  "note": ""
+ },
+ {
+  "check": "security headers on /api/tb/health",
+  "result": "PASS",
+  "note": ""
+ },
+ {
+  "check": "cross-site Origin refused with a login",
+  "result": "PASS",
+  "note": "403"
+ },
+ {
+  "check": "GET /api/tb/me answers with a login",
+  "result": "PASS",
+  "note": "200"
+ },
+ {
+  "check": "HIMS screens need a login",
+  "result": "PASS",
+  "note": "303"
+ },
+ {
+  "check": "HIMS FHIR needs the token",
+  "result": "PASS",
+  "note": "401"
+ },
+ {
+  "check": "HIMS FHIR refuses a wrong token",
+  "result": "PASS",
+  "note": "401"
+ },
+ {
+  "check": "HIMS login lockout after repeated failures",
+  "result": "PASS",
+  "note": "codes [401]"
+ },
+ {
+  "check": "HIMS PACS proxy refuses Orthanc REST",
+  "result": "PASS",
+  "note": "303"
+ },
+ {
+  "check": "Orthanc listens on loopback only",
+  "result": "PASS",
+  "note": "127.0.0.1"
+ },
+ {
+  "check": "LiveKit listens on loopback only",
+  "result": "PASS",
+  "note": "127.0.0.1"
+ },
+ {
+  "check": "HIMS listens on loopback only",
+  "result": "PASS",
+  "note": "127.0.0.1"
+ },
+ {
+  "check": "Vaidyx listens on loopback only",
+  "result": "PASS",
+  "note": "127.0.0.1"
+ },
+ {
+  "check": "mode of data/his_mock/token",
+  "result": "PASS",
+  "note": "0o600"
+ },
+ {
+  "check": "mode of data/his_mock/write_token",
+  "result": "PASS",
+  "note": "0o600"
+ },
+ {
+  "check": "mode of data/his_mock/logins.tsv",
+  "result": "PASS",
+  "note": "0o600"
+ },
+ {
+  "check": "mode of data/tumour_board/livekit.json",
+  "result": "PASS",
+  "note": "0o600"
+ },
+ {
+  "check": "mode of data/tumour_board/push_keys.json",
+  "result": "SKIP",
+  "note": "absent"
+ },
+ {
+  "check": "no secrets in the built frontend",
+  "result": "PASS",
+  "note": ""
+ },
+ {
+  "check": "WebSocket refuses an anonymous cross-site upgrade",
+  "result": "PASS",
+  "note": "HTTP/1.1 403 Forbidden"
+ },
+ {
+  "check": "protected Case File listed to nobody else (finding 0)",
+  "result": "PASS",
+  "note": "5 logins"
+ },
+ {
+  "check": "/quote limited to the records in scope (finding 1)",
+  "result": "PASS",
+  "note": "TB-DEMO-P19: HTTP 403"
+ },
+ {
+  "check": "HIMS JSON writes follow the session's role (finding 3)",
+  "result": "PASS",
+  "note": "registration 403, sign 403"
+ },
+ {
+  "check": "HIMS read token changes nothing (finding 13)",
+  "result": "PASS",
+  "note": "read 200, write with the read token 403, write token file present"
+ },
+ {
+  "check": "password change ends the other sessions (finding 4)",
+  "result": "PASS",
+  "note": "other session 401, this session 200, changed back 200, original password works True"
+ },
+ {
+  "check": "login rate limit answers 429",
+  "result": "PASS",
+  "note": "codes [401, 429]"
+ }
+]

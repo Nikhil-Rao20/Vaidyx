@@ -85,15 +85,21 @@ def test_save_round_trips(data_dir):
 
 
 def test_view_report_serves_the_rendered_pdf_inline(client, data_dir):
+    """/view/reports needs the screens' login cookie or the FHIR bearer token (here the token; the cookie in test_auth)."""
     h = app_module.Hospital(data_dir)
     r = next(iter(h.store.reports.values()))
-    assert client.get(f"/view/reports/{r['id']}/1").status_code == 404  # documents=False: nothing rendered
+    bearer = {"Authorization": f"Bearer {token(data_dir)}"}
+    anon = client.get(f"/view/reports/{r['id']}/1", follow_redirects=False)
+    assert anon.status_code == 303 and anon.headers["location"].startswith("/his/login?next=")
+    assert client.get(f"/view/reports/{r['id']}/1", headers=bearer).status_code == 404  # documents=False: nothing rendered
     v = h.store.current_version(r)
     (Path(data_dir) / paths.DOCUMENTS_NAME / "x.pdf").write_bytes(b"%PDF-1.4 x")
     v["document"] = {"path": "documents/x.pdf", "sha256": "0" * 64}
     h.save()
     client.app.state.hospital.reload()
-    resp = client.get(f"/view/reports/{r['id']}/{v['version']}")
+    resp = client.get(f"/view/reports/{r['id']}/{v['version']}", headers=bearer)
     assert resp.status_code == 200 and "inline" in resp.headers["content-disposition"]
-    assert client.get(f"/view/reports/{r['id']}/99").status_code == 404
-    assert client.get("/view/reports/nope/1").status_code == 404
+    assert client.get(f"/view/reports/{r['id']}/99", headers=bearer).status_code == 404
+    assert client.get("/view/reports/nope/1", headers=bearer).status_code == 404
+    assert client.get(f"/view/reports/{r['id']}/{v['version']}", headers={"Authorization": "Bearer wrong"},
+                      follow_redirects=False).status_code == 303
