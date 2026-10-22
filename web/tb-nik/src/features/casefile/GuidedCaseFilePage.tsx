@@ -43,6 +43,9 @@ import { ReportsStep } from "./steps/ReportsStep";
 import { SectionChips, SectionNav } from "./steps/SectionNav";
 import { SummaryStep } from "./steps/SummaryStep";
 import { deleteKeyCheck, dismissWarning, postKeyCheck, putReason, useSteps } from "./steps/api";
+import { BookViewer } from "./staging/BookViewer";
+import { StagingCard } from "./staging/StagingCard";
+import { useStaging, type BookTarget } from "./staging/api";
 import { SLUG, fromSlug, type MissingItem, type SectionId } from "./steps/types";
 import "./print.css";
 
@@ -91,6 +94,8 @@ export default function GuidedCaseFilePage() {
   const stepsq = useSteps(id, full);
   const steps = stepsq.data ?? null;
   const slotsq = useSlots(id, cf, full);
+  const stagingq = useStaging(id, full);
+  const [bookAt, setBookAt] = useState<BookTarget | null>(null);
   const role = useMyRole(cf);
   const teamq = useTeam(id, cf, full);
   const proposalsq = useProposals(id, full && !role.resident);
@@ -121,7 +126,7 @@ export default function GuidedCaseFilePage() {
 
   const refresh = useCallback(async () => {
     await cfq.refresh();
-    await Promise.all([slotsq.refetch(), qc.invalidateQueries({ queryKey: ["steps", id] }), proposalsq.refetch(), teamq.refetch()]);
+    await Promise.all([slotsq.refetch(), qc.invalidateQueries({ queryKey: ["steps", id] }), qc.invalidateQueries({ queryKey: ["staging", id] }), proposalsq.refetch(), teamq.refetch()]);
   }, [cfq, slotsq, qc, id, proposalsq, teamq]);
 
   const go = useCallback((s: SectionId, t?: string) => {
@@ -298,7 +303,11 @@ export default function GuidedCaseFilePage() {
   if (stepsq.error && !steps) body = <ErrorState error={stepsq.error} retry={() => void stepsq.refetch()} />;
   else if (steps) {
     if (section === "overview") {
-      body = <Overview steps={steps} h={overviewH} signoffs={!resident && proposalsq.proposals.length ? <div id="signoffs"><ProposalsStrip caseId={id} proposals={proposalsq.proposals} onChanged={refresh} labelOf={(sid) => slotById(sid)?.label} /></div> : null} />;
+      body = <Overview steps={steps} h={overviewH} signoffs={!resident && proposalsq.proposals.length ? <div id="signoffs"><ProposalsStrip caseId={id} proposals={proposalsq.proposals} onChanged={refresh} labelOf={(sid) => slotById(sid)?.label} /></div> : null}
+        staging={stagingq.data && (stagingq.data.switch.on || stagingq.data.written.length) ? (
+          <StagingCard caseId={id} view={stagingq.data} loading={stagingq.isLoading} canRun={prepare} canConfirm={prepare && !resident && !!cf.permissions?.review}
+            onOpen={openSource} onBook={setBookAt} onChanged={(v) => { if (v) qc.setQueryData(["staging", id], v); else void qc.invalidateQueries({ queryKey: ["staging", id] }); }} />
+        ) : null} />;
     } else if (section === "question") {
       body = <QuestionStep steps={steps} canEdit={prepare} resident={resident} consultantName={consultantName} onOpen={openSource} onNext={() => go("reports")}
         onSaveQuestion={(t) => typed("fact:clinical_question", t, `Question for the board: ${t}`)}
@@ -376,6 +385,7 @@ export default function GuidedCaseFilePage() {
       <ArchiveDialog open={archiveOpen} onOpenChange={setArchiveOpen} patient={cf.case.patient?.name || id} onConfirm={async (reason) => { await archiveCase(id, reason); nav("/cases", { replace: true }); }} />
       <MarkReadyDialog open={readyOpen} onOpenChange={setReadyOpen} slots={slotsq.data} resident={resident} consultantName={consultantName} onConfirm={onMarkReady}
         boardQuestionMissing={!steps?.question.text} />
+      <BookViewer target={bookAt} onClose={() => setBookAt(null)} />
       <ChangeCancerDialog open={cancerOpen} onOpenChange={setCancerOpen} caseId={id} current={steps?.protocol ?? cf.case.protocol ?? ""} onChanged={() => { announce("Reading the reports again for the new cancer."); void refresh(); }} />
       <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} caseId={id} hisCase={!!cf.his} onStarted={() => { announce("Upload started; reading the files."); window.setTimeout(() => void refresh(), 4000); }} />
     </div>

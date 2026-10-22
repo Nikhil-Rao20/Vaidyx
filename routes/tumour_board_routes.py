@@ -343,7 +343,7 @@ def _include_nik_routers(r):
     """The routers of the new interface (tumour_board/api/*): each module exports `router`; a module that fails to import is logged
     and skipped so one broken area never takes the whole API down."""
     import importlib
-    for name in ("me", "cases_list", "team", "setup", "slots", "steps", "chats", "helpers", "published", "meetings", "live", "video", "push", "deck"):
+    for name in ("me", "cases_list", "team", "setup", "slots", "steps", "staging", "chats", "helpers", "published", "meetings", "live", "video", "push", "deck"):
         try:
             mod = importlib.import_module(f"tumour_board.api.{name}")
         except ModuleNotFoundError as e:

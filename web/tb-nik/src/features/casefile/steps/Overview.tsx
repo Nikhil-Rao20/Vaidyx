@@ -111,7 +111,7 @@ function WaitingList({ items, h }: { items: WaitingItem[]; h: OverviewHandlers }
   );
 }
 
-export function Overview({ steps, h, signoffs }: { steps: Steps; h: OverviewHandlers; signoffs?: ReactNode }) {
+export function Overview({ steps, h, signoffs, staging }: { steps: Steps; h: OverviewHandlers; signoffs?: ReactNode; staging?: ReactNode }) {
   const prepare = steps.mode === "prepare";
   const q = steps.question;
   return (
@@ -143,6 +143,8 @@ export function Overview({ steps, h, signoffs }: { steps: Steps; h: OverviewHand
           </div>
         )}
       </Card>
+
+      {staging}
 
       <section aria-labelledby="h-glance" data-testid="glance">
         <h2 id="h-glance" className="mb-2 text-[15px]">The patient at a glance</h2>
