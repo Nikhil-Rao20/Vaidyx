@@ -7,6 +7,7 @@ import { Hero } from "./sections/Hero";
 import { Strip } from "./sections/Strip";
 import { Problem } from "./sections/Problem";
 import { HowItWorks } from "./sections/HowItWorks";
+import { Integration } from "./sections/Integration";
 import { Sources } from "./sections/Sources";
 import { Journey } from "./sections/Journey";
 import { Safety } from "./sections/Safety";
@@ -21,6 +22,7 @@ export default function LandingPage() {
       {ready ? <Hero /> : <div className="l-section min-h-[100svh]" aria-hidden />}
       <Strip />
       <Problem />
+      <Integration />
       <HowItWorks />
       <Sources />
       <Journey />

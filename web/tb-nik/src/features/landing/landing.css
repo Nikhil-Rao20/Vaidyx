@@ -291,3 +291,28 @@ html.lenis, html.lenis body { height: auto; }
 .jy-seg[data-state="done"] { background: var(--l-accent); opacity: 0.55; }
 .jy-seg[data-state="current"] { background: var(--l-accent); }
 .jy-seg:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+/* Integration (22 Oct): the drawing of Vaidyx between the hospital's systems and the Board. */
+.landing { --ig-line: var(--l-line-2); --ig-dot: var(--teal); --ig-dot-pacs: var(--violet); }
+.ig-col { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; fill: var(--l-accent); }
+.ig-box { fill: var(--l-surface); stroke: var(--l-line-2); stroke-width: 1; }
+.ig-board .ig-box { fill: color-mix(in srgb, var(--l-review-bg) 55%, var(--l-surface)); stroke: color-mix(in srgb, var(--l-review) 35%, var(--l-line-2)); }
+.ig-icon-bg { fill: var(--l-accent-bg); }
+.ig-board .ig-icon-bg { fill: var(--l-review-bg); }
+.ig-icon { color: var(--l-accent); }
+.ig-board .ig-icon { color: var(--l-review); }
+.ig-title { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; fill: var(--l-fg); }
+.ig-sub { font-size: 11px; fill: var(--l-fg-3); }
+.ig-link { font-size: 9.5px; font-weight: 600; letter-spacing: 0.02em; fill: var(--l-accent); }
+.ig-line { fill: none; stroke: var(--ig-line); stroke-width: 1.6; stroke-linecap: round; }
+.ig-line-pacs { stroke: color-mix(in srgb, var(--violet) 55%, var(--l-line-2)); }
+.ig-line-dash { stroke-dasharray: 4 5; }
+.ig-line-out { stroke: color-mix(in srgb, var(--l-review) 45%, var(--l-line-2)); }
+.ig-dot { fill: var(--ig-dot); }
+.ig-dot-pacs { fill: var(--ig-dot-pacs); }
+.ig-dot-out { fill: var(--l-review); }
+.ig-halo { fill: none; stroke: var(--l-accent); stroke-width: 1.2; opacity: 0.35; }
+.ig-v-title { font-size: 26px; font-weight: 600; letter-spacing: -0.03em; fill: #ffffff; }
+.ig-v-sub { font-size: 11px; fill: rgba(255, 255, 255, 0.82); }
+.ig-v-chip { fill: rgba(255, 255, 255, 0.14); stroke: rgba(255, 255, 255, 0.22); stroke-width: 1; }
+.ig-v-chip-t { font-size: 12px; font-weight: 500; fill: #ffffff; }

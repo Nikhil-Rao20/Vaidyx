@@ -85,6 +85,41 @@ export const PROBLEM = {
   },
 };
 
+/* Integration (22 Oct): Vaidyx is standalone software that connects to the hospital's own HIS and PACS, whoever made them. Every line
+   is true of the build today: FHIR R4 read only (tumour_board/his_client.py), DICOMweb through the app to the OHIF viewer (pacs.py). */
+export const INTEGRATION = {
+  eyebrow: "Integration",
+  title: ["Standalone software that works with", "your HIS and PACS."],
+  lead: "Vaidyx is its own software, installed on the hospital's server. It connects to the hospital information system and the PACS the hospital already has, whichever company made them. Nothing has to be replaced.",
+  diagram: {
+    label: "Vaidyx between the hospital's systems and the Tumour Board",
+    systemsTitle: "Your hospital's systems",
+    systems: [
+      { id: "his", title: "HIS / HIMS", sub: "Registration, OPD, IPD" },
+      { id: "lis", title: "Laboratory (LIS)", sub: "Pathology, labs" },
+      { id: "ris", title: "Radiology (RIS)", sub: "Imaging reports" },
+      { id: "pacs", title: "PACS", sub: "Scans and studies" },
+      { id: "outside", title: "Outside reports", sub: "PDFs and scanned pages" },
+    ],
+    links: { his: "HL7 FHIR R4, read only", lis: "HL7 FHIR R4, read only", ris: "HL7 FHIR R4, read only", pacs: "DICOMweb", outside: "Upload" },
+    vaidyx: { title: "Vaidyx", sub: "Standalone, on the hospital's own server", items: ["Case File", "Pre-Authorization", "Specialty briefs", "Ask the Case File"] },
+    boardTitle: "The Tumour Board",
+    board: [
+      { id: "team", title: "Treating team", sub: "Prepares the Case File" },
+      { id: "meeting", title: "Board meeting", sub: "Room display and video" },
+      { id: "records", title: "Records out", sub: "Minutes, deck, NCG, PM-JAY" },
+    ],
+  },
+  points: [
+    { key: "standalone", title: "Standalone software", text: "Installed on the hospital's own server, beside the systems already in use. Patient records stay inside the hospital." },
+    { key: "agnostic", title: "Vendor-agnostic", text: "Built on open standards: HL7 FHIR R4 for the hospital system and DICOMweb for the PACS, so it is not tied to one company. A system without them connects through a connector." },
+    { key: "readonly", title: "Reads, never writes", text: "Vaidyx only reads from the hospital system. Nothing is written back or changed in the hospital's records." },
+    { key: "images", title: "Images stay in your PACS", text: "Scans open from the PACS in a viewer inside the Case File and the meeting, and every opening is logged. Doctors read the images; no model does." },
+  ],
+  standards: ["HL7 FHIR R4", "ABDM / NRCeS profiles", "DICOMweb", "OHIF viewer", "UHID, IP and OP numbers, ABHA", "PDF and scanned reports"],
+  note: "Shown today with our demo hospital system and an open-source PACS (Orthanc).",
+};
+
 export interface Phase {
   key: "before" | "during" | "after";
   label: string;
@@ -228,7 +263,7 @@ export const FOOTER = {
   scope: "Vaidyx checks, routes, summarises and flags. Doctors make the decisions.",
   copyright: `© ${new Date().getFullYear()} TANUH, The AI Centre of Excellence in Healthcare.`,
   columns: [
-    { title: "Product", links: [{ label: "How it works", to: "/#how" }, { label: "Traceability", to: "/#sources" }, { label: "Workflow", to: "/#journey" }, { label: "Design principles", to: "/#safety" }] },
+    { title: "Product", links: [{ label: "Integration", to: "/#integration" }, { label: "How it works", to: "/#how" }, { label: "Traceability", to: "/#sources" }, { label: "Workflow", to: "/#journey" }, { label: "Design principles", to: "/#safety" }] },
     { title: "About", links: [{ label: "Our team", to: "/about" }, { label: "TANUH", to: "/about#tanuh" }, { label: "Contact", to: "/contact" }] },
     { title: "Resources", links: [{ label: "Research", to: "/research" }, { label: "Documentation", to: "/docs" }, { label: "Visit TANUH", to: "https://tanuh.ai" }] },
     { title: "Account", links: [{ label: "Sign in", to: "/sign-in" }] },
