@@ -21,7 +21,7 @@ from pathlib import Path
 from .. import grounding, llm, rules, store
 
 RULES_DIR = Path(__file__).resolve().parent / "rules"
-PROTOCOL_RULES = {"breast": "breast_ajcc8"}  # lung and cervix follow the same shape
+PROTOCOL_RULES = {"breast": "breast_ajcc8", "lung_nsclc": "lung_ajcc8", "cervix": "cervix_figo2018"}
 DRAFT_LABEL = "Vaidyx draft stage, for the board to confirm"
 PREVIEW_LABEL = "Preview: these staging rules are not yet checked by a clinician"
 STAGE_FACTS = ("recorded_stage", "figo_stage")
@@ -98,11 +98,31 @@ def group_of(cat: str, kind: str) -> str:
 
 
 def stage_group(rule: dict, t: str, n: str, m: str) -> dict | None:
-    """The row of the stage table for the T, N and M groups, or None."""
+    """The row of the stage table for T, N and M, each given as a category or its group ("T2a" matches a row naming "T2a" or "T2";
+    "cM1b" a row naming "M1b" or "M1"), or None."""
+    t, n, m = (re.sub(r"^c(?=[TNM])", "", x or "") for x in (t, n, m))
+    ok = lambda want, x, k: "*" in want or x in want or group_of(x, k) in want
     for row in rule["groups"]["rows"]:
-        if ("*" in row["T"] or t in row["T"]) and ("*" in row["N"] or n in row["N"]) and ("*" in row["M"] or m in row["M"]):
+        if ok(row["T"], t, "T") and ok(row["N"], n, "N") and ok(row["M"], m, "M"):
             return row
     return None
+
+
+def t_rank(rule: dict, cat: str) -> int:
+    order = rule.get("t_order") or []
+    return order.index(cat) if cat in order else -1
+
+
+def feature_cat(c: dict, mm: float | None) -> str:
+    """The category a described feature gives: its own, an "assign", or by size (lung T2 features: T2a if <= 4 cm or the size is unknown)."""
+    if c.get("by_size"):
+        for b in c["by_size"]:
+            if mm is None:
+                return c["by_size"][0]["cat"]
+            if (b.get("min_mm") is None or mm > b["min_mm"]) and (b.get("max_mm") is None or mm <= b["max_mm"]):
+                return b["cat"]
+        return c["by_size"][-1]["cat"]
+    return c.get("assign") or c["cat"]
 
 
 # ---- what the reports say ----------------------------------------------------------------------------------------------------------
@@ -137,8 +157,13 @@ def written_stages(case_id) -> list[dict]:
             loc = h.get("location") if isinstance(h.get("location"), dict) else {}
             out.append({"fact": fid, "value": v, "quote": h.get("quote") or "", "doc_id": h.get("doc_id"), "doc_title": h.get("doc_title"), "date": h.get("date"),
                         "page": loc.get("page"), "prefix": prefix, "superseded": bool(h.get("superseded")), "final": bool(h.get("doc_final"))})
-    out.sort(key=lambda x: x.get("date") or "")
-    return out
+    seen, uniq = set(), []
+    for w in sorted(out, key=lambda x: x.get("date") or ""):  # the same words from the same report under two fields: once
+        k = (w["doc_id"], re.sub(r"\s+", " ", w["value"]).strip().lower())
+        if k not in seen:
+            seen.add(k)
+            uniq.append(w)
+    return uniq
 
 
 def parse_written(v: str) -> dict:
@@ -147,7 +172,8 @@ def parse_written(v: str) -> dict:
     t = re.search(r"(?:^|[^A-Za-z])(?:yp|p|c|mr)?(T(?:is|X|0|[1-4])[a-d]?(?:mi)?)", s)
     n = re.search(r"(?:yp|p|c)?(N(?:X|[0-3])[a-c]?(?:mi)?)", s)
     m = re.search(r"(?:p|c)?(M[01])", s)
-    g = re.search(r"\bstage\s*(0|I{1,3}V?|IV)\s*([ABC])?\b", s, re.I)
+    g = re.search(r"\bstage\s*(0|IV|I{1,3})\s*([ABC][123]?)?\s*(?:[rp]\b)?", s, re.I) or \
+        re.fullmatch(r"\s*(?:FIGO\s*(?:\d{4})?\s*)?(IV|I{1,3})([ABC][123]?)?[rp]?\s*", s)  # a bare stage as written: "IIB", "IIIC1r"
     return {"T": t.group(1) if t else None, "N": n.group(1) if n else None, "M": m.group(1) if m else None,
             "stage": (g.group(1).upper() + (g.group(2) or "").upper()) if g else None}
 
@@ -195,7 +221,7 @@ def _check(q, by_id) -> dict | None:
     if v["status"] != "verified":
         return None
     c = d.get("classification") or {}
-    return {"doc_id": d["doc_id"], "doc_title": c.get("title") or d.get("filename"), "quote": quote, "page": (v.get("location") or {}).get("page"),
+    return {"doc_id": d["doc_id"], "doc_title": c.get("title") or d.get("filename"), "doc_type": c.get("doc_type"), "quote": quote, "page": (v.get("location") or {}).get("page"),
             "date": (c.get("event_date_iso") or c.get("report_date_iso") or None), "final": str(c.get("status") or "").upper() in ("FINAL", "AMENDED", "CORRECTED")}
 
 
@@ -217,19 +243,28 @@ def decide(rule: dict, answer: dict, by_id: dict, fallback_size: dict | None = N
     """The draft from the reasoner's picks: every pick needs a checked quote; size categories come from the measured size in code; then
     the stage table. Returns {"components": {T, N, M}, "stage", "row", "status": "staged" | "cannot_stage", "missing": [...]}."""
     comps, missing = {}, []
-    # T: a direct extension (T4) needs its own quoted line; otherwise the measured size decides
+    # T: the measured size gives a category in code; a described feature (an invasion, a separate nodule, skin or chest wall) needs its own
+    # checked line; the higher of the two stands (rank in t_order)
     a = answer.get("T") or {}
     quotes = [x for x in (_check(q, by_id) for q in a.get("quotes") or []) if x]
     size_q = _check(a.get("size_quote"), by_id) or next((q for q in quotes if size_mm(q["quote"]) is not None), None) or fallback_size
+    mm = size_mm(size_q["quote"]) if size_q else None
+    by_size = t_by_size(rule, mm) if mm is not None else None
     picked = _crit(rule, "T", a.get("cat"))
-    if picked and picked.get("feature") and quotes:
-        comps["T"] = {"cat": picked["cat"], "group": picked["group"], "criterion": picked, "quotes": quotes, "how": "the report describes it"}
-    elif size_q and size_mm(size_q["quote"]) is not None:
-        mm = size_mm(size_q["quote"])
-        c = t_by_size(rule, mm)
-        if c:
-            note = "" if not picked or picked["cat"] == c["cat"] else f"the measured size decides ({mm:g} mm), not the reading {picked['cat']}"
-            comps["T"] = {"cat": c["cat"], "group": c["group"], "criterion": c, "quotes": [size_q], "size_mm": mm, "how": "the measured size", "note": note}
+    feat_quotes = [q for q in quotes if size_q is None or q["quote"] != size_q["quote"]] or quotes
+    feat = picked if picked and picked.get("feature") and feat_quotes else None
+    if feat:
+        fcat = feature_cat(feat, mm)
+        if by_size and t_rank(rule, by_size["cat"]) > t_rank(rule, fcat):
+            comps["T"] = {"cat": by_size["cat"], "group": by_size["group"], "criterion": by_size, "quotes": [size_q], "size_mm": mm, "how": "the measured size",
+                          "note": f"the size gives a higher category than the feature described ({fcat})"}
+        else:
+            comps["T"] = {"cat": fcat, "group": group_of(fcat, "T"), "criterion": feat, "quotes": feat_quotes + ([size_q] if size_q and size_q not in feat_quotes else []),
+                          "how": "the report describes it", **({"size_mm": mm} if mm is not None else {}),
+                          **({"note": f"the size alone gives {by_size['cat']}; the feature described gives {fcat}"} if by_size and by_size["cat"] != fcat else {})}
+    elif by_size:
+        note = "" if not picked or picked["cat"] == by_size["cat"] else f"the measured size decides ({mm:g} mm), not the reading {picked['cat']}"
+        comps["T"] = {"cat": by_size["cat"], "group": by_size["group"], "criterion": by_size, "quotes": [size_q], "size_mm": mm, "how": "the measured size", "note": note}
     if "T" not in comps:
         missing.append("T: " + (a.get("missing") or "the tumour size is not stated in a report"))
     # N and M: the pick with its checked quote, or nothing
@@ -252,10 +287,15 @@ def decide(rule: dict, answer: dict, by_id: dict, fallback_size: dict | None = N
     out = {"components": comps, "missing": missing}
     if missing:
         return {**out, "status": "cannot_stage", "stage": None, "row": None}
-    row = stage_group(rule, comps["T"]["group"], group_of(comps["N"]["cat"], "N"), comps["M"]["group"])
+    row = stage_group(rule, comps["T"]["cat"], comps["N"]["cat"], comps["M"]["cat"])
     if not row:
         return {**out, "status": "cannot_stage", "stage": None, "row": None, "missing": ["The stage table has no row for this combination"]}
-    return {**out, "status": "staged", "stage": row["stage"], "row": row}
+    stage = row["stage"]
+    if stage in (rule["groups"].get("suffix_for") or []):  # FIGO: r when imaging allots Stage IIIC, p when pathology does (note d)
+        q = (comps["N"].get("quotes") or [None])[0]
+        if q:
+            stage += "p" if q.get("doc_type") in ("histopathology", "cytology") else "r"
+    return {**out, "status": "staged", "stage": stage, "row": row}
 
 
 def compare(draft: dict, written: list[dict]) -> dict | None:
@@ -266,7 +306,7 @@ def compare(draft: dict, written: list[dict]) -> dict | None:
     w = pool[-1]
     p = parse_written(w["value"])
     comps = draft["components"]
-    mine = {"T": comps["T"]["group"], "N": group_of(comps["N"]["cat"], "N"), "M": comps["M"]["group"], "stage": draft["stage"]}
+    mine = {"T": comps["T"]["group"], "N": group_of(comps["N"]["cat"], "N"), "M": comps["M"]["group"], "stage": re.sub(r"[rp]$", "", draft["stage"] or "")}
     diffs = []
     for k in ("T", "N", "M", "stage"):
         if p.get(k) is None:
@@ -324,8 +364,10 @@ def view(case_id) -> dict:
     sw = switch(case.get("protocol"))
     rule = rules_for(case.get("protocol"))
     written = written_stages(case_id)
+    from . import book as _book
     out = {"switch": sw, "draft_label": DRAFT_LABEL, "written": written, "draft": None, "comparison": None, "stale": False,
-           "book": (rule or {}).get("book"), "system": (rule or {}).get("system"), "label": (rule or {}).get("label"),
+           "book": (rule or {}).get("book"), "book_here": bool(rule and (rule.get("book") or {}).get("id") in _book.books()),
+           "notation": (rule or {}).get("notation") or "tnm", "system": (rule or {}).get("system"), "label": (rule or {}).get("label"),
            "groups_note": ((rule or {}).get("groups") or {}).get("note"), "groups_ref": {k: ((rule or {}).get("groups") or {}).get(k) for k in ("title", "page", "find")} if rule else None,
            "criteria": {k: [{"cat": c["cat"], "text": c["text"]} for c in rule[k] if not c.get("rare")] for k in ("T", "N", "M")} if rule and sw["on"] else None}
     if not sw["on"]:

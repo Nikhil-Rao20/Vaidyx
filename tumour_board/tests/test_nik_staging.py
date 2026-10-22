@@ -162,3 +162,78 @@ def test_the_book_pages(breast):
     assert r.status_code == 200 and r.headers["content-type"] == "image/jpeg" and int(r.headers["x-highlights"]) >= 1
     assert tc.get("/api/tb/staging/books/ajcc8_breast/pages/9999").status_code == 404
     assert tc.get("/api/tb/staging/books/not_a_book").status_code == 404
+
+
+# ---- lung (AJCC 8, chapter 36) -------------------------------------------------------------------------------------------------------
+
+def _lung_docs():
+    ct = util.make_doc("LC1", "ct", title="CECT THORAX", text="CECT thorax (SYNTHETIC)\nA 3.6 x 2.9 cm spiculated mass in the right upper lobe.\n"
+                       "The mass abuts and invades the visceral pleura.\nEnlarged right hilar lymph node, 1.4 cm.\nNo pleural effusion. No distant metastasis.")
+    ct2 = util.make_doc("LC2", "ct", title="CT CHEST", text="CT chest (SYNTHETIC)\nA 4.6 cm mass in the left lower lobe invading the chest wall with rib erosion.\n"
+                        "Subcarinal lymph node, 1.8 cm.\nMultiple liver and bone metastases.")
+    return {d["doc_id"]: d for d in (ct, ct2)}
+
+
+def test_lung_size_against_features_and_the_table():
+    r = staging.rules_for("lung_nsclc")
+    by_id = _lung_docs()
+    # 3.6 cm with visceral pleural invasion: the T2 feature by size is T2a; N1 hilar; M0: stage IIB
+    ans = {"T": {"cat": "T2-features", "quotes": [{"doc_id": "LC1", "quote": "The mass abuts and invades the visceral pleura."}],
+                 "size_quote": {"doc_id": "LC1", "quote": "A 3.6 x 2.9 cm spiculated mass in the right upper lobe."}},
+           "N": {"cat": "N1", "quotes": [{"doc_id": "LC1", "quote": "Enlarged right hilar lymph node, 1.4 cm."}]},
+           "M": {"cat": "M0", "quotes": [{"doc_id": "LC1", "quote": "No distant metastasis."}]}}
+    d = staging.decide(r, ans, by_id)
+    assert d["components"]["T"]["cat"] == "T2a" and d["components"]["T"]["size_mm"] == 36.0 and d["stage"] == "IIB"
+    # 4.6 cm alone is T2b; with chest wall invasion the feature (T3) is higher; N2 subcarinal; several extrathoracic metastases M1c: IVB
+    ans = {"T": {"cat": "T3-invades", "quotes": [{"doc_id": "LC2", "quote": "invading the chest wall with rib erosion"}],
+                 "size_quote": {"doc_id": "LC2", "quote": "A 4.6 cm mass in the left lower lobe"}},
+           "N": {"cat": "N2", "quotes": [{"doc_id": "LC2", "quote": "Subcarinal lymph node, 1.8 cm."}]},
+           "M": {"cat": "M1c", "quotes": [{"doc_id": "LC2", "quote": "Multiple liver and bone metastases."}]}}
+    d = staging.decide(r, ans, by_id)
+    assert d["components"]["T"]["cat"] == "T3" and "T2b" in d["components"]["T"]["note"] and d["stage"] == "IVB"
+    # the table rows by category and by group
+    assert [staging.stage_group(r, *x)["stage"] for x in (("T1a", "N0", "M0"), ("T1c", "N0", "M0"), ("T2b", "N0", "M0"), ("T1b", "N1", "M0"),
+                                                         ("T3", "N1", "M0"), ("T4", "N1", "M0"), ("T2a", "N3", "M0"), ("T4", "N3", "M0"), ("T1a", "N0", "M1b"))] == \
+        ["IA1", "IA3", "IIA", "IIB", "IIIA", "IIIA", "IIIB", "IIIC", "IVA"]
+
+
+@pytest.mark.skipif(not book.books().get("ajcc8_lung"), reason="the licensed AJCC chapter is not on this machine")
+def test_every_lung_rule_line_is_found_on_its_book_page():
+    r = staging.rules_for("lung_nsclc")
+    for c in r["T"] + r["N"] + r["M"] + [r["groups"]] + [x for x in r["groups"]["rows"] if x.get("find")]:
+        img, hl = book.page_png("ajcc8_lung", c.get("page", r["groups"]["page"]), c["find"])
+        assert hl, f"{c.get('cat') or c.get('stage')}: {c['find']!r} not found on p. {c.get('page')}"
+
+
+# ---- cervix (FIGO 2018) --------------------------------------------------------------------------------------------------------------
+
+def _cervix_docs():
+    mri = util.make_doc("CM1", "mri", title="MRI PELVIS", text="MRI pelvis (SYNTHETIC)\nA 3.5 x 3.0 cm mass in the cervix.\n"
+                        "Right parametrial involvement is seen, not reaching the pelvic wall.\nEnlarged right external iliac lymph node, 1.6 cm.\nNo hydronephrosis.")
+    hpe = util.make_doc("CH1", "histopathology", title="HISTOPATHOLOGY REPORT", text="Cone biopsy (SYNTHETIC)\nSquamous cell carcinoma.\n"
+                        "Depth of stromal invasion: 2 mm.\nMargins free.")
+    return {d["doc_id"]: d for d in (mri, hpe)}
+
+
+def test_cervix_figo_2018():
+    r = staging.rules_for("cervix")
+    assert r["system"] == "FIGO 2018" and r["signed_off"] is None
+    by_id = _cervix_docs()
+    size = {"doc_id": "CM1", "quote": "A 3.5 x 3.0 cm mass in the cervix."}
+    no_m = {"cat": "M0", "quotes": [{"doc_id": "CM1", "quote": "No hydronephrosis."}]}
+    # parametrial involvement (IIB) with a pelvic node on imaging: Stage IIIC1r (nodes allot IIIC whatever the local extent)
+    ans = {"T": {"cat": "IIB", "quotes": [{"doc_id": "CM1", "quote": "Right parametrial involvement is seen, not reaching the pelvic wall."}], "size_quote": size},
+           "N": {"cat": "IIIC1", "quotes": [{"doc_id": "CM1", "quote": "Enlarged right external iliac lymph node, 1.6 cm."}]}, "M": no_m}
+    d = staging.decide(r, ans, by_id)
+    assert d["components"]["T"]["cat"] == "IIB" and d["stage"] == "IIIC1r"
+    # no nodes stated as involved: the local extent stands
+    d = staging.decide(r, {**ans, "N": {"cat": "N0", "quotes": [{"doc_id": "CM1", "quote": "No hydronephrosis."}]}}, by_id)
+    assert d["stage"] == "IIB"
+    # size alone: 3.5 cm confined to the cervix is IB2; a 2 mm depth on pathology (IA1) is lower than the measured size
+    d = staging.decide(r, {"T": {"cat": "IA1", "quotes": [{"doc_id": "CH1", "quote": "Depth of stromal invasion: 2 mm."}], "size_quote": size},
+                           "N": {"cat": "N0", "quotes": [{"doc_id": "CM1", "quote": "No hydronephrosis."}]}, "M": no_m}, by_id)
+    assert d["components"]["T"]["cat"] == "IB2" and d["stage"] == "IB2"
+    assert staging.parse_written("FIGO stage IIIC1r")["stage"] == "IIIC1" and staging.parse_written("Stage IB3")["stage"] == "IB3"
+    assert staging.parse_written("IIB")["stage"] == "IIB" and staging.parse_written("FIGO 2018 IIIC2p")["stage"] == "IIIC2"
+    assert staging.parse_written("Invasive carcinoma")["stage"] is None
+    assert staging.stage_group(r, "IIA2", "N0", "M0")["stage"] == "IIA2" and staging.stage_group(r, "IVA", "IIIC1", "M0")["stage"] == "IVA"

@@ -1,0 +1,60 @@
+{
+  "_note": "FIGO staging of cancer of the cervix uteri (2018), as used by the National Cancer Grid of India (NCG gynaecological cancer guidelines 2019). Transcribed word for word from Table 1 of Bhatla N, Aoki D, Sharma DN, Sankaranarayanan R. Cancer of the cervix uteri: 2021 update. Int J Gynecol Obstet 2021;155(Suppl 1):28-44 (open access, CC BY-NC-ND; full text read from Europe PMC, PMC9298213). The book page (pages and highlights) is filled in once the PDF is on the server (book.file). FIGO allots one stage: local extent (the 'T' list), then lymph nodes (Stage IIIC, with r or p), then distant organs (IVB); 'When in doubt, the lower staging should be assigned' (note d). N0 and M0 are not FIGO lines: they say that IIIC or IVB does not apply. Not switched on until a clinician has checked this file (docs/staging/DECISION.md, guard 5).",
+  "id": "cervix_figo2018",
+  "protocol": "cervix",
+  "label": "Cervical cancer, FIGO 2018",
+  "system": "FIGO 2018",
+  "notation": "figo",
+  "signed_off": null,
+  "book": {"id": "figo2018_cervix", "title": "FIGO: Cancer of the cervix uteri, 2021 update (Bhatla et al., IJGO 2021), Table 1", "short": "FIGO 2018, Table 1", "file": "figo/Bhatla_2021_Cancer_of_the_cervix_uteri_2021_update.pdf", "first_page": 28, "licensed": false, "source": "https://doi.org/10.1002/ijgo.13865"},
+  "t_order": ["IA1", "IA2", "IB1", "IB2", "IB3", "IIA1", "IIA2", "IIB", "IIIA", "IIIB", "IVA"],
+  "inputs": {
+    "T": {"facts": ["lesion_size", "parametrial_involvement", "depth_of_invasion"], "doc_types": ["mri", "ct", "pet_ct", "ultrasound", "histopathology", "endoscopy", "clinical_note", "operative_note"], "ask": "the size of the cervical tumour (greatest dimension); the depth of stromal invasion on pathology; involvement of the vagina (upper two-thirds or lower third); parametrial involvement; extension to the pelvic wall; hydronephrosis or a nonfunctioning kidney; biopsy-proven involvement of the bladder or rectal mucosa, or spread beyond the true pelvis"},
+    "N": {"facts": ["nodal_findings"], "doc_types": ["mri", "ct", "pet_ct", "histopathology", "cytology", "clinical_note"], "ask": "pelvic lymph nodes and para-aortic lymph nodes: whether a report states metastasis, on imaging (r) or on pathology (p)"},
+    "M": {"facts": ["distant_findings"], "doc_types": ["ct", "pet_ct", "mri", "xray", "bone_scan", "clinical_note"], "ask": "spread to distant organs (lung, liver, bone, distant lymph nodes)"}
+  },
+  "T": [
+    {"cat": "IA1", "group": "IA1", "feature": true, "text": "Measured stromal invasion ≤3 mm in depth", "page": null, "find": "Measured stromal invasion ≤3 mm in depth"},
+    {"cat": "IA2", "group": "IA2", "feature": true, "text": "Measured stromal invasion >3 and ≤5 mm in depth", "page": null, "find": "Measured stromal invasion >3 and ≤5 mm in depth"},
+    {"cat": "IB1", "group": "IB1", "text": "Invasive carcinoma >5 mm depth of stromal invasion and ≤2 cm in greatest dimension", "page": null, "find": "≤2 cm in greatest dimension", "max_mm": 20},
+    {"cat": "IB2", "group": "IB2", "text": "Invasive carcinoma >2 and ≤4 cm in greatest dimension", "page": null, "find": "Invasive carcinoma >2 and ≤4 cm", "min_mm": 20, "max_mm": 40},
+    {"cat": "IB3", "group": "IB3", "text": "Invasive carcinoma >4 cm in greatest dimension", "page": null, "find": "Invasive carcinoma >4 cm in greatest dimension", "min_mm": 40},
+    {"cat": "IIA", "group": "IIA", "feature": true, "by_size": [{"cat": "IIA1", "max_mm": 40}, {"cat": "IIA2", "min_mm": 40}], "text": "Involvement limited to the upper two-thirds of the vagina without parametrial involvement (IIA1: invasive carcinoma ≤4 cm in greatest dimension; IIA2: invasive carcinoma >4 cm in greatest dimension)", "page": null, "find": "Involvement limited to the upper two"},
+    {"cat": "IIB", "group": "IIB", "feature": true, "text": "With parametrial involvement but not up to the pelvic wall", "page": null, "find": "With parametrial involvement but not up to the pelvic wall"},
+    {"cat": "IIIA", "group": "IIIA", "feature": true, "text": "The carcinoma involves the lower third of the vagina, with no extension to the pelvic wall", "page": null, "find": "involves the lower third of the vagina, with no extension"},
+    {"cat": "IIIB", "group": "IIIB", "feature": true, "text": "Extension to the pelvic wall and/or hydronephrosis or nonfunctioning kidney (unless known to be due to another cause)", "page": null, "find": "Extension to the pelvic wall"},
+    {"cat": "IVA", "group": "IVA", "feature": true, "text": "Spread of the growth to adjacent pelvic organs (the mucosa of the bladder or rectum, biopsy proven); a bullous edema, as such, does not permit a case to be allotted to Stage IV", "page": null, "find": "Spread of the growth to adjacent pelvic organs"}
+  ],
+  "N": [
+    {"cat": "N0", "group": "N0", "text": "No pelvic or para-aortic lymph node metastasis stated (Stage IIIC does not apply)", "page": null, "find": "Involvement of pelvic and/or para"},
+    {"cat": "IIIC1", "group": "IIIC1", "text": "Pelvic lymph node metastasis only", "page": null, "find": "Pelvic lymph node metastasis only"},
+    {"cat": "IIIC2", "group": "IIIC2", "text": "Para-aortic lymph node metastasis", "page": null, "find": "aortic lymph node metastasis"}
+  ],
+  "M": [
+    {"cat": "M0", "group": "M0", "text": "No spread to distant organs stated (Stage IVB does not apply)", "page": null, "find": "Spread to distant organs"},
+    {"cat": "IVB", "group": "IVB", "text": "Spread to distant organs", "page": null, "find": "Spread to distant organs"}
+  ],
+  "groups": {
+    "title": "FIGO staging of cancer of the cervix uteri (2018)",
+    "page": null,
+    "find": "FIGO staging of cancer of the cervix uteri (2018)",
+    "note": "FIGO allots one stage: distant organs (IVB) first, then adjacent pelvic organs (IVA), then lymph nodes (IIIC, irrespective of tumour size and extent, with r for imaging and p for pathology), else the local extent. When in doubt, the lower staging should be assigned (FIGO 2018, note d).",
+    "suffix_for": ["IIIC1", "IIIC2"],
+    "rows": [
+      {"T": ["*"], "N": ["*"], "M": ["IVB"], "stage": "IVB"},
+      {"T": ["IVA"], "N": ["*"], "M": ["M0"], "stage": "IVA"},
+      {"T": ["*"], "N": ["IIIC2"], "M": ["M0"], "stage": "IIIC2"},
+      {"T": ["*"], "N": ["IIIC1"], "M": ["M0"], "stage": "IIIC1"},
+      {"T": ["IA1"], "N": ["N0"], "M": ["M0"], "stage": "IA1"},
+      {"T": ["IA2"], "N": ["N0"], "M": ["M0"], "stage": "IA2"},
+      {"T": ["IB1"], "N": ["N0"], "M": ["M0"], "stage": "IB1"},
+      {"T": ["IB2"], "N": ["N0"], "M": ["M0"], "stage": "IB2"},
+      {"T": ["IB3"], "N": ["N0"], "M": ["M0"], "stage": "IB3"},
+      {"T": ["IIA1"], "N": ["N0"], "M": ["M0"], "stage": "IIA1"},
+      {"T": ["IIA2"], "N": ["N0"], "M": ["M0"], "stage": "IIA2"},
+      {"T": ["IIB"], "N": ["N0"], "M": ["M0"], "stage": "IIB"},
+      {"T": ["IIIA"], "N": ["N0"], "M": ["M0"], "stage": "IIIA"},
+      {"T": ["IIIB"], "N": ["N0"], "M": ["M0"], "stage": "IIIB"}
+    ]
+  }
+}

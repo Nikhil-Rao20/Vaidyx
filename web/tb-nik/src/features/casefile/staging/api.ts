@@ -5,7 +5,7 @@ import { caseUrl } from "../api";
 
 const enc = encodeURIComponent;
 
-export interface Criterion { cat: string; group?: string; text: string; page: number; find: string; feature?: boolean }
+export interface Criterion { cat: string; group?: string; text: string; page: number | null; find: string; feature?: boolean }
 export interface Quote { doc_id: string; doc_title: string; quote: string; page?: number | null; date?: string | null; final?: boolean }
 export interface Component {
   cat: string; group: string; criterion: Criterion; quotes: Quote[]; how: string; size_mm?: number; note?: string;
@@ -26,10 +26,12 @@ export interface StagingView {
   comparison: { written: Written; result: "matches" | "differs" | "partial"; differences: string[] } | null;
   stale: boolean;
   book: Book | null;
+  book_here?: boolean;
+  notation?: "tnm" | "figo";
   system?: string;
   label?: string;
   groups_note?: string;
-  groups_ref?: { title: string; page: number; find: string } | null;
+  groups_ref?: { title: string; page: number | null; find: string } | null;
   criteria?: Record<"T" | "N" | "M", Array<{ cat: string; text: string }>> | null;
 }
 export interface BookMeta { id: string; title: string; pages: number; printed: number[]; first_page: number; last_page: number; aspect?: number }

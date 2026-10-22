@@ -5,6 +5,7 @@
   "label": "Breast cancer, AJCC 8th edition, clinical stage",
   "system": "AJCC TNM, 8th edition",
   "signed_off": null,
+  "t_order": ["TX", "T0", "Tis", "T1mi", "T1a", "T1b", "T1c", "T2", "T3", "T4a", "T4b", "T4c", "T4d"],
   "book": {"id": "ajcc8_breast", "title": "AJCC Cancer Staging Manual, 8th edition: 48 Breast", "short": "AJCC 8, Breast", "file": "ajcc/AJCC8_Ch48_Breast_pp589-628.pdf", "first_page": 589, "licensed": true},
   "inputs": {
     "T": {"facts": ["lesion_size"], "doc_types": ["mammogram", "ultrasound", "mri", "ct", "clinical_note"], "ask": "the size of the primary breast tumour (greatest dimension) and any direct extension to the chest wall or skin (ulceration, satellite skin nodules, oedema or peau d'orange, inflammatory carcinoma)"},

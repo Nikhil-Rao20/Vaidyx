@@ -15,8 +15,12 @@ import { SourceChip } from "../steps/Value";
 import { confirmStaging, enterPart, rejectStaging, runStaging, type BookTarget, type Component, type StagingView, type Written } from "./api";
 
 const PART_WORD: Record<"T" | "N" | "M", string> = { T: "Primary tumour", N: "Regional lymph nodes", M: "Distant metastasis" };
+const FIGO_WORD: Record<"T" | "N" | "M", string> = { T: "Local extent", N: "Lymph nodes", M: "Distant spread" };
 
-function BookChip({ book, page, find, label, onOpen }: { book: string; page: number; find?: string; label: string; onOpen: (t: BookTarget) => void }) {
+function BookChip({ book, page, find, label, onOpen, here = true }: { book: string; page: number | null; find?: string; label: string; onOpen: (t: BookTarget) => void; here?: boolean }) {
+  if (!here || page == null) {
+    return <span className="quote-chip" title="The book's PDF is not on this server yet: the line is shown here as the book prints it" data-testid="book-chip-missing"><BookOpen className="size-3 shrink-0" aria-hidden />{label} (PDF not on this server yet)</span>;
+  }
   return (
     <button type="button" onClick={() => onOpen({ book, page, find, label })} className="quote-chip !border-brand/30 !bg-secondary !text-secondary-foreground hover:!border-brand" data-testid="book-chip">
       <BookOpen className="size-3 shrink-0" aria-hidden />{label}, p. {page}
@@ -24,12 +28,12 @@ function BookChip({ book, page, find, label, onOpen }: { book: string; page: num
   );
 }
 
-function Step({ part, c, book, bookShort, onOpen, onBook }: { part: "T" | "N" | "M"; c: Component; book: string; bookShort: string; onOpen: (t: SourceTarget) => void; onBook: (t: BookTarget) => void }) {
+function Step({ part, c, book, bookShort, onOpen, onBook, figo, here }: { part: "T" | "N" | "M"; c: Component; book: string; bookShort: string; onOpen: (t: SourceTarget) => void; onBook: (t: BookTarget) => void; figo?: boolean; here?: boolean }) {
   const q = c.quotes[0];
   return (
     <li className="grid gap-3 py-3 md:grid-cols-[5.5rem_minmax(0,1fr)_minmax(0,1fr)]" data-testid={`stage-step-${part}`}>
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{PART_WORD[part]}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{(figo ? FIGO_WORD : PART_WORD)[part]}</p>
         <p className="mt-0.5 text-2xl font-bold tracking-tight text-foreground">{c.cat}</p>
       </div>
       <div className="min-w-0 rounded-md border border-border bg-muted/40 p-2.5">
@@ -51,7 +55,7 @@ function Step({ part, c, book, bookShort, onOpen, onBook }: { part: "T" | "N" | 
       <div className="min-w-0 rounded-md border border-brand/25 bg-secondary/40 p-2.5">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">The book says</p>
         <p className="mt-1 text-sm text-foreground"><span className="font-semibold">{c.criterion.cat}:</span> {c.criterion.text}</p>
-        <div className="mt-1.5"><BookChip book={book} page={c.criterion.page} find={c.criterion.find} label={bookShort} onOpen={onBook} /></div>
+        <div className="mt-1.5"><BookChip book={book} page={c.criterion.page} find={c.criterion.find} label={bookShort} onOpen={onBook} here={here} /></div>
       </div>
     </li>
   );
@@ -116,7 +120,9 @@ export function StagingCard({ caseId, view, loading, canRun, canConfirm, onOpen,
   const err = run.error || confirm.error || reject.error;
   const staged = d?.status === "staged";
   const comps = d?.components ?? {};
-  const tnm = staged ? `${comps.T?.cat} ${comps.N?.cat} ${comps.M?.cat}` : "";
+  const figo = view.notation === "figo";
+  const here = view.book_here !== false;
+  const tnm = staged && !figo ? `${comps.T?.cat} ${comps.N?.cat} ${comps.M?.cat}` : "";
   return (
     <section className="surface overflow-hidden" data-testid="staging-card" aria-labelledby="h-stage">
       <header className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
@@ -124,7 +130,7 @@ export function StagingCard({ caseId, view, loading, canRun, canConfirm, onOpen,
         <h2 id="h-stage" className="text-[15px]">Stage</h2>
         {view.system ? <span className="text-xs text-muted-foreground">{view.system}</span> : null}
         <span className="flex-1" />
-        {book && sw.on ? <BookChip book={book.id} page={view.groups_ref?.page ?? 620} find={view.groups_ref?.find} label={bookShort} onOpen={onBook} /> : null}
+        {book && sw.on ? <BookChip book={book.id} page={view.groups_ref?.page ?? null} find={view.groups_ref?.find} label={bookShort} onOpen={onBook} here={here} /> : null}
       </header>
       {sw.preview ? <p className="flex items-center gap-2 border-b border-border bg-warn-soft px-4 py-1.5 text-xs font-medium text-warn" data-testid="staging-preview"><FlaskConical className="size-3.5" aria-hidden />{sw.label}</p> : null}
 
@@ -182,11 +188,11 @@ export function StagingCard({ caseId, view, loading, canRun, canConfirm, onOpen,
             <ol className="divide-y divide-border">
               {(["T", "N", "M"] as const).map((p) => {
                 const c = comps[p];
-                if (c && book) return <Step key={p} part={p} c={c} book={book.id} bookShort={bookShort} onOpen={onOpen} onBook={onBook} />;
+                if (c && book) return <Step key={p} part={p} c={c} book={book.id} bookShort={bookShort} onOpen={onOpen} onBook={onBook} figo={figo} here={here} />;
                 const miss = d.missing.find((m) => m.startsWith(`${p}:`));
                 return (
                   <li key={p} className="grid gap-3 py-3 md:grid-cols-[5.5rem_minmax(0,1fr)]" data-testid={`stage-step-${p}`}>
-                    <div><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{PART_WORD[p]}</p><p className="mt-0.5 text-2xl font-bold text-muted-foreground">?</p></div>
+                    <div><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{(figo ? FIGO_WORD : PART_WORD)[p]}</p><p className="mt-0.5 text-2xl font-bold text-muted-foreground">?</p></div>
                     <div className="rounded-md border border-dashed border-warn/50 bg-warn-soft/60 p-2.5">
                       <p className="text-sm font-medium text-warn">Cannot stage: {miss ? miss.replace(/^[TNM]:\s*/, "") : "not stated in a report"}</p>
                       {canConfirm && view.criteria ? <div className="mt-1.5"><FillPart part={p} caseId={caseId} options={view.criteria[p]} onDone={(v) => onChanged(v)} /></div> : null}
@@ -200,11 +206,11 @@ export function StagingCard({ caseId, view, loading, canRun, canConfirm, onOpen,
             {staged && book && d.row ? (
               <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
                 <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Stage table</span>
-                <span className="font-medium text-foreground">{comps.T?.group} {comps.N?.cat.replace(/^c/, "").replace(/[a-c]$/, "")} {comps.M?.group}</span>
+                <span className="font-medium text-foreground">{figo ? `local ${comps.T?.cat}, nodes ${comps.N?.cat}, distant ${comps.M?.cat}` : `${comps.T?.cat} ${comps.N?.cat.replace(/^c/, "")} ${comps.M?.cat.replace(/^c/, "")}`}</span>
                 <ArrowRight className="size-3.5 text-muted-foreground" aria-hidden />
                 <span className="font-semibold text-foreground">Stage {d.stage}</span>
                 <span className="flex-1" />
-                <BookChip book={book.id} page={view.groups_ref?.page ?? 620} find={d.row.find || view.groups_ref?.find} label={bookShort} onOpen={onBook} />
+                <BookChip book={book.id} page={view.groups_ref?.page ?? null} find={d.row.find || view.groups_ref?.find} label={bookShort} onOpen={onBook} here={here} />
               </div>
             ) : null}
             {view.groups_note ? <p className="text-xs text-muted-foreground">{view.groups_note}</p> : null}
