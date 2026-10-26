@@ -7,7 +7,9 @@
 // Passwords are read here from ~/vaidyx/.tb_v2_demo_logins (tab separated: username, password, ...) and never printed.
 // One sign-in per role and run (the login rate limit is 15 a minute): the session is kept in <tmp>/tbnik-real-state.
 // Each account starts with the welcome stepper the first time; the journey completes it (the intended first-login flow).
-// Files: docs/ui/build/shots/real-<role>-<page>-<state>-<theme>-<width>.png. Skipped in mock mode (TBNIK_MOCK=1).
+// The resident role has no demo login: TBNIK_RESIDENT_USER / TBNIK_RESIDENT_PASSWORD name one (made by
+// docs/night-v3/tools/ensure_resident.py); its tests are skipped when they are unset.
+// Files: docs/ui/build/shots/real-<role>-<page>-<state>-<theme>-<width>.png (TBNIK_SHOTS moves them). Skipped in mock mode (TBNIK_MOCK=1).
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -15,7 +17,10 @@ import { expect, test, type Page, type Response } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { MOCK, SHOTS, SIZES } from "../support/helpers";
 
-type RoleKey = "treating" | "coordinator" | "supporting" | "supporting-head" | "dept-admin" | "root-admin";
+type RoleKey = "treating" | "coordinator" | "supporting" | "supporting-head" | "dept-admin" | "root-admin" | "resident";
+// The resident login comes from the environment (never written in code or logs).
+const RESIDENT_USER = (process.env.TBNIK_RESIDENT_USER || "").trim();
+const RESIDENT_PASSWORD = process.env.TBNIK_RESIDENT_PASSWORD || "";
 const ACCOUNTS: Record<RoleKey, string> = {
   treating: "tb-breast-doc",
   coordinator: "tb-mdt",
@@ -23,6 +28,7 @@ const ACCOUNTS: Record<RoleKey, string> = {
   "supporting-head": "tb-path-head",
   "dept-admin": "tb-breast-admin",
   "root-admin": "tb-root",
+  resident: RESIDENT_USER,
 };
 const WANTED = (process.env.TBNIK_REAL_ROLES || "").split(",").map((s) => s.trim()).filter(Boolean);
 const STATE_DIR = path.join(os.tmpdir(), "tbnik-real-state");
@@ -100,6 +106,10 @@ async function guardRealCase(page: Page) {
 }
 
 function password(user: string): string {
+  if (RESIDENT_USER && user === RESIDENT_USER) {
+    if (RESIDENT_PASSWORD) return RESIDENT_PASSWORD;
+    throw new Error("Set TBNIK_RESIDENT_PASSWORD for the resident login");
+  }
   const file = path.join(os.homedir(), "vaidyx/.tb_v2_demo_logins");
   for (const line of fs.readFileSync(file, "utf8").split("\n")) {
     if (!line || line.startsWith("#")) continue;
@@ -240,10 +250,12 @@ async function checkDock(page: Page) {
 }
 
 /** The welcome stepper of a first sign-in: one shot per step, then it is finished (the intended first-login flow). */
-async function welcome(page: Page, role: RoleKey, doctor: boolean) {
+async function welcome(page: Page, role: RoleKey, doctor: boolean, name?: string) {
   await expect(page.getByRole("heading", { name: "Make it yours" })).toBeVisible({ timeout: 20_000 });
   const nameBox = page.locator("#name");
-  if (!(await nameBox.inputValue()).trim()) await nameBox.fill(`Demo ${role}`);
+  // `name`: typed over what the account came with (the resident's placement name has brackets, which the profile refuses).
+  if (name) await nameBox.fill(name);
+  else if (!(await nameBox.inputValue()).trim()) await nameBox.fill(`Demo ${role}`);
   if (doctor) { const reg = page.locator("#reg"); if (!(await reg.inputValue()).trim()) await reg.fill("TNMC 10001"); }
   await snap(page, role, "welcome", "1-you", { sizes: LAPTOP_PHONE, themes: LIGHT });
   const next = page.getByRole("button", { name: /^(Next|Continue)$/ });
@@ -260,7 +272,7 @@ async function welcome(page: Page, role: RoleKey, doctor: boolean) {
 }
 
 /** First test of every role: the sign-in page (UI), the welcome stepper on the first time, the start page. */
-async function signInJourney(page: Page, role: RoleKey, opts: { doctor: boolean; shootSignIn?: boolean }) {
+async function signInJourney(page: Page, role: RoleKey, opts: { doctor: boolean; shootSignIn?: boolean; name?: string }) {
   await guardRealCase(page);
   stateDir();
   const file = path.join(STATE_DIR, `${role}.json`);
@@ -291,11 +303,11 @@ async function signInJourney(page: Page, role: RoleKey, opts: { doctor: boolean;
   }
   if (me.setup_needed) {
     await go(page, "/home");
-    await welcome(page, role, opts.doctor);
+    await welcome(page, role, opts.doctor, opts.name);
   } else if (process.env.TBNIK_REWELCOME === "1") {
     // Shots of the welcome stepper again for an account already set up (each step re-saves the same values).
     await go(page, "/welcome");
-    await welcome(page, role, opts.doctor);
+    await welcome(page, role, opts.doctor, opts.name);
   }
   await go(page, "/home");
   await page.waitForTimeout(800);
@@ -683,6 +695,48 @@ test.describe("root admin (tb-root)", () => {
     await snap(page, role, "activity", "full-log", { sizes: LAPTOP_PHONE, themes: LIGHT, before: async () => {} });
     await go(page, "/settings");
     await snap(page, role, "settings", "page", { sizes: [LAPTOP], themes: LIGHT });
+    expect(bad).toEqual([]);
+  });
+});
+
+// ----------------------------------------------------------------------------------------------------------------------
+// A resident of Breast Surgery (on the team of TB-DEMO-P19 after docs/night-v3/tools/ensure_resident.py): browsing only.
+test.describe("resident (TBNIK_RESIDENT_USER)", () => {
+  const role: RoleKey = "resident";
+  test.skip(!forRole(role), "role not selected");
+  test.skip(!RESIDENT_USER || !RESIDENT_PASSWORD, "set TBNIK_RESIDENT_USER and TBNIK_RESIDENT_PASSWORD (docs/night-v3/tools/ensure_resident.py)");
+
+  test("sign in, welcome, home, Case Files list", async ({ page }) => {
+    const bad = watch(page, `${role}: sign-in`, SIGNED_OUT);
+    await signInJourney(page, role, { doctor: true, name: "Meera Demo-Resident" });
+    await expect(page.getByRole("heading").first()).toBeVisible();
+    await snap(page, role, "home", "list", { sizes: LAPTOP_PHONE });
+    await checkDock(page);
+    log({ test: `${role}: home`, kind: "axe", line: (await axe(page, role, "home")).join(", ") });
+    await go(page, "/cases");
+    await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 20_000 });
+    await snap(page, role, "cases", "list", { sizes: LAPTOP_PHONE });
+    expect(bad).toEqual([]);
+  });
+
+  test("the Case File the resident is on: overview and summary step", async ({ page }) => {
+    const bad = watch(page, `${role}: casefile`);
+    await session(page, role);
+    const list = await (await page.request.get("/api/tb/case-list")).json();
+    const ids: string[] = (list.cases || []).map((c: { case_id?: string }) => c.case_id || "").filter((id: string) => id && !REAL_CASE.test(id));
+    const cid = ids.includes(P19) ? P19 : ids[0];
+    log({ test: `${role}: casefile`, kind: "note", line: cid ? `Case File shown: ${cid}${cid === P19 ? "" : " (not on TB-DEMO-P19)"}` : "the resident is on no Case File" });
+    expect(cid, "the resident is on a Case File").toBeTruthy();
+    const shot = `casefile-${cid.toLowerCase().replace(/^tb-demo-/, "")}`;
+    // The guided Case File: it opens on Overview; the Summary step has its own address.
+    await go(page, `/cases/${encodeURIComponent(cid)}`);
+    await expect(page.getByTestId("casefile-page")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("section-overview")).toBeVisible({ timeout: 20_000 });
+    await snap(page, role, shot, "overview", { sizes: LAPTOP_PHONE });
+    await go(page, `/cases/${encodeURIComponent(cid)}/summary`);
+    await expect(page.getByTestId("section-summary")).toBeVisible({ timeout: 20_000 });
+    await snap(page, role, shot, "summary", { sizes: LAPTOP_PHONE });
+    log({ test: `${role}: casefile`, kind: "axe", line: (await axe(page, role, "casefile")).join(", ") });
     expect(bad).toEqual([]);
   });
 });

@@ -14,7 +14,8 @@ import * as fx from "./fixtures";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "../../../..");
 const STATIC = path.join(REPO, "static");
-export const SHOTS = path.join(REPO, "docs/ui/build/shots");
+// TBNIK_SHOTS moves the pictures elsewhere (the night-v3 baseline: /data/vaidyx/night-v3/baseline/<label>).
+export const SHOTS = process.env.TBNIK_SHOTS || path.join(REPO, "docs/ui/build/shots");
 export const MOCK = process.env.TBNIK_MOCK === "1";
 
 export const SIZES = [
