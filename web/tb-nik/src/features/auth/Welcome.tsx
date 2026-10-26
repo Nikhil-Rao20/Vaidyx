@@ -104,7 +104,7 @@ export default function Welcome() {
         <p className="mt-1 text-sm text-muted-foreground">Four short steps. Everything can be changed later in Settings.</p>
         <Progress value={progress} className="mt-3 h-1.5" aria-label={`Set-up ${progress} percent done`} />
       </motion.div>
-      <Stepper step={step} onStepChange={(n) => void onStepChange(n)} onFinalStepCompleted={() => void finish(false)} linear nextLoading={saving} completeButtonText="Go to Home">
+      <Stepper step={step} onStepChange={(n) => void onStepChange(n)} onFinalStepCompleted={() => void finish(false)} linear nextLoading={saving} completeButtonText="Go to Case Files">
         <Step title="You">
           <StepTitle title="Who you are" text="Your name appears on every Case File you work on." />
           <div className="grid gap-4">
@@ -163,7 +163,7 @@ export default function Welcome() {
             <div>
               <p className="mb-2 text-sm font-medium">Start page after sign-in</p>
               <RadioGroup value={start} onValueChange={(v) => setStart(v as typeof start)} className="grid gap-2 sm:grid-cols-3">
-                {[["home", "Home", "Your Case File list"], ["last_case", "Last Case File", "Where you left off"], ["meetings", "Meetings", "The board calendar"]].map(([v, l, h]) => (
+                {[["home", "Case Files", "Your Case File list"], ["last_case", "Last Case File", "Where you left off"], ["meetings", "Meetings", "The board calendar"]].map(([v, l, h]) => (
                   <Label key={v} htmlFor={`start-${v}`} className="surface-inner flex cursor-pointer items-start gap-2 p-3 has-[[data-state=checked]]:border-primary">
                     <RadioGroupItem id={`start-${v}`} value={v} className="mt-0.5" />
                     <span><span className="block text-sm font-medium">{l}</span><span className="block text-xs font-normal text-muted-foreground">{h}</span></span>
@@ -187,7 +187,7 @@ export default function Welcome() {
               <Input value={uhid} onChange={(e) => setUhid(e.target.value)} placeholder="UHID, IP No. or OP No." className="mono flex-1" aria-label="UHID" />
               <Button type="submit" disabled={!uhid.trim() || saving} aria-busy={saving}><Gift className="size-4" aria-hidden /> Fetch the records</Button>
             </form>
-            <p className="flex items-center gap-1 text-xs text-muted-foreground"><Sparkles className="size-3.5" aria-hidden /> Or press Go to Home and come back to this any time with "+ New Case File".</p>
+            <p className="flex items-center gap-1 text-xs text-muted-foreground"><Sparkles className="size-3.5" aria-hidden /> Or press Go to Case Files and come back to this any time with "+ New Case File".</p>
           </div>
           </>
           ) : (

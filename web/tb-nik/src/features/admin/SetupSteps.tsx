@@ -14,6 +14,7 @@ import { Field } from "@/components/Field";
 import { LoginHandover } from "@/components/LoginHandover";
 import { LogoUpload } from "@/components/LogoUpload";
 import { DateInput } from "@/components/DateInput";
+import { TimeInput } from "@/components/TimeInput";
 import { SwitchRow } from "@/components/SwitchRow";
 import { ActionButton } from "@/components/ActionButton";
 import { SearchBox } from "@/components/SearchBox";
@@ -320,7 +321,7 @@ export function BoardStep({ value, onChange, departments, accounts }: { value: B
             <SelectContent><SelectItem value="none">Not fixed</SelectItem>{WEEKDAYS.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}</SelectContent>
           </Select>
         </Field>
-        <Field id="b-time" label="Usual time"><Input type="time" value={value.time} onChange={(e) => set({ time: e.target.value })} /></Field>
+        <Field id="b-time" label="Usual time"><TimeInput value={value.time} onChange={(v) => set({ time: v })} /></Field>
         <Field id="b-room" label="Room"><Input value={value.room} onChange={(e) => set({ room: e.target.value })} placeholder="e.g. Seminar hall 2" maxLength={60} /></Field>
         <Field id="b-min" label="Minutes per case"><Input type="number" min={2} max={60} value={value.minutes} onChange={(e) => set({ minutes: Math.max(1, Number(e.target.value) || 10) })} /></Field>
       </section>

@@ -122,7 +122,7 @@ export default function NewCaseFile() {
       <div className="mx-auto max-w-2xl">
         <PageHeader title="New Case File" back={{ to: "/cases", label: "Case Files" }} />
         <div className="surface">
-          <EmptyState kind="lock" title="Only treating doctors start a Case File" text="A Case File is owned by a treating department. Ask a consultant of the department, or the MDT Coordinator, to start it." action={<Button type="button" variant="outline" asChild><Link to="/home"><ArrowLeft className="size-4" aria-hidden /> Back to Home</Link></Button>} />
+          <EmptyState kind="lock" title="Only treating doctors start a Case File" text="A Case File is owned by a treating department. Ask a consultant of the department, or the MDT Coordinator, to start it." action={<Button type="button" variant="outline" asChild><Link to="/home"><ArrowLeft className="size-4" aria-hidden /> Back to Case Files</Link></Button>} />
         </div>
       </div>
     );

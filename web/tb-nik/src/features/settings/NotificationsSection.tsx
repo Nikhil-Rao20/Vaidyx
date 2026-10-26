@@ -2,9 +2,9 @@
 // device (GET /push/key, POST /push/subscribe; public/sw.js shows them). Push text never carries a UHID or a name.
 import { useEffect, useState } from "react";
 import { BellRing, BellOff, Clock, MonitorSmartphone, ShieldAlert } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ActionButton } from "@/components/ActionButton";
+import { TimeInput } from "@/components/TimeInput";
 import { SwitchRow } from "@/components/SwitchRow";
 import { ErrorState } from "@/components/ErrorState";
 import { Pill } from "@/components/StatusPill";
@@ -107,7 +107,7 @@ export function NotificationsSection() {
           <form className="flex flex-wrap items-end gap-3" onSubmit={(e) => { e.preventDefault(); void saveDigest.run(); }}>
             <div className="grid gap-1.5">
               <label htmlFor="digest" className="flex items-center gap-1.5 text-sm font-medium"><Clock className="size-4 text-muted-foreground" aria-hidden /> Morning digest at</label>
-              <Input id="digest" type="time" value={digest} onChange={(e) => setDigest(e.target.value)} className="w-36" aria-describedby="digest-hint" />
+              <TimeInput id="digest" value={digest} onChange={setDigest} wrapperClassName="w-36" aria-describedby="digest-hint" />
             </div>
             <ActionButton type="submit" variant="outline" size="sm" state={saveDigest.state} doneText="Saved" disabled={digest === prefs.data?.digest_time}>Save time</ActionButton>
             <p id="digest-hint" className="w-full text-xs text-muted-foreground">One message a day with what is unread, at the time you choose.</p>
