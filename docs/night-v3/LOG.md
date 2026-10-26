@@ -6,7 +6,7 @@ _Updated by the orchestrator at the end of every phase._
 | | |
 |---|---|
 | Phases done | Phase 0 (set-up, baseline, research): all nine items done, 27 Oct 2026, 00:50 to 01:41. Phase 1 (the bugs and the not-built list) starts in the next session. |
-| Last commit | see the last `[DONE]` or `[REVIEW]` line below (branch night-v3, nothing pushed) |
+| Last commit | 41725f5 (N3-0-review, the Phase 0 close; branch night-v3, nothing pushed) |
 | Blocked | nothing |
 | Decisions for the owner | the section below, and the "Open questions for the owner" section at the end of every research note (02 to 08) and the "Open questions" of each cancer in 01 |
 | How to try | Nothing new in the app yet (Phase 0 changed no product code). To look at: the nine research notes in `docs/night-v3/research/` (01 index plus three parts, 02 to 08); the baseline screenshots of every role in `/data/vaidyx/night-v3/baseline/2026-10-27/` (257 PNGs; `real-<role>-<page>-<state>-<theme>-<width>.png`); the backup of the demo data in `/data/vaidyx/night-v3/backup/`; `docs/night-v3/tools/baseline_shots.sh` reruns the baseline (it needs the app on :7000). Logins: the demo usernames only (tb-breast-doc treating, tb-mdt coordinator, tb-rad-doc supporting, tb-path-head supporting head, tb-breast-admin department admin, tb-root root admin; the resident login is in `/data/vaidyx/night-v3/.resident_login`, mode 600). |
