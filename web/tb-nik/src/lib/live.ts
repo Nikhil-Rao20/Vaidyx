@@ -110,6 +110,10 @@ export interface AgendaRow {
   outcome?: string | null;
   outcome_label?: string;
   added_after_send?: boolean;
+  /** After sending (night-v3 1.5): a value waits on the treating doctor's check ("waiting on Dr X"); null when nothing waits. */
+  waiting_on?: { user: string; name: string; values?: number } | null;
+  /** Reports new or changed since the Case File was sent to the board (night-v3 1.5). */
+  new_since_sent?: number;
   urgency?: number | null;
   /** Set on the client after a "decision" event. */
   decided?: boolean;

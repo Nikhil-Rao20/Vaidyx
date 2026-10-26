@@ -9,7 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import type { AgendaRow } from "@/lib/live";
 import { StatusChip } from "@/features/casefile/components/common";
 import { cn } from "@/lib/utils";
-import { drName } from "@/lib/format";
+import { drName, plural } from "@/lib/format";
 
 /** The Case File the coordinator has just added (night-v3 1.11): its row is ringed for a few seconds so the add is seen in the page. */
 export const JustAddedContext = createContext<string | null>(null);
@@ -32,6 +32,8 @@ export function AgendaRowView({ r, canManage, onRemind, remindBusy, dragHandle, 
           {justAdded ? <StatusChip kind="ok">added just now</StatusChip> : null}
           {r.presenter?.name ? <StatusChip kind="muted">Presenter {drName(r.presenter.name)}</StatusChip> : null}
           {r.added_after_send ? <StatusChip kind="review">added after the agenda was sent</StatusChip> : null}
+          {r.new_since_sent ? <StatusChip kind="muted">{plural(r.new_since_sent, "new record")} since sent</StatusChip> : null}
+          {r.waiting_on ? <StatusChip kind="warn">waiting on {r.waiting_on.name ? drName(r.waiting_on.name) : "the treating doctor"}</StatusChip> : null}
           {typeof r.minutes === "number" ? <span className="text-xs text-muted-foreground">{r.minutes} min</span> : null}
           {r.reason ? <span className="text-xs text-muted-foreground">{r.reason}</span> : null}
         </div>

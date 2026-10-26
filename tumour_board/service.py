@@ -120,6 +120,21 @@ async def process_docs(case_id, doc_ids, job, from_stored=False):
     _save_job(job)
     store.audit(case_id, {"kind": "ingestion_finished", "documents": len(doc_ids), "seconds": job["seconds"], "gate_passed": gate["passed"] if gate else None,
                           "readiness": gate["readiness"] if gate else None})
+    after_send(case_id, job)
+
+
+def after_send(case_id, job=None) -> dict | None:
+    """A report became ready after the Case File was sent to the board (night-v3 item 1.5, B8): the ready hook runs again (the summary and
+    the briefs written again when stale, never during a meeting; the MDT Coordinator only is told). Never fails the ingestion."""
+    try:
+        from . import after_send as asend, ready_hook
+        case = store.get_case(case_id)
+        if not asend.is_sent(case) or not asend.new_docs(case_id, case):
+            return None
+        return ready_hook.on_ready(case_id, (job or {}).get("by") or "Vaidyx (automatic)", again=True)
+    except Exception:
+        log.exception("after-send hook failed for %s", case_id)
+        return None
 
 
 def scan_warnings(case_id, doc_ids, user="", intake=False):

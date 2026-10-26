@@ -38,7 +38,7 @@ TEXTS = {
     "sign_off": "Vaidyx-TB: a resident asks you to sign off",
     "join_request": "Vaidyx-TB: someone asks to join a Case File team",
     "outcome": "Vaidyx-TB: the board recorded an outcome for one of your Case Files",
-    "agenda": "Vaidyx-TB: the Tumour Board agenda was sent",
+    "agenda": "Vaidyx-TB: the Tumour Board agenda changed",
     "meeting_starting": "Vaidyx-TB: the Tumour Board starts in 15 minutes",
     "summary_stale": "Vaidyx-TB: a Case File summary is out of date",
     "record_arrived": "Vaidyx-TB: a record arrived for one of your Case Files",

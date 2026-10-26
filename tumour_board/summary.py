@@ -27,14 +27,23 @@ def _covered(value, text):
     return bool(nums) and units.numbers_equivalent(value, text) and any(w in t for w in v.split() if len(w) > 3)
 
 
-def fill_from_facts(sections, facts, cat):
+def fill_from_facts(sections, facts, cat, diffs=None):
     """Append cited sentences built from verified current facts that the model's verified sentences do not already carry.
-    A value a clinician confirmed (V1 item 2.2) has no quote of its own: its sentence names who confirmed it and carries no citation."""
+    A value a clinician confirmed (V1 item 2.2) has no quote of its own: its sentence names who confirmed it and carries no citation.
+    `diffs` (discord.open_differences, night-v3 item 1.5): a fact whose two reports differ and wait on the treating doctor's check gets one
+    line with both values and both quotes instead of the single value (a fact no section lists goes under the investigations)."""
     added = 0
+    diffs = diffs or {}
+    placed = {fid for sec in sections for fid in SECTION_FACTS.get(sec["id"], [])}
     for sec in sections:
         # an approximate sentence (V1 item 6.5) never stands in for the exact one: the print view leaves it out until reviewed
         have = " ".join(x["text"] + " " + " ".join(c["quote"] for c in x["citations"]) for x in sec["sentences"] if not x.get("approximate"))
-        for fid in SECTION_FACTS.get(sec["id"], []):
+        extra = [f for f in diffs if f not in placed] if sec["id"] == "investigations" else []
+        for fid in SECTION_FACTS.get(sec["id"], []) + extra:
+            if fid in diffs:
+                if not any(x.get("differ") and x.get("fact_id") == fid for x in sec["sentences"]):
+                    sec["sentences"].append(discord.summary_sentence(diffs[fid])); added += 1
+                continue
             cur = (facts.get(fid) or {}).get("current")
             if not cur or cur["verification"] not in rules.VERIFIED or cur["state"] != "present" or not cur.get("doc_final"):
                 continue
@@ -152,7 +161,11 @@ async def build(case_id, force=False):
         if keep:
             paras.append(keep)
     cat = protocol.facts()
-    filled = fill_from_facts(sections, facts, cat)
+    try:  # two reports that differ and wait on the treating doctor's check: both values, both quotes (night-v3 item 1.5)
+        diffs = discord.open_differences(case_id, st)
+    except Exception:
+        diffs = {}
+    filled = fill_from_facts(sections, facts, cat, diffs)
     paras = [sec["sentences"] for sec in sections if sec["sentences"]]
     pts = _check(r.get("points_for_review"), "points_for_review")
     # the system's own findings: reports that disagree, each citing both reports (code, no model; 12 Oct)
@@ -175,7 +188,8 @@ async def build(case_id, force=False):
                                   "doc_title": stage["doc_title"], "date": stage["date"], **({"confirmed_by": stage["confirmed_by"]} if stage.get("confirmed_by") else {})}
                                  if stage and stage["verification"] in rules.VERIFIED else None),
            "dropped_unverified": dropped, "guardrail_removed": by_reason.get("guardrail", 0), "removed": removed, "approximate": approximate,
-           "near_match": near, "filled_from_fields": filled, "encounters": encounters, "generated": store.now_iso(), "seconds": round(time.time() - t0, 1),
+           "near_match": near, "filled_from_fields": filled, "encounters": encounters,
+           "differences": [{"fact_id": f, "line": d["line"], "values": d["values"]} for f, d in diffs.items()], "generated": store.now_iso(), "seconds": round(time.time() - t0, 1),
            "model": config.models()["reasoner"].get("label") or "reasoner", "review": {"status": "ai_draft"}, "gate_passed": gate.get("passed"), "context": mode,
            "signature": sig}  # what it was compiled from; a changed Case File marks it stale (V1 item 4.5)
     if issues:

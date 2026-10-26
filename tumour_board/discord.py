@@ -268,3 +268,60 @@ def notify_decision_watch(case_id: str) -> int:
         store.save_state(case_id, state)
         store.audit(case_id, {"kind": "decision_watch_notified", "items": sent})
     return sent
+
+
+# ---- both values while a difference is open (night-v3 item 1.5, design B8) ------------------------------------------------------------
+# Until the treating doctor picks a value (item 1.7) or notes the difference, the summary and the slides show the two values side by side,
+# each with its own verbatim quote; Vaidyx never picks. The case of a newer report that is only preliminary (or a draft) and disagrees with
+# the final one is the kind "non_final_differs" above: it is already listed, so nothing more is added for it here.
+WAITING_LINE = "two reports differ: waiting on the treating doctor's check"
+OPEN_KINDS = ("conflict", "amended", "non_final_differs", "polarity")  # review differences between reports (decision_watch is after the board)
+
+
+def status_word(c: dict) -> str:
+    """How a value's report reads beside it: "final", else its own status in lower case (preliminary, draft), else "not final"."""
+    return "final" if c.get("final") else ((c.get("status") or "").strip().lower() or "not final")
+
+
+def open_differences(case_id: str, state: dict = None) -> dict:
+    """{fact_id: {fact_id, key, kind, label, line, values}} for every difference still open: review, not noted, not picked; the first per fact, as
+    the Check step lists it (slots). `values` is both_values' list."""
+    out = {}
+    for it in items(case_id, state):
+        if it.get("severity") != "review" or it.get("kind") not in OPEN_KINDS or it.get("noted") or it.get("picked") or it.get("field") in out:
+            continue
+        vals = [{"value": c.get("value"), "doc_id": c.get("doc_id"), "doc_title": c.get("doc_title"), "date": c.get("date"), "final": bool(c.get("final")),
+                 "status": status_word(c), "quote": c.get("quote") or "", **{k: c[k] for k in ("page", "start", "end", "source_method") if k in c}}
+                for c in it.get("citations") or []]
+        if len(vals) < 2 or not all(v["quote"] for v in vals):
+            continue  # a side without its quote is never shown as a value
+        line = f"{it['label']}: " + " and ".join(f"\"{v['value']}\" ({v['doc_title']}, {v['status']})" for v in vals) + f"; {WAITING_LINE}."
+        out[it["field"]] = {"fact_id": it["field"], "key": it["key"], "kind": it["kind"], "label": it["label"], "line": line[0].upper() + line[1:], "values": vals}
+    return out
+
+
+def both_values(case_id: str, fact_id: str, state: dict = None) -> list:
+    """The two values of an open difference on one fact, each with its report and quote:
+    [{value, doc_id, doc_title, date, final, status, quote, page?, start?, end?}]; [] when nothing is open on that fact."""
+    return (open_differences(case_id, state).get(fact_id) or {}).get("values") or []
+
+
+def summary_sentence(diff: dict) -> dict:
+    """The summary's line for an open difference: both values with both quotes (the fact line of fill_from_facts gives way to it)."""
+    cites = [{k: v[k] for k in ("doc_id", "quote", "page", "start", "end", "doc_title", "date", "source_method") if k in v} for v in diff["values"]]
+    for c, v in zip(cites, diff["values"]):
+        c["status"] = v["status"]
+    return {"text": diff["line"], "citations": cites, "from_fields": True, "differ": True, "fact_id": diff.get("fact_id") or ""}
+
+
+def slide_rows(fact_id: str, diff: dict, history: int = 0) -> list:
+    """The values slide rows for an open difference (meetings.slides): one row per value with its own quote, in the slide's value shape;
+    the first row names the difference and who it waits on."""
+    rows = []
+    for i, v in enumerate(diff["values"]):
+        rows.append({"id": fact_id if i == 0 else f"{fact_id}#{i + 1}", "fact_id": fact_id,
+                     "label": f"{diff['label']}, {WAITING_LINE}" if i == 0 else diff["label"],
+                     "value": f"{v['value']} ({v['status']})", "quote": v["quote"], "doc_id": v["doc_id"], "doc_title": v["doc_title"], "date": v.get("date"),
+                     "verification": "verified", "final": v["final"], "page": v.get("page"), "source_method": v.get("source_method"), "history": history,
+                     "differ": diff["line"]})
+    return rows

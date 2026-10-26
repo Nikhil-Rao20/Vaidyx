@@ -10,7 +10,7 @@ their gaps and what the doctor typed (always shown "entered by Dr X, no report")
 open_count() is the one count of what is left before the board; the Case File, the Case Files list and the meetings all use it."""
 import re
 
-from . import access, dates, dept_requests, his_case, org, proposals, protocol, rules, slots, store
+from . import access, after_send, dates, dept_requests, his_case, org, proposals, protocol, rules, slots, store
 
 SECTIONS = [("overview", "Overview"), ("question", "Question"), ("reports", "Reports"), ("check", "Check"),
             ("pre_authorization", "Pre-Authorization"), ("summary", "Summary")]
@@ -507,7 +507,13 @@ def build(case_id, roles=None) -> dict:
     for d in doc_todo:
         todo.append({"id": f"doc:{d['doc_id']}", "section": "reports", "label": d["title"], "why": d["check"]["reasons"][0],
                      "action": {"kind": "open_report", "label": "Check", "doc_id": d["doc_id"]}})
+    # a report that came after sending differs from an earlier one (night-v3 item 1.5, B8): one task "Check N values", first in the list
+    fresh = after_send.since_sent(case_id, case, open_problems) if sent else []
+    for p in fresh:
+        p["since_sent"] = True
     for p in open_problems:
+        if p.get("since_sent"):
+            continue
         todo.append({"id": f"check:{p['slot_id']}", "section": "check", "label": p["label"], "why": p["why"] or "Please check", "action": {"kind": "check", "label": "Check", "slot_id": p["slot_id"]}})
     unconfirmed = [k for k in keys if not k["confirmed"]]
     if unconfirmed:
@@ -518,6 +524,11 @@ def build(case_id, roles=None) -> dict:
             todo.append({"id": "summary", "section": "summary", "label": "Write the summary", "action": {"kind": "go", "label": "Write it"}})
         elif prose.get("status") == "ready" and not prose.get("reviewed"):
             todo.append({"id": "summary", "section": "summary", "label": "Read the summary", "action": {"kind": "go", "label": "Read it"}})
+    if fresh:
+        n = len(fresh)
+        todo.insert(0, {"id": "since_sent", "section": "check", "label": f"Check {n} {'value' if n == 1 else 'values'}", "since_sent": True,
+                        "why": "A report that came after sending differs from an earlier one: " + ", ".join(p["label"] for p in fresh[:3]) + ("..." if n > 3 else ""),
+                        "action": {"kind": "check", "label": "Check", "slot_id": fresh[0]["slot_id"]}})
     waiting_rows = [{"id": f"wait:{w['slot_id']}", "section": "pre_authorization", "label": w["label"], "department": w["department"], "request": w["request"],
                      "action": {"kind": "remind", "label": "Send reminder", "action_id": (w["request"] or {}).get("action_id")}} for w in waiting]
 
