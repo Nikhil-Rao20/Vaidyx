@@ -225,8 +225,20 @@ def is_member(r: dict, s: dict) -> bool:
 
 
 def presenter_of(case: dict) -> str:
+    """The presenter's login: the one chosen when the Case File was sent to the board (case.json "presenter", {user, name, set_by, at}
+    from night-v3 item 1.4; a plain login before), else the team's owner."""
     team = case.get("team") if isinstance(case.get("team"), dict) else {}
-    return str(case.get("presenter") or team.get("owner") or "")
+    p = case.get("presenter")
+    if isinstance(p, dict):
+        p = p.get("user")
+    return str(p or team.get("owner") or "")
+
+
+def chosen_presenter(case: dict) -> dict | None:
+    """{user, name} when a presenter was chosen for this Case File (sending it to the board), else None (the owner presents)."""
+    p = case.get("presenter")
+    u = str((p.get("user") if isinstance(p, dict) else p) or "")
+    return {"user": u, "name": display_name(u)} if u else None
 
 
 def owner_user(case: dict) -> str:
@@ -367,7 +379,8 @@ def row(s: dict, it: dict, order: int, r: dict | None = None, restricted: bool =
             "board_question": "" if restricted else _board_question(c, st), "left_before_board": _left_of(cid, st), "minutes": _minutes_for(s, it), "order": order,
             "reason": it.get("reason") or "", "ready": bool(c.get("board_ready")), "status": (item or {}).get("status") or "waiting",
             "ended": cid in (s.get("ended") or {}), "outcome": oc.get("outcome"), "outcome_label": OUTCOMES.get(oc.get("outcome") or "", ""),
-            "added_after_send": bool(s.get("agenda_sent_at")) and cid not in (s.get("agenda_sent_cases") or []), "urgency": urg.get("level")}
+            "added_after_send": bool(s.get("agenda_sent_at")) and cid not in (s.get("agenda_sent_cases") or []), "urgency": urg.get("level"),
+            "presenter": chosen_presenter(c)}
 
 
 def counts(s: dict) -> dict:
@@ -555,6 +568,13 @@ def list_meetings(r: dict) -> dict:
         if manage(r) or may_view(r, s):
             rows.append(summary_row(s))
     return {"meetings": rows, "can_manage": manage(r)}
+
+
+def open_meetings(today: str | None = None) -> list[dict]:
+    """The meetings a Case File may still be sent to (night-v3 item 1.4): planned, not cancelled, dated today or later, earliest first
+    (the website's New Case File and Send to the board pick the same way)."""
+    today = today or date.today().isoformat()
+    return [s for s in board.planned_sessions() if not s.get("cancelled") and str(s.get("date") or "") >= today]
 
 
 # ---- agenda ---------------------------------------------------------------------------------------------------------------------------

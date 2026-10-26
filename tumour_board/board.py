@@ -197,9 +197,10 @@ def listed_for_date(date: str) -> list[dict]:
     return out
 
 
-def mark_ready(case_id: str, user: str, ready: bool = True, note: str = "") -> dict:
+def mark_ready(case_id: str, user: str, ready: bool = True, note: str = "", *, extra_text: str = "") -> dict:
     """The owning department marks its Case File ready for the board (or takes the mark back); the MDT Coordinator is told and builds
-    the agenda from the ready Case Files (V2 item 6.1). Audited. A Case File must be listed to be marked ready."""
+    the agenda from the ready Case Files (V2 item 6.1). Audited. A Case File must be listed to be marked ready. `extra_text` is added to
+    the coordinator's notice (send_to_board: the meeting, the list and the presenter)."""
     from . import notify
     if case_id in config.PROTECTED_CASES:
         raise ValueError("That Case File is protected")
@@ -223,9 +224,74 @@ def mark_ready(case_id: str, user: str, ready: bool = True, note: str = "") -> d
         try:
             notify.notify({"role": "coordinator"}, "board_ready", case_id, f"Ready for the board: {patient} ({case_id})",
                           f"{org.department_name(c['department']) if c.get('department') else user} marked this Case File ready for the board"
-                          + (f" on {_ddmmyyyy(c.get('board_date'))}" if c.get("board_date") else "") + (f". Note: {note}" if note else "."), by=user)
+                          + (f" on {_ddmmyyyy(c.get('board_date'))}" if c.get("board_date") else "") + (f". Note: {note}" if note else ".")
+                          + (f" {extra_text.strip()}" if str(extra_text or "").strip() else ""), by=user)
         except Exception:  # a notice never fails the mark
             pass
+    return c
+
+
+SEND_LISTS = {"discussion": "for discussion", "noting": "for noting"}
+
+
+def send_to_board(case_id: str, user: str, *, list: str = "discussion", meeting_id: str = "", presenter: str = "", note: str = "",
+                  reason: str = "") -> dict:
+    """Send to the board (night-v3 item 1.4, design B7): the treating consultant picks the meeting (or none yet: the coordinator picks),
+    for discussion or for noting, the presenter (the consultant or a resident on the team), a note for the coordinator and, when items
+    are still open, the reason the board should see it anyway. The server requires the question for the board and that reason. Stores
+    the choices on case.json ("presenter", "board_send", "board_send_history"), marks the Case File ready (mark_ready: audited, the
+    coordinator told with the meeting, list and presenter), puts it on that meeting's list (the coordinator may still move it) and
+    audits board_send. ValueError with a plain message. A resident's send is a proposal that runs this in the consultant's name."""
+    from . import access, meetings, profiles, steps
+    if case_id in config.PROTECTED_CASES:
+        raise ValueError("That Case File is protected")
+    c = store.get_case(case_id)
+    if not c:
+        raise ValueError(f"Case File {case_id} not found")
+    if access.is_archived(c):
+        raise ValueError(access.ARCHIVED_MESSAGE)
+    if not _listed(c):
+        raise ValueError("List the Case File for the board first (protocol and board date)")
+    if not str(meetings._board_question(c, store.get_state(case_id)) or "").strip():
+        raise ValueError("Write the question for the board first")
+    if list not in SEND_LISTS:
+        raise ValueError("Choose for discussion or for noting")
+    reason = " ".join(str(reason or "").split())[:MAX_NOTE]
+    note = " ".join(str(note or "").split())[:MAX_NOTE]
+    open_items = steps.open_count(case_id) or 0
+    if open_items > 0 and not reason:
+        raise ValueError(f"Say why the board should see it with {open_items} {'item' if open_items == 1 else 'items'} open")
+    presenter = str(presenter or "").strip() or user
+    if presenter != user and presenter not in {x["user"] for x in access.team_residents(c)}:
+        raise ValueError("The presenter must be you or a resident on the Case File team")
+    s = None
+    meeting_id = str(meeting_id or "").strip()
+    if meeting_id:
+        s = meetings.get(meeting_id)
+        if not s:
+            raise ValueError("Meeting not found")
+        if s.get("status") != "planned" or s.get("cancelled"):
+            raise ValueError("That meeting is not open")
+        if str(s.get("date") or "") < datetime.now().date().isoformat():
+            raise ValueError("That meeting date has passed: pick another meeting")
+    now = store.now_iso()
+    pname = profiles.display_name(presenter)
+    send = {"list": list, "meeting_id": meeting_id, "presenter": presenter, "note": note, "reason": reason, "open_items": open_items, "by": user or "", "at": now}
+    c["presenter"] = {"user": presenter, "name": pname, "set_by": user or "", "at": now}
+    c["board_send"] = send
+    c.setdefault("board_send_history", []).append(send)
+    store.save_case(c)
+    store.audit(case_id, {"kind": "board_send", "by": user or "", "list": list, "meeting_id": meeting_id, "presenter": presenter,
+                          "open_items": open_items, "reason": reason})
+    where = (f"Meeting {_ddmmyyyy(s.get('date'))}" + (f" {s['time']}" if s.get("time") else "")) if s else "Meeting not scheduled yet: pick a meeting"
+    extra = f"{where}, {SEND_LISTS[list]}, presenter {pname}." + (f" Sent with {open_items} open: {reason}" if open_items and reason else "")
+    c = mark_ready(case_id, user, True, note, extra_text=extra)
+    if s:
+        try:
+            meetings.add_to_agenda(meeting_id, user, case_id, list, reason)
+        except meetings.MeetingError as e:
+            raise ValueError(str(e))
+        c = store.get_case(case_id) or c
     return c
 
 

@@ -2455,7 +2455,9 @@ def v2_phase6(c, base, ctx):
     check("6.1 only the owning department marks a Case File ready (403 for a supporting doctor, another treating department and the coordinator)",
           rad.post(f"/api/tb/cases/{p01}/ready", json={"ready": True}).status_code == 403 and medonc.post(f"/api/tb/cases/{p01}/ready", json={"ready": True}).status_code == 403
           and mdt.post(f"/api/tb/cases/{p01}/ready", json={"ready": True}).status_code == 403)
-    r = breast.post(f"/api/tb/cases/{p01}/ready", json={"ready": True, "note": "Summary to follow"})
+    # night-v3 1.4: the send needs the question for the board and, with items open, a reason
+    breast.post(f"/api/tb/cases/{p01}/slots/fact:clinical_question/value", json={"value": "Breast conservation surgery or mastectomy? (e2e h6)"})
+    r = breast.post(f"/api/tb/cases/{p01}/ready", json={"ready": True, "note": "Summary to follow", "reason": "E2E: the board sees it now"})
     j = r.json() if r.status_code == 200 else {}
     nts = mdt.get("/api/tb/notifications", params={"limit": 50}).json()["notifications"]
     check("6.1 the owner marks it ready: recorded with the name and the note, audited, the coordinator told", r.status_code == 200 and (j.get("board_ready") or {}).get("by") == "tb-e2e-h6-breast"
@@ -2744,7 +2746,8 @@ def v2_phase7(c, base, ctx):
         print(f"INFO 7.1 the live store holds {bt['gyn']['visible']} Case File(s) without an owning department (before 5.1): every placed doctor's home lists them as 'open'", flush=True)
 
     # ---- 2. the ready mark ---------------------------------------------------------------------------------------------------------
-    r = breast.post(f"/api/tb/cases/{p01}/ready", json={"ready": True, "note": "Summary to follow (e2e h7)"})
+    breast.post(f"/api/tb/cases/{p01}/slots/fact:clinical_question/value", json={"value": "Breast conservation surgery or mastectomy? (e2e h7)"})  # 1.4
+    r = breast.post(f"/api/tb/cases/{p01}/ready", json={"ready": True, "note": "Summary to follow (e2e h7)", "reason": "E2E: the board sees it now"})
     hb = home(breast); r1 = row(hb, p01) or {}
     tc = (hb.get("treating") or {}).get("counts") or {}
     check("7.1 after the owner marks it ready the home row carries who and the note; ready_marked counts it", r.status_code == 200 and (r1.get("ready") or {}).get("by") == "tb-e2e-h7-breast"

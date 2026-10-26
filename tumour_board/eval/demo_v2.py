@@ -334,7 +334,9 @@ def step4(cl, base, pause_on):
     stale = (case(breast, CASES["p19"]).get("stale") or {}).get("summary")
     check(f"4 the Case File summary compiles once the check is met ({round(time.time() - t0)} s): every sentence cited, not stale", sm.get("status") == "ready" and every_sentence_cited(sm) and stale == "",
           f"{sm.get('status')} stale {stale!r} {json.dumps(sm)[:160]}")
-    r = breast.post(f"/api/tb/cases/{CASES['p19']}/ready", json={"ready": True, "note": "Summary compiled (demo)"})
+    # night-v3 1.4: the send needs the question for the board and, with items open, a reason
+    breast.post(f"/api/tb/cases/{CASES['p19']}/slots/fact:clinical_question/value", json={"value": "Breast conservation surgery or mastectomy first? (demo)"})
+    r = breast.post(f"/api/tb/cases/{CASES['p19']}/ready", json={"ready": True, "note": "Summary compiled (demo)", "reason": "Demo: the board sees it now"})
     check("4 the owning department marks the Case File ready for the board (audited; the coordinator is told)", r.status_code == 200 and (r.json().get("board_ready") or {}).get("by") == ROLES["breast"]
           and any(n.get("case_id") == CASES["p19"] for n in notes(cl["mdt"], CASES["p19"], "board_ready")), r.text[:200])
     look([f"as tb-breast-doc: {base}/tb#case={CASES['p19']}: the header reads 'Pre-Authorization met' and 'Ready for the board (by tb-breast-doc)'; the Pre-Authorization card shows both requests Closed",

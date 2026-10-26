@@ -1343,20 +1343,28 @@ def setup_tumour_board_routes():
 
     @r.post("/cases/{case_id}/ready")
     async def case_ready(case_id: str, request: Request):
-        """{"ready": true | false, "note"?}: the owning department marks the Case File ready for the board (or takes it back); the MDT
-        Coordinator builds the agenda from the ready Case Files (V2 item 6.1)."""
+        """{"ready": true, "list"?: discussion | noting, "meeting_id"?, "presenter"?, "note"?, "reason"?}: Send to the board (night-v3 item
+        1.4, board.send_to_board): the question is required and, with items open, the reason; the Case File goes on that meeting's list and
+        the MDT Coordinator is told. {"ready": false, "note"?} takes the mark back (V2 item 6.1)."""
         u = _user(request); c = _case(case_id); _need_case(_roles(request), "mark_ready", c); b = await request.json() if (await request.body()) else {}
+        if not isinstance(b, dict):
+            b = {}
         try:
-            c = board.mark_ready(case_id, u, ready=bool(b.get("ready", True)), note=str(b.get("note") or ""))
+            if bool(b.get("ready", True)):
+                c = board.send_to_board(case_id, u, list=str(b.get("list") or "discussion"), meeting_id=str(b.get("meeting_id") or ""),
+                                        presenter=str(b.get("presenter") or ""), note=str(b.get("note") or ""), reason=str(b.get("reason") or ""))
+            else:
+                c = board.mark_ready(case_id, u, ready=False, note=str(b.get("note") or ""))
         except ValueError as e:
-            raise HTTPException(400, str(e))
+            raise HTTPException(400, {"message": str(e), "code": "send_400"})
         if bool(b.get("ready", True)):  # the summary prose and the heads' briefs are prepared in the background (18 Oct, tumour_board/ready_hook.py)
             try:
                 from tumour_board import ready_hook
                 ready_hook.on_ready(case_id, u)
             except Exception as e:
                 log.warning("ready hook failed for %s (%s: %s)", case_id, e.__class__.__name__, e)
-        return {"case_id": case_id, "board_ready": c.get("board_ready") or None, "history": c.get("board_ready_history") or []}
+        return {"case_id": case_id, "board_ready": c.get("board_ready") or None, "history": c.get("board_ready_history") or [],
+                "send": c.get("board_send") if c.get("board_ready") else None}
 
     @r.post("/cases/{case_id}/requests/{action_id}/remind")
     async def request_remind(case_id: str, action_id: str, request: Request):

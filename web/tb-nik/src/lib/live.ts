@@ -96,6 +96,8 @@ export interface AgendaRow {
   owner_department?: string;
   owner_department_name?: string;
   presenter_name?: string;
+  /** The presenter chosen when the Case File was sent to the board (night-v3 1.4); null when the owner presents. */
+  presenter?: { user: string; name: string } | null;
   board_question?: string;
   left_before_board?: number | null;
   minutes?: number;

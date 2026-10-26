@@ -219,8 +219,14 @@ test.describe("guided Case File", () => {
     await page.getByTestId("summary-send").click();
     const dialog = page.getByTestId("mark-ready-dialog");
     await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText("Nothing left before the board.");
+    // the multi-step send (night-v3 item 1.4, design B7): meeting (the next one pre-selected), list, presenter, note, confirm
+    await expect(dialog.getByTestId("send-meeting").first()).toHaveAttribute("aria-checked", "true");
     await snap(page, "casefile", "send-dialog", { sizes: DESKTOP_MOBILE, fullPage: false });
+    await laptop(page);
+    for (let i = 0; i < 3; i++) await dialog.getByTestId("send-next").click();
+    await expect(dialog).toContainText("Nothing left before the board.");
+    await dialog.getByTestId("send-next").click();
+    await snap(page, "casefile", "send-confirm", { sizes: DESKTOP_MOBILE, fullPage: false });
     await laptop(page);
     await dialog.getByRole("button", { name: "Send to the board" }).click();
     await expect(dialog).toHaveCount(0);

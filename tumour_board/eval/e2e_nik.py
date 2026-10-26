@@ -551,7 +551,7 @@ class Scenario:
         self.need(s, "the board question is typed on its line", r.status_code == 200 and q.get("status") == "entered", f"{q.get('status')}: {q.get('note', '')[:120]}")
         v, sl = self.slots(doc, cid)
         self.check(s, "Mark ready is allowed", v.get("ready_allowed") is True, f"left before the board {v.get('left_before_board')}; blockers {[b.get('why') for b in v.get('blockers') or []]}")
-        r = doc.post(f"/api/tb/cases/{cid}/ready", json={"ready": True, "note": "E2E: ready for the board"})
+        r = doc.post(f"/api/tb/cases/{cid}/ready", json={"ready": True, "note": "E2E: ready for the board", "reason": "E2E: the board sees it now"})  # 1.4: a reason when items are open
         self.need(s, "Mark ready (POST ready)", r.status_code == 200 and (self.j(r).get("board_ready") or {}).get("by") == "tb-breast-doc", f"HTTP {r.status_code}")
         t0 = time.time()
         prose = {}

@@ -4,7 +4,7 @@ import { api, ApiError, TB } from "@/lib/api";
 import { errorCode, routeMissing } from "@/lib/live";
 import type {
   CaseFile, SlotsResponse, Slot, SlotSection, QuoteBoxes, ChatThread, Helper, HelperMessage, PublishedResult, PublishedSearch, Team, Proposal,
-  Urgency, Job, RequestDraft, GateRequirement, CaseAction,
+  Urgency, Job, RequestDraft, GateRequirement, CaseAction, SendToBoardBody,
 } from "./types";
 
 const enc = encodeURIComponent;
@@ -44,7 +44,8 @@ export const createFreeRequest = (id: string, body: { department: string; label:
 export const postConfirmation = (id: string, body: { type: string; key: string; fields?: Record<string, unknown>; reason?: string }) =>
   api.post<{ confirmation: { id: string }; state: unknown }>(`${caseUrl(id)}/confirmations`, body);
 export const undoConfirmation = (id: string, conf: string) => api.post(`${caseUrl(id)}/confirmations/${enc(conf)}/undo`, {});
-export const markReady = (id: string, ready: boolean, note?: string) => api.post(`${caseUrl(id)}/ready`, { ready, note });
+/** Send to the board (night-v3 1.4): ready true with the dialog's choices; ready false takes the mark back. */
+export const markReady = (id: string, ready: boolean, body?: Partial<SendToBoardBody>) => api.post(`${caseUrl(id)}/ready`, { ready, ...body });
 export const buildSummary = (id: string, force = false) => api.post<Record<string, unknown>>(`${caseUrl(id)}/summary`, { force });
 export const reviewArtefact = (id: string, artefact: string, status = "reviewed", comment = "") => api.post(`${caseUrl(id)}/review`, { artefact, status, comment });
 export const refetchHis = (id: string) => api.post<{ job: string; total: number }>(`${caseUrl(id)}/his/refetch`, {});

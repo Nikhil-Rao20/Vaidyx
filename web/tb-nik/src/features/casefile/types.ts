@@ -48,6 +48,12 @@ export interface SlotAction {
   reason_required?: boolean;
 }
 
+/** The value a doctor picked for the board when two reports differ (a board_uses confirmation, night-v3 item 1.7). */
+export interface PickedValue { doc_id: string; doc_title?: string; value: string; by?: string; by_name?: string; at?: string; confirmation: string }
+
+/** One side of a difference between two reports (discord.py): the quote plus the value as that report writes it. */
+export type DiscordCitation = Citation & { value?: string; date?: string | null; status?: string | null; final?: boolean; confirmed_by?: string };
+
 export interface SlotConfirmation {
   type: string;
   key: string;
@@ -58,7 +64,9 @@ export interface SlotConfirmation {
   page?: number | null;
   why?: string;
   kind_label?: string;
-  citations?: Citation[];
+  citations?: DiscordCitation[];
+  /** Two reports differ and a doctor picked the value the board uses: the line is settled, the difference stays shown. */
+  picked?: PickedValue | null;
 }
 
 export interface Slot {
@@ -86,6 +94,7 @@ export interface Slot {
   draft?: { doc_id?: string; doc_title?: string; status?: string; signed?: string; value?: string } | null;
   pending?: boolean;
   waiver?: { by?: string; by_name?: string; at?: string; reason?: string } | null;
+  picked?: PickedValue | null;
 }
 
 export interface SlotSection {
@@ -504,4 +513,15 @@ export interface RequestDraft {
   free?: boolean;
   sent?: unknown;
   status?: string;
+}
+
+/** Send to the board (night-v3 item 1.4, design B7): POST /cases/{id}/ready with ready true, or a resident's mark_ready proposal.
+ *  meeting_id "" is "not scheduled yet" (the coordinator picks); presenter "" is the consultant who sends it; reason is required by the
+ *  server when items are still open. */
+export interface SendToBoardBody {
+  list: "discussion" | "noting";
+  meeting_id: string;
+  presenter: string;
+  note: string;
+  reason: string;
 }

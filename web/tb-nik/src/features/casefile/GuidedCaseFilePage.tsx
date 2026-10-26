@@ -14,10 +14,10 @@ import { ApiError } from "@/lib/api";
 import { notify } from "@/components/Toasts";
 import {
   archiveCase, buildSummary, createFreeRequest, deckUrl, exportVtbUrl, markReady, notBuiltYet, postConfirmation, postProposal, remindRequest, reviewArtefact,
-  setSlotValue, setUrgency, slotAskDepartment, slotNotNeeded,
+  setSlotValue, setUrgency, slotAskDepartment, slotNotNeeded, undoConfirmation,
 } from "./api";
 import { useCaseFile, useMyRole, useProposals, useRememberCase, useSlots, useTeam } from "./hooks";
-import type { Proposed, Slot, SlotAction } from "./types";
+import type { Proposed, SendToBoardBody, Slot, SlotAction } from "./types";
 import { ArchiveDialog } from "./components/ArchiveDialog";
 import { AskPanel } from "./components/AskPanel";
 import { BoardFormPanel } from "./components/BoardFormPanel";
@@ -249,6 +249,12 @@ export default function GuidedCaseFilePage() {
       return <ReviewPanel caseId={id} cf={cf} slot={s} queue={allSlots.filter((x) => x.status === "needs_confirmation")} derived={slotsq.derived} resident={resident} consultantName={consultantName}
         onOpenSource={openSource} onDone={refresh} onPropose={propose} onNext={() => onDone()} />;
     },
+    undoPick: async (k) => {  // two reports differ: take back the value picked for the board (night-v3 item 1.7)
+      if (!k.picked?.confirmation) return;
+      await undoConfirmation(id, k.picked.confirmation);
+      announce(`Pick undone for ${k.label}. Both values are open again.`);
+      await refresh();
+    },
   };
 
   const preAuthH: PreAuthHandlers = {
@@ -265,9 +271,9 @@ export default function GuidedCaseFilePage() {
     isPending: (k) => !!deferred.get(k),
   };
 
-  const onMarkReady = async (note: string) => {
-    if (resident) { await propose("mark_ready", { note }, "send to the board"); return; }
-    await markReady(id, true, note);
+  const onMarkReady = async (body: SendToBoardBody) => {  // the multi-step send (night-v3 item 1.4, design B7): a resident's send is a sign-off proposal
+    if (resident) { await propose("mark_ready", { ready: true, ...body }, "send to the board"); return; }
+    await markReady(id, true, body);
     announce("Sent to the board.");
     await refresh();
   };
@@ -395,7 +401,7 @@ export default function GuidedCaseFilePage() {
       </SidePanel>
 
       <ArchiveDialog open={archiveOpen} onOpenChange={setArchiveOpen} patient={cf.case.patient?.name || id} onConfirm={async (reason) => { await archiveCase(id, reason); nav("/cases", { replace: true }); }} />
-      <MarkReadyDialog open={readyOpen} onOpenChange={setReadyOpen} slots={slotsq.data} resident={resident} consultantName={consultantName} onConfirm={onMarkReady}
+      <MarkReadyDialog open={readyOpen} onOpenChange={setReadyOpen} slots={slotsq.data} resident={resident} consultantName={consultantName} onConfirm={onMarkReady} team={teamq.data ?? null} openCount={steps?.left ?? null}
         boardQuestionMissing={!steps?.question.text} />
       <BookViewer target={bookAt} onClose={() => setBookAt(null)} />
       <ChangeCancerDialog open={cancerOpen} onOpenChange={setCancerOpen} caseId={id} current={steps?.protocol ?? cf.case.protocol ?? ""} onChanged={() => { announce("Reading the reports again for the new cancer."); void refresh(); }} />

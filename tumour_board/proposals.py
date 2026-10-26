@@ -9,7 +9,9 @@ Stored on case.json "proposals": [{"id", "action", "payload", "note", "by", "at"
   waive          payload {key: requirement id, reason}                 confirm.record("waive") + service.recheck
   not_needed     payload {slot: summary line id, reason} (the line's "Not needed (reason)")   slots.not_needed; or {key, reason} as waive
   confirm        payload {type, key, fields, reason} (confirm.TYPES)    confirm.record(type) + service.recheck (+ re-extract for a type change)
-  mark_ready     payload {ready: true | false, note}                   board.mark_ready (+ ready_hook.on_ready, as the route)
+  mark_ready     payload {ready, note, list, meeting_id, presenter, reason} (+ meeting_date, presenter_name for the line shown)
+                                                                        board.send_to_board (+ ready_hook.on_ready, as the route);
+                                                                        ready false: board.mark_ready (withdraw)
   send_request   payload {action_id, message, due, subject} or {department, label, what, message, due}   dept_requests.send / create_free
   urgency        payload {level 1..5, note}                             team.set_urgency
   refer          payload {to, reason, his_ref}                          referral.request
@@ -35,7 +37,7 @@ from . import access, board, confirm, dept_requests, org, profiles, protocol, re
 PENDING, APPROVED, RETURNED = "pending", "approved", "returned"
 ACTIONS = ("waive", "not_needed", "confirm", "mark_ready", "send_request", "urgency", "refer", "typed_value", "published_case",
            "key_value", "reason", "staging_confirm")
-LABELS = {"waive": "waive a requirement", "not_needed": "mark a line not needed", "confirm": "record a confirmation", "mark_ready": "mark the Case File ready",
+LABELS = {"waive": "waive a requirement", "not_needed": "mark a line not needed", "confirm": "record a confirmation", "mark_ready": "send to the board",
           "send_request": "send a request", "urgency": "set the urgency", "refer": "refer the Case File", "typed_value": "enter a value", "published_case": "add a published case",
           "key_value": "confirm a key value", "reason": "set the reason for discussion", "staging_confirm": "confirm the draft stage"}
 STALE_KEY = "The value changed after the resident checked it: check it again."
@@ -117,8 +119,23 @@ def check_payload(action: str, payload, case: dict) -> dict:
             raise ValueError("Choose a confirmation type: " + ", ".join(t for t in confirm.TYPES if t not in ("waive", "resolve_flag")) + ".")
         clean = confirm.validate(ctype, str(p.get("key") or ""), p.get("fields") or {}, str(p.get("reason") or ""))
         return {"type": ctype, "key": clean["key"], "fields": clean["fields"], "reason": clean["reason"]}
-    if action == "mark_ready":
-        return {"ready": bool(p.get("ready", True)), "note": _note(p.get("note"))}
+    if action == "mark_ready":  # night-v3 item 1.4: the whole send (meeting, list, presenter, reason); checked again by board.send_to_board
+        ready = bool(p.get("ready", True))
+        if not ready:
+            return {"ready": False, "note": _note(p.get("note"))}
+        lst = str(p.get("list") or "discussion")
+        if lst not in board.SEND_LISTS:
+            raise ValueError("Choose for discussion or for noting.")
+        out = {"ready": True, "note": _note(p.get("note")), "list": lst, "meeting_id": str(p.get("meeting_id") or "").strip()[:80],
+               "presenter": str(p.get("presenter") or "").strip()[:120], "reason": _note(p.get("reason"))}
+        # what the consultant's "Sign-offs from your team" line shows (not read by the executor)
+        from . import meetings
+        m = meetings.get(out["meeting_id"]) if out["meeting_id"] else None
+        if out["meeting_id"] and not m:
+            raise ValueError("Meeting not found.")
+        out["meeting_date"] = (m or {}).get("date") or ""
+        out["presenter_name"] = profiles.display_name(out["presenter"]) if out["presenter"] else ""
+        return out
     if action == "send_request":
         if p.get("action_id"):
             return {"action_id": str(p["action_id"]), "message": str(p.get("message") or "")[:dept_requests.MAX_MESSAGE], "due": str(p.get("due") or "")[:10],
@@ -278,7 +295,11 @@ def _exec_mark_ready(case_id, payload, user, roles, note):
     c = _case(case_id)
     access.require(roles, "mark_ready", c)
     ready = bool(payload.get("ready", True))
-    c = board.mark_ready(case_id, user, ready=ready, note=payload.get("note") or "")
+    if ready:  # the same send as the consultant's own (night-v3 item 1.4), in the consultant's name; an empty presenter is the consultant
+        c = board.send_to_board(case_id, user, list=payload.get("list") or "discussion", meeting_id=payload.get("meeting_id") or "",
+                                presenter=payload.get("presenter") or "", note=payload.get("note") or "", reason=payload.get("reason") or "")
+    else:
+        c = board.mark_ready(case_id, user, ready=False, note=payload.get("note") or "")
     if ready:  # the summary prose and the heads' briefs are prepared in the background, as POST /cases/{id}/ready does
         try:
             from . import ready_hook
