@@ -343,7 +343,7 @@ def _include_nik_routers(r):
     """The routers of the new interface (tumour_board/api/*): each module exports `router`; a module that fails to import is logged
     and skipped so one broken area never takes the whole API down."""
     import importlib
-    for name in ("me", "cases_list", "team", "setup", "slots", "steps", "staging", "chats", "helpers", "published", "meetings", "live", "video", "push", "deck"):
+    for name in ("me", "cases_list", "team", "patients", "setup", "slots", "steps", "staging", "chats", "helpers", "published", "meetings", "live", "video", "push", "deck"):
         try:
             mod = importlib.import_module(f"tumour_board.api.{name}")
         except ModuleNotFoundError as e:
@@ -763,6 +763,8 @@ def setup_tumour_board_routes():
         async def run():
             try:
                 return await coro
+            except his_case.DuplicateCaseFile:  # the route answers its structured body (night-v3 item 1.1)
+                raise
             except his_case.HISCaseError as e:
                 raise HTTPException(e.status, str(e))
             except his_client.HISError as e:
@@ -815,9 +817,12 @@ def setup_tumour_board_routes():
         u = _user(request); rl = _roles(request); _need(rl, "create_case"); b = await request.json()
         if not isinstance(b, dict):
             raise HTTPException(400, "Send the identifier and the protocol")
-        out = await _his_call(his_case.create(str(b.get("identifier") or ""), str(b.get("protocol") or ""), str(b.get("setting") or ""), str(b.get("hospital_level") or ""),
-                                              str(b.get("board_date") or ""), b.get("window"), u, rl, department=b.get("department"), case_id=str(b.get("case_id") or ""),
-                                              cancer_name=b.get("cancer_name")))
+        try:
+            out = await _his_call(his_case.create(str(b.get("identifier") or ""), str(b.get("protocol") or ""), str(b.get("setting") or ""), str(b.get("hospital_level") or ""),
+                                                  str(b.get("board_date") or ""), b.get("window"), u, rl, department=b.get("department"), case_id=str(b.get("case_id") or ""),
+                                                  cancer_name=b.get("cancer_name")))
+        except his_case.DuplicateCaseFile as e:  # one Case File per patient and cancer: 409 with the existing file's owner (night-v3 item 1.1)
+            return JSONResponse(e.body(), status_code=409)
         job = out["job"]
         return {"case": out["case"], "job": job["id"], "total": job["total"], "his": job.get("his")}
 
@@ -877,6 +882,11 @@ def setup_tumour_board_routes():
             cancer_name = his_case.clean_cancer_name(b.get("cancer_name"), prot)
         except his_case.HISCaseError as e:
             raise HTTPException(e.status, str(e))
+        pat = b.get("patient") if isinstance(b.get("patient"), dict) else {}
+        try:  # one Case File per patient and cancer (night-v3 item 1.1): the UHID given, and any UHID among the identifiers
+            his_case.refuse_duplicate(his_case.case_uhids({"patient": pat}), prot, cancer_name, u, rl, via="manual")
+        except his_case.DuplicateCaseFile as e:
+            return JSONResponse(e.body(), status_code=409)
         try:
             c = store.create_case(store.safe_id(b["case_id"]), b.get("patient", {}), prot, b.get("board_date", ""), u, b.get("setting", ""), level or "")
         except FileExistsError:
@@ -898,6 +908,11 @@ def setup_tumour_board_routes():
         u = _user(request); rl = _roles(request); c = _case(case_id); b = await request.json()
         if not access.may_list(rl, c):  # the MDT Coordinator, or the owning department's doctors (the new owner picks the protocol after a referral, V2 item 5.2)
             raise HTTPException(403, "Only the MDT Coordinator or the doctors of the owning department change the listing of this Case File.")
+        try:  # one Case File per patient and cancer (night-v3 item 1.1): listing after intake is where the cancer is chosen
+            system = (c["his"].get("kind"), c["his"].get("label")) if isinstance(c.get("his"), dict) else None
+            his_case.refuse_duplicate(his_case.case_uhids(c), str(b.get("protocol", "")), str(c.get("cancer_name") or ""), u, rl, his=system, via="listing", exclude=case_id)
+        except his_case.DuplicateCaseFile as e:
+            return JSONResponse(e.body(), status_code=409)
         try:
             job = service.list_case(case_id, str(b.get("protocol", "")), str(b.get("setting", "") or ""), str(b.get("board_date", "") or ""), str(b.get("hospital_level", "") or ""), u)
         except ValueError as e:

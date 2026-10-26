@@ -2356,6 +2356,15 @@ def v2_phase5(c, base, ctx):
               [x["case_id"] for x in b_links] == ["TB-H5-P18A"] and b_links[0]["department"] == "colorectal_surgery" and b_links[0]["protocol"] == "colorectal_rectum" and b_links[0]["department_name"] == "Colorectal Surgery"
               and [x["case_id"] for x in a_links] == ["TB-H5-P18B"] and a_links[0]["department"] == "breast_surgery" and d2b["case"]["department"] == "breast_surgery"
               and (d2b["case"]["his"] or {}).get("same_uhid_case") is None, json.dumps([a_links, b_links])[:200])
+        # the same cancer again for the same UHID is refused (night-v3 item 1.1): 409 naming the existing file's owner, nothing made
+        rd = colo.post("/api/tb/cases/from-his", json={"identifier": "VXH/26/004218", "protocol": "colorectal_rectum", "setting": "non_metastatic", "hospital_level": "optimal", "case_id": "TB-H5-P18C"})
+        if rd.status_code == 200:
+            ctx["cases"].append("TB-H5-P18C")
+        dup = rd.json() if rd.headers.get("content-type", "").startswith("application/json") else {}
+        check("5.3 P18 a second Case File for the same patient and the same cancer is refused (409) with the existing file and its owner; nothing is made",
+              rd.status_code == 409 and dup.get("code") == "duplicate_case_file" and (dup.get("existing") or {}).get("case_id") == "TB-H5-P18A"
+              and "Colorectal Surgery" in str(dup.get("detail") or "") and (dup.get("existing") or {}).get("can_open") is True
+              and colo.get("/api/tb/cases/TB-H5-P18C").status_code == 404 and "duplicate_refused" in audit_kinds(colo, "TB-H5-P18A"), rd.text[:200])
         check("5.3 P18 both Case Files hold the patient's HIS records and each gate passes (the rectal records never satisfy the breast requirements, nor the reverse)",
               len(d1["documents"]) == len(d2b["documents"]) >= 8 and d1["state"]["gate"]["passed"] and d2b["state"]["gate"]["passed"]
               and _gaps(d1) == fixture_gaps("P18", "colorectal_rectum") == [] and _gaps(d2b) == fixture_gaps("P18", "breast") == [], json.dumps([_gaps(d1), _gaps(d2b)]))

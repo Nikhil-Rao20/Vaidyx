@@ -197,15 +197,18 @@ def test_from_his_with_protocol_generic_needs_the_cancer_name(fakes, monkeypatch
 
 
 def test_from_his_built_checklist_keeps_an_optional_name_and_generic_cases_differ_by_name(fakes, monkeypatch):
+    from tumour_board import team
     out = _create("breast", None, "early", monkeypatch=monkeypatch)
     assert "cancer_name" not in store.get_case(out["case"]["case_id"])
+    team.archive(out["case"]["case_id"], "dr.breast", "duplicate (synthetic)")  # one Case File per patient and cancer (night-v3 item 1.1)
     out = _create("breast", "Breast", "early", monkeypatch=monkeypatch)
     assert store.get_case(out["case"]["case_id"])["cancer_name"] == "Breast"
     a = _create("generic", "Urinary bladder", monkeypatch=monkeypatch)["case"]
-    b = _create("generic", "Thyroid", monkeypatch=monkeypatch)["case"]
-    c = _create("generic", "urinary bladder", monkeypatch=monkeypatch)["case"]
-    assert not store.get_case(b["case_id"])["his"].get("same_uhid_case")  # another typed cancer is not the same one
-    assert store.get_case(c["case_id"])["his"]["same_uhid_case"] == a["case_id"]  # the same typed cancer: shown, never blocked
+    b = _create("generic", "Thyroid", monkeypatch=monkeypatch)["case"]  # another typed cancer is not the same one: allowed
+    assert b["case_id"] != a["case_id"] and a["case_id"] in [x["case_id"] for x in store.get_case(b["case_id"])["linked_cases"]]
+    with pytest.raises(his_case.DuplicateCaseFile) as e:  # the same typed cancer (any case, any spacing): refused
+        _create("generic", "urinary  bladder", monkeypatch=monkeypatch)
+    assert e.value.status == 409 and e.value.existing["case_id"] == a["case_id"]
 
 
 def test_routes_accept_store_and_audit_the_cancer_name(nik_app, people, fakes, monkeypatch):

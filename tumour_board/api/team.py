@@ -10,6 +10,7 @@ from tumour_board.api.common import RateLimit, body, case, fail, make_router, ne
 
 router = make_router()
 JOIN_LIMIT = RateLimit(5, 15 * 60)
+ASK_LIMIT = RateLimit(5, 15 * 60)  # "Ask to join" (night-v3 item 1.1): the same pace as the join code
 
 
 def _err(e):
@@ -78,13 +79,31 @@ async def join(request: Request):
     return _run(team.join, str(b.get("code") or ""), r, r["user"])
 
 
+@router.post("/case-join/ask")
+async def ask_to_join(request: Request):
+    """{case_id, note?}: "Ask to join" without a code (night-v3 item 1.1). A placed doctor (consultant or resident of any department)
+    who cannot open the Case File asks its owner; the owner's consultants are told and approve or reject it in the Team panel. Under
+    /case-join so the Case File guard does not refuse a person who cannot open it yet. 5 requests per 15 minutes per login."""
+    r = roles(request); need_known(r)
+    ASK_LIMIT.check(r["user"], "Too many requests to join. Wait 15 minutes and try again.")
+    b = await body(request)
+    try:
+        cid = store.safe_id(str(b.get("case_id") or "").strip())
+    except ValueError:
+        fail(400, "Give the Case File id.", "bad_case")
+    if not cid:
+        fail(400, "Give the Case File id.", "bad_case")
+    async with store.lock(cid):
+        return _run(team.ask_to_join, cid, r, r["user"], str(b.get("note") or ""))
+
+
 @router.post("/cases/{case_id}/team/pending/{user}/approve")
 async def approve_join(case_id: str, user: str, request: Request):
     r = roles(request); c = case(case_id); need_case(r, "manage_team", c)
     b = await body(request) if (await request.body()) else {}
     async with store.lock(case_id):
         rec = _run(team.approve_pending, case_id, user.strip().lower(), r["user"], str(b.get("note") or ""))
-    return {"resident": rec, "team": team.view(store.get_case(case_id), show_code=True)}
+    return {"resident" if "since" in rec else "member": rec, "team": team.view(store.get_case(case_id), show_code=True)}
 
 
 @router.post("/cases/{case_id}/team/pending/{user}/reject")

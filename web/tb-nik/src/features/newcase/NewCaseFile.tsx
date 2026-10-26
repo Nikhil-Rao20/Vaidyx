@@ -3,6 +3,8 @@
 // urgency (PUT /cases/{id}/urgency), the board question (the typed value of the clinical_question line), the consent and
 // the join code; the first fetch shows its live steps (FetchProgress) and then the Case File opens.
 // ?identifier=<UHID> (from the gift box or the search bar) looks the patient up at once.
+// One Case File per patient and cancer (night-v3 item 1.1): when the chosen cancer already has a live Case File of this patient
+// (GET /patient-case-files, or the server's 409 duplicate_case_file), the Cancer and Logistics steps say whose it is and Create stays off.
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { motion } from "motion/react";
@@ -18,13 +20,14 @@ import { api, ApiError } from "@/lib/api";
 import { EP } from "@/lib/endpoints";
 import { useSession } from "@/lib/session";
 import { ageSex } from "@/lib/format";
-import type { CreateFromHisResponse } from "@/lib/types";
+import type { CreateFromHisResponse, DuplicateCaseFileBody, PatientCaseFile } from "@/lib/types";
 import { isGeneric } from "@/lib/cancers";
 import { DEFAULT_FORM, createBody, type NewCaseForm } from "@/features/newcase/form";
 import { StepPatient } from "@/features/newcase/StepPatient";
 import { NOT_RECORDED, StepCancer, cancerStepDone } from "@/features/newcase/StepCancer";
 import { StepLogistics, logisticsDone, useOwnerChoices } from "@/features/newcase/StepLogistics";
 import { FetchProgress, type FollowUp } from "@/features/newcase/FetchProgress";
+import { DuplicateNotice, duplicateFor, patientKey, sameCancer, usePatientCaseFiles } from "@/features/newcase/PatientCaseFiles";
 
 interface Created {
   caseId: string;
@@ -57,6 +60,7 @@ export default function NewCaseFile() {
   const [created, setCreated] = useState<Created | null>(null);
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [joinCode, setJoinCode] = useState<string | null>(null);
+  const [serverDup, setServerDup] = useState<{ key: string; file: PatientCaseFile } | null>(null);
   const protocols = useProtocols();
   const owners = useOwnerChoices();
   const invalidate = useInvalidate();
@@ -66,7 +70,11 @@ export default function NewCaseFile() {
   const protocol = useMemo(() => (isGeneric(form.protocol) ? undefined : (protocols.data?.protocols ?? []).find((p) => p.id === form.protocol)), [protocols.data, form.protocol]);
   const settingLabel = protocol?.settings.find((s) => s.id === form.setting)?.label;
   const canCreate = Boolean(me && ((me.roles.treating || []).length || me.roles.coordinator));
-  const stepOk = step === 1 ? Boolean(form.lookup?.found && form.lookup.patient) : step === 2 ? cancerStepDone(form) : logisticsDone(form, owners.length > 1);
+  const pkey = patientKey(form);
+  const files = usePatientCaseFiles(pkey);
+  // the live Case File of this patient and the chosen cancer: listed by the server, or named by its 409 on Create
+  const duplicate = duplicateFor(files.data?.cases, form) ?? (serverDup && serverDup.key === pkey && sameCancer(serverDup.file, form) ? serverDup.file : null);
+  const stepOk = step === 1 ? Boolean(form.lookup?.found && form.lookup.patient) : step === 2 ? cancerStepDone(form) && !duplicate : logisticsDone(form, owners.length > 1) && !duplicate;
 
   const setFollow = (id: string, patch: Partial<FollowUp>) => setFollowUps((list) => list.map((f) => (f.id === id ? { ...f, ...patch } : f)));
 
@@ -96,7 +104,13 @@ export default function NewCaseFile() {
       if (form.outsideConsent) await run("consent", () => api.put(`${EP.case(caseId)}/consent`, { outside_discussion: true }));
       if (form.joinCode) await run("code", async () => { const c = await api.post<{ code?: string; value?: string }>(EP.teamCode(caseId)); setJoinCode(c.code || c.value || null); });
     } catch (e) {
-      setCreateErr(createError(e, form));
+      const body = e instanceof ApiError && e.status === 409 && e.code === "duplicate_case_file" ? (e.detail as DuplicateCaseFileBody | null) : null;
+      if (body?.existing) {  // created meanwhile by someone else: the same card as the list gives, and Create stays off
+        setServerDup({ key: pkey, file: body.existing });
+        void files.refetch();
+      } else {
+        setCreateErr(createError(e, form));
+      }
     } finally {
       setCreating(false);
     }
@@ -144,10 +158,12 @@ export default function NewCaseFile() {
             <Step title="Cancer">
               <StepTitle title="Which cancer" text="The checklist decides which records the board needs." />
               <StepCancer form={form} onChange={onChange} />
+              {duplicate ? <div className="mt-4"><DuplicateNotice file={duplicate} /></div> : null}
             </Step>
             <Step title="Logistics">
               <StepTitle title="Logistics" text="Filled in with the usual choices; change what does not fit." />
               <StepLogistics form={form} onChange={onChange} settingLabel={settingLabel} protocolLabel={protocol?.label} />
+              {duplicate ? <div className="mt-4"><DuplicateNotice file={duplicate} /></div> : null}
               {createErr ? (
                 <div role="alert" className="mt-4 flex items-start gap-2 rounded-md status-bad px-3 py-2 text-sm">
                   <Lock className="mt-0.5 size-4 shrink-0" aria-hidden /> <span>{createErr}</span>
@@ -155,7 +171,7 @@ export default function NewCaseFile() {
               ) : null}
             </Step>
           </Stepper>
-          {!stepOk && step === 3 ? <p className="mt-2 text-center text-xs text-muted-foreground"><FolderPlus className="mr-1 inline size-3.5" aria-hidden />Pick an urgency tag{owners.length > 1 ? " and the Responsible Department" : ""} to create.</p> : null}
+          {!stepOk && step === 3 && !duplicate ? <p className="mt-2 text-center text-xs text-muted-foreground"><FolderPlus className="mr-1 inline size-3.5" aria-hidden />Pick an urgency tag{owners.length > 1 ? " and the Responsible Department" : ""} to create.</p> : null}
         </>
       )}
     </div>

@@ -160,6 +160,21 @@ def is_team_resident(r: dict, case: dict) -> bool:
     return any(x.get("user") == r.get("user") for x in team_residents(case))
 
 
+def team_members(case) -> list[dict]:
+    """The consultants of other departments the owner let into this Case File's team (an approved "Ask to join", night-v3 item 1.1):
+    the entries not removed. They read the whole Case File; the owner's rights stay with the owning department's consultants."""
+    return [x for x in ((case or {}).get("team") or {}).get("members") or [] if isinstance(x, dict) and x.get("user") and not x.get("removed")]
+
+
+def is_team_member(r: dict, case: dict) -> bool:
+    """A consultant (member or head of a department, not only a resident) on this Case File's team (team_members)."""
+    if not isinstance(r, dict) or r.get("disabled") or r.get("expired") or not r.get("known"):
+        return False
+    if not (set(r.get("departments") or {}) - set(r.get("resident") or {})):
+        return False
+    return any(x.get("user") == r.get("user") for x in team_members(case))
+
+
 def _action_department(a: dict) -> str | None:
     if a.get("role") == "coordinator":
         return org.COORDINATOR_ID
@@ -326,6 +341,8 @@ def scope(r: dict, case: dict, state=None) -> str | None:
     if own in mine or (mine & set(participants(case))) or (mine & set(linked_owners(case))):
         return FULL
     if is_team_resident(r, case):  # a resident of the owning department or of this Case File's team
+        return FULL
+    if is_team_member(r, case):  # a consultant of another department the owner let into the team: reads, never the owner's rights (may)
         return FULL
     ref = open_referral(case)
     if ref and org.department_id(ref.get("to")) in mine:

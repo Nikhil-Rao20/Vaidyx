@@ -1,9 +1,16 @@
 // Overview (B2): where the doctor lands. Warnings at the top, each a plain sentence with its fix; then To do and Waiting (at most five rows
 // each, every row with its one action); the question for the board; the patient at a glance in four groups, every value opening its
-// report line. No line about how Vaidyx works (owner: no line).
+// report line. No line about how Vaidyx works (owner: no line). "Other Case Files of this patient" (night-v3 item 1.1): the patient's
+// other live Case Files (another cancer each), with the owning department and consultant, read-only links where this person may open them.
 import { useState, type ReactNode } from "react";
-import { AlertTriangle, ArrowRight, Hourglass, ListTodo, MessageSquareQuote, OctagonAlert, Phone } from "lucide-react";
+import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { AlertTriangle, ArrowRight, FolderOpen, Hourglass, ListTodo, MessageSquareQuote, OctagonAlert, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api";
+import { EP } from "@/lib/endpoints";
+import { drName } from "@/lib/format";
+import type { PatientCaseFilesResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import type { SourceTarget } from "../components/SourceViewer";
 import { LoadingButton, fmtDate } from "../components/common";
@@ -111,6 +118,37 @@ function WaitingList({ items, h }: { items: WaitingItem[]; h: OverviewHandlers }
   );
 }
 
+/** The patient's other live Case Files (GET /patient-case-files?case_id=): nothing is shown when there are none or the server says no. */
+function OtherCaseFiles({ caseId }: { caseId: string }) {
+  const q = useQuery<PatientCaseFilesResponse, Error>({
+    queryKey: ["patient-case-files", "case", caseId],
+    queryFn: () => api.get<PatientCaseFilesResponse>(`${EP.patientCaseFiles}?case_id=${encodeURIComponent(caseId)}`),
+    enabled: Boolean(caseId),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const rows = q.data?.cases ?? [];
+  if (!rows.length) return null;
+  return (
+    <section className="surface px-4 py-2.5" aria-labelledby="h-other-files" data-testid="other-case-files">
+      <h2 id="h-other-files" className="text-sm font-semibold text-foreground">Other Case Files of this patient</h2>
+      <ul className="mt-1 divide-y divide-border">
+        {rows.map((f) => {
+          const who = f.owner_words || [f.department_name, drName(f.owner_name)].filter(Boolean).join(", ");
+          return (
+            <li key={f.case_id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-sm">
+              <span className="min-w-0 flex-1"><span className="font-medium text-foreground">{f.cancer_label}</span>{who ? <span className="text-muted-foreground">, {who}</span> : null}</span>
+              {f.can_open ? (
+                <Button asChild size="sm" variant="outline"><Link to={`/cases/${encodeURIComponent(f.case_id)}`}><FolderOpen className="size-4" aria-hidden />Open it</Link></Button>
+              ) : <span className="text-xs text-muted-foreground">you cannot open it</span>}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 export function Overview({ steps, h, signoffs, staging }: { steps: Steps; h: OverviewHandlers; signoffs?: ReactNode; staging?: ReactNode }) {
   const prepare = steps.mode === "prepare";
   const q = steps.question;
@@ -143,6 +181,8 @@ export function Overview({ steps, h, signoffs, staging }: { steps: Steps; h: Ove
           </div>
         )}
       </Card>
+
+      <OtherCaseFiles caseId={steps.case_id} />
 
       {staging}
 

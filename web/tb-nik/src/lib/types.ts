@@ -290,6 +290,35 @@ export interface CreateFromHisResponse {
   his?: unknown;
 }
 
+/** One Case File of a patient as the New Case File page and the Overview see it (GET /patient-case-files, night-v3 item 1.1):
+ * the cancer, the owning department and consultant, a status word and whether this person may open it; no clinical content. */
+export interface PatientCaseFile {
+  case_id: string;
+  protocol: string;
+  cancer_name?: string;
+  cancer_label: string;
+  department: string;
+  department_name: string;
+  owner: string;
+  owner_name: string;
+  /** "Breast Surgery, Dr Rao" */
+  owner_words?: string;
+  can_open: boolean;
+  created_at?: string;
+  status_label?: string;
+}
+
+export interface PatientCaseFilesResponse {
+  cases: PatientCaseFile[];
+}
+
+/** The 409 body when a Case File for this patient and this cancer exists (code "duplicate_case_file"). */
+export interface DuplicateCaseFileBody {
+  detail: string;
+  code: "duplicate_case_file";
+  existing: PatientCaseFile;
+}
+
 // ---- Meetings (GET /meetings) ---------------------------------------------------------------------------------------
 export interface Meeting {
   id: string;

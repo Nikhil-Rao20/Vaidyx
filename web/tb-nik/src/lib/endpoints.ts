@@ -21,6 +21,10 @@ export const EP = {
   urgency: (c: string) => `${TB}/cases/${id(c)}/urgency`,
   /** POST /case-join (not /cases/join: the Case File guard would read "join" as a Case File id). */
   joinCase: `${TB}/case-join`,
+  /** POST {case_id, note?}: "Ask to join" a Case File without a code (night-v3 item 1.1). */
+  askToJoin: `${TB}/case-join/ask`,
+  /** GET ?identifier=<UHID, IP No. or OP No.> or ?case_id=<id>: the patient's live Case Files (night-v3 item 1.1). */
+  patientCaseFiles: `${TB}/patient-case-files`,
   team: (c: string) => `${TB}/cases/${id(c)}/team`,
   proposals: (c: string) => `${TB}/cases/${id(c)}/proposals`,
   proposalApprove: (c: string, p: string) => `${TB}/cases/${id(c)}/proposals/${id(p)}/approve`,
