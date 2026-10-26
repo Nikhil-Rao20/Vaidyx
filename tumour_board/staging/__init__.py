@@ -12,6 +12,11 @@ The six guards, in code:
      instance) | on (only rule files with "signed_off").
   6. No treatment advice: the output is categories, quotes and pages only.
 
+For breast, the prognostic stage group (AJCC 8, pp. 621 to 624: the anatomic draft's T, N and M with grade, HER2, ER and PR) is worked out
+beside the anatomic one with the same guards: the table is data in the rule file, the grade and biomarker lines are the values Vaidyx
+already verified (checked again word for word), the category is decided in code from the line, anything missing or unclear gives
+"cannot stage", a prognostic stage written in a report is shown and flagged, and each draft is confirmed on its own.
+
 Nothing here reads images: imaging REPORTS are read like every other report."""
 import json
 import os
@@ -155,8 +160,9 @@ def written_stages(case_id) -> list[dict]:
             v = str(h["value"])
             prefix = "yp" if re.search(r"\byp", v, re.I) else "p" if re.search(r"\bp[TN]", v) else "c" if re.search(r"\bc[TN]|\bmr[TN]", v) else ""
             loc = h.get("location") if isinstance(h.get("location"), dict) else {}
+            kind = "prognostic" if re.search(r"\bprognostic\b", v + " " + str(h.get("quote") or ""), re.I) else "anatomic"
             out.append({"fact": fid, "value": v, "quote": h.get("quote") or "", "doc_id": h.get("doc_id"), "doc_title": h.get("doc_title"), "date": h.get("date"),
-                        "page": loc.get("page"), "prefix": prefix, "superseded": bool(h.get("superseded")), "final": bool(h.get("doc_final"))})
+                        "page": loc.get("page"), "prefix": prefix, "superseded": bool(h.get("superseded")), "final": bool(h.get("doc_final")), "kind": kind})
     seen, uniq = set(), []
     for w in sorted(out, key=lambda x: x.get("date") or ""):  # the same words from the same report under two fields: once
         k = (w["doc_id"], re.sub(r"\s+", " ", w["value"]).strip().lower())
@@ -300,6 +306,7 @@ def decide(rule: dict, answer: dict, by_id: dict, fallback_size: dict | None = N
 
 def compare(draft: dict, written: list[dict]) -> dict | None:
     """The newest clinical (or unprefixed) stage a report wrote against the draft: "matches", "differs" (what differs) or "partial"."""
+    written = [w for w in written if w.get("kind") != "prognostic"]  # a prognostic stage is compared with the prognostic draft
     pool = [w for w in written if not w["superseded"] and w["prefix"] in ("", "c")] or [w for w in written if not w["superseded"]]
     if not pool or draft.get("status") != "staged":
         return None
@@ -316,6 +323,252 @@ def compare(draft: dict, written: list[dict]) -> dict | None:
             diffs.append(f"{'Stage' if k == 'stage' else k}: the report writes {p[k]}, the draft {mine[k]}")
     named = [k for k in ("T", "N", "M", "stage") if p.get(k)]
     return {"written": w, "result": "differs" if diffs else "matches" if named else "partial", "differences": diffs}
+
+
+# ---- the prognostic stage group (AJCC 8 breast, pp. 621 to 624; night-v3 item 1.12) ---------------------------------------------------
+# The same six guards. The table is data ("groups_prognostic" in the rule file, every row with its page). Grade, HER2, ER and PR come from
+# the values Vaidyx already read and verified (the grade, her2, er and pr facts); each quote is checked again word for word (_check) and
+# the category is decided here in code from the quoted line. Anything missing or unclear gives "cannot stage"; a row marked "unsure" in
+# the rule file needs a clinician's check and is never used; the Oncotype Dx row needs a recurrence score Vaidyx never has and is never
+# applied.
+
+PROGNOSTIC_PARTS = ("G", "HER2", "ER", "PR")
+_PENDING = re.compile(r"\b(?:pending|awaited|sent\s+(?:out|for)|to\s+follow|not\s+(?:done|performed|available|reported))\b", re.I)
+_CONTROLS = re.compile(r"\b(?:external|internal)?\s*(?:positive|negative)\s+controls?\b", re.I)
+_MARK = re.compile(r"(?P<HER2>(?i:\bHER[\s-]?2(?:/neu)?\b|\bc-?erb\s?B-?2\b))|(?P<ER>\bER\b|(?i:\b(?:o?estrogen)\b))|"
+                   r"(?P<PR>\bPR\b|\bPgR\b|(?i:\bprogesterone\b))|(?P<KI>(?i:\bKi[\s-]?67\b))")
+_POS = re.compile(r"\bpositive\b|\+\s*ve\b|\(\s*\+\s*\)", re.I)
+_NEG = re.compile(r"\bnegative\b|(?<!\+)-\s*ve\b|\(\s*-\s*\)", re.I)
+_ISH = re.compile(r"\b(?:F|C|S|DD)?ISH\b|in[\s-]situ\s+hybridi[sz]ation", re.I)
+_GRADE = re.compile(r"(?:(?i:\bgrade\b)\s*(?:(?i:is)\s*)?[:\-]?\s*|\bG(?=[123]\b))(III|II|I|[123])(?![\w])(\s*(?:[-/–]|to|or|and)\s*(?:III|II|I|[123])(?![\w]))?")
+_ROMAN = {"I": "1", "II": "2", "III": "3"}
+
+
+def _segment(text: str, kind: str) -> str:
+    """The part of a line about one marker ("ER: positive (90%), PR: negative" -> "PR: negative" for PR); the whole line when it names
+    no marker (a fact's quote can be the result alone)."""
+    s = str(text or "")
+    marks = [(m.start(), m.lastgroup) for m in _MARK.finditer(s)]
+    mine = [i for i, (_, k) in enumerate(marks) if k == kind]
+    if not mine:
+        return s if not marks else ""
+    i = mine[0]
+    end = next((p for p, k in marks[i + 1:] if k != kind), len(s))
+    return s[marks[i][0]:end]
+
+
+def grade_cat(text) -> tuple:
+    """("G1" | "G2" | "G3" | None, why): the histologic grade a line writes ("Grade 2", "grade II", "G3", "MBR grade: 2"). GX, a range
+    ("grade II-III"), two different grades, words alone ("moderately differentiated") or a nuclear grade alone are unclear (None)."""
+    s = str(text or "")
+    if re.search(r"\bGX\b|grade\s+cannot\s+be\s+assessed", s, re.I):
+        return None, "the grade cannot be assessed (GX)"
+    if _PENDING.search(s):
+        return None, "the grade is not yet reported"
+    s = re.sub(r"(?i:nuclear)\s+(?i:grade)\s*[:\-]?\s*(?:III|II|I|[123])(?![\w])", " ", s)
+    found = set()
+    for m in _GRADE.finditer(s):
+        if m.group(2):
+            return None, "the line gives a range of grades"
+        found.add(_ROMAN.get(m.group(1).upper(), m.group(1)))
+    if len(found) > 1:
+        return None, "the line gives more than one grade"
+    if not found:
+        return None, "the line does not state grade 1, 2 or 3"
+    return f"G{found.pop()}", ""
+
+
+def receptor_cat(text, kind: str) -> tuple:
+    """("positive" | "negative" | None, why) for ER or PR: the words of the line ("positive", "+ve", "negative", "-ve"); a percentage or
+    a score alone, a pending result or both words are unclear (None)."""
+    seg = _segment(text, kind)
+    if not seg:
+        return None, f"the line is not about {kind}"
+    if _PENDING.search(seg):
+        return None, "the result is not yet reported"
+    seg = _CONTROLS.sub(" ", seg)
+    p, n = bool(_POS.search(seg)), bool(_NEG.search(seg))
+    if p and not n:
+        return "positive", ""
+    if n and not p:
+        return "negative", ""
+    return None, "the line says both positive and negative" if p and n else "the line does not say positive or negative"
+
+
+def her2_cat(text) -> tuple:
+    """("positive" | "negative" | "negative_ish_equivocal" | None, why): an ISH result decides when the line gives one ("amplified",
+    "not amplified"; "equivocal" by ISH counts as negative, the table's footnote *, p. 624); otherwise IHC 3+ is positive and 0 or 1+
+    negative (p. 616) or the words positive / negative. IHC 2+ (equivocal) without an ISH result, a pending test or words that disagree
+    are unclear (None)."""
+    seg = _segment(text, "HER2")
+    if not seg:
+        return None, "the line is not about HER2"
+    if _PENDING.search(seg):
+        return None, "the result is not yet reported"
+    seg = _CONTROLS.sub(" ", seg)
+    ish = _ISH.search(seg)
+    if ish:
+        tail = seg[ish.start():]
+        if re.search(r"\bnot\s+amplified\b|\bnon[\s-]?amplified\b|\bno\s+amplification\b|\bwithout\s+amplification\b", seg, re.I):
+            return "negative", "ISH: not amplified"
+        if re.search(r"\bamplified\b", seg, re.I):
+            return "positive", "ISH: amplified"
+        if re.search(r"\bequivocal\b", tail, re.I) or re.search(r"\bequivocal\s+(?:by|on|in)\s+(?:\w+\s+)?(?:F|C|S|DD)?ISH\b", seg, re.I):
+            return "negative_ish_equivocal", "ISH: equivocal, counted as negative (footnote *)"
+        p, n = bool(_POS.search(tail)), bool(_NEG.search(tail))
+        if p != n:
+            return ("positive" if p else "negative"), "ISH result"
+        return None, "an ISH test is named but the line gives no clear ISH result"
+    scores = set(re.findall(r"(?<![\d.])([0-3])\s*\+", seg)) | ({"0"} if re.search(r"(?:\bscore|\bIHC|\bHER[\s-]?2(?:/neu)?)\s*[:\-]?\s*0(?![\d.%+])", seg, re.I) else set())
+    if "2" in scores or re.search(r"\bequivocal\b", seg, re.I):
+        return None, "IHC 2+ (equivocal) with no ISH result in the line"
+    p, n = bool(_POS.search(seg)), bool(_NEG.search(seg))
+    by_score = "positive" if scores == {"3"} else "negative" if scores and scores <= {"0", "1"} else None
+    if len(scores) > 1 and by_score is None:
+        return None, "the line gives more than one IHC score"
+    words = "positive" if p and not n else "negative" if n and not p else None
+    if p and n:
+        return None, "the line says both positive and negative"
+    if by_score and words and by_score != words:
+        return None, "the IHC score and the words disagree"
+    cat = by_score or words
+    if not cat:
+        return None, "the line does not give the HER2 status"
+    return cat, ("IHC 3+" if by_score == "positive" else "IHC 0 or 1+" if by_score == "negative" else "")
+
+
+_CATS = {"G": grade_cat, "HER2": her2_cat, "ER": lambda t: receptor_cat(t, "ER"), "PR": lambda t: receptor_cat(t, "PR")}
+
+
+def prognostic_docs(case_id, rule) -> dict:
+    """The current, ready reports of the types the grade and biomarker facts come from, by id."""
+    types = {t for v in rule["groups_prognostic"]["inputs"].values() for t in v["doc_types"]}
+    return {d["doc_id"]: d for d in rules.case_docs(case_id) if d.get("state") == "ready" and not d.get("superseded") and not d.get("dismissed")
+            and (d.get("classification") or {}).get("doc_type") in types}
+
+
+def prognostic_inputs(rule, facts: dict, by_id: dict) -> dict:
+    """For each of G, HER2, ER, PR: {"cat", "value", "quotes", "how", "criterion"} from the verified fact, or {"missing": why}."""
+    gp = rule["groups_prognostic"]
+    out = {}
+    for k in PROGNOSTIC_PARTS:
+        spec = gp["inputs"][k]
+        cur = next(((facts.get(f) or {}).get("current") for f in spec["facts"] if (facts.get(f) or {}).get("current")), None) or {}
+        if not cur or not cur.get("value"):
+            out[k] = {"missing": f"{spec['what']} is not in a report"}
+            continue
+        if cur.get("verification") not in rules.VERIFIED or not cur.get("quote") or cur.get("doc_id") not in by_id:
+            out[k] = {"missing": f"{spec['what']} is not verified against its report"}
+            continue
+        q = _check({"doc_id": cur["doc_id"], "quote": cur["quote"]}, by_id)
+        if not q:
+            out[k] = {"missing": f"the line for {spec['what']} is not found word for word in its report"}
+            continue
+        cat, why = _CATS[k](q["quote"])
+        how = "the report line"
+        if cat is None and k in ("ER", "PR"):  # the value as read carries the category ("Positive") when the line gives only a number
+            vcat, _ = receptor_cat(cur.get("value"), k)
+            if vcat:
+                cat, how = vcat, "the value as read from this line"
+        if cat is None:
+            out[k] = {"missing": f"unclear: {why} (\"{q['quote']}\")", "quotes": [q]}
+            continue
+        crit = next((c for c in gp["criteria"][k] if c["cat"] == cat), None)
+        if k == "HER2" and why.startswith("IHC") and cat in ("positive", "negative"):
+            crit = next((c for c in gp["criteria"]["HER2"] if c.get("assign") == cat and c["cat"].startswith("ihc_")), crit)
+        if k == "HER2" and cat == "negative_ish_equivocal":
+            cat = "negative"
+        out[k] = {"cat": cat, "value": cur.get("value"), "quotes": [q], "how": how + (f" ({why})" if why else ""), "criterion": crit}
+    return out
+
+
+def prognostic_group(rule: dict, t: str, n: str, m: str, g, her2: str, er: str, pr: str) -> dict | None:
+    """The row of the prognostic table for T, N, M (categories or groups, as the anatomic draft gives them), the grade (1, 2, 3 or "G2")
+    and the HER2, ER and PR status ("positive" / "negative"), or None. Rows needing a recurrence score are never used."""
+    t, n, m = (re.sub(r"^c(?=[TNM])", "", x or "") for x in (t, n, m))
+    g = int(str(g).lstrip("Gg")) if str(g or "").lstrip("Gg") in ("1", "2", "3") else None
+    ok = lambda want, x, k: "*" in want or x in want or group_of(x, k) in want
+    st = lambda want, x: want == "any" or want == x
+    for row in rule["groups_prognostic"]["rows"]:
+        if row.get("requires"):
+            continue
+        if ok(row["T"], t, "T") and ok(row["N"], n, "N") and ok(row["M"], m, "M") and g in row["G"] and \
+                st(row["HER2"], her2) and st(row["ER"], er) and st(row["PR"], pr):
+            return row
+    return None
+
+
+def decide_prognostic(rule: dict, anatomic: dict, inputs: dict) -> dict:
+    """The prognostic draft beside the anatomic one, the same shape: {"components": {G, HER2, ER, PR}, "tnm", "stage", "row", "status",
+    "missing", "label", "multigene"}."""
+    gp = rule["groups_prognostic"]
+    comps = {k: v for k, v in inputs.items() if v.get("cat")}
+    missing = [f"{k}: {v['missing']}" for k, v in inputs.items() if not v.get("cat")]
+    ac = (anatomic or {}).get("components") or {}
+    tnm = {k: ac[k]["cat"] for k in ("T", "N", "M") if k in ac}
+    if (anatomic or {}).get("status") != "staged":
+        missing.insert(0, "T, N and M: the anatomic draft cannot stage yet")
+    out = {"label": gp.get("label"), "components": comps, "tnm": tnm, "missing": missing, "stage": None, "row": None, "status": "cannot_stage",
+           "multigene": {"applied": False, "note": gp.get("multigene_note")}, "confirmed": None, "rejected": None}
+    if missing:
+        return out
+    g = comps["G"]["cat"]
+    row = prognostic_group(rule, tnm["T"], tnm["N"], tnm["M"], g, comps["HER2"]["cat"], comps["ER"]["cat"], comps["PR"]["cat"])
+    if not row:
+        return {**out, "missing": ["The prognostic table as printed has no row for this combination"]}
+    if row.get("unsure"):
+        return {**out, "missing": ["The table row needs a clinician's check"], "row": row}
+    return {**out, "status": "staged", "stage": row["stage"], "row": row}
+
+
+_PROG_WRITTEN = re.compile(r"prognostic\s+stage(?:\s+group)?\s*(?:(?i:is)\s*)?[:\-=]?\s*(?:(?i:stage)\s*)?(0|IV|III|II|I)([ABC])?(?![a-z])", re.I)
+
+
+def parse_prognostic(v: str) -> str | None:
+    """The stage a "prognostic stage" line writes ("AJCC prognostic stage group: IB" -> IB), or None."""
+    m = _PROG_WRITTEN.search(str(v or ""))
+    return (m.group(1).upper() + (m.group(2) or "").upper()) if m else None
+
+
+def written_prognostic(case_id, written: list[dict]) -> list[dict]:
+    """Every prognostic stage a report wrote, oldest first: the stages as recorded that say "prognostic", and any report line with the
+    words "prognostic stage" and a stage (the line checked word for word against its report like every quote)."""
+    out = [{**w, "stage": parse_prognostic(w["value"]) or parse_prognostic(w["quote"])} for w in written if w.get("kind") == "prognostic"]
+    seen = {(w["doc_id"], w["stage"]) for w in out}
+    for d in rules.case_docs(case_id):
+        if d.get("state") != "ready" or d.get("superseded") or d.get("dismissed"):
+            continue
+        for text in _texts(d):
+            for line in str(text).splitlines():
+                stage = parse_prognostic(line)
+                if not stage or (d["doc_id"], stage) in seen:
+                    continue
+                q = _check({"doc_id": d["doc_id"], "quote": line.strip()}, {d["doc_id"]: d})
+                if q:
+                    seen.add((d["doc_id"], stage))
+                    out.append({"fact": None, "value": line.strip(), "quote": q["quote"], "doc_id": d["doc_id"], "doc_title": q["doc_title"], "date": q["date"],
+                                "page": q["page"], "prefix": "", "superseded": False, "final": q["final"], "kind": "prognostic", "stage": stage})
+    return sorted([w for w in out if w["stage"]], key=lambda x: x.get("date") or "")
+
+
+def compare_prognostic(draft: dict | None, written: list[dict]) -> dict | None:
+    """The newest prognostic stage a report wrote against the prognostic draft: "matches" or "differs"; shown, never overridden."""
+    pool = [w for w in written if not w.get("superseded")]
+    if not pool or not draft or draft.get("status") != "staged":
+        return None
+    w = pool[-1]
+    diffs = [] if w["stage"] == draft["stage"] else [f"Prognostic stage: the report writes {w['stage']}, the draft {draft['stage']}"]
+    return {"written": w, "result": "differs" if diffs else "matches", "differences": diffs}
+
+
+def prognostic_for(case_id, rule, anatomic) -> dict | None:
+    """The prognostic draft for this Case File (no model call: the grade and biomarker values Vaidyx already verified), or None when the
+    rule file has no prognostic table."""
+    if not (rule or {}).get("groups_prognostic"):
+        return None
+    by_id = prognostic_docs(case_id, rule)
+    facts = rules.resolve_facts(rules.case_docs(case_id), (store.get_state(case_id) or {}).get("overrides"))
+    return decide_prognostic(rule, anatomic, prognostic_inputs(rule, facts, by_id))
 
 
 async def run(case_id, user) -> dict:
@@ -340,10 +593,14 @@ async def run(case_id, user) -> dict:
     draft = decide(rule, answer, by_id, size_fact(case_id, by_id), entered)
     rec = {**draft, "rules": rule["id"], "system": rule["system"], "at": store.now_iso(), "by": user, "signature": sig.get("hash"),
            "model": (llm_model_label()), "confirmed": None, "rejected": None, "answer": answer}
+    prog = prognostic_for(case_id, rule, draft)
+    if prog is not None:
+        rec["prognostic"] = prog
     st["staging"] = rec
     store.save_state(case_id, st)
     store.audit(case_id, {"kind": "draft_stage", "by": user, "status": draft["status"], "stage": draft.get("stage"),
-                          "components": {k: v["cat"] for k, v in draft["components"].items()}, "rules": rule["id"]})
+                          "components": {k: v["cat"] for k, v in draft["components"].items()}, "rules": rule["id"],
+                          **({"prognostic": {"status": prog["status"], "stage": prog["stage"], "components": {k: v["cat"] for k, v in prog["components"].items()}}} if prog else {})})
     return view(case_id)
 
 
@@ -369,16 +626,24 @@ def view(case_id) -> dict:
            "book": (rule or {}).get("book"), "book_here": bool(rule and (rule.get("book") or {}).get("id") in _book.books()),
            "notation": (rule or {}).get("notation") or "tnm", "system": (rule or {}).get("system"), "label": (rule or {}).get("label"),
            "groups_note": ((rule or {}).get("groups") or {}).get("note"), "groups_ref": {k: ((rule or {}).get("groups") or {}).get(k) for k in ("title", "page", "find")} if rule else None,
-           "criteria": {k: [{"cat": c["cat"], "text": c["text"]} for c in rule[k] if not c.get("rare")] for k in ("T", "N", "M")} if rule and sw["on"] else None}
+           "criteria": {k: [{"cat": c["cat"], "text": c["text"]} for c in rule[k] if not c.get("rare")] for k in ("T", "N", "M")} if rule and sw["on"] else None,
+           "prognostic": None, "prognostic_written": [], "prognostic_comparison": None, "prognostic_ref": None}
     if not sw["on"]:
         return out
+    gp = rule.get("groups_prognostic")
+    if gp:
+        out["prognostic_ref"] = {k: gp.get(k) for k in ("title", "page", "find", "label", "note", "footnotes", "multigene_note")}
+        out["prognostic_written"] = written_prognostic(case_id, written)
     st = store.get_state(case_id)
     d = st.get("staging")
     if isinstance(d, dict) and d.get("rules") == rule["id"]:
         sig = rules.case_signature(case_id, st)
-        out["draft"] = d
+        out["draft"] = {k: v for k, v in d.items() if k != "prognostic"}
         out["stale"] = bool(d.get("signature") and d["signature"] != sig.get("hash"))
         out["comparison"] = compare(d, written)
+        if gp and isinstance(d.get("prognostic"), dict):
+            out["prognostic"] = d["prognostic"]
+            out["prognostic_comparison"] = compare_prognostic(d["prognostic"], out["prognostic_written"])
     return out
 
 
@@ -409,37 +674,62 @@ def enter(case_id, user, part, cat, reason) -> dict:
         by_id = {x["doc_id"]: x for x in evidence_docs(case_id, rule)}
         again = decide(rule, d.get("answer") or {}, by_id, size_fact(case_id, by_id), ent)
         d.update({**again, "confirmed": None, "rejected": None})
+        prog = prognostic_for(case_id, rule, again)
+        if prog is not None:
+            d["prognostic"] = prog
     store.save_state(case_id, st)
     store.audit(case_id, {"kind": "draft_stage_part_entered", "by": user, "part": part, "cat": cat or None, "reason": (ent.get(part) or {}).get("reason")})
     return view(case_id)
 
 
-def confirm(case_id, user, note="") -> dict:
+DRAFTS = ("anatomic", "prognostic")
+
+
+def _which(which) -> str:
+    w = str(which or "anatomic").strip().lower()
+    if w not in DRAFTS:
+        raise StagingError("Say which draft: anatomic or prognostic.", 400)
+    return w
+
+
+def _target(d, w):
+    """The anatomic draft itself, or the prognostic draft stored inside it."""
+    if not isinstance(d, dict):
+        return None
+    return d if w == "anatomic" else (d.get("prognostic") if isinstance(d.get("prognostic"), dict) else None)
+
+
+def confirm(case_id, user, note="", which="anatomic") -> dict:
+    """A doctor confirms one draft (anatomic by default, or the prognostic stage group); audited with which draft it was."""
+    w = _which(which)
     st = store.get_state(case_id)
     d = st.get("staging")
-    if not isinstance(d, dict) or d.get("status") != "staged":
-        raise StagingError("There is no draft stage to confirm.", 409)
+    x = _target(d, w)
+    if not x or x.get("status") != "staged":
+        raise StagingError("There is no draft stage to confirm." if w == "anatomic" else "There is no prognostic stage group to confirm.", 409)
     if d.get("signature") != rules.case_signature(case_id, st).get("hash"):
         raise StagingError("The reports changed after this draft was worked out: work it out again first.", 409)
     from ..slots import display_name
-    d["confirmed"] = {"by": user, "by_name": display_name(user), "at": store.now_iso(), "note": " ".join(str(note or "").split())[:500]}
-    d["rejected"] = None
+    x["confirmed"] = {"by": user, "by_name": display_name(user), "at": store.now_iso(), "note": " ".join(str(note or "").split())[:500], "which": w}
+    x["rejected"] = None
     store.save_state(case_id, st)
-    store.audit(case_id, {"kind": "draft_stage_confirmed", "by": user, "stage": d.get("stage"), "components": {k: v["cat"] for k, v in d["components"].items()}})
+    store.audit(case_id, {"kind": "draft_stage_confirmed", "which": w, "by": user, "stage": x.get("stage"), "components": {k: v["cat"] for k, v in x["components"].items()},
+                          **({"tnm": x.get("tnm")} if w == "prognostic" else {})})
     return view(case_id)
 
 
-def reject(case_id, user, reason) -> dict:
+def reject(case_id, user, reason, which="anatomic") -> dict:
+    w = _which(which)
     reason = " ".join(str(reason or "").split())[:500]
     if len(reason) < 3:
         raise StagingError("Say what is wrong: it is recorded with your name.", 400)
     st = store.get_state(case_id)
-    d = st.get("staging")
-    if not isinstance(d, dict):
-        raise StagingError("There is no draft stage.", 409)
+    x = _target(st.get("staging"), w)
+    if not x:
+        raise StagingError("There is no draft stage." if w == "anatomic" else "There is no prognostic stage group.", 409)
     from ..slots import display_name
-    d["rejected"] = {"by": user, "by_name": display_name(user), "at": store.now_iso(), "reason": reason}
-    d["confirmed"] = None
+    x["rejected"] = {"by": user, "by_name": display_name(user), "at": store.now_iso(), "reason": reason, "which": w}
+    x["confirmed"] = None
     store.save_state(case_id, st)
-    store.audit(case_id, {"kind": "draft_stage_rejected", "by": user, "reason": reason, "stage": d.get("stage")})
+    store.audit(case_id, {"kind": "draft_stage_rejected", "which": w, "by": user, "reason": reason, "stage": x.get("stage")})
     return view(case_id)

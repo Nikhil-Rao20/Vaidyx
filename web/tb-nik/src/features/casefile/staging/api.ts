@@ -16,7 +16,21 @@ export interface Draft {
   components: Partial<Record<"T" | "N" | "M", Component>>; missing: string[]; rules: string; system: string; at: string; by: string; model?: string;
   confirmed: { by: string; by_name?: string; at: string; note?: string } | null; rejected: { by: string; by_name?: string; at: string; reason: string } | null;
 }
-export interface Written { fact: string; value: string; quote: string; doc_id: string; doc_title: string; date?: string | null; page?: number | null; prefix: string; superseded: boolean; final: boolean }
+export type Which = "anatomic" | "prognostic";
+export type ProgPart = "G" | "HER2" | "ER" | "PR";
+export interface Confirmed { by: string; by_name?: string; at: string; note?: string; which?: Which }
+export interface Rejected { by: string; by_name?: string; at: string; reason: string; which?: Which }
+export interface ProgComponent { cat: string; value?: string; quotes: Quote[]; how: string; criterion: Criterion | null }
+export interface ProgRow { T: string[]; N: string[]; M: string[]; G: number[]; HER2: string; ER: string; PR: string; stage: string; page: number; printed: string; changed_from_anatomic?: boolean; note?: string }
+// The breast prognostic stage group (AJCC 8, pp. 621 to 624), beside the anatomic draft, the same guards (night-v3 item 1.12).
+export interface PrognosticDraft {
+  status: "staged" | "cannot_stage"; stage: string | null; row: ProgRow | null; label: string;
+  components: Partial<Record<ProgPart, ProgComponent>>; tnm: Partial<Record<"T" | "N" | "M", string>>; missing: string[];
+  multigene: { applied: boolean; note: string };
+  confirmed: Confirmed | null; rejected: Rejected | null;
+}
+export interface Footnote { mark: string; page: number; find: string; text: string }
+export interface Written { kind?: Which; stage?: string; fact: string | null; value: string; quote: string; doc_id: string; doc_title: string; date?: string | null; page?: number | null; prefix: string; superseded: boolean; final: boolean }
 export interface Book { id: string; title: string; short?: string; file: string; first_page: number; licensed?: boolean }
 export interface StagingView {
   switch: { on: boolean; preview: boolean; label: string; why: string };
@@ -33,14 +47,18 @@ export interface StagingView {
   groups_note?: string;
   groups_ref?: { title: string; page: number | null; find: string } | null;
   criteria?: Record<"T" | "N" | "M", Array<{ cat: string; text: string }>> | null;
+  prognostic?: PrognosticDraft | null;
+  prognostic_written?: Written[];
+  prognostic_comparison?: { written: Written; result: "matches" | "differs"; differences: string[] } | null;
+  prognostic_ref?: { title: string; page: number; find: string; label: string; note: string; footnotes: Footnote[]; multigene_note: string } | null;
 }
 export interface BookMeta { id: string; title: string; pages: number; printed: number[]; first_page: number; last_page: number; aspect?: number }
 export interface BookTarget { book: string; page: number; find?: string; label?: string }
 
 export const getStaging = (id: string) => api.get<StagingView>(`${caseUrl(id)}/staging`);
 export const runStaging = (id: string) => api.post<StagingView>(`${caseUrl(id)}/staging/run`, {});
-export const confirmStaging = (id: string) => api.post<StagingView>(`${caseUrl(id)}/staging/confirm`, {});
-export const rejectStaging = (id: string, reason: string) => api.post<StagingView>(`${caseUrl(id)}/staging/reject`, { reason });
+export const confirmStaging = (id: string, which: Which = "anatomic") => api.post<StagingView>(`${caseUrl(id)}/staging/confirm`, { which });
+export const rejectStaging = (id: string, reason: string, which: Which = "anatomic") => api.post<StagingView>(`${caseUrl(id)}/staging/reject`, { reason, which });
 export const enterPart = (id: string, part: string, cat: string, reason: string) => api.post<StagingView>(`${caseUrl(id)}/staging/enter`, { part, cat, reason });
 export const getBook = (book: string) => api.get<BookMeta>(`${TB}/staging/books/${enc(book)}`);
 export const bookPageUrl = (book: string, page: number, find?: string) => `${TB}/staging/books/${enc(book)}/pages/${page}${find ? `?find=${enc(find)}` : ""}`;

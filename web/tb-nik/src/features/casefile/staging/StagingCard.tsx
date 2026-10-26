@@ -3,19 +3,26 @@
 // opens the book at that page with the line highlighted), then the row of the stage table. Labelled "Vaidyx draft stage, for the board to
 // confirm"; a consultant confirms it or marks it wrong with a reason. A part no report states says "Cannot stage" and can be filled in by
 // the doctor ("entered by Dr X, no report"). The stage the reports wrote, and its history, sit beside it; a difference is flagged.
+// For breast, the prognostic stage group (AJCC 8, pp. 621 to 624) sits under the anatomic one (night-v3 item 1.12): the same label and
+// guards, the grade, HER2, ER and PR walked like T, N and M, confirmed or marked wrong on its own, a written prognostic stage flagged.
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { AlertTriangle, ArrowRight, BookOpen, Check, CheckCircle2, FlaskConical, History, Layers, PenLine, RefreshCw, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowRight, BookOpen, Check, CheckCircle2, FlaskConical, History, Info, Layers, PenLine, RefreshCw, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { SourceTarget } from "../components/SourceViewer";
 import { LoadingButton, SkeletonLines, errorText, fmtDate, fmtDateTime, niceTitle } from "../components/common";
 import { SourceChip } from "../steps/Value";
-import { confirmStaging, enterPart, rejectStaging, runStaging, type BookTarget, type Component, type StagingView, type Written } from "./api";
+import { confirmStaging, enterPart, rejectStaging, runStaging, type BookTarget, type Component, type Criterion, type PrognosticDraft, type ProgPart, type Quote, type StagingView, type Which, type Written } from "./api";
 
 const PART_WORD: Record<"T" | "N" | "M", string> = { T: "Primary tumour", N: "Regional lymph nodes", M: "Distant metastasis" };
 const FIGO_WORD: Record<"T" | "N" | "M", string> = { T: "Local extent", N: "Lymph nodes", M: "Distant spread" };
+const PROG_WORD: Record<ProgPart, string> = { G: "Histologic grade", HER2: "HER2 status", ER: "ER status", PR: "PR status" };
+const PROG_PARTS: ProgPart[] = ["G", "HER2", "ER", "PR"];
+// The book's categories for the markers, in plain words ("negative_ish_equivocal" is the table's footnote *).
+const CRIT_WORD: Record<string, string> = { positive: "Positive", negative: "Negative", ihc_3plus: "IHC 3+", ihc_0_1plus: "IHC 0 or 1+", negative_ish_equivocal: "Equivocal by ISH" };
+const cap = (x?: string) => (x ? x.charAt(0).toUpperCase() + x.slice(1) : "");
 
 function BookChip({ book, page, find, label, onOpen, here = true }: { book: string; page: number | null; find?: string; label: string; onOpen: (t: BookTarget) => void; here?: boolean }) {
   if (!here || page == null) {
@@ -28,13 +35,17 @@ function BookChip({ book, page, find, label, onOpen, here = true }: { book: stri
   );
 }
 
-function Step({ part, c, book, bookShort, onOpen, onBook, figo, here }: { part: "T" | "N" | "M"; c: Component; book: string; bookShort: string; onOpen: (t: SourceTarget) => void; onBook: (t: BookTarget) => void; figo?: boolean; here?: boolean }) {
+// One step of the walk: the category, the report line (or the doctor's entry) and the book line. Used for T, N and M and for the grade
+// and the markers of the prognostic stage group.
+interface StepData { quotes: Quote[]; criterion: Criterion | null; note?: string; size_mm?: number; entered?: Component["entered"] }
+
+function Step({ testId, word, cat, c, book, bookShort, onOpen, onBook, here }: { testId: string; word: string; cat: string; c: StepData; book: string; bookShort: string; onOpen: (t: SourceTarget) => void; onBook: (t: BookTarget) => void; here?: boolean }) {
   const q = c.quotes[0];
   return (
-    <li className="grid gap-3 py-3 md:grid-cols-[5.5rem_minmax(0,1fr)_minmax(0,1fr)]" data-testid={`stage-step-${part}`}>
+    <li className="grid gap-3 py-3 md:grid-cols-[5.5rem_minmax(0,1fr)_minmax(0,1fr)]" data-testid={testId}>
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{(figo ? FIGO_WORD : PART_WORD)[part]}</p>
-        <p className="mt-0.5 text-2xl font-bold tracking-tight text-foreground">{c.cat}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{word}</p>
+        <p className="mt-0.5 text-2xl font-bold tracking-tight text-foreground">{cat}</p>
       </div>
       <div className="min-w-0 rounded-md border border-border bg-muted/40 p-2.5">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{c.entered ? "Entered by the doctor" : "The report says"}</p>
@@ -52,11 +63,13 @@ function Step({ part, c, book, bookShort, onOpen, onBook, figo, here }: { part: 
         ) : null}
         {c.note ? <p className="mt-1 text-xs text-muted-foreground">{c.note}</p> : null}
       </div>
-      <div className="min-w-0 rounded-md border border-brand/25 bg-secondary/40 p-2.5">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">The book says</p>
-        <p className="mt-1 text-sm text-foreground"><span className="font-semibold">{c.criterion.cat}:</span> {c.criterion.text}</p>
-        <div className="mt-1.5"><BookChip book={book} page={c.criterion.page} find={c.criterion.find} label={bookShort} onOpen={onBook} here={here} /></div>
-      </div>
+      {c.criterion ? (
+        <div className="min-w-0 rounded-md border border-brand/25 bg-secondary/40 p-2.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">The book says</p>
+          <p className="mt-1 text-sm text-foreground"><span className="font-semibold">{c.criterion.cat}:</span> {c.criterion.text}</p>
+          <div className="mt-1.5"><BookChip book={book} page={c.criterion.page} find={c.criterion.find} label={bookShort} onOpen={onBook} here={here} /></div>
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -83,8 +96,8 @@ function FillPart({ part, caseId, options, onDone }: { part: "T" | "N" | "M"; ca
   );
 }
 
-function History_({ written, onOpen }: { written: Written[]; onOpen: (t: SourceTarget) => void }) {
-  if (!written.length) return <p className="text-sm text-muted-foreground">No report writes a stage.</p>;
+function History_({ written, onOpen, show, none = "No report writes a stage." }: { written: Written[]; onOpen: (t: SourceTarget) => void; show?: (w: Written) => string; none?: string }) {
+  if (!written.length) return <p className="text-sm text-muted-foreground">{none}</p>;
   return (
     <ol className="flex flex-wrap items-center gap-x-2 gap-y-2" data-testid="stage-history">
       {written.map((w, i) => (
@@ -92,13 +105,134 @@ function History_({ written, onOpen }: { written: Written[]; onOpen: (t: SourceT
           {i ? <ArrowRight className="size-3.5 text-muted-foreground" aria-hidden /> : null}
           <span className={cn("rounded-md border px-2 py-1 text-sm", w.superseded ? "border-dashed border-border text-muted-foreground line-through" : "border-border bg-card")}>
             <span className="text-xs text-muted-foreground">{w.date ? fmtDate(w.date) : "date not stated"} · </span>
-            <span className="font-semibold text-foreground">{w.value}</span>
+            <span className="font-semibold text-foreground">{show ? show(w) : w.value}</span>
             {w.prefix ? <span className="ml-1 rounded bg-muted px-1 text-[10px] font-semibold uppercase text-muted-foreground">{w.prefix === "c" ? "clinical" : w.prefix === "p" ? "pathological" : "after treatment"}</span> : null}
           </span>
           <SourceChip quote={{ doc_id: w.doc_id, doc_title: w.doc_title, page: w.page ?? 0, text: w.quote, date: null }} onOpen={onOpen} />
         </li>
       ))}
     </ol>
+  );
+}
+
+// The breast prognostic stage group (AJCC 8, pp. 621 to 624), under the anatomic draft: the anatomic T, N and M with the grade and the
+// HER2, ER and PR status, each from a verified report line; the row of the book's table; confirmed or marked wrong on its own ("which").
+function Prognostic({ caseId, view, p, book, bookShort, here, canConfirm, onOpen, onBook, onChanged }: {
+  caseId: string; view: StagingView; p: PrognosticDraft; book: string; bookShort: string; here: boolean; canConfirm: boolean;
+  onOpen: (t: SourceTarget) => void; onBook: (t: BookTarget) => void; onChanged: (v?: StagingView) => void;
+}) {
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState("");
+  const which: Which = "prognostic";
+  const confirm = useMutation({ mutationFn: () => confirmStaging(caseId, which), onSuccess: (v) => onChanged(v) });
+  const reject = useMutation({ mutationFn: () => rejectStaging(caseId, reason.trim(), which), onSuccess: (v) => { setRejecting(false); setReason(""); onChanged(v); } });
+  const ref = view.prognostic_ref;
+  const sw = view.switch;
+  const staged = p.status === "staged" && !!p.stage;
+  const comps = p.components;
+  const plain = (x?: string) => (x ?? "").replace(/^c(?=[TNM])/, "");
+  const tnm = [p.tnm.T, p.tnm.N, p.tnm.M].map(plain).filter(Boolean).join(" ");
+  const shown = (k: ProgPart) => (k === "G" ? comps.G?.cat ?? "" : cap(comps[k]?.cat));
+  const markers = PROG_PARTS.filter((k) => comps[k]).map((k) => (k === "G" ? shown(k) : `${k} ${comps[k]?.cat}`)).join(", ");
+  const missOf = (k: ProgPart) => p.missing.find((m) => m.startsWith(`${k}:`))?.replace(/^\w+:\s*/, "");
+  const other = p.missing.filter((m) => !/^(G|HER2|ER|PR):/.test(m));
+  const foot = (mark: string) => ref?.footnotes?.find((f) => f.mark === mark);
+  const cmp = view.prognostic_comparison;
+  const err = confirm.error || reject.error;
+  return (
+    <div className="space-y-3 border-t border-border pt-4" data-testid="prognostic-section">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-sm font-semibold text-foreground">{p.label || ref?.label || "Prognostic stage group"}</h3>
+        {sw.preview ? <span className="inline-flex items-center gap-1 rounded-md bg-warn-soft px-1.5 py-0.5 text-[11px] font-medium text-warn" title={sw.label}><FlaskConical className="size-3" aria-hidden />Preview</span> : null}
+        <span className="flex-1" />
+        {ref ? <BookChip book={book} page={ref.page} find={ref.find} label={bookShort} onOpen={onBook} here={here} /> : null}
+      </div>
+      {ref?.note ? <p className="text-xs text-muted-foreground">{ref.note}</p> : null}
+
+      {/* the result */}
+      <div className="flex flex-col gap-3 rounded-xl border border-border bg-gradient-to-br from-secondary/70 to-card p-4 sm:flex-row sm:items-center" data-testid="prognostic-result">
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{view.draft_label}</p>
+          {staged ? (
+            <p className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="text-3xl font-bold tracking-tight text-foreground">Prognostic stage {p.stage}</span>
+              <span className="text-base font-semibold text-muted-foreground">{tnm}, {markers}</span>
+            </p>
+          ) : (
+            <>
+              <p className="mt-1 text-2xl font-bold tracking-tight text-foreground">Cannot stage yet</p>
+              {other.length ? (
+                <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm text-warn" data-testid="prognostic-missing">
+                  {other.map((m) => <li key={m}>{m}</li>)}
+                </ul>
+              ) : null}
+            </>
+          )}
+          <p className="mt-1 text-xs text-muted-foreground">Counted for the board only after a doctor confirms it. The grade, HER2, ER and PR come from report lines checked word for word; fixed rules, not a model, decide each category.</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {p.confirmed ? <span className="inline-flex items-center gap-1.5 rounded-md status-ok px-2.5 py-1.5 text-sm font-medium"><CheckCircle2 className="size-4" aria-hidden />Confirmed by {p.confirmed.by_name || p.confirmed.by}</span> : null}
+          {p.rejected ? <span className="inline-flex items-center gap-1.5 rounded-md status-bad px-2.5 py-1.5 text-sm font-medium" title={p.rejected.reason}><XCircle className="size-4" aria-hidden />Marked wrong by {p.rejected.by_name || p.rejected.by}: {p.rejected.reason}</span> : null}
+          {staged && canConfirm && !p.confirmed && !view.stale ? <LoadingButton onClick={() => confirm.mutate()} loading={confirm.isPending} data-testid="confirm-prognostic"><Check className="size-4" />Confirm prognostic stage {p.stage}</LoadingButton> : null}
+          {staged && canConfirm && !rejecting && !p.rejected ? <Button variant="outline" onClick={() => setRejecting(true)} data-testid="reject-prognostic">This is wrong</Button> : null}
+        </div>
+      </div>
+      {rejecting ? (
+        <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); reject.mutate(); }}>
+          <Input autoFocus value={reason} onChange={(e) => setReason(e.target.value)} placeholder="What is wrong? (recorded with your name)" className="h-9 max-w-md text-sm" maxLength={300} aria-label="What is wrong with the prognostic stage group" />
+          <LoadingButton size="sm" type="submit" loading={reject.isPending} disabled={reason.trim().length < 3}>Save</LoadingButton>
+          <Button size="sm" variant="ghost" type="button" onClick={() => setRejecting(false)}>Cancel</Button>
+        </form>
+      ) : null}
+
+      {/* the walk: grade, HER2, ER, PR */}
+      <ol className="divide-y divide-border">
+        {PROG_PARTS.map((k) => {
+          const c = comps[k];
+          if (c) return <Step key={k} testId={`prog-step-${k}`} word={PROG_WORD[k]} cat={shown(k)} c={{ quotes: c.quotes, criterion: c.criterion ? { ...c.criterion, cat: CRIT_WORD[c.criterion.cat] ?? c.criterion.cat } : null, note: c.how ? `Decided from ${c.how}.` : undefined }} book={book} bookShort={bookShort} onOpen={onOpen} onBook={onBook} here={here} />;
+          return (
+            <li key={k} className="grid gap-3 py-3 md:grid-cols-[5.5rem_minmax(0,1fr)]" data-testid={`prog-step-${k}`}>
+              <div><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{PROG_WORD[k]}</p><p className="mt-0.5 text-2xl font-bold text-muted-foreground">?</p></div>
+              <div className="rounded-md border border-dashed border-warn/50 bg-warn-soft/60 p-2.5">
+                <p className="text-sm font-medium text-warn">Cannot stage: {missOf(k) ?? "not stated in a report"}</p>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+
+      {/* the row of the prognostic table */}
+      {staged && p.row ? (
+        <div className="space-y-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm" data-testid="prognostic-row">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Prognostic table</span>
+            <span className="font-medium text-foreground">{tnm}, {markers}</span>
+            <ArrowRight className="size-3.5 text-muted-foreground" aria-hidden />
+            <span className="font-semibold text-foreground">Prognostic stage {p.stage}</span>
+            <span className="flex-1" />
+            <BookChip book={book} page={p.row.page} find={p.row.page === ref?.page ? ref?.find : undefined} label={bookShort} onOpen={onBook} here={here} />
+          </div>
+          <p className="text-xs text-muted-foreground">The book prints this row as: {p.row.printed}</p>
+          {p.row.changed_from_anatomic ? <p className="text-xs text-muted-foreground">The book marks this group with ***: grade and the markers move it more than one stage group from the anatomic stage group (footnote ***, p. {foot("***")?.page ?? 624}).</p> : null}
+          {p.row.note ? <p className="text-xs text-muted-foreground">Note: {p.row.note}</p> : null}
+        </div>
+      ) : null}
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="prognostic-multigene"><Info className="size-3.5 shrink-0" aria-hidden />{p.multigene?.note || ref?.multigene_note}</p>
+
+      {/* the prognostic stage the reports wrote: shown and flagged, never changed */}
+      <div className="space-y-2">
+        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><History className="size-3.5" aria-hidden />Prognostic stage as written in the reports</p>
+        {cmp ? (
+          <p className={cn("flex items-start gap-1.5 rounded-md px-3 py-1.5 text-sm", cmp.result === "differs" ? "status-warn" : "status-ok")} data-testid="prognostic-compare">
+            {cmp.result === "differs" ? <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden /> : <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden />}
+            <span>{cmp.result === "matches" ? `The draft matches what ${niceTitle(cmp.written.doc_title)} writes (prognostic stage ${cmp.written.stage}).`
+              : `${niceTitle(cmp.written.doc_title)} writes prognostic stage ${cmp.written.stage}; the draft is ${p.stage}. The report is shown as written, for the board to look at.`}</span>
+          </p>
+        ) : null}
+        <History_ written={view.prognostic_written ?? []} onOpen={onOpen} show={(w) => (w.stage ? `Prognostic stage ${w.stage}` : w.value)} none="No report writes a prognostic stage." />
+      </div>
+      {err ? <p role="alert" className="text-sm text-bad">{errorText(err)}</p> : null}
+    </div>
   );
 }
 
@@ -188,7 +322,7 @@ export function StagingCard({ caseId, view, loading, canRun, canConfirm, onOpen,
             <ol className="divide-y divide-border">
               {(["T", "N", "M"] as const).map((p) => {
                 const c = comps[p];
-                if (c && book) return <Step key={p} part={p} c={c} book={book.id} bookShort={bookShort} onOpen={onOpen} onBook={onBook} figo={figo} here={here} />;
+                if (c && book) return <Step key={p} testId={`stage-step-${p}`} word={(figo ? FIGO_WORD : PART_WORD)[p]} cat={c.cat} c={c} book={book.id} bookShort={bookShort} onOpen={onOpen} onBook={onBook} here={here} />;
                 const miss = d.missing.find((m) => m.startsWith(`${p}:`));
                 return (
                   <li key={p} className="grid gap-3 py-3 md:grid-cols-[5.5rem_minmax(0,1fr)]" data-testid={`stage-step-${p}`}>
@@ -214,6 +348,11 @@ export function StagingCard({ caseId, view, loading, canRun, canConfirm, onOpen,
               </div>
             ) : null}
             {view.groups_note ? <p className="text-xs text-muted-foreground">{view.groups_note}</p> : null}
+
+            {/* the breast prognostic stage group, under the anatomic one */}
+            {view.prognostic && book ? (
+              <Prognostic caseId={caseId} view={view} p={view.prognostic} book={book.id} bookShort={bookShort} here={here} canConfirm={canConfirm} onOpen={onOpen} onBook={onBook} onChanged={onChanged} />
+            ) : null}
           </>
         )}
 
@@ -228,7 +367,7 @@ export function StagingCard({ caseId, view, loading, canRun, canConfirm, onOpen,
                   : `${niceTitle(view.comparison.written.doc_title)} writes ${view.comparison.written.value}.`}
               </p>
             ) : null}
-            <History_ written={view.written} onOpen={onOpen} />
+            <History_ written={view.prognostic_ref ? view.written.filter((w) => w.kind !== "prognostic") : view.written} onOpen={onOpen} />
           </div>
         ) : null}
         {err ? <p role="alert" className="text-sm text-bad">{errorText(err)}</p> : null}

@@ -60,21 +60,22 @@ async def enter_part(case_id: str, request: Request):
 
 @router.post("/cases/{case_id}/staging/confirm")
 async def confirm_staging(case_id: str, request: Request):
-    """{note?}: a consultant of the owning department confirms the draft for the board (guard 1); audited."""
+    """{note?, which?}: a consultant of the owning department confirms the draft for the board (guard 1); audited. which = "anatomic"
+    (the default) or "prognostic" (the breast prognostic stage group)."""
     u = common.user(request); rl = common.roles(request); c = _full(request, case_id)
     b = await common.body(request) if (await request.body()) else {}
     common.need_case(rl, "confirm", c)
     async with store.lock(case_id):
-        return _call(staging.confirm, case_id, u, b.get("note"))
+        return _call(staging.confirm, case_id, u, b.get("note"), b.get("which") or "anatomic")
 
 
 @router.post("/cases/{case_id}/staging/reject")
 async def reject_staging(case_id: str, request: Request):
-    """{reason}: "This is wrong", with the reason; the draft stays visible, marked rejected; audited."""
+    """{reason, which?}: "This is wrong", with the reason; the draft stays visible, marked rejected; audited. which as for confirm."""
     u = common.user(request); rl = common.roles(request); c = _full(request, case_id); b = await common.body(request)
     common.need_case(rl, "confirm", c)
     async with store.lock(case_id):
-        return _call(staging.reject, case_id, u, b.get("reason"))
+        return _call(staging.reject, case_id, u, b.get("reason"), b.get("which") or "anatomic")
 
 
 @router.get("/staging/books/{book_id}")
