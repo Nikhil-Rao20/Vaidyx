@@ -1,3 +1,6 @@
 # The item in progress (checkpoint)
 
-none
+Phase 0, session 1. Items in hand:
+- 0.1 Pre-flight and baseline: services checked (done); backup done 00:58 (tumour_board 1.3G without the real case, his_mock 2.2G, /data/vaidyx/night-v3/backup/); unit tests done (2964 passed, 9 deselected); next: tsc + vite build, mocked Playwright shots, then the baseline screenshots (implementer agent writing docs/night-v3/tools/baseline_shots.sh, ensure_resident.py, a resident role in web/tb-nik/e2e/shots/real.spec.ts and a TBNIK_SHOTS override in e2e/support/helpers.ts; shots to /data/vaidyx/night-v3/baseline/). Commit as N3-0.1 when the shots exist and the gate numbers are in the log.
+- 0.2 Research: parts 1 (GI and thoracic, 5 cancers) and 2 (gynae, urology, head and neck, thyroid, 7 cancers) written and their table quotes verified against the cached book text (/data/vaidyx/night-v3/research_text/); part 3 (blood, paediatric, sarcoma, CNS) agent running; the orchestrator concatenates them into 01_cancer_checklists.md (with an index and the licence lines), checks quotes and departments, then commits N3-0.2.
+- 0.3 (decision record) agent running, writing research/02_board_decision_dataset.md. 0.4 to 0.9: not started; each is one research agent writing its own file (02 to 08); commit each as N3-0.x.
