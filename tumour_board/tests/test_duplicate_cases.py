@@ -143,8 +143,9 @@ def test_another_cancer_is_allowed_and_linked_both_ways(app, people):
 
 def test_patient_case_files_lists_briefs_for_placed_logins_only(app, people):
     assert from_his(app, RAO, case_id="TB-DUP-A").status_code == 200
-    r = app.as_(RAVI).get("/patient-case-files", params={"identifier": UHID})
+    r = app.as_(MEHTA).get("/patient-case-files", params={"identifier": UHID})  # a consultant who may start a Case File
     assert r.status_code == 200, r.text
+    assert app.as_(RAVI).get("/patient-case-files", params={"identifier": UHID}).status_code == 403  # a supporting doctor: the look-up by number names a patient's cancers (review, 27 Oct)
     row = r.json()["cases"][0]
     assert set(row) == {"case_id", "protocol", "cancer_name", "cancer_label", "department", "department_name", "owner", "owner_name", "owner_words", "can_open",
                         "created_at", "status_label"}

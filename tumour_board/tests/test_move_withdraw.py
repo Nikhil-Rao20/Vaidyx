@@ -237,3 +237,80 @@ def test_open_meetings_route_lists_planned_meetings_for_a_treating_doctor(full, 
     assert r.status_code == 200, r.text
     assert [m["id"] for m in r.json()["meetings"]] == [a["id"], b["id"]]
     assert r.json()["meetings"][0]["label"] == f"Tumour Board {_dmy(a['date'])} 16:00" and r.json()["meetings"][0]["room"] == "Seminar Hall 1"
+
+
+# ---- the coordinator adds it to a meeting (review fix: one agenda, the withdraw cleared) ----------------------------------------------
+
+def test_the_coordinator_adding_it_to_a_second_meeting_takes_it_off_the_first(sent):
+    a, b = sent
+    meetings.add_to_agenda(b["id"], ANIL, CASE, "discussion")
+    assert _list_of(a["id"], CASE) is None and not _on_old_agenda(a["id"], CASE)
+    assert _list_of(b["id"], CASE) == "discussion" and store.get_case(CASE)["meeting_id"] == b["id"]
+    assert _meeting_audit(a["id"], "agenda_removed_by_owner")[0]["why"] == "coordinator"
+
+
+def test_the_coordinator_setting_a_second_agenda_takes_it_off_the_first(sent):
+    a, b = sent
+    meetings.set_agenda(b["id"], ANIL, [], [CASE])
+    assert _list_of(a["id"], CASE) is None and _list_of(b["id"], CASE) == "noting"
+    assert _meeting_audit(a["id"], "agenda_removed_by_owner")[0]["why"] == "coordinator"
+    meetings.set_agenda(b["id"], ANIL, [CASE], [])  # a reorder on the same meeting: nothing more is taken off anywhere
+    assert len(_meeting_audit(a["id"], "agenda_removed_by_owner")) == 1
+
+
+def test_a_not_ready_add_leaves_the_other_agenda_alone(sent):
+    a, b = sent
+    meetings.add_to_agenda(b["id"], ANIL, CASE, "not_ready", "Histopathology awaited (synthetic)")
+    assert _list_of(a["id"], CASE) == "noting" and _list_of(b["id"], CASE) == "not_ready"
+
+
+@pytest.mark.parametrize("how", ["add", "set"])
+def test_the_coordinator_putting_it_back_after_a_withdraw_clears_the_withdraw(sent, how):
+    from tumour_board import after_send
+    a, b = sent
+    meetings.withdraw_case(CASE, RAO, "synthetic reason")
+    assert not after_send.is_sent(store.get_case(CASE))
+    if how == "add":
+        meetings.add_to_agenda(b["id"], ANIL, CASE, "noting")
+    else:
+        meetings.set_agenda(b["id"], ANIL, [CASE], [])
+    c = store.get_case(CASE)
+    assert "withdrawn" not in c["board_send"] and c["board_send"]["meeting_id"] == b["id"] and c["meeting_id"] == b["id"]
+    assert after_send.is_sent(c)  # sent again: the chip no longer says Taken off
+    h = c["board_send_history"]
+    assert h[-2]["withdrawn_from"] == a["id"] and h[-2]["reason"] == "synthetic reason"  # the history keeps the withdraw
+    assert h[-1]["put_back_on"] == b["id"] and h[-1]["by"] == ANIL
+    ev = next(e for e in store.read_audit(CASE) if e.get("kind") == "agenda_withdraw_cleared")
+    assert ev["by"] == ANIL and ev["meeting_id"] == b["id"]
+
+
+def test_the_agenda_add_route_puts_it_back_after_a_withdraw(full, sent):
+    a, b = sent
+    meetings.withdraw_case(CASE, RAO, "synthetic reason")
+    r = full.as_(ANIL).post(f"/meetings/{b['id']}/agenda/add", {"case_id": CASE, "list": "discussion"})
+    assert r.status_code == 200, r.text
+    assert "withdrawn" not in store.get_case(CASE)["board_send"] and _list_of(b["id"], CASE) == "discussion"
+
+
+# ---- locks and the open meetings audit (review fix) -----------------------------------------------------------------------------------
+
+def test_move_withdraw_and_ready_routes_lock_the_case_file(full, ready_case, two, monkeypatch):
+    a, b = two
+    seen, real = [], store.lock
+
+    def spy(case_id):
+        seen.append(case_id)
+        return real(case_id)
+    monkeypatch.setattr(store, "lock", spy)
+    assert full.as_(RAO).post(f"/cases/{CASE}/ready", {"ready": True, "meeting_id": a["id"]}).status_code == 200
+    assert seen == [CASE]
+    assert full.as_(RAO).post(f"/cases/{CASE}/meeting/move", {"meeting_id": b["id"]}).status_code == 200
+    assert full.as_(RAO).post(f"/cases/{CASE}/meeting/withdraw", {"reason": "synthetic reason"}).status_code == 200
+    assert seen == [CASE, CASE, CASE]
+
+
+def test_open_meetings_route_is_audited(full, two):
+    from tumour_board import org
+    assert full.as_(RAO).get("/meetings/open").status_code == 200
+    ev = next(e for e in org.read_audit() if e.get("kind") == "meetings_open_listed")
+    assert ev["by"] == RAO and ev["count"] == 2

@@ -1350,11 +1350,12 @@ def setup_tumour_board_routes():
         if not isinstance(b, dict):
             b = {}
         try:
-            if bool(b.get("ready", True)):
-                c = board.send_to_board(case_id, u, list=str(b.get("list") or "discussion"), meeting_id=str(b.get("meeting_id") or ""),
-                                        presenter=str(b.get("presenter") or ""), note=str(b.get("note") or ""), reason=str(b.get("reason") or ""))
-            else:
-                c = board.mark_ready(case_id, u, ready=False, note=str(b.get("note") or ""))
+            async with store.lock(case_id):  # case.json changes: never alongside another change to the same Case File
+                if bool(b.get("ready", True)):
+                    c = board.send_to_board(case_id, u, list=str(b.get("list") or "discussion"), meeting_id=str(b.get("meeting_id") or ""),
+                                            presenter=str(b.get("presenter") or ""), note=str(b.get("note") or ""), reason=str(b.get("reason") or ""))
+                else:
+                    c = board.mark_ready(case_id, u, ready=False, note=str(b.get("note") or ""))
         except ValueError as e:
             raise HTTPException(400, {"message": str(e), "code": "send_400"})
         if bool(b.get("ready", True)):  # the summary prose and the heads' briefs are prepared in the background (18 Oct, tumour_board/ready_hook.py)

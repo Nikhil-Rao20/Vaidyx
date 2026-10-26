@@ -115,7 +115,7 @@ export function SavedFiltersSection() {
           </AnimatePresence>
         </ul>
       ) : (
-        <EmptyState compact kind="search" title="No saved filters yet" text="On Case Files, pick a few filters and press Save as a view." action={<Button type="button" variant="outline" size="sm" asChild><Link to="/cases#cases">Go to Home</Link></Button>} />
+        <EmptyState compact kind="search" title="No saved filters yet" text="On Case Files, pick a few filters and press Save as a view." action={<Button type="button" variant="outline" size="sm" asChild><Link to="/cases#cases">Go to Case Files</Link></Button>} />
       )}
     </SettingsCard>
   );

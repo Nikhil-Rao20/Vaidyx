@@ -356,16 +356,24 @@ def test_the_prognostic_draft_beside_the_anatomic_one(breast):
     assert ev["prognostic"]["stage"] == "IB"
     # each draft is confirmed on its own, and the confirmation says which; an old caller without "which" confirms the anatomic draft
     assert tc.post(f"/api/tb/cases/{CASE}/staging/confirm", json={"which": "nonsense"}).status_code == 400
+    # the prognostic group is built on the anatomic T, N and M: it is confirmed only once the anatomic draft is (review, 27 Oct)
+    r = tc.post(f"/api/tb/cases/{CASE}/staging/confirm", json={"which": "prognostic"})
+    assert r.status_code == 409 and "anatomic stage first" in r.json()["detail"]["message"], r.text
+    v = tc.post(f"/api/tb/cases/{CASE}/staging/confirm", json={}).json()
+    assert v["draft"]["confirmed"]["which"] == "anatomic" and v["prognostic"]["confirmed"] is None
+    assert [e for e in store.read_audit(CASE) if e.get("kind") == "draft_stage_confirmed"][-1]["which"] == "anatomic"
     v = tc.post(f"/api/tb/cases/{CASE}/staging/confirm", json={"which": "prognostic"}).json()
-    assert v["prognostic"]["confirmed"]["which"] == "prognostic" and v["prognostic"]["confirmed"]["by"] == "dr.rao" and v["draft"]["confirmed"] is None
+    assert v["prognostic"]["confirmed"]["which"] == "prognostic" and v["prognostic"]["confirmed"]["by"] == "dr.rao" and v["draft"]["confirmed"]["which"] == "anatomic"
     ev = [e for e in store.read_audit(CASE) if e.get("kind") == "draft_stage_confirmed"][-1]
     assert ev["which"] == "prognostic" and ev["stage"] == "IB" and ev["components"] == {"G": "G1", "HER2": "negative", "ER": "positive", "PR": "positive"}
-    v = tc.post(f"/api/tb/cases/{CASE}/staging/confirm", json={}).json()
-    assert v["draft"]["confirmed"]["which"] == "anatomic" and v["prognostic"]["confirmed"]["which"] == "prognostic"
-    assert [e for e in store.read_audit(CASE) if e.get("kind") == "draft_stage_confirmed"][-1]["which"] == "anatomic"
     v = tc.post(f"/api/tb/cases/{CASE}/staging/reject", json={"reason": "Grade is 2 on review", "which": "prognostic"}).json()
     assert v["prognostic"]["rejected"]["reason"] == "Grade is 2 on review" and v["prognostic"]["confirmed"] is None and v["draft"]["confirmed"]
     assert [e for e in store.read_audit(CASE) if e.get("kind") == "draft_stage_rejected"][-1]["which"] == "prognostic"
+    # marking the anatomic draft wrong also drops a prognostic confirmation that was built on it
+    v = tc.post(f"/api/tb/cases/{CASE}/staging/confirm", json={"which": "prognostic"}).json()
+    assert v["prognostic"]["confirmed"]
+    v = tc.post(f"/api/tb/cases/{CASE}/staging/reject", json={"reason": "N is wrong on review"}).json()
+    assert v["draft"]["rejected"] and v["draft"]["confirmed"] is None and v["prognostic"]["confirmed"] is None
 
 
 def test_a_missing_biomarker_means_cannot_stage(breast):

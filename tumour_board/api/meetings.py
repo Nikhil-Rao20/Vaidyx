@@ -75,7 +75,9 @@ async def meetings_open_list(request: Request):
     """The meetings a Case File may still go to (planned, not cancelled, today or later, earliest first) for any placed account: a
     treating doctor sees an empty planned meeting here even when GET /meetings does not list it (night-v3 item 1.6, Move)."""
     u, rl = _who(request)
-    return {"meetings": [meetings.summary_row(board.ensure_meeting_fields(s)) for s in meetings.open_meetings()]}
+    rows = [meetings.summary_row(board.ensure_meeting_fields(s)) for s in meetings.open_meetings()]
+    org.audit("meetings_open_listed", u, count=len(rows))
+    return {"meetings": rows}
 
 
 @router.post("/meetings/join")
@@ -136,7 +138,9 @@ async def meetings_agenda(mid: str, request: Request):
 @router.post("/meetings/{mid}/agenda/add")
 async def meetings_agenda_add(mid: str, request: Request):
     u, rl = _who(request); common.need(rl, "session"); b = await common.body(request); s = _meeting(mid)
-    s = _call(meetings.add_to_agenda, s["id"], u, _case_id(b.get("case_id")), str(b.get("list") or "discussion"), str(b.get("reason") or ""))
+    cid = _case_id(b.get("case_id"))
+    async with store.lock(cid):  # it may clear a withdraw on the Case File (meetings._one_agenda)
+        s = _call(meetings.add_to_agenda, s["id"], u, cid, str(b.get("list") or "discussion"), str(b.get("reason") or ""))
     return meetings.view(s["id"], rl)
 
 
@@ -158,14 +162,16 @@ def _moved(c: dict) -> dict:
 async def case_meeting_move(case_id: str, request: Request):
     """{meeting_id, reason?}: move a Case File sent to the board to another open meeting (meetings.move_case); the coordinator is told."""
     u, rl = _who(request); c = common.case(_case_id(case_id)); _may_move(rl, c); b = await common.body(request)
-    return _moved(_call(meetings.move_case, c["case_id"], u, str(b.get("meeting_id") or ""), str(b.get("reason") or "")))
+    async with store.lock(c["case_id"]):
+        return _moved(_call(meetings.move_case, c["case_id"], u, str(b.get("meeting_id") or ""), str(b.get("reason") or "")))
 
 
 @router.post("/cases/{case_id}/meeting/withdraw")
 async def case_meeting_withdraw(case_id: str, request: Request):
     """{reason}: take a Case File off the agenda (meetings.withdraw_case); the ready mark stays; the coordinator is told."""
     u, rl = _who(request); c = common.case(_case_id(case_id)); _may_move(rl, c); b = await common.body(request)
-    return _moved(_call(meetings.withdraw_case, c["case_id"], u, str(b.get("reason") or "")))
+    async with store.lock(c["case_id"]):
+        return _moved(_call(meetings.withdraw_case, c["case_id"], u, str(b.get("reason") or "")))
 
 
 @router.post("/meetings/{mid}/send-agenda")

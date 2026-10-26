@@ -124,6 +124,117 @@ def test_after_the_doctor_picks_or_notes_nothing_waits(sent, how):
     assert discord.both_values(CASE, "lesion_size") == []  # settled: the summary and the slides go back to one value
 
 
+# ---- after sending: a value a newer final report changed, a value only a preliminary report gives (review fix of item 1.5) ----------------
+
+NEW_CT = "DCTNEW01"
+NEW_SIZE = "6.3 cm"
+NEW_QUOTE = "Largest lesion now measures 6.3 cm"
+MOL_PRE, MOL_FINAL = "DMOLPRE1", "DMOLFIN1"
+MET_VALUE = "MET exon 14 skipping not detected"
+
+
+def _add_new_ct(value=NEW_SIZE, quote=NEW_QUOTE, processed="2026-10-22T09:00:00"):
+    """A final CT dated after the PET-CT (5.2 cm) that writes another size: a time-varying value changed after sending."""
+    d = util.make_doc(NEW_CT, "ct", date="2026-10-18", region="thorax", title="CECT THORAX FOLLOW-UP (SYNTHETIC)",
+                      facts={"lesion_size": util.fact(value, quote=quote)})
+    d["processed"] = processed
+    util.add(CASE, d)
+    service.recheck(CASE, "test")
+
+
+def _add_met(doc_id, status, processed):
+    """A molecular report giving MET, which no earlier report gives (PRELIMINARY first, then FINAL)."""
+    d = util.make_doc(doc_id, "molecular", status=status, signed="yes" if status == "FINAL" else "no", date="2026-10-16",
+                      title=f"MOLECULAR PANEL {status} (SYNTHETIC)", facts={"met": util.fact(MET_VALUE, quote=f"MET: {MET_VALUE}")})
+    d["processed"] = processed
+    util.add(CASE, d)
+    service.recheck(CASE, "test")
+
+
+def _check_task(fact_id):
+    v = steps.build(CASE, org.roles("dr.rao"))
+    p = next((x for x in v["check"]["problems"] if x["fact_id"] == fact_id), None)
+    return v, p
+
+
+def test_a_value_a_newer_final_report_changed_after_sending_shows_both_values_and_the_task(tb001):
+    _send()
+    _add_new_ct()
+    d = discord.open_differences(CASE)["lesion_size"]
+    assert d["kind"] == "changed" and d.get("after_send")
+    before, new = d["values"]
+    assert before["doc_id"] == "D4edcec61" and before["value"] == "5.2 cm" and before["final"] and before["quote"]  # the newest final value read before sending
+    assert new["doc_id"] == NEW_CT and new["value"] == NEW_SIZE and new["quote"] == NEW_QUOTE and new["status"] == "final"
+    assert "waiting on the treating doctor's check" in d["line"] and "—" not in d["line"]
+    rows = discord.slide_rows("lesion_size", d, 4)
+    assert [r["value"] for r in rows] == ["5.2 cm (final)", f"{NEW_SIZE} (final)"] and all(r["quote"] for r in rows)
+    assert [r["verification"] for r in rows] == [v["verification"] for v in d["values"]] == ["verified", "verified"]
+    v, p = _check_task("lesion_size")
+    assert p and p.get("since_sent") and not p.get("resolved") and p["confirmation"]["kind"] == "changed"
+    assert {c["doc_id"] for c in p["confirmation"]["citations"]} == {"D4edcec61", NEW_CT}
+    assert v["todo"][0]["id"] == "since_sent" and v["todo"][0]["label"] == "Check 1 value"
+    assert after_send.waiting_on(store.get_case(CASE))["values"] == 1
+    # noted: settled, nothing waits, the summary and the slides go back to one value
+    confirm.record(CASE, "note_discordance", d["key"], {}, "read both", by="dr.rao")
+    assert "lesion_size" not in discord.open_differences(CASE) and after_send.waiting_on(store.get_case(CASE)) is None
+    assert not any(t.get("since_sent") for t in steps.build(CASE, org.roles("dr.rao"))["todo"])
+
+
+def test_a_new_final_report_with_the_same_value_or_read_before_sending_is_not_a_change(tb001):
+    _send()
+    _add_new_ct(value="5.2 cm", quote="Largest lesion measures 5.2 cm")  # the same as before sending; it still differs from the 2025 CT (2.1 cm)
+    assert "lesion_size" not in discord.open_differences(CASE) and after_send.waiting_on(store.get_case(CASE)) is None
+    _add_new_ct(processed="2026-10-19T09:00:00")  # another value, but read before the ready mark: the doctor sent it knowing
+    assert "lesion_size" not in discord.open_differences(CASE)
+    v, p = _check_task("lesion_size")
+    assert p is None and not any(t.get("since_sent") for t in v["todo"])
+
+
+def test_a_value_only_a_preliminary_report_gives_after_sending_waits_until_the_final_lands(tb001, monkeypatch):
+    _send()
+    assert "met" not in discord.open_differences(CASE)
+    _add_met(MOL_PRE, "PRELIMINARY", "2026-10-21T09:00:00")
+    d = discord.open_differences(CASE)["met"]
+    assert d["kind"] == "preliminary" and len(d["values"]) == 1
+    val = d["values"][0]
+    assert val["doc_id"] == MOL_PRE and val["value"] == MET_VALUE and val["quote"] == f"MET: {MET_VALUE}" and val["status"] == "preliminary" and not val["final"]
+    assert f"\"{MET_VALUE}\" (MOLECULAR PANEL PRELIMINARY (SYNTHETIC), preliminary)" in d["line"] and "waiting on the treating doctor's check" in d["line"]
+    assert discord.both_values(CASE, "met") == d["values"]
+    rows = discord.slide_rows("met", d)
+    assert len(rows) == 1 and rows[0]["value"] == f"{MET_VALUE} (preliminary)" and rows[0]["quote"] and rows[0]["verification"] == "verified"
+    # the summary: the value shown "(preliminary)" with its quote
+    _fake_model(monkeypatch)
+    out = asyncio.run(summary.build(CASE, force=True))
+    line = next(x for sec in out["sections"] for x in sec["sentences"] if x.get("differ") and x.get("fact_id") == "met")
+    assert "preliminary)" in line["text"] and [c["doc_id"] for c in line["citations"]] == [MOL_PRE] and line["citations"][0]["quote"]
+    # the doctor's task
+    v, p = _check_task("met")
+    assert p and p.get("since_sent") and p["why"] == "Only a preliminary report since sending" and p["value"] == MET_VALUE and p["quote"]["doc_id"] == MOL_PRE
+    assert v["todo"][0]["label"] == "Check 1 value" and "only preliminary" in v["todo"][0]["why"]
+    assert after_send.waiting_on(store.get_case(CASE))["values"] == 1
+    # the final report lands with the same value: it clears
+    _add_met(MOL_FINAL, "FINAL", "2026-10-23T09:00:00")
+    assert "met" not in discord.open_differences(CASE) and after_send.waiting_on(store.get_case(CASE)) is None
+    v, p = _check_task("met")
+    assert p is None and not any(t.get("since_sent") for t in v["todo"])
+
+
+def test_a_preliminary_value_read_before_sending_is_not_a_task(tb001):
+    _add_met(MOL_PRE, "PRELIMINARY", "2026-10-19T09:00:00")
+    _send()
+    assert "met" not in discord.open_differences(CASE)
+    v, p = _check_task("met")
+    assert p is None and not any(t.get("since_sent") for t in v["todo"])
+    assert "pdl1" not in discord.open_differences(CASE)  # the draft histopathology of the fixture was read long before sending
+
+
+def test_slide_rows_carry_each_values_own_verification():
+    diff = {"label": "PD-L1", "line": "x", "values": [
+        {"value": "60 %", "doc_id": "D1", "doc_title": "A", "final": True, "status": "final", "quote": "TPS 60 %", "verification": "verified"},
+        {"value": "6 %", "doc_id": "D2", "doc_title": "B", "final": True, "status": "final", "quote": "TPS 6 %", "verification": "confirmed"}]}
+    assert [r["verification"] for r in discord.slide_rows("pdl1", diff)] == ["verified", "confirmed"]
+
+
 # ---- the summary ------------------------------------------------------------------------------------------------------------------------
 
 def _fake_model(monkeypatch):
@@ -216,6 +327,34 @@ def test_a_record_arriving_during_a_run_makes_it_go_once_more(sent, monkeypatch,
     out = asyncio.run(ready_hook.run(CASE, "x", again=True))
     assert out["passes"] == 2 and len(seen) == 2 and _hook_steps().count("again") == 2
     assert not ready_hook.running(CASE) and CASE not in ready_hook.AGAIN
+
+
+def test_a_record_arriving_during_the_last_pass_is_kept_for_the_next_call(sent, monkeypatch, hook):
+    monkeypatch.setenv("TB_SCHEDULER", "1")
+    seen = []
+
+    async def fake_build(case_id, force=False):
+        seen.append(case_id)
+        assert ready_hook.on_ready(case_id, "x", again=True)["how"] == "running"  # a report lands during every pass, the last one too
+        return {"status": "ready"}
+    monkeypatch.setattr(summary, "build", fake_build)
+    out = asyncio.run(ready_hook.run(CASE, "x", again=True))
+    assert out["passes"] == ready_hook.MAX_PASSES == len(seen)
+    assert _hook_steps().count("again_deferred") == 1 and CASE not in ready_hook.AGAIN and not ready_hook.running(CASE)
+    assert store.get_state(CASE)[ready_hook.NEEDS_AGAIN]["by"] == "x"  # never dropped: kept for the next call
+    runs = []
+
+    async def fake_run(case_id, user, again=False):
+        runs.append((case_id, again))
+        return {}
+    monkeypatch.setattr(ready_hook, "run", fake_run)
+    res = ready_hook.on_ready(CASE, "Vaidyx (automatic)", again=True)
+    assert res["scheduled"] and "again_honoured" in _hook_steps() and ready_hook.NEEDS_AGAIN not in store.get_state(CASE)
+    # while a run is going, the flag makes it go once more even for a call that is not a new record
+    st = store.get_state(CASE); st[ready_hook.NEEDS_AGAIN] = {"at": "2026-10-27T10:00:00", "by": "x"}; store.save_state(CASE, st)
+    ready_hook.RUNNING[CASE] = {"started": 0, "user": "x", "step": "summary"}
+    assert ready_hook.on_ready(CASE, "x")["how"] == "running" and CASE in ready_hook.AGAIN
+    ready_hook.RUNNING.pop(CASE); ready_hook.AGAIN.discard(CASE)
 
 
 def test_a_withdrawn_case_file_is_not_updated(sent, monkeypatch, hook):

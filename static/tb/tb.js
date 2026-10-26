@@ -13,8 +13,19 @@ async function api(path, opts = {}) {
   if (o.json !== undefined) { o.method = o.method || "POST"; o.headers = { "Content-Type": "application/json" }; o.body = JSON.stringify(o.json); delete o.json; }
   const r = await fetch("/api/tb" + path, o);
   if (r.status === 401) { location.href = "/login"; throw new Error("not logged in"); }
-  if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch (e) {} throw new Error(m); }
+  if (!r.ok) {
+    let m = r.statusText, code = "";
+    try { const d = (await r.json()).detail; m = errDetail(d, m); code = d && typeof d === "object" && !Array.isArray(d) ? String(d.code || "") : ""; } catch (e) {}
+    const err = new Error(m); err.status = r.status; err.code = code; throw err;
+  }
   return r.json();
+}
+// the server's error detail is plain text, {message, code} (the newer routes) or a list (a malformed request): always read it as words
+function errDetail(d, fallback) {
+  if (typeof d === "string") return d || fallback;
+  if (Array.isArray(d)) return d.map((x) => (x && x.msg) || "").filter(Boolean).join("; ") || fallback;
+  if (d && typeof d === "object") return String(d.message || fallback);
+  return fallback;
 }
 function toast(msg, ms = 3500) { const t = $("#toast"); t.textContent = msg; t.classList.remove("hidden"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.add("hidden"), ms); }
 // Document dates (V1 item 3.1): event date (clinical order) with the report date standing in when only one was found; unconfirmed = none found.
@@ -760,7 +771,16 @@ function bindReadyLine() {
     const v = ready ? await confirmDialog({ title: "Mark ready for the board", intro: "The MDT Coordinator is told and builds the agenda from the Case Files their owners marked ready.", fields: [{ id: "note", label: "Note", type: "textarea", placeholder: "e.g. HER2 FISH awaited, discuss anyway" }], submit: "Mark ready", note: "Recorded with your name and the time in the audit log. It can be taken back." })
       : await confirmDialog({ title: "Take back the ready mark", intro: "The Case File is no longer marked ready for the board.", fields: [{ id: "note", label: "Reason", type: "textarea" }], submit: "Take back", note: "Recorded with your name and the time in the audit log." });
     if (!v) return;
-    try { await api(`/cases/${encodeURIComponent(S.caseId)}/ready`, { json: { ready, note: v.note } }); toast(ready ? "Marked ready for the board; the MDT Coordinator is told (audited)" : "Ready mark taken back (audited)"); await openCase(S.caseId, true); }
+    const url = `/cases/${encodeURIComponent(S.caseId)}/ready`;
+    try {
+      try { await api(url, { json: { ready, note: v.note } }); }
+      catch (e) {  // Send to the board (night-v3 item 1.4) needs a reason when items are still open: ask for it once and try again
+        if (!(ready && e.status === 400 && e.code === "send_400" && /^Say why the board should see it/.test(e.message))) throw e;
+        const reason = (prompt(e.message + ".") || "").trim();
+        if (!reason) { toast(e.message, 7000); return; }
+        await api(url, { json: { ready, note: v.note, reason } });
+      }
+      toast(ready ? "Marked ready for the board; the MDT Coordinator is told (audited)" : "Ready mark taken back (audited)"); await openCase(S.caseId, true); }
     catch (e) { toast(e.message, 7000); }
   };
   if ($("#btn-ready")) $("#btn-ready").onclick = () => go(true);
@@ -1269,7 +1289,7 @@ function renderSummary() {
   if ($("#sum-print")) $("#sum-print").onclick = () => { document.body.classList.add("print-summary"); window.print(); setTimeout(() => document.body.classList.remove("print-summary"), 500); };
   if ($("#sum-export")) $("#sum-export").onclick = async () => {  // V1 item 4.6
     const r = await fetch(`/api/tb/cases/${encodeURIComponent(S.caseId)}/export/vtb`, { credentials: "same-origin" });
-    if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch (e) {} toast(m, 9000); return; }
+    if (!r.ok) { let m = r.statusText; try { m = errDetail((await r.json()).detail, m); } catch (e) {} toast(m, 9000); return; }
     const blob = await r.blob(); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${S.caseId}_ncg_vtb_case.pptx`; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000); toast("NCG Virtual Tumour Board case file exported (.pptx); recorded in the audit log", 6000); };
   if (s) showSummary(s);
@@ -1969,7 +1989,7 @@ function bindIntakeUpload() {
     const fd = new FormData(); list.forEach(([f]) => fd.append("files", f)); fd.append("paths", JSON.stringify(list.map(([, p]) => p))); fd.append("department", $("#up-dept").value);
     $("#up-job").innerHTML = `<span class="spin"></span> Uploading ${list.length} file(s)...`;
     const r = await fetch("/api/tb/intake/documents", { method: "POST", body: fd, credentials: "same-origin" });
-    if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch (e) {} $("#up-job").textContent = ""; toast("Upload failed: " + m, 7000); return; }
+    if (!r.ok) { let m = r.statusText; try { m = errDetail((await r.json()).detail, m); } catch (e) {} $("#up-job").textContent = ""; toast("Upload failed: " + m, 7000); return; }
     const res = await r.json();
     if (res.warnings?.length) toast(res.warnings.map((w) => w.message).join("; "), 10000);
     watchIntakeJob(res.job);

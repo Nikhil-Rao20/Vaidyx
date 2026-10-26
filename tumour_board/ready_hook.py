@@ -9,7 +9,11 @@ hook off (tests). Every step is audited in the Case File; a failing step never s
 After sending (night-v3 item 1.5, design B8): a report that becomes ready after the ready mark calls on_ready(..., again=True) from
 service.process_docs. That run is audited as step "again", waits out a meeting the same way, writes the summary and the briefs again when
 stale, and tells the MDT Coordinator only (record_arrived: how many reports are new since sending and, when a value now waits on the treating
-doctor's check, "waiting on Dr X"); the owner is not told. A record that arrives while a run is going sets a flag and the run goes once more."""
+doctor's check, "waiting on Dr X"); the owner is not told. A record that arrives while a run is going sets a flag and the run goes once more.
+A record that arrives during the last allowed pass (MAX_PASSES) is never dropped: it is audited (step "again_deferred") and the Case File's
+state keeps `ready_hook_needs_again`; the next on_ready call for that Case File honours it (audited "again_honoured"): its run reads every
+record, so it covers the deferred one, and a run that is still going then goes once more. The scheduler has no hook for a one-off job,
+so nothing runs before that next call."""
 import asyncio
 import logging
 import os
@@ -122,7 +126,36 @@ async def run(case_id, user, again=False) -> dict:
     finally:
         with _lock:
             RUNNING.pop(case_id, None)
+            deferred = case_id in AGAIN
             AGAIN.discard(case_id)
+        if deferred:  # a record arrived during the last pass: kept for the next on_ready call, never dropped
+            _defer(case_id, user)
+
+
+NEEDS_AGAIN = "ready_hook_needs_again"
+
+
+def _defer(case_id, user) -> None:
+    """Audit a record that arrived during the last allowed pass and leave the flag the next on_ready call honours."""
+    _audit(case_id, step="again_deferred", by=user, why=f"a record arrived during pass {MAX_PASSES}; it waits for the next run")
+    try:
+        st = store.get_state(case_id)
+        st[NEEDS_AGAIN] = {"at": store.now_iso(), "by": user}
+        store.save_state(case_id, st)
+    except Exception:
+        log.exception("ready hook: could not keep the deferred run for %s", case_id)
+
+
+def _take_needs_again(case_id) -> dict | None:
+    """The deferred-run flag of the Case File, cleared as it is read (None when there is none)."""
+    try:
+        st = store.get_state(case_id)
+        flag = st.pop(NEEDS_AGAIN, None)
+        if flag:
+            store.save_state(case_id, st)
+        return flag if isinstance(flag, dict) else ({"at": ""} if flag else None)
+    except Exception:
+        return None
 
 
 async def _pass(case_id, user, again=False) -> dict:
@@ -195,9 +228,12 @@ def on_ready(case_id, user, again=False) -> dict:
         return {"scheduled": False, "how": "off", "reason": "TB_SCHEDULER=0"}
     if case_id in config.PROTECTED_CASES:
         return {"scheduled": False, "how": "off", "reason": "protected Case File"}
+    flag = _take_needs_again(case_id)
+    if flag:  # a record that arrived during the last pass of an earlier run: this run reads every record, so it covers it
+        _audit(case_id, step="again_honoured", by=user, deferred_at=flag.get("at"))
     with _lock:
         if case_id in RUNNING:
-            if again:
+            if again or flag:
                 AGAIN.add(case_id)
             return {"scheduled": False, "how": "running", "reason": "already running", "again": bool(again)}
     try:

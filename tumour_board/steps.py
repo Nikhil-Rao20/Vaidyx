@@ -10,7 +10,7 @@ their gaps and what the doctor typed (always shown "entered by Dr X, no report")
 open_count() is the one count of what is left before the board; the Case File, the Case Files list and the meetings all use it."""
 import re
 
-from . import access, after_send, dates, dept_requests, his_case, org, proposals, protocol, rules, slots, store
+from . import access, after_send, dates, dept_requests, discord, his_case, org, proposals, protocol, rules, slots, store
 
 SECTIONS = [("overview", "Overview"), ("question", "Question"), ("reports", "Reports"), ("check", "Check"),
             ("pre_authorization", "Pre-Authorization"), ("summary", "Summary")]
@@ -408,6 +408,8 @@ def build(case_id, roles=None) -> dict:
             row = {**_row(s), "kind": "problem", "confirmation": conf or None, "why": _problem_words(conf), "detail": conf.get("why") or s.get("note") or ""}
             if picked:  # settled: still listed, with the pick and its Undo, never counted as left
                 row.update(picked=picked, resolved=True, why=f"Picked: {picked.get('value')} from {picked.get('doc_title')}, by {picked.get('by_name') or picked.get('by')}")
+            elif s.get("pick_stale"):  # the doctor's pick no longer matches its report (item 1.7): said, never dropped silently
+                row.update(pick_stale=s["pick_stale"], why=discord.stale_why(s["pick_stale"]))
             problems.append(row)
     for fid in key_facts(prot) if prot else []:
         s = by_fact.get(fid)
@@ -527,7 +529,8 @@ def build(case_id, roles=None) -> dict:
     if fresh:
         n = len(fresh)
         todo.insert(0, {"id": "since_sent", "section": "check", "label": f"Check {n} {'value' if n == 1 else 'values'}", "since_sent": True,
-                        "why": "A report that came after sending differs from an earlier one: " + ", ".join(p["label"] for p in fresh[:3]) + ("..." if n > 3 else ""),
+                        "why": ("A report that came after sending differs from an earlier one or is only preliminary: " if any((p.get("confirmation") or {}).get("kind") == "preliminary" for p in fresh)
+                                else "A report that came after sending differs from an earlier one: ") + ", ".join(p["label"] for p in fresh[:3]) + ("..." if n > 3 else ""),
                         "action": {"kind": "check", "label": "Check", "slot_id": fresh[0]["slot_id"]}})
     waiting_rows = [{"id": f"wait:{w['slot_id']}", "section": "pre_authorization", "label": w["label"], "department": w["department"], "request": w["request"],
                      "action": {"kind": "remind", "label": "Send reminder", "action_id": (w["request"] or {}).get("action_id")}} for w in waiting]
@@ -548,6 +551,8 @@ def _problem_words(conf) -> str:
     """A problem value in a few plain words (the long reason stays in the detail)."""
     t = (conf or {}).get("type")
     why = str((conf or {}).get("why") or "").lower()
+    if t == "note_discordance" and (conf or {}).get("kind") == "preliminary":
+        return "Only a preliminary report since sending"
     if t == "note_discordance" or "differs" in why or "disagree" in why:
         return "Two reports differ"
     if t == "confirm_value" and "scan" in why:

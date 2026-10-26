@@ -464,12 +464,8 @@ def prognostic_inputs(rule, facts: dict, by_id: dict) -> dict:
         if not q:
             out[k] = {"missing": f"the line for {spec['what']} is not found word for word in its report"}
             continue
-        cat, why = _CATS[k](q["quote"])
+        cat, why = _CATS[k](q["quote"])  # the quoted report line alone decides; never the value as the reader model wrote it (review, 27 Oct)
         how = "the report line"
-        if cat is None and k in ("ER", "PR"):  # the value as read carries the category ("Positive") when the line gives only a number
-            vcat, _ = receptor_cat(cur.get("value"), k)
-            if vcat:
-                cat, how = vcat, "the value as read from this line"
         if cat is None:
             out[k] = {"missing": f"unclear: {why} (\"{q['quote']}\")", "quotes": [q]}
             continue
@@ -709,6 +705,8 @@ def confirm(case_id, user, note="", which="anatomic") -> dict:
         raise StagingError("There is no draft stage to confirm." if w == "anatomic" else "There is no prognostic stage group to confirm.", 409)
     if d.get("signature") != rules.case_signature(case_id, st).get("hash"):
         raise StagingError("The reports changed after this draft was worked out: work it out again first.", 409)
+    if w == "prognostic" and (not d.get("confirmed") or d.get("rejected")):  # its T, N and M are the anatomic draft's: confirm that one first (review, 27 Oct)
+        raise StagingError("Confirm the anatomic stage first: the prognostic stage group is built on its T, N and M.", 409)
     from ..slots import display_name
     x["confirmed"] = {"by": user, "by_name": display_name(user), "at": store.now_iso(), "note": " ".join(str(note or "").split())[:500], "which": w}
     x["rejected"] = None
@@ -730,6 +728,8 @@ def reject(case_id, user, reason, which="anatomic") -> dict:
     from ..slots import display_name
     x["rejected"] = {"by": user, "by_name": display_name(user), "at": store.now_iso(), "reason": reason, "which": w}
     x["confirmed"] = None
+    if w == "anatomic" and isinstance(x.get("prognostic"), dict) and x["prognostic"].get("confirmed"):  # built on the T, N and M just marked wrong
+        x["prognostic"]["confirmed"] = None
     store.save_state(case_id, st)
     store.audit(case_id, {"kind": "draft_stage_rejected", "which": w, "by": user, "reason": reason, "stage": x.get("stage")})
     return view(case_id)

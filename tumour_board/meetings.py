@@ -630,12 +630,19 @@ def set_agenda(mid: str, by: str, discussion, noting, not_ready=None) -> dict:
         nr = [it["case_id"] for it in lists.get("not_ready") or [] if it.get("case_id") and it["case_id"] not in disc + note]
     else:
         nr = [c for c in _check(not_ready, listed=False, keep=set(old)) if c not in disc + note]
+    listed_before = {it["case_id"] for k in ("discussion", "noting") for it in lists.get(k) or [] if it.get("case_id")}
     s["agenda_lists"] = {"discussion": [_entry(old, c, by) for c in disc], "noting": [_entry(old, c, by) for c in note], "not_ready": [_entry(old, c, by) for c in nr]}
     _after_agenda_change(s, by, "agenda_lists")
+    for cid in disc + note:  # newly on this meeting's discussion or noting list: one planned agenda only, a withdraw cleared
+        if cid not in listed_before:
+            _one_agenda(cid, s, by)
     return s
 
 
-def add_to_agenda(mid: str, by: str, case_id: str, lst: str, reason: str = "") -> dict:
+def add_to_agenda(mid: str, by: str, case_id: str, lst: str, reason: str = "", *, one_agenda: bool = True) -> dict:
+    """The coordinator puts a Case File on one of this meeting's lists. On the discussion or noting list it sits on this planned agenda
+    only and a withdraw recorded earlier is cleared (_one_agenda); `one_agenda=False` for move_case and board.send_to_board, which take
+    it off the other agendas themselves (audited "moved" or "sent") and write board_send themselves."""
     s = need(mid); _active(s)
     if lst not in LISTS:
         raise MeetingError(f"The list must be one of: {', '.join(LISTS)}.", 400, "bad_list")
@@ -650,7 +657,31 @@ def add_to_agenda(mid: str, by: str, case_id: str, lst: str, reason: str = "") -
     lists.setdefault(lst, []).append(_entry(old, cid, by, reason))
     s["agenda_lists"] = lists
     _after_agenda_change(s, by, "agenda_added_to_list", case_id=cid, list=lst, reason=reason)
+    if one_agenda and lst in ("discussion", "noting"):
+        _one_agenda(cid, s, by)
     return s
+
+
+def _one_agenda(cid: str, s: dict, by: str) -> None:
+    """The coordinator put a Case File on meeting `s`'s discussion or noting list (night-v3 item 1.6, review fix): it leaves every other
+    planned meeting's lists (take_off_agendas, audited why="coordinator") and a withdraw recorded on it is cleared (the history keeps the
+    withdraw and gets a line for the put back), so it counts as sent again (after_send.is_sent) and the chip no longer says Taken off.
+    Nothing changes in a protected or archived Case File."""
+    if not cid or cid in config.PROTECTED_CASES:
+        return
+    c = store.get_case(cid)
+    if not c or access.is_archived(c):
+        return
+    take_off_agendas(cid, by, keep=s["id"], why="coordinator")
+    c = store.get_case(cid) or c
+    send = c.get("board_send") if isinstance(c.get("board_send"), dict) else None
+    if not (send and send.get("withdrawn")):
+        return
+    send.pop("withdrawn", None)
+    send["meeting_id"] = s["id"]
+    c.setdefault("board_send_history", []).append({"put_back_on": s["id"], "by": by or "", "at": _now()})
+    store.save_case(c)
+    store.audit(cid, {"kind": "agenda_withdraw_cleared", "by": by or "", "meeting_id": s["id"]})
 
 
 # ---- the owner moves or withdraws its Case File (night-v3 item 1.6, design B8) ---------------------------------------------------------
@@ -734,7 +765,7 @@ def move_case(case_id: str, user: str, to_meeting_id: str, reason: str = "") -> 
     lst = send.get("list") if send.get("list") in board.SEND_LISTS else "discussion"
     _check([case_id])  # listed, not archived: checked before anything moves
     old = get(frm) if frm else None
-    add_to_agenda(to, user, case_id, lst, str(send.get("reason") or ""))  # links the Case File: meeting_id, board_date (meeting_listed)
+    add_to_agenda(to, user, case_id, lst, str(send.get("reason") or ""), one_agenda=False)  # links the Case File: meeting_id, board_date (meeting_listed)
     left = take_off_agendas(case_id, user, keep=to, why="moved", moved_to=to, reason=reason)
     now = _now()
     c = store.get_case(case_id)

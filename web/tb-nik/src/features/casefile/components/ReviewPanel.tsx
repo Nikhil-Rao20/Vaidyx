@@ -2,7 +2,7 @@
 // them, and Approve / Edit / Not needed. After a decision the panel moves to the next item that needs the doctor.
 // Two reports differ (night-v3 item 1.7, design B5): both values with their report, and "Use this value for the board" on each; nothing
 // is chosen for the doctor. The pick is a board_uses confirmation (a resident's goes to the consultant for sign-off); the difference stays
-// shown with the pick and its Undo.
+// shown with the pick and its Undo. A pick that no longer matches its report is said here ("... no longer matches the report: pick again").
 import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowRight, Check, CheckCircle2, Clock, PenLine, Undo2, XCircle } from "lucide-react";
@@ -12,6 +12,7 @@ import { DateInput } from "@/components/DateInput";
 import { postConfirmation, slotNotNeeded, undoConfirmation } from "../api";
 import type { CaseFile, DiscordCitation, Slot } from "../types";
 import type { SourceTarget } from "./SourceViewer";
+import type { StalePick } from "../steps/types";
 import { docStatusChip } from "./SourceViewer";
 import { LoadingButton, StatusChip, errorText, fmtDate, indianDates, niceTitle, useAnnounce } from "./common";
 import { cn } from "@/lib/utils";
@@ -123,6 +124,8 @@ export function ReviewPanel({ caseId, cf, slot, queue, derived, resident, consul
     },
   });
   const otherSide = boardPick ? cites.find((x) => x.doc_id !== boardPick.doc_id) : undefined;
+  const stale = (slot as Slot & { pick_stale?: StalePick | null }).pick_stale ?? null;
+  const staleLine = stale ? `Your pick of ${stale.value} from ${niceTitle(stale.doc_title) || "the report"} no longer matches the report: pick again` : "";
 
   const diffs = list.length >= 2 ? differences(list[0], list[1]) : [];
   const signLabel = resident ? `Ask Dr ${consultantName} to sign off` : ctype === "note_discordance" ? "Noted, I read the difference" : "Approve";
@@ -136,8 +139,13 @@ export function ReviewPanel({ caseId, cf, slot, queue, derived, resident, consul
       </div>
       <div>
         <h3 className="text-base">{slot.label}</h3>
-        {slot.note ? <p className="text-sm text-muted-foreground">{slot.note}</p> : null}
+        {slot.note && !stale ? <p className="text-sm text-muted-foreground">{slot.note}</p> : null}
       </div>
+      {stale ? (
+        <p className="rounded-md border border-warn/50 bg-warn-soft p-2.5 text-sm text-foreground" role="status" data-testid="review-pick-stale">
+          {staleLine}{stale.by_name ? ` (picked by ${stale.by_name}${stale.at ? `, ${fmtDate(stale.at)}` : ""})` : ""}.
+        </p>
+      ) : null}
 
       {ctype === "note_discordance" ? (
         <div className="space-y-2 text-sm" data-testid="review-discordance">

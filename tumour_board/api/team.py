@@ -11,6 +11,7 @@ from tumour_board.api.common import RateLimit, body, case, fail, make_router, ne
 router = make_router()
 JOIN_LIMIT = RateLimit(5, 15 * 60)
 ASK_LIMIT = RateLimit(5, 15 * 60)  # "Ask to join" (night-v3 item 1.1): the same pace as the join code
+OPEN_LIMIT = RateLimit(10, 60 * 60)  # a doctor's "Open with a reason" (item 1.9): ten openings an hour per login (review, 27 Oct)
 
 
 def _err(e):
@@ -247,6 +248,7 @@ async def break_glass(request: Request):
         case(cid)
         w = _run(team.break_glass, r["user"], cid, str(b.get("reason") or ""), b.get("hours"))
         return {"until": w["until"], "case_id": cid, "reason": w["reason"]}
+    OPEN_LIMIT.check(r["user"], "Too many Case Files opened with a reason. Wait an hour and try again.")
     w = _run(team.break_glass_doctor, r["user"], r, cid, str(b.get("reason") or ""), str(b.get("via") or ""))
     return {"until": w["until"], "case_id": cid, "reason": w["reason"], "via": w["via"], "renewed": w["renewed"], "scope": access.READ}
 

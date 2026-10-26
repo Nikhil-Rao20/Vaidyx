@@ -677,3 +677,17 @@ def test_scheduler_status_is_for_admins(tc):
     r = As(tc, "tbroot").get("/scheduler/status")
     assert r.status_code == 200 and r.json()["running"] is False and r.json()["enabled"] is False and [j["name"] for j in r.json()["jobs"]][0] == "codes"
     assert As(tc, "admin").get("/scheduler/status").status_code == 200
+
+
+def test_a_case_file_sits_on_one_planned_agenda_when_the_coordinator_lists_it_again(tc):
+    """Review fix (night-v3 item 1.6): the coordinator putting a Case File on a second planned meeting's agenda takes it off the first."""
+    first = with_agenda(tc, discussion=("TB-001", "TB-002"), noting=())
+    second = new_meeting(tc, date_=(date.today() + timedelta(days=8)).isoformat())
+    r = As(tc, "anil").put(f"/meetings/{second}/agenda", json={"discussion": ["TB-002"], "noting": []})
+    assert r.status_code == 200, r.text
+    assert [x["case_id"] for x in As(tc, "anil").get(f"/meetings/{first}").json()["agenda"]["discussion"]] == ["TB-001"]
+    assert [a["case_id"] for a in board.get(first)["agenda"]] == ["TB-001"]
+    assert store.get_case("TB-002")["meeting_id"] == second
+    r = As(tc, "anil").post(f"/meetings/{first}/agenda/add", json={"case_id": "TB-002", "list": "noting"})
+    assert r.status_code == 200 and [x["case_id"] for x in r.json()["agenda"]["noting"]] == ["TB-002"]
+    assert As(tc, "anil").get(f"/meetings/{second}").json()["agenda"]["discussion"] == [] and store.get_case("TB-002")["meeting_id"] == first

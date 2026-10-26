@@ -217,3 +217,19 @@ def test_mark_ready_direct_calls_work_as_before(ready_case):
     c = board.mark_ready(CASE, RAO, ready=False)
     assert "board_ready" not in c and "board_ready_withdrawn" in kinds(CASE)
     assert notify.KINDS  # the coordinator's notice kind is unchanged (board_ready)
+
+
+# ---- a meeting that refuses the add (review fix: checked before anything is written) ------------------------------------------------
+
+def test_a_meeting_that_refuses_the_add_leaves_no_ready_mark_and_no_notice(full, ready_case, meeting, monkeypatch):
+    _open(monkeypatch, 0)
+
+    def refuse(ids, listed=True, keep=()):
+        raise meetings.MeetingError(f"Case File {CASE} is archived. Take it out of the archive first.", 409, "archived")
+    monkeypatch.setattr(meetings, "_check", refuse)
+    r = full.as_(RAO).post(f"/cases/{CASE}/ready", {"ready": True, "meeting_id": meeting["id"]})
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "send_400" and "archived" in r.json()["detail"]["message"]
+    c = store.get_case(CASE)
+    assert "board_ready" not in c and "board_send" not in c and "presenter" not in c
+    assert "board_send" not in kinds(CASE) and "board_ready" not in kinds(CASE)
+    assert not notes_for(ANIL, "board_ready") and _list_of(meeting["id"], CASE) is None

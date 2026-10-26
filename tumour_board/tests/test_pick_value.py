@@ -207,3 +207,63 @@ def test_a_residents_pick_is_signed_off_by_the_consultant(two_cts):
     rec = confirm.latest(CASE, "board_uses", "lesion_size")
     assert rec and rec["by"] == "dr.rao" and rec["fields"] == {"doc_id": pick_doc, "value": pick_value}
     assert _facts()["lesion_size"]["current"]["picked"]["by"] == "dr.rao"
+
+
+# ---- a pick that no longer matches its report is said, never dropped silently (review fix of item 1.7) -----------------------------------
+
+def _title(doc_id):
+    return (store.get_doc(CASE, doc_id).get("classification") or {}).get("title")
+
+
+def test_a_stale_pick_is_carried_to_the_slot_the_check_row_and_the_summary_line(two_cts, monkeypatch):
+    tc, who = two_cts
+    (cur_doc, cur_value), (pick_doc, pick_value) = _sides()
+    rec = _pick(tc, pick_doc, pick_value).json()["confirmation"]
+    # the picked report reads another value after a re-read: the two reports still differ, and the pick no longer matches
+    d = store.get_doc(CASE, pick_doc); d["facts"]["lesion_size"] = util.fact("4.4 cm", quote="Largest lesion measures 4.4 cm"); util.add(CASE, d)
+    why = f"Your pick of {pick_value} from {_title(pick_doc)} no longer matches the report: pick again"
+    s = slots.one(CASE, "fact:lesion_size", None)
+    assert s["status"] == "needs_confirmation" and not s.get("picked")
+    assert {k: s["pick_stale"][k] for k in ("doc_id", "value", "by", "at")} == {"doc_id": pick_doc, "value": pick_value, "by": "dr.rao", "at": rec["at"]}
+    assert s["note"] == why
+    p = _problem(_steps(tc))
+    assert p["why"] == why and p["pick_stale"]["doc_id"] == pick_doc and p["pick_stale"]["confirmation"] == rec["id"] and not p.get("resolved")
+    d = discord.open_differences(CASE)["lesion_size"]
+    assert d["pick_stale"]["value"] == pick_value and "no longer matches the report: the pick needs renewing" in d["line"] and "—" not in d["line"]
+
+    async def fake_chat(role, msgs, **kw):
+        return {"sentences": [], "points_for_review": []}
+    monkeypatch.setattr(llm, "chat", fake_chat); monkeypatch.setattr(summary.llm, "chat", fake_chat)
+    out = asyncio.run(summary.build(CASE, force=True))
+    line = next(x for sec in out["sections"] for x in sec["sentences"] if x.get("differ") and x.get("fact_id") == "lesion_size")
+    assert "the pick needs renewing" in line["text"] and all(c["quote"] for c in line["citations"])
+    # picking again renews it
+    v = _steps(tc)
+    other = next(c for c in _problem(v)["confirmation"]["citations"] if c["doc_id"] != pick_doc)
+    assert _pick(tc, other["doc_id"], other["value"]).status_code == 200
+    s = slots.one(CASE, "fact:lesion_size", None)
+    assert s["status"] == "found" and "pick_stale" not in s and s["picked"]["doc_id"] == other["doc_id"]
+    assert "lesion_size" not in discord.open_differences(CASE)
+
+
+def test_a_stale_pick_with_nothing_else_open_still_asks_for_a_new_pick(two_cts):
+    tc, who = two_cts
+    (cur_doc, cur_value), (pick_doc, pick_value) = _sides()
+    _pick(tc, pick_doc, pick_value)
+    # the picked report failed to read and was dismissed: no two reports of the same date differ any more, but the pick is not dropped silently
+    d = store.get_doc(CASE, pick_doc); d["state"] = "error"; d["dismissed"] = {"by": "dr.rao", "at": "2026-10-27T09:00:00", "reason": "unreadable"}; util.add(CASE, d)
+    assert not [x for x in discord.items(CASE) if x["field"] == "lesion_size" and x["severity"] == "review"]
+    s = slots.one(CASE, "fact:lesion_size", None)
+    assert s["status"] == "needs_confirmation" and s["pick_stale"]["doc_id"] == pick_doc
+    conf = s["confirmation"]
+    assert conf["type"] == "note_discordance" and conf["kind"] == "pick_stale" and len(conf["citations"]) == 1 and conf["citations"][0]["quote"]
+    p = _problem(_steps(tc))
+    assert p["why"] == f"Your pick of {pick_value} from {_title(pick_doc)} no longer matches the report: pick again" and not p.get("resolved")
+    assert any(t["id"] == f"check:{p['slot_id']}" for t in _steps(tc)["todo"])  # counted as left until picked again or noted
+    diff = discord.open_differences(CASE)["lesion_size"]
+    assert diff["kind"] == "pick_stale" and len(diff["values"]) == 1 and "the pick needs renewing" in diff["line"]
+    # noting it (the doctor read it) settles the line; the pick itself stays on file
+    assert tc.post(f"/api/tb/cases/{CASE}/confirmations", json={"type": "note_discordance", "key": conf["key"], "fields": {}, "reason": "read"}).status_code == 200
+    s = slots.one(CASE, "fact:lesion_size", None)
+    assert s["status"] == "found" and "pick_stale" not in s and "lesion_size" not in discord.open_differences(CASE)
+    assert _problem(_steps(tc)) is None

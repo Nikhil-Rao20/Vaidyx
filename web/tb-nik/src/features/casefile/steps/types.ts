@@ -57,10 +57,16 @@ export interface StepDocument {
   earlier: Array<{ doc_id: string; title: string; version?: number | null; status: string }>;
 }
 
+/** A pick for the board that no longer matches its report (the report was replaced, dismissed or now reads another value): the line says
+ *  "Your pick of 4.6 cm from the CT report no longer matches the report: pick again" until the doctor picks again or notes it. */
+export interface StalePick { doc_id: string; doc_title?: string; value: string; by?: string; by_name?: string; at?: string; confirmation?: string }
+
 export interface CheckItem extends StepRow {
   kind: "problem" | "key"; confirmation?: SlotConfirmation | null; why?: string; detail?: string; confirmed?: boolean; confirmed_by?: string; confirmed_at?: string | null;
   /** Two reports differ and a doctor picked the value the board uses (night-v3 item 1.7): still listed, settled, never counted as left. */
   picked?: PickedValue | null; resolved?: boolean;
+  /** The doctor's earlier pick no longer matches its report: `why` says "... no longer matches the report: pick again". */
+  pick_stale?: StalePick | null;
 }
 
 export interface MissingItem extends StepRow {

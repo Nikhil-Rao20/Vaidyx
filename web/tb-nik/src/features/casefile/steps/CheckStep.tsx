@@ -3,7 +3,8 @@
 // the report, scrolled to the line with it highlighted. "This is wrong" offers both: correct it (the right value and a reason, shown
 // "corrected by Dr X", the report line kept) or send a request to the department to amend the report. A resident on the team sends
 // each key value to the treating consultant for sign-off instead (night-v3 item 1.8). Two reports that differ stay listed after the
-// doctor picks the value the board uses ("Picked: 4.6 cm from the CT report, by Dr X", with Undo); they no longer count (item 1.7).
+// doctor picks the value the board uses ("Picked: 4.6 cm from the CT report, by Dr X", with Undo); they no longer count (item 1.7). A pick
+// that no longer matches its report is said on the row ("Your pick of 4.6 cm from the CT report no longer matches the report: pick again").
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ArrowRight, Check, CheckCircle2, Clock, Send, ShieldQuestion, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -146,7 +147,7 @@ export function CheckStep({ steps, caseId, docs, h, canConfirm, consultantName, 
                   <li key={p.slot_id} className={cn("rounded-lg border p-3", sel === p.slot_id ? "border-primary bg-secondary/40" : "border-border bg-card")} data-testid="problem-row" data-resolved={p.resolved ? "yes" : "no"}>
                     <button type="button" className="block w-full text-left" onClick={() => setSel(p.slot_id)}>
                       <span className="flex items-center gap-2 text-sm font-semibold text-foreground">{p.label}{p.resolved ? <CheckCircle2 className="size-3.5 text-ok" aria-hidden /> : null}</span>
-                      {sel !== p.slot_id && !p.picked ? <span className="block text-xs text-muted-foreground">{p.why || "Please check against the report"}</span> : null}
+                      {sel !== p.slot_id && !p.picked ? <span className={cn("block text-xs", p.pick_stale ? "text-warn" : "text-muted-foreground")} data-testid={p.pick_stale ? "problem-pick-stale" : undefined}>{p.why || "Please check against the report"}</span> : null}
                     </button>
                     {p.picked && sel !== p.slot_id ? <PickedLine p={p} h={h} canUndo={canConfirm} /> : null}
                     {sel === p.slot_id ? <div className="mt-2 border-t border-border pt-2">{h.review(p.slot_id, () => setSel(openProblems.find((x) => x.slot_id !== p.slot_id)?.slot_id ?? keys.find((k) => !k.confirmed)?.slot_id ?? null))}</div> : null}

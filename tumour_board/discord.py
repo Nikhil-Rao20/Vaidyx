@@ -27,9 +27,11 @@ TIME_VARYING = {"lesion_size", "suv_max", "recorded_stage", "figo_stage", "ecog"
                 "parametrial_involvement", "haemoglobin", "wbc", "platelets", "creatinine", "bilirubin", "cea", "treatment_completion_date", "smoking_history"}
 CODE_FIELDS = {"recorded_stage", "figo_stage"}  # stage strings are codes (T3b is not T3c): equal or prefix only, no numeric leniency
 AMENDED = {"AMENDED", "CORRECTED"}
-SEVERITY = {"conflict": "review", "amended": "review", "non_final_differs": "review", "polarity": "review", "changed": "info", "decision_watch": "review"}
+SEVERITY = {"conflict": "review", "amended": "review", "non_final_differs": "review", "polarity": "review", "changed": "info", "decision_watch": "review",
+            "preliminary": "review"}
 LABEL = {"conflict": "Reports disagree", "amended": "Amendment changed a value", "non_final_differs": "A non-final report differs from the final one",
-         "polarity": "Reports disagree (positive / negative)", "changed": "Changed between reports", "decision_watch": "A later report changed a value the decision cited"}
+         "polarity": "Reports disagree (positive / negative)", "changed": "Changed between reports", "decision_watch": "A later report changed a value the decision cited",
+         "preliminary": "Only a preliminary report since sending", "pick_stale": "Your pick no longer matches the report"}
 _TOKEN = re.compile(r"\d+(?:\.\d+)?|[a-z]+")
 
 
@@ -74,7 +76,7 @@ def same(a: str, b: str, field: str = None) -> bool:
 def _cite(e: dict) -> dict:
     loc = e.get("location") or {}
     c = {"doc_id": e["doc_id"], "doc_title": e.get("doc_title") or e["doc_id"], "date": e.get("date"), "status": e.get("doc_status"), "quote": e.get("quote") or "",
-         "value": e.get("value"), "final": bool(e.get("doc_final"))}
+         "value": e.get("value"), "final": bool(e.get("doc_final")), "verification": e.get("verification")}
     if loc:
         c.update(page=loc.get("page"), start=loc.get("start"), end=loc.get("end"))
     if e.get("source_method"):
@@ -273,9 +275,14 @@ def notify_decision_watch(case_id: str) -> int:
 # ---- both values while a difference is open (night-v3 item 1.5, design B8) ------------------------------------------------------------
 # Until the treating doctor picks a value (item 1.7) or notes the difference, the summary and the slides show the two values side by side,
 # each with its own verbatim quote; Vaidyx never picks. The case of a newer report that is only preliminary (or a draft) and disagrees with
-# the final one is the kind "non_final_differs" above: it is already listed, so nothing more is added for it here.
+# the final one is the kind "non_final_differs" above. After the ready mark two more cases wait on the doctor (after_send_items): a
+# time-varying value that a newer final report changed (kind "changed", both values), and a value that only a preliminary report read after
+# sending gives (kind "preliminary", one value shown "(preliminary)" with its quote; it clears when the final report lands).
 WAITING_LINE = "two reports differ: waiting on the treating doctor's check"
+PRELIM_LINE = "only a preliminary report so far: waiting on the treating doctor's check"
+STALE_LINE = "no longer matches the report: the pick needs renewing"
 OPEN_KINDS = ("conflict", "amended", "non_final_differs", "polarity")  # review differences between reports (decision_watch is after the board)
+AFTER_SEND_KINDS = ("changed", "preliminary")  # counted only when a report read after the ready mark brought them
 
 
 def status_word(c: dict) -> str:
@@ -283,26 +290,158 @@ def status_word(c: dict) -> str:
     return "final" if c.get("final") else ((c.get("status") or "").strip().lower() or "not final")
 
 
-def open_differences(case_id: str, state: dict = None) -> dict:
-    """{fact_id: {fact_id, key, kind, label, line, values}} for every difference still open: review, not noted, not picked; the first per fact, as
-    the Check step lists it (slots). `values` is both_values' list."""
-    out = {}
-    for it in items(case_id, state):
-        if it.get("severity") != "review" or it.get("kind") not in OPEN_KINDS or it.get("noted") or it.get("picked") or it.get("field") in out:
+def _usable(e: dict) -> bool:
+    from . import rules
+    return bool(e.get("value")) and e.get("verification") in rules.VERIFIED and e.get("state", "present") == "present" and not e.get("superseded")
+
+
+def after_send_items(case_id: str, state: dict = None, its: list = None, facts: dict = None) -> list:
+    """The differences a report read after the ready mark brought that the review kinds do not cover, in items() shape with `after_send`:
+    (a) "changed": a time-varying fact whose newest final report, read after sending, gives another value than the newest final report read
+        before sending (the item of items() for that pair, so a note or a pick on it counts);
+    (b) "preliminary": a fact whose current value comes from a non-final report read after sending, no final report giving it.
+    [] when the Case File is not sent or nothing new was read since."""
+    from . import after_send, rules
+    case = store.get_case(case_id)
+    fresh = set(after_send.new_docs(case_id, case)) if case else set()
+    if not fresh:
+        return []
+    st = state if state is not None else store.get_state(case_id)
+    if facts is None:
+        facts = rules.resolve_facts(rules.case_docs(case_id, st), st.get("overrides"))
+    its = items(case_id, st) if its is None else its
+    cat = protocol.facts()
+    notes = st.get("discordance_notes") or {}
+    out = []
+    for fid in sorted(TIME_VARYING):  # (a)
+        final = [e for e in (facts.get(fid) or {}).get("history") or [] if _usable(e) and e.get("doc_final")]
+        before = [e for e in final if e["doc_id"] not in fresh]
+        if not final or final[-1]["doc_id"] not in fresh or not before or same(before[-1]["value"], final[-1]["value"], fid):
             continue
-        vals = [{"value": c.get("value"), "doc_id": c.get("doc_id"), "doc_title": c.get("doc_title"), "date": c.get("date"), "final": bool(c.get("final")),
-                 "status": status_word(c), "quote": c.get("quote") or "", **{k: c[k] for k in ("page", "start", "end", "source_method") if k in c}}
-                for c in it.get("citations") or []]
-        if len(vals) < 2 or not all(v["quote"] for v in vals):
+        pair = {before[-1]["doc_id"], final[-1]["doc_id"]}
+        it = next((x for x in its if x.get("field") == fid and x.get("kind") == "changed" and {c.get("doc_id") for c in x.get("citations") or []} == pair), None)
+        if it:  # a review kind for the same pair (same date, polarity) is listed already and counted the old way
+            out.append({**it, "after_send": True})
+    for fid, f in sorted(facts.items()):  # (b)
+        cur = f.get("current") or {}
+        if not _usable(cur) or cur.get("doc_final") or cur.get("doc_id") not in fresh or not cur.get("quote"):
+            continue
+        if any(_usable(e) and e.get("doc_final") for e in f.get("history") or []):
+            continue
+        label = cat.get(fid, {}).get("label", fid)
+        status = (cur.get("doc_status") or "non-final").lower()
+        it = {"key": _key("preliminary", fid, cur["doc_id"], cur["doc_id"]), "kind": "preliminary", "kind_label": LABEL["preliminary"], "severity": SEVERITY["preliminary"],
+              "field": fid, "label": label, "after_send": True, "citations": [_cite(cur)],
+              "text": f"{label}: \"{cur['value']}\" comes only from a {status} report ({cur.get('doc_title')}, {_when(cur)}) read after the Case File was sent; "
+                      f"no final report gives it yet."}
+        pk = _pick_of(cur)
+        if pk:
+            it["picked"] = pk
+        if it["key"] in notes:
+            it["noted"] = notes[it["key"]]
+        out.append(it)
+    return out
+
+
+def stale_picks(case_id: str, state: dict = None, facts: dict = None) -> dict:
+    """{fact_id: {doc_id, doc_title, value, by, by_name, at, confirmation, key, noted?}} for every pick for the board (item 1.7) that no longer
+    matches its report (rules.resolve_facts `pick_stale`: the report was replaced, dismissed or now reads another value). Never dropped silently:
+    the slot, the Check step and the summary's difference line say the pick needs renewing until the doctor picks again, undoes it or notes it."""
+    from . import rules
+    from .slots import display_name  # slots imports this module
+    st = state if state is not None else store.get_state(case_id)
+    if facts is None:
+        facts = rules.resolve_facts(rules.case_docs(case_id, st), st.get("overrides"))
+    notes = st.get("discordance_notes") or {}
+    out = {}
+    for fid, f in facts.items():
+        cur = f.get("current") or {}
+        sp = cur.get("stale_pick") if cur.get("pick_stale") else None
+        if not isinstance(sp, dict):
+            continue
+        title = next((e.get("doc_title") for e in f.get("history") or [] if e.get("doc_id") == sp.get("doc_id") and e.get("doc_title")), "")
+        if not title and sp.get("doc_id"):
+            try:
+                d = store.get_doc(case_id, sp["doc_id"]) or {}
+                title = (d.get("classification") or {}).get("title") or d.get("filename") or ""
+            except Exception:
+                title = ""
+        key = _key("pick_stale", fid, sp.get("doc_id") or "", sp.get("confirmation") or "")
+        out[fid] = {"doc_id": sp.get("doc_id"), "doc_title": title or sp.get("doc_id") or "the report", "value": sp.get("value"), "by": sp.get("by"),
+                    "by_name": display_name(sp.get("by")) or sp.get("by") or "", "at": sp.get("at"), "confirmation": sp.get("confirmation"), "key": key}
+        if key in notes:
+            out[fid]["noted"] = notes[key]
+    return out
+
+
+def stale_why(sp: dict) -> str:
+    """The Check row's line for a pick that no longer matches its report."""
+    return f"Your pick of {sp.get('value')} from {sp.get('doc_title') or 'the report'} no longer matches the report: pick again"
+
+
+def stale_text(sp: dict) -> str:
+    """The summary's words for a pick that no longer matches its report."""
+    return f"the pick of \"{sp.get('value')}\" from {sp.get('doc_title') or 'the report'} by {sp.get('by_name') or 'a doctor'} {STALE_LINE}"
+
+
+def _values(it: dict) -> list:
+    return [{"value": c.get("value"), "doc_id": c.get("doc_id"), "doc_title": c.get("doc_title"), "date": c.get("date"), "final": bool(c.get("final")),
+             "status": status_word(c), "quote": c.get("quote") or "", "verification": c.get("verification"),
+             **{k: c[k] for k in ("page", "start", "end", "source_method") if k in c}} for c in it.get("citations") or []]
+
+
+def open_differences(case_id: str, state: dict = None) -> dict:
+    """{fact_id: {fact_id, key, kind, label, line, waiting, values, pick_stale?}} for every difference still open: review, not noted, not picked; the
+    first per fact, as the Check step lists it (slots). After sending also a value a newer final report changed and a value only a preliminary
+    report gives (after_send_items); a pick that no longer matches its report is named in the line (and listed on its own, with the current
+    value, when nothing else is open on that fact). `values` is both_values' list."""
+    from . import rules
+    st = state if state is not None else store.get_state(case_id)
+    facts = rules.resolve_facts(rules.case_docs(case_id, st), st.get("overrides"))
+    its = items(case_id, st)
+    try:
+        extra = after_send_items(case_id, st, its, facts)
+    except Exception:
+        extra = []
+    stale = {fid: sp for fid, sp in stale_picks(case_id, st, facts).items() if not sp.get("noted")}
+    out = {}
+    for it in its + extra:
+        kind = it.get("kind")
+        if it.get("severity") != "review" and not it.get("after_send"):
+            continue
+        if (kind not in OPEN_KINDS and not (it.get("after_send") and kind in AFTER_SEND_KINDS)) or it.get("noted") or it.get("picked") or it.get("field") in out:
+            continue
+        vals = _values(it)
+        if len(vals) < (1 if kind == "preliminary" else 2) or not all(v["quote"] for v in vals):
             continue  # a side without its quote is never shown as a value
-        line = f"{it['label']}: " + " and ".join(f"\"{v['value']}\" ({v['doc_title']}, {v['status']})" for v in vals) + f"; {WAITING_LINE}."
-        out[it["field"]] = {"fact_id": it["field"], "key": it["key"], "kind": it["kind"], "label": it["label"], "line": line[0].upper() + line[1:], "values": vals}
+        waiting = PRELIM_LINE if kind == "preliminary" else WAITING_LINE
+        line = f"{it['label']}: " + " and ".join(f"\"{v['value']}\" ({v['doc_title']}, {v['status']})" for v in vals) + f"; {waiting}."
+        d = {"fact_id": it["field"], "key": it["key"], "kind": kind, "label": it["label"], "waiting": waiting, "values": vals}
+        if it.get("after_send"):
+            d["after_send"] = True
+        sp = stale.get(it["field"])
+        if sp:
+            line += f" {stale_text(sp)[0].upper()}{stale_text(sp)[1:]}."
+            d["pick_stale"] = sp
+        d["line"] = line[0].upper() + line[1:]
+        out[it["field"]] = d
+    cat = protocol.facts()
+    for fid, sp in stale.items():  # a stale pick with nothing else open on the fact: the current value, and the pick needs renewing
+        cur = (facts.get(fid) or {}).get("current") or {}
+        if fid in out or not _usable(cur) or not cur.get("quote"):
+            continue
+        label = cat.get(fid, {}).get("label", fid)
+        vals = _values({"citations": [_cite(cur)]})
+        line = f"{label}: \"{cur['value']}\" ({cur.get('doc_title')}, {vals[0]['status']}); {stale_text(sp)}."
+        out[fid] = {"fact_id": fid, "key": sp["key"], "kind": "pick_stale", "label": label, "waiting": STALE_LINE, "values": vals, "pick_stale": sp,
+                    "line": line[0].upper() + line[1:]}
     return out
 
 
 def both_values(case_id: str, fact_id: str, state: dict = None) -> list:
     """The two values of an open difference on one fact, each with its report and quote:
-    [{value, doc_id, doc_title, date, final, status, quote, page?, start?, end?}]; [] when nothing is open on that fact."""
+    [{value, doc_id, doc_title, date, final, status, quote, verification, page?, start?, end?}]; one value for a value only a preliminary report
+    gives after sending; [] when nothing is open on that fact."""
     return (open_differences(case_id, state).get(fact_id) or {}).get("values") or []
 
 
@@ -315,13 +454,13 @@ def summary_sentence(diff: dict) -> dict:
 
 
 def slide_rows(fact_id: str, diff: dict, history: int = 0) -> list:
-    """The values slide rows for an open difference (meetings.slides): one row per value with its own quote, in the slide's value shape;
-    the first row names the difference and who it waits on."""
+    """The values slide rows for an open difference (meetings.slides): one row per value with its own quote and its own verification, in the
+    slide's value shape; the first row names the difference and who it waits on."""
     rows = []
     for i, v in enumerate(diff["values"]):
         rows.append({"id": fact_id if i == 0 else f"{fact_id}#{i + 1}", "fact_id": fact_id,
-                     "label": f"{diff['label']}, {WAITING_LINE}" if i == 0 else diff["label"],
+                     "label": f"{diff['label']}, {diff.get('waiting') or WAITING_LINE}" if i == 0 else diff["label"],
                      "value": f"{v['value']} ({v['status']})", "quote": v["quote"], "doc_id": v["doc_id"], "doc_title": v["doc_title"], "date": v.get("date"),
-                     "verification": "verified", "final": v["final"], "page": v.get("page"), "source_method": v.get("source_method"), "history": history,
-                     "differ": diff["line"]})
+                     "verification": v.get("verification"), "final": v["final"], "page": v.get("page"), "source_method": v.get("source_method"),
+                     "history": history, "differ": diff["line"]})
     return rows

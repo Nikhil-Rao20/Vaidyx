@@ -8,7 +8,8 @@ Files of this patient"), for a person who may open that Case File.
 
 Each row says only the cancer, the owning department and consultant, the creation date, a status word and whether this person may
 open it: no clinical content and no name but the owner's. Archived and protected Case Files are never listed. For any placed login or
-the MDT Coordinator (never an outside expert or a Vaidyx admin); the identifier look-up is rate-limited (30 per 10 minutes per login;
+the MDT Coordinator (never an outside expert or a Vaidyx admin); the look-up by number is for those who may start a Case File
+(create_case) or the coordinator, and rate-limited (30 per 10 minutes per login;
 the case_id form is not, as it only answers for a Case File the person may open already, so opening Overviews never uses up the
 New Case File page's look-ups); both are audited in the organisation log (kind patient_case_files_checked) without the identifier."""
 from fastapi import Request
@@ -83,6 +84,8 @@ async def patient_case_files(request: Request, identifier: str = "", case_id: st
         return {"cases": rows(found, r)}
     if not identifier:
         fail(400, "Give the UHID, IP No. or OP No.", "bad_identifier")
+    if not (r.get("coordinator") or org.can(r, "create_case")):  # the look-up by number names a patient's cancers: those who start Case Files only (review, 27 Oct)
+        fail(403, "Only a doctor who may start a Case File, or the MDT Coordinator, looks up a patient's Case Files by number.", "forbidden")
     CHECK_LIMIT.check(r["user"], "Too many look-ups. Wait a few minutes and try again.")
     client = his_client.client()
     system = (client.kind, client.label) if client is not None else None

@@ -274,6 +274,11 @@ def send_to_board(case_id: str, user: str, *, list: str = "discussion", meeting_
             raise ValueError("That meeting is not open")
         if str(s.get("date") or "") < datetime.now().date().isoformat():
             raise ValueError("That meeting date has passed: pick another meeting")
+        try:  # the checks add_to_agenda makes, before anything is written: a refused add leaves no ready mark and no notice
+            meetings._active(s)
+            meetings._check([case_id])
+        except meetings.MeetingError as e:
+            raise ValueError(str(e)) from None
     now = store.now_iso()
     pname = profiles.display_name(presenter)
     send = {"list": list, "meeting_id": meeting_id, "presenter": presenter, "note": note, "reason": reason, "open_items": open_items, "by": user or "", "at": now}
@@ -289,7 +294,7 @@ def send_to_board(case_id: str, user: str, *, list: str = "discussion", meeting_
     if s:
         try:
             meetings.take_off_agendas(case_id, user, keep=meeting_id, why="sent", sent_to=meeting_id)  # one agenda only (night-v3 item 1.6)
-            meetings.add_to_agenda(meeting_id, user, case_id, list, reason)
+            meetings.add_to_agenda(meeting_id, user, case_id, list, reason, one_agenda=False)  # board_send is written above
         except meetings.MeetingError as e:
             raise ValueError(str(e))
         c = store.get_case(case_id) or c

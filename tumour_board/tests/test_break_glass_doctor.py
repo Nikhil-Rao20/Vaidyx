@@ -7,9 +7,20 @@ import json
 import re
 from datetime import datetime, timedelta
 
+import pytest
+
 from tumour_board import access, config, org, store
 from tumour_board.tests.test_nik_me import ANIL, AUDIT, GUEST, MEHTA, OLD, RAO, RAVI, ROOT, VIJAY, VX, auth, make_case, people  # noqa: F401
 from tumour_board.tests.test_nik_team import CASE, full, kinds, notes_for, tb002  # noqa: F401
+
+
+@pytest.fixture(autouse=True)
+def _fresh_open_limit():
+    """Five windows an hour per login (api/team.OPEN_LIMIT): each test starts with a clean count."""
+    from tumour_board.api import team as team_api
+    team_api.OPEN_LIMIT._hits.clear()
+    yield
+    team_api.OPEN_LIMIT._hits.clear()
 
 REASON = "Second opinion on the systemic plan (synthetic)"
 

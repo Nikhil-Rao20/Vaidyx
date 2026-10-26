@@ -185,7 +185,8 @@ function Prognostic({ caseId, view, p, book, bookShort, here, canConfirm, signOf
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {p.confirmed ? <span className="inline-flex items-center gap-1.5 rounded-md status-ok px-2.5 py-1.5 text-sm font-medium"><CheckCircle2 className="size-4" aria-hidden />Confirmed by {p.confirmed.by_name || p.confirmed.by}</span> : null}
           {p.rejected ? <span className="inline-flex items-center gap-1.5 rounded-md status-bad px-2.5 py-1.5 text-sm font-medium" title={p.rejected.reason}><XCircle className="size-4" aria-hidden />Marked wrong by {p.rejected.by_name || p.rejected.by}: {p.rejected.reason}</span> : null}
-          {staged && canConfirm && !p.confirmed && !view.stale ? <LoadingButton onClick={() => confirm.mutate()} loading={confirm.isPending} data-testid="confirm-prognostic"><Check className="size-4" />Confirm prognostic stage {p.stage}</LoadingButton> : null}
+          {staged && canConfirm && !p.confirmed && !view.stale && view.draft?.confirmed && !view.draft?.rejected ? <LoadingButton onClick={() => confirm.mutate()} loading={confirm.isPending} data-testid="confirm-prognostic"><Check className="size-4" />Confirm prognostic stage {p.stage}</LoadingButton> : null}
+          {staged && canConfirm && !p.confirmed && !view.stale && !(view.draft?.confirmed && !view.draft?.rejected) ? <span className="text-xs text-muted-foreground" data-testid="prognostic-needs-anatomic">Confirm the anatomic stage first: this group is built on its T, N and M.</span> : null}
           {staged && !canConfirm && signOff.canPropose && !p.confirmed && !view.stale ? <SignOffButton which="prognostic" stage={p.stage ?? ""} s={signOff} testId="propose-prognostic" /> : null}
           {staged && canConfirm && !rejecting && !p.rejected ? <Button variant="outline" onClick={() => setRejecting(true)} data-testid="reject-prognostic">This is wrong</Button> : null}
         </div>

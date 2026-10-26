@@ -2,8 +2,8 @@
 
 A report that becomes ready after the ready mark (a new upload, a re-fetch from the HIS, a re-read) re-runs the ready hook (ready_hook.on_ready
 again=True: the summary and the briefs are written again when stale, never during a meeting, and the MDT Coordinator only is told). When the
-new report differs from an earlier one (two reports disagree, or the new one is only preliminary), the difference waits on the treating
-doctor: the Check step gives the task "Check 1 value" (steps.build, `since_sent`), and the coordinator's agenda row says "waiting on Dr X"
+new report differs from an earlier one (two reports disagree, a newer final report changed a time-varying value, or the new one is only
+preliminary, even with no earlier value: discord.after_send_items), the difference waits on the treating doctor: the Check step gives the task "Check 1 value" (steps.build, `since_sent`), and the coordinator's agenda row says "waiting on Dr X"
 (waiting_on). Vaidyx never picks: the doctor picks the value the board uses (item 1.7) or notes the difference, and the task is gone.
 """
 from . import config, store
@@ -40,8 +40,9 @@ def new_since_sent(case_id: str, case: dict | None = None) -> int:
 
 
 def since_sent(case_id: str, case: dict | None, problems: list) -> list:
-    """The open "two reports differ" problems of the Check step (steps.build) that a report read after the ready mark brought: one of the two
-    reports it cites is new since sending. Picked or noted differences are not open, so they never count."""
+    """The open problems of the Check step (steps.build) that a report read after the ready mark brought: two reports differ (a review kind),
+    a newer final report changed a value ("changed") or only a preliminary report gives it ("preliminary"), and one report it cites is new
+    since sending. Picked or noted differences are not open, so they never count; differences read before sending keep the old way."""
     fresh = set(new_docs(case_id, case))
     if not fresh:
         return []
@@ -50,7 +51,7 @@ def since_sent(case_id: str, case: dict | None, problems: list) -> list:
         conf = p.get("confirmation") or {}
         if p.get("resolved") or conf.get("type") != "note_discordance":
             continue
-        if any((c or {}).get("doc_id") in fresh for c in conf.get("citations") or []):
+        if conf.get("kind") in ("changed", "preliminary") or any((c or {}).get("doc_id") in fresh for c in conf.get("citations") or []):
             out.append(p)
     return out
 
