@@ -288,6 +288,7 @@ def send_to_board(case_id: str, user: str, *, list: str = "discussion", meeting_
     c = mark_ready(case_id, user, True, note, extra_text=extra)
     if s:
         try:
+            meetings.take_off_agendas(case_id, user, keep=meeting_id, why="sent", sent_to=meeting_id)  # one agenda only (night-v3 item 1.6)
             meetings.add_to_agenda(meeting_id, user, case_id, list, reason)
         except meetings.MeetingError as e:
             raise ValueError(str(e))

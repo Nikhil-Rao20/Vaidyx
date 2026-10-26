@@ -53,6 +53,8 @@ export const EP = {
   job: (j: string) => `${TB}/jobs/${id(j)}`,
   org: `${TB}/org`,
   meetings: `${TB}/meetings`,
+  /** GET: the meetings a Case File may still go to (planned, not cancelled, today or later) for any placed account (night-v3 item 1.6). */
+  openMeetings: `${TB}/meetings/open`,
   joinMeeting: `${TB}/meetings/join`,
 
   setup: `${TB}/setup`,

@@ -453,6 +453,8 @@ export interface CaseFile {
     urgency?: Urgency | null;
     team?: { owner?: string; residents?: unknown[] };
     meeting_id?: string;
+    /** The choices of Send to the board (night-v3 item 1.4); withdrawn when the doctor took it off the agenda (item 1.6). */
+    board_send?: BoardSend | null;
     board_record?: BoardRecord | null;
     created?: string;
   };
@@ -513,6 +515,26 @@ export interface RequestDraft {
   free?: boolean;
   sent?: unknown;
   status?: string;
+}
+
+export interface BoardSend {
+  list?: "discussion" | "noting";
+  meeting_id?: string;
+  presenter?: string;
+  note?: string;
+  reason?: string;
+  by?: string;
+  at?: string;
+  withdrawn?: { by: string; at: string; reason: string } | null;
+}
+
+/** POST /cases/{id}/meeting/move or /withdraw (night-v3 item 1.6). */
+export interface MeetingMoveResult {
+  case_id: string;
+  meeting_id: string;
+  board_date: string;
+  board_send?: BoardSend | null;
+  meeting?: { id: string; date: string; time?: string; room?: string; label?: string } | null;
 }
 
 /** Send to the board (night-v3 item 1.4, design B7): POST /cases/{id}/ready with ready true, or a resident's mark_ready proposal.

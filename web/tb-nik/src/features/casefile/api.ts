@@ -1,10 +1,12 @@
 // Every call the Case File page makes. New endpoints (SPEC-API) first; where one answers 404 the page falls back
 // to what the old routes already carry, and says so.
 import { api, ApiError, TB } from "@/lib/api";
+import { EP } from "@/lib/endpoints";
+import type { Meeting } from "@/lib/types";
 import { errorCode, routeMissing } from "@/lib/live";
 import type {
   CaseFile, SlotsResponse, Slot, SlotSection, QuoteBoxes, ChatThread, Helper, HelperMessage, PublishedResult, PublishedSearch, Team, Proposal,
-  Urgency, Job, RequestDraft, GateRequirement, CaseAction, SendToBoardBody,
+  Urgency, Job, RequestDraft, GateRequirement, CaseAction, SendToBoardBody, MeetingMoveResult,
 } from "./types";
 
 const enc = encodeURIComponent;
@@ -46,6 +48,11 @@ export const postConfirmation = (id: string, body: { type: string; key: string; 
 export const undoConfirmation = (id: string, conf: string) => api.post(`${caseUrl(id)}/confirmations/${enc(conf)}/undo`, {});
 /** Send to the board (night-v3 1.4): ready true with the dialog's choices; ready false takes the mark back. */
 export const markReady = (id: string, ready: boolean, body?: Partial<SendToBoardBody>) => api.post(`${caseUrl(id)}/ready`, { ready, ...body });
+/** Move a Case File sent to the board to another open meeting, or take it off the agenda with a reason (night-v3 item 1.6). */
+export const moveCase = (id: string, meetingId: string, reason = "") => api.post<MeetingMoveResult>(`${caseUrl(id)}/meeting/move`, { meeting_id: meetingId, reason });
+export const withdrawCase = (id: string, reason: string) => api.post<MeetingMoveResult>(`${caseUrl(id)}/meeting/withdraw`, { reason });
+/** The meetings a Case File may still go to: planned, not cancelled, today or later, earliest first. */
+export const getOpenMeetings = () => api.get<{ meetings: Meeting[] }>(EP.openMeetings);
 export const buildSummary = (id: string, force = false) => api.post<Record<string, unknown>>(`${caseUrl(id)}/summary`, { force });
 export const reviewArtefact = (id: string, artefact: string, status = "reviewed", comment = "") => api.post(`${caseUrl(id)}/review`, { artefact, status, comment });
 export const refetchHis = (id: string) => api.post<{ job: string; total: number }>(`${caseUrl(id)}/his/refetch`, {});

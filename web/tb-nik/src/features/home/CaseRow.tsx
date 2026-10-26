@@ -2,8 +2,11 @@
 // small), the cancer and its setting, then what the file is waiting for (the status word, how many records are left), the
 // board date and the last change. The owner's name shows only on a file that is not the reader's own. Another department's
 // Case File seen only through a link (night-v3 item 1.3) carries "Owned by <department>, read-only". The whole row opens the
-// Case File; the search words are marked.
-import { CalendarDays, Camera, Clock, Link2 } from "lucide-react";
+// Case File; the search words are marked. On a row the reader may act on (the owner's consultant, the MDT Coordinator) the
+// "Scheduled <date>" pill is a chip with a small menu: Move to another meeting, Take off the agenda (night-v3 item 1.6); the list
+// hosts the dialogs.
+import { CalendarDays, CalendarMinus, CalendarSync, Camera, ChevronDown, Clock, Link2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { DataRow } from "@/components/DataList";
 import { UrgencyTag } from "@/components/UrgencyTag";
 import { Pill, StatusPill } from "@/components/StatusPill";
@@ -14,7 +17,30 @@ import { drName } from "@/lib/format";
 
 const SETTING: Record<string, string> = { early: "early", locally_advanced: "locally advanced", metastatic: "metastatic", recurrent: "recurrent" };
 
-export function CaseRow({ c, q = "", showOwner = true }: { c: CaseListItem; q?: string; showOwner?: boolean }) {
+export type MeetingAction = "move" | "withdraw";
+
+/** The "Scheduled <date>" pill as a button with a menu. Inside the row's link: the clicks stop here so the row does not open. */
+function MeetingChip({ c, onMeeting }: { c: CaseListItem; onMeeting: (a: MeetingAction) => void }) {
+  const stop = (e: React.SyntheticEvent) => { e.preventDefault(); e.stopPropagation(); };
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button type="button" onClick={stop} data-testid="meeting-chip" title="Move to another meeting or take it off the agenda"
+          className="inline-flex min-w-0 items-center gap-0.5 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <StatusPill status={c.status} className="min-w-0 cursor-pointer hover:brightness-95" />
+          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="sr-only">, move or take off the agenda</span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-60" onClick={(e) => e.stopPropagation()}>
+        <DropdownMenuItem onSelect={() => onMeeting("move")} data-testid="chip-move"><CalendarSync className="size-4" />Move to another meeting</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onMeeting("withdraw")} data-testid="chip-withdraw"><CalendarMinus className="size-4" />Take off the agenda</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+export function CaseRow({ c, q = "", showOwner = true, onMeeting }: { c: CaseListItem; q?: string; showOwner?: boolean; onMeeting?: (a: MeetingAction) => void }) {
   const cancer = c.protocol_label || c.cancer_name || "Cancer not set";
   const setting = c.setting ? SETTING[c.setting] || c.setting.replace(/_/g, " ") : "";
   const owner = c.owner?.doctor_name ? `${drName(c.owner.doctor_name)}${c.owner.department_label ? ` · ${c.owner.department_label}` : ""}` : c.owner?.department_label || "";
@@ -44,7 +70,7 @@ export function CaseRow({ c, q = "", showOwner = true }: { c: CaseListItem; q?: 
           {showOwner && !c.mine && owner ? <Highlight text={owner} q={q} /> : c.residents_count ? `${c.residents_count} resident${c.residents_count === 1 ? "" : "s"} on it` : ""}
         </p>
         <div className="col-start-2 flex min-w-0 items-center gap-2 lg:col-start-auto">
-          <StatusPill status={c.status} className="min-w-0" />
+          {onMeeting && c.status?.key === "scheduled" && c.status.detail !== "in session" ? <MeetingChip c={c} onMeeting={onMeeting} /> : <StatusPill status={c.status} className="min-w-0" />}
           {showLeft ? <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{left} left</span> : null}
         </div>
         <p className="col-start-2 hidden items-center gap-1 text-xs text-muted-foreground lg:col-start-auto lg:flex" title="Board date">

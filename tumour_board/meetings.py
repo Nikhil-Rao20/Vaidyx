@@ -23,7 +23,7 @@ call them from the app's event loop, never from threads (the scheduler calls exp
 import asyncio, logging, secrets, time, uuid
 from datetime import date, datetime, timedelta
 
-from . import access, board, config, dept_requests, his_client, live, notify, org, pacs, postboard, protocol, rules, store
+from . import access, after_send, board, config, dept_requests, discord, his_client, live, notify, org, pacs, postboard, protocol, rules, store
 
 log = logging.getLogger(__name__)
 
@@ -380,7 +380,7 @@ def row(s: dict, it: dict, order: int, r: dict | None = None, restricted: bool =
             "reason": it.get("reason") or "", "ready": bool(c.get("board_ready")), "status": (item or {}).get("status") or "waiting",
             "ended": cid in (s.get("ended") or {}), "outcome": oc.get("outcome"), "outcome_label": OUTCOMES.get(oc.get("outcome") or "", ""),
             "added_after_send": bool(s.get("agenda_sent_at")) and cid not in (s.get("agenda_sent_cases") or []), "urgency": urg.get("level"),
-            "presenter": chosen_presenter(c)}
+            "presenter": chosen_presenter(c), "waiting_on": after_send.waiting_on(c), "new_since_sent": after_send.new_since_sent(cid, c)}  # night-v3 item 1.5
 
 
 def counts(s: dict) -> dict:
@@ -651,6 +651,143 @@ def add_to_agenda(mid: str, by: str, case_id: str, lst: str, reason: str = "") -
     s["agenda_lists"] = lists
     _after_agenda_change(s, by, "agenda_added_to_list", case_id=cid, list=lst, reason=reason)
     return s
+
+
+# ---- the owner moves or withdraws its Case File (night-v3 item 1.6, design B8) ---------------------------------------------------------
+
+MIN_WITHDRAW_REASON, MAX_WITHDRAW_REASON = 3, 500
+
+
+def take_off_agendas(case_id: str, by: str, keep: str = "", **extra) -> list[str]:
+    """Take a Case File off every list of every planned meeting except `keep` (a Case File sits on one agenda only). Each meeting left
+    is synced (the old agenda[] follows), saved, audited "agenda_removed_by_owner" (with `extra`: why, the reason, where it went) and
+    told to its sockets. Returns the ids of the meetings it left. A meeting in session or closed is never touched."""
+    left = []
+    for s in board.planned_sessions():
+        if s.get("id") == keep:
+            continue
+        board.ensure_meeting_fields(s)
+        if not _on_lists(s, case_id):
+            continue
+        lists = s.get("agenda_lists") or {}
+        for k in LISTS:
+            lists[k] = [it for it in lists.get(k) or [] if it.get("case_id") != case_id]
+        s["agenda_lists"] = lists
+        board.sync_agenda_lists(s, by)
+        _save(s)
+        board.audit_event(s["id"], "agenda_removed_by_owner", by, case_id=case_id, **counts(s), **extra)
+        _send(s, {"type": "agenda", "counts": counts(s)})
+        left.append(s["id"])
+    return left
+
+
+def _sent_case(case_id: str) -> dict:
+    """The Case File the owner moves or withdraws: it exists, is not protected or archived, was sent to the board (the ready mark) and
+    its current meeting is not running or over."""
+    if case_id in config.PROTECTED_CASES:
+        raise MeetingError("That Case File is protected.", 400, "protected")
+    c = store.get_case(case_id)
+    if not c:
+        raise MeetingError(f"Case File {case_id} not found.", 404, "not_found")
+    if access.is_archived(c):
+        raise MeetingError(access.ARCHIVED_MESSAGE + ". Take it out of the archive first.", 409, "archived")
+    if not (isinstance(c.get("board_ready"), dict) and c["board_ready"].get("at")):
+        raise MeetingError("Send it to the board first.", 400, "not_sent")
+    cur = get(c.get("meeting_id")) if c.get("meeting_id") else None
+    if cur and cur.get("status") in ("in_session", "closed"):
+        raise MeetingError("That meeting is not open.", 400, "not_open")
+    return c
+
+
+def _when(s: dict | None) -> str:
+    return (_dmy(s.get("date")) + (f" {s['time']}" if s.get("time") else "")) if s else ""
+
+
+def _tell_coordinator(c: dict, title: str, text: str, **extra) -> None:
+    try:
+        notify.notify({"role": "coordinator"}, "agenda", c["case_id"], title, text, **extra)
+    except Exception as e:  # a notice never fails the change
+        log.warning("agenda notice for %s failed (%s)", c.get("case_id"), e)
+
+
+def move_case(case_id: str, user: str, to_meeting_id: str, reason: str = "") -> dict:
+    """The owner (or the MDT Coordinator) moves a Case File sent to the board to another open meeting (planned, not cancelled, today
+    or later, not the one it is on): it joins that meeting's list of the same kind (board_send list, for discussion by default) and
+    leaves every other planned meeting's lists; the Case File follows (meeting_id, board_date, board_send meeting_id, the move kept in
+    board_send_history); audited in the Case File (agenda_moved) and on both meetings; the coordinator is told. Returns the Case File."""
+    c = _sent_case(case_id)
+    reason = " ".join(str(reason or "").split())[:MAX_WITHDRAW_REASON]
+    to = str(to_meeting_id or "").strip()
+    if not to:
+        raise MeetingError("Choose the meeting to move it to.", 400, "meeting_needed")
+    s = get(to)
+    if not s:
+        raise MeetingError("Meeting not found.", 400, "not_found")
+    if s.get("status") != "planned" or s.get("cancelled"):
+        raise MeetingError("That meeting is not open.", 400, "not_open")
+    if str(s.get("date") or "") < date.today().isoformat():
+        raise MeetingError("That meeting date has passed: pick another meeting.", 400, "past")
+    frm = str(c.get("meeting_id") or "")
+    if to == frm:
+        raise MeetingError("It is already on that meeting. Choose another meeting.", 400, "same_meeting")
+    send = c.get("board_send") if isinstance(c.get("board_send"), dict) else {}
+    lst = send.get("list") if send.get("list") in board.SEND_LISTS else "discussion"
+    _check([case_id])  # listed, not archived: checked before anything moves
+    old = get(frm) if frm else None
+    add_to_agenda(to, user, case_id, lst, str(send.get("reason") or ""))  # links the Case File: meeting_id, board_date (meeting_listed)
+    left = take_off_agendas(case_id, user, keep=to, why="moved", moved_to=to, reason=reason)
+    now = _now()
+    c = store.get_case(case_id)
+    send = c.get("board_send") if isinstance(c.get("board_send"), dict) else {"list": lst}
+    send.pop("withdrawn", None)
+    send["meeting_id"] = to
+    c["board_send"] = send
+    c.setdefault("board_send_history", []).append({"moved_to": to, "from": frm, "reason": reason, "by": user or "", "at": now})
+    store.save_case(c)
+    store.audit(case_id, {"kind": "agenda_moved", "by": user or "", "from": frm, "to": to, "from_date": (old or {}).get("date") or "",
+                          "to_date": s.get("date") or "", "list": lst, "reason": reason, "left": left})
+    for mid in dict.fromkeys([to] + ([frm] if frm and frm not in left and old else []) + left):
+        board.audit_event(mid, "agenda_moved", user, case_id=case_id, reason=reason, **{"from": frm, "to": to})  # "from" is a keyword
+    title = f"Moved to the meeting of {_dmy(s.get('date'))}: {patient_line(c) or case_id} ({case_id})"
+    text = (f"Moved from the meeting of {_when(old)}" if old else "Put on this meeting") + f" by {display_name(user)}." + (f" Reason: {reason}" if reason else "")
+    _tell_coordinator(c, title, text, meeting_id=to, by=user)
+    return c
+
+
+def withdraw_case(case_id: str, user: str, reason: str) -> dict:
+    """The owner (or the MDT Coordinator) takes a Case File off the agenda with a reason (3 to 500 characters): it leaves every planned
+    meeting's lists, meeting_id is cleared (board_date kept), board_send records withdrawn {by, at, reason} (the ready mark stays, so
+    Send to the board can pick a meeting again); audited in the Case File (agenda_withdrawn) and on the meeting; the coordinator is
+    told. Returns the Case File."""
+    reason = " ".join(str(reason or "").split())
+    if len(reason) < MIN_WITHDRAW_REASON:
+        raise MeetingError("Say why it comes off the agenda.", 400, "reason_needed")
+    if len(reason) > MAX_WITHDRAW_REASON:
+        raise MeetingError(f"Keep the reason to {MAX_WITHDRAW_REASON} characters.", 400, "reason_too_long")
+    c = _sent_case(case_id)
+    frm = str(c.get("meeting_id") or "")
+    old = get(frm) if frm else None
+    left = take_off_agendas(case_id, user, why="withdrawn", reason=reason)
+    if not left and not frm:
+        raise MeetingError("It is not on a meeting's agenda.", 400, "not_on_agenda")
+    if not old and left:
+        old = get(left[0])
+    now = _now()
+    c = store.get_case(case_id)
+    c.pop("meeting_id", None)
+    send = c.get("board_send") if isinstance(c.get("board_send"), dict) else {"list": "discussion"}
+    send["meeting_id"] = ""
+    send["withdrawn"] = {"by": user or "", "at": now, "reason": reason}
+    c["board_send"] = send
+    c.setdefault("board_send_history", []).append({"withdrawn_from": frm or (left[0] if left else ""), "reason": reason, "by": user or "", "at": now})
+    store.save_case(c)
+    store.audit(case_id, {"kind": "agenda_withdrawn", "by": user or "", "meeting_id": frm, "left": left, "reason": reason})
+    for mid in dict.fromkeys(([frm] if old and frm else []) + left):
+        board.audit_event(mid, "agenda_withdrawn", user, case_id=case_id, reason=reason)
+    when = _dmy((old or {}).get("date")) if old else ""
+    title = (f"Taken off the agenda of {when}" if when else "Taken off the agenda") + f": {patient_line(c) or case_id} ({case_id})"
+    _tell_coordinator(c, title, f"Taken off by {display_name(user)}. Reason: {reason}", meeting_id=(old or {}).get("id") or "", by=user)
+    return c
 
 
 def _member_departments(s) -> list[str]:
@@ -1414,16 +1551,23 @@ def slides(cid: str, r: dict | None = None) -> list[dict]:
                                 "note": "No Case File summary compiled yet: the Pre-Authorization result is shown instead."}})
     cat = protocol.facts()
     facts = rules.resolve_facts(docs, st.get("overrides") or {})
+    try:  # two reports differ and wait on the treating doctor's check: both values, each with its own quote (night-v3 item 1.5)
+        diffs = discord.open_differences(cid, st)
+    except Exception:
+        diffs = {}
     values = []
     for fid, f in facts.items():
         cur = f.get("current") or {}
         if cur.get("state") not in (None, "present") or not cur.get("value"):
             continue
+        if fid in diffs:
+            values.extend(discord.slide_rows(fid, diffs[fid], len(f.get("history") or [])))
+            continue
         values.append({"id": fid, "label": (cat.get(fid) or {}).get("label") or fid, "value": cur.get("value"), "quote": cur.get("quote") or "", "doc_id": cur.get("doc_id"),
                        "doc_title": cur.get("doc_title"), "date": cur.get("date") or cur.get("report_date"), "verification": cur.get("verification"), "final": bool(cur.get("doc_final")),
                        "page": (cur.get("location") or {}).get("page"), "source_method": cur.get("source_method"), "history": len(f.get("history") or [])})
     order = {k: i for i, k in enumerate(cat)}
-    values.sort(key=lambda v: order.get(v["id"], len(order)))
+    values.sort(key=lambda v: order.get(v.get("fact_id") or v["id"], len(order)))
     out.append({"id": "values", "title": "Key values with sources", "kind": "values", "content": {"values": values, "note": "Every value is a verbatim quote from the record named."}})
     gaps = [{"id": q.get("id"), "label": q.get("label"), "department": q.get("department"), "status": q.get("status"), "problems": list(q.get("problems") or []), "level": q.get("level")}
             for q in g.get("requirements") or [] if q.get("status") != "satisfied"]

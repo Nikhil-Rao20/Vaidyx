@@ -1,8 +1,8 @@
 // The guided Case File's header (B1, B9): who the patient is (name and UHID on every section, NISTIR two identifiers), the cancer as
 // recorded, the owner, the board date and the urgency; on the right the one final action "Send to the board" and one "More" menu
-// (Team, Board form, Print, Download, Archive). Nothing else: the work is in the sections.
+// (Team, Board form, Print, Download, Move to another meeting, Take off the agenda, Archive). Nothing else: the work is in the sections.
 import { Link } from "react-router-dom";
-import { Archive, CalendarDays, ChevronDown, ClipboardList, Download, MoreHorizontal, Presentation, Printer, Send, Users } from "lucide-react";
+import { Archive, CalendarDays, CalendarMinus, CalendarSync, ChevronDown, ClipboardList, Download, MoreHorizontal, Presentation, Printer, Send, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { UrgencyTag } from "@/components/UrgencyTag";
@@ -14,9 +14,11 @@ import type { Steps } from "./types";
 
 export type MorePanel = "team" | "board";
 
-export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, deckHref, exportHref, exportAllowed, onArchive, resident, consultantName }: {
+export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, deckHref, exportHref, exportAllowed, onArchive, onMove, onWithdraw, resident, consultantName }: {
   cf: CaseFile; team: Team | null; steps: Steps | null; onSend: () => void; onPanel: (p: MorePanel) => void; onPrint: () => void;
   deckHref: string; exportHref: string; exportAllowed: boolean; onArchive?: () => void; resident: boolean; consultantName: string;
+  /** Move to another meeting / Take off the agenda (night-v3 item 1.6): given only when the viewer may act (owner's consultant or coordinator). */
+  onMove?: () => void; onWithdraw?: () => void;
 }) {
   const c = cf.case;
   const p = c.patient ?? { name: "", mrn: "", agesex: "" };
@@ -26,7 +28,8 @@ export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, deckHref
   const ids = (p.ids ?? []).filter((x) => x.kind === "ip_no" || x.kind === "op_no").map((x) => x.value);
   const ownerDept = team?.owner?.department_label || ownerOf(cf).name;
   const ownerName = team?.owner?.doctors?.[0]?.name ?? cf.access?.owner_name ?? "";
-  const sent = !!c.board_ready;
+  const withdrawn = !!c.board_send?.withdrawn;
+  const sent = !!c.board_ready && !withdrawn;  // taken off the agenda: the ready mark stays, Send to the board picks a meeting again
   const prepare = steps?.mode === "prepare";
   const urgency = team?.urgency !== undefined ? team?.urgency : c.urgency;
   return (
@@ -54,6 +57,7 @@ export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, deckHref
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2 print:hidden">
           {sent ? <StatusChip kind="ok" icon={Send}>Sent to the board{c.board_ready?.at ? `, ${fmtDate(c.board_ready.at)}` : ""}</StatusChip> : null}
+          {withdrawn ? <StatusChip kind="warn" icon={CalendarMinus} title={c.board_send?.withdrawn?.reason ? `Reason: ${c.board_send.withdrawn.reason}` : undefined}>Taken off the agenda{c.board_send?.withdrawn?.at ? `, ${fmtDate(c.board_send.withdrawn.at)}` : ""}</StatusChip> : null}
           {prepare && !sent ? (
             <Button onClick={onSend} data-testid="send-to-board" title={steps?.left ? `${steps.left} still open: you will be asked why the board should discuss it anyway` : "Send this Case File to the board"}>
               <Send className="size-4" />{resident ? `Send to Dr ${consultantName} for sign-off` : "Send to the board"}
@@ -71,6 +75,9 @@ export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, deckHref
               <DropdownMenuItem asChild><a href={deckHref} download><Presentation className="size-4" />Download the slides (.pptx)</a></DropdownMenuItem>
               {exportAllowed ? <DropdownMenuItem asChild><a href={exportHref} download><Download className="size-4" />NCG VTB template (.pptx)</a></DropdownMenuItem>
                 : <DropdownMenuItem disabled><Download className="size-4" />NCG VTB template<span className="ml-auto text-xs">after you read the summary</span></DropdownMenuItem>}
+              {sent && (onMove || onWithdraw) ? <DropdownMenuSeparator /> : null}
+              {sent && onMove ? <DropdownMenuItem onSelect={onMove} data-testid="more-move"><CalendarSync className="size-4" />Move to another meeting</DropdownMenuItem> : null}
+              {sent && onWithdraw && c.meeting_id ? <DropdownMenuItem onSelect={onWithdraw} data-testid="more-withdraw"><CalendarMinus className="size-4" />Take off the agenda</DropdownMenuItem> : null}
               {onArchive ? <><DropdownMenuSeparator /><DropdownMenuItem onSelect={onArchive}><Archive className="size-4" />Archive</DropdownMenuItem></> : null}
             </DropdownMenuContent>
           </DropdownMenu>

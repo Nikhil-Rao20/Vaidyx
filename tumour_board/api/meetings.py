@@ -4,7 +4,7 @@ meetings.py. Also GET /scheduler/status for the root admin and the Vaidyx admin.
 from fastapi import Request
 
 from . import common
-from .. import access, config, meetings, org, scheduler, store
+from .. import access, board, config, meetings, org, scheduler, store
 
 router = common.make_router(["tumour-board-meetings"])
 JOIN_LIMIT = common.RateLimit(5, 15 * 60)
@@ -70,6 +70,14 @@ async def meetings_list(request: Request):
     return meetings.list_meetings(rl)
 
 
+@router.get("/meetings/open")
+async def meetings_open_list(request: Request):
+    """The meetings a Case File may still go to (planned, not cancelled, today or later, earliest first) for any placed account: a
+    treating doctor sees an empty planned meeting here even when GET /meetings does not list it (night-v3 item 1.6, Move)."""
+    u, rl = _who(request)
+    return {"meetings": [meetings.summary_row(board.ensure_meeting_fields(s)) for s in meetings.open_meetings()]}
+
+
 @router.post("/meetings/join")
 async def meetings_join(request: Request):
     """{"code"}: 404 no_such_code, 410 code_expired; rate limited 5 tries per 15 minutes per user (a code that is not 6 digits cannot
@@ -130,6 +138,34 @@ async def meetings_agenda_add(mid: str, request: Request):
     u, rl = _who(request); common.need(rl, "session"); b = await common.body(request); s = _meeting(mid)
     s = _call(meetings.add_to_agenda, s["id"], u, _case_id(b.get("case_id")), str(b.get("list") or "discussion"), str(b.get("reason") or ""))
     return meetings.view(s["id"], rl)
+
+
+# ---- the owner moves or withdraws its Case File (night-v3 item 1.6) ------------------------------------------------------------------
+
+def _may_move(rl, c):
+    """The owning department's consultants (the right to send it to the board) and the MDT Coordinator."""
+    if not (access.may(rl, "mark_ready", c) or rl.get("coordinator")):
+        common.fail(403, "Only the owning department's consultants or the MDT Coordinator can move this Case File or take it off the agenda.", "forbidden")
+
+
+def _moved(c: dict) -> dict:
+    s = meetings.get(c.get("meeting_id")) if c.get("meeting_id") else None
+    return {"case_id": c["case_id"], "meeting_id": c.get("meeting_id") or "", "board_date": c.get("board_date") or "",
+            "board_send": c.get("board_send"), "meeting": meetings.summary_row(s) if s else None}
+
+
+@router.post("/cases/{case_id}/meeting/move")
+async def case_meeting_move(case_id: str, request: Request):
+    """{meeting_id, reason?}: move a Case File sent to the board to another open meeting (meetings.move_case); the coordinator is told."""
+    u, rl = _who(request); c = common.case(_case_id(case_id)); _may_move(rl, c); b = await common.body(request)
+    return _moved(_call(meetings.move_case, c["case_id"], u, str(b.get("meeting_id") or ""), str(b.get("reason") or "")))
+
+
+@router.post("/cases/{case_id}/meeting/withdraw")
+async def case_meeting_withdraw(case_id: str, request: Request):
+    """{reason}: take a Case File off the agenda (meetings.withdraw_case); the ready mark stays; the coordinator is told."""
+    u, rl = _who(request); c = common.case(_case_id(case_id)); _may_move(rl, c); b = await common.body(request)
+    return _moved(_call(meetings.withdraw_case, c["case_id"], u, str(b.get("reason") or "")))
 
 
 @router.post("/meetings/{mid}/send-agenda")

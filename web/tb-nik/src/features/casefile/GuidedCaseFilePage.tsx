@@ -13,18 +13,19 @@ import { OpenWithReasonButton, ReadOnlyBanner, mayOpenWithReason, windowFor } fr
 import { ApiError } from "@/lib/api";
 import { notify } from "@/components/Toasts";
 import {
-  archiveCase, buildSummary, createFreeRequest, deckUrl, exportVtbUrl, markReady, notBuiltYet, postConfirmation, postProposal, remindRequest, reviewArtefact,
-  setSlotValue, setUrgency, slotAskDepartment, slotNotNeeded, undoConfirmation,
+  archiveCase, buildSummary, createFreeRequest, deckUrl, exportVtbUrl, markReady, moveCase, notBuiltYet, postConfirmation, postProposal, remindRequest, reviewArtefact,
+  setSlotValue, setUrgency, slotAskDepartment, slotNotNeeded, undoConfirmation, withdrawCase,
 } from "./api";
 import { useCaseFile, useMyRole, useProposals, useRememberCase, useSlots, useTeam } from "./hooks";
 import type { Proposed, SendToBoardBody, Slot, SlotAction } from "./types";
 import { ArchiveDialog } from "./components/ArchiveDialog";
 import { AskPanel } from "./components/AskPanel";
 import { BoardFormPanel } from "./components/BoardFormPanel";
-import { EmptyState, ErrorState, SkeletonLines, errorText, plural, useAnnounce } from "./components/common";
+import { EmptyState, ErrorState, SkeletonLines, errorText, fmtDate, plural, useAnnounce } from "./components/common";
 import { UndoBar, useDeferred } from "./components/deferred";
 import { HelpersPanel, NAMES as HELPER_NAMES, useHelpers } from "./components/HelpersPanel";
 import { MarkReadyDialog } from "./components/MarkReadyDialog";
+import { MoveMeetingDialog, TakeOffDialog } from "./components/MoveMeetingDialog";
 import { ProposalsStrip } from "./components/ProposalsStrip";
 import { PublishedPanel } from "./components/PublishedPanel";
 import { UploadDialog } from "./components/ReportsPanel";
@@ -111,6 +112,8 @@ export default function GuidedCaseFilePage() {
   const [side, setSide] = useState<Side | null>(legacy?.side ?? null);
   const [readyOpen, setReadyOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [takeOffOpen, setTakeOffOpen] = useState(false);
   const [cancerOpen, setCancerOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [writing, setWriting] = useState(false);
@@ -278,6 +281,22 @@ export default function GuidedCaseFilePage() {
     await refresh();
   };
 
+  // Move to another meeting / Take off the agenda (night-v3 item 1.6): the owner's consultants and the MDT Coordinator; the coordinator is told.
+  const onMove = async (meetingId: string, reason: string) => {
+    const r = await moveCase(id, meetingId, reason);
+    announce(`Moved to the meeting of ${fmtDate(r.meeting?.date || r.board_date)}.`);
+    notify.success("Moved to another meeting", `The meeting of ${fmtDate(r.meeting?.date || r.board_date)}. The MDT Coordinator is told.`);
+    void qc.invalidateQueries({ queryKey: ["meetings"] });
+    await refresh();
+  };
+  const onWithdraw = async (reason: string) => {
+    await withdrawCase(id, reason);
+    announce("Taken off the agenda.");
+    notify.success("Taken off the agenda", "The MDT Coordinator is told. You can send it to the board again.");
+    void qc.invalidateQueries({ queryKey: ["meetings"] });
+    await refresh();
+  };
+
   // ---- states ------------------------------------------------------------------------------------------------------------------------
   if (cfq.isLoading) {
     return (
@@ -306,6 +325,7 @@ export default function GuidedCaseFilePage() {
   const exportAllowed = !!prose?.reviewed;
   const canWrite = prepare && (resident || !!cf.permissions?.mark_ready || !!cf.permissions?.review);
   const canConfirm = prepare && !resident && !!steps?.permissions?.review;
+  const canMove = !resident && !teamq.data?.archived && (!!cf.permissions?.mark_ready || role.coordinator) && (!!cf.case.board_ready || !!steps?.summary.sent);
   const sectionTitle = steps?.sections.find((s) => s.id === section)?.label ?? "";
   const panelTitle = side?.kind === "panel" ? (side.panel === "team" ? "Team" : "Board form") : side?.kind === "source" ? (side.target.title ?? "Report") : side?.kind === "review" ? "Please check" : side?.kind === "request" ? "Change the message" : side?.kind === "ask" ? "Ask about this patient" : "";
   const reviewSlot = side?.kind === "review" ? slotById(side.slotId) : null;
@@ -362,7 +382,8 @@ export default function GuidedCaseFilePage() {
 
       <CaseHeader cf={cf} team={teamq.data} steps={steps} resident={resident} consultantName={consultantName} onSend={() => setReadyOpen(true)}
         onPanel={(p) => setSide({ kind: "panel", panel: p })} onPrint={() => window.print()} deckHref={deckUrl(id)} exportHref={exportVtbUrl(id)} exportAllowed={exportAllowed}
-        onArchive={teamq.data?.can?.archive && !teamq.data?.archived ? () => setArchiveOpen(true) : undefined} />
+        onArchive={teamq.data?.can?.archive && !teamq.data?.archived ? () => setArchiveOpen(true) : undefined}
+        onMove={canMove ? () => setMoveOpen(true) : undefined} onWithdraw={canMove ? () => setTakeOffOpen(true) : undefined} />
 
       {teamq.data?.archived ? <p role="status" className="rounded-md border border-border bg-muted px-3 py-2 text-sm">Archived{teamq.data.archived.reason ? `: ${teamq.data.archived.reason}` : ""}. Read only.</p> : null}
       {bg ? <ReadOnlyBanner until={bg.until} reason={bg.reason} /> : null}
@@ -403,6 +424,8 @@ export default function GuidedCaseFilePage() {
       <ArchiveDialog open={archiveOpen} onOpenChange={setArchiveOpen} patient={cf.case.patient?.name || id} onConfirm={async (reason) => { await archiveCase(id, reason); nav("/cases", { replace: true }); }} />
       <MarkReadyDialog open={readyOpen} onOpenChange={setReadyOpen} slots={slotsq.data} resident={resident} consultantName={consultantName} onConfirm={onMarkReady} team={teamq.data ?? null} openCount={steps?.left ?? null}
         boardQuestionMissing={!steps?.question.text} />
+      <MoveMeetingDialog open={moveOpen} onOpenChange={setMoveOpen} patient={cf.case.patient?.name || id} currentMeetingId={cf.case.meeting_id} currentDate={cf.case.meeting_id ? cf.case.board_date : null} onConfirm={onMove} />
+      <TakeOffDialog open={takeOffOpen} onOpenChange={setTakeOffOpen} patient={cf.case.patient?.name || id} currentDate={cf.case.board_date} onConfirm={onWithdraw} />
       <BookViewer target={bookAt} onClose={() => setBookAt(null)} />
       <ChangeCancerDialog open={cancerOpen} onOpenChange={setCancerOpen} caseId={id} current={steps?.protocol ?? cf.case.protocol ?? ""} onChanged={() => { announce("Reading the reports again for the new cancer."); void refresh(); }} />
       <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} caseId={id} hisCase={!!cf.his} onStarted={() => { announce("Upload started; reading the files."); window.setTimeout(() => void refresh(), 4000); }} />

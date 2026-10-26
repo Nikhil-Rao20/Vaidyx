@@ -8,12 +8,13 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Textarea } from "@/components/ui/textarea";
 import { Stepper, Step } from "@/components/Stepper";
 import { KeyValue, KeyValueList } from "@/components/KeyValue";
-import { useMeetings } from "@/hooks/useQueries";
+import { useQuery } from "@tanstack/react-query";
 import { useSession } from "@/lib/session";
 import { drName, formatDateWords, parseDate } from "@/lib/format";
 import type { Meeting } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import type { SendToBoardBody, SlotsResponse, Team } from "../types";
+import { getOpenMeetings } from "../api";
 import { errorText } from "./common";
 
 const NOT_SCHEDULED = "";
@@ -60,7 +61,9 @@ export function MarkReadyDialog({ open, onOpenChange, slots, resident, consultan
   openCount?: number | null;
 }) {
   const { me } = useSession();
-  const meetingsq = useMeetings({ enabled: open });
+  // the open meetings (planned, not cancelled, today or later) for any placed login: GET /meetings/open (night-v3 item 1.6), not the
+  // person's own meeting list, which hides an empty planned meeting from a department not yet on its attendance sheet
+  const meetingsq = useQuery({ queryKey: ["meetings", "open"], queryFn: getOpenMeetings, enabled: open, retry: 1 });
   const meetings = useMemo(() => openMeetings(meetingsq.data?.meetings), [meetingsq.data]);
   const [step, setStep] = useState(1);
   const [meetingId, setMeetingId] = useState<string | null>(null);

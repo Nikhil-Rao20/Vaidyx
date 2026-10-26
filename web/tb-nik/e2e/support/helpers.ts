@@ -52,7 +52,7 @@ function mockAnswer(method: string, p: string, role: fx.Role): { status: number;
   if (p === "/api/tb/waiting") return ok(fx.waiting);
   if (p === "/api/tb/notifications") return ok(fx.notifications);
   if (p === "/api/tb/inbox") return ok(fx.inbox);
-  if (p === "/api/tb/meetings") return ok(fx.meetings);
+  if (p === "/api/tb/meetings" || p === "/api/tb/meetings/open") return ok(fx.meetings);  // /open: the send dialog's open meetings (night-v3 item 1.6)
   if (p === "/api/tb/org") return ok(fx.org);
   if (p === "/api/tb/protocols") return ok(fx.protocols);
   if (p.startsWith("/api/tb/protocols/")) return ok(fx.protocols.protocols.find((x) => x.id === p.split("/").pop()) ?? {});
