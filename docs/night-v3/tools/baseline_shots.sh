@@ -39,6 +39,8 @@ export TBNIK_RESIDENT_USER TBNIK_RESIDENT_PASSWORD
 
 mkdir -p "$OUT"
 export TBNIK_SHOTS="$OUT"
+# The real spec keeps one signed-in browser session per role; the resident's is cleared so a changed resident login never reuses it.
+rm -f "${TMPDIR:-/tmp}/tbnik-real-state/resident.json"
 # A subset run (TBNIK_REAL_ROLES) keeps its own log and result, so the full run's files stay as they were.
 SUFFIX=""
 if [ -n "${TBNIK_REAL_ROLES:-}" ]; then SUFFIX="-$(printf '%s' "$TBNIK_REAL_ROLES" | tr -c 'A-Za-z0-9-' '_')"; fi
@@ -58,7 +60,8 @@ echo
 echo "==== summary ($LABEL, $(( ($(date +%s) - started) / 60 )) min, playwright exit $status) ===="
 echo "PNGs per role:"
 for role in treating resident supporting supporting-head coordinator dept-admin root-admin; do
-  n=$(find "$OUT" -maxdepth 1 -name "real-$role-*.png" | wc -l)
+  if [ "$role" = supporting ]; then n=$(find "$OUT" -maxdepth 1 -name "real-supporting-*.png" -not -name "real-supporting-head-*" | wc -l)
+  else n=$(find "$OUT" -maxdepth 1 -name "real-$role-*.png" | wc -l); fi
   printf '  %-16s %s\n' "$role" "$n"
 done
 printf '  %-16s %s\n' "total" "$(find "$OUT" -maxdepth 1 -name '*.png' | wc -l)"

@@ -1,3 +1,3 @@
 # The item in progress (checkpoint)
 
-Phase 0, session 1 (27 Oct 2026). Committed: 0.3, 0.1, 0.2, 0.4, 0.5. Committed also 0.6, 0.7. Committed also 0.8. Running agent: 0.9 (research/08_voice.md); mocked shots rerun with the changed spec: 58 passed, 22 skipped (the resident tests skip in mock mode), rc 0 (/data/vaidyx/night-v3/gate/phase0_mock_rerun.log). Next: when 08_voice.md lands, commit N3-0.9, run the tb-reviewer over 6f48d34..HEAD, fix serious findings, log [GATE] and [REVIEW], write the Morning summary, commit the log, end the session. Each finished note: sanity check (size, headings, em dashes), commit N3-0.x, mark done with the hash. Then the phase end: gate (already run at the start; rerun the unit tests only if code changed: only e2e files and tools changed), a reviewer agent over the Phase 0 diff, the Morning summary, end the session.
+none (Phase 0 finished 01:41; the next session starts Phase 1 with item 1.1)

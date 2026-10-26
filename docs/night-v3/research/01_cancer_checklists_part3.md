@@ -63,7 +63,7 @@ Vaidyx never computes any of these; a stage is shown only as recorded in a repor
 - Flow cytometry quality: page 91 refers to "Quality Control should be done as per Euroflow protocols or ICMR" (the ICMR immunophenotyping guideline).
 - Resource note on pathology, page 90: "The laboratory without expertise in diagnosing hematolymphoid neoplasms and with" (it should refer the sample to a specialist lab). Child book repeats it on page 41.
 - HIV-positive lymphoma has its own regimen line, page 18 "FOR HIV POSITIVE LYMPHOMA ".
-- Child NHL regimens name the Indian protocol MCP-842, page 23 "MCP-842 (4 to 6 cycles)".
+- Child NHL regimens name the Indian protocol MCP-842, page 23 "MCP-842" (the course length is not copied).
 - Methotrexate level monitoring needs facilities (image page 17 footnote 2: creatinine clearance, third space, methotrexate level, in-patient beds). No PM-JAY text in these books.
 
 ### Regimen or dose tables
@@ -193,7 +193,7 @@ Chemotherapy and regimens page 45; risk-stratified regimen table page 46; radiot
 ## Retinoblastoma (`retinoblastoma`)
 ### Source
 `ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf` (NCG 2019). Work-up and intraocular grouping pages 52 to 53 (printed 51 to 52); unilateral algorithm page 54; bilateral algorithm page 55; chemotherapy, adjuvant indications and radiotherapy page 56; Annexure 1 row page 64.
-How NCG splits the disease: page 52 "Unilateral RB" and "Bilateral RB" under "Intraocular Mass (Suspected Retinoblastoma)"; extra-ocular disease is a branch inside each (page 54 "Extraocular disease: 12 cycles of chemotherapy(VEC), Secondary Enucleation ( after 2-4 cycles) and EBRT").
+How NCG splits the disease: page 52 "Unilateral RB" and "Bilateral RB" under "Intraocular Mass (Suspected Retinoblastoma)"; extra-ocular disease is a branch inside each (page 54 "Extraocular disease"; the treatment on that line is not copied).
 
 ### Settings proposed
 - `unilateral`: 'Unilateral retinoblastoma (as recorded)'. Basis: page 52 "Unilateral RB"; algorithm page 54.
@@ -211,7 +211,7 @@ There is no ophthalmology department; the eye examination routes to owner, and a
 | germline_ngs | Germline mutation test (NGS) | unilateral b, bilateral b | molecular | Medical Genetics | NEW:germline_result | 52 | "Optimal: NGS for Germ Line Mutation (b)" | NCG b |
 | ct_orbit_rb | CT orbit with screening of the brain | unilateral c, bilateral c | ct | Radiology | (none) | 52 | "Optional: CT Orbit + Screening Brain (c)" | NCG c |
 | genetic_counselling_rb | Genetic counselling of the family | unilateral a, bilateral a | clinical_note, referral | Medical Genetics | (none) | 53 | "Genetic counseling needs to be done in all families, with genetic testing indicated in cases of suspected" | Proposed a, the book says "needs to be done in all families" (no letter). Sibling screening, same page: "Screening of all siblings less than 7 years of age should be done" |
-| enucleation_histopathology | Histopathology after enucleation (optic nerve, choroid, sclera) | unilateral b, bilateral b | histopathology | Pathology | histologic_type, margins | 56 | "Indications for Adjuvant Chemotherapy:" | Proposed b; the adjuvant indications (page 56) depend on pathology. Post-surgery record |
+| enucleation_histopathology | Histopathology after enucleation (optic nerve, choroid, sclera) | unilateral b, bilateral b | histopathology | Pathology | histologic_type, margins | 56 | "Scleral or Extra-scleral spread (on radiology or HPR)" | Proposed b; the pathology findings listed on page 56 (HPR: histopathology report) are what the board reads after enucleation; the list's heading is a treatment line and is not quoted. Post-surgery record |
 
 ### New facts needed
 | id | label | kind | report type | book's wording |

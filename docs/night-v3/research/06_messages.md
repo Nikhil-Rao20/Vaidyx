@@ -78,9 +78,11 @@ India, clinician chat: the Telemedicine Practice Guidelines 2020 (MoHFW and NMC,
 
 ## 5. India's DPDP Act 2023 and this feature
 
-Source: the Act, https://www.indiacode.nic.in/bitstream/123456789/22037/2/a2023-22.pdf (403 from here, so not read directly). Section summaries come from https://cdn.jsdelivr.net/npm/bmad-plus@0.9.0/src/bmad-plus/packs/pack-shield/references/dpdpa/sections-reference.md (a third-party reference) and the ICAI note https://palakkad.icai.org/detail/56514.aspx. The Rules of 13/11/2025 come from commentary only (https://www.mondaq.com/india/data-protection/1708164/digital-personal-data-protection-rules-2025-notified). Sub-section numbers inside section 8 should be checked against the Act. Commencement: commentary says most obligations start 18 months after 13/11/2025 (about 05/2027); one source shows a phase in 11/2026: check the gazette. Build as if in force. This is not legal advice; the hospital's own data protection lead should read it.
+Source: the Act, https://www.indiacode.nic.in/bitstream/123456789/22037/2/a2023-22.pdf (403 from here, so not read directly). Section summaries come from the ICAI note https://palakkad.icai.org/detail/56514.aspx (a secondary summary, not the Act). The Rules of 13/11/2025 come from commentary only (https://www.mondaq.com/india/data-protection/1708164/digital-personal-data-protection-rules-2025-notified). Sub-section numbers inside section 8 should be checked against the Act. Commencement: commentary says most obligations start 18 months after 13/11/2025 (about 05/2027); one source shows a phase in 11/2026: check the gazette. Build as if in force. This is not legal advice; the hospital's own data protection lead should read it.
 
 The hospital is the data fiduciary; Vaidyx is a tool it runs on its own server (no data leaves it). Personal data here: staff names, phone, photo (directory), message text, and anything a clinician types about a patient.
+
+Section numbers unverified until checked against the Act's text (the points stand; the numbers come from a secondary summary).
 
 | Section | Point | What we do |
 |---|---|---|

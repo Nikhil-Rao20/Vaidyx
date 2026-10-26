@@ -134,7 +134,7 @@ Tier letters are NCG's where a letter is quoted; proposed rows state the basis.
 | pet_cect | PET-CECT | early b, locally advanced b, metastatic b | pet_ct | Nuclear Medicine | suv_max, distant_findings | 16 | "PET-CECT(b)" | (b) on the page |
 | eus | Endoscopic ultrasonography | early c, locally advanced c, metastatic none | endoscopy | Gastrointestinal Surgery | recorded_stage | 16 | "Endoscopic ultrasonography (EUS)(c) for" | (c), under "Optional Procedures- C", for borderline operable or early T1, T2, N0 |
 | staging_laparoscopy | Staging laparoscopy | early none, locally advanced b, metastatic none | operative_note | Surgical Oncology | distant_findings | 16 | "If Siewart type II/III- Staging laparoscopy(b)" | (b); only for Siewert II/III adenocarcinoma and poorly differentiated tumours (condition not judged by the system) |
-| her2 | HER2 (metastatic adenocarcinoma) | early none, locally advanced none, metastatic c | ihc, histopathology | Pathology | her2 | 16 | "(Trastuzumab)(c)" | (c) on the page ("Her2 positive" with "(Trastuzumab)(c)") |
+| her2 | HER2 (metastatic adenocarcinoma) | early none, locally advanced none, metastatic c | ihc, histopathology | Pathology | her2 | 16 | "Her2 positive" | (c) on the page: the letter is printed on the next line, a treatment line that is not quoted here; the record is the HER2 test only |
 | restaging_ct | Re-evaluation CT after neoadjuvant therapy | early none, locally advanced a, metastatic none | ct | Radiology | lesion_size, distant_findings | 16 | "Followed by reevaluation with CECT(a)" | (a) on the page |
 | resection_histopathology | Histopathology of the oesophagectomy | early a, locally advanced a, metastatic none | histopathology | Pathology | histologic_type, grade, lvi, pni, margins, recorded_stage | 30 | "Margin type  Involved by invasive carcinoma," | Proposed a after surgery (post-board record): the adjuvant box depends on margins ("R+ resection(a)") and pT/pN; synoptic fields on pages 29 to 31 |
 
@@ -216,7 +216,7 @@ The book names Child, HKLC and BCLC: "Child and HKLC/BCLC scoring"; BCLC is cite
 "These are currently not cost effective in India." (about sorafenib and lenvatinib, NOTES). Reference: "Cost-effectiveness of Sorafenib for Treatment of Advanced Hepatocellular Carcinoma in India." Hepatitis B and C: "Patients with Hepatitis B and C will need evaluation and treatment for the virus in addition". No PM-JAY mention.
 
 ### Regimen or dose tables
-n/a (Word file, no pages). The only dose line is in the NOTES paragraph on targeted agents ("The recommended dose is 400mg bd"). Treatment branches: the flow chart under "Curative treatment options" and "Surveillance".
+n/a (Word file, no pages). The only dose line is in the NOTES paragraph on targeted agents (pointer only, the dose is not copied). Treatment branches: the flow chart under "Curative treatment options" and "Surveillance".
 
 ### Open questions
 - Underline and italic marks were read from the Word runs; a few runs in the flow chart may be styled in ways the key does not describe.

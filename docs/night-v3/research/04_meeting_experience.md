@@ -173,6 +173,29 @@ Same layout. Differences:
 - The Admit toast sits top right of the stage, stays until acted on, with "Admit" and "Admit all".
 - Each tile has a menu (three dots): Pin for me, Spotlight for everyone, Make presenter (allow to present), Remove from spotlight.
 
+Layout (1366 x 768); the stage, strip, rail and one side panel are the member's, with the coordinator's additions marked:
+
+```
++--------------------------------------------------------------------------------------------------------------+
+| [V] Conducting 27/10 16:00 | 3 of 8: Anitha Reddy (SYNTHETIC) 46 Y/F  Board question: Primary plan | [07:42 v] Quorum 4/5 (live) |
++--------+---------------------------------------------------------------------------+-------------------------+
+| AGENDA | [ Summary | Key values | Gaps | Imaging | Pathology | Points | Staging ] [Records and images v]       |
+| 1 done | +---------------------------------------------------------------------+   | DECISION  (one panel)   |
+| 2 done | |                                                                     |   | Outcome: (o) Decision   |
+|>3 7:42 | |                     M A I N   S T A G E                             |   | Text: [................]|
+| 4  10m | |         what the room sees; badge "Room sees this"                  |   | Rationale, next step,   |
+| 5  10m | |                                                    [Admit: Dr X]    |   | responsible doctor ...  |
+| 6  10m | |                                                    [Admit] [All]    |   | [Save]  Cards 2 of 4    |
+| Quorum | +---------------------------------------------------------------------+   | [End case]              |
+| 4 of 5 | [tile][tile][tile][tile][tile][AI Radiology][AI Nuc. Med.] +2 (tile menu)| Live text goes to strip |
++--------+---------------------------------------------------------------------------+-------------------------+
+| (mic v)(cam v)(Present)(Hand)(React)(Chat)(People)(Agenda)(Case)(Agents)(Decision)                            |
+|      [Previous] [Next case] [Timer] [End case] (More)                      [End meeting]   [Leave the controls] |
++--------------------------------------------------------------------------------------------------------------+
+```
+
+The tile menu (three dots on each tile): Pin for me, Spotlight for everyone, Make presenter, Remove from spotlight; on an agent tile: Remove agent. The bar has two rows below 1280 px wide (as drawn) and one row above it.
+
 ### 6.4 Room screen (projector, large type, 1920 x 1080, variant `room`)
 
 ```
@@ -222,6 +245,36 @@ Same layout. Differences:
 - Panels (People, Chat, Agenda, Case, Agents) open as a bottom sheet to 85% height, one at a time, with a visible Close and a drag handle; Android back closes the sheet.
 - Controls fade after 4 s with no touch and return on tap; they never hide while a panel is open or while hand is raised.
 - Landscape: the strip moves to the right edge.
+
+### 6.5b Phone, coordinator
+
+A coordinator on a phone gets the member phone layout above plus a "Coordinator" sheet, because the Decision form, the agenda moves and the timer need room that a phone bar does not have; the sheet is a bottom sheet like the others (one at a time) and the bar keeps its five buttons, with Coordinator as the fifth in place of Chat (chat stays in More).
+
+```
++------------------------------+
+| 3 of 8  Anitha R., 46 Y/F  07:42 [conn] |
++------------------------------+
+|   MAIN STAGE (16:10)         |
+|   summary / report / share   |
++------------------------------+
+| [tile][tile][AI][AI] >   (1) |  (1) Admit toast: "Dr X waiting [Admit]"
++------------------------------+
+| (mic)(cam)(hand)(Coord.)(...) |
++------------------------------+
+   Coordinator sheet (85% high, drag handle, Close)
+   +--------------------------------------------+
+   | Case 3 of 8      Timer 07:42 [Start][Stop] |
+   | [ Previous ]  [ Next case ]   [ End case ] |
+   | Show on the stage: Summary | Values | Gaps |
+   |   Imaging | Pathology | Points | Staging    |
+   |   Records and images (Show, Images)        |
+   | Decision: outcome, text (mic in Phase 4),  |
+   |   [ Save ]   cards: 2 of 4 given           |
+   | Agents: Radiology [Remove]  [Add agent]    |
+   | Waiting: Dr X [Admit]   [Admit all]        |
+   | [ End meeting ] (red, asks to confirm)     |
+   +--------------------------------------------+
+```
 
 ### 6.6 The main stage
 
@@ -324,9 +377,9 @@ Backend events and fields needed (all in `tumour_board/meetings.py` and `live.py
 | Need | Event or field | Notes |
 |---|---|---|
 | Chat | `POST /meetings/{mid}/chat` {text}; event `chat` {id, by, by_name, text, at, case_id}; state field `chat` (last 200) and file `chat` inside the meeting JSON | Kept with the meeting record; limit 1000 characters; audited (`board.audit_event`); members only; no patient data rules beyond the existing (a chat line can contain patient details, so it is kept in the meeting, not sent to push or notifications). Apart from `questions`. |
-| Reactions | `POST /meetings/{mid}/reaction` {kind}; event `reaction` {user, kind}; not stored (rate limit 1 per 2 s) | Four kinds. |
+| Reactions | `POST /meetings/{mid}/reaction` {kind}; event `reaction` {user, kind}; not stored (rate limit 1 per 2 s) | Four kinds. Permission: an admitted member (`meetings.is_member`). Audited (no content): `board.audit_event(mid, "reaction", user)` records who and when, not the kind. |
 | Screen share permission | `meeting.present_allowed: [user]`; `POST /meetings/{mid}/present-allow` {user, allowed}; event `present_allowed`; `POST /meetings/{mid}/presenting` {on} to record who shares, event `presenting` {user, on} | LiveKit carries the pixels, the app carries who and whether it is allowed. The coordinator and the case presenter are allowed by default; the coordinator may add others (5.2). Audited. |
-| Spotlight | `meeting.spotlight: [user]`; `POST /meetings/{mid}/spotlight`; event `spotlight` | Coordinator only; cleared on case change. |
+| Spotlight | `meeting.spotlight: [user]`; `POST /meetings/{mid}/spotlight`; event `spotlight` | Permission: the coordinator only (`can.manage`). Audited (no content): who set or removed it and for which users. Cleared on case change. |
 | Pin | none | Per person, browser only. |
 | Agents (D2) | `agent_state` becomes `agents: [{role, label, state, question}]`, events `agents` (list) and per-agent `agent_state` with `role`; `POST /meetings/{mid}/agents` {role, on}; `meeting.agents_added: [role]` | Today only the first absent head (`meetings.py:419-441`). States: ready, listening, thinking, speaking. Phase 6 builds the backend; Phase 5 builds the tiles from the list shape and shows today's single agent in the same list. |
 | Quorum | `quorum` object in `view()`: `{heads: [{id, name, present}], agents: [role], pmjay: {surgical, radiation, medical: present}}` | Computed on the server so room and members agree. |

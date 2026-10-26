@@ -240,7 +240,7 @@ Key: Y = the source has the item; in = an input the board must consider; blank =
 
 ## 5. The proposed form
 
-Six steps, 36 fields. All present fields stay (marked "keep"). The coordinator types or dictates (dictation fills editable text boxes only). The target is two minutes: only the outcome and the decision text are required to save; step 1 and 2 happen in the meeting, steps 3 to 6 are mostly pre-filled or ticks, and the rest can be left for after the meeting (marked "after"). Everything the owner's consultant may correct afterwards is marked "C".
+Six steps, 36 fields. All present fields stay (marked "keep"). The coordinator types or dictates (dictation fills editable text boxes only). The target is two minutes: to save, the outcome is required, and for a decision also the decision text, `intent` (one choice; "not stated" is allowed) and `responsible_doctor` (pre-filled with the Case File's owner), as rule 2 below says, so saving stays fast; step 1 and 2 happen in the meeting, steps 3 to 6 are mostly pre-filled or ticks, and the rest can be left for after the meeting (marked "after"). Everything the owner's consultant may correct afterwards is marked "C".
 
 Kinds: choice, multi (several choices), short, long, date, person, dept, yn (yes, no, not applicable or not stated).
 
