@@ -345,55 +345,53 @@ test.describe("treating doctor (tb-breast-doc)", () => {
     expect(bad).toEqual([]);
   });
 
-  test("Case File TB-DEMO-P19: summary, panels, source, reports", async ({ page }) => {
+  test("Case File TB-DEMO-P19: the guided Case File, Overview and each section", async ({ page }) => {
     const bad = watch(page, `${role}: casefile P19`);
     await session(page, role);
+    // The guided Case File opens on Overview: the header, what is left to do, the patient at a glance.
     await go(page, `/cases/${P19}`);
     await expect(page.getByTestId("casefile-page")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId("header-strip")).toContainText("Priya Venkatesan");
-    await snap(page, role, "casefile-p19", "summary");
+    await expect(page.getByTestId("case-header")).toContainText("Priya Venkatesan");
+    await expect(page.getByTestId("section-overview")).toBeVisible({ timeout: 20_000 });
+    await snap(page, role, "casefile-p19", "overview");
     log({ test: `${role}: casefile`, kind: "axe", line: (await axe(page, role, "casefile")).join(", ") });
-    for (const panel of ["helpers", "team", "board", "published"]) {
+    // Each section has its own address.
+    for (const slug of ["question", "reports", "check", "pre-authorization", "summary"]) {
+      await go(page, `/cases/${P19}/${slug}`);
+      await expect(page.getByTestId(`section-${slug}`)).toBeVisible({ timeout: 20_000 });
+      await snap(page, role, "casefile-p19", slug, { sizes: LAPTOP_PHONE, themes: THEMES_BOTH });
+    }
+    // Reports: the values read from the first report.
+    await go(page, `/cases/${P19}/reports`);
+    await expect(page.getByTestId("section-reports")).toBeVisible({ timeout: 20_000 });
+    const read = page.getByTestId("values-read").first();
+    if (await read.count()) {
+      await read.click();
+      await expect(page.getByTestId("values-list").first()).toBeVisible();
+      await snap(page, role, "casefile-p19", "reports-values", { sizes: [LAPTOP], themes: LIGHT, full: false, before: async (p) => { await p.getByTestId("values-list").first().scrollIntoViewIfNeeded(); } });
+    } else log({ test: `${role}: casefile P19`, kind: "note", line: "no values read on the first report" });
+    // Check: the report beside the value, with the quote marked (laptop).
+    await go(page, `/cases/${P19}/check`);
+    await expect(page.getByTestId("section-check")).toBeVisible({ timeout: 20_000 });
+    const source = page.getByTestId("check-source").getByTestId("source-viewer");
+    if (await page.getByTestId("check-source").count()) {
+      await expect(source).toBeVisible({ timeout: 20_000 });
+      await page.waitForTimeout(1500);
+      await snap(page, role, "casefile-p19", "source-viewer", { sizes: [LAPTOP, WIDE], themes: LIGHT, full: false });
+    } else log({ test: `${role}: casefile P19`, kind: "note", line: "no report beside the Check section" });
+    // One click away: the team and the board form.
+    for (const panel of ["team", "board"]) {
       await go(page, `/cases/${P19}/${panel}`);
       await expect(page.getByTestId("side-panel").or(page.getByRole("dialog")).first()).toBeVisible({ timeout: 20_000 });
-      await snap(page, role, "casefile-p19", panel, { sizes: panel === "helpers" ? ALL : LAPTOP_PHONE, themes: panel === "helpers" ? THEMES_BOTH : LIGHT, full: false });
-      if (panel === "helpers") {
-        const first = page.locator("[data-testid^='helper-']").filter({ hasNotText: "" }).first();
-        if (await page.getByTestId("helper-pathology").count()) await page.getByTestId("helper-pathology").click();
-        else if (await first.count()) await first.click();
-        await page.waitForTimeout(800);
-        await snap(page, role, "casefile-p19", "helper-pathology", { sizes: LAPTOP_PHONE, themes: LIGHT, full: false });
-      }
+      await snap(page, role, "casefile-p19", panel, { sizes: LAPTOP_PHONE, themes: LIGHT, full: false });
     }
-    // The source viewer: the first quote chip opens the page with the quote marked.
-    await go(page, `/cases/${P19}`);
-    await expect(page.getByTestId("summary-column")).toBeVisible({ timeout: 20_000 });
-    const chip = page.getByTestId("quote-chip").first();
-    if (await chip.count()) {
-      await chip.click();
-      await expect(page.getByTestId("source-viewer")).toBeVisible({ timeout: 20_000 });
-      await page.waitForTimeout(1500);
-      await snap(page, role, "casefile-p19", "source-viewer", { sizes: ALL, themes: LIGHT, full: false });
-      await page.keyboard.press("Escape");
-    } else log({ test: `${role}: casefile P19`, kind: "note", line: "no quote chip on the summary" });
-    // Reports and the timeline: the right column on a laptop.
-    await go(page, `/cases/${P19}`);
-    const reports = page.getByTestId("reports-panel");
-    await expect(reports).toBeVisible({ timeout: 20_000 });
-    await snap(page, role, "casefile-p19", "reports", { sizes: [LAPTOP, WIDE], themes: LIGHT, full: false, before: async (p) => { await p.getByTestId("reports-panel").scrollIntoViewIfNeeded(); } });
-    await reports.getByRole("button", { name: "Timeline" }).click();
-    await expect(page.getByTestId("timeline")).toBeVisible();
-    await snap(page, role, "casefile-p19", "timeline", { sizes: [LAPTOP], themes: LIGHT, full: false, before: async (p) => { await p.getByTestId("reports-panel").scrollIntoViewIfNeeded(); } });
-    // The phone: tabs Summary, Ask, Reports.
+    // The phone: the sections as chips.
     await page.setViewportSize(PHONE);
     await go(page, `/cases/${P19}`);
-    await page.getByRole("tab", { name: "Ask" }).click();
-    await expect(page.getByTestId("ask-panel")).toBeVisible();
-    await snap(page, role, "casefile-p19", "tab-ask", { sizes: [PHONE], themes: THEMES_BOTH });
-    await page.setViewportSize(PHONE);
-    await page.getByRole("tab", { name: "Reports" }).click();
-    await expect(page.getByTestId("reports-panel")).toBeVisible();
-    await snap(page, role, "casefile-p19", "tab-reports", { sizes: [PHONE], themes: LIGHT });
+    await expect(page.getByTestId("section-chips")).toBeVisible({ timeout: 20_000 });
+    await page.getByTestId("section-chips").getByRole("button", { name: "Check", exact: false }).first().click();
+    await expect(page.getByTestId("section-check")).toBeVisible({ timeout: 20_000 });
+    await snap(page, role, "casefile-p19", "phone-check", { sizes: [PHONE], themes: THEMES_BOTH });
     expect(bad).toEqual([]);
   });
 
@@ -402,7 +400,8 @@ test.describe("treating doctor (tb-breast-doc)", () => {
     test.setTimeout(600_000);
     const bad = watch(page, `${role}: ask`);
     await session(page, role);
-    await go(page, `/cases/${P19}`);
+    // The guided Case File: /ask opens the Overview with "Ask about this patient" in the side panel.
+    await go(page, `/cases/${P19}/ask`);
     const ask = page.getByTestId("ask-panel");
     await expect(ask).toBeVisible({ timeout: 30_000 });
     await page.locator("#ask-input").fill("What did the histopathology report say about the margins?");

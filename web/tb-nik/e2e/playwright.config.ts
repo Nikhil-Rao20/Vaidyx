@@ -15,6 +15,7 @@ export default defineConfig({
   outputDir: path.join(os.tmpdir(), "tbnik-playwright-results"),
   use: {
     baseURL: process.env.TBNIK_BASE_URL || "http://127.0.0.1:7000",
+    actionTimeout: 30_000,  // a click or fill that waits longer is a hang: fail fast instead of eating the 180 s test timeout (night-v3 item 1.10)
     headless: true,
     viewport: { width: 1366, height: 768 },
     colorScheme: "light",

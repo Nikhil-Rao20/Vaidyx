@@ -1,0 +1,1700 @@
+{
+ "case_id": "TB-DEMO-P19",
+ "mode": "prepare",
+ "role": "consultant",
+ "sections": [
+  {
+   "id": "overview",
+   "label": "Overview",
+   "status": "home",
+   "detail": "",
+   "count": null
+  },
+  {
+   "id": "question",
+   "label": "Question",
+   "status": "not_started",
+   "detail": "Not started",
+   "count": null
+  },
+  {
+   "id": "reports",
+   "label": "Reports",
+   "status": "done",
+   "detail": "",
+   "count": 8
+  },
+  {
+   "id": "check",
+   "label": "Check",
+   "status": "todo",
+   "detail": "7 to do",
+   "count": 7
+  },
+  {
+   "id": "pre_authorization",
+   "label": "Pre-Authorization",
+   "status": "done",
+   "detail": "Done",
+   "count": null
+  },
+  {
+   "id": "summary",
+   "label": "Summary",
+   "status": "todo",
+   "detail": "Read it",
+   "count": 1
+  }
+ ],
+ "next": {
+  "section": "question",
+  "label": "Write the question for the board"
+ },
+ "todo": [
+  {
+   "id": "question",
+   "section": "question",
+   "label": "Write the question for the board",
+   "action": {
+    "kind": "go",
+    "label": "Write it"
+   }
+  },
+  {
+   "id": "check:fact:lesion_size",
+   "section": "check",
+   "label": "Primary lesion size",
+   "why": "Two reports differ",
+   "action": {
+    "kind": "check",
+    "label": "Check",
+    "slot_id": "fact:lesion_size"
+   }
+  },
+  {
+   "id": "keys",
+   "section": "check",
+   "label": "Confirm 6 key values",
+   "why": "Histologic type, Grade / differentiation, Estrogen receptor (ER), Progesterone receptor (PR)...",
+   "action": {
+    "kind": "go",
+    "label": "Confirm"
+   }
+  }
+ ],
+ "waiting": [],
+ "warnings": [],
+ "question": {
+  "text": "",
+  "by": "",
+  "at": null,
+  "note_text": "Primary management plan",
+  "reason": null,
+  "urgency": null,
+  "extras": [
+   {
+    "slot_id": "fact:patient_preference",
+    "fact_id": "patient_preference",
+    "label": "Patient's wishes",
+    "status": "not_found",
+    "value": "",
+    "unit": "",
+    "as_of": null,
+    "quote": null,
+    "note": "Not recorded; type it if the board needs it",
+    "required": false
+   },
+   {
+    "slot_id": "fact:comorbidities",
+    "fact_id": "comorbidities",
+    "label": "Comorbidities",
+    "status": "found",
+    "value": "Type 2 diabetes mellitus on metformin",
+    "unit": "",
+    "as_of": "2026-09-15",
+    "quote": {
+     "text": "Comorbidities: Type 2 diabetes mellitus on metformin",
+     "doc_id": "Df40ab347",
+     "doc_title": "OPD CONSULTATION NOTE",
+     "page": 0,
+     "fact_id": "comorbidities",
+     "date": "2026-09-15",
+     "status": "FINAL",
+     "source_method": "text-layer",
+     "scan": false
+    },
+    "note": "",
+    "required": false
+   },
+   {
+    "slot_id": "fact:patient_awareness",
+    "fact_id": "patient_awareness",
+    "label": "Patient knows the diagnosis",
+    "status": "not_found",
+    "value": "",
+    "unit": "",
+    "as_of": null,
+    "quote": null,
+    "note": "Not recorded; type it if the board needs it",
+    "required": false
+   }
+  ]
+ },
+ "glance": [
+  {
+   "id": "diagnosis",
+   "label": "Diagnosis",
+   "rows": [
+    {
+     "slot_id": "fact:presenting_complaint",
+     "fact_id": "presenting_complaint",
+     "label": "Presenting complaints",
+     "status": "found",
+     "value": "Lump in the right breast noticed 6 weeks ago",
+     "unit": "",
+     "as_of": "2026-09-15",
+     "quote": {
+      "text": "Presenting complaint: Lump in the right breast noticed 6 weeks ago",
+      "doc_id": "Df40ab347",
+      "doc_title": "OPD CONSULTATION NOTE",
+      "page": 0,
+      "fact_id": "presenting_complaint",
+      "date": "2026-09-15",
+      "status": "FINAL",
+      "source_method": "text-layer",
+      "scan": false
+     },
+     "note": "",
+     "required": false
+    },
+    {
+     "slot_id": "fact:histologic_type",
+     "fact_id": "histologic_type",
+     "label": "Histologic type",
+     "status": "found",
+     "value": "Invasive breast carcinoma of no special type",
+     "unit": "",
+     "as_of": "2026-09-17",
+     "quote": {
+      "text": "Histological type: Invasive breast carcinoma of no special type",
+      "doc_id": "D8a2c165d",
+      "doc_title": "HISTOPATHOLOGY REPORT",
+      "page": 0,
+      "fact_id": "histologic_type",
+      "date": "2026-09-17",
+      "status": "FINAL",
+      "source_method": "text-layer",
+      "scan": false
+     },
+     "note": "",
+     "required": true
+    },
+    {
+     "slot_id": "fact:grade",
+     "fact_id": "grade",
+     "label": "Grade / differentiation",
+     "status": "found",
+     "value": "Grade 2 (Nottingham score 6)",
+     "unit": "",
+     "as_of": "2026-09-17",
+     "quote": {
+      "text": "Grade: Grade 2 (Nottingham score 6)",
+      "doc_id": "D8a2c165d",
+      "doc_title": "HISTOPATHOLOGY REPORT",
+      "page": 0,
+      "fact_id": "grade",
+      "date": "2026-09-17",
+      "status": "FINAL",
+      "source_method": "text-layer",
+      "scan": false
+     },
+     "note": "",
+     "required": true
+    },
+    {
+     "slot_id": "fact:er",
+     "fact_id": "er",
+     "label": "Estrogen receptor (ER)",
+     "status": "found",
+     "value": "Positive (Allred score 8/8)",
+     "unit": "",
+     "as_of": "2026-09-20",
+     "quote": {
+      "text": "Oestrogen receptor (ER) Positive (Allred score 8/8)",
+      "doc_id": "D6b012d3d",
+      "doc_title": "IMMUNOHISTOCHEMISTRY REPORT (ER, PR, HER2, Ki-67)",
+      "page": 0,
+      "fact_id": "er",
+      "date": "2026-09-20",
+      "status": "FINAL",
+      "source_method": "text-layer",
+      "scan": false
+     },
+     "note": "",
+     "required": true
+    },
+    {
+     "slot_id": "fact:pr",
+     "fact_id": "pr",
+     "label": "Progesterone receptor (PR)",
+     "status": "found",
+     "value": "Positive (Allred score 5/8)",
+     "unit": "",
+     "as_of": "2026-09-20",
+     "quote": {
+      "text": "Progesterone receptor (PR) Positive (Allred score 5/8)",
+      "doc_id": "D6b012d3d",
+      "doc_title": "IMMUNOHISTOCHEMISTRY REPORT (ER, PR, HER2, Ki-67)",
+      "page": 0,
+      "fact_id": "pr",
+      "date": "2026-09-20",
+      "status": "FINAL",
+      "source_method": "text-layer",
+      "scan": false
+     },
+     "note": "",
+     "required": true
+    },
+    {
+     "slot_id": "fact:her2",
+     "fact_id": "her2",
+     "label": "HER2",
+     "status": "found",
+     "value": "0 (Negative)",
+     "unit": "",
+     "as_of": "2026-09-20",
+     "quote": {
+      "text": "HER2/neu (IHC score) 0 (Negative)",
+      "doc_id": "D6b012d3d",
+      "doc_title": "IMMUNOHISTOCHEMISTRY REPORT (ER, PR, HER2, Ki-67)",
+      "page": 0,
+      "fact_id": "her2",
+      "date": "2026-09-20",
+      "status": "FINAL",
+      "source_method": "text-layer",
+      "scan": false
+     },
+     "note": "",
+     "required": true
+    },
+    {
+     "slot_id": "fact:ki67",
+     "fact_id": "ki67",
+     "label": "Ki-67",
+     "status": "found",
+     "value": "12 %",
+     "unit": "",
+     "as_of": "2026-09-20",
+     "quote": {
+      "text": "Ki-67 labelling index 12 %",
+      "doc_id": "D6b012d3d",
+      "doc_title": "IMMUNOHISTOCHEMISTRY REPORT (ER, PR, HER2, Ki-67)",
+      "page": 0,
+      "fact_id": "ki67",
+      "date": "2026-09-20",
+      "status": "FINAL",
+      "source_method": "text-layer",
+      "scan": false
+     },
+     "note": "",
+     "required": false
+    },
+    {
+     "slot_id": "fact:lvi",
+     "fact_id": "lvi",
+     "label": "Lymphovascular invasion",
+     "status": "found",
+     "value": "Not identified",
+     "unit": "",
+     "as_of": "2026-09-17",
+     "quote": {
+      "text": "Lymphovascular invasion: Not identified",
+      "doc_id": "D8a2c165d",
+      "doc_title": "HISTOPATHOLOGY REPORT",
+      "page": 0,
+      "fact_id": "lvi",
+      "date": "2026-09-17",
+      "status": "FINAL",
+      "source_method": "text-layer",
+      "scan": false
+     },
+     "note": "",
+     "required": false
+    }
+   ]
+  },
+  {
+   "id": "extent",
+   "label": "Extent",
+   "rows": [
+    {
+     "slot_id": "fact:lesion_size",
+     "fact_id": "lesion_size",
+     "label": "Primary lesion size",
+     "status": "needs_confirmation",
+     "value": "1.9 x 1.6 cm",
+     "unit": "",
+     "as_of": "2026-09-17",
+     "quote": {
+      "text": "Lesion size: 1.9 x 1.6 cm",
+      "doc_id": "Dc23ae75a",
+      "doc_title": "BILATERAL MAMMOGRAPHY REPORT",
+      "page": 0,
+      "fact_id": "lesion_size",
+      "date": "2026-09-17",
+      "status": "FINAL",
+      "source_method": "text-layer",
+      "scan": false
+     },
+     "note": "",
+     "required": true
+    },
+    {
+     "slot_id": "fact:nodal_findings",
+     "fact_id": "nodal_findings",
+     "label": "Nodal findings (imaging)",
+     "status": "found",
+     "value": "No suspicious axillary lymph nodes",
+     "unit": "",
+     "as_of": "2026-09-16",
+     "quote": {
+      "text": "Lymph nodes: No suspicious axillary lymph nodes",
+      "doc_id": "D95d20494",
+      "doc_title": "USG BOTH BREASTS AND AXILLAE",
+      "page": 0,
+      "fact_id": "nodal_findings",
+      "date": "2026-09-16",
+      "status": "FINAL",
+      "source_method": "text-layer",
+      "scan": false
+     },
+     "note": "",
+     "required": false
+    },
+    {
+     "slot_id": "fact:distant_findings",
+     "fact_id": "distant_findings",
+     "label": "Distant disease (imaging)",
+     "status": "not_needed",
+     "value": "",
+     "unit": "",
+     "as_of": null,
+     "quote": null,
+     "note": "not applicable in this NCG setting",
+     "required": false
+    }
+   ]
+  },
+  {
+   "id": "fitness",
+   "label": "Fitness",
+   "rows": [
+    {
+     "slot_id": "fact:ecog",
+     "fact_id": "ecog",
+     "label": "ECOG performance status",
+     "status": "found",
+     "value": "0",
+     "unit": "",
+     "as_of": "2026-09-15",
+     "quote": {
+      "text": "ECOG performance status: 0",
+      "doc_id": "Df40ab347",
+      "doc_title": "OPD CONSULTATION NOTE",
+      "page": 0,
+      "fact_id": "ecog",
+      "date": "2026-09-15",
+      "status": "FINAL",
+      "source_method": "text-layer",
+      "scan": false
+     },
+     "note": "",
+     "required": true
+    },
+    {
+     "slot_id": "fact:comorbidities",
+     "fact_id": "comorbidities",
+     "label": "Comorbidities",
+     "status": "found",
+     "value": "Type 2 diabetes mellitus on metformin",
+     "unit": "",
+     "as_of": "2026-09-15",
+     "quote": {
+      "text": "Comorbidities: Type 2 diabetes mellitus on metformin",
+      "doc_id": "Df40ab347",
+      "doc_title": "OPD CONSULTATION NOTE",
+      "page": 0,
+      "fact_id": "comorbidities",
+      "date": "2026-09-15",
+      "status": "FINAL",
+      "source_method": "text-layer",
+      "scan": false
+     },
+     "note": "",
+     "required": false
+    },
+    {
+     "slot_id": "fact:menopausal_status",
+     "fact_id": "menopausal_status",
+     "label": "Menopausal status",
+     "status": "found",
+     "value": "Postmenopausal",
+     "unit": "",
+     "as_of": "2026-09-15",
+     "quote": {
+      "text": "Menopausal status: Postmenopausal",
+      "doc_id": "Df40ab347",
+      "doc_title": "OPD CONSULTATION NOTE",
+      "page": 0,
+      "fact_id": "menopausal_status",
+      "date": "2026-09-15",
+      "status": "FINAL",
+      "source_method": "text-layer",
+      "scan": false
+     },
+     "note": "",
+     "required": true
+    },
+    {
+     "slot_id": "fact:haemoglobin",
+     "fact_id": "haemoglobin",
+     "label": "Haemoglobin",
+     "status": "found",
+     "value": "11.6 gm%",
+     "unit": "",
+     "as_of": "2026-09-15",
+     "quote": {
+      "text": "Haemoglobin (Hb) 11.6 gm% 12.0-15.0",
+      "doc_id": "D5c72a85f",
+      "doc_title": "HAEMATOLOGY REPORT: COMPLETE BLOOD COUNT",
+      "page": 0,
+      "fact_id": "haemoglobin",
+      "date": "2026-09-15",
+      "status": "FINAL",
+      "source_method": "text-layer",
+      "scan": false
+     },
+     "note": "",
+     "required": true
+    },
+    {
+     "slot_id": "fact:wbc",
+     "fact_id": "wbc",
+     "label": "WBC count",
+     "status": "found",
+     "value": "6,900 /cumm",
+     "unit": "",
+     "as_of": "2026-09-15",
+     "quote": {
+      "text": "Total leucocyte count (TLC) 6,900 /cumm 4,000-11,000",
+      "doc_id": "D5c72a85f",
+      "doc_title": "HAEMATOLOGY REPORT: COMPLETE BLOOD COUNT",
+      "page": 0,
+      "fact_id": "wbc",
+      "date": "2026-09-15",
+      "status": "FINAL",
+      "source_method": "text-layer",
+      "scan": false
+     },
+     "note": "",
+     "required": true
+    },
+    {
+     "slot_id": "fact:platelets",
+     "fact_id": "platelets",
+     "label": "Platelet count",
+     "status": "found",
+     "value": "2.4 lakhs/cumm",
+     "unit": "",
+     "as_of": "2026-09-15",
+     "quote": {
+      "text": "Platelet count 2.4 lakhs/cumm 1.5-4.5",
+      "doc_id": "D5c72a85f",
+      "doc_title": "HAEMATOLOGY REPORT: COMPLETE BLOOD COUNT",
+      "page": 0,
+      "fact_id": "platelets",
+      "date": "2026-09-15",
+      "status": "FINAL",
+      "source_method": "text-layer",
+      "scan": false
+     },
+     "note": "",
+     "required": true
+    },
+    {
+     "slot_id": "fact:creatinine",
+     "fact_id": "creatinine",
+     "label": "Serum creatinine",
+     "status": "found",
+     "value": "0.9 mg/dL",
+     "unit": "",
+     "as_of": "2026-09-15",
+     "quote": {
+      "text": "Serum creatinine 0.9 mg/dL 0.6-1.2",
+      "doc_id": "D3502ea21",
+      "doc_title": "BIOCHEMISTRY REPORT: RENAL FUNCTION TESTS",
+      "page": 0,
+      "fact_id": "creatinine",
+      "date": "2026-09-15",
+      "status": "FINAL",
+      "source_method": "text-layer",
+      "scan": false
+     },
+     "note": "",
+     "required": true
+    },
+    {
+     "slot_id": "fact:bilirubin",
+     "fact_id": "bilirubin",
+     "label": "Total bilirubin",
+     "status": "found",
+     "value": "0.6 mg/dL",
+     "unit": "",
+     "as_of": "2026-09-15",
+     "quote": {
+      "text": "Serum bilirubin (total) 0.6 mg/dL 0.3-1.2",
+      "doc_id": "D8463a054",
+      "doc_title": "BIOCHEMISTRY REPORT: LIVER FUNCTION TESTS",
+      "page": 0,
+      "fact_id": "bilirubin",
+      "date": "2026-09-15",
+      "status": "FINAL",
+      "source_method": "text-layer",
+      "scan": false
+     },
+     "note": "",
+     "required": true
+    }
+   ]
+  },
+  {
+   "id": "background",
+   "label": "Treatment so far and wishes",
+   "rows": [
+    {
+     "slot_id": "fact:patient_preference",
+     "fact_id": "patient_preference",
+     "label": "Patient's wishes",
+     "status": "not_found",
+     "value": "",
+     "unit": "",
+     "as_of": null,
+     "quote": null,
+     "note": "Not recorded; type it if the board needs it",
+     "required": false
+    },
+    {
+     "slot_id": "fact:patient_awareness",
+     "fact_id": "patient_awareness",
+     "label": "Patient knows the diagnosis",
+     "status": "not_found",
+     "value": "",
+     "unit": "",
+     "as_of": null,
+     "quote": null,
+     "note": "Not recorded; type it if the board needs it",
+     "required": false
+    }
+   ]
+  }
+ ],
+ "documents": [
+  {
+   "doc_id": "D6b012d3d",
+   "title": "IMMUNOHISTOCHEMISTRY REPORT (ER, PR, HER2, Ki-67)",
+   "doc_type": "ihc",
+   "group": "pathology",
+   "date": "2026-09-20",
+   "department": "pathology",
+   "accession": "PATH/26/00462",
+   "final": {
+    "final": true,
+    "signed": true,
+    "preliminary": false,
+    "status": "FINAL",
+    "label": "Final, signed",
+    "warn": false
+   },
+   "check": {
+    "status": "checked",
+    "reasons": [],
+    "values": [
+     {
+      "fact_id": "er",
+      "label": "Estrogen receptor (ER)",
+      "value": "Positive (Allred score 8/8)",
+      "quote": "Oestrogen receptor (ER) Positive (Allred score 8/8)",
+      "page": 0,
+      "confirmed_by": ""
+     },
+     {
+      "fact_id": "pr",
+      "label": "Progesterone receptor (PR)",
+      "value": "Positive (Allred score 5/8)",
+      "quote": "Progesterone receptor (PR) Positive (Allred score 5/8)",
+      "page": 0,
+      "confirmed_by": ""
+     },
+     {
+      "fact_id": "her2",
+      "label": "HER2",
+      "value": "0 (Negative)",
+      "quote": "HER2/neu (IHC score) 0 (Negative)",
+      "page": 0,
+      "confirmed_by": ""
+     },
+     {
+      "fact_id": "ki67",
+      "label": "Ki-67",
+      "value": "12 %",
+      "quote": "Ki-67 labelling index 12 %",
+      "page": 0,
+      "confirmed_by": ""
+     }
+    ]
+   },
+   "images": false,
+   "outside": false,
+   "state": "ready",
+   "earlier": []
+  },
+  {
+   "doc_id": "Dc23ae75a",
+   "title": "BILATERAL MAMMOGRAPHY REPORT",
+   "doc_type": "mammogram",
+   "group": "imaging",
+   "date": "2026-09-17",
+   "department": "radiology",
+   "accession": "RAD/26/01019",
+   "final": {
+    "final": true,
+    "signed": true,
+    "preliminary": false,
+    "status": "FINAL",
+    "label": "Final, signed",
+    "warn": false
+   },
+   "check": {
+    "status": "checked",
+    "reasons": [],
+    "values": [
+     {
+      "fact_id": "lesion_size",
+      "label": "Primary lesion size",
+      "value": "1.9 x 1.6 cm",
+      "quote": "Lesion size: 1.9 x 1.6 cm",
+      "page": 0,
+      "confirmed_by": ""
+     }
+    ]
+   },
+   "images": true,
+   "outside": false,
+   "state": "ready",
+   "earlier": [
+    {
+     "doc_id": "D1d1fa3e0",
+     "title": "BILATERAL MAMMOGRAPHY REPORT",
+     "version": 1,
+     "status": "Preliminary, not signed yet"
+    }
+   ]
+  },
+  {
+   "doc_id": "D8a2c165d",
+   "title": "HISTOPATHOLOGY REPORT",
+   "doc_type": "histopathology",
+   "group": "pathology",
+   "date": "2026-09-17",
+   "department": "pathology",
+   "accession": "PATH/26/00461",
+   "final": {
+    "final": true,
+    "signed": true,
+    "preliminary": false,
+    "status": "FINAL",
+    "label": "Final, signed",
+    "warn": false
+   },
+   "check": {
+    "status": "checked",
+    "reasons": [],
+    "values": [
+     {
+      "fact_id": "histologic_type",
+      "label": "Histologic type",
+      "value": "Invasive breast carcinoma of no special type",
+      "quote": "Histological type: Invasive breast carcinoma of no special type",
+      "page": 0,
+      "confirmed_by": ""
+     },
+     {
+      "fact_id": "grade",
+      "label": "Grade / differentiation",
+      "value": "Grade 2 (Nottingham score 6)",
+      "quote": "Grade: Grade 2 (Nottingham score 6)",
+      "page": 0,
+      "confirmed_by": ""
+     },
+     {
+      "fact_id": "lvi",
+      "label": "Lymphovascular invasion",
+      "value": "Not identified",
+      "quote": "Lymphovascular invasion: Not identified",
+      "page": 0,
+      "confirmed_by": ""
+     }
+    ]
+   },
+   "images": false,
+   "outside": false,
+   "state": "ready",
+   "earlier": []
+  },
+  {
+   "doc_id": "D95d20494",
+   "title": "USG BOTH BREASTS AND AXILLAE",
+   "doc_type": "ultrasound",
+   "group": "imaging",
+   "date": "2026-09-16",
+   "department": "radiology",
+   "accession": "RAD/26/01020",
+   "final": {
+    "final": true,
+    "signed": true,
+    "preliminary": false,
+    "status": "FINAL",
+    "label": "Final, signed",
+    "warn": false
+   },
+   "check": {
+    "status": "checked",
+    "reasons": [],
+    "values": [
+     {
+      "fact_id": "lesion_size",
+      "label": "Primary lesion size",
+      "value": "1.8 x 1.5 cm",
+      "quote": "Lesion size: 1.8 x 1.5 cm",
+      "page": 0,
+      "confirmed_by": ""
+     },
+     {
+      "fact_id": "nodal_findings",
+      "label": "Nodal findings (imaging)",
+      "value": "No suspicious axillary lymph nodes",
+      "quote": "Lymph nodes: No suspicious axillary lymph nodes",
+      "page": 0,
+      "confirmed_by": ""
+     }
+    ]
+   },
+   "images": true,
+   "outside": false,
+   "state": "ready",
+   "earlier": [
+    {
+     "doc_id": "D4b243548",
+     "title": "USG BOTH BREASTS AND AXILLAE",
+     "version": 1,
+     "status": "Preliminary, not signed yet"
+    }
+   ]
+  },
+  {
+   "doc_id": "D5c72a85f",
+   "title": "HAEMATOLOGY REPORT: COMPLETE BLOOD COUNT",
+   "doc_type": "lab",
+   "group": "labs",
+   "date": "2026-09-15",
+   "department": "pathology",
+   "accession": "PATH/26/00463",
+   "final": {
+    "final": true,
+    "signed": true,
+    "preliminary": false,
+    "status": "FINAL",
+    "label": "Final, signed",
+    "warn": false
+   },
+   "check": {
+    "status": "checked",
+    "reasons": [],
+    "values": [
+     {
+      "fact_id": "haemoglobin",
+      "label": "Haemoglobin",
+      "value": "11.6 gm%",
+      "quote": "Haemoglobin (Hb) 11.6 gm% 12.0-15.0",
+      "page": 0,
+      "confirmed_by": ""
+     },
+     {
+      "fact_id": "wbc",
+      "label": "WBC count",
+      "value": "6,900 /cumm",
+      "quote": "Total leucocyte count (TLC) 6,900 /cumm 4,000-11,000",
+      "page": 0,
+      "confirmed_by": ""
+     },
+     {
+      "fact_id": "platelets",
+      "label": "Platelet count",
+      "value": "2.4 lakhs/cumm",
+      "quote": "Platelet count 2.4 lakhs/cumm 1.5-4.5",
+      "page": 0,
+      "confirmed_by": ""
+     }
+    ]
+   },
+   "images": false,
+   "outside": false,
+   "state": "ready",
+   "earlier": []
+  },
+  {
+   "doc_id": "D8463a054",
+   "title": "BIOCHEMISTRY REPORT: LIVER FUNCTION TESTS",
+   "doc_type": "lab",
+   "group": "labs",
+   "date": "2026-09-15",
+   "department": "biochemistry",
+   "accession": "BIO/26/02233",
+   "final": {
+    "final": true,
+    "signed": true,
+    "preliminary": false,
+    "status": "FINAL",
+    "label": "Final, signed",
+    "warn": false
+   },
+   "check": {
+    "status": "checked",
+    "reasons": [],
+    "values": [
+     {
+      "fact_id": "bilirubin",
+      "label": "Total bilirubin",
+      "value": "0.6 mg/dL",
+      "quote": "Serum bilirubin (total) 0.6 mg/dL 0.3-1.2",
+      "page": 0,
+      "confirmed_by": ""
+     }
+    ]
+   },
+   "images": false,
+   "outside": false,
+   "state": "ready",
+   "earlier": []
+  },
+  {
+   "doc_id": "Df40ab347",
+   "title": "OPD CONSULTATION NOTE",
+   "doc_type": "clinical_note",
+   "group": "notes",
+   "date": "2026-09-15",
+   "department": "breast_surgery",
+   "accession": "",
+   "final": {
+    "final": true,
+    "signed": true,
+    "preliminary": false,
+    "status": "FINAL",
+    "label": "Final, signed",
+    "warn": false
+   },
+   "check": {
+    "status": "checked",
+    "reasons": [],
+    "values": [
+     {
+      "fact_id": "presenting_complaint",
+      "label": "Presenting complaints",
+      "value": "Lump in the right breast noticed 6 weeks ago",
+      "quote": "Presenting complaint: Lump in the right breast noticed 6 weeks ago",
+      "page": 0,
+      "confirmed_by": ""
+     },
+     {
+      "fact_id": "ecog",
+      "label": "ECOG performance status",
+      "value": "0",
+      "quote": "ECOG performance status: 0",
+      "page": 0,
+      "confirmed_by": ""
+     },
+     {
+      "fact_id": "menopausal_status",
+      "label": "Menopausal status",
+      "value": "Postmenopausal",
+      "quote": "Menopausal status: Postmenopausal",
+      "page": 0,
+      "confirmed_by": ""
+     },
+     {
+      "fact_id": "comorbidities",
+      "label": "Comorbidities",
+      "value": "Type 2 diabetes mellitus on metformin",
+      "quote": "Comorbidities: Type 2 diabetes mellitus on metformin",
+      "page": 0,
+      "confirmed_by": ""
+     },
+     {
+      "fact_id": "clinical_question",
+      "label": "Question for the Tumour Board",
+      "value": "Primary management plan",
+      "quote": "Clinical question: Primary management plan",
+      "page": 0,
+      "confirmed_by": ""
+     }
+    ]
+   },
+   "images": false,
+   "outside": false,
+   "state": "ready",
+   "earlier": []
+  },
+  {
+   "doc_id": "D3502ea21",
+   "title": "BIOCHEMISTRY REPORT: RENAL FUNCTION TESTS",
+   "doc_type": "lab",
+   "group": "labs",
+   "date": "2026-09-15",
+   "department": "biochemistry",
+   "accession": "BIO/26/02234",
+   "final": {
+    "final": true,
+    "signed": true,
+    "preliminary": false,
+    "status": "FINAL",
+    "label": "Final, signed",
+    "warn": false
+   },
+   "check": {
+    "status": "checked",
+    "reasons": [],
+    "values": [
+     {
+      "fact_id": "creatinine",
+      "label": "Serum creatinine",
+      "value": "0.9 mg/dL",
+      "quote": "Serum creatinine 0.9 mg/dL 0.6-1.2",
+      "page": 0,
+      "confirmed_by": ""
+     }
+    ]
+   },
+   "images": false,
+   "outside": false,
+   "state": "ready",
+   "earlier": []
+  }
+ ],
+ "check": {
+  "problems": [
+   {
+    "slot_id": "fact:lesion_size",
+    "fact_id": "lesion_size",
+    "label": "Primary lesion size",
+    "status": "needs_confirmation",
+    "value": "1.9 x 1.6 cm",
+    "unit": "",
+    "as_of": "2026-09-17",
+    "quote": {
+     "text": "Lesion size: 1.9 x 1.6 cm",
+     "doc_id": "Dc23ae75a",
+     "doc_title": "BILATERAL MAMMOGRAPHY REPORT",
+     "page": 0,
+     "fact_id": "lesion_size",
+     "date": "2026-09-17",
+     "status": "FINAL",
+     "source_method": "text-layer",
+     "scan": false
+    },
+    "note": "",
+    "required": true,
+    "kind": "problem",
+    "confirmation": {
+     "type": "note_discordance",
+     "key": "non_final_differs:lesion_size:Dc23ae75a:D4b243548",
+     "fact_id": "lesion_size",
+     "kind": "non_final_differs",
+     "kind_label": "A non-final report differs from the final one",
+     "why": "Primary lesion size: the preliminary report (USG BOTH BREASTS AND AXILLAE, 2026-09-16) records \"1.8 x 1.5 cm\"; the final report (BILATERAL MAMMOGRAPHY REPORT, 2026-09-17) records \"1.9 x 1.6 cm\" and is the one used.",
+     "citations": [
+      {
+       "doc_id": "Dc23ae75a",
+       "doc_title": "BILATERAL MAMMOGRAPHY REPORT",
+       "date": "2026-09-17",
+       "status": "FINAL",
+       "quote": "Lesion size: 1.9 x 1.6 cm",
+       "value": "1.9 x 1.6 cm",
+       "final": true,
+       "page": 0,
+       "start": 612,
+       "end": 637,
+       "source_method": "text-layer"
+      },
+      {
+       "doc_id": "D4b243548",
+       "doc_title": "USG BOTH BREASTS AND AXILLAE",
+       "date": "2026-09-16",
+       "status": "PRELIMINARY",
+       "quote": "Lesion size: 1.8 x 1.5 cm",
+       "value": "1.8 x 1.5 cm",
+       "final": false,
+       "page": 0,
+       "start": 554,
+       "end": 579,
+       "source_method": "text-layer"
+      }
+     ]
+    },
+    "why": "Two reports differ",
+    "detail": "Primary lesion size: the preliminary report (USG BOTH BREASTS AND AXILLAE, 2026-09-16) records \"1.8 x 1.5 cm\"; the final report (BILATERAL MAMMOGRAPHY REPORT, 2026-09-17) records \"1.9 x 1.6 cm\" and is the one used."
+   }
+  ],
+  "keys": [
+   {
+    "slot_id": "fact:histologic_type",
+    "fact_id": "histologic_type",
+    "label": "Histologic type",
+    "status": "found",
+    "value": "Invasive breast carcinoma of no special type",
+    "unit": "",
+    "as_of": "2026-09-17",
+    "quote": {
+     "text": "Histological type: Invasive breast carcinoma of no special type",
+     "doc_id": "D8a2c165d",
+     "doc_title": "HISTOPATHOLOGY REPORT",
+     "page": 0,
+     "fact_id": "histologic_type",
+     "date": "2026-09-17",
+     "status": "FINAL",
+     "source_method": "text-layer",
+     "scan": false
+    },
+    "note": "",
+    "required": true,
+    "kind": "key",
+    "confirmed": false,
+    "confirmed_by": "",
+    "confirmed_at": null
+   },
+   {
+    "slot_id": "fact:grade",
+    "fact_id": "grade",
+    "label": "Grade / differentiation",
+    "status": "found",
+    "value": "Grade 2 (Nottingham score 6)",
+    "unit": "",
+    "as_of": "2026-09-17",
+    "quote": {
+     "text": "Grade: Grade 2 (Nottingham score 6)",
+     "doc_id": "D8a2c165d",
+     "doc_title": "HISTOPATHOLOGY REPORT",
+     "page": 0,
+     "fact_id": "grade",
+     "date": "2026-09-17",
+     "status": "FINAL",
+     "source_method": "text-layer",
+     "scan": false
+    },
+    "note": "",
+    "required": true,
+    "kind": "key",
+    "confirmed": false,
+    "confirmed_by": "",
+    "confirmed_at": null
+   },
+   {
+    "slot_id": "fact:er",
+    "fact_id": "er",
+    "label": "Estrogen receptor (ER)",
+    "status": "found",
+    "value": "Positive (Allred score 8/8)",
+    "unit": "",
+    "as_of": "2026-09-20",
+    "quote": {
+     "text": "Oestrogen receptor (ER) Positive (Allred score 8/8)",
+     "doc_id": "D6b012d3d",
+     "doc_title": "IMMUNOHISTOCHEMISTRY REPORT (ER, PR, HER2, Ki-67)",
+     "page": 0,
+     "fact_id": "er",
+     "date": "2026-09-20",
+     "status": "FINAL",
+     "source_method": "text-layer",
+     "scan": false
+    },
+    "note": "",
+    "required": true,
+    "kind": "key",
+    "confirmed": false,
+    "confirmed_by": "",
+    "confirmed_at": null
+   },
+   {
+    "slot_id": "fact:pr",
+    "fact_id": "pr",
+    "label": "Progesterone receptor (PR)",
+    "status": "found",
+    "value": "Positive (Allred score 5/8)",
+    "unit": "",
+    "as_of": "2026-09-20",
+    "quote": {
+     "text": "Progesterone receptor (PR) Positive (Allred score 5/8)",
+     "doc_id": "D6b012d3d",
+     "doc_title": "IMMUNOHISTOCHEMISTRY REPORT (ER, PR, HER2, Ki-67)",
+     "page": 0,
+     "fact_id": "pr",
+     "date": "2026-09-20",
+     "status": "FINAL",
+     "source_method": "text-layer",
+     "scan": false
+    },
+    "note": "",
+    "required": true,
+    "kind": "key",
+    "confirmed": false,
+    "confirmed_by": "",
+    "confirmed_at": null
+   },
+   {
+    "slot_id": "fact:her2",
+    "fact_id": "her2",
+    "label": "HER2",
+    "status": "found",
+    "value": "0 (Negative)",
+    "unit": "",
+    "as_of": "2026-09-20",
+    "quote": {
+     "text": "HER2/neu (IHC score) 0 (Negative)",
+     "doc_id": "D6b012d3d",
+     "doc_title": "IMMUNOHISTOCHEMISTRY REPORT (ER, PR, HER2, Ki-67)",
+     "page": 0,
+     "fact_id": "her2",
+     "date": "2026-09-20",
+     "status": "FINAL",
+     "source_method": "text-layer",
+     "scan": false
+    },
+    "note": "",
+    "required": true,
+    "kind": "key",
+    "confirmed": false,
+    "confirmed_by": "",
+    "confirmed_at": null
+   },
+   {
+    "slot_id": "fact:ki67",
+    "fact_id": "ki67",
+    "label": "Ki-67",
+    "status": "found",
+    "value": "12 %",
+    "unit": "",
+    "as_of": "2026-09-20",
+    "quote": {
+     "text": "Ki-67 labelling index 12 %",
+     "doc_id": "D6b012d3d",
+     "doc_title": "IMMUNOHISTOCHEMISTRY REPORT (ER, PR, HER2, Ki-67)",
+     "page": 0,
+     "fact_id": "ki67",
+     "date": "2026-09-20",
+     "status": "FINAL",
+     "source_method": "text-layer",
+     "scan": false
+    },
+    "note": "",
+    "required": false,
+    "kind": "key",
+    "confirmed": false,
+    "confirmed_by": "",
+    "confirmed_at": null
+   }
+  ]
+ },
+ "pre_authorization": {
+  "groups": [],
+  "waiting": [],
+  "optional": [
+   {
+    "slot_id": "fact:weight",
+    "fact_id": "weight",
+    "label": "Weight",
+    "status": "not_found",
+    "value": "",
+    "unit": "",
+    "as_of": null,
+    "quote": null,
+    "note": "Not recorded; type it if the board needs it",
+    "required": false,
+    "kind": "fact",
+    "department": null,
+    "typable": true,
+    "can_not_needed": false,
+    "draft": null,
+    "pending": false
+   },
+   {
+    "slot_id": "fact:height",
+    "fact_id": "height",
+    "label": "Height",
+    "status": "not_found",
+    "value": "",
+    "unit": "",
+    "as_of": null,
+    "quote": null,
+    "note": "Not recorded; type it if the board needs it",
+    "required": false,
+    "kind": "fact",
+    "department": null,
+    "typable": true,
+    "can_not_needed": false,
+    "draft": null,
+    "pending": false
+   },
+   {
+    "slot_id": "fact:patient_preference",
+    "fact_id": "patient_preference",
+    "label": "Patient's wishes",
+    "status": "not_found",
+    "value": "",
+    "unit": "",
+    "as_of": null,
+    "quote": null,
+    "note": "Not recorded; type it if the board needs it",
+    "required": false,
+    "kind": "fact",
+    "department": null,
+    "typable": true,
+    "can_not_needed": false,
+    "draft": null,
+    "pending": false
+   },
+   {
+    "slot_id": "fact:patient_awareness",
+    "fact_id": "patient_awareness",
+    "label": "Patient knows the diagnosis",
+    "status": "not_found",
+    "value": "",
+    "unit": "",
+    "as_of": null,
+    "quote": null,
+    "note": "Not recorded; type it if the board needs it",
+    "required": false,
+    "kind": "fact",
+    "department": null,
+    "typable": true,
+    "can_not_needed": false,
+    "draft": null,
+    "pending": false
+   },
+   {
+    "slot_id": "record:pet_ct",
+    "fact_id": null,
+    "label": "PET/CT",
+    "status": "not_found",
+    "value": "",
+    "unit": "",
+    "as_of": null,
+    "quote": null,
+    "note": "No pet/ct in the Case File",
+    "required": false,
+    "kind": "record",
+    "department": {
+     "name": "Nuclear Medicine",
+     "label": "Nuclear Medicine department",
+     "id": "nuclear_medicine",
+     "action_id": null,
+     "phone": ""
+    },
+    "typable": false,
+    "can_not_needed": true,
+    "draft": null,
+    "pending": false
+   },
+   {
+    "slot_id": "record:mri_breast",
+    "fact_id": null,
+    "label": "MRI breast",
+    "status": "not_found",
+    "value": "",
+    "unit": "",
+    "as_of": null,
+    "quote": null,
+    "note": "No mri breast in the Case File",
+    "required": false,
+    "kind": "record",
+    "department": {
+     "name": "Radiology",
+     "label": "Radiology department",
+     "id": "radiology",
+     "action_id": null,
+     "phone": ""
+    },
+    "typable": false,
+    "can_not_needed": true,
+    "draft": null,
+    "pending": false
+   }
+  ]
+ },
+ "summary": {
+  "prose": {
+   "status": "ready",
+   "paragraphs": [
+    {
+     "id": "presentation",
+     "title": "Presenting complaints and examination",
+     "sentences": [
+      {
+       "text": "Presenting complaints: Lump in the right breast noticed 6 weeks ago (as recorded in the OPD CONSULTATION NOTE, 2026-09-15).",
+       "citations": [
+        {
+         "doc_id": "Df40ab347",
+         "quote": "Presenting complaint: Lump in the right breast noticed 6 weeks ago",
+         "page": 0,
+         "start": 438,
+         "end": 504,
+         "doc_title": "OPD CONSULTATION NOTE",
+         "date": "2026-09-15",
+         "status": "FINAL",
+         "source_method": "text-layer"
+        }
+       ],
+       "from_fields": true
+      },
+      {
+       "text": "Menopausal status: Postmenopausal (as recorded in the OPD CONSULTATION NOTE, 2026-09-15).",
+       "citations": [
+        {
+         "doc_id": "Df40ab347",
+         "quote": "Menopausal status: Postmenopausal",
+         "page": 0,
+         "start": 544,
+         "end": 577,
+         "doc_title": "OPD CONSULTATION NOTE",
+         "date": "2026-09-15",
+         "status": "FINAL",
+         "source_method": "text-layer"
+        }
+       ],
+       "from_fields": true
+      },
+      {
+       "text": "Comorbidities: Type 2 diabetes mellitus on metformin (as recorded in the OPD CONSULTATION NOTE, 2026-09-15).",
+       "citations": [
+        {
+         "doc_id": "Df40ab347",
+         "quote": "Comorbidities: Type 2 diabetes mellitus on metformin",
+         "page": 0,
+         "start": 578,
+         "end": 630,
+         "doc_title": "OPD CONSULTATION NOTE",
+         "date": "2026-09-15",
+         "status": "FINAL",
+         "source_method": "text-layer"
+        }
+       ],
+       "from_fields": true
+      }
+     ]
+    },
+    {
+     "id": "treatment_history",
+     "title": "Treatment history",
+     "sentences": []
+    },
+    {
+     "id": "investigations",
+     "title": "Investigations: histopathology, IHC, molecular, tumour markers",
+     "sentences": [
+      {
+       "text": "Histopathology from a biopsy on 2026-09-17 reported invasive breast carcinoma of no special type, Grade 2 (Nottingham score 6), with lymphovascular invasion not identified.",
+       "citations": [
+        {
+         "doc_id": "D8a2c165d",
+         "quote": "Histological type: Invasive breast carcinoma of no special type ... Grade: Grade 2 (Nottingham score 6) ... Lymphovascular invasion: Not identified",
+         "page": 0,
+         "start": 820,
+         "end": 883,
+         "doc_title": "HISTOPATHOLOGY REPORT",
+         "date": "2026-09-17",
+         "status": "FINAL",
+         "source_method": "text-layer"
+        }
+       ]
+      },
+      {
+       "text": "Immunohistochemistry reported ER Positive (Allred score 8/8), PR Positive (Allred score 5/8), HER2/neu 0 (Negative), and Ki-67 labelling index 12%.",
+       "citations": [
+        {
+         "doc_id": "D6b012d3d",
+         "quote": "Oestrogen receptor (ER) Positive (Allred score 8/8) ... Progesterone receptor (PR) Positive (Allred score 5/8) ... HER2/neu (IHC score) 0 (Negative) ... Ki-67 labelling index 12 %",
+         "page": 0,
+         "start": 739,
+         "end": 790,
+         "doc_title": "IMMUNOHISTOCHEMISTRY REPORT (ER, PR, HER2, Ki-67)",
+         "date": "2026-09-20",
+         "status": "FINAL",
+         "source_method": "text-layer"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "imaging",
+     "title": "Imaging",
+     "sentences": [
+      {
+       "text": "USG of both breasts and axillae on 2026-09-16 recorded a lesion size of 1.8 x 1.5 cm and no suspicious axillary lymph nodes.",
+       "citations": [
+        {
+         "doc_id": "D95d20494",
+         "quote": "Lesion size: 1.8 x 1.5 cm ... Lymph nodes: No suspicious axillary lymph nodes",
+         "page": 0,
+         "start": 573,
+         "end": 598,
+         "doc_title": "USG BOTH BREASTS AND AXILLAE",
+         "date": "2026-09-16",
+         "status": "FINAL",
+         "source_method": "text-layer"
+        }
+       ]
+      },
+      {
+       "text": "Bilateral mammography on 2026-09-17 recorded a lesion size of 1.9 x 1.6 cm and BI-RADS category: BI-RADS 4c.",
+       "citations": [
+        {
+         "doc_id": "Dc23ae75a",
+         "quote": "Lesion size: 1.9 x 1.6 cm ... BI-RADS category: BI-RADS 4c",
+         "page": 0,
+         "start": 612,
+         "end": 637,
+         "doc_title": "BILATERAL MAMMOGRAPHY REPORT",
+         "date": "2026-09-17",
+         "status": "FINAL",
+         "source_method": "text-layer"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "fitness",
+     "title": "Fitness for treatment: performance status, comorbidities, laboratory values",
+     "sentences": [
+      {
+       "text": "ECOG performance status is 0, and comorbidities include Type 2 diabetes mellitus on metformin.",
+       "citations": [
+        {
+         "doc_id": "Df40ab347",
+         "quote": "ECOG performance status: 0 ... Comorbidities: Type 2 diabetes mellitus on metformin",
+         "page": 0,
+         "start": 517,
+         "end": 543,
+         "doc_title": "OPD CONSULTATION NOTE",
+         "date": "2026-09-15",
+         "status": "FINAL",
+         "source_method": "text-layer"
+        }
+       ]
+      },
+      {
+       "text": "Laboratory values on 2026-09-15 were: Haemoglobin 11.6 gm%, TLC 6,900 /cumm, Platelet count 2.4 lakhs/cumm, Serum creatinine 0.9 mg/dL, Blood urea 27 mg/dL, Total bilirubin 0.6 mg/dL, SGOT 31 U/L, and SGPT 27 U/L.",
+       "citations": [
+        {
+         "doc_id": "D5c72a85f",
+         "quote": "Haemoglobin (Hb) 11.6 gm% ... Total leucocyte count (TLC) 6,900 /cumm ... Platelet count 2.4 lakhs/cumm",
+         "page": 0,
+         "start": 648,
+         "end": 673,
+         "doc_title": "HAEMATOLOGY REPORT: COMPLETE BLOOD COUNT",
+         "date": "2026-09-15",
+         "status": "FINAL",
+         "source_method": "text-layer"
+        },
+        {
+         "doc_id": "D3502ea21",
+         "quote": "Serum creatinine 0.9 mg/dL ... Blood urea 27 mg/dL",
+         "page": 0,
+         "start": 638,
+         "end": 664,
+         "doc_title": "BIOCHEMISTRY REPORT: RENAL FUNCTION TESTS",
+         "date": "2026-09-15",
+         "status": "FINAL",
+         "source_method": "text-layer"
+        },
+        {
+         "doc_id": "D8463a054",
+         "quote": "Serum bilirubin (total) 0.6 mg/dL ... SGOT (AST) 31 U/L ... SGPT (ALT) 27 U/L",
+         "page": 0,
+         "start": 638,
+         "end": 671,
+         "doc_title": "BIOCHEMISTRY REPORT: LIVER FUNCTION TESTS",
+         "date": "2026-09-15",
+         "status": "FINAL",
+         "source_method": "text-layer"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "questions",
+     "title": "Questions for the Tumour Board",
+     "sentences": [
+      {
+       "text": "The clinical question is the primary management plan.",
+       "citations": [
+        {
+         "doc_id": "Df40ab347",
+         "quote": "Clinical question: Primary management plan",
+         "page": 0,
+         "start": 656,
+         "end": 698,
+         "doc_title": "OPD CONSULTATION NOTE",
+         "date": "2026-09-15",
+         "status": "FINAL",
+         "source_method": "text-layer"
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "points_for_review": [
+    {
+     "text": "Invasive breast carcinoma of no special type, Grade 2.",
+     "citations": [
+      {
+       "doc_id": "D8a2c165d",
+       "quote": "Histological type: Invasive breast carcinoma of no special type ... Grade: Grade 2 (Nottingham score 6)",
+       "page": 0,
+       "start": 820,
+       "end": 883,
+       "doc_title": "HISTOPATHOLOGY REPORT",
+       "date": "2026-09-17",
+       "status": "FINAL",
+       "source_method": "text-layer"
+      }
+     ]
+    },
+    {
+     "text": "ER Positive (Allred 8/8), PR Positive (Allred 5/8), HER2 Negative, Ki-67 12%.",
+     "citations": [
+      {
+       "doc_id": "D6b012d3d",
+       "quote": "Oestrogen receptor (ER) Positive (Allred score 8/8) ... Progesterone receptor (PR) Positive (Allred score 5/8) ... HER2/neu (IHC score) 0 (Negative) ... Ki-67 labelling index 12 %",
+       "page": 0,
+       "start": 739,
+       "end": 790,
+       "doc_title": "IMMUNOHISTOCHEMISTRY REPORT (ER, PR, HER2, Ki-67)",
+       "date": "2026-09-20",
+       "status": "FINAL",
+       "source_method": "text-layer"
+      }
+     ]
+    },
+    {
+     "text": "Mammography lesion size 1.9 x 1.6 cm, BI-RADS 4c.",
+     "citations": [
+      {
+       "doc_id": "Dc23ae75a",
+       "quote": "Lesion size: 1.9 x 1.6 cm ... BI-RADS category: BI-RADS 4c",
+       "page": 0,
+       "start": 612,
+       "end": 637,
+       "doc_title": "BILATERAL MAMMOGRAPHY REPORT",
+       "date": "2026-09-17",
+       "status": "FINAL",
+       "source_method": "text-layer"
+      }
+     ]
+    },
+    {
+     "text": "Primary lesion size: the preliminary report (USG BOTH BREASTS AND AXILLAE, 2026-09-16) records \"1.8 x 1.5 cm\"; the final report (BILATERAL MAMMOGRAPHY REPORT, 2026-09-17) records \"1.9 x 1.6 cm\" and is the one used.",
+     "citations": [
+      {
+       "doc_id": "Dc23ae75a",
+       "quote": "Lesion size: 1.9 x 1.6 cm",
+       "page": 0,
+       "start": 612,
+       "end": 637,
+       "doc_title": "BILATERAL MAMMOGRAPHY REPORT",
+       "date": "2026-09-17",
+       "status": "FINAL"
+      },
+      {
+       "doc_id": "D4b243548",
+       "quote": "Lesion size: 1.8 x 1.5 cm",
+       "page": 0,
+       "start": 554,
+       "end": 579,
+       "doc_title": "USG BOTH BREASTS AND AXILLAE",
+       "date": "2026-09-16",
+       "status": "PRELIMINARY"
+      }
+     ],
+     "from_rules": true,
+     "kind": "non_final_differs"
+    }
+   ],
+   "reviewed": false,
+   "reviewed_by": null,
+   "label": "AI draft, not reviewed",
+   "generated": "2026-10-14T21:01:58",
+   "model": "Gemma-4-31B-it",
+   "stale_reason": "",
+   "stage_as_recorded": null,
+   "summary_status": "ready",
+   "preparing": false
+  },
+  "sent": {
+   "by": "tb-breast-doc",
+   "at": "2026-10-14T21:01:58",
+   "note": "Summary compiled (demo)"
+  }
+ },
+ "left": 8,
+ "permissions": {
+  "enter_value": true,
+  "not_needed": true,
+  "ask_department": true,
+  "remind": true,
+  "review": true,
+  "mark_ready": true
+ },
+ "signoffs": 0,
+ "protocol": "breast",
+ "protocol_label": "Breast cancer",
+ "reasons": [
+  {
+   "id": "new_diagnosis",
+   "label": "New diagnosis: plan first treatment"
+  },
+  {
+   "id": "after_surgery",
+   "label": "After surgery: plan next"
+  },
+  {
+   "id": "recurrence",
+   "label": "Recurrence or progression"
+  },
+  {
+   "id": "diagnosis_unclear",
+   "label": "Diagnosis not clear"
+  },
+  {
+   "id": "other",
+   "label": "Other"
+  }
+ ],
+ "blockers": [
+  {
+   "slot_id": "fact:clinical_question",
+   "why": "The question for the Tumour Board is not written yet: the treating doctor writes it in the Question step"
+  }
+ ]
+}

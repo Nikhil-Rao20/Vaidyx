@@ -1,0 +1,248 @@
+{
+ "switch": {
+  "on": true,
+  "preview": true,
+  "label": "Preview: these staging rules are not yet checked by a clinician",
+  "why": ""
+ },
+ "draft_label": "Vaidyx draft stage, for the board to confirm",
+ "written": [],
+ "draft": {
+  "components": {
+   "T": {
+    "cat": "T1c",
+    "group": "T1",
+    "criterion": {
+     "cat": "T1c",
+     "group": "T1",
+     "text": "Tumor > 10 mm but ≤ 20 mm in greatest dimension",
+     "page": 619,
+     "find": "10 mm but < 20 mm",
+     "min_mm": 10,
+     "max_mm": 20
+    },
+    "quotes": [
+     {
+      "doc_id": "Dc23ae75a",
+      "doc_title": "BILATERAL MAMMOGRAPHY REPORT",
+      "doc_type": "mammogram",
+      "quote": "Lesion size: 1.9 x 1.6 cm",
+      "page": 0,
+      "date": "2026-09-17",
+      "final": true
+     }
+    ],
+    "size_mm": 19.0,
+    "how": "the measured size",
+    "note": ""
+   },
+   "N": {
+    "cat": "cN0",
+    "group": "N0",
+    "criterion": {
+     "cat": "cN0",
+     "group": "N0",
+     "text": "No regional lymph node metastases (by imaging or clinical examination)",
+     "page": 619,
+     "find": "No regional lymph node metastases (by imaging"
+    },
+    "quotes": [
+     {
+      "doc_id": "D95d20494",
+      "doc_title": "USG BOTH BREASTS AND AXILLAE",
+      "doc_type": "ultrasound",
+      "quote": "Lymph nodes: No suspicious axillary lymph nodes",
+      "page": 0,
+      "date": "2026-09-16",
+      "final": true
+     }
+    ],
+    "how": "the report describes it"
+   },
+   "M": {
+    "cat": "cM0",
+    "group": "M0",
+    "criterion": {
+     "cat": "cM0",
+     "group": "M0",
+     "text": "No clinical or radiographic evidence of distant metastases",
+     "page": 620,
+     "find": "No clinical or radiographic evidence of distant"
+    },
+    "quotes": [],
+    "how": "entered by the doctor",
+    "entered": {
+     "by": "rao@vxh.example",
+     "by_name": "Lakshmi Rao",
+     "at": "2026-10-27T01:57:18",
+     "reason": "Clinical examination, no symptoms of spread"
+    }
+   }
+  },
+  "missing": [],
+  "status": "staged",
+  "stage": "IA",
+  "row": {
+   "T": [
+    "T1"
+   ],
+   "N": [
+    "N0"
+   ],
+   "M": [
+    "M0"
+   ],
+   "stage": "IA",
+   "find": "TI NO M0 IA"
+  },
+  "rules": "breast_ajcc8",
+  "system": "AJCC TNM, 8th edition",
+  "at": "2026-10-27T01:57:18",
+  "by": "rao@vxh.example",
+  "signature": "718231fe64f7b2c1",
+  "model": "gemma-4-31b",
+  "confirmed": null,
+  "rejected": null,
+  "answer": {
+   "T": {
+    "cat": "T1c",
+    "quotes": [
+     {
+      "doc_id": "Dc23ae75a",
+      "quote": "Lesion size: 1.9 x 1.6 cm"
+     }
+    ],
+    "size_quote": {
+     "doc_id": "Dc23ae75a",
+     "quote": "Lesion size: 1.9 x 1.6 cm"
+    }
+   },
+   "N": {
+    "cat": "cN0",
+    "quotes": [
+     {
+      "doc_id": "D95d20494",
+      "quote": "Lymph nodes: No suspicious axillary lymph nodes"
+     }
+    ]
+   },
+   "M": {
+    "cat": "not_stated",
+    "quotes": [],
+    "missing": "no staging work-up report"
+   }
+  }
+ },
+ "comparison": null,
+ "stale": false,
+ "book": {
+  "id": "ajcc8_breast",
+  "title": "AJCC Cancer Staging Manual, 8th edition: 48 Breast",
+  "short": "AJCC 8, Breast",
+  "file": "ajcc/AJCC8_Ch48_Breast_pp589-628.pdf",
+  "first_page": 589,
+  "licensed": true
+ },
+ "book_here": true,
+ "notation": "tnm",
+ "system": "AJCC TNM, 8th edition",
+ "label": "Breast cancer, AJCC 8th edition, clinical stage",
+ "groups_note": "The anatomic stage group table, used where tumour grade and biomarker testing are not routinely available (AJCC 8, p. 620). The prognostic stage group (grade, HER2, ER, PR) is not worked out by Vaidyx yet.",
+ "groups_ref": {
+  "title": "AJCC Anatomic Stage Groups",
+  "page": 620,
+  "find": "AJCC Anatomic Stage Groups"
+ },
+ "criteria": {
+  "T": [
+   {
+    "cat": "TX",
+    "text": "Primary tumor cannot be assessed"
+   },
+   {
+    "cat": "T0",
+    "text": "No evidence of primary tumor"
+   },
+   {
+    "cat": "T1mi",
+    "text": "Tumor ≤ 1 mm in greatest dimension"
+   },
+   {
+    "cat": "T1a",
+    "text": "Tumor > 1 mm but ≤ 5 mm in greatest dimension (round any measurement 1.0-1.9 mm to 2 mm)"
+   },
+   {
+    "cat": "T1b",
+    "text": "Tumor > 5 mm but ≤ 10 mm in greatest dimension"
+   },
+   {
+    "cat": "T1c",
+    "text": "Tumor > 10 mm but ≤ 20 mm in greatest dimension"
+   },
+   {
+    "cat": "T2",
+    "text": "Tumor > 20 mm but ≤ 50 mm in greatest dimension"
+   },
+   {
+    "cat": "T3",
+    "text": "Tumor > 50 mm in greatest dimension"
+   },
+   {
+    "cat": "T4a",
+    "text": "Extension to the chest wall; invasion or adherence to pectoralis muscle in the absence of invasion of chest wall structures does not qualify as T4"
+   },
+   {
+    "cat": "T4b",
+    "text": "Ulceration and/or ipsilateral macroscopic satellite nodules and/or edema (including peau d'orange) of the skin that does not meet the criteria for inflammatory carcinoma"
+   },
+   {
+    "cat": "T4c",
+    "text": "Both T4a and T4b are present"
+   },
+   {
+    "cat": "T4d",
+    "text": "Inflammatory carcinoma"
+   }
+  ],
+  "N": [
+   {
+    "cat": "cN0",
+    "text": "No regional lymph node metastases (by imaging or clinical examination)"
+   },
+   {
+    "cat": "cN1",
+    "text": "Metastases to movable ipsilateral Level I, II axillary lymph node(s)"
+   },
+   {
+    "cat": "cN2a",
+    "text": "Metastases in ipsilateral Level I, II axillary lymph nodes fixed to one another (matted) or to other structures"
+   },
+   {
+    "cat": "cN2b",
+    "text": "Metastases only in ipsilateral internal mammary nodes in the absence of axillary lymph node metastases"
+   },
+   {
+    "cat": "cN3a",
+    "text": "Metastases in ipsilateral infraclavicular lymph node(s)"
+   },
+   {
+    "cat": "cN3b",
+    "text": "Metastases in ipsilateral internal mammary lymph node(s) and axillary lymph node(s)"
+   },
+   {
+    "cat": "cN3c",
+    "text": "Metastases in ipsilateral supraclavicular lymph node(s)"
+   }
+  ],
+  "M": [
+   {
+    "cat": "cM0",
+    "text": "No clinical or radiographic evidence of distant metastases"
+   },
+   {
+    "cat": "cM1",
+    "text": "Distant metastases detected by clinical and radiographic means (cM) and/or histologically proven metastases larger than 0.2 mm (pM)"
+   }
+  ]
+ }
+}

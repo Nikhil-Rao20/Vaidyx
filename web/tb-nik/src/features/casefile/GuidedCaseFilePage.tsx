@@ -2,7 +2,7 @@
 // with one loud Continue (guide, do not lock), the section the doctor is in, a right side panel for the report, reviews and team, and the
 // "Ask about this patient" bubble on every section. Each section is an address (/cases/:id/<section>); the Case File opens on Overview.
 // A department that was only asked keeps its request view.
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, BellRing, Eye, MessageSquareText } from "lucide-react";
@@ -48,9 +48,6 @@ import { StagingCard } from "./staging/StagingCard";
 import { useStaging, type BookTarget } from "./staging/api";
 import { SLUG, fromSlug, type MissingItem, type SectionId } from "./steps/types";
 import "./print.css";
-
-// A server without the guided view (an instance not restarted since 21 Oct, such as the public demo) keeps the previous Case File page.
-const PreviousCaseFilePage = lazy(() => import("./CaseFilePage"));
 
 type Side =
   | { kind: "panel"; panel: MorePanel }
@@ -288,7 +285,6 @@ export default function GuidedCaseFilePage() {
   }
   if (!cf) return null;
   if (requestsOnly) return <RequestsOnlyView id={id} cf={cf} />;
-  if (stepsq.error && notBuiltYet(stepsq.error)) return <Suspense fallback={<div className="surface p-4"><SkeletonLines n={8} /></div>}><PreviousCaseFilePage /></Suspense>;
 
   const prose = steps?.summary.prose;
   const exportAllowed = !!prose?.reviewed;

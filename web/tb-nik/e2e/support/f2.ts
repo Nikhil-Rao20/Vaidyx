@@ -1,7 +1,9 @@
 // Fixtures and routes for the Case File and meeting screenshot specs (e2e/shots/casefile.spec.ts, meetings.spec.ts).
 // SYNTHETIC only: f2/case.json, slots.json and slides.json were built from a scratch copy of the demo Case File
 // TB-DEMO-P19 ("Priya Venkatesan (SYNTHETIC)", Vaidyx Demo Hospital) by the backend's own slots.build and
-// meetings.slides. Every route of the Case File and meeting pages is answered here, in mock and real mode alike, so the
+// meetings.slides; f2/steps.json and staging.json (27 Oct 2026) the same way by steps.build for the treating consultant and
+// staging.view (TB_STAGING=preview; the reasoner a fake that picks the reports' own lines, every quote still checked by
+// staging.decide; M entered by the doctor), on a scratch TB_DATA_ROOT, never the live data. Every route of the Case File and meeting pages is answered here, in mock and real mode alike, so the
 // shots do not depend on what the running server has loaded; the shell (/me, the bell) comes from support/helpers.ts.
 import fs from "node:fs";
 import path from "node:path";
@@ -17,6 +19,8 @@ export const MID = "M-1";
 export const baseCase = load("case.json");
 export const baseSlots = load("slots.json");
 export const baseSlides = load("slides.json");
+export const baseSteps = load("steps.json");
+export const baseStaging = load("staging.json");
 
 const now = new Date();
 const iso = (minutesAgo: number) => new Date(now.getTime() - minutesAgo * 60_000).toISOString();
@@ -131,6 +135,115 @@ export const proposals = {
   ],
 };
 
+// ---- the guided Case File (GET /steps, GET /staging) ------------------------------------------------------------------------
+type AnyObj = any; // eslint-disable-line @typescript-eslint/no-explicit-any
+const RADIOLOGY = { name: "Radiology", label: "Radiology", id: "radiology", action_id: null, phone: "" };
+const NUCLEAR = { name: "Nuclear Medicine", label: "Nuclear Medicine", id: "nuclear_medicine", action_id: "A9b1c2d", phone: "+91 44 2345 6789" };
+const setSection = (s: AnyObj, id: string, status: string, detail: string, count: number | null = null) => {
+  s.sections = s.sections.map((x: AnyObj) => (x.id === id ? { ...x, status, detail, count } : x));
+};
+
+/** The Case File before it goes to the board (the header offers "Send to the board"). */
+export function caseFileUnsent() {
+  const c = caseFile();
+  c.case.board_ready = null;
+  return c;
+}
+
+/** GET /steps as steps.build answered it for the treating consultant: the question not written, one value where two reports
+ *  differ (primary lesion size), six key values to confirm, the summary written and not read yet. */
+export function steps(over: Record<string, unknown> = {}) {
+  return { ...clone(baseSteps), ...over };
+}
+
+/** Work still open, before the board: the built answer plus one request to send (MRI breast, Radiology) and one request
+ *  overdue (PET-CT, Nuclear Medicine), so To do, Waiting and Pre-Authorization each have rows. Not sent yet. */
+export function stepsPrepare() {
+  const s: AnyObj = steps();
+  const pa = s.pre_authorization;
+  const mri = pa.optional.find((x: AnyObj) => x.slot_id === "record:mri_breast");
+  const pet = pa.optional.find((x: AnyObj) => x.slot_id === "record:pet_ct");
+  pa.optional = pa.optional.filter((x: AnyObj) => x !== mri && x !== pet);
+  const mriItem = { ...mri, required: true, department: RADIOLOGY, can_not_needed: true, note: "No mri breast in the Case File" };
+  pa.groups = [{ department: RADIOLOGY, items: [mriItem] }];
+  const request = { action_id: NUCLEAR.action_id, department: "Nuclear Medicine", department_id: "nuclear_medicine", department_label: "Nuclear Medicine", sent_at: iso(60 * 24 * 5), sent_by: "rao@vxh.example", due: dayIso(-1), due_label: "", status: "pending", reminders: 1, what: "PET-CT report, final and signed", overdue: true };
+  const petItem = { ...pet, required: true, status: "waiting", department: NUCLEAR, request };
+  pa.waiting = [petItem];
+  s.waiting = [{ id: "wait:record:pet_ct", section: "pre_authorization", label: pet.label, department: NUCLEAR, request, action: { kind: "remind", label: "Send reminder", action_id: NUCLEAR.action_id } }];
+  s.todo.splice(1, 0, { id: "request:Radiology", section: "pre_authorization", label: mri.label, why: "Not found in the reports", action: { kind: "ask_department", label: "Send request to Radiology", department: RADIOLOGY, slot_ids: [mri.slot_id] } });
+  setSection(s, "pre_authorization", "todo", "1 to do", 1);
+  s.left = s.left + 2;
+  s.summary.sent = null;
+  return s;
+}
+
+/** The same work, seen by a resident of the owning team: every step goes to the consultant for sign-off. */
+export function stepsResident() {
+  const s: AnyObj = stepsPrepare();
+  s.role = "resident";
+  s.permissions = Object.fromEntries(Object.keys(s.permissions).map((k) => [k, false]));
+  s.signoffs = 0;
+  return s;
+}
+
+/** Everything settled: the question written with its reason and urgency, every key value confirmed, nothing missing, the summary
+ *  read; only "Send to the board" is left. */
+export function stepsReadyToSend() {
+  const s: AnyObj = steps();
+  s.question = { ...s.question, text: "Is she fit for breast conservation surgery, or should she get chemotherapy first?", by: "Lakshmi Rao", at: iso(60 * 3),
+    reason: { value: "new_diagnosis", label: "New diagnosis: plan first treatment", by: "rao@vxh.example", at: iso(60 * 3) }, urgency: { level: 4 } };
+  s.check.problems = [];
+  s.check.keys = s.check.keys.map((k: AnyObj) => ({ ...k, confirmed: true, confirmed_by: "Lakshmi Rao", confirmed_at: iso(90) }));
+  s.summary.prose = { ...s.summary.prose, reviewed: true, reviewed_by: "Lakshmi Rao" };
+  s.summary.sent = null;
+  s.todo = [];
+  s.waiting = [];
+  s.warnings = [];
+  s.left = 0;
+  s.blockers = [];
+  s.next = { section: "summary", label: "Send to the board", send: true };
+  for (const id of ["question", "check", "summary"]) setSection(s, id, "done", "Done");
+  return s;
+}
+
+/** After "Send to the board". */
+export function stepsAfterSend() {
+  const s: AnyObj = stepsReadyToSend();
+  s.summary.sent = { by: "Lakshmi Rao", at: iso(5), note: "" };
+  s.next = { section: "summary", label: "Sent to the board", done: true };
+  return s;
+}
+
+/** The summary was written before a new report arrived: it says so and offers to write it again. */
+export function stepsSummaryStale() {
+  const s: AnyObj = stepsReadyToSend();
+  s.summary.prose = { ...s.summary.prose, status: "stale", reviewed: false, stale_reason: "A new report arrived" };
+  s.next = { section: "summary", label: "Write the summary" };
+  setSection(s, "summary", "todo", "Records changed: write it again", 1);
+  return s;
+}
+
+/** A warning with its two fixes (a made-up state for the warning row only: the synthetic reports do not differ in site). */
+export function stepsCancerWarning() {
+  const s: AnyObj = stepsPrepare();
+  s.warnings = [{ id: "cancer:breast:lung", kind: "cancer_mismatch", section: "overview", severity: "warn",
+    text: "The reports mention the lung (histologic type: \"Adenocarcinoma, lung primary\"; imaging: \"Spiculated nodule in the right upper lobe\"); none mention the breast. This Case File is set to Breast cancer.",
+    fixes: [{ kind: "change_cancer", label: "Change the cancer" }, { kind: "dismiss", label: "It is correct" }] }];
+  s.next = { section: "overview", label: "Check the cancer chosen", target: "cancer:breast:lung" };
+  return s;
+}
+
+/** GET /staging: the Vaidyx draft stage (preview rules), worked out and not confirmed yet. */
+export function stagingDraft() {
+  return clone(baseStaging);
+}
+
+/** Draft staging switched off on this server, no stage written in a report: the Overview shows no Stage card. */
+export function stagingOff() {
+  const v = clone(baseStaging);
+  return { ...v, switch: { on: false, preview: false, label: "", why: "Draft staging is switched off on this server" }, draft: null, criteria: null, written: [] };
+}
+
 /** A synthetic report page (SVG) with the quote boxed where quote_boxes.py says it is. */
 export function pageSvg(title: string, lines: string[]) {
   const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
@@ -151,7 +264,11 @@ export type CaseRouteOptions = {
   chats?: unknown;
   helpers?: unknown;
   published?: unknown;
-  notBuilt?: Array<"slots" | "chats" | "helpers" | "published" | "team" | "proposals">;
+  /** GET /steps (default stepsPrepare()); actions on it (reason, urgency, key checks, ready) change this copy for the next GET. */
+  steps?: unknown | { status: number; body?: unknown };
+  /** GET /staging (default stagingDraft()); confirm and reject change this copy. */
+  staging?: unknown | { status: number; body?: unknown };
+  notBuilt?: Array<"slots" | "chats" | "helpers" | "published" | "team" | "proposals" | "steps" | "staging">;
   delayMs?: number;
 };
 
@@ -161,6 +278,9 @@ const isReply = (x: unknown): x is { status: number; body?: unknown } => !!x && 
 /** Answers every Case File route for CID. Register after helpers.prepare(): the last route registered runs first. */
 export async function routeCaseFile(page: Page, o: CaseRouteOptions = {}) {
   const nb = new Set(o.notBuilt ?? []);
+  // The guided page's state for this page: what a GET answers after an action the spec took.
+  const live: { steps: AnyObj; staging: AnyObj; ready: AnyObj } = { steps: isReply(o.steps) ? null : clone(o.steps ?? stepsPrepare()), staging: isReply(o.staging) ? null : clone(o.staging ?? stagingDraft()), ready: null };
+  const me = { by: "rao@vxh.example", by_name: "Lakshmi Rao" };
   await page.route(`**/api/tb/cases/${CID}**`, async (route: Route) => {
     const url = new URL(route.request().url());
     const m = route.request().method();
@@ -168,7 +288,10 @@ export async function routeCaseFile(page: Page, o: CaseRouteOptions = {}) {
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     const reply = (x: unknown, fallback: () => unknown) => (isReply(x) ? json(x.body ?? { detail: { message: "The server could not answer (test).", code: "test" } }, x.status) : json(x ?? fallback()));
     if (o.delayMs && m === "GET" && (p === "" || p === "/")) await new Promise((r) => setTimeout(r, o.delayMs));
-    if (m === "GET" && (p === "" || p === "/")) return reply(o.caseFile, () => caseFile());
+    if (m === "GET" && (p === "" || p === "/")) {
+      if (live.ready && !isReply(o.caseFile)) { const c: AnyObj = clone(o.caseFile ?? caseFile()); c.case.board_ready = live.ready; return json(c); }
+      return reply(o.caseFile, () => caseFile());
+    }
     if (p === "/slots" && m === "GET") return nb.has("slots") ? json(NOT_FOUND, 404) : reply(o.slots, () => clone(baseSlots));
     if (p === "/chats" && m === "GET") return nb.has("chats") ? json(NOT_FOUND, 404) : json(o.chats ?? chats);
     if (p === "/chats" && m === "POST") return json({ ...chats.threads[0], id: "T3", at: new Date().toISOString(), question: JSON.parse(route.request().postData() || "{}").question, pinned: false });
@@ -178,6 +301,66 @@ export async function routeCaseFile(page: Page, o: CaseRouteOptions = {}) {
     if (p === "/published/search") return json(publishedResults);
     if (p === "/team" && m === "GET") return nb.has("team") ? json(NOT_FOUND, 404) : json(o.team ?? team());
     if (p === "/proposals" && m === "GET") return nb.has("proposals") ? json(NOT_FOUND, 404) : json(o.proposals ?? proposals);
+    if (p === "/steps" && m === "GET") return nb.has("steps") ? json(NOT_FOUND, 404) : live.steps ? json(live.steps) : reply(o.steps, () => stepsPrepare());
+    if (p === "/staging" && m === "GET") return nb.has("staging") ? json(NOT_FOUND, 404) : live.staging ? json(live.staging) : reply(o.staging, () => stagingDraft());
+    const body = (): AnyObj => { try { return JSON.parse(route.request().postData() || "{}"); } catch { return {}; } };
+    const resident = live.steps?.role === "resident";
+    const proposal = (action: string, payload: Record<string, unknown>) => json({ proposal: { id: "PR-9", action, payload, note: "", by: "asha@vxh.example", by_name: "Asha Menon", at: new Date().toISOString(), status: "pending" } });
+    if (p === "/reason" && m === "PUT") {
+      const b = body();
+      const r = (live.steps?.reasons ?? baseSteps.reasons).find((x: AnyObj) => x.id === b.value);
+      if (!r) return json({ detail: { message: "Choose one of the reasons.", code: "step_400" } }, 400);
+      if (resident) return proposal("reason", { value: r.id });
+      if (live.steps) live.steps.question.reason = { value: r.id, label: r.label, by: me.by, at: new Date().toISOString() };
+      return json({ value: r.id, label: r.label });
+    }
+    if (p === "/urgency" && m === "PUT") {
+      const level = Number(body().level);
+      if (resident) return proposal("urgency", { level });
+      if (live.steps) live.steps.question.urgency = { level };
+      return json({ urgency: { level, label: "", set_by: me.by, set_by_name: me.by_name, at: new Date().toISOString(), note: "", proposed: null } });
+    }
+    if (p === "/key-checks" && m === "POST") {
+      const b = body();
+      const k = live.steps?.check.keys.find((x: AnyObj) => x.fact_id === b.fact_id);
+      if (!k) return json({ detail: { message: "This value is not a key value of this Case File.", code: "step_404" } }, 404);
+      Object.assign(k, { confirmed: true, confirmed_by: me.by_name, confirmed_at: new Date().toISOString() });
+      return json({ fact_id: b.fact_id, value: b.value, doc_id: b.doc_id, by: me.by, at: k.confirmed_at });
+    }
+    const undoKey = /^\/key-checks\/([^/]+)$/.exec(p);
+    if (undoKey && m === "DELETE") {
+      const k = live.steps?.check.keys.find((x: AnyObj) => x.fact_id === decodeURIComponent(undoKey[1]));
+      if (!k || !k.confirmed) return json({ detail: { message: "This value was not confirmed.", code: "step_404" } }, 404);
+      Object.assign(k, { confirmed: false, confirmed_by: "", confirmed_at: null });
+      return json({ ok: true });
+    }
+    if ((p === "/staging/confirm" || p === "/staging/reject") && m === "POST") {
+      const d = live.staging?.draft;
+      if (!d) return json({ detail: { message: "There is no draft stage to confirm.", code: "staging_409" } }, 409);
+      if (p === "/staging/confirm") Object.assign(d, { confirmed: { ...me, at: new Date().toISOString(), note: "" }, rejected: null });
+      else {
+        const reason = String(body().reason ?? "").trim();
+        if (reason.length < 3) return json({ detail: { message: "Say what is wrong: it is recorded with your name.", code: "staging_400" } }, 400);
+        d.rejected = { ...me, at: new Date().toISOString(), reason };
+      }
+      return json(live.staging);
+    }
+    const typed = /^\/slots\/([^/]+)\/value$/.exec(p);
+    if (typed && m === "POST" && live.steps) {
+      const slot = decodeURIComponent(typed[1]);
+      const value = String(body().value ?? "");
+      const at = new Date().toISOString();
+      if (slot === "fact:clinical_question") Object.assign(live.steps.question, { text: value, by: me.by_name, at });
+      const extra = live.steps.question.extras.find((x: AnyObj) => x.slot_id === slot);
+      if (extra) Object.assign(extra, { status: "entered", value, entered_by: me.by_name, entered_at: at });
+      return json({ id: slot, status: "entered", value });
+    }
+    if (p === "/ready" && m === "POST" && live.steps && !resident) {
+      live.ready = { by: me.by, at: new Date().toISOString(), note: body().note ?? "" };
+      live.steps.summary.sent = { by: me.by_name, at: live.ready.at, note: live.ready.note };
+      live.steps.next = { section: "summary", label: "Sent to the board", done: true };
+      return json({ ok: true });
+    }
     if (/^\/documents\/[^/]+\/quote$/.test(p)) {
       const q = url.searchParams.get("text") || url.searchParams.get("fact") || "";
       return json({ found: true, page: 0, boxes: q ? [[0.065, 0.215, 0.82, 0.245]] : [], quote: q });
