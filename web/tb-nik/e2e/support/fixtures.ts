@@ -53,6 +53,8 @@ export const caseList = {
     { case_id: "TB-2026-0027", patient: P("Ramesh K.", "64 M", "VXH/2026/000097"), ids: ids("VXH/2026/000097", "OP/2026/00097"), protocol: "lung_nsclc", protocol_label: "Lung cancer (NSCLC)", setting: "metastatic", owner: owner("pulmonology", "Pulmonology", "joseph@vxh.example", "Thomas Joseph"), urgency: { level: 2 }, status: st("scheduled", `Scheduled ${day(3)}`), board_date: day(3), left_before_board: 0, imaging_present: true, last_change: iso(2), created: iso(6) },
     { case_id: "TB-2026-0024", patient: P("Venkatesh M.", "55 M", "VXH/2026/000081"), ids: ids("VXH/2026/000081", "OP/2026/00081"), protocol: "oral_cavity", protocol_label: "Oral cavity cancer (head and neck)", setting: "early", owner: owner("ent_head_neck_surgery", "ENT and Head and Neck Surgery", "pillai@vxh.example", "Arun Pillai"), urgency: { level: null }, status: st("draft", "Reading records", "3 record(s) being read"), board_date: "", left_before_board: 4, imaging_present: false, last_change: iso(3), created: iso(8) },
     { case_id: "TB-2026-0019", patient: P("Sunita P.", "50 F", "VXH/2026/000064"), ids: ids("VXH/2026/000064", "OP/2026/00064"), protocol: "breast", protocol_label: "Breast cancer", setting: "early", owner: owner("breast_surgery", "Breast Surgery"), urgency: { level: 1 }, status: st("decided", "Decided"), board_date: day(-11), left_before_board: 0, imaging_present: true, last_change: iso(11), created: iso(20), mine: true },
+    // night-v3 item 1.3: another department's Case File of the same patient, seen only through the link; read only, never counted
+    { case_id: "TB-2026-0032", patient: P("Lakshmi R.", "58 F", "VXH/2026/000123"), ids: ids("VXH/2026/000123", "OP/2026/00131"), protocol: "", protocol_label: "Chronic myeloid leukaemia (no checklist yet)", cancer_name: "Chronic myeloid leukaemia", setting: "", owner: owner("haematology", "Haematology", "iyer@vxh.example", "Meera Iyer"), urgency: { level: null }, status: st("needs_me", "Needs the treating team", "no cancer chosen yet"), board_date: "", left_before_board: null, imaging_present: false, last_change: iso(0, 7), created: iso(0, 7), mine: false, relation: "linked", linked_only: true, read_only: true, owned_by: { department: "haematology", label: "Haematology" } },
   ],
   filters: {
     departments: [{ id: "breast_surgery", label: "Breast Surgery" }, { id: "gynaecologic_oncology", label: "Gynaecologic Oncology" }, { id: "pulmonology", label: "Pulmonology" }],
@@ -60,7 +62,7 @@ export const caseList = {
     owners: [{ id: "rao@vxh.example", label: "Lakshmi Rao" }, { id: "devi@vxh.example", label: "Radha Devi" }, { id: "joseph@vxh.example", label: "Thomas Joseph" }],
     statuses: [{ key: "needs_me", label: "Needs you" }, { key: "waiting_department", label: "Waiting on a department" }, { key: "ready", label: "Ready for the board" }, { key: "scheduled", label: "Scheduled" }, { key: "decided", label: "Decided" }, { key: "draft", label: "Reading records" }],
   },
-  total: 6,
+  total: 7,
   can_create: true,
 };
 

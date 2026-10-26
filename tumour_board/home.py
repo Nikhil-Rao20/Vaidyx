@@ -72,8 +72,10 @@ def _case_row(c: dict, r: dict, mine: set) -> dict:
     ref = access.open_referral(c)
     ready = c.get("board_ready") if isinstance(c.get("board_ready"), dict) else None
     h = c.get("his") if isinstance(c.get("his"), dict) else {}
-    relation = ("owner" if own and own in mine else "participant" if mine & (parts | linked) else "referred" if ref and org.department_id(ref.get("to")) in mine
-                else "asked" if sc == access.REQUESTS else "open" if not own else "all")  # "all": a Vaidyx admin or the coordinator on another department's Case File
+    relation = ("owner" if own and own in mine else "participant" if mine & parts else "referred" if ref and org.department_id(ref.get("to")) in mine
+                else "linked" if mine & linked and not r.get("coordinator") else "asked" if sc == access.REQUESTS else "open" if not own else "all")
+    # "all": a Vaidyx admin or the coordinator on another department's Case File; "linked" (night-v3 item 1.3): another department's
+    # Case File seen only because it is linked to one of this department's own, read only and never counted as its own
     return {"case_id": c.get("case_id"), "patient": _patient(c), "uhid": h.get("uhid") or _patient(c)["mrn"], "protocol": c.get("protocol") or "",
             "board_date": c.get("board_date") or "", "listing": (c.get("listing") or {}).get("status"), "documents": c.get("documents", 0),
             "open_actions": c.get("open_actions", 0), "readiness": c.get("readiness"), "gate_passed": c.get("gate_passed"),
@@ -101,16 +103,16 @@ def treating(r: dict, cases: list | None = None) -> dict:
     today = _today()
     rows = []
     for c in (cases if cases is not None else store.list_cases()):
-        if access.scope(r, c):
+        if access.scope(r, c) not in (None, access.READ):  # a Case File opened with a reason is never listed (item 1.9)
             row = _case_row(c, r, mine)
             if row["relation"] == "owner" or (r.get("admin") and row["relation"] != "asked"):
                 row["suggested_unsent"] = int(c.get("suggested_actions") or 0)  # requests nobody sent yet (counted by store.list_cases)
             rows.append(row)
-    order = {"owner": 0, "referred": 1, "participant": 2, "open": 3, "all": 4, "asked": 5}
+    order = {"owner": 0, "referred": 1, "participant": 2, "open": 3, "all": 4, "asked": 5, "linked": 6}
     rows.sort(key=lambda x: (order.get(x["relation"], 9), _date_key(x["board_date"], today), x["case_id"]))
     owned = [x for x in rows if "suggested_unsent" in x]
     counts = {"visible": len(rows), "mine": sum(1 for x in rows if x["relation"] == "owner"), "participating": sum(1 for x in rows if x["relation"] in ("participant", "referred")),
-              "asked": sum(1 for x in rows if x["relation"] == "asked"), "awaiting_listing": sum(1 for x in owned if x["listing"] == "awaiting_listing"),
+              "asked": sum(1 for x in rows if x["relation"] == "asked"), "linked": sum(1 for x in rows if x["relation"] == "linked"), "awaiting_listing": sum(1 for x in owned if x["listing"] == "awaiting_listing"),
               "gate_passed": sum(1 for x in owned if x["gate_passed"] is True), "ready_marked": sum(1 for x in owned if x["ready"]),
               "referral_waiting": sum(1 for x in owned if x["referral"]), "suggested_unsent": sum(x.get("suggested_unsent", 0) for x in owned)}
     refs = referral.inbox(r)

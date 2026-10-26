@@ -3,6 +3,28 @@
 
 export type { Me, RoleKind } from "@/lib/session";
 
+// ---- Opened with a reason (POST /break-glass, night-v3 item 1.9) ------------------------------------------------------
+/** A doctor's read-only window on a Case File it cannot open otherwise: 24 hours, audited, the owner's consultants told. */
+export interface BreakGlassWindow {
+  case_id: string;
+  /** ISO end of the window (24 hours after opening). */
+  until: string;
+  reason: string;
+  /** Where the doctor came from, e.g. "similar to TB-001" (Phase 7); empty otherwise. */
+  via?: string;
+}
+/** POST /break-glass answer for a doctor. */
+export interface BreakGlassOpened extends BreakGlassWindow {
+  scope: "read";
+  renewed?: boolean;
+}
+// GET /me lists the doctor's open windows (the Me type itself lives in lib/session.tsx).
+declare module "@/lib/session" {
+  interface Me {
+    break_glass?: BreakGlassWindow[];
+  }
+}
+
 // ---- Case File list (GET /case-list) ----------------------------------------------------------------------------------
 export interface CasePatient {
   name: string;
@@ -33,6 +55,8 @@ export interface CaseStatus {
   detail?: string;
 }
 
+export type CaseRelation = "owner" | "team" | "creator" | "participant" | "referred" | "coordinator" | "linked" | "asked" | "admin";
+
 export interface CaseListItem {
   case_id: string;
   patient: CasePatient;
@@ -51,8 +75,14 @@ export interface CaseListItem {
   residents_count?: number;
   /** Free text name when the cancer has no built checklist. */
   cancer_name?: string;
-  /** The person owns it, is on its team, or created it (server side "mine"). */
+  /** The person owns it, is on its team, or created it (server side "mine"). Never true for a linked-only row. */
   mine?: boolean;
+  /** Why the person sees it: owner, team, creator, participant, referred, coordinator, linked, asked, admin. */
+  relation?: CaseRelation | null;
+  /** Another department's Case File seen only because it is linked to one of the person's own: read only, never counted. */
+  linked_only?: boolean;
+  read_only?: boolean;
+  owned_by?: { department: string; label: string };
   scope?: "FULL" | "REQUESTS" | string | null;
   documents?: number;
   gate_passed?: boolean | null;

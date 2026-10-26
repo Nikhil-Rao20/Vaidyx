@@ -18,7 +18,7 @@ import { useSavedFilters } from "@/hooks/useProfile";
 import { useDebounce } from "@/hooks/useDebounce";
 import type { Me } from "@/lib/session";
 import type { CaseListItem, FilterOption } from "@/lib/types";
-import { SORT_CHOICES, VIEWS, activeKeys, applyFilters, parseQuery, sortCases, toSearchParams, type FilterQuery, type SortKey } from "@/lib/filters";
+import { SORT_CHOICES, VIEWS, activeKeys, applyFilters, isLinkedOnly, linkedLast, ownRows, parseQuery, sortCases, toSearchParams, type FilterQuery, type SortKey } from "@/lib/filters";
 import { errorMessage } from "@/hooks/useAsyncAction";
 
 export interface ListCounts { all: number; ready: number; waiting: number }
@@ -45,18 +45,23 @@ export function CaseFileList({ me, canCreate, onCount }: { me: Me; canCreate: bo
 
   const list = useCaseList({});
   const allCases = useMemo(() => list.data?.cases ?? [], [list.data]);
-  const shown = useMemo(() => sortCases(applyFilters(allCases, query, me.user), sort), [allCases, query, me.user, sort]);
+  // Another department's Case File linked to one of this department's own (night-v3 item 1.3) is listed last, under its own heading,
+  // and left out of every count: the views, the footer, the gift box and the coordinator's card count the person's own files only.
+  const ownCases = useMemo(() => ownRows(allCases), [allCases]);
+  const shown = useMemo(() => linkedLast(sortCases(applyFilters(allCases, query, me.user), sort)), [allCases, query, me.user, sort]);
+  const ownShown = useMemo(() => ownRows(shown).length, [shown]);
+  const firstLinked = useMemo(() => shown.find(isLinkedOnly)?.case_id, [shown]);
   const saved = useSavedFilters();
   const counts = useMemo(() => {
     const out: Record<string, number> = {};
-    for (const v of VIEWS) out[v.id] = applyFilters(allCases, v.query, me.user).length;
-    for (const s of saved.list) out[`saved:${s.name}`] = applyFilters(allCases, s.query as FilterQuery, me.user).length;
+    for (const v of VIEWS) out[v.id] = applyFilters(ownCases, v.query, me.user).length;
+    for (const s of saved.list) out[`saved:${s.name}`] = applyFilters(ownCases, s.query as FilterQuery, me.user).length;
     return out;
-  }, [allCases, saved.list, me.user]);
+  }, [ownCases, saved.list, me.user]);
   // The counts drive the gift box and the coordinator's ready card.
   useEffect(() => {
-    if (list.data) onCount?.({ all: allCases.length, ready: allCases.filter((c) => c.status?.key === "ready").length, waiting: allCases.filter((c) => c.status?.key === "waiting_department").length });
-  }, [allCases, onCount, list.data]);
+    if (list.data) onCount?.({ all: ownCases.length, ready: ownCases.filter((c) => c.status?.key === "ready").length, waiting: ownCases.filter((c) => c.status?.key === "waiting_department").length });
+  }, [ownCases, onCount, list.data]);
 
   const organs = useMemo<FilterOption[]>(() => {
     const m = new Map<string, string>();
@@ -116,7 +121,12 @@ export function CaseFileList({ me, canCreate, onCount }: { me: Me; canCreate: bo
         retrying={list.isFetching}
         what="the Case File list"
         keyFor={(c) => c.case_id}
-        renderRow={(c) => <CaseRow c={c} q={query.q || ""} showOwner={!treating || coordinator || !c.mine} />}
+        renderRow={(c) => (
+          <>
+            {c.case_id === firstLinked ? <h2 className="mb-1.5 pt-3 text-sm font-semibold text-muted-foreground">Linked Case Files of other departments</h2> : null}
+            <CaseRow c={c} q={query.q || ""} showOwner={!treating || coordinator || !c.mine} />
+          </>
+        )}
         empty={
           hasAny || filtersOn || query.q ? (
             <EmptyState kind="search" title={query.q ? `Nothing matches "${query.q}"` : "No Case File matches these filters"} text={query.q ? "Try a part of the UHID, the OP or IP number, or the patient's name." : "Take a filter off, or choose another view."} action={<Button type="button" variant="outline" size="sm" onClick={() => { setText(""); setQuery({}); }}>Show all</Button>} />
@@ -124,7 +134,7 @@ export function CaseFileList({ me, canCreate, onCount }: { me: Me; canCreate: bo
             <EmptyState kind="empty" title="No Case Files yet" text={canCreate ? "Start with one UHID: Vaidyx fetches the records and shows what is missing for the board." : "When a treating doctor adds you to a Case File, it appears here."} action={canCreate ? <Button asChild><Link to="/cases/new"><Plus className="size-4" aria-hidden /> New Case File</Link></Button> : undefined} />
           )
         }
-        footer={shown.length && list.data ? <p className="pt-2 text-center text-xs text-muted-foreground">{shown.length === allCases.length ? `${allCases.length} Case Files` : `${shown.length} of ${allCases.length} Case Files`}. Cancer and setting as recorded by the treating doctor.</p> : null}
+        footer={shown.length && list.data ? <p className="pt-2 text-center text-xs text-muted-foreground">{ownShown === ownCases.length ? `${ownCases.length} Case Files` : `${ownShown} of ${ownCases.length} Case Files`}{shown.length > ownShown ? `, and ${shown.length - ownShown} linked of other departments` : ""}. Cancer and setting as recorded by the treating doctor.</p> : null}
       />
     </section>
   );
