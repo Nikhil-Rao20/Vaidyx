@@ -231,19 +231,24 @@ async def put_consent(case_id: str, request: Request):
 
 @router.post("/break-glass")
 async def break_glass(request: Request):
-    """{case_id, reason, hours?}: a Vaidyx admin opens one Case File for a while; the owner is told; audited."""
+    """{case_id, reason, hours?}: a Vaidyx admin opens one Case File for a while; the owner is told; audited. {case_id, reason, via?}: a
+    doctor without access opens one Case File read-only for 24 hours with a reason (owner decision D8, night-v3 item 1.9); the owner's
+    consultants are told; audited. 404 for an unknown or protected Case File, 409 `can_open`, 403 `not_placed`."""
     r = roles(request)
-    if not r.get("vaidyx_admin"):
-        fail(403, "Break-glass is for the Vaidyx admin (server administrator) only.", "forbidden")
+    if not r.get("vaidyx_admin") and not access.placed_doctor(r) and not r.get("coordinator"):
+        fail(403, "Only a doctor placed in a department (a consultant or a resident) opens a Case File with a reason.", "not_placed")
     b = await body(request)
     cid = str(b.get("case_id") or "").strip()
     try:
         cid = store.safe_id(cid)
     except ValueError:
         fail(400, "Give the Case File id.", "bad_case")
-    case(cid)
-    w = _run(team.break_glass, r["user"], cid, str(b.get("reason") or ""), b.get("hours"))
-    return {"until": w["until"], "case_id": cid, "reason": w["reason"]}
+    if r.get("vaidyx_admin"):
+        case(cid)
+        w = _run(team.break_glass, r["user"], cid, str(b.get("reason") or ""), b.get("hours"))
+        return {"until": w["until"], "case_id": cid, "reason": w["reason"]}
+    w = _run(team.break_glass_doctor, r["user"], r, cid, str(b.get("reason") or ""), str(b.get("via") or ""))
+    return {"until": w["until"], "case_id": cid, "reason": w["reason"], "via": w["via"], "renewed": w["renewed"], "scope": access.READ}
 
 
 @router.get("/break-glass")
@@ -256,7 +261,16 @@ async def break_glass_windows(request: Request):
 
 @router.delete("/break-glass")
 async def close_break_glass(request: Request):
+    """The Vaidyx admin closes its window; a doctor closes its own window on one Case File ({case_id}, audited)."""
     r = roles(request)
-    if not r.get("vaidyx_admin"):
-        fail(403, "Break-glass is for the Vaidyx admin (server administrator) only.", "forbidden")
-    return {"closed": access.close_break_glass(r["user"], by=r["user"])}
+    if r.get("vaidyx_admin"):
+        return {"closed": access.close_break_glass(r["user"], by=r["user"])}
+    if not access.placed_doctor(r):
+        fail(403, "Only the Vaidyx admin or a placed doctor closes a break-glass window.", "forbidden")
+    b = await body(request) if (await request.body()) else {}
+    cid = str(b.get("case_id") or "").strip()
+    try:
+        cid = store.safe_id(cid)
+    except ValueError:
+        fail(400, "Give the Case File id.", "bad_case")
+    return {"closed": _run(team.close_break_glass_doctor, r["user"], cid)}

@@ -25,6 +25,9 @@ export const EP = {
   askToJoin: `${TB}/case-join/ask`,
   /** GET ?identifier=<UHID, IP No. or OP No.> or ?case_id=<id>: the patient's live Case Files (night-v3 item 1.1). */
   patientCaseFiles: `${TB}/patient-case-files`,
+  /** POST {case_id, reason, via?}: a doctor without access opens a Case File read-only for 24 hours with a reason; DELETE {case_id}
+   *  closes it early (night-v3 item 1.9). The Vaidyx admin's own window uses the same path. */
+  breakGlass: `${TB}/break-glass`,
   team: (c: string) => `${TB}/cases/${id(c)}/team`,
   proposals: (c: string) => `${TB}/cases/${id(c)}/proposals`,
   proposalApprove: (c: string, p: string) => `${TB}/cases/${id(c)}/proposals/${id(p)}/approve`,

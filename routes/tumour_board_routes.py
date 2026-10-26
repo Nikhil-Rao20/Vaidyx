@@ -44,8 +44,9 @@ _LIMITED_OK = ((("GET",), _re.compile(r"^$")), (("GET",), _re.compile(r"^/docume
 # What an account that still carries its first (or reset) password may call: who am I, and change the password.
 _PASSWORD_FIRST_OK = _re.compile(r"^/api/tb/(me|me/password|health)$")
 
-# What a Vaidyx admin may send inside a break-glass window besides reading (security review #6): questions that change nothing and
-# opening the images of a record (viewing). Everything else that writes is refused: the window is read only.
+# What a Vaidyx admin, or a doctor who opened the Case File with a reason (scope READ, night-v3 item 1.9), may send inside a window
+# besides reading (security review #6): questions that change nothing and opening the images of a record (viewing). Everything else
+# that writes is refused: the window is read only.
 _BREAK_GLASS_OK = _re.compile(r"^/(ask|search|published/search|documents/[^/]+/images)$")
 
 # What an archived Case File still accepts besides reading: taking it out of the archive, and questions that change nothing.
@@ -69,7 +70,7 @@ def _meeting_record(rl, case_id, rest):
 
 
 def _case_guard(rl, case_id, rest, method="GET"):
-    """The Case File scope of this user (access.FULL / access.REQUESTS), or a 403 response. A Case File that does not exist is left to
+    """The Case File scope of this user (access.FULL / access.REQUESTS / access.READ), or a 403 response. A Case File that does not exist is left to
     the route (404). A department that was only asked may read the Case File view (reduced by the route), open the records in its
     scope and answer its requests and actions; nothing else."""
     try:
@@ -81,8 +82,9 @@ def _case_guard(rl, case_id, rest, method="GET"):
     sc = access.scope(rl, c)
     if sc is None and method == "GET" and _meeting_record(rl, case_id, rest):  # the record on a meeting's shared screen, for its admitted members
         return MEETING_SCOPE
-    if sc is None:
-        return JSONResponse({"detail": access.refusal(rl, c)}, status_code=403)
+    if sc is None:  # break_glass: this doctor may open the Case File read-only with a reason (night-v3 item 1.9, POST /break-glass)
+        return JSONResponse({"detail": {"message": access.refusal(rl, c), "code": "no_access", "break_glass": access.may_open_with_reason(rl, c)}},
+                            status_code=403)
     if sc == access.REQUESTS and not any(method in ms and p.match(rest or "") for ms, p in _LIMITED_OK):
         return JSONResponse({"detail": "Your department sees only the items it was asked about in this Case File."}, status_code=403)
     return sc
@@ -155,9 +157,11 @@ class _ModelErrorRoute(APIRoute):
                         if isinstance(sc, JSONResponse):
                             return sc
                         request.state.tb_scope = sc
-                        if rl.get("vaidyx_admin") and request.method in ("POST", "PUT", "PATCH", "DELETE") and not _BREAK_GLASS_OK.match(m.group(2) or ""):
-                            return JSONResponse({"detail": {"message": "A break-glass window is read only: the Vaidyx admin reads the Case File, the owning department acts on it.",
-                                                            "code": "break_glass_read_only"}}, status_code=403)
+                        if ((rl.get("vaidyx_admin") or sc == access.READ) and request.method in ("POST", "PUT", "PATCH", "DELETE")
+                                and not _BREAK_GLASS_OK.match(m.group(2) or "")):  # a window (the admin's, or a doctor's opened with a reason) only reads
+                            msg = ("A break-glass window is read only: the Vaidyx admin reads the Case File, the owning department acts on it."
+                                   if rl.get("vaidyx_admin") else access.READ_ONLY_MESSAGE)
+                            return JSONResponse({"detail": {"message": msg, "code": "break_glass_read_only"}}, status_code=403)
                         if request.method in ("POST", "PUT", "PATCH", "DELETE") and not _ARCHIVE_OK.match(m.group(2) or ""):
                             try:
                                 archived = access.is_archived(store.get_case(m.group(1)))
@@ -721,7 +725,7 @@ def setup_tumour_board_routes():
         out = []
         for c in store.list_cases():  # only the Case Files this user may open (V2 item 5.1)
             sc = access.scope(rl, c)
-            if sc:
+            if sc and sc != access.READ:  # a Case File opened with a reason is never listed (item 1.9)
                 out.append({**_his_brief(c), "scope": sc, "owner_name": org.department_name(access.owner(c)) if access.owner(c) else "",
                             "participants": access.participants(c), "linked": len(c.get("linked_cases") or []), "referral": (access.open_referral(c) or {}).get("to")})
         return {"cases": out, "demo": service.list_demo()}

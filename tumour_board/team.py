@@ -464,3 +464,47 @@ def break_glass(user: str, case_id: str, reason: str, hours=None) -> dict:
     tell_consultants(c, "break_glass", f"Break-glass: {user} opened the Case File of {patient_line(c)} ({case_id})",
                      f"The Vaidyx admin {user} opened this Case File until {w['until'][:16].replace('T', ' ')}. Reason: {w['reason']}", user=user, until=w["until"], by=user)
     return w
+
+
+def _dmy_hm(iso: str) -> str:
+    """2026-10-28T14:05:00 as 28/10/2026 14:05."""
+    try:
+        d = datetime.fromisoformat(str(iso))
+    except (TypeError, ValueError):
+        return str(iso or "")[:16].replace("T", " ")
+    return d.strftime("%d/%m/%Y %H:%M")
+
+
+def break_glass_doctor(user: str, roles: dict, case_id: str, reason: str, via: str = "") -> dict:
+    """A doctor without access opens one Case File read-only with a reason (owner decision D8, night-v3 item 1.9): 24 hours, audited in
+    the Case File and the organisation log, the owning department's consultants told. A protected or unknown Case File answers 404
+    (never named); a person who can open it already 409 `can_open`; anyone but a placed consultant or resident 403 `not_placed`. A new
+    opening of the same Case File renews the window. `via` is a short tag of where the doctor came from (Phase 7: "similar to TB-xxx")."""
+    c = store.get_case(case_id)
+    if not c or access.is_protected(c):
+        raise TeamError("Case not found", 404, "not_found")
+    sc = access.scope(roles, c)
+    if sc is not None and sc != access.READ:
+        raise TeamError("You can open this Case File already.", 409, "can_open")
+    if not access.may_open_with_reason(roles, c):
+        raise TeamError("Only a doctor placed in a department (a consultant or a resident) opens a Case File with a reason.", 403, "not_placed")
+    try:
+        w = access.open_doctor_window(user, case_id, reason, via)
+    except access.AccessError as e:
+        raise TeamError(str(e), e.status, e.code or "bad_reason")
+    store.audit(case_id, {"kind": "break_glass_doctor", "by": user, "reason": w["reason"], "via": w["via"], "until": w["until"],
+                          "window": w["id"], "renewed": w["renewed"]})
+    org.audit("break_glass_doctor", user, case_id=case_id, reason=w["reason"], via=w["via"], until=w["until"])
+    name = profiles.display_name(user)
+    tell_consultants(c, "break_glass", f"Opened with a reason: {name} opened the Case File of {patient_line(c)} ({case_id})",
+                     f"{name} reads this Case File read-only until {_dmy_hm(w['until'])}. Reason: {w['reason']}"
+                     + (f" ({w['via']})" if w["via"] else ""), user=user, until=w["until"], by=user, via=w["via"], read_only=True)
+    return w
+
+
+def close_break_glass_doctor(user: str, case_id: str) -> dict:
+    """The doctor closes its own window on a Case File (audited, access.close_doctor_window); 404 `no_window` when none is open."""
+    w = access.close_doctor_window(user, case_id, by=user)
+    if not w:
+        raise TeamError("You have no open window on this Case File.", 404, "no_window")
+    return w

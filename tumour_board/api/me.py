@@ -2,16 +2,17 @@
 
 GET /me tells the interface who is signed in and what it holds: the Tumour Board roles (org.roles), the primary role that picks the
 start page, whether the first password must still be changed, the profile (profiles.py), the counts for the top bar (unread
-notifications, what waits for the person, the open requests of its departments), the hospital and the features the server has
-(video, push). POST /me/password changes the password through the Vaidyx login system (which clears the must-change flag);
-PUT /me/profile saves the profile; GET /me/activity lists the person's own audited actions across the Case Files, the organisation and
-the board sessions; GET /activity is the whole log for the auditor, the MDT Coordinator and the root admin. No model calls."""
+notifications, what waits for the person, the open requests of its departments), the hospital, the features the server has
+(video, push) and the Case Files the doctor opened read-only with a reason (break_glass, night-v3 item 1.9). POST /me/password
+changes the password through the Vaidyx login system (which clears the must-change flag); PUT /me/profile saves the profile;
+GET /me/activity lists the person's own audited actions across the Case Files, the organisation and the board sessions;
+GET /activity is the whole log for the auditor, the MDT Coordinator and the root admin. No model calls."""
 import importlib.util, os
 from pathlib import Path
 
 from fastapi import Request
 
-from tumour_board import board, config, notify, org, profiles, proposals, store
+from tumour_board import access, board, config, notify, org, profiles, proposals, store
 from tumour_board.api.common import RateLimit, auth_manager, body, fail, make_router, need, roles
 
 router = make_router()
@@ -107,7 +108,15 @@ async def me(request: Request):
             "setup_needed": not profiles.setup_complete(u, doctor), "counts": counts(r),
             "hospital": {"name": h.get("name") or "", "level": h.get("level") or "", "pmjay_empanelled": bool(h.get("pmjay_empanelled", True))},
             "features": features(), "departments": [{"id": d["id"], "name": d["name"], "group": d.get("group"), "role": d.get("role")} for d in org.my_departments(r)]
-            if not r.get("admin") else []}
+            if not r.get("admin") else [],
+            "break_glass": break_glass_mine(r)}
+
+
+def break_glass_mine(r: dict) -> list:
+    """The doctor's open windows on Case Files opened with a reason (night-v3 item 1.9): the page shows "Read-only until ..." on them."""
+    if not access.placed_doctor(r):
+        return []
+    return [{k: w.get(k) for k in ("case_id", "until", "reason", "via")} for w in access.doctor_windows(r.get("user") or "")]
 
 
 @router.post("/me/password")

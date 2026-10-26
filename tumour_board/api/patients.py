@@ -75,7 +75,7 @@ async def patient_case_files(request: Request, identifier: str = "", case_id: st
             c = store.get_case(store.safe_id(case_id))
         except ValueError:
             c = None
-        if not c or access.scope(r, c) != access.FULL:  # a Case File this person cannot open is not named (nor its patient's other files)
+        if not c or access.scope(r, c) not in (access.FULL, access.READ):  # a Case File this person cannot open is not named (nor its patient's other files); a window opened with a reason reads it (item 1.9)
             fail(404, "Case not found", "not_found")
         system = (c["his"].get("kind"), c["his"].get("label")) if isinstance(c.get("his"), dict) else None
         found = his_case.same_patient_cases(his_case.case_uhids(c), exclude=c["case_id"], his=system)

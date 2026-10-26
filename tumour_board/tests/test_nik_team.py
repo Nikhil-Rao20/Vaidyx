@@ -328,10 +328,10 @@ def test_consent_is_recorded_by_the_owner(full, tb002):
 
 def test_break_glass_opens_one_case_file_for_the_vaidyx_admin_with_a_reason(full, tb002):
     r = full.as_(VX).get(f"/cases/{CASE}")
-    assert r.status_code == 403 and "break-glass" in r.json()["detail"]
+    assert r.status_code == 403 and "break-glass" in r.json()["detail"]["message"] and r.json()["detail"]["break_glass"] is False
     assert CASE not in {c["case_id"] for c in full.as_(VX).get("/cases").json().get("cases", [])}
     assert full.as_(VX).post("/break-glass", {"case_id": CASE, "reason": ""}).status_code == 400
-    assert full.as_(RAO).post("/break-glass", {"case_id": CASE, "reason": "x"}).status_code == 403
+    assert full.as_(RAO).post("/break-glass", {"case_id": CASE, "reason": "x"}).status_code == 409  # the owner opens it already (item 1.9)
     assert full.as_(ROOT).post("/break-glass", {"case_id": CASE, "reason": "x"}).status_code == 403
     assert full.as_(VX).post("/break-glass", {"case_id": "TB-NONE", "reason": "x"}).status_code == 404
     r = full.as_(VX).post("/break-glass", {"case_id": CASE, "reason": "support ticket 42 (synthetic)"})
