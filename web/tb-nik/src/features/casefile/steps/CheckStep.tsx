@@ -2,7 +2,8 @@
 // values (histology, grade, receptors and biomarkers, stage as written) each with a one-tap Confirm that names the value; on the right
 // the report, scrolled to the line with it highlighted. "This is wrong" offers both: correct it (the right value and a reason, shown
 // "corrected by Dr X", the report line kept) or send a request to the department to amend the report. A resident on the team sends
-// each key value to the treating consultant for sign-off instead (night-v3 item 1.8).
+// each key value to the treating consultant for sign-off instead (night-v3 item 1.8). Two reports that differ stay listed after the
+// doctor picks the value the board uses ("Picked: 4.6 cm from the CT report, by Dr X", with Undo); they no longer count (item 1.7).
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ArrowRight, Check, CheckCircle2, Clock, Send, ShieldQuestion, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,25 @@ export interface CheckHandlers {
   askAmend: (k: CheckItem) => Promise<void>;
   /** The review of a problem value (pick between the reports), from the existing review panel. */
   review: (slotId: string, onDone: () => void) => ReactNode;
+  /** Take back the value picked for the board when two reports differ (night-v3 item 1.7). */
+  undoPick: (k: CheckItem) => Promise<void>;
+}
+
+function PickedLine({ p, h, canUndo }: { p: CheckItem; h: CheckHandlers; canUndo: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  if (!p.picked) return null;
+  return (
+    <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs" data-testid="problem-picked">
+      <span className="text-ok">Picked: {p.picked.value} from {niceTitle(p.picked.doc_title) || "the report"}, by {p.picked.by_name || p.picked.by || "a doctor"}</span>
+      {canUndo ? (
+        <Button size="xs" variant="ghost" disabled={busy} onClick={() => void (async () => { setBusy(true); setErr(null); try { await h.undoPick(p); } catch (e) { setErr(errorText(e)); } finally { setBusy(false); } })()}>
+          <Undo2 className="size-3" />Undo
+        </Button>
+      ) : null}
+      {err ? <span role="alert" className="basis-full text-bad">{err}</span> : null}
+    </span>
+  );
 }
 
 const targetOf = (it?: CheckItem | null): SourceTarget | null => (it?.quote?.doc_id ? { docId: it.quote.doc_id, page: it.quote.page ?? 0, quote: it.quote.text || undefined, factId: it.fact_id ?? undefined, title: it.quote.doc_title } : null);
@@ -94,7 +114,8 @@ export function CheckStep({ steps, caseId, docs, h, canConfirm, consultantName, 
   const { problems, keys } = steps.check;
   const resident = steps.mode === "prepare" && steps.role === "resident";
   const all = useMemo(() => [...problems, ...keys], [problems, keys]);
-  const [sel, setSel] = useState<string | null>(target ?? problems[0]?.slot_id ?? keys.find((k) => !k.confirmed)?.slot_id ?? keys[0]?.slot_id ?? null);
+  const openProblems = problems.filter((p) => !p.resolved);
+  const [sel, setSel] = useState<string | null>(target ?? openProblems[0]?.slot_id ?? keys.find((k) => !k.confirmed)?.slot_id ?? problems[0]?.slot_id ?? keys[0]?.slot_id ?? null);
   useEffect(() => { if (target) setSel(target); }, [target]);
   const current = all.find((x) => x.slot_id === sel) ?? null;
   const t = targetOf(current);
@@ -103,7 +124,7 @@ export function CheckStep({ steps, caseId, docs, h, canConfirm, consultantName, 
     const n = (d?.department || "").replace(/_/g, " ");
     return n ? `${n.charAt(0).toUpperCase()}${n.slice(1)} department` : "the department";
   };
-  const open = problems.length + keys.filter((k) => !k.confirmed).length;
+  const open = openProblems.length + keys.filter((k) => !k.confirmed).length;
   if (!all.length) {
     return (
       <div className="space-y-4" data-testid="section-check">
@@ -119,15 +140,16 @@ export function CheckStep({ steps, caseId, docs, h, canConfirm, consultantName, 
           <p className="text-sm text-muted-foreground">{open ? `${open} to do. Read each value against its report line on the right.` : "Every value here is confirmed."}</p>
           {problems.length ? (
             <section className="space-y-2" aria-labelledby="h-problems">
-              <h2 id="h-problems" className="flex items-center gap-1.5 text-[15px]"><ShieldQuestion className="size-4 text-warn" aria-hidden />Please check ({problems.length})</h2>
+              <h2 id="h-problems" className="flex items-center gap-1.5 text-[15px]"><ShieldQuestion className="size-4 text-warn" aria-hidden />Please check ({openProblems.length}{openProblems.length !== problems.length ? ` of ${problems.length}` : ""})</h2>
               <ul className="space-y-2">
                 {problems.map((p) => (
-                  <li key={p.slot_id} className={cn("rounded-lg border p-3", sel === p.slot_id ? "border-primary bg-secondary/40" : "border-border bg-card")} data-testid="problem-row">
+                  <li key={p.slot_id} className={cn("rounded-lg border p-3", sel === p.slot_id ? "border-primary bg-secondary/40" : "border-border bg-card")} data-testid="problem-row" data-resolved={p.resolved ? "yes" : "no"}>
                     <button type="button" className="block w-full text-left" onClick={() => setSel(p.slot_id)}>
-                      <span className="block text-sm font-semibold text-foreground">{p.label}</span>
-                      {sel !== p.slot_id ? <span className="block text-xs text-muted-foreground">{p.why || "Please check against the report"}</span> : null}
+                      <span className="flex items-center gap-2 text-sm font-semibold text-foreground">{p.label}{p.resolved ? <CheckCircle2 className="size-3.5 text-ok" aria-hidden /> : null}</span>
+                      {sel !== p.slot_id && !p.picked ? <span className="block text-xs text-muted-foreground">{p.why || "Please check against the report"}</span> : null}
                     </button>
-                    {sel === p.slot_id ? <div className="mt-2 border-t border-border pt-2">{h.review(p.slot_id, () => setSel(problems.find((x) => x.slot_id !== p.slot_id)?.slot_id ?? keys.find((k) => !k.confirmed)?.slot_id ?? null))}</div> : null}
+                    {p.picked && sel !== p.slot_id ? <PickedLine p={p} h={h} canUndo={canConfirm} /> : null}
+                    {sel === p.slot_id ? <div className="mt-2 border-t border-border pt-2">{h.review(p.slot_id, () => setSel(openProblems.find((x) => x.slot_id !== p.slot_id)?.slot_id ?? keys.find((k) => !k.confirmed)?.slot_id ?? null))}</div> : null}
                   </li>
                 ))}
               </ul>

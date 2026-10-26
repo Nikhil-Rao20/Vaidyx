@@ -484,6 +484,9 @@ def _fact_slot(fid, recs, rows, facts, typed, needs, disc, typable, required_ids
         s["report_value"] = {"value": g.get("value") or "", "quote": _quote(g, fid), "as_of": g.get("date")}
     elif good:
         g = sorted(good, key=lambda h: ((h.get("date") or ""), (h.get("report_date") or "")))[-1]
+        pk = (f.get("current") or {}).get("picked")  # the value a doctor picked for the board when two reports differ (night-v3 item 1.7)
+        if pk:
+            g = next((h for h in hist if h.get("doc_id") == pk.get("doc_id") and h.get("value") == pk.get("value")), g)
         s["status"] = "found"; s["value"] = g.get("value") or ""; s["as_of"] = g.get("date"); s["quote"] = _quote(g, fid)
         if g.get("confirmed_by"):
             s["confirmed_by"] = g["confirmed_by"]; s["note"] = f"confirmed by {display_name(g['confirmed_by'])} against the source, no quote"
@@ -494,9 +497,11 @@ def _fact_slot(fid, recs, rows, facts, typed, needs, disc, typable, required_ids
             s["confirmation"] = {"type": need.get("type"), "key": f"{need.get('doc_id')}:{fid}", "doc_id": need.get("doc_id"), "fact_id": fid, "value": need.get("value"),
                                  "page": need.get("page"), "start": need.get("start"), "end": need.get("end"), "boxes": need.get("boxes") or [], "why": need.get("why") or ""}
         elif item:
-            s["status"] = "needs_confirmation"
+            s["status"] = "found" if item.get("picked") else "needs_confirmation"  # a picked value settles it; the difference stays shown
             s["confirmation"] = {"type": "note_discordance", "key": item["key"], "fact_id": fid, "kind": item.get("kind"), "kind_label": item.get("kind_label"),
                                  "why": item.get("text") or "", "citations": item.get("citations") or []}
+            if item.get("picked"):
+                s["picked"] = s["confirmation"]["picked"] = item["picked"]
     elif rec_rows and not live:
         s["status"] = "not_needed"
         w = (rec_rows[0].get("waiver") or {}) if rec_rows[0]["status"] == "waived" else {}
@@ -607,7 +612,7 @@ def build(case_id, roles=None) -> dict:
     try:
         disc = {}
         for it in discord.items(case_id, st):
-            if it.get("severity") == "review" and not it.get("noted") and it.get("field") and it["field"] not in disc:
+            if it.get("severity") == "review" and (not it.get("noted") or it.get("picked")) and it.get("field") and it["field"] not in disc:
                 disc[it["field"]] = it
     except Exception:
         disc = {}

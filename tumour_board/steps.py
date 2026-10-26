@@ -402,9 +402,13 @@ def build(case_id, roles=None) -> dict:
     key_checks = st.get("key_checks") if isinstance(st.get("key_checks"), dict) else {}
     problems, keys = [], []
     for s in all_slots:
-        if s.get("kind") == "fact" and s.get("status") == "needs_confirmation" and s.get("fact_id") != "clinical_question":
+        picked = s.get("picked") if s.get("status") == "found" else None  # two reports differ and a doctor picked the value the board uses (1.7)
+        if s.get("kind") == "fact" and (s.get("status") == "needs_confirmation" or picked) and s.get("fact_id") != "clinical_question":
             conf = s.get("confirmation") or {}
-            problems.append({**_row(s), "kind": "problem", "confirmation": conf or None, "why": _problem_words(conf), "detail": conf.get("why") or s.get("note") or ""})
+            row = {**_row(s), "kind": "problem", "confirmation": conf or None, "why": _problem_words(conf), "detail": conf.get("why") or s.get("note") or ""}
+            if picked:  # settled: still listed, with the pick and its Undo, never counted as left
+                row.update(picked=picked, resolved=True, why=f"Picked: {picked.get('value')} from {picked.get('doc_title')}, by {picked.get('by_name') or picked.get('by')}")
+            problems.append(row)
     for fid in key_facts(prot) if prot else []:
         s = by_fact.get(fid)
         if not s or s.get("status") != "found" or any(p["fact_id"] == fid for p in problems):
@@ -413,7 +417,8 @@ def build(case_id, roles=None) -> dict:
         doc_id = (s.get("quote") or {}).get("doc_id") or ""
         done = k.get("value") == (s.get("value") or "") and k.get("doc_id") == doc_id
         keys.append({**_row(s), "kind": "key", "confirmed": done, "confirmed_by": slots.display_name(k.get("by")) if done else "", "confirmed_at": k.get("at") if done else None})
-    check_todo = len(problems) + sum(1 for k in keys if not k["confirmed"])
+    open_problems = [p for p in problems if not p.get("resolved")]
+    check_todo = len(open_problems) + sum(1 for k in keys if not k["confirmed"])
 
     # Pre-Authorization (B6): what the board still needs, grouped by the department that will receive the request.
     missing, waiting, optional = [], [], []
@@ -502,7 +507,7 @@ def build(case_id, roles=None) -> dict:
     for d in doc_todo:
         todo.append({"id": f"doc:{d['doc_id']}", "section": "reports", "label": d["title"], "why": d["check"]["reasons"][0],
                      "action": {"kind": "open_report", "label": "Check", "doc_id": d["doc_id"]}})
-    for p in problems:
+    for p in open_problems:
         todo.append({"id": f"check:{p['slot_id']}", "section": "check", "label": p["label"], "why": p["why"] or "Please check", "action": {"kind": "check", "label": "Check", "slot_id": p["slot_id"]}})
     unconfirmed = [k for k in keys if not k["confirmed"]]
     if unconfirmed:
@@ -517,7 +522,7 @@ def build(case_id, roles=None) -> dict:
                      "action": {"kind": "remind", "label": "Send reminder", "action_id": (w["request"] or {}).get("action_id")}} for w in waiting]
 
     warnings_list = warnings(case, docs, view)
-    nxt = _next(missing, groups, doc_todo, problems, unconfirmed, question_done, prose, sent, warnings_list)
+    nxt = _next(missing, groups, doc_todo, open_problems, unconfirmed, question_done, prose, sent, warnings_list)
     glance = _glance(prot, by_fact)
     return {"case_id": case_id, "mode": "prepare" if prepare else "read", "role": "consultant" if consultant else "resident" if resident else "reader",
             "sections": sections, "next": nxt if prepare else None, "todo": todo if prepare else [], "waiting": waiting_rows if prepare else [],

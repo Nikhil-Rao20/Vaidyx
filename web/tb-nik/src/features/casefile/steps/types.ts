@@ -1,6 +1,6 @@
 // What GET /cases/{id}/steps answers (tumour_board/steps.py): the guided Case File, six sections in working order with their status,
 // the next action behind Continue, To do and Waiting, warnings, the patient at a glance and every document's check.
-import type { SlotConfirmation, SlotQuote, SlotRequest, SlotsResponse } from "../types";
+import type { PickedValue, SlotConfirmation, SlotQuote, SlotRequest, SlotsResponse } from "../types";
 
 export type SectionId = "overview" | "question" | "reports" | "check" | "pre_authorization" | "summary";
 export type SectionStatus = "home" | "done" | "todo" | "waiting" | "overdue" | "not_started" | "working" | "empty" | "not_needed";
@@ -57,7 +57,11 @@ export interface StepDocument {
   earlier: Array<{ doc_id: string; title: string; version?: number | null; status: string }>;
 }
 
-export interface CheckItem extends StepRow { kind: "problem" | "key"; confirmation?: SlotConfirmation | null; why?: string; detail?: string; confirmed?: boolean; confirmed_by?: string; confirmed_at?: string | null }
+export interface CheckItem extends StepRow {
+  kind: "problem" | "key"; confirmation?: SlotConfirmation | null; why?: string; detail?: string; confirmed?: boolean; confirmed_by?: string; confirmed_at?: string | null;
+  /** Two reports differ and a doctor picked the value the board uses (night-v3 item 1.7): still listed, settled, never counted as left. */
+  picked?: PickedValue | null; resolved?: boolean;
+}
 
 export interface MissingItem extends StepRow {
   kind: "record" | "fact" | string;

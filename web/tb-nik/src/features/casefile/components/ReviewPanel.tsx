@@ -1,16 +1,19 @@
 // Review in the side panel: the values that disagree, each with its quote and page, the factual differences between
 // them, and Approve / Edit / Not needed. After a decision the panel moves to the next item that needs the doctor.
+// Two reports differ (night-v3 item 1.7, design B5): both values with their report, and "Use this value for the board" on each; nothing
+// is chosen for the doctor. The pick is a board_uses confirmation (a resident's goes to the consultant for sign-off); the difference stays
+// shown with the pick and its Undo.
 import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ArrowRight, Check, PenLine, XCircle } from "lucide-react";
+import { ArrowRight, Check, CheckCircle2, Clock, PenLine, Undo2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/DateInput";
-import { postConfirmation, slotNotNeeded } from "../api";
-import type { CaseFile, Slot } from "../types";
+import { postConfirmation, slotNotNeeded, undoConfirmation } from "../api";
+import type { CaseFile, DiscordCitation, Slot } from "../types";
 import type { SourceTarget } from "./SourceViewer";
 import { docStatusChip } from "./SourceViewer";
-import { LoadingButton, StatusChip, errorText, fmtDate, useAnnounce } from "./common";
+import { LoadingButton, StatusChip, errorText, fmtDate, indianDates, niceTitle, useAnnounce } from "./common";
 import { cn } from "@/lib/utils";
 
 interface Candidate { value: string; quote: string; doc_id: string; doc_title: string; page: number; date?: string | null; status?: string; verification?: string; current: boolean; superseded?: boolean }
@@ -96,6 +99,31 @@ export function ReviewPanel({ caseId, cf, slot, queue, derived, resident, consul
     onSuccess: advance,
   });
 
+  // Two reports differ: pick the value the board uses (night-v3 item 1.7)
+  const cites: DiscordCitation[] = slot.confirmation?.citations ?? [];
+  const boardPick = slot.confirmation?.picked ?? slot.picked ?? null;
+  const [sentPick, setSentPick] = useState<string | null>(null);
+  useEffect(() => { setSentPick(null); }, [slot.id]);
+  const pick = useMutation({
+    mutationFn: async (c: DiscordCitation) => {
+      if (!factId || !c.value) throw new Error("There is no value to pick on this line.");
+      const body = { type: "board_uses", key: factId, fields: { doc_id: c.doc_id, value: c.value }, reason: reason.trim() };
+      if (resident) { await onPropose("confirm", body, `Pick the value for the board: ${slot.label}, ${c.value}`); setSentPick(c.doc_id); return; }
+      await postConfirmation(caseId, body);
+      await onDone();
+      announce(`The board uses ${c.value} from ${niceTitle(c.doc_title) || "the report"}.`);
+    },
+  });
+  const unpick = useMutation({
+    mutationFn: async () => {
+      if (!boardPick) return;
+      await undoConfirmation(caseId, boardPick.confirmation);
+      await onDone();
+      announce("Pick undone. Both values are open again.");
+    },
+  });
+  const otherSide = boardPick ? cites.find((x) => x.doc_id !== boardPick.doc_id) : undefined;
+
   const diffs = list.length >= 2 ? differences(list[0], list[1]) : [];
   const signLabel = resident ? `Ask Dr ${consultantName} to sign off` : ctype === "note_discordance" ? "Noted, I read the difference" : "Approve";
 
@@ -113,16 +141,53 @@ export function ReviewPanel({ caseId, cf, slot, queue, derived, resident, consul
 
       {ctype === "note_discordance" ? (
         <div className="space-y-2 text-sm" data-testid="review-discordance">
-          <p className="text-foreground">{slot.confirmation?.kind_label ? <span className="font-medium">{slot.confirmation.kind_label}: </span> : null}{slot.confirmation?.why || slot.note}</p>
-          <ul className="space-y-1">
-            {(slot.confirmation?.citations ?? []).map((c, i) => (
-              <li key={i} className="rounded-md border border-border p-2">
-                <blockquote className="border-l-2 border-primary/60 pl-2 text-foreground">{c.quote}</blockquote>
-                <button type="button" className="quote-chip mt-1 hover:brightness-95" onClick={() => onOpenSource({ docId: c.doc_id, page: c.page ?? 0, quote: c.quote, title: c.doc_title })}>{c.doc_title || "record"} p. {(c.page ?? 0) + 1}</button>
-              </li>
-            ))}
+          <p className="text-foreground">{slot.confirmation?.kind_label ? <span className="font-medium">{slot.confirmation.kind_label}: </span> : null}{indianDates(slot.confirmation?.why || slot.note)}</p>
+          {boardPick ? (
+            <div className="rounded-md border border-primary/50 bg-secondary/40 p-2.5" role="status" data-testid="review-picked">
+              <p className="text-foreground">
+                The board uses <span className="font-semibold">{boardPick.value}</span> from {niceTitle(boardPick.doc_title) || "the report"} ({boardPick.by_name || boardPick.by || "a doctor"}{boardPick.at ? `, ${fmtDate(boardPick.at)}` : ""}).
+                {otherSide?.value ? <> The other report says <span className="font-semibold">{otherSide.value}</span>.</> : null}
+              </p>
+              {!resident ? (
+                <LoadingButton size="xs" variant="ghost" className="mt-1" loading={unpick.isPending} onClick={() => unpick.mutate()} data-testid="pick-undo"><Undo2 className="size-3" />Undo</LoadingButton>
+              ) : null}
+              {unpick.isError ? <p role="alert" className="text-xs text-bad">{errorText(unpick.error)}</p> : null}
+            </div>
+          ) : null}
+          <ul className="space-y-2" aria-label="The two values">
+            {cites.map((c, i) => {
+              const uses = !!boardPick && boardPick.doc_id === c.doc_id;
+              return (
+                <li key={`${c.doc_id}-${i}`} className={cn("rounded-md border p-2.5", uses ? "border-primary bg-secondary/40" : "border-border")} data-testid="pick-card">
+                  {c.value ? <p className="text-[1.05rem] font-semibold text-foreground">{c.value}</p> : null}
+                  <p className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
+                    <span>{niceTitle(c.doc_title) || "record"}</span>
+                    {c.date ? <span>{fmtDate(c.date)}</span> : null}
+                    {c.status ? <span>{c.final === false ? `${c.status.toLowerCase()}, not final` : c.status.toLowerCase()}</span> : null}
+                  </p>
+                  {c.quote ? <blockquote className="mt-1 border-l-2 border-primary/60 pl-2 text-foreground">{c.quote}</blockquote>
+                    : c.confirmed_by ? <p className="mt-1 text-xs text-muted-foreground">confirmed by {c.confirmed_by} against the report, no quote</p> : null}
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <button type="button" className="quote-chip hover:brightness-95" onClick={() => onOpenSource({ docId: c.doc_id, page: c.page ?? 0, quote: c.quote, title: c.doc_title })}>{niceTitle(c.doc_title) || "record"} p. {(c.page ?? 0) + 1}</button>
+                    {uses ? <StatusChip kind="ok" icon={CheckCircle2}>The board uses this value</StatusChip> : null}
+                    {!boardPick && c.value && sentPick !== c.doc_id ? (
+                      <LoadingButton size="xs" variant="outline" loading={pick.isPending && pick.variables?.doc_id === c.doc_id} disabled={pick.isPending || act.isPending || !!sentPick}
+                        onClick={() => pick.mutate(c)} data-testid="pick-value">
+                        <Check className="size-3.5" />Use this value for the board
+                      </LoadingButton>
+                    ) : null}
+                    {sentPick === c.doc_id ? <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" data-testid="pick-sent"><Clock className="size-3.5" aria-hidden />Sent to Dr {consultantName} for sign-off</span> : null}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
-          <p className="text-xs text-muted-foreground">Approve records that you have read the difference; it stays listed, greyed. Nothing is changed in the records.</p>
+          {pick.isError ? <p role="alert" className="text-xs text-bad">{errorText(pick.error)}</p> : null}
+          {!boardPick ? (
+            <p className="text-xs text-muted-foreground">
+              Nothing is chosen for you. Pick the value the board should use{resident ? ` (Dr ${consultantName} signs it off)` : ""}, or record that you read the difference. Either way both reports stay on file and the difference stays listed.
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -194,7 +259,7 @@ export function ReviewPanel({ caseId, cf, slot, queue, derived, resident, consul
           <Input id="review-edit" autoFocus value={edited} onChange={(e) => setEdited(e.target.value)} className="mt-1 h-9 text-sm" maxLength={200} />
         </div>
       ) : null}
-      {mode === "not_needed" ? (
+      {boardPick ? null : mode === "not_needed" ? (
         <div>
           <label htmlFor="review-reason" className="text-sm font-medium">Why is it not needed?</label>
           <Input id="review-reason" autoFocus value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 h-9 text-sm" maxLength={200} placeholder="Recorded with your name" />
@@ -208,7 +273,7 @@ export function ReviewPanel({ caseId, cf, slot, queue, derived, resident, consul
       {act.isError ? <p role="alert" className="text-xs text-bad">{errorText(act.error)}</p> : null}
 
       <div className="flex flex-wrap gap-1.5 pt-1">
-        {mode === "pick" ? (
+        {boardPick ? null : mode === "pick" ? (
           <>
             <LoadingButton loading={act.isPending && act.variables === "approve"} onClick={() => act.mutate("approve")} disabled={act.isPending || (ctype === "confirm_value" && !list.length)} data-testid="review-approve"><Check className="size-4" />{signLabel}</LoadingButton>
             {ctype === "confirm_value" ? <Button variant="outline" onClick={() => { setMode("edit"); setEdited(list[picked]?.value ?? ""); }} disabled={act.isPending}><PenLine className="size-4" />Edit</Button> : null}

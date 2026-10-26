@@ -13,6 +13,8 @@ value; when a later final report records a different value, the record carries a
 once ("the decision of 24 Sep cited PD-L1 60 % from report D1; the amended report D2 of 28 Sep records 6 %").
 
 A person marks a discordance as noted (a `note_discordance` confirmation: audited, undoable); noted items stay listed, greyed.
+A doctor may instead pick the report whose value the board uses (a `board_uses` confirmation, night-v3 item 1.7): the item stays listed,
+carries `picked` and reads as settled; the summary keeps the line "Two reports differ on ...; the board uses ... (picked by Dr X)".
 Narrative fields (presenting complaint, comorbidities, imaging findings in prose) are not compared: prose differs without conflicting.
 """
 import re
@@ -95,6 +97,24 @@ def _when(e):
     return e.get("date") or "date not stated"
 
 
+def _pick_of(cur: dict) -> dict | None:
+    """The doctor's pick on a fact's current value (rules.resolve_facts), in the shape the items, the slots and the steps show."""
+    p = (cur or {}).get("picked")
+    if not p:
+        return None
+    from .slots import display_name  # slots imports this module
+    return {"doc_id": p.get("doc_id"), "doc_title": cur.get("doc_title") or p.get("doc_id"), "value": p.get("value"), "by": p.get("by"),
+            "by_name": display_name(p.get("by")) or p.get("by") or "", "at": p.get("at"), "confirmation": p.get("confirmation")}
+
+
+def picked_text(it: dict) -> str:
+    """The line the summary keeps for a difference the doctor settled by picking a value: both values stay named."""
+    p = it.get("picked") or {}
+    a, b = (it.get("citations") or [{}, {}])[:2]
+    return (f"Two reports differ on {it.get('label')}: \"{a.get('value')}\" ({a.get('doc_title')}) and \"{b.get('value')}\" ({b.get('doc_title')}); "
+            f"the board uses \"{p.get('value')}\" (picked by {p.get('by_name') or p.get('by') or 'a doctor'}).")
+
+
 def items(case_id: str, state: dict = None) -> list:
     """Every discordance of the Case File (review first, then information, noted last); noted ones carry `noted` (who, when)."""
     from . import rules
@@ -145,12 +165,18 @@ def items(case_id: str, state: dict = None) -> list:
                 continue
             out.append(_item("non_final_differs", fid, label, cur, e, f"{label}: the {(e.get('doc_status') or 'non-final').lower()} report ({e.get('doc_title')}, {_when(e)}) "
                                                                     f"records \"{e['value']}\"; the final report ({cur.get('doc_title')}, {_when(cur)}) records \"{cur['value']}\" and is the one used."))
+    for it in out:  # a value picked for the board settles every difference on that field; the items stay listed (night-v3 item 1.7)
+        pk = _pick_of((facts.get(it["field"]) or {}).get("current"))
+        if pk:  # the text then says which value the board uses ("the newer value counts" / "is the one used" would no longer be true)
+            it["picked"] = pk
+            it["text_before_pick"] = it["text"]
+            it["text"] = picked_text(it)
     out += decision_watch(case_id, st, facts, cat)
     notes = st.get("discordance_notes") or {}
     for it in out:
         if it["key"] in notes:
             it["noted"] = notes[it["key"]]
-    out.sort(key=lambda it: (bool(it.get("noted")), it["severity"] != "review"))
+    out.sort(key=lambda it: (bool(it.get("noted") or it.get("picked")), it["severity"] != "review"))
     return out
 
 
@@ -188,19 +214,24 @@ def decision_watch(case_id: str, st: dict = None, facts: dict = None, cat: dict 
 
 def summary(case_id: str, state: dict = None) -> dict:
     its = items(case_id, state)
-    return {"items": its, "open_review": sum(1 for x in its if x["severity"] == "review" and not x.get("noted")),
-            "info": sum(1 for x in its if x["severity"] == "info" and not x.get("noted")), "noted": sum(1 for x in its if x.get("noted")),
+    return {"items": its, "open_review": sum(1 for x in its if x["severity"] == "review" and not x.get("noted") and not x.get("picked")),
+            "info": sum(1 for x in its if x["severity"] == "info" and not x.get("noted") and not x.get("picked")), "noted": sum(1 for x in its if x.get("noted")),
+            "picked": sum(1 for x in its if x.get("picked")),
             "decision_watch": sum(1 for x in its if x["kind"] == "decision_watch" and not x.get("noted"))}
 
 
 def points(case_id: str, state: dict = None) -> list:
-    """Code-made points for review for the summary and the briefs: the open review discordances, each citing both reports."""
+    """Code-made points for review for the summary and the briefs: the open review discordances, each citing both reports. A difference settled
+    by a pick stays, as the line "Two reports differ on ...; the board uses ... (picked by Dr X)" (night-v3 item 1.7)."""
     out = []
     for it in items(case_id, state):
-        if it["severity"] != "review" or it.get("noted"):
+        if it["severity"] != "review" or (it.get("noted") and not it.get("picked")):
             continue
         cites = [{k: c[k] for k in ("doc_id", "quote", "page", "start", "end", "doc_title", "date", "status") if k in c} for c in it["citations"] if c.get("quote")]
-        out.append({"text": it["text"], "citations": cites, "from_rules": True, "kind": it["kind"]})
+        pt = {"text": picked_text(it) if it.get("picked") else it["text"], "citations": cites, "from_rules": True, "kind": it["kind"]}
+        if it.get("picked"):
+            pt["picked"] = it["picked"]
+        out.append(pt)
     return out
 
 
@@ -209,7 +240,8 @@ def text(case_id: str, state: dict = None) -> str:
     its = [it for it in items(case_id, state) if not it.get("noted")]
     if not its:
         return ""
-    return "DISCORDANCES FOUND BY THE SYSTEM (reports that disagree; a point for review may restate one with its quotes):\n" + "\n".join(f"- {it['text']}" for it in its[:12])
+    return "DISCORDANCES FOUND BY THE SYSTEM (reports that disagree; a point for review may restate one with its quotes):\n" + "\n".join(
+        f"- {picked_text(it) if it.get('picked') else it['text']}" for it in its[:12])
 
 
 NOTIFY_KIND = "decision_value_changed"
