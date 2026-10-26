@@ -66,6 +66,7 @@ Take the first phase in the plan with unfinished items and work through its item
   fact keeps its verified source line.
 - **Scope.** No image reading by any model, no diagnosis, no treatment advice. The specialty agents and the similar Case Files follow the
   owner decisions in `PLAN.md` section 2 exactly, with their labels.
+- **Login files:** never print, cat, awk or grep any column of `~/vaidyx/.tb_v2_demo_logins`, `~/vaidyx/.vaidyx_admin_login` or `data/his_mock/logins.tsv` except the first (the username). Read passwords only inside test code that uses them without printing.
 - **Synthetic data only.** New test patients go into the demo HIS through its seed (synthetic, marked SYNTHETIC). Logins come from
   `~/vaidyx/.tb_v2_demo_logins`, read in code; never print a password anywhere, not in the log, not in a commit.
 - **Precision.** Model weights in bf16 or fp16 as in the plan; no quantization.
