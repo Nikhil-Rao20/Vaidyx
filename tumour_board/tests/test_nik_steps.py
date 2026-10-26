@@ -174,3 +174,99 @@ def test_the_count_is_one_everywhere(nik_app, tb001):
     assert n == get(tc)["left"]
     rows = {x["case_id"]: x for x in tc.get("/api/tb/case-list").json()["cases"]}
     assert rows[CASE]["left_before_board"] == n
+
+
+# ---- a resident's sign-offs (night-v3 item 1.8): the reason and a key value become proposals the consultant approves ------------------
+
+def _outsider(people):
+    """A resident of a department not on the Case File (not on its team)."""
+    import copy
+    from tumour_board import org
+    o = copy.deepcopy(people)
+    o["users"]["res.kiran"] = {"departments": {"breast_surgery": "resident"}, "display_name": "Dr Kiran"}
+    org.save(o, by="test")
+
+
+def _approve(tc, who, pid, user="dr.rao"):
+    who["user"] = user
+    return tc.post(f"/api/tb/cases/{CASE}/proposals/{pid}/approve")
+
+
+def _pending(pid):
+    from tumour_board import proposals
+    return proposals.find(store.get_case(CASE), pid)["status"]
+
+
+def test_a_residents_reason_for_discussion_is_signed_off_by_the_consultant(nik_app, tb001, people):
+    tc, who = nik_app
+    _outsider(people)
+    who["user"] = "res.asha"
+    assert tc.put(f"/api/tb/cases/{CASE}/reason", json={"value": "whatever"}).status_code == 400  # checked before it is stored
+    r = tc.put(f"/api/tb/cases/{CASE}/reason", json={"value": "recurrence"})
+    assert r.status_code == 200, r.text
+    p = r.json()["proposal"]
+    assert p["action"] == "reason" and p["payload"] == {"value": "recurrence"} and p["status"] == "pending" and p["by"] == "res.asha"
+    assert store.get_case(CASE).get("board_reason") is None  # nothing changed yet
+    assert "board_reason" not in [e.get("kind") for e in store.read_audit(CASE)]
+    # the consultant sees it under "Sign-offs from your team" and approves: written in the consultant's name
+    who["user"] = "dr.rao"
+    assert get(tc)["signoffs"] == 1
+    r = _approve(tc, who, p["id"])
+    assert r.status_code == 200, r.text
+    rec = store.get_case(CASE)["board_reason"]
+    assert rec["value"] == "recurrence" and rec["by"] == "dr.rao"
+    ev = next(e for e in store.read_audit(CASE) if e.get("kind") == "board_reason")
+    assert ev["by"] == "dr.rao"
+    ap = next(e for e in store.read_audit(CASE) if e.get("kind") == "proposal_approved")
+    assert ap["by"] == "dr.rao" and ap["proposed_by"] == "res.asha" and ap["action"] == "reason"
+    # a resident not on the team, and a doctor of another department, are refused; the consultant's own call works as before
+    who["user"] = "res.kiran"
+    assert tc.put(f"/api/tb/cases/{CASE}/reason", json={"value": "other"}).status_code == 403
+    who["user"] = "dr.nair"
+    assert tc.put(f"/api/tb/cases/{CASE}/reason", json={"value": "other"}).status_code == 403
+    who["user"] = "dr.rao"
+    r = tc.put(f"/api/tb/cases/{CASE}/reason", json={"value": "other"})
+    assert r.status_code == 200 and "proposal" not in r.json() and store.get_case(CASE)["board_reason"]["value"] == "other"
+
+
+def test_a_residents_key_value_check_is_signed_off_unless_the_value_changed(nik_app, tb001, people):
+    tc, who = nik_app
+    _outsider(people)
+    util.add(CASE, util.make_doc("DK1", "ihc", title="PD-L1 IHC REPORT", facts={"pdl1": util.fact("TPS 60 %", quote="PD-L1 (22C3): TPS 60 %")}))
+    service.recheck(CASE, "test")
+    k = next(x for x in get(tc)["check"]["keys"] if x["fact_id"] == "pdl1")
+    body = {"fact_id": "pdl1", "value": k["value"], "doc_id": k["quote"]["doc_id"]}
+    who["user"] = "res.asha"
+    assert tc.post(f"/api/tb/cases/{CASE}/key-checks", json={**body, "fact_id": "PD-L1!"}).status_code == 400
+    r = tc.post(f"/api/tb/cases/{CASE}/key-checks", json=body)
+    assert r.status_code == 200, r.text
+    p = r.json()["proposal"]
+    assert p["action"] == "key_value" and p["payload"] == body
+    assert "pdl1" not in (store.get_state(CASE).get("key_checks") or {})  # nothing changed yet
+    assert "key_value_confirmed" not in [e.get("kind") for e in store.read_audit(CASE)]
+    # a proposal on another report is stale at approval: 409, and it stays pending
+    stale = tc.post(f"/api/tb/cases/{CASE}/key-checks", json={**body, "doc_id": "DX0"}).json()["proposal"]
+    r = _approve(tc, who, stale["id"])
+    assert r.status_code == 409 and "check it again" in r.text and _pending(stale["id"]) == "pending"
+    # the consultant approves the right one: confirmed in the consultant's name, and the Check step shows it
+    r = _approve(tc, who, p["id"])
+    assert r.status_code == 200, r.text
+    kc = store.get_state(CASE)["key_checks"]["pdl1"]
+    assert kc["by"] == "dr.rao" and kc["value"] == k["value"] and kc["doc_id"] == k["quote"]["doc_id"]
+    ev = next(e for e in store.read_audit(CASE) if e.get("kind") == "key_value_confirmed")
+    assert ev["by"] == "dr.rao" and ev["fact"] == "pdl1"
+    k2 = next(x for x in get(tc)["check"]["keys"] if x["fact_id"] == "pdl1")
+    assert k2["confirmed"] is True and k2["confirmed_by"] == "Dr Rao"
+    # the value changes after the resident checked it (a corrected report): the approval is refused and the proposal stays pending
+    who["user"] = "res.asha"
+    again = tc.post(f"/api/tb/cases/{CASE}/key-checks", json=body).json()["proposal"]
+    util.add(CASE, util.make_doc("DK1", "ihc", title="PD-L1 IHC REPORT", facts={"pdl1": util.fact("TPS 10 %", quote="PD-L1 (22C3): TPS 10 %")}))
+    service.recheck(CASE, "test")
+    r = _approve(tc, who, again["id"])
+    assert r.status_code == 409 and _pending(again["id"]) == "pending"
+    # a resident not on the team is refused; the consultant's own call works as before
+    who["user"] = "res.kiran"
+    assert tc.post(f"/api/tb/cases/{CASE}/key-checks", json=body).status_code == 403
+    who["user"] = "dr.rao"
+    r = tc.post(f"/api/tb/cases/{CASE}/key-checks", json={**body, "value": "TPS 10 %"})
+    assert r.status_code == 200 and "proposal" not in r.json() and r.json()["by"] == "dr.rao"

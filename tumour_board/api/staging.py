@@ -1,6 +1,6 @@
 """Draft stage routes (owner decision, 22 Oct 2026, docs/staging/DECISION.md): the Staging card's view, working the draft out (one reasoner
 call; every quote checked), confirming or rejecting it, and the staging book's pages with the line highlighted. Logic in
-tumour_board/staging/."""
+tumour_board/staging/. A resident on the team proposes the confirmation, pinned to the draft it saw (night-v3 item 1.8)."""
 from fastapi import Request
 from fastapi.responses import Response
 
@@ -8,6 +8,7 @@ from tumour_board import access, staging, store
 from tumour_board.staging import book
 
 from . import common
+from .steps import propose
 
 router = common.make_router()
 
@@ -61,12 +62,17 @@ async def enter_part(case_id: str, request: Request):
 @router.post("/cases/{case_id}/staging/confirm")
 async def confirm_staging(case_id: str, request: Request):
     """{note?, which?}: a consultant of the owning department confirms the draft for the board (guard 1); audited. which = "anatomic"
-    (the default) or "prognostic" (the breast prognostic stage group)."""
+    (the default) or "prognostic" (the breast prognostic stage group). A resident on the team sends {which, stage, signature, note?} of the
+    draft it saw: it becomes a proposal ({proposal}) the consultant approves, refused then if the draft changed since."""
     u = common.user(request); rl = common.roles(request); c = _full(request, case_id)
     b = await common.body(request) if (await request.body()) else {}
-    common.need_case(rl, "confirm", c)
     async with store.lock(case_id):
-        return _call(staging.confirm, case_id, u, b.get("note"), b.get("which") or "anatomic")
+        if access.may(rl, "confirm", c):
+            return _call(staging.confirm, case_id, u, b.get("note"), b.get("which") or "anatomic")
+        if access.may(rl, "propose", c):
+            pin = {k: b.get(k) for k in ("which", "stage", "signature", "note")}
+            return {"proposal": propose(case_id, "staging_confirm", pin, rl, u)}
+    common.need_case(rl, "confirm", c)
 
 
 @router.post("/cases/{case_id}/staging/reject")

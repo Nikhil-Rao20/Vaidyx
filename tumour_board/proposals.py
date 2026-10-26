@@ -15,6 +15,11 @@ Stored on case.json "proposals": [{"id", "action", "payload", "note", "by", "at"
   refer          payload {to, reason, his_ref}                          referral.request
   typed_value    payload {slot or fact, value, note}                    slots.set_value (the "Enter a value" line action)
   published_case payload {result, quotes}                               published.add
+  key_value      payload {fact_id, value, doc_id} (the Check step's one-tap confirm)   steps.confirm_key; refused (409) when the
+                 value or its report changed after the resident checked it
+  reason         payload {value} (one of steps.REASONS)                 steps.set_reason
+  staging_confirm payload {which: anatomic | prognostic, stage, signature, note}, pinned to the draft the resident saw
+                                                                        staging.confirm; refused (409) when the draft changed since
 PROPOSAL_EXECUTORS {action: fn} is the registry; another module may replace or add an executor (register(action, fn)). An approved
 proposal whose action has no executor is stored as "approved, pending executor" and runs once one is registered (execute_pending).
 Executors are callables fn(case_id, payload, user, roles, note) -> dict; each checks the consultant's permission the way the
@@ -22,14 +27,19 @@ consultant's own route does, and raises ValueError, PermissionError (or a module
 
 The consultant is told in-app (kind sign_off: "Dr X asks you to sign off: <action> (<patient>)"), the resident hears back (approved or
 returned). Everything is audited in the Case File. No model calls."""
+import re
 import uuid
 
 from . import access, board, confirm, dept_requests, org, profiles, protocol, referral, store, team
 
 PENDING, APPROVED, RETURNED = "pending", "approved", "returned"
-ACTIONS = ("waive", "not_needed", "confirm", "mark_ready", "send_request", "urgency", "refer", "typed_value", "published_case")
+ACTIONS = ("waive", "not_needed", "confirm", "mark_ready", "send_request", "urgency", "refer", "typed_value", "published_case",
+           "key_value", "reason", "staging_confirm")
 LABELS = {"waive": "waive a requirement", "not_needed": "mark a line not needed", "confirm": "record a confirmation", "mark_ready": "mark the Case File ready",
-          "send_request": "send a request", "urgency": "set the urgency", "refer": "refer the Case File", "typed_value": "enter a value", "published_case": "add a published case"}
+          "send_request": "send a request", "urgency": "set the urgency", "refer": "refer the Case File", "typed_value": "enter a value", "published_case": "add a published case",
+          "key_value": "confirm a key value", "reason": "set the reason for discussion", "staging_confirm": "confirm the draft stage"}
+STALE_KEY = "The value changed after the resident checked it: check it again."
+STALE_DRAFT = "The draft changed after the resident saw it: work it out again."
 # action -> fn(case_id, payload, user, roles, note) -> dict. The modules that own typed values and published cases register theirs.
 PROPOSAL_EXECUTORS: dict = {}
 PENDING_EXECUTOR = "approved, pending executor"
@@ -154,6 +164,34 @@ def check_payload(action: str, payload, case: dict) -> dict:
         except published.PublishedError as e:
             raise ValueError(str(e))
         return {"result": clean, "quotes": [q for q in (p.get("quotes") or []) if isinstance(q, dict)][:10]}
+    if action == "key_value":  # the same checks as POST /cases/{id}/key-checks (steps.confirm_key)
+        fid = str(p.get("fact_id") or "").strip()
+        if not re.fullmatch(r"[a-z0-9_]{1,64}", fid):
+            raise ValueError("Unknown value.")
+        value = str(p.get("value") if p.get("value") is not None else "")[:500]
+        if not value.strip():
+            raise ValueError("Name the value to confirm.")
+        return {"fact_id": fid, "value": value, "doc_id": str(p.get("doc_id") or "")[:64]}
+    if action == "reason":  # the same check as PUT /cases/{id}/reason (steps.set_reason)
+        from . import steps
+        v = str(p.get("value") or "")
+        if v not in steps.REASONS:
+            raise ValueError("Choose one of the listed reasons.")
+        return {"value": v}
+    if action == "staging_confirm":  # the draft the resident saw: which one, its stage and the reports it was worked out from
+        which = str(p.get("which") or "anatomic").strip().lower()
+        if which not in ("anatomic", "prognostic"):
+            raise ValueError("Say which draft: anatomic or prognostic.")
+        stage = str(p.get("stage") or "").strip()[:32]
+        signature = str(p.get("signature") or "").strip()[:128]
+        if not stage or not signature:
+            raise ValueError("Name the draft stage you checked (open the Stage card again).")
+        now = draft_now(case.get("case_id") or "", which)
+        if not now or now["status"] != "staged":
+            raise ValueError("There is no draft stage to confirm." if which == "anatomic" else "There is no prognostic stage group to confirm.")
+        if now["stage"] != stage or now["signature"] != signature:
+            raise ValueError("The draft changed after you saw it: open the Stage card again.")
+        return {"which": which, "stage": stage, "signature": signature, "note": _note(p.get("note"))}
     raise ValueError(f"Unknown proposal action '{action}'.")
 
 
@@ -299,9 +337,58 @@ def _exec_published_case(case_id, payload, user, roles, note):
     return {"published": item.get("id"), "title": item.get("title")}
 
 
+def key_value_now(case_id: str, fact_id: str, roles: dict | None = None) -> tuple[str, str] | None:
+    """The key value as the Check step shows it now ({value, report doc_id} of the fact line found in a report), or None."""
+    from . import slots
+    s = next((x for x in slots._all_slots(slots.build(case_id, roles)) if x.get("kind") == "fact" and x.get("fact_id") == fact_id), None)
+    if not s or s.get("status") != "found":
+        return None
+    return (s.get("value") or ""), ((s.get("quote") or {}).get("doc_id") or "")
+
+
+def _exec_key_value(case_id, payload, user, roles, note):
+    from . import steps
+    c = _case(case_id)
+    access.require(roles, "confirm", c)  # the same rule as POST /cases/{id}/key-checks
+    if key_value_now(case_id, payload["fact_id"], roles) != (payload.get("value") or "", payload.get("doc_id") or ""):
+        raise ProposalError(STALE_KEY, 409, "stale")
+    rec = steps.confirm_key(case_id, payload["fact_id"], payload["value"], payload.get("doc_id") or "", user)
+    return {"key_check": {"fact_id": payload["fact_id"], **rec}}
+
+
+def _exec_reason(case_id, payload, user, roles, note):
+    from . import steps
+    c = _case(case_id)
+    access.require(roles, "confirm", c)  # the same rule as PUT /cases/{id}/reason
+    return {"board_reason": steps.set_reason(case_id, payload["value"], user)}
+
+
+def draft_now(case_id: str, which: str) -> dict | None:
+    """{stage, signature, status} of the stored draft (anatomic, or the prognostic one inside it), or None."""
+    from . import staging
+    d = (store.get_state(case_id) or {}).get("staging")
+    x = staging._target(d, which)
+    if not x:
+        return None
+    return {"stage": x.get("stage"), "signature": d.get("signature"), "status": x.get("status")}
+
+
+def _exec_staging_confirm(case_id, payload, user, roles, note):
+    from . import staging
+    c = _case(case_id)
+    access.require(roles, "confirm", c)  # the same rule as POST /cases/{id}/staging/confirm
+    which = payload.get("which") or "anatomic"
+    now = draft_now(case_id, which)
+    if not now or now["stage"] != payload.get("stage") or now["signature"] != payload.get("signature"):
+        raise ProposalError(STALE_DRAFT, 409, "stale")
+    staging.confirm(case_id, user, payload.get("note") or note or "", which)  # guard 1: counted once a doctor confirms, in that doctor's name
+    return {"which": which, "stage": payload["stage"], "confirmed_by": user}
+
+
 PROPOSAL_EXECUTORS.update({"waive": _exec_waive, "not_needed": _exec_waive, "confirm": _exec_confirm, "mark_ready": _exec_mark_ready,
                            "send_request": _exec_send_request, "urgency": _exec_urgency, "refer": _exec_refer,
-                           "typed_value": _exec_typed_value, "published_case": _exec_published_case})
+                           "typed_value": _exec_typed_value, "published_case": _exec_published_case,
+                           "key_value": _exec_key_value, "reason": _exec_reason, "staging_confirm": _exec_staging_confirm})
 
 
 def _run(case_id: str, p: dict, user: str, roles: dict, note: str) -> dict:

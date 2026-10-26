@@ -5,16 +5,20 @@
 // the doctor ("entered by Dr X, no report"). The stage the reports wrote, and its history, sit beside it; a difference is flagged.
 // For breast, the prognostic stage group (AJCC 8, pp. 621 to 624) sits under the anatomic one (night-v3 item 1.12): the same label and
 // guards, the grade, HER2, ER and PR walked like T, N and M, confirmed or marked wrong on its own, a written prognostic stage flagged.
+// A resident on the team sends the confirmation to the treating consultant for sign-off, pinned to the draft on the card (night-v3 item
+// 1.8); the card says "Waiting for Dr X's sign-off" while that proposal is pending.
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { AlertTriangle, ArrowRight, BookOpen, Check, CheckCircle2, FlaskConical, History, Info, Layers, PenLine, RefreshCw, XCircle } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, ArrowRight, BookOpen, Check, CheckCircle2, Clock, FlaskConical, History, Info, Layers, PenLine, RefreshCw, Send, XCircle } from "lucide-react";
+import { notify } from "@/components/Toasts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { SourceTarget } from "../components/SourceViewer";
 import { LoadingButton, SkeletonLines, errorText, fmtDate, fmtDateTime, niceTitle } from "../components/common";
 import { SourceChip } from "../steps/Value";
-import { confirmStaging, enterPart, rejectStaging, runStaging, type BookTarget, type Component, type Criterion, type PrognosticDraft, type ProgPart, type Quote, type StagingView, type Which, type Written } from "./api";
+import { getProposals } from "../api";
+import { confirmStaging, enterPart, proposeStaging, rejectStaging, runStaging, type BookTarget, type Component, type Criterion, type PrognosticDraft, type ProgPart, type Quote, type StagingView, type Which, type Written } from "./api";
 
 const PART_WORD: Record<"T" | "N" | "M", string> = { T: "Primary tumour", N: "Regional lymph nodes", M: "Distant metastasis" };
 const FIGO_WORD: Record<"T" | "N" | "M", string> = { T: "Local extent", N: "Lymph nodes", M: "Distant spread" };
@@ -23,6 +27,14 @@ const PROG_PARTS: ProgPart[] = ["G", "HER2", "ER", "PR"];
 // The book's categories for the markers, in plain words ("negative_ish_equivocal" is the table's footnote *).
 const CRIT_WORD: Record<string, string> = { positive: "Positive", negative: "Negative", ihc_3plus: "IHC 3+", ihc_0_1plus: "IHC 0 or 1+", negative_ish_equivocal: "Equivocal by ISH" };
 const cap = (x?: string) => (x ? x.charAt(0).toUpperCase() + x.slice(1) : "");
+
+/** A resident's sign-off of one draft (anatomic or prognostic): the button, then "Waiting for Dr X's sign-off" while it is pending. */
+interface SignOff { canPropose: boolean; consultantName: string; waiting: (which: Which) => boolean; send: (which: Which) => void; sending: Which | null }
+
+function SignOffButton({ which, stage, s, testId }: { which: Which; stage: string; s: SignOff; testId: string }) {
+  if (s.waiting(which)) return <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1.5 text-sm text-muted-foreground" data-testid={`${testId}-waiting`}><Clock className="size-4" aria-hidden />Waiting for Dr {s.consultantName}'s sign-off</span>;
+  return <LoadingButton onClick={() => s.send(which)} loading={s.sending === which} data-testid={testId} aria-label={`Send ${which === "prognostic" ? "prognostic stage" : "Stage"} ${stage} to Dr ${s.consultantName} for sign-off`}><Send className="size-4" />Send to Dr {s.consultantName} for sign-off</LoadingButton>;
+}
 
 function BookChip({ book, page, find, label, onOpen, here = true }: { book: string; page: number | null; find?: string; label: string; onOpen: (t: BookTarget) => void; here?: boolean }) {
   if (!here || page == null) {
@@ -117,8 +129,8 @@ function History_({ written, onOpen, show, none = "No report writes a stage." }:
 
 // The breast prognostic stage group (AJCC 8, pp. 621 to 624), under the anatomic draft: the anatomic T, N and M with the grade and the
 // HER2, ER and PR status, each from a verified report line; the row of the book's table; confirmed or marked wrong on its own ("which").
-function Prognostic({ caseId, view, p, book, bookShort, here, canConfirm, onOpen, onBook, onChanged }: {
-  caseId: string; view: StagingView; p: PrognosticDraft; book: string; bookShort: string; here: boolean; canConfirm: boolean;
+function Prognostic({ caseId, view, p, book, bookShort, here, canConfirm, signOff, onOpen, onBook, onChanged }: {
+  caseId: string; view: StagingView; p: PrognosticDraft; book: string; bookShort: string; here: boolean; canConfirm: boolean; signOff: SignOff;
   onOpen: (t: SourceTarget) => void; onBook: (t: BookTarget) => void; onChanged: (v?: StagingView) => void;
 }) {
   const [rejecting, setRejecting] = useState(false);
@@ -174,6 +186,7 @@ function Prognostic({ caseId, view, p, book, bookShort, here, canConfirm, onOpen
           {p.confirmed ? <span className="inline-flex items-center gap-1.5 rounded-md status-ok px-2.5 py-1.5 text-sm font-medium"><CheckCircle2 className="size-4" aria-hidden />Confirmed by {p.confirmed.by_name || p.confirmed.by}</span> : null}
           {p.rejected ? <span className="inline-flex items-center gap-1.5 rounded-md status-bad px-2.5 py-1.5 text-sm font-medium" title={p.rejected.reason}><XCircle className="size-4" aria-hidden />Marked wrong by {p.rejected.by_name || p.rejected.by}: {p.rejected.reason}</span> : null}
           {staged && canConfirm && !p.confirmed && !view.stale ? <LoadingButton onClick={() => confirm.mutate()} loading={confirm.isPending} data-testid="confirm-prognostic"><Check className="size-4" />Confirm prognostic stage {p.stage}</LoadingButton> : null}
+          {staged && !canConfirm && signOff.canPropose && !p.confirmed && !view.stale ? <SignOffButton which="prognostic" stage={p.stage ?? ""} s={signOff} testId="propose-prognostic" /> : null}
           {staged && canConfirm && !rejecting && !p.rejected ? <Button variant="outline" onClick={() => setRejecting(true)} data-testid="reject-prognostic">This is wrong</Button> : null}
         </div>
       </div>
@@ -236,22 +249,43 @@ function Prognostic({ caseId, view, p, book, bookShort, here, canConfirm, onOpen
   );
 }
 
-export function StagingCard({ caseId, view, loading, canRun, canConfirm, onOpen, onBook, onChanged }: {
+export function StagingCard({ caseId, view, loading, canRun, canConfirm, canPropose = false, consultantName = "the consultant", onOpen, onBook, onChanged }: {
   caseId: string; view: StagingView | null | undefined; loading: boolean; canRun: boolean; canConfirm: boolean;
+  /** A resident on the team: the confirm buttons send the draft to the consultant for sign-off (night-v3 item 1.8). */
+  canPropose?: boolean; consultantName?: string;
   onOpen: (t: SourceTarget) => void; onBook: (t: BookTarget) => void; onChanged: (v?: StagingView) => void;
 }) {
+  const qc = useQueryClient();
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
   const run = useMutation({ mutationFn: () => runStaging(caseId), onSuccess: (v) => onChanged(v) });
   const confirm = useMutation({ mutationFn: () => confirmStaging(caseId), onSuccess: (v) => onChanged(v) });
   const reject = useMutation({ mutationFn: () => rejectStaging(caseId, reason.trim()), onSuccess: (v) => { setRejecting(false); setReason(""); onChanged(v); } });
+  const proposalsq = useQuery({ queryKey: ["proposals", caseId], queryFn: () => getProposals(caseId), enabled: canPropose && !canConfirm && !!view?.draft, retry: false });
+  const pin = (which: Which) => ({ stage: (which === "prognostic" ? view?.prognostic?.stage : view?.draft?.stage) ?? "", signature: view?.draft?.signature ?? "" });
+  const propose = useMutation({
+    mutationFn: (which: Which) => { const p = pin(which); return proposeStaging(caseId, which, p.stage, p.signature); },
+    onSuccess: async (_r, which) => {
+      notify.success(`Sent to Dr ${consultantName} for sign-off`, `Confirm the ${which === "prognostic" ? "prognostic stage" : "draft stage"} ${pin(which).stage}`);
+      await qc.invalidateQueries({ queryKey: ["proposals", caseId] });
+    },
+  });
+  const signOff: SignOff = {
+    canPropose: canPropose && !canConfirm, consultantName, sending: propose.isPending ? propose.variables ?? null : null,
+    send: (which) => propose.mutate(which),
+    waiting: (which) => {
+      const p = pin(which);
+      return (proposalsq.data?.proposals ?? []).some((x) => x.status === "pending" && x.action === "staging_confirm" && (x.payload?.which ?? "anatomic") === which
+        && x.payload?.stage === p.stage && x.payload?.signature === p.signature);
+    },
+  };
   if (loading) return <section className="surface p-4"><SkeletonLines n={4} /></section>;
   if (!view) return null;
   const sw = view.switch;
   const d = view.draft;
   const book = view.book;
   const bookShort = book?.short || book?.title || "";
-  const err = run.error || confirm.error || reject.error;
+  const err = run.error || confirm.error || reject.error || propose.error;
   const staged = d?.status === "staged";
   const comps = d?.components ?? {};
   const figo = view.notation === "figo";
@@ -306,6 +340,7 @@ export function StagingCard({ caseId, view, loading, canRun, canConfirm, onOpen,
                 {d.confirmed ? <span className="inline-flex items-center gap-1.5 rounded-md status-ok px-2.5 py-1.5 text-sm font-medium"><CheckCircle2 className="size-4" aria-hidden />Confirmed by {d.confirmed.by_name || d.confirmed.by}</span> : null}
                 {d.rejected ? <span className="inline-flex items-center gap-1.5 rounded-md status-bad px-2.5 py-1.5 text-sm font-medium" title={d.rejected.reason}><XCircle className="size-4" aria-hidden />Marked wrong by {d.rejected.by_name || d.rejected.by}: {d.rejected.reason}</span> : null}
                 {staged && canConfirm && !d.confirmed && !view.stale ? <LoadingButton onClick={() => confirm.mutate()} loading={confirm.isPending} data-testid="confirm-stage"><Check className="size-4" />Confirm Stage {d.stage}</LoadingButton> : null}
+                {staged && !canConfirm && signOff.canPropose && !d.confirmed && !view.stale ? <SignOffButton which="anatomic" stage={d.stage ?? ""} s={signOff} testId="propose-stage" /> : null}
                 {staged && canConfirm && !rejecting && !d.rejected ? <Button variant="outline" onClick={() => setRejecting(true)}>This is wrong</Button> : null}
                 {canRun && !view.stale ? <Button variant="ghost" size="sm" onClick={() => run.mutate()} disabled={run.isPending}><RefreshCw className={cn("size-4", run.isPending && "animate-spin")} />Again</Button> : null}
               </div>
@@ -351,7 +386,7 @@ export function StagingCard({ caseId, view, loading, canRun, canConfirm, onOpen,
 
             {/* the breast prognostic stage group, under the anatomic one */}
             {view.prognostic && book ? (
-              <Prognostic caseId={caseId} view={view} p={view.prognostic} book={book.id} bookShort={bookShort} here={here} canConfirm={canConfirm} onOpen={onOpen} onBook={onBook} onChanged={onChanged} />
+              <Prognostic caseId={caseId} view={view} p={view.prognostic} book={book.id} bookShort={bookShort} here={here} canConfirm={canConfirm} signOff={signOff} onOpen={onOpen} onBook={onBook} onChanged={onChanged} />
             ) : null}
           </>
         )}

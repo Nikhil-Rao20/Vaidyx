@@ -1,6 +1,7 @@
 // Question (B3): what the board should decide, in the doctor's own words (free text only; Vaidyx suggests nothing). The reason for
 // discussion in one tap, the urgency 1 to 5, and three facts reports rarely carry (the patient's wishes, comorbidities, whether the
-// patient knows the diagnosis), each shown "entered by Dr X, no report".
+// patient knows the diagnosis), each shown "entered by Dr X, no report". A resident's question, reason and urgency go to the treating
+// consultant for sign-off (night-v3 item 1.8).
 import { useEffect, useState } from "react";
 import { ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -93,8 +94,9 @@ export function QuestionStep({ steps, canEdit, onSaveQuestion, onReason, onUrgen
       </Card>
 
       <Card title="Reason for discussion" testId="question-reason">
-        <div className="py-2">
+        <div className="space-y-1.5 py-2">
           <Choice options={steps.reasons} value={q.reason?.value ?? null} label="Reason for discussion" disabled={!canEdit || busy === "r"} onPick={(v) => void run("r", () => onReason(v))} />
+          {resident && canEdit ? <p className="text-xs text-muted-foreground">Dr {consultantName} signs off the reason.</p> : null}
         </div>
       </Card>
 

@@ -1,9 +1,10 @@
 // Check (B5): side by side. On the left the values with a problem (two reports differ, an unclear scan line), one at a time, then the key
 // values (histology, grade, receptors and biomarkers, stage as written) each with a one-tap Confirm that names the value; on the right
 // the report, scrolled to the line with it highlighted. "This is wrong" offers both: correct it (the right value and a reason, shown
-// "corrected by Dr X", the report line kept) or send a request to the department to amend the report.
+// "corrected by Dr X", the report line kept) or send a request to the department to amend the report. A resident on the team sends
+// each key value to the treating consultant for sign-off instead (night-v3 item 1.8).
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ArrowRight, Check, CheckCircle2, ShieldQuestion, Undo2 } from "lucide-react";
+import { ArrowRight, Check, CheckCircle2, Clock, Send, ShieldQuestion, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -54,9 +55,10 @@ function WrongValue({ k, h, deptLabel }: { k: CheckItem; h: CheckHandlers; deptL
   );
 }
 
-function KeyRow({ k, selected, onSelect, h, canConfirm, deptLabel, consultantName }: { k: CheckItem; selected: boolean; onSelect: () => void; h: CheckHandlers; canConfirm: boolean; deptLabel: string; consultantName: string }) {
+function KeyRow({ k, selected, onSelect, h, canConfirm, canPropose, deptLabel, consultantName }: { k: CheckItem; selected: boolean; onSelect: () => void; h: CheckHandlers; canConfirm: boolean; canPropose: boolean; deptLabel: string; consultantName: string }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [sent, setSent] = useState<string | null>(null); // the value sent for sign-off (until the page shows it confirmed)
   const run = async (fn: () => Promise<void>) => { setBusy(true); setErr(null); try { await fn(); } catch (e) { setErr(errorText(e)); } finally { setBusy(false); } };
   return (
     <li className={cn("rounded-lg border p-3 transition", selected ? "border-primary bg-secondary/40" : "border-border bg-card hover:border-border-strong")} data-testid="key-row" data-confirmed={k.confirmed ? "yes" : "no"}>
@@ -74,6 +76,10 @@ function KeyRow({ k, selected, onSelect, h, canConfirm, deptLabel, consultantNam
           </>
         ) : canConfirm ? (
           <LoadingButton size="sm" loading={busy} onClick={() => void run(() => h.confirmKey(k))} data-testid="confirm-key"><Check className="size-4" />Confirm {k.value.length <= 32 ? k.value : k.label.replace(/\s*\(.*\)$/, "")}</LoadingButton>
+        ) : canPropose && sent === k.value ? (
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" data-testid="key-waiting"><Clock className="size-3.5" aria-hidden />Waiting for Dr {consultantName}'s sign-off</span>
+        ) : canPropose ? (
+          <LoadingButton size="sm" variant="outline" loading={busy} onClick={() => void run(async () => { await h.confirmKey(k); setSent(k.value); })} data-testid="propose-key"><Send className="size-4" />Send to Dr {consultantName} for sign-off</LoadingButton>
         ) : <span className="text-xs text-muted-foreground">Dr {consultantName} confirms the key values.</span>}
       </div>
       {canConfirm && !k.confirmed ? <div className="mt-1"><WrongValue k={k} h={h} deptLabel={deptLabel} /></div> : null}
@@ -86,6 +92,7 @@ export function CheckStep({ steps, caseId, docs, h, canConfirm, consultantName, 
   steps: Steps; caseId: string; docs: CaseDocument[]; h: CheckHandlers; canConfirm: boolean; consultantName: string; target?: string | null; onNext: () => void;
 }) {
   const { problems, keys } = steps.check;
+  const resident = steps.mode === "prepare" && steps.role === "resident";
   const all = useMemo(() => [...problems, ...keys], [problems, keys]);
   const [sel, setSel] = useState<string | null>(target ?? problems[0]?.slot_id ?? keys.find((k) => !k.confirmed)?.slot_id ?? keys[0]?.slot_id ?? null);
   useEffect(() => { if (target) setSel(target); }, [target]);
@@ -129,7 +136,8 @@ export function CheckStep({ steps, caseId, docs, h, canConfirm, consultantName, 
           {keys.length ? (
             <section className="space-y-2" aria-labelledby="h-keys">
               <h2 id="h-keys" className="text-[15px]">Key values ({keys.filter((k) => k.confirmed).length} of {keys.length} confirmed)</h2>
-              <ul className="space-y-2">{keys.map((k) => <KeyRow key={k.slot_id} k={k} selected={sel === k.slot_id} onSelect={() => setSel(k.slot_id)} h={h} canConfirm={canConfirm} deptLabel={deptOf(k)} consultantName={consultantName} />)}</ul>
+              {resident && !canConfirm ? <p className="text-xs text-muted-foreground">Dr {consultantName} confirms the key values. Read each one against its report line, then send it for sign-off.</p> : null}
+              <ul className="space-y-2">{keys.map((k) => <KeyRow key={k.slot_id} k={k} selected={sel === k.slot_id} onSelect={() => setSel(k.slot_id)} h={h} canConfirm={canConfirm} canPropose={resident && !canConfirm} deptLabel={deptOf(k)} consultantName={consultantName} />)}</ul>
             </section>
           ) : null}
         </div>

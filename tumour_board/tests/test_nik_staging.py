@@ -399,3 +399,74 @@ def test_the_switch_off_hides_both_drafts(breast, monkeypatch):
 
 def test_lung_has_no_prognostic_draft():
     assert staging.prognostic_for("no-case", staging.rules_for("lung_nsclc"), {}) is None
+
+
+# ---- a resident's sign-off (night-v3 item 1.8): the confirmation is a proposal pinned to the draft the resident saw -------------------
+
+def test_a_residents_confirm_is_signed_off_by_the_consultant_and_pinned_to_the_draft(breast, people):
+    from tumour_board import proposals
+    from tumour_board.tests.test_nik_steps import _outsider
+    tc, who, fake, calls = breast
+    _outsider(people)
+    _prog_docs()
+    d = tc.post(f"/api/tb/cases/{CASE}/staging/run").json()["draft"]
+    pin = {"which": "anatomic", "stage": d["stage"], "signature": d["signature"]}
+    url = f"/api/tb/cases/{CASE}/staging/confirm"
+
+    def approve(pid):
+        who["user"] = "dr.rao"
+        r = tc.post(f"/api/tb/cases/{CASE}/proposals/{pid}/approve")
+        who["user"] = "res.asha"
+        return r
+
+    def status(pid):
+        return proposals.find(store.get_case(CASE), pid)["status"]
+
+    who["user"] = "res.asha"
+    assert tc.post(url, json={**pin, "stage": "IIIA"}).status_code == 400  # not the draft on the card: refused before it is stored
+    assert tc.post(url, json={"which": "anatomic"}).status_code == 400  # the draft must be named
+    r = tc.post(url, json=pin)
+    assert r.status_code == 200, r.text
+    p = r.json()["proposal"]
+    assert p["action"] == "staging_confirm" and p["payload"] == {**pin, "note": ""}
+    v = tc.get(f"/api/tb/cases/{CASE}/staging").json()
+    assert v["draft"]["confirmed"] is None  # guard 1: nothing counts until a doctor confirms
+    assert "draft_stage_confirmed" not in [e.get("kind") for e in store.read_audit(CASE)]
+    # the consultant approves: confirmed in the consultant's name, audited
+    r = approve(p["id"])
+    assert r.status_code == 200, r.text
+    v = tc.get(f"/api/tb/cases/{CASE}/staging").json()
+    assert v["draft"]["confirmed"]["by"] == "dr.rao" and v["draft"]["confirmed"]["which"] == "anatomic" and v["prognostic"]["confirmed"] is None
+    ev = [e for e in store.read_audit(CASE) if e.get("kind") == "draft_stage_confirmed"][-1]
+    assert ev["by"] == "dr.rao" and ev["stage"] == d["stage"]
+    ap = [e for e in store.read_audit(CASE) if e.get("kind") == "proposal_approved"][-1]
+    assert ap["by"] == "dr.rao" and ap["proposed_by"] == "res.asha" and ap["action"] == "staging_confirm"
+    # the prognostic stage group on its own
+    pg = v["prognostic"]
+    p2 = tc.post(url, json={"which": "prognostic", "stage": pg["stage"], "signature": d["signature"]}).json()["proposal"]
+    assert approve(p2["id"]).status_code == 200
+    v = tc.get(f"/api/tb/cases/{CASE}/staging").json()
+    assert v["prognostic"]["confirmed"]["by"] == "dr.rao" and v["prognostic"]["confirmed"]["which"] == "prognostic"
+    # the draft is worked out again with another stage after the resident saw it: the approval is refused and the proposal stays pending
+    p3 = tc.post(url, json=pin).json()["proposal"]
+    fake.answer = {**GOOD, "N": {"cat": "cN0", "quotes": [{"doc_id": "DC1", "quote": "No evidence of distant metastasis in the chest, abdomen or pelvis"}]}}
+    who["user"] = "dr.rao"
+    d2 = tc.post(f"/api/tb/cases/{CASE}/staging/run").json()["draft"]
+    assert d2["stage"] != d["stage"] and d2["confirmed"] is None
+    r = approve(p3["id"])
+    assert r.status_code == 409 and "work it out again" in r.text and status(p3["id"]) == "pending"
+    assert tc.get(f"/api/tb/cases/{CASE}/staging").json()["draft"]["confirmed"] is None
+    # the reports changed (another signature): refused too
+    p4 = tc.post(url, json={**pin, "stage": d2["stage"], "signature": d2["signature"]}).json()["proposal"]
+    util.add(CASE, util.make_doc("DX9", "ct", text="CT thorax (SYNTHETIC)\nNo lung nodule.", title="CT THORAX", date="2026-10-05"))
+    r = approve(p4["id"])
+    assert r.status_code == 409 and status(p4["id"]) == "pending"
+    # a resident not on the team is refused; reject stays the consultant's; the consultant's own confirm works as before
+    who["user"] = "res.kiran"
+    assert tc.post(url, json=pin).status_code == 403
+    who["user"] = "res.asha"
+    assert tc.post(f"/api/tb/cases/{CASE}/staging/reject", json={"reason": "N looks wrong"}).status_code == 403
+    who["user"] = "dr.rao"
+    tc.post(f"/api/tb/cases/{CASE}/staging/run")
+    r = tc.post(url, json={})
+    assert r.status_code == 200 and "proposal" not in r.json() and r.json()["draft"]["confirmed"]["by"] == "dr.rao"

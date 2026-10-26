@@ -2,6 +2,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { TB, api } from "@/lib/api";
 import { caseUrl } from "../api";
+import type { Proposal } from "../types";
 
 const enc = encodeURIComponent;
 
@@ -15,6 +16,8 @@ export interface Draft {
   status: "staged" | "cannot_stage"; stage: string | null; row: { T: string[]; N: string[]; M: string[]; stage: string; find?: string } | null;
   components: Partial<Record<"T" | "N" | "M", Component>>; missing: string[]; rules: string; system: string; at: string; by: string; model?: string;
   confirmed: { by: string; by_name?: string; at: string; note?: string } | null; rejected: { by: string; by_name?: string; at: string; reason: string } | null;
+  /** The reports the draft was worked out from; a resident's sign-off is pinned to it with the stage (night-v3 item 1.8). */
+  signature?: string;
 }
 export type Which = "anatomic" | "prognostic";
 export type ProgPart = "G" | "HER2" | "ER" | "PR";
@@ -58,6 +61,9 @@ export interface BookTarget { book: string; page: number; find?: string; label?:
 export const getStaging = (id: string) => api.get<StagingView>(`${caseUrl(id)}/staging`);
 export const runStaging = (id: string) => api.post<StagingView>(`${caseUrl(id)}/staging/run`, {});
 export const confirmStaging = (id: string, which: Which = "anatomic") => api.post<StagingView>(`${caseUrl(id)}/staging/confirm`, { which });
+/** A resident on the team: the confirmation goes to the consultant as a proposal pinned to the draft on the card (night-v3 item 1.8). */
+export const proposeStaging = (id: string, which: Which, stage: string, signature: string) =>
+  api.post<{ proposal: Proposal }>(`${caseUrl(id)}/staging/confirm`, { which, stage, signature });
 export const rejectStaging = (id: string, reason: string, which: Which = "anatomic") => api.post<StagingView>(`${caseUrl(id)}/staging/reject`, { reason, which });
 export const enterPart = (id: string, part: string, cat: string, reason: string) => api.post<StagingView>(`${caseUrl(id)}/staging/enter`, { part, cat, reason });
 export const getBook = (book: string) => api.get<BookMeta>(`${TB}/staging/books/${enc(book)}`);

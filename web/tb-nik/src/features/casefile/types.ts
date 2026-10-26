@@ -226,7 +226,10 @@ export interface Team {
   derived?: boolean;
 }
 
-export type ProposalAction = "waive" | "not_needed" | "confirm" | "mark_ready" | "send_request" | "urgency" | "refer" | "typed_value" | "published_case";
+export type ProposalAction = "waive" | "not_needed" | "confirm" | "mark_ready" | "send_request" | "urgency" | "refer" | "typed_value" | "published_case"
+  | "key_value" | "reason" | "staging_confirm";
+/** What a resident's call answers instead of doing the step (night-v3 item 1.8): the proposal the consultant signs off. */
+export interface Proposed { proposal?: Proposal }
 export interface Proposal {
   id: string;
   action: ProposalAction | string;

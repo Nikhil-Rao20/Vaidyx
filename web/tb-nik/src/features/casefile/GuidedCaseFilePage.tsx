@@ -8,6 +8,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, BellRing, Eye, MessageSquareText } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { useSession } from "@/lib/session";
+import { OpenWithReasonButton, ReadOnlyBanner, mayOpenWithReason, windowFor } from "./components/OpenWithReason";
 import { ApiError } from "@/lib/api";
 import { notify } from "@/components/Toasts";
 import {
@@ -15,7 +17,7 @@ import {
   setSlotValue, setUrgency, slotAskDepartment, slotNotNeeded,
 } from "./api";
 import { useCaseFile, useMyRole, useProposals, useRememberCase, useSlots, useTeam } from "./hooks";
-import type { Slot, SlotAction } from "./types";
+import type { Proposed, Slot, SlotAction } from "./types";
 import { ArchiveDialog } from "./components/ArchiveDialog";
 import { AskPanel } from "./components/AskPanel";
 import { BoardFormPanel } from "./components/BoardFormPanel";
@@ -80,6 +82,8 @@ function readLeftOff(id: string): SectionId | null {
 
 export default function GuidedCaseFilePage() {
   const { id = "", view } = useParams();
+  const { me } = useSession();
+  const bg = windowFor(me, id);  // the doctor's read-only window on this Case File, if any (night-v3 item 1.9)
   const [search] = useSearchParams();
   const nav = useNavigate();
   const qc = useQueryClient();
@@ -222,7 +226,12 @@ export default function GuidedCaseFilePage() {
   };
 
   const checkH: CheckHandlers = {
-    confirmKey: async (k) => { await postKeyCheck(id, { fact_id: k.fact_id ?? "", value: k.value, doc_id: k.quote?.doc_id ?? "" }); announce(`${k.label} confirmed.`); await refresh(); },
+    confirmKey: async (k) => {
+      const r = (await postKeyCheck(id, { fact_id: k.fact_id ?? "", value: k.value, doc_id: k.quote?.doc_id ?? "" })) as Proposed | null;
+      if (r?.proposal) notify.success(`Sent to Dr ${consultantName} for sign-off`, `Confirm ${k.label}: ${k.value}`);
+      else announce(`${k.label} confirmed.`);
+      await refresh();
+    },
     undoKey: async (k) => { await deleteKeyCheck(id, k.fact_id ?? ""); await refresh(); },
     correct: async (k, value, reason) => {
       const body = { type: "confirm_value", key: `${k.quote?.doc_id}:${k.fact_id}`, fields: { value }, reason };
@@ -275,10 +284,11 @@ export default function GuidedCaseFilePage() {
   if (cfq.error && !cf) {
     const e = cfq.error;
     const status = e instanceof ApiError ? e.status : 0;
+    // a doctor without access may open the Case File read-only with a reason (owner decision D8, night-v3 item 1.9)
     return (
       <div className="mx-auto max-w-xl py-8" data-testid="casefile-error" data-status={status}>
         {status === 404 ? <EmptyState title="This Case File does not exist" text={`No Case File with the id ${id}. The link may be old.`} action={<Button asChild variant="outline"><Link to="/cases"><ArrowLeft className="size-4" />Back to the Case Files</Link></Button>} />
-          : status === 403 ? <EmptyState title="You do not have access to this Case File" text="Only the owner's team, the departments asked, and the MDT Coordinator can open it." action={<Button asChild variant="outline"><Link to="/cases"><ArrowLeft className="size-4" />Back to the Case Files</Link></Button>} />
+          : status === 403 ? <EmptyState title="You do not have access to this Case File" text="Only the owner's team, the departments asked, and the MDT Coordinator can open it." action={<div className="flex flex-wrap justify-center gap-2">{mayOpenWithReason(e) ? <OpenWithReasonButton caseId={id} onOpened={() => void cfq.refetch()} /> : null}<Button asChild variant="outline"><Link to="/cases"><ArrowLeft className="size-4" />Back to the Case Files</Link></Button></div>} />
           : <ErrorState error={e} retry={() => void cfq.refetch()} />}
       </div>
     );
@@ -302,12 +312,17 @@ export default function GuidedCaseFilePage() {
       body = <Overview steps={steps} h={overviewH} signoffs={!resident && proposalsq.proposals.length ? <div id="signoffs"><ProposalsStrip caseId={id} proposals={proposalsq.proposals} onChanged={refresh} labelOf={(sid) => slotById(sid)?.label} /></div> : null}
         staging={stagingq.data && (stagingq.data.switch.on || stagingq.data.written.length) ? (
           <StagingCard caseId={id} view={stagingq.data} loading={stagingq.isLoading} canRun={prepare} canConfirm={prepare && !resident && !!cf.permissions?.review}
+            canPropose={prepare && resident} consultantName={consultantName}
             onOpen={openSource} onBook={setBookAt} onChanged={(v) => { if (v) qc.setQueryData(["staging", id], v); else void qc.invalidateQueries({ queryKey: ["staging", id] }); }} />
         ) : null} />;
     } else if (section === "question") {
       body = <QuestionStep steps={steps} canEdit={prepare} resident={resident} consultantName={consultantName} onOpen={openSource} onNext={() => go("reports")}
         onSaveQuestion={(t) => typed("fact:clinical_question", t, `Question for the board: ${t}`)}
-        onReason={async (v) => { await putReason(id, v); await refresh(); }}
+        onReason={async (v) => {
+          const r = (await putReason(id, v)) as Proposed;
+          if (r.proposal) notify.success(`Sent to Dr ${consultantName} for sign-off`, `Reason for discussion: ${steps.reasons.find((x) => x.id === v)?.label ?? v}`);
+          await refresh();
+        }}
         onUrgency={async (n) => { const r = await setUrgency(id, n); if (r.proposal) notify.success(`Dr ${consultantName} asked to set urgency ${n}`); await refresh(); }}
         onSaveFact={(sid, v) => typed(sid, v, `${slotById(sid)?.label ?? "Value"}: ${v}`)} />;
     } else if (section === "reports") {
@@ -344,6 +359,7 @@ export default function GuidedCaseFilePage() {
         onArchive={teamq.data?.can?.archive && !teamq.data?.archived ? () => setArchiveOpen(true) : undefined} />
 
       {teamq.data?.archived ? <p role="status" className="rounded-md border border-border bg-muted px-3 py-2 text-sm">Archived{teamq.data.archived.reason ? `: ${teamq.data.archived.reason}` : ""}. Read only.</p> : null}
+      {bg ? <ReadOnlyBanner until={bg.until} reason={bg.reason} /> : null}
 
       {steps ? (
         wide ? (

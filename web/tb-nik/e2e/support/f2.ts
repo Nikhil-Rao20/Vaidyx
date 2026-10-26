@@ -324,6 +324,7 @@ export async function routeCaseFile(page: Page, o: CaseRouteOptions = {}) {
       const b = body();
       const k = live.steps?.check.keys.find((x: AnyObj) => x.fact_id === b.fact_id);
       if (!k) return json({ detail: { message: "This value is not a key value of this Case File.", code: "step_404" } }, 404);
+      if (resident) return proposal("key_value", { fact_id: b.fact_id, value: b.value, doc_id: b.doc_id });
       Object.assign(k, { confirmed: true, confirmed_by: me.by_name, confirmed_at: new Date().toISOString() });
       return json({ fact_id: b.fact_id, value: b.value, doc_id: b.doc_id, by: me.by, at: k.confirmed_at });
     }
@@ -337,6 +338,7 @@ export async function routeCaseFile(page: Page, o: CaseRouteOptions = {}) {
     if ((p === "/staging/confirm" || p === "/staging/reject") && m === "POST") {
       const d = live.staging?.draft;
       if (!d) return json({ detail: { message: "There is no draft stage to confirm.", code: "staging_409" } }, 409);
+      if (resident && p === "/staging/confirm") { const b = body(); return proposal("staging_confirm", { which: b.which ?? "anatomic", stage: b.stage, signature: b.signature, note: "" }); }
       if (p === "/staging/confirm") Object.assign(d, { confirmed: { ...me, at: new Date().toISOString(), note: "" }, rejected: null });
       else {
         const reason = String(body().reason ?? "").trim();
