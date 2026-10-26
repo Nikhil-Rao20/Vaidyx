@@ -20,8 +20,14 @@ mkdir -p "$RUNS"
 rm -f "$DONE"
 [ "$(git rev-parse --abbrev-ref HEAD)" = "night-v3" ] || { echo "$(ts) not on branch night-v3: stopping"; exit 1; }
 productive=0; stalls=0; waiting_since=0; r=0
+PAUSE=/data/vaidyx/night-v3/PAUSE      # created by `run_night.sh pause`: no new round starts; the running session wraps up its item
 while [ "$productive" -lt "$MAX_PRODUCTIVE" ]; do
   [ -f "$DONE" ] && { echo "$(ts) plan complete"; break; }
+  if [ -f "$PAUSE" ]; then
+    echo "$(ts) paused ($(cat "$PAUSE")): not starting a new round"
+    printf '\n- `[PAUSED]` %s supervisor stopped before round %s: %s. Resume with docs/night-v3/run_night.sh resume\n' "$(ts)" "$((r+1))" "$(cat "$PAUSE")" >> "$LOG"
+    break
+  fi
   r=$((r+1)); head_before=$(git rev-parse HEAD); start=$(date +%s); TS=$(date +%Y%m%d_%H%M%S)
   out="$RUNS/round_${r}_$TS"
   echo "$(ts) round $r start (HEAD ${head_before:0:7}, model $MODEL)"

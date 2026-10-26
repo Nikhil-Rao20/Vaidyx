@@ -66,7 +66,7 @@ Status: `todo`, `doing`, `done (<hash>)`, `blocked (<reason>)`. Lane: **S** seri
 
 | ID | Item | Lane | Done when | Status |
 |---|---|---|---|---|
-| 0.1 | Pre-flight and baseline | S | Services up; full gate numbers logged; baseline screenshots of every main screen per role (root admin, department admin, treating doctor, resident, supporting doctor, coordinator, member, room screen), laptop and phone, saved in `/data/vaidyx/night-v3/baseline/`, with the script that made them in `docs/night-v3/tools/` | todo |
+| 0.1 | Pre-flight and baseline | S | Services up; a backup of the demo data before any change (`data/tumour_board` without the real case `TB-2026-bharath`, and `data/his_mock`) in `/data/vaidyx/night-v3/backup/`; full gate numbers logged; baseline screenshots of every main screen per role (root admin, department admin, treating doctor, resident, supporting doctor, coordinator, member, room screen), laptop and phone, saved in `/data/vaidyx/night-v3/baseline/`, with the script that made them in `docs/night-v3/tools/` | todo |
 | 0.2 | Research: cancer checklists | P (3 explorers: GI and thoracic; gynae, urology, head and neck, thyroid; haematology, paediatric, sarcoma, CNS) | `research/01_cancer_checklists.md`: for each cancer in section 4 Phase 2, the work-up records by NCG setting with the NCG file, page and verbatim line, the departments, the facts, the staging system the guideline uses, Indian notes, and open-access sources found for thyroid and brain | todo |
 | 0.3 | Research: decision record | P | `research/02_board_decision_dataset.md`: the outcome and decision fields of NHS England 2020 minimum dataset, Victoria MDM framework Part 2, CRUK, Greater Manchester, the NCG VTB template, PM-JAY oncology treatment plan approval, ACS CoC 2.5 and ESMO molecular boards; mapped to today's fields; the proposed form, grouped in steps | todo |
 | 0.4 | Research: Case summary | P | `research/03_case_summary.md`: longitudinal patient summaries (HARVEST and similar, discharge-summary structure, NCG VTB), how to ground every sentence, versions, editing; the proposed sections and data flow | todo |
@@ -90,6 +90,8 @@ Status: `todo`, `doing`, `done (<hash>)`, `blocked (<reason>)`. Lane: **S** seri
 | 1.8 | Residents' sign-off for the remaining steps | S | A resident's key-value confirm, reason for discussion, urgency and staging confirm become proposals the consultant approves in "Sign-offs from your team" | todo |
 | 1.9 | Doctor break-glass | S | D8: "Open with a reason" for a doctor without access: read-only, 24 h, audited, owner consultants told; shown on the 403 page and used by Phase 7 | todo |
 | 1.10 | Tests and old page | S | `e2e/shots/casefile.spec.ts` covers the guided Case File (mock fixtures for `/steps` and `/staging`); the previous `CaseFilePage.tsx` and its fallback are removed if nothing needs them (the public demo now runs current code) | todo |
+| 1.11 | The 18 Oct walkthrough wishes | S | Each wish the owner parked on 18 Oct is checked against today's app and finished where not met: clear "Join a Case File" and "Join a meeting" buttons (with codes) on the home screen; no duplicate Home and Case Files lists; a better filter on the list; the date and time pickers open beside their field and look modern; the coordinator sees a clear confirmation when a Case File is added to an agenda. (The search details wait for the owner: Parking lot.) | todo |
+| 1.12 | Breast prognostic stage (if time allows) | S | The staging card of breast cancer also works out the AJCC 8 prognostic stage group (grade, HER2, ER, PR) from the book's table on pages 621 onwards, same guards and preview label as the anatomic stage (docs/staging/DECISION.md) | todo |
 
 ### Phase 2: checklists for India's top cancers (owner point 1)
 
@@ -105,6 +107,7 @@ Status: `todo`, `doing`, `done (<hash>)`, `blocked (<reason>)`. Lane: **S** seri
 | 2.8 | Paediatric and sarcoma | P | `wilms.json`, `retinoblastoma.json`, `bone_sarcoma.json`, `soft_tissue_sarcoma.json`, `brain_cns.json` (official open-access source when NCG has none) | todo |
 | 2.9 | Unknown and other cancers | S | The generic checklist stays for unknown solid cancers; a `generic_haem` variant for blood cancers not listed (marrow, flow cytometry, cytogenetics instead of staging imaging); the picker's "not listed" path asks solid or blood; CUP unchanged | todo |
 | 2.10 | Wiring | S | Every picker entry maps to a checklist (`cancers.ts`), shown "checklist built (draft)"; specialty packs and the cancer-against-reports warning know the new cancers; the Case File's glance groups show the new facts | todo |
+| 2.12 | Flags from the books (if time allows) | P | Dose and schedule reference lines for the new cancers from the NCG regimen tables (each with its page), added to `dose_references.json`, so the decision checks cover them | todo |
 | 2.11 | Synthetic patients and an end-to-end check | S | At least four new synthetic patients in the demo HIS (seed scenarios, for example ovary, prostate, stomach, lymphoma) with realistic report sets; each Case File created, its reports read by the real models, its checklist gaps sensible; screenshots | todo |
 
 Each protocol: `version` "0.1-draft", `approval.status` "draft", the note "Draft checklist from <book>: needs a clinician's check",
@@ -174,12 +177,19 @@ records per setting with `sources` (book, page, verbatim line), departments that
 
 | ID | Item | Lane | Done when | Status |
 |---|---|---|---|---|
-| 9.1 | Full regression | S | All unit tests, the mocked screenshot tests, and real checks for every role on laptop and phone, light and dark; compared with the Phase 0 baseline; nothing that worked is broken | todo |
+| 9.1 | Full regression | S | The security audit (`tumour_board/eval/security_audit.py`) passes, including the new routes and sockets (voice, messages, similar files, break-glass); all unit tests, the mocked screenshot tests, and real checks for every role on laptop and phone, light and dark; compared with the Phase 0 baseline; nothing that worked is broken | todo |
 | 9.2 | Whole-run review | P | One reviewer per area (Opus) over the whole night's diff; serious findings fixed | todo |
 | 9.3 | Demo walk-through | S | `docs/night-v3/HOW_TO_TRY.md`: a new-cancer patient prepared end to end; a meeting with two absent heads where the agents answer in voice; a decision that produces the Case summary; similar Case Files; messages between the coordinator and a doctor. Logins by username only. | todo |
 | 9.4 | The clinician's file | S | `HOW_TO_TRY.md` says how to load the owner's clinician-made synthetic file when it arrives (outside-report upload or a demo-HIS seed) | todo |
 | 9.5 | Features overview and finish | S | `docs/night-v3/FEATURES.md`: before, during and after the board with everything built; the Morning summary final; `/data/vaidyx/night-v3/RUN_COMPLETE` created | todo |
 
-## 5. Order and what matters most
+## 5. Pause, stop and resume
+- `docs/night-v3/run_night.sh pause`: the running session finishes its current item, commits, logs `[PAUSED]` and ends; nothing new starts.
+- `docs/night-v3/run_night.sh resume`: starts again from the next unfinished item.
+- `docs/night-v3/run_night.sh stop`: stops at once; the next start recovers the interrupted item (PROMPT.md, "Recover an interrupted session first").
+- `docs/night-v3/run_night.sh status`: what is running and how far the plan is.
+- The weekly usage is watched by the owner (Claude usage page, or `/usage` in an interactive session); at about 80 % the owner runs `pause`.
+
+## 6. Order and what matters most
 Phases run in order (0 to 9). If time runs short, the run still finishes the phase it is in properly (gate, review, log) rather than
 starting half of the next. Within a phase, items with an S lane run in order; P items run in parallel with agents.

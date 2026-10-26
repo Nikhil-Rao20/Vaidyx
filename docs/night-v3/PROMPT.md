@@ -12,7 +12,7 @@ A supervisor script runs one fresh session after another: you handle **one phase
 `CLAUDE.md` (already loaded), `docs/night-v3/PLAN.md`, `docs/night-v3/ORCHESTRATION.md`, `docs/night-v3/LOG.md`, and the research notes
 in `docs/night-v3/research/` that your phase lists. Read the parts of older documents you need (`docs/ui/casefile-steps/DESIGN.md`,
 `docs/staging/DECISION.md`, `docs/tumour-board/audio_feature.md`, `docs_Eswar/changes_v2.md`, `docs_Eswar/01_how_vaidyx_tb_works.md`).
-If the log already has entries, resume from the next unfinished item.
+If the log already has entries, resume as described in "Recover an interrupted session first".
 
 ## Pre-flight
 - Confirm you are on branch `night-v3`. If `git status` shows uncommitted work from an interrupted session, finish or revert that item
@@ -23,6 +23,23 @@ If the log already has entries, resume from the next unfinished item.
   `scripts/demo_services.sh start pacs his video`, `~/vaidyx/start_vaidyx_app.sh`.
 - Never touch the public demo (:7100, :7101, the Cloudflare tunnel, `~/vaidyx/public_demo/`), the benchmark, or the real case
   `data/tumour_board/cases/TB-2026-bharath`.
+
+## Recover an interrupted session first
+A session can end at any moment (a pause, a stop, a crash, a server restart). Before new work:
+1. Read the last entries of `LOG.md` and `docs/night-v3/CURRENT.md` (the checkpoint of the item in progress, see below).
+2. If `git status` shows uncommitted changes: compare them with the item named in `CURRENT.md`. If they are complete and the tests
+   pass, commit them as that item. Otherwise keep them safely with `git stash push -u -m "night-v3 interrupted <ID>"` (never discard
+   work), log `[RESUME]` with the stash name, and redo the item from its checkpoint.
+3. An item marked `doing` in `PLAN.md` is resumed from its checkpoint, not started again from zero.
+4. Check the services (below) and continue.
+
+## Checkpoints and the pause
+- **Before each item:** mark it `doing` in `PLAN.md`, append `[START] <ID> <time>` to `LOG.md`, and write `docs/night-v3/CURRENT.md`
+  (item, plan of sub-steps, files involved). **After each sub-step** (an agent returned, a test passed), update `CURRENT.md`: what is
+  done, what is next. After the commit, clear it to "none". This is what lets any later session, or the owner, continue mid-item.
+- **The pause:** before starting each item and after each commit, check for `/data/vaidyx/night-v3/PAUSE`. If it exists, start nothing
+  new: finish or stash the item in hand, update `PLAN.md`, the Morning summary and `CURRENT.md`, log `[PAUSED]` with the reason in the
+  file, commit the log, and end the session.
 
 ## Work the phase
 Take the first phase in the plan with unfinished items and work through its items in order.

@@ -15,6 +15,15 @@ How the main session (orchestrator) and its agents split the work in [PLAN.md](P
 If an agent definition is not picked up, the orchestrator uses `general-purpose` with the same model and pastes the role brief into the
 prompt. Use Sonnet for reading and searching, Opus for writing code, Fable (the orchestrator) for design, integration and judgement.
 
+## Using the models wisely (the usage budget)
+- **Orchestrator:** the supervisor's model (Fable by default). Keep its own work to design, integration, review of agent diffs and
+  commits; hand reading and writing to agents.
+- **Sonnet** for every explorer task, simple edits (tests, CSS, wording, JSON checklists transcribed from a source the explorer already
+  quoted), and screenshot checks.
+- **Opus** for real code (backend modules, new screens) and for reviews.
+- **Fable** (the orchestrator itself) only where judgement matters: the designs of Phases 3, 5, 6 and 7, and decisions.
+- Keep briefs short and precise, give agents only the files they need, and never ask two agents to read the same large document.
+
 ## Lanes: what may run side by side (at most 3 agents at once)
 
 | Parallel | Serial (orchestrator only) |

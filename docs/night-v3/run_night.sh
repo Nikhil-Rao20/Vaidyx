@@ -1,11 +1,36 @@
 #!/bin/bash
-# Starts the unattended night-v3 run on the server (independent of VS Code).
-# Watch:  tail -f docs/night-v3/LOG.md                     (progress, Morning summary at the top)
-#         tail -f /data/vaidyx/night-v3/supervisor.log     (rounds)
-# Stop:   kill -- -$(cat /data/vaidyx/night-v3/supervisor.pid)
+# Owner controls for the unattended night-v3 run (independent of VS Code).
+#   docs/night-v3/run_night.sh start     start the supervisor (branch night-v3)
+#   docs/night-v3/run_night.sh pause     ask for a pause: the running session finishes its current item, commits, logs and ends;
+#                                        no new session starts until "resume"
+#   docs/night-v3/run_night.sh resume    clear the pause and start the supervisor again; it continues from the next unfinished item
+#   docs/night-v3/run_night.sh stop      stop at once (supervisor and session); the next start recovers an interrupted item
+#   docs/night-v3/run_night.sh status    what is running, the plan's progress, the last log lines
+# Watch: tail -f docs/night-v3/LOG.md and /data/vaidyx/night-v3/supervisor.log
 cd /home/bharath.tangella/vaidyx/Vaidyx || exit 1
-[ "$(git rev-parse --abbrev-ref HEAD)" = "night-v3" ] || { echo "switch to branch night-v3 first"; exit 1; }
-mkdir -p /data/vaidyx/night-v3
-setsid nohup bash docs/night-v3/supervisor.sh >> /data/vaidyx/night-v3/supervisor.log 2>&1 < /dev/null &
-echo $! > /data/vaidyx/night-v3/supervisor.pid
-echo "supervisor started, pid $(cat /data/vaidyx/night-v3/supervisor.pid)"
+S=/data/vaidyx/night-v3; mkdir -p "$S"
+running() { [ -f "$S/supervisor.pid" ] && kill -0 "$(cat "$S/supervisor.pid")" 2>/dev/null; }
+case "${1:-status}" in
+  start|resume)
+    [ "$(git rev-parse --abbrev-ref HEAD)" = "night-v3" ] || { echo "switch to branch night-v3 first"; exit 1; }
+    running && { echo "already running (pid $(cat "$S/supervisor.pid"))"; exit 0; }
+    rm -f "$S/PAUSE"
+    setsid nohup bash docs/night-v3/supervisor.sh >> "$S/supervisor.log" 2>&1 < /dev/null &
+    echo $! > "$S/supervisor.pid"
+    echo "supervisor started, pid $(cat "$S/supervisor.pid")" ;;
+  pause)
+    echo "owner asked for a pause at $(date '+%F %T')" > "$S/PAUSE"
+    echo "pause requested: the current session finishes its item and ends; nothing new starts until: $0 resume" ;;
+  stop)
+    if running; then kill -- -"$(cat "$S/supervisor.pid")" 2>/dev/null; echo "stopped"; else echo "not running"; fi
+    echo "owner stopped the run at $(date '+%F %T')" > "$S/PAUSE" ;;
+  status)
+    if running; then echo "supervisor: running (pid $(cat "$S/supervisor.pid"))"; else echo "supervisor: not running"; fi
+    [ -f "$S/PAUSE" ] && echo "pause: $(cat "$S/PAUSE")"
+    [ -f "$S/RUN_COMPLETE" ] && echo "plan: complete"
+    echo "plan items: $(grep -cE '\| (done|blocked)' docs/night-v3/PLAN.md) finished of $(grep -cE '^\| [0-9]+\.[0-9]+\+? \|' docs/night-v3/PLAN.md)"
+    echo "last commit: $(git log --oneline -1)"
+    echo "--- supervisor"; tail -3 "$S/supervisor.log" 2>/dev/null
+    echo "--- log"; tail -5 docs/night-v3/LOG.md ;;
+  *) echo "usage: $0 start|pause|resume|stop|status"; exit 2 ;;
+esac
