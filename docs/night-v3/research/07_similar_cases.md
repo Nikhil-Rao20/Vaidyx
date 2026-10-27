@@ -234,3 +234,62 @@ Decisions are scripted fields, deliberately plain, in the style of the decision 
 5. **The Case File id in the reason.** The reason "similar to TB-xxx" and the owner notice carry a Case File id. Ids like TB-2026-bharath contain a name, so should the system use an opaque short code in notices when an id is not of the standard pattern?
 6. **Before opening, how much of the other department's file may a card show?** The card shows decisions and quoted report lines of a patient the doctor has no care relationship with, de-identified only as far as the rules in 4.7. Is that acceptable under D4 and D10 with the label, or should the card show only structured fields until the break-glass is taken (then "why similar" lines and decision text appear only after opening)? I recommend the owner and the hospital's data protection lead confirm this, since the DPDP Act 2023 does not clearly cover secondary use inside the same hospital.
 7. **Linked cases and the same patient.** Should files linked to this one (same patient, another cancer or an earlier episode) be hidden from the list, or shown with the chip "linked to this file"? Also: a limit on how often one doctor may search or open (for example a daily count flagged to the owner), and who reviews the break-glass log and how often (hospital practice is usually sampled review).
+
+## 8. The Phase 7 contract (the orchestrator, 27 Oct 2026, session 9; what is built)
+
+Sections 4.1 to 4.12 stand except where this section says otherwise. The fact sheets behind it: `/data/vaidyx/night-v3/runs/briefs/7_facts_backend.md`, `7_facts_web.md`, `7_facts_history.md`.
+
+### 8.1 Decisions on the open questions of section 7 (the safer reading each time)
+1. The card shows the past file's Case File id only; the owner department appears after opening.
+2. "Past" = listed, not archived, not protected, with at least one board record whose outcome is `decision` (`outcome_type`, else `outcome`, else "decision" as `case_summary._outcome` reads it); all time; the month and year on the card.
+3. No department boost: ranked on likeness only.
+4. The doctor's words are kept in the searching file's own audit (as `published_search` keeps its terms); the organisation log keeps a short hash of them. They never go into a shown file's audit.
+5. The reason is "similar to Case File <id>". A search is never available on a protected file, and the real case is the only id that carries a name, so no opaque code is needed.
+6. The card shows what the plan item 7.3 lists (cancer, stage, key values, decisions, outcome so far, the quoted lines) under the guards of 4.2, 4.6 and 4.7. Flagged for the owner's data protection lead.
+7. Files of the same patient (an identifier of `published._identifiers` in common, or a `linked_cases` entry either way) are never listed. Searches: 10 per 10 minutes per login. Who reviews the break-glass log: the owner (parking lot).
+
+### 8.2 Where the code differs from section 4
+- Cancer groups live in `similar.GROUPS` (no protocol file has a group): colon and rectum share `colorectal`; every other protocol is its own group; `generic` and `generic_haem` use `name:<normalised cancer_name>`.
+- No hooks in `postboard`, `case_summary`, `team` or `store`. `similar.ensure()` runs before every search and in a scheduler job (`("similar", similar.job, 1800)` in `scheduler.JOBS`): it walks `config.CASES_DIR` (a protected id is skipped by its directory name before anything is opened), computes a signature per file (the `rules.case_signature` hash plus board record ids and versions, the staging confirmation time, the Case summary's current version, review status and edit count, the archived and listing state, protocol, cancer_name, setting, agesex), rebuilds the changed profiles, drops the ineligible ones, re-embeds only changed chunks (content cache key `sha1(EMBED_MODEL + "similar:" + text)`), and rewrites `index.json` and `index.npz` atomically under one process lock. An archived, deleted or protected file is therefore gone before any result is computed; the cards are rebuilt from the live profiles at every search.
+- The source file itself gets a transient profile (not stored unless it is eligible), so a file without a decision (Kavitha's TB-2026-0001) can be searched from.
+- The search needs FULL scope on the source file (not REQUESTS, not a break-glass window: no chain of openings) and a known login that is not an admin or Vaidyx admin; the Case File guard already refuses the POST on READ, REQUESTS and archived files, so `_BREAK_GLASS_OK` and `_ARCHIVE_OK` stay as they are. A doctor inside a window keeps `ask` as item 1.9 built it.
+- `llm.chat` has no seed: the order is temperature 0 over the three fixed permutations, merged by median rank, cached by key (4.5); invalid ids fall back to the RRF order.
+- The reasoner calls run concurrently (`asyncio.gather`): the three order calls, then one line call per shown result (up to 10). The POST waits for the whole answer (the card says it takes up to half a minute).
+- The cache under `similar/cache/<key>.json` stores ids and picks only, never texts.
+
+### 8.3 Routes (`tumour_board/api/similar.py`, registered as `"similar"` in the router tuple; prefix `/api/tb`)
+- `GET /cases/{id}/similar` -> `{available: bool, reason: str, label, order_note, model_line, cancer_group, group_label, searches: [{words, at, by_name}]}` (the last five searches of this file from its audit; `available` false with a plain reason on a protected file, a file with no cancer group, or for a reader without FULL scope).
+- `POST /cases/{id}/similar/search {words?: str}` -> `SimilarResponse` (below); 403 for a Vaidyx admin or without FULL scope, 400 `bad_words` from `published.check_terms` (the past files' identifiers are screened again on every quote), 429 `rate_limited`, 502 on a model error only when the RRF fallback also fails.
+- `POST /cases/{id}/similar/open {past_case_id}` -> `{how: "normal"|"with_reason"|"refused", scope, reason, via, label}`: the server computes `access.scope` on the past file; FULL, REQUESTS or READ (a window already open) gives `normal` and audits `similar_opened` in both files (this file: `past`, `how`; the past file: `by`, `from`, `how`); None with `access.may_open_with_reason` gives `with_reason` with `reason = "similar to Case File <this id>"` and `via = "similar:<this id>"` and audits nothing (the break-glass call audits itself with that `via`, and the browser calls `open` again once the window exists); anything else `refused`. A past file that is no longer eligible answers 404 `not_found` (never named).
+- The website opens the past file at `/cases/<past>/summary?from=similar&of=<this id>`; `POST /break-glass {case_id, reason, via}` is the existing route.
+
+### 8.4 `SimilarResponse`
+```
+{label: "Past Case File, not advice for this patient", ordered_by: "model"|"text",
+ order_note: "Listed in order of likeness as judged by Gemma-4-31B (non-medical). The order is not a score." | "Ordered by text match only; the model ordering was not available.",
+ model_line: "Gemma-4-31B, a non-medical model; it only orders the list and picks quoted lines",
+ cancer_group, group_label, words, note (plain sentence or ""),
+ results: [ResultCard, ... up to 10], weaker: [ResultCard, ...]}
+ResultCard = {case_id, cancer, setting, age_band ("50 to 59" or ""), sex ("F"|"M"|"O"|""),
+ stage: [{text, kind: "recorded"|"confirmed_draft"|"agreed", label, quote, where}],     // [] means "No stage recorded; none confirmed"
+ values: [{fact, label, value, quote, where, shared: bool}],                               // histology, grade, then the biomarkers; shared = present in both files
+ decisions: [{record_id, when: "Oct 2026", outcome, outcome_label, intent, intent_label, text, modalities: [labels], stage_as_agreed}],
+ outcome_so_far: {sentences: [{text, where}], later_records: str},
+ similar: [{about, this: {text, where}, past: {text, where}}], differs: [same shape],      // up to 3 and 2
+ matched_by: ["cancer group", "setting", ...] | null, no_reasons: bool,
+ open: {how: "normal"|"with_reason"|"refused", reason, via}, label}
+```
+`where` strings: the past file "<doc title>, Mon YYYY" or "Board record, Mon YYYY" or "Case summary, Mon YYYY"; this file "<doc title>, DD/MM/YYYY". No field anywhere is a number that ranks (no score, rank, percent, count of candidates).
+
+### 8.5 Audit
+This file's `audit.jsonl`: `similar_search` {by, words, cancer_group, n_candidates, n_results, n_weaker, ordered_by, fallback, shown_hash, dropped_lines, prompt_version, seconds}; `similar_opened` {by, past, how}. Each shown past file: `similar_shown` {by, from}; an opened one: `similar_opened` {by, from, how}. `org_audit.jsonl`: `similar_search` {case_id, words_hash, shown: [ids], n_results}, `similar_opened` {case_id, past, how}. A failed or empty search is audited too. Nothing in any log holds a name, an identifier or a quote.
+
+### 8.6 The website (item 7.3)
+- `SummaryStep` gains `similar: ReactNode`, rendered as `<Card title="Similar Case Files" testId="summary-similar">` just before "Similar published cases". `SimilarPanel.tsx` mirrors `PublishedPanel.tsx`: the help line (the label, the model line, "Every line is quoted from the two files. The search is logged."), the words box (optional, 200 characters) with "Find similar Case Files" (loading "Searching, up to half a minute"), the earlier searches, the results as a plain list in order (the first five, then "Show 5 more"), "Weaker matches" after them, each result card as 4.7 describes with the label chip first, "Open Past Case File" (normal: a link; with reason: the pre-filled dialog), and the `?item=similar` address that scrolls the card into view.
+- `OpenWithReasonButton` gains `initialReason?: string` and a controlled `open`/`onOpenChange` pair (the existing uses unchanged); the reason is never empty.
+- The Overview gets a small "Similar Case Files" card after the Specialty agents card ("Past Case Files of this hospital like this one, in order, with quoted reasons. Past Case File, not advice for this patient.", a button to `h.go("summary", "similar")`), hidden inside a break-glass window.
+- `GuidedCaseFilePage` shows, when the address carries `from=similar&of=<id>`, the banner "You opened this from the Similar Case Files of <id>. Past Case File, not advice for this patient." above the nav grid (the read-only banner of item 1.9 stays as it is).
+- Wording: none of "do the same", "consider", "suggest", "recommend", "treat as", "follow", "best match" in any fixed string; a test scans them.
+
+### 8.7 The history (item 7.4)
+No seed change and no demo HIS rebuild (a rebuild erases the run-time HIS patients behind TB-2026-0001 and TB-2026-0002). `docs/night-v3/tools/make_history.py` makes the files through the running demo HIS and the normal API with the demo logins read in code: seed patients whose reports are dated Aug to Sep 2026 get a meeting dated 15/10/2026 (so a discharge summary added at run time, dated today, falls after the board and fills "since the board"); run-time patients (a triple negative breast file, a generic cancer file) get a meeting dated today (a record dated the board day counts as before it, `case_summary._split`). Ids `HIST-nn`, meetings titled "History (SYNTHETIC) <label>", decisions as plain fixtures, one deferred file, one decided file archived afterwards, Case summaries built on demand (the meetings are never started, so no agent briefs are queued).

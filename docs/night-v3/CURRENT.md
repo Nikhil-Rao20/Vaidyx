@@ -1,3 +1,3 @@
 # The item in progress (checkpoint)
 
-none (Phase 6 closed on 27 Oct 2026 at 17:18 IST, session 8: every item done, the gate run, the review and its fixes committed as a527f46, the live check re-run green, the Morning summary current). The next session starts Phase 7 (similar Case Files) from docs/night-v3/PLAN.md: read research/07_similar_cases.md and the owner decisions D4, D8 and D10 first; the Case summary of Phase 3 (tumour_board/summary.py, artefacts.case_summary) and the decision records (postboard.py) feed the profile of 7.1; the break-glass of D8 (built in Phase 1, item 1.3: "Open with a reason") is the way a result opens read-only. Services to keep: :8100, :8101, :7000, :7130, :8042, :7880, :7120.
+none (Phase 7 closed in session 10 at 19:45; next: Phase 8 from PLAN.md).
