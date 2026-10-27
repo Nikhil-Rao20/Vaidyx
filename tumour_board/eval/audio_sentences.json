@@ -1,0 +1,61 @@
+{
+  "about": "Synthetic sentences for the voice check (night-v3 item 4.5, tumour_board/eval/audio_eval.py). Written in the system's own words; no real patient, no real person of this project. must_keep: the numbers, units, dates, staging and receptor tokens that must come back exactly after the service's clean-up (compared case-insensitively, hyphens and spaces inside a token ignored). accept: spelling pairs counted as equal in the normalised word error rate, the system's form first. A check on a synthetic set, never an accuracy claim.",
+  "sentences": [
+    {"id": "his-01", "category": "histology", "text": "HPE dated 14/09/2026 shows invasive ductal carcinoma, grade 2, tumour size 2.8 cm.", "must_keep": ["14/09/2026", "grade 2", "2.8"]},
+    {"id": "his-02", "category": "histology", "text": "Biopsy of the rectal growth on 03/08/2026 shows moderately differentiated adenocarcinoma, 4.5 cm in length.", "must_keep": ["03/08/2026", "4.5"]},
+    {"id": "his-03", "category": "histology", "text": "IHC dated 21/07/2026 shows keratinising squamous cell carcinoma, size 3.2 by 2.1 cm.", "must_keep": ["21/07/2026", "3.2", "2.1"], "accept": [["keratinising", "keratinizing"]]},
+    {"id": "his-04", "category": "histology", "text": "Wide local excision on 05/10/2026: tumour 1.9 cm, margins clear, closest margin 4 mm.", "must_keep": ["05/10/2026", "1.9", "4"]},
+
+    {"id": "lab-01", "category": "lab", "text": "Haemoglobin 11.8 g/dL, platelets 245,000 per microlitre, creatinine 0.9 mg/dL.", "must_keep": ["11.8 g/dL", "245,000", "0.9 mg/dL"]},
+    {"id": "lab-02", "category": "lab", "text": "Haemoglobin 9.6 g/dL, total leucocyte count 7,400 per microlitre, platelets 1,80,000.", "must_keep": ["9.6 g/dL", "7,400", "1,80,000"]},
+    {"id": "lab-03", "category": "lab", "text": "Serum CEA 12.4 ng/mL, CA 19-9 86 U/mL, albumin 3.4 g/dL.", "must_keep": ["12.4", "19-9", "86", "3.4 g/dL"]},
+    {"id": "lab-04", "category": "lab", "text": "Sodium 136 mmol/L, potassium 4.2 mmol/L, bilirubin 0.8 mg/dL.", "must_keep": ["136", "4.2", "0.8 mg/dL"]},
+    {"id": "lab-05", "category": "lab", "text": "Absolute neutrophil count 1,600 per microlitre, haemoglobin 10.2 g/dL, platelets 98,000.", "must_keep": ["1,600", "10.2 g/dL", "98,000"]},
+
+    {"id": "stg-01", "category": "staging", "text": "MRI pelvis gives the stage as mrT3b N1, and the mesorectal fascia is clear.", "must_keep": ["mrT3b N1"]},
+    {"id": "stg-02", "category": "staging", "text": "PET-CT on 12/09/2026 gives cT3 N2 M0.", "must_keep": ["12/09/2026", "cT3 N2 M0"]},
+    {"id": "stg-03", "category": "staging", "text": "After neoadjuvant chemotherapy the pathology stage is ypT2 N0.", "must_keep": ["ypT2 N0"]},
+    {"id": "stg-04", "category": "staging", "text": "Clinical stage cT2 N1 M0, with SUVmax 8.4 in the primary.", "must_keep": ["cT2 N1 M0", "SUVmax", "8.4"], "accept": [["SUVmax", "SUV max"]]},
+    {"id": "stg-05", "category": "staging", "text": "The lung CT reads cT4 N3 M1a with a 2.3 cm adrenal lesion.", "must_keep": ["cT4 N3 M1a", "2.3"]},
+
+    {"id": "dat-01", "category": "dates", "text": "The board meets on 28/10/2026 and the scan is due by 04/11/2026.", "must_keep": ["28/10/2026", "04/11/2026"]},
+    {"id": "dat-02", "category": "dates", "text": "Surgery was done on 19/06/2026 and the first cycle started on 01/08/2026.", "must_keep": ["19/06/2026", "01/08/2026"]},
+    {"id": "dat-03", "category": "dates", "text": "Follow-up imaging is planned for 15/01/2027.", "must_keep": ["15/01/2027"]},
+
+    {"id": "rec-01", "category": "receptors", "text": "ER positive, PR positive, HER2 equivocal, Ki-67 30%.", "must_keep": ["ER positive", "PR positive", "HER2 equivocal", "Ki-67", "30%"]},
+    {"id": "rec-02", "category": "receptors", "text": "ER negative, PR negative, HER2 3+ on IHC.", "must_keep": ["ER negative", "PR negative", "HER2", "3+"], "accept": [["3+", "3 plus"]]},
+    {"id": "rec-03", "category": "receptors", "text": "PD-L1 TPS 60%, EGFR exon 19 deletion detected, ALK negative.", "must_keep": ["PD-L1", "TPS 60%", "19", "ALK negative"]},
+    {"id": "rec-04", "category": "receptors", "text": "HER2 FISH ratio 2.4, and the ER Allred score is 8 out of 8.", "must_keep": ["HER2", "2.4", "8"]},
+
+    {"id": "pre-01", "category": "pre-authorization", "text": "Pre-Authorization under PM-JAY was raised on 22/10/2026 for six cycles of chemotherapy.", "must_keep": ["PM-JAY", "22/10/2026"]},
+    {"id": "pre-02", "category": "pre-authorization", "text": "The PM-JAY Pre-Authorization needs the HPE report, the IHC report and the UHID.", "must_keep": ["PM-JAY", "HPE", "IHC", "UHID"]},
+    {"id": "pre-03", "category": "pre-authorization", "text": "Pre-Authorization approved for 85,000 rupees under PM-JAY on 24/10/2026.", "must_keep": ["85,000", "PM-JAY", "24/10/2026"]},
+
+    {"id": "pfr-01", "category": "points-for-review", "text": "Points for review: ECOG 1 in the clinic note versus ECOG 2 in the nursing note.", "must_keep": ["ECOG 1", "ECOG 2"]},
+    {"id": "pfr-02", "category": "points-for-review", "text": "Points for review: the tumour size is 3.1 cm in the MRI and 2.6 cm in the HPE.", "must_keep": ["3.1", "2.6"]},
+    {"id": "pfr-03", "category": "points-for-review", "text": "Points for review: the HPE date 11/09/2026 differs from the date on the request form.", "must_keep": ["11/09/2026"]},
+
+    {"id": "qst-01", "category": "questions", "text": "Which department should clear the fitness for surgery?", "must_keep": []},
+    {"id": "qst-02", "category": "questions", "text": "What did the HPE report say about the margins?", "must_keep": ["HPE"]},
+    {"id": "qst-03", "category": "questions", "text": "Is the ECOG noted anywhere in the records?", "must_keep": ["ECOG"]},
+    {"id": "qst-04", "category": "questions", "text": "Ask the medical oncology agent whether a creatinine of 1.4 mg/dL is noted before cycle 3.", "must_keep": ["1.4 mg/dL"]},
+
+    {"id": "ans-01", "category": "agent-answer", "text": "On 16/10/2026 the radiology report records a 2.4 cm lesion in segment 7 of the liver.", "must_keep": ["16/10/2026", "2.4", "7"]},
+    {"id": "ans-02", "category": "agent-answer", "text": "As of 20/10/2026, the records show haemoglobin 10.6 g/dL and no repeat scan after cycle 2.", "must_keep": ["20/10/2026", "10.6 g/dL"]},
+
+    {"id": "drg-01", "category": "drugs", "text": "The records list capecitabine and oxaliplatin for four cycles, last dose on 02/09/2026.", "must_keep": ["02/09/2026"]},
+    {"id": "drg-02", "category": "drugs", "text": "Trastuzumab was started with paclitaxel, weekly for 12 weeks.", "must_keep": ["12"]},
+    {"id": "drg-03", "category": "drugs", "text": "Pembrolizumab 200 mg every three weeks is noted in the oncology note.", "must_keep": ["200"]},
+    {"id": "drg-04", "category": "drugs", "text": "Osimertinib 80 mg once daily is recorded in the lung clinic note.", "must_keep": ["80"]},
+    {"id": "drg-05", "category": "drugs", "text": "Letrozole 2.5 mg daily was changed to tamoxifen 20 mg daily.", "must_keep": ["2.5", "20"]},
+    {"id": "drg-06", "category": "drugs", "text": "Docetaxel and carboplatin, with bevacizumab, are listed in the old discharge summary.", "must_keep": []},
+    {"id": "drg-07", "category": "drugs", "text": "Temozolomide after radiotherapy, and imatinib 400 mg, are in the records.", "must_keep": ["400"]},
+
+    {"id": "plc-01", "category": "places-names", "text": "The patient was referred from Tata Memorial in Mumbai and Kidwai Memorial in Bengaluru.", "must_keep": []},
+    {"id": "plc-02", "category": "places-names", "text": "Earlier treatment was at Adyar, and the slides were reviewed at AIIMS and PGIMER.", "must_keep": ["AIIMS", "PGIMER"]},
+    {"id": "plc-03", "category": "places-names", "text": "She travels from Thiruvananthapuram, and her brother lives in Visakhapatnam.", "must_keep": []},
+    {"id": "plc-04", "category": "places-names", "text": "Referral letters came from Guwahati, Bhubaneswar and Coimbatore.", "must_keep": []},
+    {"id": "plc-05", "category": "places-names", "text": "The camp patients came from Kathua, Rajouri and Poonch.", "must_keep": []},
+    {"id": "plc-06", "category": "places-names", "text": "Dr Kavita, Dr Venkatesh and Dr Priya will join the board on 30/10/2026.", "must_keep": ["30/10/2026"]}
+  ]
+}

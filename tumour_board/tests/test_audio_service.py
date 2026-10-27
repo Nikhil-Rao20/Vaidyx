@@ -702,6 +702,19 @@ def test_split_for_tts_limits():
     ("haemoglobin 9.8 g d l", "haemoglobin 9.8 g/dL"),
     ("creatinine 1.1 mg/dl", "creatinine 1.1 mg/dL"),
     ("Haemoglobin 11.8 g/dL, platelets 245,000", "Haemoglobin 11.8 g/dL, platelets 245,000"),
+    # learned from the voice check (item 4.5): the engine writes spoken forms the house format does not use
+    ("from 14th of September, 2026, Dr. Kavita", "from 14/09/2026, Dr. Kavita"),
+    ("seen on 3 March 2026 and 31st October 2025", "seen on 03/03/2026 and 31/10/2025"),
+    ("September 2026 alone stays", "September 2026 alone stays"),
+    ("under PMJ is pending, EC OG1", "under PM-JAY is pending, ECOG 1"),
+    ("PMJAY and PM Jay and EC OG 2", "PM-JAY and PM-JAY and ECOG 2"),
+    ("Haemoglobin 11.8 g per deciliter", "Haemoglobin 11.8 g/dL"),
+    ("11.8 grams per decilitre, creatinine 1.1 milligrams per decilitre", "11.8 g/dL, creatinine 1.1 mg/dL"),
+    ("creatinine 0.9 mg per deciliter", "creatinine 0.9 mg/dL"),
+    ("the scan is due by 4-11-2026 and 30-10-2026", "the scan is due by 04/11/2026 and 30/10/2026"),
+    ("approved on 2410-2026, imaging 1501-2027", "approved on 24/10/2026, imaging 15/01/2027"),
+    ("a lot number 4599-2026 stays", "a lot number 4599-2026 stays"),
+    ("HER23 plus on IHC, PDL1TPS 60%, PD L1 negative", "HER2 3+ on IHC, PD-L1 TPS 60%, PD-L1 negative"),
 ])
 def test_clean_transcript(src, clean):
     assert text_norm.clean_transcript(src) == clean

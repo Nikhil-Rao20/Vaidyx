@@ -279,14 +279,50 @@ def _stt_tnm(m: re.Match) -> str:
     return out
 
 
+_STT_SPOKEN_DATE = re.compile(r"(?<![A-Za-z0-9/])(\d{1,2})(?:st|nd|rd|th)?(?:\s+of)?\s+(" + "|".join(MONTHS) + r")\.?,?\s+((?:19|20)\d{2})(?![0-9/])",
+                              re.I)
+_STT_ECOG = re.compile(r"(?<![A-Za-z0-9])EC\s?OG\s?(\d)?(?![A-Za-z0-9])", re.I)
+_STT_PMJAY = re.compile(r"(?<![A-Za-z0-9])PM\s?-?\s?J(?:AY)?(?![A-Za-z0-9])", re.I)
+_STT_G_PER_DL = re.compile(r"(?<![A-Za-z])(?P<milli>milli|m)?(?:g|grams?)\s+per\s+(?:deci|d)\s?(?:litre|liter|l)(?![A-Za-z])", re.I)
+_STT_HYPHEN_DATE = re.compile(r"(?<![\d/.\-])(\d{1,2})-(\d{1,2})-((?:19|20)\d{2})(?![\d/.\-])")
+_STT_GLUED_DATE = re.compile(r"(?<![\d/.\-,])(\d{2})(\d{2})-((?:19|20)\d{2})(?![\d/.\-])")
+_STT_HER2_SCORE = re.compile(r"(?<![A-Za-z0-9])HER2\s?([0-3])\s?\+?plus(?![A-Za-z0-9])", re.I)
+_STT_PDL1 = re.compile(r"(?<![A-Za-z0-9])PD\s?-?\s?L\s?1\s?(TPS)?(?![A-Za-z0-9])", re.I)
+
+
+def _stt_date(m) -> str:
+    day = int(m.group(1))
+    if not 1 <= day <= 31:
+        return m.group(0)
+    month = [x.lower() for x in MONTHS].index(m.group(2).lower()) + 1
+    return f"{day:02d}/{month:02d}/{m.group(3)}"
+
+
+def _stt_numeric_date(m) -> str:
+    """"4-11-2026" or "2410-2026" (the engine's separators) to 04/11/2026 when the day and month are possible; else as heard."""
+    day, month = int(m.group(1)), int(m.group(2))
+    if not (1 <= day <= 31 and 1 <= month <= 12):
+        return m.group(0)
+    return f"{day:02d}/{month:02d}/{m.group(3)}"
+
+
 def clean_transcript(text: str) -> str:
-    """Reshape tokens only: staging written run together or spaced, "ECOG1" to "ECOG 1", "per cent" to "%", "g d l" to "g/dL".
-    Never adds a word; spelling stays as spoken and the engine's digits are kept."""
+    """Reshape tokens only: staging written run together or spaced, "ECOG1" or "EC OG 1" to "ECOG 1", "PMJ" or "PMJAY" to
+    "PM-JAY", "per cent" to "%", "g d l" or "grams per decilitre" to "g/dL", a spoken date ("14th of September, 2026") to the
+    house format 14/09/2026. Never adds a word or a value; spelling stays as spoken and the engine's digits are kept."""
     s = _STT_TNM.sub(_stt_tnm, text)
     s = _STT_T_ALONE.sub(lambda m: m.group("pre").lower() + "T" + m.group("t").lower() + (m.group("ts") or "").lower(), s)
     s = re.sub(r"(?<![A-Za-z0-9])(ECOG)(\d)(?![0-9])", r"\1 \2", s, flags=re.I)  # "ECOG1" to "ECOG 1"
+    s = _STT_ECOG.sub(lambda m: "ECOG" + (" " + m.group(1) if m.group(1) else ""), s)
+    s = _STT_PMJAY.sub("PM-JAY", s)
     s = re.sub(r"(\d)\s*(?:per\s?cent)\b", r"\1%", s, flags=re.I)
+    s = _STT_G_PER_DL.sub(lambda m: ("mg" if m.group("milli") else "g") + "/dL", s)
     s = re.sub(r"(?<![A-Za-z])(m?g)\s?/?\s?d\s?l(?![A-Za-z])", lambda m: m.group(1).lower() + "/dL", s, flags=re.I)
+    s = _STT_SPOKEN_DATE.sub(_stt_date, s)
+    s = _STT_HYPHEN_DATE.sub(_stt_numeric_date, s)
+    s = _STT_GLUED_DATE.sub(_stt_numeric_date, s)
+    s = _STT_HER2_SCORE.sub(lambda m: "HER2 " + m.group(1) + "+", s)
+    s = _STT_PDL1.sub(lambda m: "PD-L1" + (" TPS" if m.group(1) else ""), s)
     s = re.sub(r"[ \t]{2,}", " ", s)
     return s.strip()
 
