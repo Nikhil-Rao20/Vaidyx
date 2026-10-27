@@ -81,6 +81,13 @@ export const EP = {
 
   pushKey: `${TB}/push/key`,
   pushSubscribe: `${TB}/push/subscribe`,
+
+  /** GET: whether voice is on and the speech to text and read-aloud services are ready (night-v3 item 4.2). */
+  audioStatus: `${TB}/audio/status`,
+  /** POST multipart {audio, screen, case_id?, context?}: a short recording turned into editable text; the audio is never kept. */
+  audioStt: `${TB}/audio/stt`,
+  /** POST {ref, part} or {text, screen}: one sentence of a statement on screen read aloud, as a WAV (headers X-Parts, X-Part). */
+  audioTts: `${TB}/audio/tts`,
 };
 
 /** The demo hospital system. On this machine (localhost or 127.0.0.1, with the ssh tunnel) it is on port 7130 of the host
