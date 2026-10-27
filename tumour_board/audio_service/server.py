@@ -170,6 +170,7 @@ async def health(request: web.Request) -> web.Response:
     app = request.app
     stt, tts, gpu = app[STT_KEY], app[TTS_KEY], app[GPU_KEY]
     if request.query.get("warm") in ("1", "true"):
+        _check_token(request)  # loading the engines on the shared GPU is for the owner of the token (the start script uses --warm)
         await asyncio.gather(stt.warm(), tts.warm())
         await gpu.refresh()
     body = {

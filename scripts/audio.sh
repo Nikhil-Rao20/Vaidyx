@@ -50,7 +50,7 @@ start() {
     LD_LIBRARY_PATH="$NV/cublas/lib:$NV/cudnn/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
     PHONEMIZER_ESPEAK_LIBRARY="$ESPEAK/lib64/libespeak-ng.so" ESPEAK_DATA_PATH="$ESPEAK/share/espeak-ng-data" \
     HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TB_AUDIO_TOKEN_FILE="$TOKEN_FILE" \
-    setsid -f nohup "$PY" -m tumour_board.audio_service --host 127.0.0.1 --port "$PORT" --device "$DEVICE" \
+    setsid -f nohup "$PY" -m tumour_board.audio_service --host 127.0.0.1 --port "$PORT" --device "$DEVICE" --warm \
       > "$LOGS/audio.log" 2>&1 < /dev/null)
   # setsid -f forks, so the service is never this shell's child: no subshell lingers holding the caller's output open.
   local waited=0
@@ -58,10 +58,18 @@ start() {
     sleep 1; waited=$((waited + 1))
     if [ "$waited" -ge 30 ]; then echo "audio: did not answer in 30 s (see $LOGS/audio.log)"; return 1; fi
   done
-  # The first load of both engines takes a while; ?warm=1 answers once they are loaded.
+  # --warm loads both engines at start; wait until /health says each is ready (or failed), up to 180 s in all.
   local health
-  health="$(curl -s --max-time $((180 - waited)) "http://127.0.0.1:$PORT/health?warm=1")"
-  if [ -z "$health" ]; then echo "audio: listening on :$PORT, engines still loading (see $LOGS/audio.log)"; return 0; fi
+  while :; do
+    health="$(curl -s --max-time 2 "http://127.0.0.1:$PORT/health")"
+    if printf '%s' "$health" | grep -q '"state": "\(loading\|not_loaded\)"'; then
+      sleep 1; waited=$((waited + 1))
+      if [ "$waited" -ge 180 ]; then echo "audio: listening on :$PORT, engines still loading (see $LOGS/audio.log)"; return 0; fi
+    else
+      break
+    fi
+  done
+  if [ -z "$health" ]; then echo "audio: listening on :$PORT, no health answer (see $LOGS/audio.log)"; return 0; fi
   printf '%s' "$health" | python3 -c 'import json,sys
 h=json.load(sys.stdin); s,t=h["stt"],h["tts"]
 print("audio: up on :'"$PORT"' (speech to text %s %s %s, text to speech %s %s, espeak-ng fallback %s)" % (

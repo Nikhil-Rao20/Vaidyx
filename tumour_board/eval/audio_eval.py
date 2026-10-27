@@ -607,7 +607,7 @@ def main(argv=None) -> int:
     result_checks = checks(head, guards["ok"], bool(guards.get("too_long") and guards["too_long"]["ok"]))
     out = {
         "label": a.label, "at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "seconds": round(time.time() - t0, 1), "url": a.url,
-        "note": "Checks on a synthetic set spoken by a synthetic voice; not an accuracy claim.",
+        "note": "Checks on a synthetic set spoken by a synthetic voice; not an accuracy claim. The transcript clean-up was tuned on this same set on 27/10/2026, so it is not a held-out measure.",
         "voices": voices, "engines": engines, "unavailable": unavailable, "main": main_key,
         "summary": line, "thresholds": THRESHOLDS, "checks": result_checks,
         "results": per, "latency_ms": latency, "guards": guards, "real": real,

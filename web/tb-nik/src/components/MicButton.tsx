@@ -219,6 +219,15 @@ export function MicButton(props: MicButtonProps) {
     setState(message ? "error" : "idle");
   };
 
+  /** The recording died while listening: drop it, give the call microphone back and say so in plain words. */
+  const dead = (sess: Session) => {
+    if (sessRef.current !== sess || !sess.rec) return;
+    sess.rec.cancel();
+    sess.rec = null;
+    void restoreOnce(sess);
+    fail(sess, new DOMException("The microphone stopped", "AbortError"));
+  };
+
   const toggle = () => {
     if (status.stt !== "ready") return;
     if (state === "listening") void finish();
@@ -227,8 +236,8 @@ export function MicButton(props: MicButtonProps) {
   };
 
   // The listeners read the latest functions and state through this ref.
-  const live = useRef({ state, toggle, cancel, finish, props });
-  useEffect(() => { live.current = { state, toggle, cancel, finish, props }; });
+  const live = useRef({ state, toggle, cancel, finish, dead, props });
+  useEffect(() => { live.current = { state, toggle, cancel, finish, dead, props }; });
 
   // The clock, the count-down, the auto stop and the "no sound" line while listening.
   useEffect(() => {
@@ -236,6 +245,8 @@ export function MicButton(props: MicButtonProps) {
     const t = window.setInterval(() => {
       const sess = sessRef.current;
       if (!sess?.rec) return;
+      // The recorder stopped on its own (an error, the track gone) without the stop path: never show "Listening" over nothing.
+      if (!sess.rec.isLive()) { live.current.dead(sess); return; }
       const secs = (Date.now() - sess.startedAt) / 1000;
       setElapsed(Math.floor(secs));
       if (secs >= autoStopAt) { void live.current.finish(); return; }

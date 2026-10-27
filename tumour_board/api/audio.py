@@ -154,11 +154,11 @@ async def audio_tts(request: Request):
             audio, headers = await ap.speak(sentences[part], voice, speed)
         except ap.ServiceError as e:
             _service_failed(e)
-        if part == 0:
-            key = ap.ref_key(ref)
-            ap.audit_spoken(u, screen, key, len(sentences), len(text), voice, ap.took_ms(headers),
-                            case_id=str(ref.get("case_id") or "") if kind in ap.CASE_KINDS else "")
+        ap.audit_spoken(u, screen, ap.ref_key(ref), len(sentences), len(text), voice, ap.took_ms(headers),
+                        case_id=ap.audit_case_id(ref) if kind in ap.CASE_KINDS else "", part=part)
         return _wav(audio, headers, len(sentences), part)
+    if screen not in ap.TEXT_SCREENS:  # on-screen text is read back only from the boxes that offer it (the decision text)
+        common.fail(400, "Say which box the text is from.", "bad_screen")
     text = " ".join(str(b.get("text") or "").split())
     if not text:
         common.fail(400, "There is no text to read.", "empty_text")

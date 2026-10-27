@@ -155,7 +155,7 @@ def test_off_makes_no_call(tc, data_root, monkeypatch):
     assert r.status_code == 200 and r.json()["enabled"] is False and r.json()["stt"] == "off" and r.json()["tts"] == "off"
     r = stt(tc, "priya")
     assert r.status_code == 503 and r.json()["detail"] == {"message": ap.UNAVAILABLE, "code": "voice_unavailable"}
-    r = tts(tc, "priya", {"text": "Read this back."})
+    r = tts(tc, "priya", {"screen": "decision", "text": "Read this back."})
     assert r.status_code == 503 and r.json()["detail"]["code"] == "voice_unavailable"
     assert calls == []
 
@@ -183,7 +183,7 @@ def test_ready_with_limits_and_voices(tc, stub):
 def test_status_states_and_a_missing_token(tc, stub, data_root):
     stub.health = (200, {**HEALTH, "stt": {"state": "not_loaded"}, "tts": {"state": "error"}})
     s = As(tc, "priya").get("/audio/status").json()
-    assert s["stt"] == "loading" and s["tts"] == "down"
+    assert s["stt"] == "ready" and s["tts"] == "down"  # not_loaded loads on the first request, so the buttons stay usable (review N1)
     ap.reset(); stub.health = (500, {"code": "failed"})
     assert As(tc, "priya").get("/audio/status").json()["stt"] == "down"
     ap.reset(); (data_root / "audio_token.json").unlink()
@@ -294,7 +294,7 @@ def test_stt_service_down(tc, stub):
 def spy(monkeypatch):
     loaded = []
     real = ap.statement_text
-    monkeypatch.setattr(ap, "statement_text", lambda kind, ref: loaded.append(kind) or real(kind, ref))
+    monkeypatch.setattr(ap, "statement_text", lambda kind, ref, roles=None: loaded.append(kind) or real(kind, ref, roles))
     return loaded
 
 
@@ -339,9 +339,10 @@ def test_chat_reference_speaks_one_sentence_per_part(tc, stub):
     assert r.status_code == 200 and r.headers["x-part"] == "1" and json.loads(stub.calls[-1].content)["text"] == "Dr. Rao recorded ECOG 1."
     assert tts(tc, "priya", {"ref": ref, "part": 2}).status_code == 404
     assert tts(tc, "priya", {"ref": ref, "part": -1}).status_code == 400
-    lines = org_lines("audio_spoken")
-    assert len(lines) == 1 and lines[0]["ref"] == f"chat:{CASE}:T1:0" and lines[0]["parts"] == 2 and lines[0]["voice"] == "bf_emma" and lines[0]["took_ms"] == 95
-    assert lines[0]["screen"] == "ask" and lines[0]["chars"] == len("The CECT of 01/10/2026 reports a 5.2 x 4.1 cm mass. Dr. Rao recorded ECOG 1.")
+    lines = org_lines("audio_spoken")  # newest first: the part 1 request (no screen, the default voice), then the part 0 request
+    assert len(lines) == 2 and lines[1]["ref"] == f"chat:{CASE}:T1:0" and lines[1]["parts"] == 2 and lines[1]["voice"] == "bf_emma" and lines[1]["took_ms"] == 95
+    assert lines[1]["part"] == 0 and lines[0]["part"] == 1 and lines[0]["ref"] == lines[1]["ref"]  # every part leaves a line (review N3)
+    assert lines[1]["screen"] == "ask" and lines[1]["chars"] == len("The CECT of 01/10/2026 reports a 5.2 x 4.1 cm mass. Dr. Rao recorded ECOG 1.")
     c = case_lines(CASE, "audio_spoken")
     assert len(c) == 1 and c[0]["ref"] == f"chat:{CASE}:T1:0" and c[0]["parts"] == 2
     raw = (config.DATA_ROOT / "org_audit.jsonl").read_text() + json.dumps(store.read_audit(CASE))
@@ -457,26 +458,26 @@ def test_on_screen_text(tc, stub):
 
 
 def test_voice_and_speed_are_checked(tc, stub):
-    r = tts(tc, "priya", {"text": "Read this.", "voice": "en_evil"})
+    r = tts(tc, "priya", {"screen": "decision", "text": "Read this.", "voice": "en_evil"})
     assert r.status_code == 400 and r.json()["detail"]["code"] == "bad_voice"
-    assert tts(tc, "priya", {"text": "Read this.", "speed": 3}).status_code == 400
-    assert tts(tc, "priya", {"text": "Read this.", "speed": "fast"}).status_code == 400
+    assert tts(tc, "priya", {"screen": "decision", "text": "Read this.", "speed": 3}).status_code == 400
+    assert tts(tc, "priya", {"screen": "decision", "text": "Read this.", "speed": "fast"}).status_code == 400
     assert stub.calls == []
-    assert tts(tc, "priya", {"text": "Read this.", "voice": "am_michael", "speed": 0.8}).status_code == 200
+    assert tts(tc, "priya", {"screen": "decision", "text": "Read this.", "voice": "am_michael", "speed": 0.8}).status_code == 200
 
 
 @pytest.mark.parametrize("status,code,want,want_code", [(503, "loading", 503, "voice_unavailable"), (429, "busy", 429, "busy"),
                                                         (413, "text_too_long", 413, "text_too_long"), (400, "bad_voice", 502, "voice_failed")])
 def test_tts_service_errors_map(tc, stub, status, code, want, want_code):
     stub.tts = (status, {"code": code, "message": "x"})
-    r = tts(tc, "priya", {"text": "Read this."})
+    r = tts(tc, "priya", {"screen": "decision", "text": "Read this."})
     assert r.status_code == want and r.json()["detail"]["code"] == want_code
     assert not org_lines("audio_spoken")
 
 
 def test_tts_service_down(tc, stub):
     stub.down = True
-    r = tts(tc, "priya", {"text": "Read this."})
+    r = tts(tc, "priya", {"screen": "decision", "text": "Read this."})
     assert r.status_code == 503 and r.json()["detail"]["code"] == "voice_unavailable"
 
 
@@ -494,8 +495,8 @@ def test_rate_limits(tc, stub, monkeypatch):
     assert stt(tc, "priya").status_code == 200
     r = stt(tc, "priya")
     assert r.status_code == 429 and r.json()["detail"] == {"message": "Too many voice requests. Wait a minute, or type.", "code": "rate_limited"}
-    assert tts(tc, "priya", {"text": "One."}).status_code == 200
-    assert tts(tc, "priya", {"text": "Two."}).status_code == 429
+    assert tts(tc, "priya", {"screen": "decision", "text": "One."}).status_code == 200
+    assert tts(tc, "priya", {"screen": "decision", "text": "Two."}).status_code == 429
     ref = {"kind": "chat", "case_id": CASE, "id": "T1"}
     assert tts(tc, "priya", {"ref": ref}).status_code == 200  # a separate limiter from on-screen text
     assert tts(tc, "priya", {"ref": ref, "part": 1}).status_code == 200
@@ -512,3 +513,73 @@ def test_token_is_read_once_and_never_shown(tc, stub, data_root):
     (data_root / "audio_token.json").write_text("{bad json")
     ap.reset()
     assert ap.token() == ""
+
+
+# ---- the Phase 4 review fixes -------------------------------------------------------------------------------------------------
+
+def test_every_helper_role_is_a_valid_screen_id():
+    """The helper chats send screen="helper-<role>"; four roles carry an underscore (review S1)."""
+    for role in helpers.ROLES:
+        assert ap.valid_screen(f"helper-{role}"), role
+    assert not ap.valid_screen("helper/pathology") and not ap.valid_screen("x" * 41)
+
+
+def test_meeting_log_entry_needs_full_scope_on_its_case_file(tc, stub, spy):
+    """A member admitted to the meeting without FULL scope on the Case File hears the question's answer on the screen but not the
+    Board room's logged agent answer about that file (review M1)."""
+    mid, eid = _meeting_with_answer(tc)
+    join_and_admit(tc, mid, "ravi")
+    s = meetings.need(mid)
+    assert meetings.may_view(org.roles("ravi"), s) and meetings.is_member(org.roles("ravi"), s)
+    assert access.scope(org.roles("ravi"), store.get_case(CASE)) != access.FULL
+    r = tts(tc, "ravi", {"ref": {"kind": "meeting_answer", "meeting_id": mid, "id": eid}})
+    assert r.status_code == 404 and stub.calls == []
+    assert tts(tc, "ravi", {"ref": {"kind": "meeting_answer", "meeting_id": mid, "id": "Q1"}}).status_code == 200
+    assert tts(tc, "priya", {"ref": {"kind": "meeting_answer", "meeting_id": mid, "id": eid}}).status_code == 200
+
+
+def test_every_part_is_audited_and_the_case_line_once(tc, stub):
+    """A part asked for on its own leaves an organisation line; the Case File's log gets one line per statement (review N3)."""
+    seed_chat(); tid = "T1"
+    before, cb = len(org_lines("audio_spoken")), len(case_lines(CASE, "audio_spoken"))
+    r = tts(tc, "priya", {"ref": {"kind": "chat", "case_id": CASE, "id": tid}, "part": 1, "screen": "ask"})
+    assert r.status_code == 200 and r.headers["x-part"] == "1"
+    lines = org_lines("audio_spoken")
+    assert len(lines) == before + 1 and lines[0]["part"] == 1  # newest first
+    assert len(case_lines(CASE, "audio_spoken")) == cb  # the Case File's log gets its line with part 0 only
+    assert tts(tc, "priya", {"ref": {"kind": "chat", "case_id": CASE, "id": tid}, "part": 0, "screen": "ask"}).status_code == 200
+    assert len(case_lines(CASE, "audio_spoken")) == cb + 1 and org_lines("audio_spoken")[0]["part"] == 0
+
+
+def test_padded_case_id_never_makes_a_new_folder(tc, stub):
+    """The audit uses the stored id of the Case File, never the raw field (review N4)."""
+    seed_chat(); tid = "T1"
+    cases = store.CASES_DIR if hasattr(store, "CASES_DIR") else config.CASES_DIR
+    dirs_before = {d.name for d in cases.iterdir()} if cases.exists() else set()
+    r = tts(tc, "priya", {"ref": {"kind": "chat", "case_id": CASE + " " * 70 + "Z", "id": tid}, "screen": "ask"})
+    assert r.status_code in (200, 404)
+    dirs_after = {d.name for d in cases.iterdir()} if cases.exists() else set()
+    assert dirs_after == dirs_before
+    if r.status_code == 200:
+        assert case_lines(CASE, "audio_spoken")
+
+
+def test_on_screen_text_only_from_the_boxes_that_offer_it(tc, stub):
+    """Mode (b) is for the decision text's Read back; any other or no screen is refused before the service is called (review N5)."""
+    for body in ({"text": "Read this please."}, {"text": "Read this please.", "screen": "ask"}, {"text": "Read this please.", "screen": "helper-pathology"}):
+        r = tts(tc, "priya", body)
+        assert r.status_code == 400 and r.json()["detail"]["code"] == "bad_screen"
+    assert stub.calls == []
+    assert tts(tc, "priya", {"text": "Read this please.", "screen": "decision"}).status_code == 200
+
+
+def test_empty_token_is_not_cached(stub, monkeypatch, tmp_path):
+    """The app may start before the token file exists; once it appears, the next call reads it (review N2)."""
+    f = tmp_path / "later" / "audio_token.json"  # not the stub's file: this one does not exist yet
+    monkeypatch.setattr(config, "AUDIO_TOKEN_FILE", str(f))
+    ap.reset()
+    assert ap.token() == ""
+    f.parent.mkdir()
+    f.write_text(json.dumps({"token": "t" * 48}))
+    assert ap.token() == "t" * 48
+    ap.reset()

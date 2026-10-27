@@ -1,7 +1,8 @@
 // The coordinator's view during a meeting, laid out like a call with a conduct panel: on the left what the room sees (the shared
 // screen) with the people's tiles under it; on the right the panel with its tabs: Share (the case, the slide, a record, the
 // images, the timer), Decision (the form, the cards), People (admit, hands), Questions, Agenda. The control bar carries the
-// microphone and camera, previous and next case, the timer, End case and End meeting.
+// microphone and camera, previous and next case, the timer, End case and End meeting. While the coordinator dictates in the
+// call, the call microphone is muted so the room does not hear it twice, and it comes back after (only if it was on).
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -12,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { useSession } from "@/lib/session";
 import { handUsers, type LiveStatus, type MeetingState } from "@/lib/live";
 import { recallChoice, useVideoRoom, type JoinChoice } from "@/lib/video";
+import { useDictationGuard } from "@/hooks/useDictationGuard";
 import { admit, endCase, endMeeting, getCards, getSlides, openOnScreen, setCurrent, timer as timerCall } from "../api";
 import { getCase } from "@/features/casefile/api";
 import { DecisionForm } from "./DecisionForm";
@@ -62,6 +64,8 @@ export function ControlView({ mid, state, onChanged, liveStatus = "open", liveDe
   const videoAvailable = !!state.meeting.video && !!me?.features?.video;
   const joinChoice = choice && choice !== "skipped" ? choice : null;
   const video = useVideoRoom(mid, videoAvailable && !!joinChoice, joinChoice ?? {});
+  // While the coordinator dictates (the decision form, the notes), the call microphone is muted and comes back after.
+  const dictating = useDictationGuard(video);
 
   const waiting = state.attendance.filter((a) => a.status === "waiting");
   const hands = handUsers(state.hands);
@@ -221,7 +225,7 @@ export function ControlView({ mid, state, onChanged, liveStatus = "open", liveDe
       >
         {videoAvailable && joinChoice ? (
           <>
-            <BarButton icon={video.micOn ? Mic : MicOff} label={video.micOn ? "Mute" : "Unmute"} active={!video.micOn} onClick={() => void video.toggleMic()} disabled={video.status !== "connected"} testId="mic" />
+            <BarButton icon={video.micOn && !dictating ? Mic : MicOff} label={dictating ? "Dictating" : video.micOn ? "Mute" : "Unmute"} title={dictating ? "Your call microphone is off while you dictate; it comes back on after." : undefined} active={!video.micOn || dictating} onClick={() => void video.toggleMic()} disabled={video.status !== "connected" || dictating} testId="mic" />
             <BarButton icon={video.camOn ? Camera : CameraOff} label={video.camOn ? "Camera" : "Camera off"} active={!video.camOn} onClick={() => void video.toggleCam()} disabled={video.status !== "connected"} testId="cam" />
           </>
         ) : videoAvailable ? <BarButton icon={Camera} label="Join video" onClick={() => setChoice(null)} /> : null}

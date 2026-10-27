@@ -16,7 +16,7 @@ import { MicButton } from "@/components/MicButton";
 import { useSession } from "@/lib/session";
 import { handUsers, useMeetingLive, type LiveEvent, type MeetingState } from "@/lib/live";
 import { recallChoice, useVideoRoom, type JoinChoice } from "@/lib/video";
-import { registerDictationGuard } from "@/lib/voice";
+import { useDictationGuard } from "@/hooks/useDictationGuard";
 import { askQuestion, getSlides, present, raiseHand } from "./api";
 import { CardDialog } from "./components/CardDialog";
 import { PreJoin } from "./components/PreJoin";
@@ -63,7 +63,6 @@ export default function MemberViewPage() {
   const [mySlide, setMySlide] = useState(0);
   const [question, setQuestion] = useState("");
   const questionRef = useRef<HTMLTextAreaElement>(null);
-  const [dictating, setDictating] = useState(false);
   const [panel, setPanel] = useState<PanelKind>(null);
   const [choice, setChoice] = useState<JoinChoice | null | "skipped">(() => recallChoice());
   const stateRef = useRef<MeetingState | null>(null);
@@ -102,30 +101,8 @@ export default function MemberViewPage() {
   const joinChoice = choice && choice !== "skipped" ? choice : null;
   const video = useVideoRoom(id, videoAvailable && !!joinChoice, joinChoice ?? {});
 
-  // The dictation guard: while connected with the call microphone on, dictation mutes the published microphone through the room
-  // and turns it back on after, only if this guard muted it. Gone when the video disconnects or the page closes.
-  const callRoom = video.room;
-  const callLive = video.status === "connected" || video.status === "reconnecting";
-  useEffect(() => {
-    if (!callRoom || !callLive || !video.micOn) return;
-    let mutedByUs = false;
-    registerDictationGuard({
-      mute: async () => {
-        const lp = callRoom.localParticipant;
-        if (!lp.isMicrophoneEnabled) return;
-        mutedByUs = true;
-        setDictating(true);
-        await lp.setMicrophoneEnabled(false);
-      },
-      restore: async () => {
-        if (!mutedByUs) return;
-        mutedByUs = false;
-        setDictating(false);
-        await callRoom.localParticipant.setMicrophoneEnabled(true);
-      },
-    });
-    return () => { registerDictationGuard(null); setDictating(false); };
-  }, [callRoom, callLive, video.micOn]);
+  // While the member dictates in the call, the call microphone is muted and comes back after (see useDictationGuard).
+  const dictating = useDictationGuard(video);
 
   const ask = useMutation({ mutationFn: (t: string) => askQuestion(id, t), onSuccess: () => { setQuestion(""); announce("Question sent to the shared screen."); void live.refresh(); } });
   const handM = useMutation({ mutationFn: (r: boolean) => raiseHand(id, r), onSuccess: (_r, raised) => announce(raised ? "Hand raised." : "Hand lowered.") });

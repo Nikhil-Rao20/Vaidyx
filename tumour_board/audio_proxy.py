@@ -39,7 +39,8 @@ ENGINES = ("whisper", "parakeet")
 LIMITS = {"stt_seconds": 60, "stt_bytes": STT_MAX_BYTES, "tts_chars": TTS_MAX}
 KINDS = ("chat", "agent", "meeting_answer", "summary", "points")
 CASE_KINDS = ("chat", "agent", "summary", "points")
-_SCREEN = re.compile(r"^[A-Za-z0-9-]{1,40}$")
+_SCREEN = re.compile(r"^[A-Za-z0-9_-]{1,40}$")  # the helper roles carry an underscore (medical_oncology)
+TEXT_SCREENS = ("decision",)  # the only boxes whose on-screen text may be read back (mode b)
 RESP_HEADERS = ("content-type", "content-length", "x-took-ms", "x-sample-rate")
 
 UNAVAILABLE = "Voice is not available right now. You can type instead."
@@ -68,7 +69,7 @@ def token() -> str:
     """The service's shared token, read once from config.AUDIO_TOKEN_FILE ({"token": "..."}); "" when missing or unreadable."""
     path = str(config.AUDIO_TOKEN_FILE or "")
     with _lock:
-        if _token.get("path") != path:
+        if _token.get("path") != path or not _token.get("value"):  # an empty token is never cached: the file may appear later
             value = ""
             try:
                 with open(path, encoding="utf-8") as f:
@@ -107,9 +108,9 @@ _status: dict = {}  # {"at": monotonic time, "value": the last answer}
 
 def _state(engine: dict) -> str:
     s = str((engine or {}).get("state") or "")
-    if s == "ready":
+    if s in ("ready", "not_loaded"):  # not_loaded: the engine loads on the first request (a few seconds), so the buttons stay usable
         return "ready"
-    if s in ("loading", "not_loaded"):
+    if s == "loading":
         return "loading"
     return "down"
 
@@ -393,9 +394,11 @@ def _agent_text(ref):
     return _statements(m.get("statements")) or str(m.get("message") or "").strip() or "Nothing in the records answers this."
 
 
-def _meeting_text(ref):
-    """A question's answer on the meeting screen (by the question id), or the agent answer logged by board.log_answer (by its entry id)."""
-    from . import meetings
+def _meeting_text(ref, roles=None):
+    """A question's answer on the meeting screen (by the question id), or the agent answer logged by board.log_answer (by its entry
+    id). A log entry belongs to one Case File and the Board room shows it only to readers of that file, so it needs FULL scope on
+    that Case File too (review S of Phase 4, finding M1)."""
+    from . import access, meetings
     s = meetings.get(_sid(ref.get("meeting_id")))
     rid = _sid(ref.get("id"))
     if not s or not rid:
@@ -405,7 +408,11 @@ def _meeting_text(ref):
         a = q.get("answer")
         return a if isinstance(a, str) else (str(a.get("text") or "") if isinstance(a, dict) else None)
     e = next((x for x in s.get("log") or [] if isinstance(x, dict) and x.get("id") == rid and x.get("kind") == "answer"), None)
-    return str(e.get("text") or "") if e else None
+    if not e:
+        return None
+    if roles is None or case_scope(roles, _sid(e.get("case_id"))) != access.FULL:
+        return None
+    return str(e.get("text") or "")
 
 
 def _section_text(sec) -> str:
@@ -445,14 +452,14 @@ _LOADERS = {"chat": _chat_text, "agent": _agent_text, "meeting_answer": _meeting
 _CHECKS = {"chat": _team_chat, "agent": _team_chat, "meeting_answer": _meeting_member, "summary": _full, "points": _full}
 
 
-def statement_text(kind, ref) -> str | None:
+def statement_text(kind, ref, roles=None) -> str | None:
     """The saved statement's text exactly as its screen shows it (no citations, chip labels or model names; dates DD/MM/YYYY); None
-    when there is none. No access check: callers go through RESOLVERS."""
+    when there is none. No access check of its own: callers go through RESOLVERS (meeting_answer log entries also need the roles)."""
     fn = _LOADERS.get(kind)
     if not fn or not isinstance(ref, dict):
         return None
     try:
-        t = fn(ref)
+        t = fn(ref, roles) if kind == "meeting_answer" else fn(ref)
     except (KeyError, ValueError, OSError):
         return None
     t = screen_text(t).strip() if isinstance(t, str) else ""
@@ -463,7 +470,7 @@ def _resolver(kind):
     def resolve_kind(roles, ref):
         if not isinstance(ref, dict) or not _CHECKS[kind](roles, ref):  # the screen's own check, before anything is loaded
             return None
-        return statement_text(kind, ref)
+        return statement_text(kind, ref, roles)
     resolve_kind.__name__ = f"resolve_{kind}"
     return resolve_kind
 
@@ -474,6 +481,13 @@ RESOLVERS = {k: _resolver(k) for k in KINDS}  # Phase 6 adds kinds here: {kind: 
 def resolve(roles, ref) -> str | None:
     fn = RESOLVERS.get(str((ref or {}).get("kind") or "")) if isinstance(ref, dict) else None
     return fn(roles, ref) if fn else None
+
+
+def audit_case_id(ref) -> str:
+    """The Case File id for the audit line: the stored id of the file the reference names (never the raw field, so a padded id
+    cannot write a line into a new folder; review of Phase 4, note N4); "" when the file does not exist."""
+    c = _case(_sid((ref or {}).get("case_id"))) if isinstance(ref, dict) else None
+    return str((c or {}).get("case_id") or (c or {}).get("id") or "") if c else ""
 
 
 def ref_key(ref) -> str:
@@ -495,10 +509,12 @@ def audit_transcribed(user, screen, case_id, seconds, engine, took, chars) -> No
     org.audit("audio_transcribed", user, case_id=case_id or "", **fields)
 
 
-def audit_spoken(user, screen, ref, parts, chars, voice, took, case_id="") -> None:
+def audit_spoken(user, screen, ref, parts, chars, voice, took, case_id="", part=0) -> None:
+    """One organisation line per request (every part, so a part asked for on its own is audited too); the Case File's own log gets
+    one line per statement (part 0)."""
     from . import org
-    org.audit("audio_spoken", user, screen=screen, ref=ref, parts=parts, chars=chars, voice=voice, took_ms=took)
-    if case_id:
+    org.audit("audio_spoken", user, screen=screen, ref=ref, part=part, parts=parts, chars=chars, voice=voice, took_ms=took)
+    if case_id and part == 0:
         store.audit(case_id, {"kind": "audio_spoken", "by": user, "ref": ref, "parts": parts, "chars": chars})
 
 

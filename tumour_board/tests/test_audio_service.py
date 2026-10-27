@@ -172,8 +172,16 @@ async def test_health_shape_and_loads_nothing(client, calls):
     assert elapsed < 0.5
 
 
+async def test_health_warm_needs_the_token(client, calls):
+    """Loading the engines on the shared GPU is for the owner of the token (review N8); plain /health stays open."""
+    r = await client.get("/health", params={"warm": "1"})
+    assert r.status == 401 and (await r.json())["code"] == "no_token"
+    assert (calls["whisper"], calls["kokoro"]) == (0, 0)
+    assert (await client.get("/health")).status == 200
+
+
 async def test_health_warm_loads_both_engines(client, calls):
-    h = await (await client.get("/health", params={"warm": "1"})).json()
+    h = await (await client.get("/health", params={"warm": "1"}, headers=HDR)).json()
     assert h["stt"]["state"] == "ready" and h["stt"]["device"] == "cuda"
     assert h["tts"]["state"] == "ready" and h["tts"]["device"] == "cuda" and h["tts"]["espeak_fallback"] == "on"
     assert h["gpu_free_mib"] == 20000
@@ -182,7 +190,7 @@ async def test_health_warm_loads_both_engines(client, calls):
 
 async def test_low_gpu_memory_loads_on_the_cpu(client, calls, monkeypatch):
     monkeypatch.setattr(limits, "gpu_free_mib", lambda: 1000)
-    h = await (await client.get("/health", params={"warm": "1"})).json()
+    h = await (await client.get("/health", params={"warm": "1"}, headers=HDR)).json()
     assert h["stt"]["engine"] == "parakeet-tdt-0.6b-v2" and h["stt"]["device"] == "cpu"
     assert h["stt"]["fallback_reason"] == "low_gpu_memory"
     assert h["tts"]["device"] == "cpu" and h["engines"]["parakeet"] == "ready"
@@ -712,7 +720,14 @@ def test_split_for_tts_limits():
     ("11.8 grams per decilitre, creatinine 1.1 milligrams per decilitre", "11.8 g/dL, creatinine 1.1 mg/dL"),
     ("creatinine 0.9 mg per deciliter", "creatinine 0.9 mg/dL"),
     ("the scan is due by 4-11-2026 and 30-10-2026", "the scan is due by 04/11/2026 and 30/10/2026"),
-    ("approved on 2410-2026, imaging 1501-2027", "approved on 24/10/2026, imaging 15/01/2027"),
+    ("approved on 2410-2026, imaging 1501-2027", "approved on 2410-2026, imaging 1501-2027"),  # glued digits may be a registration number
+    # ordinary text that must stay as heard (review M2)
+    ("Seen at 4 pm J Kumar reviewed", "Seen at 4 pm J Kumar reviewed"),
+    ("Registration 0412-2026 noted, IP 2410-2026", "Registration 0412-2026 noted, IP 2410-2026"),
+    ("Plan CTx followed by RTx", "Plan CTx followed by RTx"),
+    ("Group 3 may 2026 cohort", "Group 3 may 2026 cohort"),
+    ("31 February 2026 and 30-13-2026 stay", "31 February 2026 and 30-13-2026 stay"),
+    ("3 May 2026 is a date", "03/05/2026 is a date"),
     ("a lot number 4599-2026 stays", "a lot number 4599-2026 stays"),
     ("HER23 plus on IHC, PDL1TPS 60%, PD L1 negative", "HER2 3+ on IHC, PD-L1 TPS 60%, PD-L1 negative"),
 ])

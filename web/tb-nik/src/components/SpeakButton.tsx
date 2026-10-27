@@ -1,6 +1,8 @@
 // The read-aloud button (night-v3 item 4.3, research 08 section 6.2): reads a saved statement (a reference the server loads and
 // checks) or text already on screen, one sentence at a time through the page's single audio element, and stops on a second tap.
-// One voice at a time on the page. A failure never hides the text: the button says "Voice unavailable, text only".
+// One voice at a time on the page. A failure never hides the text: the button says "Voice unavailable, text only". On-screen
+// text over 1,000 characters is refused before any request (the server's cap is per text, and the text goes one sentence per
+// request).
 import { useEffect, useId, useRef, useState } from "react";
 import { Loader2, Square, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,6 +28,10 @@ export interface SpeakButtonProps {
   voice?: string;
 }
 
+/** On-screen text the server reads aloud, at most (the same cap and words as the server's, for the whole text). */
+const TEXT_MAX = 1000;
+const TOO_LONG = "That text is too long to read aloud. Read it in shorter parts.";
+
 const isNotAllowed = (e: unknown) => !!e && typeof e === "object" && "name" in e && (e as { name: unknown }).name === "NotAllowedError";
 
 const TONE: Record<SpeakState, string> = {
@@ -40,6 +46,7 @@ export function SpeakButton({ source, screen, label = VOICE_TEXT.readAloud, size
   const uid = useId();
   const [state, setState] = useState<SpeakState>("idle");
   const [blocked, setBlocked] = useState(false);
+  const [errorText, setErrorText] = useState<string | null>(null);
   const handle = useRef<SpeakHandle | null>(null);
   const autoplayed = useRef(false);
   const live = useRef({ source, screen, voice, onEnd });
@@ -52,8 +59,10 @@ export function SpeakButton({ source, screen, label = VOICE_TEXT.readAloud, size
     handle.current = null;
     old?.stop();
     setBlocked(false);
-    setState("preparing");
+    setErrorText(null);
     const { source: src, screen: scr, voice: v } = live.current;
+    if ("text" in src && src.text.length > TEXT_MAX) { setErrorText(TOO_LONG); setState("error"); ended(); return; }
+    setState("preparing");
     const h: SpeakHandle = speak(src, { screen: scr, voice: v }, {
       onSpeaking: () => { if (handle.current === h) setState("speaking"); },
       onEnd: () => { if (handle.current !== h) return; handle.current = null; setState("idle"); ended(); },
@@ -107,7 +116,7 @@ export function SpeakButton({ source, screen, label = VOICE_TEXT.readAloud, size
   const title = unavailable ? downText
     : speaking ? VOICE_TEXT.stopReading
       : state === "preparing" ? `${VOICE_TEXT.preparing}. Tap to stop.`
-        : state === "error" ? `${VOICE_TEXT.ttsError}. Tap to try again.`
+        : state === "error" ? (errorText ?? `${VOICE_TEXT.ttsError}. Tap to try again.`)
           : label;
   const spoken = state === "preparing" ? VOICE_TEXT.preparing : speaking ? VOICE_TEXT.reading : "";
   const tap = size === "icon-xs" ? "min-h-11 min-w-11 sm:min-h-6 sm:min-w-6" : "min-h-11 min-w-11 sm:min-h-8 sm:min-w-8";
@@ -138,7 +147,7 @@ export function SpeakButton({ source, screen, label = VOICE_TEXT.readAloud, size
       {unavailable ? <span id={lineId} className="text-xs text-muted-foreground">{downText}</span> : null}
       {state === "preparing" ? <span className="text-xs text-muted-foreground" aria-hidden>{VOICE_TEXT.preparing}</span> : null}
       {speaking ? <span className="text-xs font-medium text-primary" aria-hidden>{VOICE_TEXT.reading}</span> : null}
-      {state === "error" ? <span role="status" className="text-xs font-medium text-warn">{VOICE_TEXT.ttsError}</span> : null}
+      {state === "error" ? <span role="status" className="text-xs font-medium text-warn">{errorText ?? VOICE_TEXT.ttsError}</span> : null}
       {blocked ? (
         <Button type="button" variant="outline" size="xs" onClick={allow} className="min-h-11 sm:min-h-6">
           <Volume2 aria-hidden /> {VOICE_TEXT.allowVoices}
