@@ -142,7 +142,7 @@ records per setting with `sources` (book, page, verbatim line), departments that
 | 5.3 | Meeting chat | S | Text chat for the meeting over the live channel, kept with the meeting record, apart from questions to the agents | done (0532658) |
 | 5.4 | Case flow | S | An agenda rail with the current case and its time; next case moves everyone; the presenter shown; a quorum line (heads present, agents standing in, the PM-JAY composition) | done (d20496e) |
 | 5.5 | Phone and room screen | S | Phone layout for members; the room screen in large type for a projector | done (691985d) |
-| 5.6 | Live checks | S | The two-person live test (fake camera and microphone) passes with screen share and chat; screenshots for member, coordinator, room and phone reviewed; the existing meeting tests stay green | doing |
+| 5.6 | Live checks | S | The two-person live test (fake camera and microphone) passes with screen share and chat; screenshots for member, coordinator, room and phone reviewed; the existing meeting tests stay green | done (3dfc566) |
 
 ### Phase 6: the specialty agents as members of the board (owner point 4)
 
