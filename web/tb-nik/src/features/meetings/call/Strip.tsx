@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Track, type Participant, type Room } from "livekit-client";
 import type { TrackReference } from "@livekit/components-react";
-import { Images, Megaphone, MessageSquareText, MonitorOff, MonitorPlay, MonitorUp, MoreVertical, Pin, PinOff, Sparkles, UserRoundMinus, X } from "lucide-react";
+import { Images, Megaphone, MessageSquareText, MonitorOff, MonitorPlay, MonitorUp, MoreVertical, Pin, PinOff, Sparkles, Square, UserRoundMinus, X } from "lucide-react";
 import type { AgendaRow, AgentInfo, Attendee, MeetingState, Opened } from "@/lib/live";
 import { identityUser, isRoomScreen, videoExtras } from "@/lib/video";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -413,13 +413,27 @@ function Dots() {
   return <span className="ml-0.5 inline-flex gap-0.5" aria-hidden>{[0, 1, 2].map((i) => <motion.span key={i} className="size-1 rounded-full bg-current" animate={{ opacity: [0.2, 1, 0.2] }} transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }} />)}</span>;
 }
 
-/** The menu of an agent tile (three dots): Ask the agent (the Agents panel), Present your points (disabled with the reason while
- * the brief is prepared or has no points); the coordinator also Remove from this meeting. */
+/** What "Stop" on an agent's tile stops: the answer this device plays for that agent (this device), and for the coordinator or the
+ * asker the voice for everyone while the agent speaks. Null when nothing of it is being spoken. Pure. */
+export function agentStopTarget(agent: Pick<AgentInfo, "role" | "state" | "question">, ctx: Pick<CallCtx, "speakingNow" | "state" | "canManage" | "me">): { question: string; everyone: boolean } | null {
+  const questions = ctx.state.questions ?? [];
+  const here = ctx.speakingNow && questions.find((q) => q.id === ctx.speakingNow!.question)?.role === agent.role ? ctx.speakingNow.question : null;
+  const qid = here ?? (agent.state === "speaking" && agent.question ? agent.question : null);
+  if (!qid) return null;
+  const everyone = ctx.canManage || (!!ctx.me && questions.find((q) => q.id === qid)?.by === ctx.me);
+  if (!here && !everyone) return null;
+  return { question: qid, everyone };
+}
+
+/** The menu of an agent tile (three dots): Ask the agent (the Agents panel, its box focused), Stop while it speaks, Present your
+ * points (disabled with the reason while the brief is prepared or has no points); the coordinator also Remove from this meeting. */
 function AgentTileMenu({ agent, line }: { agent: AgentInfo; line: string }) {
   const ctx = useCall();
   const canRemove = ctx.canManage && agent.can_remove !== false;
   const canPresent = ctx.inSession && !!ctx.cid;
   const blocked = presentBlockedReason(agent);
+  const stop = agentStopTarget(agent, ctx);
+  const ask = () => { ctx.setPanel("agents"); window.setTimeout(() => document.getElementById(`agent-q-${agent.role}`)?.focus(), 250); };
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -427,7 +441,12 @@ function AgentTileMenu({ agent, line }: { agent: AgentInfo; line: string }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56" data-theme="dark">
         <DropdownMenuLabel className="truncate">{line}</DropdownMenuLabel>
-        <DropdownMenuItem onSelect={() => ctx.setPanel("agents")} data-testid="agent-ask"><MessageSquareText aria-hidden />Ask the agent</DropdownMenuItem>
+        <DropdownMenuItem onSelect={ask} data-testid="agent-ask"><MessageSquareText aria-hidden />Ask the agent</DropdownMenuItem>
+        {stop ? (
+          <DropdownMenuItem onSelect={() => { ctx.stopAgentAudio(); if (stop.everyone) void ctx.actions.stopAgent(agent.role, stop.question).catch(() => undefined); }} data-testid="agent-stop">
+            <Square aria-hidden />{stop.everyone ? "Stop for everyone" : "Stop on this device"}
+          </DropdownMenuItem>
+        ) : null}
         {canPresent ? (
           <DropdownMenuItem disabled={!!blocked} onSelect={() => { void ctx.actions.presentPoints(agent.role).catch(() => undefined); }} data-testid="agent-present">
             <Megaphone aria-hidden />

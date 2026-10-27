@@ -25,7 +25,9 @@ export function useStageLayer() {
 export function StageFrame({ children, className, testId, attrs }: { children: ReactNode; className?: string; testId?: string; attrs?: Record<string, string | undefined> }) {
   useStageLayer();
   return (
-    <div className={cn("fixed inset-0 z-50 flex flex-col overflow-hidden bg-stage text-stage-fg", className)} data-theme="dark" data-testid={testId} {...attrs}>
+    // overflow-clip, not hidden: a script scroll (a focus or a scroll-into-view of something wider than the frame) can never shift the
+    // whole call sideways (seen once in the live check at 1366 with video on, night-v3 6.3); the inner panels keep their own scrolling
+    <div className={cn("fixed inset-0 z-50 flex flex-col overflow-clip bg-stage text-stage-fg", className)} data-theme="dark" data-testid={testId} {...attrs}>
       {children}
     </div>
   );

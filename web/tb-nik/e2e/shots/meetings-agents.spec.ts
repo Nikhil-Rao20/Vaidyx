@@ -5,7 +5,7 @@
 // Routes: e2e/support/f2.ts (SYNTHETIC).
 import { expect, test, type Page } from "@playwright/test";
 import { SIZES, login, prepare, watchConsole } from "../support/helpers";
-import { MID, meetingState, memberState, routeCaseFile, routeMeetings, type MeetingRouteOptions } from "../support/f2";
+import { AGENT_ANSWER_NOTE, MID, meetingState, memberState, routeCaseFile, routeMeetings, type MeetingRouteOptions } from "../support/f2";
 import type { Role } from "../support/fixtures";
 
 const OUT = process.env.AGENT_SHOTS ?? "";
@@ -171,6 +171,115 @@ test.describe("Meetings: AI agents", () => {
     await expect(tile.locator("[data-part=point]")).toHaveText("The histopathology report records invasive breast carcinoma of no special type, Grade 2 (Nottingham score 6).");
     expect(await page.getByTestId("room-people").evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
     await shot(page, "room");
+    expect(real(errors)).toEqual([]);
+  });
+
+  // night-v3 6.3: ask an agent; the answer streams statement by statement; Stop; the queue; a refusal; the @mention.
+  for (const size of [SIZES[0], SIZES[2]]) {
+    test(`ask an agent: the answer streams, the references, the footer and Stop at ${size.width}`, async ({ page }) => {
+      const errors = watchConsole(page);
+      await page.setViewportSize(size);
+      const live = await open(page, `/meetings/${MID}`, { wait: "control-view", state: meetingState("in_session") });
+      const nm = page.locator("[data-testid=agent-tile][data-role=nuclear_medicine]");
+      await nm.getByTestId("agent-tile-menu").click();
+      await page.getByTestId("agent-ask").click();
+      const box = page.locator("#agent-q-nuclear_medicine");
+      await expect(box).toBeFocused();
+      await expect(box).toHaveAttribute("placeholder", "Ask Nuclear Medicine about this Case File");
+      await box.fill("Is a bone scan reported?");
+      const sent = page.waitForResponse((r) => r.request().method() === "POST" && r.url().endsWith(`/meetings/${MID}/questions`));
+      await page.getByTestId("send-agent-q-nuclear_medicine").click();
+      const res = await sent;
+      expect(res.request().postDataJSON()).toEqual({ text: "Is a bone scan reported?", role: "nuclear_medicine" });
+      const q = (await res.json()).question as Record<string, unknown>;
+      const card = page.getByTestId("agents-panel").locator("[data-testid=agent-card][data-role=nuclear_medicine]");
+      const item = card.locator(`[data-testid=question-item][data-question=${q.id}]`);
+      await expect(item.getByTestId("answer-waiting")).toHaveText("Thinking");
+      // The statements arrive one by one.
+      const s1 = { text: "The OPD consultation note of 15/09/2026 records that a bone scan was advised.", citations: [{ doc_id: "Df40ab347", doc_title: "OPD CONSULTATION NOTE", date: "2026-09-15", page: 0, quote: "Bone scan advised" }] };
+      const s2 = { text: "No bone scan report is in this Case File.", citations: [], note: "This is a consultation record; the Medical Oncology agent can say more." };
+      const base = { role: "nuclear_medicine", label: "Nuclear Medicine support", model: "gemma-4-31b", note: AGENT_ANSWER_NOTE, references: [] };
+      live.push({ type: "agent_state", role: "nuclear_medicine", state: "answering", by: "mdt@vxh.example", by_name: "Priya Nair", question: q.id });
+      live.push({ type: "question", question: { ...q, answer: { ...base, status: "answering", statements: [s1], text: s1.text, speech: ["AI agent, Nuclear Medicine.", s1.text] } } });
+      await expect(item.getByTestId("answer-statement")).toHaveCount(1);
+      await expect(item.getByTestId("answer-streaming")).toHaveText("Answering");
+      live.push({ type: "question", question: { ...q, answer: { ...base, status: "answering", statements: [s1, s2], text: `${s1.text} ${s2.text}`, speech: ["AI agent, Nuclear Medicine.", s1.text, s2.text] } } });
+      await expect(item.getByTestId("answer-statement")).toHaveCount(2);
+      await expect(item.getByTestId("answer-statement").nth(1)).toContainText("the Medical Oncology agent can say more");
+      const refs = [{ ref_id: "R1", title: "NCG Guidelines for Breast Cancer", org: "National Cancer Grid", year: 2023, page: 14, quote: "A bone scan is indicated for stage III disease or symptoms suggestive of bone involvement." }];
+      live.push({ type: "question", question: { ...q, answer: { ...base, status: "answered", statements: [s1, s2], text: `${s1.text} ${s2.text}`, references: refs, at: new Date().toISOString(), seconds: 7.2, speech: ["AI agent, Nuclear Medicine.", s1.text, s2.text, "Sources are on the screen."] } } });
+      await expect(item.getByTestId("answer-streaming")).toHaveCount(0);
+      await expect(item.getByTestId("answer-references")).toContainText("Reference text, not about this patient");
+      await expect(item.getByTestId("answer-references")).toContainText("NCG Guidelines for Breast Cancer, National Cancer Grid, 2023, p. 14");
+      await expect(item.getByTestId("sources-line")).toHaveText("Sources are on the screen.");
+      await expect(item.getByTestId("answer-footer")).toContainText("AI agent, support only. From the records and guidelines only. Check the source. Gemma-4-31B (non-medical).");
+      // Speaking somewhere: the coordinator's Stop stops the voice for everyone (on the answer and on the tile's menu).
+      live.push({ type: "agent_state", role: "nuclear_medicine", state: "speaking", by: "mdt@vxh.example", by_name: "Priya Nair", question: q.id });
+      await expect(nm).toHaveAttribute("data-agent-state", "speaking");
+      await item.scrollIntoViewIfNeeded();
+      await shot(page, "answer");
+      await expect(item.getByTestId("answer-stop")).toBeVisible();
+      const stop = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith(`/meetings/${MID}/agents/nuclear_medicine/stop`));
+      if (size.width > 1000) {
+        // The laptop: Stop from the tile's menu.
+        await nm.getByTestId("agent-tile-menu").click();
+        await expect(page.getByTestId("agent-stop")).toHaveText("Stop for everyone");
+        await page.getByTestId("agent-stop").click();
+      } else await item.getByTestId("answer-stop").click();
+      expect((await stop).postDataJSON()).toEqual({ question: q.id });
+      expect(real(errors)).toEqual([]);
+    });
+  }
+
+  test("the queue line, a refusal with the quick questions, and the @mention", async ({ page }) => {
+    const errors = watchConsole(page);
+    await page.setViewportSize(SIZES[0]);
+    await open(page, `/meetings/${MID}`, { wait: "control-view", state: meetingState("in_session") });
+    // Pathology is still answering Thomas Joseph: a second question waits.
+    await page.locator("[data-testid=agent-tile][data-role=pathology]").getByRole("button").first().click();
+    const card = page.getByTestId("agents-panel").locator("[data-testid=agent-card][data-role=pathology]");
+    await page.locator("#agent-q-pathology").fill("And the PR score?");
+    await page.getByTestId("send-agent-q-pathology").click();
+    await expect(card.getByTestId("queue-line")).toHaveText("Pathology is answering Thomas Joseph. Yours is next.");
+    // The Questions tab: "@nuclear medicine" picks that agent's chip; the mention is stripped on send.
+    await page.getByTestId("panel-chat").click();
+    const tab = page.getByTestId("questions-panel");
+    await expect(tab.getByTestId("mention-hint")).toHaveText("Type @ and a department to ask one agent, for example @Radiology");
+    const box = page.locator("#member-q");
+    await box.fill("@nuclear medicine what would you do here?");
+    await expect(tab.locator("[data-testid=ask-chip][data-role=nuclear_medicine]")).toHaveAttribute("aria-pressed", "true");
+    const sent = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith(`/meetings/${MID}/questions`));
+    await page.getByTestId("send-question").click();
+    expect((await sent).postDataJSON()).toEqual({ text: "what would you do here?", role: "nuclear_medicine" });
+    const refusal = tab.locator("[data-testid=question-item][data-status=out_of_scope]");
+    await expect(refusal.getByTestId("answer-refusal")).toContainText("I can't recommend or choose treatment.");
+    await expect(refusal.getByTestId("quick-question")).toHaveText(["What do the records document?", "What is pending?"]);
+    await refusal.scrollIntoViewIfNeeded();
+    await shot(page, "refusal");
+    await refusal.getByTestId("quick-question").nth(1).click();
+    await expect(box).toHaveValue("What is pending?");
+    await expect(box).toBeFocused();
+    // An agent that is not in this meeting: the reason beside the box, the text kept.
+    await box.fill("@Radiology what does the mammogram record?");
+    await page.getByTestId("send-question").click();
+    await expect(tab.getByTestId("ask-error")).toHaveText("That agent is not in this meeting. The coordinator can add it.");
+    await expect(box).toHaveValue("@Radiology what does the mammogram record?");
+    expect(real(errors)).toEqual([]);
+  });
+
+  test("member: questions to the agents closed by the coordinator", async ({ page }) => {
+    const errors = watchConsole(page);
+    await page.setViewportSize(SIZES[0]);
+    const st = memberState() as unknown as { can: Record<string, unknown> };
+    st.can = { ...st.can, ask_agents: false };
+    await open(page, `/meetings/${MID}/member`, { role: "treating", wait: "member-view", state: st });
+    await page.getByTestId("panel-chat").click();
+    const tab = page.getByTestId("questions-panel");
+    await expect(tab.locator("[data-testid=ask-chip][data-role=pathology]")).toBeDisabled();
+    await expect(tab.getByTestId("mention-hint")).toHaveText("The MDT Coordinator has closed questions to the agents for now.");
+    await page.locator("#member-q").fill("@Pathology what is the grade?");
+    await page.getByTestId("send-question").click();
+    await expect(tab.getByTestId("ask-error")).toHaveText("The MDT Coordinator has closed questions to the agents for now.");
     expect(real(errors)).toEqual([]);
   });
 

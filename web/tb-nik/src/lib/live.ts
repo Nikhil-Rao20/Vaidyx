@@ -187,6 +187,7 @@ export interface MeetingQuestion {
   agent_label?: string;
   /** Waiting for the same agent's earlier answer ("Radiology is answering <name>. Yours is next."). */
   queued?: boolean;
+  queue_note?: string;
 }
 
 export interface Opened {

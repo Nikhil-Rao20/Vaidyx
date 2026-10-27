@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { PanelSection, usePanelAction } from "../../components/People";
 import { useCall } from "../context";
 import { agentBusy, agentDept, agentStateKey, agentStateWord, agentTitle } from "../Strip";
-import { AgentPoints } from "./AgentPoints";
+import { AGENT_ROLES, AgentPoints } from "./AgentPoints";
 import { QuestionForm, QuestionItems, questionsFor } from "./ChatPanel";
 
 /** The states in which an agent is working on a question (the Agents button's count). */
@@ -24,15 +24,8 @@ export function busyAgents(agents: AgentInfo[] | undefined): number {
   return (agents ?? []).filter((a) => AGENT_BUSY.has(a.state)).length;
 }
 
-/** The six specialty agents in the order of the server's agents.ROLES. Radiation Oncology and Nuclear Medicine are always listed. */
-export const AGENT_ROLES: Array<{ role: string; name: string }> = [
-  { role: "radiology", name: "Radiology" },
-  { role: "pathology", name: "Pathology" },
-  { role: "medical_oncology", name: "Medical Oncology" },
-  { role: "surgical_oncology", name: "Surgical Oncology" },
-  { role: "radiation_oncology", name: "Radiation Oncology" },
-  { role: "nuclear_medicine", name: "Nuclear Medicine" },
-];
+/** The six specialty agents (AgentPoints.tsx, shared with the Questions tab's @mention). */
+export { AGENT_ROLES };
 
 /** Why an agent is in the meeting: the server's reason ("Head absent", "Marked absent", "Added by <name>"), else from its flags. */
 export function agentReason(a: Pick<AgentInfo, "reason" | "added" | "added_by_name">): string {
@@ -144,6 +137,9 @@ function AgentCard({ agent }: { agent: AgentInfo }) {
   const title = agentTitle(agent);
   const dept = agentDept(agent);
   const mayAsk = s.can?.ask !== false && (canManage || s.can?.ask_agents !== false);
+  const closed = s.can?.ask !== false && !mayAsk;
+  const [draft, setDraft] = useState("");
+  const quick = (t: string) => { setDraft(t); window.setTimeout(() => document.getElementById(`agent-q-${agent.role}`)?.focus(), 0); };
   return (
     <li className={cn("space-y-2 rounded-lg border-2 border-dashed bg-card p-3", RING[key] ?? "border-ok")} data-role={agent.role} data-agent-state={key} data-testid="agent-card">
       <div className="flex items-center gap-3">
@@ -164,8 +160,9 @@ function AgentCard({ agent }: { agent: AgentInfo }) {
       </div>
       <p className="text-[10px] text-muted-foreground">Reads this Case File and the guidelines. Does not decide or advise. Not a member of the board.</p>
       <AgentPoints agent={agent} />
-      <QuestionItems questions={asked} emptyText={`No questions to ${dept} on this case yet.`} testId="agent-questions" />
-      {mayAsk ? <QuestionForm role={agent.role} roleLabel={dept} id={`agent-q-${agent.role}`} /> : null}
+      <QuestionItems questions={asked} emptyText={`No questions to ${dept} on this case yet.`} testId="agent-questions" onQuick={mayAsk ? quick : undefined} />
+      {mayAsk ? <QuestionForm role={agent.role} roleLabel={dept} id={`agent-q-${agent.role}`} text={draft} onText={setDraft} /> : null}
+      {closed ? <p className="text-xs text-muted-foreground">The MDT Coordinator has closed questions to the agents for now.</p> : null}
     </li>
   );
 }

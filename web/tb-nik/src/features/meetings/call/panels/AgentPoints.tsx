@@ -14,6 +14,37 @@ import { usePanelAction } from "../../components/People";
 import { useCall } from "../context";
 import type { CallCtx } from "../types";
 
+/** The six specialty agents in the order of the server's agents.ROLES. Radiation Oncology and Nuclear Medicine are always listed. */
+export const AGENT_ROLES: Array<{ role: string; name: string }> = [
+  { role: "radiology", name: "Radiology" },
+  { role: "pathology", name: "Pathology" },
+  { role: "medical_oncology", name: "Medical Oncology" },
+  { role: "surgical_oncology", name: "Surgical Oncology" },
+  { role: "radiation_oncology", name: "Radiation Oncology" },
+  { role: "nuclear_medicine", name: "Nuclear Medicine" },
+];
+
+/** The department's name of a role: the agent's own name when it is in the meeting, else the six names, else the role in words. */
+export function roleName(role: string | null | undefined, agents?: Array<Pick<AgentInfo, "role" | "department_name">>): string {
+  if (!role) return "";
+  return agents?.find((a) => a.role === role)?.department_name || AGENT_ROLES.find((r) => r.role === role)?.name || role.replace(/_/g, " ");
+}
+
+/** "@Radiology" (or any of the six department names, any case) at the start of a question: the role and the text without the
+ * mention; null when the text does not start with one. The longest name wins ("@Radiation Oncology" before a shorter match). */
+export function parseMention(text: string): { role: string; name: string; rest: string } | null {
+  const t = text.replace(/^\s+/, "");
+  if (!t.startsWith("@")) return null;
+  const body = t.slice(1).toLowerCase();
+  const hit = [...AGENT_ROLES].sort((a, b) => b.name.length - a.name.length).find((r) => {
+    const n = r.name.toLowerCase();
+    return body.startsWith(n) && !/[a-z0-9]/i.test(body.charAt(n.length));
+  });
+  if (!hit) return null;
+  const rest = t.slice(1 + hit.name.length).replace(/^[\s,:;.\-]+/, "");
+  return { role: hit.role, name: hit.name, rest };
+}
+
 /** The department's name of an agent ("Radiology"). */
 function deptOf(a: Pick<AgentInfo, "label" | "department" | "department_name" | "role">): string {
   return a.department_name || a.department || a.label || a.role.replace(/_/g, " ");

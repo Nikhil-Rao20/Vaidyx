@@ -5,6 +5,9 @@
 // The steps follow research/04 section 8: the admit (1), the tiles with video (2), Present a screen (4, night-v3 5.2: Chromium picks
 // the screen itself, the flags in playwright.live.config.ts), the meeting chat (5), the hand and a reaction (6), the case flow (7), the
 // quorum (8), the devices and the network (9), the keyboard (10), accessibility with axe (11) and the ending (12).
+// Night-v3 6.3 adds the AI agents after the quorum (research/05 section 8 "Live", steps 1 to 4, the contract of section 11): the
+// Agents panel with the six roles and the tiles of the absent heads (A1), the coordinator switching Nuclear Medicine in and out (A2),
+// the member asking the first agent a records question with the states on both screens (A3), and a treatment question refused (A4).
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -93,6 +96,53 @@ const blur = (page: Page) => page.evaluate(() => (document.activeElement as HTML
 // a stuck action fails in 20 s with its own message instead of eating the whole test time
 test.use({ actionTimeout: 20_000 });
 
+/** Every state and word one agent tile showed since the call (window.__agentSeen, sampled every 100 ms: the states can be short). */
+function watchAgentTile(role: string) {
+  const w = window as unknown as { __agentSeen?: Array<{ state: string; word: string; t: number }>; __agentTimer?: number };
+  if (w.__agentTimer) window.clearInterval(w.__agentTimer);
+  const seen: Array<{ state: string; word: string; t: number }> = [];
+  w.__agentSeen = seen;
+  const look = () => {
+    const tile = document.querySelector(`[data-testid="agent-tile"][data-role="${role}"]`);
+    const state = tile ? tile.getAttribute("data-agent-state") || "" : "gone";
+    const word = ((tile?.querySelector('[data-part="state"] > span')?.textContent) || "").trim();
+    const last = seen[seen.length - 1];
+    if (!last || last.state !== state || last.word !== word) seen.push({ state, word, t: Date.now() });
+  };
+  look();
+  w.__agentTimer = window.setInterval(look, 100);
+}
+type Seen = Array<{ state: string; word: string; t: number }>;
+const agentSeen = (page: Page): Promise<Seen> => page.evaluate(() => (window as unknown as { __agentSeen?: Seen }).__agentSeen ?? []);
+/** The states of a tile as segments with their last word and how long each lasted (ms). */
+const segments = (seen: Seen, end = Date.now()) => {
+  const out: Array<{ state: string; word: string; ms: number }> = [];
+  seen.forEach((x, i) => {
+    const last = out[out.length - 1];
+    const until = i + 1 < seen.length ? seen[i + 1].t : end;
+    if (last && last.state === x.state) { last.word = x.word || last.word; last.ms += until - x.t; } else out.push({ state: x.state, word: x.word, ms: until - x.t });
+  });
+  return out;
+};
+/** The Agents panel open on this page (the bar's Agents button, else the first agent tile). */
+const openAgents = async (page: Page) => {
+  const panel = page.getByTestId("agents-panel");
+  if (await panel.isVisible().catch(() => false)) return panel;
+  if (await page.getByTestId("panel-agents").isVisible().catch(() => false)) await page.getByTestId("panel-agents").click();
+  else await page.getByTestId("agent-tile").first().getByRole("button").first().click();
+  await expect(panel).toBeVisible({ timeout: 10_000 });
+  return panel;
+};
+const closeAgents = async (page: Page) => {
+  if (!(await page.getByTestId("agents-panel").isVisible().catch(() => false))) return;
+  if (await page.getByTestId("panel-agents").isVisible().catch(() => false)) await page.getByTestId("panel-agents").click();
+  else await page.keyboard.press("Escape");
+  await expect(page.getByTestId("agents-panel")).toHaveCount(0, { timeout: 10_000 });
+};
+// the sentences of tumour_board/guardrails.py REFUSALS (the first words of each)
+const REFUSAL = /I can't recommend or choose treatment\.|I can't make or suggest a diagnosis\.|I don't interpret images or scans\.|I don't derive or assign stage\.|I can't estimate prognosis or survival\.|That is outside what this assistant does\./;
+const AGENT_Q = process.env.TBNIK_LIVE_AGENT_Q || "What grade does the latest histopathology report record?";
+
 const T0 = Date.now();
 let made = "";  // the throw-away meeting, ended and cancelled after the test even when it times out
 
@@ -112,6 +162,7 @@ test.afterEach(async ({ playwright, baseURL }) => {
 const note = (text: string) => { test.info().annotations.push({ type: "live", description: text }); console.log(`[live ${Math.round((Date.now() - T0) / 1000)} s] ${text}`); };
 
 test("two people in a meeting with video, chat, case flow and the ending", async ({ browser }) => {
+  test.setTimeout(480_000);  // the agent steps wait for the reasoner (night-v3 6.3)
   const pw = logins();
   expect(pw["tb-mdt"], "tb-mdt login").toBeTruthy();
   expect(pw["tb-rad-doc"], "tb-rad-doc login").toBeTruthy();
@@ -305,6 +356,132 @@ test("two people in a meeting with video, chat, case flow and the ending", async
     const inCall = people + ((record.attendance ?? []).some((a: { user: string }) => a.user === "tb-mdt") ? 0 : 1);
     await expect(mdt.page.getByText(/\d+ in the meeting/).first()).toContainText(`${inCall} in the meeting`);
     note(`quorum ${q?.present} of ${q?.total} heads, agents standing in ${(record.agents ?? []).length}, ${people} people in the meeting`);
+
+    note("step A1");
+    // (A1, night-v3 6.3) the coordinator opens the Agents panel: the six roles as rows; the agent of every absent head is a tile in the
+    // strip with its title and "AI agent, support only"
+    const agentsNow = async () => ((await getState(mdt.api, mid)).agents ?? []) as Array<{ role: string; title: string; standing_in: boolean; state: string }>;
+    const agentsBefore = await agentsNow();
+    const standing = agentsBefore.filter((a) => a.standing_in);
+    expect(standing.length, "agents standing in for the absent heads").toBeGreaterThan(0);
+    const mdtAgents = await openAgents(mdt.page);
+    await expect(mdtAgents.getByTestId("agent-roster-row")).toHaveCount(6);
+    for (const a of standing) {
+      const tile = mdt.page.locator(`[data-testid="agent-tile"][data-role="${a.role}"]`);
+      await expect(tile).toContainText(a.title);
+      await expect(tile).toContainText("AI agent, support only");
+      await expect(mdtAgents.locator(`[data-testid="agent-roster-row"][data-role="${a.role}"] [data-testid="agent-switch"]`)).toBeChecked();
+    }
+    await expect(mdtAgents.getByTestId("agents-ask-switch")).toBeChecked();
+    await shot(mdt.page, "conduct-agents");
+    note(`agents in the meeting: ${agentsBefore.map((a) => `${a.role} (${a.state})`).join(", ")}`);
+
+    note("step A2");
+    // (A2) the coordinator switches Nuclear Medicine in (another role not in the meeting when it already stands in): a tile "called by"
+    // appears on both screens; switched out, it leaves both
+    const activeRoles = new Set(agentsBefore.map((a) => a.role));
+    const ALL = ["nuclear_medicine", "radiation_oncology", "radiology", "pathology", "medical_oncology", "surgical_oncology"];
+    const called = ALL.find((r) => !activeRoles.has(r));
+    if (!called) note("every role already in the meeting: switching one in was not tried");
+    else {
+      const sw = mdtAgents.locator(`[data-testid="agent-roster-row"][data-role="${called}"] [data-testid="agent-switch"]`);
+      await expect(sw).not.toBeChecked();
+      await sw.click();
+      const mdtTile = mdt.page.locator(`[data-testid="agent-tile"][data-role="${called}"]`);
+      const docTile = doc.page.locator(`[data-testid="agent-tile"][data-role="${called}"]`);
+      await expect(mdtTile).toContainText("called by", { timeout: 15_000 });
+      await expect(mdtTile).toContainText("AI agent, support only");
+      await expect(docTile).toContainText("called by", { timeout: 15_000 });
+      await expect(sw).toBeChecked();
+      await expect(mdtAgents.locator(`[data-testid="agent-roster-row"][data-role="${called}"] [data-testid="agent-reason"]`)).toContainText("Added by");
+      note(`${called} switched in: "${(await mdtTile.locator('[data-part="title"]').textContent()) ?? ""}"`);
+      await shot(mdt.page, "conduct-agent-called");
+      await sw.click();
+      await expect(mdtTile).toHaveCount(0, { timeout: 15_000 });
+      await expect(docTile).toHaveCount(0, { timeout: 15_000 });
+      await expect(sw).not.toBeChecked();
+      expect((await agentsNow()).some((a) => a.role === called), `${called} out of the state`).toBe(false);
+    }
+
+    note("step A3");
+    // (A3) the member asks the first agent in the strip a records question in its box in the Agents panel: Thinking on the tile, then
+    // within 30 s the answer's statements or the not documented sentence; the coordinator's tile shows the same state words
+    const firstTile = doc.page.getByTestId("agent-tile").first();
+    await expect(firstTile).toBeVisible();
+    const role = (await firstTile.getAttribute("data-role")) ?? "";
+    expect(role, "the first agent's role").toBeTruthy();
+    await doc.page.evaluate(watchAgentTile, role);
+    await mdt.page.evaluate(watchAgentTile, role);
+    const docAgents = await openAgents(doc.page);
+    const card = docAgents.locator(`[data-testid="agent-card"][data-role="${role}"]`);
+    await expect(card).toBeVisible();
+    const box = doc.page.locator(`#agent-q-${role}`);
+    await box.fill(AGENT_Q);
+    const asked = doc.page.waitForResponse((r) => r.request().method() === "POST" && r.url().endsWith(`/meetings/${mid}/questions`));
+    const tAsk = Date.now();
+    await doc.page.getByTestId(`send-agent-q-${role}`).click();
+    const askRes = await asked;
+    expect(askRes.ok(), `ask: HTTP ${askRes.status()}`).toBeTruthy();
+    expect(askRes.request().postDataJSON()).toEqual({ text: AGENT_Q, role });
+    const qid: string = (await askRes.json()).question.id;
+    const docTileR = doc.page.locator(`[data-testid="agent-tile"][data-role="${role}"]`);
+    const mdtTileR = mdt.page.locator(`[data-testid="agent-tile"][data-role="${role}"]`);
+    await expect(docTileR.locator('[data-part="state"]')).toContainText("Thinking", { timeout: 10_000 });
+    const item = card.locator(`[data-testid="question-item"][data-question="${qid}"]`);
+    await expect.poll(async () => (await item.getByTestId("answer-statement").count()) + (await item.getByTestId("answer-not-documented-text").count())
+      + (await item.getByTestId("answer-refusal").count()), { timeout: 30_000, message: "the answer's first statement within 30 s" }).toBeGreaterThan(0);
+    const firstMs = Date.now() - tAsk;
+    await shot(doc.page, "member-agent-answer");
+    await expect(item).not.toHaveAttribute("data-status", /^(waiting|answering)$/, { timeout: 120_000 });
+    const doneMs = Date.now() - tAsk;
+    const status1 = await item.getAttribute("data-status");
+    const nStatements = await item.getByTestId("answer-statement").count();
+    expect(status1, "the answer's status").toMatch(/^(answered|not_documented)$/);
+    if (status1 === "answered") expect(nStatements, "statements of an answered question").toBeGreaterThan(0);
+    else await expect(item.getByTestId("answer-not-documented-text")).toContainText("This is not documented in the Case File.");
+    await expect(item.getByTestId("answer-footer")).toContainText("AI agent, support only.");
+    // the coordinator's Agents panel shows the same answer
+    await expect(mdtAgents.locator(`[data-testid="agent-card"][data-role="${role}"] [data-testid="question-item"][data-question="${qid}"]`)).toHaveAttribute("data-status", status1 ?? "", { timeout: 15_000 });
+    // the voice may still be playing: let the tile come back to Ready (up to 90 s), then compare what each screen showed
+    await expect(docTileR).toHaveAttribute("data-agent-state", "ready", { timeout: 90_000 }).catch(() => undefined);
+    await expect(mdtTileR).toHaveAttribute("data-agent-state", "ready", { timeout: 15_000 }).catch(() => undefined);
+    const segDoc = segments(await agentSeen(doc.page));
+    const segMdt = segments(await agentSeen(mdt.page));
+    const fmt = (sg: ReturnType<typeof segments>) => sg.map((x) => `${x.state} "${x.word}" ${(x.ms / 1000).toFixed(1)} s`).join(" > ");
+    note(`asked ${role} "${AGENT_Q}": first words after ${(firstMs / 1000).toFixed(1)} s, ${status1} with ${nStatements} statements after ${(doneMs / 1000).toFixed(1)} s`);
+    note(`member's tile: ${fmt(segDoc)}`);
+    note(`coordinator's tile: ${fmt(segMdt)}`);
+    expect(segDoc.some((x) => x.state === "thinking"), "the member's tile showed Thinking").toBe(true);
+    expect([...segDoc, ...segMdt].some((x) => x.state === "error"), "no Could not answer on either tile").toBe(false);
+    // every state word the member's tile held for a second or more, the coordinator's tile showed too
+    for (const x of segDoc.filter((y) => ["thinking", "answering", "speaking"].includes(y.state) && y.ms >= 1000)) {
+      expect(segMdt.some((y) => y.state === x.state && y.word === x.word), `the coordinator's tile showed "${x.word}"`).toBe(true);
+    }
+    const saved = ((await getState(mdt.api, mid)).questions ?? []).find((x: { id: string }) => x.id === qid);
+    note(`saved answer: status ${saved?.answer?.status}, first statement ${saved?.answer?.first_seconds ?? "?"} s, all ${saved?.answer?.seconds ?? "?"} s, model ${saved?.answer?.model ?? "?"}`);
+
+    note("step A4");
+    // (A4) the member asks "What would you do here?": the refusal (a guardrails.REFUSALS sentence) with the two quick questions
+    await box.fill("What would you do here?");
+    const asked2 = doc.page.waitForResponse((r) => r.request().method() === "POST" && r.url().endsWith(`/meetings/${mid}/questions`));
+    const tAsk2 = Date.now();
+    await doc.page.getByTestId(`send-agent-q-${role}`).click();
+    const qid2: string = (await (await asked2).json()).question.id;
+    const item2 = card.locator(`[data-testid="question-item"][data-question="${qid2}"]`);
+    await expect(item2).toHaveAttribute("data-status", /^(out_of_scope|not_listed)$/, { timeout: 30_000 });
+    await expect(item2.getByTestId("answer-refusal")).toContainText(REFUSAL);
+    await expect(item2.getByTestId("quick-question")).toHaveText(["What do the records document?", "What is pending?"]);
+    await expect(item2.getByTestId("answer-statement")).toHaveCount(0);
+    note(`refusal after ${((Date.now() - tAsk2) / 1000).toFixed(1)} s: "${((await item2.getByTestId("answer-refusal").textContent()) ?? "").slice(0, 80)}"`);
+    await item2.scrollIntoViewIfNeeded();
+    await shot(doc.page, "member-agent-refusal");
+    await item2.getByTestId("quick-question").nth(1).click();
+    await expect(box).toHaveValue("What is pending?");
+    await box.fill("");
+    await doc.page.evaluate(() => { const w = window as unknown as { __agentTimer?: number }; if (w.__agentTimer) window.clearInterval(w.__agentTimer); });
+    await mdt.page.evaluate(() => { const w = window as unknown as { __agentTimer?: number }; if (w.__agentTimer) window.clearInterval(w.__agentTimer); });
+    await closeAgents(doc.page);
+    await closeAgents(mdt.page);
 
     note("step 7");
     // (7) case flow: the timer chip reads the same on both screens; Next case moves the doctor's stage and rail (the toast) and the
