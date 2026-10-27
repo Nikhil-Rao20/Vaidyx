@@ -732,12 +732,39 @@ def may_present(s: dict, r: dict) -> bool:
     return bool(c) and presenter_of(c) == user
 
 
+def _repair_interrupted(s: dict) -> bool:
+    """A question to an agent that has no answer task (a restart while it was answering, or waiting in the queue) is marked as
+    interrupted once it is older than STUCK_AFTER seconds, so the screen never shows Thinking for ever. Returns True when it saved."""
+    changed = False
+    now = datetime.now()
+    for q in s.get("questions") or []:
+        if not q.get("role") or (s["id"], q.get("id")) in _ANSWERING:
+            continue
+        a = q.get("answer")
+        if a is not None and not (isinstance(a, dict) and a.get("status") == "answering"):
+            continue
+        try:
+            age = (now - datetime.fromisoformat(str(q.get("at") or ""))).total_seconds()
+        except ValueError:
+            age = STUCK_AFTER + 1
+        if age < STUCK_AFTER:
+            continue
+        base = a if isinstance(a, dict) else {"statements": [], "references": [], "role": q["role"], "label": q.get("agent_label") or q["role"], "speech": [], "note": ANSWER_NOTE}
+        q["answer"] = {**base, "status": "error", "text": base.get("text") or INTERRUPTED, "message": INTERRUPTED, "at": _now(), "error": "interrupted"}
+        q["queued"] = False; q.pop("queue_note", None)
+        changed = True
+    if changed:
+        _save(s)
+    return changed
+
+
 def view(mid: str, r: dict) -> dict:
     """The GET /meetings/{mid} payload (also the first WebSocket message). A viewer who is not admitted (waiting, or a department on the
     attendance sheet that did not join) sees the agenda with initials for the Case Files it may not read in full, and none of the live
     content (the record or images opened, the questions, the live decision); the decision text of an outcome only for the Case Files
     it may read in full (as in the old room, Phase 6 review S2)."""
     s = need(mid)
+    _repair_interrupted(s)
     lists = s.get("agenda_lists") or {}
     member = is_member(r, s)
     full = full_cases(r, s)
@@ -1481,7 +1508,7 @@ def _announce(mid: str, role: str) -> dict:
     if not s:
         return {}
     st = agent_live_state(s, role)
-    live.broadcast(mid, {"type": "agent_state", "role": role, **st, "agent": {"active": True, "role": role, "state": st["state"], "question": st.get("question")}})
+    live.broadcast(mid, {"type": "agent_state", "role": role, **st, "agent": {"active": True, "role": role, **st}})
     return st
 
 
@@ -1534,7 +1561,18 @@ def set_agent(mid: str, by: str, role: str, on: bool) -> list[dict]:
         raise MeetingError("Unknown agent.", 404, "unknown_role")
     on = bool(on)
     was = role in active_roles(s, cid)
+    try:
+        default = set(board.absent_roles(s, cid))
+    except Exception:
+        default = set()
+    if on and role in default and not isinstance((s.get("agents_active") or {}).get(cid, {}).get(role), dict):
+        return agents_view(s)  # already standing in by itself: nothing to add, and it steps back when its head arrives
     s.setdefault("agents_active", {}).setdefault(cid, {})[role] = {"on": on, "by": by, "by_name": display_name(by), "at": _now()}
+    if not on:
+        for q in s.get("questions") or []:  # its answer in flight (or waiting) stops here; the task ends it as not_listed
+            if q.get("role") == role and q.get("case_id") == cid and (q.get("answer") is None or (isinstance(q.get("answer"), dict) and q["answer"].get("status") == "answering")):
+                if isinstance(q.get("answer"), dict):
+                    q["answer"]["stopped_by"] = by
     _save(s)
     board.audit_event(mid, "agent_added" if on else "agent_removed", by, case_id=cid, role=role)
     if on and not was:
@@ -1563,7 +1601,12 @@ def set_agents_settings(mid: str, by: str, members_ask) -> dict:
     return {"members_ask": s["agents_ask"]}
 
 
-def set_listening(mid: str, user: str, role: str, on: bool) -> dict:
+def _members_may_ask(s: dict, manager: bool) -> None:
+    if not manager and not s.get("agents_ask", True):
+        raise MeetingError("The MDT Coordinator has closed questions to the agents for now.", 403, "agents_ask_off")
+
+
+def set_listening(mid: str, user: str, role: str, on: bool, manager: bool = False) -> dict:
     """A member's device records a question for this agent (on), or stopped (off): the only trigger of "listening", shown with the
     asker's name and expiring after LISTEN_TTL so a closed tab never leaves it on. Not while the agent thinks or answers, nor while
     it listens to someone else (the device still records; the tile keeps its true word). Audited as seconds: never audio or words."""
@@ -1571,6 +1614,8 @@ def set_listening(mid: str, user: str, role: str, on: bool) -> dict:
     cid = s.get("current")
     if role not in active_roles(s, cid):
         raise MeetingError("That agent is not in this meeting. The coordinator can add it.", 409, "agent_not_in_meeting")
+    if on:
+        _members_may_ask(s, manager)
     e = _agent_entry(mid, role) or {}
     if on:
         if e.get("state") in ("thinking", "answering") or (e.get("state") == "listening" and e.get("by") != user):
@@ -1585,7 +1630,7 @@ def set_listening(mid: str, user: str, role: str, on: bool) -> dict:
     return {"role": role, **agent_live_state(s, role), "accepted": True}
 
 
-def agent_audio(mid: str, user: str, qid: str, playing: bool) -> dict:
+def agent_audio(mid: str, user: str, qid: str, playing: bool, device: str = "") -> dict:
     """A device reports that it plays (or stopped playing) an answer: "speaking" is true only while at least one device reports it
     (a report expires after AUDIO_TTL; the device renews it while it plays). The state event goes out when the word changes."""
     s = need(mid); _active(s)
@@ -1595,10 +1640,11 @@ def agent_audio(mid: str, user: str, qid: str, playing: bool) -> dict:
     role = q["role"]
     before = agent_live_state(s, role)["state"]
     a = AGENT_AUDIO.setdefault(mid, {}).setdefault(qid, {"role": role, "devices": {}})
+    key = f"{user}:{str(device)[:24]}" if device else user  # one login may run two screens (the control view and the room screen)
     if playing:
-        a["devices"][user] = time.time() + AUDIO_TTL
+        a["devices"][key] = time.time() + AUDIO_TTL
     else:
-        a["devices"].pop(user, None)
+        a["devices"].pop(key, None)
     after = agent_live_state(s, role)
     if after["state"] != before:
         _announce(mid, role)
@@ -1676,14 +1722,25 @@ def _record_exchange(s: dict, cid: str, role: str, asker: str, text: str, a: dic
         log.info("meeting %s: exchange not kept on the Case File thread (%s)", s["id"], e)
 
 
-def _speech_events(s: dict, role: str, qid: str, speech: list, sent: int) -> int:
-    """Sends agent_speech for the sentences not yet announced (the devices fetch each by reference); none once the answer was stopped."""
+def _speech_events(s: dict, role: str, qid: str, speech: list, sent: int, final: bool = False) -> int:
+    """Sends agent_speech for the sentences not yet announced (the devices fetch each by reference); none once the answer was stopped;
+    `final` marks the last sentence of a complete answer."""
     q = _question(s, qid)
     if q and isinstance(q.get("answer"), dict) and q["answer"].get("stopped_by"):
         return len(speech)
     for i in range(sent, len(speech)):
-        _send(s, {"type": "agent_speech", "role": role, "question": qid, "index": i, "final": i == len(speech) - 1})
+        _send(s, {"type": "agent_speech", "role": role, "question": qid, "index": i, "final": bool(final and i == len(speech) - 1)})
     return len(speech)
+
+
+class _AgentLeft(Exception):
+    """The agent was removed from the meeting, or the case moved on, while it was answering."""
+
+
+AGENT_LEFT = "The agent left this meeting before answering."
+STALE_BRIEF = "The records changed since this brief was prepared; prepare it again for the current records."
+INTERRUPTED = "Interrupted (the app restarted while the agent was answering). Ask again."
+STUCK_AFTER = 120  # seconds: an agent question with no answer task this old was interrupted by a restart
 
 
 async def answer(mid: str, qid: str, user: str = "") -> dict | None:
@@ -1725,6 +1782,11 @@ async def answer(mid: str, qid: str, user: str = "") -> dict | None:
                 q2 = _question(s2, qid)
                 if q2 is None:
                     return
+                if s2.get("current") != cid or role not in active_roles(s2, cid):
+                    raise _AgentLeft()  # removed by the coordinator, or the case moved on: no more statements, no more speech
+                prev = q2.get("answer") if isinstance(q2.get("answer"), dict) else {}
+                if prev.get("stopped_by"):
+                    partial["stopped_by"] = prev["stopped_by"]  # a Stop for everyone during the stream holds
                 if not partial["statements"]:
                     partial["speech"].append(f"AI agent, {dept}.")
                     partial["first_seconds"] = round(time.time() - t0, 1)
@@ -1738,6 +1800,8 @@ async def answer(mid: str, qid: str, user: str = "") -> dict | None:
                 _send(s2, {"type": "question", "question": q2})
                 spoken = _speech_events(s2, role, qid, partial["speech"], spoken)
 
+            if s.get("current") != cid or role not in active_roles(s, cid):
+                raise _AgentLeft()  # queued behind an earlier answer and the agent left meanwhile
             a = await agents.ask(cid, role, text, history, asker, on_statement=on_statement)
             stmts = list(a.get("statements") or [])
             if stmts and not partial["statements"]:  # an answer that came whole (no stream): the same steps, at once
@@ -1758,6 +1822,9 @@ async def answer(mid: str, qid: str, user: str = "") -> dict | None:
             except ValueError as e:
                 log.info("meeting %s: answer not logged (%s)", mid, e)
             _record_exchange(need(mid), cid, role, asker, text, a, status)
+    except _AgentLeft:
+        out = {**partial, "status": "not_listed", "text": partial["text"] or AGENT_LEFT, "message": AGENT_LEFT, "statements": list(partial["statements"]),
+               "references": [], "at": _now(), "speech": list(partial["speech"]), "stopped_by": partial.get("stopped_by") or "system"}
     except Exception as e:
         log.exception("meeting %s: the %s agent could not answer", mid, role)
         out = {**partial, "status": "error", "text": partial["text"] or f"The agent could not answer ({e.__class__.__name__}). Try again.",
@@ -1774,8 +1841,8 @@ async def answer(mid: str, qid: str, user: str = "") -> dict | None:
                 board.audit_event(mid, "question_answered", "system", case_id=cid, question_id=qid, role=role, status=out.get("status"),
                                   statements=len(out.get("statements") or []), seconds=out.get("seconds"), first_seconds=out.get("first_seconds"))
                 _send(s, {"type": "question", "question": q2})
-                if out.get("status") != "error":
-                    _speech_events(s, role, qid, out.get("speech") or [], spoken)
+                if out.get("status") not in ("error", "not_listed"):
+                    _speech_events(s, role, qid, out.get("speech") or [], spoken, final=True)
         except Exception:
             log.exception("meeting %s: could not store the answer", mid)
         _ANSWERING.discard((mid, qid))
@@ -1786,7 +1853,7 @@ async def answer(mid: str, qid: str, user: str = "") -> dict | None:
     return out
 
 
-def present_points(mid: str, user: str, role: str) -> dict:
+def present_points(mid: str, user: str, role: str, manager: bool = False) -> dict:
     """"Present your points" (night-v3 6.2): the agent presents a short summary of its brief for the Case File on the floor: the brief's
     points for review as statements with their citations, built by code (no model call), saved as a question "Present your points"
     with its answer, logged and announced like any answer, spoken sentence by sentence on the devices with agent voices on."""
@@ -1794,6 +1861,7 @@ def present_points(mid: str, user: str, role: str) -> dict:
     cid = s.get("current")
     if role not in active_roles(s, cid):
         raise MeetingError("That agent is not in this meeting. The coordinator can add it.", 409, "agent_not_in_meeting")
+    _members_may_ask(s, manager)
     brief, _pts, nd, npts = _agent_brief(s, cid, role)
     if brief["status"] == "preparing":
         raise MeetingError("The brief is still being prepared from the records. Try again in a moment.", 409, "brief_preparing")
@@ -1808,6 +1876,9 @@ def present_points(mid: str, user: str, role: str) -> dict:
     stmts = [{"text": str(p["text"]), "citations": list(p.get("citations") or []), "references": list(p.get("references") or [])}
              for p in (art.get("points_for_review") or []) if isinstance(p, dict) and p.get("text")]
     speech = [f"AI agent, {dept}."]
+    stale = brief["status"] == "stale"
+    if stale:
+        speech.append(STALE_BRIEF)  # said first, on the screen as the answer's first line
     if stmts:
         status, message = "answered", ""
         speech += [x["text"] for x in stmts]
@@ -1829,7 +1900,8 @@ def present_points(mid: str, user: str, role: str) -> dict:
          "seconds": 0.0, "kind": "present_points", "not_documented": list(art.get("not_documented") or [])}
     q["answer"] = {"status": status, "text": " ".join(x["text"] for x in stmts) or message, "statements": stmts, "references": [], "role": role, "label": label,
                    "model": a["model"], "at": _now(), "seconds": 0.0, "first_seconds": 0.0, "speech": speech, "message": message, "kind": "present_points",
-                   "not_documented": a["not_documented"], "brief_label": brief.get("label") or "", "note": ANSWER_NOTE}
+                   "not_documented": a["not_documented"], "brief_label": brief.get("label") or "", "note": ANSWER_NOTE, "stale": stale,
+                   "stale_note": STALE_BRIEF if stale else ""}
     s.setdefault("questions", []).append(q)
     _save(s)
     board.audit_event(mid, "present_points", user, case_id=cid, role=role, question_id=q["id"], status=status, statements=len(stmts))
@@ -1839,7 +1911,7 @@ def present_points(mid: str, user: str, role: str) -> dict:
         log.info("meeting %s: points not logged (%s)", mid, e)
     _record_exchange(s, cid, role, user, "Present your points", a, status)
     _send(s, {"type": "question", "question": q})
-    _speech_events(s, role, q["id"], speech, 0)
+    _speech_events(s, role, q["id"], speech, 0, final=True)
     return q
 
 

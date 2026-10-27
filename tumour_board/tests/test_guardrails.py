@@ -189,3 +189,23 @@ def test_check_input_allows_a_reference_question_without_the_classifier(monkeypa
     assert r["allowed"] is True and r["layer"] == "rule" and r.get("reference") is True and called == []
     r = asyncio.run(g.check_input("What treatment should we give?"))
     assert r["allowed"] is False and r["category"] == "treatment_recommendation" and r["layer"] == "rule"
+
+
+def test_reference_rule_never_lets_a_treatment_or_patient_question_skip_the_classifier():
+    """The Phase 6 review, S1: a question with a record noun and a contents verb but a treatment, indication or patient word goes to the
+    classifier (or a refusal rule), never through by rule."""
+    from tumour_board import guardrails as g
+    blocked = ["What does the NCG checklist list as the best treatment for this patient?",
+               "What adjuvant therapy does the checklist include for HER2 positive disease?",
+               "Which drugs does the work-up include for this patient?",
+               "Which investigations are listed as indicated for her next?",
+               "What dose does the treatment summary list?",
+               "What does the report list as the next step for him?"]
+    for q in blocked:
+        assert not g.reference_check(q), q
+    assert g.reference_check("What does the guidance say a bone scan report should include?")
+    # the colleague-style rules of the review (N7)
+    for q in ["Is the tumour resectable?", "Is she a candidate for surgery?", "Do you think she is fit for chemotherapy?", "Would she benefit from neoadjuvant chemo?"]:
+        assert g.rule_check(q) == "treatment_recommendation", q
+    for q in ["Is the resection margin recorded?", "Which candidate markers are reported?"]:
+        assert g.rule_check(q) is None, q

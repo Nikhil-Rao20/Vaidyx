@@ -142,10 +142,12 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
   const cs = useCallState(mid, spotlight, { variant, inRoom });
 
   // ---- the agents' voice on this device (night-v3 6.1) ----------------------------------------------------------------------
+  // one login may run two screens (the control view and the room screen): each reports its playback under its own id
+  const deviceId = useMemo(() => Math.random().toString(36).slice(2, 10), []);
   const agent = useAgentSpeaker(mid, () => ({
     // by reference only: the app reads answer.speech[index], a sentence that is on the screen
     speak: (item, h) => speak({ ref: { kind: "meeting_answer", meeting_id: mid, id: item.question, index: item.index } }, { screen: "meeting" }, h),
-    report: (question, playing) => agentAudio(mid, question, playing),
+    report: (question, playing) => agentAudio(mid, question, playing, deviceId),
     busy: isSpeaking,
   }), { enabled: cs.agentVoices && !ended, held: dictating });
   const speaker = agent.speaker;

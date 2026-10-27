@@ -4,8 +4,9 @@ preparing, listening with the asker's name and an expiry, thinking, answering, s
 agents never count for the quorum and never appear among the people; a viewer who is not admitted gets no record quotes. Hermetic: the
 fixtures of test_nik_meetings (a fake login system, synthetic Case Files, no model)."""
 import asyncio, time
+from datetime import datetime, timedelta
 
-from tumour_board import agents, board, live, meetings, service, store
+from tumour_board import agents, board, live, meetings, rules, service, store
 from tumour_board.tests.test_nik_meetings import As, app, join_and_admit, started, tc, wait_for, with_agenda  # noqa: F401
 
 STATE_WORDS = {"ready", "preparing", "listening", "thinking", "answering", "speaking", "error"}
@@ -20,6 +21,7 @@ def _brief(case_id, role, points):
     st.setdefault("artefacts", {})[f"brief_{role}"] = {
         "role": role, "label": agents.ROLES[role]["label"], "generated": "2026-10-27T10:00:00", "model": "fake", "seconds": 0.1, "version": agents.BRIEF_VERSION,
         "focus": "", "near_match": False, "sections": [], "not_documented": ["ECOG performance status"], "review": {"status": "ai_draft"},
+        "signature": rules.case_signature(case_id),  # fresh for the current records
         "points_for_review": [{"text": t, "citations": [{"doc_id": "D1", "doc_title": "CT chest", "date": "2026-03-12", "page": 0, "quote": t}], "references": []} for t in points]}
     store.save_state(case_id, st)
 
@@ -331,3 +333,108 @@ def test_the_context_is_pre_loaded_when_a_case_comes_on_the_floor_and_when_an_ag
     assert As(tc, "anil").post(f"/meetings/{mid}/agents", json={"role": "nuclear_medicine", "on": True}).status_code == 200
     wait_for(lambda: warmed[n:] == [("TB-002", "nuclear_medicine")])
     assert any(e["kind"] == "meeting_started" and e.get("warming", 0) >= 4 for e in board.read_audit() if e["session"] == mid)
+
+
+def _two_statement_ask(between):
+    """A fake agents.ask that streams two statements and calls `between` after the first (to stop, remove or move the case meanwhile)."""
+    async def fake_ask(case_id, role, question, history=None, user="", on_statement=None, **kw):
+        s1 = {"text": "Lesion 3.2 cm", "citations": [{"doc_id": "D1", "quote": "Lesion 3.2 cm"}]}
+        s2 = {"text": "Nodes clear", "citations": [{"doc_id": "D1", "quote": "Nodes clear"}]}
+        await on_statement(s1, 0)
+        between()
+        await on_statement(s2, 1)
+        return {"role": role, "label": "x", "status": "answered", "statements": [s1, s2], "references": [], "removed": [], "model": "m", "seconds": 0.3}
+    return fake_ask
+
+
+def test_a_stop_for_everyone_during_the_stream_holds(tc, monkeypatch):
+    mid = started(tc)
+    join_and_admit(tc, mid, "priya")
+    events = []
+    monkeypatch.setattr(live, "broadcast", lambda m, ev, **kw: events.append(ev) or True)
+    box = {}
+    # the fake answer runs on the app's loop as soon as the question is posted: the stop (by the asker) comes from inside it
+    monkeypatch.setattr(agents, "ask", _two_statement_ask(lambda: meetings.stop_agent(mid, "priya", "radiology", meetings.need(mid)["questions"][-1]["id"])))
+    r = As(tc, "priya").post(f"/meetings/{mid}/questions", json={"text": "What size?", "role": "radiology"})
+    box["qid"] = r.json()["question"]["id"]
+    wait_for(lambda: isinstance(meetings._question(board.get(mid), box["qid"]).get("answer"), dict) and meetings._question(board.get(mid), box["qid"])["answer"]["status"] == "answered")
+    a = meetings._question(board.get(mid), box["qid"])["answer"]
+    assert a["stopped_by"] == "priya" and len(a["statements"]) == 2  # the text stays, the voice stopped
+    idx = [i for i, e in enumerate(events) if e["type"] == "agent_stop"][0]
+    assert not any(e["type"] == "agent_speech" for e in events[idx:])  # no sentence announced after the stop
+
+
+def test_a_removed_agent_stops_answering_and_its_queued_question_is_closed(tc, monkeypatch):
+    mid = started(tc)
+    join_and_admit(tc, mid, "priya"); join_and_admit(tc, mid, "meena")
+    events = []
+    monkeypatch.setattr(live, "broadcast", lambda m, ev, **kw: events.append(ev) or True)
+    # the coordinator removes the agent while it answers (from inside the loop: the route's call would block the loop's thread)
+    monkeypatch.setattr(agents, "ask", _two_statement_ask(lambda: meetings.set_agent(mid, "anil", "radiology", False)))
+    q1 = As(tc, "priya").post(f"/meetings/{mid}/questions", json={"text": "first", "role": "radiology"}).json()["question"]
+    wait_for(lambda: isinstance(meetings._question(board.get(mid), q1["id"]).get("answer"), dict) and meetings._question(board.get(mid), q1["id"])["answer"]["status"] in ("not_listed", "answered", "error"))
+    a = meetings._question(board.get(mid), q1["id"])["answer"]
+    assert a["status"] == "not_listed" and a["message"] == meetings.AGENT_LEFT and len(a["statements"]) == 1  # the first statement stands
+    idx = [i for i, e in enumerate(events) if e["type"] == "agent_stop"][0]
+    assert not any(e["type"] == "agent_speech" for e in events[idx:])
+    assert "radiology" not in _agents(tc, mid)
+    # a question that waited for the removed agent is closed the same way, without a model call
+    called = []
+
+    async def never(*a, **k):
+        called.append(a)
+    monkeypatch.setattr(agents, "ask", never)
+    s = board.get(mid)
+    s["questions"].append({"id": "Qwait", "by": "meena", "by_name": "Dr Meena", "text": "second", "at": meetings._now(), "case_id": "TB-001", "answer": None, "role": "radiology", "queued": True})
+    board.save_session(s)
+    out = asyncio.run(meetings.answer(mid, "Qwait", "meena"))
+    assert out["status"] == "not_listed" and called == []
+
+
+def test_an_answer_interrupted_by_a_restart_is_marked_not_left_thinking(tc):
+    mid = started(tc)
+    join_and_admit(tc, mid, "priya")
+    s = board.get(mid)
+    old = (datetime.now() - timedelta(seconds=meetings.STUCK_AFTER + 5)).isoformat(timespec="seconds")
+    s["questions"] += [{"id": "Qold", "by": "priya", "by_name": "Dr Priya Nair", "text": "old", "at": old, "case_id": "TB-001", "answer": None, "role": "pathology", "queued": True},
+                       {"id": "Qpart", "by": "priya", "by_name": "Dr Priya Nair", "text": "part", "at": old, "case_id": "TB-001", "role": "pathology",
+                        "answer": {"status": "answering", "text": "Grade 2", "statements": [{"text": "Grade 2", "citations": []}], "references": [], "role": "pathology", "label": "x", "speech": ["AI agent, Pathology.", "Grade 2"], "note": ""}},
+                       {"id": "Qnew", "by": "priya", "by_name": "Dr Priya Nair", "text": "new", "at": meetings._now(), "case_id": "TB-001", "answer": None, "role": "pathology", "queued": False},
+                       {"id": "Qboard", "by": "priya", "by_name": "Dr Priya Nair", "text": "to the board", "at": old, "case_id": "TB-001", "answer": None, "role": None}]
+    board.save_session(s)
+    v = As(tc, "priya").get(f"/meetings/{mid}").json()
+    q = {x["id"]: x for x in v["questions"]}
+    assert q["Qold"]["answer"]["status"] == "error" and q["Qold"]["answer"]["message"] == meetings.INTERRUPTED and q["Qold"]["queued"] is False
+    assert q["Qpart"]["answer"]["status"] == "error" and q["Qpart"]["answer"]["text"] == "Grade 2" and q["Qpart"]["answer"]["statements"]
+    assert q["Qnew"]["answer"] is None and q["Qboard"]["answer"] is None  # a fresh one and a question to the board are left alone
+
+
+def test_the_members_switch_covers_present_and_listening_and_a_called_agent_steps_back(tc, monkeypatch):
+    mid = started(tc)
+    join_and_admit(tc, mid, "priya")
+    _brief("TB-001", "pathology", ["Grade is reported as 2."])
+    assert As(tc, "anil").put(f"/meetings/{mid}/agents/settings", json={"members_ask": "false"}).json() == {"members_ask": False}  # a string is read as a word
+    assert As(tc, "priya").post(f"/meetings/{mid}/agents/pathology/present").json()["detail"]["code"] == "agents_ask_off"
+    assert As(tc, "priya").post(f"/meetings/{mid}/agents/pathology/listening", json={"on": True}).json()["detail"]["code"] == "agents_ask_off"
+    assert As(tc, "priya").post(f"/meetings/{mid}/agents/pathology/listening", json={"on": False}).status_code == 200  # a stop never fails
+    assert As(tc, "anil").post(f"/meetings/{mid}/agents/pathology/present").status_code == 200  # the coordinator always may
+    assert As(tc, "anil").put(f"/meetings/{mid}/agents/settings", json={"members_ask": True}).json() == {"members_ask": True}
+    assert As(tc, "priya").post(f"/meetings/{mid}/agents/pathology/present").status_code == 200
+    # switching on an agent that already stands in writes no override: it steps back when its head arrives (N9)
+    assert As(tc, "anil").post(f"/meetings/{mid}/agents", json={"role": "pathology", "on": True}).status_code == 200
+    assert "pathology" not in (board.get(mid).get("agents_active") or {}).get("TB-001", {})
+    join_and_admit(tc, mid, "meena")
+    assert "pathology" not in _agents(tc, mid)
+    # a stale brief is said first when the points are presented
+    st = store.get_state("TB-001"); st["artefacts"]["brief_radiology"] = {**st["artefacts"]["brief_pathology"], "role": "radiology", "signature": {"hash": "old", "docs": []}}
+    store.save_state("TB-001", st)
+    a = As(tc, "priya").post(f"/meetings/{mid}/agents/radiology/present").json()["question"]["answer"]
+    assert a["stale"] is True and a["speech"][1] == meetings.STALE_BRIEF
+    # playback reports are keyed by login and device: the control view and the room screen of one login do not cancel each other
+    qid = As(tc, "priya").post(f"/meetings/{mid}/agents/radiology/present").json()["question"]["id"]
+    As(tc, "anil").post(f"/meetings/{mid}/agents/audio", json={"question": qid, "playing": True, "device": "tab1"})
+    As(tc, "anil").post(f"/meetings/{mid}/agents/audio", json={"question": qid, "playing": True, "device": "tab2"})
+    As(tc, "anil").post(f"/meetings/{mid}/agents/audio", json={"question": qid, "playing": "false", "device": "tab1"})
+    assert _agents(tc, mid)["radiology"]["state"] == "speaking"
+    As(tc, "anil").post(f"/meetings/{mid}/agents/audio", json={"question": qid, "playing": False, "device": "tab2"})
+    assert _agents(tc, mid)["radiology"]["state"] == "ready"

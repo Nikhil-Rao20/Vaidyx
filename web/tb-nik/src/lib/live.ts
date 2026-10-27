@@ -425,7 +425,12 @@ export function applyLiveEvent(s: MeetingState | null, ev: LiveEvent): MeetingSt
       return next;
     }
     case "agent_state": {
-      const a = (ev.agent && typeof ev.agent === "object" ? ev.agent : ev) as AgentState;
+      // the server sends the fields at the top level (role, state, by, by_name, question, at) and the older nested `agent` object: the
+      // top-level ones win so the asker's name reaches the tile (the Phase 6 review, M4)
+      const nested = (ev.agent && typeof ev.agent === "object" ? ev.agent : {}) as Partial<AgentState>;
+      const top = ev as Partial<AgentState> & { by?: string | null; by_name?: string | null; at?: string | null };
+      const pick = <K extends keyof typeof top>(k: K) => (top[k] === undefined ? (nested as Record<string, unknown>)[k as string] : top[k]);
+      const a = { ...nested, role: pick("role") ?? nested.role, state: pick("state") ?? nested.state, by: pick("by"), by_name: pick("by_name"), question: pick("question"), at: pick("at") } as AgentState & Partial<AgentInfo>;
       // the event carries the state only; keep the label and note the full state gave
       next.agent = { ...(s.agent ?? { active: true }), ...a, active: a.active !== false };
       next.agents = mergeAgent(s.agents, a as Partial<AgentInfo> & { role?: string | null });

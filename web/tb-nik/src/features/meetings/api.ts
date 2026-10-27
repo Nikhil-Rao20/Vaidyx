@@ -55,7 +55,7 @@ export const presentPoints = (mid: string, role: string) => api.post<{ question?
 /** The asker or the coordinator stops the agent's voice for everyone (the text stays). */
 export const stopAgent = (mid: string, role: string, question?: string) => api.post(`${mUrl(mid)}/agents/${enc(role)}/stop`, question ? { question } : {});
 /** This device plays (true, renewed every 15 s) or stopped playing (false) an answer: the server's "Speaking" follows these reports. */
-export const agentAudio = (mid: string, question: string, playing: boolean) => api.post(`${mUrl(mid)}/agents/audio`, { question, playing });
+export const agentAudio = (mid: string, question: string, playing: boolean, device?: string) => api.post(`${mUrl(mid)}/agents/audio`, device ? { question, playing, device } : { question, playing });
 export const saveDecision = (mid: string, cid: string, b: DecisionBody) => api.post(`${mUrl(mid)}/cases/${enc(cid)}/decision`, b);
 /** The decision record's field table as the server has it (decision_record.spec()); the form uses the bundled decision_fields.json. */
 export const getDecisionFields = () => api.get<DecisionSpec>(`${TB}/meetings/decision-fields`);

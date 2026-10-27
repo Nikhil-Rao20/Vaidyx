@@ -168,7 +168,8 @@ test.describe("Meetings: AI agents", () => {
     await open(page, `/meetings/${MID}/room`, { wait: "room-screen", state: meetingState("in_session") });
     const tile = page.getByTestId("room-people").locator("[data-testid=agent-tile][data-role=pathology]");
     await expect(tile.locator("[data-part=count]")).toContainText("3 points from the records");
-    await expect(tile.locator("[data-part=point]")).toHaveText("The histopathology report records invasive breast carcinoma of no special type, Grade 2 (Nottingham score 6).");
+    // a draft line on the room screen is marked as such (the Phase 6 review, M6)
+    await expect(tile.locator("[data-part=point]")).toHaveText("AI draft: The histopathology report records invasive breast carcinoma of no special type, Grade 2 (Nottingham score 6).");
     expect(await page.getByTestId("room-people").evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
     await shot(page, "room");
     expect(real(errors)).toEqual([]);

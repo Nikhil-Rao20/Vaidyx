@@ -57,9 +57,10 @@ check("a stored choice wins everywhere", () => {
 });
 check("no choice: a member in the room starts muted", () => assert.equal(agentVoicesFor("member", true, null), false));
 check("no choice: a remote member hears the agents", () => assert.equal(agentVoicesFor("member", false, null), true));
-check("no choice: the coordinator hears the agents, in the room or not", () => {
-  assert.equal(agentVoicesFor("coordinator", true, null), true);
-  assert.equal(agentVoicesFor("coordinator", false, null), true);
+check("no choice: the coordinator's control view starts muted, in the room or not (the room screen plays; the Phase 6 review, M8)", () => {
+  assert.equal(agentVoicesFor("coordinator", true, null), false);
+  assert.equal(agentVoicesFor("coordinator", false, null), false);
+  assert.equal(agentVoicesFor("coordinator", false, true), true);
 });
 check("no choice: the room screen plays", () => assert.equal(agentVoicesFor("room", true, null), true));
 

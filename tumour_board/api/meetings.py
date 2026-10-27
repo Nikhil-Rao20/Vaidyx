@@ -275,6 +275,8 @@ async def meetings_timer(mid: str, request: Request):
 async def meetings_question(mid: str, request: Request):
     """A member types a question; when a stand-in agent is active for the current Case File it answers in the background (text only)."""
     u, rl = _who(request); b = await common.body(request); s = _meeting(mid); _member(rl, s)
+    if b.get("role"):
+        AGENT_ASK_LIMIT.check(u, "Too many questions to the agents in a minute. Wait a moment.")
     q = _call(meetings.ask, s["id"], u, str(b.get("text") or ""), b.get("role"), manager=meetings.manage(rl))
     if q.get("role"):
         meetings.answer_in_background(s["id"], q["id"], u)
@@ -283,20 +285,30 @@ async def meetings_question(mid: str, request: Request):
 
 # ---- the specialty agents of the meeting (night-v3 Phase 6, owner decision D2) -------------------------------------------------------------
 AGENT_LIMIT = common.RateLimit(120, 60)  # listening and playback reports per login per minute
+AGENT_ASK_LIMIT = common.RateLimit(20, 60)  # questions to the agents and Present your points per login per minute (each is a model call)
+
+
+def _flag(v, default=False) -> bool:
+    """A JSON boolean, or the words true, false, on, off, 1, 0 (a string "false" is False)."""
+    if isinstance(v, bool):
+        return v
+    if v is None:
+        return default
+    return str(v).strip().lower() in ("1", "true", "on", "yes")
 
 
 @router.post("/meetings/{mid}/agents")
 async def meetings_agents_set(mid: str, request: Request):
     """The coordinator adds an agent to the meeting for the Case File on the floor, or removes one (any of the six roles)."""
     u, rl = _who(request); common.need(rl, "session"); b = await common.body(request); s = _meeting(mid)
-    return {"agents": _call(meetings.set_agent, s["id"], u, str(b.get("role") or ""), bool(b.get("on")))}
+    return {"agents": _call(meetings.set_agent, s["id"], u, str(b.get("role") or ""), _flag(b.get("on")))}
 
 
 @router.put("/meetings/{mid}/agents/settings")
 async def meetings_agents_settings(mid: str, request: Request):
     """The coordinator's switch: members can ask the agents (the coordinator always may)."""
     u, rl = _who(request); common.need(rl, "session"); b = await common.body(request); s = _meeting(mid)
-    return _call(meetings.set_agents_settings, s["id"], u, b.get("members_ask", True))
+    return _call(meetings.set_agents_settings, s["id"], u, _flag(b.get("members_ask"), True))
 
 
 @router.post("/meetings/{mid}/agents/{role}/listening")
@@ -304,14 +316,15 @@ async def meetings_agent_listening(mid: str, role: str, request: Request):
     """An admitted member's device records a question for this agent (on) or stopped (off): the "listening" state, with an expiry."""
     u, rl = _who(request); b = await common.body(request); s = _meeting(mid); _member(rl, s)
     AGENT_LIMIT.check(u)
-    return _call(meetings.set_listening, s["id"], u, role, bool(b.get("on")))
+    return _call(meetings.set_listening, s["id"], u, role, _flag(b.get("on")), manager=meetings.manage(rl))
 
 
 @router.post("/meetings/{mid}/agents/{role}/present")
 async def meetings_agent_present(mid: str, role: str, request: Request):
     """"Present your points": the agent presents the points of its brief (code, no model call), spoken where agent voices are on."""
     u, rl = _who(request); s = _meeting(mid); _member(rl, s)
-    return {"question": _call(meetings.present_points, s["id"], u, role)}
+    AGENT_ASK_LIMIT.check(u, "Too many questions to the agents in a minute. Wait a moment.")
+    return {"question": _call(meetings.present_points, s["id"], u, role, manager=meetings.manage(rl))}
 
 
 @router.post("/meetings/{mid}/agents/{role}/stop")
@@ -326,7 +339,7 @@ async def meetings_agent_audio(mid: str, request: Request):
     """A device (a member's, or the room screen's) reports that it plays or stopped playing an answer: drives "speaking"."""
     u, rl = _who(request, guest=True); b = await common.body(request); s = _meeting(mid); _member(rl, s)
     AGENT_LIMIT.check(u)
-    return _call(meetings.agent_audio, s["id"], u, str(b.get("question") or ""), bool(b.get("playing")))
+    return _call(meetings.agent_audio, s["id"], u, str(b.get("question") or ""), _flag(b.get("playing")), str(b.get("device") or ""))
 
 
 @router.post("/meetings/{mid}/hand")

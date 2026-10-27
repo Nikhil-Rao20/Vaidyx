@@ -497,7 +497,7 @@ export function AgentCallTile({ agent, big, className }: { agent: AgentInfo; big
           {big ? <span className="text-stage-fg/80" data-part="count">{" · "}{count}</span> : null}
         </span>{" "}
         {!big ? <span className="hidden truncate text-[10px] text-stage-muted @min-[9rem]:block" data-part="count">{count}</span> : null}
-        {first ? <span className="block truncate text-base text-stage-fg/80 [@media(max-height:899px)]:hidden" data-part="point" title={first}>{indianDates(first)}</span> : null}
+        {first ? <span className="block truncate text-base text-stage-fg/80 [@media(max-height:899px)]:hidden" data-part="point" title={`AI draft, not reviewed: ${first}`}>AI draft: {indianDates(first)}</span> : null}
       </span>
     </>
   );

@@ -928,12 +928,15 @@ async def warm(case_id, role):
     if _WARM.get((case_id, role)) == sig:
         return None
     t0, au = time.time(), store.auditor(case_id)
-    context, mode = await asyncio.to_thread(search.context_for, case_id, "", 40000)
-    msgs = [{"role": "system", "content": _live_stream_system(role)}, {"role": "user", "content": f"DOCUMENTS:\n{context}"}]
-    try:
+    try:  # a background task: nothing here may raise (the search, the signature or the model)
+        context, mode = await asyncio.to_thread(search.context_for, case_id, "", 40000)
+        msgs = [{"role": "system", "content": _live_stream_system(role)}, {"role": "user", "content": f"DOCUMENTS:\n{context}"}]
         await llm.chat("reasoner", msgs, max_tokens=1, purpose=WARM_PURPOSE, audit=au)
     except Exception as e:
-        au({"kind": "agent_warm_failed", "role": role, "error": f"{e.__class__.__name__}: {str(e)[:120]}"})
+        try:
+            au({"kind": "agent_warm_failed", "role": role, "error": f"{e.__class__.__name__}: {str(e)[:120]}"})
+        except Exception:
+            pass
         return None
     _WARM[(case_id, role)] = sig
     secs = round(time.time() - t0, 2)

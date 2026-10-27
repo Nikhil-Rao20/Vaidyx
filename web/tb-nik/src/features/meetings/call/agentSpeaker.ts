@@ -282,6 +282,9 @@ export class AgentSpeaker {
 export function agentVoicesFor(variant: string, inRoom: boolean, stored: boolean | null): boolean {
   if (stored !== null) return stored;
   if (variant === "room") return true;
+  // the coordinator's control view is usually beside the room screen, which plays the answers: it starts muted (the Phase 6 review,
+  // M8); the coordinator switches it on from More when they run the meeting from elsewhere, and the choice is kept in the browser
+  if (variant === "coordinator") return false;
   return !(variant === "member" && inRoom);
 }
 

@@ -72,9 +72,10 @@ export function pointsLine(a: BriefPick): string {
  * <name>". */
 export function pointsHeader(a: Pick<AgentInfo, "brief">): string {
   const b = a.brief;
-  if (b?.reviewed_by) return `Reviewed by ${b.reviewed_by}`;
-  if (b?.label && /^reviewed/i.test(b.label)) return "Reviewed";
-  return "Points from the records, AI draft, not reviewed";
+  const stale = b?.status === "stale" ? "Records changed since this brief. " : "";
+  if (b?.reviewed_by) return `${stale}Reviewed by ${b.reviewed_by}`;
+  if (b?.label && /^reviewed/i.test(b.label)) return `${stale}Reviewed`;
+  return `${stale}Points from the records, AI draft, not reviewed`;
 }
 
 /** Why "Present your points" is not offered now, or null when it is: the brief is prepared, there is nothing to read, or no points. */

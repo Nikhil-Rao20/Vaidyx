@@ -28,7 +28,10 @@ _RULES = [
     ("treatment_recommendation", r"\bwhat would you do\b"),
     ("treatment_recommendation", r"\bwhich (one )?would you (pick|choose|go for)\b"),
     ("other_out_of_scope", r"\bdo you agree (with|that)\b"),
-    ("treatment_recommendation", r"\bis (it|he|she|the patient|this) (operable|resectable|curable|fit for)\b"),
+    ("treatment_recommendation", r"\bis (it|he|she|the patient|this|the tumou?r|the lesion|the disease|the mass) (operable|resectable|curable|fit for|a candidate)\b"),
+    ("treatment_recommendation", r"\b(a |the )?candidate for\b.{0,30}\b(surgery|resection|chemo\w*|radiotherapy|radiation|treatment|therapy|transplant\w*)\b"),
+    ("treatment_recommendation", r"\bbenefit from\b"),
+    ("treatment_recommendation", r"\bdo you think\b.{0,40}\b(fit|operable|resectable|candidate|benefit|should)\b"),
     ("treatment_recommendation", r"\bcan we (go ahead|proceed) with\b"),
     ("treatment_recommendation", r"\bwould you (recommend|suggest|advise|give|offer|operate)\b"),
 ]
@@ -42,10 +45,18 @@ _REFERENCE_NOUN = re.compile(r"\b(report\w*|record\w*|summary|summaries|checklis
 _REFERENCE_VERB = re.compile(r"\b(contain\w*|include\w*|list\w*|document\w*|state\w*|mention\w*|cover\w*|comprise\w*|require\w*)\b", re.I)
 
 
+# A reference question never names a treatment, an indication or this patient: such a question goes to the classifier as before (the
+# Phase 6 review, S1), so "what does the checklist list as the best treatment for this patient" is never let through by rule.
+_REFERENCE_BLOCK = re.compile(r"\b(treat\w*|therap\w*|regimen\w*|drugs?|dos(e|es|age|ing)|chemo\w*|surg\w*|radiat\w*|radiother\w*|adjuvant|neoadjuvant|"
+                              r"best|options?|indicat\w*|candidates?|eligib\w*|benefits?|next step\w*|manage\w*|prescri\w*|give|start|"
+                              r"for (this|the|our|my) patient|for (her|him|them)|she|he|his|her)\b", re.I)
+
+
 def reference_check(text) -> bool:
-    """True for a question about what records should contain (reference text), when no refusal rule matches it."""
+    """True for a question about what records should contain (reference text), when no refusal rule matches it and it names no
+    treatment, indication or patient."""
     t = str(text or "")
-    if rule_check(t):
+    if rule_check(t) or _REFERENCE_BLOCK.search(t):
         return False
     return bool(_REFERENCE_OPENER.search(t) and _REFERENCE_NOUN.search(t) and _REFERENCE_VERB.search(t))
 
