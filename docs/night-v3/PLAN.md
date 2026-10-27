@@ -127,11 +127,11 @@ records per setting with `sources` (book, page, verbatim line), departments that
 
 | ID | Item | Lane | Done when | Status |
 |---|---|---|---|---|
-| 4.1 | Audio service | P | `tumour_board/audio_service/` run in `/data/vaidyx/venv/audio` on 127.0.0.1:7120 with `scripts/audio.sh start|stop|status`:<br>• `/stt`: browser audio to text; faster-whisper large-v3-turbo fp16, VAD, the clinical prompt; Cohere as a switchable engine; Parakeet on CPU as fallback<br>• `/tts`: Kokoro with the clinical normaliser and lexicon; CPU fallback<br>• `/health`<br><br>Limits: 60 s per clip, nothing stored. Tests. | todo |
-| 4.2 | App routes | S | `/api/tb/audio/{status,stt,tts}` behind the login, rate limits and size caps, audited without content; `TB_AUDIO_URL` set in the app start script; everything degrades to text when the service is down | todo |
-| 4.3 | Microphone and speaker components | P | `MicButton` (tap to talk, level meter, true states "listening", "transcribing", the text inserted where the cursor is and editable, Esc cancels) and `SpeakButton` (read aloud, stop); keyboard shortcut; permission errors in plain words | todo |
-| 4.4 | Voice where it helps | S | "Ask about this patient" gets a talk mode (speak, see and edit the text, send; the answer read aloud), plus the question for the board, every decision-record text field, reasons and notes, the specialty agent chat; later phases add the meeting and messages | todo |
-| 4.5 | Voice check | S | `tumour_board/eval/audio_eval.py`: clinical sentences spoken by Kokoro, transcribed, word error rate logged; a Playwright check with a fake microphone file | todo |
+| 4.1 | Audio service | P | `tumour_board/audio_service/` run in `/data/vaidyx/venv/audio` on 127.0.0.1:7120 with `scripts/audio.sh start|stop|status`:<br>• `/stt`: browser audio to text; faster-whisper large-v3-turbo fp16, VAD, the clinical prompt; Cohere as a switchable engine; Parakeet on CPU as fallback<br>• `/tts`: Kokoro with the clinical normaliser and lexicon; CPU fallback<br>• `/health`<br><br>Limits: 60 s per clip, nothing stored. Tests. | done (b89e9ff) |
+| 4.2 | App routes | S | `/api/tb/audio/{status,stt,tts}` behind the login, rate limits and size caps, audited without content; `TB_AUDIO_URL` set in the app start script; everything degrades to text when the service is down | done (6f5d907) |
+| 4.3 | Microphone and speaker components | P | `MicButton` (tap to talk, level meter, true states "listening", "transcribing", the text inserted where the cursor is and editable, Esc cancels) and `SpeakButton` (read aloud, stop); keyboard shortcut; permission errors in plain words | done (eb4e0b3) |
+| 4.4 | Voice where it helps | S | "Ask about this patient" gets a talk mode (speak, see and edit the text, send; the answer read aloud), plus the question for the board, every decision-record text field, reasons and notes, the specialty agent chat; later phases add the meeting and messages | done (330c430) |
+| 4.5 | Voice check | S | `tumour_board/eval/audio_eval.py`: clinical sentences spoken by Kokoro, transcribed, word error rate logged; a Playwright check with a fake microphone file | done (c3de60a) |
 
 ### Phase 5: the meeting experience (owner point 5)
 
