@@ -1,0 +1,909 @@
+{
+ "id": "lymphoma",
+ "label": "Lymphoma (Hodgkin and non-Hodgkin)",
+ "version": "0.1-draft",
+ "approval": {
+  "status": "draft",
+  "note": "Draft checklist from NCG Guidelines for Adult Hematolymphoid Malignancies (2019) and NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019): needs a clinician's check"
+ },
+ "site": "lymphoma|hodgkin|lymphoid",
+ "site_note": "V2 item 5.3 (two primaries): only on a Case File linked to the same patient's other Case File, and only for histopathology, cytology, IHC and molecular records: among several candidates for one record, or several documents carrying a required value, one that names another protocol's site and not this one steps aside and is named on the row for review; a document naming no site never does, and when every candidate names another site every candidate stays. Organ words only. A preference, never a filter; a patient with one cancer is checked as before.",
+ "note": "DRAFT, not approved for real use: needs a clinician's check. Configurable by the clinical team. Required records transcribed from the National Cancer Grid (India) books: NCG Guidelines for Adult Hematolymphoid Malignancies (2019) (the newly diagnosed work-up boxes of the DLBCL, follicular and Hodgkin flow charts, pages 17, 24 and 61, and annexures 1 to 3, pages 83 to 89) and NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019) (NHL work-up page 22, Hodgkin work-up page 30; the printed footer is one less than the PDF page cited). The adult flow charts are pictures with no text layer: their lines were read with the project's own OCR engine (Tesseract) and each such quote is marked ocr and checked against that engine's reading of the page. The adult NHL work-up box is the same for every subtype, so one adult NHL setting covers them; myeloma and plasma cell disorders are not in this checklist. Tiers printed by NCG are kept; the tiers whose tier_basis says 'proposed' are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). A record NCG gives only under a condition the system never judges (a stage, an indication, a finding) is shown with NCG's own tier and the condition, never counted. The stage (Ann Arbor, Cotswolds modified; Murphy for child NHL) is as recorded in a report, never computed. Nothing here suggests treatment. India first: the National Cancer Grid books are the only source.",
+ "settings_note": "The setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes a stage or a risk group and never decides the setting; a child is under 15 years as the picker decides, the books give no age cut-off). Each record carries its tier per setting; until a setting is recorded the strictest tier applies. Draft checklist: needs a clinician's check.",
+ "settings": [
+  {
+   "id": "adult_hodgkin",
+   "label": "Adult Hodgkin lymphoma (as recorded)"
+  },
+  {
+   "id": "adult_nhl",
+   "label": "Adult non-Hodgkin lymphoma (as recorded)"
+  },
+  {
+   "id": "child_hodgkin",
+   "label": "Child Hodgkin lymphoma (as recorded)"
+  },
+  {
+   "id": "child_nhl",
+   "label": "Child non-Hodgkin lymphoma, includes lymphoblastic lymphoma (as recorded)"
+  }
+ ],
+ "records": [
+  {
+   "id": "clinical_history",
+   "label": "History, examination, B symptoms, performance status",
+   "tier": "a",
+   "tiers": {
+    "adult_hodgkin": "a",
+    "adult_nhl": "a",
+    "child_hodgkin": "a",
+    "child_nhl": "a"
+   },
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ],
+   "department": "Haematology",
+   "route": "owner",
+   "required_facts": [
+    "ecog",
+    "comorbidities",
+    "b_symptoms"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 85,
+     "quote": "B: presence of B symptoms (including fever, night sweats and weight loss of over 10% of body"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 61,
+     "ocr": true,
+     "quote": "EXAMINATION: Lymph nodes, Liver, Spleen Performance status"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 30,
+     "quote": "B symptoms (any one is sufficient)"
+    }
+   ],
+   "tier_basis": "Proposed a: the first box of every adult flow chart (pages 17, 24 and 61: age, comorbidities and symptoms; examination of lymph nodes, liver, spleen; performance status) carries no letter; the child Hodgkin work-up (page 30) opens with history and B symptoms",
+   "note": "A clinical record of the owning treating department (route owner); the department named here is the default before a Case File has an owner (a child's Case File is usually owned by Paediatric Oncology)"
+  },
+  {
+   "id": "lymph_node_histopathology",
+   "label": "Excision or core biopsy, histopathology",
+   "tier": "a",
+   "tiers": {
+    "adult_hodgkin": "a",
+    "adult_nhl": "a",
+    "child_hodgkin": "a",
+    "child_nhl": "a"
+   },
+   "doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 61,
+     "ocr": true,
+     "quote": "LYMPH NODE BIOPSY HPE examination (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 88,
+     "quote": "Histological evaluation, i.e. biopsy as a method of investigation with comprehensive"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 22,
+     "quote": "Excision biopsy or core biopsy"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 30,
+     "quote": "Excision biopsy of a peripheral lymph node or"
+    }
+   ],
+   "tier_basis": "NCG a: adult flow charts pages 17, 24 and 61 print HPE examination (a); child NHL page 22 prints Biopsy (a) and Histopathology(a); the child pathology appendix (page 39) repeats the adult text under Essential (a)"
+  },
+  {
+   "id": "lymphoma_ihc",
+   "label": "Immunohistochemistry panel",
+   "tier": "a",
+   "tiers": {
+    "adult_hodgkin": "a",
+    "adult_nhl": "a",
+    "child_hodgkin": "a",
+    "child_nhl": "a"
+   },
+   "doc_types": [
+    "ihc",
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type",
+    "ki67"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 89,
+     "quote": "IHC: LCA, CD20, CD3, MIB-1"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 61,
+     "ocr": true,
+     "quote": "IMMUNOHISTOCHEMISTRY CD45, 30,15, 20 (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 22,
+     "quote": "Immunohistochemistry (a) as"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 30,
+     "quote": "Immunohistochemistry as in appendix (a)"
+    }
+   ],
+   "tier_basis": "NCG Mandatory in the adult panel (page 89; Hodgkin panel on page 88) and Essential (a) in the child appendix (page 40); the Hodgkin flow chart (page 61) prints CD45, 30, 15, 20 (a) and PAX-5, CD3, CD79a (b). MIB-1 is the Ki-67 stain, so Ki-67 is the value asked for"
+  },
+  {
+   "id": "lymphoma_molecular",
+   "label": "FISH and molecular tests (MYC, BCL2, BCL6 and others)",
+   "tier": "b",
+   "tiers": {
+    "adult_hodgkin": "none",
+    "adult_nhl": "b",
+    "child_hodgkin": "none",
+    "child_nhl": "b"
+   },
+   "doc_types": [
+    "molecular",
+    "ihc"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "molecular_markers_haem"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 89,
+     "quote": "FISH: MYC/BCL2/BCL6 gene rearrangement"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 22,
+     "quote": "Burkitt lymphoma t(8;14)(q24;q32) t(2;8) or t(8;22)(b)"
+    }
+   ],
+   "tier_basis": "NCG Optimal (b): the adult optimal or extended work-up (page 89) and the child NHL molecular studies (b) on page 22; not listed for Hodgkin"
+  },
+  {
+   "id": "bone_marrow_lymphoma",
+   "label": "Bone marrow aspirate and biopsy",
+   "tier": "a",
+   "tiers": {
+    "adult_hodgkin": "c",
+    "adult_nhl": "b",
+    "child_hodgkin": "c",
+    "child_nhl": "a"
+   },
+   "doc_types": [
+    "bone_marrow",
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "bone_marrow_result"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 61,
+     "ocr": true,
+     "quote": "ONLY IF PETCT NOT DONE AND STAGE IIB or more (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 17,
+     "ocr": true,
+     "quote": "BONE MARROW BIOPSY(b)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 88,
+     "quote": "Bone marrow biopsy, aspirate and imprint smear (as listed in the algorithm"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 22,
+     "quote": "Bone marrow aspirate and biopsy (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 30,
+     "quote": "Bone marrow aspirate and biopsy for stage IV only (b)"
+    }
+   ],
+   "tier_basis": "Adult Hodgkin (page 61): bone marrow biopsy only if PET-CT is not done and the stage is IIB or more (a), a condition the system never judges, so c; adult NHL: DLBCL page 17 prints (b) (follicular lymphoma, page 24, prints (a) for all patients except if the peripheral blood is involved); child NHL page 22 (a); child Hodgkin page 30 only for stage IV (b), a stage condition, so c",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "in adult Hodgkin lymphoma only if PET-CT is not done and the stage is IIB or more; Optimal in child Hodgkin lymphoma for stage IV only"
+   }
+  },
+  {
+   "id": "cbc_lymphoma",
+   "label": "Complete blood count (CBC) and peripheral smear",
+   "tier": "a",
+   "tiers": {
+    "adult_hodgkin": "a",
+    "adult_nhl": "a",
+    "child_hodgkin": "a",
+    "child_nhl": "a"
+   },
+   "doc_types": [
+    "lab"
+   ],
+   "region": "cbc|cbp|blood count|haemogram|hemogram|haematolog|hematolog|blood tests|routine labs|peripheral smear|smear",
+   "department": "Pathology",
+   "required_facts": [
+    "haemoglobin",
+    "wbc",
+    "platelets"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 17,
+     "ocr": true,
+     "quote": "INVESTIGATIONS (a) CBC, P Smear, Biochemistry"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 61,
+     "ocr": true,
+     "quote": "INVESTIGATIONS (a) CBC, ESR"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 22,
+     "quote": "2 Laboratory Baseline labs CBC, Renal function test, Liver function test, serum"
+    }
+   ],
+   "tier_basis": "NCG a: INVESTIGATIONS (a) in the adult flow charts (pages 17, 24, 61); the child baseline labs (pages 22 and 30) carry no letter, proposed a"
+  },
+  {
+   "id": "biochemistry_lymphoma",
+   "label": "Kidney and liver tests, LDH, electrolytes, calcium, uric acid",
+   "tier": "a",
+   "tiers": {
+    "adult_hodgkin": "a",
+    "adult_nhl": "a",
+    "child_hodgkin": "a",
+    "child_nhl": "a"
+   },
+   "doc_types": [
+    "lab"
+   ],
+   "region": "lft|rft|kft|liver|renal|kidney|biochem|creatinine|bilirubin|urea|sgot|sgpt|ldh|lactate|uric|electrolyte|calcium|blood tests|routine labs",
+   "department": "Biochemistry",
+   "required_facts": [
+    "creatinine",
+    "bilirubin",
+    "ldh"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 17,
+     "ocr": true,
+     "quote": "(RFT, LFT, serum albumin, LDH, SE, Ca, PO4, Uric acid)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 61,
+     "ocr": true,
+     "quote": "Biochemistry (RFT, LFT, serum albumin, LDH, Ca,"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 22,
+     "quote": "2 Laboratory Baseline labs CBC, Renal function test, Liver function test, serum electrolytes LDH"
+    }
+   ],
+   "tier_basis": "NCG a: INVESTIGATIONS (a) in the adult flow charts (pages 17, 24, 61); the child baseline labs (pages 22 and 30) carry no letter, proposed a"
+  },
+  {
+   "id": "viral_markers_lymphoma",
+   "label": "Viral markers (HIV, hepatitis B core antibody)",
+   "tier": "a",
+   "tiers": {
+    "adult_hodgkin": "a",
+    "adult_nhl": "a",
+    "child_hodgkin": "b",
+    "child_nhl": "b"
+   },
+   "doc_types": [
+    "lab"
+   ],
+   "region": "viral|hiv|hbsag|hbc|hepatitis|hcv|serolog",
+   "department": "Microbiology",
+   "required_facts": [
+    "hiv_status"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 17,
+     "ocr": true,
+     "quote": "HBCore antibody (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 61,
+     "ocr": true,
+     "quote": "Blood group ,Viral markers"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 22,
+     "quote": "Coagulation profile, (a) Viral Markers(b)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 30,
+     "quote": "electrolytes LDH Coagulation profile, Viral Markers (b)"
+    }
+   ],
+   "tier_basis": "Adult: viral markers sit under INVESTIGATIONS (a) and DLBCL page 17 adds HBCore antibody (a); child NHL page 22 and child Hodgkin page 30 print (b)"
+  },
+  {
+   "id": "staging_ct_lymphoma",
+   "label": "CECT neck, chest, abdomen and pelvis (staging)",
+   "tier": "a",
+   "tiers": {
+    "adult_hodgkin": "a",
+    "adult_nhl": "a",
+    "child_hodgkin": "a",
+    "child_nhl": "a"
+   },
+   "doc_types": [
+    "ct"
+   ],
+   "department": "Radiology",
+   "required_facts": [
+    "nodal_findings",
+    "distant_findings"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 61,
+     "ocr": true,
+     "quote": "CECT neck CHEST, ABDOMEN, PELVIS WITH BONE MARROW (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 83,
+     "quote": "CT SCAN OF NECK, CHEST, ABDOMEN AND PELVIS "
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 22,
+     "quote": "CT scan neck chest abdomen"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 30,
+     "quote": "CT scan chest abdomen and pelvis (if PET not available)"
+    }
+   ],
+   "tier_basis": "NCG a: STAGING (a) in the adult flow charts (pages 17, 24, 61) and the child NHL work-up (page 22); child Hodgkin page 30 lists CT if PET is not available, without a letter, proposed a",
+   "note": "The books list whole-body PET-CT or CECT for staging: a Case File staged by one of them may show the other as missing (clinical review)"
+  },
+  {
+   "id": "pet_ct_lymphoma",
+   "label": "Whole-body PET-CT",
+   "tier": "a",
+   "tiers": {
+    "adult_hodgkin": "a",
+    "adult_nhl": "b",
+    "child_hodgkin": "a",
+    "child_nhl": "b"
+   },
+   "doc_types": [
+    "pet_ct"
+   ],
+   "department": "Nuclear Medicine",
+   "required_facts": [
+    "suv_max"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 61,
+     "ocr": true,
+     "quote": "WHOLE BODY PET-CT SCAN (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 17,
+     "ocr": true,
+     "quote": "WHOLE BODY PET-CT SCAN (b)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 30,
+     "quote": "PET scan whole body (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 22,
+     "quote": "PET scan whole body (b)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 85,
+     "quote": "Normalization of FDG-PET (Deauville score 1–3)"
+    }
+   ],
+   "tier_basis": "NCG: Hodgkin (a) in adults (page 61) and children (page 30); NHL (b) in adults (page 17) and children (page 22)",
+   "note": "The Deauville score is a response score: it is read when a report gives it (extract list), not asked of a baseline PET-CT"
+  },
+  {
+   "id": "chest_xray_lymphoma",
+   "label": "Chest X-ray",
+   "tier": "a",
+   "tiers": {
+    "adult_hodgkin": "none",
+    "adult_nhl": "none",
+    "child_hodgkin": "a",
+    "child_nhl": "a"
+   },
+   "doc_types": [
+    "xray"
+   ],
+   "department": "Radiology",
+   "required_facts": [
+    "distant_findings"
+   ],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 22,
+     "quote": "CXR (a)"
+    }
+   ],
+   "tier_basis": "Child NHL page 22 prints (a); child Hodgkin page 30 lists CXR without a letter, proposed a; not in the adult work-up boxes"
+  },
+  {
+   "id": "echo_ecg_lymphoma",
+   "label": "Echocardiogram and ECG",
+   "tier": "a",
+   "tiers": {
+    "adult_hodgkin": "a",
+    "adult_nhl": "a",
+    "child_hodgkin": "a",
+    "child_nhl": "a"
+   },
+   "doc_types": [
+    "echocardiogram"
+   ],
+   "department": "Cardiology",
+   "route": "owner",
+   "required_facts": [],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 61,
+     "ocr": true,
+     "quote": "ECHOcardiogram (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 30,
+     "quote": "2D ECHO (a)"
+    }
+   ],
+   "tier_basis": "NCG a: SPECIAL INVESTIGATIONS ECG (a) and ECHOcardiogram (a) in the adult flow charts (pages 17, 24, 61); child page 22 prints 2 D ECHO (a) and page 30 2D ECHO (a)",
+   "note": "Routed to the owning team (no cardiology department in the hospital set-up)"
+  },
+  {
+   "id": "csf_lymphoma",
+   "label": "CSF cytology",
+   "tier": "a",
+   "tiers": {
+    "adult_hodgkin": "none",
+    "adult_nhl": "c",
+    "child_hodgkin": "c",
+    "child_nhl": "a"
+   },
+   "doc_types": [
+    "csf"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "csf_cytology"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 17,
+     "ocr": true,
+     "quote": "Cytology after spin (a) when"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 22,
+     "quote": "CSF cytospin and morphology (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 30,
+     "quote": "CSF cytospin and morphology only if indicated (b)"
+    }
+   ],
+   "tier_basis": "Child NHL page 22 (a); adult NHL page 17: CSF cytology (a) when indicated (the footnote lists the high-risk sites), and child Hodgkin page 30 only if indicated (b): conditions the system never judges, so c; not in the adult Hodgkin box",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "in adult non-Hodgkin lymphoma when indicated (the high-risk sites the book lists); Optimal in child Hodgkin lymphoma only if indicated"
+   }
+  },
+  {
+   "id": "pft_lymphoma",
+   "label": "Lung function (PFT, DLCO)",
+   "tier": "b",
+   "tiers": {
+    "adult_hodgkin": "b",
+    "adult_nhl": "none",
+    "child_hodgkin": "none",
+    "child_nhl": "none"
+   },
+   "doc_types": [
+    "pulmonary_function"
+   ],
+   "department": "Pulmonology",
+   "required_facts": [],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 61,
+     "ocr": true,
+     "quote": "PFT, DLCO (b)"
+    }
+   ],
+   "tier_basis": "NCG b: SPECIAL INVESTIGATIONS in the adult Hodgkin flow chart (page 61); not listed in the other work-ups"
+  },
+  {
+   "id": "flow_cytometry_lymphoma",
+   "label": "Flow cytometry (peripheral blood, pleural or ascitic fluid)",
+   "tier": "b",
+   "tiers": {
+    "adult_hodgkin": "none",
+    "adult_nhl": "c",
+    "child_hodgkin": "none",
+    "child_nhl": "b"
+   },
+   "doc_types": [
+    "flow_cytometry"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "flow_cytometry_result"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 24,
+     "ocr": true,
+     "quote": "Flow cytometry on peripheral blood presenting with lymphocytosis (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 88,
+     "quote": "• Flow cytometric immunophenotypic evaluation"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 22,
+     "quote": "Flowcytometry on pleural"
+    }
+   ],
+   "tier_basis": "Adult: listed under the optional or extended work-up (page 88), and (a) in follicular lymphoma presenting with lymphocytosis (page 24), a finding the system never judges, so c; child NHL page 22: flow cytometry on pleural effusion or ascitic fluid where possible (b)",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "in adult follicular lymphoma presenting with lymphocytosis (on the peripheral blood)"
+   }
+  },
+  {
+   "id": "stage_as_recorded_lymphoma",
+   "label": "Stage as recorded in a report",
+   "tier": "a",
+   "tiers": {
+    "adult_hodgkin": "a",
+    "adult_nhl": "a",
+    "child_hodgkin": "a",
+    "child_nhl": "a"
+   },
+   "doc_types": [
+    "ct",
+    "pet_ct",
+    "clinical_note"
+   ],
+   "department": "Radiology",
+   "required_facts": [
+    "recorded_stage"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 84,
+     "quote": "Cotswolds  modified Ann Arbor Staging Classification for both Hodgkin and non-Hodgkin lymphoma"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 22,
+     "quote": "Staging (Due to high incidence of extra-nodal disease Murphy’s staging is used for NHL)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 30,
+     "quote": "Staging information (Ann-Arbor staging system)"
+    }
+   ],
+   "tier_basis": "Proposed a: the board needs the stage; the system only copies a stage written in a report (Ann Arbor, or Murphy for child NHL), never computes it"
+  },
+  {
+   "id": "fertility_semen_lymphoma",
+   "label": "Semen cryopreservation (optional)",
+   "tier": "c",
+   "tiers": {
+    "adult_hodgkin": "c",
+    "adult_nhl": "c",
+    "child_hodgkin": "none",
+    "child_nhl": "none"
+   },
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ],
+   "department": "Haematology",
+   "route": "owner",
+   "required_facts": [],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 61,
+     "ocr": true,
+     "quote": "OPTIONAL (c) Semen cryopreservation"
+    }
+   ],
+   "tier_basis": "NCG c: OPTIONAL (c) Semen cryopreservation in the adult flow charts (pages 17 and 61); not in the child work-ups",
+   "note": "A clinical record of the owning treating department (route owner); the department named here is the default before a Case File has an owner (a child's Case File is usually owned by Paediatric Oncology)"
+  }
+ ],
+ "optional": [
+  {
+   "id": "previous_board",
+   "label": "Previous Tumour Board record",
+   "doc_types": [
+    "tumour_board_record"
+   ],
+   "department": "MDT Coordinator",
+   "route": "coordinator"
+  }
+ ],
+ "extract_facts": [
+  "presenting_complaint",
+  "ecog",
+  "comorbidities",
+  "clinical_question",
+  "recorded_stage",
+  "lesion_size",
+  "nodal_findings",
+  "distant_findings",
+  "histologic_type",
+  "grade",
+  "haemoglobin",
+  "wbc",
+  "platelets",
+  "creatinine",
+  "bilirubin",
+  "patient_preference",
+  "clinical_trial_note",
+  "diagnosis_date_mode",
+  "treatment_received",
+  "b_symptoms",
+  "ki67",
+  "molecular_markers_haem",
+  "bone_marrow_result",
+  "ldh",
+  "hiv_status",
+  "suv_max",
+  "csf_cytology",
+  "flow_cytometry_result",
+  "deauville_score",
+  "hbsag",
+  "anti_hcv",
+  "beta2_microglobulin"
+ ],
+ "core_data": [
+  {
+   "id": "diagnosis",
+   "label": "Histopathological / cytological diagnosis",
+   "facts": [
+    "histologic_type"
+   ]
+  },
+  {
+   "id": "diagnosis_date_mode",
+   "label": "Date and mode of diagnosis",
+   "facts": [
+    "diagnosis_date_mode"
+   ]
+  },
+  {
+   "id": "stage",
+   "label": "Stage or risk group as recorded (with the investigations used)",
+   "facts": [
+    "recorded_stage"
+   ]
+  },
+  {
+   "id": "performance_status",
+   "label": "Performance status",
+   "facts": [
+    "ecog"
+   ]
+  },
+  {
+   "id": "comorbidities",
+   "label": "Co-morbidities",
+   "facts": [
+    "comorbidities"
+   ]
+  },
+  {
+   "id": "biomarkers",
+   "label": "Relevant genomic / biomarker testing",
+   "facts": [
+    "b_symptoms",
+    "ki67",
+    "molecular_markers_haem",
+    "ldh",
+    "deauville_score"
+   ]
+  },
+  {
+   "id": "treatment_history",
+   "label": "Treatment history",
+   "facts": [
+    "treatment_received"
+   ]
+  },
+  {
+   "id": "patient_preference",
+   "label": "Patient preference / special circumstances",
+   "facts": [
+    "patient_preference"
+   ]
+  },
+  {
+   "id": "clinical_trial",
+   "label": "Clinical trial availability / suitability recorded",
+   "facts": [
+    "clinical_trial_note"
+   ]
+  },
+  {
+   "id": "question",
+   "label": "Question for the Tumour Board",
+   "facts": [
+    "clinical_question"
+   ]
+  }
+ ],
+ "core_data_source": "NHS England, Streamlining MDT meetings (2020), p.11 'minimum core data requirements'; aligned with the NCG Virtual Tumour Board case template (India)",
+ "post_board": {
+  "required_record_fields": [
+   "decision_text",
+   "recorded_by",
+   "participants",
+   "actions"
+  ],
+  "follow_up_default_days": 14,
+  "record_fields_source": "EUSOMA 2020 (names of all participants, evidence on decisions); Victorian Cancer MDM quality framework 2018 (report errors/changes raised, divergent recommendations and dissenting clinicians); PM-JAY HBP 2.2 s.3.9 (tumour board decision and treatment plan)"
+ },
+ "policy_basis": "PM-JAY Health Benefit Package 2.2 user guidelines (NHA, 2021), section 3.9: pre-authorization is mandatory at each step of cancer care and the decision on appropriate care is to be taken by a multidisciplinary tumour board; NHS England MDT streamlining guidance (2020) pre-listing conditions.",
+ "guideline_sources": [
+  {
+   "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+   "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+   "pages": "17, 24 and 61 (flow chart pictures, read by OCR), 83 to 89 (PDF page = printed page)"
+  },
+  {
+   "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+   "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+   "pages": "22, 30 (PDF page; the printed footer is one less)"
+  }
+ ]
+}

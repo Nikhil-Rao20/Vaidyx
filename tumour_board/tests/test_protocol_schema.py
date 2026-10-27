@@ -7,8 +7,13 @@ record cites a source. A Phase 2 draft (version "0.1-draft", approval "draft", n
 PDF page (or "n/a" and where, for the Word books) and carries no em or en dash outside its verbatim quotes.
 
 Quotes: every source with a `file` is looked up in that book (whitespace folded): on its PDF page through pypdf, or anywhere in the text
-of a .docx. Skipped when the guideline library or pypdf is not on this machine."""
+of a .docx or a .txt copy of a web page (NICE). Skipped when the guideline library or pypdf is not on this machine. A source marked `"ocr": true` (a line of a flow chart
+printed as a picture with no text layer, item 2.7) is looked up in the project's own OCR engine's reading of that page (ocr_engine.read_page,
+Tesseract, a deterministic engine, never the vision reader), rendered with pypdfium2 at scale 3 and read once per book and page; those
+sources are skipped, with the reason, when the engine or pypdfium2 is not on this machine."""
+import asyncio
 import html
+import io
 import json
 import re
 import zipfile
@@ -16,9 +21,10 @@ from functools import lru_cache
 
 import pytest
 
-from tumour_board import config, org, protocol
+from tumour_board import config, ocr_engine, org, protocol
 
 DASHES = ("\u2014", "\u2013")
+OCR_SCALE = 3.0  # the page render the quotes were taken from (pypdfium2 scale 3 = 216 dpi)
 _LEXICONS = {"facts", "dates", "units", "doc_type_keywords", "his_codes", "dose_references", "specialty_packs"}
 
 
@@ -143,6 +149,8 @@ def test_phase2_draft_sources_and_text(pid):
                 bad.append((r["id"], "file", f))
             elif config.GUIDELINE_DIR.is_dir() and not (config.GUIDELINE_DIR / f).is_file():
                 bad.append((r["id"], "file not in the guideline library", f))
+            if "ocr" in src and (src["ocr"] is not True or not str(f).lower().endswith(".pdf")):
+                bad.append((r["id"], "ocr must be true and only on a PDF page", src.get("ocr")))
             page = src.get("page")
             if not ((isinstance(page, int) and not isinstance(page, bool) and page >= 1) or (page == "n/a" and src.get("where"))):
                 bad.append((r["id"], "page", page))
@@ -169,12 +177,47 @@ def _docx_texts(path: str) -> tuple:
     return _fold(joined), _fold(spaced)
 
 
+def _ocr_unavailable() -> str:
+    """'' when a page can be OCRed here, else why not."""
+    if not ocr_engine.available():
+        return ocr_engine.unavailable_note() or "the OCR engine is turned off"
+    try:
+        import pypdfium2  # noqa: F401
+    except ImportError:
+        return "pypdfium2 not installed"
+    return ""
+
+
+@lru_cache(maxsize=None)
+def _ocr_page(path: str, page: int) -> str | None:
+    """The OCR engine's reading of one PDF page (folded), or None when the engine could not read it."""
+    import pypdfium2 as pdfium
+    pdf = pdfium.PdfDocument(path)
+    try:
+        if not 1 <= page <= len(pdf):
+            return None
+        buf = io.BytesIO()
+        pdf[page - 1].render(scale=OCR_SCALE).to_pil().save(buf, "PNG")
+    finally:
+        pdf.close()
+    read = asyncio.run(ocr_engine.read_page(buf.getvalue()))
+    return _fold(read["text"]) if read else None
+
+
 def _found(src) -> str:
     """'' when the quote is in its book at the cited place, else the reason."""
     path = config.GUIDELINE_DIR / src["file"]
     if not path.is_file():
         return "file not found"
     q = _fold(src.get("quote"))
+    if src.get("ocr"):
+        page = src.get("page")
+        if path.suffix.lower() != ".pdf" or not isinstance(page, int):
+            return "an ocr source needs a PDF page"
+        text = _ocr_page(str(path), page)
+        if text is None:
+            return f"the OCR engine could not read page {page}"
+        return "" if q in text else f"not in the OCR reading of page {page}"
     if path.suffix.lower() == ".docx":
         return "" if any(q in t for t in _docx_texts(str(path))) else "not in the document"
     if path.suffix.lower() == ".pdf":
@@ -183,6 +226,8 @@ def _found(src) -> str:
         if not isinstance(page, int) or not 1 <= page <= len(pages):
             return f"page {page} not in the book ({len(pages)} pages)"
         return "" if q in pages[page - 1] else f"not on page {page}"
+    if path.suffix.lower() == ".txt":  # a text copy of a web page (NICE NG230, item 2.6): anywhere in the whole file, no page numbers
+        return "" if q in _fold(path.read_text(encoding="utf8", errors="replace")) else "not in the text file"
     return f"unknown book format {path.suffix}"
 
 
@@ -195,5 +240,24 @@ def test_every_source_line_is_on_its_cited_page(pid):
     srcs = [(r["id"], s) for _, r in _all_records(p) for s in _sources(r) if s.get("file")]
     if not srcs:
         pytest.skip(f"{pid}: no source names its book file (written before night-v3)")
-    missing = [(rid, s.get("page"), why, _fold(s.get("quote"))[:80]) for rid, s in srcs if (why := _found(s))]
+    no_ocr = _ocr_unavailable() if any(s.get("ocr") for _, s in srcs) else ""
+    checked = [(rid, s) for rid, s in srcs if not (no_ocr and s.get("ocr"))]
+    missing = [(rid, s.get("page"), why, _fold(s.get("quote"))[:80]) for rid, s in checked if (why := _found(s))]
     assert missing == [], missing
+    if no_ocr:
+        pytest.skip(f"{pid}: {len(srcs) - len(checked)} quote(s) from flow chart pictures not checked: {no_ocr}")
+
+
+def test_an_ocr_source_is_checked_against_the_engines_reading_of_the_page():
+    """A flow chart picture has no text layer: its line is found only in the OCR reading, and a changed letter is caught (item 2.7)."""
+    book = "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf"
+    if not (config.GUIDELINE_DIR / book).is_file():
+        pytest.skip("guideline library not on this machine")
+    pytest.importorskip("pypdf")
+    if why := _ocr_unavailable():
+        pytest.skip(why)
+    assert "PFT, DLCO" not in _pdf_pages(str(config.GUIDELINE_DIR / book))[60]  # page 61: pypdf returns only the heading
+    src = {"file": book, "page": 61, "ocr": True, "quote": "PFT, DLCO (b)"}
+    assert _found(src) == ""
+    assert _found({**src, "quote": "PFT, DLCO (a)"}) == "not in the OCR reading of page 61"
+    assert _found({**src, "ocr": False}) == "not on page 61"
