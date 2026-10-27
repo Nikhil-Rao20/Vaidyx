@@ -97,8 +97,8 @@ Status: `todo`, `doing`, `done (<hash>)`, `blocked (<reason>)`. Lane: **S** seri
 
 | ID | Item | Lane | Done when | Status |
 |---|---|---|---|---|
-| 2.1 | Shared groundwork | S | New facts in `facts.json` (for example PSA, Gleason / ISUP grade, CA-125, AFP, beta-hCG, LDH, thyroglobulin, calcitonin, bone marrow result, flow cytometry, cytogenetics and molecular markers for blood cancers, CSF cytology, ophthalmic examination) and document types (bone marrow, flow cytometry, cytogenetics or FISH, CSF, ophthalmology note) with keywords and HIS codes; the hard-coded cancer lists extended (`steps.py` site words, `guidelines.py` cancer words, tests; `test_listing.py`'s "no ovary protocol" assertion changed); a schema test that every protocol parses and every source line is found on its cited page of its book | doing |
-| 2.2 | Colon | P | `colorectal_colon.json` from the NCG colorectal file; the picker's colorectal entry asks colon or rectum | todo |
+| 2.1 | Shared groundwork | S | New facts in `facts.json` (for example PSA, Gleason / ISUP grade, CA-125, AFP, beta-hCG, LDH, thyroglobulin, calcitonin, bone marrow result, flow cytometry, cytogenetics and molecular markers for blood cancers, CSF cytology, ophthalmic examination) and document types (bone marrow, flow cytometry, cytogenetics or FISH, CSF, ophthalmology note) with keywords and HIS codes; the hard-coded cancer lists extended (`steps.py` site words, `guidelines.py` cancer words, tests; `test_listing.py`'s "no ovary protocol" assertion changed); a schema test that every protocol parses and every source line is found on its cited page of its book | done (0ea10f2) |
+| 2.2 | Colon | P | `colorectal_colon.json` from the NCG colorectal file; the picker's colorectal entry asks colon or rectum | doing |
 | 2.3 | Upper GI and liver | P | `stomach.json`, `oesophagus.json`, `liver_hcc.json`, `gallbladder.json` | todo |
 | 2.4 | Gynaecology | P | `ovary.json`, `corpus_uteri.json` | todo |
 | 2.5 | Urology and germ cell | P | `prostate.json`, `kidney.json` (adult; Wilms in 2.8), `germ_cell.json` | todo |
