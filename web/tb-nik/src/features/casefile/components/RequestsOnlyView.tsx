@@ -1,5 +1,5 @@
 // The Case File as a supporting department sees it (access scope "requests"): the patient line, what the department was
-// asked for, and the department's own records. No summary, chats, team, helpers or board form (they are not theirs).
+// asked for, and the department's own records. No summary, chats, team, helpers or board decisions (they are not theirs).
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, CalendarDays, Inbox } from "lucide-react";

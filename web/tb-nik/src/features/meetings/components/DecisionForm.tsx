@@ -3,6 +3,8 @@
 // form and the server never disagree. The form records what the board said: nothing is chosen for the coordinator (no intent,
 // no modality, no decision). The decision text shows live at the bottom of the room screen (sent 400 ms after the last
 // keystroke, marked "not saved") and is saved after the read-back.
+// mode="correct" (night-v3 3.2): the same six steps open on a saved board record from the Case File's Board decisions panel. The
+// outcome is fixed, there is no live strip, a reason is asked on the last step, and only the changed fields are sent as a new version.
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from "lucide-react";
@@ -14,9 +16,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { Attendee } from "@/lib/live";
 import { cn } from "@/lib/utils";
-import { decisionLive, getMeeting, saveDecision } from "../api";
+import { correctBoardRecord, decisionLive, getMeeting, saveDecision } from "../api";
 import specJson from "../decision_fields.json";
 import type { DecisionBody, DecisionChoice, DecisionField, DecisionSpec } from "../types";
+import type { BoardRecord } from "@/features/casefile/types";
 import { LoadingButton, errorText, useAnnounce } from "@/features/casefile/components/common";
 
 /** The field table, the same one the server checks against. */
@@ -28,13 +31,13 @@ const LIST_KINDS = new Set(["multi", "people", "concerns", "investigations", "re
 type Form = Required<DecisionBody>;
 type Key = keyof Form;
 
-const fieldOf = (k: string): DecisionField => BY_KEY.get(k) ?? { key: k, label: k.replace(/_/g, " "), kind: "short", step: STEPS[0]?.id ?? "outcome" };
+export const fieldOf = (k: string): DecisionField => BY_KEY.get(k) ?? { key: k, label: k.replace(/_/g, " "), kind: "short", step: STEPS[0]?.id ?? "outcome" };
 const limitOf = (k: string, part?: string): number | undefined => {
   const l = fieldOf(k).limit;
   if (typeof l === "number") return l;
   return l && part ? l[part] : undefined;
 };
-const choicesOf = (k: string): DecisionChoice[] => {
+export const choicesOf = (k: string): DecisionChoice[] => {
   if (k === "outcome") return DECISION_SPEC.outcomes.map((o) => ({ id: o.id, label: o.label }));
   const fd = fieldOf(k);
   if (fd.kind === "yn") return DECISION_SPEC.yn.filter((c) => c.id);
@@ -64,6 +67,46 @@ function emptyForm(members: string[], owner: string): Form {
     responsible_doctor: owner, key_worker: "", informed_by: "", inform_by_date: "", patient_informed_date: "", gp_informed_date: "",
     pmjay_plan_approval: "", pmjay_plan_note: "", members_present: members,
   };
+}
+
+/** The outcome of a saved record, as the server reads it (outcome_type first; the oldest records keep only outcome). */
+export function recordOutcome(rec: BoardRecord | null | undefined): string {
+  return String(rec?.outcome_type || rec?.outcome || rec?.meeting_outcome || "decision");
+}
+
+const str = (v: unknown) => (typeof v === "string" ? v : v == null ? "" : String(v));
+
+/** Every field of a saved record, for a correction; the intent falls back to intent_as_recorded as on the server. */
+function formFromRecord(rec: BoardRecord | undefined): Form {
+  const base = emptyForm([], "");
+  if (!rec) return base;
+  const r = rec as unknown as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...base };
+  for (const k of Object.keys(base)) {
+    const v = r[k];
+    if (Array.isArray((base as unknown as Record<string, unknown>)[k])) { if (Array.isArray(v)) out[k] = v.filter((x) => x != null); }
+    else if (typeof v === "string") out[k] = v;
+  }
+  const f = out as unknown as Form;
+  f.outcome = recordOutcome(rec) as Form["outcome"];
+  if (!f.intent && rec.intent_as_recorded) f.intent = rec.intent_as_recorded;
+  f.modalities = f.modalities.map(str);
+  f.supportive_needs = f.supportive_needs.map(str);
+  f.members_present = f.members_present.map(str).filter(Boolean);
+  f.concerns = (f.concerns as unknown[]).filter((c) => c && typeof c === "object").map((c) => { const x = c as Record<string, unknown>; return { by: str(x.by), text: str(x.text) }; });
+  f.investigations = (f.investigations as unknown[]).filter((c) => c && typeof c === "object").map((c) => { const x = c as Record<string, unknown>; return { item: str(x.item), department: str(x.department), due: str(x.due) }; });
+  f.referrals = (f.referrals as unknown[]).filter((c) => c && typeof c === "object").map((c) => { const x = c as Record<string, unknown>; return { kind: str(x.kind), department: str(x.department), note: str(x.note) }; });
+  return f;
+}
+
+/** Values compared as the server compares them: whitespace folded, an absent value equal to "". */
+const norm = (v: unknown) => JSON.stringify(v ?? "", (_k, x) => (typeof x === "string" ? x.split(/\s+/).filter(Boolean).join(" ") : x === undefined || x === null ? "" : x));
+
+/** The keys a correction changes, against the record as opened. */
+function changedKeys(f: Form, init: Form): string[] {
+  const a = bodyOf(f) as unknown as Record<string, unknown>;
+  const b = bodyOf(init) as unknown as Record<string, unknown>;
+  return DECISION_SPEC.fields.map((x) => x.key).filter((k) => k !== "outcome" && norm(a[k]) !== norm(b[k]));
 }
 
 /** The outcome step shows only the fields its outcome needs; the trial name only when a trial was considered. */
@@ -153,24 +196,38 @@ function MultiPills({ fd, value, onChange }: { fd: DecisionField; value: string[
   );
 }
 
-export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRecord = true, compact = false }: { mid: string; caseId: string; attendance: Attendee[]; onSaved: () => void; liveText?: string; canRecord?: boolean; compact?: boolean }) {
+export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRecord = true, compact = false, mode = "record", initial }: {
+  mid: string; caseId: string; attendance: Attendee[];
+  /** Called after a save with the server's answer (a correction answers {record}). */
+  onSaved: (result?: unknown) => void;
+  liveText?: string; canRecord?: boolean; compact?: boolean;
+  /** "correct": a later correction of `initial`, a saved board record. */
+  mode?: "record" | "correct"; initial?: BoardRecord;
+}) {
+  const correcting = mode === "correct";
   const uid = useId().replace(/:/g, "");
   const listMembers = `d-members-${uid}`;
   const listDepts = `d-depts-${uid}`;
   // The meeting state the page already polls (no extra request): the agenda row's owner doctor, the departments, the date.
   const meeting = useQuery({ queryKey: ["meeting", mid], queryFn: () => getMeeting(mid), enabled: false, staleTime: Infinity }).data;
   const row = useMemo(() => [...(meeting?.agenda?.discussion ?? []), ...(meeting?.agenda?.noting ?? [])].find((r) => r.case_id === caseId), [meeting, caseId]);
-  const owner = row?.owner_name && row.owner_name !== row.owner_department_name ? row.owner_name : ""; // a person only: a Case File without a team owner carries its department name here
-  const boardDate = meeting?.meeting?.date ?? "";
+  const owner = !correcting && row?.owner_name && row.owner_name !== row.owner_department_name ? row.owner_name : ""; // a person only: a Case File without a team owner carries its department name here
+  const boardDate = correcting ? String(initial?.board_date ?? "").slice(0, 10) : meeting?.meeting?.date ?? "";
   const departments = useMemo(() => {
     const names = new Set<string>();
+    if (correcting) {  // no meeting state here: the departments the record itself names
+      for (const d of [initial?.awaited_from, ...(initial?.investigations ?? []).map((x) => x?.department), ...(initial?.referrals ?? []).map((x) => x?.department), ...(initial?.actions ?? []).map((x) => x?.department)]) if (typeof d === "string" && d.trim()) names.add(d.trim());
+    }
     for (const a of attendance) { const d = a.department_name || (a.department ? a.department.replace(/_/g, " ") : ""); if (d) names.add(d); }
     for (const r of [...(meeting?.agenda?.discussion ?? []), ...(meeting?.agenda?.noting ?? []), ...(meeting?.agenda?.not_ready ?? [])]) if (r.owner_department_name) names.add(r.owner_department_name);
     return [...names].sort((a, b) => a.localeCompare(b));
-  }, [attendance, meeting]);
+  }, [attendance, meeting, correcting, initial]);
   const admitted = () => attendance.filter((a) => a.status === "present" || a.status === "remote").map((a) => a.name);
 
-  const [f, setF] = useState<Form>(() => emptyForm(admitted(), owner));
+  const start = (): Form => (correcting ? formFromRecord(initial) : emptyForm(admitted(), owner));
+  const [f, setF] = useState<Form>(start);
+  const [init, setInit] = useState<Form>(start);
+  const [reason, setReason] = useState("");
   const [step, setStep] = useState(0);
   const [saved, setSaved] = useState(false);
   const [liveErr, setLiveErr] = useState<string | null>(null);
@@ -181,28 +238,39 @@ export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRe
   const heading = useRef<HTMLHeadingElement | null>(null);
   const stepButtons = useRef<Array<HTMLButtonElement | null>>([]);
 
-  useEffect(() => { setF(emptyForm(admitted(), owner)); setStep(0); setSaved(false); setTouched(false); lastSent.current = ""; }, [caseId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const s0 = start(); setF(s0); setInit(s0); setReason(""); setStep(0); setSaved(false); setTouched(false); lastSent.current = ""; }, [caseId, initial?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // The owner doctor may arrive after the form opened: fill the responsible clinician only while it is still empty.
   useEffect(() => { if (owner) setF((x) => (x.responsible_doctor ? x : { ...x, responsible_doctor: owner })); }, [caseId, owner]);
   useEffect(() => { stepButtons.current[step]?.scrollIntoView?.({ block: "nearest", inline: "nearest" }); }, [step]);
 
   // live strip: 400 ms after the last keystroke
   useEffect(() => {
-    if (f.decision_text === lastSent.current) return;
+    if (correcting || f.decision_text === lastSent.current) return;
     if (liveTimer.current) window.clearTimeout(liveTimer.current);
     liveTimer.current = window.setTimeout(() => { lastSent.current = f.decision_text; void decisionLive(mid, f.decision_text).then(() => setLiveErr(null), (e) => setLiveErr(errorText(e))); }, 400);
     return () => { if (liveTimer.current) window.clearTimeout(liveTimer.current); };
-  }, [f.decision_text, mid]);
+  }, [f.decision_text, mid, correcting]);
 
+  const changed = correcting ? changedKeys(f, init) : [];
+  const needReason = changed.filter((k) => fieldOf(k).reason);
   const save = useMutation({
-    mutationFn: () => saveDecision(mid, caseId, bodyOf(f)),
-    onSuccess: () => { setSaved(true); announce("Decision saved."); onSaved(); },
+    mutationFn: () => {
+      if (!correcting) return saveDecision(mid, caseId, bodyOf(f));
+      const b = bodyOf(f) as unknown as Record<string, unknown>;
+      const changes = Object.fromEntries(changed.map((k) => [k, b[k] ?? ""])) as Partial<DecisionBody>;
+      return correctBoardRecord(caseId, String(initial?.id ?? ""), changes, reason.trim());
+    },
+    onSuccess: (r) => { if (!correcting) { setSaved(true); announce("Decision saved."); } onSaved(r); },
   });
   const set = <K extends Key>(k: K, v: Form[K]) => { setF((x) => ({ ...x, [k]: v })); setSaved(false); };
   const problems = problemsOf(f);
+  if (correcting) {
+    if (needReason.length && !reason.trim()) problems.push({ step: STEPS.length - 1, key: "_reason", text: `give the reason for the correction (a change to ${needReason.map((k) => fieldOf(k).label.toLowerCase()).join(", ")} needs one).` });
+    if (!changed.length) problems.push({ step: -1, key: "_nothing", text: "Nothing is changed yet." });
+  }
   const badKeys = new Set(touched ? problems.map((p) => p.key) : []);
   const missingSteps = new Set(problems.map((p) => p.step));
-  const members = attendance.filter((a) => a.status !== "waiting");
+  const members: Attendee[] = correcting ? init.members_present.map((n) => ({ user: n, name: n, status: "present" })) : attendance.filter((a) => a.status !== "waiting");
   const go = (i: number, focus = false) => { setStep(i); announce(`Step ${i + 1} of ${STEPS.length}: ${STEPS[i].title}.`); if (focus) window.setTimeout(() => heading.current?.focus(), 0); };
   const wide = compact ? "" : "sm:col-span-2";
 
@@ -218,7 +286,7 @@ export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRe
     const on = (v: string) => set(k, v as Form[typeof k]);
     let control: ReactNode;
     if (fd.kind === "long") {
-      control = fd.key === "decision_text"
+      control = fd.key === "decision_text" && !correcting
         ? <Textarea id={id} value={value} onChange={(e) => on(e.target.value)} className="mt-1 min-h-24 text-sm" maxLength={limitOf(fd.key)} aria-invalid={invalid} aria-required={need || undefined} placeholder="Type as the chair states it; it shows live on the room screen marked not saved" />
         : <Textarea id={id} value={value} onChange={(e) => on(e.target.value)} className="mt-1 min-h-16 text-sm" maxLength={limitOf(fd.key)} aria-describedby={described} />;
     } else if (fd.kind === "date") {
@@ -231,7 +299,7 @@ export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRe
       <div key={fd.key} className={fd.kind === "long" ? wide : ""} data-field={fd.key}>
         <Label htmlFor={id}>{fd.label}<Need on={need} /></Label>
         {control}
-        {fd.key === "decision_text" ? (
+        {fd.key === "decision_text" && !correcting ? (
           <p className={`text-xs mt-0.5 ${liveErr ? "text-warn" : "text-muted-foreground"}`} data-testid="live-strip-note">{liveErr ? `The room screen did not get the text: ${liveErr}` : f.decision_text && liveText === f.decision_text ? "Shown on the room screen, marked not saved" : "Appears on the room screen as you type, marked not saved"}</p>
         ) : <Notes id={noteId} fd={fd} extra={ownerNote} />}
       </div>
@@ -328,6 +396,15 @@ export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRe
   const renderField = (fd: DecisionField) => {
     if (!visible(fd, f)) return null;
     const k = fd.key as Key;
+    if (fd.key === "outcome" && correcting) {
+      const label = DECISION_SPEC.outcomes.find((o) => o.id === f.outcome)?.label ?? f.outcome.replace(/_/g, " ");
+      return (
+        <div key={fd.key} className={wide} data-field="outcome" data-testid="correct-outcome">
+          <p className="text-sm"><span className="font-medium">{fd.label}:</span> {label}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">The outcome cannot be changed by a correction; record a new outcome in a meeting instead.</p>
+        </div>
+      );
+    }
     if (fd.kind === "choice" || fd.kind === "yn") {
       return <div key={fd.key} className={wide}><Pills fd={fd} value={String(f[k] ?? "")} onChange={(v) => set(k, v as Form[typeof k])} need={fd.key !== "outcome" && requiredFor(fd.key, f.outcome)} invalid={badKeys.has(fd.key)} clearable={fd.key !== "outcome"} /></div>;
     }
@@ -340,7 +417,7 @@ export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRe
   const last = STEPS.length - 1;
 
   return (
-    <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); setTouched(true); if (!problems.length) save.mutate(); }} data-testid="decision-form" data-step={current?.id}>
+    <form className="min-w-0 space-y-3" onSubmit={(e) => { e.preventDefault(); setTouched(true); if (!problems.length) save.mutate(); }} data-testid="decision-form" data-step={current?.id}>
       {liveNode}
       <datalist id={listMembers}>{members.map((m) => <option key={m.user} value={m.name} />)}</datalist>
       <datalist id={listDepts}>{departments.map((d) => <option key={d} value={d} />)}</datalist>
@@ -364,6 +441,13 @@ export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRe
         <h4 id={`d-step-title-${uid}`} ref={heading} tabIndex={-1} className="text-sm font-semibold text-foreground outline-none">Step {step + 1} of {STEPS.length}: {current?.title}</h4>
         <div className={compact ? "grid gap-3" : "grid gap-3 sm:grid-cols-2"}>
           {DECISION_SPEC.fields.filter((x) => x.step === current?.id).map(renderField)}
+          {correcting && step === last ? (
+            <div className={wide} data-field="correction_reason">
+              <Label htmlFor={`d-reason-${uid}`}>Reason for the correction<Need on={needReason.length > 0} /></Label>
+              <Textarea id={`d-reason-${uid}`} value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 min-h-16 text-sm" maxLength={DECISION_SPEC.limits.note ?? 2000} aria-required={needReason.length > 0 || undefined} aria-invalid={badKeys.has("_reason") || undefined} aria-describedby={`d-reason-${uid}-note`} data-testid="correction-reason" />
+              <p id={`d-reason-${uid}-note`} className="mt-0.5 text-xs text-muted-foreground">{needReason.length ? "Needed: a change to what the board decided is kept with its reason." : "Kept with the new version; a change to what the board decided needs one."}</p>
+            </div>
+          ) : null}
         </div>
       </section>
       <div className="flex items-center justify-between gap-2">
@@ -372,14 +456,21 @@ export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRe
       </div>
       {touched && problems.length ? (
         <ul role="alert" className="text-sm text-bad list-disc pl-5" data-testid="decision-problems">
-          {problems.map((p) => <li key={`${p.step}-${p.key}-${p.text}`}><button type="button" className="text-left underline-offset-2 hover:underline" onClick={() => go(p.step)}>Step {p.step + 1}: {p.text}</button></li>)}
+          {problems.map((p) => <li key={`${p.step}-${p.key}-${p.text}`}>{p.step < 0 ? p.text : <button type="button" className="text-left underline-offset-2 hover:underline" onClick={() => go(p.step)}>Step {p.step + 1}: {p.text}</button>}</li>)}
         </ul>
       ) : null}
       {save.isError ? <p role="alert" className="text-sm text-bad">{errorText(save.error)}</p> : null}
+      {correcting ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <LoadingButton type="submit" loading={save.isPending} loadingText="Saving" disabled={!canRecord} data-testid="save-correction"><Check className="size-4" />Save the correction</LoadingButton>
+          <span className="text-xs text-muted-foreground">Only the fields you changed are saved, as a new version; the earlier versions are kept.</span>
+        </div>
+      ) : (
       <div className="flex flex-wrap items-center gap-2">
         <LoadingButton type="submit" loading={save.isPending} loadingText="Saving" disabled={saved || !canRecord} title={canRecord ? undefined : "Only the MDT Coordinator records the decision"} data-testid="save-decision"><Check className="size-4" />{saved ? "Saved" : "Read back done, save"}</LoadingButton>
         <span className="text-xs text-muted-foreground">{saved ? "Recorded; the owner is told." : "Read the decision back to the board, then save."}</span>
       </div>
+      )}
     </form>
   );
 }

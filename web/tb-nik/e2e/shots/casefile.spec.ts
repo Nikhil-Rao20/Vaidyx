@@ -8,7 +8,7 @@ import { expect, test, type Page } from "@playwright/test";
 import path from "node:path";
 import { SHOTS, SIZES, login, prepare, shoot, watchConsole } from "../support/helpers";
 import {
-  CID, baseSlots, caseFile, caseFileUnsent, routeCaseFile, stagingOff, stepsAfterSend, stepsCancerWarning, stepsReadyToSend, stepsResident,
+  CID, baseSlots, caseFile, caseFileBoardRounds, caseFileUnsent, routeCaseFile, stagingOff, stepsAfterSend, stepsCancerWarning, stepsReadyToSend, stepsResident,
   stepsSummaryStale, team, type CaseRouteOptions,
 } from "../support/f2";
 import type { Role } from "../support/fixtures";
@@ -334,6 +334,57 @@ test.describe("guided Case File", () => {
       expect(errors).toEqual([]);
     });
   }
+
+  test("Board decisions: every round, the correction and its versions", async ({ page }) => {
+    const errors = watchConsole(page);
+    await open(page, { path: "/board", caseFile: caseFileBoardRounds() });
+    const panel = page.getByTestId("side-panel").getByTestId("board-form");
+    await expect(panel).toBeVisible();
+    // newest first, counted from the oldest
+    await expect(panel.locator("article").first()).toHaveAttribute("data-testid", "board-round-2");
+    const r2 = panel.getByTestId("board-round-2");
+    const r1 = panel.getByTestId("board-round-1");
+    await expect(r2.locator("h3")).toHaveText("Round 2, 23/10/2026");
+    await expect(r1.locator("h3")).toHaveText("Round 1, 09/10/2026");
+    await expect(r2).toContainText("Decision recorded");
+    await expect(r1).toContainText("Deferred: information awaited");
+    await expect(r1.locator("[data-field=awaited_from]")).toContainText("Radiology");
+    await expect(r2.locator("[data-field=intent]")).toContainText("Curative");
+    await expect(r2.locator("[data-field=modalities]")).toContainText("Surgery, Radiotherapy");
+    await expect(r2.locator("[data-field=investigations]")).toContainText("Bone scan (Nuclear Medicine, due 02/11/2026)");
+    await expect(r2.locator("[data-field=referrals]")).toContainText("Genetics and counselling (Medical Oncology): BRCA testing and counselling");
+    await expect(r2.locator("[data-field=concerns]")).toContainText("Thomas Joseph: Would like Ki-67 repeated");
+    await expect(r2.getByTestId("round-actions")).toContainText("Investigation: Bone scan (Nuclear Medicine, due 02/11/2026)");
+    await expect(r2.getByTestId("corrected-line")).toHaveText("Corrected by Lakshmi Rao on 24/10/2026 (version 2): The board named radiotherapy after surgery; it was left out in the meeting.");
+    await r2.getByTestId("earlier-versions").locator("summary").click();
+    await expect(r2.getByTestId("earlier-versions")).toContainText("Modalities: was Surgery, now Surgery, Radiotherapy");
+    await expect(r2.getByTestId("earlier-versions")).toContainText("Sequence: was Surgery first, now Surgery, then adjuvant radiotherapy");
+    // only the round the login may correct has the button
+    await expect(r1.getByTestId("correct-record")).toHaveCount(0);
+    await snap(page, "casefile", "board-decisions", { sizes: DESKTOP_MOBILE, fullPage: false });
+    await laptop(page);
+    await r2.getByTestId("correct-record").click();
+    const dialog = page.getByTestId("correct-dialog");
+    await expect(dialog.getByTestId("correct-outcome")).toContainText("Decision recorded");
+    await expect(dialog.getByTestId("live-strip-note")).toHaveCount(0);
+    await dialog.getByTestId("decision-step-2").click();
+    await expect(dialog.locator("#d-text")).toHaveValue(/Breast conservation surgery/);
+    await expect(dialog.getByRole("radio", { name: "Curative" })).toHaveAttribute("aria-checked", "true");
+    await snap(page, "casefile", "board-correct", { sizes: [SIZES[0]], fullPage: false });
+    await dialog.locator("#d-stage_as_agreed").fill("cT1c cN0 cM0, as in the MRI breast");
+    await dialog.getByTestId("save-correction").click();
+    await expect(dialog.getByTestId("decision-problems")).toContainText("Step 6: give the reason for the correction");
+    await dialog.getByTestId("decision-step-6").click();
+    await dialog.getByTestId("correction-reason").fill("The stage as agreed was read out with its source.");
+    const posted = page.waitForRequest((r) => r.method() === "POST" && r.url().includes("/board-records/") && r.url().endsWith("/correct"));
+    await dialog.getByTestId("save-correction").click();
+    const body = (await posted).postDataJSON();
+    expect(body).toEqual({ changes: { stage_as_agreed: "cT1c cN0 cM0, as in the MRI breast" }, reason: "The stage as agreed was read out with its source." });
+    await expect(dialog).toHaveCount(0);
+    await expect(r2.getByTestId("corrected-line")).toContainText("(version 3): The stage as agreed was read out with its source.");
+    await expect(r2.locator("[data-field=stage_as_agreed]")).toContainText("as in the MRI breast");
+    expect(errors).toEqual([]);
+  });
 
   test("new records since you looked", async ({ page }) => {
     const errors = watchConsole(page);

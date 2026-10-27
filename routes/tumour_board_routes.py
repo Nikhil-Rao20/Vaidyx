@@ -293,7 +293,28 @@ def _case_permissions(r, c, st, docs):
             "set_owner": not access.owner(c) and org.can(r, "create_case"),
             "mark_ready": access.may(r, "mark_ready", c), "remind": access.may_remind(r, c),  # V2 item 6.1
             "answer_request": {a["id"]: _can_answer(r, a) for a in st.get("actions", []) if a.get("source") == "pre_authorization"},  # V2 item 4.3
-            "undo_confirmation": {x["id"]: _can_confirm(r, c, st, x["type"], x["key"]) for x in st.get("confirmations", []) if not x.get("undone")}}
+            "undo_confirmation": {x["id"]: _can_confirm(r, c, st, x["type"], x["key"]) for x in st.get("confirmations", []) if not x.get("undone")},
+            "correct_board_record": {b["id"]: _may_correct_record(r, c, b) for b in st.get("board_records", []) if isinstance(b, dict) and b.get("id")}}  # night-v3 item 3.2
+
+
+def _correct_refusal(r, c, rec) -> str:
+    """Why this user may not correct this board record ("" when allowed; night-v3 items 3.1 / 3.2): the owning department's consultants,
+    or the MDT Coordinator on the record's board date only; nobody on an archived Case File. The correct route and the Case File
+    permissions both read this, so the two cannot drift."""
+    if access.is_archived(c):
+        return access.ARCHIVED_MESSAGE + ". Take it out of the archive first."
+    if access.is_owner_doctor(r, c):
+        return ""
+    if not r.get("coordinator") or r.get("disabled"):
+        return "Only the owning department's consultants can correct a board record"
+    import datetime as _dt
+    if str((rec or {}).get("board_date") or "")[:10] != _dt.date.today().isoformat():
+        return "The MDT Coordinator can correct a record on the meeting day only; afterwards the owning consultant corrects it"
+    return ""
+
+
+def _may_correct_record(r, c, rec) -> bool:
+    return not _correct_refusal(r, c, rec)
 
 
 def _can_answer(r, a):
@@ -1791,7 +1812,6 @@ def setup_tumour_board_routes():
         """A later correction of a saved board record (night-v3 item 3.1): {"changes": {field: value}, "reason"}. The owning department's
         consultants; the MDT Coordinator on the meeting day only. A new version (who, when, why, the changed fields, a snapshot); version 1
         is never overwritten. Audited; the owner is told."""
-        import datetime as _dt
         from tumour_board import meetings as _meetings
         rl = _roles(request); u = _user(request); c = _case(case_id); b = await request.json()
         b = b if isinstance(b, dict) else {}
@@ -1801,11 +1821,9 @@ def setup_tumour_board_routes():
             raise HTTPException(404, "No such Tumour Board record")
         if access.is_archived(c):
             raise HTTPException(409, {"message": access.ARCHIVED_MESSAGE + ". Take it out of the archive first.", "code": "archived"})
-        if not access.is_owner_doctor(rl, c):
-            if not rl.get("coordinator") or rl.get("disabled"):
-                raise HTTPException(403, "Only the owning department's consultants can correct a board record")
-            if str(rec.get("board_date") or "")[:10] != _dt.date.today().isoformat():
-                raise HTTPException(403, "The MDT Coordinator can correct a record on the meeting day only; afterwards the owning consultant corrects it")
+        refusal = _correct_refusal(rl, c, rec)  # the same rule as permissions.correct_board_record on the Case File view
+        if refusal:
+            raise HTTPException(403, refusal)
         if not isinstance(b.get("changes"), dict):
             raise HTTPException(400, "Send the fields to correct under \"changes\"")
         async with store.lock(case_id):

@@ -150,6 +150,44 @@ export function caseFileUnsent() {
   return c;
 }
 
+/** Two board rounds (night-v3 3.2): the first deferred (the MRI breast awaited from Radiology), the second a decision with the
+ *  decision record v2 fields, corrected once by the owning consultant (version 2). The treating login may correct the second only. */
+export function caseFileBoardRounds() {
+  const c = caseFile();
+  const old = c.state.board_records[0];
+  const v1 = { version: 1, at: "2026-10-09T17:40:00", by: "mdt@vxh.example", by_name: "Priya Nair", reason: "Recorded by the Tumour Board" };
+  const deferred = {
+    id: "B1d0f21", outcome_type: "deferred", outcome: "deferred", meeting_outcome: "deferred", decision_text: "Deferred: awaiting MRI breast report, final and signed from Radiology",
+    awaited: "MRI breast report, final and signed", awaited_from: "Radiology", deferred_reason: "MRI breast report, final and signed (from Radiology)",
+    board_date: "2026-10-09", recorded_at: "2026-10-09T17:40:00", recorded_by: "Priya Nair", entered_by: "mdt@vxh.example",
+    members_present: ["Priya Nair", "Lakshmi Rao", "Shanthi Raman", "Thomas Joseph"], concerns: [],
+    actions: [{ task: "MRI breast report, final and signed", department: "Radiology", due: "2026-10-16", kind: "action" }],
+    versions: [{ ...v1, decision_text: "Deferred: awaiting MRI breast report, final and signed from Radiology" }], version: 1,
+  };
+  const text = "Breast conservation surgery with sentinel node biopsy; adjuvant plan after the final histopathology (as dictated; SYNTHETIC demo).";
+  const decision = {
+    ...old, id: old.id, outcome_type: "decision", outcome: "decision", decision_text: text, rationale: "Small tumour, clinically node negative on imaging (SYNTHETIC).",
+    intent: "curative", intent_as_recorded: "curative", modalities: ["surgery", "radiotherapy"], sequence: "Surgery, then adjuvant radiotherapy; systemic therapy after the final histopathology",
+    concerns: [{ by: "Thomas Joseph", text: "Would like Ki-67 repeated on the excision specimen before the adjuvant plan." }],
+    stage_as_agreed: "cT1c cN0 cM0", stage_source: "report", trial_considered: "no", patient_preference: "yes",
+    investigations: [{ item: "Bone scan", department: "Nuclear Medicine", due: "2026-11-02" }],
+    referrals: [{ kind: "genetics", department: "Medical Oncology", note: "BRCA testing and counselling" }],
+    responsible_doctor: "Lakshmi Rao", informed_by: "Lakshmi Rao", inform_by_date: "2026-10-27", members_present: ["Priya Nair", "Lakshmi Rao", "Shanthi Raman", "Thomas Joseph"],
+    recorded_by: "Priya Nair", recorded_at: "2026-10-23T17:20:00", board_date: "2026-10-23",
+    actions: [{ task: "Bone scan", department: "Nuclear Medicine", due: "2026-11-02", kind: "investigation" }, { task: "Referral: Genetics and counselling. BRCA testing and counselling", department: "Medical Oncology", kind: "referral" }],
+    corrected: { by: "rao@vxh.example", by_name: "Lakshmi Rao", at: "2026-10-24T10:15:00", reason: "The board named radiotherapy after surgery; it was left out in the meeting.", version: 2 },
+    versions: [
+      { version: 1, at: "2026-10-23T17:20:00", by: "mdt@vxh.example", by_name: "Priya Nair", reason: "Recorded by the Tumour Board", decision_text: text },
+      { version: 2, at: "2026-10-24T10:15:00", by: "rao@vxh.example", by_name: "Lakshmi Rao", reason: "The board named radiotherapy after surgery; it was left out in the meeting.", change: "correction", decision_text: text,
+        changed: [{ key: "modalities", old: ["surgery"], new: ["surgery", "radiotherapy"] }, { key: "sequence", old: "Surgery first", new: "Surgery, then adjuvant radiotherapy; systemic therapy after the final histopathology" }] },
+    ],
+    version: 2,
+  };
+  c.state.board_records = [deferred, decision];
+  c.permissions = { ...c.permissions, correct_board_record: { [deferred.id]: false, [decision.id]: true } };
+  return c;
+}
+
 /** GET /steps as steps.build answered it for the treating consultant: the question not written, one value where two reports
  *  differ (primary lesion size), six key values to confirm, the summary written and not read yet. */
 export function steps(over: Record<string, unknown> = {}) {
@@ -362,6 +400,21 @@ export async function routeCaseFile(page: Page, o: CaseRouteOptions = {}) {
       live.steps.summary.sent = { by: me.by_name, at: live.ready.at, note: live.ready.note };
       live.steps.next = { section: "summary", label: "Sent to the board", done: true };
       return json({ ok: true });
+    }
+    const corr = /^\/board-records\/([^/]+)\/correct$/.exec(p);
+    if (corr && m === "POST") {  // night-v3 3.2: postboard.correct_record in short (the changes merged, a new version)
+      const c: AnyObj = isReply(o.caseFile) ? null : o.caseFile;
+      const rec = c?.state?.board_records?.find((x: AnyObj) => x.id === decodeURIComponent(corr[1]));
+      if (!rec) return json({ detail: "No such Tumour Board record" }, 404);
+      const b = body();
+      const changes = b.changes ?? {};
+      if (!Object.keys(changes).length) return json({ detail: "Nothing changed." }, 400);
+      const at = new Date().toISOString();
+      const version = (rec.version ?? 1) + 1;
+      const changed = Object.keys(changes).map((k) => ({ key: k, old: rec[k], new: changes[k] }));
+      const next = { ...clone(rec), ...changes, version, corrected: { ...me, at, reason: b.reason ?? "", version },
+        versions: [...(rec.versions ?? []), { version, at, ...me, reason: b.reason || "Corrected after the meeting", change: "correction", changed }] };
+      return json({ ok: true, record: next, state: c.state });
     }
     if (/^\/documents\/[^/]+\/quote$/.test(p)) {
       const q = url.searchParams.get("text") || url.searchParams.get("fact") || "";

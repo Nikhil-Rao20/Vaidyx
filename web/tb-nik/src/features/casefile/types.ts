@@ -468,6 +468,24 @@ export interface BoardRecord {
   actions?: Array<{ task: string; department?: string; due?: string; kind?: string }>;
   /** Set when the owning consultant (or the MDT Coordinator on the meeting day) corrected the record; versions are kept. */
   corrected?: { by: string; by_name?: string; at: string; reason?: string; version: number } | null;
+  entered_by?: string;
+  /** The current version number; every version is kept in `versions` (version 1 is the decision as recorded). */
+  version?: number;
+  versions?: BoardRecordVersion[];
+}
+
+/** One version of a board record (postboard._versions / _new_version): a correction carries the changed fields and why. */
+export interface BoardRecordVersion {
+  version: number;
+  at?: string;
+  by?: string;
+  by_name?: string;
+  reason?: string;
+  /** "correction" for a later correction; absent for version 1. */
+  change?: string;
+  changed?: Array<{ key: string; old?: unknown; new?: unknown }>;
+  decision_text?: string;
+  fields?: Record<string, unknown>;
 }
 
 export interface CaseFile {
@@ -512,6 +530,8 @@ export interface CaseFile {
     waive?: Record<string, boolean>;
     confirm?: Record<string, boolean>;
     board_record?: boolean;
+    /** Per board record id: may this login correct it (the owning department's consultants; the MDT Coordinator on the meeting day). */
+    correct_board_record?: Record<string, boolean>;
     manage_participants?: boolean;
     refer?: boolean;
   };

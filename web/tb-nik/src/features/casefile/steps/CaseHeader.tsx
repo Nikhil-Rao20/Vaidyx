@@ -1,6 +1,6 @@
 // The guided Case File's header (B1, B9): who the patient is (name and UHID on every section, NISTIR two identifiers), the cancer as
 // recorded, the owner, the board date and the urgency; on the right the one final action "Send to the board" and one "More" menu
-// (Team, Board form, Print, Download, Move to another meeting, Take off the agenda, Archive). Nothing else: the work is in the sections.
+// (Team, Board decisions, Print, Download, Move to another meeting, Take off the agenda, Archive). Nothing else: the work is in the sections.
 // A draft checklist (version "x-draft", owner decision D6; night-v3 item 2.10) carries the chip "Checklist built (draft): needs a
 // clinician's check" next to the cancer; the version comes from GET /protocols (cached).
 import { Link } from "react-router-dom";
@@ -75,7 +75,7 @@ export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, deckHref
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
               <DropdownMenuItem onSelect={() => onPanel("team")}><Users className="size-4" />Team</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => onPanel("board")}><ClipboardList className="size-4" />Board form</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onPanel("board")}><ClipboardList className="size-4" />Board decisions</DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={onPrint}><Printer className="size-4" />Print</DropdownMenuItem>
               <DropdownMenuItem asChild><a href={deckHref} download><Presentation className="size-4" />Download the slides (.pptx)</a></DropdownMenuItem>

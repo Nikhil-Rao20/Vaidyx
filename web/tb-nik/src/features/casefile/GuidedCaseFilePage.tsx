@@ -20,7 +20,7 @@ import { useCaseFile, useMyRole, useProposals, useRememberCase, useSlots, useTea
 import type { Proposed, SendToBoardBody, Slot, SlotAction } from "./types";
 import { ArchiveDialog } from "./components/ArchiveDialog";
 import { AskPanel } from "./components/AskPanel";
-import { BoardFormPanel } from "./components/BoardFormPanel";
+import { BoardDecisionsPanel } from "./components/BoardDecisionsPanel";
 import { EmptyState, ErrorState, SkeletonLines, errorText, fmtDate, plural, useAnnounce } from "./components/common";
 import { UndoBar, useDeferred } from "./components/deferred";
 import { HelpersPanel, NAMES as HELPER_NAMES, useHelpers } from "./components/HelpersPanel";
@@ -327,7 +327,7 @@ export default function GuidedCaseFilePage() {
   const canConfirm = prepare && !resident && !!steps?.permissions?.review;
   const canMove = !resident && !teamq.data?.archived && (!!cf.permissions?.mark_ready || role.coordinator) && (!!cf.case.board_ready || !!steps?.summary.sent);
   const sectionTitle = steps?.sections.find((s) => s.id === section)?.label ?? "";
-  const panelTitle = side?.kind === "panel" ? (side.panel === "team" ? "Team" : "Board form") : side?.kind === "source" ? (side.target.title ?? "Report") : side?.kind === "review" ? "Please check" : side?.kind === "request" ? "Change the message" : side?.kind === "ask" ? "Ask about this patient" : "";
+  const panelTitle = side?.kind === "panel" ? (side.panel === "team" ? "Team" : "Board decisions") : side?.kind === "source" ? (side.target.title ?? "Report") : side?.kind === "review" ? "Please check" : side?.kind === "request" ? "Change the message" : side?.kind === "ask" ? "Ask about this patient" : "";
   const reviewSlot = side?.kind === "review" ? slotById(side.slotId) : null;
   const requestSlot = side?.kind === "request" ? slotById(side.slotId) : null;
 
@@ -413,7 +413,7 @@ export default function GuidedCaseFilePage() {
       <SidePanel open={!!side} onClose={() => setSide(null)} title={panelTitle} width={side?.kind === "source" ? "wide" : "normal"}
         subtitle={side?.kind === "source" ? "Shown as printed; nothing is interpreted." : side?.kind === "ask" ? "Answers come only from this patient's reports, each with the line it came from." : undefined}>
         {side?.kind === "panel" && side.panel === "team" ? <TeamPanel caseId={id} team={teamq.data} derived={teamq.derived} isOwner={teamq.data?.can?.manage ?? !!cf.permissions?.manage_participants} resident={resident} onChanged={refresh} me={role.me?.user ?? ""} /> : null}
-        {side?.kind === "panel" && side.panel === "board" ? <BoardFormPanel cf={cf} coordinator={role.coordinator} /> : null}
+        {side?.kind === "panel" && side.panel === "board" ? <BoardDecisionsPanel cf={cf} coordinator={role.coordinator} onChanged={refresh} /> : null}
         {side?.kind === "source" ? <SourceViewer caseId={id} target={side.target} doc={cf.documents.find((d) => d.doc_id === side.target.docId)} /> : null}
         {side?.kind === "review" ? (reviewSlot ? <ReviewPanel caseId={id} cf={cf} slot={reviewSlot} queue={allSlots.filter((s) => s.status === "needs_confirmation")} derived={slotsq.derived} resident={resident} consultantName={consultantName}
           onOpenSource={openSource} onDone={refresh} onPropose={propose} onNext={(n) => setSide(n ? { kind: "review", slotId: n.id } : null)} /> : <EmptyState title="Nothing left to check here" className="py-6" />) : null}

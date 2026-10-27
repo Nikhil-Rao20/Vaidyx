@@ -615,3 +615,19 @@ def test_the_old_routes_stay_lenient_and_take_the_new_keys(tc):
     assert r.json()["outcome_type"] == "decision" and r.json()["intent"] == "" and r.json()["modalities"] == ["surgery"] and r.json()["actions"][0]["kind"] == "investigation"
     r = As(tc, "anil").post("/cases/TB-002/board-records", json={"decision_text": "Plan agreed.", "sequence": "x" * 301})
     assert r.status_code == 400 and "Sequence: at most 300 characters" in r.text
+
+
+def test_case_file_view_says_who_may_correct_each_board_record(tc):
+    """night-v3 item 3.2: permissions.correct_board_record follows the correct route's rule (one helper for both)."""
+    from datetime import date, timedelta
+    from tumour_board import store
+    owned("TB-002")
+    rec = asyncio.run(postboard.record_decision("TB-002", {**DECISION, "board_date": date.today().isoformat()}, "anil"))
+    may = lambda user: As(tc, user).get("/cases/TB-002").json()["permissions"]["correct_board_record"][rec["id"]]
+    assert may("priya") is True and may("anil") is True  # the owner's consultant; the MDT Coordinator on the meeting day
+    assert may("asha") is False  # a resident of the team
+    st = store.get_state("TB-002")
+    next(b for b in st["board_records"] if b["id"] == rec["id"])["board_date"] = (date.today() - timedelta(days=1)).isoformat()
+    store.save_state("TB-002", st)
+    assert may("anil") is False and may("priya") is True  # the day after: only the owner's consultant
+    assert As(tc, "anil").post(f"/cases/TB-002/board-records/{rec['id']}/correct", json={"changes": {"key_worker": "Sr Lata"}}).status_code == 403  # the route agrees
