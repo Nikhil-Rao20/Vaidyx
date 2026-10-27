@@ -20,6 +20,8 @@ PROTOCOL_DIR = Path(__file__).resolve().parent / "protocols"
 DEMO_CORPUS = Path(os.getenv("TB_DEMO_CORPUS", "/data/vaidyx/tb_demo_corpus"))
 GUIDELINE_DIR = Path(os.getenv("TB_GUIDELINE_DIR", "/data/vaidyx/tb_resources/guidelines"))
 GUIDELINE_CHUNKING = os.getenv("TB_GUIDELINE_CHUNKING", "fixed")  # "fixed" or "section" (V1 item 5.4)
+AUDIO_URL = os.getenv("TB_AUDIO_URL", "").rstrip("/")  # the local audio service (night-v3 item 4.2); empty means voice is off
+AUDIO_TOKEN_FILE = os.getenv("TB_AUDIO_TOKEN_FILE", str(DATA_ROOT / "audio_token.json"))
 
 DEFAULT_MODELS = {
     "reasoner": {"base_url": os.getenv("TB_REASONER_URL", "http://127.0.0.1:8100/v1"), "model": os.getenv("TB_REASONER_MODEL", "reasoner"),
