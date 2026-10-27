@@ -1310,7 +1310,7 @@ def start(mid: str, by: str) -> dict:
         pairs = service.prepare_session_agents(mid, by) or []
     except Exception as e:  # the briefs are support; the meeting starts without them
         log.warning("meeting %s: briefs not prepared (%s)", mid, e)
-    board.audit_event(mid, "meeting_started", by, preparing=len(pairs))
+    board.audit_event(mid, "meeting_started", by, preparing=len(pairs), warming=_warm_agents(s))
     _send(s, {"type": "current", **current_view(s), **_agent_fields(s), "quorum": quorum_view(s), "spotlight": [], "status": "in_session"})
     return {"meeting": summary_row(s), "preparing": len(pairs), "current": current_view(s)}
 
@@ -1360,7 +1360,9 @@ def set_current(mid: str, by: str, case_id: str = "", slide=None) -> dict:
         except (TypeError, ValueError):
             raise MeetingError("The slide must be a number.", 400, "bad_slide")
     _save(s)
-    if not changed_case:
+    if changed_case:
+        _warm_agents(s)
+    else:
         board.audit_event(mid, "slide", by, case_id=s.get("current"), slide=s.get("live", {}).get("slide"))
     cv = current_view(s)
     ev = {"type": "current", **cv, **_agent_fields(s), "quorum": quorum_view(s)}
@@ -1500,6 +1502,25 @@ def _stop_audio(s: dict, role: str, qid: str | None, by: str) -> None:
     _send(s, {"type": "agent_stop", "role": role, "question": qid, "by": by})
 
 
+def _warm_agents(s: dict, roles: list | None = None) -> int:
+    """Pre-load each active agent's context when a Case File comes on the floor, or an agent is added (night-v3 6.4): background tasks
+    on the running loop (agents.warm), never awaited, nothing when there is no loop (tests) or no Case File."""
+    cid = s.get("current")
+    if not cid or cid in config.PROTECTED_CASES:
+        return 0
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return 0
+    from . import agents
+    n = 0
+    for role in (roles if roles is not None else active_roles(s, cid)):
+        t = loop.create_task(agents.warm(cid, role))
+        _TASKS.add(t); t.add_done_callback(_TASKS.discard)
+        n += 1
+    return n
+
+
 def set_agent(mid: str, by: str, role: str, on: bool) -> list[dict]:
     """The coordinator adds an agent to the meeting for the Case File on the floor or removes one (D2: any of the six; Radiation
     Oncology and Nuclear Medicine always on offer). Kept in the session (agents_active), audited by ids; adding starts the brief when
@@ -1522,6 +1543,7 @@ def set_agent(mid: str, by: str, role: str, on: bool) -> list[dict]:
             service.prepare_session_agents(mid, by, roles=[role], case_ids=[cid])
         except Exception as e:  # the brief is support; the agent is in the meeting without it
             log.warning("meeting %s: brief for %s not prepared (%s)", mid, role, e)
+        _warm_agents(s, [role])
     if not on:
         e = (AGENT_STATE.get(mid) or {}).pop(role, None) or {}
         _stop_audio(s, role, e.get("question") or _audio_playing(mid, role), by)

@@ -657,8 +657,8 @@ def test_history_keeps_three_exchanges(monkeypatch):
     hist = [{"role": "user" if i % 2 == 0 else "assistant", "content": f"m{i}"} for i in range(8)]
     _ask_streaming(case_id, "And its size?", history=hist)
     msgs = fm.streams[0]
-    assert [m["content"] for m in msgs[1:-1]] == ["m2", "m3", "m4", "m5", "m6", "m7"] and msgs[0]["role"] == "system"
-    assert msgs[-1]["content"].startswith("DOCUMENTS:")
+    assert [m["content"] for m in msgs[2:-1]] == ["m2", "m3", "m4", "m5", "m6", "m7"] and msgs[0]["role"] == "system"
+    assert msgs[1]["content"].startswith("DOCUMENTS:") and msgs[-1]["content"].endswith("QUESTION FROM THE BOARD: And its size?")  # the documents first (item 6.4)
 
 
 def test_a_statement_from_another_specialtys_record_gets_the_note(monkeypatch):
@@ -696,3 +696,37 @@ def test_a_whole_answer_on_one_line_is_read(monkeypatch):
     fm = FakeModel(monkeypatch, [json.dumps({"answer_found": True, "statements": [GOOD, WRONG], "references": []})])
     a, got = _ask_streaming(case_id, "What does the CT record?")
     assert got == [(0, GOOD["text"])] and fm.chats == [] and a["streamed"] is True
+
+
+def test_warm_sends_the_documents_block_once_per_signature_and_the_live_prompt_shares_it(monkeypatch):
+    """Item 6.4: the warm call's documents message equals the first user message of a later streamed answer (the reasoner's prefix
+    cache then holds it); a second warm for the same Case File signature is skipped; a failed warm is audited and never raises."""
+    case_id = _stream_case()
+    chats = []
+
+    async def fake_chat(role, msgs, max_tokens=None, **kw):
+        chats.append((msgs, max_tokens, kw.get("purpose")))
+        return ""
+    monkeypatch.setattr(agents.llm, "chat", fake_chat)
+    agents._WARM.clear()
+    secs = asyncio.run(agents.warm(case_id, "radiology"))
+    assert secs is not None and len(chats) == 1
+    msgs, max_tokens, purpose = chats[0]
+    assert max_tokens == 1 and purpose == "agent warm" and msgs[0]["role"] == "system" and msgs[1]["content"].startswith("DOCUMENTS:")
+    assert asyncio.run(agents.warm(case_id, "radiology")) is None and len(chats) == 1  # the same signature: skipped
+    fm = FakeModel(monkeypatch, _chunks(_lines(GOOD, END)))
+    _ask_streaming(case_id, "What size is the lesion?")
+    live = fm.streams[0]
+    assert live[0] == msgs[0] and live[1] == msgs[1]  # the same prefix, token for token
+    assert "QUESTION FROM THE BOARD" in live[-1]["content"] and "DOCUMENTS:" not in live[-1]["content"]
+    kinds = [e["kind"] for e in store.read_audit(case_id)]
+    assert "agent_warm" in kinds
+
+    async def down(*a, **k):
+        raise RuntimeError("model down")
+    monkeypatch.setattr(agents.llm, "chat", down)
+    agents._WARM.clear()
+    assert asyncio.run(agents.warm(case_id, "pathology")) is None
+    assert "agent_warm_failed" in [e["kind"] for e in store.read_audit(case_id)]
+    with pytest.raises(ValueError):
+        asyncio.run(agents.warm(case_id, "cardiology"))

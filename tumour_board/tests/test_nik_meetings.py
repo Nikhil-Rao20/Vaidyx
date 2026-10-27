@@ -95,6 +95,10 @@ def app(data_root, demo_cases, monkeypatch):
     api_meetings.JOIN_LIMIT._hits.clear()
     from tumour_board import service
     monkeypatch.setattr(service, "prepare_session_agents", lambda sid, user, roles=None, case_ids=None, refresh=False: [])
+
+    async def no_warm(case_id, role):
+        return None
+    monkeypatch.setattr(agents, "warm", no_warm)  # the context pre-load is a model call (night-v3 6.4); tested on its own
     monkeypatch.setattr(his_client, "client", lambda d=None, transport=None: None)  # never the hospital system: cached studies only
 
     async def fake_chat(role, msgs, **kw):

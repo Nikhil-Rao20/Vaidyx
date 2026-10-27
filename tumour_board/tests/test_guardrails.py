@@ -154,3 +154,38 @@ def test_record_questions_put_like_a_colleague_stay_in_scope(q):
 ])
 def test_spoken_lead_ins_pass_the_output_scan(s):
     assert g.scan_output(s) == []
+
+
+def test_reference_questions_are_in_scope_by_rule_and_decision_requests_are_not():
+    from tumour_board import guardrails as g
+    yes = ["What should a histopathology report of breast cancer contain, according to Indian guidance?",
+           "What items does the reporting checklist list for a CT thorax report in lung cancer?",
+           "Which imaging investigations do the guidelines list for the work-up of carcinoma cervix?",
+           "Which biomarkers do the guidelines list for reporting non-small cell lung cancer?",
+           "What baseline laboratory tests do the guidelines list for a patient with rectal cancer?",
+           "What does the guidance say a bone scan report should include?"]
+    no = ["What treatment does the guideline recommend for stage III?",  # a refusal rule wins
+          "Which regimen should we start?",
+          "What would you do here?",
+          "What is the haemoglobin?",  # a records question: the classifier decides as before
+          "Is the PD-L1 result recorded?",
+          "How do the guidelines say radiotherapy toxicity should be graded?"]  # not about what a record contains
+    for q in yes:
+        assert g.reference_check(q), q
+    for q in no:
+        assert not g.reference_check(q), q
+
+
+def test_check_input_allows_a_reference_question_without_the_classifier(monkeypatch):
+    import asyncio
+    from tumour_board import guardrails as g, llm
+    called = []
+
+    async def boom(*a, **k):
+        called.append(a)
+        raise AssertionError("the classifier must not run")
+    monkeypatch.setattr(llm, "chat", boom)
+    r = asyncio.run(g.check_input("What should a PET/CT report for lung cancer contain, according to Indian guidance?"))
+    assert r["allowed"] is True and r["layer"] == "rule" and r.get("reference") is True and called == []
+    r = asyncio.run(g.check_input("What treatment should we give?"))
+    assert r["allowed"] is False and r["category"] == "treatment_recommendation" and r["layer"] == "rule"

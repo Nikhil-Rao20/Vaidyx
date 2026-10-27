@@ -311,3 +311,23 @@ def test_present_your_points_speaks_the_brief_by_code(tc, monkeypatch):
     store.save_state("TB-001", st)
     a = As(tc, "priya").post(f"/meetings/{mid}/agents/radiology/present").json()["question"]["answer"]
     assert a["status"] == "not_documented" and a["speech"] == ["AI agent, Radiology.", "No Radiology reports in this Case File."]
+
+
+def test_the_context_is_pre_loaded_when_a_case_comes_on_the_floor_and_when_an_agent_is_added(tc, monkeypatch):
+    warmed = []
+
+    async def fake_warm(case_id, role):
+        warmed.append((case_id, role))
+        return 0.5
+    monkeypatch.setattr(agents, "warm", fake_warm)
+    mid = started(tc)
+    wait_for(lambda: len(warmed) >= 4)
+    assert all(c == "TB-001" for c, _ in warmed) and {r for _, r in warmed} == set(meetings.active_roles(board.get(mid), "TB-001"))
+    n = len(warmed)
+    join_and_admit(tc, mid, "priya")
+    assert As(tc, "anil").post(f"/meetings/{mid}/current", json={"case_id": "TB-002"}).status_code == 200
+    wait_for(lambda: len(warmed) > n and all(c == "TB-002" for c, _ in warmed[n:]))
+    n = len(warmed)
+    assert As(tc, "anil").post(f"/meetings/{mid}/agents", json={"role": "nuclear_medicine", "on": True}).status_code == 200
+    wait_for(lambda: warmed[n:] == [("TB-002", "nuclear_medicine")])
+    assert any(e["kind"] == "meeting_started" and e.get("warming", 0) >= 4 for e in board.read_audit() if e["session"] == mid)

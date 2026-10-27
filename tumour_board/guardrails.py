@@ -33,6 +33,23 @@ _RULES = [
     ("treatment_recommendation", r"\bwould you (recommend|suggest|advise|give|offer|operate)\b"),
 ]
 
+# Reference questions (night-v3 item 6.4): what a report, record, summary or checklist should contain, or which investigations a work-up
+# lists, is answered with labelled reference text from the specialty's guideline pack, never applied to the patient. Such a question is in
+# scope by rule when no refusal rule matches, so the classifier (which reads "what the documents hold" narrowly) does not refuse it.
+_REFERENCE_OPENER = re.compile(r"\b(what|which|how)\b", re.I)
+_REFERENCE_NOUN = re.compile(r"\b(report\w*|record\w*|summary|summaries|checklist\w*|work-?up|staging (investigation|imaging|test)\w*|"
+                             r"baseline (test|investigation)\w*|follow-?up (investigation|test|imaging)\w*|investigations?|tests?|biomarkers?|template\w*)\b", re.I)
+_REFERENCE_VERB = re.compile(r"\b(contain\w*|include\w*|list\w*|document\w*|state\w*|mention\w*|cover\w*|comprise\w*|require\w*)\b", re.I)
+
+
+def reference_check(text) -> bool:
+    """True for a question about what records should contain (reference text), when no refusal rule matches it."""
+    t = str(text or "")
+    if rule_check(t):
+        return False
+    return bool(_REFERENCE_OPENER.search(t) and _REFERENCE_NOUN.search(t) and _REFERENCE_VERB.search(t))
+
+
 REFUSALS = {
     "treatment_recommendation": "I can't recommend or choose treatment. Treatment decisions belong to the Tumour Board. I can show what the signed records document, list pending results, and surface the relevant guideline sections for the board to review.",
     "diagnosis": "I can't make or suggest a diagnosis. I can show the diagnosis exactly as recorded in the signed pathology or clinical reports, with the source.",
@@ -60,10 +77,13 @@ async def check_input(text, audit=None):
     hit = rule_check(text)
     if hit:
         return {"allowed": False, "category": hit, "message": REFUSALS[hit], "layer": "rule"}
+    if reference_check(text):  # what a report or a work-up should contain: labelled reference text, in scope by rule (item 6.4)
+        return {"allowed": True, "category": "in_scope", "message": "", "layer": "rule", "reference": True}
     msg = [{"role": "system", "content": "You are a scope classifier for a Tumour Board Case File assistant. The assistant may ONLY find, quote, list, "
             "compare dates, check completeness and organise information that is written in the patient's documents (including values, results, "
-            "the stage or diagnosis AS RECORDED in a report, pending tests, timelines, who is responsible). It must NOT recommend or choose treatment, "
-            "diagnose, interpret images, derive stage, or predict prognosis."},
+            "the stage or diagnosis AS RECORDED in a report, pending tests, timelines, who is responsible), and it may show, as labelled reference "
+            "text never applied to the patient, what a guideline says a report, record, summary or work-up should contain. It must NOT recommend or "
+            "choose treatment, diagnose, interpret images, derive stage, or predict prognosis."},
            {"role": "user", "content": f"Request: {text}\n\nClassify the request."}]
     try:
         r = await llm.chat("reasoner", msg, json_schema=CLASSIFIER_SCHEMA, max_tokens=120, purpose="scope check", audit=audit)

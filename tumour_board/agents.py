@@ -642,6 +642,7 @@ LIVE_SCHEMA = {"type": "object", "additionalProperties": False, "properties": {
     "statements": qa.ANSWER_SCHEMA["properties"]["statements"],
     "references": POINT["properties"]["references"]}, "required": ["answer_found", "statements", "references"]}
 NOT_DOCUMENTED = "Not documented in the Case File. No statement could be verified against the source documents."
+REFERENCE_ONLY = "Not documented about this patient. The guideline passages below are reference text, not about this patient."
 HISTORY_MESSAGES = 6  # three exchanges of the shared thread (research 05_board_agents.md section 6.5)
 
 # the document type in the outside-specialty note, with its article ("This is an MRI record; ...")
@@ -853,22 +854,27 @@ async def ask(case_id, role, question, history=None, user="", on_statement=None)
         return refused(await scope_task)
     values = await asyncio.to_thread(search.find_values, case_id, question)
     context, mode = await asyncio.to_thread(search.context_for, case_id, question, 40000)
+    extra = ""  # the question-dependent part (matching lines, guideline passages): the documents block stays a stable prefix (item 6.4)
     if values["hits"]:
-        context += "\n\n=== LINES MATCHING THE QUESTION (for convenience; cite the document) ===\n" + \
+        extra += "\n\n=== LINES MATCHING THE QUESTION (for convenience; cite the document) ===\n" + \
                    "\n".join(f"[{h['doc_id']} | {h['date'] or '?'}] {h['text']}" for h in values["hits"][:25])
     refs = {}
     if guidelines.ready():  # never wait for a guideline index rebuild; the records alone still answer
         try:
             gl = await asyncio.to_thread(_search_guidelines, role, case, question, refs)
-            context += f"\n\n=== GUIDELINE REFERENCES ({r['label'].lower()} pack, Indian sources first; reference text, never a fact about this patient) ===\n{gl}"
+            extra += f"\n\n=== GUIDELINE REFERENCES ({r['label'].lower()} pack, Indian sources first; reference text, never a fact about this patient) ===\n{gl}"
         except Exception as e:
             au({"kind": "agent_guidelines_unavailable", "role": role, "error": str(e)[:200]})
     turns = []
     for h in (history or [])[-HISTORY_MESSAGES:]:
         if isinstance(h, dict) and h.get("role") in ("user", "assistant") and isinstance(h.get("content"), str):
             turns.append({"role": h["role"], "content": h["content"][:2000]})
-    asked = {"role": "user", "content": f"DOCUMENTS:\n{context}\n\nQUESTION FROM THE BOARD: {question}"}
-    msgs = [{"role": "system", "content": _live_system(role)}, *turns, asked]
+    # The documents first, the same text every question of this Case File sends (warm() pre-loads it when the case comes on the floor),
+    # then the thread's turns, then the question with its matching lines and guideline passages.
+    docs_msg = {"role": "user", "content": f"DOCUMENTS:\n{context}"}
+    asked = {"role": "user", "content": f"{extra.strip()}\n\nQUESTION FROM THE BOARD: {question}".strip()}
+    msgs = [{"role": "system", "content": _live_system(role)}, docs_msg, *turns, asked]
+    reference_q = guardrails.reference_check(question)  # reference text is kept even when no statement about the patient survives
     note = _note_maker(case_id, role)
     malformed = 0
     if on_statement is None:
@@ -881,7 +887,7 @@ async def ask(case_id, role, question, history=None, user="", on_statement=None)
         kept, removed, dropped = _screen(case_id, a.get("statements"), note)
         raw_refs, streamed, first = a.get("references"), False, None
     else:
-        smsgs = [{"role": "system", "content": _live_stream_system(role)}, *turns, asked]
+        smsgs = [{"role": "system", "content": _live_stream_system(role)}, docs_msg, *turns, asked]
         s = await _streamed_answer(case_id, role, smsgs, msgs, au, scope_task, note, on_statement, t0)
         if not s["gate"]["allowed"]:
             return refused(s["gate"])
@@ -890,14 +896,46 @@ async def ask(case_id, role, question, history=None, user="", on_statement=None)
     raw_refs = [x for x in raw_refs if isinstance(x, dict)] if isinstance(raw_refs, list) else []
     if any(x["reason"] == "guardrail" for x in removed):
         au({"kind": "guardrail_output", "where": f"agent {role} live answer", "issues": [x["text"] for x in removed if x["reason"] == "guardrail"]})
-    references, refs_dropped = _verify_references(raw_refs, refs, case["protocol"]) if kept else ([], len(raw_refs))
+    references, refs_dropped = _verify_references(raw_refs, refs, case["protocol"]) if (kept or reference_q) else ([], len(raw_refs))
     references.sort(key=lambda x: x["region"] != "India")  # references only beside a verified answer: never guideline text as the answer
     seconds = round(time.time() - t0, 2)
     out = {**base, "status": "answered" if kept else "not_documented", "statements": kept, "references": references, "removed": removed,
            "dropped_unverified": dropped, "references_dropped": refs_dropped, "mode": mode, "answered_at": store.now_iso(),
-           "message": "" if kept else NOT_DOCUMENTED, "seconds": seconds, "streamed": streamed,
+           "message": "" if kept else (REFERENCE_ONLY if references else NOT_DOCUMENTED), "reference_question": reference_q, "seconds": seconds, "streamed": streamed,
            "first_seconds": (first if on_statement is not None else seconds) if kept else None}
     au({"kind": "agent_answer", "role": role, "by": user, "status": out["status"], "statements": len(kept), "dropped_unverified": dropped,
         "guardrail_removed": sum(x["reason"] == "guardrail" for x in removed), "references": len(references), "seconds": out["seconds"],
         "streamed": streamed, "first_seconds": out["first_seconds"], "malformed": malformed})
     return out
+
+
+# night-v3 item 6.4: the context pre-loaded when a Case File comes on the floor
+_WARM: dict = {}  # (case_id, role) -> the Case File signature hash the reasoner's cache holds the documents for
+WARM_PURPOSE = "agent warm"
+
+
+async def warm(case_id, role):
+    """Pre-load an agent's context when its Case File comes on the floor (night-v3 item 6.4): the documents block of the live prompt, the
+    same text the next question of this Case File sends first, goes to the reasoner once with one output token so its prefix cache holds
+    it (vLLM keeps prefixes by default); the search caches warm on the way. Once per Case File signature and role. Nothing is shown;
+    audited as an llm_call with purpose "agent warm". Returns the seconds taken, or None when skipped or failed."""
+    if role not in ROLES:
+        raise ValueError("unknown role")
+    case = store.get_case(case_id)
+    if not case or not case.get("protocol"):
+        return None
+    sig = rules.case_signature(case_id)["hash"]
+    if _WARM.get((case_id, role)) == sig:
+        return None
+    t0, au = time.time(), store.auditor(case_id)
+    context, mode = await asyncio.to_thread(search.context_for, case_id, "", 40000)
+    msgs = [{"role": "system", "content": _live_stream_system(role)}, {"role": "user", "content": f"DOCUMENTS:\n{context}"}]
+    try:
+        await llm.chat("reasoner", msgs, max_tokens=1, purpose=WARM_PURPOSE, audit=au)
+    except Exception as e:
+        au({"kind": "agent_warm_failed", "role": role, "error": f"{e.__class__.__name__}: {str(e)[:120]}"})
+        return None
+    _WARM[(case_id, role)] = sig
+    secs = round(time.time() - t0, 2)
+    au({"kind": "agent_warm", "role": role, "seconds": secs, "mode": mode, "chars": len(context)})
+    return secs
