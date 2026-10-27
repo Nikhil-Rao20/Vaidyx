@@ -305,6 +305,15 @@ def _find(state: dict, action_id: str) -> dict:
     raise KeyError(action_id)
 
 
+def _refresh_case_summary(state: dict) -> None:
+    """The Case summary's status section follows a closure (night-v3 item 3.3), in this state: the caller saves it. Never breaks a closure."""
+    try:
+        from . import case_summary
+        case_summary.refresh_status(None, state)
+    except Exception as e:
+        log.warning("Case summary status not refreshed (%s: %s)", e.__class__.__name__, e)
+
+
 def close_action(state: dict, action_id: str, by: str, doc_id: str | None = None, note: str = "") -> dict:
     """A person closes a board action (optionally with the document that answers it). Mutates the state in place.
 
@@ -331,6 +340,7 @@ def close_action(state: dict, action_id: str, by: str, doc_id: str | None = None
         a["closed_doc_id"] = doc_id
     a.pop("suggested_close", None)
     a.setdefault("history", []).append({"ts": now, "event": event, **({"doc_id": doc_id} if doc_id else {})})
+    _refresh_case_summary(state)
     return {"kind": "board_action_closed", "action": action_id, "by": by, "doc_id": doc_id, "note": note, "suggested": suggested}
 
 

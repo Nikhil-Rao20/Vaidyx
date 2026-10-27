@@ -1,0 +1,1074 @@
+"""The Case summary (night-v3 item 3.3, owner decision D3): after the first board decision it replaces the pre-board summary as the main
+summary and is written again after every later decision. Every version is kept; the owner's consultant reviews and edits it.
+
+Storage: st["artefacts"]["case_summary"] = {"current": n, "case_id": id, "versions": [v1, v2, ...]}, written through store.save_state.
+Five sections, in this order:
+  presentation  "Presentation and diagnosis"                 the reasoner over the records dated up to the first board, plus
+                                                             summary.fill_from_facts for the presentation and investigation facts
+  stage         "Stage"                                      code only: the stage as recorded in a signed report, a Vaidyx draft stage
+                                                             only after a doctor confirmed it, the stage as agreed by each board
+  rounds        "Board rounds"                               code only: one block per board record, oldest first
+  since         "Treatment and follow-up since the board"    the reasoner over the records dated after the first board, plus the
+                                                             treatment facts of those records and the HIS encounters after the board
+  status        "Current status and open actions"            code only: open and closed board actions, the patient told, next review
+Every sentence cites a record line (qa.verify, word for word), a board-record field, an action, the stage confirmation or a member's card
+(the exact stored text, checked by verify_field), or is code (code: true). A model sentence that fails a check is kept in `removed` with
+its reason. Code-built sentences quote the stored field itself, so nothing is paraphrased. No diagnosis, no stage computation, no
+interpretation, no treatment advice, no prognosis. The model is the reasoner (non-medical); "AI draft, not reviewed" until reviewed.
+
+The consultant's edits are never overwritten: a rebuild carries an edited sentence forward with its edited text; a different model
+sentence for the same place is kept under edited.suggested. Never for a protected Case File (config.PROTECTED_CASES)."""
+import asyncio
+import hashlib
+import json
+import logging
+import os
+import re
+import threading
+import time
+
+from . import config, dates, decision_record, grounding, guardrails, llm, protocol, qa, rules, search, store, summary
+
+log = logging.getLogger("tumour_board")
+
+ART = "case_summary"
+SECTIONS = [("presentation", "Presentation and diagnosis"), ("stage", "Stage"), ("rounds", "Board rounds"),
+            ("since", "Treatment and follow-up since the board"), ("status", "Current status and open actions")]
+TITLES = dict(SECTIONS)
+MODEL_SECTIONS = ("presentation", "since")
+CONTEXT_BUDGET = 40000
+CLIP = 600
+REVIEW_STATUSES = ("reviewed", "flagged", "ai_draft")
+MAX_EDIT = 1000
+
+NOTHING = {
+    "presentation": "Presenting complaint and diagnosis are not documented in the records of this Case File.",
+    "stage": "No stage is recorded in a signed report and none has been confirmed. Cannot stage.",
+    "status": "No board actions are open.",
+}
+NOTHING_SINCE = "No records dated after the board decision of {date} have been added yet."
+NOTHING_CHECKED_SINCE = "Records dated after the board decision of {date} are in the Case File, but no statement could be checked against them."
+CODE_EDIT = "This sentence quotes the record itself and cannot be edited; correct the board record or the report instead."
+FIXED_EDIT = "This sentence is written by Vaidyx when nothing is documented and cannot be edited."
+
+REASONS = {**qa.REASONS, "relative_date": "a relative date (for example \"last month\") cannot be checked against the record",
+           "not_given": "the cited record was not among the records given for this section"}
+
+# "last month", "two weeks ago", "recently", "yesterday": a date the record cannot confirm (the reader does not know "when" it was written)
+RELATIVE = re.compile(r"\b(?:last|past|previous|next|this|coming)\s+(?:\d+\s+|few\s+|several\s+)?(?:day|week|fortnight|month|year)s?\b|"
+                      r"\b(?:\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|few|several|some)\s+"
+                      r"(?:day|week|fortnight|month|year)s?\s+(?:ago|back)\b|\brecently\b|\byesterday\b|\btoday\b|\btomorrow\b|"
+                      r"\bearlier this\b|\blater this\b", re.I)
+
+SYS_EXTRA = ("Write only about the documents given. One fact per sentence where possible. Cite each sentence with the document id and the "
+             "exact line that carries the value. Keep each quote short. Dates as in the record, never relative. If nothing is documented, "
+             "return no sentence.")
+SINCE_EXTRA = "Say when a report is draft or superseded."
+SCHEMA = {"type": "object", "additionalProperties": False, "properties": {
+    "sentences": {"type": "array", "items": {"type": "object", "additionalProperties": False, "properties": {
+        "text": {"type": "string"},
+        "citations": qa.ANSWER_SCHEMA["properties"]["statements"]["items"]["properties"]["citations"]},
+        "required": ["text", "citations"]}}},
+    "required": ["sentences"]}
+
+PRESENTATION_FACTS = summary.SECTION_FACTS["presentation"] + summary.SECTION_FACTS["investigations"]
+SINCE_FACTS = ("treatment_received", "treatment_completion_date", "lesion_size", "nodal_findings", "distant_findings", "recorded_stage")
+STATUS_COMM = ("patient_informed_date", "informed_by")  # the communication fields the status section shows
+ROUND_COMM = ("intent", "intent_as_recorded", "trial_considered", "trial_name")  # those the board rounds show
+
+
+# ---- small helpers -------------------------------------------------------------------------------------------------------------
+
+def dmy(iso) -> str:
+    return decision_record.dmy(iso)
+
+
+def _fold(s) -> str:
+    return " ".join(str(s if s is not None else "").split())
+
+
+def _clip(s, n=CLIP) -> str:
+    s = _fold(s)
+    return s if len(s) <= n else s[:n].rstrip() + "..."
+
+
+def _hash(obj) -> str:
+    return hashlib.sha256(json.dumps(obj, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+
+def today() -> str:
+    """Today, ISO (followup._today, so tests can move the day)."""
+    from . import followup
+    return followup._today().isoformat()
+
+
+def _name(user) -> str:
+    try:
+        from .slots import display_name
+        return display_name(user) or str(user or "")
+    except Exception:
+        return str(user or "")
+
+
+def _rec_date(rec) -> str:
+    return str((rec or {}).get("board_date") or (rec or {}).get("recorded_at") or "")[:10]
+
+
+def records(st) -> list:
+    """The board records, oldest first (board date, then the time recorded)."""
+    recs = [b for b in (st or {}).get("board_records") or [] if isinstance(b, dict) and b.get("id")]
+    return sorted(recs, key=lambda b: (_rec_date(b), str(b.get("recorded_at") or "")))
+
+
+def _outcome(rec) -> str:
+    return str(rec.get("outcome_type") or rec.get("outcome") or "decision")
+
+
+def _artefact(st):
+    a = ((st or {}).get("artefacts") or {}).get(ART)
+    return a if isinstance(a, dict) and isinstance(a.get("versions"), list) else None
+
+
+def current(st) -> dict | None:
+    a = _artefact(st)
+    if not a or not a["versions"]:
+        return None
+    n = a.get("current") or len(a["versions"])
+    return next((v for v in a["versions"] if v.get("n") == n), a["versions"][-1])
+
+
+def _version(st, n) -> dict:
+    a = _artefact(st)
+    v = next((x for x in (a or {}).get("versions") or [] if x.get("n") == n), None)
+    if v is None:
+        raise KeyError(f"No version {n} of the Case summary")
+    return v
+
+
+def all_sentences(version) -> list:
+    """Every sentence of a version, the board-round blocks included, in section order."""
+    out = []
+    for sec in (version or {}).get("sections") or []:
+        out.extend(sec.get("sentences") or [])
+        for b in sec.get("blocks") or []:
+            out.extend(b.get("sentences") or [])
+    return out
+
+
+# ---- checks ----------------------------------------------------------------------------------------------------------------------
+
+def verify_field(quote, stored_text, sentence=None) -> bool:
+    """A board-field (or action, stage confirmation, card) citation: the normalised quote is in the normalised stored text, and every
+    number of the sentence (when given) is in the quote."""
+    q, t = grounding.norm(str(quote or "")), grounding.norm(str(stored_text or ""))
+    if not q or q not in t:
+        return False
+    if sentence is not None and qa._missing_numbers(str(sentence), [{"quote": str(quote), "doc_title": "", "date": ""}]):
+        return False
+    return True
+
+
+def _numbers_ok(text, cites) -> bool:
+    """Every number of a code sentence is in one of its quotes (or a record title, a board date, a due or closing time it cites)."""
+    meta = [{"quote": str(c.get("quote") or ""), "doc_title": str(c.get("doc_title") or ""),
+             "date": " ".join(str(c.get(k) or "") for k in ("date", "board_date", "at"))} for c in cites]
+    return not qa._missing_numbers(text, meta) if meta else not grounding.numbers(text)
+
+
+def _removed(item, reason, detail, where):
+    return {"text": (item or {}).get("text") or "", "reason": reason, "reason_label": REASONS[reason], "detail": detail, "where": where,
+            "citations": [{"doc_id": c.get("doc_id") or "", "quote": (c.get("quote") or "")[:400]} for c in (item or {}).get("citations") or [] if isinstance(c, dict)]}
+
+
+def _check_model(case_id, items, allowed, where, removed, issues, near):
+    """The model's sentences that pass: no relative date, cite a record given for the section, the quote found word for word with every
+    number in it (qa.verify), and the clinical scope guardrail. Every drop is kept with its reason."""
+    pre = []
+    for x in items or []:
+        if not isinstance(x, dict) or not _fold(x.get("text")):
+            continue
+        x = {"text": _fold(x.get("text")), "citations": [c for c in x.get("citations") or [] if isinstance(c, dict)]}
+        m = RELATIVE.search(x["text"])
+        if m:
+            removed.append(_removed(x, "relative_date", f"\"{m.group(0)}\" is a relative date", where))
+            continue
+        cites = [c for c in x["citations"] if str(c.get("doc_id") or "").strip() in allowed]
+        if x["citations"] and not cites:
+            removed.append(_removed(x, "not_given", ", ".join(dict.fromkeys(str(c.get("doc_id") or "(no id)") for c in x["citations"])), where))
+            continue
+        pre.append({**x, "citations": cites})
+    ok, drops = qa.verify(case_id, pre, near_match=near)
+    removed.extend({**d, "where": where} for d in drops)
+    keep = []
+    for s in ok:
+        iss = guardrails.scan_output(s["text"])
+        if iss:
+            issues.extend(iss)
+            removed.append({**qa.removed_item(s, "guardrail", "; ".join(dict.fromkeys(i["reason"] for i in iss))), "where": where})
+        else:
+            s["text"] = _ISO_DATE.sub(lambda m: dmy(m.group(0)), s["text"])  # a date the model wrote as YYYY-MM-DD reads DD/MM/YYYY; checked before, the quote untouched
+            keep.append(s)
+    return keep
+
+
+_ISO_DATE = re.compile(r"\b(20\d\d)-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])\b")
+
+
+def _record_line(case_id, text, doc_id, quote):
+    """A code sentence citing a record line, checked by qa.verify like a model sentence; None when the quote is not found."""
+    ok, _ = qa.verify(case_id, [{"text": text, "citations": [{"doc_id": doc_id, "quote": quote}]}])
+    return ok[0] if ok else None
+
+
+def _code(sid, text, cites, removed=None, **extra):
+    """A code-built sentence. Each board, action, staging or card citation must hold its stored text (verify_field) and every number of
+    the sentence must be in its quotes; one that does not is left out (kept in removed)."""
+    for c in cites:
+        if c.get("kind") and "stored" in c:
+            if not verify_field(c["quote"], c.pop("stored")):
+                if removed is not None:
+                    removed.append(_removed({"text": text, "citations": []}, "quote_not_found", f"{c.get('field')} does not hold the quoted text", "code"))
+                return None
+    if not _numbers_ok(text, cites):
+        if removed is not None:
+            removed.append(_removed({"text": text, "citations": []}, "number_not_in_quote", "a number is not in the quoted field", "code"))
+        return None
+    return {"id": sid, "text": text, "citations": cites, "code": True, **extra}
+
+
+def _fixed(sid, text):
+    return {"id": sid, "text": text, "citations": [], "code": True, "fixed": True}
+
+
+def _stored(rec, field):
+    v = rec.get(field)
+    if isinstance(v, (list, tuple)):
+        return ", ".join(str(x) for x in v if not isinstance(x, dict))
+    return "" if v is None else str(v)
+
+
+def _bcite(rec, field, quote=None, stored=None):
+    q = _stored(rec, field) if quote is None else str(quote)
+    return {"kind": "board", "board_record": rec["id"], "version": rec.get("version", 1), "field": field, "quote": q,
+            "board_date": _rec_date(rec), "stored": _stored(rec, field) if stored is None else stored}
+
+
+def _acite(a, field, quote=None):
+    v = a.get(field)
+    q = str(v or "") if quote is None else str(quote)
+    return {"kind": "action", "action": a.get("id"), "board_record": a.get("board_record"), "field": field, "quote": q,
+            **({"at": str(v)} if field in ("completed", "due") else {}), "stored": str(v or "")}
+
+
+# ---- documents and context ------------------------------------------------------------------------------------------------------
+
+def _docs(case_id, st):
+    docs = [d for d in rules.case_docs(case_id, st) if d.get("state") == "ready" and not d.get("dismissed")]
+    return sorted(docs, key=lambda d: dates.doc_dates(d)["sort"])
+
+
+def _split(docs, first_date):
+    """(records dated up to the first board, records dated after it); an undated record counts as before the board."""
+    pre, post = [], []
+    for d in docs:
+        ev = dates.doc_dates(d)["event"]
+        (post if ev and first_date and ev > first_date else pre).append(d)
+    return pre, post
+
+
+def _context(docs, budget=CONTEXT_BUDGET):
+    """The documents in date order, each labelled as search.context_for labels them, whole, until the budget is used."""
+    parts, used, ids, left = [], 0, [], 0
+    for d in docs:
+        blk = search._doc_block(d, "\n".join(p.get("text") or "" for p in d.get("pages") or []))
+        if used + len(blk) > budget:
+            left += 1
+            continue
+        parts.append(blk); used += len(blk) + 2; ids.append(d["doc_id"])
+    return "\n\n".join(parts), ids, {"documents": len(ids), "left_out": left, "characters": used}
+
+
+def _sid(sec, n):
+    return f"s{sec}-{n}"
+
+
+# ---- the five sections -------------------------------------------------------------------------------------------------------------
+
+def _fill(sentences, facts, ids, cat):
+    """summary.fill_from_facts for the given fact ids, into one list of sentences."""
+    want = {k: v for k, v in facts.items() if k in ids}
+    groups = [{"id": sid, "sentences": sentences} for sid, fids in summary.SECTION_FACTS.items() if set(fids) & set(ids)]
+    # fill_from_facts reads summary.SECTION_FACTS by section id; the groups share one list, and only the facts asked for are offered
+    k = len(sentences)
+    added = summary.fill_from_facts(groups, want, cat) if groups else 0
+    for x in sentences[k:]:  # the record's date as DD/MM/YYYY on screen (the value itself is never touched)
+        x["text"] = _SOURCE_DATE.sub(lambda m: m.group(1) + dmy(m.group(2)) + m.group(3), x["text"])
+    return added
+
+
+_SOURCE_DATE = re.compile(r"((?:as recorded in|against) the [^()]*, )(\d{4}-\d{2}-\d{2})((?:; no quote)?\)\.)$")
+
+
+def _finish_model_section(key, sentences):
+    out = []
+    for i, s in enumerate(sentences, 1):
+        s = dict(s)
+        s["id"] = _sid(key, i)
+        if not s.get("citations"):
+            s["code"] = True
+        out.append(s)
+    return out
+
+
+def stage_section(case_id, st, facts, recs, removed):
+    out = []
+    n = 0
+
+    def add(s):
+        nonlocal n
+        if s:
+            n += 1
+            s["id"] = _sid("stage", n)
+            out.append(s)
+    cands = [c for c in (facts.get(f, {}).get("current") for f in ("recorded_stage", "figo_stage")) if c and c.get("verification") in rules.VERIFIED]
+    rep = max(cands, key=lambda c: (c.get("date") or "", c.get("report_date") or ""), default=None)
+    rep_line = None
+    if rep:
+        when = f" of {dmy(rep['date'])}" if rep.get("date") else ""
+        if rep.get("confirmed_by") or not rep.get("quote"):
+            rep_line = {"text": f"The {rep['doc_title']}{when} records the stage as \"{rep['value']}\" (confirmed by {rep.get('confirmed_by') or 'a clinician'}; no quote).",
+                        "citations": [], "code": True, "from_fields": True}
+        else:
+            rep_line = _record_line(case_id, f"The {rep['doc_title']}{when} records the stage as \"{rep['value']}\".", rep["doc_id"], rep["quote"])
+            if rep_line:
+                rep_line["code"] = True
+        add(rep_line)
+    d = st.get("staging") if isinstance(st.get("staging"), dict) else None
+    if d and isinstance(d.get("confirmed"), dict) and d["confirmed"].get("at") and not d.get("rejected") and d.get("status") == "staged":
+        comps = " ".join(str((d.get("components") or {}).get(k, {}).get("cat") or "") for k in ("T", "N", "M")).strip()
+        stage_text = ", ".join(x for x in (comps, f"stage {d['stage']}" if d.get("stage") else "") if x)
+        c = d["confirmed"]
+        by = c.get("by_name") or c.get("by") or "a doctor"
+        add(_code("", f"Vaidyx draft stage, confirmed by {by} on {dmy(c['at'])}: {stage_text}.",
+                  [{"kind": "staging", "field": "confirmed", "quote": stage_text, "by": by, "at": c["at"], "stored": stage_text}], removed, draft_stage=True))
+    for rec in recs:
+        agreed = _fold(rec.get("stage_as_agreed"))
+        if not agreed:
+            continue
+        src = decision_record.choice_label("stage_source", rec.get("stage_source")) if rec.get("stage_source") else ""
+        cites = [_bcite(rec, "stage_as_agreed")] + ([_bcite(rec, "stage_source")] if src else [])
+        add(_code("", f"The board of {dmy(_rec_date(rec))} recorded the stage as agreed: \"{agreed}\"" + (f" ({src.lower()})." if src else "."), cites, removed))
+        if rep and _stage_key(rep["value"]) != _stage_key(agreed):
+            cites = list(rep_line["citations"]) if rep_line else []
+            add(_code("", f"The stage recorded in the {rep['doc_title']} (\"{rep['value']}\") differs from the stage as agreed by the board on {dmy(_rec_date(rec))}.",
+                      cites + [_bcite(rec, "stage_as_agreed")], removed, flags=["stage differs"]))
+    if not out:
+        add(_fixed("", NOTHING["stage"]))
+    return {"id": "stage", "title": TITLES["stage"], "sentences": out, "built_by": "code"}
+
+
+def _stage_key(s) -> str:
+    return re.sub(r"[\s,;]+|\bstage\b", "", grounding.norm(str(s or "")))
+
+
+def _question(case_id, facts, on_or_before):
+    """The Case File's documented question for the board as of that board date (the newest verified line dated on or before it)."""
+    hist = [e for e in (facts.get("clinical_question") or {}).get("history") or []
+            if e.get("verification") in rules.VERIFIED and e.get("quote") and (not e.get("date") or e["date"] <= on_or_before) and not e.get("superseded")]
+    if not hist:
+        return None
+    e = hist[-1]
+    s = _record_line(case_id, f"The question put to the board, as documented: \"{_clip(e['value'], 300)}\".", e["doc_id"], e["quote"])
+    if s:
+        s["code"] = True
+    return s
+
+
+def _cards(rec, case_id) -> list:
+    mid = rec.get("session")
+    if not mid:
+        return []
+    try:
+        from . import meetings
+        s = meetings.get(mid) or {}
+    except Exception:
+        return []
+    got = ((s.get("cards") or {}).get(case_id) or {})
+    return [(u, c) for u, c in got.items() if isinstance(c, dict)]
+
+
+def round_block(case_id, st, rec, facts, removed) -> dict:
+    rid = rec["id"]
+    out = []
+
+    def add(field, s):
+        if s:
+            s["id"] = f"r{rid}-{field}"
+            out.append(s)
+    date = _rec_date(rec)
+    oc = _outcome(rec)
+    add("date", _code("", f"Tumour Board of {dmy(date)}.", [_bcite(rec, "board_date", date, stored=date)], removed))
+    if oc == "decision":
+        add("question", _question(case_id, facts, date))
+    add("outcome", _code("", f"Outcome as recorded: {decision_record.OUTCOMES.get(oc, oc)}.", [_bcite(rec, "outcome_type", oc, stored=oc)], removed))
+    if oc == "deferred":
+        aw = _fold(rec.get("awaited")) or _fold(rec.get("deferred_reason"))
+        if aw:
+            f = "awaited" if _fold(rec.get("awaited")) else "deferred_reason"
+            frm = _fold(rec.get("awaited_from"))
+            cites = [_bcite(rec, f, aw)] + ([_bcite(rec, "awaited_from")] if frm and f == "awaited" else [])
+            add("awaited", _code("", f"Awaited, as recorded: \"{_clip(aw)}\"" + (f" from {frm}." if frm and f == "awaited" else "."), cites, removed))
+    elif oc == "referred":
+        if _fold(rec.get("referred_to")):
+            add("referred_to", _code("", f"Referred to, as recorded: \"{_clip(rec['referred_to'])}\".", [_bcite(rec, "referred_to")], removed))
+    elif oc == "not_discussed":
+        if rec.get("not_discussed_reason"):
+            add("not_discussed_reason", _code("", f"Why not discussed, as recorded: {decision_record.choice_label('not_discussed_reason', rec['not_discussed_reason'])}.",
+                                              [_bcite(rec, "not_discussed_reason")], removed))
+    elif oc == "decision":
+        _decision_lines(case_id, st, rec, add, removed)
+    c = rec.get("corrected")
+    if isinstance(c, dict) and c.get("at"):
+        row = next((v for v in rec.get("versions") or [] if v.get("version") == c.get("version")), {})
+        reason = _fold(c.get("reason"))
+        by = c.get("by_name") or c.get("by") or "a consultant"
+        quote = reason or str(row.get("reason") or "")
+        cite = {"kind": "board", "board_record": rid, "version": c.get("version"), "field": "versions", "quote": quote, "at": c["at"],
+                "board_date": date, "stored": " ".join(str(x) for x in (row.get("reason"), c.get("reason")) if x) or quote}
+        text = f"Corrected on {dmy(c['at'])} by {by}" + (f": {reason}." if reason else ".")
+        add("corrected", _code("", text, [cite] if quote else [{**cite, "quote": c["at"], "stored": c["at"]}], removed))
+    return {"record": rid, "version": rec.get("version", 1), "date": date, "outcome": oc, "sentences": out}
+
+
+def _decision_lines(case_id, st, rec, add, removed):
+    def quoted(field, lead):
+        v = rec.get(field)
+        if _fold(v):
+            add(field, _code("", f"{lead}: \"{_clip(v)}\".", [_bcite(rec, field)], removed))
+    quoted("decision_text", "Decision as recorded")
+    quoted("rationale", "Rationale as recorded")
+    intent = rec.get("intent") or rec.get("intent_as_recorded")
+    if intent:
+        f = "intent" if rec.get("intent") else "intent_as_recorded"
+        add("intent", _code("", f"Treatment intent as recorded: {decision_record.choice_label('intent', intent)}.", [_bcite(rec, f)], removed))
+    quoted("intent_as_stated", "Intent, in the board's words")
+    if rec.get("modalities"):
+        add("modalities", _code("", f"Modalities as recorded: {decision_record.choice_label('modalities', rec['modalities'])}.", [_bcite(rec, "modalities")], removed))
+    quoted("sequence", "Sequence as recorded")
+    quoted("alternatives_discussed", "Alternatives discussed, as recorded")
+    rows = [x for x in rec.get("concerns") or [] if isinstance(x, dict) and _fold(x.get("text"))]
+    for i, x in enumerate(rows, 1):
+        who = _fold(x.get("by")) or "A member"
+        add(f"concerns-{i}", _code("", f"{who} recorded a view: \"{_clip(x['text'])}\".",
+                                   [{**_bcite(rec, "concerns", x["text"], stored=x["text"]), "row": i}], removed))
+    if not rows and _fold(rec.get("divergent_opinions")):
+        quoted("divergent_opinions", "Divergent views as recorded")
+    if _fold(rec.get("stage_as_agreed")):
+        src = decision_record.choice_label("stage_source", rec.get("stage_source")) if rec.get("stage_source") else ""
+        add("stage_as_agreed", _code("", f"Stage as agreed by the board: \"{_fold(rec['stage_as_agreed'])}\"" + (f" ({src.lower()})." if src else "."),
+                                     [_bcite(rec, "stage_as_agreed")] + ([_bcite(rec, "stage_source")] if src else []), removed))
+    if rec.get("trial_considered"):
+        add("trial_considered", _code("", f"Clinical trial considered: {decision_record.choice_label('trial_considered', rec['trial_considered'])}.",
+                                      [_bcite(rec, "trial_considered")], removed))
+    quoted("trial_name", "Trial, as recorded")
+    if rec.get("referrals"):
+        txt = decision_record.value_text("referrals", rec["referrals"])
+        if txt:
+            add("referrals", _code("", f"Referrals as recorded: {txt}.", [_bcite(rec, "referrals", txt, stored=txt)], removed))
+    if _fold(rec.get("next_step")):
+        nd = rec.get("next_step_date")
+        add("next_step", _code("", f"Next step as recorded: \"{_clip(rec['next_step'])}\"" + (f", by {dmy(nd)}." if nd else "."),
+                               [_bcite(rec, "next_step")] + ([_bcite(rec, "next_step_date")] if nd else []), removed))
+    if rec.get("next_review"):
+        add("next_review", _code("", f"Next review as recorded: {dmy(rec['next_review'])}.", [_bcite(rec, "next_review")], removed))
+    quoted("next_review_trigger", "Or re-discussion, as recorded")
+    if _fold(rec.get("responsible_doctor")):
+        add("responsible_doctor", _code("", f"Responsible clinician as recorded: {_fold(rec['responsible_doctor'])}.", [_bcite(rec, "responsible_doctor")], removed))
+    for a in [a for a in st.get("actions") or [] if isinstance(a, dict) and a.get("board_record") == rec["id"]]:
+        label = _fold(a.get("label")) or "Board action"
+        cites = [_acite(a, "label")] + ([_acite(a, "department")] if a.get("department") else []) + ([_acite(a, "due")] if a.get("due") else [])
+        add(f"action-{a.get('id')}", _code("", f"Action raised: \"{_clip(label, 300)}\"" + (f" for {a['department']}" if a.get("department") else "")
+                                           + (f", due {dmy(a['due'])}." if a.get("due") else "."), cites, removed))
+    from_card = {x.get("user") for x in rows if x.get("from_card") and x.get("user")}
+    for u, c in _cards(rec, case_id):
+        name = c.get("name") or _name(u)
+        note = _fold(c.get("note"))
+        base = {"kind": "card", "meeting": rec.get("session"), "user": u, "board_date": _rec_date(rec)}
+        if c.get("agree"):
+            cite = {**base, "field": "note", "quote": note, "stored": note} if note else {**base, "field": "agree", "quote": "agree", "stored": "agree"}
+            add(f"card-{u}", _code("", f"{name} agreed" + (f": \"{_clip(note)}\"." if note else "."), [cite], removed))
+        elif u not in from_card and note:
+            add(f"card-{u}", _code("", f"{name} recorded a concern: \"{_clip(note)}\".", [{**base, "field": "note", "quote": note, "stored": note}], removed))
+
+
+def rounds_section(case_id, st, recs, facts, removed):
+    return {"id": "rounds", "title": TITLES["rounds"], "blocks": [round_block(case_id, st, r, facts, removed) for r in recs], "built_by": "code"}
+
+
+def _board_actions(st):
+    return [a for a in (st or {}).get("actions") or [] if isinstance(a, dict) and a.get("source") == "board"]
+
+
+def _doc_cite(case_id, doc_id):
+    """The closing record of an action as a record line by its title (its location when the title is on a page)."""
+    d = store.get_doc(case_id, doc_id) if doc_id else None
+    if not d:
+        return None
+    d = next((x for x in rules.case_docs(case_id) if x["doc_id"] == doc_id), d)
+    cl = d.get("classification") or {}
+    title = cl.get("title") or d.get("filename") or doc_id
+    pages = [p.get("text") or "" for p in d.get("pages") or []]
+    locs = qa._locate_quote(title, pages)
+    loc = locs[0] if locs else None
+    return {"doc_id": doc_id, "quote": loc["matched"] if loc else "", "page": loc["page"] if loc else 0, "start": loc["start"] if loc else None,
+            "end": loc["end"] if loc else None, "doc_title": title, "date": dates.doc_dates(d)["event"] or None, "status": cl.get("status"), "by_title": True}
+
+
+def status_section(case_id, st, recs, removed=None):
+    removed = [] if removed is None else removed
+    out = []
+    today_iso = today()
+
+    def add(s):
+        if s:
+            s["id"] = _sid("status", len(out) + 1)
+            out.append(s)
+    acts = _board_actions(st)
+    for a in [a for a in acts if a.get("status") != "completed"]:
+        label = _fold(a.get("label")) or "Board action"
+        due = str(a.get("due") or "")[:10]
+        late = bool(due and due < today_iso)
+        cites = [_acite(a, "label")] + ([_acite(a, "department")] if a.get("department") else []) + ([_acite(a, "due")] if due else [])
+        add(_code("", f"Open: \"{_clip(label, 300)}\"" + (f", {a['department']}" if a.get("department") else "") + (f", due {dmy(due)}" if due else "")
+                  + (", overdue." if late else "."), cites, removed, open=True, overdue=late))
+    for a in [a for a in acts if a.get("status") == "completed"]:
+        label = _fold(a.get("label")) or "Board action"
+        when = a.get("completed") or ""
+        by = _name(a.get("closed_by")) if a.get("closed_by") else ""
+        doc = _doc_cite(case_id, a.get("closed_doc_id")) if a.get("closed_doc_id") else None
+        cites = [_acite(a, "label")] + ([_acite(a, "completed")] if when else []) + ([_acite(a, "closed_by")] if a.get("closed_by") else [])
+        text = ("Closed" + (f" on {dmy(when)}" if when else "") + (f" by {by}" if by else "") + (f" with the {doc['doc_title']}" if doc else "")
+                + f": \"{_clip(label, 300)}\".")
+        add(_code("", text, cites + ([doc] if doc else []), removed, open=False))
+    dec = [r for r in recs if _outcome(r) == "decision"]
+    latest = dec[-1] if dec else (recs[-1] if recs else None)
+    if latest and latest.get("patient_informed_date"):
+        by = _fold(latest.get("informed_by"))
+        add(_code("", f"The patient was recorded as informed on {dmy(latest['patient_informed_date'])}" + (f" by {by}." if by else "."),
+                  [_bcite(latest, "patient_informed_date")] + ([_bcite(latest, "informed_by")] if by else []), removed))
+    nr = st.get("next_review") if isinstance(st.get("next_review"), dict) else None
+    if nr and nr.get("date"):
+        src = next((r for r in recs if r["id"] == nr.get("from_record")), None)
+        if src and src.get("next_review"):
+            add(_code("", f"Next review: {dmy(src['next_review'])}.", [_bcite(src, "next_review")], removed))
+    if latest:
+        trig = _fold(latest.get("next_review_trigger"))
+        if trig:
+            add(_code("", f"Or re-discussion, as recorded: \"{_clip(trig)}\".", [_bcite(latest, "next_review_trigger")], removed))
+        for f in ((latest.get("adjudication") or {}).get("flags") or []):
+            if f.get("kind") == "communication" and not f.get("resolution") and f.get("text"):
+                add(_code("", f"Not yet recorded: {f['text']}", [{**_bcite(latest, "flags", f["text"], stored=f["text"]), "flag": f.get("field")}], removed))
+    if not any(s.get("open") for s in out):
+        add(_fixed("", NOTHING["status"]))
+    return {"id": "status", "title": TITLES["status"], "sentences": out, "built_by": "code"}
+
+
+# ---- the model sections ------------------------------------------------------------------------------------------------------------
+
+def _hint_lines(st) -> str:
+    """The first pre-board summary's presentation and investigation sentences: a hint of what to look for, never a source."""
+    hist = summary.history(st)
+    if not hist:
+        return ""
+    lines = [s.get("text") or "" for sec in hist[0].get("sections") or [] if sec.get("id") in ("presentation", "investigations")
+             for s in sec.get("sentences") or []]
+    return "\n".join(f"- {x}" for x in lines if x)
+
+
+def _messages(case, sec, ctx, first_date, st, hints=""):
+    p = case.get("patient") or {}
+    sysmsg = summary.SYS + " " + SYS_EXTRA + (" " + SINCE_EXTRA if sec == "since" else "")
+    if sec == "presentation":
+        task = ("Write the 'Presentation and diagnosis' part of the Case summary: how the patient presented and how the cancer was diagnosed "
+                "(histology, grade, receptors and markers) as these records document it, in date order.")
+        hint = _hint_lines(st)
+        extra = ("\n\nEARLIER SUMMARY (a hint of what to look for, NOT a source: cite only the documents above):\n" + hint) if hint else ""
+        head = f"DOCUMENTS (dated on or before the board of {dmy(first_date)}):"
+    else:
+        task = (f"Write the 'Treatment and follow-up since the board' part of the Case summary: what the records dated after the board decision "
+                f"of {dmy(first_date)} document (treatment given, operations, results, imaging), in date order, each with the date of its record.")
+        extra = ("\n\nBOARD ACTIONS CLOSED WITH A RECORD (a hint, not a source):\n" + hints) if hints else ""
+        head = f"DOCUMENTS (dated after the board of {dmy(first_date)}):"
+    return [{"role": "system", "content": sysmsg},
+            {"role": "user", "content": f"Patient: {p.get('name')}, {p.get('agesex', '')}.\n\n{head}\n{ctx}{extra}\n\n{task}"}]
+
+
+async def _ask(case_id, sec, msgs, au):
+    return await llm.chat("reasoner", msgs, json_schema=SCHEMA, max_tokens=1500, purpose=f"case summary {sec}", audit=au)
+
+
+def _closed_hints(case_id, st) -> str:
+    out = []
+    for a in _board_actions(st):
+        if a.get("status") == "completed" and a.get("closed_doc_id"):
+            d = store.get_doc(case_id, a["closed_doc_id"]) or {}
+            title = (d.get("classification") or {}).get("title") or d.get("filename") or a["closed_doc_id"]
+            out.append(f"- \"{a.get('label')}\" closed on {dmy(a.get('completed'))} with document {a['closed_doc_id']} ({title})")
+    return "\n".join(out)
+
+
+def _encounters_after(case_id, case, first_date) -> list:
+    out = []
+    for e in summary.encounter_lines(case_id, case):
+        m = re.match(r"(\d{2})/(\d{2})/(\d{4})", e.get("when") or "")
+        iso = f"{m.group(3)}-{m.group(2)}-{m.group(1)}" if m else ""
+        if iso and iso > first_date:
+            out.append({"text": e["text"], "citations": [], "from_fields": True, "code": True, "encounter": e.get("number")})
+    return out
+
+
+# ---- signature, staleness -----------------------------------------------------------------------------------------------------------
+
+def _status_part(st, recs):
+    dec = [r for r in recs if _outcome(r) == "decision"]
+    latest = dec[-1] if dec else (recs[-1] if recs else {})
+    flags = [f.get("text") for f in ((latest or {}).get("adjudication") or {}).get("flags") or [] if f.get("kind") == "communication"]
+    return _hash({"actions": [(a.get("id"), a.get("status"), a.get("closed_doc_id")) for a in _board_actions(st)],
+                  "latest": [(latest or {}).get(k) for k in STATUS_COMM] + [(latest or {}).get("next_review_trigger")], "flags": flags,
+                  "next_review": (st.get("next_review") or {}) if isinstance(st.get("next_review"), dict) else None})
+
+
+def signature(case_id, st) -> dict:
+    """What a version is built from: rules.case_signature, the board records (ids, versions and the round's communication fields), the
+    board actions and the latest record's patient-informed fields and flags (the status part), the draft stage confirmation."""
+    st = st if isinstance(st, dict) else store.get_state(case_id)
+    recs = records(st)
+    base = rules.case_signature(case_id, st)
+    d = st.get("staging") if isinstance(st.get("staging"), dict) else {}
+    conf = (d.get("confirmed") or {}).get("at") if isinstance(d.get("confirmed"), dict) and not d.get("rejected") else None
+    parts = {"case": base["hash"],
+             "board": _hash([(r["id"], r.get("version", 1), *[r.get(k) for k in ROUND_COMM]) for r in recs]),
+             "status": _status_part(st, recs), "staging": conf or ""}
+    return {"hash": _hash(parts), "parts": parts, "case": base, "records": len(recs)}
+
+
+def stale_reason(then, now) -> str:
+    """Plain words for why a version is out of date; "" when it is not."""
+    if not then or then.get("hash") == now.get("hash"):
+        return ""
+    tp, np_ = then.get("parts") or {}, now.get("parts") or {}
+    why = []
+    if tp.get("case") != np_.get("case"):
+        why.append(rules.stale_reason(then.get("case") or {}, now.get("case") or {}) or "The records changed since this was built")
+    if tp.get("board") != np_.get("board"):
+        why.append("A board record was added or corrected since this was built")
+    if tp.get("staging") != np_.get("staging"):
+        why.append("The draft stage confirmation changed since this was built")
+    if tp.get("status") != np_.get("status"):
+        why.append("Board actions or the record of telling the patient changed since this was built")
+    return ". ".join(why) or "The Case File changed since this was built"
+
+
+# ---- build --------------------------------------------------------------------------------------------------------------------------
+
+def _carry_edits(prev, sections, case_id):
+    """The consultant's edits of the previous version stay: an edited sentence keeps its edited text in the same place; a different
+    model sentence for the same place goes under edited.suggested, never over it."""
+    if not prev:
+        return 0
+    carried = 0
+    by_sec = {s["id"]: s for s in sections}
+    for psec in prev.get("sections") or []:
+        if psec.get("id") not in MODEL_SECTIONS:
+            continue
+        sec = by_sec.get(psec["id"])
+        for ps in psec.get("sentences") or []:
+            if not isinstance(ps.get("edited"), dict):
+                continue
+            keep = {k: v for k, v in ps.items() if k != "edited"}
+            ed = {**ps["edited"], "carried_from": prev.get("n")}
+            ed.pop("suggested", None)
+            ed["records_changed"] = _records_changed(ed, case_id)
+            new = next((s for s in sec["sentences"] if s.get("id") == ps["id"]), None)
+            if new is not None and not new.get("fixed") and _fold(new["text"]) not in (_fold(ps["text"]), _fold(ed.get("vaidyx_text"))):
+                ed["suggested"] = {"text": new["text"], "citations": new.get("citations") or []}
+            item = {**keep, "edited": ed}
+            if new is not None:
+                sec["sentences"][sec["sentences"].index(new)] = item
+            else:
+                sec["sentences"] = [s for s in sec["sentences"] if not s.get("fixed")] + [item]
+            carried += 1
+    return carried
+
+
+def _records_changed(ed, case_id) -> bool:
+    """True when a record the edited sentence cites was re-processed or removed since the edit."""
+    for did, processed in (ed.get("records") or {}).items():
+        d = store.get_doc(case_id, did)
+        if not d or str(d.get("processed") or "") != str(processed or ""):
+            return True
+    return bool(ed.get("records_changed"))
+
+
+async def build(case_id, trigger: dict, user="") -> dict:
+    """Build a new version of the Case summary; returns it. {"status": "no_decision"} (nothing stored) without a board record. A model
+    failure leaves that section with its fixed sentence and model_error on the version. ValueError for a protected Case File."""
+    if case_id in config.PROTECTED_CASES:
+        raise ValueError("This Case File is protected: Vaidyx does not build a Case summary for it.")
+    t0 = time.time()
+    case = store.get_case(case_id)
+    if not case:
+        raise KeyError(case_id)
+    au = store.auditor(case_id)
+    st = store.get_state(case_id)
+    recs = records(st)
+    if not recs:
+        return {"status": "no_decision", "message": "No board decision has been recorded for this Case File."}
+    sig = signature(case_id, st)  # taken first: a change during the model calls marks the version out of date
+    trigger = {**(trigger if isinstance(trigger, dict) else {}), "by": (trigger or {}).get("by") or user}
+    first = _rec_date(recs[0])
+    docs = _docs(case_id, st)
+    pre, post = _split(docs, first)
+    facts = rules.resolve_facts(rules.case_docs(case_id, st), st.get("overrides"))
+    cat = protocol.facts()
+    near = config.near_match()
+    removed, issues, model_error = [], [], {}
+    ctx_pre, ids_pre, mode_pre = _context(pre)
+    ctx_post, ids_post, mode_post = _context(post)
+    calls = {}
+    if ids_pre:
+        calls["presentation"] = _ask(case_id, "presentation", _messages(case, "presentation", ctx_pre, first, st), au)
+    if ids_post:
+        calls["since"] = _ask(case_id, "since", _messages(case, "since", ctx_post, first, st, _closed_hints(case_id, st)), au)
+    got = dict(zip(calls, await asyncio.gather(*calls.values(), return_exceptions=True))) if calls else {}
+    for k, r in got.items():
+        if isinstance(r, BaseException):
+            model_error[k] = f"{r.__class__.__name__}: {str(r)[:200]}"
+            au({"kind": "case_summary_model_error", "section": k, "why": model_error[k]})
+            got[k] = {}
+    pres = _check_model(case_id, (got.get("presentation") or {}).get("sentences"), set(ids_pre), "presentation", removed, issues, near)
+    _fill(pres, facts, PRESENTATION_FACTS, cat)
+    pres = _finish_model_section("presentation", pres) or [{**_fixed(_sid("presentation", 1), NOTHING["presentation"])}]
+    post_ids = {d["doc_id"] for d in post}
+    since_facts = {k: v for k, v in facts.items() if k in SINCE_FACTS and ((v.get("current") or {}).get("doc_id") in post_ids)}
+    since = _check_model(case_id, (got.get("since") or {}).get("sentences"), set(ids_post), "since", removed, issues, near)
+    _fill(since, since_facts, SINCE_FACTS, cat)
+    since += _encounters_after(case_id, case, first)
+    since = _finish_model_section("since", since)
+    if not since:
+        since = [_fixed(_sid("since", 1), (NOTHING_CHECKED_SINCE if post else NOTHING_SINCE).format(date=dmy(first)))]
+    sections = [{"id": "presentation", "title": TITLES["presentation"], "sentences": pres, "built_by": "model", "context": mode_pre},
+                stage_section(case_id, st, facts, recs, removed),
+                rounds_section(case_id, st, recs, facts, removed),
+                {"id": "since", "title": TITLES["since"], "sentences": since, "built_by": "model", "context": mode_post},
+                status_section(case_id, st, recs, removed)]
+    if issues:
+        au({"kind": "guardrail_output", "where": "case_summary", "issues": issues})
+    label = config.models().get("reasoner", {}).get("label") or "the reasoner model"
+    st = store.get_state(case_id)  # read again and written at once (no await in between)
+    art = st.setdefault("artefacts", {}).get(ART)
+    if not isinstance(art, dict) or not isinstance(art.get("versions"), list):
+        art = {"current": 0, "versions": []}
+    carried = _carry_edits(current(st) if _artefact(st) else None, sections, case_id)
+    n = max([v.get("n") or 0 for v in art["versions"]] + [0]) + 1
+    sents = all_sentences({"sections": sections})
+    v = {"n": n, "built_at": store.now_iso(), "trigger": trigger, "signature": sig,
+         "inputs": {"board_records": [{"id": r["id"], "version": r.get("version", 1)} for r in recs],
+                    "actions": [{"id": a.get("id"), "status": a.get("status")} for a in _board_actions(st)],
+                    "stage_confirmed_at": sig["parts"]["staging"] or None, "documents": len(docs),
+                    "documents_before": len(pre), "documents_after": len(post)},
+         "first_board_date": first, "sections": sections, "removed": removed, "model": label, "model_line": f"Written by {label} (non-medical)",
+         "label": "AI draft, not reviewed", "status_day": today(), "seconds": round(time.time() - t0, 1), "review": {"status": "ai_draft"}, "edits": [],
+         "carried_edits": carried, **({"model_error": model_error} if model_error else {})}
+    art["versions"].append(v)
+    art["current"] = n
+    art["case_id"] = case_id
+    st["artefacts"][ART] = art
+    store.save_state(case_id, st)
+    au({"kind": "case_summary", "version": n, "trigger": trigger.get("kind"), "sentences": len(sents), "dropped": len(removed),
+        "removed": {k: c for k in REASONS if (c := sum(1 for x in removed if x.get("reason") == k))}, "seconds": v["seconds"],
+        **({"model_error": sorted(model_error)} if model_error else {})})
+    return v
+
+
+# ---- the status section after an action closure or a communication update --------------------------------------------------------
+
+def refresh_status(case_id=None, state=None):
+    """Rewrite only the status section of the current version (code, no model, no new version) and set refreshed_at. With `state` the
+    state is changed in place and the caller saves it (followup.close_action: the route saves); otherwise it is read and saved here.
+    None when there is no Case summary."""
+    own = state is None
+    st = store.get_state(case_id) if own else state
+    art = _artefact(st)
+    v = current(st) if art else None
+    case_id = case_id or (art or {}).get("case_id")
+    if not v or not case_id or case_id in config.PROTECTED_CASES:
+        return None
+    recs = records(st)
+    sec = status_section(case_id, st, recs)
+    v["sections"] = [sec if s.get("id") == "status" else s for s in v.get("sections") or []]
+    v["refreshed_at"] = store.now_iso()
+    v["status_day"] = today()
+    v.setdefault("inputs", {})["actions"] = [{"id": a.get("id"), "status": a.get("status")} for a in _board_actions(st)]
+    sig = v.get("signature") or {}
+    if isinstance(sig.get("parts"), dict):
+        sig["parts"]["status"] = _status_part(st, recs)
+        sig["hash"] = _hash(sig["parts"])
+    if own:
+        store.save_state(case_id, st)
+    store.audit(case_id, {"kind": "case_summary_status_refreshed", "version": v.get("n")})
+    return v
+
+
+# ---- background build after a decision -------------------------------------------------------------------------------------------
+
+RUNNING: dict = {}  # case_id -> {"started", "trigger", "user"}
+AGAIN: dict = {}  # case_id -> (trigger, user): one more run after the current one, the latest request only
+TASKS: set = set()
+_lock = threading.Lock()
+
+
+def enabled() -> bool:
+    """TB_SCHEDULER=0 turns the background build off; under pytest it runs only with TB_SCHEDULER=1 (tests call build directly)."""
+    raw = os.getenv("TB_SCHEDULER")
+    v = str(raw).strip().lower() if raw is not None else ""
+    if v in ("0", "false", "no", "off"):
+        return False
+    return not ("PYTEST_CURRENT_TEST" in os.environ and v != "1")
+
+
+def building(case_id) -> bool:
+    return case_id in RUNNING
+
+
+def _notify_owner(case_id, v, user):
+    from . import notify, org
+    case = store.get_case(case_id) or {}
+    patient = (case.get("patient") or {}).get("name") or case_id
+    to = {"department": case["department"]} if case.get("department") and org.department_id(case["department"]) else {"user": user}
+    rid = (v.get("trigger") or {}).get("record")
+    st = store.get_state(case_id)
+    rec = next((r for r in records(st) if r["id"] == rid), None) or (records(st) or [{}])[-1]
+    title = f"Case summary updated: {patient} ({case_id})"
+    text = (f"Version {v['n']} after the board decision of {dmy(_rec_date(rec))}: AI draft, not reviewed. "
+            "The owner's consultant reviews and edits it.")
+    for kind in ("summary_ready", "owner_reminder"):
+        try:
+            return notify.notify(to, kind, case_id, title, text, by="Vaidyx (automatic)", version=v["n"], artefact=ART)
+        except ValueError:
+            continue
+        except Exception as e:
+            return {"error": f"{e.__class__.__name__}: {e}"}
+    return None
+
+
+async def _run(case_id, trigger, user):
+    from . import ready_hook
+    done = False
+    try:
+        while True:
+            waits = 0
+            while ready_hook.meeting_in_session():
+                if waits >= ready_hook.MAX_WAITS:
+                    store.audit(case_id, {"kind": "case_summary_failed", "by": user, "why": "a board session stayed in session", "trigger": trigger})
+                    break
+                waits += 1
+                await asyncio.sleep(ready_hook.MEETING_DELAY)
+            if waits < ready_hook.MAX_WAITS and not store.gone(case_id) and store.get_case(case_id):
+                try:
+                    v = await build(case_id, trigger, user)
+                    if isinstance(v, dict) and v.get("n"):
+                        _notify_owner(case_id, v, user)
+                except Exception as e:  # the old version stays current
+                    log.warning("Case summary build failed for %s (%s)", case_id, e)
+                    try:
+                        store.audit(case_id, {"kind": "case_summary_failed", "by": user, "trigger": trigger, "why": f"{e.__class__.__name__}: {str(e)[:200]}"})
+                    except Exception:
+                        pass
+            with _lock:
+                nxt = AGAIN.pop(case_id, None)
+                if nxt is None:
+                    RUNNING.pop(case_id, None)
+                    done = True
+                    return
+                trigger, user = nxt
+                RUNNING[case_id] = {"started": time.time(), "trigger": trigger, "user": user}
+    finally:
+        if not done:  # cancelled or an unexpected error: the Case File is free for the next request
+            with _lock:
+                RUNNING.pop(case_id, None)
+                AGAIN.pop(case_id, None)
+
+
+def schedule(case_id, trigger, user="") -> dict:
+    """Build the Case summary in the background and return at once: {"scheduled", "how": loop|thread|queued|off}. One run per Case
+    File; a request during a run queues exactly one more (the latest). Waits while a board session is in session."""
+    if not enabled():
+        return {"scheduled": False, "how": "off", "reason": "TB_SCHEDULER=0"}
+    if case_id in config.PROTECTED_CASES:
+        return {"scheduled": False, "how": "off", "reason": "protected Case File"}
+    trigger = trigger if isinstance(trigger, dict) else {}
+    with _lock:
+        if case_id in RUNNING:
+            AGAIN[case_id] = (trigger, user)
+            return {"scheduled": False, "how": "queued"}
+        RUNNING[case_id] = {"started": time.time(), "trigger": trigger, "user": user}
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop is not None:
+        task = loop.create_task(_run(case_id, trigger, user))
+        TASKS.add(task)
+        task.add_done_callback(TASKS.discard)
+        return {"scheduled": True, "how": "loop"}
+    threading.Thread(target=lambda: asyncio.run(_run(case_id, trigger, user)), daemon=True, name=f"tb-case-summary-{case_id}").start()
+    return {"scheduled": True, "how": "thread"}
+
+
+# ---- review and edit ----------------------------------------------------------------------------------------------------------------
+
+def review(case_id, n, status, comment, user) -> dict:
+    """The owner's consultant marks version n reviewed or flagged (or back to AI draft); kept on that version and in st["reviews"]."""
+    if status not in REVIEW_STATUSES:
+        raise ValueError("The review status must be one of: " + ", ".join(REVIEW_STATUSES) + ".")
+    st = store.get_state(case_id)
+    v = _version(st, int(n))
+    rv = {"status": status, "comment": _fold(comment)[:2000], "by": user, "by_name": _name(user), "at": store.now_iso(), "generated": v.get("built_at")}
+    v["review"] = rv
+    st.setdefault("reviews", []).append({"artefact": ART, "version": v["n"], **rv})
+    store.save_state(case_id, st)
+    store.audit(case_id, {"kind": "expert_review", "artefact": ART, "version": v["n"], "status": status, "by": user, "comment": rv["comment"]})
+    return rv
+
+
+_CAPS = re.compile(r"\b[A-Z][A-Za-z0-9+\-/]*")
+_CLAUSE_START = re.compile(r"(?:^|[.:;!?]\s+|\(\s*)$")
+
+
+def _checked(text, cites) -> bool:
+    """True when every number and every capitalised word (a name, a marker) of the edited text is in one of the sentence's quotes (or a
+    cited record's title)."""
+    cites = [c for c in cites or [] if isinstance(c, dict)]
+    if not cites:
+        return False
+    rows = [{"quote": str(c.get("quote") or ""), "doc_title": str(c.get("doc_title") or ""), "date": str(c.get("date") or "")} for c in cites]
+    if qa._missing_numbers(text, rows):
+        return False
+    pool = grounding.norm(" ".join(r["quote"] + " " + r["doc_title"] for r in rows))
+    for m in _CAPS.finditer(text):
+        if _CLAUSE_START.search(text[:m.start()]):
+            continue
+        if grounding.norm(m.group(0)) not in pool:
+            return False
+    return True
+
+
+def edit(case_id, n, sentence_id, text, user, user_name="") -> dict:
+    """The owner's consultant changes one sentence of the presentation or since section of the current version. Every edit is a new
+    entry in the version's edits (nothing deleted; undo is an edit back). The citations stay; `checked` says whether every number and
+    name of the new text is still in its quotes. Returns the sentence."""
+    text = " ".join(str(text or "").replace("\u2014", "-").split())
+    if not 1 <= len(text) <= MAX_EDIT:
+        raise ValueError(f"Write the sentence (1 to {MAX_EDIT} characters).")
+    st = store.get_state(case_id)
+    v = _version(st, int(n))
+    cur = current(st)
+    if cur is None or cur.get("n") != v.get("n"):
+        raise ValueError("Only the current version of the Case summary is edited; earlier versions stay as they were.")
+    sec = next((sec for sec in v.get("sections") or [] if any(x.get("id") == sentence_id for x in all_sentences({"sections": [sec]}))), None)
+    if sec is None:
+        raise KeyError(f"No sentence {sentence_id} in version {v['n']}")
+    if sec.get("id") not in MODEL_SECTIONS:
+        raise ValueError(CODE_EDIT)
+    s = next(x for x in sec["sentences"] if x.get("id") == sentence_id)
+    if s.get("fixed"):
+        raise ValueError(FIXED_EDIT)
+    if s.get("code") or s.get("from_fields"):
+        raise ValueError(CODE_EDIT)
+    now = store.now_iso()
+    name = user_name or _name(user)
+    prev_ed = s.get("edited") if isinstance(s.get("edited"), dict) else {}
+    vaidyx_text = prev_ed.get("vaidyx_text") or s["text"]
+    v.setdefault("edits", []).append({"sentence_id": sentence_id, "text": text, "by": user, "by_name": name, "at": now, "previous": s["text"],
+                                      "previous_citations": list(s.get("citations") or [])})
+    s["text"] = text
+    if text == _fold(vaidyx_text) and not prev_ed.get("carried_from"):
+        s.pop("edited", None)  # back to the Vaidyx text: the edits keep the chain
+    else:
+        recs = {}
+        for c in s.get("citations") or []:
+            d = store.get_doc(case_id, c.get("doc_id")) if c.get("doc_id") else None
+            if d:
+                recs[c["doc_id"]] = d.get("processed") or ""
+        s["edited"] = {"by": user, "by_name": name, "at": now, "checked": _checked(text, s.get("citations")), "vaidyx_text": vaidyx_text,
+                       "records": recs, **({"carried_from": prev_ed["carried_from"]} if prev_ed.get("carried_from") else {})}
+    store.save_state(case_id, st)
+    store.audit(case_id, {"kind": "case_summary_edit", "version": v["n"], "sentence": sentence_id, "by": user,
+                          "checked": bool((s.get("edited") or {}).get("checked")), "text": text[:300]})
+    return s
+
+
+# ---- readers -------------------------------------------------------------------------------------------------------------------------
+
+def history(st) -> list:
+    """Every version, oldest first: {n, built_at, trigger, review, edits: count, sentences: count}."""
+    a = _artefact(st)
+    return [{"n": v.get("n"), "built_at": v.get("built_at"), "trigger": v.get("trigger"), "review": v.get("review"),
+             "edits": len(v.get("edits") or []), "sentences": len(all_sentences(v))} for v in (a or {}).get("versions") or []]
+
+
+def status(st, case_id) -> dict:
+    """{"status": none|building|ready|stale|reviewed, "version", "built_at", "stale_reason"}."""
+    v = current(st)
+    if building(case_id):
+        return {"status": "building", "version": (v or {}).get("n"), "built_at": (v or {}).get("built_at"), "stale_reason": ""}
+    if not v:
+        return {"status": "none", "version": None, "built_at": None, "stale_reason": ""}
+    why = stale_reason(v.get("signature"), signature(case_id, st))
+    word = "stale" if why else ("reviewed" if (v.get("review") or {}).get("status") == "reviewed" else "ready")
+    return {"status": word, "version": v.get("n"), "built_at": v.get("built_at"), "stale_reason": why}
+
+
+_GENERIC = {"cancer", "carcinoma", "ca", "tumour", "tumor", "tumours", "of", "the", "and", "malignancy", "neoplasm", "protocol"}
+
+
+def summary_line(st, case) -> str:
+    """One line (at most 160 characters) built by code: "<histology>, <stage>; board DD/MM/YYYY: <decision>; N actions open". Stores nothing."""
+    case = case if isinstance(case, dict) else {}
+    cid = case.get("case_id") or ""
+    try:
+        facts = rules.resolve_facts(rules.case_docs(cid, st), (st or {}).get("overrides")) if cid else {}
+    except Exception:
+        facts = {}
+    cur = lambda f: (facts.get(f) or {}).get("current") or {}
+    hist = cur("histologic_type").get("value") if cur("histologic_type").get("verification") in rules.VERIFIED else ""
+    try:
+        label = protocol.case_label(case)
+    except Exception:
+        label = ""
+    site = " ".join(w for w in re.findall(r"[A-Za-z]+", label or "") if w.lower() not in _GENERIC)
+    head = _fold(hist) or _fold(label)
+    if hist and site and site.lower() not in hist.lower():
+        head = f"{_fold(hist)}, {site.lower()}"
+    stage = max([c for c in (cur("recorded_stage"), cur("figo_stage")) if c and c.get("verification") in rules.VERIFIED],
+                key=lambda c: (c.get("date") or "", c.get("report_date") or ""), default=None)
+    recs = records(st)
+    stage_v = _fold((stage or {}).get("value")) or next((_fold(r.get("stage_as_agreed")) for r in reversed(recs) if _fold(r.get("stage_as_agreed"))), "")
+    parts = [x for x in (head, stage_v) if x]
+    line = ", ".join(parts)
+    if recs:
+        r = recs[-1]
+        dec = _fold(r.get("decision_text")) or decision_record.OUTCOMES.get(_outcome(r), "")
+        if len(dec) > 80:
+            dec = dec[:80].rsplit(" ", 1)[0].rstrip(" ,;:") + "..."
+        line += ("; " if line else "") + f"board {dmy(_rec_date(r))}: {dec}"
+    k = sum(1 for a in _board_actions(st) if a.get("status") != "completed")
+    line += ("; " if line else "") + f"{k} {'action' if k == 1 else 'actions'} open"
+    line = line.replace("\u2014", "-").replace("\u2013", "-")
+    if len(line) > 160:
+        over = len(line) - 160
+        if head and len(head) > over + 10:
+            line = line.replace(head, head[:len(head) - over - 3].rstrip(" ,") + "...", 1)
+        line = line[:160]
+    return line

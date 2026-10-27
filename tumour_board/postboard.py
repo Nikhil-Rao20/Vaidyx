@@ -420,6 +420,16 @@ def _close_inform_actions(st, rec, user) -> list[str]:
     return closed
 
 
+def _case_summary(fn, *args) -> None:
+    """Call case_summary.<fn> after a board record changed (night-v3 item 3.3); a failure never breaks the record (logged)."""
+    try:
+        from . import case_summary
+        getattr(case_summary, fn)(*args)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Case summary %s failed for %s (%s: %s)", fn, args[0] if args else "", e.__class__.__name__, e)
+
+
 def update_communication(case_id, record_id, fields: dict, user="") -> dict:
     """Set the patient-communication fields of a recorded decision later (who informed the patient and when, who tells the patient by
     when, the referring doctor told, key worker, intent, trial, consent). Not a change of the decision: no new version; kept in the
@@ -447,6 +457,7 @@ def update_communication(case_id, record_id, fields: dict, user="") -> dict:
     closed = _close_inform_actions(st, rec, user)
     store.save_state(case_id, st)
     store.audit(case_id, {"kind": "board_record_communication", "record": record_id, "by": user, "changed": changed, "actions_closed": closed})
+    _case_summary("refresh_status", case_id)  # the Case summary's status section follows (night-v3 item 3.3)
     return rec
 
 
@@ -559,6 +570,7 @@ def correct_record(case_id, record_id, changes: dict, by: str, by_name: str = ""
     store.audit(case_id, {"kind": "board_record_corrected", "record": record_id, "by": by, "changed": keys, "reason": reason, "version": v["version"],
                           "actions_added": len(new_rows)})
     _tell_owner_corrected(case_id, rec, by, by_name, reason)
+    _case_summary("schedule", case_id, {"kind": "correction", "record": record_id}, by)  # the Case summary again (night-v3 item 3.3)
     return rec
 
 
@@ -598,6 +610,7 @@ async def record_decision(case_id, record, user=""):
         st["next_review"] = {"date": record["next_review"], "from_record": record["id"]}
     store.save_state(case_id, st)
     store.audit(case_id, {"kind": "board_record", "record": record["id"], "by": user, "flags": len(record["adjudication"]["flags"])})
+    _case_summary("schedule", case_id, {"kind": "decision", "record": record["id"]}, user)  # the Case summary, in the background (night-v3 item 3.3)
     return record
 
 
