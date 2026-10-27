@@ -1,0 +1,616 @@
+{
+ "id": "bone_sarcoma",
+ "label": "Bone sarcoma (osteosarcoma, Ewing sarcoma, chondrosarcoma)",
+ "version": "0.1-draft",
+ "approval": {
+  "status": "draft",
+  "note": "Draft checklist from NCG Guidelines for Bone and Soft Tissue Tumours (2019): needs a clinician's check"
+ },
+ "site": "osteosarcoma|ewing|bone|femur|tibia|humerus|pelvis bone",
+ "site_note": "V2 item 5.3 (two primaries): only on a Case File linked to the same patient's other Case File, and only for histopathology, cytology, IHC and molecular records: among several candidates for one record, or several documents carrying a required value, one that names another protocol's site and not this one steps aside and is named on the row for review; a document naming no site never does, and when every candidate names another site every candidate stays. Organ words only. A preference, never a filter; a patient with one cancer is checked as before.",
+ "note": "DRAFT, not approved for real use: needs a clinician's check. Configurable by the clinical team. Required records transcribed from the NCG Guidelines for Bone and Soft Tissue Tumours (2019) (National Cancer Grid, India), the bone sarcoma pages (evaluation p 4, osteosarcoma p 7, Ewing sarcoma p 12, chondrosarcoma p 17, appendices p 25 to 40; the PDF page is the printed page), each with its verbatim quote and page. Tiers printed by NCG are kept; the tiers whose tier_basis says 'proposed' are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). A record NCG gives only under a condition the system never judges (a finding, a plan) is shown with NCG's own tier and the condition, never counted. The stage and the risk group are as recorded by the clinician, never computed. Nothing here suggests treatment. There are three settings because the work-up differs: the chondrosarcoma flow has no alkaline phosphatase and LDH, no immunohistochemistry and no baseline organ tests, and prints the bone scan as Optional. The book has no Enneking and no bone-specific stage table. Echocardiogram and audiometry before chemotherapy are one line of the book (p 28), listed as separate records so each goes to the team that does it. Ewing sarcoma and osteosarcoma are not in the paediatric book. A child's treating team is Paediatric Oncology: clinical records go to the owner of the Case File.",
+ "settings_note": "Setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes stage and never decides the setting). The three settings follow the book's sections: Osteosarcoma (p 7), Ewing sarcoma (p 12) and Chondrosarcoma (p 17). Non-metastatic and metastatic are not settings: the work-up is common and the split follows staging. Each record carries its tier per setting; until a setting is recorded the strictest tier applies. Draft checklist: needs a clinician's check.",
+ "settings": [
+  {
+   "id": "osteosarcoma",
+   "label": "Osteosarcoma (as recorded)"
+  },
+  {
+   "id": "ewing",
+   "label": "Ewing sarcoma (as recorded)"
+  },
+  {
+   "id": "chondrosarcoma",
+   "label": "Chondrosarcoma (as recorded)"
+  }
+ ],
+ "records": [
+  {
+   "id": "clinical_history",
+   "label": "Detailed clinical history and examination (pain, swelling, pathological fracture)",
+   "tier": "a",
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ],
+   "department": "Orthopaedic Oncology",
+   "required_facts": [
+    "ecog",
+    "presenting_complaint"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 7,
+     "quote": "Detailed clinical history"
+    }
+   ],
+   "tier_basis": "Proposed a: the first box of each flow is the detailed history and clinical examination (p 4, 7). A pathological fracture is recorded in the note, as the book says one through a sarcoma is not to be fixed (p 28). For a child the treating team is Paediatric Oncology: the record goes to the owner of the Case File",
+   "route": "owner"
+  },
+  {
+   "id": "radiographs_bone",
+   "label": "Plain radiographs of the lesion and chest X-ray",
+   "tier": "a",
+   "doc_types": [
+    "xray"
+   ],
+   "department": "Radiology",
+   "required_facts": [],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 7,
+     "quote": "Basic imaging (local & chest x-ray) & routine blood investigations (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 33,
+     "quote": "first line of imaging in evaluation"
+    }
+   ],
+   "tier_basis": "NCG a. Appendix 2 (p 33) calls the radiograph the first line of imaging in the evaluation"
+  },
+  {
+   "id": "routine_blood_bone",
+   "label": "Routine blood investigations",
+   "tier": "a",
+   "doc_types": [
+    "lab"
+   ],
+   "department": "Biochemistry",
+   "required_facts": [
+    "haemoglobin",
+    "wbc",
+    "platelets",
+    "creatinine",
+    "bilirubin"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 7,
+     "quote": "Basic imaging (local & chest x-ray) & routine blood investigations (a)"
+    }
+   ],
+   "tier_basis": "NCG a (the same line as the radiographs)"
+  },
+  {
+   "id": "mri_local_bone",
+   "label": "MRI with contrast of the entire bone with adjoining joints",
+   "tier": "a",
+   "doc_types": [
+    "mri"
+   ],
+   "department": "Radiology",
+   "required_facts": [
+    "lesion_size"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 7,
+     "quote": "Local 3D imaging - MRI (with contrast) of entire bone with adjoining joints (a)"
+    }
+   ],
+   "tier_basis": "NCG a; the book's alternative line (X-ray and dynamic contrast MRI with diffusion) is (b)"
+  },
+  {
+   "id": "alp_ldh_bone",
+   "label": "Alkaline phosphatase and LDH",
+   "tier": "a",
+   "tiers": {
+    "osteosarcoma": "a",
+    "ewing": "a",
+    "chondrosarcoma": "none"
+   },
+   "doc_types": [
+    "lab"
+   ],
+   "department": "Biochemistry",
+   "required_facts": [
+    "alkaline_phosphatase",
+    "ldh"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 7,
+     "quote": "Additional serological investigations (alkaline phosphatase and lactate dehydrogenase) (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 12,
+     "quote": "Additional serological investigations (alkaline phosphatase and lactate dehydrogenase) (a)"
+    }
+   ],
+   "tier_basis": "NCG a for osteosarcoma (p 7) and Ewing sarcoma (p 12, the same words); not in the chondrosarcoma flow"
+  },
+  {
+   "id": "biopsy_bone",
+   "label": "Core needle biopsy and histopathology",
+   "tier": "a",
+   "doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type",
+    "grade"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 7,
+     "quote": "Biopsy (core needle biopsy preferred) (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 38,
+     "quote": "Histologic Subtype (According to WHO Classification of Bone Tumours):"
+    }
+   ],
+   "tier_basis": "NCG a. The bone pathology format (p 38) names the histologic subtype by the WHO classification of bone tumours"
+  },
+  {
+   "id": "ihc_bone",
+   "label": "Immunohistochemistry",
+   "tier": "a",
+   "tiers": {
+    "osteosarcoma": "c",
+    "ewing": "a",
+    "chondrosarcoma": "none"
+   },
+   "doc_types": [
+    "ihc",
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 12,
+     "quote": "Histopathological diagnosis with IHC (a) AND Molecular Pathology (c)"
+    },
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 7,
+     "quote": "Histopathological diagnosis (Use of Immunohistochemistry where applicable- (c)"
+    }
+   ],
+   "tier_basis": "Ewing sarcoma a (p 12); osteosarcoma c, \"where applicable\" (p 7); not in the chondrosarcoma flow"
+  },
+  {
+   "id": "molecular_ewing",
+   "label": "Molecular pathology (EWSR1, EWS-FLI1 and other fusions)",
+   "tier": "c",
+   "tiers": {
+    "osteosarcoma": "none",
+    "ewing": "c",
+    "chondrosarcoma": "none"
+   },
+   "doc_types": [
+    "molecular"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "sarcoma_fusion"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 12,
+     "quote": "Histopathological diagnosis with IHC (a) AND Molecular Pathology (c)"
+    },
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 39,
+     "quote": "Type of tests: (Interphase cytogenetics) FISH test EWSR1, etc."
+    }
+   ],
+   "tier_basis": "NCG c, in the Ewing sarcoma flow only. The bone pathology format (p 39) lists the FISH test for EWSR1"
+  },
+  {
+   "id": "ct_chest_bone",
+   "label": "Non-contrast CT chest",
+   "tier": "a",
+   "doc_types": [
+    "ct"
+   ],
+   "region": "chest|thorax|lung",
+   "department": "Radiology",
+   "required_facts": [
+    "distant_findings"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 26,
+     "quote": "Osteosarcoma and chondrosarcoma are staged with non-contrast CT scan (NCCT)"
+    },
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 7,
+     "quote": "(NCCT scan chest & Bone scan) (a)"
+    }
+   ],
+   "tier_basis": "NCG a on that line group (osteosarcoma p 7). Chondrosarcoma (p 17) prints the CT chest without a letter, so a is proposed there"
+  },
+  {
+   "id": "bone_scan_bone",
+   "label": "Bone scan (skeletal metastases)",
+   "tier": "a",
+   "tiers": {
+    "osteosarcoma": "a",
+    "ewing": "a",
+    "chondrosarcoma": "c"
+   },
+   "doc_types": [
+    "bone_scan"
+   ],
+   "department": "Nuclear Medicine",
+   "required_facts": [
+    "distant_findings"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 36,
+     "quote": "Radionuclide bone scan do not aid diagnosis of bone tumours, however remains the primary"
+    },
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 17,
+     "quote": "Bone scan –(c) in primary cases)"
+    }
+   ],
+   "tier_basis": "Appendix 2 (p 36) gives the bone scan its screening role with (a). For chondrosarcoma the flow prints (c) in primary cases (p 17). Ewing sarcoma may use PET instead (p 12)"
+  },
+  {
+   "id": "bone_marrow_ewing",
+   "label": "Bone marrow aspiration from two sites (bilateral)",
+   "tier": "a",
+   "tiers": {
+    "osteosarcoma": "none",
+    "ewing": "a",
+    "chondrosarcoma": "none"
+   },
+   "doc_types": [
+    "bone_marrow"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "bone_marrow_result"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 12,
+     "quote": "Non-Contrast Computed Tomography of Chest AND Bone Scan AND Bone Marrow"
+    }
+   ],
+   "tier_basis": "NCG a for Ewing sarcoma only: the line reads \"Non-Contrast Computed Tomography of Chest AND Bone Scan AND Bone Marrow Aspiration (2 sites-Bilateral) (a)\" (p 12); PET is the book's alternative"
+  },
+  {
+   "id": "pet_ct_bone",
+   "label": "FDG PET-CT with breath-hold CT chest",
+   "tier": "a",
+   "tiers": {
+    "osteosarcoma": "c",
+    "ewing": "a",
+    "chondrosarcoma": "none"
+   },
+   "doc_types": [
+    "pet_ct"
+   ],
+   "department": "Nuclear Medicine",
+   "required_facts": [
+    "suv_max",
+    "distant_findings"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 12,
+     "quote": "FDG PET Scan with Breath Hold CT Chest (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 7,
+     "quote": "Or - (c) -F18 PET/EDF PET -with breath hold chest CT Scan)"
+    },
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 36,
+     "quote": "PET scan is helping in staging sarcomas. FDG or F-18 PET scan are utilized. (c)"
+    }
+   ],
+   "tier_basis": "Ewing sarcoma a, as the alternative to CT chest, bone scan and bone marrow (p 12); osteosarcoma c (p 7 and p 36); not in the chondrosarcoma flow"
+  },
+  {
+   "id": "baseline_labs_bone",
+   "label": "Baseline blood tests (CBC, kidney and liver function)",
+   "tier": "a",
+   "tiers": {
+    "osteosarcoma": "a",
+    "ewing": "a",
+    "chondrosarcoma": "none"
+   },
+   "doc_types": [
+    "lab"
+   ],
+   "department": "Biochemistry",
+   "required_facts": [
+    "creatinine",
+    "bilirubin"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 28,
+     "quote": "Baseline assessment of renal, cardiac and auditory function - (CBC, RFT, LFT, SE,"
+    }
+   ],
+   "tier_basis": "No letter; proposed a for osteosarcoma and Ewing sarcoma because multiagent chemotherapy is the book's standard for them (p 27), and not applicable for chondrosarcoma (it has no chemotherapy line). The book's line is \"Baseline assessment of renal, cardiac and auditory function\" (p 28)"
+  },
+  {
+   "id": "echocardiogram_bone",
+   "label": "Baseline echocardiogram",
+   "tier": "a",
+   "tiers": {
+    "osteosarcoma": "a",
+    "ewing": "a",
+    "chondrosarcoma": "none"
+   },
+   "doc_types": [
+    "echocardiogram"
+   ],
+   "department": "Cardiology",
+   "required_facts": [],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 28,
+     "quote": "Baseline assessment of renal, cardiac and auditory function - (CBC, RFT, LFT, SE,"
+    }
+   ],
+   "tier_basis": "No letter; proposed a for osteosarcoma and Ewing sarcoma because multiagent chemotherapy is the book's standard for them (p 27), and not applicable for chondrosarcoma (it has no chemotherapy line). The book's line is \"Baseline assessment of renal, cardiac and auditory function\" (p 28). The echocardiogram is the cardiology team's own work and goes to the owner of the Case File",
+   "route": "owner"
+  },
+  {
+   "id": "audiometry_bone",
+   "label": "Baseline audiometry",
+   "tier": "a",
+   "tiers": {
+    "osteosarcoma": "a",
+    "ewing": "a",
+    "chondrosarcoma": "none"
+   },
+   "doc_types": [
+    "audiometry"
+   ],
+   "department": "ENT / Head and Neck Surgery",
+   "required_facts": [],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 28,
+     "quote": "Baseline assessment of renal, cardiac and auditory function - (CBC, RFT, LFT, SE,"
+    }
+   ],
+   "tier_basis": "No letter; proposed a for osteosarcoma and Ewing sarcoma because multiagent chemotherapy is the book's standard for them (p 27), and not applicable for chondrosarcoma (it has no chemotherapy line). The book's line is \"Baseline assessment of renal, cardiac and auditory function\" (p 28)"
+  }
+ ],
+ "optional": [
+  {
+   "id": "resection_histopathology_bone",
+   "label": "Histopathology of the resection after chemotherapy (necrosis as written)",
+   "doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 39,
+     "quote": "Percentage necrosis (post chemotherapy treated resection specimens):"
+    }
+   ],
+   "tier_basis": "A post-board record: the bone pathology format (p 39) asks for the percentage necrosis in specimens resected after chemotherapy. Kept under optional because a resection report exists only after the board",
+   "note": "post-board record: the percentage necrosis as written in the report, never computed"
+  },
+  {
+   "id": "previous_board",
+   "label": "Previous Tumour Board record",
+   "doc_types": [
+    "tumour_board_record"
+   ],
+   "department": "MDT Coordinator",
+   "route": "coordinator"
+  }
+ ],
+ "extract_facts": [
+  "presenting_complaint",
+  "ecog",
+  "comorbidities",
+  "clinical_question",
+  "recorded_stage",
+  "lesion_size",
+  "nodal_findings",
+  "distant_findings",
+  "histologic_type",
+  "grade",
+  "haemoglobin",
+  "wbc",
+  "platelets",
+  "creatinine",
+  "bilirubin",
+  "patient_preference",
+  "clinical_trial_note",
+  "diagnosis_date_mode",
+  "treatment_received",
+  "margins",
+  "alkaline_phosphatase",
+  "ldh",
+  "sarcoma_fusion",
+  "percent_necrosis",
+  "bone_marrow_result",
+  "suv_max"
+ ],
+ "core_data": [
+  {
+   "id": "diagnosis",
+   "label": "Histopathological / cytological diagnosis",
+   "facts": [
+    "histologic_type"
+   ]
+  },
+  {
+   "id": "diagnosis_date_mode",
+   "label": "Date and mode of diagnosis",
+   "facts": [
+    "diagnosis_date_mode"
+   ]
+  },
+  {
+   "id": "stage",
+   "label": "Stage as recorded (with the investigations used)",
+   "facts": [
+    "recorded_stage"
+   ]
+  },
+  {
+   "id": "performance_status",
+   "label": "Performance status",
+   "facts": [
+    "ecog"
+   ]
+  },
+  {
+   "id": "comorbidities",
+   "label": "Co-morbidities",
+   "facts": [
+    "comorbidities"
+   ]
+  },
+  {
+   "id": "biomarkers",
+   "label": "Relevant genomic / biomarker testing",
+   "facts": [
+    "alkaline_phosphatase",
+    "ldh",
+    "sarcoma_fusion"
+   ]
+  },
+  {
+   "id": "treatment_history",
+   "label": "Treatment history",
+   "facts": [
+    "treatment_received"
+   ]
+  },
+  {
+   "id": "patient_preference",
+   "label": "Patient preference / special circumstances",
+   "facts": [
+    "patient_preference"
+   ]
+  },
+  {
+   "id": "clinical_trial",
+   "label": "Clinical trial availability / suitability recorded",
+   "facts": [
+    "clinical_trial_note"
+   ]
+  },
+  {
+   "id": "question",
+   "label": "Question for the Tumour Board",
+   "facts": [
+    "clinical_question"
+   ]
+  }
+ ],
+ "core_data_source": "NHS England, Streamlining MDT meetings (2020), p.11 'minimum core data requirements'; aligned with the NCG Virtual Tumour Board case template (India)",
+ "post_board": {
+  "required_record_fields": [
+   "decision_text",
+   "recorded_by",
+   "participants",
+   "actions"
+  ],
+  "follow_up_default_days": 14,
+  "record_fields_source": "EUSOMA 2020 (names of all participants, evidence on decisions); Victorian Cancer MDM quality framework 2018 (report errors/changes raised, divergent recommendations and dissenting clinicians); PM-JAY HBP 2.2 s.3.9 (tumour board decision and treatment plan)"
+ },
+ "policy_basis": "PM-JAY Health Benefit Package 2.2 user guidelines (NHA, 2021), section 3.9: pre-authorization is mandatory at each step of cancer care and the decision on appropriate care is to be taken by a multidisciplinary tumour board; NHS England MDT streamlining guidance (2020) pre-listing conditions.",
+ "guideline_sources": [
+  {
+   "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+   "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+   "pages": "4, 7, 12, 17, 26, 28, 33, 36, 38, 39 (PDF page = printed page)"
+  }
+ ]
+}

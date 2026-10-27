@@ -103,7 +103,7 @@ Status: `todo`, `doing`, `done (<hash>)`, `blocked (<reason>)`. Lane: **S** seri
 | 2.4 | Gynaecology | P | `ovary.json`, `corpus_uteri.json` | done (9c6f1cf) |
 | 2.5 | Urology and germ cell | P | `prostate.json`, `kidney.json` (adult; Wilms in 2.8), `germ_cell.json` | done (1dd5fd8) |
 | 2.6 | Head and neck and thyroid | P | `larynx.json` (with the head and neck structure); `thyroid.json` from an official open-access guideline when NCG has none (source and licence logged) | done (9298d82; larynx only: thyroid parked, a licence decision for the owner) |
-| 2.7 | Blood cancers | P | `lymphoma.json` (adult and child settings), `leukaemia.json` (adult and child settings) from the NCG haematolymphoid files | doing |
+| 2.7 | Blood cancers | P | `lymphoma.json` (adult and child settings), `leukaemia.json` (adult and child settings) from the NCG haematolymphoid files | done (0a5f4c5) |
 | 2.8 | Paediatric and sarcoma | P | `wilms.json`, `retinoblastoma.json`, `bone_sarcoma.json`, `soft_tissue_sarcoma.json`, `brain_cns.json` (official open-access source when NCG has none) | doing |
 | 2.9 | Unknown and other cancers | S | The generic checklist stays for unknown solid cancers; a `generic_haem` variant for blood cancers not listed (marrow, flow cytometry, cytogenetics instead of staging imaging); the picker's "not listed" path asks solid or blood; CUP unchanged | doing |
 | 2.10 | Wiring | S | Every picker entry maps to a checklist (`cancers.ts`), shown "checklist built (draft)"; specialty packs and the cancer-against-reports warning know the new cancers; the Case File's glance groups show the new facts | doing |
