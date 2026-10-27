@@ -34,6 +34,10 @@ ADMITTED = ("present", "remote")
 MODES = ("room", "remote")
 CODE_TTL_HOURS = 12
 MAX_QUESTION, MAX_NOTE, MAX_TEXT, MAX_ROOM = 1000, 2000, 4000, 80
+SPOTLIGHT_MAX = 3                                   # people the coordinator may spotlight for everyone (night-v3 5.1)
+REACTIONS = ("agree", "thanks", "applause", "question")  # the four plain reactions; shown for a moment, never stored
+REACTION_GAP = 2.0                                  # seconds between two reactions of one person
+_REACTED: dict[tuple, float] = {}                    # (mid, user) -> time of the last reaction
 AGENT_STATES = ("ready", "reading_question", "thinking", "answering")
 IMAGING_TYPES = ("ct", "mri", "xray", "ultrasound", "mammogram", "pet_ct", "bone_scan")
 PATHOLOGY_TYPES = ("histopathology", "cytology", "ihc", "molecular")
@@ -453,6 +457,44 @@ def agent_state(s: dict) -> dict:
             "note": "AI support: answers from the records only; not a member of the board"}
 
 
+AGENT_NOTE = "AI agent, support only: answers from the records and guidelines; never a decision; not a member of the board"
+
+
+def agents_view(s: dict) -> list[dict]:
+    """Every absent board head's stand-in agent as a list (owner decision D2, night-v3 5.1), in the roles' order, each with its true
+    state (ready, reading_question, thinking, answering; the shared AGENT_STATE names the role it belongs to). Empty outside a session or
+    on a protected Case File. They are tiles and panel rows, never members and never counted. Phase 6 adds the coordinator's add and
+    remove; until then the list is the absent heads."""
+    cur = s.get("current")
+    if s.get("status") != "in_session" or not cur or cur in config.PROTECTED_CASES:
+        return []
+    try:
+        roles = board.absent_roles(s, cur)
+    except Exception:
+        roles = []
+    heads = set(board.head_ids())
+    st = AGENT_STATE.get(s["id"]) or {}
+    out = []
+    for role in roles:
+        did = board.ROLE_DEPARTMENT.get(role)
+        if did not in heads:
+            continue
+        try:
+            from . import agents
+            label = agents.spec(role)["label"]
+        except Exception:
+            label = org.department_name(did)
+        mine = st.get("role") == role
+        out.append({"role": role, "label": label, "department": did, "department_name": org.department_name(did),
+                    "state": (st.get("state") or "ready") if mine else "ready", "question": st.get("question") if mine else None,
+                    "standing_in": True, "note": AGENT_NOTE})
+    return out
+
+
+def spotlight_view(s: dict) -> list[str]:
+    return [str(u) for u in ((s.get("live") or {}).get("spotlight") or []) if u]
+
+
 def view(mid: str, r: dict) -> dict:
     """The GET /meetings/{mid} payload (also the first WebSocket message). A viewer who is not admitted (waiting, or a department on the
     attendance sheet that did not join) sees the agenda with initials for the Case Files it may not read in full, and none of the live
@@ -479,7 +521,7 @@ def view(mid: str, r: dict) -> dict:
     return {"meeting": summary_row(s), "agenda": agenda,
             "code": {"value": code["value"], "expires_at": code.get("expires_at"), "attempts": code.get("attempts", 0)} if code else None,
             "attendance": attendance_rows(s), "current": cv, "decision_live": dl, "questions": list(s.get("questions") or []) if member else [],
-            "hands": list(s.get("hands") or []), "agent": agent_state(s),
+            "hands": list(s.get("hands") or []), "agent": agent_state(s), "agents": agents_view(s), "spotlight": spotlight_view(s),
             "can": {"manage": manage(r), "record": org.can(r, "board_record"), "ask": member and bool(cur),
                     "card": member and bool(cur), "card_required": user in card_holders(s),
                     "video": bool(s.get("video")) and member, "member": member},
@@ -971,7 +1013,7 @@ def admit(mid: str, by: str, user: str) -> dict:
     _save(s)
     board.audit_event(mid, "admitted", by, user=user, status=p["status"])
     rows = attendance_rows(s)
-    _send(s, {"type": "admit", "user": user, "status": p["status"], "attendance": rows, "agent": agent_state(s)})
+    _send(s, {"type": "admit", "user": user, "status": p["status"], "attendance": rows, "agent": agent_state(s), "agents": agents_view(s)})
     return next((x for x in rows if x["user"] == user), {"user": user, "status": p["status"]})
 
 
@@ -1025,7 +1067,7 @@ def start(mid: str, by: str) -> dict:
     except Exception as e:  # the briefs are support; the meeting starts without them
         log.warning("meeting %s: briefs not prepared (%s)", mid, e)
     board.audit_event(mid, "meeting_started", by, preparing=len(pairs))
-    _send(s, {"type": "current", **current_view(s), "agent": agent_state(s), "status": "in_session"})
+    _send(s, {"type": "current", **current_view(s), "agent": agent_state(s), "agents": agents_view(s), "spotlight": [], "status": "in_session"})
     return {"meeting": summary_row(s), "preparing": len(pairs), "current": current_view(s)}
 
 
@@ -1075,8 +1117,11 @@ def set_current(mid: str, by: str, case_id: str = "", slide=None) -> dict:
     if not changed_case:
         board.audit_event(mid, "slide", by, case_id=s.get("current"), slide=s.get("live", {}).get("slide"))
     cv = current_view(s)
-    _send(s, {"type": "current", **cv, "agent": agent_state(s)})
-    return {**cv, "agent": agent_state(s)}
+    ev = {"type": "current", **cv, "agent": agent_state(s), "agents": agents_view(s)}
+    if changed_case:
+        ev["spotlight"] = []  # a spotlight is for one case: the next case clears it
+    _send(s, ev)
+    return {**cv, "agent": agent_state(s), "agents": agents_view(s)}
 
 
 async def open_item(mid: str, by: str, kind: str, doc_id: str = "") -> dict | None:
@@ -1282,6 +1327,46 @@ def decision_live(mid: str, by: str, text: str) -> dict:
     LIVE_DECISION[mid] = d
     _send(s, {"type": "decision_live", **d})
     return d
+
+
+def spotlight(mid: str, by: str, users) -> list[str]:
+    """Spotlight for everyone (night-v3 5.1, like Zoom's and Teams' "Spotlight for everyone"): the coordinator puts up to SPOTLIGHT_MAX
+    admitted people large on every screen; an empty list removes it. Kept on the meeting (live.spotlight) so a reload shows it; cleared
+    when the case changes. Audited by user ids (no content). A person's own pin wins on their screen (client side)."""
+    s = need(mid); _in_session(s)
+    people = s.get("people") or {}
+    out: list[str] = []
+    for u in users or []:
+        u = str(u or "").strip()
+        if not u or u in out:
+            continue
+        if (people.get(u) or {}).get("status") not in ADMITTED:
+            raise MeetingError(f"{display_name(u)} is not in the meeting.", 409, "not_in_meeting")
+        out.append(u)
+    if len(out) > SPOTLIGHT_MAX:
+        raise MeetingError(f"At most {SPOTLIGHT_MAX} people can be in the spotlight.", 400, "too_many")
+    s.setdefault("live", {})["spotlight"] = out
+    _save(s)
+    board.audit_event(mid, "spotlight", by, users=out)
+    _send(s, {"type": "spotlight", "users": out, "by": by})
+    return out
+
+
+def react(mid: str, user: str, kind: str) -> dict:
+    """A reaction (agree, thanks, applause, question) from an admitted member: broadcast for a moment on the person's tile, never stored in
+    the meeting record; one every REACTION_GAP seconds per person; audited as who and when, not which."""
+    s = need(mid); _in_session(s)
+    kind = str(kind or "").strip().lower()
+    if kind not in REACTIONS:
+        raise MeetingError("Pick one of the four reactions.", 400, "bad_kind")
+    now = time.time()
+    if now - _REACTED.get((mid, user), 0.0) < REACTION_GAP:
+        raise MeetingError("One reaction every 2 seconds.", 429, "too_fast")
+    _REACTED[(mid, user)] = now
+    board.audit_event(mid, "reaction", user)
+    ev = {"type": "reaction", "user": user, "name": display_name(user), "kind": kind, "at": _now()}
+    _send(s, ev)
+    return {"user": user, "kind": kind, "at": ev["at"]}
 
 
 # ---- the decision, the end of a case, the cards ------------------------------------------------------------------------------------------

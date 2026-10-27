@@ -736,3 +736,69 @@ def test_a_case_file_sits_on_one_planned_agenda_when_the_coordinator_lists_it_ag
     r = As(tc, "anil").post(f"/meetings/{first}/agenda/add", json={"case_id": "TB-002", "list": "noting"})
     assert r.status_code == 200 and [x["case_id"] for x in r.json()["agenda"]["noting"]] == ["TB-002"]
     assert As(tc, "anil").get(f"/meetings/{second}").json()["agenda"]["discussion"] == [] and store.get_case("TB-002")["meeting_id"] == first
+
+
+# ---- the call shell (night-v3 5.1): the agents list, the spotlight, reactions ----------------------------------------------------------------
+
+def test_every_absent_head_has_a_stand_in_agent_in_the_list(tc, monkeypatch):
+    mid = started(tc)
+    join_and_admit(tc, mid, "priya")
+    v = As(tc, "priya").get(f"/meetings/{mid}").json()
+    roles = [a["role"] for a in v["agents"]]
+    assert "radiology" in roles and "pathology" in roles and "medical_oncology" in roles and "radiation_oncology" in roles
+    first = v["agents"][0]
+    assert first["standing_in"] is True and first["state"] == "ready" and first["question"] is None and "support only" in first["note"]
+    assert first["department_name"] and first["label"]
+    assert v["agent"]["role"] == roles[0]  # the single-agent field stays for older readers
+    # the head who joins is no longer stood in for
+    join_and_admit(tc, mid, "suresh")
+    roles2 = [a["role"] for a in As(tc, "priya").get(f"/meetings/{mid}").json()["agents"]]
+    assert "radiology" not in roles2 and "pathology" in roles2
+    # the shared state names the role it belongs to
+    meetings._set_agent(mid, "thinking", "pathology", "Q1")
+    ag = {a["role"]: a for a in As(tc, "priya").get(f"/meetings/{mid}").json()["agents"]}
+    assert ag["pathology"]["state"] == "thinking" and ag["pathology"]["question"] == "Q1" and ag["medical_oncology"]["state"] == "ready"
+    # outside a session: nothing
+    assert As(tc, "anil").get(f"/meetings/{with_agenda(tc)}").json()["agents"] == []
+
+
+def test_spotlight_is_the_coordinators_and_clears_on_the_next_case(tc, monkeypatch):
+    mid = started(tc)
+    join_and_admit(tc, mid, "priya"); join_and_admit(tc, mid, "ravi")
+    events = []
+    monkeypatch.setattr(live, "broadcast", lambda m, ev, **kw: events.append(ev) or True)
+    assert As(tc, "priya").post(f"/meetings/{mid}/spotlight", json={"users": ["ravi"]}).status_code == 403
+    r = As(tc, "anil").post(f"/meetings/{mid}/spotlight", json={"users": ["ravi", "priya", "ravi"]})
+    assert r.status_code == 200 and r.json()["spotlight"] == ["ravi", "priya"], r.text
+    assert events[-1]["type"] == "spotlight" and events[-1]["users"] == ["ravi", "priya"]
+    assert As(tc, "priya").get(f"/meetings/{mid}").json()["spotlight"] == ["ravi", "priya"]
+    # only admitted people; at most three
+    assert As(tc, "anil").post(f"/meetings/{mid}/spotlight", json={"users": ["meena"]}).status_code == 409
+    join_and_admit(tc, mid, "meena"); join_and_admit(tc, mid, "dev")
+    assert As(tc, "anil").post(f"/meetings/{mid}/spotlight", json={"users": ["ravi", "priya", "meena", "dev"]}).status_code == 400
+    # audited by ids, and the next case clears it
+    assert any(e.get("kind") == "spotlight" and e.get("users") == ["ravi", "priya"] for e in board.read_audit() if e["session"] == mid)
+    r = As(tc, "anil").post(f"/meetings/{mid}/current", json={"case_id": "TB-002"})
+    assert r.status_code == 200
+    assert events[-1]["type"] == "current" and events[-1]["spotlight"] == [] and isinstance(events[-1]["agents"], list)
+    assert As(tc, "priya").get(f"/meetings/{mid}").json()["spotlight"] == []
+    assert As(tc, "anil").post(f"/meetings/{mid}/spotlight", json={"users": []}).json()["spotlight"] == []
+
+
+def test_reactions_are_broadcast_never_stored_and_rate_limited(tc, monkeypatch):
+    mid = started(tc)
+    join_and_admit(tc, mid, "priya")
+    events = []
+    monkeypatch.setattr(live, "broadcast", lambda m, ev, **kw: events.append(ev) or True)
+    meetings._REACTED.clear()
+    r = As(tc, "priya").post(f"/meetings/{mid}/reaction", json={"kind": "agree"})
+    assert r.status_code == 200 and r.json()["kind"] == "agree", r.text
+    assert events[-1]["type"] == "reaction" and events[-1]["user"] == "priya" and events[-1]["name"] == "Dr Priya Nair" and events[-1]["kind"] == "agree"
+    assert As(tc, "priya").post(f"/meetings/{mid}/reaction", json={"kind": "thanks"}).status_code == 429
+    meetings._REACTED.clear()
+    assert As(tc, "priya").post(f"/meetings/{mid}/reaction", json={"kind": "wave"}).status_code == 400
+    assert As(tc, "ravi").post(f"/meetings/{mid}/reaction", json={"kind": "agree"}).status_code == 403  # not admitted
+    saved = (board.sessions_dir() / f"{mid}.json").read_text()
+    assert "agree" not in saved and "reaction" not in saved
+    audit = [e for e in board.read_audit() if e["session"] == mid and e.get("kind") == "reaction"]
+    assert audit and audit[-1]["by"] == "priya" and "agree" not in str(audit[-1])

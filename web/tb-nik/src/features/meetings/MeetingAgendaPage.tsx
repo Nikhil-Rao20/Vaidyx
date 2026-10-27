@@ -167,7 +167,7 @@ export default function MeetingAgendaPage() {
       {err ? <p role="alert" className="text-sm text-bad rounded-md bg-bad-soft px-3 py-2">{err}</p> : null}
       {cancelled ? <div className="surface p-4"><EmptyState kind="wait" title="This meeting was cancelled" text={s.meeting.cancelled?.reason ? `Reason: ${s.meeting.cancelled.reason}` : "The members were told."} /></div> : null}
 
-      {inSession && canManage ? <ControlView mid={id} state={s} onChanged={() => void live.refresh()} liveStatus={live.status} liveDetail={live.statusDetail} /> : null}
+      {inSession && canManage ? <ControlView mid={id} state={s} onChanged={() => void live.refresh()} liveStatus={live.status} liveDetail={live.statusDetail} lastEvent={live.lastEvent} /> : null}
 
       {!inSession && !closed && !cancelled || (inSession && !canManage) ? (
         <div className="grid gap-4 lg:grid-cols-12 items-start">

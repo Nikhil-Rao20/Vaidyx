@@ -30,9 +30,14 @@ export const endMeeting = (mid: string) => api.post(`${mUrl(mid)}/end`, {});
 export const setCurrent = (mid: string, case_id: string, slide?: number) => api.post(`${mUrl(mid)}/current`, { case_id, slide });
 export const openOnScreen = (mid: string, kind: "record" | "images" | "none", doc_id?: string) => api.post<{ opened: Opened | null }>(`${mUrl(mid)}/open`, { kind, doc_id });
 export const timer = (mid: string, action: "start" | "stop" | "reset", minutes?: number) => api.post<{ timer: MeetingTimer | null }>(`${mUrl(mid)}/timer`, { action, minutes });
-export const askQuestion = (mid: string, text: string) => api.post(`${mUrl(mid)}/questions`, { text });
+/** A question to the board, or to one stand-in agent when `role` names it (night-v3 5.1: the chip row of the Chat panel). */
+export const askQuestion = (mid: string, text: string, role?: string) => api.post(`${mUrl(mid)}/questions`, role ? { text, role } : { text });
 export const raiseHand = (mid: string, raised: boolean) => api.post(`${mUrl(mid)}/hand`, { raised });
 export const decisionLive = (mid: string, text: string) => api.put(`${mUrl(mid)}/decision-live`, { text });
+/** Spotlight for everyone (night-v3 5.1): the coordinator, up to three admitted people; [] removes it. */
+export const setSpotlight = (mid: string, users: string[]) => api.post<{ spotlight: string[] }>(`${mUrl(mid)}/spotlight`, { users });
+/** A short reaction (agree, thanks, applause, question): broadcast for a moment, never stored (night-v3 5.1). */
+export const sendReaction = (mid: string, kind: "agree" | "thanks" | "applause" | "question") => api.post<{ user: string; kind: string; at: string }>(`${mUrl(mid)}/reaction`, { kind });
 export const saveDecision = (mid: string, cid: string, b: DecisionBody) => api.post(`${mUrl(mid)}/cases/${enc(cid)}/decision`, b);
 /** The decision record's field table as the server has it (decision_record.spec()); the form uses the bundled decision_fields.json. */
 export const getDecisionFields = () => api.get<DecisionSpec>(`${TB}/meetings/decision-fields`);

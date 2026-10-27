@@ -10,7 +10,7 @@ export interface VideoToken { url: string; token: string; room: string; identity
 export const getVideoToken = (mid: string, screen?: "room") => api.post<VideoToken>(`${TB}/meetings/${encodeURIComponent(mid)}/video-token`, screen ? { screen } : {});
 export const getVideoStatus = () => api.get<{ enabled: boolean; url?: string }>(`${TB}/video/status`);
 
-export interface JoinChoice { mic: boolean; cam: boolean; audioDeviceId?: string; videoDeviceId?: string }
+export interface JoinChoice { mic: boolean; cam: boolean; audioDeviceId?: string; videoDeviceId?: string; audioOutputDeviceId?: string }
 const CHOICE_KEY = "tbnik.video.choice";
 export function rememberChoice(c: JoinChoice) { try { sessionStorage.setItem(CHOICE_KEY, JSON.stringify(c)); } catch { /* no storage */ } }
 export function recallChoice(): JoinChoice | null { try { const v = sessionStorage.getItem(CHOICE_KEY); return v ? (JSON.parse(v) as JoinChoice) : null; } catch { return null; } }
@@ -39,15 +39,45 @@ export function isRoomScreen(identity: string): boolean {
   return identity.endsWith("#room");
 }
 
-export type VideoStatus = "off" | "connecting" | "connected" | "reconnecting" | "failed";
+/** "disconnected": LiveKit dropped the call after it had been connected (the banner offers Rejoin); "off": never joined. */
+export type VideoStatus = "off" | "connecting" | "connected" | "reconnecting" | "disconnected" | "failed";
 
 export interface VideoOptions {
   mic?: boolean;
   cam?: boolean;
   audioDeviceId?: string;
   videoDeviceId?: string;
+  audioOutputDeviceId?: string;
   /** The room computer joins under its own identity. */
   screen?: "room";
+}
+
+export type DeviceKind = "audioinput" | "audiooutput" | "videoinput";
+
+/** Fields of useVideoRoom beyond the call shell's CallVideo contract (night-v3 5.1): read with `videoExtras(ctx.video)`. */
+export interface VideoExtras {
+  /** A plain sentence when a device in use went away ("The camera you were using was unplugged ..."), for about 12 s. */
+  deviceChanged?: string | null;
+  /** LiveKit identities that spoke in the last 2 s, the most recent first. */
+  activeSpeakers?: string[];
+  /** The device ids in use, for the device selects. */
+  activeDevice?: (kind: DeviceKind) => string | undefined;
+}
+export function videoExtras(v: object): VideoExtras {
+  return v as VideoExtras;
+}
+
+const DEVICE_WORD: Record<DeviceKind, string> = { audioinput: "microphone", audiooutput: "speaker", videoinput: "camera" };
+
+/** The sentence for a device that went away; `fallback` is the label of the device used now. */
+export function deviceGoneSentence(kind: DeviceKind, fallback?: string | null): string {
+  const w = DEVICE_WORD[kind];
+  return `The ${w} you were using was unplugged${fallback ? `; switched to ${fallback}` : `; switched to the default ${w}`}.`;
+}
+
+/** Speakers kept for `holdMs` after they stop (so the ring and the order do not flicker), the most recent first. */
+export function stickySpeakers(lastSpoke: Map<string, number>, now: number, holdMs = 2000): string[] {
+  return [...lastSpoke.entries()].filter(([, t]) => now - t <= holdMs).sort((a, b) => b[1] - a[1]).map(([id]) => id);
 }
 
 /** React hook: connect when enabled, expose the toggles and a tick that changes whenever the participants or tracks change. */
@@ -61,38 +91,99 @@ export function useVideoRoom(mid: string, enabled: boolean, opts: VideoOptions =
   const [micOn, setMicOn] = useState(false);
   const [camOn, setCamOn] = useState(false);
   const [tick, setTick] = useState(0);
+  const [quality, setQuality] = useState<string>("unknown");
+  const [audioBlocked, setAudioBlocked] = useState(false);
+  const [deviceChanged, setDeviceChanged] = useState<string | null>(null);
+  const [activeSpeakers, setActiveSpeakers] = useState<string[]>([]);
+  const [attempt, setAttempt] = useState(0);
+  const micRef = useRef(false);
+  const camRef = useRef(false);
+  micRef.current = micOn;
+  camRef.current = camOn;
 
   useEffect(() => {
     if (!enabled || !mid) { setStatus("off"); return; }
     let cancelled = false;
+    let wasConnected = false;
     const r = newRoom();
     roomRef.current = r;
-    setStatus("connecting"); setError(null);
+    setStatus("connecting"); setError(null); setQuality("unknown"); setAudioBlocked(false); setDeviceChanged(null); setActiveSpeakers([]);
     const bump = () => setTick((n) => n + 1);
+    const timers: number[] = [];
+    const later = (fn: () => void, ms: number) => { timers.push(window.setTimeout(() => { if (!cancelled) fn(); }, ms)); };
+    // the speakers stay for 2 s after they stop
+    const lastSpoke = new Map<string, number>();
+    const showSpeakers = () => setActiveSpeakers((old) => { const next = stickySpeakers(lastSpoke, Date.now()); return old.join("|") === next.join("|") ? old : next; });
+    // the devices in use, to tell which one went away
+    const known: Record<DeviceKind, string[]> = { audioinput: [], audiooutput: [], videoinput: [] };
+    const learnDevices = async () => {
+      for (const k of ["audioinput", "audiooutput", "videoinput"] as DeviceKind[]) {
+        try { known[k] = (await Room.getLocalDevices(k, false)).map((d) => d.deviceId); } catch { known[k] = []; }
+      }
+    };
+    const onDevicesChanged = async () => {
+      for (const k of ["audioinput", "videoinput", "audiooutput"] as DeviceKind[]) {
+        let list: MediaDeviceInfo[] = [];
+        try { list = await Room.getLocalDevices(k, false); } catch { continue; }
+        const active = r.getActiveDevice(k);
+        const inUse = k === "audioinput" ? micRef.current : k === "videoinput" ? camRef.current : true;
+        if (inUse && active && active !== "default" && known[k].includes(active) && !list.some((d) => d.deviceId === active)) {
+          const next = list.find((d) => d.deviceId === "default") ?? list[0];
+          if (next) { try { await r.switchActiveDevice(k, next.deviceId); } catch { /* the browser picks one */ } }
+          if (cancelled) return;
+          setDeviceChanged(deviceGoneSentence(k, next?.label || null));
+          later(() => setDeviceChanged(null), 12_000);
+        }
+        known[k] = list.map((d) => d.deviceId);
+      }
+      bump();
+    };
     r.on(RoomEvent.ParticipantConnected, bump).on(RoomEvent.ParticipantDisconnected, bump)
       .on(RoomEvent.TrackSubscribed, bump).on(RoomEvent.TrackUnsubscribed, bump)
       .on(RoomEvent.TrackMuted, bump).on(RoomEvent.TrackUnmuted, bump)
-      .on(RoomEvent.ActiveSpeakersChanged, bump)
+      .on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+        const now = Date.now();
+        for (const p of speakers) lastSpoke.set(p.identity, now);
+        showSpeakers();
+        later(showSpeakers, 2100);
+        bump();
+      })
       .on(RoomEvent.LocalTrackPublished, bump).on(RoomEvent.LocalTrackUnpublished, bump)
+      .on(RoomEvent.ConnectionQualityChanged, (q, p) => { if (p.isLocal) setQuality(String(q)); bump(); })
+      .on(RoomEvent.AudioPlaybackStatusChanged, () => setAudioBlocked(!r.canPlaybackAudio))
+      .on(RoomEvent.MediaDevicesChanged, () => { void onDevicesChanged(); })
+      .on(RoomEvent.ActiveDeviceChanged, bump)
       .on(RoomEvent.Reconnecting, () => setStatus("reconnecting")).on(RoomEvent.Reconnected, () => setStatus("connected"))
-      .on(RoomEvent.Disconnected, () => { if (!cancelled) setStatus("off"); });
+      .on(RoomEvent.Disconnected, () => {
+        if (cancelled) return;
+        setStatus(wasConnected ? "disconnected" : "off");
+        setMicOn(false); setCamOn(false); setQuality("unknown");
+      });
     const o = optsRef.current;
     connectVideo(mid, r, o.screen).then(async () => {
       if (cancelled) { void r.disconnect(); return; }
+      wasConnected = true;
       setRoom(r); setStatus("connected");
+      setAudioBlocked(!r.canPlaybackAudio);
       try {
         if (o.audioDeviceId) await r.switchActiveDevice("audioinput", o.audioDeviceId);
         if (o.videoDeviceId) await r.switchActiveDevice("videoinput", o.videoDeviceId);
+        if (o.audioOutputDeviceId) await r.switchActiveDevice("audiooutput", o.audioOutputDeviceId);
       } catch { /* the default device then */ }
       try { await r.localParticipant.setMicrophoneEnabled(!!o.mic); setMicOn(!!o.mic); } catch (e) { setMicOn(false); if (o.mic) setError(e instanceof Error ? `Microphone: ${e.message}` : "The microphone could not be used."); }
       try { await r.localParticipant.setCameraEnabled(!!o.cam); setCamOn(!!o.cam); } catch (e) { setCamOn(false); if (o.cam) setError(e instanceof Error ? `Camera: ${e.message}` : "The camera could not be used."); }
+      void learnDevices();
     }).catch((e) => {
       if (cancelled) return;
       setStatus("failed");
       setError(e instanceof Error ? e.message : "Could not join the video room.");
     });
-    return () => { cancelled = true; void disconnectVideo(r); roomRef.current = null; setRoom(null); setMicOn(false); setCamOn(false); };
-  }, [mid, enabled]);
+    return () => {
+      cancelled = true;
+      for (const t of timers) window.clearTimeout(t);
+      void disconnectVideo(r); roomRef.current = null; setRoom(null); setMicOn(false); setCamOn(false); setActiveSpeakers([]);
+    };
+  }, [mid, enabled, attempt]);
 
   const toggleMic = useCallback(async () => {
     const r = roomRef.current; if (!r) return;
@@ -105,8 +196,38 @@ export function useVideoRoom(mid: string, enabled: boolean, opts: VideoOptions =
     catch (e) { setError(e instanceof Error ? `Camera: ${e.message}` : "The camera could not be used."); }
   }, [camOn]);
 
+  /** Change a device after joining; the choice is remembered for the next join in this tab. */
+  const switchDevice = useCallback(async (kind: DeviceKind, deviceId: string) => {
+    const r = roomRef.current; if (!r) return;
+    try {
+      await r.switchActiveDevice(kind, deviceId);
+      setError(null);
+      const prev = recallChoice() ?? { mic: micRef.current, cam: camRef.current };
+      rememberChoice({
+        ...prev,
+        mic: micRef.current,
+        cam: camRef.current,
+        ...(kind === "audioinput" ? { audioDeviceId: deviceId } : kind === "videoinput" ? { videoDeviceId: deviceId } : { audioOutputDeviceId: deviceId }),
+      });
+      setTick((n) => n + 1);
+    } catch (e) {
+      setError(e instanceof Error ? `The ${DEVICE_WORD[kind]} could not be changed: ${e.message}` : `The ${DEVICE_WORD[kind]} could not be changed.`);
+    }
+  }, []);
+
+  const startAudio = useCallback(async () => {
+    const r = roomRef.current; if (!r) return;
+    try { await r.startAudio(); } catch { /* still blocked */ }
+    setAudioBlocked(!r.canPlaybackAudio);
+  }, []);
+
+  /** Join again after a disconnect (a new LiveKit room with the same choice). */
+  const rejoin = useCallback(() => setAttempt((n) => n + 1), []);
+
+  const activeDevice = useCallback((kind: DeviceKind) => roomRef.current?.getActiveDevice(kind), []);
+
   const remote: RemoteParticipant[] = room ? Array.from(room.remoteParticipants.values()) : [];
-  return { room, status, error, micOn, camOn, toggleMic, toggleCam, remote, tick };
+  return { room, status, error, micOn, camOn, toggleMic, toggleCam, remote, tick, quality, audioBlocked, startAudio, switchDevice, rejoin, deviceChanged, activeSpeakers, activeDevice };
 }
 
 /** A camera and microphone preview for the pre-join screen: the tracks are created on demand and stopped on release. */
@@ -130,4 +251,13 @@ export async function listDevices(): Promise<{ cameras: MediaDeviceInfo[]; mics:
     const [cameras, mics] = await Promise.all([Room.getLocalDevices("videoinput"), Room.getLocalDevices("audioinput")]);
     return { cameras, mics };
   } catch { return { cameras: [], mics: [] }; }
+}
+
+/** The speakers (audio outputs), only where the browser can route audio (setSinkId: Chrome and Edge). */
+export function canChooseSpeaker(): boolean {
+  return typeof HTMLMediaElement !== "undefined" && "setSinkId" in HTMLMediaElement.prototype;
+}
+export async function listSpeakers(): Promise<MediaDeviceInfo[]> {
+  if (!canChooseSpeaker()) return [];
+  try { return await Room.getLocalDevices("audiooutput", false); } catch { return []; }
 }

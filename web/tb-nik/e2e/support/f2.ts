@@ -586,12 +586,18 @@ export function meetingState(status: "planned" | "in_session" | "closed" = "plan
     ] : [],
     hands: live ? [{ user: "shanthi@vxh.example", name: "Shanthi Raman", at: iso(2) }] : [],
     agent: live ? { active: true, role: "pathology", label: "Pathology support", state: "thinking", roles: ["pathology"], question: "Q2", note: "AI support: answers from the records only; not a member of the board" } : { active: false, role: null, label: "", state: "off", roles: [], question: null },
+    // Every absent head's stand-in (night-v3 5.1): the AI agents, support only, never members of the board.
+    agents: live ? [
+      { role: "pathology", label: "Pathology support", department: "pathology", department_name: "Pathology", state: "thinking", question: "Q2", note: "AI support: answers from the records only; not a member of the board", standing_in: true },
+      { role: "nuclear_medicine", label: "Nuclear Medicine support", department: "nuclear_medicine", department_name: "Nuclear Medicine", state: "ready", question: null, note: "AI support: answers from the records only; not a member of the board", standing_in: true },
+    ] : [],
+    spotlight: [],
     can: { manage: true, record: true, ask: live, card: live, card_required: false, video: false },
     me: { user: "mdt@vxh.example", status: "present", mode: "room", department: "mdt" },
     online: ["mdt@vxh.example", "rao@vxh.example", "shanthi@vxh.example", "kiran@vxh.example"],
     outcomes: status === "closed" ? { [CID]: { outcome: "decision", label: "Decision recorded" } } : {},
     ended: [], cards_given: {},
-    heads: [], absent_roles: live ? ["pathology"] : [], status,
+    heads: [], absent_roles: live ? ["pathology", "nuclear_medicine"] : [], status,
     ...over,
   };
 }

@@ -81,7 +81,21 @@ test.describe("Meetings", () => {
     const live = await open(page, `/meetings/${MID}`, { wait: "control-view", state: meetingState("in_session") });
     await expect(page.getByTestId("waiting-banner")).toContainText("Kiran Shetty");
     await snap(page, "meetings", "control", { fullPage: false });
-    await page.getByRole("tab", { name: "Decision" }).click();
+    // The agenda rail (laptop) and the Agenda panel (phone, from the More sheet's panels).
+    await page.setViewportSize(SIZES[0]);
+    await expect(page.getByTestId("agenda-rail")).toHaveAttribute("data-open", "true");
+    await expect(page.getByTestId("agenda-rail").locator("[data-state=now]")).toContainText("Priya Venkatesan");
+    await snap(page, "meetings", "control-agenda-rail", { sizes: [SIZES[0]], fullPage: false });
+    await snap(page, "meetings", "control-agenda-rail", { sizes: [SIZES[2]], fullPage: false, before: async (p) => {
+      if (!(await p.getByTestId("agenda-panel").isVisible())) { await p.getByTestId("more").click(); await p.getByTestId("sheet-panel-agenda").click(); }
+      await expect(p.getByTestId("agenda-panel")).toBeVisible();
+    } });
+    await page.setViewportSize(SIZES[0]);
+    await page.getByTestId("panel-agenda").click();
+    await expect(page.getByTestId("agenda-panel")).toHaveCount(0);
+    // The Decision panel opens from the bar's Decision button.
+    await page.getByTestId("panel-decision").click();
+    await expect(page.getByTestId("decision-panel")).toBeVisible();
     await expect(page.getByTestId("decision-form")).toBeVisible();
     // Step 1, the outcome: nothing is chosen for the board except the outcome as today; step 2 waits for the decision text.
     await expect(page.getByTestId("decision-step-1")).toHaveAttribute("aria-current", "step");
@@ -110,10 +124,8 @@ test.describe("Meetings", () => {
     await page.getByLabel("Department for referral 1").fill("Medical Oncology");
     await page.getByLabel("Note for referral 1", { exact: true }).fill("BRCA testing and counselling");  // exact: the mic beside it is "Dictate the note for referral 1" (night-v3 item 4.4)
     const panel = page.getByTestId("decision-panel-4");
-    await snap(page, "meetings", "control-decision-next", { sizes: DESKTOP_MOBILE, fullPage: false, before: async () => { await panel.scrollIntoViewIfNeeded(); } });
-    await page.setViewportSize(SIZES[2]);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await page.setViewportSize(SIZES[0]);
+    // Laptop only here: across 1024 px the side panel turns into a bottom sheet and the form inside is drawn again (unsaved steps reset).
+    await snap(page, "meetings", "control-decision-next", { sizes: [SIZES[0]], fullPage: false, before: async () => { await panel.scrollIntoViewIfNeeded(); } });
     // The responsible clinician comes from the agenda row's owner doctor; the saved body carries the new fields.
     await page.getByTestId("decision-step-5").click();
     await expect(page.locator("#d-responsible_doctor")).toHaveValue("Lakshmi Rao");
@@ -123,9 +135,23 @@ test.describe("Meetings", () => {
     expect(body).toMatchObject({ outcome: "decision", intent: "curative", modalities: ["surgery"], responsible_doctor: "Lakshmi Rao", investigations: [{ item: "Bone scan", department: "Nuclear Medicine" }], referrals: [{ kind: "genetics", department: "Medical Oncology", note: "BRCA testing and counselling" }] });
     expect(body.awaited).toBe("");
     await expect(page.getByTestId("save-decision")).toContainText("Saved");
-    await page.getByRole("tab", { name: "People" }).click();
-    await expect(page.getByTestId("waiting-list")).toContainText("Kiran Shetty");
+    // People from the bar's People button: the waiting room is inside the People panel.
+    await page.getByTestId("panel-people").click();
+    await expect(page.getByTestId("people-panel").getByTestId("waiting-list")).toContainText("Kiran Shetty");
+    await expect(page.getByTestId("waiting-banner")).toHaveCount(0);
     await snap(page, "meetings", "control-people", { sizes: [SIZES[0]], fullPage: false });
+    // The phone: the People panel as a bottom sheet, no sideways scroll; the Coordinator sheet carries the case moves.
+    await page.setViewportSize(SIZES[2]);
+    await expect(page.getByTestId("people-panel")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await snap(page, "meetings", "control-people", { sizes: [SIZES[2]], fullPage: false });
+    await page.getByRole("button", { name: "Close the panel" }).click();
+    await page.getByTestId("coordinator-sheet").click();
+    await expect(page.getByTestId("coordinator-menu")).toBeVisible();
+    await expect(page.getByTestId("sheet-next")).toBeEnabled();
+    await snap(page, "meetings", "control-coordinator-sheet", { sizes: [SIZES[2]], fullPage: false });
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    await page.setViewportSize(SIZES[0]);
     live.push({ type: "end_case", case_id: CID, cards_requested: ["radiology", "medical_oncology"], timer: { seconds_left: 300, running: false, total: 600 } });
     await page.getByTestId("end-meeting").click();
     await snap(page, "meetings", "control-end-meeting", { sizes: [SIZES[0]], fullPage: false });
@@ -135,13 +161,16 @@ test.describe("Meetings", () => {
   test("room screen: slides, stand-in, questions, live decision strip", async ({ page }) => {
     const errors = watchConsole(page);
     const live = await open(page, `/meetings/${MID}/room`, { wait: "room-screen", state: meetingState("in_session") });
-    await expect(page.getByTestId("agent-tile")).toHaveAttribute("data-agent-state", "thinking");
+    const pathology = page.locator("[data-testid=agent-tile][data-role=pathology]");
+    await expect(pathology).toHaveAttribute("data-agent-state", "thinking");
+    await expect(page.locator("[data-testid=agent-tile][data-role=nuclear_medicine]")).toHaveAttribute("data-agent-state", "ready");
     await expect(page.getByTestId("decision-strip")).toContainText("not saved");
+    await expect(page.getByTestId("room-summary")).toBeVisible();
     await snap(page, "meetings", "room", { fullPage: false });
     live.push({ type: "agent_state", agent: { active: true, role: "pathology", state: "answering", question: "Q2" } });
     live.push({ type: "open", case_id: CID, opened: { kind: "record", doc_id: "D8a2c165d", title: "HISTOPATHOLOGY REPORT", url: `/api/tb/cases/${CID}/documents/D8a2c165d/file` } });
     await expect(page.getByTestId("shared-screen")).toHaveAttribute("data-opened", "record");
-    await expect(page.getByTestId("agent-tile")).toHaveAttribute("data-agent-state", "answering");
+    await expect(pathology).toHaveAttribute("data-agent-state", "answering");
     await snap(page, "meetings", "room-record-open", { sizes: [SIZES[0], SIZES[1]], fullPage: false });
     live.push({ type: "decision", case_id: CID, outcome: { outcome: "decision", label: "Decision recorded" }, record: "R1" });
     await expect(page.getByTestId("decision-strip")).toHaveAttribute("data-saved", "true");
@@ -162,10 +191,46 @@ test.describe("Meetings", () => {
     await expect(page.getByTestId("member-view")).toHaveAttribute("data-following", "true");
     await snap(page, "meetings", "member");
     await page.setViewportSize(SIZES[0]);
-    await page.getByRole("button", { name: "Step away" }).click();
+    // Step away through the slide tabs: the room shows slide 2; the member looks at the gaps on their own.
+    await expect(page.getByRole("tab", { name: "Key values with sources" })).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("tab", { name: "Gaps and waivers" }).click();
+    await expect(page.getByTestId("member-view")).toHaveAttribute("data-following", "false");
     await expect(page.getByTestId("back-to-shared")).toBeVisible();
     await snap(page, "meetings", "member-stepped-away", { sizes: DESKTOP_MOBILE, fullPage: false });
+    await page.setViewportSize(SIZES[0]);
     await page.getByTestId("back-to-shared").click();
+    await expect(page.getByTestId("member-view")).toHaveAttribute("data-following", "true");
+    // The tab strip's own Step away still steps away (the next slide).
+    await page.getByTestId("step-away").click();
+    await expect(page.getByRole("tab", { name: "Gaps and waivers" })).toHaveAttribute("aria-selected", "true");
+    await page.getByTestId("back-to-shared").click();
+    // One side panel at a time: People, then Chat replaces it; Esc closes.
+    await page.getByTestId("panel-people").click();
+    await expect(page.getByTestId("people-panel")).toBeVisible();
+    await snap(page, "meetings", "member-panel-people", { sizes: DESKTOP_MOBILE, fullPage: false });
+    await page.setViewportSize(SIZES[0]);
+    await page.getByTestId("panel-chat").click();
+    await expect(page.getByTestId("questions-panel")).toBeVisible();
+    await expect(page.getByTestId("people-panel")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("chat-panel")).toHaveCount(0);
+    // The More menu: a dropdown on a laptop, a bottom sheet on a phone.
+    await page.getByTestId("more").click();
+    await expect(page.getByTestId("more-menu")).toBeVisible();
+    await expect(page.getByTestId("call-button")).toBeVisible();
+    await snap(page, "meetings", "member-more", { sizes: [SIZES[0]], fullPage: false });
+    await page.keyboard.press("Escape");
+    await page.setViewportSize(SIZES[2]);
+    await page.getByTestId("more").click();
+    await expect(page.getByTestId("more-menu")).toBeVisible();
+    await snap(page, "meetings", "member-more", { sizes: [SIZES[2]], fullPage: false });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    await page.setViewportSize(SIZES[0]);
+    // The shortcuts: "?" opens the list.
+    await page.keyboard.press("?");
+    await expect(page.getByTestId("shortcuts-dialog")).toBeVisible();
+    await page.keyboard.press("Escape");
     live.push({ type: "end_case", case_id: CID, cards_requested: ["radiology"], timer: null });
     await expect(page.getByTestId("card-dialog")).toBeVisible();
     await page.getByTestId("card-concern").click();

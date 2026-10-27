@@ -82,7 +82,7 @@ test("two people in a meeting with video", async ({ browser }) => {
     // the doctor raises a hand; the coordinator sees it
     await doc.page.getByTestId("raise-hand").click();
     await expect(mdt.page.locator('[data-testid="tile"][data-user="tb-rad-doc"]')).toContainText("", { timeout: 10_000 });
-    await mdt.page.getByRole("tab", { name: "People" }).click();
+    await mdt.page.getByTestId("panel-people").click();  // night-v3 5.1: the People panel opens from the bar
     await expect(mdt.page.getByTestId("person-row").filter({ hasText: "Dr Radiology" })).toBeVisible();
     await shot(mdt.page, "conduct-people");
 

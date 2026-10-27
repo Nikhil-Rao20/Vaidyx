@@ -256,9 +256,10 @@ test.describe("voice, mocked", () => {
     await routeMeetings(page, { state: meetingState("in_session") });
     await voiceRoutes(page, { enabled: false });
     await serveBuild(page);
+    await page.setViewportSize(LAPTOP);  // the Decision panel opens from the bar on a laptop; on a phone it sits in the Coordinator sheet (night-v3 5.1)
     await page.goto(`/tb-nik/meetings/${MID}`);
     await page.getByTestId("control-view").first().waitFor({ timeout: 20_000 });
-    await page.getByRole("tab", { name: "Decision" }).click();
+    await page.getByTestId("panel-decision").click();  // night-v3 5.1: the Decision panel opens from the bar
     await expect(page.getByTestId("decision-form")).toBeVisible();
     await expect(micIn(page.getByTestId("decision-form"))).toHaveCount(0);
     await expect(page.getByTestId("decision-form").getByRole("button", { name: /^(Read aloud.*|Read back)$/ })).toHaveCount(0);

@@ -287,6 +287,22 @@ async def meetings_hand(mid: str, request: Request):
     return {"hands": _call(meetings.hand, s["id"], u, bool(b.get("raised", True)))}
 
 
+@router.post("/meetings/{mid}/spotlight")
+async def meetings_spotlight(mid: str, request: Request):
+    """The coordinator spotlights up to three admitted people for everyone (night-v3 5.1); an empty list removes the spotlight."""
+    u, rl = _who(request); common.need(rl, "session"); b = await common.body(request); s = _meeting(mid)
+    users = b.get("users")
+    users = [str(x) for x in users][:10] if isinstance(users, list) else []
+    return {"spotlight": _call(meetings.spotlight, s["id"], u, users)}
+
+
+@router.post("/meetings/{mid}/reaction")
+async def meetings_reaction(mid: str, request: Request):
+    """A short reaction from an admitted member (agree, thanks, applause, question): broadcast, never stored (night-v3 5.1)."""
+    u, rl = _who(request, guest=True); b = await common.body(request); s = _meeting(mid); _member(rl, s)
+    return _call(meetings.react, s["id"], u, str(b.get("kind") or ""))
+
+
 @router.put("/meetings/{mid}/decision-live")
 async def meetings_decision_live(mid: str, request: Request):
     u, rl = _who(request); common.need(rl, "session"); b = await common.body(request); s = _meeting(mid)

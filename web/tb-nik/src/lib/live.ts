@@ -8,7 +8,9 @@ import { api, ApiError, TB } from "@/lib/api";
 
 export type LiveEventType =
   | "state" | "current" | "open" | "timer" | "decision_live" | "question" | "hand" | "presence" | "admit" | "end_case"
-  | "card" | "agent_state" | "ended" | "agenda" | "decision" | "meeting" | "pong" | "error";
+  | "card" | "agent_state" | "ended" | "agenda" | "decision" | "meeting" | "pong" | "error"
+  // night-v3 Phase 5: the call shell
+  | "agents" | "spotlight" | "reaction" | "chat" | "presenting" | "present_allowed";
 
 export interface LiveEvent { type: LiveEventType | string; [k: string]: unknown }
 
@@ -186,6 +188,39 @@ export interface AgentState {
   note?: string;
 }
 
+/** One stand-in agent of the meeting (owner decision D2; meetings.agents_view): a tile and a panel row, never a member. */
+export interface AgentInfo {
+  role: string;
+  label: string;
+  department?: string;
+  department_name?: string;
+  /** ready, reading_question, thinking, answering (true states from the server); Phase 6 adds listening and speaking. */
+  state: string;
+  question?: string | null;
+  note?: string;
+  standing_in?: boolean;
+  /** Added by the coordinator on demand (Phase 6). */
+  added?: boolean;
+}
+
+/** The quorum line (night-v3 5.4): heads present as people, the agents standing in, the PM-JAY composition. Information, not a gate. */
+export interface QuorumInfo {
+  heads: Array<{ id: string; name: string; present: boolean; by?: string | null; agent?: string | null }>;
+  present: number;
+  total: number;
+  agents: string[];
+  pmjay: { surgical: boolean; radiation: boolean; medical: boolean; present: number; total: number };
+}
+
+/** The presenter of the Case File on the floor (night-v3 5.4). */
+export interface PresenterInfo { user: string; name: string; department?: string; department_name?: string }
+
+/** A meeting chat line (night-v3 5.3): kept with the meeting record, apart from the questions to the agents. */
+export interface ChatMessage { id: string; by: string; by_name: string; text: string; at: string; case_id?: string | null }
+
+/** A reaction as the live channel carries it (night-v3 5.1): shown for a moment, never stored. */
+export interface ReactionEvent { user: string; name?: string; kind: "agree" | "thanks" | "applause" | "question" | string; at?: string }
+
 export interface MeetingInfo {
   id: string;
   date: string;
@@ -216,12 +251,21 @@ export interface MeetingState {
   agenda: { discussion: AgendaRow[]; noting: AgendaRow[]; not_ready: AgendaRow[] };
   code?: { value: string; expires_at: string; attempts?: number } | null;
   attendance: Attendee[];
-  current: { case_id?: string | null; slide?: number; opened?: Opened | null; timer?: MeetingTimer | null } | null;
+  current: { case_id?: string | null; slide?: number; opened?: Opened | null; timer?: MeetingTimer | null; presenter?: PresenterInfo | null; elapsed_seconds?: number } | null;
   decision_live?: { text: string; by?: string; at?: string | null; case_id?: string | null; saved?: boolean } | null;
   questions: MeetingQuestion[];
   hands: Array<string | { user: string; name?: string; at?: string }>;
   agent?: AgentState | null;
-  can?: { manage?: boolean; record?: boolean; ask?: boolean; card?: boolean; card_required?: boolean; video?: boolean; present?: boolean };
+  can?: { manage?: boolean; record?: boolean; ask?: boolean; card?: boolean; card_required?: boolean; video?: boolean; present?: boolean; chat?: boolean };
+  /** Every absent head's stand-in agent (night-v3 5.1, D2); `agent` above stays for older readers. */
+  agents?: AgentInfo[];
+  /** The people the coordinator spotlighted for everyone (night-v3 5.1). */
+  spotlight?: string[];
+  quorum?: QuorumInfo | null;
+  chat?: ChatMessage[];
+  /** Screen share (night-v3 5.2): who may present besides the coordinator and the presenter, and who shares now. */
+  present_allowed?: string[];
+  presenting?: string | null;
   me?: { user?: string; status?: string | null; mode?: string | null; department?: string; role?: string };
   online?: string[];
   outcomes?: Record<string, MeetingOutcome>;
@@ -232,7 +276,13 @@ export interface MeetingState {
   status?: string;
 }
 
-const EMPTY_CURRENT: NonNullable<MeetingState["current"]> = { case_id: null, slide: 0, opened: null, timer: null };
+const EMPTY_CURRENT: NonNullable<MeetingState["current"]> = { case_id: null, slide: 0, opened: null, timer: null, presenter: null };
+
+/** One agent's state event merged into the list by role (the event carries the state only). */
+function mergeAgent(list: AgentInfo[] | undefined, a: Partial<AgentInfo> & { role?: string | null }): AgentInfo[] | undefined {
+  if (!list || !a.role) return list;
+  return list.map((x) => (x.role === a.role ? { ...x, state: a.state ?? x.state, question: a.question === undefined ? x.question : a.question } : x));
+}
 
 function asTimer(v: unknown): MeetingTimer | null {
   if (!v || typeof v !== "object") return null;
@@ -261,8 +311,13 @@ export function applyLiveEvent(s: MeetingState | null, ev: LiveEvent): MeetingSt
         slide: typeof ev.slide === "number" ? ev.slide : changed ? 0 : cur.slide ?? 0,
         opened: ev.opened !== undefined ? asOpened(ev.opened) : changed ? null : cur.opened ?? null,
         timer: ev.timer !== undefined ? asTimer(ev.timer) : cur.timer ?? null,
+        presenter: ev.presenter !== undefined ? (ev.presenter as PresenterInfo | null) : changed ? null : cur.presenter ?? null,
+        elapsed_seconds: typeof ev.elapsed_seconds === "number" ? ev.elapsed_seconds : changed ? 0 : cur.elapsed_seconds,
       };
       if (ev.agent && typeof ev.agent === "object") next.agent = ev.agent as AgentState;
+      if (Array.isArray(ev.agents)) next.agents = ev.agents as AgentInfo[];
+      if (Array.isArray(ev.spotlight)) next.spotlight = ev.spotlight as string[]; else if (changed) next.spotlight = [];
+      if (changed) { next.presenting = null; }
       if (ev.status === "in_session" && s.meeting.status !== "in_session") next.meeting = { ...s.meeting, status: "in_session" };
       if (changed) next.decision_live = null;
       return next;
@@ -296,6 +351,8 @@ export function applyLiveEvent(s: MeetingState | null, ev: LiveEvent): MeetingSt
     case "presence": {
       if (Array.isArray(ev.attendance)) next.attendance = ev.attendance as Attendee[];
       if (Array.isArray(ev.online)) next.online = ev.online as string[];
+      if (ev.quorum !== undefined) next.quorum = ev.quorum as QuorumInfo | null;
+      if (Array.isArray(ev.agents)) next.agents = ev.agents as AgentInfo[];
       return next;
     }
     case "admit": {
@@ -304,14 +361,31 @@ export function applyLiveEvent(s: MeetingState | null, ev: LiveEvent): MeetingSt
       else next.attendance = (s.attendance ?? []).map((a) => (a.user === user ? { ...a, status: String(ev.status ?? "remote") } : a));
       if (s.me?.user && s.me.user === user) next.me = { ...s.me, status: String(ev.status ?? "remote") };
       if (ev.agent && typeof ev.agent === "object") next.agent = ev.agent as AgentState;
+      if (Array.isArray(ev.agents)) next.agents = ev.agents as AgentInfo[];
+      if (ev.quorum !== undefined) next.quorum = ev.quorum as QuorumInfo | null;
       return next;
     }
     case "agent_state": {
       const a = (ev.agent && typeof ev.agent === "object" ? ev.agent : ev) as AgentState;
       // the event carries the state only; keep the label and note the full state gave
       next.agent = { ...(s.agent ?? { active: true }), ...a, active: a.active !== false };
+      next.agents = mergeAgent(s.agents, a as Partial<AgentInfo> & { role?: string | null });
       return next;
     }
+    case "agents": if (Array.isArray(ev.agents)) next.agents = ev.agents as AgentInfo[]; return next;
+    case "spotlight": next.spotlight = Array.isArray(ev.users) ? (ev.users as string[]) : []; return next;
+    case "chat": {
+      const m = ev.message as ChatMessage | undefined;
+      if (!m || !m.id) return s;
+      const list = [...(s.chat ?? [])];
+      const i = list.findIndex((x) => x.id === m.id);
+      if (i >= 0) list[i] = { ...list[i], ...m }; else list.push(m);
+      next.chat = list.slice(-200);
+      return next;
+    }
+    case "presenting": next.presenting = ev.on ? String(ev.user ?? "") || null : null; return next;
+    case "present_allowed": next.present_allowed = Array.isArray(ev.users) ? (ev.users as string[]) : []; return next;
+    case "reaction": return s;
     case "ended": {
       const m = ev.meeting && typeof ev.meeting === "object" ? (ev.meeting as MeetingInfo) : null;
       next.meeting = m ? { ...s.meeting, ...m } : { ...s.meeting, status: ev.cancelled ? "cancelled" : "closed" };
