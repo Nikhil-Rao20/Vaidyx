@@ -1,6 +1,6 @@
 // /meetings/:id: the agenda page before the meeting, the coordinator's control view during it, a read-only agenda for
 // everyone else, and the old session read-only when the new route is not on the server.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Check, Copy, KeyRound, ListPlus, MonitorPlay, Play, Presentation, Send, Users, Video, XCircle } from "lucide-react";
@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { api, TB } from "@/lib/api";
 import { useSession } from "@/lib/session";
-import { useMeetingLive, type AgendaRow, type MeetingState } from "@/lib/live";
+import { useMeetingLive, type AgendaRow, type LiveEvent, type MeetingState } from "@/lib/live";
 import { addToAgenda, cancelMeeting, getOldSession, meetingDeckUrl, newCode, putAgenda, remindCase, sendAgenda, startMeeting } from "./api";
 import { AgendaLists, JustAddedContext } from "./components/AgendaLists";
 import { ControlView } from "./components/ControlView";
@@ -82,7 +82,8 @@ function reorderLocally(s: MeetingState, discussion: string[], noting: string[])
 export default function MeetingAgendaPage() {
   const { id = "" } = useParams();
   const { me } = useSession();
-  const live = useMeetingLive(id);
+  const controlEvents = useRef<((ev: LiveEvent) => void) | null>(null);  // the control view's shell takes every event in order
+  const live = useMeetingLive(id, { onEvent: (ev) => controlEvents.current?.(ev) });
   const [copied, copy] = useCopy();
   const [announce, liveNode] = useAnnounce();
   const [err, setErr] = useState<string | null>(null);
@@ -167,7 +168,7 @@ export default function MeetingAgendaPage() {
       {err ? <p role="alert" className="text-sm text-bad rounded-md bg-bad-soft px-3 py-2">{err}</p> : null}
       {cancelled ? <div className="surface p-4"><EmptyState kind="wait" title="This meeting was cancelled" text={s.meeting.cancelled?.reason ? `Reason: ${s.meeting.cancelled.reason}` : "The members were told."} /></div> : null}
 
-      {inSession && canManage ? <ControlView mid={id} state={s} onChanged={() => void live.refresh()} liveStatus={live.status} liveDetail={live.statusDetail} lastEvent={live.lastEvent} /> : null}
+      {inSession && canManage ? <ControlView mid={id} state={s} onChanged={() => void live.refresh()} liveStatus={live.status} liveDetail={live.statusDetail} lastEvent={live.lastEvent} events={controlEvents} /> : null}
 
       {!inSession && !closed && !cancelled || (inSession && !canManage) ? (
         <div className="grid gap-4 lg:grid-cols-12 items-start">

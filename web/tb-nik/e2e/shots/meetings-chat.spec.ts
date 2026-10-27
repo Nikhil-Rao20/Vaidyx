@@ -38,7 +38,7 @@ test.describe("Meeting chat", () => {
     const lines = (state as { chat: Line[] }).chat;
     const live = await open(page, `/meetings/${MID}/member`, { role: "treating", wait: "member-view", state });
     // The badge before the chat was opened: one unanswered question (Q2) plus the two lines of others (C1 is mine).
-    await expect(page.getByTestId("panel-chat")).toHaveAccessibleName("Chat (3)");
+    await expect(page.getByTestId("panel-chat")).toHaveAccessibleName("Chat 3");
     await page.getByTestId("panel-chat").click();
     // A question is waiting, so the panel opens on the questions; the chat tab carries its own count.
     await expect(page.getByTestId("questions-panel")).toBeVisible();
@@ -58,10 +58,10 @@ test.describe("Meeting chat", () => {
     // Seen: the badge is back to the unanswered question once the panel closes.
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("chat-panel")).toHaveCount(0);
-    await expect(page.getByTestId("panel-chat")).toHaveAccessibleName("Chat (1)");
+    await expect(page.getByTestId("panel-chat")).toHaveAccessibleName("Chat 1");
     // A pushed line while the panel is closed: counted on the button.
     live.push({ type: "chat", message: line("C4", "I can join the next case in five minutes.") });
-    await expect(page.getByTestId("panel-chat")).toHaveAccessibleName("Chat (2)");
+    await expect(page.getByTestId("panel-chat")).toHaveAccessibleName("Chat 2");
     await page.getByTestId("panel-chat").click();
     await showChatTab(page);
     await expect(rows).toHaveCount(4);
@@ -125,7 +125,7 @@ test.describe("Meeting chat", () => {
     const base = memberState() as { questions: Array<{ answer: unknown }>; can: Record<string, boolean> };
     const answered = base.questions.filter((q) => q.answer);
     const live = await open(page, `/meetings/${MID}/member`, { role: "treating", wait: "member-view", state: memberState({ questions: answered }) });
-    await expect(page.getByTestId("panel-chat")).toHaveAccessibleName("Chat (2)");
+    await expect(page.getByTestId("panel-chat")).toHaveAccessibleName("Chat 2");
     await page.getByTestId("panel-chat").click();
     await expect(chatTab(page)).toHaveAttribute("aria-selected", "true");
     await expect(page.getByTestId("chat-line")).toHaveCount(3);
@@ -136,7 +136,7 @@ test.describe("Meeting chat", () => {
     await page.getByTestId("member-view").waitFor();
     await expect(page.getByTestId("panel-chat")).toHaveAccessibleName("Chat");
     live.push({ type: "chat", message: line("C4", "One more thing on this case.") });
-    await expect(page.getByTestId("panel-chat")).toHaveAccessibleName("Chat (1)");
+    await expect(page.getByTestId("panel-chat")).toHaveAccessibleName("Chat 1");
     expect(errors).toEqual([]);
   });
 

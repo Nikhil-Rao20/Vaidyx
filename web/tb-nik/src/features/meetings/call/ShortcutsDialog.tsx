@@ -12,7 +12,7 @@ export function ShortcutsDialog({ open, onOpenChange, coordinator, present }: { 
   const rows = shortcutsFor(coordinator, present);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby="keys-desc" data-testid="shortcuts-dialog">
+      <DialogContent aria-describedby="keys-desc" data-testid="shortcuts-dialog" data-theme="dark" className="text-foreground">
         <DialogHeader>
           <DialogTitle>Keyboard shortcuts</DialogTitle>
           <DialogDescription id="keys-desc">They work anywhere in the call except while you type in a box; Esc always closes the panel or the menu.</DialogDescription>

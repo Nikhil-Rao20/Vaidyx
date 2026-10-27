@@ -117,8 +117,8 @@ def decode(tok: str, secret: str) -> dict:
 
 
 def for_meeting(mid: str, identity: str, name: str, screen: bool = False) -> dict:
-    """{url, token, room, identity, name} for a member of the meeting (camera, microphone and a screen share, data allowed), or for the
-    room screen (`screen=True`: camera and microphone only, no data)."""
+    """{url, token, room, identity, name} for a member of the meeting (camera, microphone and a screen share), or for the room screen
+    (`screen=True`: camera and microphone only). No data grant: chat and reactions go through the app's own channel."""
     room = room_name(mid)
-    tok = token(identity, name, room, can_publish_sources=ROOM_SOURCES if screen else MEMBER_SOURCES, can_publish_data=not screen)
+    tok = token(identity, name, room, can_publish_sources=ROOM_SOURCES if screen else MEMBER_SOURCES)  # no data grant: nothing uses it yet
     return {"url": url(), "token": tok, "room": room, "identity": str(identity), "name": str(name or identity), "expires_in": TOKEN_TTL}

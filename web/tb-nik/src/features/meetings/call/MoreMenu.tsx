@@ -126,13 +126,13 @@ export function MoreMenu({ mode = "more" }: { mode?: "more" | "coordinator" }) {
   const dialogs = (
     <>
       <Dialog open={devices} onOpenChange={setDevices}>
-        <DialogContent aria-describedby="devices-desc" data-testid="devices-dialog">
+        <DialogContent aria-describedby="devices-desc" data-testid="devices-dialog" data-theme="dark" className="text-foreground">
           <DialogHeader><DialogTitle>Devices</DialogTitle><DialogDescription id="devices-desc">The microphone, the speaker and the camera of this call.</DialogDescription></DialogHeader>
           <DeviceSettings />
         </DialogContent>
       </Dialog>
       <Dialog open={numbers} onOpenChange={setNumbers}>
-        <DialogContent aria-describedby="numbers-desc" data-testid="call-numbers">
+        <DialogContent aria-describedby="numbers-desc" data-testid="call-numbers" data-theme="dark" className="text-foreground">
           <DialogHeader><DialogTitle>Call by phone</DialogTitle><DialogDescription id="numbers-desc">The meeting room and the members who share their number.</DialogDescription></DialogHeader>
           <CallNumbers s={c.state} />
         </DialogContent>
@@ -214,7 +214,7 @@ export function MoreMenu({ mode = "more" }: { mode?: "more" | "coordinator" }) {
         <DropdownMenuTrigger asChild>
           <RoundButton icon={Ellipsis} label="More" title="More options" testId="more" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent side="top" align="end" className="w-64" data-testid="more-menu">
+        <DropdownMenuContent side="top" align="end" className="w-64" data-testid="more-menu" data-theme="dark">
           {c.videoAvailable && x.joined ? <DropdownMenuItem onSelect={() => setDevices(true)}><Settings2 />Devices</DropdownMenuItem> : null}
           <DropdownMenuLabel className="text-xs text-muted-foreground">Layout</DropdownMenuLabel>
           <DropdownMenuRadioGroup value={c.layout} onValueChange={(v) => c.setLayout(v as LayoutKind)}>

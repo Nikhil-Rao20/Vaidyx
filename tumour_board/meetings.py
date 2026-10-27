@@ -180,6 +180,8 @@ def _shape(s: dict):
 
     def shape(user, info, ev):
         if user in admitted or (isinstance(info, dict) and manage(info)):
+            if ev.get("type") == "chat" and isinstance(info, dict) and info.get("outside_expert") and isinstance(ev.get("message"), dict):
+                return {**ev, "message": _chat_lines(s, info, [ev["message"]])[0]}
             return ev
         if ev.get("type") in PRIVATE_EVENTS:
             return None
@@ -233,12 +235,23 @@ def is_member(r: dict, s: dict) -> bool:
 
 def presenter_of(case: dict) -> str:
     """The presenter's login: the one chosen when the Case File was sent to the board (case.json "presenter", {user, name, set_by, at}
-    from night-v3 item 1.4; a plain login before), else the team's owner."""
+    from night-v3 item 1.4; a plain login before), else the team's owner, else (night-v3 5.6) the doctor of the owning department who
+    created the file (the demo files carry no team owner); "" when the file was created by the coordinator or another department."""
     team = case.get("team") if isinstance(case.get("team"), dict) else {}
     p = case.get("presenter")
     if isinstance(p, dict):
         p = p.get("user")
-    return str(p or team.get("owner") or "")
+    p = str(p or team.get("owner") or "")
+    if p:
+        return p
+    cb = str(case.get("created_by") or "")
+    if not cb:
+        return ""
+    try:
+        r = org.roles(cb)
+    except Exception:
+        return ""
+    return cb if access.is_owner_doctor(r, case) and not r.get("admin") else ""
 
 
 def chosen_presenter(case: dict) -> dict | None:
@@ -418,8 +431,17 @@ def timer_view(t) -> dict | None:
     return {"seconds_left": _timer_left(t), "running": bool(t.get("running")), "total": int(t.get("total") or 0)}
 
 
-def _elapsed(t) -> int:
-    """Seconds spent on the case so far, from its countdown (total minus what is left); 0 without a timer."""
+def _elapsed(lv) -> int:
+    """Seconds since the case came on the floor (live.case_started_at, set by start() and set_current()), never capped by the planned
+    minutes; for a session started before this field existed, the countdown's total minus what is left; 0 otherwise (review M2)."""
+    lv = lv if isinstance(lv, dict) else {}
+    started = lv.get("case_started_at")
+    if started:
+        try:
+            return max(0, int(time.time() - float(started)))
+        except (TypeError, ValueError):
+            pass
+    t = lv.get("timer")
     if not isinstance(t, dict):
         return 0
     return max(0, int(t.get("total") or 0) - _timer_left(t))
@@ -441,7 +463,7 @@ def presenter_view(s: dict) -> dict | None:
 def current_view(s: dict) -> dict:
     lv = s.get("live") or {}
     return {"case_id": s.get("current"), "slide": int(lv.get("slide") or 0), "opened": lv.get("opened"), "timer": timer_view(lv.get("timer")),
-            "presenter": presenter_view(s), "elapsed_seconds": _elapsed(lv.get("timer")), "presenting": lv.get("presenting") or None}
+            "presenter": presenter_view(s), "elapsed_seconds": _elapsed(lv), "presenting": lv.get("presenting") or None}
 
 
 def attendance_rows(s: dict) -> list[dict]:
@@ -521,6 +543,28 @@ def spotlight_view(s: dict) -> list[str]:
     return [str(u) for u in ((s.get("live") or {}).get("spotlight") or []) if u]
 
 
+def _chat_lines(s: dict, r: dict | None, lines) -> list[dict]:
+    """The chat lines as this viewer may read them: an outside expert without the owner's consent gets the patient's name and numbers
+    replaced by [withheld] (strip_identity against the line's Case File, or every Case File on the agenda when the line names none)."""
+    if not (isinstance(r, dict) and r.get("outside_expert")):
+        return list(lines)
+    cases = {}
+    for k in LISTS:
+        for it in (s.get("agenda_lists") or {}).get(k) or []:
+            cid = it.get("case_id")
+            if cid and cid not in config.PROTECTED_CASES and cid not in cases:
+                cases[cid] = store.get_case(cid)
+    out = []
+    for m in lines:
+        text = m.get("text") or ""
+        targets = [cases.get(m.get("case_id"))] if m.get("case_id") in cases else list(cases.values())
+        for c in targets:
+            if c and outside_view(r, c):
+                text = strip_identity(text, c)
+        out.append({**m, "text": text})
+    return out
+
+
 def quorum_view(s: dict) -> dict:
     """The quorum line (night-v3 5.4, research/04 section 6.14): each board head present as a person (an admitted member of that department,
     or the department marked present on the attendance sheet), the agents standing in (apart, never counted), and the PM-JAY composition
@@ -536,11 +580,19 @@ def quorum_view(s: dict) -> dict:
         ok, by = present(h["id"])
         heads.append({"id": h["id"], "name": h["name"], "present": ok, "by": by, "role": h.get("role")})
     agents = [a["department_name"] for a in agents_view(s)]
-    pm = {}
-    for did in PMJAY_DEPARTMENTS:
-        pm[did.split("_")[0]] = present(did)[0]
-    return {"heads": heads, "present": sum(1 for h in heads if h["present"]), "total": len(heads), "agents": agents,
-            "pmjay": {**pm, "present": sum(1 for v in pm.values() if v), "total": len(PMJAY_DEPARTMENTS), "note": "PM-JAY advises Surgical, Radiation and Medical Oncology"}}
+    depts = {(p.get("department") or "") for _, p in people} | {d for d, v in att.items() if v == "present"}
+    if not org.hospital().get("pmjay_empanelled", True):
+        pm = {"not_applicable": True, "present": 0, "total": len(PMJAY_DEPARTMENTS), "note": postboard.NOT_EMPANELLED}
+    else:  # the same seat rule as the decision record's composition check (postboard.pmjay_seat: a listed surgeon, or one of the case's own)
+        cur = s.get("current")
+        c = store.get_case(cur) if cur and cur not in config.PROTECTED_CASES else None
+        own = board._case_surgical(c) if c else None
+        got = postboard.pmjay_present(depts, own)
+        seat = postboard.pmjay_seat(depts, own)
+        pm = {did.split("_")[0]: did in got for did in PMJAY_DEPARTMENTS}
+        pm.update({"present": len(got), "total": len(PMJAY_DEPARTMENTS), "note": "PM-JAY advises Surgical, Radiation and Medical Oncology",
+                   "seat_note": seat.get("note") or "", "seat_check": bool(seat.get("check"))})
+    return {"heads": heads, "present": sum(1 for h in heads if h["present"]), "total": len(heads), "agents": agents, "pmjay": pm}
 
 
 def present_allowed_view(s: dict) -> list[str]:
@@ -590,7 +642,7 @@ def view(mid: str, r: dict) -> dict:
             "attendance": attendance_rows(s), "current": cv, "decision_live": dl, "questions": list(s.get("questions") or []) if member else [],
             "hands": list(s.get("hands") or []), "agent": agent_state(s), "agents": agents_view(s), "spotlight": spotlight_view(s),
             "quorum": quorum_view(s), "present_allowed": present_allowed_view(s), "presenting": (s.get("live") or {}).get("presenting") or None,
-            "chat": list(s.get("chat") or [])[-CHAT_VIEW:] if member else [],
+            "chat": _chat_lines(s, r, list(s.get("chat") or [])[-CHAT_VIEW:]) if member else [],
             "can": {"manage": manage(r), "record": org.can(r, "board_record"), "ask": member and bool(cur),
                     "card": member and bool(cur), "card_required": user in card_holders(s),
                     "video": bool(s.get("video")) and member, "member": member,
@@ -1128,7 +1180,7 @@ def start(mid: str, by: str) -> dict:
     except ValueError as e:
         raise MeetingError(str(e), 409, "not_planned")
     s = need(mid)
-    s["live"] = {"slide": 0, "opened": None, "timer": _fresh_timer(s, s.get("current")) if s.get("current") else None}
+    s["live"] = {"slide": 0, "opened": None, "timer": _fresh_timer(s, s.get("current")) if s.get("current") else None, "case_started_at": time.time()}
     _save(s)
     pairs = []
     try:
@@ -1137,7 +1189,7 @@ def start(mid: str, by: str) -> dict:
     except Exception as e:  # the briefs are support; the meeting starts without them
         log.warning("meeting %s: briefs not prepared (%s)", mid, e)
     board.audit_event(mid, "meeting_started", by, preparing=len(pairs))
-    _send(s, {"type": "current", **current_view(s), "agent": agent_state(s), "agents": agents_view(s), "spotlight": [], "status": "in_session"})
+    _send(s, {"type": "current", **current_view(s), "agent": agent_state(s), "agents": agents_view(s), "quorum": quorum_view(s), "spotlight": [], "status": "in_session"})
     return {"meeting": summary_row(s), "preparing": len(pairs), "current": current_view(s)}
 
 
@@ -1174,7 +1226,7 @@ def set_current(mid: str, by: str, case_id: str = "", slide=None) -> dict:
         except ValueError as e:
             raise MeetingError(str(e), 404, "not_on_agenda")
         s = need(mid)
-        s["live"] = {"slide": 0, "opened": None, "timer": _fresh_timer(s, case_id)}
+        s["live"] = {"slide": 0, "opened": None, "timer": _fresh_timer(s, case_id), "case_started_at": time.time()}
         LIVE_DECISION.pop(mid, None)
         AGENT_STATE.pop(mid, None)
         changed_case = True
@@ -1187,7 +1239,7 @@ def set_current(mid: str, by: str, case_id: str = "", slide=None) -> dict:
     if not changed_case:
         board.audit_event(mid, "slide", by, case_id=s.get("current"), slide=s.get("live", {}).get("slide"))
     cv = current_view(s)
-    ev = {"type": "current", **cv, "agent": agent_state(s), "agents": agents_view(s)}
+    ev = {"type": "current", **cv, "agent": agent_state(s), "agents": agents_view(s), "quorum": quorum_view(s)}
     if changed_case:
         ev["spotlight"] = []  # a spotlight is for one case: the next case clears it
     _send(s, ev)
@@ -1271,7 +1323,7 @@ def timer(mid: str, by: str, action: str, minutes=None) -> dict | None:
     mins = _check_minutes(minutes)
     now_ts = time.time()
     if action == "start":
-        if mins:
+        if mins and mins * 60 != int(t.get("total") or 0):  # the coordinator changed the minutes; the same minutes resume a paused countdown
             t["total"] = t["left"] = mins * 60
         if not t.get("running"):
             t["running"], t["started_at"] = True, now_ts
@@ -1648,7 +1700,7 @@ def end_case(mid: str, cid: str, by: str) -> dict:
     if not c:
         raise MeetingError("Case File not found.", 404, "no_case")
     lv = s.get("live") or {}
-    s.setdefault("ended", {})[cid] = {"at": _now(), "by": by, "elapsed_seconds": _elapsed(lv.get("timer")) if s.get("current") == cid else None}
+    s.setdefault("ended", {})[cid] = {"at": _now(), "by": by, "elapsed_seconds": _elapsed(lv) if s.get("current") == cid else None}
     if isinstance(lv.get("timer"), dict) and lv["timer"].get("running"):
         t = lv["timer"]
         t["left"], t["running"], t["started_at"] = _timer_left(t), False, None

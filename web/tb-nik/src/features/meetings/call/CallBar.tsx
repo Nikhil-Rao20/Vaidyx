@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { BarButton, ControlBar } from "../components/Stage";
 import { useCall } from "./context";
 import { REACTIONS, type PanelKind } from "./types";
-import { ShellContext } from "./useCallState";
+import { ShellContext, useMeetingCount } from "./useCallState";
 import { MoreMenu } from "./MoreMenu";
 import { DevicePopover } from "./DevicePopover";
 import { PANEL_ICONS, panelBadge } from "./panels";
@@ -37,7 +37,7 @@ export const RoundButton = forwardRef<HTMLButtonElement, RoundProps>(function Ro
       aria-keyshortcuts={keys}
       data-testid={testId}
       {...rest}
-      className={cn("group flex flex-col items-center gap-1 outline-none disabled:opacity-40", compact ? "min-w-11" : dense ? "min-w-14" : "min-w-16", className)}
+      className={cn("group relative flex flex-col items-center gap-1 outline-none disabled:opacity-40", compact ? "min-w-11" : dense ? "min-w-14" : "min-w-16", className)}
     >
       <span className={cn(
         "relative grid place-items-center rounded-full transition-[background-color,transform] duration-150 group-active:scale-95 group-focus-visible:ring-2 group-focus-visible:ring-primary",
@@ -45,9 +45,9 @@ export const RoundButton = forwardRef<HTMLButtonElement, RoundProps>(function Ro
         tone === "danger" ? "bg-[#d64545] text-white hover:bg-[#c23b3b]" : tone === "primary" ? "bg-primary text-primary-foreground hover:bg-primary-hover" : active ? "bg-stage-fg text-stage" : "bg-stage-raised text-stage-fg hover:bg-[#232d38]",
       )}>
         <Icon className="size-5" aria-hidden />
-        {badge ? <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-primary px-1.5 text-center text-[11px] font-bold leading-5 text-primary-foreground" aria-hidden>{badge}</span> : null}
       </span>
       {compact ? null : <span className="whitespace-nowrap text-[11px] font-medium leading-none text-stage-muted group-hover:text-stage-fg">{label}</span>}
+      {badge ? <>{" "}<span className={cn("absolute -top-1 min-w-5 rounded-full bg-primary px-1.5 text-center text-[11px] font-bold leading-5 text-primary-foreground", compact ? "-right-1" : "right-1")}>{badge}</span></> : null}
     </button>
   );
 });
@@ -170,7 +170,7 @@ function PanelButton({ kind, compact = true }: { kind: Exclude<PanelKind, null>;
   const t = PANEL_TITLE[kind];
   const badge = panelBadge(kind, c);
   const open = c.panel === kind;
-  return <RoundButton icon={PANEL_ICONS[kind]} label={badge ? `${t.label} (${badge})` : t.label} title={open ? `Close ${t.label.toLowerCase()}` : t.title} keys={t.keys} active={open} badge={badge || undefined} onClick={() => c.togglePanel(kind)} compact={compact} disabled={c.waiting && kind !== "people"} testId={`panel-${kind}`} />;
+  return <RoundButton icon={PANEL_ICONS[kind]} label={badge ? `${t.label} ${badge}` : t.label} title={open ? `Close ${t.label.toLowerCase()}` : t.title} keys={t.keys} active={open} badge={badge || undefined} onClick={() => c.togglePanel(kind)} compact={compact} disabled={c.waiting && kind !== "people"} testId={`panel-${kind}`} />;
 }
 
 function CardButton() {
@@ -210,17 +210,16 @@ export function CallBar() {
     );
   }
 
-  const status = v.error ? <p role="alert" className="truncate text-xs text-[#ffb4a8]">{v.error}</p>
-    : v.status === "connecting" ? <span className="text-xs text-stage-muted">Joining the video</span>
-    : v.status === "connected" ? <span className="truncate text-xs text-stage-muted">Video on the hospital's server</span>
-    : c.inRoom && c.variant === "member" ? <span className="truncate text-xs text-stage-muted">In the room: video stays off on this device</span> : null;
-  const count = c.state.attendance.filter((a) => a.status === "present" || a.status === "remote").length;
+  const statusWords = v.error ? v.error : v.status === "connecting" ? "Joining the video" : v.status === "connected" ? "Video on the hospital's server"
+    : c.inRoom && c.variant === "member" ? "In the room: video stays off on this device" : "";
+  const count = useMeetingCount();
+  const line = [statusWords, `${c.state.meeting.room ? `${c.state.meeting.room} · ` : ""}${count} in the meeting`].filter(Boolean).join(" · ");
 
   return (
     <ControlBar
       left={<>
         {coordinator ? <button type="button" className="mr-1 shrink-0 whitespace-nowrap rounded-md border border-stage-line px-2 py-1.5 text-sm text-stage-muted outline-none hover:bg-stage-raised hover:text-stage-fg focus-visible:ring-2 focus-visible:ring-primary" onClick={c.actions.leave} title="Back to the meetings list; the meeting goes on" data-testid="leave-controls">Leave the controls</button> : null}
-        <div className="flex min-w-0 flex-col">{status}<span className="truncate text-xs text-stage-muted">{c.state.meeting.room ? `${c.state.meeting.room} · ` : ""}{count} in the meeting</span></div>
+        <p className={cn("min-w-0 truncate text-xs", v.error ? "text-[#ffb4a8]" : "text-stage-muted")} title={line} role={v.error ? "alert" : undefined} data-testid="bar-status">{line}</p>
       </>}
       right={<>
         <div className="flex items-center gap-1" role="group" aria-label="Panels">{panelKinds(c).map((k) => <PanelButton key={k} kind={k} />)}</div>

@@ -77,7 +77,7 @@ function TimerControl() {
           <TimerBadge timer={t} /><ChevronDown className="size-3.5 text-stage-muted" aria-hidden />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-64 space-y-3" aria-label="Case timer">
+      <PopoverContent align="end" className="w-64 space-y-3" aria-label="Case timer" data-theme="dark">
         <p className="text-sm font-medium">Case timer</p>
         <label className="flex items-center gap-2 text-sm text-muted-foreground">Minutes for this case <Input type="number" min={1} max={60} value={x.minutes} onChange={(e) => x.setMinutes(Math.max(1, Math.min(60, Number(e.target.value) || 1)))} className="h-8 w-16 text-sm" aria-label="Minutes for this case" /></label>
         <div className="flex flex-wrap gap-2">
@@ -105,7 +105,7 @@ function QuorumChip({ room }: { room: boolean }) {
           <Users className={room ? "size-4" : "size-3.5"} aria-hidden />{words}<ChevronDown className="size-3 text-stage-muted" aria-hidden />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className={cn("space-y-2", room ? "w-[28rem]" : "w-80")} aria-label="Quorum" data-testid="quorum-popover">
+      <PopoverContent align="end" className={cn("space-y-2", room ? "w-[28rem]" : "w-80")} aria-label="Quorum" data-testid="quorum-popover" data-theme="dark">
         <p className={cn("font-medium", room ? "text-base" : "text-sm")}>Quorum</p>
         <QuorumLine big={room} />
         <p className="text-xs text-muted-foreground">Information only: it does not make a decision valid or invalid.</p>
@@ -136,7 +136,7 @@ export function TopBar() {
       )}
       right={(
         <>
-          {coordinator ? <TimerControl /> : <TimerBadge timer={s.current?.timer} big={room} />}
+          {coordinator ? <TimerControl /> : s.meeting.status === "closed" || s.meeting.status === "cancelled" ? null : <TimerBadge timer={s.current?.timer} big={room} />}
           {presenter ? <span className={cn("hidden items-center gap-1 rounded-full bg-stage-raised px-2 py-0.5 text-stage-fg lg:inline-flex", room ? "text-sm" : "text-xs")} data-testid="presenter-chip">Presenter: {presenter.name}{presenter.department_name || presenter.department ? ` (${presenter.department_name ?? presenter.department})` : ""}</span> : null}
           {q ? <QuorumChip room={room} /> : null}
           <LiveDot status={c.liveStatus} detail={c.liveDetail} className={c.phone && !room ? "hidden" : undefined} />

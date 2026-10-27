@@ -139,7 +139,7 @@ test.describe("Phone and room screen", () => {
     expect(errors).toEqual([]);
   });
 
-  test("room screen on a projector: large type, the agenda column, six tiles and +3 more, no page scroll, the wake lock", async ({ page }) => {
+  test("room screen on a projector: large type, the agenda column, six tiles and +2 more, no page scroll, the wake lock", async ({ page }) => {
     const errors = watchConsole(page);
     // The wake lock as the browser would give it, counted.
     await page.addInitScript(() => {
@@ -153,10 +153,12 @@ test.describe("Phone and room screen", () => {
     await open(page, `/meetings/${MID}/room`, { wait: "room-screen", state });
     const frame = page.getByTestId("room-screen");
     await expect(page.getByTestId("room-summary")).toBeVisible();
-    // Nine remote members: six tiles and "+3 more" (never a scroll); the agents apart.
+    // Nine remote members, one of them offline and out of the video (no tile, night-v3 5.6): six tiles and "+2 more" (never a
+    // scroll); the agents apart.
     const people = page.getByTestId("room-people");
     await expect(people.getByTestId("tile")).toHaveCount(6);
-    await expect(people.getByTestId("strip-more")).toHaveText("+3 more");
+    await expect(people.getByTestId("strip-more")).toHaveText("+2 more");
+    await expect(people.getByRole("heading", { name: "Remote (8)" })).toBeVisible();
     await expect(people.getByTestId("agent-tile")).toHaveCount(2);
     expect(await people.evaluate((el) => el.scrollHeight <= el.clientHeight + 1), "the remote column fits without clipping").toBe(true);
     expect(await px(people.getByTestId("tile-name").first())).toBeGreaterThanOrEqual(20);

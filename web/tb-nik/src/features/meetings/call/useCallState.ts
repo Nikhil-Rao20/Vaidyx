@@ -3,6 +3,8 @@
 // Night-v3 5.5: the phone's controls fading after 4 s without a touch (useControlsAutoHide), "Save data" (useSaveData: camera off,
 // the remote video at the lower quality, remembered for this tab) and the room screen's wake lock (useWakeLock).
 import { createContext, useCallback, useEffect, useRef, useState } from "react";
+import { identityUser, isRoomScreen } from "@/lib/video";
+import { useCall } from "./context";
 import { Track, VideoQuality, type Room } from "livekit-client";
 import { agentVoiceEnabled, onAgentVoiceChange, setAgentVoice } from "@/lib/voice";
 import type { ReactionEvent } from "@/lib/live";
@@ -60,8 +62,11 @@ export function useCallState(mid: string, spotlight: string[]) {
 
   const [layout, setLayout] = useState<LayoutKind>("auto");
   const [pinned, setPinnedRaw] = useState<string | null>(() => readPin(mid));
+  const spotRef = useRef(spotlight);
+  spotRef.current = spotlight;
   const setPinned = useCallback((key: string | null) => {
     setPinnedRaw(key);
+    if (!key && spotRef.current.length) setLayout("spotlight");  // unpinning shows the coordinator's spotlight again
     try { if (key) sessionStorage.setItem(pinKey(mid), key); else sessionStorage.removeItem(pinKey(mid)); } catch { /* no storage: the pin lasts this page only */ }
   }, [mid]);
 
@@ -300,4 +305,21 @@ export function useShortcuts(ctx: CallCtx | null, extra: { openHelp: () => void;
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+}
+
+export function meetingCount(attendance: Array<{ user: string; status: string }>, identities: Array<string | null | undefined>): number {
+  const users = new Set(attendance.filter((a) => a.status === "present" || a.status === "remote").map((a) => a.user));
+  for (const id of identities) {
+    if (!id || isRoomScreen(id)) continue;
+    users.add(identityUser(id));
+  }
+  return users.size;
+}
+
+/** The count of the call for the bar and the room screen's footer (recomputed when LiveKit's participants change). */
+export function useMeetingCount(): number {
+  const c = useCall();
+  const room = c.video.room;
+  const ids = room ? [room.localParticipant?.identity, ...Array.from(room.remoteParticipants.values()).map((p) => p.identity)] : [];
+  return meetingCount(c.state.attendance ?? [], ids);
 }

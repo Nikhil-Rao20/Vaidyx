@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { MicButton } from "@/components/MicButton";
 import { SpeakButton } from "@/components/SpeakButton";
 import { answerText, type AgendaRow, type ChatMessage, type MeetingQuestion, type MeetingState } from "@/lib/live";
-import { LoadingButton, fmtDateTime, indianDates, niceTitle } from "@/features/casefile/components/common";
+import { LoadingButton, fmtDateTime, indianDates, modelLabel, niceTitle } from "@/features/casefile/components/common";
 import { cn } from "@/lib/utils";
 import { usePanelAction } from "../../components/People";
 import { useCall } from "../context";
@@ -58,7 +58,7 @@ export function QuestionItems({ questions, emptyText = "No questions yet.", test
             {a?.status === "not_documented" ? <p className="text-xs text-muted-foreground">Not documented in the records.</p> : null}
             {a || text ? (
               <div className="mt-1 flex items-center gap-1.5">
-                <p className="min-w-0 flex-1 text-[10px] text-muted-foreground">{a?.note ?? "From the records only; the agent is not a member of the board."}{a?.at ? ` Answered ${fmtDateTime(a.at)}.` : ""}</p>
+                <p className="min-w-0 flex-1 text-[10px] text-muted-foreground">{a?.note ?? "From the records only; the agent is not a member of the board."}{a?.model ? ` ${modelLabel(a.model)}.` : ""}{a?.at ? ` Answered ${fmtDateTime(a.at)}.` : ""}</p>
                 {agentVoices && text ? <SpeakButton source={{ ref: { kind: "meeting_answer", meeting_id: mid, id: q.id } }} screen="meeting" size="icon-xs" /> : null}
               </div>
             ) : null}
@@ -83,7 +83,7 @@ export function QuestionForm({ role, roleLabel, id = "member-q" }: { role?: stri
   return (
     <form className="flex flex-col gap-1.5" onSubmit={(e) => { e.preventDefault(); if (question.trim().length >= 3) void send(); }}>
       <label htmlFor={id} className="sr-only">{roleLabel ? `Type a question for ${roleLabel}` : "Type a question"}</label>
-      <Textarea ref={questionRef} id={id} value={question} onChange={(e) => setQuestion(e.target.value)} className="min-h-16 text-sm" placeholder="Type a question; it shows on the room screen with your name" maxLength={500} disabled={pending || !inSession || !cid} />
+      <Textarea ref={questionRef} id={id} value={question} onChange={(e) => setQuestion(e.target.value)} className="min-h-16 text-base md:text-base" placeholder="Type a question; it shows on the room screen with your name" maxLength={500} disabled={pending || !inSession || !cid} />
       <div className="flex items-center gap-2">
         {act.error ? <p role="alert" className="flex-1 text-xs text-bad">{act.error}</p> : <span className="flex-1 text-xs text-muted-foreground">{hint}</span>}
         {inSession && cid ? <MicButton target={questionRef} screen="meeting-q" context="question" label="Dictate the question" caseId={cid} className="max-w-[60%] shrink-0" onInsert={(next) => { if (next.length > 500) setQuestion(next.slice(0, 500)); }} /> : null}

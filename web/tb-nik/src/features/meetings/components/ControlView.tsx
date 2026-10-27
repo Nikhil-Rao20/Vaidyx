@@ -4,7 +4,7 @@
 // Case with the records and images, Agents, Decision with the form and the cards) and the control bar with the case moves, the
 // timer, End case and End meeting. The camera and microphone go through the pre-join first. While the coordinator dictates in the
 // call, the call microphone is muted so the room does not hear it twice, and it comes back after (only if it was on).
-import { useState } from "react";
+import { useState, type MutableRefObject } from "react";
 import { useSession } from "@/lib/session";
 import type { LiveEvent, LiveStatus, MeetingState } from "@/lib/live";
 import { recallChoice, type JoinChoice } from "@/lib/video";
@@ -12,10 +12,12 @@ import { PreJoin } from "./PreJoin";
 import { CallShell } from "../call/CallShell";
 import { fmtDate } from "@/features/casefile/components/common";
 
-export function ControlView({ mid, state, onChanged, liveStatus = "open", liveDetail, lastEvent }: {
+export function ControlView({ mid, state, onChanged, liveStatus = "open", liveDetail, lastEvent, events }: {
   mid: string; state: MeetingState; onChanged: () => void; liveStatus?: LiveStatus; liveDetail?: string;
   /** The last live event (useMeetingLive's lastEvent): reactions and "Decision saved" need it; optional so older callers still work. */
   lastEvent?: LiveEvent | null;
+  /** Every live event in order (the agenda page forwards them): nothing is lost when two arrive in one tick. */
+  events?: MutableRefObject<((ev: LiveEvent) => void) | null>;
 }) {
   const { me } = useSession();
   const [choice, setChoice] = useState<JoinChoice | null | "skipped">(() => recallChoice());
@@ -35,6 +37,7 @@ export function ControlView({ mid, state, onChanged, liveStatus = "open", liveDe
       joinChoice={joinChoice}
       videoAvailable={videoAvailable}
       onJoinVideo={() => setChoice(null)}
+      events={events}
     />
   );
 }

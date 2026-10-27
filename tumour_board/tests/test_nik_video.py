@@ -106,6 +106,6 @@ def test_video_token_route_grants_a_member_the_screen_share_and_the_room_screen_
     join_and_admit(tc, mid, "priya")
     (data_root / "livekit.json").write_text(json.dumps(KEYS))
     claims = jwt.decode(As(tc, "priya").post(f"/meetings/{mid}/video-token").json()["token"], KEYS["api_secret"], algorithms=["HS256"])
-    assert claims["video"]["canPublishSources"] == ["camera", "microphone", "screen_share", "screen_share_audio"] and claims["video"]["canPublishData"] is True
+    assert claims["video"]["canPublishSources"] == ["camera", "microphone", "screen_share", "screen_share_audio"] and "canPublishData" not in claims["video"]  # no data grant (review)
     claims = jwt.decode(As(tc, "anil").post(f"/meetings/{mid}/video-token", json={"screen": "room"}).json()["token"], KEYS["api_secret"], algorithms=["HS256"])
     assert claims["sub"] == "anil#room" and claims["video"]["canPublishSources"] == ["camera", "microphone"] and "canPublishData" not in claims["video"]

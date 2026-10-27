@@ -1,5 +1,6 @@
 // The one side panel of the call (night-v3 5.1, research/04 section 6.9): People, Chat and questions, Agenda, Case, Agents or
-// Decision, one at a time. On a laptop it slides in on the right of the stage (22 rem); on a phone it is a bottom sheet, 85 % high,
+// Decision, one at a time. On a laptop it slides in on the right of the stage (22 rem; the Decision panel 26 rem, for its six step
+// tabs); on a phone it is a bottom sheet, 85 % high,
 // with a handle and a visible Close. Esc closes it (the sheet by itself; on a laptop the shell's shortcut). The body is dark as the
 // stage is. The badge and title helpers here feed the bar's panel buttons.
 import { useRef } from "react";
@@ -26,6 +27,11 @@ export const PANEL_ICONS: Record<Kind, LucideIcon> = {
   agents: Bot,
   decision: ClipboardList,
 };
+
+/** The laptop width of a panel: the Decision panel is wider so its six step tabs are not cut. */
+export function panelWidth(kind: PanelKind): string {
+  return kind === "decision" ? "w-[26rem]" : "w-[22rem]";
+}
 
 /** The words of each panel's button and the screen reader's description of the sheet. */
 export const PANEL_WORD: Record<Kind, { label: string; about: string }> = {
@@ -91,7 +97,7 @@ export function SidePanel() {
     return (
       <Sheet open={!!panel} onOpenChange={(o) => { if (!o) setPanel(null); }}>
         <SheetContent side="bottom" showCloseButton={false} data-theme="dark" data-testid={`${kind}-panel`} aria-label={title}
-          className="h-[85dvh] gap-0 rounded-t-2xl border-stage-line bg-stage-panel p-0 text-stage-fg">
+          className="h-[85dvh] gap-0 rounded-t-2xl border-stage-line bg-stage-panel p-0 pb-[env(safe-area-inset-bottom)] text-stage-fg">
           <div className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-stage-line" aria-hidden />
           <header className="flex items-center gap-2 border-b border-stage-line px-4 py-2">
             <SheetTitle className="min-w-0 flex-1 truncate text-base font-semibold text-stage-fg">{title}</SheetTitle>
@@ -107,7 +113,7 @@ export function SidePanel() {
   }
 
   return (
-    <StagePanel open={!!panel} title={title} onClose={() => setPanel(null)} testId={`${kind}-panel`}>
+    <StagePanel open={!!panel} title={title} onClose={() => setPanel(null)} testId={`${kind}-panel`} width={panelWidth(kind)}>
       <div data-theme="dark" className="space-y-3">
         <PanelBody kind={kind} />
       </div>

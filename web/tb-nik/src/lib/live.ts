@@ -211,7 +211,7 @@ export interface QuorumInfo {
   present: number;
   total: number;
   agents: string[];
-  pmjay: { surgical: boolean; radiation: boolean; medical: boolean; present: number; total: number; note?: string };
+  pmjay: { surgical?: boolean; radiation?: boolean; medical?: boolean; present: number; total: number; note?: string; not_applicable?: boolean; seat_note?: string; seat_check?: boolean };
 }
 
 /** The presenter of the Case File on the floor (night-v3 5.4). */
@@ -319,6 +319,7 @@ export function applyLiveEvent(s: MeetingState | null, ev: LiveEvent): MeetingSt
       if (ev.agent && typeof ev.agent === "object") next.agent = ev.agent as AgentState;
       if (Array.isArray(ev.agents)) next.agents = ev.agents as AgentInfo[];
       if (Array.isArray(ev.spotlight)) next.spotlight = ev.spotlight as string[]; else if (changed) next.spotlight = [];
+      if (ev.quorum !== undefined) next.quorum = ev.quorum as QuorumInfo | null;
       if (changed) { next.presenting = null; }
       if (ev.status === "in_session" && s.meeting.status !== "in_session") next.meeting = { ...s.meeting, status: "in_session" };
       if (changed) next.decision_live = null;

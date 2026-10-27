@@ -59,15 +59,16 @@ function liveMedia(room: Room | null, user: string): { mic: boolean; cam: boolea
 }
 
 /** The screen share word on a row: "presenting" for the sharer, "may present" for someone the coordinator allowed. */
-export function presentWord(user: string, s: Pick<MeetingState, "presenting" | "present_allowed">): string | null {
+export function presentWord(user: string, s: Pick<MeetingState, "presenting" | "present_allowed" | "current">): string | null {
   if (s.presenting && s.presenting === user) return "presenting";
+  if (s.current?.presenter?.user === user) return "presents by default";
   if ((s.present_allowed ?? []).includes(user)) return "may present";
   return null;
 }
 
 function RowMenu({ a, ctx, busy, onSpot, onPresent }: { a: Attendee; ctx: CallCtx; busy: boolean; onSpot: (on: boolean) => void; onPresent: (k: "allow" | "withdraw" | "stop") => void }) {
   const on = ctx.spotlight.includes(a.user);
-  const present = presentMenuItems({ user: a.user, coordinator: ctx.me || null, canManage: ctx.canManage, allowed: ctx.state.present_allowed ?? [], presenting: ctx.state.presenting ?? null });
+  const present = presentMenuItems({ user: a.user, coordinator: ctx.me || null, canManage: ctx.canManage, allowed: ctx.state.present_allowed ?? [], presenting: ctx.state.presenting ?? null, defaultPresenter: ctx.state.current?.presenter?.user ?? null });
   const full = !on && ctx.spotlight.length >= SPOTLIGHT_MAX;
   return (
     <DropdownMenu>
@@ -126,7 +127,7 @@ export function PeoplePanel() {
         <div className="relative">
           <Search className="pointer-events-none absolute left-2 top-1/2 size-4 -translate-y-1/2 text-stage-muted" aria-hidden />
           <label htmlFor="people-search" className="sr-only">Search the people</label>
-          <Input id="people-search" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name or department" className={cn("h-8 pl-8 text-sm", tap)} />
+          <Input id="people-search" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name or department" className={cn("h-9 pl-8 text-base md:text-base", tap)} />
         </div>
       ) : null}
 

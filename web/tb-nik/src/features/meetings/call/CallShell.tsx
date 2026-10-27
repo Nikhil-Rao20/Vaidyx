@@ -9,11 +9,14 @@
 // dictates or a screen is shared; the layout keeps its place), the decision strip is one line that opens on a tap, and in landscape
 // the strip is a column at the right edge. The room screen (a projector, 1920 x 1080) has large type, a compact agenda column, at
 // most six remote tiles with "+n more", the latest two questions, nothing that scrolls the page, and a wake lock while it is open.
+// Night-v3 5.6: when the meeting is closed or cancelled the member and the room screen see "The meeting has ended" over the stage
+// (the member's bar keeps Leave only); "N in the meeting" counts the admitted attendance plus anyone in the video who is not on it
+// (people only, never a room screen); the call is a labelled section, not a second main landmark.
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { Camera, CameraOff, Footprints, Maximize2, Mic, MicOff, Minimize2, MonitorCheck, MonitorUp, PanelLeft, Volume2, VolumeX, X } from "lucide-react";
+import { ArrowLeft, Camera, CameraOff, Footprints, LogOut, Maximize2, Mic, MicOff, Minimize2, MonitorCheck, MonitorUp, PanelLeft, Volume2, VolumeX, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { handUsers, type AgentInfo, type LiveEvent, type LiveStatus, type MeetingState, type ReactionEvent } from "@/lib/live";
 import type { Me } from "@/lib/session";
@@ -24,21 +27,20 @@ import { SkeletonLines, errorText, useAnnounce } from "@/features/casefile/compo
 import { admit, allowPresent, askQuestion, endCase as endCaseCall, getSlides, openOnScreen, present, raiseHand, sendChat, sendReaction, setCurrent, setPresenting, setSpotlight, timer as timerCall } from "../api";
 import { CardDialog } from "../components/CardDialog";
 import { CaseFlow } from "./CaseFlow";
-import { DecisionStrip, SlideDots, StageFrame } from "../components/Stage";
+import { ControlBar, DecisionStrip, SlideDots, StageFrame } from "../components/Stage";
 import { QuestionsList, SlideContent } from "../components/shared";
 import { CallContext, useCall } from "./context";
 import type { CallActions, CallCtx, CallVariant, CallVideo, ReactionKind } from "./types";
-import { ShellContext, useCallState, useControlsAutoHide, useSaveData, useShortcuts, useWakeLock, type ShellExtras } from "./useCallState";
+import { ShellContext, useCallState, useControlsAutoHide, useMeetingCount, useSaveData, useShortcuts, useWakeLock, type ShellExtras } from "./useCallState";
 import { TopBar } from "./TopBar";
 import { AgendaRail } from "./AgendaRail";
 import { StageTabs } from "./StageTabs";
 import { AdmitToast } from "./AdmitToast";
-import { CallBar } from "./CallBar";
+import { CallBar, RoundButton } from "./CallBar";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { EndMeetingDialog } from "./EndMeetingDialog";
 import { StageContent } from "./StageContent";
 import { Strip } from "./Strip";
-import { ConnectionBanner } from "./ConnectionBanner";
 import { PresentDialog, markPresentAsked, presentAsked } from "./PresentDialog";
 import { SidePanel } from "./panels";
 import { cn } from "@/lib/utils";
@@ -75,6 +77,13 @@ export function agentsOf(s: MeetingState): AgentInfo[] {
   return [];
 }
 
+/** True when the meeting is over for the people in it (closed, or cancelled). */
+export function meetingEnded(status: string | null | undefined): boolean {
+  return status === "closed" || status === "cancelled";
+}
+
+/** "N in the meeting": the admitted attendance (in the room or remote) plus anyone in the video who is not on it (the coordinator
+ * conducts without joining by code); people only, so a room screen ("<user>#room") never counts. Pure. */
 export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvailable, onJoinVideo, events }: CallShellProps) {
   const nav = useNavigate();
   const s = live.state;
@@ -95,6 +104,7 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
   const admitted = s.me?.status === "present" || s.me?.status === "remote" || !!s.can?.manage;
   const waiting = s.me?.status === "waiting";
   const inSession = s.meeting.status === "in_session";
+  const ended = meetingEnded(s.meeting.status) && variant !== "coordinator";
   const inRoom = s.me?.mode === "room" || s.me?.status === "present";
   const canManage = variant === "coordinator" && !!s.can?.manage;
   const canRecord = variant !== "room" && !!s.can?.record;
@@ -298,7 +308,7 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
   useShortcuts(ctx, { openHelp: () => setHelpOpen(true), next, previous });
 
   // Phone: the controls fade after 4 s without a touch, except while something needs them.
-  const holdControls = !!cs.panel || !!menu || helpOpen || endOpen || !!card || presentAsk || ctx.hands.has(myUser) || dictating || shareOn || !!s.presenting;
+  const holdControls = ended || !!cs.panel || !!menu || helpOpen || endOpen || !!card || presentAsk || ctx.hands.has(myUser) || dictating || shareOn || !!s.presenting;
   const controls = useControlsAutoHide(phone && !room, holdControls);
   const landscape = phone && !room && sideways;
   const fade = cn("transition-opacity duration-300 focus-within:pointer-events-auto focus-within:opacity-100", controls.hidden && "pointer-events-none opacity-0");
@@ -315,16 +325,15 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
       <ShellContext.Provider value={extras}>
         <StageFrame testId={testId} attrs={attrs}>
           {liveNode}
-          <CaseFlow />
           {phone && !room ? <div className={fade} data-testid="top-controls"><TopBar /></div> : <TopBar />}
-          {room ? <RoomBody summaryOn={summaryOn} liveText={liveText} /> : (
-            <main className={cn("flex min-h-0 flex-1 gap-3 p-2 lg:p-3", phone && !landscape && "flex-col overflow-y-auto", landscape && "gap-2")}>
+          {room ? <RoomBody summaryOn={summaryOn} setSummaryOn={setSummaryOn} videoOn={videoOn} liveText={liveText} ended={ended} /> : (
+            <section aria-label="Call" className={cn("flex min-h-0 flex-1 gap-3 p-2 lg:p-3", phone && !landscape && "flex-col overflow-y-auto", landscape && "gap-2")}>
               {desktop ? <AgendaRail /> : null}
               <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
                 <StageTabs />
                 <div className={cn("flex min-w-0 gap-2", phone && !landscape ? "min-h-[62.5vw] flex-1" : "min-h-0 flex-1")}>
                   <StageContent className={cn(phone && !landscape ? "min-h-[62.5vw] w-full flex-1" : "min-h-0 flex-1")}>
-                    <StageOverlays />
+                    <StageOverlays ended={ended} />
                   </StageContent>
                   {desktop && !cs.panel ? <div className="scroll-thin hidden w-52 shrink-0 overflow-y-auto lg:block xl:w-60"><Strip orientation="column" /></div> : null}
                 </div>
@@ -340,9 +349,9 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
               </div>
               {landscape ? <div className="scroll-thin w-28 shrink-0 overflow-y-auto overflow-x-hidden" data-testid="landscape-strip"><Strip orientation="column" max={8} small /></div> : null}
               <SidePanel />
-            </main>
+            </section>
           )}
-          {room ? <RoomHoverBar summaryOn={summaryOn} setSummaryOn={setSummaryOn} videoOn={videoOn} /> : phone ? <div className={fade} data-testid="bar-controls"><CallBar /></div> : <CallBar />}
+          {room ? null : ended ? <EndedBar /> : phone ? <div className={fade} data-testid="bar-controls"><CallBar /></div> : <CallBar />}
           {room ? null : <ShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} coordinator={canManage} present={!!video.toggleShare} />}
           {mayShare ? <PresentDialog open={presentAsk} onOpenChange={setPresentAsk} onShare={() => { markPresentAsked(mid); setPresentAsk(false); void rawToggleShare?.(); }} /> : null}
           {canManage ? <EndMeetingDialog open={endOpen} onOpenChange={setEndOpen} /> : null}
@@ -355,12 +364,14 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
 
 /** The overlays on the stage: the connection banner, the "Following / Stepped away" chip (member), "What the room sees"
  * (coordinator), the slide dots and the coordinator's admit toast. */
-function StageOverlays() {
+function StageOverlays({ ended }: { ended: boolean }) {
   const c = useCall();
   const openedItem = c.opened && c.opened.kind !== "none";
   return (
     <>
-      <div className="pointer-events-none absolute inset-x-0 top-2 z-20 flex flex-col items-center gap-1.5 px-3 [&>*]:pointer-events-auto"><ConnectionBanner /><PresentingBar /></div>
+      <CaseFlow />
+      {ended ? <EndedCard /> : null}
+      <div className="pointer-events-none absolute inset-x-0 top-14 z-20 flex flex-col items-center gap-1.5 px-3 [&>*]:pointer-events-auto"><PresentingBar /></div>
       {c.variant === "member" ? (
         <span className={cn("pointer-events-none absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium", c.following ? "bg-ok/20 text-[#8fe0b3]" : "bg-warn/20 text-[#ffd48a]")}>
           {c.following ? <MonitorCheck className="size-3.5" aria-hidden /> : <Footprints className="size-3.5" aria-hidden />}<span className={c.phone ? "sr-only" : undefined}>{c.following ? "Following the shared screen" : "Stepped away"}</span>
@@ -369,6 +380,37 @@ function StageOverlays() {
       {!openedItem && !c.state.presenting ? <SlideDots slides={c.slides} index={c.shownSlide} className="absolute bottom-2 right-3 z-10" /> : null}
       <AdmitToast className="absolute bottom-3 left-3" />
     </>
+  );
+}
+
+/** "The meeting has ended" over the stage (member: a link back to the meeting page; the room screen: "Meeting closed", large). */
+function EndedCard() {
+  const c = useCall();
+  const room = c.variant === "room";
+  const cancelled = c.state.meeting.status === "cancelled";
+  return (
+    <div className="absolute inset-0 z-40 grid place-items-center bg-stage/85 p-4 backdrop-blur-sm" data-testid="meeting-ended" role="status">
+      <div className={cn("max-w-lg rounded-2xl border border-stage-line bg-stage-panel text-center shadow-[var(--shadow-lift)]", room ? "space-y-3 p-10" : "space-y-3 p-6")}>
+        <p className={cn("font-semibold text-stage-fg", room ? "text-5xl" : "text-xl")}>{room ? "Meeting closed" : "The meeting has ended"}</p>
+        <p className={cn("text-stage-fg/80", room ? "text-2xl" : "text-sm")}>{cancelled ? "The MDT Coordinator cancelled this meeting." : "The saved outcomes go to the owners of the Case Files."}</p>
+        {room ? null : (
+          <Button asChild variant="outline" className="border-stage-line bg-transparent text-stage-fg hover:bg-stage-raised hover:text-stage-fg">
+            <Link to={`/meetings/${c.mid}`} data-testid="back-to-meeting"><ArrowLeft className="size-4" aria-hidden />Back to the meeting page</Link>
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The member's bar once the meeting has ended: Leave only. */
+function EndedBar() {
+  const c = useCall();
+  const count = useMeetingCount();
+  return (
+    <ControlBar className="pb-[max(0.5rem,env(safe-area-inset-bottom))]" left={<span className="block min-w-0 truncate text-xs text-stage-muted" title={`The meeting has ended · ${count} in the meeting`}>The meeting has ended · {count} in the meeting</span>}>
+      <RoundButton icon={LogOut} label="Leave" title="Leave the meeting" tone="danger" onClick={c.actions.leave} testId="leave" />
+    </ControlBar>
   );
 }
 
@@ -410,23 +452,25 @@ export const ROOM_TILES_SHORT = 4;
  * room used it), the compact agenda column, the stage in large type (28 px and more), the latest questions, the remote members (at
  * most six tiles and "+n more") and the agents, and the footer with the count, the hands by name and the big decision strip
  * (28 px). Nothing here scrolls the page: long content is cut with "+n more" or clipped. */
-function RoomBody({ summaryOn, liveText }: { summaryOn: boolean; liveText: string }) {
+function RoomBody({ summaryOn, setSummaryOn, videoOn, liveText, ended }: { summaryOn: boolean; setSummaryOn: (on: boolean) => void; videoOn: boolean; liveText: string; ended: boolean }) {
   const c = useCall();
   const s = c.state;
   const summary = c.slides.find((x) => x.kind === "summary") ?? c.slides[0] ?? null;
   const onStage = c.slides[c.shownSlide] ?? null;
   const openedItem = c.opened && c.opened.kind !== "none";
   // The summary column is left out while the summary itself fills the stage (it would show twice).
-  const showColumn = summaryOn && !(onStage && summary && onStage.id === summary.id && !openedItem);
+  const summaryOnStage = !!(onStage && summary && onStage.id === summary.id && !openedItem);
+  const showColumn = summaryOn && !summaryOnStage;
   const questions = (s.questions ?? []).filter((q) => !c.cid || !q.case_id || q.case_id === c.cid);
   const latest = questions.slice(-ROOM_QUESTIONS);
   const earlier = questions.length - latest.length;
-  const count = s.attendance.filter((a) => a.status === "present" || a.status === "remote").length;
+  const count = useMeetingCount();
   const handNames = s.attendance.filter((a) => c.hands.has(a.user)).map((a) => a.name);
   const tall = useMediaQuery("(min-height: 900px)");
   return (
     <>
-      <main className="flex min-h-0 flex-1 gap-3 overflow-hidden p-3 lg:p-4">
+      {/* the hover bar sits at the bottom right of this area; the stage column and the people column keep room under it */}
+      <section aria-label="Call" className="relative flex min-h-0 flex-1 gap-3 overflow-hidden p-3 lg:p-4">
         {showColumn ? (
           <section className="hidden w-[30%] min-w-0 overflow-hidden rounded-xl border border-stage-line bg-stage-panel p-5 [mask-image:linear-gradient(to_bottom,#000_88%,transparent)] lg:block" aria-label="Summary" data-testid="room-summary">
             {!c.cid ? <p className="text-xl text-stage-fg/80">The summary of the current case appears here.</p> : null}
@@ -436,11 +480,12 @@ function RoomBody({ summaryOn, liveText }: { summaryOn: boolean; liveText: strin
           </section>
         ) : null}
         <AgendaRail room className="hidden lg:flex" />
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 pb-14">
           {/* Large type on the projector: every line on the stage at 28 px or more (the slide title larger, the source chips at 20 px). */}
           <StageContent className="min-h-0 flex-1 [&_.stage-slide]:text-[28px] [&_.stage-slide_*]:[font-size:inherit] [&_.stage-slide_h3]:text-[36px] [&_.stage-slide_.quote-chip]:text-[20px] [&_p]:text-[28px] [&_p]:leading-snug" >
-            <div className="pointer-events-none absolute inset-x-0 top-2 z-20 flex justify-center px-3 [&>*]:pointer-events-auto"><ConnectionBanner /></div>
             {!openedItem && !s.presenting ? <SlideDots slides={c.slides} index={c.shownSlide} className="absolute bottom-3 right-4 z-10" /> : null}
+            <CaseFlow />
+            {ended ? <EndedCard /> : null}
           </StageContent>
           <AnimatePresence initial={false}>
             {latest.length ? (
@@ -451,10 +496,11 @@ function RoomBody({ summaryOn, liveText }: { summaryOn: boolean; liveText: strin
             ) : null}
           </AnimatePresence>
         </div>
-        <aside className="flex w-72 shrink-0 flex-col gap-2 overflow-hidden min-[1600px]:w-[24rem]" aria-label="Remote members and agents" data-testid="room-people">
+        <aside className="flex w-72 shrink-0 flex-col gap-2 overflow-hidden pb-14 min-[1600px]:w-[24rem]" aria-label="Remote members and agents" data-testid="room-people">
           <Strip orientation="column" max={tall ? ROOM_TILES : ROOM_TILES_SHORT} />
         </aside>
-      </main>
+        <RoomHoverBar summaryOn={summaryOn} setSummaryOn={setSummaryOn} videoOn={videoOn} summaryOnStage={summaryOnStage} />
+      </section>
       <footer className="space-y-2 border-t border-stage-line px-3 py-2 lg:px-4">
         <div className="flex flex-wrap items-center gap-3 text-xl text-stage-fg/80">
           <span data-testid="room-count">{count} in the meeting</span>
@@ -469,19 +515,19 @@ function RoomBody({ summaryOn, liveText }: { summaryOn: boolean; liveText: strin
 }
 
 /** The room screen's small bar at the bottom right: it shows on hover or focus. */
-function RoomHoverBar({ summaryOn, setSummaryOn, videoOn }: { summaryOn: boolean; setSummaryOn: (on: boolean) => void; videoOn: boolean }) {
+function RoomHoverBar({ summaryOn, setSummaryOn, videoOn, summaryOnStage }: { summaryOn: boolean; setSummaryOn: (on: boolean) => void; videoOn: boolean; summaryOnStage: boolean }) {
   const c = useCall();
   const v = c.video;
   const btn = "text-stage-fg hover:bg-stage-raised hover:text-stage-fg";
   return (
-    <div className="fixed bottom-24 right-3 z-30 flex flex-wrap items-center justify-end gap-1 rounded-xl border border-stage-line bg-stage-panel/95 p-1 opacity-30 shadow-[var(--shadow-lift)] backdrop-blur transition-opacity duration-200 hover:opacity-100 focus-within:opacity-100" role="toolbar" aria-label="Room screen controls" data-testid="room-bar">
+    <div className="absolute bottom-2 right-3 z-30 flex flex-wrap items-center justify-end gap-1 rounded-xl border border-stage-line bg-stage-panel/95 p-1 opacity-30 shadow-[var(--shadow-lift)] backdrop-blur transition-opacity duration-200 hover:opacity-100 focus-within:opacity-100" role="toolbar" aria-label="Room screen controls" data-testid="room-bar">
       {videoOn ? (
         <>
           <Button variant="ghost" size="sm" className={cn(btn, v.micOn && "bg-stage-raised")} onClick={() => void v.toggleMic()} disabled={v.status !== "connected"} aria-pressed={v.micOn} title="The room's microphone, for the remote members">{v.micOn ? <Mic className="size-4" /> : <MicOff className="size-4" />}Room mic</Button>
           <Button variant="ghost" size="sm" className={cn(btn, v.camOn && "bg-stage-raised")} onClick={() => void v.toggleCam()} disabled={v.status !== "connected"} aria-pressed={v.camOn} title="The room's camera, for the remote members">{v.camOn ? <Camera className="size-4" /> : <CameraOff className="size-4" />}Room camera</Button>
         </>
       ) : null}
-      <Button variant="ghost" size="sm" className={cn(btn, summaryOn && "bg-stage-raised")} onClick={() => setSummaryOn(!summaryOn)} aria-pressed={summaryOn} title="The case summary in a column beside the stage" data-testid="summary-toggle"><PanelLeft className="size-4" />Summary on the side</Button>
+      <Button variant="ghost" size="sm" className={cn(btn, summaryOn && !summaryOnStage && "bg-stage-raised")} onClick={() => setSummaryOn(!summaryOn)} aria-pressed={summaryOn} disabled={summaryOnStage} title={summaryOnStage ? "The summary is on the stage now" : "The case summary in a column beside the stage"} data-testid="summary-toggle"><PanelLeft className="size-4" />Summary on the side</Button>
       <Button variant="ghost" size="sm" className={cn(btn, c.agentVoices && "bg-stage-raised")} onClick={() => c.setAgentVoices(!c.agentVoices)} aria-pressed={c.agentVoices} title={c.agentVoices ? "The agents' answers are read aloud on this screen; click to mute them" : "The agents' answers are not read aloud on this screen; click to turn them on"} data-testid="agent-voices">{c.agentVoices ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}{c.agentVoices ? "Agent voices on" : "Agent voices off"}</Button>
       <Button variant="ghost" size="icon" className={btn} onClick={c.toggleFullscreen} aria-label={c.fullscreen ? "Leave full screen" : "Full screen"} title={c.fullscreen ? "Leave full screen (F)" : "Full screen (F)"} aria-keyshortcuts="F">{c.fullscreen ? <Minimize2 className="size-5" /> : <Maximize2 className="size-5" />}</Button>
       <Button asChild variant="ghost" size="icon" className={btn} aria-label="Close the room screen" title="Close the room screen"><Link to={`/meetings/${c.mid}`}><X className="size-5" /></Link></Button>

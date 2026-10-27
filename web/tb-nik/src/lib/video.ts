@@ -2,7 +2,7 @@
 // to arrive with the camera and microphone on; the room screen joins under its own identity (<user>#room) and may publish the
 // room's camera and microphone. Everything stays on the hospital's own LiveKit server.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Room, RoomEvent, Track, createLocalTracks, type LocalTrack, type RemoteParticipant } from "livekit-client";
+import { ConnectionState, Room, RoomEvent, Track, createLocalTracks, type LocalTrack, type RemoteParticipant } from "livekit-client";
 import { api, TB } from "@/lib/api";
 
 export interface VideoToken { url: string; token: string; room: string; identity: string; name?: string }
@@ -78,6 +78,19 @@ export function deviceGoneSentence(kind: DeviceKind, fallback?: string | null): 
 /** Speakers kept for `holdMs` after they stop (so the ring and the order do not flicker), the most recent first. */
 export function stickySpeakers(lastSpoke: Map<string, number>, now: number, holdMs = 2000): string[] {
   return [...lastSpoke.entries()].filter(([, t]) => now - t <= holdMs).sort((a, b) => b[1] - a[1]).map(([id]) => id);
+}
+
+/** The plain words of a device failure: "Microphone: <the browser's words>", or `fallback` when the browser gave no words. */
+export function deviceErrorText(prefix: string, e: unknown, fallback: string): string {
+  const msg = e instanceof Error ? e.message.trim() : "";
+  return msg ? `${prefix}: ${msg}` : fallback;
+}
+
+/** The call's status for a LiveKit connection state (a signal drop is a reconnect too); null keeps the current status. */
+export function statusForConnection(state: ConnectionState | string): VideoStatus | null {
+  if (state === ConnectionState.Reconnecting || state === ConnectionState.SignalReconnecting) return "reconnecting";
+  if (state === ConnectionState.Connected) return "connected";
+  return null;
 }
 
 /** The screen share capture (night-v3 5.2): 1080p at 15 frames a second (sharp text, little bandwidth), the tab's audio when the
@@ -177,11 +190,20 @@ export function useVideoRoom(mid: string, enabled: boolean, opts: VideoOptions =
       .on(RoomEvent.AudioPlaybackStatusChanged, () => setAudioBlocked(!r.canPlaybackAudio))
       .on(RoomEvent.MediaDevicesChanged, () => { void onDevicesChanged(); })
       .on(RoomEvent.ActiveDeviceChanged, bump)
-      .on(RoomEvent.Reconnecting, () => setStatus("reconnecting")).on(RoomEvent.Reconnected, () => setStatus("connected"))
+      // LiveKit 2.23 reports a signal drop as SignalReconnecting; both kinds show the reconnecting banner
+      .on(RoomEvent.Reconnecting, () => { setStatus("reconnecting"); setError(null); })
+      .on(RoomEvent.SignalReconnecting, () => { setStatus("reconnecting"); setError(null); })
+      .on(RoomEvent.Reconnected, () => { setStatus("connected"); setError(null); })
+      .on(RoomEvent.ConnectionStateChanged, (state) => {
+        // before the first connect the join itself sets the status
+        if (cancelled || !wasConnected) return;
+        const next = statusForConnection(state);
+        if (next) setStatus(next);
+      })
       .on(RoomEvent.Disconnected, () => {
         if (cancelled) return;
         setStatus(wasConnected ? "disconnected" : "off");
-        setMicOn(false); setCamOn(false); setShareOn(false); setQuality("unknown");
+        setMicOn(false); setCamOn(false); setShareOn(false); setQuality("unknown"); setError(null);
       });
     const o = optsRef.current;
     connectVideo(mid, r, o.screen).then(async () => {
@@ -194,8 +216,8 @@ export function useVideoRoom(mid: string, enabled: boolean, opts: VideoOptions =
         if (o.videoDeviceId) await r.switchActiveDevice("videoinput", o.videoDeviceId);
         if (o.audioOutputDeviceId) await r.switchActiveDevice("audiooutput", o.audioOutputDeviceId);
       } catch { /* the default device then */ }
-      try { await r.localParticipant.setMicrophoneEnabled(!!o.mic); setMicOn(!!o.mic); } catch (e) { setMicOn(false); if (o.mic) setError(e instanceof Error ? `Microphone: ${e.message}` : "The microphone could not be used."); }
-      try { await r.localParticipant.setCameraEnabled(!!o.cam); setCamOn(!!o.cam); } catch (e) { setCamOn(false); if (o.cam) setError(e instanceof Error ? `Camera: ${e.message}` : "The camera could not be used."); }
+      try { await r.localParticipant.setMicrophoneEnabled(!!o.mic); setMicOn(!!o.mic); } catch (e) { setMicOn(false); if (o.mic) setError(deviceErrorText("Microphone", e, "The microphone could not be used.")); }
+      try { await r.localParticipant.setCameraEnabled(!!o.cam); setCamOn(!!o.cam); } catch (e) { setCamOn(false); if (o.cam) setError(deviceErrorText("Camera", e, "The camera could not be used.")); }
       void learnDevices();
     }).catch((e) => {
       if (cancelled) return;
@@ -212,12 +234,12 @@ export function useVideoRoom(mid: string, enabled: boolean, opts: VideoOptions =
   const toggleMic = useCallback(async () => {
     const r = roomRef.current; if (!r) return;
     try { const on = !micOn; await r.localParticipant.setMicrophoneEnabled(on); setMicOn(on); setError(null); }
-    catch (e) { setError(e instanceof Error ? `Microphone: ${e.message}` : "The microphone could not be used."); }
+    catch (e) { setError(deviceErrorText("Microphone", e, "The microphone could not be used.")); }
   }, [micOn]);
   const toggleCam = useCallback(async () => {
     const r = roomRef.current; if (!r) return;
     try { const on = !camOn; await r.localParticipant.setCameraEnabled(on); setCamOn(on); setError(null); }
-    catch (e) { setError(e instanceof Error ? `Camera: ${e.message}` : "The camera could not be used."); }
+    catch (e) { setError(deviceErrorText("Camera", e, "The camera could not be used.")); }
   }, [camOn]);
 
   /** Present a screen, or stop (night-v3 5.2). The browser asks which tab, window or screen; a refusal or a cancelled picker
@@ -251,7 +273,7 @@ export function useVideoRoom(mid: string, enabled: boolean, opts: VideoOptions =
       });
       setTick((n) => n + 1);
     } catch (e) {
-      setError(e instanceof Error ? `The ${DEVICE_WORD[kind]} could not be changed: ${e.message}` : `The ${DEVICE_WORD[kind]} could not be changed.`);
+      setError(deviceErrorText(`The ${DEVICE_WORD[kind]} could not be changed`, e, `The ${DEVICE_WORD[kind]} could not be changed.`));
     }
   }, []);
 

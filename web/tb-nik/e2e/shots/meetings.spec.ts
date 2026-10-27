@@ -238,6 +238,52 @@ test.describe("Meetings", () => {
     expect(errors).toEqual([]);
   });
 
+  test("member view: an offline member has no tile, 16 px boxes, the meeting ended card (night-v3 5.6)", async ({ page }) => {
+    const errors = watchConsole(page);
+    // Thirteen people (the People panel shows its search box from 13); Thomas Joseph is remote, offline and not in the video.
+    const extra = Array.from({ length: 9 }, (_, i) => ({ user: `extra${i}@vxh.example`, name: `Extra Member ${i + 1}`, department: "pathology", department_name: "Pathology", status: "remote", mode: "remote", online: true, head: false }));
+    const base = memberState();
+    const state = memberState({ attendance: [...(base.attendance as object[]), ...extra] });
+    const live = await open(page, `/meetings/${MID}/member`, { role: "treating", wait: "member-view", state });
+    await page.setViewportSize(SIZES[0]);
+    const strip = page.getByTestId("tile-grid").first();
+    await expect(strip.locator('[data-testid=tile][data-user="shanthi@vxh.example"]')).toHaveCount(1);
+    await expect(page.locator('[data-testid=tile][data-user="joseph@vxh.example"]')).toHaveCount(0);
+    await page.getByTestId("panel-people").click();
+    await expect(page.getByTestId("people-panel")).toContainText("Thomas Joseph");
+    const fontPx = (sel: string) => page.locator(sel).evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    expect(await fontPx("#people-search")).toBe(16);
+    await page.getByTestId("panel-chat").click();
+    await expect(page.getByTestId("questions-panel")).toBeVisible();
+    expect(await fontPx("#member-q")).toBe(16);
+    await page.keyboard.press("Escape");
+    // The coordinator ends the meeting: the card over the stage, the bar keeps Leave only, no timer.
+    const closed = { ...(state as Record<string, unknown>), meeting: { ...(state.meeting as Record<string, unknown>), status: "closed" } };
+    live.push({ type: "state", ...closed });
+    const card = page.getByTestId("meeting-ended");
+    await expect(card).toBeVisible();
+    await expect(card).toContainText("The meeting has ended");
+    await expect(card.getByRole("link", { name: "Back to the meeting page" })).toHaveAttribute("href", `/tb-nik/meetings/${MID}`);
+    await expect(page.getByTestId("leave")).toBeVisible();
+    await expect(page.getByTestId("mic")).toHaveCount(0);
+    await expect(page.getByTestId("raise-hand")).toHaveCount(0);
+    await expect(page.getByTestId("timer")).toHaveCount(0);
+    await snap(page, "meetings", "member-ended", { sizes: DESKTOP_MOBILE, fullPage: false });
+    expect(errors).toEqual([]);
+  });
+
+  test("room screen: Meeting closed over the stage (night-v3 5.6)", async ({ page }) => {
+    const errors = watchConsole(page);
+    await page.setViewportSize(SIZES[1]);
+    const live = await open(page, `/meetings/${MID}/room`, { wait: "room-screen", state: meetingState("in_session") });
+    await expect(page.getByTestId("meeting-ended")).toHaveCount(0);
+    const st = meetingState("in_session") as Record<string, unknown>;
+    live.push({ type: "state", ...st, meeting: { ...(st.meeting as Record<string, unknown>), status: "closed" } });
+    await expect(page.getByTestId("meeting-ended")).toContainText("Meeting closed");
+    await expect(page.getByTestId("room-screen")).toHaveAttribute("data-meeting-status", "closed");
+    expect(errors).toEqual([]);
+  });
+
   test("member view with video on (server without video)", async ({ page }) => {
     const errors = watchConsole(page);
     const s = memberState({ meeting: { ...memberState().meeting, video: true }, can: { ...memberState().can, video: true } });

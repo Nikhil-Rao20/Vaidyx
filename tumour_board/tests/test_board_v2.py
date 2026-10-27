@@ -320,7 +320,7 @@ def test_a_doctor_sees_only_its_own_case_files_in_the_room_minutes_and_export(ca
     assert set(full["decisions"]) == {"TB-X1", "TB-X2"}
     v = board.session_view(full, {"TB-X1"})
     assert set(v["decisions"]) == {"TB-X1"} and all((e.get("case_id") or "TB-X1") == "TB-X1" for e in v["log"]) and set(v.get("agents") or {}) <= {"TB-X1"}
-    assert board.session_view(full, None) is full
+    assert board.session_view(full, None) == {k: v for k, v in full.items() if k != "chat"}  # a copy without the meeting chat (night-v3 5.3, review S1)
     m = board.minutes(s["id"], {"TB-X1"})
     assert [c.get("restricted", False) for c in m["cases"]] == [False, True] and "patient" not in m["cases"][1] and "decision" not in m["cases"][1]
     assert m["cases"][0]["patient"]["name"] == "SYNTHETIC, Breast Patient" and all(a["case_id"] == "TB-X1" for a in m["followup"]["actions"])

@@ -76,6 +76,12 @@ export function agentLine(a: Pick<AgentInfo, "label" | "department" | "departmen
   return `${dept}, AI agent standing in`;
 }
 
+/** The accessible name of an agent tile: the visible words in their order ("Pathology, AI agent standing in, AI agent, support
+ * only, Ready"). */
+export function agentTileLabel(line: string, word: string): string {
+  return `${line}, AI agent, support only, ${word}`;
+}
+
 export function agentStateWord(state: string | undefined | null): string {
   return (state && AGENT_STATE_WORD[state]) || "Ready";
 }
@@ -99,11 +105,11 @@ export type StageMode =
  * on the floor). Pure. */
 export function stageMode(i: { layout: LayoutKind; pinned: string | null; spotlight: string[]; speakerKey: string | null; opened: Opened | null; cid: string | null; has: (key: string) => boolean; presenting?: string | null }): StageMode {
   if (i.pinned && i.has(i.pinned)) return { kind: "person", keys: [i.pinned], why: "pinned" };
+  if (i.presenting) return { kind: "share" };  // a share is for everyone: only a personal pin beats it on one's own screen (review M1)
   if (i.layout === "spotlight") {
     const keys = i.spotlight.filter(i.has).slice(0, 3);
     if (keys.length) return { kind: "spotlight", keys };
   }
-  if (i.presenting) return { kind: "share" };
   if (i.layout === "speaker" && i.speakerKey && i.has(i.speakerKey)) return { kind: "person", keys: [i.speakerKey], why: "speaker" };
   if (i.layout === "grid") return { kind: "grid" };
   if (i.opened && (i.opened.kind === "images" || i.opened.kind === "record")) return { kind: "opened" };
@@ -147,8 +153,9 @@ export function presenterName(user: string, attendance: Array<{ user: string; na
 }
 
 /** "Allow to present", "Withdraw the right to present" and "Stop their share": what the coordinator may do for a person. */
-export function presentMenuItems(i: { user: string; coordinator: string | null; canManage: boolean; allowed: string[]; presenting: string | null; roomScreen?: boolean }): Array<"allow" | "withdraw" | "stop"> {
+export function presentMenuItems(i: { user: string; coordinator: string | null; canManage: boolean; allowed: string[]; presenting: string | null; roomScreen?: boolean; defaultPresenter?: string | null }): Array<"allow" | "withdraw" | "stop"> {
   if (!i.canManage || i.roomScreen || !i.user || i.user === i.coordinator) return [];
+  if (i.defaultPresenter && i.user === i.defaultPresenter) return i.presenting === i.user ? ["stop"] : [];  // presents by right: nothing to allow or withdraw
   const out: Array<"allow" | "withdraw" | "stop"> = [i.allowed.includes(i.user) ? "withdraw" : "allow"];
   if (i.presenting === i.user) out.push("stop");
   return out;
@@ -198,6 +205,22 @@ export function basePeople(attendance: Attendee[], state: MeetingState, opts: { 
     });
 }
 
+/** The tiles the call draws. A remote attendee who is offline and has no LiveKit participant left the call: no tile (the People
+ * panel still lists them as offline); people in the room keep their tile. On the room screen the strip shows the remote members
+ * only: never the room screen itself, nor someone marked as in the room who also joined the video. Pure. */
+export function visiblePeople<T extends { key: string; local?: boolean; roomScreen?: boolean; participant: unknown }>(people: T[], attendance: Array<Pick<Attendee, "user" | "status" | "online">>, variant: "member" | "coordinator" | "room"): T[] {
+  const by = new Map(attendance.map((a) => [a.user, a]));
+  return people.filter((p) => {
+    const a = by.get(p.key);
+    if (!p.local && !p.participant && a?.status === "remote" && a.online === false) return false;
+    if (variant === "room") {
+      if (p.local && p.roomScreen) return false;
+      if (!p.roomScreen && a?.status === "present") return false;
+    }
+    return true;
+  });
+}
+
 // ---- hooks ----------------------------------------------------------------------------------------------------------------
 
 export type CallPerson = TilePerson & { participant: Participant | null };
@@ -209,7 +232,7 @@ export function useCallPeople(): CallPerson[] {
   return useMemo(() => {
     const base = basePeople(state.attendance ?? [], state, { me, canManage, onlyRemote: variant === "room" });
     const parts: Participant[] = room ? [room.localParticipant, ...room.remoteParticipants.values()] : [];
-    return mergePeople<Participant>(base, parts.filter((p) => !!p.identity));
+    return visiblePeople(mergePeople<Participant>(base, parts.filter((p) => !!p.identity)), state.attendance ?? [], variant);
     // tick changes whenever LiveKit's participants or tracks change
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, me, canManage, variant, room, tick]);
@@ -280,7 +303,7 @@ export function TileMenu({ p }: { p: CallPerson }) {
   const spot = ctx.spotlight ?? [];
   const lit = spot.includes(p.user);
   const canSpot = ctx.canManage && !p.roomScreen;
-  const present = ctx.variant === "coordinator" ? presentMenuItems({ user: p.user, coordinator: ctx.me || null, canManage: ctx.canManage, allowed: ctx.state.present_allowed ?? [], presenting: ctx.state.presenting ?? null, roomScreen: p.roomScreen }) : [];
+  const present = ctx.variant === "coordinator" ? presentMenuItems({ user: p.user, coordinator: ctx.me || null, canManage: ctx.canManage, allowed: ctx.state.present_allowed ?? [], presenting: ctx.state.presenting ?? null, roomScreen: p.roomScreen, defaultPresenter: ctx.state.current?.presenter?.user ?? null }) : [];
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -378,8 +401,8 @@ export function AgentCallTile({ agent, big, className }: { agent: AgentInfo; big
         <VaidyxIcon tone="white" className={big ? "h-7" : "h-4"} />
       </motion.span>
       <span className="min-w-0 text-left">
-        <span className={cn("block truncate font-medium leading-tight text-stage-fg", big ? "text-xl" : "text-xs")}>{line}</span>
-        <span className={cn("block truncate", big ? "text-base text-stage-fg/80" : "text-[10px] text-stage-muted")}>AI agent, support only</span>
+        <span className={cn("block truncate font-medium leading-tight text-stage-fg", big ? "text-xl" : "text-xs")}>{line}</span>{" "}
+        <span className={cn("block truncate", big ? "text-base text-stage-fg/80" : "text-[10px] text-stage-muted")}>AI agent, support only</span>{" "}
         <span className={cn("block text-stage-fg", big ? "text-lg" : "text-[11px]")} aria-live="polite">
           <AnimatePresence mode="wait" initial={false}>
             <motion.span key={key} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="inline-flex items-center gap-1">{word}{busy ? <Dots /> : null}</motion.span>
@@ -388,7 +411,9 @@ export function AgentCallTile({ agent, big, className }: { agent: AgentInfo; big
       </span>
     </>
   );
-  const label = `${line}, AI agent, support only, ${word}`;
+  // The name starts with the visible words in the same order (axe label-content-name-mismatch): the department line, "AI agent,
+  // support only", the state word.
+  const label = agentTileLabel(line, word);
   return (
     <div className={cn("group/tile relative aspect-video overflow-hidden rounded-xl border-2 border-dashed bg-stage-raised", AGENT_RING[key] ?? "border-stage-line", className)} data-testid="agent-tile" data-agent-state={key} data-role={agent.role}>
       {interactive ? (

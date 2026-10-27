@@ -1,5 +1,6 @@
 // The case flow of the call (night-v3 5.4, research/04 section 6.13): when the coordinator moves the meeting to another case, the
-// member and the room screen see a short toast at the top of the stage, "Moved to case 4 of 8: <patient line>", for 3 s and hear the
+// member and the room screen see a short toast at the top left of the stage (clear of the "Following the shared screen" chip at the
+// top right; centred on the room screen, which has no chip), "Moved to case 4 of 8: <patient line>", for 3 s and hear the
 // polite announcement "The meeting moved to case 4 of 8"; a new presenter is announced as "Presenter: <name>". The member's "stepped
 // away" state is reset by the shell on a case change, not here. Also the case clock the agenda rail and the Agenda panel share: the
 // time spent on the case on the floor (counting up between events while the timer runs) and what is left of its timer.
@@ -27,20 +28,28 @@ export interface CaseClock {
   timer: MeetingTimer | null;
 }
 
-/** Seconds spent: total minus what is left when the timer knows its total (the server's own rule), else the server's figure plus what
- * the local countdown has used since the last event. */
-export function elapsedOf(current: MeetingState["current"], left: number): number {
-  const t = current?.timer ?? null;
-  if (t && typeof t.total === "number" && t.total > 0) return Math.max(0, t.total - left);
-  const base = Math.max(0, current?.elapsed_seconds ?? 0);
-  return t ? base + Math.max(0, t.seconds_left - left) : base;
+/** Seconds spent on the case: the server's figure (since the case came on the floor, never capped by the planned minutes) plus the
+ * seconds since that figure arrived. */
+export function elapsedOf(current: MeetingState["current"], sinceSeconds: number): number {
+  if (!current?.case_id) return 0;
+  return Math.max(0, current.elapsed_seconds ?? 0) + Math.max(0, sinceSeconds);
 }
 
-/** The clock of the case on the floor, ticking between events while its timer runs. */
+/** The clock of the case on the floor: the time spent ticks up by itself, the time left follows the countdown while it runs. */
 export function useCaseClock(state: MeetingState): CaseClock {
   const timer = state.current?.timer ?? null;
   const left = useCountdown(timer);
-  return { elapsed: elapsedOf(state.current, left), left, timer };
+  const cid = state.current?.case_id ?? null;
+  const base = state.current?.elapsed_seconds ?? 0;
+  const [since, setSince] = useState(0);
+  useEffect(() => {
+    setSince(0);
+    if (!cid) return undefined;
+    const t0 = Date.now();
+    const id = window.setInterval(() => setSince(Math.round((Date.now() - t0) / 1000)), 1000);
+    return () => window.clearInterval(id);
+  }, [cid, base]);
+  return { elapsed: elapsedOf(state.current, since), left, timer };
 }
 
 /** "7:42 left" (amber under 2 minutes), "time up" at 0 (red), "paused" when the timer is stopped; null without a timer. The words
@@ -124,8 +133,10 @@ export function CaseFlow() {
   }, [toast]);
 
   const room = c.variant === "room";
+  // Drawn inside the stage (the shell puts it among the stage's overlays): the member's toast starts at the left and stops short of
+  // the chip at the top right (an icon on a phone, the words on a laptop).
   return (
-    <div className={cn("pointer-events-none fixed inset-x-0 z-40 flex justify-center px-4", room ? "top-28" : c.phone ? "top-16" : "top-[7.25rem]")}>
+    <div className={cn("pointer-events-none absolute inset-x-0 top-3 z-30 flex px-3", room ? "justify-center" : cn("justify-start", c.phone ? "pr-12" : "pr-60"))} data-testid="case-toast-area">
       <AnimatePresence>
         {toast ? (
           // role status for the tests and assistive tools; aria-live off because the shell's polite region already says it once.

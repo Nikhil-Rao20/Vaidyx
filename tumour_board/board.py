@@ -738,11 +738,13 @@ def allowed_cases(r: dict, session) -> set | None:
 def session_view(session, allowed) -> dict:
     """The session as a doctor may see it: the log entries, the decisions and the agent records of the Case Files in `allowed` only
     (entries without a Case File, such as the start and close, stay). `allowed` None: the whole session."""
+    out = {k: v for k, v in session.items() if k != "chat"}  # the meeting chat is for the admitted members only (night-v3 5.3, review S1)
     if allowed is None:
-        return session
-    return {**session, "log": [e for e in session.get("log") or [] if not e.get("case_id") or e.get("case_id") in allowed],
+        return out
+    return {**out, "log": [e for e in session.get("log") or [] if not e.get("case_id") or e.get("case_id") in allowed],
             "decisions": {k: v for k, v in (session.get("decisions") or {}).items() if k in allowed},
-            "agents": {k: v for k, v in (session.get("agents") or {}).items() if k in allowed}}
+            "agents": {k: v for k, v in (session.get("agents") or {}).items() if k in allowed},
+            "questions": [q for q in session.get("questions") or [] if q.get("case_id") in allowed]}
 
 
 def session_surgical(session) -> set:

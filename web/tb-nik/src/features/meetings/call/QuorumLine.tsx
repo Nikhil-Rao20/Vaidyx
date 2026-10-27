@@ -44,9 +44,9 @@ export function quorumSentences(q: QuorumInfo, agents: string[] = q.agents ?? []
   if (away.length) absent = `Not here: ${list(away.map((h) => h.name))}${agentWords ? ` (${agentWords})` : ""}.`;
   else if (agentWords) absent = `Every head is here. ${agentWords.charAt(0).toUpperCase()}${agentWords.slice(1)}.`;
   else if (total) absent = "Every head is here.";
-  const pm = q.pmjay;
+  const pm = q.pmjay && !q.pmjay.not_applicable ? q.pmjay : null;  // a hospital that is not PM-JAY empanelled gets no PM-JAY line
   const pmjayCount = pm ? `${pm.present} of ${pm.total}` : "";
-  const pmjay = pm ? `${PMJAY_LEAD}: ${pmjayCount} present as people.` : "";
+  const pmjay = pm ? `${PMJAY_LEAD}: ${pmjayCount} present as people.${withNames && pm.seat_check && pm.seat_note ? ` ${pm.seat_note}.` : ""}` : "";
   return { present, absent, pmjay, headsCount, pmjayCount };
 }
 

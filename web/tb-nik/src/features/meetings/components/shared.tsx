@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Bot, FileText, Hand, Images, Radio, Timer as TimerIcon, Wifi, WifiOff } from "lucide-react";
 import { answerText, handUsers, type AgentState, type Attendee, type LiveStatus, type MeetingQuestion, type MeetingState, type MeetingTimer } from "@/lib/live";
 import type { Slide, SlideCitation, SlideContentMap, SlideSentence } from "../types";
-import { StatusChip, fmtDate, indianDates, initials, niceTitle } from "@/features/casefile/components/common";
+import { StatusChip, fmtDate, indianDates, initials, modelLabel, niceTitle } from "@/features/casefile/components/common";
 import { cn } from "@/lib/utils";
 
 export function MeetingStatusChip({ status }: { status: string }) {
@@ -143,7 +143,7 @@ export function QuestionsList({ questions, big, emptyText = "No questions yet.",
             {a && (a.statements ?? []).length ? (
               <div className={cn("mt-1 border-l-2 border-primary pl-2 space-y-1", big ? "text-base" : "text-sm")}>
                 {a.statements!.map((s, i) => <p key={i} className="text-foreground">{indianDates(s.text)}{(s.citations ?? []).map((c, j) => <Cite key={j} c={c} big={big} />)}</p>)}
-                <p className={cn("text-muted-foreground", big ? "text-xs" : "text-[10px]")}>{a.note ?? "From the records only; the stand-in is not a member of the board."}</p>
+                <p className={cn("text-muted-foreground", big ? "text-xs" : "text-[10px]")}>{a.note ?? "From the records only; the stand-in is not a member of the board."}{a.model ? ` ${modelLabel(a.model)}.` : ""}</p>
               </div>
             ) : text ? <p className={cn("mt-1 text-foreground border-l-2 border-primary pl-2", big ? "text-base" : "text-sm")}>{text}</p> : null}
             {a?.status === "not_documented" ? <p className={cn("text-muted-foreground", big ? "text-sm" : "text-xs")}>Not documented in the records.</p> : null}

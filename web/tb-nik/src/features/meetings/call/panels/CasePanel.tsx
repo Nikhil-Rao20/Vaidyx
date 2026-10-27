@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, Images, MonitorCheck, MonitorOff, MonitorUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getCase } from "@/features/casefile/api";
+import { ApiError } from "@/lib/api";
 import { docStatusChip } from "@/features/casefile/components/SourceViewer";
 import { StatusChip, errorText, niceTitle } from "@/features/casefile/components/common";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,14 @@ export function mayOpen(o: { canManage: boolean; me: string; presenter?: string 
   return o.chosen ? o.chosen === o.me : !!o.owner && o.owner === o.me;
 }
 
+/** The plain line for a member who may not open the Case File (the records list answers 403). */
+export const RECORDS_FORBIDDEN = "The coordinator or the presenter opens the records of this Case File on the stage.";
+
+/** True when the records could not be listed because this person may not open the Case File. */
+export function recordsForbidden(e: unknown): boolean {
+  return e instanceof ApiError ? e.status === 403 : (e as { status?: number } | null)?.status === 403;
+}
+
 export function CasePanel() {
   const ctx = useCall();
   const { cid, row, slides, opened, me, canManage } = ctx;
@@ -33,6 +42,7 @@ export function CasePanel() {
   const onSlide = !opened || opened.kind === "none";
   const current = conduct ? ctx.sharedSlide : ctx.shownSlide;
   const tap = ctx.phone ? "min-h-11" : "";
+  const forbidden = cf.isError && recordsForbidden(cf.error);
 
   if (!cid) return <p className="text-sm text-muted-foreground">No case is on the screen yet.</p>;
 
@@ -67,7 +77,8 @@ export function CasePanel() {
         right={canOpen ? (!onSlide ? <Button size="xs" variant="outline" className={tap} onClick={() => void act.run("open:none", () => ctx.actions.open("none"))} disabled={!!act.pending}><MonitorOff className="size-3" />Back to the slide</Button> : <StatusChip kind="muted">slide only</StatusChip>) : undefined}>
         <ul className="divide-y divide-border rounded-md border border-border" aria-label="Records of this Case File">
           {cf.isLoading ? <li className="p-2"><div className="skeleton-line h-4 w-3/4" /></li> : null}
-          {cf.isError ? <li className="p-2 text-xs text-warn">The records could not be listed: {errorText(cf.error)}</li> : null}
+          {forbidden ? <li className="p-2 text-xs text-muted-foreground" data-testid="records-forbidden">{RECORDS_FORBIDDEN}</li> : null}
+          {cf.isError && !forbidden ? <li className="p-2 text-xs text-warn">The records could not be listed: {errorText(cf.error)}</li> : null}
           {!cf.isLoading && !cf.isError && docs.length === 0 ? <li className="p-2 text-xs text-muted-foreground">No records to open.</li> : null}
           {docs.map((d) => {
             const title = niceTitle(d.classification?.title ?? d.filename);
@@ -89,7 +100,7 @@ export function CasePanel() {
       </PanelSection>
 
       {act.error ? <p role="alert" className="text-xs text-bad">{act.error}</p> : null}
-      <Link to={`/cases/${cid}`} className={cn("inline-flex items-center gap-1 text-sm text-link underline", tap)} target="_blank" rel="noopener" title="Opens the Case File in a new tab">Open the Case File<ExternalLink className="size-3.5" aria-hidden /></Link>
+      {forbidden ? null : <Link to={`/cases/${cid}`} className={cn("inline-flex items-center gap-1 text-sm text-link underline", tap)} target="_blank" rel="noopener" title="Opens the Case File in a new tab">Open the Case File<ExternalLink className="size-3.5" aria-hidden /></Link>}
     </div>
   );
 }

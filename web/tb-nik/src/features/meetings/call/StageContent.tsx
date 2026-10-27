@@ -135,7 +135,7 @@ export function StageContent({ className, children }: { className?: string; chil
   } else if (mode.kind === "opened" && opened?.kind === "record" && opened.doc_id && ctx.cid) {
     bodyKey = `rec-${opened.doc_id}-${opened.page ?? 0}`;
     body = (
-      <motion.div key={bodyKey} {...fade} className="scroll-thin absolute inset-0 overflow-auto bg-[#1a1f26] p-3">
+      <motion.div key={bodyKey} {...fade} className="scroll-thin absolute inset-0 overflow-auto bg-[#1a1f26] p-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary" tabIndex={0} role="region" aria-label="Record">
         {opened.title ? <p className="sticky top-0 z-10 mb-2 inline-block rounded-md bg-stage-raised/90 px-2 py-1 text-sm font-medium text-stage-fg shadow">{opened.title}</p> : null}
         <img src={recordPageUrl(ctx.cid, opened.doc_id, opened.page ?? 0)} alt={`${opened.title ?? "Record"}, page ${(opened.page ?? 0) + 1}`} className="mx-auto h-auto max-w-full rounded-md bg-white" />
       </motion.div>
@@ -143,7 +143,7 @@ export function StageContent({ className, children }: { className?: string; chil
   } else if (slide) {
     bodyKey = `slide-${slide.id}`;
     body = (
-      <motion.div key={bodyKey} initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={{ duration: 0.22 }} className={cn("scroll-thin stage-slide absolute inset-0 overflow-y-auto", big ? "p-6 lg:p-8" : "p-4 lg:p-5")}>
+      <motion.div key={bodyKey} initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={{ duration: 0.22 }} className={cn("scroll-thin stage-slide absolute inset-0 overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary", big ? "p-6 lg:p-8" : "p-4 lg:p-5")} tabIndex={0} role="region" aria-label="Slide">
         <SlideContent slide={slide} big={big} />
       </motion.div>
     );

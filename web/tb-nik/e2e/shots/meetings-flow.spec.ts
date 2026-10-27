@@ -56,11 +56,11 @@ test.describe("Meetings: case flow", () => {
     live.push({ type: "timer", timer: { seconds_left: 95, running: true, total: 600 } });
     await expect(now.getByTestId("rail-remaining")).toHaveAttribute("data-tone", "low");
     await expect(now.getByTestId("rail-remaining")).toHaveText(/^· 1:\d\d left$/);
-    await expect(now.getByTestId("rail-elapsed")).toHaveText(/^· 8:\d\d spent$/);
+    await expect(now.getByTestId("rail-elapsed")).toHaveText(/^· 3:\d\d spent$/);  // the time spent counts from the moment the case came on the floor, not from the countdown (review M2)
     live.push({ type: "timer", timer: { seconds_left: 0, running: false, total: 600 } });
     await expect(now.getByTestId("rail-remaining")).toHaveText("· time up");
     await expect(now.getByTestId("rail-remaining")).toHaveAttribute("data-tone", "up");
-    await expect(now.getByTestId("rail-elapsed")).toHaveText("· 10:00 spent");
+    await expect(now.getByTestId("rail-elapsed")).toHaveText(/^· 3:\d\d spent$/);  // the time spent keeps counting from the case start (review M2)
     live.push({ type: "timer", timer: { seconds_left: 412, running: true, total: 600 } });
     await expect(now.getByTestId("rail-remaining")).toHaveAttribute("data-tone", "normal");
     // The quorum chip opens the full line, with the person beside each head present.
