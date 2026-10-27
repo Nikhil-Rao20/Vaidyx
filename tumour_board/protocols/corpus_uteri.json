@@ -1,0 +1,444 @@
+{
+ "id": "corpus_uteri",
+ "label": "Cancer of the corpus uteri (endometrium)",
+ "version": "0.1-draft",
+ "approval": {
+  "status": "draft",
+  "note": "Draft checklist from NCG Guidelines for Gynaecological Cancers (2019): needs a clinician's check"
+ },
+ "site": "endometri|uterus|uterine|corpus uteri|myometri",
+ "site_note": "V2 item 5.3 (two primaries): only on a Case File linked to the same patient's other Case File, and only for histopathology, cytology, IHC and molecular records: among several candidates for one record, or several documents carrying a required value, one that names another protocol's site and not this one steps aside and is named on the row for review; a document naming no site never does, and when every candidate names another site every candidate stays. Organ words only. A preference, never a filter; a patient with one cancer is checked as before.",
+ "note": "DRAFT, not approved for real use: needs a clinician's check. Configurable by the clinical team. Required records transcribed from the NCG Guidelines for Gynaecological Cancers (2019) (National Cancer Grid, India), the endometrial cancer section (the investigation algorithm and the summary table of imaging and management recommendations: Essential (a), Optimal (b), Optional (c)), each with its verbatim quote under where (the Word file has no page numbers). Tiers printed by NCG are kept; the tiers whose tier_basis says 'proposed' or 'proposal' (clinical_history, her2) are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). A record NCG gives only under a condition the system never judges (an age, a finding, a plan) is shown with NCG's own tier and the condition, never counted. Uterine sarcoma and carcinosarcoma are not separate in the book (carcinosarcoma is grouped with the Type II histology) and are not covered here. The book's algorithm for advanced disease says PET-CT should not be done in early lesions. The FIGO stage is the stage as recorded by the clinician, never computed. Nothing here suggests treatment.",
+ "settings_note": "Setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes stage). The two settings follow the book's investigation algorithm, 'Clinically early stage' and 'Advanced stage' (the summary table splits disease confined to the body of the uterus, Stage II, Stage III and Stage IV).",
+ "settings": [
+  {
+   "id": "early",
+   "label": "Early, clinically confined to the uterus (FIGO Stage I and II), as recorded"
+  },
+  {
+   "id": "advanced",
+   "label": "Advanced (FIGO Stage III and IV), as recorded"
+  }
+ ],
+ "records": [
+  {
+   "id": "clinical_history",
+   "label": "History, examination, performance status (fitness for surgery)",
+   "tier": "a",
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ],
+   "department": "Gynaecologic Oncology",
+   "required_facts": [
+    "ecog",
+    "comorbidities",
+    "menopausal_status",
+    "clinical_question"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "Staging CT scan and investigations for general fitness to treat should be done following confirmation of cancer/precancer",
+     "where": "Section on vulvar cancer, work-up (the book's wording for fitness to treat; the endometrial section has no explicit history line)"
+    }
+   ],
+   "tier_basis": "No letter printed for history; proposed a. The quoted line is from the vulvar section and shows the book's wording for fitness to treat; the endometrial rows list \"Electrocardiogram\" and renal and liver tests (see blood_counts_org)",
+   "route": "owner"
+  },
+  {
+   "id": "endometrial_biopsy",
+   "label": "Endometrial biopsy (hysteroscopy-guided if used), with IHC as indicated",
+   "tier": "a",
+   "doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type",
+    "grade"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "Endometrial biopsy +/-IHC",
+     "where": "Section \"Endometrial Cancer\" (contents p 25 to 26: Diagnosis, Workup & Investigations), the investigation algorithm headed \"Endometrial cancer / Investigations\" (Clinically early stage / Advanced stage), and the table \"Summary of Imaging and Management Recommendations for Endometrial Cancers\""
+    }
+   ],
+   "tier_basis": "Summary table Pre-treatment Workup, column (a)Essential, all rows"
+  },
+  {
+   "id": "blood_counts_org",
+   "label": "Complete haemogram, renal and liver function tests, ECG (CA125 in advanced)",
+   "tier": "a",
+   "doc_types": [
+    "lab"
+   ],
+   "department": "Biochemistry",
+   "required_facts": [
+    "haemoglobin",
+    "wbc",
+    "platelets",
+    "creatinine",
+    "bilirubin",
+    "ca125"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "Renal and Liver Function tests, CA125",
+     "where": "Section \"Endometrial Cancer\" (contents p 25 to 26: Diagnosis, Workup & Investigations), the investigation algorithm headed \"Endometrial cancer / Investigations\" (Clinically early stage / Advanced stage), and the table \"Summary of Imaging and Management Recommendations for Endometrial Cancers\""
+    }
+   ],
+   "tier_basis": "Summary table (a) column: early rows \"Complete Hemogram, Renal and Liver Function tests, Electrocardiogram\"; Stage III/IV rows add \"CA125\""
+  },
+  {
+   "id": "chest_xray",
+   "label": "Chest radiograph (CT thorax only if needed in advanced)",
+   "tier": "a",
+   "doc_types": [
+    "xray",
+    "ct"
+   ],
+   "region": "chest|thorax|lung",
+   "department": "Radiology",
+   "required_facts": [
+    "distant_findings"
+   ],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "Chest radiograph SOS CT thorax",
+     "where": "Section \"Endometrial Cancer\" (contents p 25 to 26: Diagnosis, Workup & Investigations), the investigation algorithm headed \"Endometrial cancer / Investigations\" (Clinically early stage / Advanced stage), and the table \"Summary of Imaging and Management Recommendations for Endometrial Cancers\""
+    }
+   ],
+   "tier_basis": "Summary table column (a): \"Chest radiograph\" for all stages; \"SOS CT thorax\" in Stage III/IV"
+  },
+  {
+   "id": "pelvic_imaging",
+   "label": "USG (TAS + TVS) abdomen and pelvis, or CT or MRI abdomen and pelvis",
+   "tier": "a",
+   "doc_types": [
+    "ultrasound",
+    "ct",
+    "mri"
+   ],
+   "region": "pelvis|pelvic|abdomen|abdo|uter|tas|tvs|transvaginal",
+   "department": "Radiology",
+   "required_facts": [
+    "lesion_size",
+    "depth_of_invasion",
+    "nodal_findings",
+    "parametrial_involvement"
+   ],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "USG(TAS+TVS) abdomen+ pelvis",
+     "where": "Section \"Endometrial Cancer\" (contents p 25 to 26: Diagnosis, Workup & Investigations), the investigation algorithm headed \"Endometrial cancer / Investigations\" (Clinically early stage / Advanced stage), and the table \"Summary of Imaging and Management Recommendations for Endometrial Cancers\""
+    }
+   ],
+   "tier_basis": "Summary table: (a) USG(TAS+TVS) abdomen+ pelvis; (b) CT or MRI (abdomen + pelvis); Stage II adds \"CECT Abdomen and Pelvis\"; the algorithm for advanced disease says \"CECT Abdomen + Pelvis+ Thorax or whole body PET-CT$$\" with \"$$: PET-CT should not be done in early lesions.\""
+  },
+  {
+   "id": "pathology_report",
+   "label": "Pathology: tumour type, grade, depth of invasion, LVSI",
+   "tier": "a",
+   "doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type",
+    "grade",
+    "depth_of_invasion",
+    "lvi"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "Tumour type, grade, depth of invasion, LVSI",
+     "where": "Section \"Endometrial Cancer\" (contents p 25 to 26: Diagnosis, Workup & Investigations), the investigation algorithm headed \"Endometrial cancer / Investigations\" (Clinically early stage / Advanced stage), and the table \"Summary of Imaging and Management Recommendations for Endometrial Cancers\""
+    }
+   ],
+   "tier_basis": "Summary table Pathology, column (a)",
+   "note": "The margins value belongs to a surgical specimen and is not asked here"
+  },
+  {
+   "id": "molecular_ihc",
+   "label": "IHC for p53 and MMR; ER, PR on tissue blocks; POLE if available",
+   "tier": "b",
+   "doc_types": [
+    "ihc",
+    "molecular"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "mmr",
+    "er",
+    "pr",
+    "p53",
+    "pole"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "IHC for P53, MMR",
+     "where": "Section \"Endometrial Cancer\" (contents p 25 to 26: Diagnosis, Workup & Investigations), the investigation algorithm headed \"Endometrial cancer / Investigations\" (Clinically early stage / Advanced stage), and the table \"Summary of Imaging and Management Recommendations for Endometrial Cancers\""
+    }
+   ],
+   "tier_basis": "Summary table column (b)Optimal: \"IHC for P53, MMR  ER, PR on tissue Blocks, POLE if available\"; advanced disease: \"MSI High\" and \"HER 2 positive\" (algorithm footnote; the treatment words after them are not quoted)"
+  },
+  {
+   "id": "her2",
+   "label": "HER2 (advanced disease)",
+   "tier": "c",
+   "tiers": {
+    "early": "none",
+    "advanced": "c"
+   },
+   "doc_types": [
+    "ihc"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "her2"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "HER 2 positive",
+     "where": "Section \"Endometrial Cancer\" (contents p 25 to 26: Diagnosis, Workup & Investigations), the investigation algorithm headed \"Endometrial cancer / Investigations\" (Clinically early stage / Advanced stage), and the table \"Summary of Imaging and Management Recommendations for Endometrial Cancers\""
+    }
+   ],
+   "tier_basis": "Named in the advanced-stage algorithm without a letter; proposed c (a testing item attached to a treatment option). No test line without treatment words exists in the book, so the quote is cut before the treatment word"
+  },
+  {
+   "id": "mri_fertility",
+   "label": "MRI pelvis (fertility preservation)",
+   "tier": "c",
+   "tiers": {
+    "early": "c",
+    "advanced": "none"
+   },
+   "doc_types": [
+    "mri"
+   ],
+   "region": "pelvis|pelvic|uter",
+   "department": "Radiology",
+   "required_facts": [
+    "lesion_size",
+    "depth_of_invasion"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "MRI is a must in the above.",
+     "where": "Section \"Endometrial Cancer\" (contents p 25 to 26: Diagnosis, Workup & Investigations), the investigation algorithm headed \"Endometrial cancer / Investigations\" (Clinically early stage / Advanced stage), and the table \"Summary of Imaging and Management Recommendations for Endometrial Cancers\""
+    }
+   ],
+   "tier_basis": "Printed \"must\" for the fertility-sparing case only; column (c)Optional; condition is the book's",
+   "condition": {
+    "ncg_tier": "c",
+    "text": "for a young woman considering fertility preservation"
+   },
+   "note": "NCG: \"MRI is a must in the above\" for the fertility-sparing case only; column (c) Optional"
+  },
+  {
+   "id": "frozen_sln",
+   "label": "Frozen section and sentinel node (optional, surgical)",
+   "tier": "c",
+   "tiers": {
+    "early": "c",
+    "advanced": "none"
+   },
+   "doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "depth_of_invasion",
+    "grade"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "Frozen section examination of uterus for depth of invasion, tumor size and grade and cervical involvement",
+     "where": "Section \"Endometrial Cancer\" (contents p 25 to 26: Diagnosis, Workup & Investigations), the investigation algorithm headed \"Endometrial cancer / Investigations\" (Clinically early stage / Advanced stage), and the table \"Summary of Imaging and Management Recommendations for Endometrial Cancers\""
+    }
+   ],
+   "tier_basis": "Summary table column (c) Optional; a surgery-time item"
+  }
+ ],
+ "optional": [
+  {
+   "id": "previous_board",
+   "label": "Previous Tumour Board record",
+   "doc_types": [
+    "tumour_board_record"
+   ],
+   "department": "MDT Coordinator",
+   "route": "coordinator"
+  }
+ ],
+ "extract_facts": [
+  "presenting_complaint",
+  "ecog",
+  "comorbidities",
+  "clinical_question",
+  "recorded_stage",
+  "figo_stage",
+  "lesion_size",
+  "nodal_findings",
+  "distant_findings",
+  "histologic_type",
+  "grade",
+  "haemoglobin",
+  "wbc",
+  "platelets",
+  "creatinine",
+  "bilirubin",
+  "patient_preference",
+  "clinical_trial_note",
+  "diagnosis_date_mode",
+  "treatment_received",
+  "menopausal_status",
+  "ca125",
+  "depth_of_invasion",
+  "parametrial_involvement",
+  "lvi",
+  "mmr",
+  "er",
+  "pr",
+  "p53",
+  "pole",
+  "her2"
+ ],
+ "core_data": [
+  {
+   "id": "diagnosis",
+   "label": "Histopathological / cytological diagnosis",
+   "facts": [
+    "histologic_type"
+   ]
+  },
+  {
+   "id": "diagnosis_date_mode",
+   "label": "Date and mode of diagnosis",
+   "facts": [
+    "diagnosis_date_mode"
+   ]
+  },
+  {
+   "id": "stage",
+   "label": "FIGO stage as recorded (with the investigations used)",
+   "facts": [
+    "figo_stage",
+    "recorded_stage"
+   ]
+  },
+  {
+   "id": "performance_status",
+   "label": "Performance status",
+   "facts": [
+    "ecog"
+   ]
+  },
+  {
+   "id": "comorbidities",
+   "label": "Co-morbidities",
+   "facts": [
+    "comorbidities"
+   ]
+  },
+  {
+   "id": "biomarkers",
+   "label": "Relevant genomic / biomarker testing",
+   "facts": [
+    "mmr",
+    "p53",
+    "pole",
+    "er",
+    "pr",
+    "her2"
+   ]
+  },
+  {
+   "id": "treatment_history",
+   "label": "Treatment history",
+   "facts": [
+    "treatment_received"
+   ]
+  },
+  {
+   "id": "patient_preference",
+   "label": "Patient preference / special circumstances",
+   "facts": [
+    "patient_preference"
+   ]
+  },
+  {
+   "id": "clinical_trial",
+   "label": "Clinical trial availability / suitability recorded",
+   "facts": [
+    "clinical_trial_note"
+   ]
+  },
+  {
+   "id": "question",
+   "label": "Question for the Tumour Board",
+   "facts": [
+    "clinical_question"
+   ]
+  }
+ ],
+ "core_data_source": "NHS England, Streamlining MDT meetings (2020), p.11 'minimum core data requirements'; aligned with the NCG Virtual Tumour Board case template (India)",
+ "post_board": {
+  "required_record_fields": [
+   "decision_text",
+   "recorded_by",
+   "participants",
+   "actions"
+  ],
+  "follow_up_default_days": 14,
+  "record_fields_source": "EUSOMA 2020 (names of all participants, evidence on decisions); Victorian Cancer MDM quality framework 2018 (report errors/changes raised, divergent recommendations and dissenting clinicians); PM-JAY HBP 2.2 s.3.9 (tumour board decision and treatment plan)"
+ },
+ "policy_basis": "PM-JAY Health Benefit Package 2.2 user guidelines (NHA, 2021), section 3.9: pre-authorization is mandatory at each step of cancer care and the decision on appropriate care is to be taken by a multidisciplinary tumour board; NHS England MDT streamlining guidance (2020) pre-listing conditions.",
+ "guideline_sources": [
+  {
+   "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+   "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+   "pages": "n/a (Word file with no page numbers: each source names its section under where)"
+  }
+ ]
+}
