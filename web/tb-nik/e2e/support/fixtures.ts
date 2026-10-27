@@ -1,5 +1,8 @@
 // SYNTHETIC answers for the screenshot run in mock mode (TBNIK_MOCK=1): fake people, fake UHIDs (VXH/...), the fictitious
 // "Vaidyx Demo Hospital". Shapes follow docs/ui/build/SPEC-API.md and the routes in tumour_board/api. No real patient data.
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export type Role = "treating" | "resident" | "supporting" | "coordinator" | "root_admin" | "dept_admin" | "auditor";
 
@@ -111,16 +114,10 @@ export const meetings = {
 
 export const org = { hospital: { name: "Vaidyx Demo Hospital", level: "optimal" }, departments, admin_departments: [{ id: "radiology", name: "Radiology", group: "supporting" }] };
 
-export const protocols = {
-  protocols: [
-    { id: "breast", label: "Breast cancer", settings: [{ id: "early", label: "Early (operable), as recorded" }, { id: "locally_advanced", label: "Locally advanced, as recorded" }, { id: "metastatic", label: "Metastatic, as recorded" }] },
-    { id: "cervix", label: "Cervix cancer", settings: [{ id: "early", label: "Early (FIGO 2018 IA1 to IIA1), as recorded" }, { id: "locally_advanced", label: "Locally advanced (FIGO 2018 IB3, IIA2 to IVA), as recorded" }, { id: "metastatic", label: "Metastatic (FIGO 2018 IVB) or recurrent, as recorded" }] },
-    { id: "colorectal_rectum", label: "Rectal cancer", settings: [{ id: "non_metastatic", label: "Non-metastatic (no distant disease recorded)" }, { id: "metastatic", label: "Metastatic (distant disease recorded)" }] },
-    { id: "cup", label: "Cancer of Unknown Primary (CUP)", note: "DRAFT, not approved for real use.", settings: [{ id: "provisional_cup", label: "Provisional CUP, as recorded" }] },
-    { id: "lung_nsclc", label: "Lung cancer (NSCLC)", settings: [{ id: "non_metastatic", label: "Non-metastatic (no distant disease recorded)" }, { id: "metastatic", label: "Metastatic (distant disease recorded)" }] },
-    { id: "oral_cavity", label: "Oral cavity cancer (head and neck)", settings: [{ id: "early", label: "Early (Stage I and II), as recorded" }, { id: "locally_advanced", label: "Locally advanced (Stage III to IVB), as recorded" }] },
-  ],
-};
+// GET /protocols as the backend lists it (protocol.list_protocols(), saved to protocols.json on 27 Oct 2026 for night-v3 item
+// 2.10): the 24 checklists with their versions ("0.1-draft" for the new ones) plus generic and generic_haem.
+export const protocols: { protocols: Array<{ id: string; label: string; version?: string; note?: string; settings: Array<{ id: string; label: string; definition?: string }> }> } =
+  JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "protocols.json"), "utf8"));
 
 export const hisLookup = {
   found: true, identifier: "VXH/2026/000140", his: "DemoHIMS",

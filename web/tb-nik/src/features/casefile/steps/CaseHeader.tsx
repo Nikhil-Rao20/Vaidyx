@@ -1,12 +1,15 @@
 // The guided Case File's header (B1, B9): who the patient is (name and UHID on every section, NISTIR two identifiers), the cancer as
 // recorded, the owner, the board date and the urgency; on the right the one final action "Send to the board" and one "More" menu
 // (Team, Board form, Print, Download, Move to another meeting, Take off the agenda, Archive). Nothing else: the work is in the sections.
+// A draft checklist (version "x-draft", owner decision D6; night-v3 item 2.10) carries the chip "Checklist built (draft): needs a
+// clinician's check" next to the cancer; the version comes from GET /protocols (cached).
 import { Link } from "react-router-dom";
 import { Archive, CalendarDays, CalendarMinus, CalendarSync, ChevronDown, ClipboardList, Download, MoreHorizontal, Presentation, Printer, Send, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { UrgencyTag } from "@/components/UrgencyTag";
-import { GENERIC_RULE, NO_CHECKLIST_WORDS, isGeneric } from "@/lib/cancers";
+import { BUILT_DRAFT_WORDS, DRAFT_CHECKLIST, NO_CHECKLIST_WORDS, genericRule, isDraftChecklist, isGeneric } from "@/lib/cancers";
+import { useProtocols } from "@/hooks/useQueries";
 import { ownerOf } from "../api";
 import type { CaseFile, Team } from "../types";
 import { StatusChip, fmtDate } from "../components/common";
@@ -23,6 +26,8 @@ export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, deckHref
   const c = cf.case;
   const p = c.patient ?? { name: "", mrn: "", agesex: "" };
   const generic = isGeneric(c.protocol);
+  const protocols = useProtocols();
+  const draft = !generic && isDraftChecklist(protocols.data?.protocols.find((x) => x.id === c.protocol));
   const cancerName = ((c as { cancer_name?: string }).cancer_name ?? "").trim();
   const cancer = generic ? `${cancerName || "Other cancer"} (${NO_CHECKLIST_WORDS})` : steps?.protocol_label || c.protocol_label || (c.protocol ? c.protocol.replace(/_/g, " ") : "Cancer not chosen yet");
   const ids = (p.ids ?? []).filter((x) => x.kind === "ip_no" || x.kind === "op_no").map((x) => x.value);
@@ -46,7 +51,8 @@ export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, deckHref
           </p>
           <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
             <span className="font-medium text-foreground" data-testid="header-cancer">{cancer}{!generic && c.setting ? <span className="font-normal text-muted-foreground">, {c.setting.replace(/_/g, " ")}</span> : null}</span>
-            {generic ? <span className="text-muted-foreground">{GENERIC_RULE}</span> : null}
+            {generic ? <span className="text-muted-foreground">{genericRule(c.protocol)}</span> : null}
+            {draft ? <StatusChip kind="warn" icon={ClipboardList} title={DRAFT_CHECKLIST} className="whitespace-normal">{BUILT_DRAFT_WORDS}</StatusChip> : null}
             <span className="text-muted-foreground">{ownerName ? `${ownerName}, ` : ""}{ownerDept || "no owner yet"}</span>
             <span className="inline-flex items-center gap-1 text-muted-foreground"><CalendarDays className="size-3.5" aria-hidden />
               {c.board_date ? <>Board {fmtDate(c.board_date)}</> : "Board date not set"}

@@ -10,8 +10,12 @@ export interface NewCaseForm {
   cancerId: string | null;
   /** The cancer's name (the picked label, or the typed name when it is not listed); sent as cancer_name. */
   cancerName: string;
-  /** The built checklist, or "generic" (lib/cancers GENERIC_PROTOCOL) for a cancer with no checklist yet; null before a pick. */
+  /** The built checklist, or "generic" / "generic_haem" (lib/cancers GENERIC_PROTOCOLS) for a cancer with no checklist yet; null
+   * before a pick, before a typed cancer is marked solid or blood, and before a Colorectal or Kidney variant is picked. */
   protocol: string | null;
+  /** The picked variant of an entry that asks one more question (lib/cancers CancerEntry.variants: colon or rectum, adult or
+   * child kidney cancer); "" when the entry has none or none is picked yet. */
+  variant: string;
   /** The NCG setting id "as recorded"; NOT_RECORDED (StepCancer) when the records do not say yet; "as_recorded" under the generic rule. */
   setting: string;
   windowMonths: number | "all";
@@ -31,6 +35,7 @@ export const DEFAULT_FORM: NewCaseForm = {
   cancerId: null,
   cancerName: "",
   protocol: null,
+  variant: "",
   setting: "",
   windowMonths: 12,
   boardQuestion: "",
@@ -52,7 +57,7 @@ export function windowWords(w: number | "all"): string {
   return w === "all" ? "everything on record" : `the last ${w} months`;
 }
 
-/** The body of POST /cases/from-his. A cancer with no checklist yet goes as protocol "generic" with its one setting and its name
+/** The body of POST /cases/from-his. A cancer with no checklist yet goes as protocol "generic" (or "generic_haem") with its one setting and its name
  * (required there); a built checklist sends the picked name too, for the record. */
 export function createBody(form: NewCaseForm, notRecorded: string) {
   const p = form.lookup?.patient;

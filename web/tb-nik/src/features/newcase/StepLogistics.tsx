@@ -2,7 +2,7 @@
 // before the Case File can be marked ready), the urgency tag 1 to 5 (required, no default: the consultant's own call),
 // the board date (the next planned meeting when there is one), the presenter (you), a join code for residents, and the
 // consent to discuss with outside experts. A read-back of the whole Case File sits at the end; for a cancer with no checklist
-// yet it says what the generic rule checks (four core records, owner decision R05-Q04).
+// yet it says what the generic rule checks (four core records, owner decision R05-Q04; the blood cancer rule for "generic_haem").
 import { useEffect, useMemo } from "react";
 import { motion } from "motion/react";
 import { CalendarDays, ClipboardList, Flame, KeyRound, ShieldCheck, TriangleAlert, UserRound } from "lucide-react";
@@ -16,7 +16,7 @@ import { useMeetings, useOrg } from "@/hooks/useQueries";
 import { useSession } from "@/lib/session";
 import { ageSex, drName, formatDate, parseDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { GENERIC_RULE, NO_CHECKLIST_WORDS, cleanCancerName, isGeneric } from "@/lib/cancers";
+import { NO_CHECKLIST_WORDS, cleanCancerName, genericRecords, genericRule, isGeneric } from "@/lib/cancers";
 import { WINDOW_CHOICES, type NewCaseForm } from "@/features/newcase/form";
 import { NOT_RECORDED } from "@/features/newcase/StepCancer";
 
@@ -157,7 +157,8 @@ export function StepLogistics({ form, onChange, settingLabel, protocolLabel }: {
           <KeyValue label="UHID" value={p?.uhid} mono />
           <KeyValue label="Cancer" value={cancerWords(form, protocolLabel)} />
           {generic ? (
-            <KeyValue label="Checked" value={<span className="inline-flex items-start gap-1" data-testid="generic-readback"><ClipboardList className="mt-0.5 size-3.5 shrink-0" aria-hidden /> {GENERIC_RULE}</span>} />
+            <KeyValue label="Checked" value={<span className="inline-flex items-start gap-1" data-testid="generic-readback"><ClipboardList className="mt-0.5 size-3.5 shrink-0" aria-hidden /> {genericRule(form.protocol)}</span>}
+              hint={<span className="mt-0.5 block" data-testid="generic-records">{genericRecords(form.protocol).join("; ")}</span>} />
           ) : (
             <KeyValue label="Setting" value={form.setting === NOT_RECORDED ? "not recorded yet" : settingLabel} fallback="none" />
           )}
