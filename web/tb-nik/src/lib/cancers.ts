@@ -32,6 +32,8 @@ export interface CancerEntry {
   question?: string;
   /** Pre-select the variant by age (the child's under 15, else the other); without it nothing is pre-selected. */
   childDefault?: boolean;
+  /** A blood cancer: with no built checklist it falls under the blood cancer rule ("generic_haem"), not the solid one. */
+  blood?: boolean;
   /** Words a search box matches on. */
   keywords?: string[];
   /** The group lists this cancer sits in (any cancer can be picked from General). */
@@ -118,7 +120,18 @@ export function protocolFor(c: CancerEntry, built?: { has(id: string): boolean }
   const own = c.variants?.length ? variantOf(c, variantId)?.protocol : c.protocol;
   if (c.variants?.length && !own) return null;
   if (own && !isGeneric(own) && (!built || built.has(own))) return own;
-  return GENERIC_PROTOCOL;
+  return fallbackFor(c);
+}
+
+/** The generic rule an entry falls back to without a built checklist: the blood cancer rule for a blood cancer, else the solid one. */
+export function fallbackFor(c?: CancerEntry | null): string {
+  return c?.blood ? GENERIC_HAEM_PROTOCOL : GENERIC_PROTOCOL;
+}
+
+/** The cancer's name sent with the Case File: a variant under the generic rule is named by its own label (the server keeps the
+ * name of a cancer with no checklist), otherwise the entry's label. */
+export function nameFor(c: CancerEntry, v?: CancerVariant | null): string {
+  return v && isGeneric(v.protocol) ? v.label : c.label;
 }
 
 /** The checklists an entry can lead to (its own, or each variant's), for the picker card. */
@@ -143,17 +156,25 @@ export const CANCERS: CancerEntry[] = [
     question: "Where is the tumour?",
     variants: [{ id: "colon", label: "Colon", protocol: "colorectal_colon" }, { id: "rectum", label: "Rectum", protocol: "colorectal_rectum" }],
   },
-  { id: "liver", label: "Liver", protocol: "liver_hcc", keywords: ["hepatocellular", "hcc", "hepatoblastoma"], groups: ["men", "children", "general"], note: "Uses the liver cancer (HCC) checklist." },
+  {
+    id: "liver", label: "Liver", protocol: null, keywords: ["hepatocellular", "hcc", "hepatoblastoma"], groups: ["men", "children", "general"],
+    question: "Which liver cancer?", childDefault: true,
+    variants: [
+      { id: "hcc", label: "Hepatocellular carcinoma (adult)", protocol: "liver_hcc" },
+      // no checklist for a child's liver tumour: the generic rule, never the adult HCC checklist (Phase 2 review)
+      { id: "child_liver", label: "Hepatoblastoma or another liver tumour of a child", protocol: GENERIC_PROTOCOL, child: true },
+    ],
+  },
   { id: "larynx", label: "Larynx", protocol: "larynx", keywords: ["voice box", "throat"], groups: ["men", "general"] },
-  { id: "lymphoma_nhl", label: "Lymphoma (NHL)", protocol: "lymphoma", keywords: ["non-hodgkin", "lymph"], groups: ["men", "general"] },
+  { id: "lymphoma_nhl", label: "Lymphoma (NHL)", protocol: "lymphoma", keywords: ["non-hodgkin", "lymph"], groups: ["men", "general"], blood: true },
   { id: "breast", label: "Breast", protocol: "breast", groups: ["women", "general"] },
   { id: "cervix", label: "Cervix", protocol: "cervix", keywords: ["cervical"], groups: ["women", "general"] },
   { id: "ovary", label: "Ovary", protocol: "ovary", keywords: ["ovarian"], groups: ["women", "general"] },
   { id: "corpus_uteri", label: "Corpus uteri", protocol: "corpus_uteri", keywords: ["endometrium", "endometrial", "uterus"], groups: ["women", "general"] },
   { id: "gallbladder", label: "Gallbladder", protocol: "gallbladder", keywords: ["biliary", "gall bladder"], groups: ["women", "general"] },
   { id: "thyroid", label: "Thyroid", protocol: null, groups: ["women", "general"] },
-  { id: "leukaemia", label: "Leukaemia", protocol: "leukaemia", keywords: ["leukemia", "all", "aml", "blood"], groups: ["children", "general"] },
-  { id: "lymphoma_child", label: "Lymphoma", protocol: "lymphoma", keywords: ["hodgkin", "lymph"], groups: ["children"] },
+  { id: "leukaemia", label: "Leukaemia", protocol: "leukaemia", keywords: ["leukemia", "all", "aml", "blood"], groups: ["children", "general"], blood: true },
+  { id: "lymphoma_child", label: "Lymphoma", protocol: "lymphoma", keywords: ["hodgkin", "lymph"], groups: ["children"], blood: true },
   { id: "brain", label: "Brain", protocol: "brain_cns", keywords: ["cns", "glioma", "medulloblastoma"], groups: ["children", "general"] },
   { id: "bone", label: "Bone", protocol: "bone_sarcoma", keywords: ["osteosarcoma", "ewing", "chondrosarcoma", "sarcoma"], groups: ["children", "general"] },
   {

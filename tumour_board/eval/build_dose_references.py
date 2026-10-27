@@ -217,9 +217,14 @@ PAGES = {
 }
 # Lines that are not a dosing statement: dose reductions, caps, cumulative limits, HDR boosts.
 DROP_QUOTE = [r"reduce[sd]? (the )?(starting )?dose|dose reduces|reduced starting dose|use starting dose|reduce the \w+ dose",
-              r"cumulative dose|not exceeding|cumulative lifetime|limit cumulative", r"HDR boost"]
+              r"cumulative dose|not exceeding|cumulative lifetime|limit cumulative", r"HDR boost",
+              # Phase 2 review (27 Oct 2026): an intrathecal dose is not a systemic dose; a boost or a phase is not a course; the gynaecology
+              # Word file glues drawing-anchor digits to some lines, which a doctor cannot read as a source line
+              r"\bIT\b|intrathecal", r"\(Boost", r"\bPh-2\b|shrinking portals", r"^\d{2,}(Chemotherapy|!:)"]
 # Candidate ids (a trailing * drops every id with that prefix), after reading the candidates.
 DROP = {
+    # Phase 2 review (night-v3, 27 Oct 2026): lines a decision check must not compare a course against
+    "prostate:ncg-guidelines-for-urologica:p34:rt:74Gy/30",  # "74 Gy /30 fractions or equivalent": a misprint kept for clinical review, not a reference schedule
     # breast
     "breast:esmo-2024-early-breast-cance:p19:ribociclib:400mg/day",  # trial description ("evaluated the addition of"), not a dosing line
     "breast:breast-treatment-pdq:p20:rt:54Gy/30", "breast:breast-treatment-pdq:p20:rt:45Gy/15",  # brachial plexus toxicity comparison

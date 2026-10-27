@@ -5893,22 +5893,6 @@
    "quote": "Rucaparib 600 mg BD"
   },
   {
-   "id": "corpus_uteri:ncg-guidelines-for-gynecolog:p9:paclitaxel:175mg/m2",
-   "cancer": "corpus_uteri",
-   "kind": "drug",
-   "drug": "paclitaxel",
-   "as_written": "Paclitaxel",
-   "dose": 175,
-   "unit": "mg/m2",
-   "source_kind": "regimen",
-   "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
-   "title": "ncg guidelines for gynecological cancer 2019",
-   "org": "National Cancer Grid (NCG), India",
-   "region": "India",
-   "page": 9,
-   "quote": "3714750208915Chemotherapy (Paclitaxel 175mg/m2+"
-  },
-  {
    "id": "corpus_uteri:ncg-guidelines-for-gynecolog:p9:carboplatin:5-6AUC",
    "cancer": "corpus_uteri",
    "kind": "drug",
@@ -5927,36 +5911,20 @@
    "quote": "Carboplatin AUC 5-6x 6 cycles)"
   },
   {
-   "id": "corpus_uteri:ncg-guidelines-for-gynecolog:p9:megestrol-acetate:160mg/day",
+   "id": "corpus_uteri:ncg-guidelines-for-gynecolog:p9:paclitaxel:175mg/m2#3",
    "cancer": "corpus_uteri",
    "kind": "drug",
-   "drug": "megestrol acetate",
-   "as_written": "megestrol acetate",
-   "dose": 160,
-   "unit": "mg/day",
+   "drug": "paclitaxel",
+   "as_written": "Paclitaxel",
+   "dose": 175,
+   "unit": "mg/m2",
    "source_kind": "regimen",
    "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
    "title": "ncg guidelines for gynecological cancer 2019",
    "org": "National Cancer Grid (NCG), India",
    "region": "India",
    "page": 9,
-   "quote": "6248400!: If ER/PR we consider megestrol acetate 160 mg/ day or Aromatase Inhibitor (example letrozole 2.5 mg /day)"
-  },
-  {
-   "id": "corpus_uteri:ncg-guidelines-for-gynecolog:p9:letrozole:2.5mg/day",
-   "cancer": "corpus_uteri",
-   "kind": "drug",
-   "drug": "letrozole",
-   "as_written": "letrozole",
-   "dose": 2.5,
-   "unit": "mg/day",
-   "source_kind": "regimen",
-   "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
-   "title": "ncg guidelines for gynecological cancer 2019",
-   "org": "National Cancer Grid (NCG), India",
-   "region": "India",
-   "page": 9,
-   "quote": "6248400!: If ER/PR we consider megestrol acetate 160 mg/ day or Aromatase Inhibitor (example letrozole 2.5 mg /day)"
+   "quote": "Chemotherapy (Paclitaxel 175mg/m2 +Carboplatin AUC 5-6 x 6 cycles)"
   },
   {
    "id": "corpus_uteri:ncg-guidelines-for-gynecolog:p10:rt:21Gy/3",
@@ -6039,21 +6007,6 @@
    "region": "India",
    "page": 12,
    "quote": "(pembrolizumab 200 mg q 3 weekly"
-  },
-  {
-   "id": "prostate:ncg-guidelines-for-urologica:p34:rt:74Gy/30",
-   "cancer": "prostate",
-   "kind": "rt",
-   "total_gy": 74,
-   "fractions": 30,
-   "schedule": "74 Gy /30 fractions",
-   "source_kind": "regimen",
-   "file": "ncg_india/ncg-guidelines-for-urological-malignancies-2019.pdf",
-   "title": "ncg guidelines for urological malignancies 2019",
-   "org": "National Cancer Grid (NCG), India",
-   "region": "India",
-   "page": 34,
-   "quote": "Intermediate Risk : 3 D CRT / IMRT +/- Brachytherapy : 74 Gy /30 fractions or equivalent"
   },
   {
    "id": "prostate:ncg-guidelines-for-urologica:p40:leuprolide:7.5mg",
@@ -7170,23 +7123,6 @@
    "quote": "Inj. ENDOXAN (D 5) 750mg/m2/d Over 1 hour"
   },
   {
-   "id": "lymphoma:ncg-guidelines-for-adult-hem:p20:methotrexate:12mg",
-   "cancer": "lymphoma",
-   "kind": "drug",
-   "drug": "methotrexate",
-   "as_written": "METHOTREXATE",
-   "dose": 12,
-   "unit": "mg",
-   "schedule": "per cycle for 4-6 doses",
-   "source_kind": "regimen",
-   "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
-   "title": "ncg guidelines for adult hematolymphoid 2019",
-   "org": "National Cancer Grid (NCG), India",
-   "region": "India",
-   "page": 20,
-   "quote": "IT METHOTREXATE 12mg per cycle for 4-6 doses"
-  },
-  {
    "id": "lymphoma:ncg-guidelines-for-adult-hem:p20:methotrexate:3g/m2",
    "cancer": "lymphoma",
    "kind": "drug",
@@ -7591,23 +7527,6 @@
    "region": "India",
    "page": 36,
    "quote": "METHOTREXATE 3000MG/M2 IV 24 HOURS INFUSION DAY 10"
-  },
-  {
-   "id": "lymphoma:ncg-guidelines-for-adult-hem:p36:cytarabine:50mg",
-   "cancer": "lymphoma",
-   "kind": "drug",
-   "drug": "cytarabine",
-   "as_written": "CYTARABINE",
-   "dose": 50,
-   "unit": "mg",
-   "schedule": "ON D1, D3",
-   "source_kind": "regimen",
-   "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
-   "title": "ncg guidelines for adult hematolymphoid 2019",
-   "org": "National Cancer Grid (NCG), India",
-   "region": "India",
-   "page": 36,
-   "quote": "IT CYTARABINE 50MG ON D1, D3"
   },
   {
    "id": "lymphoma:ncg-guidelines-for-adult-hem:p36:ifosfamide:1500mg/m2",
@@ -10388,21 +10307,6 @@
    "quote": "12.6Gy/ 7# @ 1.8Gy/ Fraction"
   },
   {
-   "id": "wilms:ncg-guidelines-for-pediatric:p46:rt:9Gy/5",
-   "cancer": "wilms",
-   "kind": "rt",
-   "total_gy": 9,
-   "fractions": 5,
-   "schedule": "9.0Gy/ 5#",
-   "source_kind": "regimen",
-   "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
-   "title": "ncg guidelines for pediatric haematolymphoid solid tumours 2019",
-   "org": "National Cancer Grid (NCG), India",
-   "region": "India",
-   "page": 46,
-   "quote": "+ 9.0Gy/ 5# @ 1.8Gy/ Fraction (Boost)"
-  },
-  {
    "id": "wilms:ncg-guidelines-for-pediatric:p47:rt:25.2Gy/14",
    "cancer": "wilms",
    "kind": "rt",
@@ -11097,36 +11001,6 @@
    "region": "India",
    "page": 23,
    "quote": "1. Margin negative: 60Gy/30#s over 6 weeks with phased portals (Ph-1"
-  },
-  {
-   "id": "soft_tissue_sarcoma:ncg-guidelines-for-bone-soft:p23:rt:50Gy/23",
-   "cancer": "soft_tissue_sarcoma",
-   "kind": "rt",
-   "total_gy": 50,
-   "fractions": 23,
-   "schedule": "50Gy/23#",
-   "source_kind": "regimen",
-   "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
-   "title": "ncg guidelines for bone soft tissue tumours 2019",
-   "org": "National Cancer Grid (NCG), India",
-   "region": "India",
-   "page": 23,
-   "quote": "50Gy/23#s followed by Ph-2 with shrinking portals 10Gy/5#s) (a)"
-  },
-  {
-   "id": "soft_tissue_sarcoma:ncg-guidelines-for-bone-soft:p23:rt:10Gy/5",
-   "cancer": "soft_tissue_sarcoma",
-   "kind": "rt",
-   "total_gy": 10,
-   "fractions": 5,
-   "schedule": "10Gy/5#",
-   "source_kind": "regimen",
-   "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
-   "title": "ncg guidelines for bone soft tissue tumours 2019",
-   "org": "National Cancer Grid (NCG), India",
-   "region": "India",
-   "page": 23,
-   "quote": "50Gy/23#s followed by Ph-2 with shrinking portals 10Gy/5#s) (a)"
   },
   {
    "id": "soft_tissue_sarcoma:ncg-guidelines-for-bone-soft:p23:rt:36Gy/9",

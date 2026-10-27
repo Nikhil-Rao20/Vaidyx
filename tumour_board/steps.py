@@ -64,26 +64,30 @@ SITE_WORDS = {"breast": ("breast", "mammo", "axilla"),
               # Phase 2 cancers (night-v3 item 2.1): clear report-title words only. Lymphoma, leukaemia, the sarcomas and the generic blood
               # cancer list are left out on purpose (their titles name a body part, not the disease): a protocol not listed here gets no
               # warning, the safer side. A word shared by related cancers (colon and rectum, kidney and Wilms) only prevents a warning.
+              # Review (Phase 2): tumour-specific words only. Organ words that routine work-up titles of every cancer use (liver function
+              # tests, renal function, MRI brain, thyroid function, upper GI endoscopy) would make the warning fire falsely; thyroid has no checklist.
               "colorectal_colon": ("colon", "colonoscop", "caec", "sigmoid", "hemicolect", "colect"),
-              "stomach": ("stomach", "gastr", "ugi", "ogd", "antr", "pylor"),
+              "stomach": ("stomach", "gastric", "antr", "pylor", "gastrectom"),
               "oesophagus": ("oesophag", "esophag"),
-              "liver_hcc": ("liver", "hepat", "hcc", "triphasic"),
-              "gallbladder": ("gallbladder", "gall bladder", "cholecyst", "biliary"),
-              "ovary": ("ovar", "adnex", "ca-125", "ca125", "omentum"),
+              "liver_hcc": ("hcc", "hepatocellular", "triphasic", "liver mass", "liver lesion", "hepatectom"),
+              "gallbladder": ("gallbladder", "gall bladder", "cholecyst"),
+              "ovary": ("ovar", "adnex", "ca-125", "ca125"),
               "corpus_uteri": ("endometri", "uterus", "uterine", "corpus"),
               "prostate": ("prostat", "psa"),
-              "kidney": ("kidney", "renal", "nephr"),
+              "kidney": ("renal mass", "renal cell", "kidney mass", "nephrectom"),
               "germ_cell": ("testis", "testic", "scrot", "orchidect"),
               "larynx": ("larynx", "laryng", "vocal cord", "glott"),
-              "thyroid": ("thyroid", "thyroglobulin", "calcitonin"),
-              "brain_cns": ("brain", "cranial", "cerebr", "glioma", "spine"),
-              "retinoblastoma": ("retinoblastoma", "eye", "orbit", "fundus"),
-              "wilms": ("wilms", "kidney", "renal", "nephr")}
+              "brain_cns": ("glioma", "glioblastoma", "astrocytoma", "meningioma", "craniotom", "brain tumour", "brain tumor", "intracranial mass"),
+              "retinoblastoma": ("retinoblastoma", "orbit", "retcam", "ophthalm", "eua eyes"),
+              "wilms": ("wilms", "nephroblastoma", "renal mass", "nephrectom")}
 SITE_NAME = {"breast": "the breast", "cervix": "the cervix", "lung_nsclc": "the lung", "colorectal_rectum": "the colon or rectum",
              "oral_cavity": "the oral cavity", "colorectal_colon": "the colon", "stomach": "the stomach", "oesophagus": "the oesophagus",
              "liver_hcc": "the liver", "gallbladder": "the gallbladder", "ovary": "the ovary", "corpus_uteri": "the uterus",
-             "prostate": "the prostate", "kidney": "the kidney", "germ_cell": "the testis", "larynx": "the larynx", "thyroid": "the thyroid",
-             "brain_cns": "the brain or spine", "retinoblastoma": "the eye", "wilms": "the kidney"}
+             "prostate": "the prostate", "kidney": "the kidney", "germ_cell": "the testis", "larynx": "the larynx",
+             "brain_cns": "the brain", "retinoblastoma": "the eye", "wilms": "the kidney"}
+
+# Routine work-up titles that name an organ without naming a tumour site: left out of the mismatch check (review, Phase 2).
+ROUTINE_TITLE = re.compile(r"function test|function|serolog|hepatitis|profile|markers|opinion|referral")
 
 FINAL = {"FINAL", "AMENDED", "CORRECTED"}
 VERIFIED = ("verified", "confirmed")
@@ -228,6 +232,8 @@ def _mentions(docs, by_fact) -> dict:
     out = {site: [] for site in SITE_WORDS}
     for d in docs:
         t = " " + d["title"].lower() + " "
+        if ROUTINE_TITLE.search(t):  # a liver function test or a hepatitis serology names no tumour site (review, Phase 2)
+            continue
         for site, words in SITE_WORDS.items():
             if any(w in t for w in words):
                 out[site].append(slots_title(d["title"]))

@@ -21,13 +21,13 @@ SETTINGS = {
     "soft_tissue_sarcoma": ["non_metastatic", "metastatic", "paediatric_rhabdomyosarcoma"],
     "brain_cns": ["adult_glioma", "adult_other", "child"],
 }
-COUNTS = {"wilms": 7, "retinoblastoma": 9, "bone_sarcoma": 15, "soft_tissue_sarcoma": 13, "brain_cns": 10}
-OPTIONAL = {"wilms": ["nephrectomy_histopathology", "previous_board"], "retinoblastoma": ["previous_board"], "bone_sarcoma": ["resection_histopathology_bone", "previous_board"],
-            "soft_tissue_sarcoma": ["previous_board"], "brain_cns": ["previous_board"]}
+COUNTS = {"wilms": 7, "retinoblastoma": 8, "bone_sarcoma": 15, "soft_tissue_sarcoma": 13, "brain_cns": 9}
+OPTIONAL = {"wilms": ["nephrectomy_histopathology", "previous_board"], "retinoblastoma": ["enucleation_histopathology", "previous_board"], "bone_sarcoma": ["resection_histopathology_bone", "previous_board"],
+            "soft_tissue_sarcoma": ["previous_board"], "brain_cns": ["post_op_mri_brain", "previous_board"]}
 LABELS = {"wilms": "Wilms tumour (child)", "retinoblastoma": "Retinoblastoma (child)", "bone_sarcoma": "Bone sarcoma (osteosarcoma, Ewing sarcoma, chondrosarcoma)",
           "soft_tissue_sarcoma": "Soft tissue sarcoma", "brain_cns": "Brain and CNS tumours"}
 SITES = {"wilms": "wilms|nephroblastoma|kidney|renal", "retinoblastoma": "retinoblastoma|eye|orbit|retina|globe",
-         "bone_sarcoma": "osteosarcoma|ewing|bone|femur|tibia|humerus|pelvis bone", "soft_tissue_sarcoma": "sarcoma|soft tissue|rhabdomyosarcoma|thigh|extremity",
+         "bone_sarcoma": "osteosarcoma|ewing|chondrosarcoma|bone tumour|bone tumor|femur|tibia|humerus|pelvic bone", "soft_tissue_sarcoma": "sarcoma|soft tissue|rhabdomyosarcoma|thigh|extremity",
          "brain_cns": "brain|cerebr|glioma|astrocytoma|oligodendroglioma|glioblastoma|medulloblastoma|spinal cord|cranial"}
 OWNER_DEPT = {"wilms": "Paediatric Oncology", "retinoblastoma": "Paediatric Oncology", "bone_sarcoma": "Orthopaedic Oncology",
               "soft_tissue_sarcoma": "Orthopaedic Oncology", "brain_cns": "Neurosurgery"}
@@ -294,7 +294,7 @@ def test_brain_cns_tiers_by_setting_and_the_mapping_of_the_guidelines_levels():
         assert [protocol.tier_for(r, x) for x in s] == ["c", "none", "none"] and r["condition"]["ncg_tier"] == "a", rid
         assert not protocol.required(r, "adult_glioma", "optimal"), rid
     assert [protocol.tier_for(_rec("brain_cns", "other_glioma_markers"), x) for x in s] == ["c", "none", "c"]
-    assert [protocol.tier_for(_rec("brain_cns", "post_op_mri_brain"), x) for x in s] == ["b", "none", "b"]
+    assert next(o for o in protocol.get("brain_cns")["optional"] if o["id"] == "post_op_mri_brain")["tiers_in_the_book"] == {"adult_glioma": "b", "adult_other": "none", "child": "b"}  # an after-surgery record (review)
     for rid in ("clinical_history", "mri_brain_contrast", "neurosurgery_opinion", "histopathology_brain"):
         assert _rec("brain_cns", rid)["tier"] == "a" and "tiers" not in _rec("brain_cns", rid), rid
     other = {r["id"] for r in protocol.records("brain_cns") if protocol.required(r, "adult_other", "essential")}

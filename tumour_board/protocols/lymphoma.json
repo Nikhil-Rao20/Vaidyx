@@ -703,7 +703,7 @@
     "pet_ct",
     "clinical_note"
    ],
-   "department": "Radiology",
+   "department": "Haematology",
    "required_facts": [
     "recorded_stage"
    ],
@@ -728,7 +728,9 @@
      "quote": "Staging information (Ann-Arbor staging system)"
     }
    ],
-   "tier_basis": "Proposed a: the board needs the stage; the system only copies a stage written in a report (Ann Arbor, or Murphy for child NHL), never computes it"
+   "tier_basis": "Proposed a: the board needs the stage; the system only copies a stage written in a report (Ann Arbor, or Murphy for child NHL), never computes it",
+   "route": "owner",
+   "note": "A clinical record of the owning treating department (route owner): the stage is the treating team's to record, from the imaging it reads (review, Phase 2)."
   },
   {
    "id": "fertility_semen_lymphoma",

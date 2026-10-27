@@ -100,7 +100,7 @@ def test_the_labels_and_site_words_are_the_orchestrators():
     assert protocol.get("lymphoma")["label"] == "Lymphoma (Hodgkin and non-Hodgkin)"
     assert protocol.get("leukaemia")["label"] == "Leukaemia (acute and chronic)"
     assert protocol.get("lymphoma")["site"] == "lymphoma|hodgkin|lymphoid"  # organ words only: "lymph node" and "nodal" would make a neck node report of another cancer step aside
-    assert protocol.get("leukaemia")["site"] == "leukaemia|leukemia|marrow|blast"
+    assert protocol.get("leukaemia")["site"] == "leukaemia|leukemia|marrow"  # not "blast": retinoblastoma, nephroblastoma, medulloblastoma (review)
     breast_site_note = _raw("breast")["site_note"]
     assert all(protocol.get(pid)["site_note"] == breast_site_note for pid in PIDS)
 

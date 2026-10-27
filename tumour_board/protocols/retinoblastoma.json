@@ -225,20 +225,17 @@
     }
    ],
    "tier_basis": "Proposed a: the book says genetic counselling \"needs to be done in all families\" (no letter); sibling screening is on the same page (p 53)"
-  },
+  }
+ ],
+ "optional": [
   {
    "id": "enucleation_histopathology",
    "label": "Histopathology after enucleation (optic nerve, choroid, sclera)",
-   "tier": "b",
    "doc_types": [
     "histopathology"
    ],
    "department": "Pathology",
-   "required_facts": [
-    "histologic_type",
-    "margins"
-   ],
-   "sla_days": 5,
+   "note": "An after-surgery record (never a gap before the board; the proposed tier is kept in tiers_in_the_book: review, Phase 2).",
    "sources": [
     {
      "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
@@ -247,10 +244,13 @@
      "quote": "Scleral or Extra-scleral spread (on radiology or HPR)"
     }
    ],
-   "tier_basis": "Proposed b (a post-surgery record): the pathology findings listed on p 56 (HPR, the histopathology report) are what the board reads after enucleation; the list's heading is a treatment line and is not quoted"
-  }
- ],
- "optional": [
+   "tier_basis": "Proposed b (a post-surgery record): the pathology findings listed on p 56 (HPR, the histopathology report) are what the board reads after enucleation; the list's heading is a treatment line and is not quoted",
+   "required_facts": [
+    "histologic_type",
+    "margins"
+   ],
+   "tiers_in_the_book": "b"
+  },
   {
    "id": "previous_board",
    "label": "Previous Tumour Board record",

@@ -242,3 +242,25 @@ def test_keyword_table_and_classify_prompt_know_the_new_types():
     src = (config.PROTOCOL_DIR.parent / "extract.py").read_text()
     for t in NEW_DOC_TYPES:
         assert f'"- {t}: ' in src or f"\\n- {t}: " in src, t
+
+
+# --- the mismatch warning never fires on routine work-up titles (Phase 2 review) ---------------------------------------------------
+
+@pytest.mark.parametrize("prot,titles", [
+    ("cervix", ["Liver function tests", "Hepatitis B surface antigen and anti-HCV", "MRI pelvis"]),
+    ("oral_cavity", ["Renal function tests", "Kidney function tests", "CECT face and neck"]),
+    ("breast", ["Thyroid function tests", "Thyroid function tests (repeat)", "Bilateral mammography"]),
+    ("lung_nsclc", ["MRI brain", "MRI whole spine", "PET-CT whole body"]),
+    ("colorectal_rectum", ["Upper GI endoscopy (OGD)", "Gastroenterology opinion", "MRI pelvis (rectal protocol)"]),
+    ("lymphoma", ["Bone marrow aspiration and biopsy", "2D echocardiography report", "CECT neck, thorax, abdomen and pelvis"]),
+])
+def test_routine_titles_never_raise_the_mismatch_warning(prot, titles):
+    docs = [{"title": t} for t in titles]
+    m = steps._mentions(docs, {})
+    other = max((s for s in steps.SITE_WORDS if s != prot), key=lambda s: len(m[s]), default=None)
+    assert other is None or len(m[other]) < 2 or m.get(prot), (prot, {k: v for k, v in m.items() if v})
+
+
+def test_two_titles_of_another_site_still_warn():
+    m = steps._mentions([{"title": "MRI prostate (multiparametric)"}, {"title": "Serum PSA"}, {"title": "CECT abdomen"}], {})
+    assert len(m["prostate"]) == 2 and not m["kidney"]

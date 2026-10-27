@@ -272,9 +272,7 @@
    ],
    "department": "Pathology",
    "required_facts": [
-    "histologic_type",
-    "margins",
-    "recorded_stage"
+    "histologic_type"
    ],
    "sla_days": 5,
    "sources": [
@@ -297,7 +295,8 @@
      "quote": "if upfront surgery not contemplated/ metastatic disease"
     }
    ],
-   "tier_basis": "Proposed Essential for locally advanced disease ('mandatory') and for incidental disease, where the diagnosis is the post-operative histopathology itself; per primum Optimal, because the book allows no biopsy when upfront surgery is planned (page 1, 'if upfront surgery not contemplated/ metastatic disease')"
+   "tier_basis": "Proposed Essential for locally advanced disease ('mandatory') and for incidental disease, where the diagnosis is the post-operative histopathology itself; per primum Optimal, because the book allows no biopsy when upfront surgery is planned (page 1, 'if upfront surgery not contemplated/ metastatic disease')",
+   "note": "Margins and the stage belong to the resection (the cystic duct margin record for an incidental cancer); a biopsy or FNA carries neither (review, Phase 2)."
   },
   {
    "id": "cystic_duct_margin",

@@ -166,7 +166,7 @@
    "label": "Risk stratification, IGCCCG group as recorded (stage II and III)",
    "tier": "a",
    "tiers": {
-    "stage_i": "a",
+    "stage_i": "none",
     "stage_ii_iii": "a",
     "relapsed": "none"
    },
@@ -188,7 +188,7 @@
      "quote": "Risk stratification as per IGCCC  (a)"
     }
    ],
-   "tier_basis": "Printed (a); p 20 \"Risk Stratification (a)\"; stage I seminoma risk (p 21): \"Risk Stratification (b)\"",
+   "tier_basis": "Printed (a); p 20 \"Risk Stratification (a)\"; stage I seminoma risk (p 21): \"Risk Stratification (b)\" Not applicable in stage I: the IGCCCG group is worked out for metastatic disease only (review, Phase 2).",
    "route": "owner"
   },
   {

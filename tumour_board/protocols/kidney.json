@@ -217,9 +217,7 @@
    ],
    "region": "dmsa|renal scan|renogram|scintigra",
    "department": "Nuclear Medicine",
-   "required_facts": [
-    "creatinine"
-   ],
+   "required_facts": [],
    "sla_days": 5,
    "sources": [
     {

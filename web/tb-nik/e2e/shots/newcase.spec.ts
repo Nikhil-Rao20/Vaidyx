@@ -1,6 +1,6 @@
 // New Case File: patient lookup (found, similar registrations, existing Case File), cancer picker, logistics, the live fetch.
-// Night-v3 items 2.9 and 2.10 (mock only): Colorectal asks colon or rectum, Kidney asks adult or child (Wilms tumour pre-selected
-// under 15), a typed cancer asks solid or blood (the blood cancer rule), and a draft checklist says so. GET /protocols is the
+// Night-v3 items 2.9 and 2.10 (mock only): Colorectal asks colon or rectum, Kidney and Liver ask adult or child (the child's
+// option pre-selected under 15; a child's liver tumour goes under the generic rule), a typed cancer (or Others) asks solid or blood (the blood cancer rule), and a draft checklist says so. GET /protocols is the
 // backend's real list (support/protocols.json).
 import { expect, test, type Page } from "@playwright/test";
 import { MOCK, SIZES, THEMES, runsFor, shoot, visit } from "../support/helpers";
@@ -62,7 +62,7 @@ test.describe("new case file", () => {
     await page.getByText("Colon", { exact: true }).click();
     await expect(page.getByText("Colon cancer checklist", { exact: true }).last()).toBeVisible();
     await expect(page.getByTestId("checklist-status")).toHaveText("Checklist built (draft): needs a clinician's check");
-    await expect(page.getByText("Draft checklist: needs a clinician's check", { exact: true })).toBeVisible();  // owner decision D6, verbatim
+    await expect(page.getByRole("region", { name: "Checklist and setting" }).getByText("Draft checklist: needs a clinician's check", { exact: true })).toBeVisible();  // owner decision D6, verbatim
     await expect(page.getByText("Non-metastatic (any T, any N, M0), as recorded")).toBeVisible();  // the settings of colorectal_colon
     await expect(page.getByRole("button", { name: /Continue/ })).toBeDisabled();
     await page.getByText("Non-metastatic (any T, any N, M0), as recorded").click();
@@ -71,7 +71,7 @@ test.describe("new case file", () => {
     await page.getByText("Rectum", { exact: true }).click();  // the older rectal checklist: built, not a draft
     await expect(page.getByText("Rectal cancer checklist", { exact: true }).last()).toBeVisible();
     await expect(page.getByTestId("checklist-status")).toHaveText("Checklist built");
-    await expect(page.getByText("Draft checklist: needs a clinician's check", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Checklist and setting" }).getByText("Draft checklist: needs a clinician's check", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Continue/ })).toBeDisabled();  // a new checklist: its setting is asked again
     // a search finds an entry by a variant's word; an adult gets renal cell carcinoma pre-selected
     await page.getByLabel("Search a cancer").fill("wilms");
@@ -79,7 +79,7 @@ test.describe("new case file", () => {
     await expect(page.getByRole("radio", { name: "Renal cell carcinoma (adult)" })).toBeChecked();
   });
 
-  test("kidney for a child: Wilms tumour pre-selected", async ({ page }) => {
+  test("kidney and liver for a child, and Others", async ({ page }) => {
     test.skip(!MOCK);
     await toCancerStep(page, { name: "Arjun K. (SYNTHETIC)", sex: "male", age: 9, dob: "2017-05-02" });
     await expect(page.getByRole("tab", { name: /Children/ })).toHaveAttribute("aria-selected", "true");
@@ -89,6 +89,27 @@ test.describe("new case file", () => {
     await expect(page.getByText("Wilms tumour (child) checklist", { exact: true }).last()).toBeVisible();
     await expect(page.getByText("Unilateral renal mass, suspected Wilms tumour (as recorded)")).toBeVisible();
     await shoot(page, "newcase", "2-kidney-child", { sizes: PHONE_AND_LAPTOP, themes: THEMES });
+    // Liver for a child: the child's option is pre-selected and goes under the generic rule, never the adult HCC checklist
+    await page.getByRole("radio", { name: /Liver/ }).click();
+    await expect(page.getByText("Which liver cancer?")).toBeVisible();
+    await expect(page.getByRole("radio", { name: "Hepatoblastoma or another liver tumour of a child" })).toBeChecked();
+    const rule = page.getByTestId("generic-rule");
+    await expect(rule).toContainText("Hepatoblastoma or another liver tumour of a child: no checklist yet");
+    await expect(rule).toContainText("No disease-specific Indian protocol: four core records are checked");
+    await expect(page.getByTestId("checklist-status")).toHaveCount(0);  // no built checklist card: the generic rule only
+    await expect(page.getByRole("button", { name: /Continue/ })).toBeEnabled();  // the generic rule has no setting to choose
+    await shoot(page, "newcase", "2-liver-child", { sizes: PHONE_AND_LAPTOP, themes: THEMES });
+    await page.getByText("Hepatocellular carcinoma (adult)", { exact: true }).click();
+    await expect(page.getByText("Liver cancer (hepatocellular carcinoma) checklist", { exact: true }).last()).toBeVisible();
+    await expect(rule).toHaveCount(0);
+    // Others (children): a typed name, which asks solid or blood like any cancer not listed
+    await page.getByRole("radio", { name: /Others/ }).click();
+    await expect(page.getByText("Is this a solid cancer or a blood cancer?")).toBeVisible();
+    await page.getByLabel("Cancer, as written in the record").fill("Neuroblastoma");
+    await expect(page.getByRole("button", { name: /Continue/ })).toBeDisabled();
+    await page.getByText("Solid cancer (organ, tissue)").click();
+    await expect(page.getByTestId("generic-rule")).toContainText("Neuroblastoma: no checklist yet");
+    await expect(page.getByRole("button", { name: /Continue/ })).toBeEnabled();
   });
 
   test("a cancer not listed asks solid or blood", async ({ page }) => {

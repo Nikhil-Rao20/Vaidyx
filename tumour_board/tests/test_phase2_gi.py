@@ -27,7 +27,7 @@ SETTINGS = {
 LABELS = {"colorectal_colon": "Colon cancer", "stomach": "Stomach cancer", "oesophagus": "Oesophageal cancer",
           "liver_hcc": "Liver cancer (hepatocellular carcinoma)", "gallbladder": "Gallbladder cancer"}
 SITES = {"colorectal_colon": "colon|caec|ascending|transverse|descending|sigmoid|hemicolect|colect|colorectal|bowel|intestin",
-         "stomach": "stomach|gastr|antr|pylor|fund", "oesophagus": "oesophag|esophag|siewert", "liver_hcc": "liver|hepat|hcc",
+         "stomach": "stomach|gastr|antr|pylor", "oesophagus": "oesophag|esophag|siewert", "liver_hcc": "liver|hepat|hcc",
          "gallbladder": "gallbladder|gall bladder|cholecyst|biliary"}
 COUNTS = {"colorectal_colon": 11, "stomach": 11, "oesophagus": 10, "liver_hcc": 16, "gallbladder": 13}
 OWNER_DEPT = {"colorectal_colon": "Colorectal Surgery", "stomach": "Gastrointestinal Surgery", "oesophagus": "Gastrointestinal Surgery",

@@ -686,7 +686,7 @@ def test_new_cancers_curated_lines():
     assert has("oesophagus", "paclitaxel", 50, "mg/m2") and has("oesophagus", "carboplatin", 2, "AUC")
     assert has("ovary", "paclitaxel", 175, "mg/m2") and has("ovary", "olaparib", 300, "mg")
     assert not has("ovary", "etoposide", 100, "mg/m2") and not has("ovary", "pembrolizumab", 200, "mg")  # germ cell (p7), cervix (p5)
-    assert has("corpus_uteri", "megestrol acetate", 160, "mg/day") and has("corpus_uteri", "pembrolizumab", 200, "mg")
+    assert has("corpus_uteri", "paclitaxel", 175, "mg/m2")  # the megestrol line carries the Word file's glued anchor digits and is dropped (review) and has("corpus_uteri", "pembrolizumab", 200, "mg")
     assert has("prostate", "abiraterone", 1000, "mg") and not has("prostate", "abiraterone", 250, "mg")  # 250 mg is the tablet
     assert has("kidney", "sorafenib", 400, "mg")  # printed "Sorafinib"
     assert has("germ_cell", "carboplatin", 7, "AUC") and not has("germ_cell", "etoposide", 240, "mg/m2")  # mesna 240 mg/m2

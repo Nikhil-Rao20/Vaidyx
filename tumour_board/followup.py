@@ -49,11 +49,11 @@ TASK_WORDS = {
     # Phase 2 cancers (night-v3 item 2.1). "EUA" alone is left out (also the examination under anaesthesia of a cervix case) and so is
     # "FISH" for cytogenetics (a lone FISH stays molecular, as in doc_type_keywords.json: "HER2 FISH" asks for a molecular report).
     "bone_marrow": ["bone marrow", "marrow", "bone marrow aspiration and biopsy", "marrow aspiration and biopsy", "BMA and biopsy"],
-    "flow_cytometry": ["flow", "immunophenotyping"],
+    "flow_cytometry": ["flow cytometry", "immunophenotyping", "FCM"],  # not a bare "flow": a Doppler flow study is an ultrasound (review, Phase 2)
     "cytogenetics": ["karyotype"],
     "csf": ["CSF", "lumbar puncture"],
     "echocardiogram": ["echo", "2D echo"],
-    "audiometry": ["audiometry", "hearing"],
+    "audiometry": ["audiometry", "audiogram", "hearing test"],
     "ophthalmology_note": ["eye examination", "EUA eyes", "EUA of the eyes", "EUA of both eyes"],
 }
 

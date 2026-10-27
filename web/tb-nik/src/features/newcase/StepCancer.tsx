@@ -22,7 +22,7 @@ import { useProtocols } from "@/hooks/useQueries";
 import { api } from "@/lib/api";
 import { EP } from "@/lib/endpoints";
 import {
-  BUILT_DRAFT_WORDS, BUILT_WORDS, CANCER_NAME_MAX, CANCER_NAME_MIN, DRAFT_CHECKLIST, GENERIC_PROTOCOL, GENERIC_SETTING, GROUP_LABELS, KIND_CHOICES,
+  BUILT_DRAFT_WORDS, BUILT_WORDS, CANCER_NAME_MAX, CANCER_NAME_MIN, DRAFT_CHECKLIST, GENERIC_SETTING, GROUP_LABELS, KIND_CHOICES, fallbackFor, nameFor,
   KIND_QUESTION, SOURCE_NOTE, cancerById, cancersFor, cleanCancerName, defaultVariant, genericRecords, genericRule, groupFor, isDraftChecklist,
   isGeneric, protocolFor, protocolsOf, searchCancers, variantOf, type CancerEntry, type CancerGroup, type CancerVariant,
 } from "@/lib/cancers";
@@ -77,7 +77,8 @@ export function StepCancer({ form, onChange }: { form: NewCaseForm; onChange: (p
 
   // When the checklist list arrives, a picked cancer whose checklist is not built falls back to the generic rule.
   useEffect(() => {
-    if (form.protocol && !isGeneric(form.protocol) && protocols.data && !built.has(form.protocol)) onChange({ protocol: GENERIC_PROTOCOL, setting: GENERIC_SETTING });
+    // a blood cancer entry (Leukaemia, Lymphoma) falls back to the blood cancer rule, any other to the solid one
+    if (form.protocol && !isGeneric(form.protocol) && protocols.data && !built.has(form.protocol)) onChange({ protocol: fallbackFor(picked), setting: GENERIC_SETTING });
   }, [protocols.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const known = protocols.data ? built : null;
@@ -91,12 +92,12 @@ export function StepCancer({ form, onChange }: { form: NewCaseForm; onChange: (p
     const v = defaultVariant(c, p?.age);  // Kidney: Wilms tumour for a child under 15, renal cell carcinoma otherwise; Colorectal: none
     const protocol = protocolFor(c, known, v?.id);
     setTyping(false);
-    onChange({ cancerId: c.id, cancerName: c.label, variant: v?.id ?? "", protocol, setting: protocol && isGeneric(protocol) ? GENERIC_SETTING : "" });
+    onChange({ cancerId: c.id, cancerName: nameFor(c, v), variant: v?.id ?? "", protocol, setting: protocol && isGeneric(protocol) ? GENERIC_SETTING : "" });
   };
   const chooseVariant = (v: CancerVariant) => {
     if (!picked) return;
     const protocol = protocolFor(picked, known, v.id);
-    onChange({ variant: v.id, protocol, setting: protocol && isGeneric(protocol) ? GENERIC_SETTING : "" });
+    onChange({ variant: v.id, cancerName: nameFor(picked, v), protocol, setting: protocol && isGeneric(protocol) ? GENERIC_SETTING : "" });
   };
   const list = search.trim() ? searchCancers(search) : cancersFor(group);
   // the checklists an entry leads to that the server lists (all of them before the list arrives)
@@ -151,7 +152,7 @@ export function StepCancer({ form, onChange }: { form: NewCaseForm; onChange: (p
                 <span className="block truncate text-sm font-medium text-foreground">{c.label}</span>
                 <span className={cn("flex items-center gap-1 text-xs", ok ? "text-ok" : "text-muted-foreground")}>
                   {ok ? <><ClipboardList className="size-3" aria-hidden /> checklist built</> : <><CircleHelp className="size-3" aria-hidden /> no checklist yet</>}
-                  {ok && isDraft ? <span className="ml-1 rounded-sm status-warn px-1 text-[10px] font-semibold leading-4" title={DRAFT_CHECKLIST}>draft</span> : null}
+                  {ok && isDraft ? <span className="ml-1 rounded-sm status-warn px-1 text-[11px] font-semibold leading-4" title={DRAFT_CHECKLIST}><span aria-hidden>draft</span><span className="sr-only">{DRAFT_CHECKLIST}</span></span> : null}
                 </span>
               </span>
               {on ? <Check className="size-4 shrink-0 text-primary" aria-hidden /> : null}
@@ -202,7 +203,8 @@ export function StepCancer({ form, onChange }: { form: NewCaseForm; onChange: (p
                     <RadioGroupItem id={`variant-${v.id}`} value={v.id} className="mt-0.5" />
                     <span className="min-w-0">
                       <span className="block text-sm font-medium text-foreground">{v.label}</span>
-                      {built.get(v.protocol) ? <span className="block text-xs text-muted-foreground">{built.get(v.protocol)?.label} checklist</span> : null}
+                      {isGeneric(v.protocol) ? <span className="block text-xs text-muted-foreground">No checklist yet: the core records only</span>
+                        : built.get(v.protocol) ? <span className="block text-xs text-muted-foreground">{built.get(v.protocol)?.label} checklist</span> : null}
                     </span>
                   </Label>
                 ))}
