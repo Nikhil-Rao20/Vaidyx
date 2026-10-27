@@ -1,6 +1,6 @@
 // One row of the Case File list, read the way a treating doctor reads a ward list: the patient (name, age and sex, the UHID
-// small), the cancer and its setting, then what the file is waiting for (the status word, how many records are left), the
-// board date and the last change. The owner's name shows only on a file that is not the reader's own. Another department's
+// small), the cancer and its setting, the Case File's summary line (night-v3 3.4, full readers only), then what the file is
+// waiting for (the status word, how many records are left), the board date and the last change. The owner's name shows only on a file that is not the reader's own. Another department's
 // Case File seen only through a link (night-v3 item 1.3) carries "Owned by <department>, read-only". The whole row opens the
 // Case File; the search words are marked. On a row the reader may act on (the owner's consultant, the MDT Coordinator) the
 // "Scheduled <date>" pill is a chip with a small menu: Move to another meeting, Take off the agenda (night-v3 item 1.6); the list
@@ -64,6 +64,7 @@ export function CaseRow({ c, q = "", showOwner = true, onMeeting }: { c: CaseLis
             {setting ? <span className="text-muted-foreground">, {setting}</span> : null}
             {c.imaging_present ? <Camera className="ml-1.5 inline size-3.5 align-[-2px] text-muted-foreground" aria-label="Imaging present" /> : null}
           </p>
+          {c.summary_line ? <p className="truncate text-xs text-muted-foreground" data-testid="row-summary-line"><Highlight text={c.summary_line} q={q} /></p> : null}
           {linkedOnly ? <p className="mt-1"><Pill icon={Link2} title="Linked to a Case File of your department; you can read it, not change it">Owned by {ownedBy}, read-only</Pill></p> : null}
         </div>
         <p className="col-start-2 truncate text-xs text-muted-foreground lg:col-start-auto lg:text-sm">

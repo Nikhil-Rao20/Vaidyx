@@ -305,7 +305,7 @@
       "step": "recommendation"
     },
     {
-      "hint": "As the board stated it, for example surgery then adjuvant chemotherapy",
+      "hint": "In the order the board stated it",
       "key": "sequence",
       "kind": "short",
       "label": "Sequence",

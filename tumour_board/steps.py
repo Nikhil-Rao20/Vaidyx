@@ -8,9 +8,12 @@ Built from slots.build and the stored documents; no model call. Nothing here dia
 their gaps and what the doctor typed (always shown "entered by Dr X, no report").
 
 open_count() is the one count of what is left before the board; the Case File, the Case Files list and the meetings all use it."""
+import logging
 import re
 
 from . import access, after_send, dates, dept_requests, discord, his_case, org, proposals, protocol, rules, slots, store
+
+log = logging.getLogger("tumour_board")
 
 SECTIONS = [("overview", "Overview"), ("question", "Question"), ("reports", "Reports"), ("check", "Check"),
             ("pre_authorization", "Pre-Authorization"), ("summary", "Summary")]
@@ -492,6 +495,15 @@ def build(case_id, roles=None) -> dict:
     # Summary (B7): written before sending, read, then sent.
     prose = view.get("prose") or {}
     sent = case.get("board_ready") or None
+    # After the first board decision the Case summary is the main summary (night-v3 item 3.4, owner decision D3); the pre-board
+    # summaries stay in the history. `prose` stays the live pre-board summary for every existing reader.
+    cs_view, history = None, []
+    try:
+        from . import case_summary
+        cs_view = case_summary.view(case_id, st, r) if case_summary.current(st) else None
+        history = case_summary.pre_board_history(st)
+    except Exception as e:  # the Case File view never fails because of the Case summary
+        log.warning("Case summary view failed for %s (%s: %s)", case_id, e.__class__.__name__, e)
 
     # Sign-offs for the consultant (B9).
     signoffs = [p for p in proposals.list_(case) if p.get("status") == proposals.PENDING] if consultant else []
@@ -512,7 +524,10 @@ def build(case_id, roles=None) -> dict:
         pa = sec("pre_authorization", "waiting", "Waiting on " + deps[0] + (f" and {len(deps) - 1} more" if len(deps) > 1 else ""), len(waiting))
     else:
         pa = sec("pre_authorization", "done", "Done")
-    if prose.get("status") in ("ready",) and prose.get("reviewed"):
+    if cs_view:  # the Case summary's own words (item 3.4)
+        sm = {"reviewed": sec("summary", "done", "Reviewed"), "stale": sec("summary", "todo", "Decision recorded: update the Case summary", 1),
+              "building": sec("summary", "working", "Being written")}.get(cs_view["status"]) or sec("summary", "todo", "Read the Case summary", 1)
+    elif prose.get("status") in ("ready",) and prose.get("reviewed"):
         sm = sec("summary", "done", "Done")
     elif prose.get("status") == "ready":
         sm = sec("summary", "todo", "Read it", 1)
@@ -561,7 +576,13 @@ def build(case_id, roles=None) -> dict:
     if unconfirmed:
         todo.append({"id": "keys", "section": "check", "label": f"Confirm {len(unconfirmed)} key {'value' if len(unconfirmed) == 1 else 'values'}",
                      "why": ", ".join(k["label"] for k in unconfirmed[:4]) + ("..." if len(unconfirmed) > 4 else ""), "action": {"kind": "go", "label": "Confirm"}})
-    if not todo and not sent:
+    if cs_view:  # after a decision the Case summary's to-do, whether or not the Case File was sent (item 3.4)
+        if cs_view["status"] == "ready" and cs_view["can"]["review"]:
+            todo.append({"id": "case_summary", "section": "summary", "label": "Read the Case summary", "action": {"kind": "go", "label": "Read it"}})
+        elif cs_view["status"] == "stale" and cs_view["can"]["build"]:
+            todo.append({"id": "case_summary", "section": "summary", "label": "Update the Case summary", "why": cs_view.get("stale_reason") or "",
+                         "action": {"kind": "go", "label": "Update it"}})
+    elif not todo and not sent:
         if prose.get("status") in ("none", "stale"):
             todo.append({"id": "summary", "section": "summary", "label": "Write the summary", "action": {"kind": "go", "label": "Write it"}})
         elif prose.get("status") == "ready" and not prose.get("reviewed"):
@@ -582,7 +603,7 @@ def build(case_id, roles=None) -> dict:
             "sections": sections, "next": nxt if prepare else None, "todo": todo if prepare else [], "waiting": waiting_rows if prepare else [],
             "warnings": warnings_list, "question": question, "glance": glance, "documents": docs,
             "check": {"problems": problems, "keys": keys}, "pre_authorization": {"groups": list(groups.values()), "waiting": waiting, "optional": optional},
-            "summary": {"prose": prose, "sent": sent}, "left": left, "permissions": perms, "signoffs": len(signoffs),
+            "summary": {"prose": prose, "sent": sent, "case_summary": cs_view, "history": history}, "left": left, "permissions": perms, "signoffs": len(signoffs),
             "protocol": case.get("protocol") or "", "protocol_label": view.get("protocol_label") or "", "reasons": [{"id": k, "label": v} for k, v in REASONS.items()],
             "blockers": view.get("blockers") or []}
 

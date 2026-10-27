@@ -3,19 +3,76 @@
 // (Team, Board decisions, Print, Download, Move to another meeting, Take off the agenda, Archive). Nothing else: the work is in the sections.
 // A draft checklist (version "x-draft", owner decision D6; night-v3 item 2.10) carries the chip "Checklist built (draft): needs a
 // clinician's check" next to the cancer; the version comes from GET /protocols (cached).
+// Under the patient the Case File's summary line (night-v3 3.4: built by Vaidyx from the Case summary, full readers only); the owner's
+// consultant changes it in place (at most 160 characters) or goes back to the Vaidyx line.
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Archive, CalendarDays, CalendarMinus, CalendarSync, ChevronDown, ClipboardList, Download, MoreHorizontal, Presentation, Printer, Send, Users } from "lucide-react";
+import { Archive, CalendarDays, CalendarMinus, CalendarSync, ChevronDown, ClipboardList, Download, MoreHorizontal, Pencil, Presentation, Printer, Send, Users } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { drName } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { UrgencyTag } from "@/components/UrgencyTag";
 import { BUILT_DRAFT_WORDS, DRAFT_CHECKLIST, NO_CHECKLIST_WORDS, genericRule, isDraftChecklist, isGeneric } from "@/lib/cancers";
 import { useProtocols } from "@/hooks/useQueries";
-import { ownerOf } from "../api";
-import type { CaseFile, Team } from "../types";
-import { StatusChip, fmtDate } from "../components/common";
+import { ownerOf, setSummaryLine } from "../api";
+import type { CaseFile, SummaryLine, Team } from "../types";
+import { LoadingButton, StatusChip, errorText, fmtDate, useAnnounce } from "../components/common";
 import type { Steps } from "./types";
 
 export type MorePanel = "team" | "board";
+
+const MAX_LINE = 160;
+
+/** The summary line under the patient; a pencil for the owner's consultant opens an inline field. */
+function SummaryLineRow({ caseId, line, canEdit }: { caseId: string; line: SummaryLine | null | undefined; canEdit: boolean }) {
+  const [saved, setSaved] = useState<SummaryLine | null>(null);
+  const cur = saved ?? line ?? null;
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState<"" | "save" | "vaidyx">("");
+  const [err, setErr] = useState<string | null>(null);
+  const [announce, liveNode] = useAnnounce();
+  if (!cur?.text && !canEdit) return null;
+  const send = async (t: string, which: "save" | "vaidyx") => {
+    setBusy(which); setErr(null);
+    try {
+      const r = await setSummaryLine(caseId, t);
+      setSaved(r.summary_line); setEditing(false);
+      announce(which === "vaidyx" ? "The Vaidyx line is back." : "Summary line saved.");
+    } catch (e) { setErr(errorText(e)); } finally { setBusy(""); }
+  };
+  if (editing) {
+    return (
+      <div className="mt-1.5 max-w-3xl space-y-1.5 print:hidden" data-testid="summary-line-edit">
+        {liveNode}
+        <label htmlFor="summary-line-input" className="text-xs font-medium text-foreground">Summary line</label>
+        <Input id="summary-line-input" value={text} onChange={(e) => setText(e.target.value)} maxLength={MAX_LINE} className="text-sm" aria-describedby="summary-line-note" aria-invalid={!!err || undefined} />
+        <p id="summary-line-note" className="text-xs text-muted-foreground">At most {MAX_LINE} characters ({text.length} now). It shows here and in the Case File list, with your name.</p>
+        {err ? <p role="alert" className="text-xs text-bad">{err}</p> : null}
+        <div className="flex flex-wrap gap-2">
+          <LoadingButton size="sm" loading={busy === "save"} disabled={!!busy || !text.trim()} onClick={() => void send(text, "save")} data-testid="summary-line-save">Save</LoadingButton>
+          {cur?.edited ? <LoadingButton size="sm" variant="outline" loading={busy === "vaidyx"} disabled={!!busy} onClick={() => void send("", "vaidyx")} data-testid="summary-line-vaidyx">Use the Vaidyx line</LoadingButton> : null}
+          <Button size="sm" variant="ghost" onClick={() => { setEditing(false); setErr(null); }}>Cancel</Button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <p className="mt-1 flex max-w-3xl items-start gap-1 text-sm text-muted-foreground" data-testid="summary-line">
+      {liveNode}
+      <span className="line-clamp-2 min-w-0">
+        {cur?.text || <span className="italic">No summary line yet.</span>}
+        {cur?.edited ? <span className="ml-1.5 text-xs" data-testid="summary-line-edited">edited by {drName(cur.by_name || cur.by)}</span> : null}
+        {cur?.edited && cur.stale ? <span className="ml-1.5 text-xs text-warn" title={cur.vaidyx_text ? `Vaidyx would now write: ${cur.vaidyx_text}` : undefined}>(the Vaidyx line has changed since)</span> : null}
+      </span>
+      {canEdit ? (
+        <button type="button" onClick={() => { setText(cur?.text ?? ""); setEditing(true); }} aria-label="Change the summary line" data-testid="summary-line-pencil"
+          className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground print:hidden"><Pencil className="size-3.5" aria-hidden /></button>
+      ) : null}
+    </p>
+  );
+}
 
 export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, deckHref, exportHref, exportAllowed, onArchive, onMove, onWithdraw, resident, consultantName }: {
   cf: CaseFile; team: Team | null; steps: Steps | null; onSend: () => void; onPanel: (p: MorePanel) => void; onPrint: () => void;
@@ -49,6 +106,7 @@ export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, deckHref
             <span>UHID <span className="id text-foreground">{p.mrn}</span></span>
             {ids.map((v) => <span key={v} className="id">{v}</span>)}
           </p>
+          {(cf.access?.scope ?? "").toLowerCase() !== "requests" ? <SummaryLineRow caseId={c.case_id} line={c.summary_line} canEdit={!!steps?.summary?.case_summary?.can?.edit} /> : null}
           <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
             <span className="font-medium text-foreground" data-testid="header-cancer">{cancer}{!generic && c.setting ? <span className="font-normal text-muted-foreground">, {c.setting.replace(/_/g, " ")}</span> : null}</span>
             {generic ? <span className="text-muted-foreground">{genericRule(c.protocol)}</span> : null}

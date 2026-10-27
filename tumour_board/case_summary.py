@@ -19,6 +19,7 @@ interpretation, no treatment advice, no prognosis. The model is the reasoner (no
 The consultant's edits are never overwritten: a rebuild carries an edited sentence forward with its edited text; a different model
 sentence for the same place is kept under edited.suggested. Never for a protected Case File (config.PROTECTED_CASES)."""
 import asyncio
+import copy
 import hashlib
 import json
 import logging
@@ -56,8 +57,10 @@ REASONS = {**qa.REASONS, "relative_date": "a relative date (for example \"last m
 
 # "last month", "two weeks ago", "recently", "yesterday": a date the record cannot confirm (the reader does not know "when" it was written)
 RELATIVE = re.compile(r"\b(?:last|past|previous|next|this|coming)\s+(?:\d+\s+|few\s+|several\s+)?(?:day|week|fortnight|month|year)s?\b|"
-                      r"\b(?:\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|few|several|some)\s+"
-                      r"(?:day|week|fortnight|month|year)s?\s+(?:ago|back)\b|\brecently\b|\byesterday\b|\btoday\b|\btomorrow\b|"
+                      r"\b(?:\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|few|several|some|a\s+few)\s+"
+                      r"(?:day|week|fortnight|month|year)s?\s+(?:ago|back|later|after|afterwards|earlier|before|following)\b|"
+                      r"\bthe\s+(?:following|next|previous|preceding|same)\s+(?:day|week|fortnight|month|year|morning|evening|night)\b|"
+                      r"\bthe\s+(?:day|week|month)\s+(?:after|before)\b|\brecently\b|\byesterday\b|\btoday\b|\btomorrow\b|"
                       r"\bearlier this\b|\blater this\b", re.I)
 
 SYS_EXTRA = ("Write only about the documents given. One fact per sentence where possible. Cite each sentence with the document id and the "
@@ -216,6 +219,7 @@ _ISO_DATE = re.compile(r"\b(20\d\d)-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])\b")
 
 def _record_line(case_id, text, doc_id, quote):
     """A code sentence citing a record line, checked by qa.verify like a model sentence; None when the quote is not found."""
+    text = _END.sub(r'\1"', text)
     ok, _ = qa.verify(case_id, [{"text": text, "citations": [{"doc_id": doc_id, "quote": quote}]}])
     return ok[0] if ok else None
 
@@ -229,11 +233,24 @@ def _code(sid, text, cites, removed=None, **extra):
                 if removed is not None:
                     removed.append(_removed({"text": text, "citations": []}, "quote_not_found", f"{c.get('field')} does not hold the quoted text", "code"))
                 return None
+    text = _END.sub(r'\1"', text)  # 'recorded: "Surgery first."' never ends '."."' (Phase 3 review N5)
     if not _numbers_ok(text, cites):
         if removed is not None:
             removed.append(_removed({"text": text, "citations": []}, "number_not_in_quote", "a number is not in the quoted field", "code"))
         return None
     return {"id": sid, "text": text, "citations": cites, "code": True, **extra}
+
+
+_END = re.compile(r'([.!?])"\.$')
+# the short words for a communication flag of the latest record ("Not yet recorded: the date the patient was told.")
+FLAG_WORDS = {"patient_informed_date": "the date the patient was told", "key_worker": "the key worker", "trial_considered": "whether a clinical trial was considered",
+              "intent_as_recorded": "the treatment intent", "consent_recorded": "the patient's consent to the discussion"}
+
+
+def _lower_first(s) -> str:
+    """"As recorded in a report" -> "as recorded in a report"; "A Vaidyx draft stage..." keeps "Vaidyx"."""
+    s = str(s or "")
+    return s[:1].lower() + s[1:]
 
 
 def _fixed(sid, text):
@@ -302,11 +319,11 @@ def _fill(sentences, facts, ids, cat):
     k = len(sentences)
     added = summary.fill_from_facts(groups, want, cat) if groups else 0
     for x in sentences[k:]:  # the record's date as DD/MM/YYYY on screen (the value itself is never touched)
-        x["text"] = _SOURCE_DATE.sub(lambda m: m.group(1) + dmy(m.group(2)) + m.group(3), x["text"])
+        x["text"] = _SOURCE_DATE.sub(lambda m: ", " + dmy(m.group(1)) + m.group(2), x["text"])
     return added
 
 
-_SOURCE_DATE = re.compile(r"((?:as recorded in|against) the [^()]*, )(\d{4}-\d{2}-\d{2})((?:; no quote)?\)\.)$")
+_SOURCE_DATE = re.compile(r", (\d{4}-\d{2}-\d{2})((?:; no quote)?\)\.)$")  # the record's date closing the bracket (titles may hold brackets)
 
 
 def _finish_model_section(key, sentences):
@@ -357,7 +374,7 @@ def stage_section(case_id, st, facts, recs, removed):
             continue
         src = decision_record.choice_label("stage_source", rec.get("stage_source")) if rec.get("stage_source") else ""
         cites = [_bcite(rec, "stage_as_agreed")] + ([_bcite(rec, "stage_source")] if src else [])
-        add(_code("", f"The board of {dmy(_rec_date(rec))} recorded the stage as agreed: \"{agreed}\"" + (f" ({src.lower()})." if src else "."), cites, removed))
+        add(_code("", f"The board of {dmy(_rec_date(rec))} recorded the stage as agreed: \"{agreed}\"" + (f" ({_lower_first(src)})." if src else "."), cites, removed))
         if rep and _stage_key(rep["value"]) != _stage_key(agreed):
             cites = list(rep_line["citations"]) if rep_line else []
             add(_code("", f"The stage recorded in the {rep['doc_title']} (\"{rep['value']}\") differs from the stage as agreed by the board on {dmy(_rec_date(rec))}.",
@@ -465,7 +482,7 @@ def _decision_lines(case_id, st, rec, add, removed):
         quoted("divergent_opinions", "Divergent views as recorded")
     if _fold(rec.get("stage_as_agreed")):
         src = decision_record.choice_label("stage_source", rec.get("stage_source")) if rec.get("stage_source") else ""
-        add("stage_as_agreed", _code("", f"Stage as agreed by the board: \"{_fold(rec['stage_as_agreed'])}\"" + (f" ({src.lower()})." if src else "."),
+        add("stage_as_agreed", _code("", f"Stage as agreed by the board: \"{_fold(rec['stage_as_agreed'])}\"" + (f" ({_lower_first(src)})." if src else "."),
                                      [_bcite(rec, "stage_as_agreed")] + ([_bcite(rec, "stage_source")] if src else []), removed))
     if rec.get("trial_considered"):
         add("trial_considered", _code("", f"Clinical trial considered: {decision_record.choice_label('trial_considered', rec['trial_considered'])}.",
@@ -567,7 +584,7 @@ def status_section(case_id, st, recs, removed=None):
             add(_code("", f"Or re-discussion, as recorded: \"{_clip(trig)}\".", [_bcite(latest, "next_review_trigger")], removed))
         for f in ((latest.get("adjudication") or {}).get("flags") or []):
             if f.get("kind") == "communication" and not f.get("resolution") and f.get("text"):
-                add(_code("", f"Not yet recorded: {f['text']}", [{**_bcite(latest, "flags", f["text"], stored=f["text"]), "flag": f.get("field")}], removed))
+                add(_code("", f"Not yet recorded: {FLAG_WORDS.get(f.get('field'), f['text'])}.", [{**_bcite(latest, "flags", f["text"], stored=f["text"]), "flag": f.get("field")}], removed))
     if not any(s.get("open") for s in out):
         add(_fixed("", NOTHING["status"]))
     return {"id": "status", "title": TITLES["status"], "sentences": out, "built_by": "code"}
@@ -671,32 +688,52 @@ def stale_reason(then, now) -> str:
 
 # ---- build --------------------------------------------------------------------------------------------------------------------------
 
+def _cite_keys(sentence) -> set:
+    return {(str(c.get("doc_id") or ""), grounding.norm(str(c.get("quote") or ""))) for c in sentence.get("citations") or []
+            if isinstance(c, dict) and c.get("doc_id") and c.get("quote")}
+
+
 def _carry_edits(prev, sections, case_id):
-    """The consultant's edits of the previous version stay: an edited sentence keeps its edited text in the same place; a different
-    model sentence for the same place goes under edited.suggested, never over it."""
+    """The consultant's edits of the previous version stay. An edited sentence is matched to a new one by content (the same Vaidyx text,
+    else a shared cited record line), never by position; it replaces only that sentence, and a different new text for it is kept under
+    edited.suggested, never over the edit. An edited sentence with no match is added at the end of its section (carried), the new
+    sentences left as they are."""
     if not prev:
         return 0
     carried = 0
     by_sec = {s["id"]: s for s in sections}
     for psec in prev.get("sections") or []:
-        if psec.get("id") not in MODEL_SECTIONS:
+        if psec.get("id") not in MODEL_SECTIONS or psec["id"] not in by_sec:
             continue
-        sec = by_sec.get(psec["id"])
+        sec = by_sec[psec["id"]]
+        used = set()
         for ps in psec.get("sentences") or []:
             if not isinstance(ps.get("edited"), dict):
                 continue
-            keep = {k: v for k, v in ps.items() if k != "edited"}
+            keep = {k: v for k, v in ps.items() if k not in ("edited", "id")}
             ed = {**ps["edited"], "carried_from": prev.get("n")}
             ed.pop("suggested", None)
             ed["records_changed"] = _records_changed(ed, case_id)
-            new = next((s for s in sec["sentences"] if s.get("id") == ps["id"]), None)
-            if new is not None and not new.get("fixed") and _fold(new["text"]) not in (_fold(ps["text"]), _fold(ed.get("vaidyx_text"))):
-                ed["suggested"] = {"text": new["text"], "citations": new.get("citations") or []}
-            item = {**keep, "edited": ed}
+            vt = _fold(ed.get("vaidyx_text"))
+            cands = [x for x in sec["sentences"] if not x.get("fixed") and not isinstance(x.get("edited"), dict) and id(x) not in used]
+            new = next((x for x in cands if vt and _fold(x["text"]) == vt), None)
+            if new is None and _cite_keys(ps):
+                new = next((x for x in cands if _cite_keys(x) & _cite_keys(ps)), None)
             if new is not None:
+                if _fold(new["text"]) not in (_fold(ps["text"]), vt):
+                    ed["suggested"] = {"text": new["text"], "citations": new.get("citations") or []}
+                item = {**keep, "id": new["id"], "edited": ed}
+                used.add(id(item))
                 sec["sentences"][sec["sentences"].index(new)] = item
             else:
-                sec["sentences"] = [s for s in sec["sentences"] if not s.get("fixed")] + [item]
+                sec["sentences"] = [x for x in sec["sentences"] if not x.get("fixed")]
+                ids = {x.get("id") for x in sec["sentences"]}
+                k = len(sec["sentences"]) + 1
+                while _sid(sec["id"], k) in ids:
+                    k += 1
+                item = {**keep, "id": _sid(sec["id"], k), "edited": {**ed, "unmatched": True}}
+                used.add(id(item))
+                sec["sentences"].append(item)
             carried += 1
     return carried
 
@@ -785,6 +822,7 @@ async def build(case_id, trigger: dict, user="") -> dict:
     art["case_id"] = case_id
     st["artefacts"][ART] = art
     store.save_state(case_id, st)
+    write_line(case_id, st)  # the summary line of the Case File follows the new version (item 3.4); an edited line is kept
     au({"kind": "case_summary", "version": n, "trigger": trigger.get("kind"), "sentences": len(sents), "dropped": len(removed),
         "removed": {k: c for k in REASONS if (c := sum(1 for x in removed if x.get("reason") == k))}, "seconds": v["seconds"],
         **({"model_error": sorted(model_error)} if model_error else {})})
@@ -817,6 +855,10 @@ def refresh_status(case_id=None, state=None):
     if own:
         store.save_state(case_id, st)
     store.audit(case_id, {"kind": "case_summary_status_refreshed", "version": v.get("n")})
+    try:  # "N actions open" in the summary line follows too (item 3.4)
+        write_line(case_id, st)
+    except Exception as e:
+        log.warning("summary line not written for %s (%s)", case_id, e)
     return v
 
 
@@ -1047,28 +1089,190 @@ def summary_line(st, case) -> str:
         label = protocol.case_label(case)
     except Exception:
         label = ""
-    site = " ".join(w for w in re.findall(r"[A-Za-z]+", label or "") if w.lower() not in _GENERIC)
+    site = " ".join(w for w in re.findall(r"[A-Za-z]+", label or "") if w.lower() not in _GENERIC and len(w) > 3 and w.lower() not in _fold(hist).lower())
     head = _fold(hist) or _fold(label)
-    if hist and site and site.lower() not in hist.lower():
+    if hist and site:  # the site words of the cancer label that the histology does not already say
         head = f"{_fold(hist)}, {site.lower()}"
     stage = max([c for c in (cur("recorded_stage"), cur("figo_stage")) if c and c.get("verification") in rules.VERIFIED],
                 key=lambda c: (c.get("date") or "", c.get("report_date") or ""), default=None)
     recs = records(st)
     stage_v = _fold((stage or {}).get("value")) or next((_fold(r.get("stage_as_agreed")) for r in reversed(recs) if _fold(r.get("stage_as_agreed"))), "")
-    parts = [x for x in (head, stage_v) if x]
-    line = ", ".join(parts)
+    head_part = ", ".join(x for x in (head, stage_v) if x)
+    dec_part = ""
     if recs:
         r = recs[-1]
         dec = _fold(r.get("decision_text")) or decision_record.OUTCOMES.get(_outcome(r), "")
-        if len(dec) > 80:
-            dec = dec[:80].rsplit(" ", 1)[0].rstrip(" ,;:") + "..."
-        line += ("; " if line else "") + f"board {dmy(_rec_date(r))}: {dec}"
+        dec_part = f"board {dmy(_rec_date(r))}: {dec}"
     k = sum(1 for a in _board_actions(st) if a.get("status") != "completed")
-    line += ("; " if line else "") + f"{k} {'action' if k == 1 else 'actions'} open"
+    tail = f"{k} {'action' if k == 1 else 'actions'} open"
+    # fit in MAX_LINE: the decision text gives way first (at a word boundary, with "..."), then the head; the tail always stays
+    sep = "; "
+    room = MAX_LINE - len(tail) - len(sep) - (len(head_part) + len(sep) if head_part else 0)
+    dec_part = _cut_words(dec_part, room)
+    if head_part and len(head_part) + len(sep) + (len(dec_part) + len(sep) if dec_part else 0) + len(tail) > MAX_LINE:
+        head_part = _cut_words(head_part, MAX_LINE - len(tail) - len(sep) - (len(dec_part) + len(sep) if dec_part else 0))
+    line = sep.join(x for x in (head_part, dec_part, tail) if x)
     line = line.replace("\u2014", "-").replace("\u2013", "-")
-    if len(line) > 160:
-        over = len(line) - 160
-        if head and len(head) > over + 10:
-            line = line.replace(head, head[:len(head) - over - 3].rstrip(" ,") + "...", 1)
-        line = line[:160]
+    return line[:MAX_LINE]
+
+
+def _cut_words(text, room) -> str:
+    """`text` within `room` characters, cut at a word boundary with "..."; "" when the room is too small for anything readable."""
+    text = _fold(text)
+    if len(text) <= room:
+        return text
+    if room < 16:
+        return ""
+    cut = text[:room - 3].rsplit(" ", 1)[0].rstrip(" ,;:(")
+    return cut + "..."
+
+
+# ---- the main summary and the summary line (night-v3 item 3.4) ------------------------------------------------------------------------
+
+VAIDYX = "vaidyx"
+VAIDYX_NAME = "Vaidyx"
+MAX_LINE = 160
+BOARD_LABELS = {"versions": "Correction", "outcome_type": "Outcome", "board_date": "Board date", "flags": "Not yet recorded",
+                "deferred_reason": "What is awaited", "divergent_opinions": "Divergent views", "intent_as_recorded": "Treatment intent"}
+
+
+def board_label(field) -> str:
+    """The words a board chip reads after "Board DD/MM/YYYY, ": the field's label from decision_record."""
+    return BOARD_LABELS.get(field) or decision_record.label(field)
+
+
+def with_labels(v) -> dict:
+    """A copy of a version whose board citations carry `label` (the stored version is never changed by reading it)."""
+    out = copy.deepcopy(v)
+    for sen in all_sentences(out):
+        for c in sen.get("citations") or []:
+            if isinstance(c, dict) and c.get("kind") == "board" and not c.get("label"):
+                c["label"] = board_label(c.get("field"))
+        sug = (sen.get("edited") or {}).get("suggested") if isinstance(sen.get("edited"), dict) else None
+        for c in (sug or {}).get("citations") or []:
+            if isinstance(c, dict) and c.get("kind") == "board" and not c.get("label"):
+                c["label"] = board_label(c.get("field"))
+    return out
+
+
+def display(case_id, st, v) -> dict:
+    """A version as shown: board chips labelled, and for the current version the status section worked out now (code, no model), so
+    "overdue" and the open actions are true today without writing anything on a read (Phase 3 review N3). Earlier versions as stored."""
+    out = with_labels(v)
+    cur = current(st)
+    if cur and v.get("n") == cur.get("n") and case_id not in config.PROTECTED_CASES:
+        try:
+            sec = status_section(case_id, st, records(st))
+            out["sections"] = [sec if x.get("id") == "status" else x for x in out.get("sections") or []]
+            out["status_day"] = today()
+        except Exception as e:
+            log.warning("status section not worked out for %s (%s)", case_id, e)
+    return out
+
+
+def _can(case_id, roles) -> dict:
+    from . import access, org
+    r = roles if isinstance(roles, dict) else {}
+    c = store.get_case(case_id) or {}
+    if not r or r.get("disabled"):
+        return {"build": False, "review": False, "edit": False}
+    owner = access.is_owner_doctor(r, c)
+    return {"build": bool(org.can(r, "list_case") or access.may(r, "upload_to_case", c)), "review": owner, "edit": owner}
+
+
+def view(case_id, st, roles=None, n=None) -> dict | None:
+    """What the Summary section and the Overview show of the Case summary (CaseSummaryView); None when there is none. `n` picks a version
+    (the current one by default); the status words are those of the current version."""
+    st = st if isinstance(st, dict) else store.get_state(case_id)
+    cur = current(st)
+    if not cur:
+        return None
+    v = cur if n is None else _version(st, int(n))
+    stt = status(st, case_id)
+    rv = v.get("review") or {}
+    reviewed = rv.get("status") == "reviewed"
+    lv = display(case_id, st, v)
+    return {"status": stt["status"], "current": cur.get("n"), "n": v.get("n"), "built_at": v.get("built_at"),
+            "trigger": {"kind": (v.get("trigger") or {}).get("kind"), "by": (v.get("trigger") or {}).get("by")},
+            "model_line": v.get("model_line") or "", "model": v.get("model") or "",
+            "label": f"Reviewed by {rv.get('by_name') or _name(rv.get('by'))}" if reviewed else "AI draft, not reviewed",
+            "stale_reason": stt.get("stale_reason") or "",
+            "review": {"status": rv.get("status") or "ai_draft", "by": rv.get("by"), "by_name": rv.get("by_name") or (_name(rv.get("by")) if rv.get("by") else ""),
+                       "at": rv.get("at"), "comment": rv.get("comment") or ""},
+            "sections": lv.get("sections") or [], "removed": len(v.get("removed") or []), "edits": len(v.get("edits") or []),
+            "first_board_date": v.get("first_board_date"), "refreshed_at": v.get("refreshed_at"),
+            "versions": [{"n": h["n"], "built_at": h["built_at"], "trigger": {"kind": (h.get("trigger") or {}).get("kind")},
+                          "review": {"status": (h.get("review") or {}).get("status") or "ai_draft", "by_name": (h.get("review") or {}).get("by_name")
+                                     or (_name((h.get("review") or {}).get("by")) if (h.get("review") or {}).get("by") else "")},
+                          "edits": h["edits"], "sentences": h["sentences"]} for h in history(st)],
+            "can": _can(case_id, roles)}
+
+
+def pre_board_history(st) -> list:
+    """The pre-board summaries (summary.history, item 3.5), oldest first, the live one last (live true)."""
+    out = []
+    for h in summary.history(st):
+        rv = h.get("review") or {}
+        out.append({"generated": h.get("generated"), "archived_at": h.get("archived_at"),
+                    "review": {"status": rv.get("status") or "ai_draft", "by": rv.get("by"), "by_name": _name(rv.get("by")) if rv.get("by") else "",
+                               "at": rv.get("at"), "comment": rv.get("comment") or ""},
+                    "model": h.get("model") or "",
+                    "paragraphs": [{"id": x.get("id"), "title": x.get("title"), "sentences": x.get("sentences") or []} for x in h.get("sections") or []],
+                    "points_for_review": h.get("points_for_review") or [], "stage_as_recorded": h.get("stage_as_recorded"),
+                    "live": h.get("archived_at") is None})
+    return out
+
+
+def _clean_line(text) -> str:
+    return " ".join(str(text or "").replace("\u2014", "-").replace("\u2013", "-").split())
+
+
+def write_line(case_id, st=None) -> dict | None:
+    """case["summary_line"] from the current version: the Vaidyx line (code, summary_line()), unless the consultant edited it; then the
+    edited text stays, `vaidyx_text` holds the Vaidyx line now and `stale` turns true once that differs from the one the edit replaced.
+    Saved only when something changed. None when there is no Case summary."""
+    st = st if isinstance(st, dict) else store.get_state(case_id)
+    v = current(st)
+    case = store.get_case(case_id)
+    if not v or not case or case_id in config.PROTECTED_CASES:
+        return None
+    text = summary_line(st, case)
+    cur = case.get("summary_line") if isinstance(case.get("summary_line"), dict) else None
+    if cur and cur.get("edited"):
+        new = dict(cur)
+        if text != cur.get("vaidyx_text"):
+            new["stale"] = True
+            new["vaidyx_text"] = text
+    else:
+        same = bool(cur) and cur.get("text") == text and cur.get("version") == v.get("n")
+        new = {"text": text, "version": v.get("n"), "at": cur.get("at") if same else store.now_iso(), "by": VAIDYX, "by_name": VAIDYX_NAME, "edited": False}
+    if new != cur:
+        case["summary_line"] = new
+        store.save_case(case)
+    return new
+
+
+def edit_line(case_id, text, user, user_name="") -> dict:
+    """The owner's consultant writes the summary line (at most 160 characters, whitespace folded, no em dash); an empty text goes back to
+    the Vaidyx line. Audited. LookupError when there is no Case summary yet; ValueError for a line over 160 characters."""
+    st = store.get_state(case_id)
+    v = current(st)
+    case = store.get_case(case_id)
+    if not v or not case:
+        raise LookupError("There is no Case summary yet, so there is no summary line to edit.")
+    text = _clean_line(text)
+    if len(text) > MAX_LINE:
+        raise ValueError(f"The summary line: at most {MAX_LINE} characters ({len(text)} written). Shorten it.")
+    old = case.get("summary_line") if isinstance(case.get("summary_line"), dict) else {}
+    vaidyx = summary_line(st, case)
+    now = store.now_iso()
+    if not text:
+        line = {"text": vaidyx, "version": v.get("n"), "at": now, "by": VAIDYX, "by_name": VAIDYX_NAME, "edited": False}
+    else:
+        line = {"text": text, "version": v.get("n"), "at": now, "by": user, "by_name": user_name or _name(user), "edited": True, "stale": False,
+                "vaidyx_text": vaidyx}
+    case["summary_line"] = line
+    store.save_case(case)
+    store.audit(case_id, {"kind": "summary_line_edit", "by": user, "text": line["text"], "edited": line["edited"], "previous": old.get("text") or "",
+                          "version": v.get("n")})
     return line

@@ -68,7 +68,7 @@ FIELDS = [
     _f("intent", "Treatment intent", "choice", "recommendation", choices="intent", required=["decision"], reason=True),
     _f("intent_as_stated", "Intent, in the board's words", "short", "recommendation", limit=300, reason=True),
     _f("modalities", "Modalities", "multi", "recommendation", choices="modalities", reason=True),
-    _f("sequence", "Sequence", "short", "recommendation", limit=300, reason=True, hint="As the board stated it, for example surgery then adjuvant chemotherapy"),
+    _f("sequence", "Sequence", "short", "recommendation", limit=300, reason=True, hint="In the order the board stated it"),
     _f("alternatives_discussed", "Alternatives discussed", "long", "recommendation", limit=2000, reason=True),
     _f("concerns", "Divergent views and concerns (name and words)", "concerns", "recommendation", limit={"by": 120, "text": 2000}, reason=True),
     _f("stage_as_agreed", "Stage as agreed by the board", "short", "recommendation", limit=300, reason=True),
@@ -182,10 +182,11 @@ def _outcome_of(body) -> str:
     return _fold(body.get("outcome") or body.get("outcome_type") or "")
 
 
-def clean(body: dict, *, strict: bool) -> dict:
+def clean(body: dict, *, strict: bool, only=None) -> dict:
     """Every FIELDS key normalised: whitespace folded (line breaks kept in long text), choices checked, dates ISO, list rows cleaned, ""
     for an absent scalar and [] for an absent list. Over-limit text is refused, never cut. strict=True (the coordinator's meeting form,
-    a correction) also applies the required-by-outcome rule. Compatibility keys: intent_as_recorded (= intent), divergent_opinions
+    a correction) also applies the required-by-outcome rule; with `only` (a set of keys: a later correction or update of some fields) that
+    rule is applied to those keys only, so a stored record from before a rule existed can still be corrected. Compatibility keys: intent_as_recorded (= intent), divergent_opinions
     (joined from the concerns), deferred_reason. ValueError with every problem in plain words."""
     body = body if isinstance(body, dict) else {}
     out, errs = {}, []
@@ -256,7 +257,7 @@ def clean(body: dict, *, strict: bool) -> dict:
                 out["intent"] = got
                 break
     if strict:
-        errs += [_REQUIRED_MESSAGE[k] for k in missing_required(out)]
+        errs += [_REQUIRED_MESSAGE[k] for k in missing_required(out) if only is None or k in only]
     if errs:
         raise ValueError(" ".join(dict.fromkeys(errs)))
     out["intent_as_recorded"] = out["intent"]
@@ -442,8 +443,10 @@ def value_text(key: str, value) -> str:
         out = []
         for x in value:
             if isinstance(x, dict) and x.get("kind"):
-                extra = ", ".join(p for p in (x.get("department") or "", x.get("note") or "") if p)
-                out.append(choice_label("referrals", x["kind"]) + (f" ({extra})" if extra else ""))
+                name = choice_label("referrals", x["kind"])
+                dept = x.get("department") or ""
+                extra = ", ".join(p for p in (dept if _fold(dept).lower() != name.lower() else "", x.get("note") or "") if p)  # never "Nutrition (Nutrition)"
+                out.append(name + (f" ({extra})" if extra else ""))
         return "; ".join(out)
     return str(value)
 

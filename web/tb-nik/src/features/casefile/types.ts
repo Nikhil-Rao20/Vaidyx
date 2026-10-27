@@ -488,6 +488,8 @@ export interface BoardRecordVersion {
   fields?: Record<string, unknown>;
 }
 
+export interface SummaryLine { text: string; version?: number; at?: string; by?: string; by_name?: string; edited?: boolean; stale?: boolean; vaidyx_text?: string }
+
 export interface CaseFile {
   case: {
     case_id: string;
@@ -508,6 +510,8 @@ export interface CaseFile {
     board_send?: BoardSend | null;
     board_record?: BoardRecord | null;
     created?: string;
+    /** The short line under the patient (night-v3 3.4), built from the Case summary; the owner's consultant may edit it. */
+    summary_line?: SummaryLine | null;
   };
   state: {
     gate?: { passed?: boolean; readiness?: number; satisfied?: number; total?: number; requirements?: GateRequirement[]; blockers?: unknown[] };

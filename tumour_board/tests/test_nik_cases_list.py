@@ -139,3 +139,30 @@ def test_search_finds_any_part_of_an_identifier(api, people):
     # the list filters take comma-separated values
     r = api.as_(RAO).get("/case-list", params={"organ": "breast,lung_nsclc"})
     assert r.status_code == 200 and {x["case_id"] for x in r.json()["cases"]} >= {"TB-S1", "TB-S2"}
+
+
+def test_the_summary_line_and_decision_text_only_for_full_readers(api, people):
+    """night-v3 item 3.4: the row carries the summary line and the latest decision text for a reader of the whole Case File, and the
+    search finds a word of either; a department that was only asked gets "" (clinical text never leaks)."""
+    make_case("TB-SL1", summary_line={"text": "Invasive ductal carcinoma, right breast, cT2 N1 M0; board 12/11/2026: neoadjuvant chemotherapy; 1 action open",
+                                      "version": 1, "at": "2026-11-12T10:00:00", "by": "vaidyx", "by_name": "Vaidyx", "edited": False})
+    make_case("TB-SL2")
+    st = store.get_state("TB-SL1")
+    st["board_records"] = [{"id": "BR1", "board_date": "2026-10-01", "recorded_at": "2026-10-01T10:00:00", "decision_text": "Older plan."},
+                           {"id": "BR2", "board_date": "2026-11-12", "recorded_at": "2026-11-12T10:00:00", "decision_text": "Neoadjuvant chemotherapy, then breast conserving surgery. " * 6}]
+    st["actions"] = [{"id": "A1", "source": "pre_authorization", "requirement": "breast_imaging", "label": "Mammogram", "department": "Radiology", "department_id": "radiology",
+                      "status": "pending", "created": store.now_iso(), "due": NEXT_YEAR, "history": [], "sent": {"by": RAO, "at": store.now_iso(), "count": 1}}]
+    store.save_state("TB-SL1", st)
+    rows = by_id(api.as_(RAO).get("/case-list").json()["cases"])
+    row = rows["TB-SL1"]
+    assert row["summary_line"].startswith("Invasive ductal carcinoma, right breast") and row["scope"] == access.FULL
+    assert row["decision_text"].startswith("Neoadjuvant chemotherapy, then breast conserving surgery.") and len(row["decision_text"]) == 200
+    assert rows["TB-SL2"]["summary_line"] == "" and rows["TB-SL2"]["decision_text"] == ""
+
+    def ids(user, q):
+        return sorted(x["case_id"] for x in api.as_(user).get("/case-list", params={"q": q}).json()["cases"] if x["case_id"].startswith("TB-SL"))
+    assert ids(RAO, "ductal") == ["TB-SL1"] and ids(RAO, "conserving") == ["TB-SL1"] and ids(RAO, "neoadjuvant ductal") == ["TB-SL1"]
+    rows = api.as_(RAVI).get("/case-list").json()["cases"]  # Radiology was only asked about the mammogram
+    assert [x["case_id"] for x in rows] == ["TB-SL1"] and rows[0]["scope"] == access.REQUESTS
+    assert rows[0]["summary_line"] == "" and rows[0]["decision_text"] == ""
+    assert ids(RAVI, "ductal") == [] and ids(RAVI, "conserving") == []

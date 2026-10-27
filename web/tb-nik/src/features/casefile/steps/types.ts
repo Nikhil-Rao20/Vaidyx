@@ -79,6 +79,74 @@ export interface MissingItem extends StepRow {
   request?: SlotRequest & { overdue?: boolean };
 }
 
+// ---- the Case summary (night-v3 3.3 / 3.4; tumour_board/case_summary.py view) ----------------------------------------------------
+/** A record line as today, or a field of a board record, an action, the stage confirmation or a member's card (the stored text). */
+export type CaseCitation =
+  | { kind?: undefined; doc_id: string; quote: string; page?: number | null; doc_title?: string; date?: string; status?: string }
+  | { kind: "board"; board_record: string; version?: number; field: string; label?: string; quote: string; board_date?: string }
+  | { kind: "action"; action?: string; board_record?: string; field: string; label?: string; quote: string; at?: string }
+  | { kind: "staging"; field: string; quote: string; by?: string; at?: string }
+  | { kind: "card"; meeting?: string; user?: string; field: string; quote: string; board_date?: string };
+
+export interface SentenceEdit { by: string; by_name?: string; at: string; checked: boolean; records_changed?: boolean; suggested?: string; vaidyx_text?: string }
+
+export interface CaseSentence {
+  id: string;
+  text: string;
+  citations: CaseCitation[];
+  /** Written by code from the stored fields: no AI mark, not editable. */
+  code?: boolean;
+  /** The fixed sentence when nothing is documented. */
+  fixed?: boolean;
+  from_fields?: boolean;
+  approximate?: boolean;
+  edited?: SentenceEdit | null;
+}
+
+export interface CaseSummarySection {
+  id: "presentation" | "stage" | "rounds" | "since" | "status" | string;
+  title: string;
+  built_by?: "model" | "code" | string;
+  context?: string;
+  sentences?: CaseSentence[];
+  /** The board rounds: one block per board record, oldest first. */
+  blocks?: Array<{ record: string; version?: number; date?: string; outcome?: string; sentences: CaseSentence[] }>;
+}
+
+export interface CaseSummaryReview { status?: "reviewed" | "flagged" | "ai_draft" | string; by?: string; by_name?: string; at?: string; comment?: string }
+
+export interface CaseSummaryVersionRow { n: number; built_at?: string; trigger?: { kind?: string }; review?: CaseSummaryReview; edits?: number; sentences?: number }
+
+export interface CaseSummaryView {
+  status: "building" | "ready" | "stale" | "reviewed";
+  current: number;
+  built_at?: string;
+  trigger?: { kind?: string; by?: string };
+  model_line?: string;
+  label?: string;
+  stale_reason?: string;
+  review?: CaseSummaryReview | null;
+  sections: CaseSummarySection[];
+  /** Sentences dropped because they could not be checked (a count here; a stored version keeps the list). */
+  removed?: number | unknown[];
+  edits?: number | unknown[];
+  first_board_date?: string;
+  versions: CaseSummaryVersionRow[];
+  can: { build?: boolean; review?: boolean; edit?: boolean };
+}
+
+/** One pre-board summary (summary.history): the archived ones first, the live one last. */
+export interface PreBoardVersion {
+  generated?: string;
+  archived_at?: string;
+  review?: { status?: string; by?: string; at?: string } | null;
+  model?: string;
+  paragraphs: Array<{ id?: string; title?: string; sentences?: Array<string | { text: string; citations?: Array<{ doc_id: string; doc_title: string; page: number | null; quote: string }> }> }>;
+  points_for_review?: Array<{ text: string }>;
+  stage_as_recorded?: unknown;
+  live?: boolean;
+}
+
 export interface Steps {
   case_id: string;
   mode: "prepare" | "read";
@@ -98,7 +166,13 @@ export interface Steps {
   documents: StepDocument[];
   check: { problems: CheckItem[]; keys: CheckItem[] };
   pre_authorization: { groups: Array<{ department: Department; items: MissingItem[] }>; waiting: MissingItem[]; optional: MissingItem[] };
-  summary: { prose: SlotsResponse["prose"]; sent: { by?: string; at?: string; note?: string } | null };
+  summary: {
+    prose: SlotsResponse["prose"]; sent: { by?: string; at?: string; note?: string } | null;
+    /** After the first board decision: the main summary (night-v3 3.4). */
+    case_summary?: CaseSummaryView | null;
+    /** Every pre-board summary, the live one last. */
+    history?: PreBoardVersion[];
+  };
   left: number;
   permissions: SlotsResponse["permissions"];
   signoffs: number;

@@ -1,20 +1,49 @@
 // Summary (B7): written before sending. "Write the summary" (15 to 35 s, from the checked values only; every sentence keeps its report
 // line), read it, "I have read it", then "Send to the board". What the doctor typed is shown apart, "entered by Dr X, no report". The
 // specialty briefs and similar published cases sit here too (B9).
+// After the first board decision (night-v3 3.4, owner decision D3) the Case summary comes first; the pre-board summary folds under
+// "Before the board on DD/MM/YYYY", with its earlier versions (summary history) in a fold of their own.
 import type { ReactNode } from "react";
-import { CheckCheck, PenLine, RefreshCw, Send, Sparkles } from "lucide-react";
+import { CheckCheck, History, PenLine, RefreshCw, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { SlotHandlers } from "../components/SlotLine";
 import { ProseBlock } from "../components/SummaryColumn";
-import { LoadingButton, SkeletonLines, fmtDateTime, indianDates, modelLabel } from "../components/common";
+import { CaseSummaryCard } from "../components/CaseSummaryCard";
+import { LoadingButton, SkeletonLines, fmtDate, fmtDateTime, indianDates, modelLabel } from "../components/common";
 import type { CaseDocument } from "../types";
 import { Card } from "./Overview";
-import type { Steps } from "./types";
+import type { PreBoardVersion, Steps } from "./types";
 
-export function SummaryStep({ steps, docs, h, canWrite, canRead, busy, reading, onWrite, onRead, onSend, resident, consultantName, briefs, published }: {
+/** "read by X", "flagged" or "not read" for a pre-board version (its review keeps the login; a name shows only when it is one). */
+function readWords(r: PreBoardVersion["review"]): string {
+  const by = r?.by && !r.by.includes("@") ? ` by ${r.by}` : "";
+  return r?.status === "reviewed" ? `read${by}` : r?.status === "flagged" ? `flagged${by}` : "not read";
+}
+
+function EarlierPreBoard({ versions, docs, h }: { versions: PreBoardVersion[]; docs: CaseDocument[]; h: SlotHandlers }) {
+  return (
+    <details className="rounded-md border border-border px-3 py-2" data-testid="preboard-history">
+      <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">Earlier versions ({versions.length})</summary>
+      <ol className="mt-2 space-y-3">
+        {[...versions].reverse().map((v, i) => (
+          <li key={`${v.generated ?? ""}-${i}`} className="space-y-2 border-t border-border pt-2 first:border-t-0 first:pt-0">
+            <p className="text-xs text-muted-foreground">{[v.generated ? `Written ${fmtDateTime(v.generated)}` : "Written earlier", v.model ? `by ${modelLabel(v.model)}` : "", readWords(v.review)].filter(Boolean).join(", ")}</p>
+            <div className="space-y-2 text-sm leading-relaxed">{v.paragraphs.map((p, j) => <ProseBlock key={j} p={p} docs={docs} h={h} />)}</div>
+          </li>
+        ))}
+      </ol>
+    </details>
+  );
+}
+
+export function SummaryStep({ steps, docs, h, canWrite, canRead, busy, reading, onWrite, onRead, onSend, resident, consultantName, briefs, published, onBoard }: {
   steps: Steps; docs: CaseDocument[]; h: SlotHandlers; canWrite: boolean; canRead: boolean; busy: boolean; reading: boolean; resident: boolean; consultantName: string;
   onWrite: () => void; onRead: () => void; onSend: () => void; briefs: ReactNode; published: ReactNode;
+  /** Opens the Board decisions panel from a board chip of the Case summary. */
+  onBoard?: () => void;
 }) {
+  const cs = steps.summary.case_summary ?? null;
+  const archived = (steps.summary.history ?? []).filter((v) => !v.live);
   const prose = steps.summary.prose;
   const sent = steps.summary.sent;
   const shown = prose.status === "ready" || prose.status === "stale";
@@ -24,7 +53,8 @@ export function SummaryStep({ steps, docs, h, canWrite, canRead, busy, reading, 
   ];
   return (
     <div className="space-y-4" data-testid="section-summary">
-      <Card title="The board summary" icon={<Sparkles className="size-4 text-brand" aria-hidden />} testId="summary-card">
+      {cs ? <CaseSummaryCard caseId={steps.case_id} view={cs} docs={docs} h={h} onBoard={onBoard} /> : null}
+      <PreBoardFrame folded={!!cs} title={cs ? `Before the board${cs.first_board_date ? ` on ${fmtDate(cs.first_board_date)}` : ""}` : "The board summary"}>
         <div className="space-y-3 py-2">
           {prose.status === "none" && !busy ? (
             <div className="space-y-2">
@@ -63,8 +93,9 @@ export function SummaryStep({ steps, docs, h, canWrite, canRead, busy, reading, 
               {sent ? <span className="text-sm text-ok">Sent to the board{sent.at ? `, ${fmtDateTime(sent.at)}` : ""}</span> : null}
             </div>
           ) : null}
+          {archived.length ? <EarlierPreBoard versions={archived} docs={docs} h={h} /> : null}
         </div>
-      </Card>
+      </PreBoardFrame>
       {entered.length ? (
         <Card title="Entered by the treating doctor, no report" icon={<PenLine className="size-4 text-muted-foreground" aria-hidden />} testId="summary-entered">
           <dl className="divide-y divide-border">
@@ -79,5 +110,19 @@ export function SummaryStep({ steps, docs, h, canWrite, canRead, busy, reading, 
       <Card title="Specialty briefs" testId="summary-briefs"><div className="py-2">{briefs}</div></Card>
       <Card title="Similar published cases" testId="summary-published"><div className="py-2">{published}</div></Card>
     </div>
+  );
+}
+
+/** The pre-board summary's frame: the card as before, or a fold closed by default once the Case summary is the main summary. */
+function PreBoardFrame({ folded, title, children }: { folded: boolean; title: string; children: ReactNode }) {
+  if (!folded) return <Card title={title} icon={<Sparkles className="size-4 text-brand" aria-hidden />} testId="summary-card">{children}</Card>;
+  return (
+    <details className="surface overflow-hidden" data-testid="summary-card">
+      <summary className="flex cursor-pointer items-center gap-2 px-4 py-2.5 text-[15px] font-semibold text-foreground hover:bg-accent/60">
+        <History className="size-4 text-muted-foreground" aria-hidden />{title}
+        <span className="ml-auto text-xs font-normal text-muted-foreground">the summary the board read</span>
+      </summary>
+      <div className="border-t border-border px-4 py-2">{children}</div>
+    </details>
   );
 }

@@ -90,6 +90,10 @@ export interface CaseListItem {
   ids?: string[];
   /** Accession / Lab numbers of the records in the file, for the search. */
   accessions?: string[];
+  /** The Case File's summary line (night-v3 3.4); "" unless the reader has full access to the Case File. */
+  summary_line?: string;
+  /** The latest board decision in the board's words (at most 200 characters), for the search; "" unless full access. */
+  decision_text?: string;
 }
 
 export type FilterOption = string | { id: string; label: string } | { key: string; label: string };

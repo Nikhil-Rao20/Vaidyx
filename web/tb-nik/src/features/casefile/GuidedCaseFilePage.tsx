@@ -335,7 +335,7 @@ export default function GuidedCaseFilePage() {
   if (stepsq.error && !steps) body = <ErrorState error={stepsq.error} retry={() => void stepsq.refetch()} />;
   else if (steps) {
     if (section === "overview") {
-      body = <Overview steps={steps} h={overviewH} signoffs={!resident && proposalsq.proposals.length ? <div id="signoffs"><ProposalsStrip caseId={id} proposals={proposalsq.proposals} onChanged={refresh} labelOf={(sid) => slotById(sid)?.label} /></div> : null}
+      body = <Overview steps={steps} h={overviewH} onBoard={() => setSide({ kind: "panel", panel: "board" })} signoffs={!resident && proposalsq.proposals.length ? <div id="signoffs"><ProposalsStrip caseId={id} proposals={proposalsq.proposals} onChanged={refresh} labelOf={(sid) => slotById(sid)?.label} /></div> : null}
         staging={stagingq.data && (stagingq.data.switch.on || stagingq.data.written.length) ? (
           <StagingCard caseId={id} view={stagingq.data} loading={stagingq.isLoading} canRun={prepare} canConfirm={prepare && !resident && !!cf.permissions?.review}
             canPropose={prepare && resident} consultantName={consultantName}
@@ -358,7 +358,7 @@ export default function GuidedCaseFilePage() {
     } else if (section === "pre_authorization") {
       body = <PreAuthStep steps={steps} h={preAuthH} canAct={prepare} resident={resident} consultantName={consultantName} onNext={() => go("summary")} />;
     } else {
-      body = <SummaryStep steps={steps} docs={cf.documents} h={slotHandlers} canWrite={!!canWrite} canRead={!resident && !!cf.permissions?.review} busy={writing} reading={reading} resident={resident} consultantName={consultantName}
+      body = <SummaryStep steps={steps} docs={cf.documents} onBoard={() => setSide({ kind: "panel", panel: "board" })} h={slotHandlers} canWrite={!!canWrite} canRead={!resident && !!cf.permissions?.review} busy={writing} reading={reading} resident={resident} consultantName={consultantName}
         onWrite={() => void (async () => { setWriting(true); try { await buildSummary(id, true); await refresh(); } catch (e) { notify.error("Could not write the summary", errorText(e)); } finally { setWriting(false); } })()}
         onRead={() => void (async () => { setReading(true); try { await reviewArtefact(id, "summary", "reviewed"); await refresh(); } catch (e) { notify.error("Could not save", errorText(e)); } finally { setReading(false); } })()}
         onSend={() => setReadyOpen(true)}

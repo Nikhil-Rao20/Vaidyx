@@ -516,6 +516,10 @@ def test_decision_is_recorded_through_postboard_and_sent_to_the_owner(tc):
     # the old minutes carry it
     m = As(tc, "anil").get(f"/sessions/{mid}/minutes?format=json").json()
     assert next(c for c in m["cases"] if c["case_id"] == "TB-002")["decision"]["text"] == body["decision_text"]
+    # saving the form again records nothing more: no second round, no second request (Phase 3 review S2)
+    r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-002/decision", json=body)
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "already_recorded" and "Board decisions panel" in r.json()["detail"]["message"]
+    assert [b["id"] for b in store.get_state("TB-002")["board_records"]] == [rec["id"]]
 
 
 def test_not_discussed_moves_the_case_to_the_next_meeting_else_flags_it(tc):

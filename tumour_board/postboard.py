@@ -420,6 +420,64 @@ def _close_inform_actions(st, rec, user) -> list[str]:
     return closed
 
 
+CONFIRMED_DRAFT_MISSING = ("The stage source \"A Vaidyx draft stage a doctor confirmed\" needs a draft stage a doctor confirmed, and this "
+                           "Case File has none. Choose another source.")
+ROUND_FIELDS = ("intent", "intent_as_recorded", "trial_considered", "trial_name")  # communication fields the Case summary's board rounds show
+
+
+def _check_stage_source(case_id, value) -> None:
+    """The stage source "confirmed_draft" only when the Case File holds a draft stage a doctor confirmed and nobody rejected (Phase 3 review M4)."""
+    if value != "confirmed_draft":
+        return
+    d = (store.get_state(case_id) or {}).get("staging")
+    if not (isinstance(d, dict) and isinstance(d.get("confirmed"), dict) and d["confirmed"].get("at") and not d.get("rejected")):
+        raise ValueError(CONFIRMED_DRAFT_MISSING)
+
+
+def _row_match_key(task, department) -> tuple:
+    dept = " ".join(str(department or "").split())
+    return (" ".join(str(task or "").split()).lower(), org.department_id(dept) or dept.lower())
+
+
+def _not_open(st, rows) -> list:
+    """The follow-up rows that no open board action of the Case File already carries (the same task for the same department): a form
+    saved twice never sends a department the same request twice (Phase 3 review S2)."""
+    have = {_row_match_key(a.get("label"), a.get("department")) for a in (st or {}).get("actions") or []
+            if isinstance(a, dict) and a.get("source") == "board" and a.get("status") != "completed"}
+    out = []
+    for r in rows:
+        k = _row_match_key(r.get("task"), r.get("department"))
+        if k not in have:
+            out.append(r)
+            have.add(k)
+    return out
+
+
+def _withdraw_rows(case_id, st, rec, rows, by, version) -> list[str]:
+    """A correction removed investigation or referral rows: their open board actions are closed as withdrawn, audited, and the department
+    is told (Phase 3 review M2). Returns the action ids."""
+    keys = {_row_match_key(r["task"], r["department"]) for r in rows}
+    patient = ((store.get_case(case_id) or {}).get("patient") or {}).get("name") or case_id
+    out = []
+    for a in st.get("actions") or []:
+        if not (isinstance(a, dict) and a.get("source") == "board" and a.get("board_record") == rec["id"] and a.get("status") != "completed"):
+            continue
+        if _row_match_key(a.get("label"), a.get("department")) not in keys:
+            continue
+        now = store.now_iso()
+        a["status"], a["completed"], a["closed_by"], a["withdrawn"] = "completed", now, by, True
+        a.setdefault("history", []).append({"ts": now, "event": f"Withdrawn by the correction of version {version}"})
+        out.append(a["id"])
+        store.audit(case_id, {"kind": "board_action_withdrawn", "action": a["id"], "record": rec["id"], "version": version, "by": by})
+        if a.get("department_id"):
+            followup._notify({"department": a["department_id"]}, "board_action", case_id, f"Tumour Board action withdrawn for {patient} ({case_id}): {a.get('label')}",
+                             f"{a.get('label')}. Withdrawn by the correction of version {version} of the board record.", action_id=a["id"],
+                             board_record=rec["id"], by=by, withdrawn=True)
+    rec["actions"] = [x for x in rec.get("actions") or [] if not (isinstance(x, dict) and x.get("kind") in ("investigation", "referral")
+                                                                      and _row_match_key(x.get("task"), x.get("department")) in keys)]
+    return out
+
+
 def _case_summary(fn, *args) -> None:
     """Call case_summary.<fn> after a board record changed (night-v3 item 3.3); a failure never breaks the record (logged)."""
     try:
@@ -443,12 +501,15 @@ def update_communication(case_id, record_id, fields: dict, user="") -> dict:
     if "intent_as_recorded" in allowed and "intent" not in allowed:  # the old key from the Case File's board tab
         allowed["intent"] = allowed["intent_as_recorded"]
     allowed.pop("intent_as_recorded", None)
-    clean = clean_record_fields({**rec, **allowed})
+    # only the fields being set are checked against today's limits: an older record with a longer stored text can still be updated (M3)
+    fresh = decision_record.clean({"outcome": rec.get("outcome_type") or rec.get("outcome") or "decision", **allowed}, strict=False)
+    keys = set(allowed) | ({"intent_as_recorded"} if "intent" in allowed else set())
+    clean = {**rec, **{k: fresh[k] for k in keys}}
     reason = " ".join(str((fields or {}).get("reason") or "").split())
     problem = informed_date_problem(clean)
     if problem and not reason and clean.get("patient_informed_date") != rec.get("patient_informed_date"):
         raise ValueError(problem)
-    changed = {k: clean[k] for k in COMMUNICATION_FIELDS if clean.get(k) != rec.get(k)}
+    changed = {k: clean[k] for k in COMMUNICATION_FIELDS if k in keys and clean.get(k) != rec.get(k)}
     for k, v in changed.items():
         rec[k] = v
     rec.setdefault("communication_history", []).append({"ts": store.now_iso(), "by": user, "changed": changed, **({"reason": reason} if reason else {})})
@@ -458,6 +519,8 @@ def update_communication(case_id, record_id, fields: dict, user="") -> dict:
     store.save_state(case_id, st)
     store.audit(case_id, {"kind": "board_record_communication", "record": record_id, "by": user, "changed": changed, "actions_closed": closed})
     _case_summary("refresh_status", case_id)  # the Case summary's status section follows (night-v3 item 3.3)
+    if set(changed) & set(ROUND_FIELDS):  # a field the board rounds show: the Case summary is written again (Phase 3 review M5)
+        _case_summary("schedule", case_id, {"kind": "communication", "record": record_id}, user)
     return rec
 
 
@@ -512,17 +575,19 @@ def _row_key(row) -> str:
 
 def correct_record(case_id, record_id, changes: dict, by: str, by_name: str = "", reason: str = "") -> dict:
     """The owner's consultant (or the MDT Coordinator on the meeting day: the route checks who) corrects a saved board record later
-    (night-v3 item 3.1). `changes`: decision record fields only; the outcome may not change. The merged record must pass the meeting
-    form's rule (decision_record.clean strict). A change to the decision, intent, divergent views, stage and the other fields marked
-    "reason" needs a reason. A new version keeps who, when, why, the changed list [{key, old, new}] and the snapshot of every field;
-    version 1 is never overwritten. New investigation or referral rows become board actions; the communication flags and the missing
-    actions flag follow the fields. Audited (board_record_corrected); the owner is told. Caller holds the Case File lock. ValueError
+    (night-v3 item 3.1). `changes`: decision record fields only; the outcome may not change. The changed fields must pass the meeting
+    form's rule (decision_record.clean strict, for those keys only: the other stored values stay as they are). A change to the decision,
+    intent, divergent views, stage and the other fields marked "reason" needs a reason. A new version keeps who, when, why, the changed
+    list [{key, old, new}] and the snapshot of every field; version 1 is never overwritten. New investigation or referral rows become board
+    actions (not when an open action carries the same task); a removed row's open action is withdrawn and its department told; the
+    communication flags and the missing actions flag follow the fields. Audited (board_record_corrected); the owner is told. Caller holds the Case File lock. ValueError
     for invalid input or nothing changed, KeyError for an unknown record."""
     c = store.get_case(case_id)
     if isinstance(c, dict) and isinstance(c.get("archived"), dict) and c["archived"].get("at"):
         raise ValueError("This Case File is archived. Take it out of the archive first.")
     st = store.get_state(case_id)
     rec = _find_record(st, record_id)
+    _versions(rec)  # version 1 is the record as it was, built before anything changes (Phase 3 review N1)
     changes = {k: v for k, v in (changes or {}).items() if k in decision_record.BY_KEY} if isinstance(changes, dict) else {}
     outcome = rec.get("outcome_type") or rec.get("outcome") or "decision"
     if "outcome" in changes:
@@ -534,7 +599,16 @@ def correct_record(case_id, record_id, changes: dict, by: str, by_name: str = ""
     before = decision_record.form_fields(rec)
     if not before.get("intent") and rec.get("intent_as_recorded"):
         before["intent"] = rec["intent_as_recorded"]
-    after = decision_record.clean({**before, **changes, "outcome": outcome}, strict=True)
+    # the rules (limits, the required-by-outcome rule) apply to the fields being changed only; the other stored values stay as they are, so
+    # a record from before a rule existed can still be corrected (Phase 3 review M3)
+    fresh = decision_record.clean({"outcome": outcome, **changes}, strict=True, only=set(changes))
+    after = {**before, **{k: fresh[k] for k in changes}}
+    after["intent_as_recorded"] = after.get("intent") or rec.get("intent_as_recorded") or ""
+    after["divergent_opinions"] = decision_record.join_concerns(after.get("concerns")) or str(rec.get("divergent_opinions") or "")
+    after["deferred_reason"] = ((after.get("awaited") or "") + (f" (from {after['awaited_from']})" if after.get("awaited_from") else "")) if after.get("awaited") \
+        else str(rec.get("deferred_reason") or "")
+    if "stage_source" in changes:
+        _check_stage_source(case_id, after.get("stage_source"))
     changed = [{"key": k, "old": before.get(k), "new": after[k]} for k in decision_record.KEYS if k in changes and after[k] != before.get(k)]
     if not changed:
         raise ValueError("Nothing changed.")
@@ -553,9 +627,14 @@ def correct_record(case_id, record_id, changes: dict, by: str, by_name: str = ""
         rec["divergent_opinions"] = after["divergent_opinions"]
     if outcome == "deferred" and ({"awaited", "awaited_from"} & set(keys)):
         rec["deferred_reason"] = after["deferred_reason"]
-    new_rows = follow_up_rows(case_id, rec, [x for x in after["investigations"] if _row_key(x) not in old_inv] if "investigations" in keys else [],
-                              [x for x in after["referrals"] if _row_key(x) not in old_ref] if "referrals" in keys else [])
+    new_rows = _not_open(st, follow_up_rows(case_id, rec, [x for x in after["investigations"] if _row_key(x) not in old_inv] if "investigations" in keys else [],
+                                            [x for x in after["referrals"] if _row_key(x) not in old_ref] if "referrals" in keys else []))
+    new_inv = {_row_key(x) for x in after.get("investigations") or []}
+    new_ref = {_row_key(x) for x in after.get("referrals") or []}
+    gone = follow_up_rows(case_id, rec, [x for x in before.get("investigations") or [] if _row_key(x) not in new_inv] if "investigations" in keys else [],
+                          [x for x in before.get("referrals") or [] if _row_key(x) not in new_ref] if "referrals" in keys else [])
     v = _new_version(rec, by, reason or "Corrected after the meeting", "correction", changed=changed, by_name=by_name or by)
+    withdrawn = _withdraw_rows(case_id, st, rec, gone, by, v["version"]) if gone else []
     rec["corrected"] = {"by": by, "by_name": by_name or by, "at": v["at"], "reason": reason, "version": v["version"]}
     if new_rows:
         rec["actions"] = list(rec.get("actions") or []) + new_rows
@@ -568,7 +647,7 @@ def correct_record(case_id, record_id, changes: dict, by: str, by_name: str = ""
         st["next_review"] = {"date": rec["next_review"], "from_record": rec["id"]}
     store.save_state(case_id, st)
     store.audit(case_id, {"kind": "board_record_corrected", "record": record_id, "by": by, "changed": keys, "reason": reason, "version": v["version"],
-                          "actions_added": len(new_rows)})
+                          "actions_added": len(new_rows), "actions_withdrawn": withdrawn})
     _tell_owner_corrected(case_id, rec, by, by_name, reason)
     _case_summary("schedule", case_id, {"kind": "correction", "record": record_id}, by)  # the Case summary again (night-v3 item 3.3)
     return rec
@@ -579,10 +658,11 @@ async def record_decision(case_id, record, user=""):
     if isinstance(c, dict) and isinstance(c.get("archived"), dict) and c["archived"].get("at"):  # nothing changes in an archived Case File (review #8)
         raise ValueError("This Case File is archived. Take it out of the archive first.")
     record = clean_record_fields(record)
+    _check_stage_source(case_id, record.get("stage_source"))
     record = {**record, "id": "B" + uuid.uuid4().hex[:6], "recorded_at": store.now_iso(), "entered_by": user}
     # night-v3 item 3.1: further investigations and referrals become board actions for their departments (before the checks, so a row
     # without a department gets the "no Responsible Department" flag); who tells the patient and by when default as the board agreed
-    record["actions"] = [a for a in record.get("actions") or [] if isinstance(a, dict)] + follow_up_rows(case_id, record)
+    record["actions"] = [a for a in record.get("actions") or [] if isinstance(a, dict)] + _not_open(store.get_state(case_id), follow_up_rows(case_id, record))
     if not record.get("informed_by") and record.get("responsible_doctor"):
         record["informed_by"] = record["responsible_doctor"]
     if not record.get("inform_by_date") and record["outcome_type"] == "decision":

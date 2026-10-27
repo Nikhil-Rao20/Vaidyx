@@ -137,7 +137,7 @@ def test_a_decided_case_builds_the_five_sections_every_sentence_cited_or_code(de
     for f in ("date", "question", "outcome", "decision_text", "rationale", "intent", "concerns-1", "stage_as_agreed", "responsible_doctor"):
         assert f"r{rec['id']}-{f}" in ids, f
     by = {s["id"]: s for s in block["sentences"]}
-    assert by[f"r{rec['id']}-decision_text"]["text"] == 'Decision as recorded: "Upfront surgery, then adjuvant chemotherapy.".'
+    assert by[f"r{rec['id']}-decision_text"]["text"] == 'Decision as recorded: "Upfront surgery, then adjuvant chemotherapy."'  # never '."."'
     c = by[f"r{rec['id']}-decision_text"]["citations"][0]
     assert c == {"kind": "board", "board_record": rec["id"], "version": 1, "field": "decision_text", "quote": DECISION["decision_text"], "board_date": "2026-09-10"}
     assert by[f"r{rec['id']}-intent"]["text"] == "Treatment intent as recorded: Curative."
@@ -147,7 +147,7 @@ def test_a_decided_case_builds_the_five_sections_every_sentence_cited_or_code(de
     assert any(s["text"] == 'Action raised: "CT brain" for Radiology, due 20/09/2026.' for s in actions)
     status = texts(v, "status")
     assert 'Open: "CT brain", Radiology, due 20/09/2026.' in status
-    assert any(t.startswith("Not yet recorded: Patient not yet recorded as informed") for t in status)
+    assert "Not yet recorded: the date the patient was told." in status and "Not yet recorded: the key worker." in status
     stored = store.get_state(case_id)["artefacts"]["case_summary"]
     assert stored["current"] == 1 and len(stored["versions"]) == 1 and stored["case_id"] == case_id
     ev = [e for e in store.read_audit(case_id) if e.get("kind") == "case_summary"][-1]
@@ -226,7 +226,7 @@ def test_two_records_oldest_first_a_deferred_one_and_a_correction(decided, monke
     assert [s["id"].split("-", 1)[1] for s in blocks[1]["sentences"]] == ["date", "outcome", "awaited"]
     assert blocks[1]["sentences"][2]["text"] == 'Awaited, as recorded: "PET-CT report" from Radiology.'
     b1 = {s["id"].split("-", 1)[1]: s for s in blocks[0]["sentences"]}
-    assert b1["decision_text"]["text"] == 'Decision as recorded: "Upfront lobectomy, then adjuvant chemotherapy.".'
+    assert b1["decision_text"]["text"] == 'Decision as recorded: "Upfront lobectomy, then adjuvant chemotherapy."'
     assert b1["decision_text"]["citations"][0]["version"] == 2 and blocks[0]["version"] == 2
     assert b1["corrected"]["text"].startswith("Corrected on ") and b1["corrected"]["text"].endswith("by Dr Rao: Typo in the plan.")
     assert b1["corrected"]["citations"][0]["field"] == "versions" and b1["corrected"]["citations"][0]["version"] == 2
@@ -239,7 +239,7 @@ def test_a_long_decision_is_shown_cut_and_quoted_whole(decided, monkeypatch):
     rec = decide(case_id, decision_text=long, board_date="2026-10-26")
     v = build(case_id)
     s = next(x for b in section(v, "rounds")["blocks"] if b["record"] == rec["id"] for x in b["sentences"] if x["id"].endswith("-decision_text"))
-    assert s["text"].endswith('...".') and len(s["text"]) < 650 and s["citations"][0]["quote"] == " ".join(long.split())
+    assert s["text"].endswith('..."') and len(s["text"]) < 650 and s["citations"][0]["quote"] == " ".join(long.split())
 
 
 def test_members_cards_are_shown_by_name(decided, monkeypatch):
@@ -580,7 +580,7 @@ def test_routes_read_build_and_no_decision(case, monkeypatch, app):
     who["user"] = "dr.rao"
     r = tc.get(f"/api/tb/cases/{case}/case-summary")
     assert r.status_code == 200 and r.json() == {"current": None, "versions": [], "version": None,
-                                                 "status": {"status": "none", "version": None, "built_at": None, "stale_reason": ""}}
+                                                 "status": {"status": "none", "version": None, "built_at": None, "stale_reason": ""}, "view": None}
     decide(case)
     who["user"] = "anil"  # the MDT Coordinator builds on demand
     r = tc.post(f"/api/tb/cases/{case}/case-summary", json={"force": True})
@@ -597,12 +597,197 @@ def test_routes_read_build_and_no_decision(case, monkeypatch, app):
     assert "case_summary" in kinds(case)
 
 
-def test_get_refreshes_overdue_after_a_day(decided, monkeypatch, app):
+def test_a_read_shows_overdue_today_and_writes_nothing(decided, monkeypatch, app):
     case_id, _ = decided
     tc, who = app
     fake(monkeypatch)
     build(case_id)
+    before = json.dumps(store.get_state(case_id), sort_keys=True)
     monkeypatch.setattr(followup, "_today", lambda: date(2026, 9, 25))
     j = tc.get(f"/api/tb/cases/{case_id}/case-summary").json()
-    assert 'Open: "CT brain", Radiology, due 20/09/2026, overdue.' in texts(j["version"], "status") and j["version"]["refreshed_at"]
-    assert len(j["versions"]) == 1
+    assert 'Open: "CT brain", Radiology, due 20/09/2026, overdue.' in texts(j["version"], "status") and len(j["versions"]) == 1
+    assert 'Open: "CT brain", Radiology, due 20/09/2026, overdue.' in texts(j["view"], "status")
+    assert json.dumps(store.get_state(case_id), sort_keys=True) == before  # never a write on a read (review N3)
+    st = store.get_state(case_id)
+    assert 'Open: "CT brain", Radiology, due 20/09/2026.' in texts(cs.current(st), "status")  # the stored version as it was built
+
+
+# ---- item 3.4: the summary line, the version picker, the view ---------------------------------------------------------------------
+
+def test_the_summary_line_is_written_on_build_kept_when_edited_and_marked_stale(decided, monkeypatch, app):
+    case_id, _ = decided
+    tc, who = app
+    fake(monkeypatch, pres=[P_OK])
+    build(case_id)
+    line = store.get_case(case_id)["summary_line"]
+    assert line["text"] == cs.summary_line(store.get_state(case_id), store.get_case(case_id)) and line["edited"] is False
+    assert line["version"] == 1 and line["by"] == "vaidyx" and line["by_name"] == "Vaidyx" and line["text"].endswith("2 actions open")
+    # the consultant writes it; a resident and the coordinator may not
+    for u in ("res.asha", "anil"):
+        who["user"] = u
+        r = tc.post(f"/api/tb/cases/{case_id}/summary-line", json={"text": "Changed."})
+        assert r.status_code == 403 and "Only the owning department's consultants edit the summary line" in r.text
+    who["user"] = "dr.rao"
+    r = tc.post(f"/api/tb/cases/{case_id}/summary-line", json={"text": "  Adenocarcinoma — right upper lobe;   surgery first  "})
+    assert r.status_code == 200, r.text
+    got = r.json()["summary_line"]
+    assert got["text"] == "Adenocarcinoma - right upper lobe; surgery first" and got["edited"] is True and got["by_name"] == "Dr Rao" and got["stale"] is False
+    assert got["vaidyx_text"] == line["text"]
+    assert tc.post(f"/api/tb/cases/{case_id}/summary-line", json={"text": "x" * 161}).status_code == 400
+    # a rebuild keeps the edited line; the Vaidyx line now differs (a new decision), so it is marked stale
+    decide(case_id, board_date="2026-10-26", decision_text="Adjuvant chemotherapy after surgery.")
+    build(case_id, kind="decision")
+    kept = store.get_case(case_id)["summary_line"]
+    assert kept["text"] == got["text"] and kept["edited"] is True and kept["stale"] is True
+    assert "board 26/10/2026: Adjuvant chemotherapy after surgery." in kept["vaidyx_text"]
+    # an empty text goes back to the Vaidyx line
+    r = tc.post(f"/api/tb/cases/{case_id}/summary-line", json={"text": ""})
+    back = r.json()["summary_line"]
+    assert r.status_code == 200 and back["edited"] is False and back["text"] == kept["vaidyx_text"] and back["version"] == 2
+    ev = [e for e in store.read_audit(case_id) if e.get("kind") == "summary_line_edit"]
+    assert [e["edited"] for e in ev] == [True, False] and ev[0]["by"] == "dr.rao"
+    # the Case File view carries the line in the case record
+    assert tc.get(f"/api/tb/cases/{case_id}").json()["case"]["summary_line"]["text"] == back["text"]
+
+
+def test_no_summary_line_before_a_case_summary(case, monkeypatch, app):
+    tc, who = app
+    r = tc.post(f"/api/tb/cases/{case}/summary-line", json={"text": "Something"})
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "no_case_summary"
+    assert "summary_line" not in store.get_case(case)
+
+
+def test_a_closure_updates_the_actions_count_of_the_line(decided, monkeypatch):
+    case_id, _ = decided
+    fake(monkeypatch)
+    build(case_id)
+    assert store.get_case(case_id)["summary_line"]["text"].endswith("2 actions open")
+    act = next(a for a in store.get_state(case_id)["actions"] if a.get("label") == "CT brain")
+    st = store.get_state(case_id)
+    followup.close_action(st, act["id"], "dr.ravi")
+    store.save_state(case_id, st)
+    assert store.get_case(case_id)["summary_line"]["text"].endswith("1 action open")
+
+
+def test_get_a_version_by_number_and_the_view(decided, monkeypatch, app):
+    case_id, rec = decided
+    tc, who = app
+    fake(monkeypatch, pres=[P_OK])
+    build(case_id)
+    decide(case_id, board_date="2026-10-26")
+    build(case_id, kind="decision")
+    j = tc.get(f"/api/tb/cases/{case_id}/case-summary", params={"n": 1}).json()
+    assert j["current"] == 2 and j["version"]["n"] == 1 and j["view"]["n"] == 1 and j["view"]["current"] == 2
+    assert tc.get(f"/api/tb/cases/{case_id}/case-summary").json()["version"]["n"] == 2
+    assert tc.get(f"/api/tb/cases/{case_id}/case-summary", params={"n": 9}).status_code == 404
+    assert tc.get(f"/api/tb/cases/{case_id}/case-summary", params={"n": "x"}).status_code == 400
+    c = next(c for b in section(j["version"], "rounds")["blocks"] for s in b["sentences"] if s["id"].endswith("-decision_text") for c in s["citations"])
+    assert c["label"] == "Decision, in the board's words"
+    assert "label" not in store.get_state(case_id)["artefacts"]["case_summary"]["versions"][0]["sections"][2]["blocks"][0]["sentences"][2]["citations"][0]
+    v = cs.view(case_id, store.get_state(case_id), None)
+    assert set(v) >= {"status", "current", "built_at", "trigger", "model_line", "label", "stale_reason", "review", "sections", "removed", "edits",
+                      "first_board_date", "versions", "can"}
+    assert v["status"] == "ready" and v["label"] == "AI draft, not reviewed" and v["can"] == {"build": False, "review": False, "edit": False}
+    assert [x["n"] for x in v["versions"]] == [1, 2] and v["versions"][0]["trigger"] == {"kind": "on_demand"} and v["first_board_date"] == "2026-09-10"
+    cs.review(case_id, 2, "reviewed", "", "dr.rao")
+    v = cs.view(case_id, store.get_state(case_id), None)
+    assert v["status"] == "reviewed" and v["label"] == "Reviewed by Dr Rao" and v["versions"][1]["review"] == {"status": "reviewed", "by_name": "Dr Rao"}
+
+
+# ---- the Phase 3 review fixes ---------------------------------------------------------------------------------------------------
+
+PAIN = {"text": "The OPD clinical note records cough for three months.", "citations": [{"doc_id": "Da0000002", "quote": "Presenting complaint: cough for three months"}]}
+MASS = {"text": "The CT thorax report records a right upper lobe mass measuring 3.2 cm.",
+        "citations": [{"doc_id": "Da0000003", "quote": "Right upper lobe mass measuring 3.2 cm"}]}
+EDITED = "Adenocarcinoma, grade 2, as the histopathology report records."
+
+
+def test_an_edit_follows_its_sentence_when_the_model_reorders(decided, monkeypatch):
+    case_id, _ = decided
+    fake(monkeypatch, pres=[PAIN, P_OK])
+    build(case_id)
+    cs.edit(case_id, 1, "spresentation-2", EDITED, "dr.rao", "Dr Rao")
+    fake(monkeypatch, pres=[MASS, PAIN, P_OK])  # the same sentences in another order, one more in front
+    v = build(case_id)
+    sents = section(v, "presentation")["sentences"]
+    t = [x["text"] for x in sents]
+    assert t[:3] == [MASS["text"], PAIN["text"], EDITED] and P_OK["text"] not in t and t.count(EDITED) == 1
+    e = sents[2]
+    assert e["id"] == "spresentation-3" and e["edited"]["by_name"] == "Dr Rao" and "suggested" not in e["edited"]
+    assert e["citations"][0]["doc_id"] == "Da0000001" and "edited" not in sents[1]
+    cs.edit(case_id, 2, "spresentation-3", EDITED + " Signed.", "dr.rao", "Dr Rao")  # the carried edit is edited again on the new version
+    fake(monkeypatch, pres=[MASS])  # the model no longer writes the histopathology sentence and no fact cites its line: the edit stays, at the end
+    d = store.get_doc(case_id, "Da0000001"); d["facts"] = {}; store.save_doc(case_id, d); store._docs_cache.clear()
+    v = build(case_id)
+    sents = section(v, "presentation")["sentences"]
+    assert sents[0]["text"] == MASS["text"] and "edited" not in sents[0]
+    last = [x for x in sents if isinstance(x.get("edited"), dict)]
+    assert len(last) == 1 and last[0]["text"] == EDITED + " Signed." and last[0]["edited"]["unmatched"] is True and last[0] is sents[-1]
+    assert len({x["id"] for x in sents}) == len(sents)
+
+
+def test_a_source_date_after_a_title_with_brackets_reads_dd_mm_yyyy():
+    s = [{"text": "Histologic type: Adenocarcinoma (as recorded in the IMMUNOHISTOCHEMISTRY REPORT: HER2 (GASTRIC), 2026-09-03)."}]
+    assert cs._SOURCE_DATE.sub(lambda m: ", " + cs.dmy(m.group(1)) + m.group(2), s[0]["text"]).endswith("HER2 (GASTRIC), 03/09/2026).")
+
+
+@pytest.mark.parametrize("text", ["Two weeks later the CT was repeated.", "The following day she was discharged.", "A week after surgery the drain was removed.",
+                                  "3 months later the CT was repeated.", "The CT was done 10 days earlier."])
+def test_relative_dates_are_caught(text):
+    assert cs.RELATIVE.search(text)
+
+
+@pytest.mark.parametrize("text", ["She presented with cough for three months.", "Surgery on 18/10/2026.", "After surgery on 18/10/2026 the drain was removed."])
+def test_dated_sentences_pass(text):
+    assert not cs.RELATIVE.search(text)
+
+
+def test_the_old_review_route_refuses_the_case_summary(decided, monkeypatch, app):
+    from tumour_board import service
+    case_id, _ = decided
+    tc, who = app
+    fake(monkeypatch)
+    build(case_id)
+    with pytest.raises(ValueError, match="Case summary"):
+        service.review(case_id, "case_summary", "reviewed", "", "res.asha")
+    for art in ("case_summary", "summary_history"):
+        who["user"] = "dr.rao"
+        r = tc.post(f"/api/tb/cases/{case_id}/review", json={"artefact": art, "status": "reviewed"})
+        assert r.status_code == 400, r.text
+    assert cs.current(store.get_state(case_id))["review"] == {"status": "ai_draft"}
+
+
+def test_the_case_file_view_sends_the_case_summary_short(decided, monkeypatch, app):
+    case_id, _ = decided
+    tc, who = app
+    fake(monkeypatch, pres=[P_OK])
+    build(case_id)
+    build(case_id)
+    st = store.get_state(case_id)
+    st["artefacts"]["summary_history"] = [{"generated": "2026-09-08T10:00:00", "archived_at": "2026-09-09T10:00:00", "review": {"status": "reviewed"},
+                                           "sections": [{"id": "presentation", "sentences": [{"text": "x"}]}]}]
+    store.save_state(case_id, st)
+    a = tc.get(f"/api/tb/cases/{case_id}").json()["state"]["artefacts"]
+    assert set(a["case_summary"]) == {"current", "case_id", "versions", "version"} and a["case_summary"]["current"] == 2
+    assert [v["n"] for v in a["case_summary"]["versions"]] == [1, 2] and a["case_summary"]["version"]["n"] == 2 and "sections" not in a["case_summary"]["versions"][0]
+    assert a["summary_history"] == [{"generated": "2026-09-08T10:00:00", "archived_at": "2026-09-09T10:00:00", "review": {"status": "reviewed"}}]
+    assert len(store.get_state(case_id)["artefacts"]["summary_history"][0]["sections"]) == 1  # on disk in full
+
+
+def test_the_wording_of_code_sentences(decided, monkeypatch):
+    case_id, rec = decided
+    fake(monkeypatch)
+    st = store.get_state(case_id)
+    st["staging"] = {"status": "staged", "stage": "IIB", "confirmed": {"by": "dr.rao", "at": "2026-09-09T10:00:00"}, "rejected": None,
+                     "components": {"T": {"cat": "T2"}, "N": {"cat": "N1"}, "M": {"cat": "M0"}}}
+    store.save_state(case_id, st)
+    r2 = decide(case_id, board_date="2026-10-26", stage_source="confirmed_draft", referrals=[{"kind": "nutrition", "department": "Nutrition"}],
+                decision_text="Adjuvant chemotherapy. Review in clinic!")
+    v = build(case_id)
+    t = texts(v, "rounds")
+    assert 'Decision as recorded: "Adjuvant chemotherapy. Review in clinic!"' in t
+    assert "Referrals as recorded: Nutrition." in t and not any("Nutrition (Nutrition)" in x for x in t)
+    assert any(x.endswith("(a Vaidyx draft stage a doctor confirmed).") for x in texts(v, "stage"))
+    bad = [x for s in ("rounds", "status", "stage") for x in texts(v, s) if x.endswith('".') and x[:-2].endswith((".", "!", "?"))]
+    assert bad == []
+    assert "In the order the board stated it" == __import__("tumour_board.decision_record", fromlist=["x"]).BY_KEY["sequence"]["hint"]

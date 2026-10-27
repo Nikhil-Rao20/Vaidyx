@@ -510,6 +510,10 @@ def list_demo():
 
 def review(case_id, artefact, status, comment, user):
     """Human oversight (expert-in-the-loop): mark an AI artefact reviewed, or flag it for correction."""
+    if artefact in ("case_summary", "summary_history"):  # its own route checks the owner's consultant and the version (Phase 3 review M7)
+        raise ValueError("The Case summary is reviewed version by version by the owning department's consultants: use the review of the "
+                         "Case summary (POST /cases/{id}/case-summary/{n}/review)." if artefact == "case_summary" else
+                         "Earlier versions of the summary are not reviewed here: each version keeps the review it had.")
     st = store.get_state(case_id)
     a = st.get("artefacts", {}).get(artefact)
     if not isinstance(a, dict):  # summary_history (a list of archived versions, night-v3 item 3.5) is not an artefact to review

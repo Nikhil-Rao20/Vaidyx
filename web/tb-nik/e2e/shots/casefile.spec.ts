@@ -8,7 +8,7 @@ import { expect, test, type Page } from "@playwright/test";
 import path from "node:path";
 import { SHOTS, SIZES, login, prepare, shoot, watchConsole } from "../support/helpers";
 import {
-  CID, baseSlots, caseFile, caseFileBoardRounds, caseFileUnsent, routeCaseFile, stagingOff, stepsAfterSend, stepsCancerWarning, stepsReadyToSend, stepsResident,
+  CID, baseSlots, caseFile, caseFileAfterBoard, caseFileBoardRounds, caseFileUnsent, routeCaseFile, stepsAfterBoard, stagingOff, stepsAfterSend, stepsCancerWarning, stepsReadyToSend, stepsResident,
   stepsSummaryStale, team, type CaseRouteOptions,
 } from "../support/f2";
 import type { Role } from "../support/fixtures";
@@ -383,6 +383,90 @@ test.describe("guided Case File", () => {
     await expect(dialog).toHaveCount(0);
     await expect(r2.getByTestId("corrected-line")).toContainText("(version 3): The stage as agreed was read out with its source.");
     await expect(r2.locator("[data-field=stage_as_agreed]")).toContainText("as in the MRI breast");
+    expect(errors).toEqual([]);
+  });
+
+  test("Case summary after the board: the main summary, its versions, an edit, the review, the header line", async ({ page }) => {
+    const errors = watchConsole(page);
+    await open(page, { path: "/summary", steps: stepsAfterBoard(), caseFile: caseFileAfterBoard() });
+    const card = page.getByTestId("case-summary-card");
+    await expect(card).toBeVisible();
+    await expect(card.getByTestId("cs-header-line")).toHaveText("Version 2, written 24/10/2026, 10:20 by Gemma-4-31B (non-medical)");
+    await expect(card).toContainText("AI draft, not reviewed");
+    for (const id of ["presentation", "stage", "rounds", "since", "status"]) await expect(card.getByTestId(`cs-section-${id}`)).toBeVisible();
+    await expect(card.getByTestId("cs-round")).toHaveCount(2);
+    await expect(card.getByTestId("cs-section-rounds")).toContainText("Board 23/10/2026, Decision, in the board's words");
+    await expect(card.getByTestId("cs-section-rounds")).toContainText("Member's card");
+    await expect(card.getByTestId("cs-section-status")).toContainText("Action: task");
+    await expect(card.getByTestId("cs-section-stage")).toContainText("Board 23/10/2026, Stage as agreed by the board");
+    await expect(card.getByTestId("cs-edited").first()).toHaveText(/edited by Dr Lakshmi Rao on 24\/10\/2026, not checked against the record/);
+    await expect(card.getByTestId("cs-removed")).toHaveText("1 sentence dropped because it could not be checked against the records.");
+    // code sentences carry no AI mark and no pencil; the model sentences do
+    await expect(card.locator("[data-id=rBade0ac-decision_text] [aria-label='Written by the AI model']")).toHaveCount(0);
+    await expect(card.locator("[data-id=presentation-2] [aria-label='Written by the AI model']")).toHaveCount(1);
+    await expect(card.getByTestId("cs-edit")).toHaveCount(2);
+    // the pre-board summary folds under "Before the board on", closed
+    const pre = page.getByTestId("summary-card");
+    await expect(pre).toContainText("Before the board on 09/10/2026");
+    await expect(pre).not.toHaveAttribute("open", "");
+    await snap(page, "casefile", "case-summary", { sizes: DESKTOP_MOBILE });
+    await laptop(page);
+    await pre.locator("summary").first().click();
+    await expect(pre.getByTestId("prose-text")).toBeVisible();
+    await expect(pre.getByTestId("preboard-history")).toContainText("Earlier versions (1)");
+    // version 1, read-only
+    await card.getByTestId("cs-version").selectOption("1");
+    await expect(card.getByTestId("cs-header-line")).toContainText("Version 1, written 23/10/2026, 18:10");
+    await expect(card).toContainText("Reviewed by Dr Lakshmi Rao");
+    await expect(card.getByTestId("cs-edit")).toHaveCount(0);
+    await card.getByRole("button", { name: "Back to the current version" }).click();
+    // an edit of a model sentence
+    await card.locator("[data-id=presentation-2]").getByTestId("cs-edit").click();
+    await card.getByRole("textbox", { name: "The sentence, in your words" }).fill("The histopathology report records Grade 2 (Nottingham score 6).");
+    await card.getByTestId("cs-edit-save").click();
+    await expect(card.locator("[data-id=presentation-2]")).toContainText("The histopathology report records Grade 2 (Nottingham score 6).");
+    await expect(card.locator("[data-id=presentation-2]").getByTestId("cs-edited")).toContainText("edited by Dr Lakshmi Rao");
+    // the review
+    await card.getByTestId("cs-review").click();
+    await expect(card).toContainText("Reviewed by Dr Lakshmi Rao");
+    await expect(card.getByTestId("cs-review")).toHaveCount(0);
+    // the summary line in the header, edited by the consultant
+    const line = page.getByTestId("summary-line");
+    await expect(line).toContainText("52 F, early breast cancer: board 23/10/2026 decision recorded");
+    await expect(line.getByTestId("summary-line-edited")).toHaveText("edited by Dr Lakshmi Rao");
+    await snap(page, "casefile", "header-summary-line", { sizes: DESKTOP_MOBILE, fullPage: false });
+    await laptop(page);
+    await page.getByTestId("summary-line-pencil").click();
+    await page.getByLabel("Summary line").fill("Early breast cancer, decision recorded 23/10/2026; bone scan open (SYNTHETIC)");
+    const posted = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith("/summary-line"));
+    await page.getByTestId("summary-line-save").click();
+    expect((await posted).postDataJSON()).toEqual({ text: "Early breast cancer, decision recorded 23/10/2026; bone scan open (SYNTHETIC)" });
+    await expect(page.getByTestId("summary-line")).toContainText("bone scan open");
+    await page.getByTestId("summary-line-pencil").click();
+    await page.getByTestId("summary-line-vaidyx").click();
+    await expect(page.getByTestId("summary-line")).toContainText("1 action open");
+    await expect(page.getByTestId("summary-line-edited")).toHaveCount(0);
+    await noSideways(page);
+    expect(errors).toEqual([]);
+  });
+
+  test("Case summary on the Overview", async ({ page }) => {
+    const errors = watchConsole(page);
+    await open(page, { steps: stepsAfterBoard(), caseFile: caseFileAfterBoard() });
+    const ov = page.getByTestId("overview-case-summary");
+    await expect(ov).toBeVisible();
+    await expect(ov.getByTestId("overview-summary-line")).toContainText("52 F, early breast cancer");
+    await expect(ov).toContainText("Outcome as recorded: Decision recorded.");
+    await expect(ov).toContainText("Decision as recorded:");
+    await expect(ov).toContainText("She presented with a lump in the right breast");
+    await expect(ov).not.toContainText("Deferred: information awaited");
+    // above the question for the board
+    const y = async (id: string) => (await page.getByTestId(id).boundingBox())!.y;
+    expect(await y("overview-case-summary")).toBeLessThan(await y("overview-question"));
+    await snap(page, "casefile", "overview-case-summary", { sizes: DESKTOP_MOBILE, fullPage: false, before: async () => { await ov.scrollIntoViewIfNeeded(); } });
+    await laptop(page);
+    await ov.getByTestId("open-case-summary").click();
+    await expect(page.getByTestId("case-summary-card")).toBeVisible();
     expect(errors).toEqual([]);
   });
 

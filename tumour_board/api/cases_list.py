@@ -205,6 +205,8 @@ def row(c: dict, r: dict, sched: dict, labels: dict) -> dict:
     rel = relation(r, c)
     mine = rel in MINE_RELATIONS or bool(own and own in (r.get("resident") or {}) and rel != "linked") or bool(rel != "linked" and c.get("created_by") == r.get("user"))  # as before, its creator too; never a linked row
     extra = {"linked_only": True, "read_only": True, "owned_by": {"department": own, "label": org.department_name(own)}} if rel == "linked" else {}
+    scope = access.scope(r, c)
+    clinical = _clinical_text(c, st) if scope == access.FULL else {"summary_line": "", "decision_text": ""}  # never to a department only asked
     return {"case_id": cid, "patient": {"name": p.get("name") or "", "agesex": p.get("agesex") or "", "uhid": p.get("mrn") or ""},
             "protocol": c.get("protocol") or "", "setting": c.get("setting") or "",
             # a cancer with no checklist yet (generic rule, R05-Q04) reads "<cancer name> (no checklist yet)"; the name is kept as typed
@@ -216,8 +218,18 @@ def row(c: dict, r: dict, sched: dict, labels: dict) -> dict:
             "imaging_present": any(((d.get("classification") or {}).get("doc_type") in IMAGING_TYPES) and d.get("state") == "ready" and not d.get("dismissed") for d in docs),
             "ids": _identifiers(c), "accessions": _accessions(docs),
             "documents": len(docs), "last_change": _last_change(cid), "created": c.get("created") or "", "created_by": c.get("created_by") or "",
-            "residents_count": len(access.team_residents(c)), "scope": access.scope(r, c), "archived": access.is_archived(c),
-            "relation": rel, "mine": mine, **extra}
+            "residents_count": len(access.team_residents(c)), "scope": scope, "archived": access.is_archived(c),
+            "relation": rel, "mine": mine, **clinical, **extra}
+
+
+def _clinical_text(c: dict, st: dict) -> dict:
+    """The summary line (night-v3 item 3.4) and the latest board record's decision text (at most 200 characters), for FULL readers only."""
+    line = c.get("summary_line")
+    text = str(line.get("text") or "") if isinstance(line, dict) else ""
+    recs = [b for b in (st or {}).get("board_records") or [] if isinstance(b, dict)]
+    recs.sort(key=lambda b: (str(b.get("board_date") or b.get("recorded_at") or "")[:10], str(b.get("recorded_at") or "")))
+    dec = " ".join(str((recs[-1] if recs else {}).get("decision_text") or "").split())
+    return {"summary_line": text, "decision_text": dec[:200]}
 
 
 def _compact(s: str) -> str:
@@ -242,7 +254,8 @@ def _match(x: dict, q: str) -> bool:
     VDX/2026/00764; the owner, 19 Oct 2026)."""
     ids = [x["patient"]["uhid"], *x.get("ids", []), *x.get("accessions", []), x["case_id"]]
     parts = [x["patient"]["name"], x["patient"].get("agesex"), *ids, x["protocol_label"], x.get("cancer_name"), (x.get("setting") or "").replace("_", " "),
-             x["owner"]["doctor_name"], x["owner"]["department_label"], (x.get("status") or {}).get("label"), _dmy(x.get("board_date") or "")]
+             x["owner"]["doctor_name"], x["owner"]["department_label"], (x.get("status") or {}).get("label"), _dmy(x.get("board_date") or ""),
+             x.get("summary_line"), x.get("decision_text")]  # both "" unless the reader has the whole Case File (item 3.4)
     words = " ".join(str(v) for v in parts if v).lower()
     id_text = " ".join(str(v) for v in ids if v)
     comp, loose = _compact(id_text), _loose(id_text)

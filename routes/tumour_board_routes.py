@@ -354,6 +354,24 @@ def _case(case_id):
     return c
 
 
+def _state_view(st):
+    """The state as the Case File view sends it (Phase 3 review N4): the Case summary as {current, case_id, versions (the list of versions),
+    version (the current one)} and the pre-board summary history as {generated, archived_at, review} per version; the full versions stay
+    on disk and come through GET /cases/{id}/case-summary?n=K and the steps view."""
+    arts = st.get("artefacts") if isinstance(st.get("artefacts"), dict) else None
+    if not arts or not (isinstance(arts.get("case_summary"), dict) or isinstance(arts.get("summary_history"), list)):
+        return st
+    from tumour_board import case_summary as _cs
+    arts = dict(arts)
+    if isinstance(arts.get("case_summary"), dict):
+        a = arts["case_summary"]
+        arts["case_summary"] = {"current": a.get("current"), "case_id": a.get("case_id"), "versions": _cs.history(st), "version": _cs.current(st)}
+    if isinstance(arts.get("summary_history"), list):
+        arts["summary_history"] = [{"generated": h.get("generated"), "archived_at": h.get("archived_at"), "review": h.get("review")}
+                                   for h in arts["summary_history"] if isinstance(h, dict)]
+    return {**st, "artefacts": arts}
+
+
 def _history(h):
     """Earlier turns sent with a question: a list of {"role": user | assistant, "content": text}; anything else is ignored."""
     return [x for x in h if isinstance(x, dict) and x.get("role") in ("user", "assistant") and isinstance(x.get("content"), str)][-4:] if isinstance(h, list) else None
@@ -1001,7 +1019,7 @@ def setup_tumour_board_routes():
         stale = {name: (rules.stale_reason(a["signature"], sig) if a.get("signature") else
                         "Compiled before the Case File signature was kept, so changes since then cannot be checked")  # pre-4.5 artefacts (review)
                  for name, a in (st.get("artefacts") or {}).items() if isinstance(a, dict) and (name == "summary" or name.startswith("brief_"))}
-        return {"case": c, "state": st, "documents": docs, "facts": {k: {"label": cat.get(k, {}).get("label", k), **v} for k, v in facts.items()},
+        return {"case": c, "state": _state_view(st), "documents": docs, "facts": {k: {"label": cat.get(k, {}).get("label", k), **v} for k, v in facts.items()},
                 "timeline": postboard.timeline(case_id), "permissions": _case_permissions(rl, c, st, all_docs), "signature": sig, "stale": stale,
                 "discordances": discord.summary(case_id, st),  # reports that disagree, values a decision cited that later reports changed (12 Oct)
                 "trends": postboard.trends(case_id, st), "outcomes": postboard.OUTCOMES,  # values over time (12 Oct)
@@ -1784,6 +1802,8 @@ def setup_tumour_board_routes():
             return service.review(case_id, b["artefact"], b.get("status", "reviewed"), b.get("comment", ""), u)
         except KeyError:
             raise HTTPException(404, "artefact not found")
+        except ValueError as e:  # the Case summary has its own review route (Phase 3 review M7)
+            raise HTTPException(400, str(e))
 
     @r.get("/cases/{case_id}/audit")
     async def audit(case_id: str, request: Request):

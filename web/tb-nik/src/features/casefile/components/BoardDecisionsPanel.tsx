@@ -143,7 +143,7 @@ export function BoardDecisionsPanel({ cf, coordinator, onChanged }: { cf: CaseFi
   return (
     <div className="space-y-3" data-testid="board-form">
       {liveNode}
-      <p className="text-sm text-muted-foreground flex items-start gap-1.5"><ClipboardList className="size-4 mt-0.5 shrink-0" aria-hidden />Recorded by the MDT Coordinator during the meeting; read-only here. The decision is the board's, in its own words.</p>
+      <p className="text-sm text-muted-foreground flex items-start gap-1.5"><ClipboardList className="size-4 mt-0.5 shrink-0" aria-hidden />Recorded by the MDT Coordinator during the meeting. The decision is the board's, in its own words; the owning consultant corrects a slip here, with the reason kept.</p>
       {!rounds.length ? (
         <EmptyState kind="wait" title="No board decision recorded yet" text={cf.case?.meeting_id ? "The form is filled during the meeting." : "The Case File is not on a meeting agenda yet."} action={coordinator && cf.case?.meeting_id ? <Link className="text-link underline" to={`/meetings/${cf.case.meeting_id}`}>Open the meeting</Link> : undefined} />
       ) : (

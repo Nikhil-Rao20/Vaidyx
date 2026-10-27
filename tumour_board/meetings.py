@@ -1309,6 +1309,21 @@ async def record_decision(mid: str, cid: str, body: dict, user: str) -> dict:
         raise MeetingError("Case File not found.", 404, "no_case")
     if access.is_archived(c):  # security review #8
         raise MeetingError(access.ARCHIVED_MESSAGE + ". Take it out of the archive first.", 409, "archived")
+    if cid in (s.get("outcomes") or {}) or (mid, cid) in _RECORDING:  # the form saved twice would make a second round (Phase 3 review S2)
+        raise MeetingError(ALREADY_RECORDED, 409, "already_recorded")
+    _RECORDING.add((mid, cid))
+    try:
+        return await _record_decision(s, mid, cid, c, body, user)
+    finally:
+        _RECORDING.discard((mid, cid))
+
+
+ALREADY_RECORDED = ("The outcome of this Case File is recorded for this meeting. To change it, correct the record from the Case File's "
+                    "Board decisions panel.")
+_RECORDING: set = set()  # (meeting, Case File) whose outcome is being saved now: a second save waits for nothing and is refused
+
+
+async def _record_decision(s, mid, cid, c, body, user) -> dict:
     outcome = str(body.get("outcome") or "decision").strip()
     if outcome not in OUTCOMES:
         raise MeetingError(f"The outcome must be one of: {', '.join(OUTCOMES)}.", 400, "bad_outcome")

@@ -164,7 +164,7 @@ def communication_action(case_id: str, record: dict, by: str = "") -> dict | Non
     act = {"id": "A" + uuid.uuid4().hex[:6], "source": "board", "board_record": rid, "label": "Inform the patient of the Tumour Board outcome and record the date",
            "department": org.COORDINATOR_NAME, "department_id": None, "role": "coordinator", "requirement": None, "communication": True,
            "what": "Tell the patient (or carer) the board's outcome through the lead clinician and record the date and who informed them on the board record (within one week).",
-           "status": "pending", "created": now, "due": due, "history": [{"ts": now, "event": "Created from Tumour Board record " + rid + " (patient not yet recorded as informed)"}]}
+           "status": "pending", "created": now, "due": due, "kind": "communication", "history": [{"ts": now, "event": "Created from Tumour Board record " + rid + " (patient not yet recorded as informed)"}]}
     _notify({"role": "coordinator"}, "board_action", case_id, f"Tumour Board action for {patient} ({case_id}): {act['label']}", f"Due {_dmy(due)}.", action_id=act["id"], due=due, board_record=rid, by=by)
     return act
 

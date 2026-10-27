@@ -631,3 +631,91 @@ def test_case_file_view_says_who_may_correct_each_board_record(tc):
     store.save_state("TB-002", st)
     assert may("anil") is False and may("priya") is True  # the day after: only the owner's consultant
     assert As(tc, "anil").post(f"/cases/TB-002/board-records/{rec['id']}/correct", json={"changes": {"key_worker": "Sr Lata"}}).status_code == 403  # the route agrees
+
+
+# ---- night-v3 Phase 3 review fixes ----------------------------------------------------------------------------------------------
+
+def _board_acts(case_id, label=None):
+    from tumour_board import store
+    return [a for a in store.get_state(case_id)["actions"] if a.get("source") == "board" and (label is None or a.get("label") == label)]
+
+
+def test_a_form_saved_twice_never_sends_the_same_request_twice(unit_case, monkeypatch):
+    _no_claims(monkeypatch)
+    body = {**DECISION, "board_date": "2026-10-27", "investigations": [{"item": "PET-CT", "department": "Radiology"}],
+            "referrals": [{"kind": "nutrition", "department": "Nutrition"}]}
+    asyncio.run(postboard.record_decision(unit_case, body, "coord"))
+    asyncio.run(postboard.record_decision(unit_case, body, "coord"))
+    assert len(_board_acts(unit_case, "PET-CT")) == 1 and len(_board_acts(unit_case, "Referral: Nutrition")) == 1
+
+
+def test_a_correction_that_removes_a_row_withdraws_its_request(unit_case, monkeypatch):
+    from tumour_board import notify, store
+    _no_claims(monkeypatch)
+    rec = asyncio.run(postboard.record_decision(unit_case, {**DECISION, "board_date": "2026-10-27",
+                                                            "investigations": [{"item": "PET-CT", "department": "Radiology"}, {"item": "MRI brain", "department": "Radiology"}]}, "coord"))
+    out = postboard.correct_record(unit_case, rec["id"], {"investigations": [{"item": "MRI brain", "department": "Radiology"}]}, "dr.rao", "Dr Rao", "PET-CT not needed")
+    pet, mri = _board_acts(unit_case, "PET-CT")[0], _board_acts(unit_case, "MRI brain")[0]
+    assert pet["status"] == "completed" and pet["withdrawn"] is True and pet["history"][-1]["event"] == "Withdrawn by the correction of version 2"
+    assert mri["status"] == "pending" and [a["task"] for a in out["actions"] if a.get("kind") == "investigation"] == ["MRI brain"]
+    ev = [e for e in store.read_audit(unit_case) if e["kind"] == "board_action_withdrawn"]
+    assert len(ev) == 1 and ev[0]["action"] == pet["id"] and ev[0]["version"] == 2
+    told = [n for n in notify._load() if "withdrawn" in n["title"]]
+    assert len(told) == 1 and told[0]["to"]["department"] == "radiology" and "version 2" in told[0]["text"]
+
+
+def test_an_old_record_without_intent_can_be_corrected(unit_case, monkeypatch):
+    from tumour_board import store
+    st = store.get_state(unit_case)
+    st["board_records"] = [{"id": "BOLD01", "recorded_at": "2026-09-01T10:00:00", "board_date": "2026-09-01", "decision_text": "Plan agreed.", "outcome_type": "decision"}]
+    store.save_state(unit_case, st)
+    out = postboard.correct_record(unit_case, "BOLD01", {"key_worker": "Sr Meena, 98450 00000"}, "dr.rao", "Dr Rao", "")
+    assert out["key_worker"] == "Sr Meena, 98450 00000" and out["decision_text"] == "Plan agreed." and not out.get("intent")
+    assert [v["version"] for v in out["versions"]] == [1, 2] and out["versions"][0]["fields"]["key_worker"] == ""  # version 1 before the change (N1)
+    with pytest.raises(ValueError, match="Choose the treatment intent"):  # a field being changed still follows the rule
+        postboard.correct_record(unit_case, "BOLD01", {"intent": ""}, "dr.rao", "Dr Rao", "x")
+
+
+def test_patient_told_on_a_record_with_a_long_stored_next_step(unit_case, monkeypatch):
+    from tumour_board import store
+    st = store.get_state(unit_case)
+    st["board_records"] = [{"id": "BOLD02", "recorded_at": "2026-09-10T10:00:00", "board_date": "2026-09-10", "decision_text": "Plan agreed.",
+                            "outcome_type": "decision", "intent": "curative", "next_step": "x " * 500}]
+    store.save_state(unit_case, st)
+    out = postboard.update_communication(unit_case, "BOLD02", {"patient_informed_date": "12/09/2026", "informed_by": "Dr A"}, user="coord")
+    assert out["patient_informed_date"] == "2026-09-12" and out["informed_by"] == "Dr A" and len(out["next_step"]) == 1000
+
+
+def test_the_confirmed_draft_stage_source_needs_a_confirmed_draft(unit_case, monkeypatch):
+    from tumour_board import store
+    _no_claims(monkeypatch)
+    body = {**DECISION, "board_date": "2026-10-27", "stage_as_agreed": "cT2 N1 M0", "stage_source": "confirmed_draft"}
+    with pytest.raises(ValueError, match="needs a draft stage a doctor confirmed"):
+        asyncio.run(postboard.record_decision(unit_case, body))
+    rec = asyncio.run(postboard.record_decision(unit_case, {**body, "stage_source": "report"}, "coord"))
+    with pytest.raises(ValueError, match="needs a draft stage a doctor confirmed"):
+        postboard.correct_record(unit_case, rec["id"], {"stage_source": "confirmed_draft"}, "dr.rao", "Dr Rao", "the draft")
+    st = store.get_state(unit_case)
+    st["staging"] = {"status": "staged", "stage": "IIB", "confirmed": {"by": "dr.rao", "at": "2026-10-26T10:00:00"}, "rejected": None}
+    store.save_state(unit_case, st)
+    assert postboard.correct_record(unit_case, rec["id"], {"stage_source": "confirmed_draft"}, "dr.rao", "Dr Rao", "the draft")["stage_source"] == "confirmed_draft"
+    asyncio.run(postboard.record_decision(unit_case, body, "coord"))
+
+
+def test_a_communication_change_the_rounds_show_writes_the_case_summary_again(unit_case, monkeypatch):
+    from tumour_board import case_summary
+    _no_claims(monkeypatch)
+    rec = asyncio.run(postboard.record_decision(unit_case, {**DECISION, "board_date": "2026-10-27"}, "coord"))
+    asked = []
+    monkeypatch.setattr(case_summary, "schedule", lambda cid, trig, user="": asked.append((cid, trig, user)))
+    postboard.update_communication(unit_case, rec["id"], {"key_worker": "Sr Meena"}, user="coord")
+    assert asked == []  # the key worker is not in the board rounds: the status refresh is enough
+    postboard.update_communication(unit_case, rec["id"], {"intent": "palliative"}, user="coord")
+    assert asked == [(unit_case, {"kind": "communication", "record": rec["id"]}, "coord")]
+
+
+def test_the_inform_the_patient_action_is_of_kind_communication(unit_case, monkeypatch):
+    _no_claims(monkeypatch)
+    asyncio.run(postboard.record_decision(unit_case, {**DECISION, "board_date": "2026-10-27"}, "coord"))
+    comm = [a for a in _board_acts(unit_case) if a.get("communication")]
+    assert len(comm) == 1 and comm[0]["kind"] == "communication"

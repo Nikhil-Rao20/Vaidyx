@@ -6,8 +6,9 @@ import type { Meeting } from "@/lib/types";
 import { errorCode, routeMissing } from "@/lib/live";
 import type {
   CaseFile, SlotsResponse, Slot, SlotSection, QuoteBoxes, ChatThread, Helper, HelperMessage, PublishedResult, PublishedSearch, Team, Proposal,
-  Urgency, Job, RequestDraft, GateRequirement, CaseAction, SendToBoardBody, MeetingMoveResult,
+  Urgency, Job, RequestDraft, GateRequirement, CaseAction, SendToBoardBody, MeetingMoveResult, SummaryLine,
 } from "./types";
+import type { CaseSentence, CaseSummaryReview, CaseSummaryVersionRow, CaseSummaryView } from "./steps/types";
 
 const enc = encodeURIComponent;
 export const caseUrl = (id: string) => `${TB}/cases/${enc(id)}`;
@@ -54,6 +55,12 @@ export const withdrawCase = (id: string, reason: string) => api.post<MeetingMove
 /** The meetings a Case File may still go to: planned, not cancelled, today or later, earliest first. */
 export const getOpenMeetings = () => api.get<{ meetings: Meeting[] }>(EP.openMeetings);
 export const buildSummary = (id: string, force = false) => api.post<Record<string, unknown>>(`${caseUrl(id)}/summary`, { force });
+// The Case summary (night-v3 3.3 / 3.4, tumour_board/api/case_summary.py) and the summary line.
+export const getCaseSummary = (id: string, n?: number) => api.get<{ current: number | null; versions: CaseSummaryVersionRow[]; version: CaseSummaryView | null; status?: unknown }>(`${caseUrl(id)}/case-summary${n ? `?n=${n}` : ""}`);
+export const buildCaseSummary = (id: string) => api.post<Record<string, unknown>>(`${caseUrl(id)}/case-summary`, {});
+export const reviewCaseSummary = (id: string, n: number, status: "reviewed" | "flagged" | "ai_draft", comment = "") => api.post<CaseSummaryReview>(`${caseUrl(id)}/case-summary/${n}/review`, { status, comment });
+export const editCaseSentence = (id: string, n: number, sentenceId: string, text: string) => api.post<CaseSentence>(`${caseUrl(id)}/case-summary/${n}/edit`, { sentence_id: sentenceId, text });
+export const setSummaryLine = (id: string, text: string) => api.post<{ summary_line: SummaryLine }>(`${caseUrl(id)}/summary-line`, { text });
 export const reviewArtefact = (id: string, artefact: string, status = "reviewed", comment = "") => api.post(`${caseUrl(id)}/review`, { artefact, status, comment });
 export const refetchHis = (id: string) => api.post<{ job: string; total: number }>(`${caseUrl(id)}/his/refetch`, {});
 export const uploadDocuments = (id: string, files: File[], outside: boolean) => {

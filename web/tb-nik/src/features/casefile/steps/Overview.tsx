@@ -2,6 +2,8 @@
 // each, every row with its one action); the question for the board; the patient at a glance in four groups, every value opening its
 // report line. No line about how Vaidyx works (owner: no line). "Other Case Files of this patient" (night-v3 item 1.1): the patient's
 // other live Case Files (another cancer each), with the owning department and consultant, read-only links where this person may open them.
+// After the first board decision (night-v3 3.4) a "Case summary" card comes above the question: the summary line, the latest round's
+// outcome and decision lines and the first presentation sentences, each with its chips.
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -16,6 +18,7 @@ import type { SourceTarget } from "../components/SourceViewer";
 import { LoadingButton, fmtDate } from "../components/common";
 import type { SectionId, StepAction, Steps, TodoItem, Warning, WaitingItem } from "./types";
 import { ValueCell } from "./Value";
+import { CaseSummaryGlance, useCaseFileCache } from "../components/CaseSummaryCard";
 
 export interface OverviewHandlers {
   go: (section: SectionId, target?: string) => void;
@@ -149,8 +152,10 @@ function OtherCaseFiles({ caseId }: { caseId: string }) {
   );
 }
 
-export function Overview({ steps, h, signoffs, staging }: { steps: Steps; h: OverviewHandlers; signoffs?: ReactNode; staging?: ReactNode }) {
+export function Overview({ steps, h, signoffs, staging, onBoard }: { steps: Steps; h: OverviewHandlers; signoffs?: ReactNode; staging?: ReactNode; onBoard?: () => void }) {
   const prepare = steps.mode === "prepare";
+  const cs = steps.summary?.case_summary ?? null;
+  const cf = useCaseFileCache(steps.case_id);
   const q = steps.question;
   return (
     <div className="space-y-4" data-testid="section-overview">
@@ -167,6 +172,8 @@ export function Overview({ steps, h, signoffs, staging }: { steps: Steps; h: Ove
           </Card>
         </div>
       ) : null}
+
+      {cs ? <CaseSummaryGlance view={cs} h={h} onBoard={onBoard} onOpen={() => h.go("summary")} line={cf?.case?.summary_line?.text} docs={cf?.documents} /> : null}
 
       <Card title="Question for the board" icon={<MessageSquareQuote className="size-4 text-brand" aria-hidden />} testId="overview-question">
         {q.text ? (

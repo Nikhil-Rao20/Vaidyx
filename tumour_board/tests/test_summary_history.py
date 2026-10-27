@@ -98,6 +98,6 @@ def test_history_without_a_summary_is_empty():
 def test_the_history_list_itself_cannot_be_reviewed(ihc_case, monkeypatch):
     _fake(monkeypatch, [GOOD])
     asyncio.run(summary.build(ihc_case, force=True)); asyncio.run(summary.build(ihc_case, force=True))
-    with pytest.raises(KeyError):
+    with pytest.raises(ValueError, match="each version keeps the review it had"):  # refused in plain words (Phase 3 review M7)
         service.review(ihc_case, "summary_history", "reviewed", "", "dr.rao")
     assert store.get_state(ihc_case).get("reviews") == []

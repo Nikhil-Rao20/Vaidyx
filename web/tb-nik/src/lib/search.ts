@@ -23,7 +23,7 @@ export function haystack(c: CaseListItem): { words: string; compact: string; loo
   const ids = [c.patient?.uhid, ...(c.ids ?? []), ...(c.accessions ?? []), c.case_id].filter(Boolean) as string[];
   const parts = [
     c.patient?.name, c.patient?.agesex, ...ids, c.protocol_label, c.cancer_name, (c.setting || "").replace(/_/g, " "),
-    c.owner?.doctor_name, c.owner?.department_label, c.status?.label, dmy(c.board_date),
+    c.owner?.doctor_name, c.owner?.department_label, c.status?.label, dmy(c.board_date), c.summary_line, c.decision_text,
   ].filter(Boolean) as string[];
   const words = parts.join(" ").toLowerCase();
   const idText = ids.join(" ");

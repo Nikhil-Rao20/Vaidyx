@@ -252,6 +252,89 @@ export function stepsAfterSend() {
   return s;
 }
 
+// ---- the Case summary after the board (night-v3 3.4) --------------------------------------------------------------------------
+const OPD = { doc_id: "Df40ab347", doc_title: "OPD CONSULTATION NOTE", page: 0, date: "2026-09-15", status: "FINAL" };
+const HPE = { doc_id: "D8a2c165d", doc_title: "HISTOPATHOLOGY REPORT", page: 0, date: "2026-09-17", status: "FINAL" };
+const bcite = (rec: string, field: string, quote: string, board_date: string, label: string, version = 1) => ({ kind: "board", board_record: rec, version, field, label, quote, board_date });
+
+/** The Case summary in the steps view (case_summary.view): version 2 of 2, an AI draft; one presentation sentence edited by the
+ *  consultant and not checked against the record; both board rounds of caseFileBoardRounds(); one sentence dropped. */
+export function caseSummaryView(over: Record<string, unknown> = {}) {
+  const text = "Breast conservation surgery with sentinel node biopsy; adjuvant plan after the final histopathology (as dictated; SYNTHETIC demo).";
+  return {
+    status: "ready", current: 2, built_at: "2026-10-24T10:20:00", trigger: { kind: "correction", by: "rao@vxh.example" }, model_line: "Written by Gemma-4-31B (non-medical)",
+    label: "AI draft, not reviewed", stale_reason: "", review: { status: "ai_draft" }, removed: 1, edits: 1, first_board_date: "2026-10-09",
+    sections: [
+      { id: "presentation", title: "Presentation and diagnosis", built_by: "model", context: "full", sentences: [
+        { id: "presentation-1", text: "She presented with a lump in the right breast noticed 6 weeks before the OPD visit of 15/09/2026.", citations: [{ ...OPD, quote: "Presenting complaint: Lump in the right breast noticed 6 weeks ago" }],
+          edited: { by: "rao@vxh.example", by_name: "Lakshmi Rao", at: "2026-10-24T11:05:00", checked: false, suggested: "Presenting complaint: lump in the right breast noticed 6 weeks ago.", vaidyx_text: "Presenting complaint: lump in the right breast noticed 6 weeks ago." } },
+        { id: "presentation-2", text: "The histopathology report records invasive breast carcinoma of no special type, Grade 2 (Nottingham score 6).", citations: [{ ...HPE, quote: "Grade: Grade 2 (Nottingham score 6)" }] },
+        { id: "presentation-3", text: "Comorbidities: Type 2 diabetes mellitus on metformin (as recorded in the OPD consultation note).", citations: [{ ...OPD, quote: "Comorbidities: Type 2 diabetes mellitus on metformin" }], from_fields: true },
+      ] },
+      { id: "stage", title: "Stage", built_by: "code", sentences: [
+        { id: "stage-1", text: "Stage as agreed by the board on 23/10/2026: \"cT1c cN0 cM0\" (as recorded in a report).", citations: [bcite("Bade0ac", "stage_as_agreed", "cT1c cN0 cM0", "2026-10-23", "Stage as agreed by the board", 2)], code: true },
+      ] },
+      { id: "rounds", title: "Board rounds", built_by: "code", blocks: [
+        { record: "B1d0f21", version: 1, date: "2026-10-09", outcome: "deferred", sentences: [
+          { id: "rB1d0f21-date", text: "Tumour Board of 09/10/2026.", citations: [bcite("B1d0f21", "board_date", "2026-10-09", "2026-10-09", "Date")], code: true },
+          { id: "rB1d0f21-outcome", text: "Outcome as recorded: Deferred: information awaited.", citations: [bcite("B1d0f21", "outcome_type", "deferred", "2026-10-09", "Outcome")], code: true },
+          { id: "rB1d0f21-awaited", text: "Awaited, as recorded: \"MRI breast report, final and signed\" from Radiology.", citations: [bcite("B1d0f21", "awaited", "MRI breast report, final and signed", "2026-10-09", "What is awaited"), bcite("B1d0f21", "awaited_from", "Radiology", "2026-10-09", "From which department")], code: true },
+        ] },
+        { record: "Bade0ac", version: 2, date: "2026-10-23", outcome: "decision", sentences: [
+          { id: "rBade0ac-date", text: "Tumour Board of 23/10/2026.", citations: [bcite("Bade0ac", "board_date", "2026-10-23", "2026-10-23", "Date", 2)], code: true },
+          { id: "rBade0ac-outcome", text: "Outcome as recorded: Decision recorded.", citations: [bcite("Bade0ac", "outcome_type", "decision", "2026-10-23", "Outcome", 2)], code: true },
+          { id: "rBade0ac-decision_text", text: `Decision as recorded: "${text}".`, citations: [bcite("Bade0ac", "decision_text", text, "2026-10-23", "Decision, in the board's words", 2)], code: true },
+          { id: "rBade0ac-intent", text: "Treatment intent as recorded: Curative.", citations: [bcite("Bade0ac", "intent", "curative", "2026-10-23", "Treatment intent", 2)], code: true },
+          { id: "rBade0ac-card-joseph@vxh.example", text: "Thomas Joseph agreed.", citations: [{ kind: "card", meeting: "M-1", user: "joseph@vxh.example", field: "agree", quote: "agree", board_date: "2026-10-23" }], code: true },
+          { id: "rBade0ac-corrected", text: "Corrected on 24/10/2026 by Lakshmi Rao: The board named radiotherapy after surgery; it was left out in the meeting.", citations: [bcite("Bade0ac", "versions", "The board named radiotherapy after surgery; it was left out in the meeting.", "2026-10-23", "Correction", 2)], code: true },
+        ] },
+      ] },
+      { id: "since", title: "Treatment and follow-up since the board", built_by: "model", context: "full", sentences: [
+        { id: "since-1", text: "No records dated after the board decision of 09/10/2026 have been added yet.", citations: [], code: true, fixed: true },
+      ] },
+      { id: "status", title: "Current status and open actions", built_by: "code", sentences: [
+        { id: "status-1", text: "Open action: \"Bone scan\" for Nuclear Medicine, due 02/11/2026.", citations: [{ kind: "action", action: "A51c0de", board_record: "Bade0ac", field: "label", quote: "Bone scan" }, { kind: "action", action: "A51c0de", field: "due", quote: "2026-11-02" }], code: true },
+      ] },
+    ],
+    versions: [
+      { n: 1, built_at: "2026-10-23T18:10:00", trigger: { kind: "decision" }, review: { status: "reviewed", by_name: "Lakshmi Rao" }, edits: 0, sentences: 12 },
+      { n: 2, built_at: "2026-10-24T10:20:00", trigger: { kind: "correction" }, review: { status: "ai_draft" }, edits: 1, sentences: 15 },
+    ],
+    can: { build: true, review: true, edit: true },
+    ...over,
+  };
+}
+
+/** Version 1 in full, as GET /case-summary?n=1 answers it (the stored version). */
+export function caseSummaryVersion1() {
+  const v: AnyObj = caseSummaryView();
+  const sections = clone(v.sections);
+  sections[0].sentences = sections[0].sentences.slice(1);
+  sections[2].blocks[1].sentences = sections[2].blocks[1].sentences.filter((x: AnyObj) => !x.id.endsWith("-corrected"));
+  return { n: 1, built_at: "2026-10-23T18:10:00", trigger: { kind: "decision" }, model_line: v.model_line, label: "AI draft, not reviewed", first_board_date: v.first_board_date,
+    review: { status: "reviewed", by: "rao@vxh.example", by_name: "Lakshmi Rao", at: "2026-10-23T19:00:00", comment: "" }, removed: [], edits: [], sections };
+}
+
+/** After the board: the Case summary first, the pre-board summary sent and read, one archived pre-board version. */
+export function stepsAfterBoard(over: Record<string, unknown> = {}) {
+  const s: AnyObj = stepsAfterSend();
+  const live = { generated: s.summary.prose.generated ?? iso(60 * 24 * 12), review: { status: "reviewed", by: "Lakshmi Rao" }, model: "gemma-4-31b", paragraphs: s.summary.prose.paragraphs, live: true };
+  const first = clone(s.summary.prose.paragraphs).slice(0, 1);
+  s.summary.case_summary = caseSummaryView(over);
+  s.summary.history = [{ generated: "2026-10-02T09:30:00", archived_at: "2026-10-05T16:00:00", review: { status: "ai_draft" }, model: "gemma-4-31b", paragraphs: first, live: false }, live];
+  setSection(s, "summary", "todo", "Read the Case summary", 1);
+  s.todo = [{ id: "case_summary:read", section: "summary", label: "Read the Case summary", action: { kind: "go", label: "Read it" } }, ...s.todo];
+  return s;
+}
+
+/** The Case File after the board: two rounds and the summary line, edited by the consultant. */
+export function caseFileAfterBoard() {
+  const c: AnyObj = caseFileBoardRounds();
+  c.case.summary_line = { text: "52 F, early breast cancer: board 23/10/2026 decision recorded (corrected 24/10/2026); bone scan open (SYNTHETIC)", version: 2, at: "2026-10-24T11:10:00",
+    by: "rao@vxh.example", by_name: "Lakshmi Rao", edited: true, stale: false };
+  return c;
+}
+
 /** The summary was written before a new report arrived: it says so and offers to write it again. */
 export function stepsSummaryStale() {
   const s: AnyObj = stepsReadyToSend();
@@ -400,6 +483,39 @@ export async function routeCaseFile(page: Page, o: CaseRouteOptions = {}) {
       live.steps.summary.sent = { by: me.by_name, at: live.ready.at, note: live.ready.note };
       live.steps.next = { section: "summary", label: "Sent to the board", done: true };
       return json({ ok: true });
+    }
+    // the Case summary (night-v3 3.4): a version in full, an edit, a review, a build, and the summary line
+    if (p === "/case-summary" && m === "GET") {
+      const cs = live.steps?.summary?.case_summary;
+      if (!cs) return json({ current: null, versions: [], version: null });
+      const n = Number(url.searchParams.get("n") || cs.current);
+      return json({ current: cs.current, versions: cs.versions, version: n === 1 ? caseSummaryVersion1() : { ...cs, n } });
+    }
+    const csEdit = /^\/case-summary\/(\d+)\/edit$/.exec(p);
+    if (csEdit && m === "POST") {
+      const b = body();
+      const cs = live.steps?.summary?.case_summary;
+      const sent = cs?.sections.flatMap((x: AnyObj) => x.sentences ?? []).find((x: AnyObj) => x.id === b.sentence_id);
+      if (!sent) return json({ detail: { message: "No such sentence.", code: "not_found" } }, 404);
+      const text = String(b.text ?? "").trim();
+      if (!text || text.length > 1000) return json({ detail: { message: "Write the sentence (1 to 1000 characters).", code: "invalid" } }, 400);
+      Object.assign(sent, { text, edited: { by: me.by, by_name: me.by_name, at: new Date().toISOString(), checked: false, vaidyx_text: sent.edited?.vaidyx_text ?? sent.text } });
+      return json(sent);
+    }
+    const csReview = /^\/case-summary\/(\d+)\/review$/.exec(p);
+    if (csReview && m === "POST") {
+      const b = body();
+      const cs = live.steps?.summary?.case_summary;
+      const rv = { status: b.status, comment: b.comment ?? "", ...me, at: new Date().toISOString() };
+      if (cs) { cs.review = rv; if (b.status === "reviewed") cs.status = "reviewed"; }
+      return json(rv);
+    }
+    if (p === "/case-summary" && m === "POST") return json({ n: 3, status: "ok" });
+    if (p === "/summary-line" && m === "POST") {
+      const t = String(body().text ?? "").split(/\s+/).filter(Boolean).join(" ");
+      if (t.length > 160) return json({ detail: { message: "The summary line: at most 160 characters.", code: "invalid" } }, 400);
+      const vaidyx = "52 F, early breast cancer: board 23/10/2026 decision recorded; 1 action open (SYNTHETIC)";
+      return json({ summary_line: t ? { text: t, edited: true, ...me, at: new Date().toISOString(), version: 2 } : { text: vaidyx, edited: false, version: 2, at: new Date().toISOString() } });
     }
     const corr = /^\/board-records\/([^/]+)\/correct$/.exec(p);
     if (corr && m === "POST") {  // night-v3 3.2: postboard.correct_record in short (the changes merged, a new version)

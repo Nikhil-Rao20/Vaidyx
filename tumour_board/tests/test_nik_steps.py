@@ -270,3 +270,54 @@ def test_a_residents_key_value_check_is_signed_off_unless_the_value_changed(nik_
     who["user"] = "dr.rao"
     r = tc.post(f"/api/tb/cases/{CASE}/key-checks", json={**body, "value": "TPS 10 %"})
     assert r.status_code == 200 and "proposal" not in r.json() and r.json()["by"] == "dr.rao"
+
+
+# ---- night-v3 item 3.4: after the first decision the Summary section follows the Case summary -----------------------------------
+
+def test_the_summary_section_follows_the_case_summary(nik_app, tb001, monkeypatch):
+    import asyncio
+    from tumour_board import case_summary as cs, llm, postboard, summary
+    tc, who = nik_app
+
+    async def chat(role, msgs, **kw):  # no model: the adjudication finds no claims, the summaries get no model sentence
+        return {"claims": [], "sentences": [], "points_for_review": []}
+    monkeypatch.setattr(llm, "chat", chat)
+    v = get(tc)
+    assert v["summary"]["case_summary"] is None and set(v["summary"]) == {"prose", "sent", "case_summary", "history"}
+    plain = section(v, "summary")
+    assert plain["detail"] in ("Not started", "Read it", "Done", "Records changed: write it again", "Being written")  # as before item 3.4
+    asyncio.run(summary.build(CASE, force=True))
+    asyncio.run(summary.build(CASE, force=True))
+    h = get(tc)["summary"]["history"]
+    assert len(h) >= 2 and h[-1]["live"] is True and h[0]["live"] is False and h[0]["archived_at"]
+    assert set(h[0]) == {"generated", "archived_at", "review", "model", "paragraphs", "points_for_review", "stage_as_recorded", "live"}
+    assert set(h[0]["review"]) >= {"status", "by", "at"} and all(set(p) == {"id", "title", "sentences"} for p in h[0]["paragraphs"])
+    decision = {"outcome": "decision", "decision_text": "Concurrent chemoradiation.", "intent": "curative", "responsible_doctor": "Dr Rao", "board_date": "2026-10-20"}
+    asyncio.run(postboard.record_decision(CASE, decision, "anil"))
+    asyncio.run(cs.build(CASE, {"kind": "decision"}, "anil"))
+    v = get(tc)
+    cv = v["summary"]["case_summary"]
+    assert cv["status"] == "ready" and cv["current"] == 1 and cv["can"] == {"build": True, "review": True, "edit": True}
+    assert [s["id"] for s in cv["sections"]] == ["presentation", "stage", "rounds", "since", "status"] and cv["first_board_date"] == "2026-10-20"
+    assert section(v, "summary")["status"] == "todo" and section(v, "summary")["detail"] == "Read the Case summary"
+    assert any(t["id"] == "case_summary" and t["label"] == "Read the Case summary" for t in v["todo"])
+    assert v["summary"]["prose"]["paragraphs"]  # the live pre-board summary stays as it was for every existing reader
+    asyncio.run(postboard.record_decision(CASE, {**decision, "board_date": "2026-10-27"}, "anil"))  # a later decision: out of date
+    v = get(tc)
+    assert v["summary"]["case_summary"]["status"] == "stale" and "board record" in v["summary"]["case_summary"]["stale_reason"]
+    assert section(v, "summary")["status"] == "todo" and section(v, "summary")["detail"] == "Decision recorded: update the Case summary"
+    assert any(t["id"] == "case_summary" and t["label"] == "Update the Case summary" for t in v["todo"])
+    cs.RUNNING[CASE] = {"started": 0, "trigger": {}, "user": "anil"}
+    try:
+        v = get(tc)
+        assert section(v, "summary")["status"] == "working" and section(v, "summary")["detail"] == "Being written"
+        assert not any(t["id"] == "case_summary" for t in v["todo"])
+    finally:
+        cs.RUNNING.pop(CASE, None)
+    asyncio.run(cs.build(CASE, {"kind": "decision"}, "anil"))
+    cs.review(CASE, 2, "reviewed", "", "dr.rao")
+    v = get(tc)
+    assert section(v, "summary")["status"] == "done" and section(v, "summary")["detail"] == "Reviewed"
+    assert v["summary"]["case_summary"]["label"] == "Reviewed by Dr Rao" and not any(t["id"] == "case_summary" for t in v["todo"])
+    who["user"] = "anil"  # the MDT Coordinator reads: may write it again, not review or edit it
+    assert get(tc)["summary"]["case_summary"]["can"] == {"build": True, "review": False, "edit": False}
