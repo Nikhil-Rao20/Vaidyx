@@ -100,8 +100,8 @@ Status: `todo`, `doing`, `done (<hash>)`, `blocked (<reason>)`. Lane: **S** seri
 | 2.1 | Shared groundwork | S | New facts in `facts.json` (for example PSA, Gleason / ISUP grade, CA-125, AFP, beta-hCG, LDH, thyroglobulin, calcitonin, bone marrow result, flow cytometry, cytogenetics and molecular markers for blood cancers, CSF cytology, ophthalmic examination) and document types (bone marrow, flow cytometry, cytogenetics or FISH, CSF, ophthalmology note) with keywords and HIS codes; the hard-coded cancer lists extended (`steps.py` site words, `guidelines.py` cancer words, tests; `test_listing.py`'s "no ovary protocol" assertion changed); a schema test that every protocol parses and every source line is found on its cited page of its book | done (0ea10f2) |
 | 2.2 | Colon | P | `colorectal_colon.json` from the NCG colorectal file; the picker's colorectal entry asks colon or rectum | done (43a10be; the picker's colon-or-rectum question lands with 2.10) |
 | 2.3 | Upper GI and liver | P | `stomach.json`, `oesophagus.json`, `liver_hcc.json`, `gallbladder.json` | done (b111c9b) |
-| 2.4 | Gynaecology | P | `ovary.json`, `corpus_uteri.json` | doing |
-| 2.5 | Urology and germ cell | P | `prostate.json`, `kidney.json` (adult; Wilms in 2.8), `germ_cell.json` | todo |
+| 2.4 | Gynaecology | P | `ovary.json`, `corpus_uteri.json` | done (9c6f1cf) |
+| 2.5 | Urology and germ cell | P | `prostate.json`, `kidney.json` (adult; Wilms in 2.8), `germ_cell.json` | doing |
 | 2.6 | Head and neck and thyroid | P | `larynx.json` (with the head and neck structure); `thyroid.json` from an official open-access guideline when NCG has none (source and licence logged) | todo |
 | 2.7 | Blood cancers | P | `lymphoma.json` (adult and child settings), `leukaemia.json` (adult and child settings) from the NCG haematolymphoid files | todo |
 | 2.8 | Paediatric and sarcoma | P | `wilms.json`, `retinoblastoma.json`, `bone_sarcoma.json`, `soft_tissue_sarcoma.json`, `brain_cns.json` (official open-access source when NCG has none) | todo |
