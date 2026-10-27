@@ -156,7 +156,7 @@ def dashboard(start: str = None, end: str = None) -> dict:
     before = {"cases": len(cases), "listed": 0, "awaiting_listing": 0, "ready_now": 0, "readiness": [], "ready_before_board_n": 0, "ready_before_board_d": 0,
               "days_listed_to_ready": [], "documents": 0, "final_signed": 0, "scanned": 0, "dates_unconfirmed": 0, "identity_flags": 0, "discordances_open": 0,
               "requests_open": 0, "requests_overdue": 0, "requests_closed": 0, "hours_to_close": [], "by_department": {}}
-    after = {"decisions": 0, "outcomes": {}, "final": 0, "flags_open": 0, "flags_resolved": 0, "flags_by_kind": {}, "composition_checked": 0, "composition_complete": 0,
+    after = {"records": 0, "decisions": 0, "outcomes": {}, "final": 0, "flags_open": 0, "flags_resolved": 0, "flags_by_kind": {}, "composition_checked": 0, "composition_complete": 0,
              "same_day": 0, "informed_7d_n": 0, "informed_7d_d": 0, "trial_considered": 0, "key_worker": 0, "intent_recorded": 0, "consent_recorded": 0,
              "board_actions_open": 0, "board_actions_overdue": 0, "board_actions_closed": 0, "days_to_close_action": [], "decision_watch_open": 0}
     for c in cases:
@@ -220,8 +220,9 @@ def dashboard(start: str = None, end: str = None) -> dict:
                     if due and due < today:
                         after["board_actions_overdue"] += 1
         for b in st.get("board_records") or []:
-            after["decisions"] += 1
             oc = b.get("outcome_type") or "decision"
+            after["records"] += 1  # every board record (night-v3 item 3.1: a noted, deferred or referred case is not a decision)
+            after["decisions"] += oc == "decision"
             after["outcomes"][oc] = after["outcomes"].get(oc, 0) + 1
             res = b.get("resolution") or postboard.resolution_status(b)
             after["final"] += bool(res.get("final"))
@@ -248,7 +249,7 @@ def dashboard(start: str = None, end: str = None) -> dict:
                     after["informed_7d_n"] += 1
                 after["trial_considered"] += bool(b.get("trial_considered"))
                 after["key_worker"] += bool(b.get("key_worker"))
-                after["intent_recorded"] += bool(b.get("intent_as_recorded"))
+                after["intent_recorded"] += bool(b.get("intent") or b.get("intent_as_recorded"))
                 after["consent_recorded"] += bool(b.get("consent_recorded"))
         if c.get("protocol"):
             after["decision_watch_open"] += discord.summary(cid, st).get("decision_watch", 0)
@@ -287,10 +288,10 @@ def dashboard(start: str = None, end: str = None) -> dict:
                    "by_department": [{"department": k, "open": v["open"], "overdue": v["overdue"], "closed": v["closed"], "hours_to_close_median": _median(v["hours"])}
                                      for k, v in sorted(before["by_department"].items(), key=lambda kv: (-kv[1]["open"], kv[0]))]},
         "during": during,
-        "after": {"decisions": after["decisions"], "outcomes": after["outcomes"], "final": after["final"], "final_pct": _pct(after["final"], after["decisions"]),
+        "after": {"records": after["records"], "decisions": after["decisions"], "outcomes": after["outcomes"], "final": after["final"], "final_pct": _pct(after["final"], after["records"]),
                   "flags_open": after["flags_open"], "flags_resolved": after["flags_resolved"], "flags_by_kind": after["flags_by_kind"],
                   "composition_complete_pct": _pct(after["composition_complete"], after["composition_checked"]), "composition_checked": after["composition_checked"],
-                  "decision_recorded_same_day_pct": _pct(after["same_day"], after["decisions"]),
+                  "decision_recorded_same_day_pct": _pct(after["same_day"], after["records"]),
                   "patient_informed_7d_pct": _pct(after["informed_7d_n"], after["informed_7d_d"]), "patient_informed_7d_n": after["informed_7d_n"], "patient_informed_7d_d": after["informed_7d_d"],
                   "trial_considered_pct": _pct(after["trial_considered"], after["informed_7d_d"]), "key_worker_pct": _pct(after["key_worker"], after["informed_7d_d"]),
                   "intent_recorded_pct": _pct(after["intent_recorded"], after["informed_7d_d"]), "consent_recorded_pct": _pct(after["consent_recorded"], after["informed_7d_d"]),

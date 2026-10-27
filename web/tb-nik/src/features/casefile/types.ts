@@ -430,11 +430,44 @@ export interface BoardRecord {
   /** The old board record keeps a sentence ("Radiology, Medical Oncology; absent: Pathology"); the new one a list. */
   participants?: string[] | string;
   concerns?: Array<{ by: string; text: string }>;
+  divergent_opinions?: string;
   meeting_outcome?: string;
   session?: string;
   recorded_at?: string;
   recorded_by?: string;
   board_date?: string;
+  // Decision record v2 (night-v3 3.1, tumour_board/decision_record.py): the same keys as the meeting's decision form.
+  not_discussed_reason?: string;
+  intent?: string;
+  modalities?: string[];
+  sequence?: string;
+  alternatives_discussed?: string;
+  stage_as_agreed?: string;
+  stage_source?: string;
+  report_corrections_raised?: string;
+  patient_preference?: string;
+  patient_preference_note?: string;
+  fitness_considered?: string;
+  trial_considered?: string;
+  trial_name?: string;
+  genomic_considered?: string;
+  supportive_needs?: string[];
+  consent_recorded?: string;
+  investigations?: Array<{ item: string; department: string; due?: string }>;
+  referrals?: Array<{ kind: string; department: string; note?: string }>;
+  next_review?: string;
+  next_review_trigger?: string;
+  key_worker?: string;
+  informed_by?: string;
+  inform_by_date?: string;
+  patient_informed_date?: string;
+  gp_informed_date?: string;
+  pmjay_plan_approval?: string;
+  pmjay_plan_note?: string;
+  /** Board actions ({task, department, due, kind}); investigations and referrals become rows of kind investigation or referral. */
+  actions?: Array<{ task: string; department?: string; due?: string; kind?: string }>;
+  /** Set when the owning consultant (or the MDT Coordinator on the meeting day) corrected the record; versions are kept. */
+  corrected?: { by: string; by_name?: string; at: string; reason?: string; version: number } | null;
 }
 
 export interface CaseFile {

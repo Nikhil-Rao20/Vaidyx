@@ -1095,6 +1095,9 @@ def _att_label(v) -> str:
     return {"present": "Present", "absent": "Absent", "not_marked": "Not recorded"}.get(v, v or "Not recorded")
 
 
+MINUTES_SKIP = ("outcome", "decision_text", "members_present")  # the outcome is the heading, the text printed above, the members in the participants line
+
+
 def minutes(sid, allowed=None) -> dict:
     """The minutes of a board session (V2 item 6.1): the hospital, the session, the attendance sheet (heads first) with the members by
     name and the AI support agents that stood in, then per Case File the patient, the protocol, the owner, who marked it ready, the
@@ -1102,7 +1105,7 @@ def minutes(sid, allowed=None) -> dict:
     the PM-JAY composition result, then the follow-up of every action. Nothing here is a model output: the agents' points are in the
     agent log export (6.3). `allowed`: the Case Files this reader may see in full (None: all); the others print as restricted,
     with no patient data, decision or seat (Phase 6 review S2)."""
-    from . import postboard, protocol
+    from . import decision_record, postboard, protocol
     s = _need(sid)
     att = attendance(s)
     members = s.get("members") or []
@@ -1146,7 +1149,8 @@ def minutes(sid, allowed=None) -> dict:
                       "seat": seat(s, c), "agents": agents_of(cid), "agenda_status": a.get("status"), "minutes_on_floor": round((timing(s).get(cid) or 0) / 60, 1),
                       "decision": None if not rec else {
                           "record": rec["id"], "recorded_by": rec.get("recorded_by") or rec.get("entered_by"), "recorded_at": rec.get("recorded_at"),
-                          "outcome": rec.get("outcome_type") or "decision", "outcome_label": postboard.OUTCOMES.get(rec.get("outcome_type") or "decision", "Decision recorded"),
+                          "outcome": rec.get("outcome_type") or "decision", "outcome_label": decision_record.OUTCOMES.get(rec.get("outcome_type") or "decision", "Decision recorded"),
+                          "fields": decision_record.display_lines(rec, skip=MINUTES_SKIP), "corrected": decision_record.corrected_line(rec),
                           "text": d.get("decision_text") if d else rec.get("decision_text"), "version": rec.get("version", 1),
                           "intent": rec.get("intent_as_recorded") or "", "trial_considered": rec.get("trial_considered") or "", "key_worker": rec.get("key_worker") or "",
                           "deferred_reason": rec.get("deferred_reason") or "", "referred_to": rec.get("referred_to") or "",
@@ -1210,11 +1214,9 @@ def minutes_html(sid, allowed=None) -> str:
             out.append("<div><i>No board decision recorded for this Case File.</i></div>"); continue
         out.append(f"<div><b>{_h(d['outcome_label'])}</b></div><div style='white-space:pre-wrap'>{_h(d['text'])}</div>")
         meta = [f"Record {d['record']}" + (f", version {d['version']}" if (d.get('version') or 1) > 1 else ""), f"recorded by {d.get('recorded_by') or ''}", _ddmmyyyy(d.get("recorded_at"))]
-        for k, lbl in (("intent", "Intention to treat"), ("trial_considered", "Clinical trial considered"), ("key_worker", "Key worker"), ("deferred_reason", "Awaited"),
-                       ("referred_to", "Referred to"), ("report_corrections_raised", "Report corrections raised"), ("divergent_opinions", "Divergent opinions"), ("next_review", "Next review")):
-            if d.get(k):
-                meta.append(f"{lbl}: {_ddmmyyyy(d[k]) if k == 'next_review' else d[k]}")
         out.append(f"<div class='meta'>{_h(' | '.join(m for m in meta if m))}</div>")
+        if d.get("fields"):  # every field of the decision record with a value, in the form's step order (night-v3 item 3.1)
+            out.append("<table class='fields'>" + "".join(f"<tr><th>{_h(x['label'])}</th><td style='white-space:pre-wrap'>{_h(x['text'])}</td></tr>" for x in d["fields"]) + "</table>")
         if d.get("participants"):
             out.append(f"<div class='meta'>Participants: {_h(d['participants'])}</div>")
         if d["actions"]:

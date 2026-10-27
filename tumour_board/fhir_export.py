@@ -17,7 +17,7 @@ marked not coded.
 """
 import base64, hashlib, html, json, mimetypes, uuid
 
-from . import config, dates, postboard, protocol, rules, store, units
+from . import config, dates, decision_record, postboard, protocol, rules, store, units
 
 BASE_URL = "https://vaidyx.local"  # placeholder identifier and extension base; the hospital sets its own on deployment
 LOINC = {  # standard mappings only; every other field is exported with a text code
@@ -64,6 +64,29 @@ def _quantity(value: str):
     if len(qs) != 1 or qs[0].get("value") is None:
         return None
     return {"value": qs[0]["value"], "unit": str(qs[0]["unit"])}
+
+
+CAREPLAN_FIELDS = ("intent", "modalities", "sequence", "alternatives_discussed", "stage_as_agreed", "trial_considered", "referrals", "pmjay_plan_approval",
+                   "responsible_doctor", "key_worker", "informed_by")
+
+
+def care_plan_lines(b: dict) -> list[str]:
+    """The decision record fields of night-v3 item 3.1 as CarePlan notes, as the board recorded them (labels from decision_record):
+    the stage with its source, the trial with its name, PM-JAY with its reference, who tells the patient with the date."""
+    vals = {x["key"]: x["text"] for x in decision_record.display_lines(b)}
+    out = []
+    for k in CAREPLAN_FIELDS:
+        t = vals.get(k)
+        if not t:
+            continue
+        extra = {"stage_as_agreed": vals.get("stage_source"), "trial_considered": vals.get("trial_name"), "pmjay_plan_approval": vals.get("pmjay_plan_note"),
+                 "informed_by": (f"by {vals['inform_by_date']}" if vals.get("inform_by_date") else "")}.get(k)
+        out.append(f"{decision_record.label(k)}: {t}" + (f" ({extra})" if extra else ""))
+    if not vals.get("informed_by") and vals.get("inform_by_date"):
+        out.append(f"{decision_record.label('inform_by_date')}: {vals['inform_by_date']}")
+    if b.get("corrected"):
+        out.append(decision_record.corrected_line(b))
+    return out
 
 
 def bundle(case_id: str) -> dict:
@@ -179,13 +202,13 @@ def bundle(case_id: str) -> dict:
     for b in st.get("board_records") or []:
         rid = _uuid(case_id, "CarePlan", b["id"])
         plan = {"resourceType": "CarePlan", "id": rid, "status": "active" if (b.get("outcome_type") or "decision") == "decision" else "draft", "intent": "plan",
-                "title": f"Tumour Board record {b.get('board_date') or (b.get('recorded_at') or '')[:10]} ({getattr(postboard, 'OUTCOMES', {}).get(b.get('outcome_type') or 'decision', 'Decision recorded')})",
+                "title": f"Tumour Board record {b.get('board_date') or (b.get('recorded_at') or '')[:10]} ({decision_record.OUTCOMES.get(b.get('outcome_type') or 'decision', 'Decision recorded')})",
                 "description": b.get("decision_text") or "", "subject": _ref("Patient", patient_id), "created": b.get("recorded_at"),
                 "author": {"display": b.get("recorded_by") or b.get("entered_by") or ""},
                 "activity": [{"reference": _ref("Task", t)} for a, t in task_ids if a.get("board_record") == b["id"]],
                 "note": [{"text": f"Participants: {b.get('participants') or ''}"}, {"text": f"Version {b.get('version', 1)}; adjudication status: {(b.get('adjudication') or {}).get('status')}"}]
-                        + ([{"text": f"Intention to treat as recorded: {b['intent_as_recorded']}"}] if b.get("intent_as_recorded") else [])
-                        + ([{"text": f"Divergent opinions: {b['divergent_opinions']}"}] if b.get("divergent_opinions") else [])}
+                        + ([{"text": f"Divergent opinions: {b['divergent_opinions']}"}] if b.get("divergent_opinions") else [])
+                        + [{"text": line} for line in care_plan_lines(b)]}
         if cond_id:
             plan["addresses"] = [_ref("Condition", cond_id)]
         add(plan); plan_ids.append(rid)

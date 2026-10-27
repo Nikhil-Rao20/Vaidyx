@@ -1,0 +1,616 @@
+{
+  "choices": {
+    "consent_recorded": [
+      {
+        "id": "yes",
+        "label": "Yes"
+      },
+      {
+        "id": "pending",
+        "label": "Pending"
+      },
+      {
+        "id": "no",
+        "label": "No"
+      },
+      {
+        "id": "not_stated",
+        "label": "Not stated"
+      }
+    ],
+    "intent": [
+      {
+        "id": "curative",
+        "label": "Curative"
+      },
+      {
+        "id": "palliative",
+        "label": "Palliative"
+      },
+      {
+        "id": "not_stated",
+        "label": "Not stated by the board"
+      }
+    ],
+    "modalities": [
+      {
+        "id": "surgery",
+        "label": "Surgery"
+      },
+      {
+        "id": "chemotherapy",
+        "label": "Chemotherapy"
+      },
+      {
+        "id": "radiotherapy",
+        "label": "Radiotherapy"
+      },
+      {
+        "id": "endocrine",
+        "label": "Endocrine therapy"
+      },
+      {
+        "id": "targeted",
+        "label": "Targeted therapy"
+      },
+      {
+        "id": "immunotherapy",
+        "label": "Immunotherapy"
+      },
+      {
+        "id": "supportive",
+        "label": "Supportive or palliative care"
+      },
+      {
+        "id": "observation",
+        "label": "Observation"
+      },
+      {
+        "id": "other",
+        "label": "Other"
+      }
+    ],
+    "not_discussed_reason": [
+      {
+        "id": "information_missing",
+        "label": "Information missing"
+      },
+      {
+        "id": "member_absent",
+        "label": "A member was absent"
+      },
+      {
+        "id": "time",
+        "label": "Time ran out"
+      },
+      {
+        "id": "other",
+        "label": "Other reason"
+      }
+    ],
+    "pmjay_plan_approval": [
+      {
+        "id": "yes",
+        "label": "Yes"
+      },
+      {
+        "id": "no",
+        "label": "No"
+      },
+      {
+        "id": "not_applicable",
+        "label": "Not applicable"
+      }
+    ],
+    "referral_kind": [
+      {
+        "id": "genetics",
+        "label": "Genetics and counselling"
+      },
+      {
+        "id": "palliative",
+        "label": "Palliative care"
+      },
+      {
+        "id": "nutrition",
+        "label": "Nutrition"
+      },
+      {
+        "id": "psycho_oncology",
+        "label": "Psycho-oncology"
+      },
+      {
+        "id": "fertility",
+        "label": "Fertility preservation"
+      },
+      {
+        "id": "dental",
+        "label": "Dental"
+      },
+      {
+        "id": "physiotherapy",
+        "label": "Physiotherapy"
+      },
+      {
+        "id": "social_work",
+        "label": "Social work"
+      },
+      {
+        "id": "other",
+        "label": "Other"
+      }
+    ],
+    "stage_source": [
+      {
+        "id": "report",
+        "label": "As recorded in a report"
+      },
+      {
+        "id": "confirmed_draft",
+        "label": "A Vaidyx draft stage a doctor confirmed"
+      },
+      {
+        "id": "board",
+        "label": "The board's own"
+      },
+      {
+        "id": "not_staged",
+        "label": "Not staged"
+      }
+    ],
+    "supportive_needs": [
+      {
+        "id": "physical",
+        "label": "Physical"
+      },
+      {
+        "id": "psychological",
+        "label": "Psychological"
+      },
+      {
+        "id": "social",
+        "label": "Social"
+      },
+      {
+        "id": "information",
+        "label": "Information"
+      },
+      {
+        "id": "spiritual",
+        "label": "Spiritual"
+      },
+      {
+        "id": "none",
+        "label": "None"
+      }
+    ],
+    "trial_considered": [
+      {
+        "id": "yes",
+        "label": "Yes"
+      },
+      {
+        "id": "no",
+        "label": "No"
+      },
+      {
+        "id": "not_stated",
+        "label": "Not stated"
+      }
+    ]
+  },
+  "fields": [
+    {
+      "key": "outcome",
+      "kind": "choice",
+      "label": "Outcome",
+      "required": [
+        "decision",
+        "deferred",
+        "referred",
+        "not_discussed",
+        "noted"
+      ],
+      "step": "outcome"
+    },
+    {
+      "key": "awaited",
+      "kind": "short",
+      "label": "What is awaited",
+      "limit": 300,
+      "reason": true,
+      "required": [
+        "deferred"
+      ],
+      "step": "outcome"
+    },
+    {
+      "key": "awaited_from",
+      "kind": "dept",
+      "label": "From which department",
+      "limit": 120,
+      "reason": true,
+      "required": [
+        "deferred"
+      ],
+      "source": "departments",
+      "step": "outcome"
+    },
+    {
+      "key": "referred_to",
+      "kind": "short",
+      "label": "Referred to (board or centre)",
+      "limit": 300,
+      "reason": true,
+      "required": [
+        "referred"
+      ],
+      "step": "outcome"
+    },
+    {
+      "choices": "not_discussed_reason",
+      "key": "not_discussed_reason",
+      "kind": "choice",
+      "label": "Why not discussed",
+      "reason": true,
+      "required": [
+        "not_discussed"
+      ],
+      "step": "outcome"
+    },
+    {
+      "key": "decision_text",
+      "kind": "long",
+      "label": "Decision, in the board's words",
+      "limit": 4000,
+      "reason": true,
+      "required": [
+        "decision"
+      ],
+      "step": "recommendation"
+    },
+    {
+      "key": "rationale",
+      "kind": "long",
+      "label": "Rationale as discussed",
+      "limit": 4000,
+      "reason": true,
+      "step": "recommendation"
+    },
+    {
+      "choices": "intent",
+      "key": "intent",
+      "kind": "choice",
+      "label": "Treatment intent",
+      "reason": true,
+      "required": [
+        "decision"
+      ],
+      "step": "recommendation"
+    },
+    {
+      "key": "intent_as_stated",
+      "kind": "short",
+      "label": "Intent, in the board's words",
+      "limit": 300,
+      "reason": true,
+      "step": "recommendation"
+    },
+    {
+      "choices": "modalities",
+      "key": "modalities",
+      "kind": "multi",
+      "label": "Modalities",
+      "reason": true,
+      "step": "recommendation"
+    },
+    {
+      "hint": "As the board stated it, for example surgery then adjuvant chemotherapy",
+      "key": "sequence",
+      "kind": "short",
+      "label": "Sequence",
+      "limit": 300,
+      "reason": true,
+      "step": "recommendation"
+    },
+    {
+      "key": "alternatives_discussed",
+      "kind": "long",
+      "label": "Alternatives discussed",
+      "limit": 2000,
+      "reason": true,
+      "step": "recommendation"
+    },
+    {
+      "key": "concerns",
+      "kind": "concerns",
+      "label": "Divergent views and concerns (name and words)",
+      "limit": {
+        "by": 120,
+        "text": 2000
+      },
+      "reason": true,
+      "step": "recommendation"
+    },
+    {
+      "key": "stage_as_agreed",
+      "kind": "short",
+      "label": "Stage as agreed by the board",
+      "limit": 300,
+      "reason": true,
+      "step": "recommendation"
+    },
+    {
+      "choices": "stage_source",
+      "key": "stage_source",
+      "kind": "choice",
+      "label": "Where the stage comes from",
+      "reason": true,
+      "step": "recommendation"
+    },
+    {
+      "key": "report_corrections_raised",
+      "kind": "long",
+      "label": "Report errors or corrections raised",
+      "limit": 2000,
+      "reason": true,
+      "step": "recommendation"
+    },
+    {
+      "key": "patient_preference",
+      "kind": "yn",
+      "label": "Patient preference considered",
+      "step": "considered"
+    },
+    {
+      "key": "patient_preference_note",
+      "kind": "short",
+      "label": "Patient preference, in words",
+      "limit": 300,
+      "step": "considered"
+    },
+    {
+      "key": "fitness_considered",
+      "kind": "yn",
+      "label": "Fitness and comorbidities considered",
+      "step": "considered"
+    },
+    {
+      "choices": "trial_considered",
+      "key": "trial_considered",
+      "kind": "choice",
+      "label": "Clinical trial considered",
+      "step": "considered"
+    },
+    {
+      "key": "trial_name",
+      "kind": "short",
+      "label": "Trial name and requirements",
+      "limit": 300,
+      "step": "considered"
+    },
+    {
+      "key": "genomic_considered",
+      "kind": "yn",
+      "label": "Genomic or genetic testing considered",
+      "step": "considered"
+    },
+    {
+      "after": true,
+      "choices": "supportive_needs",
+      "key": "supportive_needs",
+      "kind": "multi",
+      "label": "Supportive and psychosocial needs",
+      "step": "considered"
+    },
+    {
+      "choices": "consent_recorded",
+      "key": "consent_recorded",
+      "kind": "choice",
+      "label": "Patient consent to the discussion",
+      "step": "considered"
+    },
+    {
+      "key": "investigations",
+      "kind": "investigations",
+      "label": "Further investigations",
+      "limit": {
+        "department": 120,
+        "item": 300
+      },
+      "source": "departments",
+      "step": "next"
+    },
+    {
+      "choices": "referral_kind",
+      "key": "referrals",
+      "kind": "referrals",
+      "label": "Referrals",
+      "limit": {
+        "department": 120,
+        "note": 300
+      },
+      "source": "departments",
+      "step": "next"
+    },
+    {
+      "key": "next_step",
+      "kind": "short",
+      "label": "Next step",
+      "limit": 300,
+      "step": "next"
+    },
+    {
+      "key": "next_step_date",
+      "kind": "date",
+      "label": "By date",
+      "step": "next"
+    },
+    {
+      "key": "next_review",
+      "kind": "date",
+      "label": "Next review",
+      "step": "next"
+    },
+    {
+      "hint": "For example after the restaging CT",
+      "key": "next_review_trigger",
+      "kind": "short",
+      "label": "Or the trigger for re-discussion",
+      "limit": 300,
+      "step": "next"
+    },
+    {
+      "key": "responsible_doctor",
+      "kind": "person",
+      "label": "Responsible clinician",
+      "limit": 120,
+      "required": [
+        "decision"
+      ],
+      "source": "owner_doctor",
+      "step": "responsibility"
+    },
+    {
+      "after": true,
+      "hint": "Name and contact",
+      "key": "key_worker",
+      "kind": "short",
+      "label": "Key worker",
+      "limit": 120,
+      "step": "responsibility"
+    },
+    {
+      "hint": "Vaidyx fills the responsible clinician when empty",
+      "key": "informed_by",
+      "kind": "person",
+      "label": "Who tells the patient",
+      "limit": 120,
+      "step": "responsibility"
+    },
+    {
+      "hint": "Vaidyx fills 2 working days after the meeting when empty",
+      "key": "inform_by_date",
+      "kind": "date",
+      "label": "Tell the patient by",
+      "step": "responsibility"
+    },
+    {
+      "after": true,
+      "key": "patient_informed_date",
+      "kind": "date",
+      "label": "Date the patient was told",
+      "step": "responsibility"
+    },
+    {
+      "after": true,
+      "key": "gp_informed_date",
+      "kind": "date",
+      "label": "Date the referring doctor was informed",
+      "step": "responsibility"
+    },
+    {
+      "after": true,
+      "choices": "pmjay_plan_approval",
+      "key": "pmjay_plan_approval",
+      "kind": "choice",
+      "label": "PM-JAY treatment plan approval",
+      "step": "pmjay"
+    },
+    {
+      "after": true,
+      "key": "pmjay_plan_note",
+      "kind": "short",
+      "label": "Plan or approval reference",
+      "limit": 300,
+      "step": "pmjay"
+    },
+    {
+      "key": "members_present",
+      "kind": "people",
+      "label": "Members present",
+      "limit": 120,
+      "source": "admitted_members",
+      "step": "pmjay"
+    }
+  ],
+  "limits": {
+    "decision": 4000,
+    "long": 2000,
+    "name": 120,
+    "note": 2000,
+    "rationale": 4000,
+    "short": 300
+  },
+  "outcomes": [
+    {
+      "hint": "The board decided",
+      "id": "decision",
+      "label": "Decision recorded"
+    },
+    {
+      "hint": "Something is awaited",
+      "id": "deferred",
+      "label": "Deferred: information awaited"
+    },
+    {
+      "hint": "To another board or centre",
+      "id": "referred",
+      "label": "Referred to another board or centre"
+    },
+    {
+      "hint": "Moves to the next meeting",
+      "id": "not_discussed",
+      "label": "Not discussed"
+    },
+    {
+      "hint": "For noting only",
+      "id": "noted",
+      "label": "Noted for information"
+    }
+  ],
+  "steps": [
+    {
+      "id": "outcome",
+      "title": "Outcome"
+    },
+    {
+      "id": "recommendation",
+      "title": "The board's recommendation"
+    },
+    {
+      "id": "considered",
+      "title": "What the board considered"
+    },
+    {
+      "id": "next",
+      "title": "What happens next"
+    },
+    {
+      "id": "responsibility",
+      "title": "Responsibility and telling the patient"
+    },
+    {
+      "id": "pmjay",
+      "title": "PM-JAY and attendance"
+    }
+  ],
+  "yn": [
+    {
+      "id": "yes",
+      "label": "Yes"
+    },
+    {
+      "id": "no",
+      "label": "No"
+    },
+    {
+      "id": "not_applicable",
+      "label": "Not applicable"
+    },
+    {
+      "id": "not_stated",
+      "label": "Not stated"
+    }
+  ]
+}

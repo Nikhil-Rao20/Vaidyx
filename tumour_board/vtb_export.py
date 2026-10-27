@@ -23,7 +23,7 @@ from pptx.oxml.ns import qn
 from pptx.text.text import _Paragraph
 from pptx.util import Pt
 
-from . import config, dates, org, rules, store
+from . import config, dates, decision_record, org, rules, store
 
 
 def template_path() -> Path:
@@ -41,6 +41,7 @@ class ExportNotReady(Exception):
 NOT_DOCUMENTED = "Not documented in the verified records of this Case File"
 CONTINUED = "(continued in the Vaidyx Case File summary)"
 POINTS_HEADING = "Points for review (from the verified records, not treatment recommendations):"
+PREVIOUS_BOARD = "Earlier Tumour Board decision (added by Vaidyx, not part of the NCG template)"
 INCOMPLETE = "INCOMPLETE: Pre-Authorization not met"
 MAX_LINES = 18          # per text box, the continuation line included
 SMALL_AFTER = 10        # more lines than this: 12 pt instead of 14 pt
@@ -237,6 +238,24 @@ def _blocked(summ) -> str:
             + "; correct it and mark it reviewed, or regenerate it, before exporting")
 
 
+def previous_board_lines(st) -> list[str]:
+    """Slide 6 (night-v3 item 3.1): the latest board record of this Case File as the board recorded it: date and outcome, the decision
+    text, the intent, the stage as agreed and the next review. [] when there is none."""
+    recs = [b for b in (st or {}).get("board_records") or [] if isinstance(b, dict)]
+    if not recs:
+        return []
+    b = recs[-1]
+    when = _ddmmyyyy(b.get("board_date") or b.get("recorded_at")) or "date not stated"
+    out = [f"{PREVIOUS_BOARD}: {when}, {decision_record.OUTCOMES.get(b.get('outcome_type') or 'decision', 'Decision recorded')}"]
+    vals = {x["key"]: x["text"] for x in decision_record.display_lines(b)}
+    if _clean(b.get("decision_text")):
+        out.append(f"Decision, in the board's words: {_clean(b['decision_text'])}")
+    for k in ("intent", "stage_as_agreed", "next_review"):
+        if vals.get(k):
+            out.append(f"{decision_record.label(k)}: {_clean(vals[k])}" + (f" ({vals['stage_source']})" if k == "stage_as_agreed" and vals.get("stage_source") else ""))
+    return out
+
+
 def _width_height(top, height, width):
     return width, min(top + height, FOOTER["top"]) - top
 
@@ -283,8 +302,10 @@ def content(case_id: str) -> dict:
             extra["stage"] = stage
         if n == 6:
             pts = [_sentence(x, docs) for x in summ.get("points_for_review") or [] if _printed(summ, x)]
-            body = body + ([POINTS_HEADING] + pts if pts else [])
+            prev = previous_board_lines(st)
+            body = body + prev + ([POINTS_HEADING] + pts if pts else [])
             extra["points_for_review"] = pts
+            extra["previous_board"] = prev
         items, pt, cut = fit(body, tail, w, h)
         extra.update(pt=pt, cut=cut)
         if n == 2:

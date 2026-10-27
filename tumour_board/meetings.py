@@ -23,12 +23,11 @@ call them from the app's event loop, never from threads (the scheduler calls exp
 import asyncio, logging, secrets, time, uuid
 from datetime import date, datetime, timedelta
 
-from . import access, after_send, board, config, dept_requests, discord, his_client, live, notify, org, pacs, postboard, protocol, rules, store
+from . import access, after_send, board, config, decision_record, dept_requests, discord, his_client, live, notify, org, pacs, postboard, protocol, rules, store
 
 log = logging.getLogger(__name__)
 
-OUTCOMES = {"decision": "Decision recorded", "deferred": "Deferred: information awaited", "referred": "Referred to another board or centre",
-            "not_discussed": "Not discussed: moved to the next meeting", "noted": "Noted for information"}
+OUTCOMES = decision_record.OUTCOMES  # one table for the meeting, the board record, the minutes and the deck (night-v3 item 3.1)
 LISTS = board.MEETING_LISTS
 STATUSES = ("planned", "in_session", "closed", "cancelled")
 ADMITTED = ("present", "remote")
@@ -1313,38 +1312,31 @@ async def record_decision(mid: str, cid: str, body: dict, user: str) -> dict:
     outcome = str(body.get("outcome") or "decision").strip()
     if outcome not in OUTCOMES:
         raise MeetingError(f"The outcome must be one of: {', '.join(OUTCOMES)}.", 400, "bad_outcome")
-    text = " ".join(str(body.get("decision_text") or "").split())[:MAX_TEXT]
-    awaited = " ".join(str(body.get("awaited") or "").split())[:300]
-    awaited_from = " ".join(str(body.get("awaited_from") or "").split())[:120]
-    referred_to = " ".join(str(body.get("referred_to") or "").split())[:300]
-    if outcome == "decision" and not text:
-        raise MeetingError("Write the board's decision.", 400, "empty")
-    if outcome == "deferred" and not (awaited or text):
-        raise MeetingError("Say what is awaited and from whom.", 400, "empty")
-    if outcome == "referred" and not (referred_to or text):
-        raise MeetingError("Say where the Case File is referred to.", 400, "empty")
+    try:  # the coordinator's form (night-v3 item 3.1): every field checked, the required-by-outcome rule, over-limit text refused
+        clean = decision_record.clean({**body, "outcome": outcome}, strict=True)
+    except ValueError as e:
+        raise MeetingError(str(e), 400, "bad_record")
+    problem = postboard.informed_date_problem({**clean, "board_date": s.get("date")})
+    if problem:
+        raise MeetingError(problem, 400, "bad_record")
+    text, awaited, awaited_from, referred_to = clean["decision_text"], clean["awaited"], clean["awaited_from"], clean["referred_to"]
     nxt = board.next_planned_after(s) if outcome == "not_discussed" else None
     if not text:
         text = {"deferred": f"Deferred: awaiting {awaited}" + (f" from {awaited_from}" if awaited_from else ""),
                 "referred": f"Referred to {referred_to}", "noted": "Noted for information; no decision taken",
-                "not_discussed": "Not discussed" + (f": moved to the meeting on {_dmy(nxt.get('date'))}" if nxt else "; no later meeting planned yet")}.get(outcome, text)
-    concerns = [{"by": str(x.get("by") or "")[:120], "text": " ".join(str(x.get("text") or "").split())[:MAX_NOTE]} for x in body.get("concerns") or [] if isinstance(x, dict) and x.get("text")]
+                "not_discussed": "Not discussed" + (f": moved to the meeting on {_dmy(nxt.get('date'))}" if nxt else "; no later meeting planned yet")
+                + (f" ({decision_record.choice_label('not_discussed_reason', clean['not_discussed_reason']).lower()})" if clean["not_discussed_reason"] else "")}.get(outcome, text)
+    concerns = list(clean["concerns"])
     have = {x["text"] for x in concerns}
     concerns += [x for x in _card_concerns(s, cid) if x["text"] not in have]
-    members = [str(x)[:120] for x in body.get("members_present") or [] if str(x).strip()] or [p.get("name") or u for u, p in (s.get("people") or {}).items() if p.get("status") in ADMITTED]
+    members = clean["members_present"] or [p.get("name") or u for u, p in (s.get("people") or {}).items() if p.get("status") in ADMITTED]
     part = board.participants(s)
-    intent = str(body.get("intent_as_stated") or "").strip()
-    next_date = _iso_date(body.get("next_step_date"))
     actions = []
     did = org.department_id(awaited_from) if awaited_from else None
     if outcome == "deferred" and awaited and did:
-        actions.append({"task": f"Awaited by the board: {awaited}", "department": org.department_name(did), "due": next_date or (date.today() + timedelta(days=14)).isoformat()})
-    rec = {"decision_text": text, "outcome_type": outcome if outcome in postboard.OUTCOMES else "decision", "meeting_outcome": outcome,
-           "rationale": " ".join(str(body.get("rationale") or "").split())[:MAX_TEXT], "intent_as_stated": intent[:300],
-           "intent_as_recorded": intent.lower() if intent.lower() in postboard.INTENTS else "", "responsible_doctor": str(body.get("responsible_doctor") or "")[:120],
-           "next_step": " ".join(str(body.get("next_step") or "").split())[:MAX_NOTE], "next_step_date": next_date, "awaited": awaited, "awaited_from": awaited_from,
-           "deferred_reason": (awaited + (f" (from {awaited_from})" if awaited_from else ""))[:300] if outcome == "deferred" else "", "referred_to": referred_to,
-           "concerns": concerns, "divergent_opinions": "; ".join(f"{x['by']}: {x['text']}" if x.get("by") else x["text"] for x in concerns)[:MAX_TEXT],
+        actions.append({"task": f"Awaited by the board: {awaited}", "department": org.department_name(did), "due": clean["next_step_date"] or (date.today() + timedelta(days=14)).isoformat()})
+    rec = {**clean, "decision_text": text, "outcome_type": outcome, "meeting_outcome": outcome,
+           "concerns": concerns, "divergent_opinions": decision_record.join_concerns(concerns),
            "members_present": members, "participants": ", ".join(members) or part["text"], "board_date": s.get("date"), "session": mid,
            "attendance": {"present": part["present"], "absent": part["absent"], "members": part["members"]}, "actions": actions, "recorded_by": display_name(user)}
     try:

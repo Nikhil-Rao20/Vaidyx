@@ -23,6 +23,7 @@ from tumour_board import accounts  # department admins create / disable / remove
 from tumour_board import his_case, his_client  # HIS-connected Case Files: create from a UHID, re-fetch, link registrations, outside reports (V2 items 3.1 to 3.6)
 from tumour_board import access  # who may open a Case File and act on it: owner, participants, the departments asked (V2 item 5.1)
 from tumour_board import referral  # refer a Case File to another treating department: request, accept (ownership moves, new protocol), decline (V2 item 5.2)
+from tumour_board import decision_record  # the decision record fields, choices and limits (night-v3 item 3.1)
 from tumour_board import pacs  # the image viewer (OHIF) and DICOMweb reached through the app only: logged in, granted per study, audited (V2 item 6.3)
 from tumour_board.api import common as _common  # the idle timeout and the JSON body cap (security review #11, #19)
 
@@ -1785,6 +1786,42 @@ def setup_tumour_board_routes():
             raise HTTPException(400, str(e))
         return {"ok": True, "record": rec, "state": store.get_state(case_id)}
 
+    @r.post("/cases/{case_id}/board-records/{record_id}/correct")
+    async def correct_board_record(case_id: str, record_id: str, request: Request):
+        """A later correction of a saved board record (night-v3 item 3.1): {"changes": {field: value}, "reason"}. The owning department's
+        consultants; the MDT Coordinator on the meeting day only. A new version (who, when, why, the changed fields, a snapshot); version 1
+        is never overwritten. Audited; the owner is told."""
+        import datetime as _dt
+        from tumour_board import meetings as _meetings
+        rl = _roles(request); u = _user(request); c = _case(case_id); b = await request.json()
+        b = b if isinstance(b, dict) else {}
+        rid = store.safe_id(record_id)
+        rec = next((x for x in store.get_state(case_id).get("board_records") or [] if x.get("id") == rid), None)
+        if not rec:
+            raise HTTPException(404, "No such Tumour Board record")
+        if access.is_archived(c):
+            raise HTTPException(409, {"message": access.ARCHIVED_MESSAGE + ". Take it out of the archive first.", "code": "archived"})
+        if not access.is_owner_doctor(rl, c):
+            if not rl.get("coordinator") or rl.get("disabled"):
+                raise HTTPException(403, "Only the owning department's consultants can correct a board record")
+            if str(rec.get("board_date") or "")[:10] != _dt.date.today().isoformat():
+                raise HTTPException(403, "The MDT Coordinator can correct a record on the meeting day only; afterwards the owning consultant corrects it")
+        if not isinstance(b.get("changes"), dict):
+            raise HTTPException(400, "Send the fields to correct under \"changes\"")
+        async with store.lock(case_id):
+            try:
+                rec = postboard.correct_record(case_id, rid, b["changes"], u, _meetings.display_name(u), str(b.get("reason") or ""))
+            except KeyError:
+                raise HTTPException(404, "No such Tumour Board record")
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+        if rec.get("session"):  # the meeting and the session export show the current version
+            try:
+                board.decision_amended(rec["session"], case_id, rec, u)
+            except ValueError as e:
+                log.warning("session %s: corrected record not shown (%s)", rec["session"], e)
+        return {"ok": True, "record": rec, "state": store.get_state(case_id)}
+
     @r.post("/guidelines/search")
     async def gl_search(request: Request):
         _user(request); b = await request.json()
@@ -2029,7 +2066,7 @@ def setup_tumour_board_routes():
             raise HTTPException(400, "Write the board's decision")
         part = board.participants(s)
         rec = {k: b.get(k) for k in ("decision_text", "recorded_by", "report_corrections_raised", "divergent_opinions", "actions", "next_review", "outcome_type", "deferred_reason",
-                                     "referred_to", "intent_as_recorded", "trial_considered", "consent_recorded", "key_worker") if b.get(k) is not None}
+                                     "referred_to", "intent_as_recorded", "trial_considered", "consent_recorded", "key_worker", *decision_record.KEYS) if b.get(k) is not None}
         rec.update({"board_date": s["date"], "session": sid, "participants": b.get("participants") or part["text"],
                     "attendance": {"present": part["present"], "absent": part["absent"], "members": part["members"]}})
         record = await postboard.record_decision(case_id, rec, u)

@@ -195,6 +195,23 @@ def test_questions_then_points_for_review(case):
     assert _texts(_deck(case).slides[5]) == [vtb_export.NOT_DOCUMENTED]
 
 
+def test_slide6_carries_the_earlier_board_decision(case):
+    """night-v3 item 3.1: when a board record exists, slide 6 names it as Vaidyx's addition (not part of the NCG template)."""
+    st = store.get_state(case)
+    st["board_records"] = [{"id": "B1", "board_date": "2026-10-13", "outcome_type": "decision", "decision_text": "Concurrent chemoradiation.",
+                            "intent": "curative", "intent_as_recorded": "curative", "stage_as_agreed": "Stage IIIA", "stage_source": "report", "next_review": "2026-12-15"}]
+    store.save_state(case, st)
+    _summary(case)
+    prev = next(x for x in vtb_export.content(case)["slides"] if x["n"] == 6)["extra"]["previous_board"]
+    assert prev == ["Earlier Tumour Board decision (added by Vaidyx, not part of the NCG template): 13/10/2026, Decision recorded",
+                    "Decision, in the board's words: Concurrent chemoradiation.", "Treatment intent: Curative",
+                    "Stage as agreed by the board: Stage IIIA (As recorded in a report)", "Next review: 15/12/2026"]
+    t = _texts(_deck(case).slides[5])
+    assert t[0].startswith("The treating team asks") and t[1] == prev[0] and vtb_export.POINTS_HEADING in t
+    st = store.get_state(case); st["board_records"] = []; store.save_state(case, st)
+    assert vtb_export.previous_board_lines(store.get_state(case)) == []
+
+
 def test_footer_on_every_slide_ai_draft_and_reviewed(case):
     _summary(case)
     for sl in _deck(case).slides:

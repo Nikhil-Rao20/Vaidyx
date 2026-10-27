@@ -522,7 +522,7 @@ def test_not_discussed_moves_the_case_to_the_next_meeting_else_flags_it(tc):
     owned("TB-002")
     mid = started(tc)
     nxt = new_meeting(tc, date_=(date.today() + timedelta(days=8)).isoformat(), time_="09:00")
-    r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-001/decision", json={"outcome": "not_discussed"})
+    r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-001/decision", json={"outcome": "not_discussed", "not_discussed_reason": "information_missing"})
     assert r.status_code == 200, r.text
     oc = r.json()["outcome"]
     assert oc["moved_to"] == nxt and oc["flagged"] is False and "moved to the meeting on" in r.json()["record"]["decision_text"]
@@ -534,7 +534,7 @@ def test_not_discussed_moves_the_case_to_the_next_meeting_else_flags_it(tc):
     assert c["meeting_id"] == nxt and c["board_date"] == board.get(nxt)["date"] and "board_flags" not in c
     # no later meeting: flagged
     As(tc, "anil").post(f"/meetings/{nxt}/cancel")
-    r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-002/decision", json={"outcome": "not_discussed"})
+    r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-002/decision", json={"outcome": "not_discussed", "not_discussed_reason": "information_missing"})
     assert r.json()["outcome"]["flagged"] is True and r.json()["outcome"]["moved_to"] is None
     assert store.get_case("TB-002")["board_flags"][0]["kind"] == "not_discussed"
     ns = [n for n in notify.for_roles(org.roles("priya"), limit=None) if n["kind"] == "outcome"]
@@ -554,8 +554,49 @@ def test_deferred_referred_and_noted(tc):
     r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-002/decision", json={"outcome": "referred", "referred_to": "State cancer centre sarcoma board"})
     assert r.json()["record"]["outcome_type"] == "referred" and r.json()["record"]["referred_to"] == "State cancer centre sarcoma board"
     r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-003/decision", json={"outcome": "noted"})
-    assert r.json()["record"]["outcome_type"] == "decision" and r.json()["record"]["meeting_outcome"] == "noted" and r.json()["outcome"]["label"] == "Noted for information"
+    assert r.json()["record"]["outcome_type"] == "noted" and r.json()["record"]["meeting_outcome"] == "noted" and r.json()["outcome"]["label"] == "Noted for information"  # night-v3 item 3.1: the real outcome
     assert As(tc, "anil").post(f"/meetings/{mid}/cases/TB-999/decision", json={"outcome": "noted"}).status_code == 404
+
+
+def test_the_meeting_form_applies_the_required_by_outcome_rule(tc):
+    """night-v3 item 3.1: the coordinator's form is strict (decision_record.clean); the message names what is missing."""
+    owned("TB-002")
+    mid = started(tc)
+    url = f"/meetings/{mid}/cases/TB-002/decision"
+    r = As(tc, "anil").post(url, json={"outcome": "decision", "decision_text": "Upfront surgery.", "responsible_doctor": "Dr Priya Nair"})
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "bad_record" and "Choose the treatment intent" in r.json()["detail"]["message"]
+    r = As(tc, "anil").post(url, json={"outcome": "decision", "decision_text": "Upfront surgery.", "intent": "curative", "responsible_doctor": "Dr Priya Nair", "sequence": "s" * 301})
+    assert r.status_code == 400 and "Sequence: at most 300 characters" in r.json()["detail"]["message"]  # refused, never cut
+    r = As(tc, "anil").post(url, json={"outcome": "deferred", "awaited": "IHC report"})
+    assert r.status_code == 400 and "Say which department it is awaited from." in r.json()["detail"]["message"]
+    r = As(tc, "anil").post(url, json={"outcome": "decision", "decision_text": "Upfront surgery.", "intent": "curative", "responsible_doctor": "Dr Priya Nair",
+                                       "patient_informed_date": "01/01/2020"})
+    assert r.status_code == 400 and "earlier than the board date" in r.json()["detail"]["message"]
+    r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-003/decision", json={"outcome": "noted"})
+    assert r.status_code == 200, r.text
+    rec = r.json()["record"]
+    assert rec["outcome_type"] == "noted" and not [f for f in rec["adjudication"]["flags"] if f.get("kind") == "communication"]
+    body = {"outcome": "decision", "decision_text": "Upfront surgery, then adjuvant chemotherapy.", "intent": "curative", "responsible_doctor": "Dr Priya Nair",
+            "modalities": ["surgery", "chemotherapy"], "sequence": "Surgery then adjuvant chemotherapy", "stage_as_agreed": "cT2 N1 M0", "stage_source": "report",
+            "investigations": [{"item": "MUGA scan", "department": "Nuclear Medicine"}], "referrals": [{"kind": "genetics", "department": "Medical Oncology", "note": "BRCA"}],
+            "pmjay_plan_approval": "yes", "pmjay_plan_note": "PA-123"}
+    r = As(tc, "anil").post(url, json=body)
+    assert r.status_code == 200, r.text
+    rec = r.json()["record"]
+    assert rec["modalities"] == ["surgery", "chemotherapy"] and rec["stage_source"] == "report" and rec["informed_by"] == "Dr Priya Nair" and rec["inform_by_date"]
+    assert [a["kind"] for a in store.get_state("TB-002")["actions"] if a.get("board_record") == rec["id"] and not a.get("communication")] == ["investigation", "referral"]
+    m = As(tc, "anil").get(f"/sessions/{mid}/minutes?format=json").json()
+    d = next(c for c in m["cases"] if c["case_id"] == "TB-002")["decision"]
+    lines = {x["label"]: x["text"] for x in d["fields"]}
+    assert lines["Modalities"] == "Surgery, Chemotherapy" and lines["Further investigations"] == "MUGA scan (Nuclear Medicine)"  # the board gave no date: the action gets the default
+    assert lines["Referrals"] == "Genetics and counselling (Medical Oncology, BRCA)" and lines["PM-JAY treatment plan approval"] == "Yes"
+    # the owner's consultant corrects it later: a new version, the meeting shows it, the minutes carry the correction line
+    r = As(tc, "priya").post(f"/cases/TB-002/board-records/{rec['id']}/correct", json={"changes": {"stage_as_agreed": "cT2 N0 M0"}, "reason": "N stage misread"})
+    assert r.status_code == 200, r.text
+    assert board.get(mid)["decisions"]["TB-002"]["version"] == 2
+    html = As(tc, "anil").get(f"/sessions/{mid}/minutes").text
+    assert "Stage as agreed by the board" in html and "cT2 N0 M0" in html and "Corrected by Dr Priya Nair on" in html and "N stage misread" in html
+    assert "\u2014" not in html
 
 
 # ---- end of a case and the cards ---------------------------------------------------------------------------------------------------------

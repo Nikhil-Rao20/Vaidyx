@@ -2,7 +2,7 @@
 // routes are the read-only fallback when the new routes are not on the server.
 import { api, TB } from "@/lib/api";
 import { routeMissing, type MeetingInfo, type MeetingState, type MeetingTimer, type Opened } from "@/lib/live";
-import type { CardsResponse, DecisionBody, JoinResponse, MeetingsResponse, MemberCard, NewMeeting, OldSession, SlidesResponse } from "./types";
+import type { CardsResponse, DecisionBody, DecisionSpec, JoinResponse, MeetingsResponse, MemberCard, NewMeeting, OldSession, SlidesResponse } from "./types";
 
 const enc = encodeURIComponent;
 export const mUrl = (mid: string) => `${TB}/meetings/${enc(mid)}`;
@@ -34,6 +34,10 @@ export const askQuestion = (mid: string, text: string) => api.post(`${mUrl(mid)}
 export const raiseHand = (mid: string, raised: boolean) => api.post(`${mUrl(mid)}/hand`, { raised });
 export const decisionLive = (mid: string, text: string) => api.put(`${mUrl(mid)}/decision-live`, { text });
 export const saveDecision = (mid: string, cid: string, b: DecisionBody) => api.post(`${mUrl(mid)}/cases/${enc(cid)}/decision`, b);
+/** The decision record's field table as the server has it (decision_record.spec()); the form uses the bundled decision_fields.json. */
+export const getDecisionFields = () => api.get<DecisionSpec>(`${TB}/meetings/decision-fields`);
+/** A later correction of a board record (the owning department's consultants, or the MDT Coordinator on the meeting day). */
+export const correctBoardRecord = (cid: string, recordId: string, changes: Partial<DecisionBody>, reason = "") => api.post(`${TB}/cases/${enc(cid)}/board-records/${enc(recordId)}/correct`, { changes, reason });
 export const endCase = (mid: string, cid: string) => api.post<{ case_id: string; cards_requested: string[] }>(`${mUrl(mid)}/cases/${enc(cid)}/end`, {});
 export const sendCard = (mid: string, cid: string, agree: boolean, note?: string) => api.post<{ card: MemberCard }>(`${mUrl(mid)}/cases/${enc(cid)}/card`, { agree, note });
 export const getCards = (mid: string) => api.get<CardsResponse>(`${mUrl(mid)}/cards`);

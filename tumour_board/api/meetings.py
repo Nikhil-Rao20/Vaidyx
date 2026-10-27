@@ -4,7 +4,7 @@ meetings.py. Also GET /scheduler/status for the root admin and the Vaidyx admin.
 from fastapi import Request
 
 from . import common
-from .. import access, board, config, meetings, org, scheduler, store
+from .. import access, board, config, decision_record, meetings, org, scheduler, store
 
 router = common.make_router(["tumour-board-meetings"])
 JOIN_LIMIT = common.RateLimit(5, 15 * 60)
@@ -78,6 +78,13 @@ async def meetings_open_list(request: Request):
     rows = [meetings.summary_row(board.ensure_meeting_fields(s)) for s in meetings.open_meetings()]
     org.audit("meetings_open_listed", u, count=len(rows))
     return {"meetings": rows}
+
+
+@router.get("/meetings/decision-fields")
+async def meetings_decision_fields(request: Request):
+    """The decision record table (night-v3 item 3.1): outcomes, steps, fields, choices and limits, the same as decision_fields.json."""
+    _who(request)
+    return decision_record.spec()
 
 
 @router.post("/meetings/join")

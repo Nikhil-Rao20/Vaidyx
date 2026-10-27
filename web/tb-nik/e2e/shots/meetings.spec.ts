@@ -83,8 +83,46 @@ test.describe("Meetings", () => {
     await snap(page, "meetings", "control", { fullPage: false });
     await page.getByRole("tab", { name: "Decision" }).click();
     await expect(page.getByTestId("decision-form")).toBeVisible();
+    // Step 1, the outcome: nothing is chosen for the board except the outcome as today; step 2 waits for the decision text.
+    await expect(page.getByTestId("decision-step-1")).toHaveAttribute("aria-current", "step");
+    await expect(page.getByTestId("decision-step-2")).toHaveAttribute("data-missing", "true");
+    await snap(page, "meetings", "control-decision-outcome", { sizes: [SIZES[0]], fullPage: false });
+    await page.getByTestId("save-decision").click();
+    await expect(page.getByTestId("decision-problems")).toContainText("Step 2: write the board's decision");
+    await expect(page.getByTestId("decision-problems")).toContainText("Step 2: record the treatment intent");
+    // Step 2, the board's recommendation: the live strip still follows the decision text.
+    await page.getByTestId("decision-next").click();
+    await expect(page.getByTestId("decision-step-2")).toHaveAttribute("aria-current", "step");
+    await expect(page.locator("[data-field=intent] [role=radio][aria-checked=true]")).toHaveCount(0);
     await page.locator("#d-text").fill("Breast conservation surgery with sentinel node biopsy");
-    await snap(page, "meetings", "control-decision", { sizes: [SIZES[0]], fullPage: false });
+    await expect(page.getByTestId("live-strip-note")).toContainText("not saved");
+    await page.getByRole("radio", { name: "Curative" }).click();
+    await page.getByRole("button", { name: "Surgery", exact: true }).click();
+    await page.locator("#d-sequence").fill("Surgery then adjuvant therapy as per final histopathology");
+    await snap(page, "meetings", "control-decision", { sizes: [SIZES[0]], fullPage: false, before: async () => { await page.getByTestId("decision-step-2").scrollIntoViewIfNeeded(); } });
+    // Step 4, what happens next: an investigation and a referral, each with a department from the meeting's list.
+    await page.getByTestId("decision-step-4").click();
+    await page.getByTestId("add-investigation").click();
+    await page.getByLabel("Investigation 1", { exact: true }).fill("Bone scan");
+    await page.getByLabel("Department for investigation 1").fill("Nuclear Medicine");
+    await page.getByTestId("add-referral").click();
+    await page.getByLabel("Kind of referral 1").selectOption("genetics");
+    await page.getByLabel("Department for referral 1").fill("Medical Oncology");
+    await page.getByLabel("Note for referral 1").fill("BRCA testing and counselling");
+    const panel = page.getByTestId("decision-panel-4");
+    await snap(page, "meetings", "control-decision-next", { sizes: DESKTOP_MOBILE, fullPage: false, before: async () => { await panel.scrollIntoViewIfNeeded(); } });
+    await page.setViewportSize(SIZES[2]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.setViewportSize(SIZES[0]);
+    // The responsible clinician comes from the agenda row's owner doctor; the saved body carries the new fields.
+    await page.getByTestId("decision-step-5").click();
+    await expect(page.locator("#d-responsible_doctor")).toHaveValue("Lakshmi Rao");
+    const posted = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith(`/cases/${CID}/decision`));
+    await page.getByTestId("save-decision").click();
+    const body = (await posted).postDataJSON();
+    expect(body).toMatchObject({ outcome: "decision", intent: "curative", modalities: ["surgery"], responsible_doctor: "Lakshmi Rao", investigations: [{ item: "Bone scan", department: "Nuclear Medicine" }], referrals: [{ kind: "genetics", department: "Medical Oncology", note: "BRCA testing and counselling" }] });
+    expect(body.awaited).toBe("");
+    await expect(page.getByTestId("save-decision")).toContainText("Saved");
     await page.getByRole("tab", { name: "People" }).click();
     await expect(page.getByTestId("waiting-list")).toContainText("Kiran Shetty");
     await snap(page, "meetings", "control-people", { sizes: [SIZES[0]], fullPage: false });

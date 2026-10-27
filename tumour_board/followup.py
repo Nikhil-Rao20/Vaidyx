@@ -100,6 +100,11 @@ def default_days(case: dict | None) -> int:
     return days if days > 0 else DEFAULT_DAYS
 
 
+def default_due(case: dict | None) -> str:
+    """The due date a board action gets when none was typed: today plus the protocol's follow-up days."""
+    return (_today() + timedelta(days=default_days(case))).isoformat()
+
+
 def _patient(case: dict | None, case_id: str) -> str:
     return ((case or {}).get("patient") or {}).get("name") or case_id
 
@@ -109,7 +114,8 @@ def _patient(case: dict | None, case_id: str) -> str:
 def board_actions(case_id: str, record: dict, by: str = "") -> list[dict]:
     """The follow-up actions for a newly recorded board decision (the caller appends them to state["actions"] and saves).
 
-    One action per entry of record["actions"] ({task, department, due}). The department is kept as typed and resolved to a
+    One action per entry of record["actions"] ({task, department, due, kind?}; kind "investigation" or "referral" for the rows of the
+    decision form's further investigations and referrals, night-v3 item 3.1, else "action"). The department is kept as typed and resolved to a
     department id through org (names and aliases: "Radio-diagnosis" -> radiology); a department that does not resolve gets
     department_id None and no notification (the coordinator sees it in the Case File); an action typed for the MDT Coordinator
     goes to the coordinator role (V2 item 2.1). A known department is notified (kind "board_action")."""
@@ -129,7 +135,7 @@ def board_actions(case_id: str, record: dict, by: str = "") -> list[dict]:
         now = store.now_iso()
         act = {"id": "A" + uuid.uuid4().hex[:6], "source": "board", "board_record": rid, "label": task or "Board action",
                "department": org.COORDINATOR_NAME if to_coord else dept, "department_id": did, "requirement": None, "what": task, "status": "pending",
-               "created": now, "due": due, "history": [{"ts": now, "event": "Created from Tumour Board record " + rid}]}
+               "created": now, "due": due, "kind": str(a.get("kind") or "action"), "history": [{"ts": now, "event": "Created from Tumour Board record " + rid}]}
         if to_coord:
             act["role"] = "coordinator"
         if did or to_coord:

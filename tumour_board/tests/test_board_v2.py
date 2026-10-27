@@ -238,6 +238,9 @@ def test_minutes_hold_attendance_decisions_seat_and_followup(cases):
     assert "Surgical seat: Breast Surgery (Dr Meera Nair) ; check PM-JAY requirement" in h  # a breast surgeon outside the PM-JAY list (6.4)
     assert "the Surgical Oncology AI support agent stood in" in h and "No board decision recorded" in h
     assert "Marked ready by meera" in h and "MRI breast" in h and "Follow-up" in h and "—" not in h
+    # night-v3 item 3.1: the decision block lists every field with a value from the one table (a record from before 3.1 too)
+    assert {x["label"]: x["text"] for x in br["decision"]["fields"]} == {"Treatment intent": "Curative", "Next review": "22/11/2026"}
+    assert "<th>Treatment intent</th><td style='white-space:pre-wrap'>Curative</td>" in h and "<th>Next review</th><td style='white-space:pre-wrap'>22/11/2026</td>" in h
     ev = [json.loads(l) for l in (board.sessions_dir() / "audit.jsonl").read_text().splitlines()]
     assert any(e["kind"] == "decision_linked" for e in ev)
 
