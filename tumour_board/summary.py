@@ -194,6 +194,19 @@ async def build(case_id, force=False):
            "signature": sig}  # what it was compiled from; a changed Case File marks it stale (V1 item 4.5)
     if issues:
         au({"kind": "guardrail_output", "where": "summary", "issues": issues})
-    st = store.get_state(case_id); st.setdefault("artefacts", {})["summary"] = out; store.save_state(case_id, st)
+    st = store.get_state(case_id); arts = st.setdefault("artefacts", {})
+    if arts.get("summary"):  # every version is kept, with its own review (night-v3 item 3.5, owner decision D3): never deleted or trimmed
+        arts.setdefault("summary_history", []).append({**arts["summary"], "archived_at": store.now_iso(), "archived_reason": "rebuilt"})
+    arts["summary"] = out; store.save_state(case_id, st)
     au({"kind": "summary", "sentences": sum(len(p) for p in paras), "dropped_unverified": dropped, "removed": by_reason, "seconds": out["seconds"]})
+    return out
+
+
+def history(st):
+    """Every version of the pre-board summary, oldest first (night-v3 item 3.5): the archived ones (each with its generated time, its own
+    review and archived_at) and the live one last (archived_at None). [] when no summary was ever compiled."""
+    arts = (st or {}).get("artefacts") or {}
+    out = list(arts.get("summary_history") or [])
+    if arts.get("summary"):
+        out.append({**arts["summary"], "archived_at": None})
     return out

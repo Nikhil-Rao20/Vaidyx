@@ -512,9 +512,10 @@ def review(case_id, artefact, status, comment, user):
     """Human oversight (expert-in-the-loop): mark an AI artefact reviewed, or flag it for correction."""
     st = store.get_state(case_id)
     a = st.get("artefacts", {}).get(artefact)
-    if a is None:
+    if not isinstance(a, dict):  # summary_history (a list of archived versions, night-v3 item 3.5) is not an artefact to review
         raise KeyError(artefact)
-    a["review"] = {"status": status, "comment": comment, "by": user, "at": store.now_iso()}
+    # "generated" links the review to the version it judged (night-v3 item 3.5): a rebuild archives that version with this review inside it
+    a["review"] = {"status": status, "comment": comment, "by": user, "at": store.now_iso(), "generated": a.get("generated")}
     st.setdefault("reviews", []).append({"artefact": artefact, **a["review"]})
     store.save_state(case_id, st)
     store.audit(case_id, {"kind": "expert_review", "artefact": artefact, "status": status, "by": user, "comment": comment})
