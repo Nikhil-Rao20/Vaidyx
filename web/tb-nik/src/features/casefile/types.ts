@@ -244,6 +244,46 @@ export interface PublishedResult {
 
 export interface PublishedSearch { by?: string; at?: string; terms: string; counts?: Record<string, number>; errors?: unknown }
 
+// ---- similar.py (night-v3 Phase 7, docs/night-v3/research/07_similar_cases.md 8.3 and 8.4) ------------------------------
+/** A quoted line and where it sits: the past file "<doc title>, Mon YYYY" (or "Board record, Mon YYYY", "Case summary, Mon YYYY"),
+ *  this file "<doc title>, DD/MM/YYYY". */
+export interface SimilarQuote { text: string; where: string }
+export interface SimilarStage { text: string; kind: "recorded" | "confirmed_draft" | "agreed" | string; label: string; quote?: string; where?: string }
+export interface SimilarValue { fact: string; label: string; value: string; quote?: string; where?: string; shared?: boolean }
+export interface SimilarDecision {
+  record_id: string; when: string; outcome?: string; outcome_label?: string; intent?: string; intent_label?: string;
+  text: string; modalities?: string[]; stage_as_agreed?: string;
+}
+export interface SimilarLine { about?: string; this: SimilarQuote; past: SimilarQuote }
+export type SimilarHow = "normal" | "with_reason" | "refused";
+/** POST /cases/{id}/similar/open: how this person may open the past file (the server computes access.scope). */
+export interface SimilarOpen { how: SimilarHow; scope?: string | null; reason?: string; via?: string; label?: string }
+/** One past Case File as the card shows it. No field ranks it: the order of the list is the only order. */
+export interface SimilarResult {
+  case_id: string; cancer: string; setting?: string; age_band?: string; sex?: string;
+  stage: SimilarStage[];
+  values: SimilarValue[];
+  decisions: SimilarDecision[];
+  outcome_so_far: { sentences: SimilarQuote[]; later_records?: string };
+  similar: SimilarLine[];
+  differs: SimilarLine[];
+  matched_by?: string[] | null;
+  no_reasons?: boolean;
+  open?: { how: SimilarHow; reason?: string; via?: string };
+  label?: string;
+}
+/** POST /cases/{id}/similar/search {words?} */
+export interface SimilarResponse {
+  label: string; ordered_by: "model" | "text"; order_note: string; model_line: string;
+  cancer_group?: string; group_label?: string; words?: string; note?: string;
+  results: SimilarResult[]; weaker: SimilarResult[];
+}
+/** GET /cases/{id}/similar: whether a search is possible here, and the last five searches of this file. */
+export interface SimilarInfo {
+  available: boolean; reason?: string; label?: string; order_note?: string; model_line?: string; cancer_group?: string; group_label?: string;
+  searches?: Array<{ words?: string; at?: string; by_name?: string }>;
+}
+
 // ---- team.py -----------------------------------------------------------------------------------------------------
 export interface Team {
   owner: { department: string; department_label?: string; doctors: Array<{ user: string; name: string }> };

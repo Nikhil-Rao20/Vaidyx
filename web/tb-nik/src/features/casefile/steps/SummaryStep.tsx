@@ -1,6 +1,7 @@
 // Summary (B7): written before sending. "Write the summary" (15 to 35 s, from the checked values only; every sentence keeps its report
 // line), read it, "I have read it", then "Send to the board". What the doctor typed is shown apart, "entered by Dr X, no report". The
-// Specialty agents (their briefs and the shared threads, night-v3 item 6.5) and similar published cases sit here too (B9).
+// Specialty agents (their briefs and the shared threads, night-v3 item 6.5), Similar Case Files (past Case Files of this hospital, night-v3
+// item 7.3, "Past Case File, not advice for this patient") and similar published cases sit here too (B9).
 // After the first board decision (night-v3 3.4, owner decision D3) the Case summary comes first; the pre-board summary folds under
 // "Before the board on DD/MM/YYYY", with its earlier versions (summary history) in a fold of their own.
 // Voice (night-v3 item 4.4): "Read aloud" beside each section of the pre-board summary and on Points for review reads the saved text as
@@ -52,9 +53,9 @@ function SpokenProse({ p, caseId, docs, h }: { p: string | ProseSection; caseId:
   );
 }
 
-export function SummaryStep({ steps, docs, h, canWrite, canRead, busy, reading, onWrite, onRead, onSend, resident, consultantName, briefs, published, onBoard }: {
+export function SummaryStep({ steps, docs, h, canWrite, canRead, busy, reading, onWrite, onRead, onSend, resident, consultantName, briefs, similar, published, onBoard }: {
   steps: Steps; docs: CaseDocument[]; h: SlotHandlers; canWrite: boolean; canRead: boolean; busy: boolean; reading: boolean; resident: boolean; consultantName: string;
-  onWrite: () => void; onRead: () => void; onSend: () => void; briefs: ReactNode; published: ReactNode;
+  onWrite: () => void; onRead: () => void; onSend: () => void; briefs: ReactNode; similar: ReactNode; published: ReactNode;
   /** Opens the Board decisions panel from a board chip of the Case summary. */
   onBoard?: () => void;
 }) {
@@ -127,6 +128,7 @@ export function SummaryStep({ steps, docs, h, canWrite, canRead, busy, reading, 
         </Card>
       ) : null}
       <Card title="Specialty agents" icon={<Bot className="size-4 text-brand" aria-hidden />} testId="summary-briefs"><div className="py-2">{briefs}</div></Card>
+      <Card title="Similar Case Files" testId="summary-similar"><div className="py-2">{similar}</div></Card>
       <Card title="Similar published cases" testId="summary-published"><div className="py-2">{published}</div></Card>
     </div>
   );

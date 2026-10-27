@@ -1,6 +1,7 @@
 // "Open with a reason" (owner decision D8, night-v3 item 1.9): a doctor who cannot open a Case File may open it read-only for
 // 24 hours with a reason. The owner's consultants are told and the opening is recorded with the doctor's name. The button sits on
-// the Case File's 403 page; the banner on the Case File while the window is open.
+// the Case File's 403 page; the banner on the Case File while the window is open. Similar Case Files (night-v3 item 7.3) opens the same
+// dialog itself (controlled `open`, no button of its own) with the reason written in ("similar to Case File <id>", editable, never empty).
 import { useEffect, useState } from "react";
 import { format, isValid, parseISO } from "date-fns";
 import { Eye, KeyRound } from "lucide-react";
@@ -40,9 +41,18 @@ export function windowFor(me: Me | null | undefined, caseId: string): BreakGlass
   return (me?.break_glass ?? []).find((w) => w.case_id === caseId && (!isValid(parseISO(w.until)) || parseISO(w.until).getTime() > now)) ?? null;
 }
 
-export function OpenWithReasonButton({ caseId, onOpened, via }: { caseId: string; onOpened?: (w: BreakGlassOpened) => void; via?: string }) {
-  const [open, setOpen] = useState(false);
-  const [reason, setReason] = useState("");
+export function OpenWithReasonButton({ caseId, onOpened, via, initialReason, open: openProp, onOpenChange }: {
+  caseId: string; onOpened?: (w: BreakGlassOpened) => void; via?: string;
+  /** The reason written in when the dialog opens (the person may change it; it is never sent empty). */
+  initialReason?: string;
+  /** Controlled: the caller opens the dialog itself and no "Open with a reason" button is drawn. */
+  open?: boolean; onOpenChange?: (open: boolean) => void;
+}) {
+  const controlled = openProp !== undefined;
+  const [openState, setOpenState] = useState(false);
+  const open = controlled ? openProp : openState;
+  const setOpen = (o: boolean) => { if (!controlled) setOpenState(o); onOpenChange?.(o); };
+  const [reason, setReason] = useState(initialReason ?? "");
   const [code, setCode] = useState("");
   const { refresh } = useSession();
   const text = reason.trim().replace(/\s+/g, " ");
@@ -59,14 +69,16 @@ export function OpenWithReasonButton({ caseId, onOpened, via }: { caseId: string
       throw e;
     }
   });
-  useEffect(() => { if (!open) { setReason(""); setCode(""); action.reset(); } }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setReason(initialReason ?? ""); if (!open) { setCode(""); action.reset(); } }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   const short = text.length > 0 && text.length < REASON_MIN;
   const err = action.state === "error" ? (code === "can_open" ? "You can open this Case File already. Reload the page." : action.error) : null;
   return (
     <>
-      <Button type="button" onClick={() => setOpen(true)} data-testid="open-with-reason">
-        <KeyRound className="size-4" aria-hidden />Open with a reason
-      </Button>
+      {controlled ? null : (
+        <Button type="button" onClick={() => setOpen(true)} data-testid="open-with-reason">
+          <KeyRound className="size-4" aria-hidden />Open with a reason
+        </Button>
+      )}
       <Dialog open={open} onOpenChange={(o) => { if (action.state !== "loading") setOpen(o); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>

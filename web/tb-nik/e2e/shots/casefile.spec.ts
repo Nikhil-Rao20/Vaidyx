@@ -9,9 +9,9 @@ import path from "node:path";
 import { SHOTS, SIZES, login, prepare, shoot, watchConsole } from "../support/helpers";
 import {
   CID, baseSlots, caseFile, caseFileAfterBoard, caseFileBoardRounds, caseFileUnsent, routeCaseFile, stepsAfterBoard, stagingOff, stepsAfterSend, stepsCancerWarning, stepsReadyToSend, stepsResident,
-  stepsSummaryStale, team, type CaseRouteOptions,
+  stepsSummaryStale, similarMany, team, type CaseRouteOptions,
 } from "../support/f2";
-import type { Role } from "../support/fixtures";
+import { me, type Role } from "../support/fixtures";
 
 const DESKTOP_MOBILE = [SIZES[0], SIZES[2]];
 const PHONE = SIZES[2];
@@ -608,6 +608,141 @@ test.describe("guided Case File", () => {
     await expect(page.getByTestId("case-header")).toBeVisible();
     await expect(page.getByText("This is not on the server.")).toBeVisible();
     await expect(page.getByTestId("summary-column")).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  // ---- Similar Case Files (night-v3 item 7.3, owner decision D10): past Case Files, read only, "Past Case File, not advice for this patient"
+  const PAST_LABEL = "Past Case File, not advice for this patient";
+  /** Words no fixed or shown line of the panel may hold (docs/night-v3/research/07_similar_cases.md 4.7 and 8.6). */
+  const NOT_SAID = ["recommend", "consider", "suggest", "do the same", "treat as", "follow", "best match", "%"];
+
+  test("Summary: Similar Case Files, a search in order with the decisions, the quoted lines and the label on each", async ({ page }) => {
+    const errors = watchConsole(page);
+    await open(page, { path: "/summary", steps: stepsReadyToSend() });
+    const card = page.getByTestId("summary-similar");
+    await expect(card).toBeVisible();
+    await expect(card).toContainText(PAST_LABEL);
+    await expect(card).toContainText("The order is not a score. Every line is quoted from the two files.");
+    await expect(card).toContainText("The search is logged.");
+    await expect(card.getByRole("button", { name: "ER positive early breast" })).toBeVisible();
+    await page.locator("#similar-words").fill("HER2 negative early breast");
+    const [req] = await Promise.all([
+      page.waitForRequest((r) => r.url().endsWith("/similar/search") && r.method() === "POST"),
+      page.getByTestId("similar-search").click(),
+    ]);
+    expect(req.postDataJSON()).toEqual({ words: "HER2 negative early breast" });
+    const items = card.getByTestId("similar-item");
+    await expect(items).toHaveCount(3);
+    for (const [i, id] of ["TB-HIST-X", "TB-HIST-04", "TB-HIST-07"].entries()) {
+      await expect(items.nth(i)).toHaveAttribute("data-case", id);
+      await expect(items.nth(i)).toContainText(`Past Case File ${id}`);
+      await expect(items.nth(i)).toContainText(PAST_LABEL);
+      await expect(items.nth(i).getByTestId("similar-open")).toHaveText("Open Past Case File");
+    }
+    await expect(card.getByTestId("similar-order-note")).toHaveText("Listed in order of likeness as judged by Gemma-4-31B (non-medical). The order is not a score.");
+    const first = items.nth(0);
+    await expect(first).toContainText("Breast cancer, early · 50 to 59, F");
+    await expect(first).toContainText("cT2 N0 M0 (as recorded, MRI BREAST REPORT, Aug 2026)");
+    await expect(first.getByTestId("similar-decision")).toContainText("Board, Oct 2026: Decision recorded, intent curative");
+    await expect(first.getByTestId("similar-decision")).toContainText("as written by the board");
+    await expect(first).toContainText("Wide local excision with sentinel node biopsy was done on 22/10/2026 (SYNTHETIC). (Case summary, Oct 2026)");
+    await expect(first.getByTestId("similar-why")).toContainText('This file, HISTOPATHOLOGY REPORT, 12/10/2026: "Invasive breast carcinoma of no special type, Grade 2".');
+    await expect(first.getByTestId("similar-why")).toContainText('Past file, HISTOPATHOLOGY REPORT, Aug 2026: "Invasive breast carcinoma of no special type".');
+    await expect(first.getByTestId("similar-differs")).toContainText("Mass of 3.1 cm in the upper outer quadrant");
+    await expect(items.nth(1)).toContainText("Vaidyx draft stage, confirmed by Dr Lakshmi Rao");
+    await expect(items.nth(2)).toContainText("No stage recorded; none confirmed");
+    await expect(items.nth(2)).toContainText("No quoted reasons found");
+    await expect(items.nth(2)).toContainText("Matched by recorded fields: cancer group, setting");
+    await expect(items.nth(2)).toContainText("No records after the board decision yet");
+    await expect(card.getByTestId("similar-more")).toHaveCount(0);
+    const text = (await page.getByTestId("similar-panel").innerText()).toLowerCase();
+    for (const w of NOT_SAID) expect(text, `"${w}" in the Similar Case Files panel`).not.toContain(w);
+    await snap(page, "casefile", "similar", { sizes: DESKTOP_MOBILE, before: under("summary-similar") });
+    await page.setViewportSize(PHONE);
+    await expect(page.getByTestId("similar-item")).toHaveCount(3);
+    await noSideways(page);
+    await laptop(page);
+    expect(errors).toEqual([]);
+  });
+
+  test("Summary: Similar Case Files, the first five, Show 5 more, the weaker ones; not built yet", async ({ page }) => {
+    const errors = watchConsole(page);
+    await open(page, { path: "/summary", steps: stepsReadyToSend(), similarSearch: similarMany() });
+    await page.getByTestId("similar-search").click();
+    const results = page.getByTestId("similar-results");
+    await expect(results.getByTestId("similar-item")).toHaveCount(6);
+    await expect(page.getByTestId("similar-weaker")).toContainText("Weaker matches");
+    await expect(page.getByTestId("similar-weaker").getByTestId("similar-item")).toHaveCount(1);
+    await expect(page.getByTestId("similar-more")).toHaveText("Show 5 more");
+    await page.getByTestId("similar-more").click();
+    await expect(results.getByTestId("similar-item")).toHaveCount(11);
+    await expect(page.getByTestId("similar-more")).toHaveCount(0);
+    const text = (await page.getByTestId("similar-panel").innerText()).toLowerCase();
+    for (const w of NOT_SAID) expect(text, `"${w}" in the Similar Case Files panel`).not.toContain(w);
+    await page.unroute(`**/api/tb/cases/${CID}**`);
+    await routeCaseFile(page, { caseFile: caseFileUnsent(), steps: stepsReadyToSend(), notBuilt: ["similar"] });
+    await page.reload();
+    await expect(page.getByTestId("summary-similar")).toContainText("Similar Case Files is not available on this server yet.");
+    expect(errors).toEqual([]);
+  });
+
+  test("Similar Case Files: opening a past file with a reason, then the banner on it", async ({ page }) => {
+    const errors = watchConsole(page);
+    const reason = `similar to Case File ${CID}`;
+    await open(page, {
+      path: "/summary", steps: stepsReadyToSend(),
+      similarOpen: [{ how: "with_reason", scope: null, reason, via: `similar:${CID}`, label: PAST_LABEL }, { how: "normal", scope: "read", reason: "", via: "", label: PAST_LABEL }],
+    });
+    await routeCaseFile(page, { caseId: "TB-HIST-X", steps: stepsAfterBoard(), caseFile: caseFileAfterBoard() });
+    let sent: Record<string, unknown> | null = null;
+    await page.route("**/api/tb/break-glass", async (route) => {
+      sent = route.request().postDataJSON();
+      const until = new Date(Date.now() + 24 * 3600_000).toISOString();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ case_id: "TB-HIST-X", until, reason: sent?.reason, via: sent?.via, scope: "read" }) });
+    });
+    await page.getByTestId("similar-search").click();
+    await page.getByTestId("similar-item").first().getByTestId("similar-open").click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText("Open with a reason");
+    await expect(page.locator("#open-reason")).toHaveValue(reason);
+    await expect(page.getByTestId("open-with-reason")).toHaveCount(0);
+    // laptop only: the phone layout mounts the section again, which closes the dialog
+    await shoot(page, "casefile", "similar-open-reason", { sizes: [SIZES[0]], fullPage: false });
+    await dialog.getByRole("button", { name: "Open read-only" }).click();
+    await expect(page).toHaveURL(new RegExp(`/tb-nik/cases/TB-HIST-X/summary\\?from=similar&of=${CID}$`));
+    expect(sent).toEqual({ case_id: "TB-HIST-X", reason, via: `similar:${CID}` });
+    const banner = page.getByTestId("similar-from-banner");
+    await expect(banner).toHaveText(`You opened this from the Similar Case Files of ${CID}. Past Case File, not advice for this patient.`);
+    await snap(page, "casefile", "similar-opened", { sizes: DESKTOP_MOBILE, fullPage: false });
+    await page.setViewportSize(PHONE);
+    await expect(banner).toBeVisible();
+    await noSideways(page);
+    await laptop(page);
+    expect(errors).toEqual([]);
+  });
+
+  test("Overview: the Similar Case Files card opens the Summary on it; hidden in a window opened with a reason", async ({ page }) => {
+    const errors = watchConsole(page);
+    await open(page, { steps: stepsReadyToSend() });
+    const ov = page.getByTestId("overview-similar");
+    await expect(ov).toContainText("Past Case Files of this hospital like this one, in order, with quoted reasons. Past Case File, not advice for this patient.");
+    await ov.getByRole("button", { name: "Open Similar Case Files" }).click();
+    await expect(page.getByTestId("casefile-page")).toHaveAttribute("data-section", "summary");
+    await expect(page.getByTestId("similar-panel")).toBeInViewport();
+    await expect(page).not.toHaveURL(/item=similar/);
+    await page.setViewportSize(PHONE);
+    await noSideways(page);
+    await laptop(page);
+    // inside a read-only window on this Case File the card is not there
+    const until = new Date(Date.now() + 24 * 3600_000).toISOString();
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await prepare(page, { role: "treating", overrides: { "GET /api/tb/me": { body: { ...me("treating"), break_glass: [{ case_id: CID, until, reason: "second opinion", via: "" }] } } } });
+    await routeCaseFile(page, { caseFile: caseFileUnsent(), steps: stepsReadyToSend() });
+    await page.goto(`/tb-nik/cases/${CID}`);
+    await expect(page.getByTestId("read-only-banner")).toBeVisible();
+    await expect(page.getByTestId("section-overview")).toBeVisible();
+    await expect(page.getByTestId("overview-similar")).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 

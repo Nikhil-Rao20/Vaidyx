@@ -5,7 +5,7 @@ import { EP } from "@/lib/endpoints";
 import type { Meeting } from "@/lib/types";
 import { errorCode, routeMissing } from "@/lib/live";
 import type {
-  CaseFile, SlotsResponse, Slot, SlotSection, QuoteBoxes, ChatThread, Helper, HelperMessage, PublishedResult, PublishedSearch, Team, Proposal,
+  CaseFile, SlotsResponse, Slot, SlotSection, QuoteBoxes, ChatThread, Helper, HelperMessage, PublishedResult, PublishedSearch, SimilarInfo, SimilarOpen, SimilarResponse, Team, Proposal,
   Urgency, Job, RequestDraft, GateRequirement, CaseAction, SendToBoardBody, MeetingMoveResult, SummaryLine,
 } from "./types";
 import type { CaseSentence, CaseSummaryReview, CaseSummaryVersionRow, CaseSummaryView } from "./steps/types";
@@ -120,6 +120,13 @@ export const getPublished = (id: string) => api.get<{ items: PublishedResult[]; 
 export const searchPublished = (id: string, terms: string) => api.post<{ results: PublishedResult[]; error?: string }>(`${caseUrl(id)}/published/search`, { terms });
 export const addPublished = (id: string, result: PublishedResult, quotes?: PublishedResult["quotes"]) => api.post<PublishedResult>(`${caseUrl(id)}/published`, { result, quotes });
 export const removePublished = (id: string, pid: string) => api.del(`${caseUrl(id)}/published/${enc(pid)}`);
+
+// ---- similar Case Files (night-v3 Phase 7: past Case Files of this hospital, read only, "Past Case File, not advice for this patient") --
+export const getSimilar = (id: string) => api.get<SimilarInfo>(`${caseUrl(id)}/similar`);
+/** The doctor's words are optional (at most 200 characters); without them the recorded facts of this file are the query. */
+export const searchSimilar = (id: string, words?: string) => api.post<SimilarResponse>(`${caseUrl(id)}/similar/search`, words ? { words } : {});
+/** How this person may open a past file: "normal" (audited by the server), "with_reason" (the break-glass dialog first) or "refused". */
+export const openSimilar = (id: string, past: string) => api.post<SimilarOpen>(`${caseUrl(id)}/similar/open`, { past_case_id: past });
 
 // ---- team, proposals, urgency ----------------------------------------------------------------------------------------
 export const getTeam = (id: string) => api.get<Team>(`${caseUrl(id)}/team`);

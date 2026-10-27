@@ -5,11 +5,12 @@
 // After the first board decision (night-v3 3.4) a "Case summary" card comes above the question: the summary line, the latest round's
 // outcome and decision lines and the first presentation sentences, each with its chips.
 // "Specialty agents" (night-v3 item 6.5): the six AI agents as chips with their count badges, near the top; a chip opens that agent in the
-// Summary section.
+// Summary section. "Similar Case Files" (night-v3 item 7.3): a small card after the agents that opens the Similar Case Files card of the
+// Summary (?item=similar); not shown inside a read-only window opened with a reason (no search from a file opened that way).
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowRight, FolderOpen, Hourglass, ListTodo, MessageSquareQuote, OctagonAlert, Phone } from "lucide-react";
+import { AlertTriangle, ArrowRight, FolderOpen, FolderSearch, Hourglass, ListTodo, MessageSquareQuote, OctagonAlert, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { EP } from "@/lib/endpoints";
@@ -155,7 +156,11 @@ function OtherCaseFiles({ caseId }: { caseId: string }) {
   );
 }
 
-export function Overview({ steps, h, signoffs, staging, onBoard }: { steps: Steps; h: OverviewHandlers; signoffs?: ReactNode; staging?: ReactNode; onBoard?: () => void }) {
+export function Overview({ steps, h, signoffs, staging, onBoard, inWindow }: {
+  steps: Steps; h: OverviewHandlers; signoffs?: ReactNode; staging?: ReactNode; onBoard?: () => void;
+  /** The page is open inside a read-only window opened with a reason: the Similar Case Files card is not shown. */
+  inWindow?: boolean;
+}) {
   const prepare = steps.mode === "prepare";
   const cs = steps.summary?.case_summary ?? null;
   const cf = useCaseFileCache(steps.case_id);
@@ -179,6 +184,15 @@ export function Overview({ steps, h, signoffs, staging, onBoard }: { steps: Step
       {cs ? <CaseSummaryGlance view={cs} h={h} onBoard={onBoard} onOpen={() => h.go("summary")} line={cf?.case?.summary_line?.text} docs={cf?.documents} /> : null}
 
       <AgentsCard caseId={steps.case_id} cf={cf ?? null} onOpen={(role) => h.go("summary", role)} />
+
+      {inWindow ? null : (
+        <Card title="Similar Case Files" icon={<FolderSearch className="size-4 text-brand" aria-hidden />} testId="overview-similar">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 py-1">
+            <p className="min-w-[12rem] flex-1 text-sm text-muted-foreground">Past Case Files of this hospital like this one, in order, with quoted reasons. Past Case File, not advice for this patient.</p>
+            <Button size="sm" variant="outline" onClick={() => h.go("summary", "similar")} aria-label="Open Similar Case Files" data-testid="overview-similar-open">Open<ArrowRight className="size-4" aria-hidden /></Button>
+          </div>
+        </Card>
+      )}
 
       <Card title="Question for the board" icon={<MessageSquareQuote className="size-4 text-brand" aria-hidden />} testId="overview-question">
         {q.text ? (

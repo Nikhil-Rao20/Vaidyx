@@ -133,6 +133,73 @@ export const publishedResults = {
   counts: { local: 0, pubmed: 1, europepmc: 1 },
 };
 
+// ---- Similar Case Files (night-v3 item 7.3; docs/night-v3/research/07_similar_cases.md 8.3 and 8.4). SYNTHETIC past files only. ----
+const SIMILAR_LABEL = "Past Case File, not advice for this patient";
+export const similar = {
+  available: true, reason: "", label: SIMILAR_LABEL,
+  order_note: "Listed in order of likeness as judged by Gemma-4-31B (non-medical). The order is not a score.",
+  model_line: "Gemma-4-31B, a non-medical model; it only orders the list and picks quoted lines",
+  cancer_group: "breast", group_label: "Breast cancer",
+  searches: [{ words: "ER positive early breast", at: iso(400), by_name: "Lakshmi Rao" }, { words: "", at: iso(300), by_name: "Lakshmi Rao" }],
+};
+
+const pastOpen = (how: string) => ({ how, reason: how === "with_reason" ? `similar to Case File ${CID}` : "", via: how === "with_reason" ? `similar:${CID}` : "" });
+
+/** One past Case File card (SYNTHETIC history). */
+export function similarCard(id: string, over: Record<string, unknown> = {}) {
+  return {
+    case_id: id, cancer: "Breast cancer", setting: "early", age_band: "50 to 59", sex: "F",
+    stage: [{ text: "cT2 N0 M0", kind: "recorded", label: "as recorded", quote: "Clinical stage: cT2 N0 M0", where: "MRI BREAST REPORT, Aug 2026" }],
+    values: [
+      { fact: "her2", label: "HER2", value: "Negative (IHC 1+)", quote: "HER2: Negative (IHC score 1+)", where: "IMMUNOHISTOCHEMISTRY REPORT, Aug 2026", shared: false },
+      { fact: "histology", label: "Histology", value: "Invasive breast carcinoma of no special type", quote: "Invasive breast carcinoma of no special type", where: "HISTOPATHOLOGY REPORT, Aug 2026", shared: true },
+      { fact: "er", label: "ER", value: "Positive (Allred 8/8)", quote: "ER: Positive (Allred score 8/8)", where: "IMMUNOHISTOCHEMISTRY REPORT, Aug 2026", shared: true },
+    ],
+    decisions: [{
+      record_id: `B-${id}`, when: "Oct 2026", outcome: "decision", outcome_label: "Decision recorded", intent: "curative", intent_label: "curative",
+      text: "Breast conservation surgery with sentinel node biopsy; adjuvant radiotherapy after the final histopathology (SYNTHETIC history).",
+      modalities: ["surgery", "radiotherapy"], stage_as_agreed: "cT2 N0 M0",
+    }],
+    outcome_so_far: {
+      sentences: [{ text: "Wide local excision with sentinel node biopsy was done on 22/10/2026 (SYNTHETIC).", where: "Case summary, Oct 2026" }],
+      later_records: "One record after the board decision: a discharge summary.",
+    },
+    similar: [
+      { about: "histology", this: { text: "Invasive breast carcinoma of no special type, Grade 2", where: "HISTOPATHOLOGY REPORT, 12/10/2026" }, past: { text: "Invasive breast carcinoma of no special type", where: "HISTOPATHOLOGY REPORT, Aug 2026" } },
+      { about: "ER", this: { text: "ER: Positive (Allred score 8/8)", where: "IMMUNOHISTOCHEMISTRY REPORT, 14/10/2026" }, past: { text: "ER: Positive (Allred score 8/8)", where: "IMMUNOHISTOCHEMISTRY REPORT, Aug 2026" } },
+    ],
+    differs: [
+      { about: "tumour size", this: { text: "Mass of 2.4 cm in the upper outer quadrant", where: "MAMMOGRAPHY REPORT, 10/10/2026" }, past: { text: "Mass of 3.1 cm in the upper outer quadrant", where: "MRI BREAST REPORT, Aug 2026" } },
+    ],
+    matched_by: null, no_reasons: false, open: pastOpen("normal"), label: SIMILAR_LABEL,
+    ...over,
+  };
+}
+
+/** POST /similar/search: three past files in order, the third without quoted reasons (matched by recorded fields only). */
+export const similarResults = {
+  label: SIMILAR_LABEL, ordered_by: "model",
+  order_note: similar.order_note, model_line: similar.model_line, cancer_group: "breast", group_label: "Breast cancer", words: "", note: "",
+  results: [
+    similarCard("TB-HIST-X", { open: pastOpen("with_reason") }),
+    similarCard("TB-HIST-04", { age_band: "40 to 49", stage: [{ text: "Stage IIA", kind: "confirmed_draft", label: "Vaidyx draft stage, confirmed by Dr Lakshmi Rao", quote: "", where: "Case File, Sep 2026" }] }),
+    similarCard("TB-HIST-07", {
+      setting: "locally_advanced", age_band: "60 to 69", stage: [], values: [], similar: [], differs: [], matched_by: ["cancer group", "setting"], no_reasons: true,
+      outcome_so_far: { sentences: [], later_records: "" },
+      decisions: [{ record_id: "B-07", when: "Sep 2026", outcome: "decision", outcome_label: "Decision recorded", intent: "", intent_label: "", text: "Neoadjuvant chemotherapy, then surgery (SYNTHETIC history).", modalities: ["chemotherapy", "surgery"], stage_as_agreed: "" }],
+    }),
+  ],
+  weaker: [] as unknown[],
+};
+
+/** Ten past files and one weaker one (the list shows five, then "Show 5 more"). */
+export function similarMany() {
+  const r = clone(similarResults);
+  r.results = Array.from({ length: 10 }, (_, i) => similarCard(`TB-HIST-${String(i + 10).padStart(2, "0")}`));
+  r.weaker = [similarCard("TB-HIST-30", { similar: [], differs: [], no_reasons: true, matched_by: ["cancer group"] })];
+  return r;
+}
+
 export function team(over: Record<string, unknown> = {}) {
   return {
     owner: { department: "breast_surgery", department_label: "Breast Surgery", doctors: [{ user: "rao@vxh.example", name: "Lakshmi Rao" }] },
@@ -408,11 +475,18 @@ export type CaseRouteOptions = {
   chats?: unknown;
   helpers?: unknown;
   published?: unknown;
+  /** GET /similar (default `similar`), POST /similar/search (default `similarResults`) and POST /similar/open: the answers in turn,
+   *  the last one repeated (default `{how: "normal"}`). */
+  similar?: unknown;
+  similarSearch?: unknown | { status: number; body?: unknown };
+  similarOpen?: unknown[];
+  /** Answer for another Case File id than CID (a past file opened from Similar Case Files); the same fixtures. */
+  caseId?: string;
   /** GET /steps (default stepsPrepare()); actions on it (reason, urgency, key checks, ready) change this copy for the next GET. */
   steps?: unknown | { status: number; body?: unknown };
   /** GET /staging (default stagingDraft()); confirm and reject change this copy. */
   staging?: unknown | { status: number; body?: unknown };
-  notBuilt?: Array<"slots" | "chats" | "helpers" | "published" | "team" | "proposals" | "steps" | "staging">;
+  notBuilt?: Array<"slots" | "chats" | "helpers" | "published" | "similar" | "team" | "proposals" | "steps" | "staging">;
   delayMs?: number;
 };
 
@@ -428,10 +502,12 @@ export async function routeCaseFile(page: Page, o: CaseRouteOptions = {}) {
   // The Specialty agents for this page (night-v3 6.5): "Prepare all" and a chip's "Prepare" set the briefs being prepared in this copy.
   const agentsLive: AnyObj = clone(o.helpers ?? helpers);
   const startBrief = (h: AnyObj) => Object.assign(h, { brief: { status: "preparing", at: null, sections: [], points_for_review: [], not_documented: [], message: "Being prepared from the records" }, job: `J-${h.role}`, points_count: 0, not_documented_count: 0, prepared_at: null });
-  await page.route(`**/api/tb/cases/${CID}**`, async (route: Route) => {
+  const cid = o.caseId ?? CID;
+  const opens = [...(o.similarOpen ?? [{ how: "normal", reason: "", via: "" }])];
+  await page.route(`**/api/tb/cases/${cid}**`, async (route: Route) => {
     const url = new URL(route.request().url());
     const m = route.request().method();
-    const p = url.pathname.replace(`/api/tb/cases/${CID}`, "");
+    const p = url.pathname.replace(`/api/tb/cases/${cid}`, "");
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     const reply = (x: unknown, fallback: () => unknown) => (isReply(x) ? json(x.body ?? { detail: { message: "The server could not answer (test).", code: "test" } }, x.status) : json(x ?? fallback()));
     if (o.delayMs && m === "GET" && (p === "" || p === "/")) await new Promise((r) => setTimeout(r, o.delayMs));
@@ -462,6 +538,9 @@ export async function routeCaseFile(page: Page, o: CaseRouteOptions = {}) {
     if (/^\/helpers\/[a-z_]+\/chat$/.test(p) && m === "GET") return json(helperChat);
     if (p === "/published" && m === "GET") return nb.has("published") ? json(NOT_FOUND, 404) : json(o.published ?? published);
     if (p === "/published/search") return json(publishedResults);
+    if (p === "/similar" && m === "GET") return nb.has("similar") ? json(NOT_FOUND, 404) : json(o.similar ?? similar);
+    if (p === "/similar/search" && m === "POST") return nb.has("similar") ? json(NOT_FOUND, 404) : reply(o.similarSearch, () => clone(similarResults));
+    if (p === "/similar/open" && m === "POST") return json(opens.length > 1 ? opens.shift() : opens[0]);
     if (p === "/team" && m === "GET") return nb.has("team") ? json(NOT_FOUND, 404) : json(o.team ?? team());
     if (p === "/proposals" && m === "GET") return nb.has("proposals") ? json(NOT_FOUND, 404) : json(o.proposals ?? proposals);
     if (p === "/steps" && m === "GET") return nb.has("steps") ? json(NOT_FOUND, 404) : live.steps ? json(live.steps) : reply(o.steps, () => stepsPrepare());

@@ -1,11 +1,12 @@
 // The guided Case File (21 Oct 2026, docs/ui/casefile-steps/DESIGN.md): a slim header, the left list of six sections in working order
 // with one loud Continue (guide, do not lock), the section the doctor is in, a right side panel for the report, reviews and team, and the
 // "Ask about this patient" bubble on every section. Each section is an address (/cases/:id/<section>); the Case File opens on Overview.
-// A department that was only asked keeps its request view.
+// A department that was only asked keeps its request view. Opened from Similar Case Files (?from=similar&of=<id>, night-v3 item 7.3) a
+// banner says so above the sections: "Past Case File, not advice for this patient".
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft, BellRing, Eye, MessageSquareText } from "lucide-react";
+import { ArrowLeft, BellRing, Eye, FolderSearch, MessageSquareText } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/session";
@@ -28,6 +29,7 @@ import { MarkReadyDialog } from "./components/MarkReadyDialog";
 import { MoveMeetingDialog, TakeOffDialog } from "./components/MoveMeetingDialog";
 import { ProposalsStrip } from "./components/ProposalsStrip";
 import { PublishedPanel } from "./components/PublishedPanel";
+import { SimilarPanel } from "./components/SimilarPanel";
 import { UploadDialog } from "./components/ReportsPanel";
 import { RequestEditPanel } from "./components/RequestEditPanel";
 import { ReviewPanel } from "./components/ReviewPanel";
@@ -108,6 +110,8 @@ export default function GuidedCaseFilePage() {
   const legacy = view ? LEGACY[view] : undefined;
   const section: SectionId = fromSlug(view) ?? legacy?.section ?? "overview";
   const target = search.get("item");
+  // Opened from the Similar Case Files of another file (night-v3 item 7.3): the banner stays while the address carries it.
+  const similarOf = search.get("from") === "similar" ? search.get("of") : null;
   const [leftOff] = useState<SectionId | null>(() => readLeftOff(id));
   const [side, setSide] = useState<Side | null>(legacy?.side ?? null);
   const [readyOpen, setReadyOpen] = useState(false);
@@ -335,7 +339,7 @@ export default function GuidedCaseFilePage() {
   if (stepsq.error && !steps) body = <ErrorState error={stepsq.error} retry={() => void stepsq.refetch()} />;
   else if (steps) {
     if (section === "overview") {
-      body = <Overview steps={steps} h={overviewH} onBoard={() => setSide({ kind: "panel", panel: "board" })} signoffs={!resident && proposalsq.proposals.length ? <div id="signoffs"><ProposalsStrip caseId={id} proposals={proposalsq.proposals} onChanged={refresh} labelOf={(sid) => slotById(sid)?.label} /></div> : null}
+      body = <Overview steps={steps} h={overviewH} inWindow={!!bg} onBoard={() => setSide({ kind: "panel", panel: "board" })} signoffs={!resident && proposalsq.proposals.length ? <div id="signoffs"><ProposalsStrip caseId={id} proposals={proposalsq.proposals} onChanged={refresh} labelOf={(sid) => slotById(sid)?.label} /></div> : null}
         staging={stagingq.data && (stagingq.data.switch.on || stagingq.data.written.length) ? (
           <StagingCard caseId={id} view={stagingq.data} loading={stagingq.isLoading} canRun={prepare} canConfirm={prepare && !resident && !!cf.permissions?.review}
             canPropose={prepare && resident} consultantName={consultantName}
@@ -363,6 +367,7 @@ export default function GuidedCaseFilePage() {
         onRead={() => void (async () => { setReading(true); try { await reviewArtefact(id, "summary", "reviewed"); await refresh(); } catch (e) { notify.error("Could not save", errorText(e)); } finally { setReading(false); } })()}
         onSend={() => setReadyOpen(true)}
         briefs={<HelpersPanel caseId={id} cf={cf} onOpenSource={openSource} onCaseChanged={refresh} />}
+        similar={<SimilarPanel caseId={id} />}
         published={<PublishedPanel caseId={id} resident={resident} consultantName={consultantName} onPropose={(payload, label) => propose("published_case", payload, label)} />} />;
     }
   }
@@ -387,6 +392,12 @@ export default function GuidedCaseFilePage() {
 
       {teamq.data?.archived ? <p role="status" className="rounded-md border border-border bg-muted px-3 py-2 text-sm">Archived{teamq.data.archived.reason ? `: ${teamq.data.archived.reason}` : ""}. Read only.</p> : null}
       {bg ? <ReadOnlyBanner until={bg.until} reason={bg.reason} /> : null}
+      {similarOf ? (
+        <p role="status" className="flex items-start gap-2 rounded-md status-review px-3 py-2 text-sm" data-testid="similar-from-banner">
+          <FolderSearch className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>You opened this from the Similar Case Files of {similarOf}. Past Case File, not advice for this patient.</span>
+        </p>
+      ) : null}
 
       {steps ? (
         wide ? (
