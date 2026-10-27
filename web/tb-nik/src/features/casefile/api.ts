@@ -89,6 +89,8 @@ export const prepareHelper = async (id: string, role: string, refresh = false) =
   const job = typeof r.job === "string" ? r.job : r.job && typeof r.job === "object" ? r.job.id : null;
   return { job, status: r.status, reused: !!r.reused };
 };
+/** "Prepare all" (night-v3 item 6.5): every agent without a brief standing for the Case File, one after the other in the background. */
+export const prepareAllHelpers = (id: string) => api.post<{ helpers: Array<{ role: string; status: "preparing" | "ready" | "queued"; job: string | null }>; started: number }>(`${caseUrl(id)}/helpers/prepare-all`, {});
 export const getHelperChat = (id: string, role: string) => api.get<{ messages: HelperMessage[] }>(`${caseUrl(id)}/helpers/${enc(role)}/chat`);
 export const postHelperChat = (id: string, role: string, question: string) => api.post<HelperMessage>(`${caseUrl(id)}/helpers/${enc(role)}/chat`, { question });
 export const askAgentOld = (id: string, role: string, question: string) => api.post<HelperMessage>(`${caseUrl(id)}/agents/${enc(role)}/ask`, { question });

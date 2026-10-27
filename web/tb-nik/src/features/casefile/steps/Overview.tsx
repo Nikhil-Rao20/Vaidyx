@@ -4,6 +4,8 @@
 // other live Case Files (another cancer each), with the owning department and consultant, read-only links where this person may open them.
 // After the first board decision (night-v3 3.4) a "Case summary" card comes above the question: the summary line, the latest round's
 // outcome and decision lines and the first presentation sentences, each with its chips.
+// "Specialty agents" (night-v3 item 6.5): the six AI agents as chips with their count badges, near the top; a chip opens that agent in the
+// Summary section.
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -19,6 +21,7 @@ import { LoadingButton, fmtDate } from "../components/common";
 import type { SectionId, StepAction, Steps, TodoItem, Warning, WaitingItem } from "./types";
 import { ValueCell } from "./Value";
 import { CaseSummaryGlance, useCaseFileCache } from "../components/CaseSummaryCard";
+import { AgentsCard } from "../components/AgentsCard";
 
 export interface OverviewHandlers {
   go: (section: SectionId, target?: string) => void;
@@ -174,6 +177,8 @@ export function Overview({ steps, h, signoffs, staging, onBoard }: { steps: Step
       ) : null}
 
       {cs ? <CaseSummaryGlance view={cs} h={h} onBoard={onBoard} onOpen={() => h.go("summary")} line={cf?.case?.summary_line?.text} docs={cf?.documents} /> : null}
+
+      <AgentsCard caseId={steps.case_id} cf={cf ?? null} onOpen={(role) => h.go("summary", role)} />
 
       <Card title="Question for the board" icon={<MessageSquareQuote className="size-4 text-brand" aria-hidden />} testId="overview-question">
         {q.text ? (

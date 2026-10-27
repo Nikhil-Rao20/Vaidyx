@@ -39,6 +39,11 @@ async function open(page: Page, o: CaseRouteOptions & { role?: Role; path?: stri
   await page.waitForLoadState("networkidle").catch(() => {});
 }
 
+/** Scrolls the first element of a test id to just under the sticky bars (taller on a phone: the section chips and Continue). */
+const under = (testId: string) => async (p: Page) => {
+  await p.evaluate((id) => { const el = document.querySelector(`[data-testid=${id}]`); if (el) window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - (window.innerWidth < 1024 ? 180 : 72)); }, testId);
+};
+
 /** No sideways scrolling of the whole page at the current width. */
 async function noSideways(page: Page) {
   const width = page.viewportSize()?.width ?? 0;
@@ -478,6 +483,72 @@ test.describe("guided Case File", () => {
     await laptop(page);
     await ov.getByTestId("open-case-summary").click();
     await expect(page.getByTestId("case-summary-card")).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  // night-v3 item 6.5: the six "records check" helpers are the Specialty agents (owner decision D2: AI agent, support only).
+  test("Specialty agents: the Overview card, Prepare all, a chip opens the agent with its brief and the shared thread", async ({ page }) => {
+    const errors = watchConsole(page);
+    await open(page);
+    const card = page.getByTestId("overview-agents");
+    await expect(card).toBeVisible();
+    await expect(card.getByRole("heading", { name: "Specialty agents" })).toBeVisible();
+    await expect(card).toContainText("AI agents, support only: they read this Case File and the guidelines, never decide or advise.");
+    // near the top: above the question for the board
+    const y = async (id: string) => (await page.getByTestId(id).boundingBox())!.y;
+    expect(await y("overview-agents")).toBeLessThan(await y("overview-question"));
+    const chip = (role: string) => card.getByTestId(`agent-chip-${role}`);
+    await expect(card.getByTestId(/^agent-chip-/)).toHaveCount(6);
+    await expect(card.getByTestId(/^agent-chip-/).first()).toContainText("Radiology");
+    await expect(chip("pathology").getByTestId("badge-points")).toHaveText("2 points");
+    await expect(chip("pathology").getByTestId("badge-not-documented")).toHaveText("1 not documented");
+    await expect(chip("pathology").getByTestId("badge-questions")).toHaveText("2 questions");
+    await expect(chip("medical_oncology")).toContainText("Reading the records");
+    await expect(chip("surgical_oncology")).toContainText("Records changed");
+    await expect(chip("surgical_oncology").getByTestId("badge-points")).toHaveText("1 point");
+    await expect(chip("radiology")).toContainText("Not prepared");
+    await expect(chip("radiology").getByRole("button", { name: "Prepare the Radiology brief" })).toBeVisible();
+    await snap(page, "casefile", "agents-overview", { sizes: DESKTOP_MOBILE, fullPage: false, before: under("overview-agents") });
+    await laptop(page);
+    await page.setViewportSize(PHONE);
+    await noSideways(page);
+    await laptop(page);
+    // Prepare all: every brief that is not prepared or changed is read again, in the background
+    await card.getByTestId("overview-prepare-all").click();
+    await expect(card.locator("li[data-state=preparing]")).toHaveCount(5);
+    await expect(chip("radiology")).toContainText("Reading the records");
+    await expect(card.getByTestId("overview-prepare-all")).toHaveCount(0);
+    // a chip opens that agent in the Summary section
+    await chip("pathology").getByRole("button", { name: /Pathology, AI agent/ }).click();
+    await expect(page).toHaveURL(/\/cases\/TB-DEMO-P19\/summary\?item=pathology$/);
+    const detail = page.getByTestId("helper-detail");
+    await expect(detail).toBeVisible();
+    await expect(page.getByTestId("summary-briefs").getByRole("heading", { name: "Specialty agents" })).toBeVisible();
+    await expect(detail.getByRole("heading", { name: "Pathology, AI agent" })).toBeVisible();
+    await expect(detail).toContainText("AI agent, support only");
+    await expect(detail).toContainText("Does not decide or advise. Not a member of the board.");
+    await expect(detail.getByTestId("helper-brief")).toBeVisible();
+    const ex = detail.getByTestId("agent-exchange");
+    await expect(ex).toHaveCount(2);
+    await expect(ex.nth(0).getByTestId("meeting-exchange")).toHaveText("Asked of the Pathology AI agent in the board meeting of 27/10/2026");
+    await expect(ex.nth(1).getByTestId("meeting-exchange")).toHaveCount(0);
+    await expect(ex.nth(0).getByTestId("agent-footer")).toHaveText("AI agent, support only. From the records and guidelines only. Check the source. Gemma-4-31B (non-medical).");
+    await expect(detail.getByPlaceholder("Ask Pathology about this Case File")).toBeVisible();
+    await snap(page, "casefile", "agents-detail", { sizes: DESKTOP_MOBILE, fullPage: false, before: under("helper-detail") });
+    await snap(page, "casefile", "agents-thread", { sizes: DESKTOP_MOBILE, fullPage: false, before: under("agent-exchange") });
+    await laptop(page);
+    await page.setViewportSize(PHONE);
+    await noSideways(page);
+    await laptop(page);
+    // back to the list: the agents' titles and the label
+    await page.getByTestId("helper-detail").getByRole("button", { name: "All agents" }).click();
+    const list = page.getByTestId("helpers-list");
+    await expect(list).toBeVisible();
+    await expect(page).toHaveURL(/\/summary$/);
+    await expect(list.getByTestId("helper-pathology")).toContainText("Pathology, AI agent");
+    await expect(list.getByTestId("helper-pathology")).toContainText("AI agent, support only");
+    await expect(list.getByTestId("helper-pathology")).toContainText("1 question from board meetings");
+    await snap(page, "casefile", "agents-list", { sizes: DESKTOP_MOBILE, fullPage: false, before: under("summary-briefs") });
     expect(errors).toEqual([]);
   });
 

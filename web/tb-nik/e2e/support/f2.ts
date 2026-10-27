@@ -78,22 +78,41 @@ export const chats = {
   ],
 };
 
+// The six Specialty agents (night-v3 6.5): a brief not prepared, ready (with one exchange asked in a board meeting), being prepared,
+// changed by a new report, and two not prepared; the title and the count badges as list_helpers gives them.
+const brief0 = { status: "none", at: null, sections: [], points_for_review: [], not_documented: [] };
+const agentRow = (role: string, name: string, over: Record<string, unknown> = {}) => ({
+  role, label: `${name} records check`, title: `${name}, AI agent`, department: name, head: role !== "nuclear_medicine", brief: brief0, job: null, thread_count: 0, prepare_allowed: true,
+  prepared_at_ready: role !== "nuclear_medicine", points_count: 0, not_documented_count: 0, meeting_exchanges: 0, prepared_at: null, ...over,
+});
+const pathologyBrief = baseCase.state.artefacts.brief_pathology;
 export const helpers = {
   heads: ["radiology", "pathology", "medical_oncology", "surgical_oncology", "radiation_oncology"],
   helpers: [
-    { role: "radiology", label: "Radiology support", department: "radiology", head: true, brief: { status: "none", at: null, sections: [], points_for_review: [], not_documented: [] }, thread_count: 0, prepare_allowed: true },
-    { role: "pathology", label: "Pathology support", department: "pathology", head: true, brief: { status: "ready", at: iso(60 * 30), sections: baseCase.state.artefacts.brief_pathology.sections, points_for_review: baseCase.state.artefacts.brief_pathology.points_for_review, not_documented: baseCase.state.artefacts.brief_pathology.not_documented, model: "gemma-4-31b", label: "AI draft, not reviewed" }, thread_count: 2, prepare_allowed: true },
-    { role: "medical_oncology", label: "Medical Oncology support", department: "medical_oncology", head: true, brief: { status: "preparing", at: null, sections: [], points_for_review: [], not_documented: [] }, thread_count: 0, prepare_allowed: true },
-    { role: "surgical_oncology", label: "Surgical Oncology support", department: "surgical_oncology", head: true, brief: { status: "stale", at: iso(60 * 50), sections: [], points_for_review: [], not_documented: [], stale_reason: "A new report arrived" }, thread_count: 1, prepare_allowed: true },
-    { role: "radiation_oncology", label: "Radiation Oncology support", department: "radiation_oncology", head: true, brief: { status: "none", at: null, sections: [], points_for_review: [], not_documented: [] }, thread_count: 0, prepare_allowed: true },
-    { role: "nuclear_medicine", label: "Nuclear Medicine support", department: "nuclear_medicine", head: false, brief: { status: "none", at: null, sections: [], points_for_review: [], not_documented: [] }, thread_count: 0, prepare_allowed: true },
+    agentRow("radiology", "Radiology"),
+    agentRow("pathology", "Pathology", {
+      brief: { status: "ready", at: iso(60 * 30), sections: pathologyBrief.sections, points_for_review: pathologyBrief.points_for_review, not_documented: pathologyBrief.not_documented, model: "gemma-4-31b", label: "AI draft, not reviewed" },
+      thread_count: 2, points_count: pathologyBrief.points_for_review.length, not_documented_count: pathologyBrief.not_documented.length, meeting_exchanges: 1, prepared_at: iso(60 * 30),
+    }),
+    agentRow("medical_oncology", "Medical Oncology", { brief: { ...brief0, status: "preparing", message: "Being prepared from the records" }, job: "J5e6f7a8b" }),
+    agentRow("surgical_oncology", "Surgical Oncology", {
+      brief: { status: "stale", at: iso(60 * 50), sections: [], points_for_review: [{ text: "Is the margin status recorded on the core biopsy?", citations: [] }], not_documented: ["Margin status"], stale_reason: "A new report arrived" },
+      thread_count: 1, points_count: 1, not_documented_count: 1, prepared_at: iso(60 * 50),
+    }),
+    agentRow("radiation_oncology", "Radiation Oncology"),
+    agentRow("nuclear_medicine", "Nuclear Medicine"),
   ],
 };
 
+/** The Pathology agent's thread: one exchange asked in the board meeting of 27/10/2026 (night-v3 6.3), one on the Case File page. */
 export const helperChat = {
-  role: "pathology", label: "Pathology support",
-  messages: [{ id: "H1", role: "pathology", by: "rao@vxh.example", by_name: "Lakshmi Rao", at: iso(40), question: "Are ER and PR reported with Allred scores?", status: "answered", stale: false,
-    statements: [{ text: "ER is positive with Allred score 8/8 and PR positive with Allred score 5/8.", citations: [{ doc_id: "D6b012d3d", doc_title: "IMMUNOHISTOCHEMISTRY REPORT (ER, PR, HER2, Ki-67)", page: 0, quote: "ER: Positive (Allred score 8/8)" }] }] }],
+  role: "pathology", label: "Pathology records check",
+  messages: [
+    { id: "H0", role: "pathology", by: "anil@vxh.example", by_name: "Anil Kumar", at: iso(90), question: "Is the tumour grade recorded?", status: "answered", stale: false, source: "meeting:M-1", meeting_date: "2026-10-27", model: "gemma-4-31b", kind: "AI agent, support only",
+      statements: [{ text: "The histopathology report records invasive breast carcinoma of no special type, Grade 2 (Nottingham score 6).", citations: [{ doc_id: "D8a2c165d", doc_title: "HISTOPATHOLOGY REPORT", page: 0, quote: "Grade: Grade 2 (Nottingham score 6)" }] }] },
+    { id: "H1", role: "pathology", by: "rao@vxh.example", by_name: "Lakshmi Rao", at: iso(40), question: "Are ER and PR reported with Allred scores?", status: "answered", stale: false, source: "case", meeting_date: null, model: "gemma-4-31b", kind: "AI agent, support only",
+      statements: [{ text: "ER is positive with Allred score 8/8 and PR positive with Allred score 5/8.", citations: [{ doc_id: "D6b012d3d", doc_title: "IMMUNOHISTOCHEMISTRY REPORT (ER, PR, HER2, Ki-67)", page: 0, quote: "ER: Positive (Allred score 8/8)" }] }] },
+  ],
 };
 
 export const published = {
@@ -406,6 +425,9 @@ export async function routeCaseFile(page: Page, o: CaseRouteOptions = {}) {
   // The guided page's state for this page: what a GET answers after an action the spec took.
   const live: { steps: AnyObj; staging: AnyObj; ready: AnyObj } = { steps: isReply(o.steps) ? null : clone(o.steps ?? stepsPrepare()), staging: isReply(o.staging) ? null : clone(o.staging ?? stagingDraft()), ready: null };
   const me = { by: "rao@vxh.example", by_name: "Lakshmi Rao" };
+  // The Specialty agents for this page (night-v3 6.5): "Prepare all" and a chip's "Prepare" set the briefs being prepared in this copy.
+  const agentsLive: AnyObj = clone(o.helpers ?? helpers);
+  const startBrief = (h: AnyObj) => Object.assign(h, { brief: { status: "preparing", at: null, sections: [], points_for_review: [], not_documented: [], message: "Being prepared from the records" }, job: `J-${h.role}`, points_count: 0, not_documented_count: 0, prepared_at: null });
   await page.route(`**/api/tb/cases/${CID}**`, async (route: Route) => {
     const url = new URL(route.request().url());
     const m = route.request().method();
@@ -420,7 +442,23 @@ export async function routeCaseFile(page: Page, o: CaseRouteOptions = {}) {
     if (p === "/slots" && m === "GET") return nb.has("slots") ? json(NOT_FOUND, 404) : reply(o.slots, () => clone(baseSlots));
     if (p === "/chats" && m === "GET") return nb.has("chats") ? json(NOT_FOUND, 404) : json(o.chats ?? chats);
     if (p === "/chats" && m === "POST") return json({ ...chats.threads[0], id: "T3", at: new Date().toISOString(), question: JSON.parse(route.request().postData() || "{}").question, pinned: false });
-    if (p === "/helpers" && m === "GET") return nb.has("helpers") ? json(NOT_FOUND, 404) : json(o.helpers ?? helpers);
+    if (p === "/helpers" && m === "GET") return nb.has("helpers") ? json(NOT_FOUND, 404) : json(agentsLive);
+    if (p === "/helpers/prepare-all" && m === "POST") {
+      const out = (agentsLive.helpers as AnyObj[]).map((h) => {
+        if (h.brief.status === "preparing") return { role: h.role, status: "preparing", job: h.job };
+        if (h.brief.status === "ready") return { role: h.role, status: "ready", job: null };
+        startBrief(h);
+        return { role: h.role, status: "preparing", job: h.job };
+      });
+      return json({ helpers: out, started: out.filter((x) => x.job && x.job.startsWith("J-")).length });
+    }
+    const prep = /^\/helpers\/([a-z_]+)\/prepare$/.exec(p);
+    if (prep && m === "POST") {
+      const h = (agentsLive.helpers as AnyObj[]).find((x) => x.role === prep[1]);
+      if (!h) return json({ detail: { message: "Unknown helper role.", code: "no_role" } }, 404);
+      startBrief(h);
+      return json({ job: null, status: "preparing", reused: false, role: h.role });
+    }
     if (/^\/helpers\/[a-z_]+\/chat$/.test(p) && m === "GET") return json(helperChat);
     if (p === "/published" && m === "GET") return nb.has("published") ? json(NOT_FOUND, 404) : json(o.published ?? published);
     if (p === "/published/search") return json(publishedResults);
@@ -568,6 +606,9 @@ const AGENT_POINTS: Record<string, Array<{ text: string; citations: Array<Record
   // Nuclear Medicine: the brief is ready but lists no points for review (two items not documented), so "Present your points" waits.
   nuclear_medicine: [],
 };
+/** The refusal of a decision asked of an agent (guardrails.REFUSALS) and the note under every agent answer (meetings.ANSWER_NOTE). */
+export const AGENT_REFUSAL = "I can't recommend or choose treatment. Treatment decisions belong to the Tumour Board. I can show what the signed records document, list pending results, and surface the relevant guideline sections for the board to review.";
+export const AGENT_ANSWER_NOTE = "AI agent, support only. From the records and guidelines only. Check the source.";
 /** The items each brief lists as not documented (the "Present your points" answer shows them; the cards show the count). */
 const AGENT_NOT_DOCUMENTED: Record<string, string[]> = {
   pathology: ["HER2 FISH result", "Margin status of the core biopsy"],
@@ -694,6 +735,26 @@ export async function routeMeetings(page: Page, o: MeetingRouteOptions = {}): Pr
       if (body.on && body.role) list.push(agentEntry(body.role, { state: "preparing", brief: { status: "preparing", label: "", at: null, reviewed_by: null, message: "" }, points: [], points_count: 0 }));
       st.agents = list;
       return json({ agents: list });
+    }
+    // night-v3 6.3: a question, to the board or to one agent ({text, role}). An agent not in the meeting is refused (409); a request
+    // for a decision is refused by rule at once (out_of_scope, with the guardrail's sentence); a question to an agent that is still
+    // answering an earlier one waits (queued, with the server's queue note); else the answer comes later as pushed question events.
+    if (p === `/${MID}/questions` && m === "POST") {
+      const body = (route.request().postDataJSON() ?? {}) as { text?: string; role?: string };
+      const st = state as { agents?: Array<Record<string, unknown>>; questions?: Array<Record<string, unknown>> };
+      const a = body.role ? (st.agents ?? []).find((x) => x.role === body.role) : null;
+      if (body.role && !a) return json({ detail: { message: "That agent is not in this meeting. The coordinator can add it.", code: "agent_not_in_meeting" } }, 409);
+      const at = new Date().toISOString();
+      const q: Record<string, unknown> = { id: `QA${(st.questions ?? []).length + 1}`, by: "mdt@vxh.example", by_name: "Priya Nair", text: body.text ?? "", at, case_id: CID, role: body.role ?? null, agent_label: a?.label, queued: false, answer: null };
+      const waiting = a ? (st.questions ?? []).find((x) => x.role === body.role && !x.answer) : null;
+      if (a && /what would you do|would you (recommend|suggest)/i.test(body.text ?? "")) {
+        q.answer = { status: "out_of_scope", category: "treatment_recommendation", message: AGENT_REFUSAL, text: AGENT_REFUSAL, statements: [], references: [], role: a.role, label: a.label, model: "gemma-4-31b", at, seconds: 0.4, speech: [`AI agent, ${a.department_name}.`, AGENT_REFUSAL], note: AGENT_ANSWER_NOTE };
+      } else if (a && waiting) {
+        q.queued = true;
+        q.queue_note = `${a.department_name} is answering ${waiting.by_name}. Yours is next.`;
+      }
+      st.questions = [...(st.questions ?? []), q];
+      return json({ question: q });
     }
     // night-v3 6.2: "Present your points" answers a question built from the brief's points (no model call), kept with the questions.
     const present = new RegExp(`^/${MID}/agents/([a-z_]+)/present$`).exec(p);

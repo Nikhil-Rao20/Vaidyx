@@ -170,7 +170,11 @@ export interface ChatThread {
 export type HelperRole = "radiology" | "pathology" | "medical_oncology" | "surgical_oncology" | "radiation_oncology" | "nuclear_medicine";
 export interface HelperBrief {
   status: "none" | "preparing" | "ready" | "stale";
-  at?: string;
+  at?: string | null;
+  /** Set while the ready mark's run still has to reach this head (status "preparing"). */
+  queued?: boolean;
+  message?: string;
+  stale_reason?: string;
   sections?: Array<{ heading?: string; title?: string; items?: Array<{ text: string; citations?: Citation[] }>; text?: string }>;
   points_for_review?: Array<{ text: string; citations?: Citation[] }>;
   not_documented?: string[];
@@ -184,9 +188,21 @@ export interface Helper {
   brief: HelperBrief;
   thread_count: number;
   prepare_allowed: boolean;
+  head?: boolean;
+  /** The brief's job while it is prepared (poll GET /jobs/{id}). */
+  job?: string | null;
+  // night-v3 item 6.5: the "Specialty agents" (owner decision D2: AI agent, support only, never a member of the board)
+  /** "<Department>, AI agent". */
+  title?: string;
+  points_count?: number;
+  not_documented_count?: number;
+  /** How many exchanges on the shared thread were asked in a board meeting. */
+  meeting_exchanges?: number;
+  prepared_at?: string | null;
 }
 export interface HelperMessage {
   id?: string;
+  role?: string;
   by?: string;
   by_name?: string;
   at?: string;
@@ -195,6 +211,14 @@ export interface HelperMessage {
   statements?: ChatStatement[];
   status?: string;
   message?: string;
+  /** "case" or "meeting:<meeting id>": the one thread per Case File and role is shared with the board meetings (night-v3 item 6.3). */
+  source?: string;
+  /** The date of the board meeting the question was asked in (YYYY-MM-DD), for a meeting exchange. */
+  meeting_date?: string | null;
+  model?: string | null;
+  /** The records changed after this answer. */
+  stale?: boolean;
+  kind?: string;
 }
 
 // ---- published.py ------------------------------------------------------------------------------------------------

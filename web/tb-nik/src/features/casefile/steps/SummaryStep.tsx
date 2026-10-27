@@ -1,12 +1,12 @@
 // Summary (B7): written before sending. "Write the summary" (15 to 35 s, from the checked values only; every sentence keeps its report
 // line), read it, "I have read it", then "Send to the board". What the doctor typed is shown apart, "entered by Dr X, no report". The
-// specialty briefs and similar published cases sit here too (B9).
+// Specialty agents (their briefs and the shared threads, night-v3 item 6.5) and similar published cases sit here too (B9).
 // After the first board decision (night-v3 3.4, owner decision D3) the Case summary comes first; the pre-board summary folds under
 // "Before the board on DD/MM/YYYY", with its earlier versions (summary history) in a fold of their own.
 // Voice (night-v3 item 4.4): "Read aloud" beside each section of the pre-board summary and on Points for review reads the saved text as
 // shown (the server loads it by reference); nothing is drawn when voice is off.
 import type { ReactNode } from "react";
-import { CheckCheck, History, PenLine, RefreshCw, Send, Sparkles } from "lucide-react";
+import { Bot, CheckCheck, History, PenLine, RefreshCw, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SpeakButton } from "@/components/SpeakButton";
 import type { TtsRef } from "@/lib/voice";
@@ -126,7 +126,7 @@ export function SummaryStep({ steps, docs, h, canWrite, canRead, busy, reading, 
           </dl>
         </Card>
       ) : null}
-      <Card title="Specialty briefs" testId="summary-briefs"><div className="py-2">{briefs}</div></Card>
+      <Card title="Specialty agents" icon={<Bot className="size-4 text-brand" aria-hidden />} testId="summary-briefs"><div className="py-2">{briefs}</div></Card>
       <Card title="Similar published cases" testId="summary-published"><div className="py-2">{published}</div></Card>
     </div>
   );
