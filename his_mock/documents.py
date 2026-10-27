@@ -59,7 +59,9 @@ FORBIDDEN = ("Sahyadri", "SYN-", "\u2014")   # the V1 corpus hospital and ids mu
 RADIOLOGY = set(IMAGING_MODALITY)
 LAYOUT = {"lab": "lab", "histopathology": "hpe", "ihc": "ihc", "molecular": "molecular", "cytology": "cytology",
           "endoscopy": "endoscopy", "clinical_note": "clinical", "referral": "referral",
-          "discharge_summary": "discharge", **{t: "radiology" for t in RADIOLOGY}}
+          "discharge_summary": "discharge", **{t: "radiology" for t in RADIOLOGY},
+          # night-v3 item 2.11: the echocardiogram and the lung function test print as a procedure (Findings, Impression)
+          "echocardiogram": "endoscopy", "pulmonary_function": "endoscopy"}
 
 # printed titles: chosen so the title line names one document type only (tumour_board/protocols/doc_type_keywords.json
 # reads the first lines of page 1; "EBUS procedure note" would tie endoscopy with operative note)
@@ -102,6 +104,19 @@ TITLES = {
     "colonoscopy": "COLONOSCOPY REPORT",
     "cystoscopy_proctoscopy": "CYSTOSCOPY AND PROCTOSCOPY REPORT",
     "eua": "EXAMINATION UNDER ANAESTHESIA (EUA): OPERATIVE NOTE",
+    # night-v3 item 2.11 (the four new cancers); each title names one document type of doc_type_keywords.json
+    "ca125_cea": "TUMOUR MARKER REPORT: SERUM CA-125 AND CEA",
+    "psa": "TUMOUR MARKER REPORT: SERUM PSA",
+    "ldh": "BIOCHEMISTRY REPORT: SERUM LDH",
+    "ascitic_fluid_cytology": "CYTOLOGY REPORT: ASCITIC FLUID",
+    "trus_biopsy": "HISTOPATHOLOGY REPORT: TRUS-GUIDED PROSTATE BIOPSY",
+    "her2_ihc": "IMMUNOHISTOCHEMISTRY REPORT: HER2 (GASTRIC)",
+    "lymph_node_biopsy": "HISTOPATHOLOGY REPORT: LYMPH NODE EXCISION BIOPSY",
+    "ihc_lymphoma": "IMMUNOHISTOCHEMISTRY REPORT: LYMPHOMA PANEL",
+    "mri_prostate": "MULTIPARAMETRIC MRI PROSTATE",
+    "cect_neck_tap": "CECT NECK, THORAX, ABDOMEN AND PELVIS",
+    "ugi_endoscopy": "UPPER GI ENDOSCOPY REPORT",
+    "echo": "2D ECHOCARDIOGRAPHY REPORT",
 }
 
 LABELS = {
@@ -125,6 +140,14 @@ LABELS = {
     "technique": "Technique", "comparison": "Comparison", "findings": "Findings", "impression": "Impression",
     "specimen": "Specimen", "gross": "Gross", "microscopy": "Microscopy", "diagnosis": "Diagnosis",
     "examination": "Examination", "plan": "Plan", "course": "Course", "advice": "Advice", "remarks": "Remarks",
+    # night-v3 item 2.11
+    "ca125": "CA-125 (cancer antigen 125)", "psa": "Prostate specific antigen (PSA), total", "ldh": "Lactate dehydrogenase (LDH)",
+    "gleason_isup": "Gleason score / ISUP grade group", "positive_cores": "Positive cores", "pirads": "PI-RADS category",
+    "dre": "Digital rectal examination (DRE)", "tumour_site_stomach": "Site of the lesion", "b_symptoms": "B symptoms",
+    "nutrition": "Nutrition evaluation", "asa_grade": "ASA physical status", "ihc_markers": "IHC",
+    "cd45": "CD45 (LCA)", "cd30": "CD30", "cd15": "CD15", "cd20": "CD20", "pax5": "PAX5", "cd3": "CD3",
+    "lvef": "LV ejection fraction (LVEF)", "ecg": "ECG", "fev1": "FEV1", "fvc": "FVC", "fev1_fvc": "FEV1/FVC ratio",
+    "dlco": "DLCO (diffusing capacity)",
 }
 # values the HIMS entry forms type as free text: printed as paragraphs inside their own section, without a label
 PLAIN_KEYS = {"technique", "comparison", "findings", "impression", "specimen", "gross", "microscopy", "diagnosis",
@@ -135,6 +158,7 @@ REFERENCE = {
     "haemoglobin": {"M": "13.0-17.0", "F": "12.0-15.0"}, "wbc": "4,000-11,000", "platelets": "1.5-4.5",
     "creatinine": "0.6-1.2", "bilirubin": "0.3-1.2", "urea": "15-40", "sgot": "5-40", "sgpt": "5-40", "cea": "0-5",
     "hiv_status": "Non-reactive", "hbsag": "Non-reactive", "anti_hcv": "Non-reactive",
+    "ca125": "0-35", "psa": "0-4.0", "ldh": "140-280",
 }
 MOLECULAR_METHOD = {"egfr": "Real-time PCR", "alk": "IHC (D5F3 clone)", "ros1": "FISH", "met": "RT-PCR",
                     "kras": "Real-time PCR", "her2": "FISH"}
@@ -148,7 +172,7 @@ TECHNIQUE = {
     "bone_scan": "Whole-body planar images after intravenous Tc-99m MDP.",
 }
 IMPRESSION_KEY = re.compile(r"impression|conclusion|stage|rads|diagnosis")
-HPE_DIAGNOSIS_KEYS = ("histologic_type", "grade", "nodal_findings", "diagnosis")
+HPE_DIAGNOSIS_KEYS = ("histologic_type", "grade", "gleason_isup", "positive_cores", "nodal_findings", "diagnosis")
 LAB_GROUPS = {"Pathology": "Whole blood (EDTA)"}       # other laboratories report on serum
 _NUMERIC = re.compile(r"^[<>]?\s*[\d][\d.,]*\s+(\S.*)$")
 

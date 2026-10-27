@@ -134,6 +134,21 @@ IHC = {
                    _f("her2", "HER2/neu (IHC score)", required=True, example="2+ (Equivocal)"),
                    _f("ki67", "Ki-67 labelling index", required=True, example="25 %")],
     "pdl1_ihc": [_f("pdl1", "PD-L1 (22C3), tumour proportion score", required=True, example="TPS 30 %")],
+    # night-v3 item 2.11
+    "her2_ihc": [_f("her2", "HER2/neu (IHC score, gastric scoring)", required=True, example="Score 1+ (Negative)")],
+    "ihc_lymphoma": [_f("cd45", "CD45 (LCA)", example="Negative in the Reed-Sternberg cells"),
+                     _f("cd30", "CD30", required=True, example="Positive in the Reed-Sternberg cells"),
+                     _f("cd15", "CD15", example="Positive in the Reed-Sternberg cells"),
+                     _f("cd20", "CD20", example="Negative in the Reed-Sternberg cells"),
+                     _f("pax5", "PAX5", example="Weakly positive (dim) in the Reed-Sternberg cells"),
+                     _f("cd3", "CD3", example="Negative in the Reed-Sternberg cells"),
+                     _f("ki67", "Ki-67 labelling index", example="40 %"),
+                     _f("diagnosis", "Diagnosis", rows=2, example="Immunoprofile consistent with classical Hodgkin lymphoma")],
+}
+# HPE entry fields per test where the report needs more than the general list (night-v3 item 2.11: the prostate biopsy)
+HPE_BY_TEST = {
+    "trus_biopsy": HPE[:4] + [_f("gleason_isup", "Gleason score / ISUP grade group", example="Gleason score 4+3=7, ISUP grade group 3"),
+                              _f("positive_cores", "Positive cores", example="6 of 12 cores positive")] + HPE[5:],
 }
 MOLECULAR = {
     "molecular_lung": [_f("egfr", "EGFR mutation analysis", required=True, example="Not detected"),
@@ -171,7 +186,7 @@ CLINICAL = [
 def pathology_fields(test_key, doc_type):
     """The entry fields of a pathology order: HPE, an IHC panel (per test, else free lines), molecular, cytology."""
     if doc_type == "histopathology":
-        return HPE
+        return HPE_BY_TEST.get(test_key, HPE)
     if doc_type == "ihc":
         return IHC.get(test_key)          # None: the free IHC panel (marker: result lines)
     if doc_type == "molecular":

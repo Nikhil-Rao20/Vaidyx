@@ -28,11 +28,11 @@ def _actions(exp, status="pending"):
              "accession": r.get("accession"), "status": status} for i, r in enumerate(exp["requests"])]
 
 
-def test_one_expectation_per_case_file_twenty_one_in_all():
-    assert len(EXPS) == 21
+def test_one_expectation_per_case_file_twenty_five_in_all():
+    assert len(EXPS) == 25  # 21 before night-v3 item 2.11 added the four Phase 2 patients (P20 to P23)
     slots = [e["slot"] for e in EXPS]
-    assert len(set(slots)) == 19 and slots.count("P14") == 2 and slots.count("P18") == 2
-    assert len({e["case_id"] for e in EXPS}) == 21
+    assert len(set(slots)) == 23 and slots.count("P14") == 2 and slots.count("P18") == 2
+    assert len({e["case_id"] for e in EXPS}) == 25
     assert all(e["case_id"].startswith("TB-SCN-") and e["case_id"] != "TB-2026-bharath" for e in EXPS)
 
 
