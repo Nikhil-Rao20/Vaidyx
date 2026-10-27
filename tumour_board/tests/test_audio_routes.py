@@ -583,3 +583,33 @@ def test_empty_token_is_not_cached(stub, monkeypatch, tmp_path):
     f.write_text(json.dumps({"token": "t" * 48}))
     assert ap.token() == "t" * 48
     ap.reset()
+
+
+# ---- night-v3 item 6.3: one spoken sentence of an agent answer by its index -------------------------------------------------------
+def test_meeting_answer_sentence_by_index(tc, stub):
+    mid, eid = _meeting_with_answer(tc)
+    s = meetings.need(mid)
+    q = s["questions"][0]
+    q["answer"] = {"status": "answered", "text": "HER2 is 3+ on IHC. The report is final.",
+                   "statements": [{"text": "HER2 is 3+ on IHC."}, {"text": "The report is final."}],
+                   "speech": ["AI agent, Pathology.", "HER2 is 3+ on IHC.", "The report is final.", "Sources are on the screen."]}
+    s["questions"].append({"id": "Q2", "by": "priya", "text": "ER?", "case_id": CASE, "role": "pathology",
+                           "answer": {"status": "answering", "text": "ER is positive.", "statements": [{"text": "ER is positive."}, {"text": "PR is negative."}]}})
+    board.save_session(s)
+    ref = {"kind": "meeting_answer", "meeting_id": mid, "id": "Q1"}
+    assert ap._meeting_text({**ref, "index": 0}) == "AI agent, Pathology."
+    assert ap._meeting_text({**ref, "index": 3}) == "Sources are on the screen."
+    assert ap._meeting_text({**ref, "index": 4}) is None and ap._meeting_text({**ref, "index": -1}) is None
+    assert ap._meeting_text(ref) == "HER2 is 3+ on IHC. The report is final."  # without an index: the whole answer as before
+    assert ap._meeting_text({**ref, "index": True}) == "HER2 is 3+ on IHC. The report is final."  # a boolean is not an index
+    ref2 = {**ref, "id": "Q2"}  # no speech list yet: the statements by place
+    assert ap._meeting_text({**ref2, "index": 1}) == "PR is negative." and ap._meeting_text({**ref2, "index": 2}) is None
+    # the logged answer by its entry id: the statements by place, FULL scope still required
+    assert ap._meeting_text({**ref, "id": eid, "index": 0}, org.roles("priya")) == "HER2 is 3+ on IHC. The report is final."
+    assert ap._meeting_text({**ref, "id": eid, "index": 1}, org.roles("priya")) is None
+    assert ap._meeting_text({**ref, "id": eid, "index": 0}) is None
+    # through the route: one sentence per request, and an index past the end is not found
+    r = tts(tc, "priya", {"ref": {**ref, "index": 1}, "screen": "meeting"})
+    assert r.status_code == 200 and r.headers["x-parts"] == "1" and json.loads(stub.calls[-1].content)["text"] == "HER2 is 3+ on IHC."
+    assert tts(tc, "priya", {"ref": {**ref, "index": 9}, "screen": "meeting"}).status_code == 404
+    assert org_lines("audio_spoken")[-1]["ref"] == f"meeting_answer:{mid}:Q1:1"

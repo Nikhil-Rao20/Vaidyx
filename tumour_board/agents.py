@@ -10,7 +10,7 @@ the brief. Tools only read the Case File and the agent's guideline pack (V1 item
 sources first, and a reporting checklist). A guideline passage is a "reference" cited by id with a verbatim quote, kept apart from
 the record citations; it is never a fact about the patient and never a recommendation for this patient.
 """
-import asyncio, json, re, time
+import asyncio, inspect, json, re, time
 
 from . import config, dates, grounding, guardrails, guidelines, llm, org, packs, protocol, qa, rules, search, skills, store
 
@@ -438,7 +438,8 @@ def _removed(item, reason, detail, where):
             "citations": [{"doc_id": c.get("doc_id"), "quote": (c.get("quote") or "")[:400]} for c in ((item.get("citations") or []) if isinstance(item, dict) else [])]}
 
 
-REMOVED_REASONS = {"found_in_case_file": "said to be not documented, but found in the Case File"}
+REMOVED_REASONS = {"found_in_case_file": "said to be not documented, but found in the Case File",
+                   "malformed": "a line of the answer that was not one readable statement"}
 
 
 async def run_agent(case_id, role, focus_question="", max_steps=5):
@@ -633,12 +634,23 @@ def fresh(art, sig) -> bool:
             and bool(art.get("near_match")) == config.near_match())
 
 
-# V1 item 6.2: the agent of an absent specialty answers the board's questions live, from the Case File records and its guideline pack
-LIVE_LABEL = "AI support (role-specific)"
+# V1 item 6.2: the agent of an absent specialty answers the board's questions live, from the Case File records and its guideline pack.
+# Night-v3 item 6.3: with a callback the answer streams statement by statement, each one verified and scanned before it is passed on.
+LIVE_LABEL = "AI agent, support only"
 LIVE_SCHEMA = {"type": "object", "additionalProperties": False, "properties": {
     "answer_found": {"type": "boolean"},
     "statements": qa.ANSWER_SCHEMA["properties"]["statements"],
     "references": POINT["properties"]["references"]}, "required": ["answer_found", "statements", "references"]}
+NOT_DOCUMENTED = "Not documented in the Case File. No statement could be verified against the source documents."
+HISTORY_MESSAGES = 6  # three exchanges of the shared thread (research 05_board_agents.md section 6.5)
+
+# the document type in the outside-specialty note, with its article ("This is an MRI record; ...")
+DOC_TYPE_PHRASES = {"ct": "a CT", "mri": "an MRI", "xray": "an X-ray", "ultrasound": "an ultrasound", "mammogram": "a mammogram", "pet_ct": "a PET-CT",
+                    "bone_scan": "a bone scan", "histopathology": "a histopathology", "cytology": "a cytology", "ihc": "an IHC", "molecular": "a molecular",
+                    "lab": "a lab", "clinical_note": "a clinical note", "referral": "a referral", "discharge_summary": "a discharge summary",
+                    "treatment_summary": "a treatment summary", "tumour_board_record": "a Tumour Board", "endoscopy": "an endoscopy",
+                    "operative_note": "an operative note"}
+_UNKNOWN_TYPES = {"", "unknown", "other"}
 
 
 def _live_system(role):
@@ -651,25 +663,194 @@ def _live_system(role):
             "only when they say what a report or record should contain, never as an answer about this patient.")
 
 
-async def ask(case_id, role, question, history=None, user=""):
+STREAM_FORMAT = (" Write the answer as JSON Lines: one JSON object on each line and nothing else (no prose, no code fences, no list brackets). "
+                 'Each statement is one line: {"text": "<one short factual statement>", "citations": [{"doc_id": "<document id>", '
+                 '"quote": "<exact text copied from that document>"}]}. The last line is always: {"end": true, "answer_found": true or false, '
+                 '"references": [{"ref_id": "G1", "quote": "<exact text copied from that guideline passage>"}]}. If the documents do not '
+                 "contain the answer, write only the last line, with answer_found false.")
+
+
+def _live_stream_system(role):
+    """The live prompt with the line protocol of the streamed answer (llm.stream takes no schema, so the format is in the prompt)."""
+    return _live_system(role).replace("set answer_found=false and return no statements", "write no statement line") + STREAM_FORMAT
+
+
+def _type_phrase(t):
+    return DOC_TYPE_PHRASES.get(t) or (("an " if t[:1] in "aeiou" else "a ") + t.replace("_", " "))
+
+
+def _note_maker(case_id, role):
+    """note(statement) -> the fixed line for a statement whose first cited record lies outside the role's document types ("This is a CT
+    record; the Radiology agent can say more.", the first role in ROLES order that reads that type), or None: a type of the role, an
+    unknown type, or a type no role reads. Written by code, never by the model; shown, never spoken. The documents are read once."""
+    cache = {}
+
+    def note(stmt):
+        if not cache:
+            cache["types"] = {d["doc_id"]: (d.get("classification") or {}).get("doc_type") or "" for d in rules.case_docs(case_id)}
+            cache["specs"] = {x: spec(x) for x in ROLES}
+        c = next((c for c in stmt.get("citations") or [] if isinstance(c, dict) and c.get("doc_id")), None)
+        t = cache["types"].get(c["doc_id"], "") if c else ""
+        if t in _UNKNOWN_TYPES or t in cache["specs"][role]["doc_types"]:
+            return None
+        owner = next((x for x in ROLES if t in cache["specs"][x]["doc_types"]), None)
+        return f"This is {_type_phrase(t)} record; the {cache['specs'][owner]['department']} agent can say more." if owner else None
+    return note
+
+
+def _screen(case_id, statements, note):
+    """Statements as the model wrote them -> (kept, removed, unverified count): exact quotes only (qa.verify, as in Ask the Case File), then
+    the scope guardrail on each kept text; a kept statement outside the specialty gains its note."""
+    stmts, drop = qa.verify(case_id, statements)
+    removed, kept = [{**x, "where": "answer"} for x in drop], []
+    for st_ in stmts:
+        iss = guardrails.scan_output(st_["text"])
+        if iss:
+            removed.append(_removed(st_, "guardrail", "; ".join(i["reason"] for i in iss), "answer"))
+            continue
+        n = note(st_)
+        kept.append({**st_, "note": n} if n else st_)
+    return kept, removed, len(drop)
+
+
+def _statement(obj):
+    """A statement object of the line protocol, cleaned ({text, citations[dict]}), or None when it is not one."""
+    if not isinstance(obj, dict) or not isinstance(obj.get("text"), str) or not obj["text"].strip() or not isinstance(obj.get("citations"), list):
+        return None
+    return {"text": obj["text"], "citations": [c for c in obj["citations"] if isinstance(c, dict)]}
+
+
+def _parse_line(line):
+    """One line of the streamed answer -> ("skip", None) for a blank line or a code fence, ("statement", {text, citations}), ("end", obj),
+    ("whole", obj) for one LIVE_SCHEMA object written on a line, or ("malformed", None)."""
+    s = line.strip()
+    if not s or s.startswith("```") or s in ("[", "]"):
+        return "skip", None
+    try:
+        obj = json.loads(s.rstrip(",").strip())
+    except ValueError:
+        return "malformed", None
+    if isinstance(obj, dict) and obj.get("end") is True:
+        return "end", obj
+    if isinstance(obj, dict) and isinstance(obj.get("statements"), list):
+        return "whole", obj
+    st_ = _statement(obj)
+    return ("statement", st_) if st_ else ("malformed", None)
+
+
+class _Refused(Exception):
+    """The scope check refused the question while the answer was streaming."""
+
+
+async def _call(fn, *args):
+    r = fn(*args)
+    if inspect.isawaitable(r):
+        await r
+
+
+async def _streamed_answer(case_id, role, smsgs, msgs, au, scope_task, note, on_statement, t0):
+    """The streamed answer (night-v3 item 6.3): one JSON object per line; each complete statement line is verified and scanned on its own
+    and only a kept statement reaches on_statement(statement, index), in order; the first one waits for the scope check (a refusal closes
+    the stream and nothing is passed on). A stream with no readable statement or end line falls back to the one-shot call (never a second
+    stream after a statement went out). A stream that fails halfway is not restarted: the statements passed on stand, the error rises.
+    Returns {gate, kept, removed, dropped, end, first, streamed, malformed}."""
+    out = {"gate": None, "kept": [], "removed": [], "dropped": 0, "end": None, "first": None, "streamed": True, "malformed": 0}
+    seen = False
+
+    async def take(raw):
+        if out["gate"] is None:
+            out["gate"] = await scope_task
+            if not out["gate"]["allowed"]:
+                raise _Refused
+        kept, removed, dropped = _screen(case_id, [raw], note)
+        out["removed"] += removed; out["dropped"] += dropped
+        for s in kept:
+            if out["first"] is None:
+                out["first"] = round(time.time() - t0, 2)
+            await _call(on_statement, s, len(out["kept"]))
+            out["kept"].append(s)
+
+    async def line(text):
+        nonlocal seen
+        kind, obj = _parse_line(text)
+        if kind == "malformed":
+            out["malformed"] += 1
+            out["removed"].append(_removed({"text": text.strip()[:200]}, "malformed", "not one JSON object on its line", "answer"))
+        elif kind == "statement":
+            seen = True
+            await take(obj)
+        elif kind == "whole":
+            seen = True
+            for raw in obj["statements"]:
+                st_ = _statement(raw)
+                if st_:
+                    await take(st_)
+            out["end"] = {"answer_found": obj.get("answer_found"), "references": obj.get("references")}
+        elif kind == "end":
+            seen = True
+            out["end"] = obj
+
+    agen = llm.stream("reasoner", smsgs, max_tokens=1200, audit=au)
+    try:
+        buf = ""
+        async for chunk in agen:
+            buf += chunk or ""
+            while "\n" in buf and out["end"] is None:
+                text, buf = buf.split("\n", 1)
+                await line(text)
+            if out["end"] is not None:
+                break  # nothing after the end line is read
+        if out["end"] is None and buf.strip():
+            await line(buf)  # the last line without a final newline
+        if out["gate"] is None:
+            out["gate"] = await scope_task
+            if not out["gate"]["allowed"]:
+                raise _Refused
+        if not seen:  # nothing readable came: the one-shot call, its statements through the same checks and the callback
+            out["streamed"] = False
+            a = await llm.chat("reasoner", msgs, json_schema=LIVE_SCHEMA, max_tokens=1200, purpose=f"agent {role} live answer", audit=au)
+            for raw in a.get("statements") or []:
+                st_ = _statement(raw)
+                if st_:
+                    await take(st_)
+            out["end"] = {"answer_found": a.get("answer_found"), "references": a.get("references")}
+    except _Refused:
+        out["kept"], out["streamed"] = [], False
+    except Exception as e:
+        au({"kind": "agent_answer_failed", "role": role, "statements": len(out["kept"]), "error": f"{e.__class__.__name__}: {str(e)[:200]}"})
+        raise
+    finally:
+        if not scope_task.done():
+            scope_task.cancel()
+        if hasattr(agen, "aclose"):
+            await agen.aclose()  # a refusal or an end line stops the model's stream
+    return out
+
+
+async def ask(case_id, role, question, history=None, user="", on_statement=None):
     """One live question to the agent of `role` (V1 item 6.2): scope check first (a refused question gets no answer), the Case File
     records and the specialty pack as context, every statement verified against its quote (exact only, like Ask the Case File), the scope
-    guardrail on the output, references verified verbatim and limited to record and report contents. Returns the answer record."""
+    guardrail on the output, references verified verbatim and limited to record and report contents. Returns the answer record.
+    With on_statement (night-v3 item 6.3) the answer is streamed and each kept statement is passed on as soon as it is verified (a plain
+    function or a coroutine function, called with the statement and its index); the record then says `streamed` and `first_seconds`."""
     if role not in ROLES:
         raise ValueError("unknown role")
     t0, au, r = time.time(), store.auditor(case_id), spec(role)
     case = store.get_case(case_id)
     base = {"role": role, "label": r["label"], "kind": LIVE_LABEL, "question": question, "statements": [], "references": [], "removed": [],
-            "dropped_unverified": 0, "model": config.models()["reasoner"].get("label") or "reasoner"}
+            "dropped_unverified": 0, "model": config.models()["reasoner"].get("label") or "reasoner", "streamed": False, "first_seconds": None}
     if not case.get("protocol"):
         return {**base, "status": "not_listed", "message": NOT_LISTED, "seconds": round(time.time() - t0, 2)}
     au({"kind": "agent_question", "role": role, "question": question, "by": user})
+
+    def refused(gate):
+        au({"kind": "guardrail_input", "where": f"agent {role}", "category": gate["category"], "layer": gate["layer"]})
+        return {**base, "status": "out_of_scope", "category": gate["category"], "message": gate["message"], "seconds": round(time.time() - t0, 2)}
+
     hit = guardrails.rule_check(question)
     scope_task = asyncio.create_task(guardrails.check_input(question, au))
     if hit:  # refused by rule: no retrieval and no answer call
-        gate = await scope_task
-        au({"kind": "guardrail_input", "where": f"agent {role}", "category": gate["category"], "layer": gate["layer"]})
-        return {**base, "status": "out_of_scope", "category": gate["category"], "message": gate["message"], "seconds": round(time.time() - t0, 2)}
+        return refused(await scope_task)
     values = await asyncio.to_thread(search.find_values, case_id, question)
     context, mode = await asyncio.to_thread(search.context_for, case_id, question, 40000)
     if values["hits"]:
@@ -682,35 +863,41 @@ async def ask(case_id, role, question, history=None, user=""):
             context += f"\n\n=== GUIDELINE REFERENCES ({r['label'].lower()} pack, Indian sources first; reference text, never a fact about this patient) ===\n{gl}"
         except Exception as e:
             au({"kind": "agent_guidelines_unavailable", "role": role, "error": str(e)[:200]})
-    msgs = [{"role": "system", "content": _live_system(role)}]
-    for h in (history or [])[-4:]:
-        if h.get("role") in ("user", "assistant") and isinstance(h.get("content"), str):
-            msgs.append({"role": h["role"], "content": h["content"][:2000]})
-    msgs.append({"role": "user", "content": f"DOCUMENTS:\n{context}\n\nQUESTION FROM THE BOARD: {question}"})
-    answer_task = asyncio.create_task(llm.chat("reasoner", msgs, json_schema=LIVE_SCHEMA, max_tokens=1200, purpose=f"agent {role} live answer", audit=au))
-    gate = await scope_task
-    if not gate["allowed"]:
-        answer_task.cancel()
-        au({"kind": "guardrail_input", "where": f"agent {role}", "category": gate["category"], "layer": gate["layer"]})
-        return {**base, "status": "out_of_scope", "category": gate["category"], "message": gate["message"], "seconds": round(time.time() - t0, 2)}
-    a = await answer_task
-    stmts, drop = qa.verify(case_id, a.get("statements"))  # exact quotes only, as in Ask the Case File
-    removed = [{**x, "where": "answer"} for x in drop]
-    kept = []
-    for st_ in stmts:
-        iss = guardrails.scan_output(st_["text"])
-        if iss:
-            removed.append(_removed(st_, "guardrail", "; ".join(i["reason"] for i in iss), "answer"))
-        else:
-            kept.append(st_)
+    turns = []
+    for h in (history or [])[-HISTORY_MESSAGES:]:
+        if isinstance(h, dict) and h.get("role") in ("user", "assistant") and isinstance(h.get("content"), str):
+            turns.append({"role": h["role"], "content": h["content"][:2000]})
+    asked = {"role": "user", "content": f"DOCUMENTS:\n{context}\n\nQUESTION FROM THE BOARD: {question}"}
+    msgs = [{"role": "system", "content": _live_system(role)}, *turns, asked]
+    note = _note_maker(case_id, role)
+    malformed = 0
+    if on_statement is None:
+        answer_task = asyncio.create_task(llm.chat("reasoner", msgs, json_schema=LIVE_SCHEMA, max_tokens=1200, purpose=f"agent {role} live answer", audit=au))
+        gate = await scope_task
+        if not gate["allowed"]:
+            answer_task.cancel()
+            return refused(gate)
+        a = await answer_task
+        kept, removed, dropped = _screen(case_id, a.get("statements"), note)
+        raw_refs, streamed, first = a.get("references"), False, None
+    else:
+        smsgs = [{"role": "system", "content": _live_stream_system(role)}, *turns, asked]
+        s = await _streamed_answer(case_id, role, smsgs, msgs, au, scope_task, note, on_statement, t0)
+        if not s["gate"]["allowed"]:
+            return refused(s["gate"])
+        kept, removed, dropped, streamed, first, malformed = s["kept"], s["removed"], s["dropped"], s["streamed"], s["first"], s["malformed"]
+        raw_refs = (s["end"] or {}).get("references")
+    raw_refs = [x for x in raw_refs if isinstance(x, dict)] if isinstance(raw_refs, list) else []
     if any(x["reason"] == "guardrail" for x in removed):
         au({"kind": "guardrail_output", "where": f"agent {role} live answer", "issues": [x["text"] for x in removed if x["reason"] == "guardrail"]})
-    references, refs_dropped = _verify_references(a.get("references"), refs, case["protocol"]) if kept else ([], len(a.get("references") or []))
+    references, refs_dropped = _verify_references(raw_refs, refs, case["protocol"]) if kept else ([], len(raw_refs))
     references.sort(key=lambda x: x["region"] != "India")  # references only beside a verified answer: never guideline text as the answer
+    seconds = round(time.time() - t0, 2)
     out = {**base, "status": "answered" if kept else "not_documented", "statements": kept, "references": references, "removed": removed,
-           "dropped_unverified": len(drop), "references_dropped": refs_dropped, "mode": mode, "answered_at": store.now_iso(),
-           "message": "" if kept else "Not documented in the Case File. No statement could be verified against the source documents.",
-           "seconds": round(time.time() - t0, 2)}
-    au({"kind": "agent_answer", "role": role, "by": user, "status": out["status"], "statements": len(kept), "dropped_unverified": len(drop),
-        "guardrail_removed": sum(x["reason"] == "guardrail" for x in removed), "references": len(references), "seconds": out["seconds"]})
+           "dropped_unverified": dropped, "references_dropped": refs_dropped, "mode": mode, "answered_at": store.now_iso(),
+           "message": "" if kept else NOT_DOCUMENTED, "seconds": seconds, "streamed": streamed,
+           "first_seconds": (first if on_statement is not None else seconds) if kept else None}
+    au({"kind": "agent_answer", "role": role, "by": user, "status": out["status"], "statements": len(kept), "dropped_unverified": dropped,
+        "guardrail_removed": sum(x["reason"] == "guardrail" for x in removed), "references": len(references), "seconds": out["seconds"],
+        "streamed": streamed, "first_seconds": out["first_seconds"], "malformed": malformed})
     return out

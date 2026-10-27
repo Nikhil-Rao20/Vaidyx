@@ -108,7 +108,7 @@ def test_live_answer_is_cited_and_unverified_statements_are_kept_aside(monkeypat
         {"text": "A PET-CT was done.", "citations": [{"doc_id": "Dnope0000", "quote": "PET-CT"}]}],
         "references": [{"ref_id": "G1", "quote": "Molecular testing for EGFR(a) and ALK(a) on the biopsy specimen"}]})
     a = asyncio.run(agents.ask(case_id, "radiology", "What size is the lung mass on the CT?"))
-    assert a["status"] == "answered" and a["kind"] == "AI support (role-specific)" and a["label"] == "Radiology support"
+    assert a["status"] == "answered" and a["kind"] == "AI agent, support only" and a["label"] == "Radiology support"
     assert [s["text"] for s in a["statements"]] == ["The CECT thorax records a spiculated mass of 3.2 cm in the right upper lobe."]
     assert a["statements"][0]["citations"][0]["doc_id"] == "Dct000001"
     assert sorted(x["reason"] for x in a["removed"]) == ["document_not_found", "number_not_in_quote"] and a["dropped_unverified"] == 2

@@ -107,3 +107,50 @@ def test_enforce_clean_text_unchanged_no_audit():
     events = []
     assert g.enforce("PD-L1 TPS is pending.", events.append) == ("PD-L1 TPS is pending.", [])
     assert events == []
+
+
+# ---- night-v3 item 6.4: a decision asked of an agent the way one asks a colleague is refused by rule ----------------------------------
+@pytest.mark.parametrize("q,cat", [
+    ("What would you do here?", "treatment_recommendation"),
+    ("Radiology, what would you do?", "treatment_recommendation"),
+    ("Which would you pick?", "treatment_recommendation"),
+    ("Which one would you choose for her?", "treatment_recommendation"),
+    ("Which would you go for, given the CT?", "treatment_recommendation"),
+    ("Do you agree with the surgeon?", "other_out_of_scope"),
+    ("Do you agree that the node is involved?", "other_out_of_scope"),
+    ("Is it operable?", "treatment_recommendation"),
+    ("Is he resectable?", "treatment_recommendation"),
+    ("Is the patient curable?", "treatment_recommendation"),
+    ("Is she fit for surgery?", "treatment_recommendation"),
+    ("Is this operable on the CT?", "treatment_recommendation"),
+    ("Can we go ahead with the surgery?", "treatment_recommendation"),
+    ("Can we proceed with chemoradiation?", "treatment_recommendation"),
+    ("Would you recommend a PET-CT?", "treatment_recommendation"),
+    ("Would you suggest another biopsy?", "treatment_recommendation"),
+    ("Would you advise waiting?", "treatment_recommendation"),
+    ("Would you give her chemotherapy?", "treatment_recommendation"),
+    ("Would you offer radiotherapy?", "treatment_recommendation"),
+    ("Would you operate?", "treatment_recommendation"),
+])
+def test_colleague_style_requests_are_refused_by_rule(q, cat):
+    assert g.rule_check(q) == cat
+    r = asyncio.run(g.check_input(q))
+    assert r["allowed"] is False and r["layer"] == "rule" and r["message"] == g.REFUSALS[cat]
+
+
+@pytest.mark.parametrize("q", [
+    "What does the CT report say?", "Which report is the latest?", "Is the PD-L1 result recorded?", "What did the board decide last time?",
+    "What did you find in the histopathology report?", "Which would be the latest ECOG recorded?", "Is the operative note signed?",
+    "Is the resection margin documented?", "Do you have the PET-CT report?",
+])
+def test_record_questions_put_like_a_colleague_stay_in_scope(q):
+    assert g.rule_check(q) is None
+
+
+@pytest.mark.parametrize("s", [
+    "AI agent, Radiology.", "Sources are on the screen.",
+    "In the report of 12/03/2026: the CT chest records right hilar node 1.8 cm in short axis.",
+    "The pathology report of 04/03/2026 records PD-L1: pending.",
+])
+def test_spoken_lead_ins_pass_the_output_scan(s):
+    assert g.scan_output(s) == []

@@ -24,6 +24,13 @@ _RULES = [
     ("scan_interpretation", r"\b(look at|read|interpret|analy[sz]e|review|see)\b.{0,30}\b(scan|image|images|ct|mri|x-?ray|pet|slide|film|mammogram)\b(?!.{0,15}report)"),
     ("stage_derivation", r"\b(what|calculate|derive|assign|determine|work out)\b.{0,30}\b(stage|tnm)\b(?!.{0,40}\b(recorded|documented|written|reported)\b)"),
     ("prognosis", r"\b(prognosis|survival|life expectancy|how long (will|does) (he|she|the patient)|chance of cure)\b"),
+    # night-v3 item 6.4: a decision asked of an agent the way one asks a colleague; refused by rule because the classifier fails open
+    ("treatment_recommendation", r"\bwhat would you do\b"),
+    ("treatment_recommendation", r"\bwhich (one )?would you (pick|choose|go for)\b"),
+    ("other_out_of_scope", r"\bdo you agree (with|that)\b"),
+    ("treatment_recommendation", r"\bis (it|he|she|the patient|this) (operable|resectable|curable|fit for)\b"),
+    ("treatment_recommendation", r"\bcan we (go ahead|proceed) with\b"),
+    ("treatment_recommendation", r"\bwould you (recommend|suggest|advise|give|offer|operate)\b"),
 ]
 
 REFUSALS = {

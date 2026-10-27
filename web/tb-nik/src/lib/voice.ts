@@ -623,3 +623,12 @@ export function onAgentVoiceChange(fn: (on: boolean) => void): () => void {
   window.addEventListener(AGENT_VOICE_EVENT, h);
   return () => window.removeEventListener(AGENT_VOICE_EVENT, h);
 }
+
+/** The agent-voice choice this person made (kept in this browser), or null when they never chose (night-v3 6.1: the call then
+ *  decides by where they are; a member in the room starts muted, the room screen plays). */
+export function agentVoiceChoice(): boolean | null {
+  try {
+    const v = localStorage.getItem(AGENT_VOICE_KEY);
+    return v === null ? agentVoiceHere : v !== "0";
+  } catch { return agentVoiceHere; }
+}

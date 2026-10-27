@@ -91,7 +91,7 @@ class As:
 def app(data_root, demo_cases, monkeypatch):
     monkeypatch.setenv("TB_SCHEDULER", "0")
     org.save(hospital_org(), by="test")
-    pacs.clear(); live.hub.clear(); meetings.LIVE_DECISION.clear(); meetings.AGENT_STATE.clear()
+    pacs.clear(); live.hub.clear(); meetings.LIVE_DECISION.clear(); meetings.AGENT_STATE.clear(); meetings.AGENT_AUDIO.clear(); meetings.AGENT_LOCKS.clear()
     api_meetings.JOIN_LIMIT._hits.clear()
     from tumour_board import service
     monkeypatch.setattr(service, "prepare_session_agents", lambda sid, user, roles=None, case_ids=None, refresh=False: [])
@@ -411,32 +411,40 @@ def test_questions_are_answered_by_the_stand_in_agent_in_text(tc, monkeypatch):
     monkeypatch.setattr(live, "broadcast", lambda m, ev, **kw: events.append(ev) or True)
     asked = []
 
-    async def fake_ask(case_id, role, question, history=None, user=""):
+    async def fake_ask(case_id, role, question, history=None, user="", **kw):
         asked.append((case_id, role, question, user))
         return {"role": role, "label": "Radiology", "status": "answered", "statements": [{"text": "Lesion 3.2 cm", "citations": [{"doc_id": "D1", "quote": "Lesion 3.2 cm"}]}],
                 "references": [], "removed": [], "model": "reasoner", "seconds": 0.2}
     monkeypatch.setattr(agents, "ask", fake_ask)
     v = As(tc, "priya").get(f"/meetings/{mid}").json()
     assert v["agent"]["active"] is True and v["agent"]["role"] == "radiology" and v["agent"]["state"] == "ready"  # no radiology head present
-    assert v["can"]["ask"] is True
-    r = As(tc, "priya").post(f"/meetings/{mid}/questions", json={"text": "  What size is the lung lesion?  "})
+    assert v["can"]["ask"] is True and v["can"]["ask_agents"] is True
+    # a question with no role goes to the board (nobody answers it by itself); the role names the agent (night-v3 6.1)
+    r = As(tc, "priya").post(f"/meetings/{mid}/questions", json={"text": "Who presents?"})
+    assert r.status_code == 200 and r.json()["question"]["role"] is None and r.json()["question"]["answer"] is None, r.text
+    r = As(tc, "priya").post(f"/meetings/{mid}/questions", json={"text": "  What size is the lung lesion?  ", "role": "radiology"})
     assert r.status_code == 200, r.text
     q = r.json()["question"]
     assert q["text"] == "What size is the lung lesion?" and q["role"] == "radiology" and q["by_name"] == "Dr Priya Nair" and q["case_id"] == "TB-001"
-    # the stand-in answers in a background task on the app's loop, its true states broadcast
+    # the agent answers in a background task on the app's loop, its true states broadcast per role (no "reading the question")
     wait_for(lambda: any(e["type"] == "agent_state" and e["agent"]["state"] == "ready" for e in events))
     assert asked == [("TB-001", "radiology", "What size is the lung lesion?", "priya")]
     states = [e["agent"]["state"] for e in events if e["type"] == "agent_state"]
-    assert states == ["reading_question", "thinking", "answering", "ready"]
-    assert [e["type"] for e in events][-2:] == ["question", "agent_state"]
+    assert states == ["thinking", "answering", "ready"]
+    assert all(e["role"] == "radiology" for e in events if e["type"] == "agent_state")
+    assert [e["type"] for e in events][-3:] == ["question", "agent_speech", "agent_state"]
+    speech = [e for e in events if e["type"] == "agent_speech"]
+    assert [x["index"] for x in speech] == [0, 1, 2] and speech[-1]["final"] is True and "text" not in speech[0]  # spoken by reference only
     out = asyncio.run(meetings.answer(mid, q["id"], "priya"))  # asked again: the stored answer, no second model call
     assert out["status"] == "answered" and out["text"] == "Lesion 3.2 cm" and out["role"] == "radiology" and len(asked) == 1
+    assert out["speech"] == ["AI agent, Radiology.", "Lesion 3.2 cm", "Sources are on the screen."] and out["first_seconds"] is not None
     assert As(tc, "priya").post(f"/meetings/{mid}/questions", json={"text": " "}).status_code == 400
     assert As(tc, "ravi").post(f"/meetings/{mid}/questions", json={"text": "x"}).status_code == 403
     v = As(tc, "anil").get(f"/meetings/{mid}").json()
-    assert v["questions"][0]["answer"]["text"] == "Lesion 3.2 cm" and v["questions"][0]["answer"]["statements"][0]["citations"] and v["agent"]["state"] == "ready"
+    assert v["questions"][1]["answer"]["text"] == "Lesion 3.2 cm" and v["questions"][1]["answer"]["statements"][0]["citations"] and v["agent"]["state"] == "ready"
     s = board.get(mid)
     assert [e["kind"] for e in s["log"]] == ["answer"] and s["log"][0]["question"] == "What size is the lung lesion?"  # the session's agent log, for the minutes
+    assert [x["text"] for x in v["questions"]] == ["Who presents?", "What size is the lung lesion?"]
     assert "question_answered" in [e["kind"] for e in board.read_audit() if e["session"] == mid]
     # the head arrives: no stand-in for Radiology any more
     join_and_admit(tc, mid, "suresh")
@@ -458,11 +466,12 @@ def test_stand_in_failure_is_shown_not_hidden(tc, monkeypatch):
     async def boom(*a, **k):
         raise RuntimeError("model down")
     monkeypatch.setattr(agents, "ask", boom)
-    q = As(tc, "priya").post(f"/meetings/{mid}/questions", json={"text": "Lesion size?"}).json()["question"]
-    wait_for(lambda: (board.get(mid)["questions"][0].get("answer") or {}).get("status") == "error" and meetings.AGENT_STATE.get(mid, {}).get("state") == "ready")
+    q = As(tc, "priya").post(f"/meetings/{mid}/questions", json={"text": "Lesion size?", "role": "radiology"}).json()["question"]
+    wait_for(lambda: (board.get(mid)["questions"][0].get("answer") or {}).get("status") == "error" and meetings.AGENT_STATE.get(mid, {}).get("radiology", {}).get("state") == "error")
     out = asyncio.run(meetings.answer(mid, q["id"]))
     assert out["status"] == "error" and "could not answer" in out["text"]
-    assert board.get(mid)["questions"][0]["answer"]["status"] == "error" and meetings.AGENT_STATE[mid]["state"] == "ready"
+    assert board.get(mid)["questions"][0]["answer"]["status"] == "error" and meetings.AGENT_STATE[mid]["radiology"]["state"] == "error"  # "Could not answer, try again" for a minute
+    assert {a["role"]: a["state"] for a in As(tc, "priya").get(f"/meetings/{mid}").json()["agents"]}["radiology"] == "error"
 
 
 def test_hands_and_the_live_decision(tc, monkeypatch):
@@ -755,7 +764,7 @@ def test_every_absent_head_has_a_stand_in_agent_in_the_list(tc, monkeypatch):
     roles2 = [a["role"] for a in As(tc, "priya").get(f"/meetings/{mid}").json()["agents"]]
     assert "radiology" not in roles2 and "pathology" in roles2
     # the shared state names the role it belongs to
-    meetings._set_agent(mid, "thinking", "pathology", "Q1")
+    meetings._set_agent(mid, "pathology", "thinking", by="priya", question="Q1")
     ag = {a["role"]: a for a in As(tc, "priya").get(f"/meetings/{mid}").json()["agents"]}
     assert ag["pathology"]["state"] == "thinking" and ag["pathology"]["question"] == "Q1" and ag["medical_oncology"]["state"] == "ready"
     # outside a session: nothing

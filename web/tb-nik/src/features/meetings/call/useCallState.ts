@@ -2,13 +2,16 @@
 // for me, full screen, the reactions shown for a moment, "Decision saved" for 8 s, and the keyboard shortcuts of the call.
 // Night-v3 5.5: the phone's controls fading after 4 s without a touch (useControlsAutoHide), "Save data" (useSaveData: camera off,
 // the remote video at the lower quality, remembered for this tab) and the room screen's wake lock (useWakeLock).
+// Night-v3 6.1: the agent voices follow the person's stored choice; with none, a member in the room starts muted (the room screen
+// plays the answers) and everyone else hears them; the room screen starts on and keeps its own choice for this page only.
 import { createContext, useCallback, useEffect, useRef, useState } from "react";
 import { identityUser, isRoomScreen } from "@/lib/video";
 import { useCall } from "./context";
 import { Track, VideoQuality, type Room } from "livekit-client";
-import { agentVoiceEnabled, onAgentVoiceChange, setAgentVoice } from "@/lib/voice";
+import { agentVoiceChoice, onAgentVoiceChange, setAgentVoice } from "@/lib/voice";
+import { agentVoicesFor } from "./agentSpeaker";
 import type { ReactionEvent } from "@/lib/live";
-import type { CallCtx, CallVideo, LayoutKind, PanelKind, ShownReaction } from "./types";
+import type { CallCtx, CallVariant, CallVideo, LayoutKind, PanelKind, ShownReaction } from "./types";
 
 /** How long a reaction stays on a tile, and how long "Decision saved" stays on the strip. */
 export const REACTION_MS = 3000;
@@ -55,7 +58,7 @@ export function pruneReactions(m: Map<string, ShownReaction>, now: number): Map<
   return changed ? next : m;
 }
 
-export function useCallState(mid: string, spotlight: string[]) {
+export function useCallState(mid: string, spotlight: string[], where: { variant: CallVariant; inRoom: boolean } = { variant: "member", inRoom: false }) {
   const [panel, setPanelRaw] = useState<PanelKind>(null);
   const setPanel = useCallback((p: PanelKind) => setPanelRaw(p), []);
   const togglePanel = useCallback((p: Exclude<PanelKind, null>) => setPanelRaw((cur) => (cur === p ? null : p)), []);
@@ -79,9 +82,13 @@ export function useCallState(mid: string, spotlight: string[]) {
     if (!spotKey) setLayout((l) => (l === "spotlight" ? "auto" : l));
   }, [spotKey]);
 
-  const [agentVoices, setAgentVoicesRaw] = useState<boolean>(() => agentVoiceEnabled());
-  useEffect(() => onAgentVoiceChange(setAgentVoicesRaw), []);
-  const setAgentVoices = useCallback((on: boolean) => { setAgentVoice(on); setAgentVoicesRaw(on); }, []);
+  // The person's choice (null: none yet). The room screen runs under the coordinator's login, often in the same browser: it never
+  // reads nor writes that stored choice, so muting the control view does not mute the room.
+  const roomScreen = where.variant === "room";
+  const [voiceChoice, setVoiceChoice] = useState<boolean | null>(() => (roomScreen ? null : agentVoiceChoice()));
+  useEffect(() => (roomScreen ? undefined : onAgentVoiceChange(setVoiceChoice)), [roomScreen]);
+  const agentVoices = agentVoicesFor(where.variant, where.inRoom, voiceChoice);
+  const setAgentVoices = useCallback((on: boolean) => { if (!roomScreen) setAgentVoice(on); setVoiceChoice(on); }, [roomScreen]);
 
   const [fullscreen, setFullscreen] = useState<boolean>(() => typeof document !== "undefined" && !!document.fullscreenElement);
   useEffect(() => {
@@ -287,7 +294,10 @@ export function useShortcuts(ctx: CallCtx | null, extra: { openHelp: () => void;
       const videoLive = v.status === "connected" && !!v.room;
       switch (id) {
         case "escape":
-          if (c.panel && !layerOpen()) { c.setPanel(null); e.preventDefault(); }
+          if (layerOpen()) return;
+          // an agent speaking on this device stops first (here only; the others keep hearing it), the next Esc closes the panel
+          if (c.speakingNow) { c.stopAgentAudio(); e.preventDefault(); return; }
+          if (c.panel) { c.setPanel(null); e.preventDefault(); }
           return;
         case "mic": e.preventDefault(); if (videoLive && !c.dictating) void v.toggleMic(); return;
         case "cam": e.preventDefault(); if (videoLive) void v.toggleCam(); return;

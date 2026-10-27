@@ -394,25 +394,43 @@ def _agent_text(ref):
     return _statements(m.get("statements")) or str(m.get("message") or "").strip() or "Nothing in the records answers this."
 
 
+def _spoken(answer, i) -> str | None:
+    """One sentence of an agent answer by its place (night-v3 item 6.3): `speech[i]` when the answer carries the list the devices read
+    ("AI agent, Radiology.", the statements, "Sources are on the screen."), else the i-th statement's text; None out of range."""
+    if not isinstance(answer, dict) or i < 0:
+        return None
+    rows = answer.get("speech") if isinstance(answer.get("speech"), list) else answer.get("statements")
+    if not isinstance(rows, list) or i >= len(rows):
+        return None
+    x = rows[i]
+    x = x.get("text") if isinstance(x, dict) else x
+    return x if isinstance(x, str) else None
+
+
 def _meeting_text(ref, roles=None):
     """A question's answer on the meeting screen (by the question id), or the agent answer logged by board.log_answer (by its entry
     id). A log entry belongs to one Case File and the Board room shows it only to readers of that file, so it needs FULL scope on
-    that Case File too (review S of Phase 4, finding M1)."""
+    that Case File too (review S of Phase 4, finding M1). With an integer `index` only that sentence of the answer (_spoken); without
+    it the whole answer's text."""
     from . import access, meetings
     s = meetings.get(_sid(ref.get("meeting_id")))
     rid = _sid(ref.get("id"))
     if not s or not rid:
         return None
+    i = ref.get("index")
+    i = i if isinstance(i, int) and not isinstance(i, bool) else None
     q = next((x for x in s.get("questions") or [] if isinstance(x, dict) and x.get("id") == rid), None)
     if q is not None:
         a = q.get("answer")
+        if i is not None:
+            return _spoken(a, i)
         return a if isinstance(a, str) else (str(a.get("text") or "") if isinstance(a, dict) else None)
     e = next((x for x in s.get("log") or [] if isinstance(x, dict) and x.get("id") == rid and x.get("kind") == "answer"), None)
     if not e:
         return None
     if roles is None or case_scope(roles, _sid(e.get("case_id"))) != access.FULL:
         return None
-    return str(e.get("text") or "")
+    return _spoken(e, i) if i is not None else str(e.get("text") or "")
 
 
 def _section_text(sec) -> str:

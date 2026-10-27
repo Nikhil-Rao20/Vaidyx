@@ -4,10 +4,13 @@
 // polite announcement "The meeting moved to case 4 of 8"; a new presenter is announced as "Presenter: <name>". The member's "stepped
 // away" state is reset by the shell on a case change, not here. Also the case clock the agenda rail and the Agenda panel share: the
 // time spent on the case on the floor (counting up between events while the timer runs) and what is left of its timer.
+// Night-v3 6.1: when a case with stand-in agents comes on the floor (and at the first state after joining), every screen shows for
+// 6 s "AI agents in this case: Radiology, Pathology. They read records and guidelines only. They do not decide or advise.", said
+// once politely; once per case on this screen.
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { ArrowRightLeft } from "lucide-react";
-import type { AgendaRow, MeetingState, MeetingTimer } from "@/lib/live";
+import { ArrowRightLeft, Bot } from "lucide-react";
+import type { AgendaRow, AgentInfo, MeetingState, MeetingTimer } from "@/lib/live";
 import { fmtClock, useCountdown } from "../components/shared";
 import { useCall } from "./context";
 import type { CallCtx } from "./types";
@@ -15,6 +18,17 @@ import { cn } from "@/lib/utils";
 
 /** How long the "Moved to case" toast stays. */
 export const CASE_TOAST_MS = 3000;
+/** How long the "AI agents in this case" notice stays. */
+export const AGENTS_NOTICE_MS = 6000;
+/** The agents of a case may arrive a moment after the case itself (their own event): the notice waits this long for them. */
+export const AGENTS_WAIT_MS = 15_000;
+
+/** "AI agents in this case: Radiology, Pathology. They read records and guidelines only. They do not decide or advise." ("" with none). */
+export function agentsNotice(agents: AgentInfo[]): string {
+  const names = Array.from(new Set(agents.map((a) => a.department_name || a.label || a.role).filter(Boolean)));
+  if (!names.length) return "";
+  return `AI agents in this case: ${names.join(", ")}. They read records and guidelines only. They do not decide or advise.`;
+}
 /** Under this many seconds left the remaining time turns amber ("under 2 minutes"). */
 export const LOW_SECONDS = 120;
 
@@ -132,11 +146,33 @@ export function CaseFlow() {
     return () => window.clearTimeout(id);
   }, [toast]);
 
+  // The agents' notice: once per case on this screen, when the case comes on the floor or at the first state after joining (its
+  // agents may arrive a moment later, so it waits up to AGENTS_WAIT_MS for them).
+  const notice = agentsNotice(c.agents);
+  const shownFor = useRef<Set<string>>(new Set());
+  const floorSince = useRef<{ cid: string | null; at: number }>({ cid: null, at: 0 });
+  if (floorSince.current.cid !== cid) floorSince.current = { cid, at: Date.now() };
+  const [agentsToast, setAgentsToast] = useState<{ key: number; text: string; cid: string } | null>(null);
+  useEffect(() => {
+    if (!cid || !notice || shownFor.current.has(cid)) return;
+    if (Date.now() - floorSince.current.at > AGENTS_WAIT_MS) return;
+    shownFor.current.add(cid);
+    setAgentsToast({ key: Date.now(), text: notice, cid });
+    // after the "moved" announcement, so the polite region reads both
+    const id = window.setTimeout(() => c.announce(notice), 1200);
+    return () => window.clearTimeout(id);
+  }, [cid, notice]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!agentsToast) return undefined;
+    const id = window.setTimeout(() => setAgentsToast(null), AGENTS_NOTICE_MS);
+    return () => window.clearTimeout(id);
+  }, [agentsToast]);
+
   const room = c.variant === "room";
   // Drawn inside the stage (the shell puts it among the stage's overlays): the member's toast starts at the left and stops short of
   // the chip at the top right (an icon on a phone, the words on a laptop).
   return (
-    <div className={cn("pointer-events-none absolute inset-x-0 top-3 z-30 flex px-3", room ? "justify-center" : cn("justify-start", c.phone ? "pr-12" : "pr-60"))} data-testid="case-toast-area">
+    <div className={cn("pointer-events-none absolute inset-x-0 top-3 z-30 flex flex-col gap-2 px-3", room ? "items-center" : cn("items-start", c.phone ? "pr-12" : "pr-60"))} data-testid="case-toast-area">
       <AnimatePresence>
         {toast ? (
           // role status for the tests and assistive tools; aria-live off because the shell's polite region already says it once.
@@ -145,6 +181,15 @@ export function CaseFlow() {
             className={cn("inline-flex max-w-full items-center gap-2 rounded-xl border border-stage-line bg-stage-panel/95 px-4 py-2 font-medium text-stage-fg shadow-[var(--shadow-lift)] backdrop-blur", room ? "text-xl" : "text-sm")}>
             <ArrowRightLeft className={cn("shrink-0 text-primary", room ? "size-6" : "size-4")} aria-hidden />
             <span className="min-w-0 truncate">{toast.text}</span>
+          </motion.p>
+        ) : null}
+        {agentsToast && agentsToast.cid === cid ? (
+          // aria-live off: the shell's polite region says it once (c.announce above)
+          <motion.p key={`agents-${agentsToast.key}`} role="status" aria-live="off" data-testid="agents-notice"
+            initial={reduce ? { opacity: 0 } : { opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+            className={cn("inline-flex max-w-full items-start gap-2 rounded-xl border border-stage-line bg-stage-panel/95 px-4 py-2 font-medium text-stage-fg shadow-[var(--shadow-lift)] backdrop-blur", room ? "max-w-[min(100%,56rem)] text-xl" : "text-sm")}>
+            <Bot className={cn("mt-0.5 shrink-0 text-primary", room ? "size-6" : "size-4")} aria-hidden />
+            <span className="min-w-0">{agentsToast.text}</span>
           </motion.p>
         ) : null}
       </AnimatePresence>

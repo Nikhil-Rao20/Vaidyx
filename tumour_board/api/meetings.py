@@ -275,10 +275,58 @@ async def meetings_timer(mid: str, request: Request):
 async def meetings_question(mid: str, request: Request):
     """A member types a question; when a stand-in agent is active for the current Case File it answers in the background (text only)."""
     u, rl = _who(request); b = await common.body(request); s = _meeting(mid); _member(rl, s)
-    q = _call(meetings.ask, s["id"], u, str(b.get("text") or ""), b.get("role"))
+    q = _call(meetings.ask, s["id"], u, str(b.get("text") or ""), b.get("role"), manager=meetings.manage(rl))
     if q.get("role"):
         meetings.answer_in_background(s["id"], q["id"], u)
     return {"question": q, "agent": meetings.agent_state(meetings.get(s["id"]))}
+
+
+# ---- the specialty agents of the meeting (night-v3 Phase 6, owner decision D2) -------------------------------------------------------------
+AGENT_LIMIT = common.RateLimit(120, 60)  # listening and playback reports per login per minute
+
+
+@router.post("/meetings/{mid}/agents")
+async def meetings_agents_set(mid: str, request: Request):
+    """The coordinator adds an agent to the meeting for the Case File on the floor, or removes one (any of the six roles)."""
+    u, rl = _who(request); common.need(rl, "session"); b = await common.body(request); s = _meeting(mid)
+    return {"agents": _call(meetings.set_agent, s["id"], u, str(b.get("role") or ""), bool(b.get("on")))}
+
+
+@router.put("/meetings/{mid}/agents/settings")
+async def meetings_agents_settings(mid: str, request: Request):
+    """The coordinator's switch: members can ask the agents (the coordinator always may)."""
+    u, rl = _who(request); common.need(rl, "session"); b = await common.body(request); s = _meeting(mid)
+    return _call(meetings.set_agents_settings, s["id"], u, b.get("members_ask", True))
+
+
+@router.post("/meetings/{mid}/agents/{role}/listening")
+async def meetings_agent_listening(mid: str, role: str, request: Request):
+    """An admitted member's device records a question for this agent (on) or stopped (off): the "listening" state, with an expiry."""
+    u, rl = _who(request); b = await common.body(request); s = _meeting(mid); _member(rl, s)
+    AGENT_LIMIT.check(u)
+    return _call(meetings.set_listening, s["id"], u, role, bool(b.get("on")))
+
+
+@router.post("/meetings/{mid}/agents/{role}/present")
+async def meetings_agent_present(mid: str, role: str, request: Request):
+    """"Present your points": the agent presents the points of its brief (code, no model call), spoken where agent voices are on."""
+    u, rl = _who(request); s = _meeting(mid); _member(rl, s)
+    return {"question": _call(meetings.present_points, s["id"], u, role)}
+
+
+@router.post("/meetings/{mid}/agents/{role}/stop")
+async def meetings_agent_stop(mid: str, role: str, request: Request):
+    """Stops the agent's voice for everyone: the coordinator, or the person who asked."""
+    u, rl = _who(request); b = await common.body(request); s = _meeting(mid); _member(rl, s)
+    return _call(meetings.stop_agent, s["id"], u, role, b.get("question"), manager=meetings.manage(rl))
+
+
+@router.post("/meetings/{mid}/agents/audio")
+async def meetings_agent_audio(mid: str, request: Request):
+    """A device (a member's, or the room screen's) reports that it plays or stopped playing an answer: drives "speaking"."""
+    u, rl = _who(request, guest=True); b = await common.body(request); s = _meeting(mid); _member(rl, s)
+    AGENT_LIMIT.check(u)
+    return _call(meetings.agent_audio, s["id"], u, str(b.get("question") or ""), bool(b.get("playing")))
 
 
 @router.post("/meetings/{mid}/hand")

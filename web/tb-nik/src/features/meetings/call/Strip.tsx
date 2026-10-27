@@ -9,14 +9,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Track, type Participant, type Room } from "livekit-client";
 import type { TrackReference } from "@livekit/components-react";
-import { Images, MessageSquareText, MonitorOff, MonitorPlay, MonitorUp, MoreVertical, Pin, PinOff, Sparkles, X } from "lucide-react";
+import { Images, Megaphone, MessageSquareText, MonitorOff, MonitorPlay, MonitorUp, MoreVertical, Pin, PinOff, Sparkles, UserRoundMinus, X } from "lucide-react";
 import type { AgendaRow, AgentInfo, Attendee, MeetingState, Opened } from "@/lib/live";
 import { identityUser, isRoomScreen, videoExtras } from "@/lib/video";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { VaidyxIcon } from "@/components/Wordmark";
 import { cn } from "@/lib/utils";
+import { indianDates } from "@/features/casefile/components/common";
 import { LiveVideo, TileFrame, micStateOf, useSpeaking, type TilePerson, type TileSize } from "../components/VideoTiles";
 import { useCall } from "./context";
+import { pointsLine, presentBlockedReason } from "./panels/AgentPoints";
 import { AGENT_STATE_WORD, BADGE_WORD, REACTIONS, badgesOf, type CallCtx, type LayoutKind, type RoleBadge } from "./types";
 
 // ---- pure helpers ---------------------------------------------------------------------------------------------------------
@@ -70,20 +72,43 @@ function ordinal(n: number): string {
   return `${n}${s}`;
 }
 
-/** The label of an agent tile: "Radiology, AI agent standing in". */
+/** The label of an agent tile: "Radiology, AI agent standing in" (the fallback when the server sends no title). */
 export function agentLine(a: Pick<AgentInfo, "label" | "department" | "department_name" | "role">): string {
   const dept = a.department_name || a.department || a.label || a.role.replace(/_/g, " ");
   return `${dept}, AI agent standing in`;
 }
 
-/** The accessible name of an agent tile: the visible words in their order ("Pathology, AI agent standing in, AI agent, support
- * only, Ready"). */
-export function agentTileLabel(line: string, word: string): string {
-  return `${line}, AI agent, support only, ${word}`;
+/** The title of an agent tile, from the server ("Radiology, AI agent standing in", "Nuclear Medicine, AI agent, called by Priya
+ * Nair"), else agentLine. */
+export function agentTitle(a: Pick<AgentInfo, "label" | "department" | "department_name" | "role" | "title">): string {
+  return (a.title ?? "").trim() || agentLine(a);
 }
 
-export function agentStateWord(state: string | undefined | null): string {
+/** The department's name of an agent ("Radiology"). */
+export function agentDept(a: Pick<AgentInfo, "label" | "department" | "department_name" | "role">): string {
+  return a.department_name || a.department || a.label || a.role.replace(/_/g, " ");
+}
+
+/** The accessible name of an agent tile: the visible words in their order ("Pathology, AI agent standing in, AI agent, support
+ * only, Ready, 3 points from the records", then the first point on a big tile). */
+export function agentTileLabel(line: string, word: string, ...more: Array<string | null | undefined>): string {
+  return [`${line}, AI agent, support only, ${word}`, ...more.filter(Boolean)].join(", ");
+}
+
+/** The state key a tile draws: a state the words know, else "ready". */
+export function agentStateKey(state: string | undefined | null): string {
+  return state && AGENT_STATE_WORD[state] ? state : "ready";
+}
+
+/** The state word of an agent: AGENT_STATE_WORD, and while listening "Listening to <name>" (the asker; "Listening" without one). */
+export function agentStateWord(state: string | undefined | null, byName?: string | null): string {
+  if (state === "listening") return byName ? `Listening to ${byName}` : (AGENT_STATE_WORD.listening ?? "Listening");
   return (state && AGENT_STATE_WORD[state]) || "Ready";
+}
+
+/** True while an agent is working (the pulse and the dots): every state but ready and error. */
+export function agentBusy(state: string | undefined | null): boolean {
+  return !!state && state !== "ready" && state !== "error";
 }
 
 /** The spotlight after a click: add (at most three) or remove. */
@@ -377,58 +402,97 @@ export function CallTile({ p, size = "md", big, dense, className, fit, chip }: {
   );
 }
 
-const AGENT_RING: Record<string, string> = {
-  ready: "border-ok/70", listening: "border-indigo", reading_question: "border-indigo", reading: "border-indigo",
-  thinking: "border-review", answering: "border-primary", speaking: "border-primary",
+/** The dashed ring of an agent per state (ready ok, preparing muted, listening indigo, thinking review, answering and speaking
+ * primary, error bad). */
+export const AGENT_RING: Record<string, string> = {
+  ready: "border-ok/70", preparing: "border-stage-muted", listening: "border-indigo", reading_question: "border-indigo", reading: "border-indigo",
+  thinking: "border-review", answering: "border-primary", speaking: "border-primary", error: "border-bad",
 };
 
 function Dots() {
   return <span className="ml-0.5 inline-flex gap-0.5" aria-hidden>{[0, 1, 2].map((i) => <motion.span key={i} className="size-1 rounded-full bg-current" animate={{ opacity: [0.2, 1, 0.2] }} transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }} />)}</span>;
 }
 
-/** An AI agent standing in for an absent head: dashed, the Vaidyx mark, its true state; a click opens the Agents panel. */
+/** The menu of an agent tile (three dots): Ask the agent (the Agents panel), Present your points (disabled with the reason while
+ * the brief is prepared or has no points); the coordinator also Remove from this meeting. */
+function AgentTileMenu({ agent, line }: { agent: AgentInfo; line: string }) {
+  const ctx = useCall();
+  const canRemove = ctx.canManage && agent.can_remove !== false;
+  const canPresent = ctx.inSession && !!ctx.cid;
+  const blocked = presentBlockedReason(agent);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button type="button" className={menuBtn} aria-label={`More for the ${line}`} title="More" data-testid="agent-tile-menu"><MoreVertical className="size-4" aria-hidden /></button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56" data-theme="dark">
+        <DropdownMenuLabel className="truncate">{line}</DropdownMenuLabel>
+        <DropdownMenuItem onSelect={() => ctx.setPanel("agents")} data-testid="agent-ask"><MessageSquareText aria-hidden />Ask the agent</DropdownMenuItem>
+        {canPresent ? (
+          <DropdownMenuItem disabled={!!blocked} onSelect={() => { void ctx.actions.presentPoints(agent.role).catch(() => undefined); }} data-testid="agent-present">
+            <Megaphone aria-hidden />
+            <span className="min-w-0">
+              <span className="block">Present your points</span>
+              {blocked ? <span className="block text-xs text-muted-foreground" data-testid="agent-present-why">{blocked}</span> : null}
+            </span>
+          </DropdownMenuItem>
+        ) : null}
+        {canRemove ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => { void ctx.actions.setAgent(agent.role, false).catch(() => undefined); }} data-testid="agent-remove">
+              <UserRoundMinus aria-hidden />Remove from this meeting
+            </DropdownMenuItem>
+          </>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** An AI agent in the meeting (standing in for an absent head, or called by the coordinator): dashed with a ring per state, the
+ * Vaidyx mark, its title, "AI agent, support only" and its true state (with the asker's name while listening); a click opens the
+ * Agents panel. Never a member of the board. */
 export function AgentCallTile({ agent, big, className }: { agent: AgentInfo; big?: boolean; className?: string }) {
   const ctx = useCall();
   const reduce = useReducedMotion();
-  const key = agent.state && AGENT_STATE_WORD[agent.state] ? agent.state : "ready";
-  const word = agentStateWord(key);
-  const busy = key !== "ready";
-  const line = agentLine(agent);
+  const key = agentStateKey(agent.state);
+  const word = agentStateWord(key, agent.by_name);
+  const busy = agentBusy(key);
+  const line = agentTitle(agent);
+  const count = pointsLine(agent);
+  const first = big && agent.brief?.status !== "preparing" ? agent.points?.[0]?.text ?? null : null;
   const interactive = ctx.variant !== "room";
   const body = (
     <>
-      <motion.span animate={reduce ? {} : busy ? { scale: [1, 1.08, 1] } : { scale: 1 }} transition={busy ? { repeat: Infinity, duration: key === "thinking" ? 1.2 : 0.8 } : {}} className={cn("grid shrink-0 place-items-center rounded-full bg-stage-panel", big ? "size-14" : "size-9")} aria-hidden>
+      <motion.span animate={reduce ? {} : busy ? { scale: [1, 1.08, 1] } : { scale: 1 }} transition={busy ? { repeat: Infinity, duration: key === "thinking" || key === "preparing" ? 1.2 : 0.8 } : {}} className={cn("grid shrink-0 place-items-center rounded-full bg-stage-panel", big ? "size-14" : "size-9")} aria-hidden>
         <VaidyxIcon tone="white" className={big ? "h-7" : "h-4"} />
       </motion.span>
-      <span className="min-w-0 text-left">
-        <span className={cn("block truncate font-medium leading-tight text-stage-fg", big ? "text-xl" : "text-xs")}>{line}</span>{" "}
+      <span className="min-w-0 flex-1 text-left">
+        <span className={cn("block truncate font-medium leading-tight text-stage-fg", big ? "text-xl" : "text-xs")} data-part="title">{line}</span>{" "}
         <span className={cn("block truncate", big ? "text-base text-stage-fg/80" : "text-[10px] text-stage-muted")}>AI agent, support only</span>{" "}
-        <span className={cn("block text-stage-fg", big ? "text-lg" : "text-[11px]")} aria-live="polite">
+        <span className={cn("block truncate", key === "error" ? "text-[#ffb4a8]" : "text-stage-fg", big ? "text-lg" : "text-[11px]")} aria-live="polite" data-part="state">
           <AnimatePresence mode="wait" initial={false}>
-            <motion.span key={key} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="inline-flex items-center gap-1">{word}{busy ? <Dots /> : null}</motion.span>
+            <motion.span key={`${key}:${word}`} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="inline-flex items-center gap-1">{word}{busy ? <Dots /> : null}</motion.span>
           </AnimatePresence>
-        </span>
+          {big ? <span className="text-stage-fg/80" data-part="count">{" · "}{count}</span> : null}
+        </span>{" "}
+        {!big ? <span className="hidden truncate text-[10px] text-stage-muted @min-[9rem]:block" data-part="count">{count}</span> : null}
+        {first ? <span className="block truncate text-base text-stage-fg/80 [@media(max-height:899px)]:hidden" data-part="point" title={first}>{indianDates(first)}</span> : null}
       </span>
     </>
   );
-  // The name starts with the visible words in the same order (axe label-content-name-mismatch): the department line, "AI agent,
-  // support only", the state word.
-  const label = agentTileLabel(line, word);
+  // The name starts with the visible words in the same order (axe label-content-name-mismatch): the title, "AI agent, support
+  // only", the state word.
+  const label = agentTileLabel(line, word, count, first ? indianDates(first) : null);
   return (
-    <div className={cn("group/tile relative aspect-video overflow-hidden rounded-xl border-2 border-dashed bg-stage-raised", AGENT_RING[key] ?? "border-stage-line", className)} data-testid="agent-tile" data-agent-state={key} data-role={agent.role}>
+    <div className={cn("@container group/tile relative aspect-video overflow-hidden rounded-xl border-2 border-dashed bg-stage-raised", AGENT_RING[key] ?? "border-stage-line", className)} data-testid="agent-tile" data-agent-state={key} data-role={agent.role}>
       {interactive ? (
         <button type="button" onClick={() => ctx.setPanel("agents")} className="flex h-full w-full items-center gap-2 p-2 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary" aria-label={`${label}. Open the Agents panel`} title={`${line}: open the Agents panel`}>{body}</button>
       ) : <div className={cn("flex h-full w-full items-center gap-2", big ? "p-3" : "p-2")} role="group" aria-label={label}>{body}</div>}
       {interactive ? (
         <div className="absolute right-1.5 top-1.5 opacity-100 lg:opacity-0 lg:group-hover/tile:opacity-100 lg:group-focus-within/tile:opacity-100 [&:has([data-state=open])]:opacity-100">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button type="button" className={menuBtn} aria-label={`More for the ${line}`} title="More"><MoreVertical className="size-4" aria-hidden /></button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56" data-theme="dark">
-              <DropdownMenuItem onSelect={() => ctx.setPanel("agents")}><MessageSquareText aria-hidden />Ask the agent</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <AgentTileMenu agent={agent} line={line} />
         </div>
       ) : null}
     </div>
@@ -469,7 +533,7 @@ export function UnpinChip({ big }: { big?: boolean }) {
 
 // ---- the strip ------------------------------------------------------------------------------------------------------------
 
-/** The room screen's column: at most `max` remote tiles in two columns, "+n more" in words, then the agents standing in under
+/** The room screen's column: at most `max` remote tiles in two columns, "+n more" in words, then the agents in the meeting under
  * their own heading (at most four, then "+n more"). No menus, no scroll. */
 function RoomStrip({ people, agents, showContent, max, className }: { people: CallPerson[]; agents: AgentInfo[]; showContent: boolean; max: number; className?: string }) {
   const cut = roomCut(people, max - (showContent ? 1 : 0));
@@ -487,10 +551,10 @@ function RoomStrip({ people, agents, showContent, max, className }: { people: Ca
         </section>
       ) : <p className="text-xl text-stage-fg/80">No remote members</p>}
       {agents.length ? (
-        <section aria-label="AI agents standing in" className="space-y-1.5">
-          <h2 className="text-lg font-semibold text-stage-fg/80">AI agents standing in</h2>
+        <section aria-label="AI agents in this meeting" className="space-y-1.5">
+          <h2 className="text-lg font-semibold text-stage-fg/80">AI agents in this meeting</h2>
           <div className="space-y-2" role="list">
-            {agentCut.shown.map((a) => <div role="listitem" key={`agent-${a.role}`}><AgentCallTile agent={a} big className="aspect-auto h-20 [@media(min-height:900px)]:h-24" /></div>)}
+            {agentCut.shown.map((a) => <div role="listitem" key={`agent-${a.role}`}><AgentCallTile agent={a} big className="aspect-auto h-24 [@media(min-height:900px)]:h-32" /></div>)}
           </div>
           {agentCut.more > 0 ? <p className="text-xl text-stage-fg/80" data-testid="agents-more">+{agentCut.more} more</p> : null}
         </section>

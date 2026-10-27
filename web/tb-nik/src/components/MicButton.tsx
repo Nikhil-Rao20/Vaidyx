@@ -31,6 +31,9 @@ type Common = {
   hintText?: string;
   /** Called after the words went in, with the box's new value and the words added. */
   onInsert?: (next: string, inserted: string) => void;
+  /** True right after the recorder starts (state "listening"), false when it leaves that state (stop, cancel, Esc, an error, the
+   *  page hidden, unmounting). The meeting tells an agent it is being asked (night-v3 6.1). */
+  onListening?: (on: boolean) => void;
 };
 export type MicButtonProps = Common & (
   | { target: RefObject<Box>; value?: never; onChange?: never }
@@ -293,8 +296,21 @@ export function MicButton(props: MicButtonProps) {
     return () => document.removeEventListener("keydown", onKey);
   }, [target]);
 
+  // "Listening" on and off for the caller, once per change (the latest callback, read through the ref).
+  const listeningSaid = useRef(false);
+  useEffect(() => {
+    const on = state === "listening";
+    if (on === listeningSaid.current) return;
+    listeningSaid.current = on;
+    live.current.props.onListening?.(on);
+  }, [state]);
+
   // Unmounting stops the microphone and ignores any reply.
-  useEffect(() => () => { live.current.cancel(); timers.current.forEach((t) => window.clearTimeout(t)); }, []);
+  useEffect(() => () => {
+    live.current.cancel();
+    timers.current.forEach((t) => window.clearTimeout(t));
+    if (listeningSaid.current) { listeningSaid.current = false; live.current.props.onListening?.(false); }
+  }, []);
 
   if (!status.enabled || status.stt === "off") return null;
 

@@ -86,6 +86,16 @@ export interface CallActions {
   allowPresent?: (user: string, allowed: boolean) => Promise<unknown>;
   /** Item 5.2: tell the meeting that I start or stop sharing (the pixels go through LiveKit). */
   presenting?: (on: boolean) => Promise<unknown>;
+  /** Item 6.3, the coordinator: add (on) or remove an agent for the Case File on the floor. */
+  setAgent: (role: string, on: boolean) => Promise<unknown>;
+  /** Item 6.3, the coordinator: "Members can ask the agents" on or off. */
+  setAgentsAsk: (on: boolean) => Promise<unknown>;
+  /** Item 6.1: my device records a question for this agent (true when the microphone starts, false when it stops). */
+  agentListening: (role: string, on: boolean) => Promise<unknown>;
+  /** Item 6.2: "Present your points" (the agent reads its points for review from the brief). */
+  presentPoints: (role: string) => Promise<unknown>;
+  /** Item 6.1: stop the agent's voice for everyone (the asker or the coordinator); the text stays. */
+  stopAgent: (role: string, question?: string) => Promise<unknown>;
 }
 
 /** Everything the shell knows, read by the panels, the strip and the stage through useCall(). */
@@ -131,9 +141,13 @@ export interface CallCtx {
   setPinned: (key: string | null) => void;
   spotlight: string[];
   agents: AgentInfo[];
-  /** Agent voices for me (lib/voice.ts agentVoiceEnabled). */
+  /** Agent voices for me (lib/voice.ts agentVoiceEnabled; with no stored choice, off for a member in the room, on otherwise). */
   agentVoices: boolean;
   setAgentVoices: (on: boolean) => void;
+  /** The agent sentence this device plays now (agentSpeaker.ts), or null. */
+  speakingNow: { question: string; index: number } | null;
+  /** Stops the agent audio on this device only (Esc, a Stop on my screen); the others keep hearing it. */
+  stopAgentAudio: () => void;
   reactions: Map<string, ShownReaction>;
   hands: Set<string>;
   canManage: boolean;
@@ -165,6 +179,7 @@ export const BADGE_WORD: Record<RoleBadge, string> = { head: "Head", coordinator
 
 /** The words of an agent's state (true states; the server names them). */
 export const AGENT_STATE_WORD: Record<string, string> = {
+  preparing: "Reading the records",
   ready: "Ready",
   listening: "Listening",
   reading_question: "Reading the question",
@@ -172,6 +187,7 @@ export const AGENT_STATE_WORD: Record<string, string> = {
   thinking: "Thinking",
   answering: "Answering",
   speaking: "Speaking",
+  error: "Could not answer, try again",
 };
 
 /** Keyboard shortcuts of the call (research/04 section 6.10). Never while the focus is in a text box, except Esc. */

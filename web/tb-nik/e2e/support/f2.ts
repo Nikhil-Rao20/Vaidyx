@@ -556,6 +556,41 @@ export async function routeCaseFile(page: Page, o: CaseRouteOptions = {}) {
 // ---- meetings ---------------------------------------------------------------------------------------------------------
 const row = (o: Record<string, unknown>) => ({ owner_department: "breast_surgery", owner_department_name: "Breast Surgery", minutes: 10, reason: "", ready: true, status: "waiting", ended: false, outcome: null, outcome_label: "", added_after_send: false, urgency: null, ...o });
 
+// The AI agents of the Case File on the floor (night-v3 6.1, research/05 section 11.1): never members of the board, never counted.
+const AGENT_NOTE = "AI support: answers from the records only; not a member of the board";
+const AGENT_BRIEF = { status: "ready", label: "AI draft, not reviewed", at: "2026-10-27T09:12:00", reviewed_by: null, message: "" };
+const AGENT_POINTS: Record<string, Array<{ text: string; citations: Array<Record<string, unknown>> }>> = {
+  pathology: [
+    { text: "The histopathology report records invasive breast carcinoma of no special type, Grade 2 (Nottingham score 6).", citations: [{ doc_id: "D8a2c165d", doc_title: "HISTOPATHOLOGY REPORT", date: "2026-09-17", page: 0, quote: "Grade: Grade 2 (Nottingham score 6)" }] },
+    { text: "ER is positive with Allred score 8/8.", citations: [{ doc_id: "D6b012d3d", doc_title: "IMMUNOHISTOCHEMISTRY REPORT (ER, PR, HER2, Ki-67)", date: "2026-09-19", page: 0, quote: "ER: Positive (Allred score 8/8)" }] },
+    { text: "The ultrasound of both breasts and axillae records no suspicious axillary lymph nodes.", citations: [{ doc_id: "D95d20494", doc_title: "USG BOTH BREASTS AND AXILLAE", date: "2026-09-12", page: 0, quote: "No suspicious axillary lymph nodes" }] },
+  ],
+  // Nuclear Medicine: the brief is ready but lists no points for review (two items not documented), so "Present your points" waits.
+  nuclear_medicine: [],
+};
+/** The items each brief lists as not documented (the "Present your points" answer shows them; the cards show the count). */
+const AGENT_NOT_DOCUMENTED: Record<string, string[]> = {
+  pathology: ["HER2 FISH result", "Margin status of the core biopsy"],
+  nuclear_medicine: ["Bone scan report", "PET-CT report"],
+};
+const AGENT_ENTRY: Record<string, Record<string, unknown>> = {
+  pathology: { role: "pathology", label: "Pathology support", department: "pathology", department_name: "Pathology", state: "thinking", by: null, by_name: null, question: "Q2", note: AGENT_NOTE, standing_in: true, added: false, added_by: null, added_by_name: null, reason: "Head absent", title: "Pathology, AI agent standing in", not_documented_count: 2 },
+  nuclear_medicine: { role: "nuclear_medicine", label: "Nuclear Medicine support", department: "nuclear_medicine", department_name: "Nuclear Medicine", state: "ready", by: null, by_name: null, question: null, note: AGENT_NOTE, standing_in: true, added: false, added_by: null, added_by_name: null, reason: "Head absent", title: "Nuclear Medicine, AI agent standing in", not_documented_count: 2 },
+};
+
+/** One agent entry as agents_view gives it; a role without a fixed entry is added by the coordinator, ready, with no points. */
+export function agentEntry(role: string, over: Record<string, unknown> = {}): Record<string, unknown> {
+  const name = role.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+  const base = AGENT_ENTRY[role] ?? { role, label: `${name} support`, department: role, department_name: name, state: "ready", by: null, by_name: null, question: null, note: AGENT_NOTE, standing_in: false, added: true, added_by: "mdt@vxh.example", added_by_name: "Priya Nair", reason: "Added by Priya Nair", title: `${name}, AI agent, called by Priya Nair`, not_documented_count: 0 };
+  const points = AGENT_POINTS[role] ?? [];
+  return { ...base, brief: { ...AGENT_BRIEF }, points, points_count: points.length, voice: "af_heart", can_remove: true, ...over };
+}
+
+/** The agents in the meeting for the Case File on the floor: Pathology and Nuclear Medicine standing in for their absent heads. */
+export function meetingAgents(): Array<Record<string, unknown>> {
+  return [agentEntry("pathology"), agentEntry("nuclear_medicine")];
+}
+
 export function meetingState(status: "planned" | "in_session" | "closed" = "planned", over: Record<string, unknown> = {}) {
   const live = status === "in_session";
   return {
@@ -608,12 +643,10 @@ export function meetingState(status: "planned" | "in_session" | "closed" = "plan
     hands: live ? [{ user: "shanthi@vxh.example", name: "Shanthi Raman", at: iso(2) }] : [],
     agent: live ? { active: true, role: "pathology", label: "Pathology support", state: "thinking", roles: ["pathology"], question: "Q2", note: "AI support: answers from the records only; not a member of the board" } : { active: false, role: null, label: "", state: "off", roles: [], question: null },
     // Every absent head's stand-in (night-v3 5.1): the AI agents, support only, never members of the board.
-    agents: live ? [
-      { role: "pathology", label: "Pathology support", department: "pathology", department_name: "Pathology", state: "thinking", question: "Q2", note: "AI support: answers from the records only; not a member of the board", standing_in: true },
-      { role: "nuclear_medicine", label: "Nuclear Medicine support", department: "nuclear_medicine", department_name: "Nuclear Medicine", state: "ready", question: null, note: "AI support: answers from the records only; not a member of the board", standing_in: true },
-    ] : [],
+    // night-v3 6.1 / 6.2: the title, the reason, the brief's status and its points from the records (each with its chips).
+    agents: live ? meetingAgents() : [],
     spotlight: [],
-    can: { manage: true, record: true, ask: live, card: live, card_required: false, video: false, present: live, chat: status !== "closed" },
+    can: { manage: true, record: true, ask: live, card: live, card_required: false, video: false, present: live, chat: status !== "closed", ask_agents: true },
     me: { user: "mdt@vxh.example", status: "present", mode: "room", department: "mdt" },
     online: ["mdt@vxh.example", "rao@vxh.example", "shanthi@vxh.example", "kiran@vxh.example"],
     outcomes: status === "closed" ? { [CID]: { outcome: "decision", label: "Decision recorded" } } : {},
@@ -627,7 +660,7 @@ export function meetingState(status: "planned" | "in_session" | "closed" = "plan
 export function memberState(over: Record<string, unknown> = {}) {
   const s = meetingState("in_session") as any; // eslint-disable-line @typescript-eslint/no-explicit-any
   s.code = null;
-  s.can = { manage: false, record: false, ask: true, card: true, card_required: true, video: false, present: false, chat: true };
+  s.can = { manage: false, record: false, ask: true, card: true, card_required: true, video: false, present: false, chat: true, ask_agents: true };
   s.me = { user: "rao@vxh.example", status: "remote", mode: "remote", department: "radiology" };
   return { ...s, ...over };
 }
@@ -653,6 +686,37 @@ export async function routeMeetings(page: Page, o: MeetingRouteOptions = {}): Pr
     if (p === `/${MID}/cards`) return json(cards);
     if (p === `/${MID}/cases/${CID}/slides`) return json(baseSlides);
     if (/\/cases\/[^/]+\/slides$/.test(p)) return json({ slides: [{ id: "summary", title: "Summary", kind: "summary", content: { from: "gate", board_question: "", requirements: [], note: "No Case File summary compiled yet." } }] });
+    // night-v3 6.1: the coordinator adds or removes an agent ({role, on}) and opens or closes questions to the agents.
+    if (p === `/${MID}/agents` && m === "POST") {
+      const body = (route.request().postDataJSON() ?? {}) as { role?: string; on?: boolean };
+      const st = state as { agents?: Array<Record<string, unknown>> };
+      const list = (st.agents ?? []).filter((a) => a.role !== body.role);
+      if (body.on && body.role) list.push(agentEntry(body.role, { state: "preparing", brief: { status: "preparing", label: "", at: null, reviewed_by: null, message: "" }, points: [], points_count: 0 }));
+      st.agents = list;
+      return json({ agents: list });
+    }
+    // night-v3 6.2: "Present your points" answers a question built from the brief's points (no model call), kept with the questions.
+    const present = new RegExp(`^/${MID}/agents/([a-z_]+)/present$`).exec(p);
+    if (present && m === "POST") {
+      const st = state as { agents?: Array<Record<string, unknown>>; questions?: Array<Record<string, unknown>> };
+      const a = (st.agents ?? []).find((x) => x.role === present[1]);
+      if (!a) return json({ detail: { message: "That agent is not in this meeting. The coordinator can add it.", code: "agent_not_in_meeting" } }, 409);
+      if ((a.brief as { status?: string } | undefined)?.status === "preparing") return json({ detail: { message: "The brief is still being prepared from the records. Try again in a moment.", code: "brief_preparing" } }, 409);
+      const pts = (a.points as Array<{ text: string; citations: unknown[] }> | undefined) ?? [];
+      const dept = String(a.department_name);
+      const message = pts.length ? "" : "The brief lists no points for review.";
+      const q = { id: `QP${(st.questions ?? []).length + 1}`, by: "mdt@vxh.example", by_name: "Priya Nair", text: "Present your points", at: new Date().toISOString(), case_id: CID, role: a.role, agent_label: a.label, kind: "present_points", queued: false,
+        answer: { status: pts.length ? "answered" : "not_documented", text: pts.map((x) => x.text).join(" ") || message, statements: pts, references: [], role: a.role, label: a.label, model: "gemma-4-31b", at: new Date().toISOString(), seconds: 0, first_seconds: 0,
+          speech: [`AI agent, ${dept}.`, ...pts.map((x) => x.text), "Sources are on the screen."], message, kind: "present_points", not_documented: AGENT_NOT_DOCUMENTED[String(a.role)] ?? [], brief_label: "AI draft, not reviewed", note: "From the records only; the agent is not a member of the board" } };
+      st.questions = [...(st.questions ?? []), q];
+      return json({ question: q });
+    }
+    if (p === `/${MID}/agents/settings` && m === "PUT") {
+      const body = (route.request().postDataJSON() ?? {}) as { members_ask?: boolean };
+      const st = state as { can?: Record<string, unknown> };
+      if (st.can) st.can.ask_agents = !!body.members_ask;
+      return json({ members_ask: !!body.members_ask });
+    }
     if (p === `/${MID}/video-token`) return json({ detail: { message: "Video is not set up on this server (ask the Vaidyx admin to run scripts/livekit.sh).", code: "video_off" } }, 503);
     if (m !== "GET") return json({ ok: true });
     return json(NOT_FOUND, 404);

@@ -2,17 +2,20 @@
 // with the ask box (a role chip row picks "Ask the board" or one of the agents standing in); an agent's answer shows its text, its
 // sources as quote chips, the time, and Read aloud when agent voices are on. "Meeting chat" (item 5.3, research/04 section 6.9) is
 // the text chat of the members admitted to the meeting: kept with the meeting record, apart from the questions to the agents, never
-// pushed as a notification (owner decision D5). The room screen shows the questions only.
+// pushed as a notification (owner decision D5). The room screen shows the questions only. Item 6.2: the chips of an answer are the
+// agent points' chips (AgentPoints.tsx: document, date, page; open the record or show the quote), and a "Present your points"
+// answer lists the brief's not documented items.
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { format, isToday, isValid, parseISO } from "date-fns";
-import { ArrowDown, FileText, SendHorizontal } from "lucide-react";
+import { ArrowDown, SendHorizontal } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { MicButton } from "@/components/MicButton";
 import { SpeakButton } from "@/components/SpeakButton";
 import { answerText, type AgendaRow, type ChatMessage, type MeetingQuestion, type MeetingState } from "@/lib/live";
-import { LoadingButton, fmtDateTime, indianDates, modelLabel, niceTitle } from "@/features/casefile/components/common";
+import { LoadingButton, fmtDateTime, indianDates, modelLabel } from "@/features/casefile/components/common";
 import { cn } from "@/lib/utils";
 import { usePanelAction } from "../../components/People";
+import { CitedText } from "./AgentPoints";
 import { useCall } from "../context";
 import type { CallCtx } from "../types";
 
@@ -24,6 +27,13 @@ export function questionsFor(questions: MeetingQuestion[] | undefined, caseId: s
 /** The questions still waiting for an answer (the Chat button's count). */
 export function unansweredCount(questions: MeetingQuestion[] | undefined, caseId: string | null): number {
   return questionsFor(questions, caseId).filter((q) => !q.answer).length;
+}
+
+/** The items a "Present your points" answer lists as not documented (the brief's list; strings, or objects with a text). */
+export function notDocumentedItems(a: unknown): string[] {
+  const list = (a && typeof a === "object" ? (a as { not_documented?: unknown }).not_documented : null);
+  if (!Array.isArray(list)) return [];
+  return list.map((x) => (typeof x === "string" ? x : x && typeof x === "object" ? String((x as Record<string, unknown>).text ?? (x as Record<string, unknown>).item ?? (x as Record<string, unknown>).label ?? "") : "")).filter(Boolean);
 }
 
 /** The questions with their answers, newest first: the text, who asked and when, the agent's statements with their sources as quote
@@ -38,24 +48,23 @@ export function QuestionItems({ questions, emptyText = "No questions yet.", test
         const text = answerText(q);
         const waiting = !q.answer && !!q.role;
         const who = q.agent_label ?? (q.role ? q.role.replace(/_/g, " ") : "");
+        const nd = a?.kind === "present_points" ? notDocumentedItems(a) : [];
         return (
           <li key={q.id} className="rounded-md border border-border bg-card p-2">
             <p className="text-sm font-medium text-foreground">{q.text}</p>
             <p className="text-xs text-muted-foreground">{q.by_name}{who ? `, to the ${who} agent` : ""}{q.at ? ` · ${fmtDateTime(q.at)}` : ""}</p>
             {a && (a.statements ?? []).length ? (
-              <div className="mt-1 space-y-1 border-l-2 border-primary pl-2 text-sm">
-                {a.statements!.map((st, i) => (
-                  <p key={i} className="text-foreground">
-                    {indianDates(st.text)}
-                    {(st.citations ?? []).map((c, j) => {
-                      const page = typeof c.page === "number" ? ` p. ${c.page + 1}` : "";
-                      return <span key={j} className="quote-chip ml-1 align-middle" title={c.quote ? `"${c.quote}"` : undefined}><FileText className="size-3" aria-hidden />{niceTitle(c.doc_title) || "record"}{page}</span>;
-                    })}
-                  </p>
-                ))}
+              <div className="mt-1 space-y-1 border-l-2 border-primary pl-2">
+                {a.statements!.map((st, i) => <CitedText key={i} text={st.text} citations={st.citations} />)}
               </div>
-            ) : text ? <p className="mt-1 border-l-2 border-primary pl-2 text-sm text-foreground">{text}</p> : null}
-            {a?.status === "not_documented" ? <p className="text-xs text-muted-foreground">Not documented in the records.</p> : null}
+            ) : text ? <p className="mt-1 border-l-2 border-primary pl-2 text-sm text-foreground">{indianDates(text)}</p> : null}
+            {nd.length ? (
+              <div className="mt-1" data-testid="answer-not-documented">
+                <p className="text-xs font-medium text-muted-foreground">Not documented (from the brief)</p>
+                <ul className="list-disc space-y-0.5 pl-4 text-xs text-muted-foreground">{nd.map((x, i) => <li key={i}>{indianDates(x)}</li>)}</ul>
+              </div>
+            ) : null}
+            {a?.status === "not_documented" && !(a.message && a.message === text) ? <p className="text-xs text-muted-foreground">Not documented in the records.</p> : null}
             {a || text ? (
               <div className="mt-1 flex items-center gap-1.5">
                 <p className="min-w-0 flex-1 text-[10px] text-muted-foreground">{a?.note ?? "From the records only; the agent is not a member of the board."}{a?.model ? ` ${modelLabel(a.model)}.` : ""}{a?.at ? ` Answered ${fmtDateTime(a.at)}.` : ""}</p>

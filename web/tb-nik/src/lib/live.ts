@@ -10,7 +10,10 @@ export type LiveEventType =
   | "state" | "current" | "open" | "timer" | "decision_live" | "question" | "hand" | "presence" | "admit" | "end_case"
   | "card" | "agent_state" | "ended" | "agenda" | "decision" | "meeting" | "pong" | "error"
   // night-v3 Phase 5: the call shell
-  | "agents" | "spotlight" | "reaction" | "chat" | "presenting" | "present_allowed";
+  | "agents" | "spotlight" | "reaction" | "chat" | "presenting" | "present_allowed"
+  // night-v3 Phase 6: the agents speak by reference ({role, question, index, final}) and a stop for everyone ({role, question, by});
+  // both leave the state as it is and reach the shell through lastEvent
+  | "agent_speech" | "agent_stop";
 
 export interface LiveEvent { type: LiveEventType | string; [k: string]: unknown }
 
@@ -138,16 +141,36 @@ export interface Attendee {
   phone?: string;
 }
 
+/** A record a statement or a point cites: the document, its date and page, and the verbatim quote. */
+export interface AgentCitation { doc_id: string; doc_title?: string; date?: string | null; page?: number | null; quote?: string }
+
+/** A guideline passage under an answer: reference text, never about this patient (agents.py _reference). */
+export interface AgentReference { ref_id?: string; file?: string; title?: string; org?: string; region?: string; page?: number | null; page_end?: number | null; quote?: string; [k: string]: unknown }
+
 export interface QuestionAnswer {
+  /** answering (filling statement by statement), answered, not_documented, out_of_scope, not_listed, error. */
   status?: string;
   text?: string;
-  statements?: Array<{ text: string; citations?: Array<{ doc_id: string; doc_title?: string; page?: number | null; quote?: string }> }>;
+  statements?: Array<{ text: string; citations?: AgentCitation[]; note?: string }>;
+  references?: AgentReference[];
   role?: string;
   label?: string;
   model?: string;
   at?: string;
   seconds?: number;
+  /** Seconds to the first verified statement (night-v3 6.4). */
+  first_seconds?: number;
   note?: string;
+  /** "present_points" when the agent presents its points for review (built by code from the brief, no model call). */
+  kind?: string;
+  /** The refusal's category and its plain message (a colleague-style request refused by rule). */
+  category?: string;
+  message?: string;
+  /** The exact sentences the devices read, each one a text on the screen; fetched by reference ({kind: "meeting_answer", index}). */
+  speech?: string[];
+  /** A present_points answer: the brief's not documented items (strings) and the brief's label ("AI draft, not reviewed"). */
+  not_documented?: string[];
+  brief_label?: string;
 }
 
 export interface MeetingQuestion {
@@ -162,6 +185,8 @@ export interface MeetingQuestion {
   /** The stand-in role the question was routed to, when one is active. */
   role?: string | null;
   agent_label?: string;
+  /** Waiting for the same agent's earlier answer ("Radiology is answering <name>. Yours is next."). */
+  queued?: boolean;
 }
 
 export interface Opened {
@@ -190,19 +215,46 @@ export interface AgentState {
   note?: string;
 }
 
+/** The agent's brief for the Case File on the floor (its points for review): none, preparing, ready, stale, no_documents, error. */
+export interface AgentBrief { status: string; label?: string; at?: string | null; reviewed_by?: string | null; message?: string }
+
+/** One point for review of the brief, with the records it cites (at most five on the list). */
+export interface AgentPoint { text: string; citations: AgentCitation[] }
+
 /** One stand-in agent of the meeting (owner decision D2; meetings.agents_view): a tile and a panel row, never a member. */
 export interface AgentInfo {
   role: string;
   label: string;
   department?: string;
   department_name?: string;
-  /** ready, reading_question, thinking, answering (true states from the server); Phase 6 adds listening and speaking. */
+  /** preparing, ready, listening, thinking, answering, speaking, error (true states from the server; older: reading_question). */
   state: string;
+  /** Who the agent listens to or answers now (listening, thinking, answering, speaking). */
+  by?: string | null;
+  by_name?: string | null;
   question?: string | null;
+  /** When the state began (ISO). */
+  at?: string | null;
   note?: string;
+  /** Standing in for an absent head (the default for the Case File); never counted as a member. */
   standing_in?: boolean;
-  /** Added by the coordinator on demand (Phase 6). */
+  /** Added by the MDT Coordinator on demand (night-v3 6.3). */
   added?: boolean;
+  added_by?: string | null;
+  added_by_name?: string | null;
+  /** "Head absent", "Marked absent" or "Added by <name>". */
+  reason?: string;
+  /** "Radiology, AI agent standing in" or "Nuclear Medicine, AI agent, called by <name>". */
+  title?: string;
+  brief?: AgentBrief | null;
+  /** The brief's points for review (left out for a viewer who is not admitted). */
+  points?: AgentPoint[];
+  points_count?: number;
+  not_documented_count?: number;
+  /** The voice the agent speaks with (one voice for every agent; the department is named first). */
+  voice?: string | null;
+  /** The coordinator may remove it from this meeting. */
+  can_remove?: boolean;
 }
 
 /** The quorum line (night-v3 5.4): heads present as people, the agents standing in, the PM-JAY composition. Information, not a gate. */
@@ -258,7 +310,9 @@ export interface MeetingState {
   questions: MeetingQuestion[];
   hands: Array<string | { user: string; name?: string; at?: string }>;
   agent?: AgentState | null;
-  can?: { manage?: boolean; record?: boolean; ask?: boolean; card?: boolean; card_required?: boolean; video?: boolean; present?: boolean; chat?: boolean };
+  can?: { manage?: boolean; record?: boolean; ask?: boolean; card?: boolean; card_required?: boolean; video?: boolean; present?: boolean; chat?: boolean;
+    /** I may ask the agents now (the coordinator always; members while "Members can ask the agents" is on). */
+    ask_agents?: boolean };
   /** Every absent head's stand-in agent (night-v3 5.1, D2); `agent` above stays for older readers. */
   agents?: AgentInfo[];
   /** The people the coordinator spotlighted for everyone (night-v3 5.1). */
@@ -280,10 +334,11 @@ export interface MeetingState {
 
 const EMPTY_CURRENT: NonNullable<MeetingState["current"]> = { case_id: null, slide: 0, opened: null, timer: null, presenter: null };
 
-/** One agent's state event merged into the list by role (the event carries the state only). */
-function mergeAgent(list: AgentInfo[] | undefined, a: Partial<AgentInfo> & { role?: string | null }): AgentInfo[] | undefined {
+/** One agent's state event merged into the list by role (the event carries the state, who it concerns, the question and the time). */
+export function mergeAgent(list: AgentInfo[] | undefined, a: Partial<AgentInfo> & { role?: string | null }): AgentInfo[] | undefined {
   if (!list || !a.role) return list;
-  return list.map((x) => (x.role === a.role ? { ...x, state: a.state ?? x.state, question: a.question === undefined ? x.question : a.question } : x));
+  const pick = <K extends "by" | "by_name" | "question" | "at">(x: AgentInfo, k: K): AgentInfo[K] => (a[k] === undefined ? x[k] : (a[k] as AgentInfo[K]));
+  return list.map((x) => (x.role === a.role ? { ...x, state: a.state ?? x.state, by: pick(x, "by"), by_name: pick(x, "by_name"), question: pick(x, "question"), at: pick(x, "at") } : x));
 }
 
 function asTimer(v: unknown): MeetingTimer | null {
@@ -389,6 +444,9 @@ export function applyLiveEvent(s: MeetingState | null, ev: LiveEvent): MeetingSt
     case "presenting": next.presenting = ev.on ? String(ev.user ?? "") || null : null; return next;
     case "present_allowed": next.present_allowed = Array.isArray(ev.users) ? (ev.users as string[]) : []; return next;
     case "reaction": return s;
+    // spoken by reference and stopped on each device: the shell reads them from lastEvent; the state does not change
+    case "agent_speech": return s;
+    case "agent_stop": return s;
     case "ended": {
       const m = ev.meeting && typeof ev.meeting === "object" ? (ev.meeting as MeetingInfo) : null;
       next.meeting = m ? { ...s.meeting, ...m } : { ...s.meeting, status: ev.cancelled ? "cancelled" : "closed" };

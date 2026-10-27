@@ -12,7 +12,12 @@
 // Night-v3 5.6: when the meeting is closed or cancelled the member and the room screen see "The meeting has ended" over the stage
 // (the member's bar keeps Leave only); "N in the meeting" counts the admitted attendance plus anyone in the video who is not on it
 // (people only, never a room screen); the call is a labelled section, not a second main landmark.
-import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+// Night-v3 6.1: the agents' voice. Each "agent_speech" event of the Case File on the floor names a sentence that this device fetches
+// by reference and plays when agent voices are on here (agentSpeaker.ts), reporting playback so "Speaking" is true; "agent_stop",
+// Esc, voices off, the case changing, Leave and the meeting ending stop it. A browser that blocks sound until a tap shows
+// "Tap to allow agent voices". The coordinator's agent actions (add, remove, members may ask) and everyone's (listening, present
+// your points, stop for everyone) go through the meeting API like the other actions.
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
@@ -24,7 +29,9 @@ import { useVideoRoom, type JoinChoice } from "@/lib/video";
 import { useDictationGuard } from "@/hooks/useDictationGuard";
 import { useIsDesktop, useMediaQuery } from "@/hooks/useMediaQuery";
 import { SkeletonLines, errorText, useAnnounce } from "@/features/casefile/components/common";
-import { admit, allowPresent, askQuestion, endCase as endCaseCall, getSlides, openOnScreen, present, raiseHand, sendChat, sendReaction, setCurrent, setPresenting, setSpotlight, timer as timerCall } from "../api";
+import { admit, agentAudio, agentListening as agentListeningCall, allowPresent, askQuestion, endCase as endCaseCall, getSlides, openOnScreen, present, presentPoints as presentPointsCall, raiseHand, sendChat, sendReaction, setAgent as setAgentCall, setAgentSettings, setCurrent, setPresenting, setSpotlight, stopAgent as stopAgentCall, timer as timerCall } from "../api";
+import { isSpeaking, primeAudio, speak, VOICE_TEXT } from "@/lib/voice";
+import { onTheFloor, speechItem, useAgentSpeaker } from "./agentSpeaker";
 import { CardDialog } from "../components/CardDialog";
 import { CaseFlow } from "./CaseFlow";
 import { ControlBar, DecisionStrip, SlideDots, StageFrame } from "../components/Stage";
@@ -132,7 +139,33 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
 
   // ---- the shell's own state ---------------------------------------------------------------------------------------------
   const spotlight = useMemo(() => s.spotlight ?? [], [s.spotlight]);
-  const cs = useCallState(mid, spotlight);
+  const cs = useCallState(mid, spotlight, { variant, inRoom });
+
+  // ---- the agents' voice on this device (night-v3 6.1) ----------------------------------------------------------------------
+  const agent = useAgentSpeaker(mid, () => ({
+    // by reference only: the app reads answer.speech[index], a sentence that is on the screen
+    speak: (item, h) => speak({ ref: { kind: "meeting_answer", meeting_id: mid, id: item.question, index: item.index } }, { screen: "meeting" }, h),
+    report: (question, playing) => agentAudio(mid, question, playing),
+    busy: isSpeaking,
+  }), { enabled: cs.agentVoices && !ended, held: dictating });
+  const speaker = agent.speaker;
+  const voicesRef = useRef(cs.agentVoices);
+  voicesRef.current = cs.agentVoices;
+  // The case on the floor changed: the previous case's answers are not read any more.
+  const floorRef = useRef(cid);
+  useEffect(() => {
+    if (floorRef.current && floorRef.current !== cid) speaker.stopAll();
+    floorRef.current = cid;
+  }, [cid, speaker]);
+  useEffect(() => { if (agent.blocked) announce("The browser holds the agent voices until a tap. Tap to allow agent voices."); }, [agent.blocked, announce]);
+  /** Inside a click that will make an agent speak: unlock the audio for the answer to come (and play what the browser held). */
+  const primeVoices = () => {
+    if (!voicesRef.current) return;
+    if (!speaker.snapshot().speakingNow && !isSpeaking()) primeAudio();
+    speaker.resume();
+  };
+  const allowVoices = () => { primeAudio(); speaker.resume(); };
+  const agentName = (role: string) => { const a = agentsOf(stateRef.current).find((x) => x.role === role); return a?.department_name || a?.label || role; };
   const [error, setError] = useState<string | null>(null);
   const [card, setCard] = useState<{ caseId: string; patientLine: string } | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -159,12 +192,18 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
   // ---- live events -------------------------------------------------------------------------------------------------------
   const onEvent = useCallback((ev: LiveEvent) => {
     const st = stateRef.current;
+    if (ev.type === "agent_speech") {
+      const item = speechItem(ev);
+      if (item && voicesRef.current && onTheFloor(st.questions, item.question, st.current?.case_id ?? null)) speaker.enqueue(item);
+      return;
+    }
+    if (ev.type === "agent_stop") { speaker.stopQuestion(String(ev.question ?? "")); return; }
     if (ev.type === "presenting") { onPresentingEvent(ev); return; }
     if (ev.type === "present_allowed") { void live.refresh(); return; }  // my "may I present" (can.present) comes with the state
     if (ev.type === "current" && ev.case_id && ev.case_id !== st.current?.case_id && st.presenting && st.presenting === myUser) shareStopReason.current = "Your share was stopped: the next case is on the screen.";
     if (ev.type === "reaction") { cs.addReaction({ user: String(ev.user ?? ""), name: ev.name as string | undefined, kind: String(ev.kind ?? ""), at: ev.at as string | undefined }); return; }
     if (ev.type === "decision") { cs.markSaved(); return; }
-    if (ev.type === "ended") { announce("The meeting has ended."); return; }
+    if (ev.type === "ended") { speaker.stopAll(); announce("The meeting has ended."); return; }
     if (variant !== "member") return;
     if (ev.type === "end_case") {
       const c = String(ev.case_id ?? "");
@@ -177,7 +216,7 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
         announce("The coordinator asks for your card on this case.");
       }
     }
-  }, [announce, cs.addReaction, cs.markSaved, variant, myUser]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [announce, cs.addReaction, cs.markSaved, variant, myUser, speaker]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!events) return undefined;
     events.current = onEvent;
@@ -220,7 +259,7 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
     timer: (action, m) => run(() => timerM.mutateAsync({ action, minutes: action === "stop" ? undefined : m ?? minutes }), action === "start" ? "Timer started." : action === "stop" ? "Timer stopped." : "Timer reset."),
     endCase: () => (cid ? run(() => endM.mutateAsync(cid), (r) => (r?.cards_requested?.length ? `Cards asked of ${r.cards_requested.length} board heads.` : "Discussion ended.")) : Promise.reject(new Error("No case on the screen."))),
     endMeeting: () => setEndOpen(true),
-    ask: (text, role) => run(() => askQuestion(mid, text, role), "Question sent to the shared screen."),
+    ask: (text, role) => { if (role) primeVoices(); return run(() => askQuestion(mid, text, role), "Question sent to the shared screen."); },
     hand: (raised) => run(() => handM.mutateAsync(raised), raised ? "Hand raised." : "Hand lowered."),
     react: (kind: ReactionKind) => {
       if (myUser) cs.addReaction({ user: myUser, name: me?.display_name, kind } as ReactionEvent);
@@ -228,11 +267,19 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
     },
     spotlight: (users) => run(() => setSpotlight(mid, users), users.length ? "Spotlight set for everyone." : "Spotlight removed."),
     presence: (mode) => run(() => presenceM.mutateAsync(mode), mode === "room" ? "Marked as in the room." : "Marked as remote."),
-    leave: () => nav(variant === "coordinator" ? "/meetings" : `/meetings/${mid}`),
+    leave: () => { speaker.stopAll(); nav(variant === "coordinator" ? "/meetings" : `/meetings/${mid}`); },
     card: () => { if (cid) setCard({ caseId: cid, patientLine: row?.patient_line || cid }); },
     chat: (text) => run(() => sendChat(mid, text)),
     allowPresent: (user, allowed) => run(() => allowPresent(mid, user, allowed), allowed ? "Allowed to present." : "The right to present was withdrawn."),
     presenting: (on) => run(() => setPresenting(mid, on)),
+    setAgent: (role, on) => run(() => setAgentCall(mid, role, on), on ? `${agentName(role)} agent added to this case.` : `${agentName(role)} agent removed from this case.`),
+    setAgentsAsk: (on) => run(() => setAgentSettings(mid, { members_ask: on }), on ? "Members can ask the agents." : "Questions to the agents are closed for members."),
+    agentListening: (role, on) => run(() => agentListeningCall(mid, role, on)),
+    presentPoints: (role) => { primeVoices(); return run(() => presentPointsCall(mid, role), `${agentName(role)} agent asked to present its points.`); },
+    stopAgent: (role, question) => {
+      if (question) speaker.stopQuestion(question);
+      return run(() => stopAgentCall(mid, role, question), `${agentName(role)} agent's voice stopped for everyone.`);
+    },
   };
 
   // My share turned on: tell the meeting (refused: stop it again). Turned off: tell the meeting when it still names me.
@@ -295,6 +342,8 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
     joinVideo: () => onJoinVideo?.(), dictating,
     panel: cs.panel, setPanel: cs.setPanel, togglePanel: cs.togglePanel, layout: cs.layout, setLayout: cs.setLayout,
     pinned: cs.pinned, setPinned: cs.setPinned, spotlight, agents: agentsOf(s), agentVoices: cs.agentVoices, setAgentVoices: cs.setAgentVoices,
+    speakingNow: agent.speakingNow,
+    stopAgentAudio: () => { if (!speaker.snapshot().speakingNow && !speaker.snapshot().queued) return; speaker.stopAll(); announce("Agent voice stopped on this device."); },
     reactions: cs.reactions, hands: handUsers(s.hands), canManage, canRecord, admitted, waiting, inSession, inRoom, phone,
     fullscreen: cs.fullscreen, toggleFullscreen: cs.toggleFullscreen, announce, refresh, error, actions,
   };
@@ -314,6 +363,7 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
   const fade = cn("transition-opacity duration-300 focus-within:pointer-events-auto focus-within:opacity-100", controls.hidden && "pointer-events-none opacity-0");
 
   const liveText = s.decision_live && (!s.decision_live.case_id || s.decision_live.case_id === cid) ? s.decision_live.text : "";
+  const voiceChip = agent.blocked && cs.agentVoices && !ended ? <AllowVoicesChip onAllow={allowVoices} big={room} /> : null;
   const testId = variant === "member" ? "member-view" : variant === "coordinator" ? "control-view" : "room-screen";
   const attrs: Record<string, string | undefined> = variant === "member" ? { "data-following": String(following), "data-video-status": video.status }
     : variant === "room" ? { "data-meeting-status": s.meeting.status } : { "data-video-status": video.status };
@@ -326,14 +376,14 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
         <StageFrame testId={testId} attrs={attrs}>
           {liveNode}
           {phone && !room ? <div className={fade} data-testid="top-controls"><TopBar /></div> : <TopBar />}
-          {room ? <RoomBody summaryOn={summaryOn} setSummaryOn={setSummaryOn} videoOn={videoOn} liveText={liveText} ended={ended} /> : (
+          {room ? <RoomBody summaryOn={summaryOn} setSummaryOn={setSummaryOn} videoOn={videoOn} liveText={liveText} ended={ended} voiceChip={voiceChip} /> : (
             <section aria-label="Call" className={cn("flex min-h-0 flex-1 gap-3 p-2 lg:p-3", phone && !landscape && "flex-col overflow-y-auto", landscape && "gap-2")}>
               {desktop ? <AgendaRail /> : null}
               <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
                 <StageTabs />
                 <div className={cn("flex min-w-0 gap-2", phone && !landscape ? "min-h-[62.5vw] flex-1" : "min-h-0 flex-1")}>
                   <StageContent className={cn(phone && !landscape ? "min-h-[62.5vw] w-full flex-1" : "min-h-0 flex-1")}>
-                    <StageOverlays ended={ended} />
+                    <StageOverlays ended={ended} voiceChip={voiceChip} />
                   </StageContent>
                   {desktop && !cs.panel ? <div className="scroll-thin hidden w-52 shrink-0 overflow-y-auto lg:block xl:w-60"><Strip orientation="column" /></div> : null}
                 </div>
@@ -364,14 +414,14 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
 
 /** The overlays on the stage: the connection banner, the "Following / Stepped away" chip (member), "What the room sees"
  * (coordinator), the slide dots and the coordinator's admit toast. */
-function StageOverlays({ ended }: { ended: boolean }) {
+function StageOverlays({ ended, voiceChip }: { ended: boolean; voiceChip: ReactNode }) {
   const c = useCall();
   const openedItem = c.opened && c.opened.kind !== "none";
   return (
     <>
       <CaseFlow />
       {ended ? <EndedCard /> : null}
-      <div className="pointer-events-none absolute inset-x-0 top-14 z-20 flex flex-col items-center gap-1.5 px-3 [&>*]:pointer-events-auto"><PresentingBar /></div>
+      <div className="pointer-events-none absolute inset-x-0 top-14 z-20 flex flex-col items-center gap-1.5 px-3 [&>*]:pointer-events-auto"><PresentingBar />{voiceChip}</div>
       {c.variant === "member" ? (
         <span className={cn("pointer-events-none absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium", c.following ? "bg-ok/20 text-[#8fe0b3]" : "bg-warn/20 text-[#ffd48a]")}>
           {c.following ? <MonitorCheck className="size-3.5" aria-hidden /> : <Footprints className="size-3.5" aria-hidden />}<span className={c.phone ? "sr-only" : undefined}>{c.following ? "Following the shared screen" : "Stepped away"}</span>
@@ -414,6 +464,17 @@ function EndedBar() {
   );
 }
 
+/** "Tap to allow agent voices": the browser held the agents' sound until a tap on the page; the tap unlocks it and plays what waits. */
+function AllowVoicesChip({ onAllow, big = false }: { onAllow: () => void; big?: boolean }) {
+  return (
+    <button type="button" onClick={onAllow} data-testid="allow-agent-voices" title="The browser plays sound only after a tap on the page"
+      className={cn("inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-3 py-1 font-medium text-primary-foreground shadow-[var(--shadow-lift)] outline-none hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-primary sm:min-h-8",
+        big ? "px-5 py-2 text-xl" : "text-sm")}>
+      <Volume2 className={big ? "size-6" : "size-4"} aria-hidden />{VOICE_TEXT.allowVoices}
+    </button>
+  );
+}
+
 /** "You are presenting" with Stop, at the top of the stage while my screen is shared. */
 function PresentingBar() {
   const c = useCall();
@@ -452,7 +513,7 @@ export const ROOM_TILES_SHORT = 4;
  * room used it), the compact agenda column, the stage in large type (28 px and more), the latest questions, the remote members (at
  * most six tiles and "+n more") and the agents, and the footer with the count, the hands by name and the big decision strip
  * (28 px). Nothing here scrolls the page: long content is cut with "+n more" or clipped. */
-function RoomBody({ summaryOn, setSummaryOn, videoOn, liveText, ended }: { summaryOn: boolean; setSummaryOn: (on: boolean) => void; videoOn: boolean; liveText: string; ended: boolean }) {
+function RoomBody({ summaryOn, setSummaryOn, videoOn, liveText, ended, voiceChip }: { summaryOn: boolean; setSummaryOn: (on: boolean) => void; videoOn: boolean; liveText: string; ended: boolean; voiceChip: ReactNode }) {
   const c = useCall();
   const s = c.state;
   const summary = c.slides.find((x) => x.kind === "summary") ?? c.slides[0] ?? null;
@@ -485,6 +546,7 @@ function RoomBody({ summaryOn, setSummaryOn, videoOn, liveText, ended }: { summa
           <StageContent className="min-h-0 flex-1 [&_.stage-slide]:text-[28px] [&_.stage-slide_*]:[font-size:inherit] [&_.stage-slide_h3]:text-[36px] [&_.stage-slide_.quote-chip]:text-[20px] [&_p]:text-[28px] [&_p]:leading-snug" >
             {!openedItem && !s.presenting ? <SlideDots slides={c.slides} index={c.shownSlide} className="absolute bottom-3 right-4 z-10" /> : null}
             <CaseFlow />
+            {voiceChip ? <div className="absolute inset-x-0 top-20 z-30 flex justify-center px-3">{voiceChip}</div> : null}
             {ended ? <EndedCard /> : null}
           </StageContent>
           <AnimatePresence initial={false}>
