@@ -88,7 +88,17 @@ export type CaseCitation =
   | { kind: "staging"; field: string; quote: string; by?: string; at?: string }
   | { kind: "card"; meeting?: string; user?: string; field: string; quote: string; board_date?: string };
 
-export interface SentenceEdit { by: string; by_name?: string; at: string; checked: boolean; records_changed?: boolean; suggested?: string; vaidyx_text?: string }
+/** What the model wrote for an edited sentence on a later rebuild (case_summary._carry_edits); never written over the edit. */
+export interface SuggestedSentence { text: string; citations?: CaseCitation[] }
+
+export interface SentenceEdit {
+  by: string; by_name?: string; at: string; checked: boolean; records_changed?: boolean;
+  /** An object from the server; a plain string is accepted too. */
+  suggested?: SuggestedSentence | string | null;
+  vaidyx_text?: string;
+  /** Carried from an earlier version: no sentence of the current version matches the edit, so it sits at the end of its section. */
+  unmatched?: boolean;
+}
 
 export interface CaseSentence {
   id: string;
@@ -141,10 +151,12 @@ export interface PreBoardVersion {
   archived_at?: string;
   review?: { status?: string; by?: string; at?: string } | null;
   model?: string;
-  paragraphs: Array<{ id?: string; title?: string; sentences?: Array<string | { text: string; citations?: Array<{ doc_id: string; doc_title: string; page: number | null; quote: string }> }> }>;
+  paragraphs?: Array<{ id?: string; title?: string; sentences?: Array<string | { text: string; citations?: Array<{ doc_id: string; doc_title: string; page: number | null; quote: string }> }> }>;
   points_for_review?: Array<{ text: string }>;
   stage_as_recorded?: unknown;
   live?: boolean;
+  /** false: only the date and the review are sent (older archived versions); no paragraphs to show. */
+  full?: boolean;
 }
 
 export interface Steps {

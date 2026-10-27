@@ -267,9 +267,11 @@ export function caseSummaryView(over: Record<string, unknown> = {}) {
     sections: [
       { id: "presentation", title: "Presentation and diagnosis", built_by: "model", context: "full", sentences: [
         { id: "presentation-1", text: "She presented with a lump in the right breast noticed 6 weeks before the OPD visit of 15/09/2026.", citations: [{ ...OPD, quote: "Presenting complaint: Lump in the right breast noticed 6 weeks ago" }],
-          edited: { by: "rao@vxh.example", by_name: "Lakshmi Rao", at: "2026-10-24T11:05:00", checked: false, suggested: "Presenting complaint: lump in the right breast noticed 6 weeks ago.", vaidyx_text: "Presenting complaint: lump in the right breast noticed 6 weeks ago." } },
+          edited: { by: "rao@vxh.example", by_name: "Lakshmi Rao", at: "2026-10-24T11:05:00", checked: false, suggested: { text: "Presenting complaint: lump in the right breast noticed 6 weeks ago.", citations: [{ ...OPD, quote: "Presenting complaint: Lump in the right breast noticed 6 weeks ago" }] }, vaidyx_text: "Presenting complaint: lump in the right breast noticed 6 weeks ago." } },
         { id: "presentation-2", text: "The histopathology report records invasive breast carcinoma of no special type, Grade 2 (Nottingham score 6).", citations: [{ ...HPE, quote: "Grade: Grade 2 (Nottingham score 6)" }] },
         { id: "presentation-3", text: "Comorbidities: Type 2 diabetes mellitus on metformin (as recorded in the OPD consultation note).", citations: [{ ...OPD, quote: "Comorbidities: Type 2 diabetes mellitus on metformin" }], from_fields: true },
+        { id: "presentation-4", text: "Menopausal status: postmenopausal.", citations: [{ ...OPD, quote: "Menopausal status: Postmenopausal" }],
+          edited: { by: "rao@vxh.example", by_name: "Lakshmi Rao", at: "2026-10-23T19:10:00", checked: true, unmatched: true, vaidyx_text: "Menopausal status: Postmenopausal (as recorded in the OPD consultation note)." } },
       ] },
       { id: "stage", title: "Stage", built_by: "code", sentences: [
         { id: "stage-1", text: "Stage as agreed by the board on 23/10/2026: \"cT1c cN0 cM0\" (as recorded in a report).", citations: [bcite("Bade0ac", "stage_as_agreed", "cT1c cN0 cM0", "2026-10-23", "Stage as agreed by the board", 2)], code: true },
@@ -321,7 +323,9 @@ export function stepsAfterBoard(over: Record<string, unknown> = {}) {
   const live = { generated: s.summary.prose.generated ?? iso(60 * 24 * 12), review: { status: "reviewed", by: "Lakshmi Rao" }, model: "gemma-4-31b", paragraphs: s.summary.prose.paragraphs, live: true };
   const first = clone(s.summary.prose.paragraphs).slice(0, 1);
   s.summary.case_summary = caseSummaryView(over);
-  s.summary.history = [{ generated: "2026-10-02T09:30:00", archived_at: "2026-10-05T16:00:00", review: { status: "ai_draft" }, model: "gemma-4-31b", paragraphs: first, live: false }, live];
+  s.summary.history = [
+    { generated: "2026-09-28T08:00:00", archived_at: "2026-10-02T09:30:00", review: { status: "reviewed", by: "rao@vxh.example" }, model: "gemma-4-31b", full: false, live: false },
+    { generated: "2026-10-02T09:30:00", archived_at: "2026-10-05T16:00:00", review: { status: "ai_draft" }, model: "gemma-4-31b", paragraphs: first, live: false }, live];
   setSection(s, "summary", "todo", "Read the Case summary", 1);
   s.todo = [{ id: "case_summary:read", section: "summary", label: "Read the Case summary", action: { kind: "go", label: "Read it" } }, ...s.todo];
   return s;

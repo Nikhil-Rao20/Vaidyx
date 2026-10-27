@@ -28,7 +28,7 @@ function EarlierPreBoard({ versions, docs, h }: { versions: PreBoardVersion[]; d
         {[...versions].reverse().map((v, i) => (
           <li key={`${v.generated ?? ""}-${i}`} className="space-y-2 border-t border-border pt-2 first:border-t-0 first:pt-0">
             <p className="text-xs text-muted-foreground">{[v.generated ? `Written ${fmtDateTime(v.generated)}` : "Written earlier", v.model ? `by ${modelLabel(v.model)}` : "", readWords(v.review)].filter(Boolean).join(", ")}</p>
-            <div className="space-y-2 text-sm leading-relaxed">{v.paragraphs.map((p, j) => <ProseBlock key={j} p={p} docs={docs} h={h} />)}</div>
+            {v.full !== false && v.paragraphs?.length ? <div className="space-y-2 text-sm leading-relaxed">{v.paragraphs.map((p, j) => <ProseBlock key={j} p={p} docs={docs} h={h} />)}</div> : null}
           </li>
         ))}
       </ol>

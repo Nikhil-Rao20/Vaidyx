@@ -290,7 +290,8 @@ def test_the_summary_section_follows_the_case_summary(nik_app, tb001, monkeypatc
     asyncio.run(summary.build(CASE, force=True))
     h = get(tc)["summary"]["history"]
     assert len(h) >= 2 and h[-1]["live"] is True and h[0]["live"] is False and h[0]["archived_at"]
-    assert set(h[0]) == {"generated", "archived_at", "review", "model", "paragraphs", "points_for_review", "stage_as_recorded", "live"}
+    assert set(h[0]) == {"generated", "archived_at", "review", "model", "paragraphs", "points_for_review", "stage_as_recorded", "live", "sentences", "full"}
+    assert h[0]["full"] is True and h[-1]["full"] is True
     assert set(h[0]["review"]) >= {"status", "by", "at"} and all(set(p) == {"id", "title", "sentences"} for p in h[0]["paragraphs"])
     decision = {"outcome": "decision", "decision_text": "Concurrent chemoradiation.", "intent": "curative", "responsible_doctor": "Dr Rao", "board_date": "2026-10-20"}
     asyncio.run(postboard.record_decision(CASE, decision, "anil"))

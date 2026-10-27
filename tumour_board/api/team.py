@@ -5,7 +5,7 @@ the modules' errors into plain JSON and keeps the paths of the contract (POST /c
 guard does not take "join" for a Case File id)."""
 from fastapi import Request
 
-from tumour_board import access, org, proposals, store, team
+from tumour_board import access, case_summary, org, proposals, store, team
 from tumour_board.api.common import RateLimit, body, case, fail, make_router, need_case, need_known, roles
 
 router = make_router()
@@ -205,7 +205,7 @@ async def archive(case_id: str, request: Request):
     b = await body(request) if (await request.body()) else {}
     async with store.lock(case_id):
         c = _run(team.archive, case_id, r["user"], str(b.get("reason") or ""))
-    return {"case": c, "archived": c.get("archived")}
+    return {"case": case_summary.case_for(c, access.scope(r, c)), "archived": c.get("archived")}
 
 
 @router.post("/cases/{case_id}/unarchive")
@@ -216,7 +216,7 @@ async def unarchive(case_id: str, request: Request):
     b = await body(request) if (await request.body()) else {}
     async with store.lock(case_id):
         c = _run(team.unarchive, case_id, r["user"], str(b.get("note") or ""))
-    return {"case": c, "archived": None}
+    return {"case": case_summary.case_for(c, access.scope(r, c)), "archived": None}
 
 
 @router.put("/cases/{case_id}/consent")

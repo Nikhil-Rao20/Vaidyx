@@ -62,6 +62,7 @@ function SummaryLineRow({ caseId, line, canEdit }: { caseId: string; line: Summa
     <p className="mt-1 flex max-w-3xl items-start gap-1 text-sm text-muted-foreground" data-testid="summary-line">
       {liveNode}
       <span className="line-clamp-2 min-w-0">
+        {cur?.text && !cur.edited ? <span className="mr-1.5 rounded bg-muted px-1 py-px text-xs" data-testid="summary-line-vaidyx-tag">Vaidyx line</span> : null}
         {cur?.text || <span className="italic">No summary line yet.</span>}
         {cur?.edited ? <span className="ml-1.5 text-xs" data-testid="summary-line-edited">edited by {drName(cur.by_name || cur.by)}</span> : null}
         {cur?.edited && cur.stale ? <span className="ml-1.5 text-xs text-warn" title={cur.vaidyx_text ? `Vaidyx would now write: ${cur.vaidyx_text}` : undefined}>(the Vaidyx line has changed since)</span> : null}

@@ -791,3 +791,41 @@ def test_the_wording_of_code_sentences(decided, monkeypatch):
     bad = [x for s in ("rounds", "status", "stage") for x in texts(v, s) if x.endswith('".') and x[:-2].endswith((".", "!", "?"))]
     assert bad == []
     assert "In the order the board stated it" == __import__("tumour_board.decision_record", fromlist=["x"]).BY_KEY["sequence"]["hint"]
+
+
+# ---- the Phase 3 follow-up review ----------------------------------------------------------------------------------------------
+
+def test_the_summary_line_never_reaches_a_department_only_asked(decided, monkeypatch, app):
+    case_id, _ = decided
+    tc, who = app
+    fake(monkeypatch)
+    build(case_id)
+    st = store.get_state(case_id)
+    st["actions"].append({"id": "AREQ1", "source": "pre_authorization", "requirement": "ct_thorax", "label": "CT thorax", "department": "Radiology",
+                          "department_id": "radiology", "status": "pending", "created": store.now_iso(), "due": "2026-12-01", "history": [],
+                          "sent": {"by": "dr.rao", "at": store.now_iso(), "count": 1}})
+    store.save_state(case_id, st)
+    assert store.get_case(case_id)["summary_line"]["text"]
+    rows = {x["case_id"]: x for x in tc.get("/api/tb/cases").json()["cases"]}
+    assert rows[case_id]["summary_line"]["text"] and rows[case_id]["scope"] == "full"  # the owner's consultant
+    who["user"] = "dr.ravi"  # Radiology was only asked for the CT
+    rows = {x["case_id"]: x for x in tc.get("/api/tb/cases").json()["cases"]}
+    assert rows[case_id]["scope"] == "requests" and "summary_line" not in rows[case_id]
+    assert "summary_line" not in tc.get(f"/api/tb/cases/{case_id}").json()["case"]
+    assert tc.post(f"/api/tb/cases/{case_id}/archive", json={"reason": "x"}).status_code == 403
+    who["user"] = "dr.rao"
+    r = tc.post(f"/api/tb/cases/{case_id}/archive", json={"reason": "duplicate (synthetic)"})
+    assert r.status_code == 200 and r.json()["case"]["summary_line"]["text"]
+    assert cs.case_for(store.get_case(case_id), "requests").get("summary_line") is None and cs.case_for(store.get_case(case_id), "full")["summary_line"]
+    assert cs.case_for(store.get_case(case_id), "meeting").get("summary_line") is None
+
+
+def test_only_the_newest_three_archived_pre_board_summaries_come_in_full():
+    sec = [{"id": "presentation", "title": "Presentation", "sentences": [{"text": "a"}, {"text": "b"}]}]
+    hist = [{"generated": f"2026-09-0{i}T10:00:00", "archived_at": f"2026-09-0{i + 1}T10:00:00", "review": {"status": "ai_draft"}, "model": "m",
+             "sections": sec} for i in range(1, 6)]
+    st = {"artefacts": {"summary_history": hist, "summary": {"generated": "2026-09-07T10:00:00", "review": {"status": "reviewed", "by": "dr.rao"}, "model": "m", "sections": sec}}}
+    h = cs.pre_board_history(st)
+    assert [x["full"] for x in h] == [False, False, True, True, True, True] and h[-1]["live"] is True
+    assert set(h[0]) == {"generated", "archived_at", "review", "model", "sentences", "live", "full"} and h[0]["sentences"] == 2
+    assert h[2]["paragraphs"][0]["sentences"] == sec[0]["sentences"] and h[-1]["review"]["status"] == "reviewed"

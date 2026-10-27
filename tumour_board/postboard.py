@@ -478,6 +478,24 @@ def _withdraw_rows(case_id, st, rec, rows, by, version) -> list[str]:
     return out
 
 
+def _redate_rows(case_id, st, rec, moved, by, version) -> list[str]:
+    """A correction changed only the due date of a row: the open action of that row takes the new date (history line, audited)."""
+    out = []
+    for k, row in moved:
+        for a in st.get("actions") or []:
+            if not (isinstance(a, dict) and a.get("source") == "board" and a.get("board_record") == rec["id"] and a.get("status") != "completed"
+                    and _row_match_key(a.get("label"), a.get("department")) == k):
+                continue
+            old, a["due"] = a.get("due"), row["due"]
+            a.setdefault("history", []).append({"ts": store.now_iso(), "event": f"Due date changed to {decision_record.dmy(row['due'])} by the correction of version {version}"})
+            out.append(a["id"])
+            store.audit(case_id, {"kind": "board_action_due_changed", "action": a["id"], "record": rec["id"], "version": version, "by": by, "old": old, "new": row["due"]})
+        for x in rec.get("actions") or []:
+            if isinstance(x, dict) and x.get("kind") in ("investigation", "referral") and _row_match_key(x.get("task"), x.get("department")) == k:
+                x["due"] = row["due"]
+    return out
+
+
 def _case_summary(fn, *args) -> None:
     """Call case_summary.<fn> after a board record changed (night-v3 item 3.3); a failure never breaks the record (logged)."""
     try:
@@ -627,13 +645,23 @@ def correct_record(case_id, record_id, changes: dict, by: str, by_name: str = ""
         rec["divergent_opinions"] = after["divergent_opinions"]
     if outcome == "deferred" and ({"awaited", "awaited_from"} & set(keys)):
         rec["deferred_reason"] = after["deferred_reason"]
-    new_rows = _not_open(st, follow_up_rows(case_id, rec, [x for x in after["investigations"] if _row_key(x) not in old_inv] if "investigations" in keys else [],
-                                            [x for x in after["referrals"] if _row_key(x) not in old_ref] if "referrals" in keys else []))
     new_inv = {_row_key(x) for x in after.get("investigations") or []}
     new_ref = {_row_key(x) for x in after.get("referrals") or []}
+    added = follow_up_rows(case_id, rec, [x for x in after["investigations"] if _row_key(x) not in old_inv] if "investigations" in keys else [],
+                           [x for x in after["referrals"] if _row_key(x) not in old_ref] if "referrals" in keys else [])
     gone = follow_up_rows(case_id, rec, [x for x in before.get("investigations") or [] if _row_key(x) not in new_inv] if "investigations" in keys else [],
                           [x for x in before.get("referrals") or [] if _row_key(x) not in new_ref] if "referrals" in keys else [])
+    # a row whose task and department stay and only the due date changed is the same request: its action gets the new date, never
+    # withdrawn and made again (Phase 3 follow-up review S1)
+    moved = []
+    for g in list(gone):
+        k = _row_match_key(g["task"], g["department"])
+        n = next((x for x in added if _row_match_key(x["task"], x["department"]) == k), None)
+        if n is not None:
+            gone.remove(g); added.remove(n); moved.append((k, n))
+    new_rows = _not_open(st, added)
     v = _new_version(rec, by, reason or "Corrected after the meeting", "correction", changed=changed, by_name=by_name or by)
+    redated = _redate_rows(case_id, st, rec, moved, by, v["version"]) if moved else []
     withdrawn = _withdraw_rows(case_id, st, rec, gone, by, v["version"]) if gone else []
     rec["corrected"] = {"by": by, "by_name": by_name or by, "at": v["at"], "reason": reason, "version": v["version"]}
     if new_rows:
@@ -647,7 +675,7 @@ def correct_record(case_id, record_id, changes: dict, by: str, by_name: str = ""
         st["next_review"] = {"date": rec["next_review"], "from_record": rec["id"]}
     store.save_state(case_id, st)
     store.audit(case_id, {"kind": "board_record_corrected", "record": record_id, "by": by, "changed": keys, "reason": reason, "version": v["version"],
-                          "actions_added": len(new_rows), "actions_withdrawn": withdrawn})
+                          "actions_added": len(new_rows), "actions_withdrawn": withdrawn, "actions_redated": redated})
     _tell_owner_corrected(case_id, rec, by, by_name, reason)
     _case_summary("schedule", case_id, {"kind": "correction", "record": record_id}, by)  # the Case summary again (night-v3 item 3.3)
     return rec

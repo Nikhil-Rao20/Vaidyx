@@ -46,6 +46,7 @@ function Sentence({ s, sec, docs, h, onBoard, canEdit, onEdit }: {
   const [err, setErr] = useState<string | null>(null);
   const model = !s.code && !s.fixed && !s.from_fields && sec.built_by === "model";
   const e = s.edited;
+  const sug = typeof e?.suggested === "string" ? { text: e.suggested } : e?.suggested && typeof e.suggested === "object" && e.suggested.text ? e.suggested : null;
   const tooLong = text.trim().length > MAX_EDIT;
   const save = async () => {
     const t = text.trim();
@@ -82,10 +83,11 @@ function Sentence({ s, sec, docs, h, onBoard, canEdit, onEdit }: {
           edited by {drName(e.by_name || e.by)} on {fmtDate(e.at)}
           {e.checked === false ? <span className="text-warn">, not checked against the record</span> : null}
           {e.records_changed ? <span className="text-warn">, records changed after this edit</span> : null}
-          {e.suggested ? (
-            <details className="mt-0.5">
+          {e.unmatched ? <span className="block" data-testid="cs-unmatched">kept from an earlier version; no current sentence matches</span> : null}
+          {sug ? (
+            <details className="mt-0.5" data-testid="cs-suggested">
               <summary className="cursor-pointer hover:text-foreground">Vaidyx wrote</summary>
-              <span className="mt-0.5 block pl-3">Vaidyx wrote: {indianDates(e.suggested || e.vaidyx_text || "")}</span>
+              <span className="mt-0.5 block pl-3">Vaidyx wrote: {indianDates(sug.text)}<Cites cites={"citations" in sug ? sug.citations : undefined} docs={docs} h={h} onBoard={onBoard} max={3} /></span>
             </details>
           ) : null}
         </span>

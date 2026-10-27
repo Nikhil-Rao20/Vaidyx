@@ -719,3 +719,24 @@ def test_the_inform_the_patient_action_is_of_kind_communication(unit_case, monke
     asyncio.run(postboard.record_decision(unit_case, {**DECISION, "board_date": "2026-10-27"}, "coord"))
     comm = [a for a in _board_acts(unit_case) if a.get("communication")]
     assert len(comm) == 1 and comm[0]["kind"] == "communication"
+
+
+def test_a_correction_of_the_due_date_only_keeps_the_one_request(unit_case, monkeypatch):
+    """Phase 3 follow-up review S1: the same investigation with a new due date is the same request: its date changes, nothing is withdrawn."""
+    from tumour_board import notify, store
+    _no_claims(monkeypatch)
+    rec = asyncio.run(postboard.record_decision(unit_case, {**DECISION, "board_date": "2026-10-27",
+                                                            "investigations": [{"item": "PET-CT", "department": "Nuclear Medicine", "due": "2026-11-10"}]}, "coord"))
+    out = postboard.correct_record(unit_case, rec["id"], {"investigations": [{"item": "PET-CT", "department": "Nuclear Medicine", "due": "2026-11-20"}]},
+                                   "dr.rao", "Dr Rao", "")
+    acts = _board_acts(unit_case, "PET-CT")
+    assert len(acts) == 1 and acts[0]["status"] == "pending" and acts[0]["due"] == "2026-11-20" and not acts[0].get("withdrawn")
+    assert acts[0]["history"][-1]["event"] == "Due date changed to 20/11/2026 by the correction of version 2"
+    assert [(a["task"], a["due"]) for a in out["actions"] if a.get("kind") == "investigation"] == [("PET-CT", "2026-11-20")]
+    ev = store.read_audit(unit_case)
+    assert [e["new"] for e in ev if e["kind"] == "board_action_due_changed"] == ["2026-11-20"] and not [e for e in ev if e["kind"] == "board_action_withdrawn"]
+    assert not [n for n in notify._load() if "withdrawn" in n["title"]]
+    # a changed task is a new request: the old one is withdrawn, the new one sent
+    postboard.correct_record(unit_case, rec["id"], {"investigations": [{"item": "PET-CT whole body", "department": "Nuclear Medicine", "due": "2026-11-20"}]},
+                             "dr.rao", "Dr Rao", "")
+    assert _board_acts(unit_case, "PET-CT")[0]["withdrawn"] is True and _board_acts(unit_case, "PET-CT whole body")[0]["status"] == "pending"

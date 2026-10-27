@@ -400,11 +400,17 @@ test.describe("guided Case File", () => {
     await expect(card.getByTestId("cs-section-status")).toContainText("Action: task");
     await expect(card.getByTestId("cs-section-stage")).toContainText("Board 23/10/2026, Stage as agreed by the board");
     await expect(card.getByTestId("cs-edited").first()).toHaveText(/edited by Dr Lakshmi Rao on 24\/10\/2026, not checked against the record/);
+    await expect(card.locator("[data-id=presentation-1]").getByTestId("cs-suggested")).toContainText("Vaidyx wrote");
+    await card.locator("[data-id=presentation-1]").getByTestId("cs-suggested").locator("summary").click();
+    await expect(card.locator("[data-id=presentation-1]").getByTestId("cs-suggested")).toContainText("Vaidyx wrote: Presenting complaint: lump in the right breast noticed 6 weeks ago.");
+    await expect(card.locator("[data-id=presentation-1]").getByTestId("cs-suggested").locator("button.quote-chip")).toHaveCount(1);
+    await expect(card.locator("[data-id=presentation-4]").getByTestId("cs-unmatched")).toHaveText("kept from an earlier version; no current sentence matches");
+    await expect(card.getByTestId("cs-unmatched")).toHaveCount(1);
     await expect(card.getByTestId("cs-removed")).toHaveText("1 sentence dropped because it could not be checked against the records.");
     // code sentences carry no AI mark and no pencil; the model sentences do
     await expect(card.locator("[data-id=rBade0ac-decision_text] [aria-label='Written by the AI model']")).toHaveCount(0);
     await expect(card.locator("[data-id=presentation-2] [aria-label='Written by the AI model']")).toHaveCount(1);
-    await expect(card.getByTestId("cs-edit")).toHaveCount(2);
+    await expect(card.getByTestId("cs-edit")).toHaveCount(3);
     // the pre-board summary folds under "Before the board on", closed
     const pre = page.getByTestId("summary-card");
     await expect(pre).toContainText("Before the board on 09/10/2026");
@@ -413,7 +419,10 @@ test.describe("guided Case File", () => {
     await laptop(page);
     await pre.locator("summary").first().click();
     await expect(pre.getByTestId("prose-text")).toBeVisible();
-    await expect(pre.getByTestId("preboard-history")).toContainText("Earlier versions (1)");
+    await expect(pre.getByTestId("preboard-history")).toContainText("Earlier versions (2)");
+    await pre.getByTestId("preboard-history").locator("summary").click();
+    await expect(pre.getByTestId("preboard-history").locator("li")).toHaveCount(2);
+    await expect(pre.getByTestId("preboard-history").locator("li").last()).toHaveText("Written 28/09/2026, 08:00, by Gemma-4-31B (non-medical), read");
     // version 1, read-only
     await card.getByTestId("cs-version").selectOption("1");
     await expect(card.getByTestId("cs-header-line")).toContainText("Version 1, written 23/10/2026, 18:10");
@@ -434,6 +443,7 @@ test.describe("guided Case File", () => {
     const line = page.getByTestId("summary-line");
     await expect(line).toContainText("52 F, early breast cancer: board 23/10/2026 decision recorded");
     await expect(line.getByTestId("summary-line-edited")).toHaveText("edited by Dr Lakshmi Rao");
+    await expect(line.getByTestId("summary-line-vaidyx-tag")).toHaveCount(0);
     await snap(page, "casefile", "header-summary-line", { sizes: DESKTOP_MOBILE, fullPage: false });
     await laptop(page);
     await page.getByTestId("summary-line-pencil").click();
@@ -446,6 +456,7 @@ test.describe("guided Case File", () => {
     await page.getByTestId("summary-line-vaidyx").click();
     await expect(page.getByTestId("summary-line")).toContainText("1 action open");
     await expect(page.getByTestId("summary-line-edited")).toHaveCount(0);
+    await expect(page.getByTestId("summary-line-vaidyx-tag")).toHaveText("Vaidyx line");
     await noSideways(page);
     expect(errors).toEqual([]);
   });

@@ -1208,18 +1208,28 @@ def view(case_id, st, roles=None, n=None) -> dict | None:
             "can": _can(case_id, roles)}
 
 
+FULL_ARCHIVED = 3  # archived pre-board summaries sent in full; older ones as a line each (Phase 3 follow-up review M3)
+
+
 def pre_board_history(st) -> list:
-    """The pre-board summaries (summary.history, item 3.5), oldest first, the live one last (live true)."""
+    """The pre-board summaries (summary.history, item 3.5), oldest first, the live one last (live true). The live one and the newest three
+    archived ones come in full (full true: paragraphs, points for review, the stage as recorded); older ones as {generated, archived_at,
+    review, model, sentences: count, live, full: false}: they stay on disk in full."""
+    hist = summary.history(st)
+    archived = [i for i, h in enumerate(hist) if h.get("archived_at") is not None]
+    full_idx = set(archived[-FULL_ARCHIVED:]) | {i for i, h in enumerate(hist) if h.get("archived_at") is None}
     out = []
-    for h in summary.history(st):
+    for i, h in enumerate(hist):
         rv = h.get("review") or {}
-        out.append({"generated": h.get("generated"), "archived_at": h.get("archived_at"),
-                    "review": {"status": rv.get("status") or "ai_draft", "by": rv.get("by"), "by_name": _name(rv.get("by")) if rv.get("by") else "",
-                               "at": rv.get("at"), "comment": rv.get("comment") or ""},
-                    "model": h.get("model") or "",
-                    "paragraphs": [{"id": x.get("id"), "title": x.get("title"), "sentences": x.get("sentences") or []} for x in h.get("sections") or []],
-                    "points_for_review": h.get("points_for_review") or [], "stage_as_recorded": h.get("stage_as_recorded"),
-                    "live": h.get("archived_at") is None})
+        row = {"generated": h.get("generated"), "archived_at": h.get("archived_at"),
+               "review": {"status": rv.get("status") or "ai_draft", "by": rv.get("by"), "by_name": _name(rv.get("by")) if rv.get("by") else "",
+                          "at": rv.get("at"), "comment": rv.get("comment") or ""},
+               "model": h.get("model") or "", "sentences": sum(len(x.get("sentences") or []) for x in h.get("sections") or []),
+               "live": h.get("archived_at") is None, "full": i in full_idx}
+        if row["full"]:
+            row.update({"paragraphs": [{"id": x.get("id"), "title": x.get("title"), "sentences": x.get("sentences") or []} for x in h.get("sections") or []],
+                        "points_for_review": h.get("points_for_review") or [], "stage_as_recorded": h.get("stage_as_recorded")})
+        out.append(row)
     return out
 
 
@@ -1276,3 +1286,12 @@ def edit_line(case_id, text, user, user_name="") -> dict:
     store.audit(case_id, {"kind": "summary_line_edit", "by": user, "text": line["text"], "edited": line["edited"], "previous": old.get("text") or "",
                           "version": v.get("n")})
     return line
+
+
+def case_for(c, scope, also=()) -> dict:
+    """The case record for a reader: `summary_line` (clinical text) only when the reader's scope is FULL (or one of `also`); a department
+    that was only asked, a linked reader or a meeting screen never receives it (Phase 3 follow-up review S2)."""
+    from . import access
+    if not isinstance(c, dict) or "summary_line" not in c or scope == access.FULL or (scope and scope in also):
+        return c
+    return {k: v for k, v in c.items() if k != "summary_line"}

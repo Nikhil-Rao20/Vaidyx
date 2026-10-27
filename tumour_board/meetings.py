@@ -1318,8 +1318,8 @@ async def record_decision(mid: str, cid: str, body: dict, user: str) -> dict:
         _RECORDING.discard((mid, cid))
 
 
-ALREADY_RECORDED = ("The outcome of this Case File is recorded for this meeting. To change it, correct the record from the Case File's "
-                    "Board decisions panel.")
+ALREADY_RECORDED = ("The outcome of this Case File is recorded for this meeting. To change the fields, correct the record from the Case File's "
+                    "Board decisions panel. A different outcome is recorded at the next meeting.")
 _RECORDING: set = set()  # (meeting, Case File) whose outcome is being saved now: a second save waits for nothing and is refused
 
 
