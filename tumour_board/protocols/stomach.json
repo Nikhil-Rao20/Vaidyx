@@ -1,0 +1,475 @@
+{
+ "id": "stomach",
+ "label": "Stomach cancer",
+ "version": "0.1-draft",
+ "approval": {
+  "status": "draft",
+  "note": "Draft checklist from the NCG GI draft 2021 (gastric cancer): needs a clinician's check"
+ },
+ "site": "stomach|gastr|antr|pylor|fund",
+ "site_note": "V2 item 5.3 (two primaries): only on a Case File linked to the same patient's other Case File, and only for histopathology, cytology, IHC and molecular records: among several candidates for one record, or several documents carrying a required value, one that names another protocol's site and not this one steps aside and is named on the row for review; a document naming no site never does, and when every candidate names another site every candidate stays. Organ words only. A preference, never a filter; a patient with one cancer is checked as before.",
+ "note": "Draft checklist from the NCG GI draft 2021, gastric cancer (page 1: flow chart with work-up and settings; page 2: PET, CDH1 testing, endoscopy, EUS): needs a clinician's check. The file prints no tier letters, so every tier is a proposal (an item in the page 1 work-up block is proposed Essential; 'desirable' and 'encouraged' are proposed Optimal; 'consider' is proposed Optional), to be confirmed by the hospital Tumour Board (clinical review before real use). PET: page 2 says 'PET scan should NOT be performed in gastric cancer', so no PET record is listed. MMR / MSI is not in this file and is not listed. The system records the stage as written and never computes it; no treatment advice. India first: the National Cancer Grid draft is the only source (page 1 uses 'Poor PS/ ASA 4'; page 2 says EMR and follow up belong at tertiary care centres).",
+ "settings_note": "The setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes a stage and never decides the setting). Each record carries its tier per setting; until a setting is recorded the strictest tier applies. Draft checklist: needs a clinician's check.",
+ "settings": [
+  {
+   "id": "early_localized",
+   "label": "Early, localised (as recorded)"
+  },
+  {
+   "id": "locally_advanced",
+   "label": "Loco-regionally advanced (as recorded)"
+  },
+  {
+   "id": "metastatic",
+   "label": "Metastatic (as recorded)"
+  }
+ ],
+ "records": [
+  {
+   "id": "clinical_history",
+   "label": "Clinical history and performance status",
+   "tier": "a",
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ],
+   "department": "Gastrointestinal Surgery",
+   "required_facts": [
+    "ecog",
+    "presenting_complaint",
+    "clinical_question"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gastric cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gastric-cancer.pdf",
+     "page": 1,
+     "quote": "Symptoms :Dyspepsia Pain, Bleeding, Vomiting, Lumps, Unexplained weight"
+    }
+   ],
+   "tier_basis": "Proposed Essential: listed first in the page 1 work-up block",
+   "route": "owner",
+   "note": "a clinical record of the owning treating department; the department named here is the default before a Case File has an owner"
+  },
+  {
+   "id": "upper_gi_endoscopy",
+   "label": "Upper GI endoscopy with biopsies",
+   "tier": "a",
+   "doc_types": [
+    "endoscopy"
+   ],
+   "department": "Gastrointestinal Surgery",
+   "required_facts": [
+    "tumour_site_stomach"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gastric cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gastric-cancer.pdf",
+     "page": 1,
+     "quote": "Upper GI Endoscopy with multiple biopsies(6-8)"
+    }
+   ],
+   "tier_basis": "Proposed Essential: in the page 1 work-up block"
+  },
+  {
+   "id": "histopathology",
+   "label": "Histopathology report",
+   "tier": "a",
+   "doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type",
+    "grade"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gastric cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gastric-cancer.pdf",
+     "page": 1,
+     "quote": "Pathology : Adenocarcinoma."
+    }
+   ],
+   "tier_basis": "Proposed Essential: in the page 1 work-up block"
+  },
+  {
+   "id": "cect_tap",
+   "label": "CECT thorax, abdomen and pelvis",
+   "tier": "a",
+   "doc_types": [
+    "ct"
+   ],
+   "region": "thorax|chest|abdomen|abdo|abdominal|pelvis|pelvic",
+   "department": "Radiology",
+   "required_facts": [
+    "lesion_size",
+    "nodal_findings",
+    "distant_findings"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gastric cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gastric-cancer.pdf",
+     "page": 1,
+     "quote": "CECT scan thorax, abdomen and pelvis"
+    }
+   ],
+   "tier_basis": "Proposed Essential: in the page 1 work-up block"
+  },
+  {
+   "id": "eus",
+   "label": "Endoscopic ultrasonography",
+   "tier": "b",
+   "tiers": {
+    "early_localized": "b",
+    "locally_advanced": "b",
+    "metastatic": "none"
+   },
+   "doc_types": [
+    "endoscopy"
+   ],
+   "region": "eus|endoscopic ultraso|endosonograph",
+   "department": "Gastrointestinal Surgery",
+   "required_facts": [],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gastric cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gastric-cancer.pdf",
+     "page": 2,
+     "quote": "EUS is desirable in patients with resectable disease to determine precise T and N stage"
+    }
+   ],
+   "tier_basis": "Proposed Optimal: page 2 calls EUS 'desirable' for resectable disease, which is the book's wording for Optimal; it also appears as 'Endoscopic ultrasonography' on page 1"
+  },
+  {
+   "id": "staging_laparoscopy",
+   "label": "Staging laparoscopy",
+   "tier": "c",
+   "tiers": {
+    "early_localized": "none",
+    "locally_advanced": "c",
+    "metastatic": "none"
+   },
+   "doc_types": [
+    "operative_note"
+   ],
+   "region": "laparoscop",
+   "department": "Surgical Oncology",
+   "required_facts": [],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gastric cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gastric-cancer.pdf",
+     "page": 1,
+     "quote": "Staging Laparoscopy if CT s/o no mets if Periop chemo is planned"
+    }
+   ],
+   "tier_basis": "Proposed Optimal, but only if CT shows no metastases and perioperative chemotherapy is planned, which the system does not judge: shown and not counted",
+   "condition": {
+    "ncg_tier": "b",
+    "text": "when CT shows no metastases and perioperative chemotherapy is planned"
+   }
+  },
+  {
+   "id": "her2",
+   "label": "HER2 testing",
+   "tier": "b",
+   "tiers": {
+    "early_localized": "none",
+    "locally_advanced": "c",
+    "metastatic": "b"
+   },
+   "doc_types": [
+    "ihc",
+    "histopathology",
+    "molecular"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "her2"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gastric cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gastric-cancer.pdf",
+     "page": 1,
+     "quote": "Consider Her 2 testing"
+    }
+   ],
+   "tier_basis": "Proposed: 'Consider' means not required, so Optional for locally advanced disease; Optimal for metastatic disease, where page 1 names HER2 again in the first-line box"
+  },
+  {
+   "id": "pdl1",
+   "label": "PD-L1 (third line)",
+   "tier": "c",
+   "tiers": {
+    "early_localized": "none",
+    "locally_advanced": "none",
+    "metastatic": "c"
+   },
+   "doc_types": [
+    "ihc",
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "pdl1"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gastric cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gastric-cancer.pdf",
+     "page": 1,
+     "quote": "Test PDL1"
+    }
+   ],
+   "tier_basis": "Proposed Optional: appears only under third-line therapy, where the book marks the immunotherapy '(O)'"
+  },
+  {
+   "id": "cdh1_testing",
+   "label": "CDH1 germline testing (selected patients)",
+   "tier": "c",
+   "doc_types": [
+    "molecular"
+   ],
+   "department": "Medical Genetics",
+   "required_facts": [
+    "cdh1_result"
+   ],
+   "sla_days": 10,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gastric cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gastric-cancer.pdf",
+     "page": 2,
+     "quote": "Testing for CDH1 mutation is essential in:"
+    },
+    {
+     "guideline": "NCG GI draft 2021: Gastric cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gastric-cancer.pdf",
+     "page": 2,
+     "quote": "Patient with diffuse gastric cancer under the age of 40."
+    }
+   ],
+   "tier_basis": "NCG calls CDH1 testing essential only in selected patients (the page 2 list, for example diffuse gastric cancer under the age of 40). The system does not judge that condition, so the record is shown and not counted",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "in selected patients only, for example a patient with diffuse gastric cancer under the age of 40"
+   },
+   "note": "germline test; the result is a fact of the patient's record, never advice"
+  },
+  {
+   "id": "pre_anaesthetic",
+   "label": "Pre-anaesthetic evaluation",
+   "tier": "b",
+   "tiers": {
+    "early_localized": "b",
+    "locally_advanced": "b",
+    "metastatic": "none"
+   },
+   "doc_types": [
+    "clinical_note"
+   ],
+   "department": "Anaesthesiology",
+   "required_facts": [
+    "comorbidities"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gastric cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gastric-cancer.pdf",
+     "page": 1,
+     "quote": "Pre-anesthetic evaluation"
+    }
+   ],
+   "tier_basis": "Proposed Optimal: listed in the work-up with no letter; relevant only where surgery is planned, so not applicable in metastatic disease",
+   "route": "owner"
+  },
+  {
+   "id": "nutrition",
+   "label": "Nutrition and supportive care evaluation",
+   "tier": "b",
+   "doc_types": [
+    "clinical_note"
+   ],
+   "department": "Palliative Medicine",
+   "required_facts": [],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gastric cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gastric-cancer.pdf",
+     "page": 2,
+     "quote": "Early supportive care team and nutrition evaluation is encouraged in all cases"
+    },
+    {
+     "guideline": "NCG GI draft 2021: Gastric cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gastric-cancer.pdf",
+     "page": 1,
+     "quote": "Nutritional support-Oral or tube feeding"
+    }
+   ],
+   "tier_basis": "Proposed Optimal: page 2 says early supportive care and nutrition evaluation is 'encouraged'; page 1 also lists nutritional support"
+  }
+ ],
+ "optional": [
+  {
+   "id": "resection_histopathology",
+   "label": "Histopathology of the gastrectomy",
+   "doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gastric cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gastric-cancer.pdf",
+     "page": 1,
+     "quote": "D2 Dissection ( More than15 nodes)"
+    }
+   ],
+   "tier_basis": "Proposed Essential after surgery for early and locally advanced disease (a post-board record: the page 1 adjuvant box reads pT, N and margins). Kept under optional because a resection report exists only after the board and the gate cannot tell it from the biopsy report",
+   "note": "post-board record: histologic type, grade, margins, stage as recorded and lymph nodes examined (the book's D2 dissection line names more than 15 nodes)"
+  },
+  {
+   "id": "previous_board",
+   "label": "Previous Tumour Board record",
+   "doc_types": [
+    "tumour_board_record"
+   ],
+   "department": "MDT Coordinator",
+   "route": "coordinator"
+  }
+ ],
+ "extract_facts": [
+  "presenting_complaint",
+  "ecog",
+  "comorbidities",
+  "clinical_question",
+  "recorded_stage",
+  "lesion_size",
+  "nodal_findings",
+  "distant_findings",
+  "histologic_type",
+  "grade",
+  "haemoglobin",
+  "wbc",
+  "platelets",
+  "creatinine",
+  "bilirubin",
+  "patient_preference",
+  "clinical_trial_note",
+  "diagnosis_date_mode",
+  "treatment_received",
+  "tumour_site_stomach",
+  "her2",
+  "pdl1",
+  "cdh1_result",
+  "margins",
+  "nodes_examined"
+ ],
+ "core_data": [
+  {
+   "id": "diagnosis",
+   "label": "Histopathological / cytological diagnosis",
+   "facts": [
+    "histologic_type"
+   ]
+  },
+  {
+   "id": "diagnosis_date_mode",
+   "label": "Date and mode of diagnosis",
+   "facts": [
+    "diagnosis_date_mode"
+   ]
+  },
+  {
+   "id": "stage",
+   "label": "Stage as recorded (with the investigations used)",
+   "facts": [
+    "recorded_stage"
+   ]
+  },
+  {
+   "id": "performance_status",
+   "label": "Performance status",
+   "facts": [
+    "ecog"
+   ]
+  },
+  {
+   "id": "comorbidities",
+   "label": "Co-morbidities",
+   "facts": [
+    "comorbidities"
+   ]
+  },
+  {
+   "id": "biomarkers",
+   "label": "Relevant genomic / biomarker testing",
+   "facts": [
+    "her2",
+    "pdl1",
+    "cdh1_result"
+   ]
+  },
+  {
+   "id": "treatment_history",
+   "label": "Treatment history",
+   "facts": [
+    "treatment_received"
+   ]
+  },
+  {
+   "id": "patient_preference",
+   "label": "Patient preference / special circumstances",
+   "facts": [
+    "patient_preference"
+   ]
+  },
+  {
+   "id": "clinical_trial",
+   "label": "Clinical trial availability / suitability recorded",
+   "facts": [
+    "clinical_trial_note"
+   ]
+  },
+  {
+   "id": "question",
+   "label": "Question for the Tumour Board",
+   "facts": [
+    "clinical_question"
+   ]
+  }
+ ],
+ "core_data_source": "NHS England, Streamlining MDT meetings (2020), p.11 'minimum core data requirements'; aligned with the NCG Virtual Tumour Board case template (India)",
+ "post_board": {
+  "required_record_fields": [
+   "decision_text",
+   "recorded_by",
+   "participants",
+   "actions"
+  ],
+  "follow_up_default_days": 14,
+  "record_fields_source": "EUSOMA 2020 (names of all participants, evidence on decisions); Victorian Cancer MDM quality framework 2018 (report errors/changes raised, divergent recommendations and dissenting clinicians); PM-JAY HBP 2.2 s.3.9 (tumour board decision and treatment plan)"
+ },
+ "policy_basis": "PM-JAY Health Benefit Package 2.2 user guidelines (NHA, 2021), section 3.9: pre-authorization is mandatory at each step of cancer care and the decision on appropriate care is to be taken by a multidisciplinary tumour board; NHS England MDT streamlining guidance (2020) pre-listing conditions. The NCG book itself asks for the board: \"Multidisciplinary Tumour board\" (NCG GI draft 2021: Gastric cancer, page 1); the Tumour Board Case File is that discussion, so no separate record is required for it (orchestrator, night-v3 Phase 2).",
+ "guideline_sources": [
+  {
+   "guideline": "NCG GI draft 2021: Gastric cancer",
+   "file": "ncg_india/ncg-gi-draft-2021-gastric-cancer.pdf",
+   "pages": "1, 2"
+  }
+ ]
+}

@@ -1,0 +1,594 @@
+{
+ "id": "gallbladder",
+ "label": "Gallbladder cancer",
+ "version": "0.1-draft",
+ "approval": {
+  "status": "draft",
+  "note": "Draft checklist from the NCG GI draft 2021 (gall bladder cancer): needs a clinician's check"
+ },
+ "site": "gallbladder|gall bladder|cholecyst|biliary",
+ "site_note": "V2 item 5.3 (two primaries): only on a Case File linked to the same patient's other Case File, and only for histopathology, cytology, IHC and molecular records: among several candidates for one record, or several documents carrying a required value, one that names another protocol's site and not this one steps aside and is named on the row for review; a document naming no site never does, and when every candidate names another site every candidate stays. Organ words only. A preference, never a filter; a patient with one cancer is checked as before.",
+ "note": "Draft checklist from the NCG GI draft guidelines of 15 Jan 2021 on gall bladder cancer (page 1: basic work-up and the four-way split; page 2: per primum; page 3: incidental; page 4: locally advanced; page 5: metastatic) and its radiology synoptic (pages 1 and 2): needs a clinician's check. The files print no tier letters (only 'Optional:' and '(optimal)'), so every tier is a proposal, to be confirmed by the hospital Tumour Board (clinical review before real use). The system records the stage as written (the book names no staging edition) and never computes it; no treatment advice. India first: the National Cancer Grid draft is the only source; it advises radical surgery only where expertise and facilities exist (page 2), and the high share of incidental disease is the Indian presentation it shows (page 3).",
+ "settings_note": "The setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes a stage and never decides the setting). Each record carries its tier per setting; until a setting is recorded the strictest tier applies. Draft checklist: needs a clinician's check.",
+ "settings": [
+  {
+   "id": "per_primum",
+   "label": "Per primum, suspected or proven before surgery (as recorded)"
+  },
+  {
+   "id": "incidental",
+   "label": "Incidental, found after cholecystectomy (as recorded)"
+  },
+  {
+   "id": "locally_advanced",
+   "label": "Locally advanced (as recorded)"
+  },
+  {
+   "id": "metastatic",
+   "label": "Metastatic (as recorded)"
+  }
+ ],
+ "records": [
+  {
+   "id": "clinical_history",
+   "label": "Clinical history, jaundice and performance status",
+   "tier": "a",
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ],
+   "department": "Hepatobiliary and Pancreatic Surgery",
+   "required_facts": [
+    "ecog",
+    "presenting_complaint",
+    "clinical_question"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gall bladder cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gall-bladder-cancer.pdf",
+     "page": 1,
+     "quote": "BASIC WORK UP"
+    },
+    {
+     "guideline": "NCG GI draft 2021: Gall bladder cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gall-bladder-cancer.pdf",
+     "page": 4,
+     "quote": "In patients presenting with OJ:"
+    }
+   ],
+   "tier_basis": "Proposed Essential: the page 1 'BASIC WORK UP' heading is the only clinical line; page 4 adds jaundice for patients presenting with obstructive jaundice (OJ)",
+   "route": "owner",
+   "note": "a clinical record of the owning treating department; the department named here is the default before a Case File has an owner"
+  },
+  {
+   "id": "ultrasonography",
+   "label": "Ultrasonography",
+   "tier": "a",
+   "tiers": {
+    "per_primum": "a",
+    "incidental": "b",
+    "locally_advanced": "a",
+    "metastatic": "a"
+   },
+   "doc_types": [
+    "ultrasound"
+   ],
+   "region": "abdomen|abdo|abdominal|gall|liver|hepat|biliary|hepatobiliary",
+   "department": "Radiology",
+   "required_facts": [
+    "gb_mass",
+    "lesion_size"
+   ],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gall bladder cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gall-bladder-cancer.pdf",
+     "page": 1,
+     "quote": "Ultrasonography"
+    },
+    {
+     "guideline": "NCG GI draft 2021: Gallbladder cancer radiology synoptic",
+     "file": "ncg_india/ncg-gi-draft-2021-gallbladder-cancer-radiology-synoptic.pdf",
+     "page": 1,
+     "quote": "- absent, indeterminate, present, if present size (cm): ...."
+    }
+   ],
+   "tier_basis": "Proposed Essential: in the page 1 basic work-up; Optimal for incidental disease because the cholecystectomy is already done"
+  },
+  {
+   "id": "liver_function",
+   "label": "Liver function tests",
+   "tier": "a",
+   "doc_types": [
+    "lab"
+   ],
+   "region": "lft|liver|biochem|bilirubin|sgot|sgpt|blood investigations|blood tests",
+   "department": "Biochemistry",
+   "required_facts": [
+    "bilirubin"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gall bladder cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gall-bladder-cancer.pdf",
+     "page": 1,
+     "quote": "Blood Investigations:  Liver function tests"
+    }
+   ],
+   "tier_basis": "Proposed Essential: in the page 1 basic work-up"
+  },
+  {
+   "id": "ca19_9",
+   "label": "CA 19-9",
+   "tier": "a",
+   "doc_types": [
+    "lab"
+   ],
+   "region": "ca ?-?19 ?-?9|carbohydrate antigen|tumou?r markers?",
+   "department": "Biochemistry",
+   "required_facts": [
+    "ca19_9"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gall bladder cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gall-bladder-cancer.pdf",
+     "page": 3,
+     "quote": "Repeat all labs + Tumour marker CA 19-9"
+    }
+   ],
+   "tier_basis": "Proposed Essential: in the page 1 basic work-up; page 3 repeats it for incidental disease"
+  },
+  {
+   "id": "cbc",
+   "label": "Complete blood count (CBC)",
+   "tier": "a",
+   "tiers": {
+    "per_primum": "none",
+    "incidental": "a",
+    "locally_advanced": "a",
+    "metastatic": "none"
+   },
+   "doc_types": [
+    "lab"
+   ],
+   "region": "cbc|cbp|blood count|haemogram|hemogram|haematolog|hematolog|blood tests|routine labs",
+   "department": "Pathology",
+   "required_facts": [
+    "haemoglobin",
+    "platelets"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gall bladder cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gall-bladder-cancer.pdf",
+     "page": 4,
+     "quote": "CBC Creatinine, CA 19-9, LFT"
+    }
+   ],
+   "tier_basis": "Proposed Essential for locally advanced disease (page 4); incidental disease repeats 'all labs' (page 3); not applicable per primum or metastatic",
+   "note": "the NCG line 'CBC Creatinine, CA 19-9, LFT' is split by test so each request reaches the desk that does it (CBC: Pathology; creatinine: Biochemistry)"
+  },
+  {
+   "id": "creatinine",
+   "label": "Serum creatinine",
+   "tier": "a",
+   "tiers": {
+    "per_primum": "none",
+    "incidental": "a",
+    "locally_advanced": "a",
+    "metastatic": "none"
+   },
+   "doc_types": [
+    "lab"
+   ],
+   "region": "creatinine|kft|rft|renal|kidney|biochem|blood tests|routine labs",
+   "department": "Biochemistry",
+   "required_facts": [
+    "creatinine"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gall bladder cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gall-bladder-cancer.pdf",
+     "page": 4,
+     "quote": "CBC Creatinine, CA 19-9, LFT"
+    }
+   ],
+   "tier_basis": "Proposed Essential for locally advanced disease (page 4); incidental disease repeats 'all labs' (page 3); not applicable per primum or metastatic",
+   "note": "the NCG line 'CBC Creatinine, CA 19-9, LFT' is split by test so each request reaches the desk that does it (CBC: Pathology; creatinine: Biochemistry)"
+  },
+  {
+   "id": "cect_cap",
+   "label": "CECT chest, abdomen and pelvis",
+   "tier": "a",
+   "doc_types": [
+    "ct"
+   ],
+   "region": "chest|thorax|abdomen|abdo|abdominal|pelvis|pelvic",
+   "department": "Radiology",
+   "required_facts": [
+    "lesion_size",
+    "nodal_findings",
+    "distant_findings",
+    "vessel_involvement",
+    "bile_duct_involvement"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gall bladder cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gall-bladder-cancer.pdf",
+     "page": 1,
+     "quote": "CECT Scan of Chest Abdomen and pelvis"
+    },
+    {
+     "guideline": "NCG GI draft 2021: Gall bladder cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gall-bladder-cancer.pdf",
+     "page": 3,
+     "quote": "Complete metastatic work up: CT Chest abdomen pelvis / PET CT if presenting after 6 weeks"
+    },
+    {
+     "guideline": "NCG GI draft 2021: Gallbladder cancer radiology synoptic",
+     "file": "ncg_india/ncg-gi-draft-2021-gallbladder-cancer-radiology-synoptic.pdf",
+     "page": 1,
+     "quote": "Bile duct involvement: absent, present"
+    },
+    {
+     "guideline": "NCG GI draft 2021: Gallbladder cancer radiology synoptic",
+     "file": "ncg_india/ncg-gi-draft-2021-gallbladder-cancer-radiology-synoptic.pdf",
+     "page": 1,
+     "quote": "1) Arterial abutment/ encasement/ infiltration: RHA, CHA, LHA"
+    },
+    {
+     "guideline": "NCG GI draft 2021: Gallbladder cancer radiology synoptic",
+     "file": "ncg_india/ncg-gi-draft-2021-gallbladder-cancer-radiology-synoptic.pdf",
+     "page": 2,
+     "quote": "III. Regional lymph nodes: absent, indeterminate, present"
+    }
+   ],
+   "tier_basis": "Proposed Essential: in the page 1 basic work-up; page 3 repeats the complete metastatic work-up for incidental disease. The radiology synoptic lists the elements the report should state"
+  },
+  {
+   "id": "histopathology",
+   "label": "Biopsy, FNA or post-cholecystectomy histopathology",
+   "tier": "a",
+   "tiers": {
+    "per_primum": "b",
+    "incidental": "a",
+    "locally_advanced": "a",
+    "metastatic": "a"
+   },
+   "doc_types": [
+    "histopathology",
+    "cytology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type",
+    "margins",
+    "recorded_stage"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gall bladder cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gall-bladder-cancer.pdf",
+     "page": 4,
+     "quote": "Obtaining tissue diagnosis: Biopsy/ FNAB is mandatory to confirm diagnosis"
+    },
+    {
+     "guideline": "NCG GI draft 2021: Gall bladder cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gall-bladder-cancer.pdf",
+     "page": 3,
+     "quote": "Diagnosis of Gallbladder cancer based on post operative histopathology of the gallbladder specimen in a"
+    },
+    {
+     "guideline": "NCG GI draft 2021: Gall bladder cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gall-bladder-cancer.pdf",
+     "page": 1,
+     "quote": "if upfront surgery not contemplated/ metastatic disease"
+    }
+   ],
+   "tier_basis": "Proposed Essential for locally advanced disease ('mandatory') and for incidental disease, where the diagnosis is the post-operative histopathology itself; per primum Optimal, because the book allows no biopsy when upfront surgery is planned (page 1, 'if upfront surgery not contemplated/ metastatic disease')"
+  },
+  {
+   "id": "cystic_duct_margin",
+   "label": "Cystic duct margin and cystic node (incidental review)",
+   "tier": "a",
+   "tiers": {
+    "per_primum": "none",
+    "incidental": "a",
+    "locally_advanced": "none",
+    "metastatic": "none"
+   },
+   "doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "cystic_duct_margin",
+    "margins"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gall bladder cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gall-bladder-cancer.pdf",
+     "page": 3,
+     "quote": "Note T stage, cystic duct margin and"
+    }
+   ],
+   "tier_basis": "Proposed Essential for incidental disease: part of the page 3 review of the histopathology"
+  },
+  {
+   "id": "ihc_if_not_adenocarcinoma",
+   "label": "Additional IHC if adenocarcinoma is not confirmed",
+   "tier": "c",
+   "tiers": {
+    "per_primum": "none",
+    "incidental": "none",
+    "locally_advanced": "none",
+    "metastatic": "c"
+   },
+   "doc_types": [
+    "ihc"
+   ],
+   "department": "Pathology",
+   "required_facts": [],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gall bladder cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gall-bladder-cancer.pdf",
+     "page": 5,
+     "quote": "to add additional IHC, if not confirmed to be an adenocarcinoma on"
+    }
+   ],
+   "tier_basis": "Proposed Optional: only when the tumour is not confirmed to be an adenocarcinoma, a condition the system does not judge"
+  },
+  {
+   "id": "pet_cect",
+   "label": "Whole body PET-CECT",
+   "tier": "a",
+   "tiers": {
+    "per_primum": "c",
+    "incidental": "b",
+    "locally_advanced": "a",
+    "metastatic": "c"
+   },
+   "doc_types": [
+    "pet_ct"
+   ],
+   "department": "Nuclear Medicine",
+   "required_facts": [
+    "suv_max",
+    "distant_findings"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gall bladder cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gall-bladder-cancer.pdf",
+     "page": 4,
+     "quote": "Staging:  Whole body PET CECT Scan"
+    }
+   ],
+   "tier_basis": "Proposed. Locally advanced: Essential (listed under Staging on page 4); incidental: Optimal (page 3); per primum and metastatic: Optional, because page 1 lists PET-CECT under 'Optional:'"
+  },
+  {
+   "id": "mri_mrcp",
+   "label": "MRI with MRCP (obstructive jaundice)",
+   "tier": "c",
+   "tiers": {
+    "per_primum": "c",
+    "incidental": "none",
+    "locally_advanced": "c",
+    "metastatic": "none"
+   },
+   "doc_types": [
+    "mri"
+   ],
+   "region": "mrcp|biliary|cholangio|hepat|liver|abdomen|abdo",
+   "department": "Radiology",
+   "required_facts": [
+    "bile_duct_involvement"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gall bladder cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gall-bladder-cancer.pdf",
+     "page": 4,
+     "quote": "MRCP to ascertain the exact level of block"
+    },
+    {
+     "guideline": "NCG GI draft 2021: Gall bladder cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gall-bladder-cancer.pdf",
+     "page": 1,
+     "quote": "Optional: MRI with MRCP in patients presenting with OJ"
+    }
+   ],
+   "tier_basis": "Proposed Optional (page 1: 'Optional: MRI with MRCP in patients presenting with OJ'). Page 4 makes MRCP part of the work-up of obstructive jaundice (Optimal), a condition the system does not judge: shown and not counted",
+   "condition": {
+    "ncg_tier": "b",
+    "text": "for a patient presenting with obstructive jaundice (OJ)"
+   }
+  },
+  {
+   "id": "staging_laparoscopy",
+   "label": "Staging or diagnostic laparoscopy",
+   "tier": "b",
+   "tiers": {
+    "per_primum": "b",
+    "incidental": "b",
+    "locally_advanced": "b",
+    "metastatic": "none"
+   },
+   "doc_types": [
+    "operative_note"
+   ],
+   "region": "laparoscop",
+   "department": "Hepatobiliary and Pancreatic Surgery",
+   "required_facts": [],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG GI draft 2021: Gall bladder cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gall-bladder-cancer.pdf",
+     "page": 4,
+     "quote": "Staging laparoscopy (optimal)"
+    },
+    {
+     "guideline": "NCG GI draft 2021: Gall bladder cancer",
+     "file": "ncg_india/ncg-gi-draft-2021-gall-bladder-cancer.pdf",
+     "page": 3,
+     "quote": "Diagnostic laparoscopy if presenting after 4 weeks prior to definitive surgery."
+    }
+   ],
+   "tier_basis": "Proposed Optimal: printed '(optimal)' on page 4; page 3 adds diagnostic laparoscopy for incidental disease presenting after 4 weeks; page 2 lists it for per primum disease without metastases"
+  }
+ ],
+ "optional": [
+  {
+   "id": "previous_board",
+   "label": "Previous Tumour Board record",
+   "doc_types": [
+    "tumour_board_record"
+   ],
+   "department": "MDT Coordinator",
+   "route": "coordinator"
+  }
+ ],
+ "extract_facts": [
+  "presenting_complaint",
+  "ecog",
+  "comorbidities",
+  "clinical_question",
+  "recorded_stage",
+  "lesion_size",
+  "nodal_findings",
+  "distant_findings",
+  "histologic_type",
+  "grade",
+  "haemoglobin",
+  "wbc",
+  "platelets",
+  "creatinine",
+  "bilirubin",
+  "patient_preference",
+  "clinical_trial_note",
+  "diagnosis_date_mode",
+  "treatment_received",
+  "gb_mass",
+  "ca19_9",
+  "vessel_involvement",
+  "bile_duct_involvement",
+  "margins",
+  "cystic_duct_margin",
+  "suv_max"
+ ],
+ "core_data": [
+  {
+   "id": "diagnosis",
+   "label": "Histopathological / cytological diagnosis",
+   "facts": [
+    "histologic_type"
+   ]
+  },
+  {
+   "id": "diagnosis_date_mode",
+   "label": "Date and mode of diagnosis",
+   "facts": [
+    "diagnosis_date_mode"
+   ]
+  },
+  {
+   "id": "stage",
+   "label": "Stage as recorded (with the investigations used)",
+   "facts": [
+    "recorded_stage"
+   ]
+  },
+  {
+   "id": "performance_status",
+   "label": "Performance status",
+   "facts": [
+    "ecog"
+   ]
+  },
+  {
+   "id": "comorbidities",
+   "label": "Co-morbidities",
+   "facts": [
+    "comorbidities"
+   ]
+  },
+  {
+   "id": "biomarkers",
+   "label": "Relevant genomic / biomarker testing",
+   "facts": [
+    "ca19_9"
+   ]
+  },
+  {
+   "id": "treatment_history",
+   "label": "Treatment history",
+   "facts": [
+    "treatment_received"
+   ]
+  },
+  {
+   "id": "patient_preference",
+   "label": "Patient preference / special circumstances",
+   "facts": [
+    "patient_preference"
+   ]
+  },
+  {
+   "id": "clinical_trial",
+   "label": "Clinical trial availability / suitability recorded",
+   "facts": [
+    "clinical_trial_note"
+   ]
+  },
+  {
+   "id": "question",
+   "label": "Question for the Tumour Board",
+   "facts": [
+    "clinical_question"
+   ]
+  }
+ ],
+ "core_data_source": "NHS England, Streamlining MDT meetings (2020), p.11 'minimum core data requirements'; aligned with the NCG Virtual Tumour Board case template (India)",
+ "post_board": {
+  "required_record_fields": [
+   "decision_text",
+   "recorded_by",
+   "participants",
+   "actions"
+  ],
+  "follow_up_default_days": 14,
+  "record_fields_source": "EUSOMA 2020 (names of all participants, evidence on decisions); Victorian Cancer MDM quality framework 2018 (report errors/changes raised, divergent recommendations and dissenting clinicians); PM-JAY HBP 2.2 s.3.9 (tumour board decision and treatment plan)"
+ },
+ "policy_basis": "PM-JAY Health Benefit Package 2.2 user guidelines (NHA, 2021), section 3.9: pre-authorization is mandatory at each step of cancer care and the decision on appropriate care is to be taken by a multidisciplinary tumour board; NHS England MDT streamlining guidance (2020) pre-listing conditions. The NCG book itself asks for the board: \"discussed in MDT)\" (NCG GI draft 2021: Gall bladder cancer, page 2); the Tumour Board Case File is that discussion, so no separate record is required for it (orchestrator, night-v3 Phase 2).",
+ "guideline_sources": [
+  {
+   "guideline": "NCG GI draft 2021: Gall bladder cancer",
+   "file": "ncg_india/ncg-gi-draft-2021-gall-bladder-cancer.pdf",
+   "pages": "1, 2, 3, 4, 5"
+  },
+  {
+   "guideline": "NCG GI draft 2021: Gallbladder cancer radiology synoptic",
+   "file": "ncg_india/ncg-gi-draft-2021-gallbladder-cancer-radiology-synoptic.pdf",
+   "pages": "1, 2"
+  }
+ ]
+}
