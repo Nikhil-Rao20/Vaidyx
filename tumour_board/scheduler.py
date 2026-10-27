@@ -238,10 +238,20 @@ def job_refetch(now: datetime) -> dict:
     return {"started": _refetch["started"]}
 
 
+def similar_job(now: datetime) -> dict:
+    """The Similar Case Files index (night-v3 item 7.1): profiles rebuilt for the Case Files that changed, in this thread (embedding on
+    CPU, never on the app's loop). Never raises."""
+    try:
+        from . import similar
+        return similar.job(now)
+    except Exception as e:
+        return {"error": f"{e.__class__.__name__}: {str(e)[:200]}"}
+
+
 QUICK = ("codes", "break_glass", "meeting_starting", "reminders", "digests", "prune")
 JOBS = (("codes", job_codes, 0), ("break_glass", job_break_glass, 0), ("meeting_starting", job_meeting_starting, 0),
         ("reminders", job_reminders, REMINDERS_EVERY), ("digests", job_digests, 0), ("prune", job_prune, PRUNE_EVERY),
-        ("refetch", job_refetch, REFETCH_EVERY))
+        ("refetch", job_refetch, REFETCH_EVERY), ("similar", similar_job, 1800))
 
 
 def tick(now: datetime | None = None, force: bool = False, only=None, refetch: bool = True) -> dict:
