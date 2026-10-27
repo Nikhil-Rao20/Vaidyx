@@ -2,10 +2,13 @@
 // discussion in one tap, the urgency 1 to 5, and three facts reports rarely carry (the patient's wishes, comorbidities, whether the
 // patient knows the diagnosis), each shown "entered by Dr X, no report". A resident's question, reason and urgency go to the treating
 // consultant for sign-off (night-v3 item 1.8).
-import { useEffect, useState } from "react";
+// Voice (night-v3 item 4.4): a mic under the question box and beside each free-text fact fills the box as an editable edit; nothing is
+// saved until the doctor clicks Save.
+import { useEffect, useRef, useState } from "react";
 import { ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { MicButton } from "@/components/MicButton";
 import { cn } from "@/lib/utils";
 import type { SourceTarget } from "../components/SourceViewer";
 import { LoadingButton, errorText, fmtDateTime } from "../components/common";
@@ -30,8 +33,11 @@ function Choice<T extends string | number>({ options, value, onPick, label, disa
   );
 }
 
-function Extra({ row, onSave, onOpen, canEdit, choices }: { row: StepRow; onSave: (v: string) => Promise<void>; onOpen: (t: SourceTarget) => void; canEdit: boolean; choices?: string[] }) {
+const MAX_TEXT = 1000;
+
+function Extra({ row, onSave, onOpen, canEdit, choices, caseId }: { row: StepRow; onSave: (v: string) => Promise<void>; onOpen: (t: SourceTarget) => void; canEdit: boolean; choices?: string[]; caseId: string }) {
   const [v, setV] = useState(row.status === "entered" ? row.value : "");
+  const boxRef = useRef<HTMLTextAreaElement>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => { setV(row.status === "entered" ? row.value : ""); }, [row.status, row.value]);
@@ -50,9 +56,14 @@ function Extra({ row, onSave, onOpen, canEdit, choices }: { row: StepRow; onSave
         <Choice options={choices.map((c) => ({ id: c, label: c }))} value={row.status === "entered" ? row.value : null} label={row.label} disabled={!canEdit || busy} onPick={(c) => void save(c)} />
       ) : (
         <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start">
-          <Textarea value={v} onChange={(e) => setV(e.target.value)} disabled={!canEdit} maxLength={1000} className="min-h-14 flex-1 text-sm" aria-label={row.label}
+          <Textarea ref={boxRef} value={v} onChange={(e) => setV(e.target.value)} disabled={!canEdit} maxLength={MAX_TEXT} className="min-h-14 flex-1 text-sm" aria-label={row.label}
             placeholder={row.fact_id === "patient_preference" ? "What the patient wants or will not accept, in a few words" : "For example: type 2 diabetes on metformin, hypertension"} />
-          {canEdit ? <LoadingButton size="sm" variant="outline" loading={busy} disabled={v.trim().length < 2 || v.trim() === (row.status === "entered" ? row.value : "")} onClick={() => void save(v.trim())}>Save</LoadingButton> : null}
+          {canEdit ? (
+            <div className="flex items-start gap-1.5">
+              <LoadingButton size="sm" variant="outline" className="flex-1 sm:flex-none" loading={busy} disabled={v.trim().length < 2 || v.trim() === (row.status === "entered" ? row.value : "")} onClick={() => void save(v.trim())}>Save</LoadingButton>
+              <MicButton target={boxRef} screen="facts" context="note" caseId={caseId} label={`Dictate: ${row.label}`} onInsert={(next) => { if (next.length > MAX_TEXT) setV(next.slice(0, MAX_TEXT)); }} />
+            </div>
+          ) : null}
         </div>
       )}
       {row.status === "entered" ? <p className="text-xs text-muted-foreground">Entered by {row.entered_by || "the treating doctor"}{row.entered_at ? `, ${fmtDateTime(row.entered_at)}` : ""}, no report.</p> : null}
@@ -68,6 +79,7 @@ export function QuestionStep({ steps, canEdit, onSaveQuestion, onReason, onUrgen
 }) {
   const q = steps.question;
   const [text, setText] = useState(q.text);
+  const questionRef = useRef<HTMLTextAreaElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => { setText(q.text); }, [q.text]);
@@ -80,7 +92,7 @@ export function QuestionStep({ steps, canEdit, onSaveQuestion, onReason, onUrgen
     <div className="space-y-4" data-testid="section-question">
       <Card title="What should the board decide?" testId="question-text">
         <div className="space-y-2 py-2">
-          <Textarea value={text} onChange={(e) => setText(e.target.value)} disabled={!canEdit} maxLength={1000} className="min-h-24 text-[1rem]" aria-label="The question for the board"
+          <Textarea ref={questionRef} value={text} onChange={(e) => setText(e.target.value)} disabled={!canEdit} maxLength={MAX_TEXT} className="min-h-24 text-[1rem]" aria-label="The question for the board"
             placeholder="In your own words, for example: Is she fit for breast conservation surgery, or should she get chemotherapy first?" data-testid="question-input" />
           <div className="flex flex-wrap items-center gap-2">
             {canEdit ? (
@@ -89,6 +101,8 @@ export function QuestionStep({ steps, canEdit, onSaveQuestion, onReason, onUrgen
               </LoadingButton>
             ) : null}
             {q.text ? <span className="text-xs text-muted-foreground">Written by {q.by || "the treating doctor"}{q.at ? `, ${fmtDateTime(q.at)}` : ""}</span> : <span className="text-xs text-muted-foreground">The board sees exactly these words.</span>}
+            {canEdit ? <MicButton target={questionRef} screen="question" context="question" caseId={steps.case_id} label="Dictate the question" className="ml-auto"
+              onInsert={(next) => { if (next.length > MAX_TEXT) setText(next.slice(0, MAX_TEXT)); }} /> : null}
           </div>
         </div>
       </Card>
@@ -112,7 +126,7 @@ export function QuestionStep({ steps, canEdit, onSaveQuestion, onReason, onUrgen
           <p className="pt-2 text-sm text-muted-foreground">Optional. Shown to the board as entered by you, never as a report.</p>
           <div className="divide-y divide-border">
             {q.extras.map((r) => (
-              <Extra key={r.slot_id} row={r} canEdit={canEdit} onOpen={onOpen} choices={r.fact_id === "patient_awareness" ? ["Yes", "No", "Partly"] : undefined}
+              <Extra key={r.slot_id} row={r} caseId={steps.case_id} canEdit={canEdit} onOpen={onOpen} choices={r.fact_id === "patient_awareness" ? ["Yes", "No", "Partly"] : undefined}
                 onSave={(v) => onSaveFact(r.slot_id, v)} />
             ))}
           </div>

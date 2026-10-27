@@ -5,7 +5,9 @@
 // keystroke, marked "not saved") and is saved after the read-back.
 // mode="correct" (night-v3 3.2): the same six steps open on a saved board record from the Case File's Board decisions panel. The
 // outcome is fixed, there is no live strip, a reason is asked on the last step, and only the changed fields are sent as a new version.
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+// Voice (night-v3 4.4): the sentence boxes have a dictation button under them on the right, and the decision a "Read back" speaker;
+// the words heard go into the box as an edit, never saved by themselves. Voice off draws nothing.
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,7 +16,10 @@ import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/DateInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { MicButton } from "@/components/MicButton";
+import { SpeakButton } from "@/components/SpeakButton";
 import type { Attendee } from "@/lib/live";
+import type { SttContext } from "@/lib/voice";
 import { cn } from "@/lib/utils";
 import { correctBoardRecord, decisionLive, getMeeting, saveDecision } from "../api";
 import specJson from "../decision_fields.json";
@@ -196,6 +201,38 @@ function MultiPills({ fd, value, onChange }: { fd: DecisionField; value: string[
   );
 }
 
+type BoxRef = RefObject<HTMLTextAreaElement | HTMLInputElement>;
+const asTextarea = (r?: BoxRef) => r as RefObject<HTMLTextAreaElement> | undefined;
+const asInput = (r?: BoxRef) => r as RefObject<HTMLInputElement> | undefined;
+
+/** The sentence boxes that take dictation, by field (the audit's screen id). Names, dates, choices, values and short structured
+ *  lines get no microphone (research 08 section 7). */
+const MIC_SCREEN: Record<string, string> = {
+  decision_text: "decision", rationale: "rationale", alternatives_discussed: "alternatives", report_corrections_raised: "report-corrections",
+  patient_preference_note: "preference",
+};
+
+/** A sentence box with the dictation button just under it on the right, beside the box's note. The words go in through the box's
+ *  own onChange (the live strip sees them as typed); the box's limit is kept here, as the button does not know it. */
+function Voiced({ box, screen, label, context = "decision", caseId, max, onValue, note, extra, className }: {
+  box: (ref: BoxRef) => ReactNode; screen: string; label: string; context?: SttContext; caseId?: string; max?: number; onValue: (v: string) => void;
+  note?: ReactNode; extra?: ReactNode; className?: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
+  return (
+    <div className={className}>
+      {box(ref)}
+      <div className="flex items-start justify-end gap-2">
+        <div className="min-w-0 flex-1">{note}</div>
+        <span className="flex max-w-[70%] shrink-0 items-start justify-end gap-1">
+          {extra}
+          <MicButton target={ref} screen={screen} label={label} context={context} caseId={caseId || undefined} onInsert={(next) => { if (max && next.length > max) onValue(next.slice(0, max)); }} />
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRecord = true, compact = false, mode = "record", initial }: {
   mid: string; caseId: string; attendance: Attendee[];
   /** Called after a save with the server's answer (a correction answers {record}). */
@@ -284,24 +321,28 @@ export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRe
     const ownerNote = fd.key === "responsible_doctor" && owner && value === owner ? "Filled from the Case File's owner doctor; change it if the board named another." : undefined;
     const described = fd.hint || fd.after || ownerNote ? noteId : undefined;
     const on = (v: string) => set(k, v as Form[typeof k]);
-    let control: ReactNode;
-    if (fd.kind === "long") {
-      control = fd.key === "decision_text" && !correcting
-        ? <Textarea id={id} value={value} onChange={(e) => on(e.target.value)} className="mt-1 min-h-24 text-sm" maxLength={limitOf(fd.key)} aria-invalid={invalid} aria-required={need || undefined} placeholder="Type as the chair states it; it shows live on the room screen marked not saved" />
-        : <Textarea id={id} value={value} onChange={(e) => on(e.target.value)} className="mt-1 min-h-16 text-sm" maxLength={limitOf(fd.key)} aria-describedby={described} />;
-    } else if (fd.kind === "date") {
-      control = <DateInput id={id} value={value} onChange={on} wrapperClassName="mt-1" className="text-sm" min={fd.key === "patient_informed_date" && boardDate ? boardDate : undefined} aria-describedby={described} />;
-    } else {
+    const control = (ref?: BoxRef): ReactNode => {
+      if (fd.kind === "long") {
+        return fd.key === "decision_text" && !correcting
+          ? <Textarea ref={asTextarea(ref)} id={id} value={value} onChange={(e) => on(e.target.value)} className="mt-1 min-h-24 text-sm" maxLength={limitOf(fd.key)} aria-invalid={invalid} aria-required={need || undefined} placeholder="Type as the chair states it; it shows live on the room screen marked not saved" />
+          : <Textarea ref={asTextarea(ref)} id={id} value={value} onChange={(e) => on(e.target.value)} className="mt-1 min-h-16 text-sm" maxLength={limitOf(fd.key)} aria-describedby={described} />;
+      }
+      if (fd.kind === "date") {
+        return <DateInput id={id} value={value} onChange={on} wrapperClassName="mt-1" className="text-sm" min={fd.key === "patient_informed_date" && boardDate ? boardDate : undefined} aria-describedby={described} />;
+      }
       const list = fd.kind === "person" ? listMembers : fd.kind === "dept" ? listDepts : undefined;
-      control = <Input id={id} list={list} value={value} onChange={(e) => on(e.target.value)} className="mt-1 text-sm" maxLength={limitOf(fd.key)} aria-invalid={invalid} aria-required={need || undefined} aria-describedby={described} placeholder={fd.key === "intent_as_stated" ? "as stated, never computed" : undefined} />;
-    }
+      return <Input ref={asInput(ref)} id={id} list={list} value={value} onChange={(e) => on(e.target.value)} className="mt-1 text-sm" maxLength={limitOf(fd.key)} aria-invalid={invalid} aria-required={need || undefined} aria-describedby={described} placeholder={fd.key === "intent_as_stated" ? "as stated, never computed" : undefined} />;
+    };
+    const note = fd.key === "decision_text" && !correcting ? (
+      <p className={`text-xs mt-0.5 ${liveErr ? "text-warn" : "text-muted-foreground"}`} data-testid="live-strip-note">{liveErr ? `The room screen did not get the text: ${liveErr}` : f.decision_text && liveText === f.decision_text ? "Shown on the room screen, marked not saved" : "Appears on the room screen as you type, marked not saved"}</p>
+    ) : <Notes id={noteId} fd={fd} extra={ownerNote} />;
+    const screen = fd.kind === "date" ? undefined : MIC_SCREEN[fd.key];
+    // "Read back": the decision as it stands in the box, read aloud so the coordinator hears what will be recorded.
+    const readBack = fd.key === "decision_text" && value.trim() ? <SpeakButton source={{ text: value }} screen="decision" label="Read back" /> : null;
     return (
       <div key={fd.key} className={fd.kind === "long" ? wide : ""} data-field={fd.key}>
         <Label htmlFor={id}>{fd.label}<Need on={need} /></Label>
-        {control}
-        {fd.key === "decision_text" && !correcting ? (
-          <p className={`text-xs mt-0.5 ${liveErr ? "text-warn" : "text-muted-foreground"}`} data-testid="live-strip-note">{liveErr ? `The room screen did not get the text: ${liveErr}` : f.decision_text && liveText === f.decision_text ? "Shown on the room screen, marked not saved" : "Appears on the room screen as you type, marked not saved"}</p>
-        ) : <Notes id={noteId} fd={fd} extra={ownerNote} />}
+        {screen ? <Voiced box={control} screen={screen} label={`Dictate: ${fd.label}`} caseId={caseId} max={limitOf(fd.key)} onValue={on} note={note} extra={readBack} /> : <>{control()}{note}</>}
       </div>
     );
   };
@@ -314,7 +355,8 @@ export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRe
           {f.concerns.map((c, i) => (
             <li key={i} className="flex gap-1.5">
               <Input list={listMembers} value={c.by} onChange={(e) => set("concerns", f.concerns.map((x, j) => (j === i ? { ...x, by: e.target.value } : x)))} placeholder="Who" className="w-40 text-sm" aria-label="Who raised it" maxLength={limitOf(fd.key, "by")} aria-invalid={badKeys.has(fd.key) && !c.by.trim()} />
-              <Input value={c.text} onChange={(e) => set("concerns", f.concerns.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))} placeholder="The concern, in their words" className="flex-1 text-sm" aria-label="The concern" maxLength={limitOf(fd.key, "text")} aria-invalid={badKeys.has(fd.key) && !c.text.trim()} />
+              <Voiced className="min-w-0 flex-1" screen="concern" label={`Dictate concern ${i + 1}`} caseId={caseId} max={limitOf(fd.key, "text")} onValue={(v) => set("concerns", f.concerns.map((x, j) => (j === i ? { ...x, text: v } : x)))}
+                box={(ref) => <Input ref={asInput(ref)} value={c.text} onChange={(e) => set("concerns", f.concerns.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))} placeholder="The concern, in their words" className="text-sm" aria-label="The concern" maxLength={limitOf(fd.key, "text")} aria-invalid={badKeys.has(fd.key) && !c.text.trim()} />} />
               <Button type="button" size="icon-sm" variant="ghost" aria-label="Remove this concern" onClick={() => set("concerns", f.concerns.filter((_, j) => j !== i))}><Trash2 className="size-4" /></Button>
             </li>
           ))}
@@ -362,9 +404,10 @@ export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRe
                   </select>
                   <Button type="button" size="icon-sm" variant="ghost" aria-label={`Remove referral ${i + 1}`} onClick={() => set("referrals", f.referrals.filter((_, j) => j !== i))}><Trash2 className="size-4" /></Button>
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div className="flex flex-wrap items-start gap-1.5">
                   <Input list={listDepts} value={r.department} onChange={(e) => upd({ department: e.target.value })} placeholder="Department" className="min-w-0 flex-1 basis-36 text-sm" aria-label={`Department for referral ${i + 1}`} maxLength={limitOf(fd.key, "department")} />
-                  <Input value={r.note ?? ""} onChange={(e) => upd({ note: e.target.value })} placeholder="Note, in the board's words" className="min-w-0 flex-[2] basis-48 text-sm" aria-label={`Note for referral ${i + 1}`} maxLength={limitOf(fd.key, "note")} />
+                  <Voiced className="min-w-0 flex-[2] basis-48" screen="referral-reason" label={`Dictate the note for referral ${i + 1}`} caseId={caseId} max={limitOf(fd.key, "note")} onValue={(v) => upd({ note: v })}
+                    box={(ref) => <Input ref={asInput(ref)} value={r.note ?? ""} onChange={(e) => upd({ note: e.target.value })} placeholder="Note, in the board's words" className="text-sm" aria-label={`Note for referral ${i + 1}`} maxLength={limitOf(fd.key, "note")} />} />
                 </div>
               </li>
             );
@@ -444,8 +487,9 @@ export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRe
           {correcting && step === last ? (
             <div className={wide} data-field="correction_reason">
               <Label htmlFor={`d-reason-${uid}`}>Reason for the correction<Need on={needReason.length > 0} /></Label>
-              <Textarea id={`d-reason-${uid}`} value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 min-h-16 text-sm" maxLength={DECISION_SPEC.limits.note ?? 2000} aria-required={needReason.length > 0 || undefined} aria-invalid={badKeys.has("_reason") || undefined} aria-describedby={`d-reason-${uid}-note`} data-testid="correction-reason" />
-              <p id={`d-reason-${uid}-note`} className="mt-0.5 text-xs text-muted-foreground">{needReason.length ? "Needed: a change to what the board decided is kept with its reason." : "Kept with the new version; a change to what the board decided needs one."}</p>
+              <Voiced screen="correction-reason" label="Dictate the reason" context="reason" caseId={caseId} max={DECISION_SPEC.limits.note ?? 2000} onValue={setReason}
+                box={(ref) => <Textarea ref={asTextarea(ref)} id={`d-reason-${uid}`} value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 min-h-16 text-sm" maxLength={DECISION_SPEC.limits.note ?? 2000} aria-required={needReason.length > 0 || undefined} aria-invalid={badKeys.has("_reason") || undefined} aria-describedby={`d-reason-${uid}-note`} data-testid="correction-reason" />}
+                note={<p id={`d-reason-${uid}-note`} className="mt-0.5 text-xs text-muted-foreground">{needReason.length ? "Needed: a change to what the board decided is kept with its reason." : "Kept with the new version; a change to what the board decided needs one."}</p>} />
             </div>
           ) : null}
         </div>

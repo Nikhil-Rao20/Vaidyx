@@ -1,17 +1,24 @@
 // Specialty helpers: six "<Specialty> records check" cards. Pick one: its brief (prepared at the ready mark for the five
 // heads, on click for Nuclear Medicine) with sections and points for review, then a chat thread with that helper.
 // Everything comes from the records and guideline points; never an opinion.
+// Voice (night-v3 item 4.4): the mic fills the question box as an editable edit (nothing is sent until Ask); "Read aloud" on each
+// saved answer reads its statements as shown.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Bot, Loader2, SendHorizontal, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { MicButton } from "@/components/MicButton";
+import { SpeakButton } from "@/components/SpeakButton";
 import { askAgentOld, getHelperChat, getHelpers, getRoles, notBuiltYet, postHelperChat, prepareHelper, streamAgentOld } from "../api";
 import { useJob } from "../hooks";
 import type { CaseFile, Helper, HelperMessage } from "../types";
 import type { SourceTarget } from "./SourceViewer";
 import { ErrorState, LoadingButton, NotYetState, SkeletonLines, StatusChip, docTitleOf, errorText, fmtDateTime, indianDates, modelLabel } from "./common";
 import { cn } from "@/lib/utils";
+
+const MAX_Q = 1000;
+const HEARD = "Heard this. Check it before asking.";
 
 const ORDER = ["radiology", "pathology", "medical_oncology", "surgical_oncology", "radiation_oncology", "nuclear_medicine"];
 export const NAMES: Record<string, string> = { radiology: "Radiology", pathology: "Pathology", medical_oncology: "Medical Oncology", surgical_oncology: "Surgical Oncology", radiation_oncology: "Radiation Oncology", nuclear_medicine: "Nuclear Medicine" };
@@ -80,6 +87,9 @@ function HelperDetail({ caseId, helper, notBuilt, docs, onBack, onOpenSource, on
   const [question, setQuestion] = useState("");
   const [local, setLocal] = useState<HelperMessage[]>([]);
   const abort = useRef<AbortController | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  /** The text in the box came from the mic and the box has not been cleared or sent since. */
+  const [dictated, setDictated] = useState(false);
   const role = helper.role;
   const brief = helper.brief;
 
@@ -110,6 +120,7 @@ function HelperDetail({ caseId, helper, notBuilt, docs, onBack, onOpenSource, on
       if (notBuilt) setLocal((l) => [...l, { ...m, question: m.question || question, at: new Date().toISOString() }]);
       else void qc.invalidateQueries({ queryKey: ["helper-chat", caseId, role] });
       setQuestion("");
+      setDictated(false);
     },
   });
   const messages = useMemo(() => [...(chatQ.data?.messages ?? []), ...local], [chatQ.data, local]);
@@ -192,7 +203,10 @@ function HelperDetail({ caseId, helper, notBuilt, docs, onBack, onOpenSource, on
         <ul className="space-y-2 max-h-[40dvh] overflow-y-auto">
           {messages.map((m, i) => (
             <li key={m.id ?? i} className="rounded-md border border-border p-2">
-              <p className="text-sm font-medium text-foreground">{m.question}</p>
+              <div className="flex items-start gap-2">
+                <p className="flex-1 text-sm font-medium text-foreground">{m.question}</p>
+                {m.id && !notBuilt ? <SpeakButton source={{ ref: { kind: "agent", case_id: caseId, role, id: m.id } }} screen={`helper-${role}`} size="icon-xs" className="justify-end" /> : null}
+              </div>
               <p className="text-xs text-muted-foreground">{m.by_name ?? m.by ?? ""}{m.at ? ` ${fmtDateTime(m.at)}` : ""}</p>
               {m.answer ? <p className="text-sm mt-1">{m.answer}</p> : null}
               {(m.statements ?? []).map((s, j) => (
@@ -204,9 +218,12 @@ function HelperDetail({ caseId, helper, notBuilt, docs, onBack, onOpenSource, on
         </ul>
         <form className="mt-2 flex flex-col gap-1.5" onSubmit={(e) => { e.preventDefault(); if (question.trim().length >= 3) ask.mutate(question.trim()); }}>
           <label htmlFor={`helper-q-${role}`} className="sr-only">Question for the {name} helper</label>
-          <Textarea id={`helper-q-${role}`} value={question} onChange={(e) => setQuestion(e.target.value)} className={cn("min-h-12 text-sm")} placeholder={`Ask the ${name} helper about the records`} maxLength={1000} disabled={ask.isPending} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (question.trim().length >= 3) ask.mutate(question.trim()); } }} />
+          <Textarea ref={inputRef} id={`helper-q-${role}`} value={question} onChange={(e) => { setQuestion(e.target.value); if (!e.target.value.trim()) setDictated(false); }} className={cn("min-h-12 text-sm")} placeholder={`Ask the ${name} helper about the records`} maxLength={MAX_Q} disabled={ask.isPending} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (question.trim().length >= 3) ask.mutate(question.trim()); } }} />
           <div className="flex items-center gap-2">
-            {ask.isError ? <p role="alert" className="text-xs text-bad flex-1">{errorText(ask.error)}</p> : <span className="flex-1" />}
+            {ask.isError ? <p role="alert" className="text-xs text-bad flex-1">{errorText(ask.error)}</p>
+              : dictated && question.trim() ? <span className="text-xs text-muted-foreground flex-1" data-testid="helper-heard">{HEARD}</span> : <span className="flex-1" />}
+            <MicButton target={inputRef} screen={`helper-${role}`} context="question" caseId={caseId} label="Dictate the question" hint={false}
+              onInsert={(next) => { setDictated(true); if (next.length > MAX_Q) setQuestion(next.slice(0, MAX_Q)); }} />
             <LoadingButton size="sm" type="submit" loading={ask.isPending} loadingText="Reading" disabled={question.trim().length < 3}><SendHorizontal className="size-4" />Ask</LoadingButton>
           </div>
         </form>

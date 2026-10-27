@@ -65,6 +65,8 @@ function mockAnswer(method: string, p: string, role: fx.Role): { status: number;
   if (p === "/api/tb/me/activity" || p === "/api/tb/activity") return ok(fx.activity);
   if (p === "/api/tb/push/key") return ok({ public_key: null, enabled: false });
   if (p === "/api/auth/2fa/status") return ok({ enabled: false });
+  // night-v3 item 4.4: voice on, so the microphone and speaker buttons show in the screenshots
+  if (p === "/api/tb/audio/status") return ok({ enabled: true, stt: "ready", tts: "ready", limits: { stt_seconds: 60, stt_bytes: 4194304, tts_chars: 2000 }, cohere: false, voices: ["af_heart", "bf_emma", "am_michael"] });
   return { status: 404, body: { detail: "Not Found" } };
 }
 

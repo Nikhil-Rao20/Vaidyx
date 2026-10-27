@@ -3,12 +3,14 @@
 // Two reports differ (night-v3 item 1.7, design B5): both values with their report, and "Use this value for the board" on each; nothing
 // is chosen for the doctor. The pick is a board_uses confirmation (a resident's goes to the consultant for sign-off); the difference stays
 // shown with the pick and its Undo. A pick that no longer matches its report is said here ("... no longer matches the report: pick again").
-import { useEffect, useMemo, useState } from "react";
+// Voice (night-v3 item 4.4): a mic beside the reason box fills it as an editable edit; nothing is saved until the doctor clicks.
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowRight, Check, CheckCircle2, Clock, PenLine, Undo2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/DateInput";
+import { MicButton } from "@/components/MicButton";
 import { postConfirmation, slotNotNeeded, undoConfirmation } from "../api";
 import type { CaseFile, DiscordCitation, Slot } from "../types";
 import type { SourceTarget } from "./SourceViewer";
@@ -60,6 +62,9 @@ export function ReviewPanel({ caseId, cf, slot, queue, derived, resident, consul
   const [mode, setMode] = useState<"pick" | "edit" | "not_needed">("pick");
   const [edited, setEdited] = useState("");
   const [reason, setReason] = useState("");
+  const reasonRef = useRef<HTMLInputElement>(null);
+  /** Dictated words go in at the cursor; the box keeps its 200 characters. */
+  const reasonMic = <MicButton target={reasonRef} screen="reason" context="reason" caseId={caseId} size="icon-xs" label="Dictate the reason" onInsert={(next) => { if (next.length > 200) setReason(next.slice(0, 200)); }} />;
   const [announce, liveNode] = useAnnounce();
   const ctype = slot.confirmation?.type ?? "confirm_value";
   const doc = cf.documents.find((d) => d.doc_id === (slot.confirmation?.doc_id ?? list[picked]?.doc_id ?? slot.quote?.doc_id ?? slot.confirmation?.key.split(":")[0]));
@@ -270,12 +275,18 @@ export function ReviewPanel({ caseId, cf, slot, queue, derived, resident, consul
       {boardPick ? null : mode === "not_needed" ? (
         <div>
           <label htmlFor="review-reason" className="text-sm font-medium">Why is it not needed?</label>
-          <Input id="review-reason" autoFocus value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 h-9 text-sm" maxLength={200} placeholder="Recorded with your name" />
+          <div className="mt-1 flex items-start gap-1">
+            <Input ref={reasonRef} id="review-reason" autoFocus value={reason} onChange={(e) => setReason(e.target.value)} className="h-9 min-w-0 flex-1 text-sm" maxLength={200} placeholder="Recorded with your name" />
+            {reasonMic}
+          </div>
         </div>
       ) : (
         <div>
           <label htmlFor="review-reason" className="text-xs text-muted-foreground">Reason (optional, recorded)</label>
-          <Input id="review-reason" value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 h-8 text-sm" maxLength={200} />
+          <div className="mt-1 flex items-start gap-1">
+            <Input ref={reasonRef} id="review-reason" value={reason} onChange={(e) => setReason(e.target.value)} className="h-8 min-w-0 flex-1 text-sm" maxLength={200} />
+            {reasonMic}
+          </div>
         </div>
       )}
       {act.isError ? <p role="alert" className="text-xs text-bad">{errorText(act.error)}</p> : null}

@@ -2,6 +2,8 @@
 // step away to the other slides), the people beside it with their cameras, panels for the people and the questions, and the
 // control bar: microphone, camera, hand, follow, questions, people, the end-of-case card, leave. Video goes through a
 // pre-join screen (see your camera first). Members in the room keep video off on their own device.
+// Voice (night-v3 4.4): the question box takes dictation; while the member dictates in the call, the call microphone is muted so
+// the room does not hear it twice, and it comes back after (only if it was on).
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -10,9 +12,11 @@ import { ArrowLeft, ArrowRight, Camera, CameraOff, Copy, Footprints, Hand, KeyRo
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
+import { MicButton } from "@/components/MicButton";
 import { useSession } from "@/lib/session";
 import { handUsers, useMeetingLive, type LiveEvent, type MeetingState } from "@/lib/live";
 import { recallChoice, useVideoRoom, type JoinChoice } from "@/lib/video";
+import { registerDictationGuard } from "@/lib/voice";
 import { askQuestion, getSlides, present, raiseHand } from "./api";
 import { CardDialog } from "./components/CardDialog";
 import { PreJoin } from "./components/PreJoin";
@@ -58,6 +62,8 @@ export default function MemberViewPage() {
   const [following, setFollowing] = useState(true);
   const [mySlide, setMySlide] = useState(0);
   const [question, setQuestion] = useState("");
+  const questionRef = useRef<HTMLTextAreaElement>(null);
+  const [dictating, setDictating] = useState(false);
   const [panel, setPanel] = useState<PanelKind>(null);
   const [choice, setChoice] = useState<JoinChoice | null | "skipped">(() => recallChoice());
   const stateRef = useRef<MeetingState | null>(null);
@@ -95,6 +101,31 @@ export default function MemberViewPage() {
   const videoAvailable = !!s?.meeting.video && !!me?.features?.video && s?.can?.video !== false && !inRoom && admitted && s?.meeting.status !== "closed";
   const joinChoice = choice && choice !== "skipped" ? choice : null;
   const video = useVideoRoom(id, videoAvailable && !!joinChoice, joinChoice ?? {});
+
+  // The dictation guard: while connected with the call microphone on, dictation mutes the published microphone through the room
+  // and turns it back on after, only if this guard muted it. Gone when the video disconnects or the page closes.
+  const callRoom = video.room;
+  const callLive = video.status === "connected" || video.status === "reconnecting";
+  useEffect(() => {
+    if (!callRoom || !callLive || !video.micOn) return;
+    let mutedByUs = false;
+    registerDictationGuard({
+      mute: async () => {
+        const lp = callRoom.localParticipant;
+        if (!lp.isMicrophoneEnabled) return;
+        mutedByUs = true;
+        setDictating(true);
+        await lp.setMicrophoneEnabled(false);
+      },
+      restore: async () => {
+        if (!mutedByUs) return;
+        mutedByUs = false;
+        setDictating(false);
+        await callRoom.localParticipant.setMicrophoneEnabled(true);
+      },
+    });
+    return () => { registerDictationGuard(null); setDictating(false); };
+  }, [callRoom, callLive, video.micOn]);
 
   const ask = useMutation({ mutationFn: (t: string) => askQuestion(id, t), onSuccess: () => { setQuestion(""); announce("Question sent to the shared screen."); void live.refresh(); } });
   const handM = useMutation({ mutationFn: (r: boolean) => raiseHand(id, r), onSuccess: (_r, raised) => announce(raised ? "Hand raised." : "Hand lowered.") });
@@ -185,9 +216,10 @@ export default function MemberViewPage() {
               <QuestionsList questions={s.questions ?? []} caseId={cid} emptyText="No questions on this case yet." />
               <form className="flex flex-col gap-1.5" onSubmit={(e) => { e.preventDefault(); if (question.trim().length >= 3) ask.mutate(question.trim()); }}>
                 <label htmlFor="member-q" className="sr-only">Type a question</label>
-                <Textarea id="member-q" value={question} onChange={(e) => setQuestion(e.target.value)} className="min-h-16 text-sm" placeholder="Type a question; it shows on the room screen with your name" maxLength={500} disabled={ask.isPending || !inSession || !cid} />
+                <Textarea ref={questionRef} id="member-q" value={question} onChange={(e) => setQuestion(e.target.value)} className="min-h-16 text-sm" placeholder="Type a question; it shows on the room screen with your name" maxLength={500} disabled={ask.isPending || !inSession || !cid} />
                 <div className="flex items-center gap-2">
                   {ask.isError ? <p role="alert" className="flex-1 text-xs text-bad">{errorText(ask.error)}</p> : <span className="flex-1 text-xs text-muted-foreground">{!inSession ? "Questions open when the meeting starts." : !cid ? "Questions open when a case is on the screen." : "The stand-in answers from the records only."}</span>}
+                  {inSession && cid ? <MicButton target={questionRef} screen="meeting-q" context="question" label="Dictate the question" caseId={cid} className="max-w-[60%] shrink-0" onInsert={(next) => { if (next.length > 500) setQuestion(next.slice(0, 500)); }} /> : null}
                   <LoadingButton size="sm" type="submit" loading={ask.isPending} loadingText="Sending" disabled={question.trim().length < 3 || !inSession || !cid} data-testid="send-question"><SendHorizontal className="size-4" />Send</LoadingButton>
                 </div>
               </form>
@@ -202,7 +234,7 @@ export default function MemberViewPage() {
       >
         {videoAvailable && joinChoice ? (
           <>
-            <BarButton icon={video.micOn ? Mic : MicOff} label={video.micOn ? "Mute" : "Unmute"} active={!video.micOn} onClick={() => void video.toggleMic()} disabled={video.status !== "connected"} testId="mic" />
+            <BarButton icon={video.micOn && !dictating ? Mic : MicOff} label={dictating ? "Dictating" : video.micOn ? "Mute" : "Unmute"} title={dictating ? "Your call microphone is off while you dictate; it comes back on after." : undefined} active={!video.micOn || dictating} onClick={() => void video.toggleMic()} disabled={video.status !== "connected" || dictating} testId="mic" />
             <BarButton icon={video.camOn ? Camera : CameraOff} label={video.camOn ? "Camera" : "Camera off"} active={!video.camOn} onClick={() => void video.toggleCam()} disabled={video.status !== "connected"} testId="cam" />
           </>
         ) : videoAvailable ? <BarButton icon={Camera} label="Join video" onClick={() => setChoice(null)} /> : null}

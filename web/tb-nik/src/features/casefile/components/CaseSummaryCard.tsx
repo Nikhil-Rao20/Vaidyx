@@ -8,6 +8,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, CheckCheck, Flag, Pencil, RefreshCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SpeakButton } from "@/components/SpeakButton";  // voice (night-v3 item 4.4): a section of the current version read aloud
 import { Textarea } from "@/components/ui/textarea";
 import { drName } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -96,11 +97,14 @@ function Sentence({ s, sec, docs, h, onBoard, canEdit, onEdit }: {
   );
 }
 
-function Section({ sec, docs, h, onBoard, canEdit, onEdit }: { sec: CaseSummarySection; docs?: CaseDocument[]; h: Pick<SlotHandlers, "openSource">; onBoard?: () => void; canEdit: boolean; onEdit: (sid: string, text: string) => Promise<void> }) {
+function Section({ sec, docs, h, onBoard, canEdit, onEdit, caseId, speak }: { sec: CaseSummarySection; docs?: CaseDocument[]; h: Pick<SlotHandlers, "openSource">; onBoard?: () => void; canEdit: boolean; onEdit: (sid: string, text: string) => Promise<void>; caseId: string; speak: boolean }) {
   const one = (s: CaseSentence) => <Sentence key={`${s.id}:${s.text}`} s={s} sec={sec} docs={docs} h={h} onBoard={onBoard} canEdit={canEdit} onEdit={(t) => onEdit(s.id, t)} />;
   return (
     <section aria-labelledby={`cs-h-${sec.id}`} data-testid={`cs-section-${sec.id}`}>
-      <h3 id={`cs-h-${sec.id}`} className="text-sm font-semibold text-foreground">{sec.title}</h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 id={`cs-h-${sec.id}`} className="text-sm font-semibold text-foreground">{sec.title}</h3>
+        {speak ? <SpeakButton source={{ ref: { kind: "summary", case_id: caseId, id: sec.id } }} screen="summary" size="icon-xs" label={`Read aloud: ${sec.title}`} /> : null}
+      </div>
       {sec.blocks ? (
         <div className="mt-1 space-y-2">
           {sec.blocks.map((b) => (
@@ -165,7 +169,7 @@ export function CaseSummaryCard({ caseId, view, docs, h, onBoard }: { caseId: st
             </p>
             {older ? <p className="rounded-md status-info px-3 py-1.5 text-sm">You are reading version {shownN}. <button type="button" className="text-link underline underline-offset-2" onClick={() => setPick(view.current)}>Back to the current version</button></p> : null}
             <div className={cn("space-y-3", shown.review?.status !== "reviewed" && "border-l-2 border-review/50 pl-3")}>
-              {shown.sections.map((sec) => <Section key={sec.id} sec={sec} docs={docs} h={h} onBoard={onBoard} canEdit={canEdit} onEdit={edit} />)}
+              {shown.sections.map((sec) => <Section key={sec.id} sec={sec} docs={docs} h={h} onBoard={onBoard} canEdit={canEdit} onEdit={edit} caseId={caseId} speak={!older} />)}
             </div>
             {removed ? <p className="text-xs text-muted-foreground" data-testid="cs-removed">{plural(removed, "sentence", "sentences")} dropped because {removed === 1 ? "it" : "they"} could not be checked against the records.</p> : null}
             {shown.review?.comment ? <p className="text-xs text-muted-foreground">Review note: {shown.review.comment}</p> : null}

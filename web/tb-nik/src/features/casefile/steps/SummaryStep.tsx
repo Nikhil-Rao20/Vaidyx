@@ -3,14 +3,18 @@
 // specialty briefs and similar published cases sit here too (B9).
 // After the first board decision (night-v3 3.4, owner decision D3) the Case summary comes first; the pre-board summary folds under
 // "Before the board on DD/MM/YYYY", with its earlier versions (summary history) in a fold of their own.
+// Voice (night-v3 item 4.4): "Read aloud" beside each section of the pre-board summary and on Points for review reads the saved text as
+// shown (the server loads it by reference); nothing is drawn when voice is off.
 import type { ReactNode } from "react";
 import { CheckCheck, History, PenLine, RefreshCw, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SpeakButton } from "@/components/SpeakButton";
+import type { TtsRef } from "@/lib/voice";
 import type { SlotHandlers } from "../components/SlotLine";
 import { ProseBlock } from "../components/SummaryColumn";
 import { CaseSummaryCard } from "../components/CaseSummaryCard";
 import { LoadingButton, SkeletonLines, fmtDate, fmtDateTime, indianDates, modelLabel } from "../components/common";
-import type { CaseDocument } from "../types";
+import type { CaseDocument, ProseSection } from "../types";
 import { Card } from "./Overview";
 import type { PreBoardVersion, Steps } from "./types";
 
@@ -33,6 +37,18 @@ function EarlierPreBoard({ versions, docs, h }: { versions: PreBoardVersion[]; d
         ))}
       </ol>
     </details>
+  );
+}
+
+/** A section of the pre-board summary with its "Read aloud" (the server reads the same section by its id from the saved summary). */
+function SpokenProse({ p, caseId, docs, h }: { p: string | ProseSection; caseId: string; docs: CaseDocument[]; h: SlotHandlers }) {
+  if (typeof p === "string" || !p.id || !(p.sentences ?? []).length) return <ProseBlock p={p} docs={docs} h={h} />;
+  const ref: TtsRef & { source: "pre_board" } = { kind: "summary", case_id: caseId, id: p.id, source: "pre_board" };
+  return (
+    <div className="flex items-start gap-2" data-testid="prose-section">
+      <div className="min-w-0 flex-1"><ProseBlock p={p} docs={docs} h={h} /></div>
+      <SpeakButton source={{ ref }} screen="summary" size="icon-xs" className="justify-end" label={p.title ? `Read aloud: ${p.title}` : undefined} />
+    </div>
   );
 }
 
@@ -74,13 +90,16 @@ export function SummaryStep({ steps, docs, h, canWrite, canRead, busy, reading, 
           ) : null}
           {shown && prose.paragraphs.length && !busy ? (
             <div className="space-y-3 text-[0.97rem] leading-relaxed" data-testid="prose-text">
-              {prose.paragraphs.map((p, i) => <ProseBlock key={i} p={p} docs={docs} h={h} />)}
+              {prose.paragraphs.map((p, i) => <SpokenProse key={i} p={p} caseId={steps.case_id} docs={docs} h={h} />)}
               <p className="text-xs text-muted-foreground">{[prose.generated ? `Written ${fmtDateTime(prose.generated)}` : "", prose.model ? `by ${modelLabel(prose.model)}` : ""].filter(Boolean).join(" ")}</p>
             </div>
           ) : null}
           {shown && (prose.points_for_review ?? []).length && !busy ? (
             <div className="rounded-md border border-border bg-muted/40 p-3">
-              <h3 className="text-sm font-semibold">Points for review</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="flex-1 text-sm font-semibold">Points for review</h3>
+                <SpeakButton source={{ ref: { kind: "points", case_id: steps.case_id, id: "" } }} screen="points" size="icon-xs" className="justify-end" label="Read aloud: Points for review" />
+              </div>
               <ol className="mt-1 list-decimal space-y-1 pl-5 text-sm">{prose.points_for_review!.map((pt, i) => <li key={i}>{indianDates(pt.text)}</li>)}</ol>
             </div>
           ) : null}

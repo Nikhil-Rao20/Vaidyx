@@ -5,10 +5,12 @@
 // each key value to the treating consultant for sign-off instead (night-v3 item 1.8). Two reports that differ stay listed after the
 // doctor picks the value the board uses ("Picked: 4.6 cm from the CT report, by Dr X", with Undo); they no longer count (item 1.7). A pick
 // that no longer matches its report is said on the row ("Your pick of 4.6 cm from the CT report no longer matches the report: pick again").
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+// Voice (night-v3 item 4.4): a mic beside the "Why" box of a correction fills it as an editable edit; the corrected value is typed.
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowRight, Check, CheckCircle2, Clock, Send, ShieldQuestion, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MicButton } from "@/components/MicButton";
 import { cn } from "@/lib/utils";
 import type { CaseDocument } from "../types";
 import { SourceViewer, type SourceTarget } from "../components/SourceViewer";
@@ -45,10 +47,11 @@ function PickedLine({ p, h, canUndo }: { p: CheckItem; h: CheckHandlers; canUndo
 
 const targetOf = (it?: CheckItem | null): SourceTarget | null => (it?.quote?.doc_id ? { docId: it.quote.doc_id, page: it.quote.page ?? 0, quote: it.quote.text || undefined, factId: it.fact_id ?? undefined, title: it.quote.doc_title } : null);
 
-function WrongValue({ k, h, deptLabel }: { k: CheckItem; h: CheckHandlers; deptLabel: string }) {
+function WrongValue({ k, h, deptLabel, caseId }: { k: CheckItem; h: CheckHandlers; deptLabel: string; caseId: string }) {
   const [mode, setMode] = useState<"idle" | "correct">("idle");
   const [value, setValue] = useState("");
   const [reason, setReason] = useState("");
+  const reasonRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
@@ -64,7 +67,11 @@ function WrongValue({ k, h, deptLabel }: { k: CheckItem; h: CheckHandlers; deptL
       ) : (
         <form className="space-y-1.5 rounded-md border border-border bg-muted/40 p-2" onSubmit={(e) => { e.preventDefault(); void run("correct", () => h.correct(k, value.trim(), reason.trim())); }}>
           <Input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="The right value, as the report should say it" className="h-8 text-sm" maxLength={200} aria-label="The right value" />
-          <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why (recorded with your name)" className="h-8 text-sm" maxLength={200} aria-label="Why" />
+          <div className="flex items-start gap-1">
+            <Input ref={reasonRef} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why (recorded with your name)" className="h-8 min-w-0 flex-1 text-sm" maxLength={200} aria-label="Why" />
+            <MicButton target={reasonRef} screen="check-why" context="reason" caseId={caseId} size="icon-xs" label="Dictate the reason"
+              onInsert={(next) => { if (next.length > 200) setReason(next.slice(0, 200)); }} />
+          </div>
           <div className="flex gap-1.5">
             <LoadingButton size="xs" type="submit" loading={busy === "correct"} disabled={!value.trim() || reason.trim().length < 3}>Save the correction</LoadingButton>
             <Button size="xs" variant="ghost" type="button" onClick={() => setMode("idle")}>Cancel</Button>
@@ -76,7 +83,7 @@ function WrongValue({ k, h, deptLabel }: { k: CheckItem; h: CheckHandlers; deptL
   );
 }
 
-function KeyRow({ k, selected, onSelect, h, canConfirm, canPropose, deptLabel, consultantName }: { k: CheckItem; selected: boolean; onSelect: () => void; h: CheckHandlers; canConfirm: boolean; canPropose: boolean; deptLabel: string; consultantName: string }) {
+function KeyRow({ k, selected, onSelect, h, canConfirm, canPropose, deptLabel, consultantName, caseId }: { k: CheckItem; selected: boolean; onSelect: () => void; h: CheckHandlers; canConfirm: boolean; canPropose: boolean; deptLabel: string; consultantName: string; caseId: string }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [sent, setSent] = useState<string | null>(null); // the value sent for sign-off (until the page shows it confirmed)
@@ -103,7 +110,7 @@ function KeyRow({ k, selected, onSelect, h, canConfirm, canPropose, deptLabel, c
           <LoadingButton size="sm" variant="outline" loading={busy} onClick={() => void run(async () => { await h.confirmKey(k); setSent(k.value); })} data-testid="propose-key"><Send className="size-4" />Send to Dr {consultantName} for sign-off</LoadingButton>
         ) : <span className="text-xs text-muted-foreground">Dr {consultantName} confirms the key values.</span>}
       </div>
-      {canConfirm && !k.confirmed ? <div className="mt-1"><WrongValue k={k} h={h} deptLabel={deptLabel} /></div> : null}
+      {canConfirm && !k.confirmed ? <div className="mt-1"><WrongValue k={k} h={h} deptLabel={deptLabel} caseId={caseId} /></div> : null}
       {err ? <p role="alert" className="mt-1 text-xs text-bad">{err}</p> : null}
     </li>
   );
@@ -160,7 +167,7 @@ export function CheckStep({ steps, caseId, docs, h, canConfirm, consultantName, 
             <section className="space-y-2" aria-labelledby="h-keys">
               <h2 id="h-keys" className="text-[15px]">Key values ({keys.filter((k) => k.confirmed).length} of {keys.length} confirmed)</h2>
               {resident && !canConfirm ? <p className="text-xs text-muted-foreground">Dr {consultantName} confirms the key values. Read each one against its report line, then send it for sign-off.</p> : null}
-              <ul className="space-y-2">{keys.map((k) => <KeyRow key={k.slot_id} k={k} selected={sel === k.slot_id} onSelect={() => setSel(k.slot_id)} h={h} canConfirm={canConfirm} canPropose={resident && !canConfirm} deptLabel={deptOf(k)} consultantName={consultantName} />)}</ul>
+              <ul className="space-y-2">{keys.map((k) => <KeyRow key={k.slot_id} k={k} selected={sel === k.slot_id} onSelect={() => setSel(k.slot_id)} h={h} canConfirm={canConfirm} canPropose={resident && !canConfirm} deptLabel={deptOf(k)} consultantName={consultantName} caseId={caseId} />)}</ul>
             </section>
           ) : null}
         </div>

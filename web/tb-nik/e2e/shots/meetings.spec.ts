@@ -108,7 +108,7 @@ test.describe("Meetings", () => {
     await page.getByTestId("add-referral").click();
     await page.getByLabel("Kind of referral 1").selectOption("genetics");
     await page.getByLabel("Department for referral 1").fill("Medical Oncology");
-    await page.getByLabel("Note for referral 1").fill("BRCA testing and counselling");
+    await page.getByLabel("Note for referral 1", { exact: true }).fill("BRCA testing and counselling");  // exact: the mic beside it is "Dictate the note for referral 1" (night-v3 item 4.4)
     const panel = page.getByTestId("decision-panel-4");
     await snap(page, "meetings", "control-decision-next", { sizes: DESKTOP_MOBILE, fullPage: false, before: async () => { await panel.scrollIntoViewIfNeeded(); } });
     await page.setViewportSize(SIZES[2]);
