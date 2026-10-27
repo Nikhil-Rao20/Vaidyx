@@ -36,7 +36,8 @@ OPEN = ("pending", "overdue")
 # (operative note, discharge / treatment summary, clinical note, referral, tumour board record, other) are left out on
 # purpose: "Surgery: APR" or "Follow up in 3 months" is not a request for one document.
 REQUESTABLE = ("ct", "mri", "xray", "ultrasound", "mammogram", "pet_ct", "bone_scan", "histopathology", "cytology", "ihc",
-               "molecular", "lab", "endoscopy", "pulmonary_function")
+               "molecular", "lab", "endoscopy", "pulmonary_function",
+               "bone_marrow", "flow_cytometry", "cytogenetics", "csf", "echocardiogram", "audiometry", "ophthalmology_note")
 
 # Words a task uses for a record that the header keywords of item 3.2 do not carry (those read report titles, not requests).
 TASK_WORDS = {
@@ -45,6 +46,15 @@ TASK_WORDS = {
     "molecular": ["mutation", "mutational", "genetic testing", "germline testing", "MSI"],
     "lab": ["blood counts", "tumour marker levels", "tumor marker levels"],
     "pulmonary_function": ["lung function"],
+    # Phase 2 cancers (night-v3 item 2.1). "EUA" alone is left out (also the examination under anaesthesia of a cervix case) and so is
+    # "FISH" for cytogenetics (a lone FISH stays molecular, as in doc_type_keywords.json: "HER2 FISH" asks for a molecular report).
+    "bone_marrow": ["bone marrow", "marrow", "bone marrow aspiration and biopsy", "marrow aspiration and biopsy", "BMA and biopsy"],
+    "flow_cytometry": ["flow", "immunophenotyping"],
+    "cytogenetics": ["karyotype"],
+    "csf": ["CSF", "lumbar puncture"],
+    "echocardiogram": ["echo", "2D echo"],
+    "audiometry": ["audiometry", "hearing"],
+    "ophthalmology_note": ["eye examination", "EUA eyes", "EUA of the eyes", "EUA of both eyes"],
 }
 
 

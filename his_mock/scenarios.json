@@ -110,7 +110,14 @@
   "tumour_board_record",
   "clinical_note",
   "referral",
-  "pulmonary_function"
+  "pulmonary_function",
+  "bone_marrow",
+  "flow_cytometry",
+  "cytogenetics",
+  "csf",
+  "echocardiogram",
+  "ophthalmology_note",
+  "audiometry"
  ],
  "tests": {
   "opd_note": {

@@ -598,6 +598,6 @@ def test_every_shipped_protocol_names_its_site_with_organ_words():
     assert rules._foreign(doc("left breast"), crs, [br]) and not rules._foreign(doc("Colorectal"), crs, [br]) and not rules._foreign(doc("biopsy"), crs, [br])
     assert not rules._foreign(doc("THORAX, ABDOMEN AND PELVIS"), br, rules.other_sites(protocol.get("breast"))), "a staging CT names no organ"
     assert not rules._foreign(doc("cervical lymph nodes"), protocol.get("oral_cavity")["site"], rules.other_sites(protocol.get("oral_cavity"))), "cervical nodes are not the cervix"
-    for words in ("rectus abdominis flap", "CECT ABDOMEN PELVIS WITH ORAL CONTRAST", "uterus and ovaries", "CT THORAX - LUNG WINDOW"):
+    for words in ("rectus abdominis flap", "CECT ABDOMEN PELVIS WITH ORAL CONTRAST", "peritoneum and omentum", "CT THORAX - LUNG WINDOW"):  # "ovaries" is the ovary checklist's own site since night-v3 Phase 2
         assert not rules._foreign(doc(words), br, rules.other_sites(protocol.get("breast"))) or words.startswith("CT THORAX"), words
     assert rules.SITE_DOC_TYPES == {"histopathology", "cytology", "ihc", "molecular"}

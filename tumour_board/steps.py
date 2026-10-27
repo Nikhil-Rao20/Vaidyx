@@ -23,23 +23,36 @@ REASONS = {"new_diagnosis": "New diagnosis: plan first treatment", "after_surger
 # The patient at a glance (B2): four groups of protocol facts, in board order. A fact the protocol does not carry is left out.
 GLANCE = [
     ("diagnosis", "Diagnosis", ["presenting_complaint", "histologic_type", "grade", "er", "pr", "her2", "ki67", "pdl1", "egfr", "alk", "ros1", "met",
-                                "kras", "mmr", "ras_braf", "lvi", "pni", "margins", "depth_of_invasion", "cea"]),
+                                "kras", "mmr", "ras_braf", "lvi", "pni", "margins", "depth_of_invasion", "cea",
+                                # Phase 2 cancers (night-v3 item 2.1): grades, biomarkers, blood cancer results and tumour markers
+                                "gleason_isup", "positive_cores", "bethesda_category", "p53", "pole", "brca_status", "hrd_status", "cdh1_result",
+                                "germline_result", "idh_status", "codeletion_1p19q", "mgmt_promoter", "sarcoma_fusion", "loh_1p_16q",
+                                "bone_marrow_result", "flow_cytometry_result", "cytogenetics_result", "molecular_markers_haem",
+                                "psa", "ca125", "afp", "beta_hcg", "ldh", "ca19_9", "pivka", "he4", "inhibin_b", "thyroglobulin", "calcitonin",
+                                "beta2_microglobulin", "nodes_examined", "trg", "percent_necrosis", "cystic_duct_margin", "embryonal_component",
+                                "anaplasia"]),
     ("extent", "Extent", ["lesion_size", "nodal_findings", "ene", "distant_findings", "parametrial_involvement", "mrf_status", "emvi",
-                          "distance_from_anal_verge", "suv_max", "recorded_stage", "figo_stage"]),
-    ("fitness", "Fitness", ["ecog", "comorbidities", "menopausal_status", "haemoglobin", "wbc", "platelets", "creatinine", "bilirubin", "hiv_status"]),
+                          "distance_from_anal_verge", "suv_max", "recorded_stage", "figo_stage",
+                          "tumour_site_colon", "tumour_site_stomach", "tumour_location_oesophagus", "siewert_type", "lirads_category", "flr_percent",
+                          "gb_mass", "vessel_involvement", "bile_duct_involvement", "laryngeal_subsite", "cord_mobility", "extrathyroid_extension",
+                          "tirads", "tumour_depth", "deauville_score", "csf_cytology", "ophthalmic_examination", "rb_group", "igcccg_group",
+                          "obstruction_perforation", "varices_finding"]),
+    ("fitness", "Fitness", ["ecog", "comorbidities", "menopausal_status", "haemoglobin", "wbc", "platelets", "creatinine", "bilirubin", "hiv_status",
+                            "kps", "b_symptoms", "laryngeal_function", "child_pugh_class", "inr", "hbsag", "anti_hcv", "hbv_core_ab", "hvpg_mmhg",
+                            "corrected_calcium", "alkaline_phosphatase", "testosterone", "lh", "fsh"]),
     ("background", "Treatment so far and wishes", ["treatment_received", "treatment_completion_date", "diagnosis_date_mode", "patient_preference",
-                                                   "patient_awareness"]),
+                                                   "patient_awareness", "fertility_preservation"]),
 ]
 STAGE_FACTS = ("recorded_stage", "figo_stage")
 # Key values a doctor confirms one by one in Check (B5), whatever the quote check said: the diagnosis and the critical biomarkers and stage.
 KEY_ALWAYS = ("histologic_type", "grade")
 
 # Report groups by type (B4); an outside report is its own group.
-DOC_GROUPS = [("pathology", "Pathology", {"histopathology", "cytology", "ihc", "molecular"}),
+DOC_GROUPS = [("pathology", "Pathology", {"histopathology", "cytology", "ihc", "molecular", "bone_marrow", "flow_cytometry", "cytogenetics", "csf"}),
               ("imaging", "Imaging", {"ct", "mri", "xray", "ultrasound", "mammogram", "pet_ct", "bone_scan"}),
               ("labs", "Labs", {"lab"}),
               ("notes", "Clinical notes", {"clinical_note", "referral", "discharge_summary", "operative_note", "endoscopy", "treatment_summary",
-                                           "tumour_board_record", "pulmonary_function"}),
+                                           "tumour_board_record", "pulmonary_function", "echocardiogram", "ophthalmology_note", "audiometry"}),
               ("other", "Other reports", set())]  # an outside report keeps its type group, with an "Outside report" tag
 
 # The cancer chosen against the report titles (B2 warning). Words a report title uses for a site; only titles are read, never the text.
@@ -47,9 +60,30 @@ SITE_WORDS = {"breast": ("breast", "mammo", "axilla"),
               "cervix": ("cervix", "cervical", "colposcop", "pap smear", "vulva", "vagina"),
               "lung_nsclc": ("lung", "thorax", "thoracic", "bronch", "ebus", "pleura"),
               "colorectal_rectum": ("rectum", "rectal", "colon", "colonoscop", "sigmoid", "anal verge", "proctos"),
-              "oral_cavity": ("oral", "tongue", "buccal", "mandib", "gingiva", "palate", "lip ")}
+              "oral_cavity": ("oral", "tongue", "buccal", "mandib", "gingiva", "palate", "lip "),
+              # Phase 2 cancers (night-v3 item 2.1): clear report-title words only. Lymphoma, leukaemia, the sarcomas and the generic blood
+              # cancer list are left out on purpose (their titles name a body part, not the disease): a protocol not listed here gets no
+              # warning, the safer side. A word shared by related cancers (colon and rectum, kidney and Wilms) only prevents a warning.
+              "colorectal_colon": ("colon", "colonoscop", "caec", "sigmoid", "hemicolect", "colect"),
+              "stomach": ("stomach", "gastr", "ugi", "ogd", "antr", "pylor"),
+              "oesophagus": ("oesophag", "esophag"),
+              "liver_hcc": ("liver", "hepat", "hcc", "triphasic"),
+              "gallbladder": ("gallbladder", "gall bladder", "cholecyst", "biliary"),
+              "ovary": ("ovar", "adnex", "ca-125", "ca125", "omentum"),
+              "corpus_uteri": ("endometri", "uterus", "uterine", "corpus"),
+              "prostate": ("prostat", "psa"),
+              "kidney": ("kidney", "renal", "nephr"),
+              "germ_cell": ("testis", "testic", "scrot", "orchidect"),
+              "larynx": ("larynx", "laryng", "vocal cord", "glott"),
+              "thyroid": ("thyroid", "thyroglobulin", "calcitonin"),
+              "brain_cns": ("brain", "cranial", "cerebr", "glioma", "spine"),
+              "retinoblastoma": ("retinoblastoma", "eye", "orbit", "fundus"),
+              "wilms": ("wilms", "kidney", "renal", "nephr")}
 SITE_NAME = {"breast": "the breast", "cervix": "the cervix", "lung_nsclc": "the lung", "colorectal_rectum": "the colon or rectum",
-             "oral_cavity": "the oral cavity"}
+             "oral_cavity": "the oral cavity", "colorectal_colon": "the colon", "stomach": "the stomach", "oesophagus": "the oesophagus",
+             "liver_hcc": "the liver", "gallbladder": "the gallbladder", "ovary": "the ovary", "corpus_uteri": "the uterus",
+             "prostate": "the prostate", "kidney": "the kidney", "germ_cell": "the testis", "larynx": "the larynx", "thyroid": "the thyroid",
+             "brain_cns": "the brain or spine", "retinoblastoma": "the eye", "wilms": "the kidney"}
 
 FINAL = {"FINAL", "AMENDED", "CORRECTED"}
 VERIFIED = ("verified", "confirmed")

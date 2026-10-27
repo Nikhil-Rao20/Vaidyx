@@ -107,7 +107,10 @@ DEFAULT_DEPARTMENTS = [
 # resolve_route() treats them as "owner". A hospital that adds such a department again gets it back as a real department.
 OWNER_ALIASES = {"dental surgery / oral and maxillofacial surgery", "dental surgery", "dental", "oral and maxillofacial surgery", "omfs",
                  "dentistry", "dental evaluation", "anaesthesiology", "anaesthesia", "anesthesiology", "anesthesia", "pre anaesthetic check up",
-                 "pre anaesthetic check", "pre anesthetic check up", "pac"}
+                 "pre anaesthetic check", "pre anesthetic check up", "pac",
+                 # night-v3 item 2.1: an eye examination, an echocardiogram or an audiogram is asked of the owning treating team (the hospital
+                 # set-up has no ophthalmology, cardiology or audiology department)
+                 "ophthalmology", "eye", "ophthalmologist", "cardiology", "echocardiography", "2d echo", "audiology"}
 # V2 -> V3 (18 Oct): where the users and stored ids of the removed V2 departments go; None means the owning department (OWNER_ALIASES),
 # so such a department is dropped unless someone is still placed in it (then it is kept as a hospital-added department: no loss).
 V2_REMOVED = {"medical_gastroenterology": "gastrointestinal_surgery", "dental_surgery": None, "anaesthesiology": None}
@@ -1115,6 +1118,8 @@ def resolve_route(target: str | None, fallback_name: str, owner_dept: str | None
         if did:
             return department_name(did), did, OWNER_ID
         did = department_id(fallback_name)
+        if not did and is_owner_alias(fallback_name):  # "route": "owner" on an eye examination or a pre-anaesthetic check (night-v3 2.1)
+            return OWNER_NAME, None, OWNER_ID
         return (department_name(did) if did else str(fallback_name or "")), did, OWNER_ID
     did = department_id(t) if t else None
     if did:

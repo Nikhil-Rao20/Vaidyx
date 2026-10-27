@@ -118,7 +118,7 @@ def test_describe():
     (lambda d: d["packs"]["radiology"]["sources"].append({"folder": "no_such_folder"}), "unknown guideline folder"),
     (lambda d: d["packs"]["pathology"]["sources"].append({"folder": "icmr"}), "after international"),
     (lambda d: d["packs"].pop("nuclear_medicine"), "no pack for role"),
-    (lambda d: d["packs"]["radiology"]["checklists"].__setitem__("prostate", d["packs"]["radiology"]["checklists"]["breast"]), "not a protocol"),
+    (lambda d: d["packs"]["radiology"]["checklists"].__setitem__("no_such_cancer", d["packs"]["radiology"]["checklists"]["breast"]), "not a protocol"),
     (lambda d: d["packs"]["radiology"]["checklists"]["breast"]["items"][0].pop("page"), "has no page"),
     (lambda d: d["packs"]["radiology"]["checklists"]["breast"]["items"][0].__setitem__("quote", "  "), "has no quote"),
     (lambda d: d["packs"]["radiology"]["sources"][1].__setitem__("files", "x.pdf"), "files"),

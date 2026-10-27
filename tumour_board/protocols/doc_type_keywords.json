@@ -6,7 +6,9 @@
     "Weights: a title line (one of the first title_lines lines, a line in capitals, or a line ending with REPORT) counts 'title'; other header lines count 'header'; the filename counts least. A department line ('Department of Pathology') or a hospital line counts as a header line even when it is in capitals: the study line names the document, the department does not. Each type counts once per line (its best match).",
     "Addendum: when a title line says ADDENDUM, a header line that names the report it belongs to ('Relates to IHC report of ...') gives that report's type with weight 'addendum_parent' (an addendum is filed with its parent report).",
     "ignore: phrases blanked out before matching ('CT guided' biopsy is a biopsy, not a CT; 'MRD No.', 'OPD No.' and 'HPE No.' are number labels, not the document's type; 'ALK PHOS' is a liver test, not the ALK gene). 'MR' alone is deliberately absent: it matches the salutation 'Mr.'.",
-    "Result: the type with the highest total; none when there is no evidence or when two types share the top total (ambiguous). Clinical team: add a phrase under its type, a title-only word for short words that are too common in report bodies, or a 'beats' entry for a new conflict."
+    "Result: the type with the highest total; none when there is no evidence or when two types share the top total (ambiguous). Clinical team: add a phrase under its type, a title-only word for short words that are too common in report bodies, or a 'beats' entry for a new conflict.",
+    "Blood cancer, eye, heart and hearing reports (night-v3 item 2.1, 27 Oct 2026). The specific type wins on the same line: bone_marrow beats histopathology, cytology and lab ('BONE MARROW ASPIRATION AND BIOPSY REPORT', 'Haematology: bone marrow trephine'); flow_cytometry and cytogenetics beat bone_marrow ('BONE MARROW FLOW CYTOMETRY' is flow_cytometry, 'BONE MARROW CYTOGENETICS' is cytogenetics); csf beats cytology, lab and flow_cytometry ('CSF CYTOLOGY', 'CSF FLOW CYTOMETRY' are csf: the sample names the record a blood cancer checklist asks for); echocardiogram beats ultrasound ('2D ECHO WITH COLOUR DOPPLER'); ophthalmology_note beats operative_note ('OPHTHALMOLOGY: EXAMINATION UNDER ANAESTHESIA').",
+    "FISH: a lone 'FISH' stays molecular (HER2 FISH, ALK FISH of a solid tumour, as before); cytogenetics beats molecular on the same line, so 'CYTOGENETICS REPORT (FISH)' or 'FISH AND KARYOTYPE' is cytogenetics. 'EUA' alone stays an operative note (a cervix examination under anaesthesia); only a line that also names ophthalmology or the eyes makes it an ophthalmology note. 'ECHO' and 'PTA' count only on a title line; 'fundus' alone is not a keyword (the fundus of the stomach), only 'fundus examination', 'fundoscopy' and similar."
   ],
   "header_lines": 10,
   "title_lines": 3,
@@ -106,6 +108,40 @@
     "pulmonary_function": {
       "patterns": ["PFT", "spirometry", "pulmonary function", "lung function test"],
       "title_only": []
+    },
+    "bone_marrow": {
+      "patterns": ["bone marrow", "marrow aspirate", "marrow aspiration", "marrow biopsy", "marrow trephine", "BM aspirate", "BM aspiration", "BM biopsy", "BMA", "BMB", "BMA/BMB", "trephine", "trephine biopsy"],
+      "title_only": [],
+      "beats": ["histopathology", "cytology", "lab"]
+    },
+    "flow_cytometry": {
+      "patterns": ["flow cytometry", "flowcytometry", "flow cytometric", "immunophenotyping", "immunophenotype", "immunophenotypic", "MRD by flow"],
+      "title_only": ["FCM"],
+      "beats": ["bone_marrow", "lab", "cytology", "histopathology"]
+    },
+    "cytogenetics": {
+      "patterns": ["cytogenetic", "cytogenetics", "cytogenetic study", "karyotype", "karyotyping", "karyotypic", "G-banding", "chromosome analysis", "chromosomal analysis"],
+      "title_only": [],
+      "beats": ["molecular", "bone_marrow", "lab"]
+    },
+    "csf": {
+      "patterns": ["CSF", "cerebrospinal fluid", "CSF cytology", "CSF analysis", "CSF examination", "CSF study"],
+      "title_only": [],
+      "beats": ["cytology", "lab", "flow_cytometry"]
+    },
+    "echocardiogram": {
+      "patterns": ["echocardiography", "echocardiogram", "echocardiographic", "2D echo", "2D echocardiography", "2D-echo", "transthoracic echo", "TTE"],
+      "title_only": ["ECHO"],
+      "beats": ["ultrasound"]
+    },
+    "ophthalmology_note": {
+      "patterns": ["ophthalmology", "ophthalmic", "ophthalmological", "ophthalmologist", "eye examination", "eye exam", "eye clinic", "fundus examination", "fundoscopy", "fundus photography", "dilated fundus", "indirect ophthalmoscopy", "ophthalmoscopy", "RetCam", "EUA eyes", "EUA of both eyes", "EUA both eyes"],
+      "title_only": [],
+      "beats": ["operative_note"]
+    },
+    "audiometry": {
+      "patterns": ["audiometry", "audiogram", "audiometric", "audiological", "pure tone", "pure tone audiometry", "hearing assessment", "hearing test", "BERA", "BERA test"],
+      "title_only": ["PTA"]
     }
   }
 }

@@ -117,7 +117,10 @@ def _hist(doc_id="Dhist0001", pdl1="TPS 60%", method=SCAN, date="2026-09-01"):
 
 def test_the_proposed_fields_are_critical():
     crit = sorted(k for k, v in protocol.facts().items() if v.get("critical"))
-    assert crit == sorted(["recorded_stage", "figo_stage", "pdl1", "egfr", "alk", "ros1", "er", "pr", "her2", "ki67", "mmr", "ras_braf"])  # FIGO stage: V1 item 9.2
+    assert crit == sorted(["recorded_stage", "figo_stage", "pdl1", "egfr", "alk", "ros1", "er", "pr", "her2", "ki67", "mmr", "ras_braf",  # FIGO stage: V1 item 9.2
+                           # Phase 2 cancers (night-v3 item 2.1): the genetic and molecular results and the recorded groups a board relies on
+                           "brca_status", "cdh1_result", "codeletion_1p19q", "cytogenetics_result", "germline_result", "gleason_isup",
+                           "idh_status", "igcccg_group", "molecular_markers_haem", "rb_group", "sarcoma_fusion"])
 
 
 def test_needs_scan_confirmation_rule():

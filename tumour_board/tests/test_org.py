@@ -299,6 +299,15 @@ def test_department_id(name, dept):
     assert org.department_id(name) == dept
 
 
+def test_eye_heart_and_hearing_go_to_the_owning_team():
+    """night-v3 item 2.1 (research decision 4): no ophthalmology, cardiology or audiology department in the hospital set-up, so an eye
+    examination, an echocardiogram or an audiogram is asked of the owning treating team."""
+    for name in ("Ophthalmology", "Cardiology", "Eye", "Ophthalmologist", "Echocardiography", "2D Echo", "Audiology", "Department of Ophthalmology"):
+        assert org.is_owner_alias(name), name
+    assert org.department_id("Ophthalmology") is None and org.department_id("Cardiology") is None
+    assert not org.is_owner_alias("Haematology") and not org.is_owner_alias("ENT / Head and Neck Surgery")  # real departments stay departments
+
+
 def test_department_name_and_lookup():
     assert org.department_name("radiology") == "Radiology"
     assert org.department_name("cardiology") == "cardiology"

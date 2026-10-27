@@ -23,7 +23,9 @@ DOC_SECTION = {"clinical_note": "presenting", "referral": "presenting", "dischar
                "histopathology": "pathology", "cytology": "pathology", "ihc": "pathology", "molecular": "pathology",
                "ct": "imaging", "mri": "imaging", "xray": "imaging", "ultrasound": "imaging", "mammogram": "imaging", "pet_ct": "imaging", "bone_scan": "imaging",
                "lab": "labs", "treatment_summary": "prior_treatment", "tumour_board_record": "prior_treatment",
-               "endoscopy": "other", "operative_note": "other", "pulmonary_function": "other", "other": "other"}
+               "endoscopy": "other", "operative_note": "other", "pulmonary_function": "other", "other": "other",
+               "bone_marrow": "pathology", "flow_cytometry": "pathology", "cytogenetics": "pathology", "csf": "pathology",
+               "echocardiogram": "other", "ophthalmology_note": "other", "audiometry": "other"}
 FACT_SECTION = {"presenting_complaint": "presenting", "ecog": "presenting", "smoking_history": "presenting", "tobacco_use": "presenting",
                 "menopausal_status": "presenting", "comorbidities": "presenting", "diagnosis_date_mode": "presenting", "patient_preference": "presenting", "patient_awareness": "presenting",
                 "clinical_trial_note": "presenting", "weight": "presenting", "height": "presenting", "dental_evaluation": "other",
@@ -34,7 +36,27 @@ FACT_SECTION = {"presenting_complaint": "presenting", "ecog": "presenting", "smo
                 "lesion_size": "imaging", "nodal_findings": "imaging", "distant_findings": "imaging", "comparison_prior": "imaging", "suv_max": "imaging",
                 "parametrial_involvement": "imaging", "distance_from_anal_verge": "imaging", "mrf_status": "imaging", "emvi": "imaging",
                 "haemoglobin": "labs", "wbc": "labs", "platelets": "labs", "creatinine": "labs", "bilirubin": "labs", "hiv_status": "labs", "cea": "labs",
-                "treatment_received": "prior_treatment", "treatment_completion_date": "prior_treatment"}
+                "treatment_received": "prior_treatment", "treatment_completion_date": "prior_treatment",
+                # Phase 2 cancers (night-v3 item 2.1), matching steps.GLANCE
+                "kps": "presenting", "b_symptoms": "presenting", "child_pugh_class": "presenting", "igcccg_group": "presenting",
+                "laryngeal_function": "presenting", "fertility_preservation": "presenting",
+                "gleason_isup": "pathology", "positive_cores": "pathology", "bethesda_category": "pathology", "p53": "pathology", "pole": "pathology",
+                "brca_status": "pathology", "hrd_status": "pathology", "cdh1_result": "pathology", "germline_result": "pathology",
+                "idh_status": "pathology", "codeletion_1p19q": "pathology", "mgmt_promoter": "pathology", "sarcoma_fusion": "pathology",
+                "loh_1p_16q": "pathology", "bone_marrow_result": "pathology", "flow_cytometry_result": "pathology",
+                "cytogenetics_result": "pathology", "molecular_markers_haem": "pathology", "nodes_examined": "pathology", "trg": "pathology",
+                "percent_necrosis": "pathology", "cystic_duct_margin": "pathology", "embryonal_component": "pathology", "anaplasia": "pathology",
+                "csf_cytology": "pathology",
+                "tumour_site_colon": "imaging", "tumour_site_stomach": "imaging", "tumour_location_oesophagus": "imaging", "siewert_type": "imaging",
+                "lirads_category": "imaging", "flr_percent": "imaging", "gb_mass": "imaging", "vessel_involvement": "imaging",
+                "bile_duct_involvement": "imaging", "laryngeal_subsite": "imaging", "cord_mobility": "imaging", "extrathyroid_extension": "imaging",
+                "tirads": "imaging", "tumour_depth": "imaging", "deauville_score": "imaging", "obstruction_perforation": "imaging",
+                "varices_finding": "imaging", "hvpg_mmhg": "imaging",
+                "psa": "labs", "ca125": "labs", "afp": "labs", "beta_hcg": "labs", "ldh": "labs", "ca19_9": "labs", "pivka": "labs", "he4": "labs",
+                "inhibin_b": "labs", "thyroglobulin": "labs", "calcitonin": "labs", "beta2_microglobulin": "labs", "inr": "labs", "hbsag": "labs",
+                "anti_hcv": "labs", "hbv_core_ab": "labs", "corrected_calcium": "labs", "alkaline_phosphatase": "labs", "testosterone": "labs",
+                "lh": "labs", "fsh": "labs",
+                "ophthalmic_examination": "other", "rb_group": "other"}
 # The doctor may also type the patient's wishes, the comorbidities and whether the patient knows the diagnosis (owner, 21 Oct 2026, B3):
 # facts reports rarely carry; shown "entered by Dr X, no report", never as a verified value.
 DOCTOR_FACTS = {"patient_preference", "comorbidities", "patient_awareness"}

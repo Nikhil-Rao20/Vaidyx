@@ -76,7 +76,7 @@ def test_listing_triggers_extraction_from_stored_pages_and_the_gate(fakes):
 def test_listing_validates_protocol_setting_level_and_date(fakes):
     _unlisted(fakes)
     with pytest.raises(ValueError):
-        service.list_case("TB-2026-0001", "ovary", "", "", "", "coord")
+        service.list_case("TB-2026-0001", "no_such_protocol", "", "", "", "coord")  # ovary is a protocol since night-v3 Phase 2
     with pytest.raises(ValueError):
         service.list_case("TB-2026-0001", "lung_nsclc", "early", "", "", "coord")  # a breast setting on a lung protocol
     with pytest.raises(ValueError):
@@ -117,7 +117,7 @@ def test_every_protocol_has_ncg_settings():
     for p in protocol.list_protocols():
         assert p["settings"] and all(s["id"] and s["label"] for s in p["settings"]), p["id"]
         assert protocol.settings(p["id"]) == p["settings"] and protocol.exists(p["id"])
-    assert not protocol.exists("facts") and not protocol.exists("") and not protocol.exists("ovary")  # cervix is a protocol since V1 item 9.2
+    assert not protocol.exists("facts") and not protocol.exists("") and not protocol.exists("no_such_protocol")  # cervix is a protocol since V1 item 9.2 (ovary since night-v3 Phase 2)
 
 
 def test_create_case_listed_or_awaiting():
