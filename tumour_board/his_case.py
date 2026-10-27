@@ -110,14 +110,14 @@ def clean_cancer_name(value, protocol_id: str = "") -> str:
     """The cancer's name as the doctor picked or typed it (case.json "cancer_name"): trimmed, inner spaces collapsed, 2 to 80
     characters. Required under the generic rule (a cancer with no built checklist: protocol "generic", four core records), optional
     under a built checklist. Returns "" when none is given and none is needed; HISCaseError (400) with a plain message otherwise."""
-    from .protocol import GENERIC
+    from .protocol import GENERIC_IDS
     if value is not None and not isinstance(value, str):
         raise HISCaseError("The cancer's name must be text")
     name = " ".join(str(value or "").split())
     if any(ord(ch) < 32 or ord(ch) == 127 for ch in name):
         raise HISCaseError("The cancer's name has characters that cannot be shown: type it again")
     if not name:
-        if protocol_id == GENERIC:
+        if protocol_id in GENERIC_IDS:
             raise HISCaseError(f"Type the cancer's name: a cancer with no checklist yet needs it ({CANCER_NAME_MIN} to {CANCER_NAME_MAX} characters)")
         return ""
     if not CANCER_NAME_MIN <= len(name) <= CANCER_NAME_MAX:
@@ -129,8 +129,8 @@ def _same_cancer(c: dict, protocol_id: str, cancer_name: str) -> bool:
     """Another Case File of the same UHID is for the same cancer: the same protocol and, under the generic rule, the same typed name."""
     if c.get("protocol") != protocol_id:
         return False
-    from .protocol import GENERIC
-    return protocol_id != GENERIC or " ".join(str(c.get("cancer_name") or "").split()).lower() == cancer_name.lower()
+    from .protocol import GENERIC_IDS
+    return protocol_id not in GENERIC_IDS or " ".join(str(c.get("cancer_name") or "").split()).lower() == cancer_name.lower()
 
 
 # ---- the same patient and the same cancer (night-v3 item 1.1: one Case File per patient and cancer) ----------------------------
