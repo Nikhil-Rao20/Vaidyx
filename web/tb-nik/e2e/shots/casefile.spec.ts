@@ -622,7 +622,7 @@ test.describe("guided Case File", () => {
     const card = page.getByTestId("summary-similar");
     await expect(card).toBeVisible();
     await expect(card).toContainText(PAST_LABEL);
-    await expect(card).toContainText("The order is not a score. Every line is quoted from the two files.");
+    await expect(card).toContainText("The order is not a score. Every reason line is quoted from the two files; the outcome so far shows the past Case summary with its cited line.");
     await expect(card).toContainText("The search is logged.");
     await expect(card.getByRole("button", { name: "ER positive early breast" })).toBeVisible();
     await page.locator("#similar-words").fill("HER2 negative early breast");
@@ -645,11 +645,21 @@ test.describe("guided Case File", () => {
     await expect(first).toContainText("cT2 N0 M0 (as recorded, MRI BREAST REPORT, Aug 2026)");
     await expect(first.getByTestId("similar-decision")).toContainText("Board, Oct 2026: Decision recorded, intent curative");
     await expect(first.getByTestId("similar-decision")).toContainText("as written by the board");
-    await expect(first).toContainText("Wide local excision with sentinel node biopsy was done on 22/10/2026 (SYNTHETIC). (Case summary, Oct 2026)");
+    // a Case summary sentence is plain text with its label, then the verified quote it rests on (Phase 7 review, S1)
+    const outcome = first.getByTestId("similar-outcome");
+    await expect(outcome).toContainText("Wide local excision with sentinel node biopsy was done (SYNTHETIC).");
+    await expect(outcome).toContainText("Case summary, AI draft, not reviewed (Gemma-4-31B, non-medical)");
+    await expect(outcome).toContainText("(Case summary, Oct 2026)");
+    await expect(outcome.getByText("Procedure: Wide local excision and sentinel lymph node biopsy (SYNTHETIC)", { exact: true })).toBeVisible();
+    await expect(outcome).toContainText("(DISCHARGE SUMMARY, Oct 2026)");
     await expect(first.getByTestId("similar-why")).toContainText('This file, HISTOPATHOLOGY REPORT, 12/10/2026: "Invasive breast carcinoma of no special type, Grade 2".');
     await expect(first.getByTestId("similar-why")).toContainText('Past file, HISTOPATHOLOGY REPORT, Aug 2026: "Invasive breast carcinoma of no special type".');
     await expect(first.getByTestId("similar-differs")).toContainText("Mass of 3.1 cm in the upper outer quadrant");
-    await expect(items.nth(1)).toContainText("Vaidyx draft stage, confirmed by Dr Lakshmi Rao");
+    await expect(items.nth(1)).toContainText("Vaidyx draft stage, confirmed by a doctor");
+    // only "how it differs" lines: no "No quoted reasons found" chip next to them (Phase 7 review, finding 14)
+    await expect(items.nth(1).getByTestId("similar-why-none")).toHaveText("No line that agrees was found. See How it differs.");
+    await expect(items.nth(1)).not.toContainText("No quoted reasons found");
+    await expect(items.nth(1).getByTestId("similar-differs")).toBeVisible();
     await expect(items.nth(2)).toContainText("No stage recorded; none confirmed");
     await expect(items.nth(2)).toContainText("No quoted reasons found");
     await expect(items.nth(2)).toContainText("Matched by recorded fields: cancer group, setting");
@@ -719,6 +729,28 @@ test.describe("guided Case File", () => {
     await expect(banner).toBeVisible();
     await noSideways(page);
     await laptop(page);
+    // the banner stays on another section of the opened file (Phase 7 review, S2)
+    await page.getByTestId("nav-reports").click();
+    await expect(page.getByTestId("casefile-page")).toHaveAttribute("data-section", "reports");
+    await expect(page).toHaveURL(new RegExp(`/tb-nik/cases/TB-HIST-X/reports\\?from=similar&of=${CID}$`));
+    await expect(banner).toHaveText(`You opened this from the Similar Case Files of ${CID}. Past Case File, not advice for this patient.`);
+    await page.getByTestId("nav-overview").click();
+    await expect(page.getByTestId("casefile-page")).toHaveAttribute("data-section", "overview");
+    await expect(banner).toBeVisible();
+    // an "of" that is not a Case File id is not shown (finding 13)
+    await page.goto(`/tb-nik/cases/TB-HIST-X/overview?from=similar&of=${encodeURIComponent("any text at all")}`);
+    await expect(page.getByTestId("section-overview")).toBeVisible();
+    await expect(banner).toHaveCount(0);
+    // a read-only window opened from the Similar Case Files of CID keeps the banner without the params (after a reload or a fresh visit)
+    const until = new Date(Date.now() + 24 * 3600_000).toISOString();
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await prepare(page, { role: "treating", overrides: { "GET /api/tb/me": { body: { ...me("treating"), break_glass: [{ case_id: "TB-HIST-X", until, reason, via: `similar:${CID}` }] } } } });
+    await routeCaseFile(page, { caseId: "TB-HIST-X", steps: stepsAfterBoard(), caseFile: caseFileAfterBoard() });
+    await page.goto("/tb-nik/cases/TB-HIST-X/overview");
+    await expect(page.getByTestId("read-only-banner")).toBeVisible();
+    await expect(banner).toHaveText(`You opened this from the Similar Case Files of ${CID}. Past Case File, not advice for this patient.`);
+    await page.goto(`/tb-nik/cases/TB-HIST-X/summary?from=similar&of=${encodeURIComponent("any text at all")}`);
+    await expect(banner).toHaveText(`You opened this from the Similar Case Files of ${CID}. Past Case File, not advice for this patient.`);
     expect(errors).toEqual([]);
   });
 

@@ -247,7 +247,9 @@ export interface PublishedSearch { by?: string; at?: string; terms: string; coun
 // ---- similar.py (night-v3 Phase 7, docs/night-v3/research/07_similar_cases.md 8.3 and 8.4) ------------------------------
 /** A quoted line and where it sits: the past file "<doc title>, Mon YYYY" (or "Board record, Mon YYYY", "Case summary, Mon YYYY"),
  *  this file "<doc title>, DD/MM/YYYY". */
-export interface SimilarQuote { text: string; where: string }
+/** A quoted line (text and where it sits). A Case summary sentence of the past file (outcome so far) is model-written: `label` says so
+ *  ("Case summary, AI draft, not reviewed"), and `quote` with `quote_where` is the verified record line it rests on (Phase 7 review, S1). */
+export interface SimilarQuote { text: string; where: string; quote?: string; quote_where?: string; label?: string }
 export interface SimilarStage { text: string; kind: "recorded" | "confirmed_draft" | "agreed" | string; label: string; quote?: string; where?: string }
 export interface SimilarValue { fact: string; label: string; value: string; quote?: string; where?: string; shared?: boolean }
 export interface SimilarDecision {

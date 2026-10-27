@@ -49,9 +49,11 @@ def _fresh_limits():
     from tumour_board.api import similar as similar_api
     from tumour_board.api import team as team_api
     similar_api.SEARCH_LIMIT._hits.clear()
+    similar_api.OPEN_LIMIT._hits.clear()
     team_api.OPEN_LIMIT._hits.clear()
     yield
     similar_api.SEARCH_LIMIT._hits.clear()
+    similar_api.OPEN_LIMIT._hits.clear()
 
 
 _LISTED = re.compile(r"^P(\d+): (.*)$", re.M)
@@ -189,6 +191,24 @@ def run(coro):
     return asyncio.run(coro)
 
 
+def summary_sentences(cid, items, status="ai_draft"):
+    """A current Case summary whose "since" sentences cite (doc_id, quote) exactly at the quote's offsets in that report; a sentence
+    with doc_id None has no citation."""
+    sents = []
+    for sid, text, doc_id, quote in items:
+        cites = []
+        if doc_id:
+            d = store.get_doc(cid, doc_id)
+            k = d["pages"][0]["text"].index(quote)
+            cites.append({"doc_id": doc_id, "quote": quote, "page": 0, "start": k, "end": k + len(quote),
+                          "doc_title": d["classification"]["title"], "date": d["classification"]["report_date_iso"], "status": "FINAL"})
+        sents.append({"id": sid, "text": text, "citations": cites})
+    st = store.get_state(cid)
+    st.setdefault("artefacts", {})["case_summary"] = {"current": 1, "case_id": cid, "versions": [{"n": 1, "built_at": "2026-10-22T10:00:00",
+        "review": {"status": status}, "edits": [], "label": "AI draft, not reviewed", "sections": [{"id": "since", "sentences": sents}]}]}
+    store.save_state(cid, st)
+
+
 def do_search(cid, words="", user=RAO):
     return run(similar.search(cid, words, user, org.roles(user)))
 
@@ -279,7 +299,8 @@ def test_a_cache_hit_makes_no_model_call_and_a_changed_signature_misses(model):
     cands[1] = {**cands[1], "signature": "v2-changed"}
     run(similar.order(src, cands, "HER2 positive"))
     assert len(model.of("similar_order")) == 9
-    assert run(similar.order(src, cands[:1], "")) == (["TB-SIM-231"], "model") and len(model.of("similar_order")) == 9
+    assert run(similar.order(src, cands[:1], "")) == (["TB-SIM-231"], "text") and len(model.of("similar_order")) == 9  # nothing to order
+    assert run(similar.order(src, [], "")) == ([], "text") and len(model.of("similar_order")) == 9
 
 
 def test_candidate_text_drops_the_board_decisions_and_no_prompt_carries_an_id_or_a_decision(model, people):
@@ -401,7 +422,8 @@ def test_a_past_line_carrying_the_past_patients_name_is_dropped(model, people, m
     picks = run(similar.pick_lines(src, p, sources={}))
     assert "Meenakshi" not in json.dumps(picks) and picks["dropped"] >= 1
     case = {"patient": {"name": "SYNTHETIC, Meenakshi Sundaram", "mrn": "SYN-812345", "ids": [{"value": "VXH/2026/004512"}]}}
-    for t in ("seen by MEENAKSHI", "UHID VXH/2026/004512", "ref 004512 noted", "lab 12345678", "on 12/09/2026", "SYN-812345"):
+    for t in ("seen by MEENAKSHI", "UHID VXH/2026/004512", "ref 004512 noted", "lab 12345678", "on 12/09/2026", "SYN-812345", "on 12-Sep-2026",
+              "on 12 September 2026", "on 12/09/26", "call 98765 43210", "mail a.b@example.com", "IP No. IP/26/01234", "RAD-26-0789"):
         assert similar._carries_id(t, case), t
     assert not similar._carries_id("ER: Positive (Allred 8/8)", case)
 
@@ -416,6 +438,62 @@ def test_a_model_error_or_a_bad_answer_gives_no_lines(model, people, monkeypatch
         raise llm.LLMError("reasoner model server unreachable")
     monkeypatch.setattr(similar.llm, "chat", boom)
     assert run(similar.pick_lines(src, p))["no_reasons"] is True
+
+
+def test_the_picks_are_cached_by_ids_and_checked_again_on_a_hit(model, people, monkeypatch):
+    source()
+    past("TB-SIM-363", her2="Positive (score 3+)")
+    src, p = _profiles("TB-SIM-300", "TB-SIM-363")
+    first = run(similar.pick_lines(src, p))
+    assert len(model.of("similar_lines")) == 1 and first["similar"]
+    files = list(similar._cache_dir().glob("lines-*.json"))
+    assert len(files) == 1
+    stored = json.loads(files[0].read_text())
+    assert set(stored) == {"picks", "prompt_version", "model", "at"} and set(stored["picks"]) == {"similar", "differs"}
+    assert all(set(x) == {"a", "b"} and re.fullmatch(r"A\d+", x["a"]) and re.fullmatch(r"B\d+", x["b"])
+               for k in ("similar", "differs") for x in stored["picks"][k])
+    assert "Positive" not in files[0].read_text() and "Grade" not in files[0].read_text()  # ids only, never a text
+    second = run(similar.pick_lines(src, p))
+    assert second == first and len(model.of("similar_lines")) == 1  # no model call on a hit
+    # on a hit the checks still run on the sources read now
+    d = store.get_doc("TB-SIM-363", "D36302")
+    d["pages"][0]["text"] = d["pages"][0]["text"].replace("ER: Positive (Allred 8/8)", "ER: Negative (Allred 0/8)")
+    store.save_doc("TB-SIM-363", d)
+    store._docs_cache.clear()
+    third = run(similar.pick_lines(src, p))
+    assert len(model.of("similar_lines")) == 1 and third["dropped"] >= 1
+    assert "Estrogen receptor (ER)" not in {x["about"] for x in third["similar"] + third["differs"]}
+    # another signature: another key (a call); a model error is never cached
+    past("TB-SIM-364")
+    _, p2 = _profiles("TB-SIM-300", "TB-SIM-364")
+
+    async def boom(role, msgs, **kw):
+        raise llm.LLMError("reasoner model server unreachable")
+    monkeypatch.setattr(similar.llm, "chat", boom)
+    assert run(similar.pick_lines(src, p2))["no_reasons"] is True
+    assert len(list(similar._cache_dir().glob("lines-*.json"))) == 1
+
+
+def test_case_summary_sentences_are_never_offered_as_lines(model, people):
+    source()
+    past("TB-SIM-365")
+    summary_sentences("TB-SIM-365", [("ssince-1", "QUOKKA course recorded since the board.", "D36501", "Diagnosis: Invasive ductal carcinoma")])
+    similar.ensure()
+    p = similar._load_profile("TB-SIM-365")
+    assert p["outcome_so_far"]["sentences"] and not any(l["kind"] == "summary" for l in p["lines"])
+    out = do_search("TB-SIM-300")
+    assert "QUOKKA" not in "\n".join(m["content"] for c in model.of("similar_lines") for m in c["msgs"])
+    c = next(x for x in out["results"] + out["weaker"] if x["case_id"] == "TB-SIM-365")
+    assert c["outcome_so_far"]["sentences"][0]["label"] == "Case summary, AI draft, not reviewed"
+    assert c["outcome_so_far"]["sentences"][0]["quote"] == "Diagnosis: Invasive ductal carcinoma"
+    assert not any("QUOKKA" in x["past"]["text"] for x in c["similar"] + c["differs"])
+
+
+def test_one_candidate_is_ordered_by_text_without_a_call(model, people):
+    source(); past("TB-SIM-366")
+    out = do_search("TB-SIM-300")
+    assert out["ordered_by"] == "text" and out["order_note"] == similar.ORDER_NOTE_TEXT and not model.of("similar_order")
+    assert out["note"] == "Few past Case Files of this cancer group have a recorded decision."
 
 
 # ---- 3. the cards and the response ------------------------------------------------------------------------------------------------
@@ -445,11 +523,9 @@ def similar_api_reset():
 def test_the_card_shape_and_no_number_or_past_day_date_anywhere(model, people):
     source()
     past("TB-SIM-381", her2="Positive (score 3+)")
-    st = store.get_state("TB-SIM-381")
-    st["artefacts"]["case_summary"] = {"current": 1, "case_id": "TB-SIM-381", "versions": [{"n": 1, "built_at": "2026-10-22T10:00:00",
-        "review": {"status": "ai_draft"}, "edits": [], "sections": [{"id": "since", "sentences": [
-            {"id": "ssince-1", "text": "The discharge summary of 20/10/2026 records a wide local excision.", "citations": []}]}]}]}
-    store.save_state("TB-SIM-381", st)
+    summary_sentences("TB-SIM-381", [("ssince-1", "The discharge summary of 20/10/2026 records a wide local excision.", "D38101",
+                                      "Diagnosis: Invasive ductal carcinoma"),
+                                     ("ssince-2", "Chemotherapy is planned.", None, None)])
     out = do_search("TB-SIM-300")
     assert set(out) == {"label", "ordered_by", "order_note", "model_line", "cancer_group", "group_label", "words", "note", "results", "weaker"}
     assert out["label"] == similar.LABEL and out["model_line"] == similar.MODEL_LINE and out["cancer_group"] == "breast"
@@ -464,7 +540,9 @@ def test_the_card_shape_and_no_number_or_past_day_date_anywhere(model, people):
     assert set(c["values"][0]) == {"fact", "label", "value", "quote", "where", "shared"}
     assert set(c["decisions"][0]) == {"record_id", "when", "outcome", "outcome_label", "intent", "intent_label", "text", "modalities", "stage_as_agreed"}
     assert c["decisions"][0]["modalities"] == ["Surgery", "Chemotherapy"] and c["decisions"][0]["outcome_label"] == "Decision recorded"
-    assert c["outcome_so_far"]["sentences"] == [{"text": "The discharge summary of [date] records a wide local excision.", "where": "Case summary, Oct 2026"}]
+    assert c["outcome_so_far"]["sentences"] == [{"text": "The discharge summary of [date] records a wide local excision.",
+                                                 "where": "HISTOPATHOLOGY REPORT, Sep 2026", "quote": "Diagnosis: Invasive ductal carcinoma",
+                                                 "quote_where": "HISTOPATHOLOGY REPORT, Sep 2026", "label": "Case summary, AI draft, not reviewed"}]
     assert set(c["open"]) == {"how", "reason", "via"} and c["open"]["how"] == "normal"
     for pair in c["similar"] + c["differs"]:
         assert set(pair) == {"about", "this", "past"} and re.fullmatch(r".+, \w{3} \d{4}", pair["past"]["where"])
@@ -477,26 +555,60 @@ def test_the_card_shape_and_no_number_or_past_day_date_anywhere(model, people):
     assert not re.search(r"\d{1,2}/\d{1,2}/\d{4}|\d{4}-\d{2}-\d{2}", past_only), past_only
 
 
+FORMATS = ("12/03/2026", "13-03-2026", "14.03.2026", "15/03/26", "2026-03-16", "2026-03-17T10:30:00", "18-Mar-2026", "19 Mar 2026",
+           "20 March 2026", "March 21, 2026", "22 sept 2026", "98765 43210", "98764-43211", "+91 98763 43212", "+91-9876243213", "9876143214",
+           "asha.k@example.com", "IP/26/01234", "RAD-26-0789", "VXH/26/004202", "IP No. IP/26/05678", "OP No. OP-4521", "MRN 7781-22",
+           "ABHA Number 12-3456-7890-1234")
+
+
+def _residue(fmt) -> list:
+    """What must not survive of a seeded format: the whole of it, and every group of three or more digits but the year."""
+    return [fmt.lower()] + [g for g in re.findall(r"\d{3,}", fmt) if g != "2026"] + (["asha.k", "example.com"] if "@" in fmt else [])
+
+
 @pytest.mark.parametrize("seed", [1, 2, 3])
 def test_property_no_seeded_identifier_of_the_past_patient_reaches_the_response(model, people, seed):
     rnd = random.Random(seed)
     first, last = rnd.choice(NAMES).split()
     uhid = f"VXH/2026/{rnd.randint(100000, 999999)}"
     long_no = str(rnd.randint(10 ** 10, 10 ** 11 - 1))
+    fmts = list(FORMATS)
+    rnd.shuffle(fmts)
+    seeded = "; ".join(fmts)
+    short = rnd.choice(FORMATS)  # one in a short quote, so that it also reaches the embedded text
     lead = f"Patient {first} {last.upper()} UHID {uhid} Lab no {long_no}"
     source(name="Bhavani Raghavan")  # another patient (a file of the same patient is never listed)
-    past("TB-SIM-391", name=f"{first} {last}", uhid=uhid, lead=lead, grade_quote=f"{first} {last}: Nottingham Grade 2 (lab {long_no})",
-         rec_text=f"Discussed for {first} {last} ({uhid}), ref {long_no}: breast conserving surgery.")
-    st = store.get_state("TB-SIM-391")
-    st["artefacts"]["case_summary"] = {"current": 1, "case_id": "TB-SIM-391", "versions": [{"n": 1, "built_at": "2026-10-22T10:00:00",
-        "review": {"status": "ai_draft"}, "edits": [], "sections": [{"id": "since", "sentences": [
-            {"id": "ssince-1", "text": f"{first} was seen on 21/10/2026, UHID {uhid}.", "citations": []}]}]}]}
-    store.save_state("TB-SIM-391", st)
+    grade_quote = f"{first} {last}: Nottingham Grade 2 (lab {long_no}; {seeded})"
+    past("TB-SIM-391", name=f"{first} {last}", uhid=uhid, lead=lead, grade_quote=grade_quote, histology=f"Invasive ductal carcinoma (ref {short})",
+         rec_text=f"Discussed for {first} {last} ({uhid}), ref {long_no}, {seeded}: breast conserving surgery.")
+    summary_sentences("TB-SIM-391", [("ssince-1", f"{first} was seen on 21/10/2026, UHID {uhid}, {seeded}.", "D39101", grade_quote)])
     out = do_search("TB-SIM-300")
     assert out["results"] + out["weaker"]
-    blob = json.dumps(out).lower()
-    for bad in (first.lower(), last.lower(), uhid.lower(), uhid.split("/")[-1], long_no, "21/10/2026"):
-        assert bad not in blob, bad
+    p = similar._load_profile("TB-SIM-391")
+    assert p["outcome_so_far"]["sentences"], "the sentence is kept (exact citation) and scrubbed"
+    texts = {"text": p["text"], "text_decisions": p["text_decisions"], "lines": " ".join(l["text"] for l in p["lines"]),
+             "card": json.dumps(out), "prompts": model.prompts()}
+    assert "invasive ductal carcinoma (ref [" in texts["text"].lower()  # the short quote reached the embedded text, scrubbed
+    for where, blob in texts.items():
+        low = blob.lower()
+        for bad in (first.lower(), last.lower(), uhid.lower(), uhid.split("/")[-1], long_no, "21/10/2026"):
+            assert bad not in low, (where, bad)
+        for fmt in FORMATS:
+            for bad in _residue(fmt):
+                assert bad not in low, (where, fmt, bad)
+
+
+def test_medical_values_pass_the_scrubber_unchanged():
+    case = {"patient": {"name": "SYNTHETIC, Meenakshi Sundaram", "mrn": "SYN-812345"}}
+    for t in ("Allred score 8/8", "T2 N0 M0", "Ki-67 20 %", "HER2 3+", "2.8 x 2.1 cm", "cycle 1 of 4", "pT2 N1a (2/14) M0", "CA-19-9 37 U/mL",
+              "Ki-67 20-30 %", "CR after chemotherapy", "ER 90%, PR 10%", "IHC REPORT, Sep 2026", "ECOG 1", "pCR 2026"):
+        assert similar.scrub(t, case) == t, t
+        assert not similar._carries_id(t, case), t
+    for fmt in FORMATS:
+        got = similar.scrub(f"seen {fmt} here", case)
+        assert got in ("seen [date] here", "seen [id] here"), (fmt, got)
+        assert similar._carries_id(fmt, case), fmt
+    assert similar.scrub("review on 5 Nov 2026.", case) == "review on [date]." and similar.scrub("IP No. IP/26/01234", case) == "[id]"
 
 
 def test_late_lines_give_cards_without_reasons_and_the_text_order_note(model, people, monkeypatch):
@@ -599,6 +711,43 @@ def test_the_search_route_answers_and_refuses_words_with_this_patients_name(full
     assert api.post("/cases/TB-SIM-300/similar/search", {"words": 12}).status_code == 400
 
 
+def test_the_search_route_refuses_words_with_a_date_a_phone_an_email_or_an_identifier(full, model):
+    source(); past("TB-SIM-433")
+    api = full.as_(RAO)
+    for w in ("seen on 12/03/2026", "review 5 Nov 2026", "call 98765 43210", "asha.k@example.com", "IP No. IP/26/01234", "RAD-26-0789 report"):
+        r = api.post("/cases/TB-SIM-300/similar/search", {"words": w})
+        assert r.status_code == 400 and detail(r)["code"] == "bad_words", (w, r.text)
+    ev = [e for e in store.read_audit("TB-SIM-300") if e["kind"] == "similar_search"]
+    assert ev and all(e["fallback"] == "bad_words" and e["words"] == "" for e in ev)
+    assert "98765" not in json.dumps(ev) and "12/03/2026" not in json.dumps(ev) and not model.calls
+
+
+def test_open_refuses_the_same_patient_a_linked_file_and_another_cancer_group(full, model):
+    source(uhid="VXH/2026/007001", linked_cases=[{"case_id": "TB-SIM-472"}])
+    past("TB-SIM-471", uhid="VXH/2026/007001", name="Other Name")          # the same patient (UHID in common)
+    past("TB-SIM-472")                                                       # linked from this file
+    past("TB-SIM-473", linked_cases=[{"case_id": "TB-SIM-300"}])            # links back to this file
+    past("TB-SIM-474", protocol="cervix")                                    # another cancer group
+    past("TB-SIM-475")                                                       # fine
+    rl = org.roles(RAO)
+    for pid in ("TB-SIM-471", "TB-SIM-472", "TB-SIM-473", "TB-SIM-474"):
+        with pytest.raises(ValueError, match="not_found"):
+            similar.open_info(rl, pid, "TB-SIM-300")
+        r = full.as_(RAO).post("/cases/TB-SIM-300/similar/open", {"past_case_id": pid})
+        assert r.status_code == 404 and pid not in r.text
+    assert similar.open_info(rl, "TB-SIM-475", "TB-SIM-300")["how"] == "normal"
+    assert not [e for e in store.read_audit("TB-SIM-471") if e["kind"] == "similar_opened"]
+
+
+def test_the_sixty_first_opening_in_ten_minutes_is_refused(full, model):
+    source(); past("TB-SIM-476")
+    api = full.as_(RAO)
+    for _ in range(60):
+        assert api.post("/cases/TB-SIM-300/similar/open", {"past_case_id": "TB-SIM-476"}).status_code == 200
+    r = api.post("/cases/TB-SIM-300/similar/open", {"past_case_id": "TB-SIM-476"})
+    assert r.status_code == 429 and detail(r)["code"] == "rate_limited"
+
+
 def test_the_eleventh_search_in_ten_minutes_is_refused(full, model):
     source()
     api = full.as_(RAO)
@@ -695,3 +844,8 @@ def test_info_lists_the_last_five_searches_newest_first_and_is_off_inside_a_wind
     n = full.as_(RAO).get("/cases/TB-SIM-461/similar").json()
     assert n["available"] is False and n["reason"] == similar.NO_GROUP_REASON
     assert similar.info("TB-SIM-300", org.roles(VX, vaidyx_admin=True))["reason"] == similar.ADMIN_REASON
+    c = store.get_case("TB-SIM-300"); c["archived"] = {"by": RAO, "at": store.now_iso(), "reason": "synthetic"}; store.save_case(c)
+    a = similar.info("TB-SIM-300", org.roles(RAO))
+    assert a["available"] is False and a["reason"] == "This Case File is archived."
+    g = full.as_(RAO).get("/cases/TB-SIM-300/similar")
+    assert g.status_code == 200 and g.json()["available"] is False and g.json()["reason"] == "This Case File is archived."

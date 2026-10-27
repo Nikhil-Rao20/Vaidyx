@@ -100,7 +100,7 @@ export function SimilarPanel({ caseId }: { caseId: string }) {
   else body = (
     <>
       <p className="text-sm text-muted-foreground flex items-start gap-1.5"><FolderSearch className="size-4 mt-0.5 shrink-0" aria-hidden />
-        <span>Past Case Files of this hospital that resemble this one, in order of likeness as judged by Gemma-4-31B (a non-medical model that only orders the list and picks quoted lines). The order is not a score. Every line is quoted from the two files.</span>
+        <span>Past Case Files of this hospital that resemble this one, in order of likeness as judged by Gemma-4-31B (a non-medical model that only orders the list and picks quoted lines). The order is not a score. Every reason line is quoted from the two files; the outcome so far shows the past Case summary with its cited line.</span>
       </p>
       <div><StatusChip kind="muted" className="whitespace-normal">{SIMILAR_LABEL}</StatusChip></div>
       <form className="flex flex-wrap gap-1.5" onSubmit={(e) => { e.preventDefault(); search.mutate(words.trim()); }}>

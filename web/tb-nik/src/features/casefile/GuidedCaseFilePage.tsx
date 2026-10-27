@@ -2,7 +2,8 @@
 // with one loud Continue (guide, do not lock), the section the doctor is in, a right side panel for the report, reviews and team, and the
 // "Ask about this patient" bubble on every section. Each section is an address (/cases/:id/<section>); the Case File opens on Overview.
 // A department that was only asked keeps its request view. Opened from Similar Case Files (?from=similar&of=<id>, night-v3 item 7.3) a
-// banner says so above the sections: "Past Case File, not advice for this patient".
+// banner says so above the sections: "Past Case File, not advice for this patient". It stays on every section (the section moves carry
+// the two params) and after a reload or a fresh visit while the person's read-only window came from there (via "similar:<id>").
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
@@ -78,6 +79,10 @@ function useMinWidth(px: number): boolean {
   return ok;
 }
 
+/** A Case File id as the banner may show it; anything else in the address is not shown (Phase 7 review, finding 13). */
+const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const safeId = (x?: string | null) => (x && SAFE_ID.test(x) ? x : null);
+
 const leftOffKey = (id: string) => `tbnik.cf.${id}.section`;
 function readLeftOff(id: string): SectionId | null {
   try { return fromSlug(localStorage.getItem(leftOffKey(id)) ?? undefined); } catch { return null; }
@@ -110,8 +115,11 @@ export default function GuidedCaseFilePage() {
   const legacy = view ? LEGACY[view] : undefined;
   const section: SectionId = fromSlug(view) ?? legacy?.section ?? "overview";
   const target = search.get("item");
-  // Opened from the Similar Case Files of another file (night-v3 item 7.3): the banner stays while the address carries it.
-  const similarOf = search.get("from") === "similar" ? search.get("of") : null;
+  // Opened from the Similar Case Files of another file (night-v3 item 7.3): the banner stays while the address carries it, or while the
+  // read-only window on this file was opened from there (its via is "similar:<id>").
+  const fromParam = search.get("from");
+  const ofParam = search.get("of");
+  const similarOf = (fromParam === "similar" ? safeId(ofParam) : null) ?? (bg?.via?.startsWith("similar:") ? safeId(bg.via.slice("similar:".length)) : null);
   const [leftOff] = useState<SectionId | null>(() => readLeftOff(id));
   const [side, setSide] = useState<Side | null>(legacy?.side ?? null);
   const [readyOpen, setReadyOpen] = useState(false);
@@ -138,9 +146,14 @@ export default function GuidedCaseFilePage() {
   }, [cfq, slotsq, qc, id, proposalsq, teamq]);
 
   const go = useCallback((s: SectionId, t?: string) => {
-    nav(`/cases/${encodeURIComponent(id)}/${SLUG[s]}${t ? `?item=${encodeURIComponent(t)}` : ""}`);
+    // the Similar Case Files params travel with every section move, so the "Past Case File" banner stays (Phase 7 review, S2)
+    const q = new URLSearchParams();
+    if (t) q.set("item", t);
+    if (fromParam && ofParam) { q.set("from", fromParam); q.set("of", ofParam); }
+    const qs = q.toString();
+    nav(`/cases/${encodeURIComponent(id)}/${SLUG[s]}${qs ? `?${qs}` : ""}`);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [nav, id]);
+  }, [nav, id, fromParam, ofParam]);
   const openSource = useCallback((t: SourceTarget) => setSide({ kind: "source", target: t }), []);
 
   // A helper brief prepared in the background is announced once when it is ready.

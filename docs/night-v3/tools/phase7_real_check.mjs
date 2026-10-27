@@ -96,7 +96,7 @@ for (const [vp, scheme] of VIEWS) {
     if (!n) note(`search ${tag}: no result card (text: ${(await page.getByTestId("similar-results").innerText()).slice(0, 160)})`);
     const text = await page.getByTestId("summary-similar").innerText();
     for (const x of NOT_SAID) if (text.toLowerCase().includes(x)) note(`search ${tag}: the word "${x}" is on the screen`);
-    if (/\d{1,3}\s?% (similar|match|likeness)/i.test(text) || /\b(similarity )?score\b/i.test(text.replace(/Allred score|Nottingham score|IHC score/g, "")) || /\brank(ed)?\b/i.test(text)) note(`search ${tag}: a score, rank or similarity percent is on the screen`);
+    if (/\d{1,3}\s?% (similar|match|likeness)/i.test(text) || /\b(similarity )?score\b/i.test(text.replace(/Allred score|Nottingham score|IHC score|not a score/g, "")) || /\brank(ed)?\b/i.test(text)) note(`search ${tag}: a score, rank or similarity percent is on the screen`);
     for (let i = 0; i < n; i++) {
       const t = await items.nth(i).innerText();
       if (!t.includes(LABEL)) note(`search ${tag}: card ${i + 1} has no label`);

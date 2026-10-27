@@ -1,7 +1,7 @@
 """Similar Case Files routes (night-v3 item 7.2; contract docs/night-v3/research/07_similar_cases.md section 8.3): whether a search is
 possible here, the search itself (the reasoner's order, the quoted lines, the cards) and how one result may be opened. A search needs a
 known login with full access to this Case File (never a Vaidyx admin, a supporting department or a window opened with a reason) and is
-limited to 10 per 10 minutes per login. Every result is labelled "Past Case File, not advice for this patient"."""
+limited to 10 per 10 minutes per login; an opening to 60 per 10 minutes per login. Every result is labelled "Past Case File, not advice for this patient"."""
 from fastapi import Request
 
 from tumour_board import access, llm, org, published, similar, store
@@ -10,6 +10,7 @@ from . import common
 
 router = common.make_router(["tumour-board-similar"])
 SEARCH_LIMIT = common.RateLimit(10, 600)
+OPEN_LIMIT = common.RateLimit(60, 600)
 NOT_FOUND = "That Case File is not available here any more."
 
 
@@ -61,6 +62,7 @@ async def similar_open(case_id: str, request: Request):
     """{past_case_id} -> {how: normal | with_reason | refused, scope, reason, via, label}. "normal" is audited here in both Case Files and
     the organisation log; "with_reason" audits nothing here (the break-glass route audits the opening with its via)."""
     u, rl, c = _searcher(request, case_id)
+    OPEN_LIMIT.check(u or common.client_key(request), "Too many openings in a short time; please wait a few minutes.")
     b = await common.body(request)
     past = str(b.get("past_case_id") or "").strip()
     try:

@@ -120,7 +120,8 @@ def test_profile_fields_filled_from_the_records():
     record(cid)
     case_summary(cid, [
         {"id": "ssince-1", "text": "The discharge summary records a wide local excision.",
-         "citations": [{"doc_id": "DSIM00104", "quote": "Wide local excision done", "doc_title": "DISCHARGE SUMMARY", "date": "2026-10-20"}]},
+         "citations": [{"doc_id": "DSIM00104", "quote": "Wide local excision done", "doc_title": "DISCHARGE SUMMARY", "date": "2026-10-20",
+                        "page": 0, "start": 0, "end": 24, "status": "FINAL"}]},
         {"id": "ssince-2", "text": "Nothing documented since the board.", "citations": [], "code": True, "fixed": True}])
     p = similar.build_profile(cid)
     assert p["version"] == similar.VERSION and len(p["signature"]) == 16 and p["group"] == "breast" and p["group_label"] == "Breast cancer"
@@ -138,17 +139,20 @@ def test_profile_fields_filled_from_the_records():
     assert [t["value"] for t in p["treatments"]] == ["Wide local excision"]
     os_ = p["outcome_so_far"]
     assert os_["sentences"] == [{"text": "The discharge summary records a wide local excision.", "where": "DISCHARGE SUMMARY, Oct 2026",
-                                 "source": {"sentence": "ssince-1", "section": "since"}}]
+                                 "quote": "Wide local excision done", "quote_where": "DISCHARGE SUMMARY, Oct 2026",
+                                 "label": "Case summary, AI draft, not reviewed", "status": "ai_draft",
+                                 "source": {"sentence": "ssince-1", "section": "since", "doc_id": "DSIM00104", "page": 0, "start": 0, "end": 24}}]
     assert os_["later_records"] == "1 record dated after the last board decision; latest Oct 2026"
     er_line = next(l for l in p["lines"] if l.get("fact") == "er")
     assert er_line["text"] == "ER: Positive (Allred 8/8)" and er_line["where"] == "IHC REPORT, Sep 2026" and er_line["where_full"] == "IHC REPORT, 04/09/2026"
     assert er_line["source"] == {"doc_id": "D00102", "page": 0, "start": 0, "end": len("ER: Positive (Allred 8/8)")}
     kinds = [l["kind"] for l in p["lines"]]
-    assert kinds.index("fact") < kinds.index("stage") < kinds.index("summary") < kinds.index("decision")
+    assert kinds.index("fact") < kinds.index("stage") < kinds.index("decision") and "summary" not in kinds  # model-written: never a line
     assert all(k == "decision" for k in kinds[kinds.index("decision"):]) and len(p["lines"]) <= similar.MAX_LINES
     assert [l["id"] for l in p["lines"]] == [f"L{i}" for i in range(1, len(p["lines"]) + 1)]
     assert p["text"].startswith("Cancer group: Breast cancer. Setting: ") and "Age band 50 to 59. Sex F." in p["text"]
     assert "ER: Positive (Allred 8/8)" in p["text"] and "Board decisions: decision recorded, intent curative" in p["text"]
+    assert "The discharge summary records a wide local excision." in p["text"]  # the embedded text keeps the sentences
     assert "Asha" not in json.dumps(p) and "SYN-7" not in json.dumps(p)
 
 
@@ -163,7 +167,8 @@ def test_unverified_fact_absent_and_confirmed_value_kept_without_a_line():
     p = similar.build_profile(cid)
     facts = {e["fact"]: e for e in p["biomarkers"]}
     assert "her2" not in facts and "ki67" not in facts
-    assert facts["pr"]["confirmed"] is True and facts["pr"]["quote"] == "" and facts["pr"]["value"] == "Negative" and facts["pr"]["confirmed_by"]
+    assert facts["pr"]["confirmed"] is True and facts["pr"]["quote"] == "" and facts["pr"]["value"] == "Negative"
+    assert facts["pr"]["confirmed_by"] == "a clinician" and "rao" not in json.dumps(p).lower()
     assert not any(l.get("fact") in ("pr", "her2") for l in p["lines"])
 
 
@@ -197,6 +202,41 @@ def test_identifiers_are_scrubbed_from_every_text():
     assert "[id]" in p["text"] and "[id]" in p["text_decisions"] and "[date]" in " ".join(blobs)
     assert "lakshmi" not in json.dumps(p).lower() and uhid.lower() not in json.dumps(p).lower()
     assert similar.scrub("Seen by Dr Mehta for Lakshmi", store.get_case(cid)) == "Seen by Dr Mehta for [id]"
+
+
+def test_case_summary_sentences_need_an_exact_citation_and_carry_their_quote_and_label():
+    cid = mk("TB-SIM-005")
+    dis = make_doc("DSIM00504", "discharge_summary", date="2026-10-20", title="DISCHARGE SUMMARY",
+                   facts={"treatment_received": fact("Wide local excision", quote="Wide local excision done")})
+    fname = dis["filename"]
+    breast_docs(cid, extra=[dis])
+    record(cid)
+    exact = {"doc_id": "DSIM00504", "quote": "Wide local excision done", "doc_title": "DISCHARGE SUMMARY", "date": "2026-10-20", "page": 0,
+             "start": 0, "end": 24}
+    case_summary(cid, [
+        {"id": "ssince-1", "text": "A wide local excision is recorded.", "citations": [exact]},
+        {"id": "ssince-2", "text": "Radiotherapy was completed.", "citations": [{**exact, "approximate": True, "score": 91.0}]},  # approximate only
+        {"id": "ssince-3", "text": "The patient is well.", "citations": [{"doc_id": "DSIM00504", "quote": "Wide local excision done",
+                                                                          "doc_title": "DISCHARGE SUMMARY"}]},                        # no offsets
+        {"id": "ssince-4", "text": "Chemotherapy has started.", "citations": [{**exact, "doc_id": "DGONE"}]},                       # no such report
+        {"id": "ssince-5", "text": "A wound check is recorded.", "citations": [{**exact, "doc_title": fname}]},                      # file name title
+        {"id": "ssince-6", "text": "Nothing else is recorded.", "citations": []}])
+    p = similar.build_profile(cid)
+    sents = p["outcome_so_far"]["sentences"]
+    assert [s["source"]["sentence"] for s in sents] == ["ssince-1", "ssince-5"]
+    assert sents[0]["quote"] == "Wide local excision done" and sents[0]["label"] == "Case summary, AI draft, not reviewed"
+    assert sents[0]["status"] == "ai_draft" and sents[0]["quote_where"] == sents[0]["where"] == "DISCHARGE SUMMARY, Oct 2026"
+    assert sents[1]["where"] == "Discharge summary, Oct 2026" and fname not in json.dumps(p)
+    assert not any(l["kind"] == "summary" for l in p["lines"])
+    for gone in ("Radiotherapy was completed", "The patient is well", "Chemotherapy has started", "Nothing else is recorded"):
+        assert gone not in json.dumps(p)
+    # a reviewed version: "Case summary, reviewed", never the reviewer's name
+    st = store.get_state(cid)
+    st["artefacts"]["case_summary"]["versions"][0]["review"] = {"status": "reviewed", "by": "dr.rao", "by_name": "Dr Rao"}
+    store.save_state(cid, st)
+    p = similar.build_profile(cid)
+    assert {s["label"] for s in p["outcome_so_far"]["sentences"]} == {"Case summary, reviewed"}
+    assert {s["status"] for s in p["outcome_so_far"]["sentences"]} == {"reviewed"} and "rao" not in json.dumps(p).lower()
 
 
 # ---- 2. the real case --------------------------------------------------------------------------------------------------------------
@@ -264,6 +304,105 @@ def test_a_file_decided_through_record_decision_is_profiled(unit_case, monkeypat
     assert p["decisions"][0]["outcome_label"] == "Decision recorded" and p["decisions"][0]["when"] == "Sep 2026"
 
 
+class _FlakyEmbed:
+    """search._embed that raises while `down` is set (the embedder unavailable), else the deterministic fake."""
+
+    def __init__(self, inner):
+        self.inner, self.down = inner, 0
+
+    def __call__(self, texts, prefix=""):
+        if self.down:
+            self.down -= 1
+            raise RuntimeError("embedder unavailable")
+        return self.inner(texts, prefix)
+
+
+def test_a_failed_rebuild_is_retried_by_the_next_ensure(monkeypatch):
+    flaky = _FlakyEmbed(search._embed)
+    monkeypatch.setattr(search, "_embed", flaky)
+    decided("TB-R01")
+    assert "embed_error" not in similar.ensure() and index_ids() == {"TB-R01"}
+    sig1 = json.loads(similar._index_json().read_text())["profiles_sig"]
+    assert sig1
+    decided("TB-R02", agesex="64 Y / F")  # another text: not in the content cache
+    flaky.down = 1
+    out = similar.ensure()
+    assert out["built"] == 1 and out["embed_error"] == "RuntimeError"
+    meta = json.loads(similar._index_json().read_text())
+    assert meta["profiles_sig"] == "" and index_ids() == {"TB-R01", "TB-R02"}  # the chunks are there, the vectors not yet
+    meta_l, m = similar.load_index()
+    assert m.size == 0
+    out = similar.ensure()  # the profiles did not change, but the index is behind them: rebuilt
+    assert "embed_error" not in out and out["built"] == 0 and out["unchanged"] == 2
+    assert sorted(index_keys()) == ["TB-R01|main", "TB-R02|main"]
+    meta = json.loads(similar._index_json().read_text())
+    assert meta["profiles_sig"] and meta["profiles_sig"] != sig1
+    meta_l, m = similar.load_index()
+    assert m.shape[0] == len(meta_l["chunks"]) == 2
+    assert similar.ensure() == {**similar.ensure(), "built": 0, "embedded": 0, "removed": 0}  # in step: nothing to do
+
+
+def test_an_archived_file_leaves_index_json_even_while_the_embedder_fails(monkeypatch):
+    flaky = _FlakyEmbed(search._embed)
+    monkeypatch.setattr(search, "_embed", flaky)
+    decided("TB-R11"); decided("TB-R12", agesex="64 Y / F"); decided("TB-R13", agesex="74 Y / F")
+    similar.ensure()
+    c = store.get_case("TB-R12"); c["archived"] = {"by": "test", "at": "2026-10-27T10:00:00", "reason": "test"}; store.save_case(c)
+    record("TB-R13", text="Neoadjuvant chemotherapy, then surgery.", board_date="2026-09-20")  # a new text to embed
+    flaky.down = 5
+    out = similar.ensure()
+    assert out["removed"] == 1 and out["embed_error"] == "RuntimeError"
+    assert index_ids() == {"TB-R11", "TB-R13"} and "TB-R12" not in similar._index_json().read_text()
+    # the candidates still answer with the embedder down: BM25 only, never an error
+    flaky.down = 10 ** 6
+    r = similar.candidates("TB-R11")
+    assert [c["case_id"] for c in r["candidates"]] == ["TB-R13"]
+    flaky.down = 0
+    similar.ensure()
+    flaky.down = 10 ** 6  # vectors in the index, the query embedding fails: BM25 only
+    assert [c["case_id"] for c in similar.candidates("TB-R11", words="HER2 negative")["candidates"]] == ["TB-R13"]
+
+
+def test_forget_keeps_the_index_in_step_with_the_profiles(fake_embed):
+    decided("TB-R21"); decided("TB-R22")
+    similar.ensure()
+    similar.forget("TB-R22")
+    meta = json.loads(similar._index_json().read_text())
+    assert meta["profiles_sig"] == similar._profiles_sig(similar._stored_profiles()) and index_ids() == {"TB-R21"}
+    n = len(embedded(fake_embed))
+    assert similar.ensure()["embedded"] == 0 and len(embedded(fake_embed)) == n
+
+
+def test_load_index_reads_under_the_lock():
+    decided("TB-R31")
+    similar.ensure()
+    similar._loaded.update(key=None, meta=None, matrix=None)
+    assert similar._lock.acquire(timeout=1)
+    import threading
+    got = []
+    t = threading.Thread(target=lambda: got.append(similar.load_index()))
+    t.start()
+    t.join(0.3)
+    assert t.is_alive() and not got  # waits for an ensure() or forget() in progress
+    similar._lock.release()
+    t.join(5)
+    meta, m = got[0]
+    assert [c["case_id"] for c in meta["chunks"]] == ["TB-R31"] and m.shape == (1, DIM)
+
+
+def test_words_with_a_date_a_phone_an_email_or_an_identifier_are_refused():
+    decided("TB-R41")
+    for w in ("review on 12/03/2026", "seen 12 March 2026", "call 98765 43210", "asha.k@example.com", "IP No. IP/26/01234",
+              "RAD-26-0789 report", "call +91-9876543210"):
+        with pytest.raises(published.PublishedError, match="carry"):  # check_terms refuses a long number itself
+            similar.candidates("TB-R41", words=w)
+    for w in ("review on 12/03/2026", "seen 12 March 2026", "call 98765 43210", "asha.k@example.com", "IP No. IP/26/01234"):
+        with pytest.raises(published.PublishedError) as e:
+            similar.candidates("TB-R41", words=w)
+        assert str(e.value) == similar.WORDS_ID_REASON and e.value.status == 400
+    assert similar.candidates("TB-R41", words="HER2 3+ with Ki-67 20 %")["group"] == "breast"
+
+
 def test_forget_removes_at_once_without_embedding(fake_embed):
     decided("TB-SIM-030"); decided("TB-SIM-031")
     similar.ensure()
@@ -324,7 +463,14 @@ def test_a_summary_edit_or_stage_confirmation_changes_the_signature():
     assert len({s0, s1, s2}) == 3
     p = similar.build_profile(cid)
     draft = next(s for s in p["stage"] if s["kind"] == "confirmed_draft")
-    assert draft["text"] == "T2 N0 M0, stage IIA" and draft["label"] == "Vaidyx draft stage, confirmed by Dr Rao" and draft["month"] == "Oct 2026"
+    assert draft["text"] == "T2 N0 M0, stage IIA" and draft["label"] == "Vaidyx draft stage, confirmed by a doctor" and draft["month"] == "Oct 2026"
+    st = store.get_state(cid)
+    st["staging"]["prognostic"] = {"stage": "IB", "confirmed": {"by": "dr.rao", "by_name": "Dr Rao", "at": "2026-10-02T10:00:00"}}
+    store.save_state(cid, st)
+    p = similar.build_profile(cid)
+    labels = [s["label"] for s in p["stage"] if s["kind"] == "confirmed_draft"]
+    assert labels == ["Vaidyx draft stage, confirmed by a doctor", "Vaidyx draft prognostic stage group, confirmed by a doctor"]
+    assert "rao" not in json.dumps(p).lower()  # no clinician of the past file is named anywhere in its profile
 
 
 # ---- 4. the candidates -----------------------------------------------------------------------------------------------------------
@@ -343,7 +489,7 @@ def test_group_filter_colon_and_rectum_share_generic_by_name():
     assert got == {"TB-SIM-070": ["TB-SIM-071"], "TB-SIM-072": ["TB-SIM-073"], "TB-SIM-074": ["TB-SIM-075"], "TB-SIM-076": []}
     r = similar.candidates("TB-SIM-070")
     assert r["group"] == "breast" and r["group_label"] == "Breast cancer" and r["n_in_group"] == 1
-    assert r["note"] == "Only 1 past Case File of this cancer group has a recorded decision."
+    assert r["note"] == "Few past Case Files of this cancer group have a recorded decision."
     assert similar.candidates("TB-SIM-076")["note"] == "No past Case File of this cancer group has a recorded decision."
     mk("TB-SIM-078", protocol="generic")
     assert similar.candidates("TB-SIM-078") == {"group": None, "group_label": "", "candidates": [], "n_in_group": 0, "note": "No cancer group on this file."}
@@ -359,7 +505,7 @@ def test_the_source_the_same_patient_and_linked_files_are_excluded():
     decided("TB-SIM-085")
     r = similar.candidates("TB-SIM-080")
     assert sorted(c["case_id"] for c in r["candidates"]) == ["TB-SIM-081", "TB-SIM-085"]
-    assert r["note"] == "Only 2 past Case Files of this cancer group have a recorded decision."
+    assert r["note"] == "Few past Case Files of this cancer group have a recorded decision." and not re.search(r"\d", r["note"])
     assert [c["rrf_rank"] for c in r["candidates"]] == [1, 2]
 
 

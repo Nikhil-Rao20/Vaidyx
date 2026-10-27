@@ -161,7 +161,12 @@ export function similarCard(id: string, over: Record<string, unknown> = {}) {
       modalities: ["surgery", "radiotherapy"], stage_as_agreed: "cT2 N0 M0",
     }],
     outcome_so_far: {
-      sentences: [{ text: "Wide local excision with sentinel node biopsy was done on 22/10/2026 (SYNTHETIC).", where: "Case summary, Oct 2026" }],
+      // a Case summary sentence (model-written): its label, and the verified record line it rests on (Phase 7 review, S1)
+      sentences: [{
+        text: "Wide local excision with sentinel node biopsy was done (SYNTHETIC).", where: "Case summary, Oct 2026",
+        label: "Case summary, AI draft, not reviewed (Gemma-4-31B, non-medical)",
+        quote: "Procedure: Wide local excision and sentinel lymph node biopsy (SYNTHETIC)", quote_where: "DISCHARGE SUMMARY, Oct 2026",
+      }],
       later_records: "One record after the board decision: a discharge summary.",
     },
     similar: [
@@ -176,13 +181,14 @@ export function similarCard(id: string, over: Record<string, unknown> = {}) {
   };
 }
 
-/** POST /similar/search: three past files in order, the third without quoted reasons (matched by recorded fields only). */
+/** POST /similar/search: three past files in order; the second has only "how it differs" lines, the third no quoted reasons (matched by
+ *  recorded fields only). */
 export const similarResults = {
   label: SIMILAR_LABEL, ordered_by: "model",
   order_note: similar.order_note, model_line: similar.model_line, cancer_group: "breast", group_label: "Breast cancer", words: "", note: "",
   results: [
     similarCard("TB-HIST-X", { open: pastOpen("with_reason") }),
-    similarCard("TB-HIST-04", { age_band: "40 to 49", stage: [{ text: "Stage IIA", kind: "confirmed_draft", label: "Vaidyx draft stage, confirmed by Dr Lakshmi Rao", quote: "", where: "Case File, Sep 2026" }] }),
+    similarCard("TB-HIST-04", { age_band: "40 to 49", similar: [], stage: [{ text: "Stage IIA", kind: "confirmed_draft", label: "Vaidyx draft stage, confirmed by a doctor", quote: "", where: "Case File, Sep 2026" }] }),
     similarCard("TB-HIST-07", {
       setting: "locally_advanced", age_band: "60 to 69", stage: [], values: [], similar: [], differs: [], matched_by: ["cancer group", "setting"], no_reasons: true,
       outcome_so_far: { sentences: [], later_records: "" },

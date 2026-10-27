@@ -33,7 +33,7 @@ from . import case_summary
 
 log = logging.getLogger(__name__)
 
-VERSION = 1  # the profile schema
+VERSION = 2  # the profile schema (2: the review fixes of 27 Oct 2026: cited summary sentences, no names, the wider scrubber)
 LABEL = "Past Case File, not advice for this patient"
 GROUPS = {"colorectal_colon": "colorectal", "colorectal_rectum": "colorectal"}  # protocol id -> cancer group (others: their own id)
 GROUP_LABELS = {"colorectal": "Colorectal cancer"}
@@ -56,8 +56,15 @@ OTHER = ("lesion_size", "nodal_findings", "distant_findings", "ecog", "menopausa
 DECISION_FIELDS = ("decision_text", "intent", "modalities", "sequence", "rationale")
 
 NO_GROUP = "No cancer group on this file."
+NOTE_NONE = "No past Case File of this cancer group has a recorded decision."
+NOTE_FEW = "Few past Case Files of this cancer group have a recorded decision."
+WORDS_ID_REASON = "Search words cannot carry a date, a phone number, an email or an identifier."
 NO_RECORDS_AFTER = "No records after the board decision yet"
 NO_DECISION_YET = "No board decision recorded yet"
+STAGE_CONFIRMED_LABEL = "Vaidyx draft stage, confirmed by a doctor"
+PROGNOSTIC_CONFIRMED_LABEL = "Vaidyx draft prognostic stage group, confirmed by a doctor"
+SUMMARY_DRAFT_LABEL = "Case summary, AI draft, not reviewed"
+SUMMARY_REVIEWED_LABEL = "Case summary, reviewed"
 
 _lock = threading.Lock()  # one ensure / forget at a time (the whole index is rewritten)
 _loaded: dict = {"key": None, "meta": None, "matrix": None}
@@ -175,8 +182,22 @@ def _records(st) -> list:
 
 # ---- the scrubber -----------------------------------------------------------------------------------------------------------------
 
-_LONG_DIGITS = re.compile(r"\d{6,}")
-_DAY_DATE = re.compile(r"(?<!\d)\d{1,2}[/.-]\d{1,2}[/.-]\d{4}(?!\d)|(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)")
+_MON = (r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|"
+        r"nov(?:ember)?|dec(?:ember)?)")
+_DAY_DATE = re.compile(
+    r"(?<![\d./-])\d{4}-\d{1,2}-\d{1,2}(?:[T ]\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?(?![\d])"   # 2026-03-12, with a time
+    r"|(?<![\d./-])\d{1,2}[/.-]\d{1,2}[/.-](?:\d{4}|\d{2})(?!\d|[./-]\d)"                                            # 12/03/2026, 12-03-26
+    r"|(?<![\d./-])\d{1,2}(?:st|nd|rd|th)?[\s/.-]{1,3}" + _MON + r"\.?[\s/.,-]{1,3}(?:\d{4}|\d{2})(?!\d)"                 # 12-Mar-2026, 12 March 2026
+    r"|\b" + _MON + r"\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}(?!\d)", re.I)                                             # March 12, 2026
+_ID_PATTERNS = (  # (pattern, replacement), in this order: dates, emails, prefixed numbers, identifier tokens, phone numbers, long runs
+    (_DAY_DATE, "[date]"),
+    (re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}"), "[id]"),
+    (re.compile(r"\b(?:IP|OP|CR|MRN|UHID|ABHA|Acc(?:ession)?)\b\.?\s*(?:No\.?|Number)?\s*[:#]?\s*(?=[A-Za-z/-]*\d)[A-Za-z0-9/-]{4,}"), "[id]"),
+    (re.compile(r"\b[A-Z]{2,6}[/-]\d{2,4}[/-]\d{3,}\b"), "[id]"),
+    (re.compile(r"(?<![\d+])(?:\+91[\s-]?)?\d{5}[\s-]?\d{5}(?!\d)"), "[id]"),
+    (re.compile(r"\d{6,}"), "[id]"),
+)
+_LONG_DIGITS = _ID_PATTERNS[-1][0]
 
 
 def _scrub_patterns(case) -> list:
@@ -205,8 +226,22 @@ def scrub(text, case, _pats=None) -> str:
     s = str(text or "")
     for rx in (_scrub_patterns(case) if _pats is None else _pats):
         s = rx.sub("[id]", s)
-    s = _DAY_DATE.sub("[date]", s)
-    return _LONG_DIGITS.sub("[id]", s)
+    return scrub_general(s)
+
+
+def scrub_general(text) -> str:
+    """The patterns that name anybody, whoever the patient: day-level dates ("[date]"), emails, IP / OP / CR / MRN / UHID / ABHA
+    numbers, identifier-like tokens ("IP/26/01234", "RAD-26-0789"), phone numbers and runs of six or more digits ("[id]")."""
+    s = str(text or "")
+    for rx, rep in _ID_PATTERNS:
+        s = rx.sub(rep, s)
+    return s
+
+
+def general_id(text) -> bool:
+    """True when a text carries a day-level date, a phone number, an email or an identifier-like token (the scrubber's patterns)."""
+    t = str(text or "")
+    return any(rx.search(t) for rx, _ in _ID_PATTERNS)
 
 
 # ---- eligibility and signature ------------------------------------------------------------------------------------------------------
@@ -280,7 +315,7 @@ def _entry(fid, cur, cat, filenames, scr) -> dict | None:
          "doc_id": cur.get("doc_id"), "doc_title": scr(title), "date": cur.get("date") or "", "month": _month(cur.get("date")),
          "page": None, "start": None, "end": None, "confirmed": bool(confirmed_by)}
     if confirmed_by:
-        e["confirmed_by"] = "a clinician" if confirmed_by == "clinician" else (_display(confirmed_by) or "a clinician")
+        e["confirmed_by"] = "a clinician"  # never a name: no clinician of a past file is named in a profile (contract 4.2)
     else:
         e.update(quote=scr(cur.get("quote")), page=loc.get("page"), start=loc.get("start"), end=loc.get("end"))
     return e
@@ -299,24 +334,51 @@ def _staging(st) -> list:
     comps = " ".join(str((d.get("components") or {}).get(k, {}).get("cat") or "") for k in ("T", "N", "M")).strip()
     text = ", ".join(x for x in (comps, f"stage {d['stage']}" if d.get("stage") else "") if x)
     c = d["confirmed"]
-    by = c.get("by_name") or _display(c.get("by")) or "a doctor"
-    if text:
-        out.append({"text": text, "kind": "confirmed_draft", "label": f"Vaidyx draft stage, confirmed by {by}", "quote": text,
-                    "date": str(c["at"])[:10], "by": by})
+    if text:  # who confirmed it is never named (contract 4.2 and 4.7): "a doctor"
+        out.append({"text": text, "kind": "confirmed_draft", "label": STAGE_CONFIRMED_LABEL, "quote": text, "date": str(c["at"])[:10]})
     p = d.get("prognostic") if isinstance(d.get("prognostic"), dict) else None
     if p and isinstance(p.get("confirmed"), dict) and p["confirmed"].get("at") and not p.get("rejected") and p.get("stage"):
-        pby = p["confirmed"].get("by_name") or _display(p["confirmed"].get("by")) or "a doctor"
         t = f"prognostic stage group {p['stage']}"
-        out.append({"text": t, "kind": "confirmed_draft", "label": f"Vaidyx draft prognostic stage group, confirmed by {pby}", "quote": t,
-                    "date": str(p["confirmed"]["at"])[:10], "by": pby})
+        out.append({"text": t, "kind": "confirmed_draft", "label": PROGNOSTIC_CONFIRMED_LABEL, "quote": t, "date": str(p["confirmed"]["at"])[:10]})
     return out
 
 
-def _summary_part(st, scr) -> tuple:
-    """The "since the board" sentences of the current Case summary (placeholders left out), each with where it comes from."""
+def _int(x) -> bool:
+    return isinstance(x, int) and not isinstance(x, bool)
+
+
+def _exact_cite(s) -> dict | None:
+    """The first citation of a Case summary sentence that is exact: a quote, a document and integer page, start and end (an
+    approximate citation, qa.verify near_match, is never proof)."""
+    for c in (s or {}).get("citations") or []:
+        if (isinstance(c, dict) and not c.get("approximate") and str(c.get("quote") or "").strip() and c.get("doc_id")
+                and all(_int(c.get(k)) for k in ("page", "start", "end"))):
+            return c
+    return None
+
+
+def summary_label(v) -> tuple:
+    """(label, status) of a Case summary version: "Case summary, AI draft, not reviewed" for an AI draft (from the version's own label
+    when it has one), "Case summary, reviewed" for a reviewed or approved one, "Case summary, <status>" for any other (flagged). Never a reviewer's name."""
+    status = str(((v or {}).get("review") or {}).get("status") or "ai_draft")
+    if status == "ai_draft":
+        own = " ".join(str((v or {}).get("label") or "").split())
+        return (f"Case summary, {own}" if own and not own.lower().startswith("case summary") else own or SUMMARY_DRAFT_LABEL), status
+    if status in ("reviewed", "approved"):
+        return SUMMARY_REVIEWED_LABEL, status
+    return f"Case summary, {status.replace('_', ' ')}", status  # for example "Case summary, flagged": never read as reviewed
+
+
+def _summary_part(st, scr, docs=None, filenames=()) -> tuple:
+    """The "since the board" sentences of the current Case summary (placeholders left out). A sentence is kept only with an exact
+    citation (see _exact_cite) to a document of this file that is still ready; that citation is its proof. Each kept sentence:
+    {text, where, quote, quote_where, label, status, source{sentence, section, doc_id, page, start, end}}, every text scrubbed, the
+    title through the _title rule (a title that is only a file name becomes the document type)."""
     v = case_summary.current(st)
     if not v:
         return [], ""
+    by_id = {str(d.get("doc_id")): d for d in docs or []} if docs is not None else None
+    label, status = summary_label(v)
     out = []
     for sec in v.get("sections") or []:
         if sec.get("id") != "since":
@@ -324,9 +386,17 @@ def _summary_part(st, scr) -> tuple:
         for s in sec.get("sentences") or []:
             if not isinstance(s, dict) or s.get("fixed") or not str(s.get("text") or "").strip():
                 continue
-            cite = next((c for c in s.get("citations") or [] if isinstance(c, dict) and c.get("doc_id") and c.get("doc_title")), None)
-            where = _where(scr(cite["doc_title"]), cite.get("date")) if cite else _where("Case summary", v.get("built_at"))
-            out.append({"text": scr(s["text"]), "where": where, "source": {"sentence": s.get("id"), "section": "since"}})
+            cite = _exact_cite(s)
+            if not cite:
+                continue
+            doc = by_id.get(str(cite["doc_id"])) if by_id is not None else {}
+            if doc is None:
+                continue  # the cited document is gone, dismissed or not ready: no proof any more
+            title = _title({"doc_title": cite.get("doc_title"), "doc_type": ((doc or {}).get("classification") or {}).get("doc_type")}, set(filenames))
+            where = _where(scr(title), cite.get("date"))
+            out.append({"text": scr(s["text"]), "where": where, "quote": scr(cite["quote"]), "quote_where": where, "label": label,
+                        "status": status, "source": {"sentence": s.get("id"), "section": "since", "doc_id": cite["doc_id"],
+                                                     "page": cite["page"], "start": cite["start"], "end": cite["end"]}})
     return out, str(v.get("built_at") or "")
 
 
@@ -398,7 +468,8 @@ def grounding_norm(s) -> str:
 
 def _lines(p) -> list:
     """The numbered evidence lines (item 7.2 quotes them): quoted facts first (biomarkers, histology, stage, treatments, other), then
-    the Case summary sentences, then the decision fields (kind "decision": shown, never offered as a "why similar" line)."""
+    the decision fields (kind "decision": shown, never offered as a "why similar" line). The Case summary sentences are model
+    written: they are shown on the card with their own quote and label, never as a line here."""
     out = []
 
     def add(kind, text, where, where_full, source, fact=None):
@@ -427,8 +498,6 @@ def _lines(p) -> list:
                 {"record": s["record"], "field": "stage_as_agreed"})
     facts(p["treatments"], "treatment")
     facts(p["other"], "fact")
-    for s in p["outcome_so_far"]["sentences"]:
-        add("summary", s["text"], s["where"], s["where"], s["source"])
     for d in p["decisions"]:
         w, wf = _where("Board record", d["date"]), _where("Board record", d["date"], True)
         for f in DECISION_FIELDS:
@@ -493,7 +562,7 @@ def build_profile(case_id, case=None, state=None) -> dict:
                 seen.add((fid, e["value"], e["doc_id"]))
                 treatments.append(e)
     treatments.sort(key=lambda e: e["date"] or "")
-    sentences, _ = _summary_part(st, scr)
+    sentences, _ = _summary_part(st, scr, docs, filenames)
     p = {"case_id": case_id, "version": VERSION, "signature": signature({**case, "case_id": case_id}, st), "built_at": store.now_iso(),
          "group": group(case), "group_label": group_label(case), "cancer": protocol.case_label(case), "protocol": pid,
          "cancer_name": " ".join(str(case.get("cancer_name") or "").split()), "setting": case.get("setting") or "",
@@ -562,8 +631,27 @@ def _vectors(texts) -> tuple:
     return vecs, len(todo)
 
 
-def _write_index(chunks, vecs) -> None:
-    """index.npz first (a .tmp then os.replace), then index.json: a reader keyed on both mtimes never sees a half pair."""
+def _profiles_sig(pairs) -> str:
+    """sha1 over the sorted "case_id|signature" of a set of profiles: what an index was built from."""
+    return hashlib.sha1(json.dumps(sorted(f"{c}|{g}" for c, g in pairs)).encode()).hexdigest()
+
+
+def _stored_profiles():
+    """(case_id, signature) of every stored profile (a protected id never read)."""
+    out = []
+    d = _profiles_dir()
+    for f in sorted(d.glob("*.json")) if d.exists() else []:
+        if _protected(f.stem):
+            continue
+        p = _load_profile(f.stem)
+        if p and p.get("case_id") == f.stem:
+            out.append((f.stem, str(p.get("signature") or "")))
+    return out
+
+
+def _write_index(chunks, vecs, profiles_sig="") -> None:
+    """index.npz first (a .tmp then os.replace), then index.json: a reader keyed on both mtimes never sees a half pair. `profiles_sig`
+    names the profiles the index holds ("" after a failed embedding: the next ensure() rebuilds)."""
     DIR().mkdir(parents=True, exist_ok=True)
     if vecs:
         m = np.stack([np.asarray(v, dtype=np.float32) for v in vecs])
@@ -578,11 +666,14 @@ def _write_index(chunks, vecs) -> None:
     os.replace(tmp, _index_npz())
     sig = hashlib.sha1(json.dumps(sorted(f"{c['case_id']}|{c['chunk']}|{hashlib.sha1(c['text'].encode()).hexdigest()}" for c in chunks)).encode()).hexdigest()[:16]
     store._write_json(_index_json(), {"version": VERSION, "embed_model": retrieval.EMBED_MODEL, "chunks": chunks, "signature": sig,
-                                      "built_at": store.now_iso()})
+                                      "profiles_sig": profiles_sig, "built_at": store.now_iso()})
 
 
-def _rebuild_index() -> int:
-    chunks = []
+def _rebuild_index() -> tuple:
+    """Rewrite the index from the stored profiles: (number embedded now, "" or the error type). When the embedder fails, index.json
+    still gets the live chunks (an archived or removed file is gone from it at once) with profiles_sig "" and index.npz no vectors,
+    so a search runs on BM25 only and the next ensure() tries again."""
+    chunks, pairs = [], []
     d = _profiles_dir()
     for f in sorted(d.glob("*.json")) if d.exists() else []:
         cid = f.stem
@@ -591,9 +682,15 @@ def _rebuild_index() -> int:
         p = _load_profile(cid)
         if p and p.get("case_id") == cid:
             chunks.extend(_chunks_of(p))
-    vecs, n = _vectors([c["text"] for c in chunks])
-    _write_index(chunks, vecs)
-    return n
+            pairs.append((cid, str(p.get("signature") or "")))
+    try:
+        vecs, n = _vectors([c["text"] for c in chunks])
+    except Exception as e:  # the embedder is down: keep the chunks, no vectors, retry at the next ensure()
+        log.warning("similar: index vectors not built (%s)", type(e).__name__)
+        _write_index(chunks, [], "")
+        return 0, type(e).__name__
+    _write_index(chunks, vecs, _profiles_sig(pairs))
+    return n, ""
 
 
 def _remove(case_id) -> bool:
@@ -611,6 +708,7 @@ def ensure(force=False) -> dict:
     out = {"scanned": 0, "built": 0, "removed": 0, "unchanged": 0, "embedded": 0, "failed": 0}
     with _lock:
         live = set()
+        sigs = {}
         changed = False
         root = config.CASES_DIR
         dirs = sorted(root.iterdir()) if root.exists() else []
@@ -636,11 +734,13 @@ def ensure(force=False) -> dict:
                 old = _load_profile(name)
                 if not force and old and old.get("signature") == sig and old.get("version") == VERSION:
                     live.add(name)
+                    sigs[name] = str(old.get("signature") or "")
                     out["unchanged"] += 1
                     continue
                 p = build_profile(name, case, st)
                 store._write_json(_profile_path(name), p)
                 live.add(name)
+                sigs[name] = str(p.get("signature") or "")
                 out["built"] += 1
                 changed = True
             except Exception as e:  # one broken Case File never stops the scan
@@ -652,33 +752,43 @@ def ensure(force=False) -> dict:
                 f.unlink(missing_ok=True)
                 out["removed"] += 1
                 changed = True
-        if changed or force or not _index_json().exists() or not _index_npz().exists() or _stale_meta():
-            out["embedded"] = _rebuild_index()
+        if (changed or force or not _index_json().exists() or not _index_npz().exists() or _stale_meta()
+                or _stored_meta().get("profiles_sig") != _profiles_sig(sigs.items())):
+            out["embedded"], err = _rebuild_index()
+            if err:
+                out["embed_error"] = err
     return out
 
 
-def _stale_meta() -> bool:
+def _stored_meta() -> dict:
     try:
         meta = store._read_json(_index_json(), None) or {}
     except (ValueError, OSError):
-        return True
-    return meta.get("version") != VERSION or meta.get("embed_model") != retrieval.EMBED_MODEL
+        return {}
+    return meta if isinstance(meta, dict) else {}
+
+
+def _stale_meta() -> bool:
+    meta = _stored_meta()
+    return not meta or meta.get("version") != VERSION or meta.get("embed_model") != retrieval.EMBED_MODEL
 
 
 def forget(case_id) -> None:
     """Remove a Case File from the index at once (archived, deleted, protected): its profile and its chunks, no embedding."""
     with _lock:
+        before = _stored_profiles()
         _remove(case_id)
         if not (_index_json().exists() or _index_npz().exists()):
             return
         meta, m = _read_index()
+        in_step = bool(meta.get("profiles_sig")) and meta.get("profiles_sig") == _profiles_sig(before)
         all_chunks = meta.get("chunks") or []
         keep = [i for i, c in enumerate(all_chunks) if c.get("case_id") != case_id]
-        if m.shape[0] != len(all_chunks):  # the pair does not line up: drop both, the next ensure() rebuilds them
-            for f in (_index_json(), _index_npz()):
-                f.unlink(missing_ok=True)
+        if m.shape[0] != len(all_chunks):  # the pair does not line up (or no vectors): keep the chunks, the next ensure() rebuilds
+            _write_index([all_chunks[i] for i in keep], [], "")
             return
-        _write_index([all_chunks[i] for i in keep], [m[i] for i in keep])
+        _write_index([all_chunks[i] for i in keep], [m[i] for i in keep],
+                     _profiles_sig([x for x in before if x[0] != case_id]) if in_step else "")
 
 
 def job(now=None) -> dict:
@@ -711,14 +821,15 @@ def _read_index() -> tuple:
 
 def load_index() -> tuple:
     """(index.json as a dict, the vectors aligned with its chunks), cached in memory and reloaded when the files change on disk."""
-    try:
-        key = (str(_index_json()), _index_json().stat().st_mtime_ns, _index_npz().stat().st_mtime_ns)
-    except OSError:
-        return {"chunks": []}, np.zeros((0, 0), dtype=np.float32)
-    if _loaded["key"] != key:
-        meta, m = _read_index()
-        _loaded.update(key=key, meta=meta, matrix=m)
-    return _loaded["meta"], _loaded["matrix"]
+    with _lock:  # read and cached as one pair: never the meta of one load with the matrix of another
+        try:
+            key = (str(_index_json()), _index_json().stat().st_mtime_ns, _index_npz().stat().st_mtime_ns)
+        except OSError:
+            return {"chunks": []}, np.zeros((0, 0), dtype=np.float32)
+        if _loaded["key"] != key:
+            meta, m = _read_index()
+            _loaded.update(key=key, meta=meta, matrix=m)
+        return _loaded["meta"], _loaded["matrix"]
 
 
 # ---- the candidates (item 7.1; item 7.2 orders them with the reasoner) ----------------------------------------------------------------
@@ -753,6 +864,15 @@ def _bm25(tok, q, k1=1.4, b=0.75):
     return scores
 
 
+def check_words(case, words) -> str:
+    """The doctor's words, cleaned: published.check_terms (this patient's identifiers), then refused (PublishedError, 400) when they
+    carry a day-level date, a phone number, an email or an identifier-like token of anybody (the scrubber's patterns)."""
+    w = published.check_terms(case, words)[:WORDS_MAX]
+    if general_id(w):
+        raise published.PublishedError(WORDS_ID_REASON)
+    return w
+
+
 def candidates(case_id, words="", n=TOP_N, profile=None) -> dict:
     """The past Case Files of the same cancer group most like this one, by BM25 plus dense vectors fused by Reciprocal Rank Fusion
     (as search.CaseIndex.search). Never the file itself, a file of the same patient (an identifier in common) or a linked file.
@@ -763,7 +883,7 @@ def candidates(case_id, words="", n=TOP_N, profile=None) -> dict:
     if not isinstance(case, dict):
         raise ValueError("not_found")
     case = {**case, "case_id": case_id}
-    w = published.check_terms(case, words)[:WORDS_MAX] if str(words or "").strip() else ""
+    w = check_words(case, words) if str(words or "").strip() else ""
     ensure()
     src = profile or query_profile(case_id)
     g = src.get("group")
@@ -790,9 +910,8 @@ def candidates(case_id, words="", n=TOP_N, profile=None) -> dict:
             rows.append(i)
     n_in = len({chunks[i]["case_id"] for i in rows})
     note = ""
-    if n_in < FEW:
-        note = ("No past Case File of this cancer group has a recorded decision." if n_in == 0 else
-                f"Only {n_in} past Case File{'s' if n_in != 1 else ''} of this cancer group {'have' if n_in != 1 else 'has'} a recorded decision.")
+    if n_in < FEW:  # never a count (contract 8.4)
+        note = NOTE_NONE if n_in == 0 else NOTE_FEW
     if not rows:
         return {"group": g, "group_label": src.get("group_label") or "", "candidates": [], "n_in_group": 0, "note": note}
     tok = [retrieval.tokenize(chunks[i]["text"]) for i in rows]
@@ -803,9 +922,12 @@ def candidates(case_id, words="", n=TOP_N, profile=None) -> dict:
     if w:
         arrays.append(("lex", _bm25(tok, w)))
     if m.shape[0] == len(chunks) and m.size:
-        qv = np.asarray(retrieval._embed([q], prefix=QUERY_PREFIX)[0], dtype=np.float32)
-        nq = float(np.linalg.norm(qv)) or 1.0
-        arrays.append(("sem", m[rows] @ (qv / nq)))
+        try:
+            qv = np.asarray(retrieval._embed([q], prefix=QUERY_PREFIX)[0], dtype=np.float32)
+            nq = float(np.linalg.norm(qv)) or 1.0
+            arrays.append(("sem", m[rows] @ (qv / nq)))
+        except Exception as e:  # the embedder is down: BM25 only, never an error
+            log.warning("similar: query not embedded (%s)", type(e).__name__)
     rr = np.zeros(len(rows))
     for kind, arr in arrays:
         order = np.argsort(-arr, kind="stable")
@@ -834,7 +956,7 @@ import time
 
 from . import grounding, llm, org
 
-PROMPT_VERSION = "similar-v1"
+PROMPT_VERSION = "similar-v2"
 MODEL_NAME = "Gemma-4-31B"
 MODEL_LINE = "Gemma-4-31B, a non-medical model; it only orders the list and picks quoted lines"
 ORDER_NOTE_MODEL = "Listed in order of likeness as judged by Gemma-4-31B (non-medical). The order is not a score."
@@ -850,6 +972,7 @@ PROTECTED_REASON = "This Case File is not searched from."
 NO_GROUP_REASON = "No cancer group on this file: set the protocol or the cancer name first."
 ADMIN_REASON = "A Vaidyx admin does not search Case Files."
 SCOPE_REASON = "Only a doctor with full access to this Case File can search; a window opened with a reason cannot."
+ARCHIVED_REASON = access.ARCHIVED_MESSAGE + "."
 LINES_LATE = "The quoted lines took too long this time; the files are listed without them."
 MATCH_FIELDS = ("cancer group", "setting", "age band", "sex", "stage as recorded")
 _DECISIONS_MARK = "Board decisions: "
@@ -861,7 +984,7 @@ ORDER_SCHEMA = {"type": "object", "required": ["order"], "properties": {
     "order": {"type": "array", "items": {"type": "string", "description": "an id of the list, like P3"}}}}
 LINES_SYSTEM = ("You compare the recorded lines of two Case Files. List A holds lines of the current Case File, list B lines of a past Case "
                 "File. Pair a line of A with a line of B only when both are about the same kind of fact (the same marker, the histology, "
-                "the grade, the stage, the treatments received, the course since the board). Put a pair under \"similar\" when the two "
+                "the grade, the stage, the treatments received). Put a pair under \"similar\" when the two "
                 "lines agree and under \"differs\" when they say different things. Use only the lines given. Do not judge any treatment, "
                 "do not say which is better, do not say what to do. Answer with the ids only: at most three similar pairs and two differs pairs.")
 _PAIR = {"type": "object", "properties": {"a": {"type": "string", "description": "an id of list A, like A3"},
@@ -939,14 +1062,15 @@ def _as_permutation(answer, n) -> list | None:
 async def order(src, cands, words="", *, info=None, audit=None) -> tuple:
     """(case ids in order, "model" | "text"). `cands` are candidate profiles in RRF order. The reasoner sees them three times (the RRF
     order, its reverse, a seeded shuffle) under the ids P1..Pn of that listing, never a Case File id; the answers that are a permutation
-    are merged by median rank per candidate, ties by the RRF rank. No valid answer: the RRF order and "text". A model order is cached
+    are merged by median rank per candidate, ties by the RRF rank. No valid answer, or nothing to order (0 or 1 candidate, no call):
+    the RRF order and "text". A model order is cached
     by the profiles' signatures, the words, the prompt version and the model (ids only, never a text). `info` (a dict) receives
     {fallback, cached, valid}."""
     info = {} if info is None else info
     info.update(fallback="", cached=False, valid=0)
     ids = [str(c["case_id"]) for c in cands]
     if len(ids) < 2:
-        return ids, "model"  # nothing to order: no call
+        return ids, "text"  # nothing to order: no call, and never called a model order
     key = _order_key(src, cands, words)
     hit = _cache_get(key, ids)
     if hit:
@@ -986,8 +1110,8 @@ async def order(src, cands, words="", *, info=None, audit=None) -> tuple:
 # ---- the quoted lines (research 4.6) ----------------------------------------------------------------------------------------------
 
 def _source(case_id) -> dict | None:
-    """One Case File read again now, for checking quotes against their sources: its documents (confirmations applied), board records,
-    the current Case summary's sentences and the confirmed draft stage. None for a missing file; a protected id raises."""
+    """One Case File read again now, for checking quotes against their sources: its documents (confirmations applied), board records
+    and the confirmed draft stage. None for a missing file; a protected id raises."""
     _guard(case_id)
     case = store.get_case(case_id)
     if not isinstance(case, dict):
@@ -996,18 +1120,13 @@ def _source(case_id) -> dict | None:
     _guard(case.get("case_id"))
     st = store.get_state(case_id)
     docs = {str(d.get("doc_id")): d for d in rules.case_docs(case_id, st) if d.get("state") == "ready" and not d.get("dismissed")}
-    sents = {}
-    for sec in (case_summary.current(st) or {}).get("sections") or []:
-        for s in sec.get("sentences") or []:
-            if isinstance(s, dict) and s.get("id"):
-                sents[(sec.get("id"), s.get("id"))] = str(s.get("text") or "")
     return {"case": case, "pats": _scrub_patterns(case), "docs": docs, "records": {r.get("id"): r for r in _records(st)},
-            "sentences": sents, "staging": [s["quote"] for s in _staging(st)]}
+            "staging": [s["quote"] for s in _staging(st)]}
 
 
 def _verified(line, src) -> bool:
     """The stored (scrubbed) line text equals, after grounding.norm, its source read now and scrubbed the same way: a report line at
-    its page and offsets, a board record field, a Case summary sentence, the confirmed draft stage. Exact; no fuzzy score."""
+    its page and offsets, a board record field, the confirmed draft stage. Exact; no fuzzy score."""
     if not src:
         return False
     want = grounding.norm(str(line.get("text") or ""))
@@ -1030,8 +1149,6 @@ def _verified(line, src) -> bool:
     if s.get("record"):
         rec = src["records"].get(s["record"])
         return bool(rec) and same(" ".join(str(rec.get(s.get("field") or "") or "").split()))
-    if s.get("sentence"):
-        return (s.get("section"), s["sentence"]) in src["sentences"] and same(src["sentences"][(s.get("section"), s["sentence"])])
     if s.get("staging"):
         return any(same(q) for q in src["staging"])
     return False
@@ -1055,7 +1172,7 @@ def _carries_id(text, case) -> bool:
                     return True
             elif len(part) >= 5 and part in low:
                 return True
-    return bool(_LONG_DIGITS.search(t) or _DAY_DATE.search(t))
+    return general_id(t)
 
 
 def _numbered(p, prefix) -> dict:
@@ -1067,8 +1184,6 @@ def _line_label(line, cat) -> str:
     k = line.get("kind")
     if k == "stage":
         return "stage"
-    if k == "summary":
-        return "since the board"
     if k == "treatment":
         return "treatment"
     return (cat.get(line.get("fact")) or {}).get("label") or str(line.get("fact") or "fact")
@@ -1078,7 +1193,7 @@ def _about(a, b, cat) -> str | None:
     """What a pair is about, or None when the two lines are not the same kind of fact (the model cannot pair unrelated lines)."""
     if a.get("kind") == "decision" or b.get("kind") == "decision":
         return None
-    for k, about in (("stage", "stage"), ("treatment", "treatment"), ("summary", "since the board")):
+    for k, about in (("stage", "stage"), ("treatment", "treatment")):
         if a.get("kind") == k and b.get("kind") == k:
             return about
     if a.get("fact") and a.get("fact") == b.get("fact"):
@@ -1093,6 +1208,35 @@ def _lines_messages(la, lb, cat) -> list:
     return [{"role": "system", "content": LINES_SYSTEM}, {"role": "user", "content": user}]
 
 
+def _lines_key(src, past) -> str:
+    return _sha(json.dumps([(src or {}).get("signature"), (past or {}).get("signature"), PROMPT_VERSION, MODEL_NAME]))
+
+
+def _lines_cache_path(key):
+    return _cache_dir() / f"lines-{key}.json"
+
+
+def _pair_ids(ans) -> dict | None:
+    """The model's answer as ids only ({similar: [{a, b}], differs: [...]}, short strings), or None when it is not that shape."""
+    if not isinstance(ans, dict) or not isinstance(ans.get("similar", []), list) or not isinstance(ans.get("differs", []), list):
+        return None
+    out = {}
+    for kind in ("similar", "differs"):
+        out[kind] = [{"a": str(x.get("a") or "")[:8], "b": str(x.get("b") or "")[:8]} if isinstance(x, dict) else {"a": "", "b": ""}
+                     for x in (ans.get(kind) or [])[:LINES_MAX]]
+    return out
+
+
+def _lines_cache_get(key) -> dict | None:
+    try:
+        d = store._read_json(_lines_cache_path(key), None)
+    except (ValueError, OSError):
+        return None
+    if not isinstance(d, dict) or d.get("prompt_version") != PROMPT_VERSION or d.get("model") != MODEL_NAME:
+        return None
+    return _pair_ids(d.get("picks"))
+
+
 def _empty_picks(dropped=0) -> dict:
     return {"similar": [], "differs": [], "no_reasons": True, "dropped": dropped}
 
@@ -1102,19 +1246,29 @@ async def pick_lines(src, past, *, sources=None, audit=None) -> dict:
     ids from the two numbered lists (decision lines left out of both); code keeps a pair only when both ids exist, both quotes match
     their sources read now, the past line names nobody, a "differs" pair really differs, and both lines are the same kind of fact.
     {similar, differs, no_reasons (fewer than two lines in all), dropped (pairs refused by the checks)}. A model error or an invalid
-    answer gives no lines. `sources` caches the re-read files by Case File id."""
+    answer gives no lines. `sources` caches the re-read files by Case File id. The model's id answer is cached under
+    cache/lines-<key>.json, keyed by the two profiles' signatures, the prompt version and the model (ids only, never a text; a model
+    error or an invalid answer is never cached); on a hit no call is made and every check below runs again on the sources read now."""
     la, lb = _numbered(src, "A"), _numbered(past, "B")
     if not la or not lb:
         return _empty_picks()
     cat = protocol.facts()
-    try:
-        ans = await llm.chat("reasoner", _lines_messages(la, lb, cat), json_schema=LINES_SCHEMA, max_tokens=300, temperature=0,
-                             purpose="similar_lines", audit=audit)
-    except Exception as e:  # the model is down or answered no JSON: the card is shown without quoted reasons
-        log.warning("similar: lines not picked (%s)", type(e).__name__)
-        return _empty_picks()
-    if not isinstance(ans, dict) or not isinstance(ans.get("similar", []), list) or not isinstance(ans.get("differs", []), list):
-        return _empty_picks()
+    key = _lines_key(src, past)
+    ans = _lines_cache_get(key)
+    if ans is None:
+        try:
+            raw = await llm.chat("reasoner", _lines_messages(la, lb, cat), json_schema=LINES_SCHEMA, max_tokens=300, temperature=0,
+                                 purpose="similar_lines", audit=audit)
+        except Exception as e:  # the model is down or answered no JSON: the card is shown without quoted reasons
+            log.warning("similar: lines not picked (%s)", type(e).__name__)
+            return _empty_picks()
+        ans = _pair_ids(raw)
+        if ans is None:
+            return _empty_picks()
+        try:
+            store._write_json(_lines_cache_path(key), {"picks": ans, "prompt_version": PROMPT_VERSION, "model": MODEL_NAME, "at": store.now_iso()})
+        except OSError as e:
+            log.warning("similar: lines cache not written (%s)", e)
     sources = {} if sources is None else sources
 
     async def source(cid):
@@ -1215,8 +1369,10 @@ def card(past, src, picks, open_info) -> dict:
                        "outcome_label": d.get("outcome_label") or "", "intent": d.get("intent") or "", "intent_label": d.get("intent_label") or "",
                        "text": d.get("text") or "", "modalities": [str(m) for m in d.get("modalities") or []],
                        "stage_as_agreed": d.get("stage_as_agreed") or ""} for d in past.get("decisions") or []],
-        "outcome_so_far": {"sentences": [{"text": s.get("text") or "", "where": s.get("where") or ""}
-                                         for s in (past.get("outcome_so_far") or {}).get("sentences") or []],
+        "outcome_so_far": {"sentences": [{"text": s.get("text") or "", "where": s.get("where") or "", "quote": s.get("quote") or "",
+                                          "quote_where": s.get("quote_where") or s.get("where") or "", "label": s.get("label") or SUMMARY_DRAFT_LABEL}
+                                         for s in (past.get("outcome_so_far") or {}).get("sentences") or []
+                                         if isinstance(s, dict) and str(s.get("quote") or "").strip()],
                            "later_records": (past.get("outcome_so_far") or {}).get("later_records") or ""},
         "similar": sim, "differs": dif,
         "matched_by": _matched_by(past, src or {}) if no_reasons else None, "no_reasons": no_reasons,
@@ -1233,7 +1389,8 @@ def _weaker(c) -> bool:
 def open_info(rl, past_case_id, this_case_id) -> dict:
     """How this person may open a past Case File: FULL, REQUESTS or READ (a window already open) is "normal"; no access but a doctor who
     may open it with a reason is "with_reason" (reason and via pre-filled; the break-glass route audits itself); else "refused". A past
-    file that is no longer eligible (archived, unlisted, protected, missing) raises ValueError("not_found")."""
+    file that is no longer eligible (archived, unlisted, protected, missing), of another cancer group, of the same patient or linked
+    either way raises ValueError("not_found")."""
     pid = str(past_case_id or "").strip()
     if not pid or _protected(pid) or pid == str(this_case_id or ""):
         raise ValueError("not_found")
@@ -1246,6 +1403,13 @@ def open_info(rl, past_case_id, this_case_id) -> dict:
         raise ValueError("not_found")
     past = {**past, "case_id": pid}
     if not eligible(past, store.get_state(pid), exclude=(this_case_id,)):
+        raise ValueError("not_found")
+    this = store.get_case(str(this_case_id or "")) if this_case_id and not _protected(this_case_id) else None
+    if not isinstance(this, dict):
+        raise ValueError("not_found")
+    this = {**this, "case_id": str(this_case_id)}
+    # what candidates() checks: the same cancer group, never the same patient (an identifier in common), never a linked file
+    if group(past) != group(this) or (_ids(past) & _ids(this)) or pid in _linked(this) or this["case_id"] in _linked(past):
         raise ValueError("not_found")
     out = {"how": "refused", "scope": None, "reason": "", "via": "", "label": LABEL}
     sc = access.scope(rl, past)
@@ -1279,7 +1443,9 @@ def info(case_id, rl) -> dict:
         out["reason"] = PROTECTED_REASON
         return out
     out["cancer_group"], out["group_label"] = group(case) or "", group_label(case)
-    if not out["cancer_group"]:
+    if access.is_archived(case):
+        out["reason"] = ARCHIVED_REASON
+    elif not out["cancer_group"]:
         out["reason"] = NO_GROUP_REASON
     elif (rl or {}).get("vaidyx_admin"):
         out["reason"] = ADMIN_REASON
@@ -1313,7 +1479,7 @@ async def search(case_id, words, user, rl) -> dict:
     try:
         raw = " ".join(str(words or "").split())
         try:
-            w = published.check_terms(case, raw)[:WORDS_MAX] if raw else ""
+            w = check_words(case, raw) if raw else ""
         except published.PublishedError:
             ev["fallback"] = "bad_words"  # the refused words are never written down
             raise

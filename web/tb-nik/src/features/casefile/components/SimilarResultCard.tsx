@@ -1,7 +1,9 @@
 // One past Case File in the Similar Case Files list (night-v3 item 7.3, docs/night-v3/research/07_similar_cases.md 4.7 and 8.4): the
 // label "Past Case File, not advice for this patient" first, the cancer, the stage with where it was written, the key values with their
 // quotes, the board decisions as written by the board, the outcome so far, and the quoted "why similar" and "how it differs" lines.
-// No number, rank, percent, bar or stars: the order of the list is the only order.
+// No number, rank, percent, bar or stars: the order of the list is the only order. A Case summary sentence of the past file is written by
+// the model: it shows as plain text with its label ("Case summary, AI draft, not reviewed") and, under it, the verified quote it rests on
+// (Phase 7 review, S1).
 import { FolderOpen } from "lucide-react";
 import type { SimilarLine, SimilarResult } from "../types";
 import { LoadingButton, StatusChip } from "./common";
@@ -111,7 +113,20 @@ export function SimilarResultCard({ r, onOpen, opening, message }: { r: SimilarR
       <Part title="Outcome so far">
         {outcome.sentences.length || outcome.later_records ? (
           <>
-            {outcome.sentences.length ? <ul className="space-y-1">{outcome.sentences.map((s, i) => <li key={i}><Quoted text={s.text} where={s.where} /></li>)}</ul> : null}
+            {outcome.sentences.length ? (
+              <ul className="space-y-1.5">
+                {outcome.sentences.map((s, i) => (
+                  <li key={i} className="space-y-0.5 text-sm" data-testid="similar-outcome">
+                    <span className="block">
+                      <span className="text-foreground">{s.text}</span>
+                      {s.label ? <> <StatusChip kind="muted" className="whitespace-normal">{s.label}</StatusChip></> : null}
+                      {s.where ? <> <span className="text-xs text-muted-foreground">({s.where})</span></> : null}
+                    </span>
+                    {s.quote ? <Quoted text={s.quote} where={s.quote_where} /> : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             {outcome.later_records ? <p className="text-xs text-muted-foreground">{outcome.later_records}</p> : null}
           </>
         ) : <p className="text-sm text-muted-foreground">No records after the board decision yet</p>}
@@ -119,11 +134,15 @@ export function SimilarResultCard({ r, onOpen, opening, message }: { r: SimilarR
 
       <Part title="Why similar">
         {r.similar.length ? <Lines lines={r.similar.slice(0, 3)} testId="similar-why" /> : null}
-        {r.no_reasons || !r.similar.length ? (
+        {r.no_reasons ? (
           <div className="space-y-1">
             <StatusChip kind="muted">No quoted reasons found</StatusChip>
             {(r.matched_by ?? []).length ? <p className="text-sm text-muted-foreground">Matched by recorded fields: {r.matched_by!.join(", ")}</p> : null}
           </div>
+        ) : !r.similar.length ? (
+          <p className="text-sm text-muted-foreground" data-testid="similar-why-none">
+            {r.differs.length ? "No line that agrees was found. See How it differs." : "No quoted line was found."}
+          </p>
         ) : null}
       </Part>
 
