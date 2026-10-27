@@ -3,6 +3,9 @@
 // connection bars, a hand when it is raised, a reaction for a moment. Members who are in the room without a laptop still get a
 // tile from the attendance list. LiveKit carries the video and audio. The call shell's strip and stage (call/Strip.tsx,
 // call/StageContent.tsx) build on TileFrame and LiveVideo; TileGrid stays for the older pages.
+// Night-v3 5.5: `big` tiles (the room screen, a person on the stage) carry the name at 20 px; `dense` tiles (the room screen's two
+// columns, the phone's landscape column) keep the name, the microphone, the hand and the connection and leave the department and
+// the badges to the label.
 import { useMemo, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { RoomAudioRenderer, RoomContext, VideoTrack, isTrackReference, useIsSpeaking, useTracks, type TrackReference } from "@livekit/components-react";
@@ -82,7 +85,7 @@ function plainLabel(person: TilePerson, micOn?: boolean | null): string {
   return `${person.name}${person.department ? `, ${person.department}` : ""}${person.remote ? ", remote" : ", in the room"}${micOn === false ? ", microphone off" : ""}${person.hand ? ", hand raised" : ""}`;
 }
 
-export function TileFrame({ person, speaking, micOn, children, size, className, label, quality, qualityMine, reaction, menu, chip, big, testId = "tile" }: {
+export function TileFrame({ person, speaking, micOn, children, size, className, label, quality, qualityMine, reaction, menu, chip, big, dense, testId = "tile" }: {
   person: TilePerson;
   speaking?: boolean;
   micOn?: boolean | null;
@@ -100,6 +103,8 @@ export function TileFrame({ person, speaking, micOn, children, size, className, 
   chip?: ReactNode;
   /** Large type (the room screen, a person on the stage). */
   big?: boolean;
+  /** A small tile: the department and the badges stay in the label only. */
+  dense?: boolean;
   testId?: string;
 }) {
   return (
@@ -115,15 +120,15 @@ export function TileFrame({ person, speaking, micOn, children, size, className, 
       {chip ? <div className="absolute left-2 top-2 z-10 flex items-center gap-1">{chip}</div> : null}
       <AnimatePresence>{reaction ? <ReactionBadge key={reaction.word} glyph={reaction.glyph} word={reaction.word} big={big} /> : null}</AnimatePresence>
       {menu ? <div className="absolute right-1.5 top-1.5 z-10 opacity-100 transition-opacity lg:opacity-0 lg:group-hover/tile:opacity-100 lg:group-focus-within/tile:opacity-100 [&:has([data-state=open])]:opacity-100">{menu}</div> : null}
-      <div className={cn("absolute inset-x-0 bottom-0 flex items-center gap-1.5 bg-gradient-to-t from-black/75 to-transparent px-2 pb-1.5 pt-5", big && "px-3 pb-2.5")} aria-hidden>
+      <div className={cn("absolute inset-x-0 bottom-0 flex items-center gap-1.5 bg-gradient-to-t from-black/75 to-transparent px-2 pb-1.5 pt-5", big && !dense && "px-3 pb-2.5", big && dense && "px-2 pb-1.5")} aria-hidden>
         {micOn === false ? <MicOff className={cn("shrink-0 text-white/90", big ? "size-5" : "size-3.5")} /> : micOn ? <Mic className={cn("shrink-0 text-white/90", big ? "size-5" : "size-3.5", speaking && "text-ok")} /> : null}
         {speaking ? <SpeakingIcon className={big ? "size-5" : undefined} /> : null}
-        <span className={cn("min-w-0 truncate font-medium text-white", big ? "text-lg" : "text-xs")}>{person.name}{person.local ? " (you)" : ""}</span>
-        {person.department ? <span className={cn("hidden min-w-0 truncate text-white/70 sm:inline", big ? "text-base" : "text-[11px]")}>· {person.department}</span> : null}
-        {(person.badges ?? []).map((b) => <span key={b} className={cn("hidden shrink-0 rounded px-1 font-medium sm:inline", big ? "text-sm" : "text-[10px]", b === "presenter" ? "bg-primary/80 text-primary-foreground" : "bg-white/15 text-white/90")}>{BADGE_WORD[b]}</span>)}
+        <span className={cn("min-w-0 truncate font-medium text-white", big ? "text-xl" : "text-xs")} data-testid="tile-name">{person.name}{person.local ? " (you)" : ""}</span>
+        {person.department && !dense ? <span className={cn("hidden min-w-0 truncate text-white/70 sm:inline", big ? "text-base" : "text-[11px]")}>· {person.department}</span> : null}
+        {dense ? null : (person.badges ?? []).map((b) => <span key={b} className={cn("hidden shrink-0 rounded px-1 font-medium sm:inline", big ? "text-sm" : "text-[10px]", b === "presenter" ? "bg-primary/80 text-primary-foreground" : "bg-white/15 text-white/90")}>{BADGE_WORD[b]}</span>)}
         <span className="flex-1" />
         {person.roomScreen ? <MonitorPlay className="size-3.5 text-white/80" /> : null}
-        {!person.remote && !person.roomScreen ? <span className={cn("rounded bg-white/15 px-1 text-white/90", big ? "text-sm" : "text-[10px]")}>room</span> : null}
+        {!person.remote && !person.roomScreen && !dense ? <span className={cn("rounded bg-white/15 px-1 text-white/90", big ? "text-sm" : "text-[10px]")}>room</span> : null}
         <QualityBars quality={quality} mine={qualityMine} />
         {person.hand ? <span className={cn("inline-flex h-5 items-center gap-0.5 rounded-full bg-warn px-1 text-white", big && "h-7 px-2")}><Hand className={big ? "size-4" : "size-3"} />{person.handOrder ? <span className={cn("font-bold leading-none", big ? "text-sm" : "text-[10px]")}>{person.handOrder}</span> : null}</span> : null}
       </div>

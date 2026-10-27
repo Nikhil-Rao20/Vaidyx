@@ -3,11 +3,12 @@
 // Close) that also carries what the five-button bar leaves out: reactions, the panels, the card and Leave (red, last). The phone's
 // Coordinator button opens the same sheet with the coordinator's part only: the case, the timer, Previous, Next case, End case,
 // the Decision form, the records, the waiting room and End meeting.
+// Night-v3 5.5: "Save data" in both (camera off, the remote video at the lower quality, remembered for this tab).
 import { useContext, useState, type ReactNode } from "react";
-import { Check, ChevronLeft, ChevronRight, Copy, DoorOpen, Ellipsis, Keyboard, LayoutGrid, LogOut, Maximize2, Minimize2, MonitorCheck, Pause, Phone, Play, RotateCcw, Settings2, ShieldCheck, StopCircle, Volume2, VolumeX, Vote } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Copy, DoorOpen, Ellipsis, Gauge, Keyboard, LayoutGrid, LogOut, Maximize2, Minimize2, MonitorCheck, Pause, Phone, Play, RotateCcw, Settings2, ShieldCheck, StopCircle, Volume2, VolumeX, Vote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import type { MeetingState } from "@/lib/live";
@@ -43,6 +44,9 @@ export function phoneCount(s: MeetingState): number {
   return (s.meeting.room_phone ?? s.meeting.phone ? 1 : 0) + s.attendance.filter((a) => a.phone).length;
 }
 
+/** The note under "Save data" while it is on. */
+export const SAVE_DATA_NOTE = "Your camera stays off and the stage stays at the lower quality, to use less mobile data.";
+
 const LAYOUT_WORD: Record<LayoutKind, string> = { auto: "Auto", speaker: "Speaker", grid: "Grid", spotlight: "Spotlight" };
 
 /** The layouts offered: Auto, Speaker and Grid on a laptop (Auto and Grid on a phone), Spotlight while one is set. */
@@ -53,9 +57,9 @@ export function layoutChoices(phone: boolean, spotlightSet: boolean): LayoutKind
 }
 
 /** A row of the phone sheet: 44 px high, an icon and a plain word. */
-function SheetRow({ icon: Icon, children, onClick, tone, disabled, testId, pressed, hint }: { icon: typeof Phone; children: ReactNode; onClick: () => void; tone?: "danger"; disabled?: boolean; testId?: string; pressed?: boolean; hint?: string }) {
+function SheetRow({ icon: Icon, children, onClick, tone, disabled, testId, pressed, hint, describedBy }: { icon: typeof Phone; children: ReactNode; onClick: () => void; tone?: "danger"; disabled?: boolean; testId?: string; pressed?: boolean; hint?: string; describedBy?: string }) {
   return (
-    <button type="button" onClick={onClick} disabled={disabled} aria-pressed={pressed} data-testid={testId} className={cn("flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm outline-none hover:bg-stage-raised focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40", tone === "danger" ? "bg-[#d64545] font-semibold text-white hover:bg-[#c23b3b]" : "text-stage-fg")}>
+    <button type="button" onClick={onClick} disabled={disabled} aria-pressed={pressed} aria-describedby={describedBy} data-testid={testId} className={cn("flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm outline-none hover:bg-stage-raised focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40", tone === "danger" ? "bg-[#d64545] font-semibold text-white hover:bg-[#c23b3b]" : "text-stage-fg")}>
       <Icon className="size-5 shrink-0" aria-hidden /><span className="min-w-0 flex-1">{children}</span>{hint ? <span className="shrink-0 text-xs text-stage-muted">{hint}</span> : null}
       {pressed ? <Check className="size-4 shrink-0" aria-hidden /> : null}
     </button>
@@ -113,6 +117,11 @@ export function MoreMenu({ mode = "more" }: { mode?: "more" | "coordinator" }) {
   const voices = c.agentVoices;
   const phones = phoneCount(c.state);
   const presence = (m: "room" | "remote") => { if ((m === "room") !== c.inRoom) void c.actions.presence(m).catch(() => {}); };
+  const toggleSaveData = () => {
+    const on = !x.saveData;
+    x.setSaveData(on);
+    c.announce(on ? "Save data is on: your camera is off and the stage stays at the lower quality." : "Save data is off.");
+  };
 
   const dialogs = (
     <>
@@ -172,6 +181,8 @@ export function MoreMenu({ mode = "more" }: { mode?: "more" | "coordinator" }) {
                   </div>
                   <SheetRow icon={c.fullscreen ? Minimize2 : Maximize2} onClick={c.toggleFullscreen}>{c.fullscreen ? "Leave full screen" : "Full screen"}</SheetRow>
                   <SheetRow icon={voices ? VolumeX : Volume2} onClick={() => c.setAgentVoices(!voices)}>{voices ? "Mute agent voices for me" : "Unmute agent voices"}</SheetRow>
+                  <SheetRow icon={Gauge} onClick={toggleSaveData} pressed={x.saveData} testId="save-data" describedBy={x.saveData ? "save-data-note" : undefined}>Save data</SheetRow>
+                  {x.saveData ? <p id="save-data-note" className="px-11 pb-1 text-xs text-stage-muted" data-testid="save-data-note">{SAVE_DATA_NOTE}</p> : null}
                   <SheetRow icon={Keyboard} onClick={() => { close(); x.openShortcuts(); }}>Show shortcuts</SheetRow>
                   <SheetRow icon={Phone} onClick={() => setNumbers(true)} testId="call-button" hint={phones ? `${phones} number${phones === 1 ? "" : "s"}` : undefined}>Call by phone</SheetRow>
                   {member ? (
@@ -212,6 +223,8 @@ export function MoreMenu({ mode = "more" }: { mode?: "more" | "coordinator" }) {
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={c.toggleFullscreen}>{c.fullscreen ? <Minimize2 /> : <Maximize2 />}{c.fullscreen ? "Leave full screen" : "Full screen"}<DropdownMenuShortcut>F</DropdownMenuShortcut></DropdownMenuItem>
           <DropdownMenuItem onSelect={() => c.setAgentVoices(!voices)}>{voices ? <VolumeX /> : <Volume2 />}{voices ? "Mute agent voices for me" : "Unmute agent voices"}</DropdownMenuItem>
+          <DropdownMenuCheckboxItem checked={x.saveData} onCheckedChange={toggleSaveData} onSelect={(e) => e.preventDefault()} data-testid="save-data">Save data</DropdownMenuCheckboxItem>
+          {x.saveData ? <p className="px-2 pb-1.5 pl-8 text-xs text-muted-foreground" data-testid="save-data-note">{SAVE_DATA_NOTE}</p> : null}
           <DropdownMenuItem onSelect={x.openShortcuts}><Keyboard />Show shortcuts<DropdownMenuShortcut>?</DropdownMenuShortcut></DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setNumbers(true)} data-testid="call-button" aria-label={phones ? `Call by phone (${phones} number${phones === 1 ? "" : "s"})` : "Call by phone"}><Phone />Call by phone{phones ? <DropdownMenuShortcut>{phones}</DropdownMenuShortcut> : null}</DropdownMenuItem>
           {member ? (

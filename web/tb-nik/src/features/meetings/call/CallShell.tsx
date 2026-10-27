@@ -4,6 +4,11 @@
 // decision strip, one side panel, the control bar, the More menu and the dialogs. The room variant has no control bar: a small bar
 // at the bottom right (room microphone and camera, the summary column, the agent voices, full screen, close).
 // Voice (night-v3 4.4): while the person dictates in the call, the call microphone is muted and comes back after (useDictationGuard).
+// Phone and room screen (night-v3 5.5, research/04 sections 6.4, 6.5 and 7): on a phone the top bar and the control bar fade after
+// 4 s without a touch and come back on a tap (never while a panel, a sheet or a dialog is open, the hand is raised, the person
+// dictates or a screen is shared; the layout keeps its place), the decision strip is one line that opens on a tap, and in landscape
+// the strip is a column at the right edge. The room screen (a projector, 1920 x 1080) has large type, a compact agenda column, at
+// most six remote tiles with "+n more", the latest two questions, nothing that scrolls the page, and a wake lock while it is open.
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -14,7 +19,7 @@ import { handUsers, type AgentInfo, type LiveEvent, type LiveStatus, type Meetin
 import type { Me } from "@/lib/session";
 import { useVideoRoom, type JoinChoice } from "@/lib/video";
 import { useDictationGuard } from "@/hooks/useDictationGuard";
-import { useIsDesktop } from "@/hooks/useMediaQuery";
+import { useIsDesktop, useMediaQuery } from "@/hooks/useMediaQuery";
 import { SkeletonLines, errorText, useAnnounce } from "@/features/casefile/components/common";
 import { admit, allowPresent, askQuestion, endCase as endCaseCall, getSlides, openOnScreen, present, raiseHand, sendChat, sendReaction, setCurrent, setPresenting, setSpotlight, timer as timerCall } from "../api";
 import { CardDialog } from "../components/CardDialog";
@@ -23,7 +28,7 @@ import { DecisionStrip, SlideDots, StageFrame } from "../components/Stage";
 import { QuestionsList, SlideContent } from "../components/shared";
 import { CallContext, useCall } from "./context";
 import type { CallActions, CallCtx, CallVariant, CallVideo, ReactionKind } from "./types";
-import { ShellContext, useCallState, useShortcuts, type ShellExtras } from "./useCallState";
+import { ShellContext, useCallState, useControlsAutoHide, useSaveData, useShortcuts, useWakeLock, type ShellExtras } from "./useCallState";
 import { TopBar } from "./TopBar";
 import { AgendaRail } from "./AgendaRail";
 import { StageTabs } from "./StageTabs";
@@ -77,6 +82,7 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
   stateRef.current = s;
   const desktop = useIsDesktop();
   const phone = !desktop;
+  const sideways = useMediaQuery("(orientation: landscape)");
   const [announce, liveNode] = useAnnounce();
   const myUser = variant === "room" ? "" : me?.user ?? "";
 
@@ -111,6 +117,8 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
   const rawVideo: CallVideo = useVideoRoom(mid, videoOn, room ? { screen: "room", mic: false, cam: false } : joinChoice ?? {});
   // While the person dictates (a question, the decision form, the notes), the call microphone is muted and comes back after.
   const dictating = useDictationGuard(room ? { room: null, status: "off", micOn: false } : rawVideo);
+  const { saveData, setSaveData } = useSaveData(rawVideo);
+  useWakeLock(room);
 
   // ---- the shell's own state ---------------------------------------------------------------------------------------------
   const spotlight = useMemo(() => s.spotlight ?? [], [s.spotlight]);
@@ -285,14 +293,22 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
   const extras: ShellExtras = {
     joined: room || !!joinChoice, idx, minutes, setMinutes, next, previous, openShortcuts: () => setHelpOpen(true), cardAsked,
     handPending: handM.isPending, goPending: goM.isPending, timerPending: timerM.isPending, endPending: endM.isPending, presencePending: presenceM.isPending,
-    menu, setMenu,
+    menu, setMenu, saveData, setSaveData,
   };
   useShortcuts(ctx, { openHelp: () => setHelpOpen(true), next, previous });
+
+  // Phone: the controls fade after 4 s without a touch, except while something needs them.
+  const holdControls = !!cs.panel || !!menu || helpOpen || endOpen || !!card || presentAsk || ctx.hands.has(myUser) || dictating || shareOn || !!s.presenting;
+  const controls = useControlsAutoHide(phone && !room, holdControls);
+  const landscape = phone && !room && sideways;
+  const fade = cn("transition-opacity duration-300 focus-within:pointer-events-auto focus-within:opacity-100", controls.hidden && "pointer-events-none opacity-0");
 
   const liveText = s.decision_live && (!s.decision_live.case_id || s.decision_live.case_id === cid) ? s.decision_live.text : "";
   const testId = variant === "member" ? "member-view" : variant === "coordinator" ? "control-view" : "room-screen";
   const attrs: Record<string, string | undefined> = variant === "member" ? { "data-following": String(following), "data-video-status": video.status }
     : variant === "room" ? { "data-meeting-status": s.meeting.status } : { "data-video-status": video.status };
+  attrs["data-controls"] = controls.hidden ? "hidden" : "shown";
+  if (phone && !room) attrs["data-orientation"] = landscape ? "landscape" : "portrait";
 
   return (
     <CallContext.Provider value={ctx}>
@@ -300,32 +316,33 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
         <StageFrame testId={testId} attrs={attrs}>
           {liveNode}
           <CaseFlow />
-          <TopBar />
+          {phone && !room ? <div className={fade} data-testid="top-controls"><TopBar /></div> : <TopBar />}
           {room ? <RoomBody summaryOn={summaryOn} liveText={liveText} /> : (
-            <main className={cn("flex min-h-0 flex-1 gap-3 p-2 lg:p-3", phone && "flex-col overflow-y-auto")}>
+            <main className={cn("flex min-h-0 flex-1 gap-3 p-2 lg:p-3", phone && !landscape && "flex-col overflow-y-auto", landscape && "gap-2")}>
               {desktop ? <AgendaRail /> : null}
               <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
                 <StageTabs />
-                <div className={cn("flex min-w-0 gap-2", phone ? "min-h-[62.5vw] flex-1" : "min-h-0 flex-1")}>
-                  <StageContent className={cn(phone ? "min-h-[62.5vw] w-full flex-1" : "min-h-0 flex-1")}>
+                <div className={cn("flex min-w-0 gap-2", phone && !landscape ? "min-h-[62.5vw] flex-1" : "min-h-0 flex-1")}>
+                  <StageContent className={cn(phone && !landscape ? "min-h-[62.5vw] w-full flex-1" : "min-h-0 flex-1")}>
                     <StageOverlays />
                   </StageContent>
                   {desktop && !cs.panel ? <div className="scroll-thin hidden w-52 shrink-0 overflow-y-auto lg:block xl:w-60"><Strip orientation="column" /></div> : null}
                 </div>
-                {phone || cs.panel ? <div className="shrink-0"><Strip orientation="row" max={phone ? 8 : 10} /></div> : null}
+                {(phone && !landscape) || (desktop && cs.panel) ? <div className="shrink-0"><Strip orientation="row" max={phone ? 8 : 10} /></div> : null}
                 <AnimatePresence>
                   {liveText || cs.savedNow ? (
                     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-                      <DecisionStrip text={liveText} saved={cs.savedNow} className={phone ? "py-1.5 [&>p]:truncate" : undefined} />
+                      {phone ? <PhoneDecisionStrip text={liveText} saved={cs.savedNow} /> : <DecisionStrip text={liveText} saved={cs.savedNow} />}
                     </motion.div>
                   ) : null}
                 </AnimatePresence>
                 {error ? <p role="alert" className="flex items-center gap-2 rounded-lg bg-[#3a1c1c] px-3 py-1.5 text-xs text-[#ffb4a8]"><span className="min-w-0 flex-1">{error}</span><button type="button" className="rounded p-1 hover:bg-white/10" onClick={() => setError(null)} aria-label="Dismiss the message"><X className="size-3.5" /></button></p> : null}
               </div>
+              {landscape ? <div className="scroll-thin w-28 shrink-0 overflow-y-auto overflow-x-hidden" data-testid="landscape-strip"><Strip orientation="column" max={8} small /></div> : null}
               <SidePanel />
             </main>
           )}
-          {room ? <RoomHoverBar summaryOn={summaryOn} setSummaryOn={setSummaryOn} videoOn={videoOn} /> : <CallBar />}
+          {room ? <RoomHoverBar summaryOn={summaryOn} setSummaryOn={setSummaryOn} videoOn={videoOn} /> : phone ? <div className={fade} data-testid="bar-controls"><CallBar /></div> : <CallBar />}
           {room ? null : <ShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} coordinator={canManage} present={!!video.toggleShare} />}
           {mayShare ? <PresentDialog open={presentAsk} onOpenChange={setPresentAsk} onShare={() => { markPresentAsked(mid); setPresentAsk(false); void rawToggleShare?.(); }} /> : null}
           {canManage ? <EndMeetingDialog open={endOpen} onOpenChange={setEndOpen} /> : null}
@@ -367,8 +384,32 @@ function PresentingBar() {
   );
 }
 
-/** The room screen's body: the summary column (a toggle, on by default, as the room used it), the stage, the questions, the remote
- * members and the agents, and the footer with the count, the hands and the big decision strip. */
+/** The phone's decision strip: one line; a tap opens the whole text in place and a second tap folds it again. The strip keeps its
+ * live region; a transparent button over it takes the tap. */
+function PhoneDecisionStrip({ text, saved }: { text: string; saved: boolean }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => { if (saved) setOpen(false); }, [saved]);
+  const long = !saved && text.length > 0;
+  return (
+    <div className="relative" data-testid="decision-strip-phone" data-expanded={open ? "true" : "false"}>
+      <DecisionStrip text={text} saved={saved} className={cn("min-h-11 items-center py-1.5", open ? "scroll-thin max-h-[40dvh] overflow-y-auto [&>p]:whitespace-normal" : "[&>p]:truncate")} />
+      {long ? (
+        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="absolute inset-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          aria-label={open ? "Show the decision on one line" : "Show the whole decision text"} title={open ? "Show the decision on one line" : "Show the whole decision text"} data-testid="decision-expand" />
+      ) : null}
+    </div>
+  );
+}
+
+/** How many questions the room screen shows (the latest), and how many remote tiles (fewer on a screen under 900 px high). */
+export const ROOM_QUESTIONS = 2;
+export const ROOM_TILES = 6;
+export const ROOM_TILES_SHORT = 4;
+
+/** The room screen's body (a projector, 1920 x 1080; research/04 section 6.4): the summary column (a toggle, on by default, as the
+ * room used it), the compact agenda column, the stage in large type (28 px and more), the latest questions, the remote members (at
+ * most six tiles and "+n more") and the agents, and the footer with the count, the hands by name and the big decision strip
+ * (28 px). Nothing here scrolls the page: long content is cut with "+n more" or clipped. */
 function RoomBody({ summaryOn, liveText }: { summaryOn: boolean; liveText: string }) {
   const c = useCall();
   const s = c.state;
@@ -378,44 +419,50 @@ function RoomBody({ summaryOn, liveText }: { summaryOn: boolean; liveText: strin
   // The summary column is left out while the summary itself fills the stage (it would show twice).
   const showColumn = summaryOn && !(onStage && summary && onStage.id === summary.id && !openedItem);
   const questions = (s.questions ?? []).filter((q) => !c.cid || !q.case_id || q.case_id === c.cid);
+  const latest = questions.slice(-ROOM_QUESTIONS);
+  const earlier = questions.length - latest.length;
   const count = s.attendance.filter((a) => a.status === "present" || a.status === "remote").length;
+  const handNames = s.attendance.filter((a) => c.hands.has(a.user)).map((a) => a.name);
+  const tall = useMediaQuery("(min-height: 900px)");
   return (
     <>
-      <main className="flex min-h-0 flex-1 gap-3 p-3 lg:p-4">
+      <main className="flex min-h-0 flex-1 gap-3 overflow-hidden p-3 lg:p-4">
         {showColumn ? (
-          <section className="scroll-thin hidden w-[30%] min-w-0 overflow-y-auto rounded-xl border border-stage-line bg-stage-panel p-5 lg:block" aria-label="Summary" data-testid="room-summary">
-            {!c.cid ? <p className="text-lg text-stage-muted">The summary of the current case appears here.</p> : null}
+          <section className="hidden w-[30%] min-w-0 overflow-hidden rounded-xl border border-stage-line bg-stage-panel p-5 [mask-image:linear-gradient(to_bottom,#000_88%,transparent)] lg:block" aria-label="Summary" data-testid="room-summary">
+            {!c.cid ? <p className="text-xl text-stage-fg/80">The summary of the current case appears here.</p> : null}
             {c.cid && c.slidesStatus === "loading" ? <div data-theme="dark"><SkeletonLines n={8} /></div> : null}
-            {c.cid && c.slidesStatus === "error" ? <p className="text-lg text-warn">The slides for this case could not be loaded.</p> : null}
+            {c.cid && c.slidesStatus === "error" ? <p className="text-xl text-warn">The slides for this case could not be loaded.</p> : null}
             {summary ? <div data-theme="dark"><SlideContent slide={summary} big /></div> : null}
           </section>
         ) : null}
+        <AgendaRail room className="hidden lg:flex" />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-          <StageContent className="min-h-0 flex-1">
+          {/* Large type on the projector: every line on the stage at 28 px or more (the slide title larger, the source chips at 20 px). */}
+          <StageContent className="min-h-0 flex-1 [&_.stage-slide]:text-[28px] [&_.stage-slide_*]:[font-size:inherit] [&_.stage-slide_h3]:text-[36px] [&_.stage-slide_.quote-chip]:text-[20px] [&_p]:text-[28px] [&_p]:leading-snug" >
             <div className="pointer-events-none absolute inset-x-0 top-2 z-20 flex justify-center px-3 [&>*]:pointer-events-auto"><ConnectionBanner /></div>
             {!openedItem && !s.presenting ? <SlideDots slides={c.slides} index={c.shownSlide} className="absolute bottom-3 right-4 z-10" /> : null}
           </StageContent>
           <AnimatePresence initial={false}>
-            {questions.length ? (
-              <motion.section key="q" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="scroll-thin max-h-56 shrink-0 overflow-y-auto rounded-xl border border-stage-line bg-stage-panel p-3" aria-label="Questions">
-                <h2 className="mb-1 text-sm font-semibold text-stage-muted">Questions from members</h2>
-                <div data-theme="dark"><QuestionsList questions={questions} caseId={c.cid} big /></div>
+            {latest.length ? (
+              <motion.section key="q" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="max-h-[30%] shrink-0 overflow-hidden rounded-xl border border-stage-line bg-stage-panel p-3 [&_li_p]:text-xl [&_li_p]:leading-snug" aria-label="Questions" data-testid="room-questions">
+                <h2 className="mb-1 flex items-baseline gap-2 text-lg font-semibold text-stage-fg/80">Questions from members{earlier > 0 ? <span className="text-base font-normal" data-testid="room-questions-more">(the latest {latest.length}; +{earlier} more)</span> : null}</h2>
+                <div data-theme="dark"><QuestionsList questions={latest} caseId={c.cid} big /></div>
               </motion.section>
             ) : null}
           </AnimatePresence>
         </div>
-        <aside className="scroll-thin flex w-48 shrink-0 flex-col gap-2 overflow-y-auto xl:w-60" aria-label="Remote members and agents">
-          <Strip orientation="column" max={6} />
+        <aside className="flex w-72 shrink-0 flex-col gap-2 overflow-hidden min-[1600px]:w-[24rem]" aria-label="Remote members and agents" data-testid="room-people">
+          <Strip orientation="column" max={tall ? ROOM_TILES : ROOM_TILES_SHORT} />
         </aside>
       </main>
       <footer className="space-y-2 border-t border-stage-line px-3 py-2 lg:px-4">
-        <div className="flex flex-wrap items-center gap-2 text-sm text-stage-muted">
-          <span>{count} in the meeting</span>
-          {c.hands.size ? <span className="rounded-full bg-warn/20 px-2 py-0.5 text-xs font-medium text-[#ffd48a]">{c.hands.size} hand{c.hands.size === 1 ? "" : "s"} raised: {s.attendance.filter((a) => c.hands.has(a.user)).map((a) => a.name).join(", ")}</span> : null}
-          {c.video.error ? <span className="text-xs text-[#ffb4a8]">{c.video.error}</span> : null}
+        <div className="flex flex-wrap items-center gap-3 text-xl text-stage-fg/80">
+          <span data-testid="room-count">{count} in the meeting</span>
+          {handNames.length ? <span className="rounded-full bg-warn/20 px-3 py-0.5 text-xl font-medium text-[#ffd48a]" data-testid="room-hands">{handNames.length} hand{handNames.length === 1 ? "" : "s"} raised: {handNames.join(", ")}</span> : null}
+          {c.video.error ? <span className="text-lg text-[#ffb4a8]">{c.video.error}</span> : null}
         </div>
-        <DecisionStrip text={liveText} saved={c.savedNow} big className={!liveText && !c.savedNow ? "hidden" : ""} />
-        {!liveText && !c.savedNow ? <p className="rounded-xl border border-dashed border-stage-line px-4 py-2 text-sm text-stage-muted">The decision appears here as the coordinator types it, until it is read back and saved.</p> : null}
+        <DecisionStrip text={liveText} saved={c.savedNow} big className={cn("[&>p]:line-clamp-2 [&>p]:text-[28px] [&>span]:text-base", !liveText && !c.savedNow && "hidden")} />
+        {!liveText && !c.savedNow ? <p className="rounded-xl border border-dashed border-stage-line px-4 py-2 text-xl text-stage-fg/80">The decision appears here as the coordinator types it, until it is read back and saved.</p> : null}
       </footer>
     </>
   );

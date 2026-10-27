@@ -4,6 +4,8 @@
 // for Done the minutes it took when known. The presenter under the current row. The coordinator clicks a row to put that case on the
 // screen. Under 1280 px (and while a side panel is open under 1536 px) it folds to a column of numbers; a button opens it. The quorum
 // line (QuorumLine compact) sits at its foot when the server sends one.
+// The room screen (night-v3 5.5, research/04 section 6.4) has its own look (RoomAgenda): the number, the patient line and the word
+// (Done, Now, Next, Later) in 20 px type, no click, no fold button; folded to the numbers under 1600 px; "+n more" past ROOM_ROWS.
 import { useEffect, useState } from "react";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { AgendaRow, MeetingState } from "@/lib/live";
@@ -48,7 +50,64 @@ const TONE: Record<RowState, string> = {
 /** The remaining time's colour on the dark stage: amber under 2 minutes, red at 0 (the words say it too). */
 export const CLOCK_TONE: Record<ClockTone, string> = { normal: "text-stage-fg", low: "text-[#ffd48a]", up: "text-[#ffb4a8]" };
 
-export function AgendaRail({ className }: { className?: string }) {
+/** The most agenda rows the room screen shows; the rest are "+n more" (the page never scrolls). */
+export const ROOM_ROWS = 12;
+
+/** The rows the room screen shows: the current case kept in view, at most `max`, and how many are left out. Pure. */
+export function roomRows<T extends { case_id: string }>(rows: T[], cid: string | null, max = ROOM_ROWS): { shown: T[]; more: number } {
+  if (rows.length <= max) return { shown: rows, more: 0 };
+  const at = Math.max(0, rows.findIndex((r) => r.case_id === cid));
+  const from = Math.min(Math.max(0, at - 2), rows.length - max);
+  return { shown: rows.slice(from, from + max), more: rows.length - max };
+}
+
+const ROOM_WORD: Record<RowState, string> = { done: "Done", now: "Now", next: "Next", later: "Later", not_ready: "Not ready" };
+/** The room's colours: at least 7:1 on the panel (the muted grey is too faint on a projector for the later rows). */
+const ROOM_TONE: Record<RowState, string> = { done: "text-[#8fe0b3]", now: "text-[#7cc4ff]", next: "text-stage-fg", later: "text-stage-fg/80", not_ready: "text-stage-fg/80" };
+
+/** The room screen's agenda column: large type, no click; the numbers only under 1600 px. */
+function RoomAgenda({ className }: { className?: string }) {
+  const c = useCall();
+  const open = useMediaQuery("(min-width: 1600px)");
+  const s = c.state;
+  const states = rowStates(c.order, [], c.cid, s.outcomes);
+  const { shown, more } = roomRows(c.order, c.cid);
+  return (
+    <nav aria-label="Agenda" data-testid="agenda-rail" data-look="room" data-open={open ? "true" : "false"} className={cn("flex min-h-0 shrink-0 flex-col overflow-hidden rounded-xl border border-stage-line bg-stage-panel", open ? "w-64" : "w-16", className)}>
+      {open ? <h2 className="border-b border-stage-line px-3 py-2 text-base font-semibold uppercase tracking-wide text-stage-fg/80">Agenda</h2> : null}
+      <ol className="min-h-0 flex-1 space-y-1 overflow-hidden p-2">
+        {shown.map((r) => {
+          const st = states.get(r.case_id) ?? "later";
+          const n = c.order.indexOf(r) + 1;
+          const line = r.patient_line || r.case_id;
+          const word = ROOM_WORD[st];
+          return (
+            <li key={r.case_id} aria-current={st === "now" ? "true" : undefined} data-state={st} aria-label={`${n}. ${line}, ${word}`} title={`${n}. ${line}, ${word}`}
+              className={cn("rounded-lg px-2 py-1.5 text-[20px] leading-snug", st === "now" && "bg-stage-raised ring-2 ring-primary/70")}>
+              {open ? (
+                <div className="flex items-baseline gap-2">
+                  <span className="w-7 shrink-0 tabular-nums text-stage-fg/80">{n}.</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-stage-fg">{line}</span>
+                    <span className={cn("block font-semibold", ROOM_TONE[st])} data-testid="room-row-word">{word}</span>
+                  </span>
+                </div>
+              ) : <span className={cn("block text-center font-semibold tabular-nums", ROOM_TONE[st])}>{n}</span>}
+            </li>
+          );
+        })}
+      </ol>
+      {more > 0 ? <p className="border-t border-stage-line px-2 py-1.5 text-center text-[20px] text-stage-fg/80" data-testid="room-agenda-more">+{more} more</p> : null}
+    </nav>
+  );
+}
+
+export function AgendaRail({ className, room }: { className?: string; room?: boolean }) {
+  if (room) return <RoomAgenda className={className} />;
+  return <CallAgendaRail className={className} />;
+}
+
+function CallAgendaRail({ className }: { className?: string }) {
   const c = useCall();
   const wide = useMediaQuery("(min-width: 1280px)");
   const roomy = useMediaQuery("(min-width: 1536px)");

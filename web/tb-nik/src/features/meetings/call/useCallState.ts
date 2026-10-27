@@ -1,9 +1,12 @@
 // The call shell's own state (night-v3 5.1): which side panel is open, the layout, my pin (this browser only), the agent voices
 // for me, full screen, the reactions shown for a moment, "Decision saved" for 8 s, and the keyboard shortcuts of the call.
+// Night-v3 5.5: the phone's controls fading after 4 s without a touch (useControlsAutoHide), "Save data" (useSaveData: camera off,
+// the remote video at the lower quality, remembered for this tab) and the room screen's wake lock (useWakeLock).
 import { createContext, useCallback, useEffect, useRef, useState } from "react";
+import { Track, VideoQuality, type Room } from "livekit-client";
 import { agentVoiceEnabled, onAgentVoiceChange, setAgentVoice } from "@/lib/voice";
 import type { ReactionEvent } from "@/lib/live";
-import type { CallCtx, LayoutKind, PanelKind, ShownReaction } from "./types";
+import type { CallCtx, CallVideo, LayoutKind, PanelKind, ShownReaction } from "./types";
 
 /** How long a reaction stays on a tile, and how long "Decision saved" stays on the strip. */
 export const REACTION_MS = 3000;
@@ -29,9 +32,12 @@ export interface ShellExtras {
   /** The More menu (laptop dropdown, phone sheet) and the phone's Coordinator sheet; kept here so it survives a resize. */
   menu: "more" | "coordinator" | null;
   setMenu: (m: "more" | "coordinator" | null) => void;
+  /** "Save data" (night-v3 5.5): camera off and the remote video at the lower quality, remembered for this tab. */
+  saveData: boolean;
+  setSaveData: (on: boolean) => void;
 }
 const noop = () => {};
-export const ShellContext = createContext<ShellExtras>({ joined: false, idx: -1, minutes: 10, setMinutes: noop, next: noop, previous: noop, openShortcuts: noop, cardAsked: false, handPending: false, goPending: false, timerPending: false, endPending: false, presencePending: false, menu: null, setMenu: noop });
+export const ShellContext = createContext<ShellExtras>({ joined: false, idx: -1, minutes: 10, setMinutes: noop, next: noop, previous: noop, openShortcuts: noop, cardAsked: false, handPending: false, goPending: false, timerPending: false, endPending: false, presencePending: false, menu: null, setMenu: noop, saveData: false, setSaveData: noop });
 
 export const pinKey = (mid: string) => `tbnik.call.pin.${mid}`;
 
@@ -107,6 +113,115 @@ export function useCallState(mid: string, spotlight: string[]) {
   useEffect(() => () => { if (savedTimer.current) window.clearTimeout(savedTimer.current); }, []);
 
   return { panel, setPanel, togglePanel, layout, setLayout, pinned, setPinned, agentVoices, setAgentVoices, fullscreen, toggleFullscreen, reactions, addReaction, savedNow, markSaved };
+}
+
+// ---- phone: the controls fade after a while without a touch (research/04 section 6.5) ----------------------------------------
+
+/** How long the phone's controls stay after the last touch. */
+export const CONTROLS_MS = 4000;
+
+/** The phone's top bar and control bar fade out CONTROLS_MS after the last touch, click or key and come back on the next one. They
+ * never fade while `hold` is true (a panel, a sheet or a dialog open, the hand raised, dictating, a screen share on). Off: always
+ * shown. The layout keeps its place: the shell only changes the opacity. */
+export function useControlsAutoHide(enabled: boolean, hold: boolean, ms = CONTROLS_MS): { hidden: boolean; poke: () => void } {
+  const [hidden, setHidden] = useState(false);
+  const timer = useRef<number | null>(null);
+  const live = useRef({ enabled, hold });
+  live.current = { enabled, hold };
+  const clear = () => { if (timer.current !== null) { window.clearTimeout(timer.current); timer.current = null; } };
+  const poke = useCallback(() => {
+    setHidden(false);
+    clear();
+    const { enabled: on, hold: held } = live.current;
+    if (on && !held) timer.current = window.setTimeout(() => { timer.current = null; setHidden(true); }, ms);
+  }, [ms]);
+  useEffect(() => { poke(); return clear; }, [enabled, hold, poke]);
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const on = () => poke();
+    window.addEventListener("pointerdown", on, true);
+    window.addEventListener("keydown", on, true);
+    return () => { window.removeEventListener("pointerdown", on, true); window.removeEventListener("keydown", on, true); };
+  }, [enabled, poke]);
+  return { hidden: enabled && !hold && hidden, poke };
+}
+
+// ---- Save data (research/04 section 7) ------------------------------------------------------------------------------------
+
+export const SAVE_DATA_KEY = "tbnik.call.savedata";
+
+export function readSaveData(): boolean {
+  try { return sessionStorage.getItem(SAVE_DATA_KEY) === "on"; } catch { return false; }
+}
+
+/** The highest quality asked of a remote video under Save data: the cameras at the low layer, a shared screen at the middle one
+ * (it carries text); without Save data, the high layer (LiveKit's adaptive stream still sizes it to the tile). */
+export function savedQuality(source: Track.Source, saveData: boolean): VideoQuality {
+  if (!saveData) return VideoQuality.HIGH;
+  return source === Track.Source.ScreenShare ? VideoQuality.MEDIUM : VideoQuality.LOW;
+}
+
+function applyQuality(room: Room | null, saveData: boolean) {
+  if (!room) return;
+  for (const p of room.remoteParticipants.values()) {
+    for (const pub of p.videoTrackPublications.values()) {
+      if (pub.isSubscribed) pub.setVideoQuality(savedQuality(pub.source, saveData));
+    }
+  }
+}
+
+/** "Save data": on turns my camera off (once, and again when the video connects with it on) and keeps the remote video at the lower
+ * quality; the choice lasts for this tab (sessionStorage). The person may still turn the camera back on. */
+export function useSaveData(video: Pick<CallVideo, "room" | "status" | "camOn" | "toggleCam" | "tick">) {
+  const [saveData, setRaw] = useState<boolean>(readSaveData);
+  const v = useRef(video);
+  v.current = video;
+  const setSaveData = useCallback((on: boolean) => {
+    setRaw(on);
+    try { if (on) sessionStorage.setItem(SAVE_DATA_KEY, "on"); else sessionStorage.removeItem(SAVE_DATA_KEY); } catch { /* no storage: this page only */ }
+    if (on && v.current.status === "connected" && v.current.camOn) void v.current.toggleCam().catch(() => undefined);
+  }, []);
+  // Joined with the camera on while Save data is remembered: turn it off once.
+  useEffect(() => {
+    if (saveData && video.status === "connected" && v.current.camOn) void v.current.toggleCam().catch(() => undefined);
+  }, [video.status]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The remote video's quality follows the choice (tick changes when tracks come and go).
+  useEffect(() => { applyQuality(video.room, saveData); }, [video.room, video.tick, saveData]);
+  return { saveData, setSaveData };
+}
+
+// ---- the room screen keeps the projector awake ----------------------------------------------------------------------------
+
+type WakeLockLike = { release: () => Promise<void> };
+type WakeLockApi = { request: (type: "screen") => Promise<WakeLockLike> };
+
+/** Asks the browser to keep the screen awake while `enabled` (the room screen), again when the tab comes back (the browser drops the
+ * lock when the tab is hidden), and releases it on close. Where the browser has no wake lock, or refuses, nothing happens. */
+export function useWakeLock(enabled: boolean) {
+  useEffect(() => {
+    if (!enabled || typeof navigator === "undefined") return undefined;
+    const api = (navigator as Navigator & { wakeLock?: WakeLockApi }).wakeLock;
+    if (!api?.request) return undefined;
+    let lock: WakeLockLike | null = null;
+    let done = false;
+    const ask = async () => {
+      if (done || document.visibilityState !== "visible") return;
+      try {
+        const l = await api.request("screen");
+        if (done) { void l.release().catch(() => undefined); return; }
+        lock = l;
+      } catch { /* refused (battery saver, not allowed): the projector's own settings decide */ }
+    };
+    const onVisible = () => { if (document.visibilityState === "visible") void ask(); };
+    void ask();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      done = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      if (lock) void lock.release().catch(() => undefined);
+      lock = null;
+    };
+  }, [enabled]);
 }
 
 /** True when the key press comes from a place where people type (shortcuts then stay quiet, except Esc). */

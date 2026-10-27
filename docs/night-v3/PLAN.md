@@ -138,10 +138,10 @@ records per setting with `sources` (book, page, verbatim line), departments that
 | ID | Item | Lane | Done when | Status |
 |---|---|---|---|---|
 | 5.1 | The call shell | S | One in-call layout, shared by the member view, the coordinator's control view and (in its own variant) the room screen, as designed in `research/04`.<br><br>**Layout and tiles**<br>• The main stage shows what is presented (the case summary slide, a report page, the images, the Staging card), with the participant strip; or a grid when nothing is presented.<br>• Speaker view, pin and spotlight; an active-speaker ring.<br>• Tiles with name, department, role badge (head, coordinator, presenter), mic state, hand.<br><br>**Bottom control bar**<br>• mic, camera, present, raise hand, reactions, chat, people, agenda, more (devices, layout, full screen), leave<br>• the coordinator also gets next case, timer, decision and end meeting<br><br>**Also**<br>• One side panel at a time: People (in the room, remote, waiting, admit), Chat and questions, Agenda, Case, Agents, Decision.<br>• Device change after joining, connection quality, a reconnect banner, keyboard shortcuts, tooltips, accessible labels. | done (59f70d5) |
-| 5.2 | Present a screen | S | LiveKit screen share for the coordinator and the presenter (the coordinator may allow others), shown on the main stage for everyone | todo |
-| 5.3 | Meeting chat | S | Text chat for the meeting over the live channel, kept with the meeting record, apart from questions to the agents | todo |
-| 5.4 | Case flow | S | An agenda rail with the current case and its time; next case moves everyone; the presenter shown; a quorum line (heads present, agents standing in, the PM-JAY composition) | todo |
-| 5.5 | Phone and room screen | S | Phone layout for members; the room screen in large type for a projector | todo |
+| 5.2 | Present a screen | S | LiveKit screen share for the coordinator and the presenter (the coordinator may allow others), shown on the main stage for everyone | done (af3c171) |
+| 5.3 | Meeting chat | S | Text chat for the meeting over the live channel, kept with the meeting record, apart from questions to the agents | done (0532658) |
+| 5.4 | Case flow | S | An agenda rail with the current case and its time; next case moves everyone; the presenter shown; a quorum line (heads present, agents standing in, the PM-JAY composition) | done (d20496e) |
+| 5.5 | Phone and room screen | S | Phone layout for members; the room screen in large type for a projector | doing |
 | 5.6 | Live checks | S | The two-person live test (fake camera and microphone) passes with screen share and chat; screenshots for member, coordinator, room and phone reviewed; the existing meeting tests stay green | todo |
 
 ### Phase 6: the specialty agents as members of the board (owner point 4)
