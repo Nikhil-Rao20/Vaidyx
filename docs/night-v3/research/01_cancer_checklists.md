@@ -81,3 +81,54 @@ tumour guideline was found. NCCN is not acceptable (login, no redistribution).
 4. Eye examination, echocardiogram and audiometry route to "owner" (no ophthalmology or cardiology department in the hospital set-up).
 5. Every new protocol is a draft: `version` "0.1-draft", `approval.status` "draft", the note "Draft checklist from <book>: needs a
    clinician's check" (owner decision D6).
+
+## Thyroid source and licence (item 2.6)
+Decision (orchestrator, 27 Oct 2026, the owner may change it): NCG has no thyroid chapter and no Indian national thyroid guideline was found, and
+the ESMO 2019 page says "All rights reserved worldwide", so `thyroid.json` follows the `cup.json` precedent with a NICE guideline: **NICE NG230,
+Thyroid cancer: assessment and management** (published 19 December 2022).
+- Fetched: 27 Oct 2026, with curl from https://www.nice.org.uk/guidance/ng230/chapter/Recommendations (HTTP 200, 97 KB). Text copy
+  `/data/vaidyx/tb_resources/guidelines/nice/NG230_thyroid_recommendations.txt` (tags stripped with `python -I`; recommendation numbers kept);
+  log `LICENCE_NG230.txt` beside it.
+- Terms found (footer of every NICE page, "(c) NICE 2026. All rights reserved. Subject to Notice of rights", and the Notice of Rights on
+  https://www.nice.org.uk/terms-and-conditions): clause 18.1 gives reuse under the NICE UK Open Content Licence "in the United Kingdom only";
+  clause 18.2: "Except for personal use, study or personal research, copyright content owned by ... NICE may not be used, reproduced, translated,
+  distributed or transmitted in any form ... without the prior written agreement of NICE. Such an agreement may be subject to a licence and fee";
+  clause 18.3: use for artificial intelligence purposes needs an approval, a licence and a fee (for international use). The page's own metadata
+  adds: "You can download material for private research, study or in-house use only. Do not distribute or publish any material from this site
+  without first obtaining NICE's permission."
+- So the UK open licence the brief assumed covers the United Kingdom only; for a hospital in India clause 18.2 applies beyond personal use and
+  study. The CUP checklist (CG104, accepted by the owner on 18 Oct 2026) is on the same footing. Owner to decide: keep the draft as it is, ask NICE
+  for written agreement, use the ATA 2015 guideline (free to read on PubMed Central, Mary Ann Liebert copyright, no Creative Commons licence; the
+  research note's open question), or return thyroid to the generic checklist by deleting `tumour_board/protocols/thyroid.json`.
+- Used: assessment and diagnosis recommendations 1.2.1 to 1.2.14 and the thyroglobulin measurement line of 1.5.2 (10 verbatim quotes, each with its
+  recommendation number), plus three NCG head and neck lines (p 48 and 51, thyroid CT and ultrasound reporting formats). NG230 has no recommendation on
+  the clinical history, the histology report, laryngoscopy or genetic testing (RET); the last three are optional items without a source and the history
+  record cites the line that names a family history. No treatment, radioactive iodine, TSH suppression or follow-up line is quoted as a record.
+
+## Brain source and licence (item 2.8)
+Decision (orchestrator, 27 Oct 2026, the owner may change it): NCG has no CNS file and no Indian national brain tumour guideline was found, so the adult
+records of `brain_cns.json` come from **EANO 2021, "EANO guidelines on the diagnosis and treatment of diffuse gliomas of adulthood"** (Weller et al.,
+Nature Reviews Clinical Oncology 18:170-186, DOI https://doi.org/10.1038/s41571-020-00447-z, PMC https://pmc.ncbi.nlm.nih.gov/articles/PMC7904519/).
+- Fetched: 27 Oct 2026, with curl. The PMC PDF link answered with a proof-of-work "Preparing to download" page and the Europe PMC render link with a 403
+  browser check; neither was worked around. The publisher's own open-access PDF (https://www.nature.com/articles/s41571-020-00447-z.pdf, HTTP 200,
+  17 pages, 1,786,657 bytes) was stored as `/data/vaidyx/tb_resources/guidelines/eano/EANO_2021_diffuse_gliomas_Weller.pdf`, read only with `python -I`
+  and pypdf. Log beside it: `LICENCE.txt` (sha256, source, licence text).
+- Licence line read on the PDF itself (PDF page 17): "Open Access This article is licensed under a Creative Commons Attribution 4.0 International
+  License, which permits use, sharing, adaptation, distribution and reproduction in any medium or format, as long as you give appropriate credit to the
+  original author(s) and the source, provide a link to the Creative Commons license, and indicate if changes were made ... To view a copy of this license,
+  visit http://creativecommons.org/licenses/by/4.0/." Copyright line: "(c) The Author(s) 2020, corrected publication 2022". The Europe PMC full-text XML
+  of the same article carries the same paragraph. CC BY 4.0 conditions are met by the credit and link in the protocol note, the unchanged file, and the
+  statement that the quotes are verbatim and the labels, tiers and routing are Vaidyx's own draft.
+- Page numbers: PDF page n = journal page n + 169. Used: pages 2, 3, 6 and 7 (15 verbatim quotes in the 10 records; the post-operative MRI
+  line has no level). The guideline rests on the WHO 2016 classification and cIMPACT-NOW, not WHO 2021, and is European.
+- Tier rule (a proposal, in the protocol note): EANO level of recommendation A or B for a record asked in every patient is a; the same test only in a
+  subgroup the system never judges (negative IDH1 stain, retained ATRX, glioblastoma, midline location) is system tier c with the condition; a sentence
+  with no level is a proposed b. Treatment lines (steroids, anticonvulsants, extent of resection, temozolomide) are not copied.
+- Not in EANO for diffuse gliomas: any line on CSF or spinal imaging (none listed); a paediatric section. The NCG paediatric book has no brain tumour
+  chapter (checked: no medulloblastoma, glioma, ependymoma or craniopharyngioma), so the `child` setting reuses the records with child tiers noted in
+  each `tier_basis`, and the protocol note says the child checks need a clinician's check even more than the rest. ISNO 2017 and 2019 were not used
+  (reuse terms not confirmed).
+- Orchestrator's decision after reading the terms above (27 Oct 2026, 08:05): the thyroid checklist built from NG230 is **not shipped**; it is
+  parked at `/data/vaidyx/night-v3/runs/parked/thyroid.json` (copy it back to `tumour_board/protocols/` to restore it; its tests were removed with it and would be rewritten), thyroid stays on the generic checklist and the picker says "no checklist yet", and the owner decides between a
+  written NICE agreement, ATA 2015 (licence to be read on its PDF) and generic. The NICE text copy stays under the library as in-house research
+  material only. The same question stands for the CUP checklist's NICE CG104 quotes.

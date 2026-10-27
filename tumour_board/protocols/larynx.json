@@ -1,0 +1,524 @@
+{
+ "id": "larynx",
+ "label": "Cancer of the larynx (head and neck)",
+ "version": "0.1-draft",
+ "approval": {
+  "status": "draft",
+  "note": "Draft checklist from NCG Guidelines for Head and Neck Cancer (2019): needs a clinician's check"
+ },
+ "site": "larynx|laryng|glott|vocal cord|supraglott|subglott|hypopharyn",
+ "site_note": "V2 item 5.3 (two primaries): only on a Case File linked to the same patient's other Case File, and only for histopathology, cytology, IHC and molecular records: among several candidates for one record, or several documents carrying a required value, one that names another protocol's site and not this one steps aside and is named on the row for review; a document naming no site never does, and when every candidate names another site every candidate stays. Organ words only. A preference, never a filter; a patient with one cancer is checked as before.",
+ "note": "DRAFT, not approved for real use: needs a clinician's check. Configurable by the clinical team. Required records transcribed from the NCG Guidelines for Head and Neck Cancer (2019) (National Cancer Grid, India), the shared oropharynx, hypopharynx and larynx work-up (p 10 and 11), the larynx pathways (p 14 to 20, 27 and 36) and the pathology format (p 56), each with its verbatim quote and page. NCG prints letters only for the imaging, the chest X-ray and the speech and swallowing assessment; the other work-up lines have no letter and are treated as Essential, as in the oral cavity checklist: the tiers whose tier_basis says 'proposed' or 'treated as Essential' are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). A record NCG gives only under a condition the system never judges (a stage, a risk of distant disease) is shown with NCG's own tier and the condition, never counted. HPV / p16 testing (p 11) is for the oropharynx only and is not listed. The pathway is shared with the oropharynx and hypopharynx; hypopharynx is named in the site words and not built as a separate checklist. The stage is as recorded by the clinician, never computed. Nothing here suggests treatment.",
+ "settings_note": "Setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes stage). The three settings follow the book's pathways: early disease (T1 to T2, N0, p 14), locally advanced disease (T1 to T2 with nodes, T3, T4 or inoperable neck nodes, p 15 to 20 and 27) and recurrent or metastatic disease (p 36).",
+ "settings": [
+  {
+   "id": "early",
+   "label": "Early (T1 to T2, N0), as recorded"
+  },
+  {
+   "id": "locally_advanced",
+   "label": "Locally advanced (T1 to T2 with nodes, T3, T4, or inoperable neck nodes), as recorded"
+  },
+  {
+   "id": "metastatic",
+   "label": "Metastatic or recurrent, as recorded"
+  }
+ ],
+ "records": [
+  {
+   "id": "clinical_history",
+   "label": "Clinical evaluation: hoarseness, dysphagia, stridor, tobacco; performance status",
+   "tier": "a",
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ],
+   "department": "ENT / Head and Neck Surgery",
+   "required_facts": [
+    "ecog",
+    "tobacco_use",
+    "smoking_history",
+    "comorbidities",
+    "presenting_complaint",
+    "clinical_question"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Head and Neck Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf",
+     "page": 10,
+     "quote": "Hoarseness/Hot Potato Speech"
+    }
+   ],
+   "tier_basis": "No letter: proposed Essential, by the same rule as the oral cavity checklist (an unlettered work-up item is treated as Essential); the clinician to confirm",
+   "route": "owner",
+   "note": "A clinical record of the owning treating department (route owner); the department named here is the default before a Case File has an owner"
+  },
+  {
+   "id": "laryngoscopy",
+   "label": "Indirect and direct laryngoscopy (examination under anaesthesia optional): mucosal extent, cord mobility, arytenoid",
+   "tier": "a",
+   "tiers": {
+    "early": "a",
+    "locally_advanced": "a",
+    "metastatic": "none"
+   },
+   "doc_types": [
+    "endoscopy",
+    "operative_note"
+   ],
+   "region": "laryng|vocal|glott|supraglott|subglott|nasoendoscop|nasendoscop",
+   "department": "ENT / Head and Neck Surgery",
+   "required_facts": [
+    "cord_mobility",
+    "laryngeal_function"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Head and Neck Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf",
+     "page": 10,
+     "quote": "Direct Laryngoscopy OR"
+    },
+    {
+     "guideline": "NCG Guidelines for Head and Neck Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf",
+     "page": 10,
+     "quote": "To delineate the mucosal extent, vocal cord mobility and arytenoid status"
+    }
+   ],
+   "tier_basis": "No letter on laryngoscopy: proposed Essential; 'Examination Under Anesthesia (c)' is the printed optional alternative (c)"
+  },
+  {
+   "id": "laryngeal_function",
+   "label": "Assessment of laryngeal function (intact or compromised) and airway status",
+   "tier": "a",
+   "tiers": {
+    "early": "a",
+    "locally_advanced": "a",
+    "metastatic": "none"
+   },
+   "doc_types": [
+    "clinical_note",
+    "endoscopy"
+   ],
+   "department": "ENT / Head and Neck Surgery",
+   "required_facts": [
+    "laryngeal_function"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Head and Neck Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf",
+     "page": 10,
+     "quote": "Assessment of laryngeal functionality"
+    }
+   ],
+   "tier_basis": "No letter: proposed Essential; the pathways on p 17 and 19 branch on 'Larynx function intact' and 'Laryngeal Function compromised (Tracheostomy/Aspiration)'"
+  },
+  {
+   "id": "histopathology",
+   "label": "Biopsy and histopathology: type, grade",
+   "tier": "a",
+   "doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type",
+    "grade"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Head and Neck Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf",
+     "page": 56,
+     "quote": "Histologic type of tumor:"
+    }
+   ],
+   "tier_basis": "No letter: proposed Essential (a diagnosis is needed to enter the pathway); no biopsy line is printed in the larynx pathway (p 10), so the record cites the pathology reporting format (p 56), 'As per WHO 2017 classification'"
+  },
+  {
+   "id": "imaging_primary_neck",
+   "label": "CECT or MRI of the primary and the neck (CECT preferred for the larynx)",
+   "tier": "b",
+   "doc_types": [
+    "ct",
+    "mri"
+   ],
+   "region": "neck(?! of)|larynx|laryng|hypopharyn|supraglott|glott|pharyn",
+   "department": "Radiology",
+   "required_facts": [
+    "lesion_size",
+    "nodal_findings",
+    "ene",
+    "recorded_stage"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Head and Neck Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf",
+     "page": 11,
+     "quote": "Optimal Imaging modality for the primary and the neck may be by a CECT(b) or MRI(b)."
+    },
+    {
+     "guideline": "NCG Guidelines for Head and Neck Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf",
+     "page": 11,
+     "quote": "A MRI may be optimal for the Oropharynx and a CECT for the larynx and hypopharynx."
+    },
+    {
+     "guideline": "NCG Guidelines for Head and Neck Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf",
+     "page": 14,
+     "quote": "At least a 16 slice CT scan with 3 mm cut should be preferred to evaluate involvement of cartilage."
+    }
+   ],
+   "tier_basis": "Printed Optimal (b); NCG prefers CECT for the larynx and hypopharynx and MRI for the oropharynx; p 14 sets at least a 16 slice CT with 3 mm cuts to look at cartilage"
+  },
+  {
+   "id": "chest_xray",
+   "label": "Chest X-ray (lung metastasis, aspiration)",
+   "tier": "a",
+   "doc_types": [
+    "xray"
+   ],
+   "region": "chest|thorax|lung",
+   "department": "Radiology",
+   "required_facts": [
+    "distant_findings"
+   ],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Head and Neck Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf",
+     "page": 11,
+     "quote": "Chest X-ray(a) is an essential investigation for ruling out lung metastasis"
+    }
+   ],
+   "tier_basis": "Printed Essential (a)"
+  },
+  {
+   "id": "cect_thorax_pet",
+   "label": "CECT thorax or PET-CT (high risk of distant metastasis)",
+   "tier": "c",
+   "tiers": {
+    "early": "none",
+    "locally_advanced": "c",
+    "metastatic": "c"
+   },
+   "doc_types": [
+    "ct",
+    "pet_ct"
+   ],
+   "region": "chest|thorax|lung|whole body",
+   "department": "Radiology",
+   "required_facts": [
+    "distant_findings",
+    "suv_max"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Head and Neck Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf",
+     "page": 11,
+     "quote": "Either a PET CT(c) or CECT Thorax (b) should be optimal in patients being considered for"
+    }
+   ],
+   "tier_basis": "NCG prints CECT thorax (b) and PET-CT (c), only for patients being considered for curative therapy with a high risk of distant metastasis; the system never judges that risk, so the record is shown and not counted (clinical review)",
+   "condition": {
+    "ncg_tier": "b",
+    "text": "for patients considered for curative therapy at high risk of distant metastasis (N3 node over 6 cm, multiple bilateral neck nodes, lower cervical neck nodes, T4b, advanced hypopharyngeal cancer, or symptoms suggesting distant metastasis)"
+   }
+  },
+  {
+   "id": "dental_evaluation",
+   "label": "Dental evaluation and appropriate intervention",
+   "tier": "a",
+   "tiers": {
+    "early": "a",
+    "locally_advanced": "a",
+    "metastatic": "none"
+   },
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ],
+   "region": "dental|dentist|opg|orthopantomogram|prosthetic|oral hygiene|oral prophylaxis",
+   "department": "Dental surgery",
+   "required_facts": [
+    "dental_evaluation"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Head and Neck Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf",
+     "page": 10,
+     "quote": "Dental, Nutrition, Swallowing Assessment & Appropriate intervention**"
+    }
+   ],
+   "tier_basis": "No letter: treated as Essential, as in the oral cavity checklist (p 4); the line is printed in the shared oropharynx, hypopharynx and larynx pathway; a clinician to confirm it applies to larynx cases managed with radiation",
+   "route": "owner",
+   "note": "Its own record (a dental note), requested from the owning team (Dental surgery); the nutrition and speech and swallowing assessments of the same NCG line have their own records"
+  },
+  {
+   "id": "nutrition_assessment",
+   "label": "Nutrition assessment",
+   "tier": "a",
+   "tiers": {
+    "early": "a",
+    "locally_advanced": "a",
+    "metastatic": "none"
+   },
+   "doc_types": [
+    "clinical_note"
+   ],
+   "region": "nutrition|dietit|dietic|diet\\b|malnutrition",
+   "department": "ENT / Head and Neck Surgery",
+   "required_facts": [],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Head and Neck Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf",
+     "page": 10,
+     "quote": "Dental, Nutrition, Swallowing Assessment & Appropriate intervention**"
+    }
+   ],
+   "tier_basis": "No letter: treated as Essential, as in the oral cavity checklist; a clinician to confirm",
+   "route": "owner"
+  },
+  {
+   "id": "speech_swallowing",
+   "label": "Speech assessment and swallowing evaluation (bedside water swallow test, 100 ml)",
+   "tier": "b",
+   "tiers": {
+    "early": "b",
+    "locally_advanced": "b",
+    "metastatic": "none"
+   },
+   "doc_types": [
+    "clinical_note"
+   ],
+   "region": "speech|swallow|dysphagia|aspiration|fees\\b|videofluor|deglutition",
+   "department": "ENT / Head and Neck Surgery",
+   "required_facts": [],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Head and Neck Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf",
+     "page": 11,
+     "quote": "Assessment for speech(b) and swallowing to evaluate for aspiration(b) is considered Op-"
+    }
+   ],
+   "tier_basis": "Printed Optimal (b); fibre optic endoscopic evaluation of swallowing or videofluoroscopy is Optional (c) where available",
+   "route": "owner"
+  },
+  {
+   "id": "performance_cisplatin_fitness",
+   "label": "Performance status and fitness for systemic therapy (blood counts, creatinine)",
+   "tier": "a",
+   "tiers": {
+    "early": "none",
+    "locally_advanced": "a",
+    "metastatic": "a"
+   },
+   "doc_types": [
+    "lab",
+    "clinical_note"
+   ],
+   "department": "Medical Oncology",
+   "required_facts": [
+    "ecog",
+    "creatinine",
+    "haemoglobin",
+    "wbc",
+    "platelets",
+    "comorbidities"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Head and Neck Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf",
+     "page": 27,
+     "quote": "ECOG performance 0-1 ECOG performance > 2"
+    }
+   ],
+   "tier_basis": "Printed branch on ECOG performance; 'cisplatin fitness as per standard practice/guidelines' (p 27); no letter for the blood counts, so proposed Essential for the non-surgical and metastatic pathways (clinical review)"
+  }
+ ],
+ "optional": [
+  {
+   "id": "surgical_pathology",
+   "label": "Surgical specimen pathology: PNI, LVI, margins, extranodal extension, pT / pN",
+   "doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Head and Neck Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf",
+     "page": 56,
+     "quote": "Perineural invasion (PNI):  Absent / Present / Cannot be determined"
+    }
+   ],
+   "tier_basis": "No letter: a post-board record (the surgical specimen report after surgery, from the pathology reporting format on p 56); not required before the board, the board reads it at the next round",
+   "note": "post-board record: perineural invasion, lymphovascular invasion, margins, extranodal extension and the pT / pN as recorded"
+  },
+  {
+   "id": "previous_board",
+   "label": "Previous Tumour Board record",
+   "doc_types": [
+    "tumour_board_record"
+   ],
+   "department": "MDT Coordinator",
+   "route": "coordinator"
+  }
+ ],
+ "extract_facts": [
+  "presenting_complaint",
+  "ecog",
+  "tobacco_use",
+  "smoking_history",
+  "comorbidities",
+  "clinical_question",
+  "recorded_stage",
+  "lesion_size",
+  "nodal_findings",
+  "ene",
+  "distant_findings",
+  "suv_max",
+  "histologic_type",
+  "grade",
+  "pni",
+  "lvi",
+  "margins",
+  "laryngeal_subsite",
+  "cord_mobility",
+  "laryngeal_function",
+  "dental_evaluation",
+  "haemoglobin",
+  "wbc",
+  "platelets",
+  "creatinine",
+  "bilirubin",
+  "patient_preference",
+  "clinical_trial_note",
+  "diagnosis_date_mode",
+  "treatment_received"
+ ],
+ "core_data": [
+  {
+   "id": "diagnosis",
+   "label": "Histopathological / cytological diagnosis",
+   "facts": [
+    "histologic_type"
+   ]
+  },
+  {
+   "id": "diagnosis_date_mode",
+   "label": "Date and mode of diagnosis",
+   "facts": [
+    "diagnosis_date_mode"
+   ]
+  },
+  {
+   "id": "stage",
+   "label": "Stage as recorded (with the investigations used)",
+   "facts": [
+    "recorded_stage"
+   ]
+  },
+  {
+   "id": "performance_status",
+   "label": "Performance status",
+   "facts": [
+    "ecog"
+   ]
+  },
+  {
+   "id": "comorbidities",
+   "label": "Co-morbidities",
+   "facts": [
+    "comorbidities"
+   ]
+  },
+  {
+   "id": "site_and_function",
+   "label": "Laryngeal site, cord mobility and laryngeal function (as recorded)",
+   "facts": [
+    "laryngeal_subsite",
+    "cord_mobility",
+    "laryngeal_function"
+   ]
+  },
+  {
+   "id": "risk_features",
+   "label": "Pathology and imaging risk features (PNI, LVI, ENE, margins)",
+   "facts": [
+    "pni",
+    "lvi",
+    "ene",
+    "margins"
+   ]
+  },
+  {
+   "id": "treatment_history",
+   "label": "Treatment history",
+   "facts": [
+    "treatment_received"
+   ]
+  },
+  {
+   "id": "patient_preference",
+   "label": "Patient preference / special circumstances",
+   "facts": [
+    "patient_preference"
+   ]
+  },
+  {
+   "id": "clinical_trial",
+   "label": "Clinical trial availability / suitability recorded",
+   "facts": [
+    "clinical_trial_note"
+   ]
+  },
+  {
+   "id": "question",
+   "label": "Question for the Tumour Board",
+   "facts": [
+    "clinical_question"
+   ]
+  }
+ ],
+ "core_data_source": "NHS England, Streamlining MDT meetings (2020), p.11 'minimum core data requirements'; aligned with the NCG Virtual Tumour Board case template (India)",
+ "post_board": {
+  "required_record_fields": [
+   "decision_text",
+   "recorded_by",
+   "participants",
+   "actions"
+  ],
+  "follow_up_default_days": 14,
+  "record_fields_source": "EUSOMA 2020 (names of all participants, evidence on decisions); Victorian Cancer MDM quality framework 2018 (report errors/changes raised, divergent recommendations and dissenting clinicians); PM-JAY HBP 2.2 s.3.9 (tumour board decision and treatment plan)"
+ },
+ "policy_basis": "PM-JAY Health Benefit Package 2.2 user guidelines (NHA, 2021), section 3.9: pre-authorization is mandatory at each step of cancer care and the decision on appropriate care is to be taken by a multidisciplinary tumour board; NHS England MDT streamlining guidance (2020) pre-listing conditions.",
+ "guideline_sources": [
+  {
+   "guideline": "NCG Guidelines for Head and Neck Cancer (2019)",
+   "file": "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf",
+   "pages": "10, 11, 14, 27, 56 (PDF page = printed page)"
+  }
+ ]
+}

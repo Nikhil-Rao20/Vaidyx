@@ -101,14 +101,14 @@ Status: `todo`, `doing`, `done (<hash>)`, `blocked (<reason>)`. Lane: **S** seri
 | 2.2 | Colon | P | `colorectal_colon.json` from the NCG colorectal file; the picker's colorectal entry asks colon or rectum | done (43a10be; the picker's colon-or-rectum question lands with 2.10) |
 | 2.3 | Upper GI and liver | P | `stomach.json`, `oesophagus.json`, `liver_hcc.json`, `gallbladder.json` | done (b111c9b) |
 | 2.4 | Gynaecology | P | `ovary.json`, `corpus_uteri.json` | done (9c6f1cf) |
-| 2.5 | Urology and germ cell | P | `prostate.json`, `kidney.json` (adult; Wilms in 2.8), `germ_cell.json` | doing |
-| 2.6 | Head and neck and thyroid | P | `larynx.json` (with the head and neck structure); `thyroid.json` from an official open-access guideline when NCG has none (source and licence logged) | todo |
-| 2.7 | Blood cancers | P | `lymphoma.json` (adult and child settings), `leukaemia.json` (adult and child settings) from the NCG haematolymphoid files | todo |
-| 2.8 | Paediatric and sarcoma | P | `wilms.json`, `retinoblastoma.json`, `bone_sarcoma.json`, `soft_tissue_sarcoma.json`, `brain_cns.json` (official open-access source when NCG has none) | todo |
-| 2.9 | Unknown and other cancers | S | The generic checklist stays for unknown solid cancers; a `generic_haem` variant for blood cancers not listed (marrow, flow cytometry, cytogenetics instead of staging imaging); the picker's "not listed" path asks solid or blood; CUP unchanged | todo |
-| 2.10 | Wiring | S | Every picker entry maps to a checklist (`cancers.ts`), shown "checklist built (draft)"; specialty packs and the cancer-against-reports warning know the new cancers; the Case File's glance groups show the new facts | todo |
-| 2.12 | Flags from the books (if time allows) | P | Dose and schedule reference lines for the new cancers from the NCG regimen tables (each with its page), added to `dose_references.json`, so the decision checks cover them | todo |
-| 2.11 | Synthetic patients and an end-to-end check | S | At least four new synthetic patients in the demo HIS (seed scenarios, for example ovary, prostate, stomach, lymphoma) with realistic report sets; each Case File created, its reports read by the real models, its checklist gaps sensible; screenshots | todo |
+| 2.5 | Urology and germ cell | P | `prostate.json`, `kidney.json` (adult; Wilms in 2.8), `germ_cell.json` | done (1dd5fd8) |
+| 2.6 | Head and neck and thyroid | P | `larynx.json` (with the head and neck structure); `thyroid.json` from an official open-access guideline when NCG has none (source and licence logged) | doing |
+| 2.7 | Blood cancers | P | `lymphoma.json` (adult and child settings), `leukaemia.json` (adult and child settings) from the NCG haematolymphoid files | doing |
+| 2.8 | Paediatric and sarcoma | P | `wilms.json`, `retinoblastoma.json`, `bone_sarcoma.json`, `soft_tissue_sarcoma.json`, `brain_cns.json` (official open-access source when NCG has none) | doing |
+| 2.9 | Unknown and other cancers | S | The generic checklist stays for unknown solid cancers; a `generic_haem` variant for blood cancers not listed (marrow, flow cytometry, cytogenetics instead of staging imaging); the picker's "not listed" path asks solid or blood; CUP unchanged | doing |
+| 2.10 | Wiring | S | Every picker entry maps to a checklist (`cancers.ts`), shown "checklist built (draft)"; specialty packs and the cancer-against-reports warning know the new cancers; the Case File's glance groups show the new facts | doing |
+| 2.12 | Flags from the books (if time allows) | P | Dose and schedule reference lines for the new cancers from the NCG regimen tables (each with its page), added to `dose_references.json`, so the decision checks cover them | doing |
+| 2.11 | Synthetic patients and an end-to-end check | S | At least four new synthetic patients in the demo HIS (seed scenarios, for example ovary, prostate, stomach, lymphoma) with realistic report sets; each Case File created, its reports read by the real models, its checklist gaps sensible; screenshots | doing |
 
 Each protocol: `version` "0.1-draft", `approval.status` "draft", the note "Draft checklist from <book>: needs a clinician's check",
 records per setting with `sources` (book, page, verbatim line), departments that exist in the hospital set-up, and unit tests.
