@@ -27,7 +27,8 @@ from datetime import date
 
 import numpy as np
 
-from . import access, config, dates, decision_record, identity, protocol, published, rules, search, store
+from . import access, config, dates, decision_record, identity, protocol, published, rules, store
+from . import search as retrieval  # the published-cases search module: its embedder, tokenizer and model name (the public `search` below is ours)
 from . import case_summary
 
 log = logging.getLogger(__name__)
@@ -543,7 +544,7 @@ def _vectors(texts) -> tuple:
     cache.mkdir(parents=True, exist_ok=True)
     vecs, todo = [None] * len(texts), []
     for i, t in enumerate(texts):
-        f = cache / (hashlib.sha1((search.EMBED_MODEL + "similar:" + t).encode()).hexdigest() + ".npy")
+        f = cache / (hashlib.sha1((retrieval.EMBED_MODEL + "similar:" + t).encode()).hexdigest() + ".npy")
         if f.exists():
             try:
                 vecs[i] = np.load(f)
@@ -553,7 +554,7 @@ def _vectors(texts) -> tuple:
         todo.append((i, f))
     for k in range(0, len(todo), EMBED_BATCH):
         part = todo[k:k + EMBED_BATCH]
-        new = search._embed([texts[i] for i, _ in part])
+        new = retrieval._embed([texts[i] for i, _ in part])
         for (i, f), v in zip(part, new):
             v = np.asarray(v, dtype=np.float32)
             np.save(f, v)
@@ -576,7 +577,7 @@ def _write_index(chunks, vecs) -> None:
         np.savez(fh, vectors=m, keys=keys)
     os.replace(tmp, _index_npz())
     sig = hashlib.sha1(json.dumps(sorted(f"{c['case_id']}|{c['chunk']}|{hashlib.sha1(c['text'].encode()).hexdigest()}" for c in chunks)).encode()).hexdigest()[:16]
-    store._write_json(_index_json(), {"version": VERSION, "embed_model": search.EMBED_MODEL, "chunks": chunks, "signature": sig,
+    store._write_json(_index_json(), {"version": VERSION, "embed_model": retrieval.EMBED_MODEL, "chunks": chunks, "signature": sig,
                                       "built_at": store.now_iso()})
 
 
@@ -661,7 +662,7 @@ def _stale_meta() -> bool:
         meta = store._read_json(_index_json(), None) or {}
     except (ValueError, OSError):
         return True
-    return meta.get("version") != VERSION or meta.get("embed_model") != search.EMBED_MODEL
+    return meta.get("version") != VERSION or meta.get("embed_model") != retrieval.EMBED_MODEL
 
 
 def forget(case_id) -> None:
@@ -741,7 +742,7 @@ def _bm25(tok, q, k1=1.4, b=0.75):
     df = Counter(t for ts in tok for t in set(ts))
     avgdl = sum(map(len, tok)) / max(n, 1)
     scores = np.zeros(n)
-    for t in set(search.tokenize(q)):
+    for t in set(retrieval.tokenize(q)):
         if t not in df:
             continue
         idf = math.log(1 + (n - df[t] + 0.5) / (df[t] + 0.5))
@@ -794,7 +795,7 @@ def candidates(case_id, words="", n=TOP_N, profile=None) -> dict:
                 f"Only {n_in} past Case File{'s' if n_in != 1 else ''} of this cancer group {'have' if n_in != 1 else 'has'} a recorded decision.")
     if not rows:
         return {"group": g, "group_label": src.get("group_label") or "", "candidates": [], "n_in_group": 0, "note": note}
-    tok = [search.tokenize(chunks[i]["text"]) for i in rows]
+    tok = [retrieval.tokenize(chunks[i]["text"]) for i in rows]
     q = src.get("text") or ""
     if w:
         q = f"{q} Doctor's words: {w}"
@@ -802,7 +803,7 @@ def candidates(case_id, words="", n=TOP_N, profile=None) -> dict:
     if w:
         arrays.append(("lex", _bm25(tok, w)))
     if m.shape[0] == len(chunks) and m.size:
-        qv = np.asarray(search._embed([q], prefix=QUERY_PREFIX)[0], dtype=np.float32)
+        qv = np.asarray(retrieval._embed([q], prefix=QUERY_PREFIX)[0], dtype=np.float32)
         nq = float(np.linalg.norm(qv)) or 1.0
         arrays.append(("sem", m[rows] @ (qv / nq)))
     rr = np.zeros(len(rows))
@@ -822,3 +823,562 @@ def candidates(case_id, words="", n=TOP_N, profile=None) -> dict:
 
 
 # ---- item 7.2 adds here: search (the reasoner ordering), order, lines (the "why similar" and "how it differs" picks), the cards --------
+
+# Part 2 (item 7.2): the reasoner's order, the quoted "why similar" and "how it differs" lines, the result cards, the search, the
+# routes' helpers (info, open_info). The order is the only rank: nothing numeric is shown, the model answers with ids only, every
+# shown line is a stored quote checked again word for word against its source, and a past board's decision is never a reason.
+import asyncio
+import random
+import statistics
+import time
+
+from . import grounding, llm, org
+
+PROMPT_VERSION = "similar-v1"
+MODEL_NAME = "Gemma-4-31B"
+MODEL_LINE = "Gemma-4-31B, a non-medical model; it only orders the list and picks quoted lines"
+ORDER_NOTE_MODEL = "Listed in order of likeness as judged by Gemma-4-31B (non-medical). The order is not a score."
+ORDER_NOTE_TEXT = "Ordered by text match only; the model ordering was not available."
+SHOWN = 10
+LINES_MAX = 25
+SIMILAR_MAX = 3
+DIFFERS_MAX = 2
+SEARCH_BUDGET_S = 45
+ADVICE_WORDS = ("do the same", "consider", "suggest", "recommend", "treat as", "follow", "best match")
+
+PROTECTED_REASON = "This Case File is not searched from."
+NO_GROUP_REASON = "No cancer group on this file: set the protocol or the cancer name first."
+ADMIN_REASON = "A Vaidyx admin does not search Case Files."
+SCOPE_REASON = "Only a doctor with full access to this Case File can search; a window opened with a reason cannot."
+LINES_LATE = "The quoted lines took too long this time; the files are listed without them."
+MATCH_FIELDS = ("cancer group", "setting", "age band", "sex", "stage as recorded")
+_DECISIONS_MARK = "Board decisions: "
+
+ORDER_SYSTEM = ("You order past Case Files by how much their recorded facts resemble the current Case File: same cancer, setting, stage, "
+                "histology, markers, treatments already received, and what the doctor asked for. Use only the text given. Do not judge "
+                "any treatment, do not say which is better, do not say what to do. Return the ids from most to least similar, every id once.")
+ORDER_SCHEMA = {"type": "object", "required": ["order"], "properties": {
+    "order": {"type": "array", "items": {"type": "string", "description": "an id of the list, like P3"}}}}
+LINES_SYSTEM = ("You compare the recorded lines of two Case Files. List A holds lines of the current Case File, list B lines of a past Case "
+                "File. Pair a line of A with a line of B only when both are about the same kind of fact (the same marker, the histology, "
+                "the grade, the stage, the treatments received, the course since the board). Put a pair under \"similar\" when the two "
+                "lines agree and under \"differs\" when they say different things. Use only the lines given. Do not judge any treatment, "
+                "do not say which is better, do not say what to do. Answer with the ids only: at most three similar pairs and two differs pairs.")
+_PAIR = {"type": "object", "properties": {"a": {"type": "string", "description": "an id of list A, like A3"},
+                                          "b": {"type": "string", "description": "an id of list B, like B2"}}}
+LINES_SCHEMA = {"type": "object", "required": ["similar", "differs"], "properties": {
+    "similar": {"type": "array", "items": _PAIR}, "differs": {"type": "array", "items": _PAIR}}}
+
+
+def _sha(s) -> str:
+    return hashlib.sha1(str(s).encode()).hexdigest()
+
+
+# ---- the text the reasoner reads ------------------------------------------------------------------------------------------------
+
+def candidate_text(profile) -> str:
+    """The profile's text without its "Board decisions: ..." sentence (research 4.8: the order is by likeness of the recorded facts,
+    never by what a board did); text_decisions is never read. Used for the source and for every candidate."""
+    t = str((profile or {}).get("text") or "")
+    i = t.find(_DECISIONS_MARK)
+    return (t[:i] if i >= 0 else t).strip()
+
+
+# ---- the order (research 4.5, contract 8.2) ---------------------------------------------------------------------------------------
+
+def _order_key(src, cands, words) -> str:
+    return _sha(json.dumps([src.get("signature"), [c.get("signature") for c in cands], words or "", PROMPT_VERSION, MODEL_NAME]))
+
+
+def _cache_path(key):
+    return _cache_dir() / f"{key}.json"
+
+
+def _cache_get(key, ids) -> list | None:
+    try:
+        d = store._read_json(_cache_path(key), None)
+    except (ValueError, OSError):
+        return None
+    got = (d or {}).get("order") if isinstance(d, dict) else None
+    if not isinstance(got, list) or len(got) != len(ids) or set(got) != set(ids) or d.get("prompt_version") != PROMPT_VERSION:
+        return None
+    return [str(x) for x in got]
+
+
+def _permutations(src, cands) -> list:
+    """Three fixed orders of the candidates (indices): the RRF order, its reverse and a shuffle seeded by the file and the list."""
+    n = len(cands)
+    seed = int(_sha(str(src.get("case_id") or "") + "".join(sorted(str(c.get("signature") or "") for c in cands)))[:16], 16)
+    shuffled = list(range(n))
+    random.Random(seed).shuffle(shuffled)
+    return [list(range(n)), list(range(n))[::-1], shuffled]
+
+
+def _order_messages(src, texts, words) -> list:
+    asked = f"The doctor asked to look for: {words}\n\n" if words else ""
+    listing = "\n".join(f"P{k + 1}: {t}" for k, t in enumerate(texts))
+    user = (f"Current Case File:\n{candidate_text(src)}\n\n{asked}Past Case Files:\n{listing}\n\n"
+            f"Return every id once (P1 to P{len(texts)}), from most to least similar.")
+    return [{"role": "system", "content": ORDER_SYSTEM}, {"role": "user", "content": user}]
+
+
+def _as_permutation(answer, n) -> list | None:
+    """The positions (0-based) in the order the model gave, or None unless the answer is exactly a permutation of P1..Pn."""
+    got = answer.get("order") if isinstance(answer, dict) else None
+    if not isinstance(got, list) or len(got) != n:
+        return None
+    out = []
+    for x in got:
+        m = re.fullmatch(r"P(\d+)", str(x).strip().upper()) if isinstance(x, str) else None
+        if not m or not 1 <= int(m.group(1)) <= n:
+            return None
+        out.append(int(m.group(1)) - 1)
+    return out if len(set(out)) == n else None
+
+
+async def order(src, cands, words="", *, info=None, audit=None) -> tuple:
+    """(case ids in order, "model" | "text"). `cands` are candidate profiles in RRF order. The reasoner sees them three times (the RRF
+    order, its reverse, a seeded shuffle) under the ids P1..Pn of that listing, never a Case File id; the answers that are a permutation
+    are merged by median rank per candidate, ties by the RRF rank. No valid answer: the RRF order and "text". A model order is cached
+    by the profiles' signatures, the words, the prompt version and the model (ids only, never a text). `info` (a dict) receives
+    {fallback, cached, valid}."""
+    info = {} if info is None else info
+    info.update(fallback="", cached=False, valid=0)
+    ids = [str(c["case_id"]) for c in cands]
+    if len(ids) < 2:
+        return ids, "model"  # nothing to order: no call
+    key = _order_key(src, cands, words)
+    hit = _cache_get(key, ids)
+    if hit:
+        info["cached"] = True
+        return hit, "model"
+    texts = [candidate_text(c) for c in cands]
+    perms = _permutations(src, cands)
+
+    async def one(perm):
+        msgs = _order_messages(src, [texts[i] for i in perm], words)
+        ans = await llm.chat("reasoner", msgs, json_schema=ORDER_SCHEMA, max_tokens=60 + 12 * len(perm), temperature=0,
+                             purpose="similar_order", audit=audit)
+        pos = _as_permutation(ans, len(perm))
+        if pos is None:
+            raise ValueError("not a permutation of the ids")
+        return [perm[p] for p in pos]
+    res = await asyncio.gather(*(one(p) for p in perms), return_exceptions=True)
+    good = [r for r in res if isinstance(r, list)]
+    info["valid"] = len(good)
+    if not good:
+        errs = sorted({type(r).__name__ for r in res if isinstance(r, BaseException)})
+        info["fallback"] = "no valid model order (" + ", ".join(errs) + ")" if errs else "no valid model order"
+        return ids, "text"
+    ranks = {i: [] for i in range(len(ids))}
+    for o in good:
+        for r, i in enumerate(o):
+            ranks[i].append(r)
+    merged = sorted(range(len(ids)), key=lambda i: (statistics.median(ranks[i]), i))
+    out = [ids[i] for i in merged]
+    try:
+        store._write_json(_cache_path(key), {"order": out, "ordered_by": "model", "prompt_version": PROMPT_VERSION, "at": store.now_iso()})
+    except OSError as e:
+        log.warning("similar: order cache not written (%s)", e)
+    return out, "model"
+
+
+# ---- the quoted lines (research 4.6) ----------------------------------------------------------------------------------------------
+
+def _source(case_id) -> dict | None:
+    """One Case File read again now, for checking quotes against their sources: its documents (confirmations applied), board records,
+    the current Case summary's sentences and the confirmed draft stage. None for a missing file; a protected id raises."""
+    _guard(case_id)
+    case = store.get_case(case_id)
+    if not isinstance(case, dict):
+        return None
+    case = {**case, "case_id": case_id}
+    _guard(case.get("case_id"))
+    st = store.get_state(case_id)
+    docs = {str(d.get("doc_id")): d for d in rules.case_docs(case_id, st) if d.get("state") == "ready" and not d.get("dismissed")}
+    sents = {}
+    for sec in (case_summary.current(st) or {}).get("sections") or []:
+        for s in sec.get("sentences") or []:
+            if isinstance(s, dict) and s.get("id"):
+                sents[(sec.get("id"), s.get("id"))] = str(s.get("text") or "")
+    return {"case": case, "pats": _scrub_patterns(case), "docs": docs, "records": {r.get("id"): r for r in _records(st)},
+            "sentences": sents, "staging": [s["quote"] for s in _staging(st)]}
+
+
+def _verified(line, src) -> bool:
+    """The stored (scrubbed) line text equals, after grounding.norm, its source read now and scrubbed the same way: a report line at
+    its page and offsets, a board record field, a Case summary sentence, the confirmed draft stage. Exact; no fuzzy score."""
+    if not src:
+        return False
+    want = grounding.norm(str(line.get("text") or ""))
+    if len(want) < 2:
+        return False
+    s = line.get("source") if isinstance(line.get("source"), dict) else {}
+
+    def same(text):
+        return grounding.norm(scrub(text, src["case"], src["pats"])) == want
+    if s.get("doc_id"):
+        d = src["docs"].get(str(s["doc_id"]))
+        page, start, end = s.get("page"), s.get("start"), s.get("end")
+        if not d or not all(isinstance(x, int) and not isinstance(x, bool) for x in (page, start, end)):
+            return False
+        pages = d.get("pages") or []
+        if not 0 <= page < len(pages):
+            return False
+        text = str((pages[page] or {}).get("text") or "")
+        return 0 <= start < end <= len(text) and same(text[start:end])
+    if s.get("record"):
+        rec = src["records"].get(s["record"])
+        return bool(rec) and same(" ".join(str(rec.get(s.get("field") or "") or "").split()))
+    if s.get("sentence"):
+        return (s.get("section"), s["sentence"]) in src["sentences"] and same(src["sentences"][(s.get("section"), s["sentence"])])
+    if s.get("staging"):
+        return any(same(q) for q in src["staging"])
+    return False
+
+
+def _carries_id(text, case) -> bool:
+    """A text that still names the patient of `case`: an identifier of published._identifiers (whole, any case), a name word as a
+    whole word, a number or mixed part of five or more characters, a run of six or more digits, a day-level date."""
+    t = str(text or "")
+    low = t.lower()
+    words = set(re.findall(r"[^\W\d_]+", low))
+    for ident in published._identifiers(case):
+        il = " ".join(str(ident).lower().split())
+        if len(il) >= 3 and il in low:
+            return True
+        for part in re.split(r"[\s,/]+", il):
+            if len(part) < 3:
+                continue
+            if part.isalpha():
+                if part in words:
+                    return True
+            elif len(part) >= 5 and part in low:
+                return True
+    return bool(_LONG_DIGITS.search(t) or _DAY_DATE.search(t))
+
+
+def _numbered(p, prefix) -> dict:
+    lines = [l for l in (p or {}).get("lines") or [] if isinstance(l, dict) and l.get("kind") != "decision" and str(l.get("text") or "").strip()]
+    return {f"{prefix}{k + 1}": l for k, l in enumerate(lines[:LINES_MAX])}
+
+
+def _line_label(line, cat) -> str:
+    k = line.get("kind")
+    if k == "stage":
+        return "stage"
+    if k == "summary":
+        return "since the board"
+    if k == "treatment":
+        return "treatment"
+    return (cat.get(line.get("fact")) or {}).get("label") or str(line.get("fact") or "fact")
+
+
+def _about(a, b, cat) -> str | None:
+    """What a pair is about, or None when the two lines are not the same kind of fact (the model cannot pair unrelated lines)."""
+    if a.get("kind") == "decision" or b.get("kind") == "decision":
+        return None
+    for k, about in (("stage", "stage"), ("treatment", "treatment"), ("summary", "since the board")):
+        if a.get("kind") == k and b.get("kind") == k:
+            return about
+    if a.get("fact") and a.get("fact") == b.get("fact"):
+        return (cat.get(a["fact"]) or {}).get("label") or str(a["fact"])
+    return None
+
+
+def _lines_messages(la, lb, cat) -> list:
+    def block(d):
+        return "\n".join(f"{i} [{_line_label(l, cat)}]: {l['text']}" for i, l in d.items())
+    user = f"List A (the current Case File):\n{block(la)}\n\nList B (the past Case File):\n{block(lb)}"
+    return [{"role": "system", "content": LINES_SYSTEM}, {"role": "user", "content": user}]
+
+
+def _empty_picks(dropped=0) -> dict:
+    return {"similar": [], "differs": [], "no_reasons": True, "dropped": dropped}
+
+
+async def pick_lines(src, past, *, sources=None, audit=None) -> dict:
+    """The "why similar" (up to SIMILAR_MAX) and "how it differs" (up to DIFFERS_MAX) pairs for one past file: the reasoner picks
+    ids from the two numbered lists (decision lines left out of both); code keeps a pair only when both ids exist, both quotes match
+    their sources read now, the past line names nobody, a "differs" pair really differs, and both lines are the same kind of fact.
+    {similar, differs, no_reasons (fewer than two lines in all), dropped (pairs refused by the checks)}. A model error or an invalid
+    answer gives no lines. `sources` caches the re-read files by Case File id."""
+    la, lb = _numbered(src, "A"), _numbered(past, "B")
+    if not la or not lb:
+        return _empty_picks()
+    cat = protocol.facts()
+    try:
+        ans = await llm.chat("reasoner", _lines_messages(la, lb, cat), json_schema=LINES_SCHEMA, max_tokens=300, temperature=0,
+                             purpose="similar_lines", audit=audit)
+    except Exception as e:  # the model is down or answered no JSON: the card is shown without quoted reasons
+        log.warning("similar: lines not picked (%s)", type(e).__name__)
+        return _empty_picks()
+    if not isinstance(ans, dict) or not isinstance(ans.get("similar", []), list) or not isinstance(ans.get("differs", []), list):
+        return _empty_picks()
+    sources = {} if sources is None else sources
+
+    async def source(cid):
+        if cid not in sources:
+            sources[cid] = await asyncio.to_thread(_source, cid)
+        return sources[cid]
+    s_src, p_src = await source(src["case_id"]), await source(past["case_id"])
+    if not p_src:
+        return _empty_picks()
+    checked: dict = {}
+
+    def ok(key, line, s):
+        if key not in checked:
+            checked[key] = _verified(line, s)
+        return checked[key]
+    out = {"similar": [], "differs": []}
+    dropped, seen = 0, set()
+    for kind in ("similar", "differs"):
+        for pair in ans.get(kind) or []:
+            a_id = str((pair or {}).get("a") or "").strip().upper() if isinstance(pair, dict) else ""
+            b_id = str((pair or {}).get("b") or "").strip().upper() if isinstance(pair, dict) else ""
+            a, b = la.get(a_id), lb.get(b_id)
+            if not a or not b or a.get("kind") == "decision" or b.get("kind") == "decision":    # (1)
+                dropped += 1
+                continue
+            if not ok(a_id, a, s_src) or not ok(b_id, b, p_src):                                # (2)
+                dropped += 1
+                continue
+            if _carries_id(b["text"], p_src["case"]):                                           # (3)
+                dropped += 1
+                continue
+            about = _about(a, b, cat)
+            same = grounding.norm(a["text"]) == grounding.norm(b["text"])
+            if about is None or (kind == "differs" and same):                                   # (4)
+                dropped += 1
+                continue
+            if (a_id, b_id) in seen:
+                continue
+            seen.add((a_id, b_id))
+            if len(out[kind]) >= (SIMILAR_MAX if kind == "similar" else DIFFERS_MAX):           # (5)
+                continue
+            out[kind].append({"about": about, "this": {"text": a["text"], "where": a.get("where_full") or a.get("where") or ""},
+                              "past": {"text": b["text"], "where": b.get("where") or ""}})
+    return {**out, "no_reasons": len(out["similar"]) + len(out["differs"]) < 2, "dropped": dropped}
+
+
+# ---- the result card (research 4.7, contract 8.4) ---------------------------------------------------------------------------------
+
+def _stage_where(s) -> str:
+    if s.get("kind") == "confirmed_draft":
+        return _where("Vaidyx draft stage confirmation", s.get("date"))
+    if s.get("kind") == "agreed":
+        return _where("Board record", s.get("date"))
+    return _where(s.get("doc_title") or "Report", s.get("date"))
+
+
+def _recorded_stage(p) -> str:
+    s = next((x for x in (p or {}).get("stage") or [] if x.get("kind") == "recorded"), None)
+    return grounding.norm(s["text"]) if s and s.get("text") else ""
+
+
+def _matched_by(past, src) -> list:
+    out = []
+    if past.get("group") and past.get("group") == src.get("group"):
+        out.append("cancer group")
+    for label, key in (("setting", "setting"), ("age band", "age_band"), ("sex", "sex")):
+        if past.get(key) and past.get(key) == src.get(key):
+            out.append(label)
+    if _recorded_stage(past) and _recorded_stage(past) == _recorded_stage(src):
+        out.append("stage as recorded")
+    return out
+
+
+def card(past, src, picks, open_info) -> dict:
+    """One past Case File as the screen shows it (contract 8.4, SimilarResult of types.ts): month and year only for its dates, no
+    number anywhere, the past board's decisions whole as written, the quoted pairs, the label first."""
+    picks = picks if isinstance(picks, dict) else _empty_picks()
+    sim, dif = list(picks.get("similar") or []), list(picks.get("differs") or [])
+    no_reasons = bool(picks.get("no_reasons", len(sim) + len(dif) < 2))
+    mine = {e.get("fact") for k in ("histology", "biomarkers") for e in (src or {}).get(k) or []}
+
+    def value(e):
+        where = _where(e.get("doc_title") or "Report", e.get("date"))
+        if e.get("confirmed"):
+            where += ", confirmed by a clinician"
+        return {"fact": e.get("fact") or "", "label": e.get("label") or "", "value": e.get("value") or "", "quote": e.get("quote") or "",
+                "where": where, "shared": e.get("fact") in mine}
+    markers = [value(e) for e in past.get("biomarkers") or []]
+    values = [value(e) for e in past.get("histology") or []] + sorted(markers, key=lambda v: not v["shared"])
+    oi = open_info if isinstance(open_info, dict) else {}
+    return {
+        "case_id": past["case_id"], "cancer": past.get("cancer") or past.get("group_label") or "", "setting": past.get("setting_label") or "",
+        "age_band": past.get("age_band") or "", "sex": past.get("sex") or "",
+        "stage": [{"text": s.get("text") or "", "kind": s.get("kind") or "", "label": s.get("label") or "", "quote": s.get("quote") or "",
+                   "where": _stage_where(s)} for s in past.get("stage") or []],
+        "values": values,
+        "decisions": [{"record_id": d.get("record_id") or "", "when": d.get("when") or "", "outcome": d.get("outcome") or "",
+                       "outcome_label": d.get("outcome_label") or "", "intent": d.get("intent") or "", "intent_label": d.get("intent_label") or "",
+                       "text": d.get("text") or "", "modalities": [str(m) for m in d.get("modalities") or []],
+                       "stage_as_agreed": d.get("stage_as_agreed") or ""} for d in past.get("decisions") or []],
+        "outcome_so_far": {"sentences": [{"text": s.get("text") or "", "where": s.get("where") or ""}
+                                         for s in (past.get("outcome_so_far") or {}).get("sentences") or []],
+                           "later_records": (past.get("outcome_so_far") or {}).get("later_records") or ""},
+        "similar": sim, "differs": dif,
+        "matched_by": _matched_by(past, src or {}) if no_reasons else None, "no_reasons": no_reasons,
+        "open": {"how": oi.get("how") or "refused", "reason": oi.get("reason") or "", "via": oi.get("via") or ""},
+        "label": LABEL}
+
+
+def _weaker(c) -> bool:
+    return bool(c.get("no_reasons")) and (c.get("matched_by") or []) == ["cancer group"]
+
+
+# ---- opening a result (research 4.10, contract 8.3) ---------------------------------------------------------------------------------
+
+def open_info(rl, past_case_id, this_case_id) -> dict:
+    """How this person may open a past Case File: FULL, REQUESTS or READ (a window already open) is "normal"; no access but a doctor who
+    may open it with a reason is "with_reason" (reason and via pre-filled; the break-glass route audits itself); else "refused". A past
+    file that is no longer eligible (archived, unlisted, protected, missing) raises ValueError("not_found")."""
+    pid = str(past_case_id or "").strip()
+    if not pid or _protected(pid) or pid == str(this_case_id or ""):
+        raise ValueError("not_found")
+    try:
+        store.safe_id(pid)
+    except ValueError:
+        raise ValueError("not_found")
+    past = store.get_case(pid)
+    if not isinstance(past, dict) or _protected(past.get("case_id")):
+        raise ValueError("not_found")
+    past = {**past, "case_id": pid}
+    if not eligible(past, store.get_state(pid), exclude=(this_case_id,)):
+        raise ValueError("not_found")
+    out = {"how": "refused", "scope": None, "reason": "", "via": "", "label": LABEL}
+    sc = access.scope(rl, past)
+    if sc in (access.FULL, access.REQUESTS, access.READ):
+        out.update(how="normal", scope=sc)
+    elif access.may_open_with_reason(rl, past):
+        out.update(how="with_reason", reason=f"similar to Case File {this_case_id}", via=f"similar:{this_case_id}")
+    return out
+
+
+# ---- the GET (contract 8.3) ----------------------------------------------------------------------------------------------------------
+
+def _recent(case_id, n=5) -> list:
+    evs = [e for e in store.read_audit(case_id, limit=5000) if e.get("kind") == "similar_search" and e.get("fallback") != "bad_words"]
+    return [{"words": str(e.get("words") or ""), "at": str(e.get("ts") or ""), "by_name": _display(e.get("by")) or str(e.get("by") or "")}
+            for e in reversed(evs[-n:])]
+
+
+def info(case_id, rl) -> dict:
+    """Whether a search is possible here and the last five searches of this file (newest first)."""
+    out = {"available": False, "reason": "", "label": LABEL, "order_note": ORDER_NOTE_MODEL, "model_line": MODEL_LINE,
+           "cancer_group": "", "group_label": "", "searches": []}
+    if _protected(case_id):
+        out["reason"] = PROTECTED_REASON
+        return out
+    case = store.get_case(case_id)
+    if not isinstance(case, dict):
+        raise ValueError("not_found")
+    case = {**case, "case_id": case_id}
+    if access.is_protected(case):
+        out["reason"] = PROTECTED_REASON
+        return out
+    out["cancer_group"], out["group_label"] = group(case) or "", group_label(case)
+    if not out["cancer_group"]:
+        out["reason"] = NO_GROUP_REASON
+    elif (rl or {}).get("vaidyx_admin"):
+        out["reason"] = ADMIN_REASON
+    elif access.scope(rl, case) != access.FULL:
+        out["reason"] = SCOPE_REASON
+    else:
+        out["available"] = True
+    out["searches"] = _recent(case_id)
+    return out
+
+
+# ---- the search (contract 8.4 and 8.5) ----------------------------------------------------------------------------------------------
+
+async def search(case_id, words, user, rl) -> dict:
+    """The SimilarResponse for this Case File and the doctor's words: the candidates (same cancer group, BM25 plus dense vectors, off
+    the loop), the reasoner's order, the quoted lines of the first SHOWN (concurrently), the cards, all under SEARCH_BUDGET_S (a late
+    order falls back to the text order; late lines give cards without quoted reasons). Every search is audited, an empty or failed
+    one too: this file (`similar_search`, the words and counts, a hash of the shown ids), each shown file (`similar_shown`) and the
+    organisation log (a hash of the words, the shown ids). Raises published.PublishedError for words that carry an identifier."""
+    _guard(case_id)
+    case = store.get_case(case_id)
+    if not isinstance(case, dict):
+        raise ValueError("not_found")
+    case = {**case, "case_id": case_id}
+    _guard(case.get("case_id"))
+    t0 = time.monotonic()
+    au = store.auditor(case_id)
+    ev = {"by": user, "words": "", "cancer_group": "", "n_candidates": 0, "n_results": 0, "n_weaker": 0, "ordered_by": "", "fallback": "",
+          "shown_hash": "", "dropped_lines": 0, "prompt_version": PROMPT_VERSION, "seconds": 0}
+    shown: list = []
+    try:
+        raw = " ".join(str(words or "").split())
+        try:
+            w = published.check_terms(case, raw)[:WORDS_MAX] if raw else ""
+        except published.PublishedError:
+            ev["fallback"] = "bad_words"  # the refused words are never written down
+            raise
+        ev["words"] = w
+
+        def gather_candidates():
+            src = query_profile(case_id)
+            res = candidates(case_id, w, profile=src)
+            cands = []
+            for c in res.get("candidates") or []:
+                cid = c["case_id"]
+                p = None if _protected(cid) else _load_profile(cid)
+                if p and p.get("case_id") == cid:
+                    cands.append(p)
+            return src, res, cands
+        src, res, cands = await asyncio.to_thread(gather_candidates)
+        ev["cancer_group"], ev["n_candidates"] = res.get("group") or "", len(cands)
+        note = res.get("note") or ""
+        oinfo: dict = {}
+        rrf = [c["case_id"] for c in cands]
+        try:
+            ids, ordered_by = await asyncio.wait_for(order(src, cands, w, info=oinfo, audit=au), max(1.0, SEARCH_BUDGET_S - (time.monotonic() - t0)))
+        except asyncio.TimeoutError:
+            ids, ordered_by, oinfo["fallback"] = rrf, "text", "the model ordering took too long"
+        except Exception as e:  # the honest fallback: the text order
+            ids, ordered_by, oinfo["fallback"] = rrf, "text", f"model ordering failed ({type(e).__name__})"
+        ev["ordered_by"], ev["fallback"] = ordered_by, oinfo.get("fallback") or ""
+        by_id = {c["case_id"]: c for c in cands}
+        top = [by_id[i] for i in ids if i in by_id][:SHOWN]
+        sources = {case_id: await asyncio.to_thread(_source, case_id)}  # this file read once for every pair check
+        left = SEARCH_BUDGET_S - (time.monotonic() - t0)
+        picks = [_empty_picks() for _ in top]
+        try:
+            got = await asyncio.wait_for(asyncio.gather(*(pick_lines(src, p, sources=sources, audit=au) for p in top), return_exceptions=True),
+                                         max(1.0, left))
+            picks = [g if isinstance(g, dict) else _empty_picks() for g in got]
+        except asyncio.TimeoutError:
+            note = " ".join(x for x in (note, LINES_LATE) if x)
+            ev["fallback"] = "; ".join(x for x in (ev["fallback"], "the quoted lines took too long") if x)
+        ev["dropped_lines"] = sum(int(p.get("dropped") or 0) for p in picks)
+        results, weaker = [], []
+        for p, pk in zip(top, picks):
+            try:
+                oi = open_info(rl, p["case_id"], case_id)  # eligible again on live data, at card time
+            except ValueError:
+                continue
+            c = card(p, src, pk, oi)
+            (weaker if _weaker(c) else results).append(c)
+        shown = [c["case_id"] for c in results + weaker]
+        ev["n_results"], ev["n_weaker"] = len(results), len(weaker)
+        return {"label": LABEL, "ordered_by": ordered_by, "order_note": ORDER_NOTE_MODEL if ordered_by == "model" else ORDER_NOTE_TEXT,
+                "model_line": MODEL_LINE, "cancer_group": res.get("group") or "", "group_label": res.get("group_label") or "", "words": w,
+                "note": note, "results": results, "weaker": weaker}
+    except BaseException as e:
+        if not ev["fallback"]:
+            ev["fallback"] = f"search failed ({type(e).__name__})"
+        raise
+    finally:
+        ev["seconds"] = round(time.monotonic() - t0, 2)
+        ev["shown_hash"] = _sha(",".join(shown))[:16] if shown else ""
+        try:
+            store.audit(case_id, {"kind": "similar_search", **ev})
+            for sid in shown:
+                store.audit(sid, {"kind": "similar_shown", "by": user, "from": case_id})
+            org.audit("similar_search", user, case_id=case_id, words_hash=_sha(ev["words"])[:12] if ev["words"] else "", shown=shown,
+                      n_results=ev["n_results"])
+        except Exception as e:  # an audit write that fails is logged; it never hides the search's own error
+            log.warning("similar: search audit not written (%s)", e)
