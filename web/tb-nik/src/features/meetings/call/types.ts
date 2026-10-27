@@ -84,6 +84,8 @@ export interface CallActions {
   chat?: (text: string) => Promise<unknown>;
   /** Item 5.2: allow or withdraw a person's right to present. */
   allowPresent?: (user: string, allowed: boolean) => Promise<unknown>;
+  /** Item 5.2: tell the meeting that I start or stop sharing (the pixels go through LiveKit). */
+  presenting?: (on: boolean) => Promise<unknown>;
 }
 
 /** Everything the shell knows, read by the panels, the strip and the stage through useCall(). */

@@ -802,3 +802,121 @@ def test_reactions_are_broadcast_never_stored_and_rate_limited(tc, monkeypatch):
     assert "agree" not in saved and "reaction" not in saved
     audit = [e for e in board.read_audit() if e["session"] == mid and e.get("kind") == "reaction"]
     assert audit and audit[-1]["by"] == "priya" and "agree" not in str(audit[-1])
+
+
+# ---- present a screen (night-v3 5.2) -------------------------------------------------------------------------------------------------------
+
+def test_who_may_present_a_screen_and_a_new_share_replaces_the_old(tc, monkeypatch):
+    mid = started(tc, discussion=("TB-002",), noting=())
+    owned("TB-002", owner="priya")  # priya presents TB-002 (the owner)
+    join_and_admit(tc, mid, "priya"); join_and_admit(tc, mid, "ravi")
+    events = []
+    monkeypatch.setattr(live, "broadcast", lambda m, ev, **kw: events.append(ev) or True)
+    v = As(tc, "ravi").get(f"/meetings/{mid}").json()
+    assert v["can"]["present"] is False and v["present_allowed"] == [] and v["presenting"] is None and v["current"]["presenting"] is None
+    assert As(tc, "priya").get(f"/meetings/{mid}").json()["can"]["present"] is True   # the case's presenter
+    assert As(tc, "anil").get(f"/meetings/{mid}").json()["can"]["present"] is True    # the coordinator
+    assert As(tc, "ravi").post(f"/meetings/{mid}/presenting", json={"on": True}).status_code == 403
+    r = As(tc, "priya").post(f"/meetings/{mid}/presenting", json={"on": True})
+    assert r.status_code == 200 and r.json()["presenting"] == "priya", r.text
+    assert events[-1] == {**events[-1], "type": "presenting", "user": "priya", "on": True}
+    assert As(tc, "ravi").get(f"/meetings/{mid}").json()["presenting"] == "priya"
+    # ravi cannot stop priya's share; the coordinator allows ravi, whose share replaces priya's
+    assert As(tc, "ravi").post(f"/meetings/{mid}/presenting", json={"on": False}).status_code == 403
+    assert As(tc, "ravi").post(f"/meetings/{mid}/present-allow", json={"user": "ravi"}).status_code == 403
+    assert As(tc, "anil").post(f"/meetings/{mid}/present-allow", json={"user": "meena"}).status_code == 409  # not admitted
+    r = As(tc, "anil").post(f"/meetings/{mid}/present-allow", json={"user": "ravi", "allowed": True})
+    assert r.status_code == 200 and r.json()["present_allowed"] == ["ravi"] and events[-1]["type"] == "present_allowed" and events[-1]["users"] == ["ravi"]
+    assert As(tc, "ravi").get(f"/meetings/{mid}").json()["can"]["present"] is True
+    r = As(tc, "ravi").post(f"/meetings/{mid}/presenting", json={"on": True})
+    assert r.status_code == 200 and r.json() == {"presenting": "ravi", "replaced": "priya"}
+    assert [e for e in events if e["type"] == "presenting"][-2:] == [{**events[-2], "user": "priya", "on": False, "replaced": True}, {**events[-1], "user": "ravi", "on": True}]
+    # the coordinator stops it; withdrawing the right ends a share too; the next case clears the share
+    assert As(tc, "anil").post(f"/meetings/{mid}/presenting", json={"on": False}).status_code == 200
+    assert As(tc, "anil").get(f"/meetings/{mid}").json()["presenting"] is None
+    As(tc, "ravi").post(f"/meetings/{mid}/presenting", json={"on": True})
+    r = As(tc, "anil").post(f"/meetings/{mid}/present-allow", json={"user": "ravi", "allowed": False})
+    assert r.status_code == 200 and r.json()["present_allowed"] == [] and events[-1] == {**events[-1], "type": "presenting", "user": "ravi", "on": False}
+    assert As(tc, "anil").get(f"/meetings/{mid}").json()["presenting"] is None
+    As(tc, "priya").post(f"/meetings/{mid}/presenting", json={"on": True})
+    As(tc, "anil").put(f"/meetings/{mid}/agenda", json={"discussion": ["TB-002", "TB-001"], "noting": []})
+    As(tc, "anil").post(f"/meetings/{mid}/current", json={"case_id": "TB-001"})
+    assert As(tc, "anil").get(f"/meetings/{mid}").json()["presenting"] is None
+    kinds = [e["kind"] for e in board.read_audit() if e["session"] == mid]
+    assert "presenting" in kinds and "present_allowed" in kinds
+
+
+# ---- the meeting chat (night-v3 5.3) --------------------------------------------------------------------------------------------------------
+
+def test_chat_is_for_admitted_members_kept_with_the_record_and_never_in_the_audit(tc, monkeypatch):
+    mid = with_agenda(tc)
+    join_and_admit(tc, mid, "priya")
+    code = As(tc, "anil").post(f"/meetings/{mid}/code").json()["value"]
+    As(tc, "ravi").post("/meetings/join", json={"code": code})  # ravi waits
+    sent = []
+    shapes = []
+    monkeypatch.setattr(live, "broadcast", lambda m, ev, shape=None: (sent.append(ev), shapes.append(shape)) and True)
+    meetings._CHATTED.clear()
+    assert As(tc, "priya").get(f"/meetings/{mid}").json()["can"]["chat"] is True  # before the start too
+    r = As(tc, "priya").post(f"/meetings/{mid}/chat", json={"text": "  The PET report for Kavitha is signed now.  "})
+    assert r.status_code == 200, r.text
+    m = r.json()["message"]
+    assert m["by"] == "priya" and m["by_name"] == "Dr Priya Nair" and m["text"] == "The PET report for Kavitha is signed now." and m["id"].startswith("C")
+    assert sent[-1]["type"] == "chat" and sent[-1]["message"]["id"] == m["id"]
+    # the event is private: a waiting viewer's socket gets nothing, a member's gets it
+    sh = shapes[-1]
+    assert sh("ravi", {"user": "ravi"}, sent[-1]) is None and sh("priya", {"user": "priya"}, sent[-1]) is sent[-1]
+    assert As(tc, "ravi").post(f"/meetings/{mid}/chat", json={"text": "hello"}).status_code == 403
+    assert As(tc, "priya").get(f"/meetings/{mid}").json()["chat"][-1]["text"] == "The PET report for Kavitha is signed now."
+    assert As(tc, "ravi").get(f"/meetings/{mid}").json()["chat"] == []
+    assert "The PET report for Kavitha" in (board.sessions_dir() / f"{mid}.json").read_text()  # kept with the meeting record
+    audit = [e for e in board.read_audit() if e["session"] == mid and e.get("kind") == "chat"]
+    assert audit and audit[-1]["chars"] == len("The PET report for Kavitha is signed now.") and "PET" not in str(audit[-1])
+    assert As(tc, "priya").post(f"/meetings/{mid}/chat", json={"text": ""}).status_code == 400
+    assert As(tc, "priya").post(f"/meetings/{mid}/chat", json={"text": "x" * 1001}).status_code == 413
+    for i in range(meetings.CHAT_PER_MINUTE):
+        As(tc, "priya").post(f"/meetings/{mid}/chat", json={"text": f"line {i}"})
+    assert As(tc, "priya").post(f"/meetings/{mid}/chat", json={"text": "one more"}).status_code == 429
+    # questions never land in the chat
+    As(tc, "anil").post(f"/meetings/{mid}/start")
+    As(tc, "priya").post(f"/meetings/{mid}/questions", json={"text": "Is the PET final?"})
+    assert all("PET final" not in x["text"] for x in As(tc, "priya").get(f"/meetings/{mid}").json()["chat"])
+
+
+# ---- the case flow: the quorum, the presenter, the elapsed time (night-v3 5.4) ------------------------------------------------------------
+
+def test_quorum_presenter_and_elapsed_time(tc, monkeypatch):
+    mid = started(tc, discussion=("TB-002", "TB-001"), noting=())
+    owned("TB-002", owner="priya")
+    join_and_admit(tc, mid, "priya")
+    v = As(tc, "priya").get(f"/meetings/{mid}").json()
+    q = v["quorum"]
+    assert q["total"] == 5 and q["present"] == 0 and [h["id"] for h in q["heads"]][:2] == ["radiology", "medical_oncology"]
+    assert q["pmjay"]["present"] == 0 and q["pmjay"]["total"] == 3 and "advises" in q["pmjay"]["note"]
+    assert "Radiology" in q["agents"] and "Pathology" in q["agents"]
+    assert v["current"]["presenter"] == {"user": "priya", "name": "Dr Priya Nair", "department": "breast_surgery", "department_name": "Breast Surgery"}
+    assert v["current"]["elapsed_seconds"] == 0
+    # a head joins: present as a person, no longer stood in for; PM-JAY counts Medical Oncology
+    events = []
+    monkeypatch.setattr(live, "broadcast", lambda m, ev, **kw: events.append(ev) or True)
+    join_and_admit(tc, mid, "dev")
+    assert events[-1]["type"] == "admit" and events[-1]["quorum"]["present"] == 1
+    q = As(tc, "priya").get(f"/meetings/{mid}").json()["quorum"]
+    med = next(h for h in q["heads"] if h["id"] == "medical_oncology")
+    assert med["present"] is True and med["by"] == "Dr Dev" and "Medical Oncology" not in q["agents"] and q["pmjay"]["medical"] is True and q["pmjay"]["present"] == 1
+    # the elapsed time follows the timer and is kept when the case ends; the decision record keeps the quorum
+    As(tc, "anil").post(f"/meetings/{mid}/timer", json={"action": "start", "minutes": 10})
+    s = meetings.need(mid); s["live"]["timer"]["started_at"] -= 125; board.save_session(s)
+    assert 124 <= As(tc, "priya").get(f"/meetings/{mid}").json()["current"]["elapsed_seconds"] <= 127
+    r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-002/end")
+    assert r.status_code == 200
+    row = As(tc, "priya").get(f"/meetings/{mid}").json()["agenda"]["discussion"][0]
+    assert row["case_id"] == "TB-002" and 124 <= row["elapsed_seconds"] <= 128
+    r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-002/decision", json={"outcome": "decision", "decision_text": "Surgery first", "intent": "curative", "responsible_doctor": "Dr Priya Nair"})
+    assert r.status_code == 200, r.text
+    rec = r.json()["record"]
+    assert rec["quorum"]["present"] == 1 and rec["quorum"]["agents"] and rec["quorum"]["pmjay"]["present"] == 1
+    assert "quorum" in store.get_state("TB-002")["board_records"][-1]
+    # the presenter changes with the case
+    As(tc, "anil").post(f"/meetings/{mid}/current", json={"case_id": "TB-001"})
+    assert events[-1]["type"] == "current" and events[-1]["presenter"] != {"user": "priya", "name": "Dr Priya Nair", "department": "breast_surgery", "department_name": "Breast Surgery"} or events[-1]["presenter"] is None

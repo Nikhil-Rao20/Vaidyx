@@ -249,6 +249,92 @@ test.describe("Meetings", () => {
     expect(errors).toEqual([]);
   });
 
+  // night-v3 5.2: someone presents a screen. No LiveKit in mock mode, so the stage shows the placeholder until the picture comes.
+  const withVideo = (st: Record<string, any>) => ({ ...st, meeting: { ...st.meeting, video: true }, can: { ...st.can, video: true } }); // eslint-disable-line @typescript-eslint/no-explicit-any
+
+  test("present a screen: the member sees who presents and may not present", async ({ page }) => {
+    const errors = watchConsole(page);
+    const live = await open(page, `/meetings/${MID}/member`, { role: "treating", wait: "prejoin", state: withVideo(memberState({ presenting: "mdt@vxh.example" })) });
+    await page.getByTestId("prejoin-join").click();
+    await expect(page.getByTestId("member-view")).toHaveAttribute("data-video-status", "failed", { timeout: 15_000 });
+    const stage = page.getByTestId("shared-screen");
+    await expect(stage).toHaveAttribute("data-stage", "share-waiting");
+    await expect(stage).toContainText("Priya Nair is presenting: waiting for the picture");
+    await expect(page.getByTestId("share-badge")).toContainText("Priya Nair is presenting");
+    await expect(page.getByTestId("share-stop")).toHaveCount(0);  // only the sharer and the coordinator stop a share
+    const present = page.getByTestId("present");
+    await expect(present).toBeDisabled();
+    await expect(present).toHaveAttribute("title", "Ask the MDT Coordinator to allow you to present");
+    await expect(present).toHaveAttribute("data-may-present", "false");
+    // The People panel names the sharer.
+    await page.getByTestId("panel-people").click();
+    await expect(page.getByTestId("person-row").filter({ hasText: "Priya Nair" }).getByTestId("present-word")).toHaveText("presenting");
+    await page.getByTestId("panel-people").click();
+    await snap(page, "meetings", "member-presenting", { sizes: DESKTOP_MOBILE, fullPage: false });
+    // A phone cannot capture a screen: no Present button, the share still shows.
+    await page.setViewportSize(SIZES[2]);
+    await expect(page.getByTestId("present")).toHaveCount(0);
+    await expect(stage).toHaveAttribute("data-stage", "share-waiting");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.setViewportSize(SIZES[0]);
+    // The share ends: the slide again.
+    live.push({ type: "presenting", user: "mdt@vxh.example", name: "Priya Nair", on: false, by: "mdt@vxh.example" });
+    await expect(stage).toHaveAttribute("data-stage", "slide");
+    await expect(page.getByTestId("share-badge")).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test("present a screen: the coordinator allows, withdraws and stops", async ({ page }) => {
+    const errors = watchConsole(page);
+    const st = withVideo(meetingState("in_session", { presenting: "shanthi@vxh.example", present_allowed: ["shanthi@vxh.example", "joseph@vxh.example"] }));
+    await open(page, `/meetings/${MID}`, { wait: "prejoin", state: st });
+    await page.getByTestId("prejoin-join").click();
+    await expect(page.getByTestId("control-view")).toHaveAttribute("data-video-status", "failed", { timeout: 15_000 });
+    const present = page.getByTestId("present");
+    await expect(present).toHaveAttribute("data-may-present", "true");  // the coordinator may present; here only the video is missing
+    await expect(present).toHaveAttribute("title", "Join the video to present a screen");
+    await expect(page.getByTestId("shared-screen")).toHaveAttribute("data-stage", "share-waiting");
+    await expect(page.getByTestId("share-badge")).toContainText("Shanthi Raman is presenting");
+    // With Present in it, the coordinator's bar still fits a 1366 px laptop: End meeting stays clear of the panel buttons.
+    const endBox = await page.getByTestId("end-meeting").boundingBox();
+    const chatBox = await page.getByTestId("panel-chat").boundingBox();
+    expect(endBox && chatBox && endBox.x + endBox.width <= chatBox.x, `End meeting ends at ${endBox && endBox.x + endBox.width}, the panels start at ${chatBox?.x}`).toBeTruthy();
+    // The tile menu: allow a person, or withdraw the right and stop the share of the one presenting; none on the coordinator.
+    const tile = (u: string) => page.locator(`[data-testid="tile"][data-user="${u}"]`).first();
+    await tile("mdt@vxh.example").getByTestId("tile-menu").click();
+    await expect(page.getByTestId("tile-pin")).toBeVisible();
+    await expect(page.locator("[data-testid^=tile-present-]")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await tile("shanthi@vxh.example").getByTestId("tile-menu").click();
+    await expect(page.getByTestId("tile-present-withdraw")).toHaveText("Withdraw the right to present");
+    await expect(page.getByTestId("tile-present-stop")).toHaveText("Stop their share");
+    await page.keyboard.press("Escape");
+    await tile("rao@vxh.example").getByTestId("tile-menu").click();
+    await expect(page.getByTestId("tile-present-allow")).toHaveText("Allow to present");
+    await snap(page, "meetings", "control-present-menu", { sizes: [SIZES[0]], fullPage: false, before: async (p) => {
+      if (!(await p.getByTestId("tile-present-allow").isVisible())) await tile("rao@vxh.example").getByTestId("tile-menu").click();
+      await expect(p.getByTestId("tile-present-allow")).toBeVisible();
+    } });
+    const allowed = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith(`/meetings/${MID}/present-allow`));
+    await page.getByTestId("tile-present-allow").click();
+    expect((await allowed).postDataJSON()).toEqual({ user: "rao@vxh.example", allowed: true });
+    // The People panel: "presenting" and "may present" on the rows; the row menu withdraws the right.
+    await page.getByTestId("panel-people").click();
+    const row = (name: string) => page.getByTestId("people-panel").getByTestId("person-row").filter({ hasText: name });
+    await expect(row("Shanthi Raman").getByTestId("present-word")).toHaveText("presenting");
+    await expect(row("Thomas Joseph").getByTestId("present-word")).toHaveText("may present");
+    await row("Thomas Joseph").getByRole("button", { name: "More for Thomas Joseph" }).click();
+    const withdrawn = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith(`/meetings/${MID}/present-allow`));
+    await page.getByTestId("row-present-withdraw").click();
+    expect((await withdrawn).postDataJSON()).toEqual({ user: "joseph@vxh.example", allowed: false });
+    await page.getByTestId("panel-people").click();
+    // Stop on the stage ends anyone's share for everyone.
+    const stopped = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith(`/meetings/${MID}/presenting`));
+    await page.getByTestId("share-stop").click();
+    expect((await stopped).postDataJSON()).toEqual({ on: false });
+    expect(errors).toEqual([]);
+  });
+
   test("join with a code, waiting room, wrong code", async ({ page }) => {
     const errors = watchConsole(page);
     const waitingState = memberState({ me: { user: "rao@vxh.example", status: "waiting", department: "breast_surgery" } });

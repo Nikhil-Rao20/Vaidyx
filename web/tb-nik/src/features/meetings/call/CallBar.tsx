@@ -1,10 +1,10 @@
-// The bottom control bar of the call (research/04 section 6.8, without Present until item 5.2). Laptop: the call group in the
-// middle (member: Mic, Camera, Raise hand, Reactions, More, then Leave apart; coordinator: Mic, Camera, Raise hand, Reactions,
+// The bottom control bar of the call (research/04 section 6.8). Laptop: the call group in the middle (member: Mic, Camera, Present
+// (night-v3 5.2; never on a phone, where the browser cannot capture a screen), Raise hand, Reactions, More, then Leave apart; coordinator: Mic, Camera, Raise hand, Reactions,
 // Previous, Next case, Timer, End case, More, then End meeting), the side panel buttons on the right with their counts; the
 // coordinator's "Leave the controls" sits at the far left, apart from End meeting. Phone: five buttons (mic, camera, hand, chat or Coordinator, more); the rest is in
 // the More sheet. Every button has a name, a tooltip with its key and aria-pressed on the toggles.
-import { forwardRef, useContext, useState, type ButtonHTMLAttributes } from "react";
-import { Camera, CameraOff, ChevronDown, ChevronLeft, ChevronRight, Hand, LogOut, Mic, MicOff, Pause, Play, Smile, StopCircle, Vote, DoorOpen } from "lucide-react";
+import { createContext, forwardRef, useContext, useState, type ButtonHTMLAttributes } from "react";
+import { Camera, CameraOff, ChevronDown, ChevronLeft, ChevronRight, Hand, LogOut, Mic, MicOff, MonitorUp, Pause, Play, Smile, StopCircle, Vote, DoorOpen } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { BarButton, ControlBar } from "../components/Stage";
@@ -21,8 +21,12 @@ type RoundProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "title"> & {
   badge?: number | string; testId?: string; compact?: boolean;
 };
 
+/** The coordinator's laptop bar carries the most buttons: they sit a little closer so it fits a 1366 px screen. */
+const DenseBar = createContext(false);
+
 /** BarButton's look (components/Stage.tsx) with a ref, so it can open a menu or a popover, and aria-keyshortcuts. */
 export const RoundButton = forwardRef<HTMLButtonElement, RoundProps>(function RoundButton({ icon: Icon, label, title, keys, active, tone = "default", badge, testId, compact, className, ...rest }, ref) {
+  const dense = useContext(DenseBar);
   return (
     <button
       ref={ref}
@@ -33,7 +37,7 @@ export const RoundButton = forwardRef<HTMLButtonElement, RoundProps>(function Ro
       aria-keyshortcuts={keys}
       data-testid={testId}
       {...rest}
-      className={cn("group flex flex-col items-center gap-1 outline-none disabled:opacity-40", compact ? "min-w-11" : "min-w-16", className)}
+      className={cn("group flex flex-col items-center gap-1 outline-none disabled:opacity-40", compact ? "min-w-11" : dense ? "min-w-14" : "min-w-16", className)}
     >
       <span className={cn(
         "relative grid place-items-center rounded-full transition-[background-color,transform] duration-150 group-active:scale-95 group-focus-visible:ring-2 group-focus-visible:ring-primary",
@@ -87,6 +91,29 @@ function VideoButtons({ arrows }: { arrows: boolean }) {
   if (!c.videoAvailable) return null;
   if (x.joined) return <MicCam arrows={arrows} />;
   return <BarButton icon={Camera} label="Join video" title="Check your camera and microphone, then join the video" onClick={c.joinVideo} />;
+}
+
+/** Why Present is off for this person now, or null when they may present (pure, so it can be checked on its own). */
+export function presentBlock(i: { shareOn: boolean; canPresent: boolean; connected: boolean }): string | null {
+  if (i.shareOn) return null;
+  if (!i.canPresent) return "Ask the MDT Coordinator to allow you to present";
+  if (!i.connected) return "Join the video to present a screen";
+  return null;
+}
+
+/** Present a screen (Ctrl+Alt+T), or stop. Laptop only; the shell asks once with a one-line reminder, then the browser's picker. */
+function PresentButton() {
+  const c = useCall();
+  const x = useContext(ShellContext);
+  const v = c.video;
+  if (!c.videoAvailable || c.phone || !v.toggleShare) return null;
+  const on = !!v.shareOn;
+  const may = !!c.state.can?.present;
+  const block = presentBlock({ shareOn: on, canPresent: may, connected: x.joined && v.status === "connected" });
+  return (
+    <RoundButton icon={MonitorUp} label={on ? "Stop presenting" : "Present"} title={on ? "Stop presenting (Ctrl+Alt+T)" : block ?? "Present a screen (Ctrl+Alt+T)"} keys="Control+Alt+T"
+      active={on} tone={on ? "primary" : "default"} onClick={() => void v.toggleShare?.()} disabled={!!block} testId="present" data-may-present={String(may)} />
+  );
 }
 
 function HandButton() {
@@ -199,13 +226,16 @@ export function CallBar() {
         <div className="flex items-center gap-1" role="group" aria-label="Panels">{panelKinds(c).map((k) => <PanelButton key={k} kind={k} />)}</div>
       </>}
     >
-      <VideoButtons arrows />
-      <HandButton />
-      <ReactionsButton />
-      {coordinator ? <CoordinatorGroup /> : null}
-      <CardButton />
-      <MoreMenu mode="more" />
-      <span className="w-4 shrink-0" aria-hidden />
+      <DenseBar.Provider value={coordinator}>
+        <VideoButtons arrows />
+        <PresentButton />
+        <HandButton />
+        <ReactionsButton />
+        {coordinator ? <CoordinatorGroup /> : null}
+        <CardButton />
+        <MoreMenu mode="more" />
+        <span className={cn("shrink-0", coordinator ? "w-1" : "w-4")} aria-hidden />
+      </DenseBar.Provider>
       {coordinator
         ? <RoundButton icon={DoorOpen} label="End meeting" title="End the meeting for everyone (asks to confirm)" tone="danger" onClick={c.actions.endMeeting} testId="end-meeting" />
         : <RoundButton icon={LogOut} label="Leave" title="Leave the meeting" tone="danger" onClick={c.actions.leave} testId="leave" />}

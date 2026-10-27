@@ -303,6 +303,28 @@ async def meetings_reaction(mid: str, request: Request):
     return _call(meetings.react, s["id"], u, str(b.get("kind") or ""))
 
 
+@router.post("/meetings/{mid}/present-allow")
+async def meetings_present_allow(mid: str, request: Request):
+    """The coordinator allows or withdraws a member's right to present a screen (night-v3 5.2)."""
+    u, rl = _who(request); common.need(rl, "session"); b = await common.body(request); s = _meeting(mid)
+    return {"present_allowed": _call(meetings.present_allow, s["id"], u, str(b.get("user") or ""), bool(b.get("allowed", True)))}
+
+
+@router.post("/meetings/{mid}/presenting")
+async def meetings_presenting(mid: str, request: Request):
+    """A member starts or stops a screen share (night-v3 5.2): the coordinator, the presenter of the Case File on the floor, or an allowed
+    member; the coordinator may stop anyone's."""
+    u, rl = _who(request, guest=True); b = await common.body(request); s = _meeting(mid); _member(rl, s)
+    return _call(meetings.set_presenting, s["id"], u, rl, bool(b.get("on", True)))
+
+
+@router.post("/meetings/{mid}/chat")
+async def meetings_chat(mid: str, request: Request):
+    """A meeting chat line from an admitted member (night-v3 5.3): kept with the meeting record, apart from the questions."""
+    u, rl = _who(request, guest=True); b = await common.body(request); s = _meeting(mid); _member(rl, s)
+    return {"message": _call(meetings.chat, s["id"], u, str(b.get("text") or ""))}
+
+
 @router.put("/meetings/{mid}/decision-live")
 async def meetings_decision_live(mid: str, request: Request):
     u, rl = _who(request); common.need(rl, "session"); b = await common.body(request); s = _meeting(mid)

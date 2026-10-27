@@ -1,19 +1,20 @@
-// The main stage of the call (night-v3 5.1, research/04 section 6.6): one item at a time. A pinned person, the spotlight or the
-// active speaker when the layout asks for it; else what the coordinator opened (the images in the hospital viewer, only when a
+// The main stage of the call (night-v3 5.1, research/04 section 6.6): one item at a time. A pinned person or the spotlight; else a
+// screen someone presents (night-v3 5.2: the LiveKit screen share, full on the stage, "<name> is presenting", Stop for the sharer and
+// the coordinator; its audio plays through the room's audio renderer); else the active speaker when the layout asks for it; else what the coordinator opened (the images in the hospital viewer, only when a
 // same-origin viewer path exists, or a record page); else the slide; else, with nothing on the floor, a grid of every tile with
 // the next case named. Layout "grid" shows every tile with the shared content as the first tile. The connection banner and the
 // call's audio live here so every variant has them once. Overlays from the shell come as children.
 import type { ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { RoomAudioRenderer } from "@livekit/components-react";
-import { ImageOff } from "lucide-react";
+import { RoomAudioRenderer, VideoTrack } from "@livekit/components-react";
+import { ImageOff, MonitorUp } from "lucide-react";
 import { recordPageUrl, viewerSrc } from "../api";
 import { SlideContent } from "../components/shared";
 import { errorText } from "@/features/casefile/components/common";
 import { cn } from "@/lib/utils";
 import { useCall } from "./context";
 import { ConnectionBanner } from "./ConnectionBanner";
-import { AgentCallTile, CallTile, ContentTile, UnpinChip, nextCaseLine, useCallAgents, useCallPeople, useStageMode, type CallPerson } from "./Strip";
+import { AgentCallTile, CallTile, ContentTile, UnpinChip, nextCaseLine, presenterName, screenShareRef, useCallAgents, useCallPeople, useStageMode, type CallPerson } from "./Strip";
 import type { CallCtx } from "./types";
 
 /** The words on an empty stage. */
@@ -42,6 +43,21 @@ function TileWall({ people, withContent, big }: { people: CallPerson[]; withCont
   );
 }
 
+/** "<name> is presenting" on the shared picture, with Stop for the sharer (my own share) and the coordinator (anyone's). */
+function ShareBadge({ name, user }: { name: string; user: string }) {
+  const ctx = useCall();
+  const big = ctx.variant === "room";
+  const mine = !!ctx.me && user === ctx.me && ctx.variant !== "room";
+  const canStop = ctx.variant !== "room" && (mine ? !!ctx.video.toggleShare : ctx.canManage);
+  const stop = () => { if (mine) void ctx.video.toggleShare?.(); else void ctx.actions.presenting?.(false).catch(() => undefined); };
+  return (
+    <p className={cn("absolute left-3 top-3 z-10 flex items-center gap-2 rounded-full bg-black/70 py-1 pl-3 font-medium text-white", canStop ? "pr-1" : "pr-3", big ? "text-lg" : "text-xs")} data-testid="share-badge">
+      <MonitorUp className={big ? "size-5" : "size-3.5"} aria-hidden />{name} presenting
+      {canStop ? <button type="button" onClick={stop} className="rounded-full bg-[#d64545] px-2.5 py-0.5 text-xs font-semibold text-white outline-none hover:bg-[#c23b3b] focus-visible:ring-2 focus-visible:ring-white" aria-label={mine ? "Stop presenting" : "Stop the share for everyone"} title={mine ? "Stop presenting (Ctrl+Alt+T)" : "Stop the share for everyone"} data-testid="share-stop">Stop</button> : null}
+    </p>
+  );
+}
+
 export function StageContent({ className, children }: { className?: string; children?: ReactNode }) {
   const ctx = useCall();
   const people = useCallPeople();
@@ -56,7 +72,28 @@ export function StageContent({ className, children }: { className?: string; chil
 
   let body: ReactNode;
   let bodyKey: string;
-  if (mode.kind === "person" || mode.kind === "spotlight") {
+  let stage: string = mode.kind;
+  if (mode.kind === "share") {
+    const user = ctx.state.presenting ?? "";
+    const name = presenterName(user, ctx.state.attendance ?? [], room);
+    const mine = !!ctx.me && user === ctx.me && ctx.variant !== "room";
+    const track = mine ? null : screenShareRef(room, user);
+    stage = mine ? "share-self" : track ? "share" : "share-waiting";
+    bodyKey = `${stage}-${user}`;
+    body = (
+      <motion.div key={bodyKey} {...fade} className="absolute inset-0 bg-black" data-testid="stage-share">
+        {track ? <VideoTrack trackRef={track} className="h-full w-full bg-black object-contain" /> : (
+          <div className="grid h-full place-items-center p-6 text-center">
+            <p className={cn("flex flex-col items-center gap-2 text-stage-muted", big ? "text-2xl" : "text-base")}>
+              <MonitorUp className={big ? "size-10" : "size-7"} aria-hidden />
+              {mine ? "You are presenting. Everyone sees the screen you chose." : `${name} is presenting: waiting for the picture`}
+            </p>
+          </div>
+        )}
+        <ShareBadge name={mine ? "You are" : `${name} is`} user={user} />
+      </motion.div>
+    );
+  } else if (mode.kind === "person" || mode.kind === "spotlight") {
     const shown = mode.keys.map((k) => byKey.get(k)).filter((p): p is CallPerson => !!p);
     const pinned = mode.kind === "person" && mode.why === "pinned";
     const lit = (ctx.spotlight ?? []).filter((u) => byKey.has(u));
@@ -125,7 +162,7 @@ export function StageContent({ className, children }: { className?: string; chil
       aria-label="Shared screen"
       data-testid="shared-screen"
       data-opened={opened?.kind ?? "slide"}
-      data-stage={mode.kind}
+      data-stage={stage}
     >
       <AnimatePresence mode="wait" initial={false}>{body}</AnimatePresence>
       <ConnectionBanner />

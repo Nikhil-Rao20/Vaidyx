@@ -577,7 +577,28 @@ export function meetingState(status: "planned" | "in_session" | "closed" = "plan
       { user: "joseph@vxh.example", name: "Thomas Joseph", department: "medical_oncology", department_name: "Medical Oncology", status: "remote", mode: "remote", online: false, head: true },
       { user: "kiran@vxh.example", name: "Kiran Shetty", department: "surgical_oncology", department_name: "Surgical Oncology", status: "waiting", mode: null, online: true, head: true },
     ],
-    current: { case_id: live ? CID : null, slide: live ? 1 : 0, opened: null, timer: live ? { seconds_left: 412, running: true, total: 600 } : null },
+    current: { case_id: live ? CID : null, slide: live ? 1 : 0, opened: null, timer: live ? { seconds_left: 412, running: true, total: 600 } : null,
+      // night-v3 5.4: the presenter of the Case File on the floor and the time spent on it; 5.2: who shares a screen now
+      presenter: live ? { user: "asha@vxh.example", name: "Asha Menon", department: "breast_surgery", department_name: "Breast Surgery" } : null, elapsed_seconds: live ? 188 : 0, presenting: null },
+    presenting: null, present_allowed: [],
+    // night-v3 5.3: the meeting chat, kept with the meeting record (members only), apart from the questions
+    chat: live ? [
+      { id: "C1", by: "rao@vxh.example", by_name: "Lakshmi Rao", text: "The final histopathology came in this morning; the slides are updated.", at: iso(9), case_id: CID },
+      { id: "C2", by: "shanthi@vxh.example", by_name: "Shanthi Raman", text: "Thanks. Could we look at the mammography images after the summary?", at: iso(7), case_id: CID },
+      { id: "C3", by: "mdt@vxh.example", by_name: "Priya Nair", text: "Yes, the images come up next.", at: iso(3), case_id: CID },
+    ] : [],
+    // night-v3 5.4: the quorum line (heads present as people; agents listed apart, never counted; PM-JAY advises three departments)
+    quorum: {
+      heads: [
+        { id: "radiology", name: "Radiology", present: true, by: "Shanthi Raman", role: "radiology" },
+        { id: "medical_oncology", name: "Medical Oncology", present: true, by: "Thomas Joseph", role: "medical_oncology" },
+        { id: "surgical_oncology", name: "Surgical Oncology", present: false, by: null, role: "surgical_oncology" },
+        { id: "pathology", name: "Pathology", present: false, by: null, role: "pathology" },
+        { id: "radiation_oncology", name: "Radiation Oncology", present: false, by: null, role: "radiation_oncology" },
+      ],
+      present: 2, total: 5, agents: live ? ["Pathology", "Nuclear Medicine"] : [],
+      pmjay: { surgical: false, radiation: false, medical: true, present: 1, total: 3, note: "PM-JAY advises Surgical, Radiation and Medical Oncology" },
+    },
     decision_live: { text: live ? "Breast conservation surgery with sentinel node biopsy; adjuvant plan after the final histopathology" : "", by: "mdt@vxh.example", at: iso(1), case_id: live ? CID : null },
     questions: live ? [
       { id: "Q1", by: "shanthi@vxh.example", by_name: "Shanthi Raman", text: "Is the axillary ultrasound final and signed?", at: iso(6), case_id: CID, role: "pathology", agent_label: "Pathology support",
@@ -592,7 +613,7 @@ export function meetingState(status: "planned" | "in_session" | "closed" = "plan
       { role: "nuclear_medicine", label: "Nuclear Medicine support", department: "nuclear_medicine", department_name: "Nuclear Medicine", state: "ready", question: null, note: "AI support: answers from the records only; not a member of the board", standing_in: true },
     ] : [],
     spotlight: [],
-    can: { manage: true, record: true, ask: live, card: live, card_required: false, video: false },
+    can: { manage: true, record: true, ask: live, card: live, card_required: false, video: false, present: live, chat: status !== "closed" },
     me: { user: "mdt@vxh.example", status: "present", mode: "room", department: "mdt" },
     online: ["mdt@vxh.example", "rao@vxh.example", "shanthi@vxh.example", "kiran@vxh.example"],
     outcomes: status === "closed" ? { [CID]: { outcome: "decision", label: "Decision recorded" } } : {},
@@ -606,7 +627,7 @@ export function meetingState(status: "planned" | "in_session" | "closed" = "plan
 export function memberState(over: Record<string, unknown> = {}) {
   const s = meetingState("in_session") as any; // eslint-disable-line @typescript-eslint/no-explicit-any
   s.code = null;
-  s.can = { manage: false, record: false, ask: true, card: true, card_required: true, video: false };
+  s.can = { manage: false, record: false, ask: true, card: true, card_required: true, video: false, present: false, chat: true };
   s.me = { user: "rao@vxh.example", status: "remote", mode: "remote", department: "radiology" };
   return { ...s, ...over };
 }

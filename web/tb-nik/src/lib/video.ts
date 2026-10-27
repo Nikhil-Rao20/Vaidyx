@@ -80,6 +80,25 @@ export function stickySpeakers(lastSpoke: Map<string, number>, now: number, hold
   return [...lastSpoke.entries()].filter(([, t]) => now - t <= holdMs).sort((a, b) => b[1] - a[1]).map(([id]) => id);
 }
 
+/** The screen share capture (night-v3 5.2): 1080p at 15 frames a second (sharp text, little bandwidth), the tab's audio when the
+ * browser offers it, and never this tab itself (a mirror of the call). */
+export const SCREEN_SHARE_OPTIONS = { audio: true, resolution: { width: 1920, height: 1080, frameRate: 15 }, selfBrowserSurface: "exclude" as const };
+
+/** True when the person said no in the browser's picker (or cancelled it): not an error to show. */
+export function isShareRefusal(e: unknown): boolean {
+  const name = (e as { name?: string } | null)?.name ?? "";
+  return name === "NotAllowedError" || name === "AbortError";
+}
+
+/** The plain words of a screen share failure. */
+export function shareErrorText(e: unknown, starting = true): string {
+  const name = (e as { name?: string } | null)?.name ?? "";
+  if (name === "DeviceUnsupportedError" || name === "NotSupportedError") return "This browser cannot present a screen. Use Chrome or Edge on a laptop.";
+  if (name === "NotReadableError") return "The screen could not be captured. Close other apps that share the screen and try again.";
+  const msg = e instanceof Error && e.message ? `: ${e.message}` : ".";
+  return starting ? `The screen could not be shared${msg}` : `The share could not be stopped${msg}`;
+}
+
 /** React hook: connect when enabled, expose the toggles and a tick that changes whenever the participants or tracks change. */
 export function useVideoRoom(mid: string, enabled: boolean, opts: VideoOptions = {}) {
   const roomRef = useRef<Room | null>(null);
@@ -96,6 +115,9 @@ export function useVideoRoom(mid: string, enabled: boolean, opts: VideoOptions =
   const [deviceChanged, setDeviceChanged] = useState<string | null>(null);
   const [activeSpeakers, setActiveSpeakers] = useState<string[]>([]);
   const [attempt, setAttempt] = useState(0);
+  const [shareOn, setShareOn] = useState(false);
+  const shareRef = useRef(false);
+  shareRef.current = shareOn;
   const micRef = useRef(false);
   const camRef = useRef(false);
   micRef.current = micOn;
@@ -148,7 +170,9 @@ export function useVideoRoom(mid: string, enabled: boolean, opts: VideoOptions =
         later(showSpeakers, 2100);
         bump();
       })
-      .on(RoomEvent.LocalTrackPublished, bump).on(RoomEvent.LocalTrackUnpublished, bump)
+      .on(RoomEvent.LocalTrackPublished, (pub) => { if (pub.source === Track.Source.ScreenShare) setShareOn(true); bump(); })
+      // the browser's own "Stop sharing" ends the track; LiveKit then unpublishes it
+      .on(RoomEvent.LocalTrackUnpublished, (pub) => { if (pub.source === Track.Source.ScreenShare) setShareOn(false); bump(); })
       .on(RoomEvent.ConnectionQualityChanged, (q, p) => { if (p.isLocal) setQuality(String(q)); bump(); })
       .on(RoomEvent.AudioPlaybackStatusChanged, () => setAudioBlocked(!r.canPlaybackAudio))
       .on(RoomEvent.MediaDevicesChanged, () => { void onDevicesChanged(); })
@@ -157,7 +181,7 @@ export function useVideoRoom(mid: string, enabled: boolean, opts: VideoOptions =
       .on(RoomEvent.Disconnected, () => {
         if (cancelled) return;
         setStatus(wasConnected ? "disconnected" : "off");
-        setMicOn(false); setCamOn(false); setQuality("unknown");
+        setMicOn(false); setCamOn(false); setShareOn(false); setQuality("unknown");
       });
     const o = optsRef.current;
     connectVideo(mid, r, o.screen).then(async () => {
@@ -181,7 +205,7 @@ export function useVideoRoom(mid: string, enabled: boolean, opts: VideoOptions =
     return () => {
       cancelled = true;
       for (const t of timers) window.clearTimeout(t);
-      void disconnectVideo(r); roomRef.current = null; setRoom(null); setMicOn(false); setCamOn(false); setActiveSpeakers([]);
+      void disconnectVideo(r); roomRef.current = null; setRoom(null); setMicOn(false); setCamOn(false); setShareOn(false); setActiveSpeakers([]);
     };
   }, [mid, enabled, attempt]);
 
@@ -195,6 +219,22 @@ export function useVideoRoom(mid: string, enabled: boolean, opts: VideoOptions =
     try { const on = !camOn; await r.localParticipant.setCameraEnabled(on); setCamOn(on); setError(null); }
     catch (e) { setError(e instanceof Error ? `Camera: ${e.message}` : "The camera could not be used."); }
   }, [camOn]);
+
+  /** Present a screen, or stop (night-v3 5.2). The browser asks which tab, window or screen; a refusal or a cancelled picker
+   * leaves the share off without a message; the browser's own "Stop sharing" turns it off too (LocalTrackUnpublished). */
+  const toggleShare = useCallback(async () => {
+    const r = roomRef.current; if (!r) return;
+    const on = !shareRef.current;
+    try {
+      await r.localParticipant.setScreenShareEnabled(on, on ? SCREEN_SHARE_OPTIONS : undefined);
+      setShareOn(on && r.localParticipant.isScreenShareEnabled);
+      setError(null);
+    } catch (e) {
+      setShareOn(r.localParticipant.isScreenShareEnabled);
+      if (on && isShareRefusal(e)) return;
+      setError(shareErrorText(e, on));
+    }
+  }, []);
 
   /** Change a device after joining; the choice is remembered for the next join in this tab. */
   const switchDevice = useCallback(async (kind: DeviceKind, deviceId: string) => {
@@ -227,7 +267,7 @@ export function useVideoRoom(mid: string, enabled: boolean, opts: VideoOptions =
   const activeDevice = useCallback((kind: DeviceKind) => roomRef.current?.getActiveDevice(kind), []);
 
   const remote: RemoteParticipant[] = room ? Array.from(room.remoteParticipants.values()) : [];
-  return { room, status, error, micOn, camOn, toggleMic, toggleCam, remote, tick, quality, audioBlocked, startAudio, switchDevice, rejoin, deviceChanged, activeSpeakers, activeDevice };
+  return { room, status, error, micOn, camOn, toggleMic, toggleCam, remote, tick, quality, audioBlocked, startAudio, switchDevice, rejoin, deviceChanged, activeSpeakers, activeDevice, shareOn, toggleShare };
 }
 
 /** A camera and microphone preview for the pre-join screen: the tracks are created on demand and stopped on release. */

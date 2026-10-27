@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObjec
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { Camera, CameraOff, Footprints, Maximize2, Mic, MicOff, Minimize2, MonitorCheck, PanelLeft, Volume2, VolumeX, X } from "lucide-react";
+import { Camera, CameraOff, Footprints, Maximize2, Mic, MicOff, Minimize2, MonitorCheck, MonitorUp, PanelLeft, Volume2, VolumeX, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { handUsers, type AgentInfo, type LiveEvent, type LiveStatus, type MeetingState, type ReactionEvent } from "@/lib/live";
 import type { Me } from "@/lib/session";
@@ -16,7 +16,7 @@ import { useVideoRoom, type JoinChoice } from "@/lib/video";
 import { useDictationGuard } from "@/hooks/useDictationGuard";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
 import { SkeletonLines, errorText, useAnnounce } from "@/features/casefile/components/common";
-import { admit, askQuestion, endCase as endCaseCall, getSlides, openOnScreen, present, raiseHand, sendReaction, setCurrent, setSpotlight, timer as timerCall } from "../api";
+import { admit, allowPresent, askQuestion, endCase as endCaseCall, getSlides, openOnScreen, present, raiseHand, sendChat, sendReaction, setCurrent, setPresenting, setSpotlight, timer as timerCall } from "../api";
 import { CardDialog } from "../components/CardDialog";
 import { DecisionStrip, SlideDots, StageFrame } from "../components/Stage";
 import { QuestionsList, SlideContent } from "../components/shared";
@@ -33,6 +33,7 @@ import { EndMeetingDialog } from "./EndMeetingDialog";
 import { StageContent } from "./StageContent";
 import { Strip } from "./Strip";
 import { ConnectionBanner } from "./ConnectionBanner";
+import { PresentDialog, markPresentAsked, presentAsked } from "./PresentDialog";
 import { SidePanel } from "./panels";
 import { cn } from "@/lib/utils";
 
@@ -106,9 +107,9 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
   // ---- video -------------------------------------------------------------------------------------------------------------
   const room = variant === "room";
   const videoOn = videoAvailable && (room || !!joinChoice);
-  const video: CallVideo = useVideoRoom(mid, videoOn, room ? { screen: "room", mic: false, cam: false } : joinChoice ?? {});
+  const rawVideo: CallVideo = useVideoRoom(mid, videoOn, room ? { screen: "room", mic: false, cam: false } : joinChoice ?? {});
   // While the person dictates (a question, the decision form, the notes), the call microphone is muted and comes back after.
-  const dictating = useDictationGuard(room ? { room: null, status: "off", micOn: false } : video);
+  const dictating = useDictationGuard(room ? { room: null, status: "off", micOn: false } : rawVideo);
 
   // ---- the shell's own state ---------------------------------------------------------------------------------------------
   const spotlight = useMemo(() => s.spotlight ?? [], [s.spotlight]);
@@ -123,9 +124,25 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
   useEffect(() => { setMinutes(row?.minutes ?? s.meeting.minutes_per_case ?? 10); }, [cid]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!phone) setMenu((m) => (m === "coordinator" ? null : m)); }, [phone]);
 
+  // ---- screen share (night-v3 5.2): LiveKit carries the pixels, the meeting records who presents -----------------------------
+  // Why my share stopped, from the event that stopped it (read when the state says someone else presents, or no one).
+  const shareStopReason = useRef<string | null>(null);
+  const nameOf = (user: string) => stateRef.current.attendance.find((a) => a.user === user)?.name || user;
+  const onPresentingEvent = (ev: LiveEvent) => {
+    const user = String(ev.user ?? "");
+    const by = String(ev.by ?? "");
+    if (!ev.on && user && user === myUser && by && by !== myUser) {
+      shareStopReason.current = ev.replaced ? `Your share was stopped: ${nameOf(by)} started presenting.` : `Your share was stopped by ${nameOf(by)}.`;
+    }
+    if (ev.on && user && user !== myUser) announce(`${(ev.name as string | undefined) || nameOf(user)} is presenting.`);
+  };
+
   // ---- live events -------------------------------------------------------------------------------------------------------
   const onEvent = useCallback((ev: LiveEvent) => {
     const st = stateRef.current;
+    if (ev.type === "presenting") { onPresentingEvent(ev); return; }
+    if (ev.type === "present_allowed") { void live.refresh(); return; }  // my "may I present" (can.present) comes with the state
+    if (ev.type === "current" && ev.case_id && ev.case_id !== st.current?.case_id && st.presenting && st.presenting === myUser) shareStopReason.current = "Your share was stopped: the next case is on the screen.";
     if (ev.type === "reaction") { cs.addReaction({ user: String(ev.user ?? ""), name: ev.name as string | undefined, kind: String(ev.kind ?? ""), at: ev.at as string | undefined }); return; }
     if (ev.type === "decision") { cs.markSaved(); return; }
     if (ev.type === "ended") { announce("The meeting has ended."); return; }
@@ -141,8 +158,7 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
         announce("The coordinator asks for your card on this case.");
       }
     }
-    if (ev.type === "current" && ev.case_id && ev.case_id !== st.current?.case_id) announce("The shared screen moved to the next case.");
-  }, [announce, cs.addReaction, cs.markSaved, variant]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [announce, cs.addReaction, cs.markSaved, variant, myUser]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!events) return undefined;
     events.current = onEvent;
@@ -195,7 +211,54 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
     presence: (mode) => run(() => presenceM.mutateAsync(mode), mode === "room" ? "Marked as in the room." : "Marked as remote."),
     leave: () => nav(variant === "coordinator" ? "/meetings" : `/meetings/${mid}`),
     card: () => { if (cid) setCard({ caseId: cid, patientLine: row?.patient_line || cid }); },
+    chat: (text) => run(() => sendChat(mid, text)),
+    allowPresent: (user, allowed) => run(() => allowPresent(mid, user, allowed), allowed ? "Allowed to present." : "The right to present was withdrawn."),
+    presenting: (on) => run(() => setPresenting(mid, on)),
   };
+
+  // My share turned on: tell the meeting (refused: stop it again). Turned off: tell the meeting when it still names me.
+  const shareOn = !!rawVideo.shareOn;
+  const rawToggleShare = rawVideo.toggleShare;
+  const sharePrev = useRef(false);
+  const shareMine = useRef(false);
+  useEffect(() => {
+    if (shareOn && !sharePrev.current) {
+      shareMine.current = false;
+      shareStopReason.current = null;
+      void actions.presenting?.(true).catch(() => { void rawToggleShare?.(); });
+    } else if (!shareOn && sharePrev.current) {
+      if (stateRef.current.presenting === myUser) void actions.presenting?.(false).catch(() => undefined);
+      shareMine.current = false;
+    }
+    sharePrev.current = shareOn;
+  }, [shareOn]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Someone else presents now, the coordinator stopped me, my right was withdrawn or the next case came: stop my share.
+  useEffect(() => {
+    if (!shareOn || !myUser) return;
+    if (s.presenting === myUser) { shareMine.current = true; return; }
+    if (!shareMine.current) return;  // not yet confirmed by the server
+    shareMine.current = false;
+    void rawToggleShare?.();
+    announce(shareStopReason.current ?? "Your share was stopped.");
+    shareStopReason.current = null;
+  }, [s.presenting, shareOn]); // eslint-disable-line react-hooks/exhaustive-deps
+  // After a reload the meeting may still name me while nothing is shared: clear it once the video is back.
+  useEffect(() => {
+    if (rawVideo.status === "connected" && !shareOn && myUser && stateRef.current.presenting === myUser) void actions.presenting?.(false).catch(() => undefined);
+  }, [rawVideo.status]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const [presentAsk, setPresentAsk] = useState(false);
+  const mayShare = !room && desktop && !!rawToggleShare;
+  /** Present or stop (the bar's button and Ctrl+Alt+T): the one-line reminder before the first share of the meeting in this tab. */
+  const toggleShare = async () => {
+    if (!rawToggleShare) return;
+    if (shareOn) { await rawToggleShare(); return; }
+    if (!stateRef.current.can?.present) { announce("Ask the MDT Coordinator to allow you to present."); return; }
+    if (rawVideo.status !== "connected") return;
+    if (!presentAsked(mid)) { setPresentAsk(true); return; }
+    await rawToggleShare();
+  };
+  const video: CallVideo = { ...rawVideo, toggleShare: mayShare || shareOn ? toggleShare : undefined };
 
   const next = () => { if (order.length && idx < order.length - 1 && !goM.isPending) void actions.go(order[idx + 1].case_id).catch(() => {}); };
   const previous = () => { if (idx > 0 && !goM.isPending) void actions.go(order[idx - 1].case_id).catch(() => {}); };
@@ -262,6 +325,7 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
           )}
           {room ? <RoomHoverBar summaryOn={summaryOn} setSummaryOn={setSummaryOn} videoOn={videoOn} /> : <CallBar />}
           {room ? null : <ShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} coordinator={canManage} present={!!video.toggleShare} />}
+          {mayShare ? <PresentDialog open={presentAsk} onOpenChange={setPresentAsk} onShare={() => { markPresentAsked(mid); setPresentAsk(false); void rawToggleShare?.(); }} /> : null}
           {canManage ? <EndMeetingDialog open={endOpen} onOpenChange={setEndOpen} /> : null}
           {card ? <CardDialog mid={mid} caseId={card.caseId} patientLine={card.patientLine} required={!!s.can?.card_required} open onOpenChange={(o) => { if (!o) setCard(null); }} onSent={() => announce("Card sent.")} /> : null}
         </StageFrame>
@@ -277,15 +341,27 @@ function StageOverlays() {
   const openedItem = c.opened && c.opened.kind !== "none";
   return (
     <>
-      <div className="pointer-events-none absolute inset-x-0 top-2 z-20 flex justify-center px-3 [&>*]:pointer-events-auto"><ConnectionBanner /></div>
+      <div className="pointer-events-none absolute inset-x-0 top-2 z-20 flex flex-col items-center gap-1.5 px-3 [&>*]:pointer-events-auto"><ConnectionBanner /><PresentingBar /></div>
       {c.variant === "member" ? (
         <span className={cn("pointer-events-none absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium", c.following ? "bg-ok/20 text-[#8fe0b3]" : "bg-warn/20 text-[#ffd48a]")}>
           {c.following ? <MonitorCheck className="size-3.5" aria-hidden /> : <Footprints className="size-3.5" aria-hidden />}<span className={c.phone ? "sr-only" : undefined}>{c.following ? "Following the shared screen" : "Stepped away"}</span>
         </span>
       ) : c.variant === "coordinator" ? <span className="pointer-events-none absolute right-3 top-3 z-10 rounded-full bg-black/50 px-2.5 py-1 text-xs font-medium text-white">What the room sees</span> : null}
-      {!openedItem ? <SlideDots slides={c.slides} index={c.shownSlide} className="absolute bottom-2 right-3 z-10" /> : null}
+      {!openedItem && !c.state.presenting ? <SlideDots slides={c.slides} index={c.shownSlide} className="absolute bottom-2 right-3 z-10" /> : null}
       <AdmitToast className="absolute bottom-3 left-3" />
     </>
+  );
+}
+
+/** "You are presenting" with Stop, at the top of the stage while my screen is shared. */
+function PresentingBar() {
+  const c = useCall();
+  if (!c.video.shareOn) return null;
+  return (
+    <p role="status" className="flex items-center gap-2 rounded-full bg-primary px-3 py-1 text-sm font-medium text-primary-foreground shadow-[var(--shadow-lift)]" data-testid="presenting-bar">
+      <MonitorUp className="size-4" aria-hidden />You are presenting to everyone
+      <button type="button" onClick={() => void c.video.toggleShare?.()} className="rounded-full bg-white px-2.5 py-0.5 text-xs font-semibold text-primary outline-none hover:bg-white/90 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-primary" aria-label="Stop presenting" title="Stop presenting (Ctrl+Alt+T)" data-testid="stop-presenting">Stop</button>
+    </p>
   );
 }
 
@@ -315,7 +391,7 @@ function RoomBody({ summaryOn, liveText }: { summaryOn: boolean; liveText: strin
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
           <StageContent className="min-h-0 flex-1">
             <div className="pointer-events-none absolute inset-x-0 top-2 z-20 flex justify-center px-3 [&>*]:pointer-events-auto"><ConnectionBanner /></div>
-            {!openedItem ? <SlideDots slides={c.slides} index={c.shownSlide} className="absolute bottom-3 right-4 z-10" /> : null}
+            {!openedItem && !s.presenting ? <SlideDots slides={c.slides} index={c.shownSlide} className="absolute bottom-3 right-4 z-10" /> : null}
           </StageContent>
           <AnimatePresence initial={false}>
             {questions.length ? (

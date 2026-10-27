@@ -24,7 +24,9 @@ export default defineConfig({
     trace: "off",
     screenshot: "off",
     permissions: ["camera", "microphone"],
-    launchOptions: { args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required"] },
+    // The screen share picker (night-v3 5.2) chooses by itself: TBNIK_LIVE_CAPTURE=tab picks a tab by its title instead of the screen.
+    launchOptions: { args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required",
+      process.env.TBNIK_LIVE_CAPTURE === "tab" ? "--auto-select-tab-capture-source-by-title=Vaidyx" : "--auto-select-desktop-capture-source=Entire screen"] },
   },
   projects: [{ name: "chromium-live" }],
 });

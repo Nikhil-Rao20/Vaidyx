@@ -69,15 +69,25 @@ def hmac_jwt(payload: dict, secret: str) -> str:
     return f"{header}.{body}.{_b64url(sig)}"
 
 
+MEMBER_SOURCES = ("camera", "microphone", "screen_share", "screen_share_audio")  # a member may present a screen (night-v3 5.2)
+ROOM_SOURCES = ("camera", "microphone")                                        # the room screen never shares a screen
+
+
 def token(identity: str, name: str, room: str, ttl: int = TOKEN_TTL, now: int | None = None, keys_: dict | None = None,
-          can_publish: bool = True, can_subscribe: bool = True) -> str:
-    """A LiveKit access token for `identity` to join `room`."""
+          can_publish: bool = True, can_subscribe: bool = True, can_publish_sources=None, can_publish_data: bool = False) -> str:
+    """A LiveKit access token for `identity` to join `room`. `can_publish_sources` (camera, microphone, screen_share, screen_share_audio)
+    limits what the token may publish; `can_publish_data` allows data packets (night-v3 5.2: transient signals only; chat and reactions
+    go through the app's own channel). Who may present is the app's rule (meetings.may_present), the token only makes it possible."""
     k = keys_ or keys()
     if not k:
         raise RuntimeError("Video is not set up (data/tumour_board/livekit.json is missing)")
     now = int(time.time()) if now is None else int(now)
-    payload = {"iss": k["api_key"], "sub": str(identity), "nbf": now, "exp": now + int(ttl), "iat": now, "name": str(name or identity),
-               "video": {"roomJoin": True, "room": str(room), "canPublish": bool(can_publish), "canSubscribe": bool(can_subscribe)}}
+    grant = {"roomJoin": True, "room": str(room), "canPublish": bool(can_publish), "canSubscribe": bool(can_subscribe)}
+    if can_publish_sources:
+        grant["canPublishSources"] = [str(x) for x in can_publish_sources]
+    if can_publish_data:
+        grant["canPublishData"] = True
+    payload = {"iss": k["api_key"], "sub": str(identity), "nbf": now, "exp": now + int(ttl), "iat": now, "name": str(name or identity), "video": grant}
     try:
         import jwt  # PyJWT
     except ImportError:
@@ -106,7 +116,9 @@ def decode(tok: str, secret: str) -> dict:
     return json.loads(_b64url_decode(body))
 
 
-def for_meeting(mid: str, identity: str, name: str) -> dict:
-    """{url, token, room, identity, name} for a member of the meeting."""
+def for_meeting(mid: str, identity: str, name: str, screen: bool = False) -> dict:
+    """{url, token, room, identity, name} for a member of the meeting (camera, microphone and a screen share, data allowed), or for the
+    room screen (`screen=True`: camera and microphone only, no data)."""
     room = room_name(mid)
-    return {"url": url(), "token": token(identity, name, room), "room": room, "identity": str(identity), "name": str(name or identity), "expires_in": TOKEN_TTL}
+    tok = token(identity, name, room, can_publish_sources=ROOM_SOURCES if screen else MEMBER_SOURCES, can_publish_data=not screen)
+    return {"url": url(), "token": tok, "room": room, "identity": str(identity), "name": str(name or identity), "expires_in": TOKEN_TTL}

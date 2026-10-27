@@ -1,13 +1,14 @@
 // The People panel of the call (night-v3 5.1, research/04 section 6.9): Waiting (the coordinator admits each or all; a member sees
 // the count), In the room, Remote, Expected not here, and apart the AI agents standing in for absent heads (support only, never
 // counted). Each row: initials, name, role badges, department, where, hand with its order number, microphone and camera when the
-// call knows them. The coordinator's row menu spotlights a person for everyone.
+// call knows them. The coordinator's row menu spotlights a person for everyone and allows or withdraws the right to present a screen
+// (night-v3 5.2), or stops a share; "may present" and "presenting" stand on the rows.
 import { useMemo, useState } from "react";
 import type { Room } from "livekit-client";
-import { Bot, MoreVertical, Search, Star, StarOff, UserRoundCheck, UsersRound } from "lucide-react";
+import { Bot, MonitorOff, MonitorUp, MoreVertical, Search, Star, StarOff, UserRoundCheck, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { Attendee, MeetingState } from "@/lib/live";
 import { identityUser, isRoomScreen } from "@/lib/video";
 import { LoadingButton } from "@/features/casefile/components/common";
@@ -15,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { PanelSection, PersonRow, handOrder, usePanelAction } from "../../components/People";
 import { useCall } from "../context";
 import { AGENT_STATE_WORD, badgesOf, type CallCtx, type RoleBadge } from "../types";
+import { PRESENT_ITEM_WORD, presentMenuItems } from "../Strip";
 
 /** Up to three people in the spotlight (the server's cap). */
 export const SPOTLIGHT_MAX = 3;
@@ -56,8 +58,16 @@ function liveMedia(room: Room | null, user: string): { mic: boolean; cam: boolea
   return p ? { mic: p.isMicrophoneEnabled, cam: p.isCameraEnabled } : null;
 }
 
-function RowMenu({ a, ctx, busy, onSpot }: { a: Attendee; ctx: CallCtx; busy: boolean; onSpot: (on: boolean) => void }) {
+/** The screen share word on a row: "presenting" for the sharer, "may present" for someone the coordinator allowed. */
+export function presentWord(user: string, s: Pick<MeetingState, "presenting" | "present_allowed">): string | null {
+  if (s.presenting && s.presenting === user) return "presenting";
+  if ((s.present_allowed ?? []).includes(user)) return "may present";
+  return null;
+}
+
+function RowMenu({ a, ctx, busy, onSpot, onPresent }: { a: Attendee; ctx: CallCtx; busy: boolean; onSpot: (on: boolean) => void; onPresent: (k: "allow" | "withdraw" | "stop") => void }) {
   const on = ctx.spotlight.includes(a.user);
+  const present = presentMenuItems({ user: a.user, coordinator: ctx.me || null, canManage: ctx.canManage, allowed: ctx.state.present_allowed ?? [], presenting: ctx.state.presenting ?? null });
   const full = !on && ctx.spotlight.length >= SPOTLIGHT_MAX;
   return (
     <DropdownMenu>
@@ -68,6 +78,12 @@ function RowMenu({ a, ctx, busy, onSpot }: { a: Attendee; ctx: CallCtx; busy: bo
         <DropdownMenuItem disabled={full} onSelect={() => onSpot(!on)} title={full ? "Up to three people can be in the spotlight" : undefined}>
           {on ? <StarOff className="size-4" /> : <Star className="size-4" />}{on ? "Remove from spotlight" : full ? "Spotlight is full (three people)" : "Spotlight for everyone"}
         </DropdownMenuItem>
+        {present.length ? <DropdownMenuSeparator /> : null}
+        {present.map((k) => (
+          <DropdownMenuItem key={k} onSelect={() => onPresent(k)} data-testid={`row-present-${k}`}>
+            {k === "stop" ? <MonitorOff className="size-4" /> : <MonitorUp className="size-4" />}{PRESENT_ITEM_WORD[k]}
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -86,6 +102,7 @@ export function PeoplePanel() {
 
   const row = (a: Attendee, opts: { admit?: boolean; menu?: boolean } = {}) => {
     const media = a.status === "present" || a.status === "remote" ? liveMedia(video.room, a.user) : null;
+    const word = a.status === "present" || a.status === "remote" ? presentWord(a.user, s) : null;
     return (
       <PersonRow
         key={a.user}
@@ -96,8 +113,9 @@ export function PeoplePanel() {
         hand={ctx.hands.has(a.user)}
         mic={media ? media.mic : null}
         cam={media ? media.cam : null}
-        action={opts.admit ? <LoadingButton size={ctx.phone ? "sm" : "xs"} className={tap} loading={act.pending === `admit:${a.user}`} disabled={!!act.pending} onClick={() => void act.run(`admit:${a.user}`, () => ctx.actions.admit(a.user))}><UserRoundCheck className="size-3" />Admit</LoadingButton> : undefined}
-        menu={opts.menu && canManage && ctx.variant === "coordinator" ? <RowMenu a={a} ctx={ctx} busy={!!act.pending} onSpot={(on) => { const next = nextSpotlight(ctx.spotlight, a.user, on); if (next) void act.run(`spot:${a.user}`, () => ctx.actions.spotlight(next)); }} /> : undefined}
+        action={!opts.admit && word ? <span className={cn("shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium", word === "presenting" ? "bg-primary text-primary-foreground" : "bg-stage-raised text-stage-muted")} data-testid="present-word">{word}</span> : opts.admit ? <LoadingButton size={ctx.phone ? "sm" : "xs"} className={tap} loading={act.pending === `admit:${a.user}`} disabled={!!act.pending} onClick={() => void act.run(`admit:${a.user}`, () => ctx.actions.admit(a.user))}><UserRoundCheck className="size-3" />Admit</LoadingButton> : undefined}
+        menu={opts.menu && canManage && ctx.variant === "coordinator" ? <RowMenu a={a} ctx={ctx} busy={!!act.pending} onSpot={(on) => { const next = nextSpotlight(ctx.spotlight, a.user, on); if (next) void act.run(`spot:${a.user}`, () => ctx.actions.spotlight(next)); }}
+          onPresent={(k) => void act.run(`present:${a.user}`, () => (k === "stop" ? ctx.actions.presenting?.(false) : ctx.actions.allowPresent?.(a.user, k === "allow")) ?? Promise.resolve())} /> : undefined}
       />
     );
   };

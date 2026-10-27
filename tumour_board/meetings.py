@@ -38,6 +38,10 @@ SPOTLIGHT_MAX = 3                                   # people the coordinator may
 REACTIONS = ("agree", "thanks", "applause", "question")  # the four plain reactions; shown for a moment, never stored
 REACTION_GAP = 2.0                                  # seconds between two reactions of one person
 _REACTED: dict[tuple, float] = {}                    # (mid, user) -> time of the last reaction
+MAX_CHAT, CHAT_VIEW = 1000, 200                     # a chat line's length; lines sent with the state (the file keeps every line) (night-v3 5.3)
+CHAT_PER_MINUTE = 20
+_CHATTED: dict[tuple, list] = {}                     # (mid, user) -> times of the last lines
+PMJAY_DEPARTMENTS = ("surgical_oncology", "radiation_oncology", "medical_oncology")  # NHA HBP 2.2 manual 2021, 3.9: "advised" (night-v3 5.4)
 AGENT_STATES = ("ready", "reading_question", "thinking", "answering")
 IMAGING_TYPES = ("ct", "mri", "xray", "ultrasound", "mammogram", "pet_ct", "bone_scan")
 PATHOLOGY_TYPES = ("histopathology", "cytology", "ihc", "molecular")
@@ -166,7 +170,7 @@ def _save(s) -> dict:
     return board.save_session(s)
 
 
-PRIVATE_EVENTS = ("open", "question", "decision_live", "decision", "card")  # live content: for the admitted members and the coordinator only
+PRIVATE_EVENTS = ("open", "question", "decision_live", "decision", "card", "chat")  # live content: for the admitted members and the coordinator only
 
 
 def _shape(s: dict):
@@ -381,7 +385,8 @@ def row(s: dict, it: dict, order: int, r: dict | None = None, restricted: bool =
             "owner_department_name": org.department_name(own) if own else "", "presenter_name": display_name(pres) if pres else "",
             "board_question": "" if restricted else _board_question(c, st), "left_before_board": _left_of(cid, st), "minutes": _minutes_for(s, it), "order": order,
             "reason": it.get("reason") or "", "ready": bool(c.get("board_ready")), "status": (item or {}).get("status") or "waiting",
-            "ended": cid in (s.get("ended") or {}), "outcome": oc.get("outcome"), "outcome_label": OUTCOMES.get(oc.get("outcome") or "", ""),
+            "ended": cid in (s.get("ended") or {}), "elapsed_seconds": ((s.get("ended") or {}).get(cid) or {}).get("elapsed_seconds"),
+            "outcome": oc.get("outcome"), "outcome_label": OUTCOMES.get(oc.get("outcome") or "", ""),
             "added_after_send": bool(s.get("agenda_sent_at")) and cid not in (s.get("agenda_sent_cases") or []), "urgency": urg.get("level"),
             "presenter": chosen_presenter(c), "waiting_on": after_send.waiting_on(c), "new_since_sent": after_send.new_since_sent(cid, c)}  # night-v3 item 1.5
 
@@ -413,9 +418,30 @@ def timer_view(t) -> dict | None:
     return {"seconds_left": _timer_left(t), "running": bool(t.get("running")), "total": int(t.get("total") or 0)}
 
 
+def _elapsed(t) -> int:
+    """Seconds spent on the case so far, from its countdown (total minus what is left); 0 without a timer."""
+    if not isinstance(t, dict):
+        return 0
+    return max(0, int(t.get("total") or 0) - _timer_left(t))
+
+
+def presenter_view(s: dict) -> dict | None:
+    """The presenter of the Case File on the floor (night-v3 5.4): the one chosen when it was sent to the board, else the owner."""
+    cid = s.get("current")
+    c = store.get_case(cid) if cid and cid not in config.PROTECTED_CASES else None
+    if not c:
+        return None
+    u = presenter_of(c)
+    if not u:
+        return None
+    did = user_department(u)
+    return {"user": u, "name": display_name(u), "department": did, "department_name": org.department_name(did) if did else ""}
+
+
 def current_view(s: dict) -> dict:
     lv = s.get("live") or {}
-    return {"case_id": s.get("current"), "slide": int(lv.get("slide") or 0), "opened": lv.get("opened"), "timer": timer_view(lv.get("timer"))}
+    return {"case_id": s.get("current"), "slide": int(lv.get("slide") or 0), "opened": lv.get("opened"), "timer": timer_view(lv.get("timer")),
+            "presenter": presenter_view(s), "elapsed_seconds": _elapsed(lv.get("timer")), "presenting": lv.get("presenting") or None}
 
 
 def attendance_rows(s: dict) -> list[dict]:
@@ -495,6 +521,47 @@ def spotlight_view(s: dict) -> list[str]:
     return [str(u) for u in ((s.get("live") or {}).get("spotlight") or []) if u]
 
 
+def quorum_view(s: dict) -> dict:
+    """The quorum line (night-v3 5.4, research/04 section 6.14): each board head present as a person (an admitted member of that department,
+    or the department marked present on the attendance sheet), the agents standing in (apart, never counted), and the PM-JAY composition
+    (Surgical, Radiation and Medical Oncology present as people; the NHA manual says "advised", so it is information, not a gate)."""
+    att = board.attendance(s)
+    people = [(u, p) for u, p in (s.get("people") or {}).items() if p.get("status") in ADMITTED]
+
+    def present(did):
+        who = [p.get("name") or display_name(u) for u, p in people if (p.get("department") or "") == did]
+        return (True, who[0]) if who else (att.get(did) == "present", None)
+    heads = []
+    for h in board.heads():
+        ok, by = present(h["id"])
+        heads.append({"id": h["id"], "name": h["name"], "present": ok, "by": by, "role": h.get("role")})
+    agents = [a["department_name"] for a in agents_view(s)]
+    pm = {}
+    for did in PMJAY_DEPARTMENTS:
+        pm[did.split("_")[0]] = present(did)[0]
+    return {"heads": heads, "present": sum(1 for h in heads if h["present"]), "total": len(heads), "agents": agents,
+            "pmjay": {**pm, "present": sum(1 for v in pm.values() if v), "total": len(PMJAY_DEPARTMENTS), "note": "PM-JAY advises Surgical, Radiation and Medical Oncology"}}
+
+
+def present_allowed_view(s: dict) -> list[str]:
+    return [str(u) for u in (s.get("present_allowed") or []) if u]
+
+
+def may_present(s: dict, r: dict) -> bool:
+    """Who may present a screen (night-v3 5.2): the coordinator, the presenter of the Case File on the floor, and anyone the coordinator
+    allowed; always an admitted member."""
+    user = r.get("user") or ""
+    if manage(r):
+        return True
+    if not is_member(r, s):
+        return False
+    if user in present_allowed_view(s):
+        return True
+    cid = s.get("current")
+    c = store.get_case(cid) if cid and cid not in config.PROTECTED_CASES else None
+    return bool(c) and presenter_of(c) == user
+
+
 def view(mid: str, r: dict) -> dict:
     """The GET /meetings/{mid} payload (also the first WebSocket message). A viewer who is not admitted (waiting, or a department on the
     attendance sheet that did not join) sees the agenda with initials for the Case Files it may not read in full, and none of the live
@@ -522,9 +589,12 @@ def view(mid: str, r: dict) -> dict:
             "code": {"value": code["value"], "expires_at": code.get("expires_at"), "attempts": code.get("attempts", 0)} if code else None,
             "attendance": attendance_rows(s), "current": cv, "decision_live": dl, "questions": list(s.get("questions") or []) if member else [],
             "hands": list(s.get("hands") or []), "agent": agent_state(s), "agents": agents_view(s), "spotlight": spotlight_view(s),
+            "quorum": quorum_view(s), "present_allowed": present_allowed_view(s), "presenting": (s.get("live") or {}).get("presenting") or None,
+            "chat": list(s.get("chat") or [])[-CHAT_VIEW:] if member else [],
             "can": {"manage": manage(r), "record": org.can(r, "board_record"), "ask": member and bool(cur),
                     "card": member and bool(cur), "card_required": user in card_holders(s),
-                    "video": bool(s.get("video")) and member, "member": member},
+                    "video": bool(s.get("video")) and member, "member": member,
+                    "present": member and s.get("status") == "in_session" and may_present(s, r), "chat": member and s.get("status") in ("planned", "in_session")},
             "me": {"user": user, "status": me.get("status"), "mode": me.get("mode"), "department": me.get("department") or ""},
             "online": live.online(mid), "outcomes": outcomes, "ended": sorted((s.get("ended") or {}).keys()), "cards_given": cards,
             "heads": board.heads(), "absent_roles": board.absent_roles(s, cur) if cur else [], "status": s.get("status")}
@@ -994,7 +1064,7 @@ def join(code: str, user: str, r: dict) -> dict:
         _sync_department(s, user, user)
     _save(s)
     board.audit_event(s["id"], "joined", user, status=status)
-    _send(s, {"type": "presence", "attendance": attendance_rows(s), "online": live.online(s["id"]), "joined": user})
+    _send(s, {"type": "presence", "attendance": attendance_rows(s), "online": live.online(s["id"]), "joined": user, "quorum": quorum_view(s), "agents": agents_view(s)})
     return {"meeting_id": s["id"], "status": "admitted" if status in ADMITTED else "waiting", "meeting": summary_row(s)}
 
 
@@ -1013,7 +1083,7 @@ def admit(mid: str, by: str, user: str) -> dict:
     _save(s)
     board.audit_event(mid, "admitted", by, user=user, status=p["status"])
     rows = attendance_rows(s)
-    _send(s, {"type": "admit", "user": user, "status": p["status"], "attendance": rows, "agent": agent_state(s), "agents": agents_view(s)})
+    _send(s, {"type": "admit", "user": user, "status": p["status"], "attendance": rows, "agent": agent_state(s), "agents": agents_view(s), "quorum": quorum_view(s)})
     return next((x for x in rows if x["user"] == user), {"user": user, "status": p["status"]})
 
 
@@ -1035,7 +1105,7 @@ def present(mid: str, user: str, r: dict, mode: str) -> dict:
     _save(s)
     board.audit_event(mid, "presence_mode", user, mode=mode, status=p["status"])
     rows = attendance_rows(s)
-    _send(s, {"type": "presence", "attendance": rows, "online": live.online(mid)})
+    _send(s, {"type": "presence", "attendance": rows, "online": live.online(mid), "quorum": quorum_view(s), "agents": agents_view(s)})
     return next((x for x in rows if x["user"] == user), {"user": user, "status": p["status"], "mode": mode})
 
 
@@ -1369,6 +1439,76 @@ def react(mid: str, user: str, kind: str) -> dict:
     return {"user": user, "kind": kind, "at": ev["at"]}
 
 
+def present_allow(mid: str, by: str, user: str, allowed: bool) -> list[str]:
+    """The coordinator allows (or withdraws) a member's right to present a screen (night-v3 5.2); kept on the meeting for its length.
+    Audited by ids."""
+    s = need(mid); _active(s)
+    user = str(user or "").strip()
+    if ((s.get("people") or {}).get(user) or {}).get("status") not in ADMITTED:
+        raise MeetingError(f"{display_name(user)} is not in the meeting.", 409, "not_in_meeting")
+    cur = [u for u in present_allowed_view(s) if u != user]
+    if allowed:
+        cur.append(user)
+    s["present_allowed"] = cur
+    lv = s.get("live") or {}
+    stopped = False
+    if not allowed and lv.get("presenting") == user and not manage(org.roles(user)):
+        lv["presenting"] = None  # a withdrawn right ends the share on every screen
+        stopped = True
+    _save(s)
+    board.audit_event(mid, "present_allowed", by, user=user, allowed=bool(allowed))
+    _send(s, {"type": "present_allowed", "users": cur, "by": by})
+    if stopped:
+        _send(s, {"type": "presenting", "user": user, "name": display_name(user), "on": False, "by": by})
+    return cur
+
+
+def set_presenting(mid: str, user: str, r: dict, on: bool) -> dict:
+    """Who shares a screen now (night-v3 5.2): LiveKit carries the pixels, the app records who and whether it is allowed. Starting needs
+    may_present; a new share replaces the earlier one (as Google Meet does); stopping is for the sharer or the coordinator. Audited."""
+    s = need(mid); _in_session(s)
+    lv = s.setdefault("live", {})
+    before = lv.get("presenting") or None
+    if on:
+        if not may_present(s, r):
+            raise MeetingError("Only the MDT Coordinator, the presenter of this Case File, or someone the coordinator allowed can present a screen.", 403, "not_allowed")
+        lv["presenting"] = user
+    else:
+        if before and before != user and not manage(r):
+            raise MeetingError("Only the person presenting or the MDT Coordinator can stop a share.", 403, "not_yours")
+        lv["presenting"] = None
+    _save(s)
+    board.audit_event(mid, "presenting", user, on=bool(on), replaced=before if on and before and before != user else None)
+    if on and before and before != user:
+        _send(s, {"type": "presenting", "user": before, "name": display_name(before), "on": False, "by": user, "replaced": True})
+    who = user if on else (before or user)
+    _send(s, {"type": "presenting", "user": who, "name": display_name(who), "on": bool(on), "by": user})
+    return {"presenting": lv.get("presenting"), "replaced": before if on and before and before != user else None}
+
+
+def chat(mid: str, user: str, text: str) -> dict:
+    """A meeting chat line from an admitted member (night-v3 5.3): kept with the meeting record (the session file), apart from the
+    questions to the board and the agents; sent only to the admitted members; at most MAX_CHAT characters and CHAT_PER_MINUTE lines a
+    minute per person; audited without the words (a line may carry patient details). Never pushed as a notification."""
+    s = need(mid); _active(s)
+    text = str(text or "").strip()
+    if not text:
+        raise MeetingError("Type a message.", 400, "empty")
+    if len(text) > MAX_CHAT:
+        raise MeetingError(f"A message can have at most {MAX_CHAT} characters.", 413, "too_long")
+    now = time.time()
+    recent = [x for x in _CHATTED.get((mid, user), []) if now - x < 60]
+    if len(recent) >= CHAT_PER_MINUTE:
+        raise MeetingError("Too many messages in a minute.", 429, "too_many")
+    _CHATTED[(mid, user)] = recent + [now]
+    m = {"id": "C" + uuid.uuid4().hex[:6], "by": user, "by_name": display_name(user), "text": text, "at": _now(), "case_id": s.get("current")}
+    s.setdefault("chat", []).append(m)
+    _save(s)
+    board.audit_event(mid, "chat", user, chars=len(text))
+    _send(s, {"type": "chat", "message": m})
+    return m
+
+
 # ---- the decision, the end of a case, the cards ------------------------------------------------------------------------------------------
 
 def _card_concerns(s, cid) -> list[dict]:
@@ -1438,7 +1578,8 @@ async def _record_decision(s, mid, cid, c, body, user) -> dict:
     rec = {**clean, "decision_text": text, "outcome_type": outcome, "meeting_outcome": outcome,
            "concerns": concerns, "divergent_opinions": decision_record.join_concerns(concerns),
            "members_present": members, "participants": ", ".join(members) or part["text"], "board_date": s.get("date"), "session": mid,
-           "attendance": {"present": part["present"], "absent": part["absent"], "members": part["members"]}, "actions": actions, "recorded_by": display_name(user)}
+           "attendance": {"present": part["present"], "absent": part["absent"], "members": part["members"]}, "actions": actions, "recorded_by": display_name(user),
+           "quorum": quorum_view(s)}  # heads present as people, agents standing in (apart), the PM-JAY composition (night-v3 5.4)
     try:
         record = await postboard.record_decision(cid, rec, user)
     except ValueError as e:
@@ -1506,9 +1647,10 @@ def end_case(mid: str, cid: str, by: str) -> dict:
     c = store.get_case(cid) if cid not in config.PROTECTED_CASES else None
     if not c:
         raise MeetingError("Case File not found.", 404, "no_case")
-    s.setdefault("ended", {})[cid] = {"at": _now(), "by": by}
-    if isinstance((s.get("live") or {}).get("timer"), dict) and s["live"]["timer"].get("running"):
-        t = s["live"]["timer"]
+    lv = s.get("live") or {}
+    s.setdefault("ended", {})[cid] = {"at": _now(), "by": by, "elapsed_seconds": _elapsed(lv.get("timer")) if s.get("current") == cid else None}
+    if isinstance(lv.get("timer"), dict) and lv["timer"].get("running"):
+        t = lv["timer"]
         t["left"], t["running"], t["started_at"] = _timer_left(t), False, None
     _save(s)
     heads = board.heads()

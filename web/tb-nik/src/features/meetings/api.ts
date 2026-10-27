@@ -1,7 +1,7 @@
 // Every call the meeting pages make (meetings.py, checked against tumour_board/api/meetings.py). The old /sessions
 // routes are the read-only fallback when the new routes are not on the server.
 import { api, TB } from "@/lib/api";
-import { routeMissing, type MeetingInfo, type MeetingState, type MeetingTimer, type Opened } from "@/lib/live";
+import { routeMissing, type ChatMessage, type MeetingInfo, type MeetingState, type MeetingTimer, type Opened } from "@/lib/live";
 import type { CardsResponse, DecisionBody, DecisionSpec, JoinResponse, MeetingsResponse, MemberCard, NewMeeting, OldSession, SlidesResponse } from "./types";
 
 const enc = encodeURIComponent;
@@ -36,6 +36,11 @@ export const raiseHand = (mid: string, raised: boolean) => api.post(`${mUrl(mid)
 export const decisionLive = (mid: string, text: string) => api.put(`${mUrl(mid)}/decision-live`, { text });
 /** Spotlight for everyone (night-v3 5.1): the coordinator, up to three admitted people; [] removes it. */
 export const setSpotlight = (mid: string, users: string[]) => api.post<{ spotlight: string[] }>(`${mUrl(mid)}/spotlight`, { users });
+/** Screen share (night-v3 5.2): the coordinator allows or withdraws a member's right to present; the sharer records a start or stop. */
+export const allowPresent = (mid: string, user: string, allowed: boolean) => api.post<{ present_allowed: string[] }>(`${mUrl(mid)}/present-allow`, { user, allowed });
+export const setPresenting = (mid: string, on: boolean) => api.post<{ presenting: string | null; replaced?: string | null }>(`${mUrl(mid)}/presenting`, { on });
+/** A meeting chat line (night-v3 5.3): kept with the meeting record, apart from the questions. */
+export const sendChat = (mid: string, text: string) => api.post<{ message: ChatMessage }>(`${mUrl(mid)}/chat`, { text });
 /** A short reaction (agree, thanks, applause, question): broadcast for a moment, never stored (night-v3 5.1). */
 export const sendReaction = (mid: string, kind: "agree" | "thanks" | "applause" | "question") => api.post<{ user: string; kind: string; at: string }>(`${mUrl(mid)}/reaction`, { kind });
 export const saveDecision = (mid: string, cid: string, b: DecisionBody) => api.post(`${mUrl(mid)}/cases/${enc(cid)}/decision`, b);

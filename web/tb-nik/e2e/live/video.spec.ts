@@ -1,7 +1,8 @@
 // Two people in one meeting, live: the MDT Coordinator (tb-mdt) conducts, a doctor (tb-rad-doc) joins with the code, both arrive
 // through the pre-join screen with Chromium's fake camera and microphone, and each sees the other's tile. Synthetic data only: a
 // throw-away meeting with Kavitha's synthetic Case File on the noting list; cancelled at the end. Screenshots go to
-// docs/ui/build/shots/live-*.png.
+// docs/ui/build/shots/live-*.png. Present a screen (night-v3 5.2): Chromium picks the screen itself (the flags in
+// playwright.live.config.ts), the other person sees it on the stage; one presenter at a time.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -85,6 +86,50 @@ test("two people in a meeting with video", async ({ browser }) => {
     await mdt.page.getByTestId("panel-people").click();  // night-v3 5.1: the People panel opens from the bar
     await expect(mdt.page.getByTestId("person-row").filter({ hasText: "Dr Radiology" })).toBeVisible();
     await shot(mdt.page, "conduct-people");
+    await mdt.page.getByTestId("panel-people").click();
+
+    // Present a screen: the coordinator presents, the doctor sees the picture on the stage and may not present yet
+    const docStage = doc.page.getByTestId("shared-screen");
+    const mdtStage = mdt.page.getByTestId("shared-screen");
+    const sharePicture = async (page: Page) => {
+      await expect(page.getByTestId("shared-screen")).toHaveAttribute("data-stage", "share", { timeout: 40_000 });
+      await expect.poll(async () => page.getByTestId("stage-share").locator("video").first().evaluate((v: HTMLVideoElement) => v.videoWidth).catch(() => 0), { timeout: 30_000 }).toBeGreaterThan(0);
+    };
+    const present = async (page: Page) => {
+      await expect(page.getByTestId("present")).toBeEnabled({ timeout: 20_000 });
+      await page.getByTestId("present").click();
+      const ask = page.getByTestId("present-dialog");
+      if (await ask.isVisible({ timeout: 3_000 }).catch(() => false)) await page.getByTestId("present-share").click();
+      await expect(page.getByTestId("present")).toHaveAttribute("aria-pressed", "true", { timeout: 20_000 });
+    };
+    await expect(doc.page.getByTestId("present")).toBeDisabled();
+    await present(mdt.page);
+    await expect(mdt.page.getByTestId("presenting-bar")).toBeVisible();
+    await expect(mdtStage).toHaveAttribute("data-stage", "share-self", { timeout: 20_000 });
+    await sharePicture(doc.page);
+    await expect(doc.page.getByTestId("share-badge")).toContainText("MDT Coordinator (demo) is presenting");
+    await expect(doc.page.getByTestId("present")).toBeDisabled();
+    await expect(doc.page.getByTestId("present")).toHaveAttribute("title", "Ask the MDT Coordinator to allow you to present");
+    await doc.page.waitForTimeout(1000);
+    await shot(doc.page, "member-sees-share");
+    await shot(mdt.page, "conduct-presenting");
+
+    // the coordinator allows the doctor, who presents: the coordinator's share stops and the stage names the doctor
+    const allow = await mdt.api.post(`/api/tb/meetings/${mid}/present-allow`, { data: { user: "tb-rad-doc", allowed: true } });
+    expect(allow.ok(), await allow.text()).toBeTruthy();
+    await present(doc.page);
+    await expect(mdt.page.getByTestId("present")).toHaveAttribute("aria-pressed", "false", { timeout: 20_000 });
+    await expect(mdt.page.getByTestId("presenting-bar")).toHaveCount(0);
+    await sharePicture(mdt.page);
+    await expect(mdt.page.getByTestId("share-badge")).toContainText("Dr Radiology");
+    await expect(mdt.page.getByTestId("share-stop")).toBeVisible();  // the coordinator may stop anyone's share
+    await shot(mdt.page, "conduct-sees-share");
+
+    // the doctor stops: both stages show the slide again
+    await doc.page.getByTestId("stop-presenting").click();
+    await expect(doc.page.getByTestId("present")).toHaveAttribute("aria-pressed", "false", { timeout: 20_000 });
+    await expect(docStage).toHaveAttribute("data-stage", "slide", { timeout: 20_000 });
+    await expect(mdtStage).toHaveAttribute("data-stage", "slide", { timeout: 20_000 });
 
     // the room screen joins under its own identity and shows the remote doctor
     const room = await mdt.page.context().newPage();

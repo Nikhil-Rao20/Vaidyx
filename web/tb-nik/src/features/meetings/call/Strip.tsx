@@ -5,8 +5,9 @@
 // coordinator Spotlight for everyone. The pure helpers at the top are checked by a small node script.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import type { Participant } from "livekit-client";
-import { Images, MessageSquareText, MonitorPlay, MoreVertical, Pin, PinOff, Sparkles, X } from "lucide-react";
+import { Track, type Participant, type Room } from "livekit-client";
+import type { TrackReference } from "@livekit/components-react";
+import { Images, MessageSquareText, MonitorOff, MonitorPlay, MonitorUp, MoreVertical, Pin, PinOff, Sparkles, X } from "lucide-react";
 import type { AgendaRow, AgentInfo, Attendee, MeetingState, Opened } from "@/lib/live";
 import { identityUser, isRoomScreen, videoExtras } from "@/lib/video";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -85,19 +86,22 @@ export function spotlightToggle(list: string[], user: string, max = 3): string[]
 export type StageMode =
   | { kind: "person"; keys: string[]; why: "pinned" | "speaker" }
   | { kind: "spotlight"; keys: string[] }
+  | { kind: "share" }
   | { kind: "grid" }
   | { kind: "opened" }
   | { kind: "slide" }
   | { kind: "floor" };
 
-/** What the main stage shows, in the order of research/04 section 6.6 (a person first when pinned, spotlighted or in
- * speaker view; then the opened item, the slide, and the grid when nothing is on the floor). Pure. */
-export function stageMode(i: { layout: LayoutKind; pinned: string | null; spotlight: string[]; speakerKey: string | null; opened: Opened | null; cid: string | null; has: (key: string) => boolean }): StageMode {
+/** What the main stage shows, in the order of research/04 section 6.6 (a person first when pinned or spotlighted, as Meet does; then
+ * a screen someone presents (night-v3 5.2); then the speaker view, the grid, the opened item, the slide, and the grid when nothing is
+ * on the floor). Pure. */
+export function stageMode(i: { layout: LayoutKind; pinned: string | null; spotlight: string[]; speakerKey: string | null; opened: Opened | null; cid: string | null; has: (key: string) => boolean; presenting?: string | null }): StageMode {
   if (i.pinned && i.has(i.pinned)) return { kind: "person", keys: [i.pinned], why: "pinned" };
   if (i.layout === "spotlight") {
     const keys = i.spotlight.filter(i.has).slice(0, 3);
     if (keys.length) return { kind: "spotlight", keys };
   }
+  if (i.presenting) return { kind: "share" };
   if (i.layout === "speaker" && i.speakerKey && i.has(i.speakerKey)) return { kind: "person", keys: [i.speakerKey], why: "speaker" };
   if (i.layout === "grid") return { kind: "grid" };
   if (i.opened && (i.opened.kind === "images" || i.opened.kind === "record")) return { kind: "opened" };
@@ -114,6 +118,40 @@ export function stageKeys(m: StageMode): string[] {
 export function stripShownFor(m: StageMode): boolean {
   return m.kind !== "grid" && m.kind !== "floor";
 }
+
+/** The LiveKit screen share of a login, when its picture has arrived (a remote track subscribed, or my own track), else null. The
+ * room screen's identity ("<user>#room") cannot share. */
+export function screenShareRef(room: Room | null, user: string | null | undefined): TrackReference | null {
+  if (!room || !user) return null;
+  const all: Participant[] = [room.localParticipant, ...room.remoteParticipants.values()];
+  for (const p of all) {
+    if (!p?.identity || isRoomScreen(p.identity) || identityUser(p.identity) !== user) continue;
+    const pub = p.getTrackPublication(Track.Source.ScreenShare);
+    if (pub && pub.track && !pub.isMuted && (p.isLocal || pub.isSubscribed)) return { participant: p, publication: pub, source: Track.Source.ScreenShare };
+  }
+  return null;
+}
+
+/** The name of the person presenting: the attendance name, else the video name, else the login. */
+export function presenterName(user: string, attendance: Array<{ user: string; name: string }>, room?: Room | null): string {
+  const a = attendance.find((x) => x.user === user);
+  if (a?.name) return a.name;
+  if (room) {
+    const all: Participant[] = [room.localParticipant, ...room.remoteParticipants.values()];
+    const p = all.find((x) => !!x?.identity && !isRoomScreen(x.identity) && identityUser(x.identity) === user);
+    if (p?.name) return p.name;
+  }
+  return user;
+}
+
+/** "Allow to present", "Withdraw the right to present" and "Stop their share": what the coordinator may do for a person. */
+export function presentMenuItems(i: { user: string; coordinator: string | null; canManage: boolean; allowed: string[]; presenting: string | null; roomScreen?: boolean }): Array<"allow" | "withdraw" | "stop"> {
+  if (!i.canManage || i.roomScreen || !i.user || i.user === i.coordinator) return [];
+  const out: Array<"allow" | "withdraw" | "stop"> = [i.allowed.includes(i.user) ? "withdraw" : "allow"];
+  if (i.presenting === i.user) out.push("stop");
+  return out;
+}
+export const PRESENT_ITEM_WORD: Record<"allow" | "withdraw" | "stop", string> = { allow: "Allow to present", withdraw: "Withdraw the right to present", stop: "Stop their share" };
 
 /** The next case after the current one, for the empty floor ("Next: 4. Anitha Reddy ..."). */
 export function nextCaseLine(order: AgendaRow[], cid: string | null): string | null {
@@ -212,7 +250,7 @@ export function useStageMode(people: CallPerson[]): StageMode {
   const speakerKey = useSpeakerKey(people);
   const opened = ctx.variant === "member" && !ctx.following ? null : ctx.opened;
   const keys = new Set(people.map((p) => p.key));
-  return stageMode({ layout: ctx.layout, pinned: ctx.pinned, spotlight: ctx.spotlight ?? [], speakerKey, opened, cid: ctx.cid, has: (k) => keys.has(k) });
+  return stageMode({ layout: ctx.layout, pinned: ctx.pinned, spotlight: ctx.spotlight ?? [], speakerKey, opened, cid: ctx.cid, has: (k) => keys.has(k), presenting: ctx.state.presenting ?? null });
 }
 
 // ---- tiles ----------------------------------------------------------------------------------------------------------------
@@ -234,6 +272,7 @@ export function TileMenu({ p }: { p: CallPerson }) {
   const spot = ctx.spotlight ?? [];
   const lit = spot.includes(p.user);
   const canSpot = ctx.canManage && !p.roomScreen;
+  const present = ctx.variant === "coordinator" ? presentMenuItems({ user: p.user, coordinator: ctx.me || null, canManage: ctx.canManage, allowed: ctx.state.present_allowed ?? [], presenting: ctx.state.presenting ?? null, roomScreen: p.roomScreen }) : [];
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -252,6 +291,13 @@ export function TileMenu({ p }: { p: CallPerson }) {
             </DropdownMenuItem>
           </>
         ) : null}
+        {present.length ? <DropdownMenuSeparator /> : null}
+        {present.map((k) => (
+          <DropdownMenuItem key={k} data-testid={`tile-present-${k}`}
+            onSelect={() => { void (k === "stop" ? ctx.actions.presenting?.(false) : ctx.actions.allowPresent?.(p.user, k === "allow"))?.catch(() => undefined); }}>
+            {k === "stop" ? <MonitorOff aria-hidden /> : <MonitorUp aria-hidden />}{PRESENT_ITEM_WORD[k]}
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -361,8 +407,10 @@ export function ContentTile({ className, big }: { className?: string; big?: bool
   const ctx = useCall();
   const opened = ctx.variant === "member" && !ctx.following ? null : ctx.opened;
   const slide = ctx.slides[ctx.shownSlide];
-  const what = opened?.kind === "images" ? (opened.title || "The images") : opened?.kind === "record" ? (opened.title || "A record") : slide?.title ?? (ctx.cid ? "The slides" : "The shared screen");
-  const Icon = opened?.kind === "images" ? Images : MonitorPlay;
+  const sharing = ctx.state.presenting ?? null;
+  const what = sharing ? `${presenterName(sharing, ctx.state.attendance ?? [], ctx.video.room)} is presenting`
+    : opened?.kind === "images" ? (opened.title || "The images") : opened?.kind === "record" ? (opened.title || "A record") : slide?.title ?? (ctx.cid ? "The slides" : "The shared screen");
+  const Icon = sharing ? MonitorUp : opened?.kind === "images" ? Images : MonitorPlay;
   const show = () => { ctx.setPinned(null); ctx.setLayout("auto"); };
   return (
     <div className={cn("relative flex aspect-video flex-col justify-between overflow-hidden rounded-xl border border-stage-line bg-stage-panel p-2", className)} data-testid="content-tile" role="group" aria-label={`Shared screen: ${what}`}>
