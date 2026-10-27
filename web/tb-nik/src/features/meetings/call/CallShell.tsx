@@ -18,6 +18,7 @@ import { useIsDesktop } from "@/hooks/useMediaQuery";
 import { SkeletonLines, errorText, useAnnounce } from "@/features/casefile/components/common";
 import { admit, allowPresent, askQuestion, endCase as endCaseCall, getSlides, openOnScreen, present, raiseHand, sendChat, sendReaction, setCurrent, setPresenting, setSpotlight, timer as timerCall } from "../api";
 import { CardDialog } from "../components/CardDialog";
+import { CaseFlow } from "./CaseFlow";
 import { DecisionStrip, SlideDots, StageFrame } from "../components/Stage";
 import { QuestionsList, SlideContent } from "../components/shared";
 import { CallContext, useCall } from "./context";
@@ -298,6 +299,7 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
       <ShellContext.Provider value={extras}>
         <StageFrame testId={testId} attrs={attrs}>
           {liveNode}
+          <CaseFlow />
           <TopBar />
           {room ? <RoomBody summaryOn={summaryOn} liveText={liveText} /> : (
             <main className={cn("flex min-h-0 flex-1 gap-3 p-2 lg:p-3", phone && "flex-col overflow-y-auto")}>

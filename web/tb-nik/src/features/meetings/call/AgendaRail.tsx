@@ -1,13 +1,17 @@
 // The agenda rail at the left of the call on a laptop (research/04 section 6.13): each row "n. patient line", a state word (Done with
-// the outcome, Now, Next, Later, Not ready) and the planned minutes; the current case highlighted. The coordinator clicks a row to put
-// that case on the screen. Under 1280 px (and while a side panel is open under 1536 px) it folds to a column of numbers; a button
-// opens it. The quorum block sits at its foot when
-// the server sends one (item 5.4 adds the times and the full quorum line).
+// the outcome, Now, Next, Later, Not ready) and its time: the planned minutes for Later and Next; for Now the time spent (counting up
+// while the timer runs) and what is left ("7:42 left", amber under 2 minutes, "time up" in red at 0: the words carry the meaning);
+// for Done the minutes it took when known. The presenter under the current row. The coordinator clicks a row to put that case on the
+// screen. Under 1280 px (and while a side panel is open under 1536 px) it folds to a column of numbers; a button opens it. The quorum
+// line (QuorumLine compact) sits at its foot when the server sends one.
 import { useEffect, useState } from "react";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { AgendaRow, MeetingState } from "@/lib/live";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { useCall } from "./context";
+import { fmtClock } from "../components/shared";
+import { fmtMinutes, presenterOf, remainingOf, rowElapsed, spokenClock, useCaseClock, type ClockTone } from "./CaseFlow";
+import { QuorumLine } from "./QuorumLine";
 import { cn } from "@/lib/utils";
 
 export type RowState = "done" | "now" | "next" | "later" | "not_ready";
@@ -41,6 +45,9 @@ const TONE: Record<RowState, string> = {
   not_ready: "text-stage-muted",
 };
 
+/** The remaining time's colour on the dark stage: amber under 2 minutes, red at 0 (the words say it too). */
+export const CLOCK_TONE: Record<ClockTone, string> = { normal: "text-stage-fg", low: "text-[#ffd48a]", up: "text-[#ffb4a8]" };
+
 export function AgendaRail({ className }: { className?: string }) {
   const c = useCall();
   const wide = useMediaQuery("(min-width: 1280px)");
@@ -56,6 +63,9 @@ export function AgendaRail({ className }: { className?: string }) {
   const perCase = s.meeting.minutes_per_case;
   const rows = [...c.order, ...notReady];
   const q = s.quorum;
+  const clock = useCaseClock(s);
+  const remaining = remainingOf(clock.left, clock.timer);
+  const remainingSaid = !remaining ? "" : remaining.tone === "up" ? "time up" : `${spokenClock(clock.left)} left${clock.timer?.running ? "" : ", paused"}`;
 
   return (
     <nav aria-label="Agenda" data-testid="agenda-rail" data-open={open ? "true" : "false"} className={cn("flex min-h-0 shrink-0 flex-col rounded-xl border border-stage-line bg-stage-panel transition-[width] duration-200", open ? "w-56 xl:w-60" : "w-12", className)}>
@@ -72,17 +82,33 @@ export function AgendaRail({ className }: { className?: string }) {
           const word = stateWord(st, r, s.outcomes);
           const mins = r.minutes ?? perCase;
           const line = r.patient_line || r.case_id;
-          const label = `${n ? `${n}. ` : ""}${line}, ${word}${mins ? `, ${mins} minutes planned` : ""}`;
-          const clickable = coordinator && st !== "not_ready" && st !== "now";
+          const now = st === "now";
+          const took = st === "done" ? fmtMinutes(rowElapsed(r)) : "";
+          const presenter = now ? presenterOf(r, s, c.cid) : "";
+          // The time words: planned minutes for Next and Later, spent and left for Now, the minutes it took for Done.
+          const timeSaid = now
+            ? [clock.elapsed > 0 || clock.timer ? `${spokenClock(clock.elapsed)} spent` : "", remainingSaid, mins ? `${mins} minutes planned` : ""].filter(Boolean).join(", ")
+            : st === "done" ? (took ? `took ${took}` : "") : mins && st !== "not_ready" ? `${mins} minutes planned` : "";
+          const label = `${n ? `${n}. ` : ""}${line}, ${word}${timeSaid ? `, ${timeSaid}` : ""}${presenter ? `, presenter ${presenter}` : ""}`;
+          const clickable = coordinator && st !== "not_ready" && !now;
+          const times = now ? (
+            <>
+              {clock.elapsed > 0 || clock.timer ? <span className="shrink-0 tabular-nums text-stage-fg" data-testid="rail-elapsed">· {fmtClock(clock.elapsed)} spent</span> : null}
+              {remaining ? <span className={cn("shrink-0 font-medium tabular-nums", CLOCK_TONE[remaining.tone])} data-testid="rail-remaining" data-tone={remaining.tone}>· {remaining.text}</span>
+                : mins ? <span className="shrink-0 text-stage-muted">· {mins} min planned</span> : null}
+            </>
+          ) : st === "done" ? (took ? <span className="shrink-0 text-stage-muted" data-testid="rail-took">· {took}</span> : null)
+            : mins && st !== "not_ready" ? <span className="shrink-0 text-stage-muted" data-testid="rail-planned">· {mins} min</span> : null;
           const inner = open ? (
             <>
               <span className="w-5 shrink-0 text-xs tabular-nums text-stage-muted">{n ? `${n}.` : ""}</span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm">{line}</span>
-                <span className="flex items-center gap-1.5 text-[11px]"><span className={cn("truncate font-medium", TONE[st])}>{word}</span>{mins && st !== "not_ready" ? <span className="shrink-0 text-stage-muted">· {mins} min</span> : null}</span>
+                <span className="flex flex-wrap items-center gap-x-1.5 text-[11px]"><span className={cn("truncate font-medium", TONE[st])}>{word}</span>{times}</span>
+                {presenter ? <span className="block truncate text-[11px] text-stage-muted" data-testid="rail-presenter">Presenter: {presenter}</span> : null}
               </span>
             </>
-          ) : <span className={cn("w-full text-center text-sm tabular-nums", TONE[st])}>{n ?? "·"}</span>;
+          ) : <span className={cn("w-full text-center text-sm tabular-nums", TONE[st], now && remaining && remaining.tone !== "normal" && CLOCK_TONE[remaining.tone])}>{n ?? "·"}</span>;
           const cls = cn("flex w-full items-start gap-1.5 rounded-lg px-1.5 py-1.5 text-left outline-none", st === "now" && "bg-stage-raised ring-1 ring-primary/60", st === "not_ready" && "opacity-55", clickable && "hover:bg-stage-raised focus-visible:ring-2 focus-visible:ring-primary");
           return (
             <li key={r.case_id} aria-current={st === "now" ? "true" : undefined} data-state={st}>
@@ -94,10 +120,8 @@ export function AgendaRail({ className }: { className?: string }) {
         })}
       </ol>
       {q && open ? (
-        <div className="border-t border-stage-line p-2.5 text-xs text-stage-muted" data-testid="rail-quorum">
-          <p className="font-medium text-stage-fg">Heads {q.present} of {q.total}</p>
-          {q.agents?.length ? <p>AI agents standing in (support only, not counted): {q.agents.length}</p> : null}
-          {q.pmjay ? <p>PM-JAY advises Surgical, Radiation and Medical Oncology: {q.pmjay.present} of {q.pmjay.total} present as people</p> : null}
+        <div className="scroll-thin max-h-56 shrink-0 overflow-y-auto border-t border-stage-line p-2.5" data-testid="rail-quorum">
+          <QuorumLine compact />
         </div>
       ) : null}
     </nav>

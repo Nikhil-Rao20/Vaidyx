@@ -119,6 +119,8 @@ export interface AgendaRow {
   urgency?: number | null;
   /** Set on the client after a "decision" event. */
   decided?: boolean;
+  /** Seconds spent on the case when it ended (night-v3 5.4); null or absent before. */
+  elapsed_seconds?: number | null;
 }
 
 export interface Attendee {
@@ -205,11 +207,11 @@ export interface AgentInfo {
 
 /** The quorum line (night-v3 5.4): heads present as people, the agents standing in, the PM-JAY composition. Information, not a gate. */
 export interface QuorumInfo {
-  heads: Array<{ id: string; name: string; present: boolean; by?: string | null; agent?: string | null }>;
+  heads: Array<{ id: string; name: string; present: boolean; by?: string | null; agent?: string | null; role?: string | null }>;
   present: number;
   total: number;
   agents: string[];
-  pmjay: { surgical: boolean; radiation: boolean; medical: boolean; present: number; total: number };
+  pmjay: { surgical: boolean; radiation: boolean; medical: boolean; present: number; total: number; note?: string };
 }
 
 /** The presenter of the Case File on the floor (night-v3 5.4). */

@@ -1,6 +1,7 @@
 // The top bar of the call: the Vaidyx mark, "Tumour Board · DD/MM/YYYY HH:MM" ("Conducting · ..." for the coordinator), the case
 // headline ("3 of 8: patient line") and the board question, the case timer (the coordinator opens its controls from it), the presenter
-// and quorum chips when the server sends them, the live-channel dot, the video chip and, for the coordinator, the room screen link.
+// and quorum chips when the server sends them (the quorum chip opens the full quorum line), the live-channel dot, the video chip and,
+// for the coordinator, the room screen link.
 import { useContext } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, MonitorUp, Pause, Play, RotateCcw, Signal, SignalHigh, SignalLow, SignalMedium, Users, Video, VideoOff } from "lucide-react";
@@ -13,6 +14,7 @@ import { LiveDot, TimerBadge } from "../components/shared";
 import { useCall } from "./context";
 import type { CallCtx } from "./types";
 import { ShellContext } from "./useCallState";
+import { QuorumLine } from "./QuorumLine";
 import { cn } from "@/lib/utils";
 
 /** "Tumour Board · 27/10/2026 16:00" (the coordinator: "Conducting · ..."), with the room when asked. */
@@ -90,6 +92,28 @@ function TimerControl() {
   );
 }
 
+/** "Heads 2 of 5": opens the quorum line (heads present, who is not here and the agents standing in, the PM-JAY composition). */
+function QuorumChip({ room }: { room: boolean }) {
+  const c = useCall();
+  const q = c.state.quorum;
+  if (!q) return null;
+  const words = `Heads ${q.present} of ${q.total}`;
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button type="button" className={cn("hidden items-center gap-1 rounded-full bg-stage-raised px-2 py-0.5 text-stage-fg outline-none hover:bg-stage-line focus-visible:ring-2 focus-visible:ring-primary md:inline-flex", room ? "text-base" : "text-xs")} aria-label={`${words} present as people. Show the quorum line`} title="Heads of the board present as people; AI agents never count. Click for the quorum line" data-testid="quorum-chip">
+          <Users className={room ? "size-4" : "size-3.5"} aria-hidden />{words}<ChevronDown className="size-3 text-stage-muted" aria-hidden />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className={cn("space-y-2", room ? "w-[28rem]" : "w-80")} aria-label="Quorum" data-testid="quorum-popover">
+        <p className={cn("font-medium", room ? "text-base" : "text-sm")}>Quorum</p>
+        <QuorumLine big={room} />
+        <p className="text-xs text-muted-foreground">Information only: it does not make a decision valid or invalid.</p>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function TopBar() {
   const c = useCall();
   const s = c.state;
@@ -114,7 +138,7 @@ export function TopBar() {
         <>
           {coordinator ? <TimerControl /> : <TimerBadge timer={s.current?.timer} big={room} />}
           {presenter ? <span className={cn("hidden items-center gap-1 rounded-full bg-stage-raised px-2 py-0.5 text-stage-fg lg:inline-flex", room ? "text-sm" : "text-xs")} data-testid="presenter-chip">Presenter: {presenter.name}{presenter.department_name || presenter.department ? ` (${presenter.department_name ?? presenter.department})` : ""}</span> : null}
-          {q ? <span className={cn("hidden items-center gap-1 rounded-full bg-stage-raised px-2 py-0.5 text-stage-fg md:inline-flex", room ? "text-sm" : "text-xs")} title="Heads of the board present as people; AI agents never count" data-testid="quorum-chip"><Users className="size-3.5" aria-hidden />Heads {q.present} of {q.total}</span> : null}
+          {q ? <QuorumChip room={room} /> : null}
           <LiveDot status={c.liveStatus} detail={c.liveDetail} className={c.phone && !room ? "hidden" : undefined} />
           {room ? null : <VideoChip />}
           {coordinator ? <Button asChild size="sm" variant="ghost" className="hidden text-stage-fg hover:bg-stage-raised hover:text-stage-fg md:inline-flex"><Link to={`/meetings/${c.mid}/room`} target="_blank" rel="noopener" title="Opens the full-screen room screen in a new tab, for the room computer"><MonitorUp className="size-4" />Room screen</Link></Button> : null}
