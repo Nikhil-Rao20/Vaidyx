@@ -1,8 +1,11 @@
 # The item in progress (checkpoint)
 
-Item: 8.2 Real time (session 11, 2026-10-28, 14:38). 8.1 committed a16146c.
+Item: 8.4 Screens, part 2 (session 11, 2026-10-28, 14:42). Committed: 8.1 a16146c, 8.2 85fa700, 8.3 (the directory commit).
+
+Done and uncommitted: features/messages/* (the implementer), App.tsx include, e2e messages_mock.ts + messages.spec.ts + fixtures me(), components/MessageButton.tsx, nav.ts (Messages item, fitNav), AppShell MessagesIcon, Message buttons on TeamPanel, CaseHeader, PeoplePage, meeting People, RequestCard, RequestsPage, MeetingsListPage; static/tb-nik rebuilt by the implementer.
 
 Sub-steps:
-1. [done by the 8.1 implementer] tumour_board/api/messages_ws.py (WS /messages/ws, presence, typing), live.py (messages_hub, broadcast hub_, online_users), tests/test_messages_ws.py (12)
-2. [done by the orchestrator] web lib: live.ts messagesWsUrl, notifications.ts message kind + link + pref, types.ts Notification.conversation, session.tsx counts.messages_unread + me.messages
-3. [ ] commit 8.2 (those files + this log); then 8.3 commit (directory.py, api/directory.py, tests/test_directory.py; done, 20 tests); then 8.4 part 2: mount useMessagesLive in AppShell, live badge, page key for /messages, build, mocked suite (shell shots change on purpose: the Messages icon and item), restart :7000, real-screen check; 8.5 live two-login check.
+1. [ ] AppShell: mount useMessagesLive (from features/messages) once; the icon's count from the live unread query; key the page by /messages for conversation switches
+2. [ ] tsc, vite build; the whole mocked suite (shell shots change on purpose: the Messages icon and nav item); fix what fails
+3. [ ] restart :7000; real-screen check script docs/night-v3/tools/phase8_real_check.mjs (laptop and phone, light and dark; two logins)
+4. [ ] commit 8.4 (git add -A static/tb-nik); then 8.5
