@@ -23,10 +23,11 @@
   --primary-hover: #00ada3;
   --primary-foreground: #06292c;
   --accent-brand: #008f87;
+  --accent-brand-text: #007a73; /* small brand text: 4.8:1 on the page and on secondary */
   --secondary: #e4f6f4;
   --secondary-foreground: #0a4d52;
   --muted: #f1f4f8;
-  --muted-foreground: #5f6b78;
+  --muted-foreground: #5a6673; /* 4.8:1 on the muted surface, 5.9:1 on white (small text) */
   --accent: #eef2f6;
   --accent-foreground: #121a24;
   --destructive: #b2362b;
@@ -67,6 +68,7 @@
   --primary-hover: #2fdbd0;
   --primary-foreground: #06292c;
   --accent-brand: #3fd6cc;
+  --accent-brand-text: #3fd6cc;
   --secondary: #12343a;
   --secondary-foreground: #b9edea;
   --muted: #171f29;
@@ -108,6 +110,7 @@
   --color-primary-hover: var(--primary-hover);
   --color-primary-foreground: var(--primary-foreground);
   --color-brand: var(--accent-brand);
+  --color-brand-text: var(--accent-brand-text);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);

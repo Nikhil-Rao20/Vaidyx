@@ -57,7 +57,7 @@ export function CaseRow({ c, q = "", showOwner = true, onMeeting }: { c: CaseLis
           <p className="flex min-w-0 items-baseline gap-x-2 truncate">
             <span className="truncate text-[15px] font-semibold text-foreground"><Highlight text={c.patient?.name || "Unnamed"} q={q} /></span>
             {c.patient?.agesex ? <span className="shrink-0 text-xs text-muted-foreground">{c.patient.agesex}</span> : null}
-            {uhid ? <span className="id hidden shrink-0 text-xs text-muted-foreground/80 sm:inline"><Highlight text={uhid} q={q} id /></span> : null}
+            {uhid ? <span className="id hidden shrink-0 text-xs text-muted-foreground sm:inline"><Highlight text={uhid} q={q} id /></span> : null}
           </p>
           <p className="truncate text-sm text-body">
             <Highlight text={cancer} q={q} />

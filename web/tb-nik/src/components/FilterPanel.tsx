@@ -106,10 +106,10 @@ export function FilterButton({ query, onChange, filters, organs, owners, showDep
   const dateOn = (a: FilterKey, b: FilterKey) => (query[a] || query[b] ? 1 : 0);
 
   const trigger = (
-    <Button type="button" variant={n ? "secondary" : "outline"} size="sm" className="h-10 gap-1.5 px-3" aria-label={n ? `Filters, ${n} on` : "Filters"} onClick={phone ? () => onOpenChange(true) : undefined}>
+    <Button type="button" variant={n ? "secondary" : "outline"} size="sm" className="h-10 gap-1.5 px-3" aria-label={n ? `Filters, ${n} on` : undefined} onClick={phone ? () => onOpenChange(true) : undefined}>
       <ListFilter className="size-4" aria-hidden />
-      Filter
-      {n ? <span className="rounded-full bg-primary px-1.5 text-[11px] font-bold leading-4 text-primary-foreground">{n}</span> : null}
+      Filters
+      {n ? <span className="rounded-full bg-primary px-1.5 text-[11px] font-bold leading-4 text-primary-foreground" aria-hidden>{n}</span> : null}
     </Button>
   );
   const sections = (

@@ -49,7 +49,7 @@ function Row({ s, active, leftOff, onOpen, number }: { s: StepSection; active: b
             {s.id === "reports" && s.count ? <span className="ml-auto text-xs font-normal tabular-nums text-muted-foreground">{s.count}</span> : null}
           </span>
           {s.detail && s.status !== "done" ? (
-            <span className={cn("block text-xs leading-snug", s.status === "overdue" ? "font-medium text-bad" : loud ? "font-medium text-brand" : s.status === "waiting" ? "text-warn" : "text-muted-foreground")}>{s.detail}</span>
+            <span className={cn("block text-xs leading-snug", s.status === "overdue" ? "font-medium text-bad" : loud ? "font-medium text-brand-text" : s.status === "waiting" ? "text-warn" : "text-muted-foreground")}>{s.detail}</span>
           ) : null}
           {leftOff && !active ? <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-indigo/10 px-2 py-0.5 text-[11px] font-semibold text-indigo" data-testid="left-off">You left off here</span> : null}
         </span>

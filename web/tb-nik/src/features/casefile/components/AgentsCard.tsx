@@ -38,11 +38,10 @@ export function AgentsCard({ caseId, cf, onOpen }: { caseId: string; cf: CaseFil
               const canPrepare = h.brief.status === "none" && h.prepare_allowed && !notBuilt;
               return (
                 <li key={h.role} className="flex items-stretch rounded-md border border-border bg-card transition-colors hover:border-primary/60" data-testid={`agent-chip-${h.role}`} data-state={h.brief.status}>
-                  <button type="button" onClick={() => onOpen(h.role)} className="min-h-11 min-w-0 flex-1 rounded-md px-3 py-2 text-left focus-visible:outline-2"
-                    aria-label={`${name}, AI agent: open its brief and questions`}>
+                  <button type="button" onClick={() => onOpen(h.role)} className="min-h-11 min-w-0 flex-1 rounded-md px-3 py-2 text-left focus-visible:outline-2">
                     <span className="flex items-center gap-2">
                       <Bot className="size-4 shrink-0 text-brand" aria-hidden />
-                      <span className="truncate font-medium text-foreground">{name}</span>
+                      <span className="truncate font-medium text-foreground">{name}<span className="sr-only">, AI agent: open its brief and questions</span></span>
                     </span>
                     <span className="mt-1.5 flex flex-wrap items-center gap-1">
                       <AgentState h={h} />

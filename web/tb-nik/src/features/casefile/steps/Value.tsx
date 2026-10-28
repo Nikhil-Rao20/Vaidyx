@@ -14,7 +14,7 @@ export function SourceChip({ quote, onOpen, className }: { quote: NonNullable<St
     <button type="button" className={cn("quote-chip max-w-full hover:brightness-95 active:scale-95", className)} data-testid="source-chip"
       onClick={() => onOpen({ docId: quote.doc_id, page: quote.page ?? 0, quote: quote.text || undefined, factId: quote.fact_id ?? undefined, title: quote.doc_title })}
       title={quote.text ? `"${quote.text}"\nOpen ${title}, page ${page}, at this line` : `Open ${title}`}>
-      <FileText className="size-3 shrink-0" aria-hidden /><span className="truncate">{title}</span>{quote.date ? <span className="shrink-0 opacity-80">{fmtDate(quote.date)}</span> : null}
+      <FileText className="size-3 shrink-0" aria-hidden /><span className="truncate">{title}</span>{quote.date ? <span className="shrink-0">{fmtDate(quote.date)}</span> : null}
     </button>
   );
 }

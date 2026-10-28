@@ -439,7 +439,14 @@ test.describe("treating doctor (tb-breast-doc)", () => {
     await page.getByRole("button", { name: "Continue" }).click();
     await expect(page.getByText("Which cancer")).toBeVisible();
     await snap(page, role, "newcase", "2-cancer", { sizes: LAPTOP_PHONE, themes: LIGHT });
+    // This demo patient already has a Breast Case File (TB-DEMO-P19): the duplicate line of item 1.1 shows and Continue stays off.
     await page.getByRole("radiogroup", { name: "Cancer" }).getByRole("radio").filter({ hasText: "Breast" }).first().click();
+    await expect(page.getByText("A Case File for this patient and this cancer exists")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("button", { name: "Continue" })).toBeDisabled();
+    await snap(page, role, "newcase", "2-cancer-duplicate", { sizes: LAPTOP_PHONE, themes: LIGHT });
+    // A cancer this patient has no Case File for: the journey goes on.
+    await page.getByLabel("Search a cancer").fill("Lung");
+    await page.getByRole("radiogroup", { name: "Cancer" }).getByRole("radio").filter({ hasText: "Lung" }).first().click();
     await expect(page.getByLabel("Checklist and setting")).toBeVisible();
     await page.locator("[id^='setting-']").first().click();
     await snap(page, role, "newcase", "2-cancer-picked", { sizes: LAPTOP_PHONE, themes: LIGHT });

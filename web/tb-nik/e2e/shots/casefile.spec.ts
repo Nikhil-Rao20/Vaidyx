@@ -519,7 +519,7 @@ test.describe("guided Case File", () => {
     await expect(chip("radiology")).toContainText("Reading the records");
     await expect(card.getByTestId("overview-prepare-all")).toHaveCount(0);
     // a chip opens that agent in the Summary section
-    await chip("pathology").getByRole("button", { name: /Pathology, AI agent/ }).click();
+    await chip("pathology").getByRole("button", { name: /^Pathology/ }).click();  // the name is the chip's own text (no aria-label)
     await expect(page).toHaveURL(/\/cases\/TB-DEMO-P19\/summary\?item=pathology$/);
     const detail = page.getByTestId("helper-detail");
     await expect(detail).toBeVisible();
