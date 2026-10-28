@@ -47,6 +47,7 @@ TEXTS = {
     "summary_ready": "Vaidyx-TB: a Case File summary is ready for review",
     "team_changed": "Vaidyx-TB: a Case File team changed",
     "break_glass": "Vaidyx-TB: an emergency access to a Case File was opened",
+    "message": "Vaidyx-TB: you have a new message",  # night-v3 Phase 8: messages.py sends its own push ("New message from Dr X", coalesced); this text is the fallback
 }
 GENERIC = "Vaidyx-TB: you have a new notification"
 _lock = threading.Lock()
@@ -318,6 +319,8 @@ def on_notification(rec: dict) -> dict | None:
     """Called by notify.notify after a notification is stored: a generic push to the people addressed (in a thread unless ASYNC is off)."""
     if not isinstance(rec, dict) or not enabled():
         return None
+    if rec.get("kind") == "message":
+        return None  # messages.py pushes "New message from Dr X" itself, at most once per conversation per five minutes (Phase 8)
     users = users_for(rec.get("to") or {})
     if not users:
         return None

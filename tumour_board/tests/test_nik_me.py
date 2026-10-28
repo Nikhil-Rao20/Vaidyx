@@ -168,7 +168,8 @@ def test_me_shape_per_role(api, user, primary, known):
     assert m["user"] == user and m["primary_role"] == primary and m["roles"]["known"] is known
     assert set(m) >= {"user", "display_name", "roles", "primary_role", "must_change_password", "profile", "setup_needed", "counts", "hospital", "features"}
     assert set(m["roles"]) >= {"admin", "root_admin", "coordinator", "auditor", "departments", "treating", "supporting", "resident", "admin_of", "outside_expert", "disabled"}
-    assert set(m["counts"]) == {"unread", "waiting_for_me", "open_requests"} and all(isinstance(v, int) for v in m["counts"].values())
+    assert set(m["counts"]) == {"unread", "waiting_for_me", "open_requests", "messages_unread"} and all(isinstance(v, int) for v in m["counts"].values())
+    assert isinstance(m.get("messages"), bool)  # Phase 8: may this person use Messages
     assert m["features"] == {"video": False, "push": False} and m["hospital"]["level"] == "essential"
     assert m["must_change_password"] is False and set(m["profile"]) == set(profiles.FIELDS)
     assert "password" not in json.dumps(m["profile"]).lower()

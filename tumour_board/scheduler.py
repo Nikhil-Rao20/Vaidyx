@@ -248,10 +248,20 @@ def similar_job(now: datetime) -> dict:
         return {"error": f"{e.__class__.__name__}: {str(e)[:200]}"}
 
 
+def messages_job(now: datetime) -> dict:
+    """Message retention (night-v3 item 8.1): the text of conversations older than the hospital's retention period is removed, in this
+    thread. Never raises."""
+    try:
+        from . import messages
+        return messages.job(now)
+    except Exception as e:
+        return {"error": f"{e.__class__.__name__}: {str(e)[:200]}"}
+
+
 QUICK = ("codes", "break_glass", "meeting_starting", "reminders", "digests", "prune")
 JOBS = (("codes", job_codes, 0), ("break_glass", job_break_glass, 0), ("meeting_starting", job_meeting_starting, 0),
         ("reminders", job_reminders, REMINDERS_EVERY), ("digests", job_digests, 0), ("prune", job_prune, PRUNE_EVERY),
-        ("refetch", job_refetch, REFETCH_EVERY), ("similar", similar_job, 1800))
+        ("refetch", job_refetch, REFETCH_EVERY), ("similar", similar_job, 1800), ("messages_retention", messages_job, PRUNE_EVERY))
 
 
 def tick(now: datetime | None = None, force: bool = False, only=None, refetch: bool = True) -> dict:

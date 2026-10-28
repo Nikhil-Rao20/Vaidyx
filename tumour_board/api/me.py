@@ -78,6 +78,15 @@ def public_roles(r: dict) -> dict:
             "expired": bool(r.get("expired")), "end_date": r.get("end_date") or ""}
 
 
+def _may_message(r: dict) -> bool:
+    """Phase 8: whether this person may use Messages (placed, or the MDT Coordinator; never a disabled or expired login)."""
+    try:
+        from .. import messages
+        return bool(messages.may_use(r))
+    except Exception:
+        return False
+
+
 def counts(r: dict) -> dict:
     """The top bar's numbers: unread notifications, what waits for this person (a consultant: residents' proposals, join requests and
     confirmations; a resident: its returned proposals), and the open requests of the person's departments."""
@@ -92,7 +101,15 @@ def counts(r: dict) -> dict:
             open_requests = int(notify.inbox(r).get("open") or 0)
         except Exception:
             open_requests = 0
-    return {"unread": notify.unread_count(r) if r.get("known") else 0, "waiting_for_me": waiting, "open_requests": open_requests}
+    messages_unread = 0
+    try:
+        from .. import messages  # Phase 8: the Messages badge
+        if messages.may_use(r):
+            messages_unread = int(messages.unread_total(r.get("user") or ""))
+    except Exception:
+        messages_unread = 0
+    return {"unread": notify.unread_count(r) if r.get("known") else 0, "waiting_for_me": waiting, "open_requests": open_requests,
+            "messages_unread": messages_unread}
 
 
 @router.get("/me")
@@ -109,7 +126,7 @@ async def me(request: Request):
             "hospital": {"name": h.get("name") or "", "level": h.get("level") or "", "pmjay_empanelled": bool(h.get("pmjay_empanelled", True))},
             "features": features(), "departments": [{"id": d["id"], "name": d["name"], "group": d.get("group"), "role": d.get("role")} for d in org.my_departments(r)]
             if not r.get("admin") else [],
-            "break_glass": break_glass_mine(r)}
+            "break_glass": break_glass_mine(r), "messages": _may_message(r)}
 
 
 def break_glass_mine(r: dict) -> list:
@@ -179,7 +196,8 @@ async def get_profile(request: Request):
 
 # ---- activity -------------------------------------------------------------------------------------------------------------------------
 
-_DETAIL_KEYS = ("action", "requirement", "department", "type", "key", "reason", "note", "level", "to", "proposal", "username", "fields", "changes")
+_DETAIL_KEYS = ("action", "requirement", "department", "type", "key", "reason", "note", "level", "to", "proposal", "username", "fields", "changes",
+                "conversation")  # conversation: the Phase 8 message events (an id, never the text)
 _SKIP_KINDS = {"org_saved"}
 
 
