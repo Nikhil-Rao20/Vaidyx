@@ -112,6 +112,28 @@ consultants told; no export from such a window). The banner "Past Case File" sta
    panel, the request cards and the Requests and Meetings pages. The first-use notice states the hospital's retention (an
    Organisation setting, 365 days by default).
 
+## 7. Loading the clinician-made synthetic file (when it arrives)
+
+The clinician's file must be synthetic: invented names ending in "(SYNTHETIC)", invented identifiers (`VXH/26/…`), nothing copied
+from a real patient, every document marked SYNTHETIC. Two ways, depending on what the clinician gives you.
+
+**A. Reports as PDFs (outside reports).** Sign in as the consultant of the owning department, create the Case File for the patient
+(section 2, from a demo-hospital registration; when there is no registration, the older /tb page offers a patient entered by hand beside "From the hospital system"), open
+Records and press "Upload outside report" for each PDF (60 MB each at most): the reader extracts the values, every value shown needs
+a verified verbatim quote from the page (unverified text is dropped or marked for review), the checklist and the flags run again,
+and the Case File goes on exactly as in section 2. Outside reports are labelled "outside report" in the Records list.
+
+**B. A whole patient in the demo hospital system (the richer way: orders, signed reports, DICOM, FHIR).** Add the patient to the
+seed `his_mock/scenarios.json` under `patients` like the Phase 2 entries (slot `P24`, `marker: "SYNTHETIC"`, `name` ending in
+"(SYNTHETIC)", `sex`, `age`, `protocol` (one of `tumour_board/protocols/*.json`), `uhid` in the `VXH/26/…` pattern, `abha`,
+`pmjay_id`, `treating_department`, `encounters`, and `records` with `type`, `title`, `producing_department`, `reported_on`, `signed`
+and `values` copied from the clinician's text). Rebuild the demo data: `/data/vaidyx/venv/app/bin/python -m his_mock.build --upload`
+(PDF rendering uses the pdf venv, see `his_mock/README.md`; the build refuses to wipe a store without the SYNTHETIC marker), then
+`scripts/demo_services.sh restart his pacs`, and run `/data/vaidyx/venv/app/bin/python -m his_mock.eval.conformance`. Then section 2
+from the new UHID. `his_mock/tests` has a test per seed patient to copy.
+
+Either way, nothing of the real Case File `TB-2026-bharath` is used, and the models never read an image.
+
 ## 8. Checks you can run
 
 - The security audit: `/data/vaidyx/venv/app/bin/python -m tumour_board.eval.security_audit` (add `--with-writes` for the two checks

@@ -179,8 +179,8 @@ records per setting with `sources` (book, page, verbatim line), departments that
 |---|---|---|---|---|
 | 9.1 | Full regression | S | The security audit (`tumour_board/eval/security_audit.py`) passes, including the new routes and sockets (voice, messages, similar files, break-glass); all unit tests, the mocked screenshot tests, and real checks for every role on laptop and phone, light and dark; compared with the Phase 0 baseline; nothing that worked is broken | done (d098085) |
 | 9.2 | Whole-run review | P | One reviewer per area (Opus) over the whole night's diff; serious findings fixed | done (4b13bde) |
-| 9.3 | Demo walk-through | S | `docs/night-v3/HOW_TO_TRY.md`: a new-cancer patient prepared end to end; a meeting with two absent heads where the agents answer in voice; a decision that produces the Case summary; similar Case Files; messages between the coordinator and a doctor. Logins by username only. | done (N3-9.3, hash in LOG) |
-| 9.4 | The clinician's file | S | `HOW_TO_TRY.md` says how to load the owner's clinician-made synthetic file when it arrives (outside-report upload or a demo-HIS seed) | todo |
+| 9.3 | Demo walk-through | S | `docs/night-v3/HOW_TO_TRY.md`: a new-cancer patient prepared end to end; a meeting with two absent heads where the agents answer in voice; a decision that produces the Case summary; similar Case Files; messages between the coordinator and a doctor. Logins by username only. | done (07d6925) |
+| 9.4 | The clinician's file | S | `HOW_TO_TRY.md` says how to load the owner's clinician-made synthetic file when it arrives (outside-report upload or a demo-HIS seed) | done (N3-9.4, hash in LOG) |
 | 9.5 | Features overview and finish | S | `docs/night-v3/FEATURES.md`: before, during and after the board with everything built; the Morning summary final; `/data/vaidyx/night-v3/RUN_COMPLETE` created | todo |
 
 ## 5. Pause, stop and resume
