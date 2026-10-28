@@ -7,6 +7,7 @@ import type { Attendee, MeetingState } from "@/lib/live";
 import { BADGE_WORD, type RoleBadge } from "../call/types";
 import { LoadingButton, errorText, initials } from "@/features/casefile/components/common";
 import { cn } from "@/lib/utils";
+import { MessageButton } from "@/components/MessageButton";
 
 const COLOURS = ["#2f6f8f", "#3e5cad", "#5b3fc4", "#1d6a44", "#8a5200", "#9c3d5e", "#2a7a74", "#6b4e2e"];
 function colourOf(key: string): string {
@@ -64,6 +65,7 @@ export function PersonRow({ a, hand, me, action, badges, handNo, mic, cam, menu 
       </span>
       {action}
       {menu}
+      {!me ? <MessageButton target={{ to: a.user }} iconOnly newTab label={`Message ${a.name}`} size="icon-xs" className="text-stage-muted hover:text-stage-fg" /> : null}
     </li>
   );
 }

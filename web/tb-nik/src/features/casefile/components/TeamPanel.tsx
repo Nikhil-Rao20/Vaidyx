@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Check, Copy, KeyRound, RefreshCw, Trash2, UserRoundCheck, UserRoundX, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { MessageButton } from "@/components/MessageButton";
 import { approveJoin, dropJoinCode, newJoinCode, rejectJoin, removeResident } from "../api";
 import type { Team } from "../types";
 
@@ -37,7 +38,12 @@ export function TeamPanel({ caseId, team, derived, isOwner, resident, onChanged,
         <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Users className="size-4" aria-hidden />Owner</h3>
         <p className="text-sm mt-1">{(team.owner.department_label ?? team.owner.department ?? "").replace(/_/g, " ") || "No owner yet"}</p>
         <ul className="mt-1 space-y-0.5">
-          {team.owner.doctors.map((d) => <li key={d.user} className="text-sm text-foreground">{d.name}{d.user === me ? " (you)" : ""}</li>)}
+          {team.owner.doctors.map((d) => (
+            <li key={d.user} className="flex items-center gap-2 text-sm text-foreground">
+              <span className="flex-1 min-w-0 truncate">{d.name}{d.user === me ? " (you)" : ""}</span>
+              {!derived ? <MessageButton target={{ to: d.user }} caseId={caseId} /> : null}
+            </li>
+          ))}
           {!team.owner.doctors.length ? <li className="text-xs text-muted-foreground">No consultant listed yet.</li> : null}
         </ul>
       </section>
@@ -48,6 +54,7 @@ export function TeamPanel({ caseId, team, derived, isOwner, resident, onChanged,
           {team.residents.map((r) => (
             <li key={r.user} className="flex items-center gap-2 text-sm">
               <span className="flex-1 min-w-0 truncate">{r.name}{r.user === me ? " (you)" : ""}<span className="text-xs text-muted-foreground ml-1">{r.end_date ? `${r.expired ? "ended" : "until"} ${fmtDate(r.end_date)}` : "no end date"}</span>{r.expired ? <StatusChip kind="muted" className="ml-1">access ended</StatusChip> : null}</span>
+              {!derived && !r.expired ? <MessageButton target={{ to: r.user }} caseId={caseId} /> : null}
               {(isOwner || r.user === me) && !derived ? (
                 confirmRemove === r.user ? (
                   <span className="inline-flex gap-1">
@@ -68,6 +75,7 @@ export function TeamPanel({ caseId, team, derived, isOwner, resident, onChanged,
             {members.map((m) => (
               <li key={m.user} className="flex items-center gap-2 text-sm">
                 <span className="flex-1 min-w-0 truncate">{m.name}{m.user === me ? " (you)" : ""}{m.department_label ? <span className="text-xs text-muted-foreground ml-1">{m.department_label}</span> : null}{m.added_at ? <span className="text-xs text-muted-foreground ml-1">since {fmtDate(m.added_at)}</span> : null}</span>
+                {!derived ? <MessageButton target={{ to: m.user }} caseId={caseId} /> : null}
                 {(isOwner || m.user === me) && !derived ? (
                   confirmRemove === m.user ? (
                     <span className="inline-flex gap-1">
@@ -84,7 +92,7 @@ export function TeamPanel({ caseId, team, derived, isOwner, resident, onChanged,
       <section>
         <h3 className="text-sm font-semibold text-foreground">Departments taking part</h3>
         {team.departments.length === 0 ? <p className="text-xs text-muted-foreground mt-1">Only the owner's department so far.</p> : null}
-        <ul className="mt-1 flex flex-wrap gap-1">{team.departments.map((d) => <li key={d.id}><StatusChip kind="info">{(d.label ?? d.id).replace(/_/g, " ")}{d.since ? `, since ${fmtDate(d.since)}` : ""}</StatusChip></li>)}</ul>
+        <ul className="mt-1 flex flex-wrap items-center gap-1">{team.departments.map((d) => <li key={d.id} className="inline-flex items-center gap-0.5"><StatusChip kind="info">{(d.label ?? d.id).replace(/_/g, " ")}{d.since ? `, since ${fmtDate(d.since)}` : ""}</StatusChip><MessageButton target={{ dept: d.id }} caseId={caseId} iconOnly label={`Message ${(d.label ?? d.id).replace(/_/g, " ")}`} /></li>)}</ul>
       </section>
       {isOwner && !resident ? (
         <section className="rounded-md border border-border p-3">

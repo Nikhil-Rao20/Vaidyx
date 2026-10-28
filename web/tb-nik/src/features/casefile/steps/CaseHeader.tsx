@@ -7,12 +7,13 @@
 // consultant changes it in place (at most 160 characters) or goes back to the Vaidyx line.
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Archive, CalendarDays, CalendarMinus, CalendarSync, ChevronDown, ClipboardList, Download, MoreHorizontal, Pencil, Presentation, Printer, Send, Users } from "lucide-react";
+import { Archive, CalendarDays, CalendarMinus, CalendarSync, ChevronDown, ClipboardList, Download, MessageSquare, MoreHorizontal, Pencil, Presentation, Printer, Send, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { drName } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { UrgencyTag } from "@/components/UrgencyTag";
+import { MessageButton, messageHref, useMayMessage } from "@/components/MessageButton";
 import { BUILT_DRAFT_WORDS, DRAFT_CHECKLIST, NO_CHECKLIST_WORDS, genericRule, isDraftChecklist, isGeneric } from "@/lib/cancers";
 import { useProtocols } from "@/hooks/useQueries";
 import { ownerOf, setSummaryLine } from "../api";
@@ -91,6 +92,8 @@ export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, deckHref
   const ids = (p.ids ?? []).filter((x) => x.kind === "ip_no" || x.kind === "op_no").map((x) => x.value);
   const ownerDept = team?.owner?.department_label || ownerOf(cf).name;
   const ownerName = team?.owner?.doctors?.[0]?.name ?? cf.access?.owner_name ?? "";
+  const ownerUser = team && !(team as { derived?: boolean }).derived ? team.owner?.doctors?.[0]?.user ?? "" : "";  // a login only from the real team (a derived team carries the name)
+  const mayMessageCoordinator = useMayMessage();
   const withdrawn = !!c.board_send?.withdrawn;
   const sent = !!c.board_ready && !withdrawn;  // taken off the agenda: the ready mark stays, Send to the board picks a meeting again
   const prepare = steps?.mode === "prepare";
@@ -113,6 +116,7 @@ export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, deckHref
             {generic ? <span className="text-muted-foreground">{genericRule(c.protocol)}</span> : null}
             {draft ? <StatusChip kind="warn" icon={ClipboardList} title={DRAFT_CHECKLIST} className="whitespace-normal">{BUILT_DRAFT_WORDS}</StatusChip> : null}
             <span className="text-muted-foreground">{ownerName ? `${ownerName}, ` : ""}{ownerDept || "no owner yet"}</span>
+            {ownerUser ? <MessageButton target={{ to: ownerUser }} caseId={c.case_id} iconOnly label={`Message ${ownerName || "the owner"}`} className="print:hidden" /> : null}
             <span className="inline-flex items-center gap-1 text-muted-foreground"><CalendarDays className="size-3.5" aria-hidden />
               {c.board_date ? <>Board {fmtDate(c.board_date)}</> : "Board date not set"}
               {c.meeting_id ? <Link className="ml-1 text-link underline underline-offset-2" to={`/meetings/${c.meeting_id}`}>meeting</Link> : null}
@@ -135,6 +139,7 @@ export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, deckHref
             <DropdownMenuContent align="end" className="w-64">
               <DropdownMenuItem onSelect={() => onPanel("team")}><Users className="size-4" />Team</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => onPanel("board")}><ClipboardList className="size-4" />Board decisions</DropdownMenuItem>
+              {mayMessageCoordinator ? <DropdownMenuItem asChild><Link to={messageHref({ coordinator: true }, c.case_id)} data-testid="more-message-coordinator"><MessageSquare className="size-4" />Message the MDT Coordinator</Link></DropdownMenuItem> : null}
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={onPrint}><Printer className="size-4" />Print</DropdownMenuItem>
               <DropdownMenuItem asChild><a href={deckHref} download><Presentation className="size-4" />Download the slides (.pptx)</a></DropdownMenuItem>

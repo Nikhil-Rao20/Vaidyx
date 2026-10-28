@@ -64,6 +64,10 @@ function mockAnswer(method: string, p: string, role: fx.Role): { status: number;
   if (p === "/api/tb/me/notifications") return ok(fx.notificationPrefs);
   if (p === "/api/tb/me/activity" || p === "/api/tb/activity") return ok(fx.activity);
   if (p === "/api/tb/push/key") return ok({ public_key: null, enabled: false });
+  // night-v3 Phase 8: the shell asks for the unread count on every page; a spec that needs more routes Messages itself (messages_mock.ts)
+  if (p === "/api/tb/messages/unread") return ok({ unread_total: 2 });
+  if (p === "/api/tb/messages/conversations") return ok({ conversations: [], unread_total: 2 });
+  if (p === "/api/tb/directory") return ok({ people: [], departments: [], coordinators: [], me: "" });
   if (p === "/api/auth/2fa/status") return ok({ enabled: false });
   // night-v3 item 4.4: voice on, so the microphone and speaker buttons show in the screenshots
   if (p === "/api/tb/audio/status") return ok({ enabled: true, stt: "ready", tts: "ready", limits: { stt_seconds: 60, stt_bytes: 4194304, tts_chars: 2000 }, cohere: false, voices: ["af_heart", "bf_emma", "am_michael"] });
@@ -72,6 +76,13 @@ function mockAnswer(method: string, p: string, role: fx.Role): { status: number;
 
 /** Installs the routes for one page: mock answers (mock mode), the /me pass-through (real mode) and the overrides. */
 export async function prepare(page: Page, { role = "treating", overrides = {}, signedOut = false }: { role?: fx.Role; overrides?: Overrides; signedOut?: boolean } = {}) {
+  if (MOCK) {
+    // night-v3 Phase 8: the shell opens the messages socket for placed roles; without an answer the browser logs a failed connection.
+    // A spec that drives the socket registers its own handler afterwards (messages_mock.ts), which takes over.
+    await page.routeWebSocket(/\/api\/tb\/messages\/ws$/, (ws) => {
+      ws.onMessage((msg) => { try { if (JSON.parse(String(msg)).type === "ping") ws.send(JSON.stringify({ type: "pong" })); } catch { /* not JSON */ } });
+    });
+  }
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
     const method = route.request().method();

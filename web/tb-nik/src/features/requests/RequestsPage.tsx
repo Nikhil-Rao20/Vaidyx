@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { DataList } from "@/components/DataList";
 import { SearchBox } from "@/components/SearchBox";
 import { RequestCard } from "@/features/requests/RequestCard";
+import { MessageButton } from "@/components/MessageButton";
 import { useInbox } from "@/hooks/useQueries";
 import { useSession } from "@/lib/session";
 import type { InboxRequest } from "@/lib/types";
@@ -50,12 +51,17 @@ export default function RequestsPage({ embedded }: { embedded?: boolean }) {
       <PageHeader
         title={title}
         subtitle={subtitle}
-        actions={departments.length > 1 ? (
-          <select value={dept} onChange={(e) => setDept(e.target.value)} aria-label="Department" className="h-9 rounded-md border border-input bg-card px-2 text-sm">
-            <option value="all">All my departments</option>
-            {departments.map((d) => <option key={d.id} value={d.id}>{d.name} ({d.open})</option>)}
-          </select>
-        ) : undefined}
+        actions={(
+          <span className="flex flex-wrap items-center gap-2">
+            <MessageButton target={{ coordinator: true }} label="Message the MDT Coordinator" variant="outline" size="sm" />
+            {departments.length > 1 ? (
+              <select value={dept} onChange={(e) => setDept(e.target.value)} aria-label="Department" className="h-9 rounded-md border border-input bg-card px-2 text-sm">
+                <option value="all">All my departments</option>
+                {departments.map((d) => <option key={d.id} value={d.id}>{d.name} ({d.open})</option>)}
+              </select>
+            ) : null}
+          </span>
+        )}
       />
       {caseFilter ? (
         <p className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">

@@ -169,8 +169,8 @@ records per setting with `sources` (book, page, verbatim line), departments that
 |---|---|---|---|---|
 | 8.1 | Messages backend | P | `tumour_board/messages.py` + routes, D5:<br>• Conversations: direct, or to a department.<br>• Messages: text, an optional Case File or meeting link (access unchanged), reactions, editing or deleting your own within 10 minutes, "resolved" per conversation, unread per person, mentions, search.<br>• Storage: JSON lines under `data/tumour_board/messages/`; audited; rate limits. Tests. | done (a16146c) |
 | 8.2 | Real time | S | A WebSocket for messages (a second `Hub`), typing and online state; the bell gets a "message" kind; browser push says only "New message from Dr X" | done (85fa700) |
-| 8.3 | Directory | S | A people-and-departments search for every placed login (name, department, role, photo; phone only when the person made it visible) | done (see LOG) |
-| 8.4 | Screens | S | "Messages" in the top bar with an unread badge; a Slack-like page (conversations on the left, the thread on the right, a composer with voice, reactions, resolve, Case File chips); "Message" buttons on people (People page, Team panel, meeting People, request cards, the Case File owner) and "Message the MDT Coordinator"; phone layout | todo |
+| 8.3 | Directory | S | A people-and-departments search for every placed login (name, department, role, photo; phone only when the person made it visible) | done (b079200) |
+| 8.4 | Screens | S | "Messages" in the top bar with an unread badge; a Slack-like page (conversations on the left, the thread on the right, a composer with voice, reactions, resolve, Case File chips); "Message" buttons on people (People page, Team panel, meeting People, request cards, the Case File owner) and "Message the MDT Coordinator"; phone layout | doing |
 | 8.5 | Checks | S | Two logins exchange messages live; the unread badge and the bell work; a department message reaches all its members | todo |
 
 ### Phase 9: integration and demo readiness

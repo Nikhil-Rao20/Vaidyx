@@ -4,7 +4,7 @@
 // remove from the department. Passwords travel only inside mailto: links opened in the admin's own mail program.
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { CalendarClock, KeyRound, Mail, MoreHorizontal, Settings2, ShieldAlert, Trash2, UserMinus, UserPlus, UserRoundCheck } from "lucide-react";
+import { CalendarClock, KeyRound, Mail, MessageSquare, MoreHorizontal, Settings2, ShieldAlert, Trash2, UserMinus, UserPlus, UserRoundCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -27,6 +27,7 @@ import { keys, useAccounts, useDepartmentDoctors, useInvalidate, useOrg } from "
 import { api } from "@/lib/api";
 import { EP } from "@/lib/endpoints";
 import { useSession } from "@/lib/session";
+import { messageHref, useMayMessage } from "@/components/MessageButton";
 import type { AccountRow, DepartmentDoctor, Placement, PersonSaved, ResetResult } from "@/lib/types";
 import { initials, plural } from "@/lib/format";
 import { EMAIL } from "@/features/admin/state";
@@ -97,6 +98,7 @@ function PersonRow({ p, dept, canReset, onChanged, onMail }: { p: DepartmentDoct
   const [menuOpen, setMenuOpen] = useState(false);
   const [endOpen, setEndOpen] = useState(false);
   const [end, setEnd] = useState(p.end_date || "");
+  const mayMessage = useMayMessage({ to: p.username });
   const who = p.display_name || p.username;
   const run = async (body: Record<string, unknown>, ok: string) => {
     try {
@@ -146,6 +148,7 @@ function PersonRow({ p, dept, canReset, onChanged, onMail }: { p: DepartmentDoct
           <Button type="button" variant="ghost" size="icon-sm" aria-label={`Actions for ${who}`} disabled={reset.state === "loading"}><MoreHorizontal className="size-4" aria-hidden /></Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
+          {mayMessage && p.account !== false && !p.disabled ? <DropdownMenuItem asChild><Link to={messageHref({ to: p.username })}><MessageSquare className="size-4" aria-hidden /> Message</Link></DropdownMenuItem> : null}
           {(["member", "head", "resident"] as Placement[]).filter((r) => r !== p.role).map((r) => (
             <DropdownMenuItem key={r} disabled={locked} onSelect={() => void run({ role: r }, `Now ${ROLE_WORD[r].toLowerCase()}`)}>Make {ROLE_WORD[r].toLowerCase()}</DropdownMenuItem>
           ))}

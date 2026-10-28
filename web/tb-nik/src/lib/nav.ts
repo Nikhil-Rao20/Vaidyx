@@ -1,6 +1,6 @@
 // The 2 to 5 items of the top bar and the Dock, per role: Case Files and Meetings for everyone clinical, plus the role items. Several roles give the union, in a fixed order.
 import type { LucideIcon } from "lucide-react";
-import { Activity, CalendarDays, FolderOpen, Inbox, Settings2, Users } from "lucide-react";
+import { Activity, CalendarDays, FolderOpen, Inbox, MessageSquare, Settings2, Users } from "lucide-react";
 import type { Me } from "@/lib/session";
 
 export interface NavItem {
@@ -33,7 +33,7 @@ export function hasInbox(me: Me): boolean {
   return (me.roles.supporting || []).length > 0 || (me.counts?.open_requests ?? 0) > 0;
 }
 
-export function navItems(me: Me): NavItem[] {
+export function navItems(me: Me, messagesUnread?: number): NavItem[] {
   const r = me.roles;
   const items: NavItem[] = [];
   const primary = me.primary_role;
@@ -50,6 +50,10 @@ export function navItems(me: Me): NavItem[] {
   if (clinical || r.outside_expert) {
     items.push({ key: "meetings", label: "Meetings", to: "/meetings", icon: CalendarDays, match: startsWith("/meetings") });
   }
+  // Messages (Phase 8): every placed login and the MDT Coordinator; the badge is the unread count.
+  if (me.messages) {
+    items.push({ key: "messages", label: "Messages", to: "/messages", icon: MessageSquare, match: startsWith("/messages"), badge: (messagesUnread ?? me.counts?.messages_unread) || undefined });
+  }
   if (isDeptAdmin(me) || r.root_admin) {
     items.push({ key: "people", label: "People", to: "/people", icon: Users, match: startsWith("/people") });
   }
@@ -60,7 +64,15 @@ export function navItems(me: Me): NavItem[] {
   if (r.auditor || (!clinical && (r.root_admin || isDeptAdmin(me)))) {
     items.push({ key: "activity", label: "Activity", to: "/activity", icon: Activity, match: startsWith("/activity") });
   }
-  return items.slice(0, 5);  // five fit the Dock
+  return fitNav(items);
+}
+
+/** Five fit the top bar and the Dock. When there are more, Messages steps out first: its icon with the badge stays in the top bar
+ * beside the bell on every screen, so nothing is lost. */
+export function fitNav(items: NavItem[]): NavItem[] {
+  if (items.length <= 5) return items;
+  const without = items.filter((it) => it.key !== "messages");
+  return without.slice(0, 5);
 }
 
 /** Where "Home" goes for this person. */

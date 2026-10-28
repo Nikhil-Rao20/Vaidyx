@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { MicButton } from "@/components/MicButton";
+import { MessageButton } from "@/components/MessageButton";
 import { Label } from "@/components/ui/label";
 import { ActionButton } from "@/components/ActionButton";
 import { PatientLine } from "@/components/PatientLine";
@@ -88,6 +89,7 @@ export function RequestCard({ request: r, onChanged, canAnswer = true }: { reque
         <Button type="button" variant="ghost" size="sm" asChild>
           <Link to={`/cases/${encodeURIComponent(r.case_id)}`} title="What was asked, and your department's records in this Case File"><FolderOpen className="size-4" aria-hidden /> Case File</Link>
         </Button>
+        <MessageButton target={r.sent?.by ? { to: r.sent.by } : { coordinator: true }} caseId={r.case_id} label={r.sent?.by ? "Message the asker" : "Message the MDT Coordinator"} variant="ghost" size="sm" />
         {!completed && canAnswer ? (
           <span className="ml-auto flex items-center gap-2">
             {!r.acknowledged && !board ? (

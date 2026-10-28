@@ -23,11 +23,14 @@ const iso = (daysAgo: number, h = 10) => { const d = new Date(now); d.setDate(d.
 const day = (daysAhead: number) => { const d = new Date(now); d.setDate(d.getDate() + daysAhead); return d.toISOString().slice(0, 10); };
 
 export function me(role: Role) {
+  // night-v3 8.4: placed hospital staff (and the MDT Coordinator) may use Messages; the others get no "messages" field.
+  const placed = role === "treating" || role === "resident" || role === "supporting" || role === "coordinator";
   const base = {
+    ...(placed ? { messages: true } : {}),
     must_change_password: false, setup_needed: false,
     profile: { title: "Dr", registration_no: "TNMC 45821", phone: "", phone_visible: false, photo: "", text_size: "normal", start_page: "home",
       saved_filters: role === "treating" ? [{ name: "My urgent ones", query: { urgency: "high", mine: "1" } }, { name: "Ready", query: { status: "ready" } }] : [] },
-    counts: { unread: 3, waiting_for_me: role === "treating" ? 2 : 0, open_requests: role === "supporting" ? 4 : 0 },
+    counts: { unread: 3, waiting_for_me: role === "treating" ? 2 : 0, open_requests: role === "supporting" ? 4 : 0, ...(placed ? { messages_unread: 2 } : {}) },
     hospital: { name: "Vaidyx Demo Hospital", level: "optimal" },
     features: { video: true, push: true },
   };
