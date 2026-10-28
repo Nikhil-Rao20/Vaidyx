@@ -26,6 +26,7 @@ export function useMayMessage(target?: MessageTarget): boolean {
   const { me } = useSession();
   if (!me?.messages) return false;
   if (target && "to" in target && (!target.to || target.to === me.user)) return false;
+  if (target && "coordinator" in target && me.roles?.coordinator) return false;  // a coordinator does not message the coordinator role
   return true;
 }
 

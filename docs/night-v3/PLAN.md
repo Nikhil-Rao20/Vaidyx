@@ -171,7 +171,7 @@ records per setting with `sources` (book, page, verbatim line), departments that
 | 8.2 | Real time | S | A WebSocket for messages (a second `Hub`), typing and online state; the bell gets a "message" kind; browser push says only "New message from Dr X" | done (85fa700) |
 | 8.3 | Directory | S | A people-and-departments search for every placed login (name, department, role, photo; phone only when the person made it visible) | done (b079200) |
 | 8.4 | Screens | S | "Messages" in the top bar with an unread badge; a Slack-like page (conversations on the left, the thread on the right, a composer with voice, reactions, resolve, Case File chips); "Message" buttons on people (People page, Team panel, meeting People, request cards, the Case File owner) and "Message the MDT Coordinator"; phone layout | done (af8b3ed) |
-| 8.5 | Checks | S | Two logins exchange messages live; the unread badge and the bell work; a department message reaches all its members | done (see LOG) |
+| 8.5 | Checks | S | Two logins exchange messages live; the unread badge and the bell work; a department message reaches all its members | done (74cdeb4) |
 
 ### Phase 9: integration and demo readiness
 

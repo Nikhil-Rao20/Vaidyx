@@ -26,8 +26,14 @@ import { ConversationAvatar, REACTIONS, TEXT_MAX, clock, groupDays, minutesLeft,
 import { usePresence, useTyping } from "@/features/messages/useMessagesLive";
 import type { Chip, ConversationRow, ConversationView, Message, PickedLink, Presence, ReactionKind } from "@/features/messages/types";
 
-export const NOTICE_TEXT =
-  "Messages are for work between the staff of this hospital. They are kept for a set time (365 days by default) after the last message, then the text is removed. Only the people in a conversation can read it; the activity log records who messaged whom, never the text. Ask the MDT Coordinator to have a message removed.";
+/** The first-use notice with the hospital's own retention setting (0 keeps every message until the hospital removes it). */
+export function noticeText(days?: number | null): string {
+  const kept = typeof days === "number" && days > 0
+    ? `They are kept for ${days} days after the last message, then the text is removed.`
+    : typeof days === "number" ? "They are kept until the hospital removes them." : "They are kept for a set time after the last message, then the text is removed.";
+  return `Messages are for work between the staff of this hospital. ${kept} Only the people in a conversation can read it; the activity log records who messaged whom, never the text. Ask the MDT Coordinator to have a message removed.`;
+}
+export const NOTICE_TEXT = noticeText(365);
 
 // ---- the frame (desktop: a card in the right column; phone: the whole screen above the Dock) -----------------------------
 export function ThreadFrame({ phone, header, children, composer, testId = "thread", label }: {
@@ -228,7 +234,7 @@ function MessageItem({ m, me, kind, names, seen, onReact, onEdit, onDelete }: {
 }
 
 // ---- the first-use notice -------------------------------------------------------------------------------------------------
-function Notice() {
+function Notice({ days }: { days?: number | null }) {
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
   const gotIt = async () => {
@@ -243,7 +249,7 @@ function Notice() {
   return (
     <div data-testid="notice" role="note" className="surface-inner mx-auto flex max-w-2xl flex-col gap-2 border-primary/30 p-3 text-sm sm:flex-row sm:items-start">
       <Info className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
-      <p className="min-w-0 flex-1 text-foreground">{NOTICE_TEXT}</p>
+      <p className="min-w-0 flex-1 text-foreground">{noticeText(days)}</p>
       <Button type="button" size="sm" onClick={() => void gotIt()} disabled={busy} className="self-end sm:self-start">Got it</Button>
     </div>
   );
@@ -407,7 +413,7 @@ export function Thread({ view, me, phone, initialLink }: { view: ConversationVie
           <Composer key={id} conversationId={id} readers={view.readers} me={me} initialLink={initialLink} onSend={send} />
         </>
       }>
-      {!view.notice_seen ? <div className="shrink-0 px-3 pt-3 lg:px-4"><Notice /></div> : null}
+      {!view.notice_seen ? <div className="shrink-0 px-3 pt-3 lg:px-4"><Notice days={view.retention_days} /></div> : null}
       <div ref={listRef} role="log" aria-label="Messages" data-testid="message-list"
         onScroll={() => { const el = listRef.current; if (el) atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 32; }}
         className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 lg:px-4">
@@ -420,7 +426,7 @@ export function Thread({ view, me, phone, initialLink }: { view: ConversationVie
         ) : null}
         {!messages.length ? <p className="py-6 text-center text-sm text-muted-foreground">No messages yet.</p> : groupDays(messages).map((day) => (
           <section key={day.key} aria-label={day.label} className="pb-2">
-            <h3 className="sticky top-0 z-[1] mx-auto my-2 w-fit rounded-full border border-border bg-card px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">{day.label}</h3>
+            <h3 className="sticky top-0 z-[1] mx-auto mb-3 mt-2 w-fit rounded-full border border-border bg-card px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">{day.label}</h3>
             <ol className="space-y-2">
               {day.items.map((m) => (
                 <MessageItem key={m.id} m={m} me={me} kind={c.kind} names={names} seen={m.id === seenId}

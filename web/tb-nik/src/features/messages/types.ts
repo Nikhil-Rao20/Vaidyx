@@ -64,6 +64,8 @@ export interface ConversationView {
   /** Direct only: the partner's last read seq ("Seen"). */
   seen_seq: number | null;
   notice_seen: boolean;
+  /** The hospital's retention setting in days (0 keeps every message), for the first-use notice. */
+  retention_days?: number;
 }
 
 export interface SearchHit { conversation_id: string; title: string; message: Message }

@@ -118,7 +118,7 @@ export async function routeMessages(page: Page, o: MessagesMockOptions = {}): Pr
   };
   const view = (c: Conv) => ({
     conversation: row(c), messages: c.messages.map(shapeMsg), has_more: false,
-    readers: readersOf(c).map((u) => ({ user: u, display_name: nameOf(u) })), seen_seq: c.kind === "direct" ? c.seen_seq : null, notice_seen: noticeSeen,
+    readers: readersOf(c).map((u) => ({ user: u, display_name: nameOf(u) })), seen_seq: c.kind === "direct" ? c.seen_seq : null, notice_seen: noticeSeen, retention_days: 365,
   });
   const total = () => convs.reduce((a, c) => a + unreadOf(c), 0);
   const sorted = () => [...convs].sort((a, b) => (lastMsg(b)?.ts ?? "").localeCompare(lastMsg(a)?.ts ?? ""));

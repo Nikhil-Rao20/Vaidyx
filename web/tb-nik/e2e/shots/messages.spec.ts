@@ -124,7 +124,7 @@ test.describe("Messages", () => {
     const live = await open(page, `/messages/${C_DIRECT}`, { wait: "thread", noticeSeen: false });
     const notice = page.getByTestId("notice");
     await expect(notice).toContainText("Messages are for work between the staff of this hospital.");
-    await expect(notice).toContainText("365 days by default");
+    await expect(notice).toContainText("kept for 365 days after the last message");
     await expect(notice).toContainText("Ask the MDT Coordinator to have a message removed.");
     await shoot(page, "messages", "notice", { sizes: DM, fullPage: false });
     await page.setViewportSize(SIZES[0]);
@@ -260,6 +260,25 @@ test.describe("Messages", () => {
     await page.getByTestId("new-message").click();
     const box = await page.getByTestId("directory-picker").boundingBox();
     expect(box?.height ?? 0).toBeGreaterThan(PHONE.height - 4);
+    expect(errors).toEqual([]);
+  });
+
+  test("no Messages icon or socket for a root admin", async ({ page }) => {
+    const errors = watchConsole(page);
+    await open(page, "/cases", { role: "root_admin" });
+    await page.waitForTimeout(500);
+    await expect(page.getByTestId("messages-nav")).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test("a message that looks like HTML shows as text", async ({ page }) => {
+    const errors = watchConsole(page);
+    await open(page, `/messages/${C_DIRECT}`, { wait: "composer-input" });
+    await page.getByTestId("composer-input").fill("<b>not bold</b> <img src=x onerror=alert(1)>");
+    await page.getByTestId("send").click();
+    const mine = page.locator('[data-testid="message"][data-mine="true"]').last();
+    await expect(mine).toContainText("<b>not bold</b>");
+    await expect(mine.locator("b, img")).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 

@@ -402,7 +402,7 @@ def check_link(by: str, link, r: dict | None = None):
         if typ == "case":
             from . import access
             c = _case(lid)
-            if c and not access.is_protected(c) and access.scope(rl, c) is not None:
+            if c and not access.is_protected(c) and not access.is_archived(c) and access.scope(rl, c) is not None:
                 return {"type": "case", "id": lid}
         elif typ == "meeting":
             from . import meetings
@@ -430,8 +430,8 @@ def link_view(by: str, link, r: dict | None = None):
             if access.is_protected(lid):
                 return chip
             c = _case(lid)
-            if not c:
-                return chip
+            if not c or access.is_archived(c):
+                return chip  # a missing or archived file gives no name (review M5)
             if access.scope(rl, c) is not None:
                 chip.update(label=_case_label(c), can_open=True)
             else:
@@ -654,9 +654,10 @@ def _bell_ids(reader: str, cid: str) -> list[str]:
 def _bell(reader: str, cid: str, sender_name: str) -> None:
     """One unread "message" item per reader and conversation (coalesced); addressed to the user, never a department (admins see those)."""
     from . import notify
-    if _bell_ids(reader, cid):
-        return
-    notify.notify({"user": reader}, "message", "", f"New message from {sender_name}", "", conversation=cid)
+    with _lock:  # the check and the write as one step, so two sends at once leave one item (review M6)
+        if _bell_ids(reader, cid):
+            return
+        notify.notify({"user": reader}, "message", "", f"New message from {sender_name}", "", conversation=cid)
 
 
 def _push(users: list, cid: str, sender_name: str) -> None:
@@ -726,6 +727,8 @@ def _emit_message(conv: dict, mid: str, kind: str) -> None:
 # ---- text ---------------------------------------------------------------------------------------------------------------------------
 
 def _clean_text(text) -> str:
+    if text is not None and not isinstance(text, str):
+        raise Refused(400, "empty", EMPTY)  # a number or an object is not a message (review M4)
     t = str(text if text is not None else "").strip()
     if not t:
         raise Refused(400, "empty", EMPTY)
@@ -1082,7 +1085,8 @@ def get_conversation(by: str, conv_id: str, before: int | None = None, limit: in
     page = pool[-limit:]
     names: dict = {}
     return {"conversation": row, "messages": [_message(m, by, rl, names) for m in page], "has_more": len(pool) > len(page),
-            "readers": [{"user": u, "display_name": _name(u)} for u in readers(conv)], "seen_seq": seen_seq, "notice_seen": notice}
+            "readers": [{"user": u, "display_name": _name(u)} for u in readers(conv)], "seen_seq": seen_seq, "notice_seen": notice,
+            "retention_days": retention_days()}
 
 
 def search(by: str, q: str, r: dict | None = None) -> list[dict]:
@@ -1133,6 +1137,14 @@ def unread_total(by: str, r: dict | None = None) -> int:
                 continue
             total += _unread(_fold(_events(c["id"]))[1], by, seen)
     return total
+
+
+def retention_days() -> int:
+    """The hospital's setting (0 keeps every message), for the first-use notice."""
+    try:
+        return max(0, int(org.hospital().get("message_retention_days", 365)))
+    except Exception:
+        return 365
 
 
 def notice_seen(by: str) -> bool:

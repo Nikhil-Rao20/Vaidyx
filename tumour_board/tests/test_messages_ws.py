@@ -145,3 +145,42 @@ def test_shape_drops_a_socket_that_lost_messages():
     assert messages_ws._shape("ravi", {"user": "ravi", "departments": {"radiology": "member"}}, ev) == ev
     assert messages_ws._shape("ravi", {"user": "ravi", "departments": {}, "expired": True}, ev) is None
     assert messages_ws._shape("ravi", None, ev) is None
+
+
+# ---- Phase 8 review additions (28/10/2026) -------------------------------------------------------------------------------------------
+
+def test_a_message_event_never_reaches_a_non_reader(tc):
+    cid = start(tc, "priya", {"user": "ravi"}, text="First")["conversation"]["id"]
+    with connect(tc, "meena") as meena, connect(tc, "ravi") as ravi:
+        until(meena, "unread"); until(ravi, "unread")
+        As(tc, "priya").post(f"/messages/conversations/{cid}/messages", json={"text": "Only for Ravi"})
+        until(ravi, "message")
+        kinds = [e.get("type") for e in drain(meena)]
+        assert "message" not in kinds and all(k in ("unread", "presence") for k in kinds), kinds
+
+
+def test_a_login_that_loses_its_placement_is_closed_with_1008(tc):
+    import copy
+    from tumour_board import org
+    with connect(tc, "ravi") as ravi:
+        until(ravi, "unread")
+        o = copy.deepcopy(org.load()); o["users"]["ravi"]["disabled"] = True; org.save(o, by="test")
+        ravi.send_json({"type": "ping"})  # every client message re-checks the session and the roles
+        with pytest.raises(WebSocketDisconnect) as e:
+            for _ in range(5):
+                ravi.receive_json()
+        assert e.value.code == 1008
+
+
+def test_the_socket_cap_per_login(tc):
+    open_ = []
+    try:
+        for _ in range(live.MAX_SOCKETS_PER_USER):
+            ws = connect(tc, "ravi").__enter__(); open_.append(ws); until(ws, "unread")
+        with pytest.raises(WebSocketDisconnect) as e:
+            with connect(tc, "ravi") as extra:
+                extra.receive_json()
+        assert e.value.code == 1008
+    finally:
+        for ws in open_:
+            ws.__exit__(None, None, None)

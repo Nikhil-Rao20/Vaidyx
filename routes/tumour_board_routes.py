@@ -420,6 +420,11 @@ def _include_nik_routers(r):
 
 def setup_tumour_board_routes():
     _warm()
+    try:
+        from tumour_board import access_log
+        access_log.install()  # Phase 8 review: no search words in the access log
+    except Exception as e:
+        log.warning("access log filter not installed: %s", e.__class__.__name__)
     r = APIRouter(prefix="/api/tb", tags=["tumour-board"], route_class=_ModelErrorRoute)
     _include_nik_routers(r)
 

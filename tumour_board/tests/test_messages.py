@@ -481,3 +481,48 @@ def test_listeners_never_break_a_send(tc, monkeypatch):
     monkeypatch.setattr(messages, "INTERESTED", lambda u: True)
     d = start(tc, "priya", {"user": "ravi"}, text="Still stored")
     assert As(tc, "ravi").get(f"/messages/conversations/{d['conversation']['id']}").json()["messages"][0]["text"] == "Still stored"
+
+
+# ---- Phase 8 review additions (28/10/2026) -------------------------------------------------------------------------------------------
+
+def test_a_department_admin_placed_elsewhere_cannot_read_that_departments_conversation(tc):
+    """meena (pathology head) made admin of radiology: still not a reader of a radiology conversation (admin rights are not membership)."""
+    import copy
+    from tumour_board import org
+    o = copy.deepcopy(org.load()); o["users"]["meena"]["admin_of"] = ["radiology"]; org.save(o, by="test")
+    cid = As(tc, "priya").post("/messages/conversations", json={"to": {"department": "radiology"}, "text": "For Radiology only."}).json()["conversation"]["id"]
+    assert As(tc, "ravi").get(f"/messages/conversations/{cid}").status_code == 200
+    r = As(tc, "meena").get(f"/messages/conversations/{cid}")
+    assert r.status_code == 404 and r.json()["detail"]["code"] == "not_found"
+    assert cid not in [c["id"] for c in As(tc, "meena").get("/messages/conversations").json()["conversations"]]
+
+
+def test_text_must_be_a_string(tc):
+    r = As(tc, "priya").post("/messages/conversations", json={"to": {"user": "ravi"}, "text": {"a": 1}})
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "empty"
+    r = As(tc, "priya").post("/messages/conversations", json={"to": {"user": "ravi"}, "text": 12345})
+    assert r.status_code == 400
+
+
+def test_an_archived_case_file_cannot_be_attached_and_gets_no_label(tc, demo_cases):
+    from tumour_board import store
+    from tumour_board.tests.test_nik_meetings import owned
+    owned("TB-002", department="breast_surgery", owner="priya")
+    c = store.get_case("TB-002")
+    r0 = As(tc, "priya").post("/messages/conversations", json={"to": {"user": "ravi"}, "text": "See the file.", "link": {"type": "case", "id": "TB-002"}})
+    assert r0.status_code == 201, r0.text
+    cid = r0.json()["conversation"]["id"]
+    c["archived"] = {"by": "priya", "at": "2026-10-01T10:00:00", "reason": "test"}; store.save_case(c)
+    r = As(tc, "priya").post(f"/messages/conversations/{cid}/messages", json={"text": "Again.", "link": {"type": "case", "id": "TB-002"}})
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "link_not_allowed"
+    first = As(tc, "priya").get(f"/messages/conversations/{cid}").json()["messages"][0]
+    assert first["link"]["label"] is None and first["link"]["can_open"] is False  # the earlier chip loses its name once the file is archived
+
+
+def test_the_view_carries_the_hospitals_retention_days(tc):
+    import copy
+    from tumour_board import org
+    cid = As(tc, "priya").post("/messages/conversations", json={"to": {"user": "ravi"}, "text": "Hello."}).json()["conversation"]["id"]
+    assert As(tc, "priya").get(f"/messages/conversations/{cid}").json()["retention_days"] == 365
+    o = copy.deepcopy(org.load()); o["hospital"]["message_retention_days"] = 30; org.save(o, by="test")
+    assert As(tc, "priya").get(f"/messages/conversations/{cid}").json()["retention_days"] == 30
