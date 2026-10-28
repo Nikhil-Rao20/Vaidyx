@@ -181,7 +181,7 @@ records per setting with `sources` (book, page, verbatim line), departments that
 | 9.2 | Whole-run review | P | One reviewer per area (Opus) over the whole night's diff; serious findings fixed | done (4b13bde) |
 | 9.3 | Demo walk-through | S | `docs/night-v3/HOW_TO_TRY.md`: a new-cancer patient prepared end to end; a meeting with two absent heads where the agents answer in voice; a decision that produces the Case summary; similar Case Files; messages between the coordinator and a doctor. Logins by username only. | done (07d6925) |
 | 9.4 | The clinician's file | S | `HOW_TO_TRY.md` says how to load the owner's clinician-made synthetic file when it arrives (outside-report upload or a demo-HIS seed) | done (ce26726) |
-| 9.5 | Features overview and finish | S | `docs/night-v3/FEATURES.md`: before, during and after the board with everything built; the Morning summary final; `/data/vaidyx/night-v3/RUN_COMPLETE` created | doing |
+| 9.5 | Features overview and finish | S | `docs/night-v3/FEATURES.md`: before, during and after the board with everything built; the Morning summary final; `/data/vaidyx/night-v3/RUN_COMPLETE` created | done (N3-9.5, the closing commit) |
 
 ## 5. Pause, stop and resume
 - `docs/night-v3/run_night.sh pause`: the running session finishes its current item, commits, logs `[PAUSED]` and ends; nothing new starts.
