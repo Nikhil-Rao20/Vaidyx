@@ -326,16 +326,9 @@
      "page": "n/a",
      "where": "Hepatocellular carcinoma flow chart, work-up list",
      "quote": "Endoscopy for varices, HVPG"
-    },
-    {
-     "guideline": "NCG GI: Hepatocellular carcinoma",
-     "file": "ncg_india/ncg-gi-hepatocellular-carcinoma.docx",
-     "page": "n/a",
-     "where": "NOTES, liver resection paragraph",
-     "quote": "no varices or HVPG < 10 mmHg"
     }
    ],
-   "tier_basis": "NCG Optional (italics) in the work-up list; the NOTES tie it to resection. Proposed not applicable where no resection is recorded"
+   "tier_basis": "NCG Optional (italics) in the work-up list. Proposed not applicable where no resection is recorded. The NOTES sentence on resection candidacy is not cited: it is a treatment-selection line (the whole-run review, I5)"
   },
   {
    "id": "chest_ct",

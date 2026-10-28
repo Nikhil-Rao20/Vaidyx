@@ -80,6 +80,33 @@ def _profiles_dir():
     return DIR() / "profiles"
 
 
+def _write_private(p, write) -> None:
+    """Atomic and private (whole-run review 9, M12): `write(fh)` fills a sibling .tmp opened with mode 600, flushed and fsynced, then
+    os.replace puts it in place; a crash leaves the old file whole and nobody else on the server reads a profile or a vector."""
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(p.name + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            write(fh)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, p)
+    except BaseException:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
+
+
+def _write_json(p, obj) -> None:
+    """A JSON file of this module (profiles, the index, the order caches), written by _write_private."""
+    data = json.dumps(obj, indent=2, ensure_ascii=False).encode("utf-8")
+    _write_private(p, lambda fh: fh.write(data))
+
+
 def _profile_path(case_id):
     return _profiles_dir() / f"{store.safe_id(case_id)}.json"
 
@@ -626,7 +653,7 @@ def _vectors(texts) -> tuple:
         new = retrieval._embed([texts[i] for i, _ in part])
         for (i, f), v in zip(part, new):
             v = np.asarray(v, dtype=np.float32)
-            np.save(f, v)
+            _write_private(f, lambda fh, v=v: np.save(fh, v))
             vecs[i] = v
     return vecs, len(todo)
 
@@ -660,12 +687,9 @@ def _write_index(chunks, vecs, profiles_sig="") -> None:
     else:
         m = np.zeros((0, 0), dtype=np.float32)
     keys = np.array([f"{c['case_id']}|{c['chunk']}" for c in chunks], dtype=str)
-    tmp = _index_npz().with_suffix(".npz.tmp")
-    with open(tmp, "wb") as fh:
-        np.savez(fh, vectors=m, keys=keys)
-    os.replace(tmp, _index_npz())
+    _write_private(_index_npz(), lambda fh: np.savez(fh, vectors=m, keys=keys))
     sig = hashlib.sha1(json.dumps(sorted(f"{c['case_id']}|{c['chunk']}|{hashlib.sha1(c['text'].encode()).hexdigest()}" for c in chunks)).encode()).hexdigest()[:16]
-    store._write_json(_index_json(), {"version": VERSION, "embed_model": retrieval.EMBED_MODEL, "chunks": chunks, "signature": sig,
+    _write_json(_index_json(), {"version": VERSION, "embed_model": retrieval.EMBED_MODEL, "chunks": chunks, "signature": sig,
                                       "profiles_sig": profiles_sig, "built_at": store.now_iso()})
 
 
@@ -738,7 +762,7 @@ def ensure(force=False) -> dict:
                     out["unchanged"] += 1
                     continue
                 p = build_profile(name, case, st)
-                store._write_json(_profile_path(name), p)
+                _write_json(_profile_path(name), p)
                 live.add(name)
                 sigs[name] = str(p.get("signature") or "")
                 out["built"] += 1
@@ -1101,7 +1125,7 @@ async def order(src, cands, words="", *, info=None, audit=None) -> tuple:
     merged = sorted(range(len(ids)), key=lambda i: (statistics.median(ranks[i]), i))
     out = [ids[i] for i in merged]
     try:
-        store._write_json(_cache_path(key), {"order": out, "ordered_by": "model", "prompt_version": PROMPT_VERSION, "at": store.now_iso()})
+        _write_json(_cache_path(key), {"order": out, "ordered_by": "model", "prompt_version": PROMPT_VERSION, "at": store.now_iso()})
     except OSError as e:
         log.warning("similar: order cache not written (%s)", e)
     return out, "model"
@@ -1266,7 +1290,7 @@ async def pick_lines(src, past, *, sources=None, audit=None) -> dict:
         if ans is None:
             return _empty_picks()
         try:
-            store._write_json(_lines_cache_path(key), {"picks": ans, "prompt_version": PROMPT_VERSION, "model": MODEL_NAME, "at": store.now_iso()})
+            _write_json(_lines_cache_path(key), {"picks": ans, "prompt_version": PROMPT_VERSION, "model": MODEL_NAME, "at": store.now_iso()})
         except OSError as e:
             log.warning("similar: lines cache not written (%s)", e)
     sources = {} if sources is None else sources
@@ -1395,7 +1419,8 @@ def open_info(rl, past_case_id, this_case_id) -> dict:
     if not pid or _protected(pid) or pid == str(this_case_id or ""):
         raise ValueError("not_found")
     try:
-        store.safe_id(pid)
+        if store.safe_id(pid) != pid:  # "TB 001" would reach the TB-001 folder with a wrong id in the audit (whole-run review 9, M7)
+            raise ValueError("not_found")
     except ValueError:
         raise ValueError("not_found")
     past = store.get_case(pid)

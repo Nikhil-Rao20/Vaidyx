@@ -97,12 +97,15 @@ class StubSttEngine:
 
 class StubKokoro:
     fallback_on = True
+    delay = 0.0
 
     def __init__(self, device, calls):
         self.device, self.calls = device, calls
 
     def render(self, chunk, voice, speed):
         self.calls["chunks"].append(chunk)
+        if self.delay:
+            time.sleep(self.delay)
         return np.full(len(chunk) * 240, 0.1, dtype=np.float32)  # 10 ms per character
 
 
@@ -133,6 +136,7 @@ def calls(monkeypatch):
     monkeypatch.setattr(limits, "gpu_free_mib", lambda: 20000)
     monkeypatch.setattr(StubSttEngine, "text", "Stub transcript.")
     monkeypatch.setattr(StubSttEngine, "delay", 0.0)
+    monkeypatch.setattr(StubKokoro, "delay", 0.0)
     return c
 
 
@@ -458,6 +462,69 @@ async def test_busy_after_waiting_too_long(client, calls, monkeypatch):
     assert second.status == 429
     assert (await first).status == 200
     assert (await post_stt(client, make_wav(tone(1)))).status in (200, 429)  # the slot was given back
+
+
+class _Lines(logging.Handler):
+    def __init__(self):
+        super().__init__(logging.INFO)
+        self.lines = []
+
+    def emit(self, record):
+        self.lines.append(record.getMessage())
+
+
+@pytest.fixture
+def audio_log():
+    h, lg = _Lines(), logging.getLogger("tb.audio")
+    old = lg.level
+    lg.addHandler(h); lg.setLevel(logging.INFO)
+    yield h.lines
+    lg.removeHandler(h); lg.setLevel(old)
+
+
+async def test_a_stuck_stt_engine_gives_the_slot_back_and_health_says_error(client, calls, monkeypatch, audio_log):
+    """Review 9 D, M1: a run past the time limit is refused as unavailable, the engine is marked error (the app hides the
+    microphone), it is never reloaded while its thread may still run, and the log names the error class only."""
+    monkeypatch.setattr(stt, "RUN_TIMEOUT", 0.2)
+    monkeypatch.setattr(StubSttEngine, "text", "Zephyrine stuck words.")
+    monkeypatch.setattr(StubSttEngine, "delay", 0.8)
+    t0 = time.monotonic()
+    r = await post_stt(client, make_wav(tone(2)))
+    assert r.status == 503 and time.monotonic() - t0 < 0.7
+    assert_error(await r.json(), "engine_unavailable")
+    body = await (await client.get("/health")).json()
+    assert body["stt"]["state"] == "error" and body["stt"]["engine"] == stt.WHISPER_NAME
+    assert calls["whisper"] == 1
+    lines = [l for l in audio_log if "run failed" in l]
+    assert lines == ["run failed engine=whisper error=TimeoutError"]
+    assert not any("Zephyrine" in l for l in audio_log)
+    await asyncio.sleep(0.7)  # let the stuck thread end before the stubs are taken away
+    assert calls["whisper"] == 1  # a later dictation never reloads Whisper next to the stuck run
+
+
+async def test_a_stuck_vad_marks_dictation_down(client, calls, monkeypatch, audio_log):
+    monkeypatch.setattr(stt, "RUN_TIMEOUT", 0.1)
+    monkeypatch.setattr(StubVad, "speech_seconds", lambda self, audio: time.sleep(0.4) or 0.0)
+    r = await post_stt(client, make_wav(tone(1)))
+    assert r.status == 503
+    assert (await (await client.get("/health")).json())["stt"]["state"] == "error"
+    assert "run failed engine=vad error=TimeoutError" in audio_log
+    await asyncio.sleep(0.4)
+
+
+async def test_a_stuck_tts_engine_gives_the_slot_back_and_health_says_error(client, calls, monkeypatch, audio_log):
+    monkeypatch.setattr(tts, "RUN_TIMEOUT", 0.2)
+    monkeypatch.setattr(StubKokoro, "delay", 0.8)
+    t0 = time.monotonic()
+    r = await client.post("/tts", json={"text": "Zephyrine reads slowly."}, headers=HDR)
+    assert r.status == 503 and time.monotonic() - t0 < 0.7
+    assert_error(await r.json(), "engine_unavailable")
+    assert (await (await client.get("/health")).json())["tts"]["state"] == "error"
+    assert [l for l in audio_log if "run failed" in l] == ["run failed engine=kokoro error=TimeoutError"]
+    assert not any("Zephyrine" in l for l in audio_log)
+    r = await client.post("/tts", json={"text": "Again."}, headers=HDR)
+    assert r.status == 503 and calls["kokoro"] == 1
+    await asyncio.sleep(0.7)
 
 
 # ------------------------------------------------------------------------------------------------------------ /tts

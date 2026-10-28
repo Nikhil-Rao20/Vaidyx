@@ -802,15 +802,9 @@
      "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
      "page": 94,
      "quote": "7. B-ALL MRD"
-    },
-    {
-     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
-     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
-     "page": 7,
-     "quote": "If MRD> 0.01% at"
     }
    ],
-   "tier_basis": "Adult ALL page 11 (b), AML page 5 (c), CLL page 13 (c), annexure MRD panels pages 94 to 95; child ALL page 7: the risk group depends on MRD at the end of induction (the child appendix lists the B-ALL MRD panel as Essential), child AML page 13 MRD panel (b)",
+   "tier_basis": "Adult ALL page 11 (b), AML page 5 (c), CLL page 13 (c), annexure MRD panels pages 94 to 95; child ALL: the child appendix lists the B-ALL MRD panel as Essential, child AML page 13 MRD panel (b). The child page 7 risk-arm line is not cited: it starts a treatment branch (the whole-run review, I5)",
    "required_facts": [
     "flow_cytometry_result"
    ],

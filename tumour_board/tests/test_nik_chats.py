@@ -120,3 +120,22 @@ def test_may_read_rule():
     assert not chats.may_read({"treating": {OWNER: "member"}, "known": True, "disabled": True}, full)
     assert not chats.may_read(None, full)
     assert "supporting department" in chats.refusal({"supporting": {"radiology": "member"}})
+
+
+def test_thread_names_the_model_that_wrote_it(nik_app, tb001, fake_qa, monkeypatch):
+    """Review 9 C, S3: an answer carries the model that wrote it (the answer's own, else the reasoner's label), kept on the thread and
+    sent with it; a request refused before any model call names none; an older thread without the field sends None."""
+    from tumour_board import chats as chats_mod, config
+    tc, who = nik_app
+    cfg = config.models()
+    cfg["reasoner"]["label"] = "Gemma-4-31B"
+    monkeypatch.setattr(config, "models", lambda: cfg)
+    t = tc.post(f"/api/tb/cases/{CASE}/chats", json={"question": "What is the ECOG?"}).json()
+    assert t["model"] == "Gemma-4-31B"
+    assert store._read_json(store.case_dir(CASE) / "chats.json")["threads"][-1]["model"] == "Gemma-4-31B"
+    assert tc.get(f"/api/tb/cases/{CASE}/chats").json()["threads"][0]["model"] == "Gemma-4-31B"
+    assert chats_mod._model({"status": "answered", "model": "Qwen3.5-4B"}) == "Qwen3.5-4B"
+    assert chats_mod._model({"status": "out_of_scope"}) == ""
+    cfg["reasoner"]["label"] = ""
+    assert chats_mod._model({"status": "not_documented"}) == "reasoner"
+    assert chats_mod.public({"id": "Told", "question": "q"}, "h")["model"] is None

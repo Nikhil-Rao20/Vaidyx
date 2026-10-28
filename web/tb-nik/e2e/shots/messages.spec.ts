@@ -48,6 +48,8 @@ test.describe("Messages", () => {
     await expect(rows.nth(0).getByLabel("2 unread")).toHaveText("2");
     await expect(rows.nth(1)).toContainText("Dr Meena Iyer");
     await expect(rows.nth(1)).toContainText("Resolved");
+    // the row reads the server's presence word: "away" stays away, not offline (review 9 C, I4)
+    await expect(rows.nth(1)).toContainText("Away");
     await expect(rows.nth(2)).toContainText("Radiology");
     await expect(rows.nth(2)).toContainText("Reaches 6 people");
     await expect(rows.nth(3)).toContainText("Breast Surgery");
@@ -124,8 +126,10 @@ test.describe("Messages", () => {
     const live = await open(page, `/messages/${C_DIRECT}`, { wait: "thread", noticeSeen: false });
     const notice = page.getByTestId("notice");
     await expect(notice).toContainText("Messages are for work between the staff of this hospital.");
-    await expect(notice).toContainText("kept for 365 days after the last message");
-    await expect(notice).toContainText("Ask the MDT Coordinator to have a message removed.");
+    await expect(notice).toContainText("Messages are kept for 365 days after they were sent, then their text is removed.");
+    await expect(notice).toContainText("A department conversation is read by everyone placed in that department, including people who join it later.");
+    await expect(notice).toContainText("For anything else, ask the MDT Coordinator.");
+    await expect(notice).not.toContainText("to have a message removed");
     await shoot(page, "messages", "notice", { sizes: DM, fullPage: false });
     await page.setViewportSize(SIZES[0]);
     await notice.getByRole("button", { name: "Got it" }).click();

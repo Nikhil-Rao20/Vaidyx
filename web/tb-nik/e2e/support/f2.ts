@@ -68,7 +68,7 @@ export function slotsBeforeReady() {
 export const chats = {
   threads: [
     {
-      id: "T2", by: "asha@vxh.example", by_name: "Asha Menon", at: iso(35), question: "What did the HPE report say about the grade?", status: "answered", pinned: true, stale: false, seconds: 14,
+      id: "T2", by: "asha@vxh.example", by_name: "Asha Menon", at: iso(35), question: "What did the HPE report say about the grade?", status: "answered", pinned: true, stale: false, seconds: 14, model: "gemma-4-31b",
       statements: [{ text: "The histopathology report records Grade 2 (Nottingham score 6).", citations: [{ doc_id: "D8a2c165d", doc_title: "HISTOPATHOLOGY REPORT", page: 0, quote: "Grade: Grade 2 (Nottingham score 6)" }] }],
     },
     {
@@ -524,6 +524,17 @@ export async function routeCaseFile(page: Page, o: CaseRouteOptions = {}) {
     if (p === "/slots" && m === "GET") return nb.has("slots") ? json(NOT_FOUND, 404) : reply(o.slots, () => clone(baseSlots));
     if (p === "/chats" && m === "GET") return nb.has("chats") ? json(NOT_FOUND, 404) : json(o.chats ?? chats);
     if (p === "/chats" && m === "POST") return json({ ...chats.threads[0], id: "T3", at: new Date().toISOString(), question: JSON.parse(route.request().postData() || "{}").question, pinned: false });
+    // Human oversight of an agent's brief (review 9 C, I1): POST /review {artefact: "brief_<role>", status, comment}; the brief then
+    // says who reviewed it, with the display name beside the login (helpers.brief_view), or that it is flagged for correction.
+    if (p === "/review" && m === "POST") {
+      const body = (route.request().postDataJSON() ?? {}) as { artefact?: string; status?: string; comment?: string };
+      const h = (agentsLive.helpers as AnyObj[]).find((x) => `brief_${x.role}` === body.artefact);
+      if (h && h.brief?.status !== "none") {
+        const reviewed = body.status === "reviewed";
+        h.brief = { ...h.brief, review: body.status, label: reviewed ? "Reviewed" : body.status, reviewed_by: reviewed ? me.by : undefined, reviewed_by_name: reviewed ? me.by_name : undefined };
+        return json({ status: body.status, comment: body.comment ?? "", by: me.by, at: new Date().toISOString() });
+      }
+    }
     if (p === "/helpers" && m === "GET") return nb.has("helpers") ? json(NOT_FOUND, 404) : json(agentsLive);
     if (p === "/helpers/prepare-all" && m === "POST") {
       const out = (agentsLive.helpers as AnyObj[]).map((h) => {
@@ -681,7 +692,7 @@ const row = (o: Record<string, unknown>) => ({ owner_department: "breast_surgery
 
 // The AI agents of the Case File on the floor (night-v3 6.1, research/05 section 11.1): never members of the board, never counted.
 const AGENT_NOTE = "AI support: answers from the records only; not a member of the board";
-const AGENT_BRIEF = { status: "ready", label: "AI draft, not reviewed", at: "2026-10-27T09:12:00", reviewed_by: null, message: "" };
+const AGENT_BRIEF = { status: "ready", label: "AI draft, not reviewed", at: "2026-10-27T09:12:00", reviewed_by: null, message: "", model: "gemma-4-31b" };
 const AGENT_POINTS: Record<string, Array<{ text: string; citations: Array<Record<string, unknown>> }>> = {
   pathology: [
     { text: "The histopathology report records invasive breast carcinoma of no special type, Grade 2 (Nottingham score 6).", citations: [{ doc_id: "D8a2c165d", doc_title: "HISTOPATHOLOGY REPORT", date: "2026-09-17", page: 0, quote: "Grade: Grade 2 (Nottingham score 6)" }] },
@@ -848,12 +859,15 @@ export async function routeMeetings(page: Page, o: MeetingRouteOptions = {}): Pr
       const a = (st.agents ?? []).find((x) => x.role === present[1]);
       if (!a) return json({ detail: { message: "That agent is not in this meeting. The coordinator can add it.", code: "agent_not_in_meeting" } }, 409);
       if ((a.brief as { status?: string } | undefined)?.status === "preparing") return json({ detail: { message: "The brief is still being prepared from the records. Try again in a moment.", code: "brief_preparing" } }, 409);
+      // one answer at a time per agent (review 9 D, I6): refused while it answers someone
+      if (a.state === "answering") return json({ detail: { message: `${a.department_name} is answering ${a.by_name ?? "another question"}. Try again when it finishes.`, code: "agent_busy" } }, 409);
       const pts = (a.points as Array<{ text: string; citations: unknown[] }> | undefined) ?? [];
       const dept = String(a.department_name);
       const message = pts.length ? "" : "The brief lists no points for review.";
       const q = { id: `QP${(st.questions ?? []).length + 1}`, by: "mdt@vxh.example", by_name: "Priya Nair", text: "Present your points", at: new Date().toISOString(), case_id: CID, role: a.role, agent_label: a.label, kind: "present_points", queued: false,
         answer: { status: pts.length ? "answered" : "not_documented", text: pts.map((x) => x.text).join(" ") || message, statements: pts, references: [], role: a.role, label: a.label, model: "gemma-4-31b", at: new Date().toISOString(), seconds: 0, first_seconds: 0,
-          speech: [`AI agent, ${dept}.`, ...pts.map((x) => x.text), "Sources are on the screen."], message, kind: "present_points", not_documented: AGENT_NOT_DOCUMENTED[String(a.role)] ?? [], brief_label: "AI draft, not reviewed", note: "From the records only; the agent is not a member of the board" } };
+          speech: [`AI agent, ${dept}.`, ...pts.map((x) => x.text), "Sources are on the screen."], message, kind: "present_points", not_documented: AGENT_NOT_DOCUMENTED[String(a.role)] ?? [], brief_label: "AI draft, not reviewed", brief_model: "gemma-4-31b",
+          dropped_unverified: pts.length ? 1 : 0, dropped_note: pts.length ? "1 point no longer matches the records and was left out." : "", note: "From the records only; the agent is not a member of the board" } };
       st.questions = [...(st.questions ?? []), q];
       return json({ question: q });
     }

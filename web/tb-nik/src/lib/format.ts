@@ -89,6 +89,14 @@ export function drName(name?: string | null): string {
   return /^(dr|prof)\.?\s/i.test(name) ? name : `Dr ${name}`;
 }
 
+/** The consultant who signs off, titled ("Dr Rao"); "the consultant" when the name is not known ("The consultant" at the start of a
+ *  sentence), never "Dr the consultant" (review 9 C, M18). */
+export function consultantTitle(name?: string | null, start = false): string {
+  const n = (name ?? "").trim();
+  if (n) return drName(n);
+  return start ? "The consultant" : "the consultant";
+}
+
 export function plural(n: number, one: string, many = one + "s"): string {
   return `${n} ${n === 1 ? one : many}`;
 }

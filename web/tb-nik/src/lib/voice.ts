@@ -236,6 +236,7 @@ export function writeIntoBox(el: HTMLTextAreaElement | HTMLInputElement, selStar
 // -------------------------------------------------------------------------------------------------------------- recorder
 
 const MIME_TYPES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
+const AUDIO_BITS_PER_SECOND = 32000;
 
 /** The first recording format this browser supports, "" to let the browser choose, null when it cannot record at all. */
 export function pickMimeType(): string | null {
@@ -273,7 +274,8 @@ export async function startRecording(opts: { onLevel?: (level: number) => void; 
   const track = stream.getAudioTracks()[0];
   if (!track) { stopTracks(); throw new DOMException("No microphone track", "NotFoundError"); }
   let rec: MediaRecorder;
-  try { rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream); }
+  // 32 kbit/s keeps a one-minute clip near 240 KB, far under the 4 MiB cap, and plenty for speech.
+  try { rec = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: AUDIO_BITS_PER_SECOND } : { audioBitsPerSecond: AUDIO_BITS_PER_SECOND }); }
   catch { stopTracks(); throw new VoiceError("no_recorder"); }
   let chunks: Blob[] = [];
   rec.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };

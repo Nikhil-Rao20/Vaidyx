@@ -331,16 +331,8 @@
     "histopathology"
    ],
    "department": "Pathology",
-   "sources": [
-    {
-     "guideline": "NCG GI draft 2021: Gastric cancer",
-     "file": "ncg_india/ncg-gi-draft-2021-gastric-cancer.pdf",
-     "page": 1,
-     "quote": "D2 Dissection ( More than15 nodes)"
-    }
-   ],
-   "tier_basis": "Proposed Essential after surgery for early and locally advanced disease (a post-board record: the page 1 adjuvant box reads pT, N and margins). Kept under optional because a resection report exists only after the board and the gate cannot tell it from the biopsy report",
-   "note": "post-board record: histologic type, grade, margins, stage as recorded and lymph nodes examined (the book's D2 dissection line names more than 15 nodes)"
+   "tier_basis": "Proposed Essential after surgery for early and locally advanced disease (a post-board record: the page 1 adjuvant box reads pT, N and margins). Kept under optional because a resection report exists only after the board and the gate cannot tell it from the biopsy report. No source cited: the D2 dissection line of page 1 is a surgical-technique line, and page 1 prints no pathology or nodes-examined line for the resection (the whole-run review, I5); an optional record, never counted",
+   "note": "post-board record: histologic type, grade, margins, stage as recorded and lymph nodes examined"
   },
   {
    "id": "previous_board",

@@ -162,6 +162,8 @@ export interface ChatThread {
   pinned?: boolean;
   stale?: boolean;
   seconds?: number;
+  /** The model that wrote the answer (review 9 C, S3); empty when no model was called (a request refused by the scope check). */
+  model?: string | null;
   /** Set by the page when the answer came from the old /ask route and is not saved. */
   unsaved?: boolean;
 }
@@ -179,6 +181,11 @@ export interface HelperBrief {
   points_for_review?: Array<{ text: string; citations?: Citation[] }>;
   not_documented?: string[];
   reviewed_by?: string;
+  /** The reviewer's display name beside the login (review 9 C, M11). */
+  reviewed_by_name?: string;
+  /** The review status of the brief: "reviewed", "flagged", "ai_draft" or "". */
+  review?: string;
+  label?: string;
   model?: string;
 }
 export interface Helper {

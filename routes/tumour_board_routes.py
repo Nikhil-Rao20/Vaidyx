@@ -1046,7 +1046,7 @@ def setup_tumour_board_routes():
                 "his": his_case.public(c), "his_flags": his_case.flags(case_id, confirmed_docs),  # the hospital system, its registrations and orders; HIS values the text does not carry (V2 item 3.3)
                 "requests": dept_requests.summary(st),  # suggested / sent / done / closed counts (V2 item 4.2)
                 "groups": his_case.encounter_groups(c, confirmed_docs),  # records grouped by OP visit and IP admission (V2 item 3.4)
-                "access": {**access.public(c), "scope": access.FULL},  # owner, participants, linked Case Files (V2 items 5.1 / 5.3)
+                "access": {**access.public(c), "scope": _scope(request)},  # owner, participants, linked Case Files (V2 items 5.1 / 5.3); READ for a window (review 9 M5)
                 "referral": referral.public(c)}  # the open referral, the history, the hospital system's suggestions (V2 item 5.2)
 
     @r.post("/cases/{case_id}/documents")
@@ -1282,11 +1282,20 @@ def setup_tumour_board_routes():
         ids = None if b.get("all") else [str(x) for x in (b.get("ids") or [])]
         return {"changed": notify.mark_read(rl, ids), "unread": notify.unread_count(rl)}
 
+    _READ_ONLY_EXPORT = "A Case File opened with a reason is read on screen only."
+
+    def _no_export_in_window(request, rl, c):
+        """A window (a doctor's opened with a reason, D8, or the Vaidyx admin's break-glass) reads the Case File on screen only: no bulk
+        download of the file, its records or its audit (whole-run review 9, I1). 403 break_glass_read_only."""
+        admin_window = bool(rl.get("vaidyx_admin")) and not (access.is_protected(c) and access.is_creator(rl, c))
+        if admin_window or _scope(request) == access.READ:
+            raise HTTPException(403, {"message": _READ_ONLY_EXPORT, "code": "break_glass_read_only"})
+
     @r.get("/cases/{case_id}/export/vtb")
     async def export_vtb(case_id: str, request: Request):
         """The NCG Virtual Tumour Board case template filled from the verified Case File summary (V1 item 4.6), for referral to a
         Regional Cancer Centre or the NCG VTB. Refused (409) without a current summary. Audited."""
-        u = _user(request); _need_known(_roles(request)); _case(case_id)
+        u = _user(request); rl = _roles(request); _need_known(rl); _no_export_in_window(request, rl, _case(case_id))
         from tumour_board import vtb_export
         try:
             data = await asyncio.to_thread(vtb_export.build, case_id)
@@ -1300,7 +1309,7 @@ def setup_tumour_board_routes():
     @r.get("/cases/{case_id}/export/fhir")
     async def export_fhir(case_id: str, request: Request):
         """FHIR R4 document bundle of the Case File (mCODE-informed, not profile-validated; values as recorded) (12 Oct). Audited (Phase 0 review)."""
-        u = _user(request); _need_known(_roles(request)); _case(case_id)
+        u = _user(request); rl = _roles(request); _need_known(rl); _no_export_in_window(request, rl, _case(case_id))
         b = fhir_export.bundle(case_id)
         store.audit(case_id, {"kind": "export_fhir", "by": u, "entries": len(b.get("entry") or [])})
         return JSONResponse(b, headers={"Content-Disposition": f'attachment; filename="{case_id}_fhir_bundle.json"'})
@@ -1308,7 +1317,7 @@ def setup_tumour_board_routes():
     @r.get("/cases/{case_id}/export/registry")
     async def export_registry(case_id: str, request: Request, format: str = "json"):
         """The HBCR (ICMR-NCDIR 2025) registry items as the records state them, with sources (12 Oct). Audited (Phase 0 review)."""
-        u = _user(request); _need_known(_roles(request)); _case(case_id)
+        u = _user(request); rl = _roles(request); _need_known(rl); _no_export_in_window(request, rl, _case(case_id))
         store.audit(case_id, {"kind": "export_registry", "by": u, "format": format})
         if format == "csv":
             from fastapi.responses import Response
@@ -1318,7 +1327,7 @@ def setup_tumour_board_routes():
     @r.get("/cases/{case_id}/export")
     async def export(case_id: str, request: Request):
         """Portable record of the Case File (state, documents' extracted data, audit) for the hospital record system. Audited (Phase 0 review)."""
-        u = _user(request); _need_known(_roles(request)); c = _case(case_id)
+        u = _user(request); rl = _roles(request); _need_known(rl); c = _case(case_id); _no_export_in_window(request, rl, c)
         store.audit(case_id, {"kind": "export_case_file", "by": u})
         docs = []
         for d in store.list_docs(case_id):
@@ -1853,9 +1862,13 @@ def setup_tumour_board_routes():
         consultants; the MDT Coordinator on the meeting day only. A new version (who, when, why, the changed fields, a snapshot); version 1
         is never overwritten. Audited; the owner is told."""
         from tumour_board import meetings as _meetings
-        rl = _roles(request); u = _user(request); c = _case(case_id); b = await request.json()
+        rl = _roles(request); u = _user(request); c = _case(case_id)
+        try:  # a body that is not JSON, or a record id store.safe_id refuses ("."): 400, never 500 (whole-run review 9, M10)
+            b = await request.json()
+            rid = store.safe_id(record_id)
+        except ValueError:
+            raise HTTPException(400, {"message": "Send a valid board record id and a JSON body.", "code": "bad_request"})
         b = b if isinstance(b, dict) else {}
-        rid = store.safe_id(record_id)
         rec = next((x for x in store.get_state(case_id).get("board_records") or [] if x.get("id") == rid), None)
         if not rec:
             raise HTTPException(404, "No such Tumour Board record")

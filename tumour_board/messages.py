@@ -222,7 +222,8 @@ def _append(cid: str, ev: dict) -> None:
 
 
 def _rewrite(cid: str, events: list[dict]) -> None:
-    """Only the retention job rewrites a conversation file (tmp + os.replace, mode 600; call with _lock)."""
+    """Rewrite a conversation file (tmp + fsync + os.replace, mode 600; call with _lock): a delete and the retention job, which blank
+    text and keep every event (who wrote when)."""
     p = _conv_path(cid)
     tmp = p.with_name(p.name + ".tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -234,6 +235,42 @@ def _rewrite(cid: str, events: list[dict]) -> None:
     os.chmod(tmp, 0o600)
     os.replace(tmp, p)
     _cache.pop(str(p), None)
+
+
+def _blank(events: list[dict], mids: set) -> tuple[list[dict], bool]:
+    """The events with the text of the messages `mids` and of their edits emptied and marked "removed" (an "old" text from before
+    night-v3 9.2 emptied too); every event stays. Returns (new events, whether anything changed). The events are copied."""
+    out, changed = [], False
+    for ev in events:
+        t = ev.get("t")
+        if (t == "msg" and ev.get("id") in mids) or (t == "edit" and ev.get("of") in mids):
+            if ev.get("text") or ev.get("old") or not ev.get("removed"):
+                ev = dict(ev)
+                ev["text"] = ""
+                if "old" in ev:
+                    ev["old"] = ""
+                ev["removed"] = True
+                changed = True
+        out.append(ev)
+    return out, changed
+
+
+def _superseded(events: list[dict], mid: str) -> tuple[list[dict], bool]:
+    """After an edit: the text of message `mid` and of its earlier edits emptied, the newest edit kept (it is the text readers see).
+    Not marked "removed": the message stands, only its older wording leaves the file. Returns (new events, changed); copies."""
+    last = max((i for i, ev in enumerate(events) if ev.get("t") == "edit" and ev.get("of") == mid), default=None)
+    if last is None:
+        return list(events), False
+    out, changed = [], False
+    for i, ev in enumerate(events):
+        t = ev.get("t")
+        if i != last and ((t == "msg" and ev.get("id") == mid) or (t == "edit" and ev.get("of") == mid)) and (ev.get("text") or ev.get("old")):
+            ev = dict(ev)
+            ev["text"] = ""
+            ev.pop("old", None)
+            changed = True
+        out.append(ev)
+    return out, changed
 
 
 def _next_seq(cid: str) -> int:
@@ -348,6 +385,8 @@ def note_denied(by: str, route: str, conv_id: str = "") -> None:
     key = str(by or "")
     if now - _DENIED.get(key, -1e9) < DENIED_EVERY:
         return
+    for k in [k for k, t in _DENIED.items() if now - t >= DENIED_EVERY]:  # past their window: dropped (review 9 M14)
+        _DENIED.pop(k, None)
     _DENIED[key] = now
     try:
         org.audit("message_denied", key, type=str(route or "")[:60], conversation=str(conv_id or "")[:20])
@@ -666,6 +705,8 @@ def _push(users: list, cid: str, sender_name: str) -> None:
     if not users or not push.enabled():
         return
     now = time.monotonic()
+    for k in [k for k, t in _PUSHED.items() if now - t >= PUSH_EVERY]:  # past their window: dropped, so the map never grows (review 9 M14)
+        _PUSHED.pop(k, None)
     due = []
     for u in users:
         if now - _PUSHED.get((u, cid), -1e9) >= PUSH_EVERY:
@@ -902,15 +943,20 @@ def _own(cid: str, mid: str, by: str, window: bool = True) -> dict:
 
 
 def edit(by: str, conv_id: str, mid: str, text, r: dict | None = None) -> dict:
-    """Change your own message within 10 minutes; the old text stays in the file ("old")."""
+    """Change your own message within 10 minutes. The old text is not kept (whole-run review 9, I4): the file is rewritten with the
+    earlier wording emptied; the edit event keeps when it was edited ("ts") and how many times ("count")."""
     rl = r if r is not None else _roles_of(by)
     _need_use(rl)
     text = _clean_text(text)
     with _lock:
         conv = _conv_for(conv_id, by, rl)
         cid = conv["id"]
-        m = _own(cid, mid, by)
-        _append(cid, {"seq": _next_seq(cid), "t": "edit", "of": mid, "ts": _iso(), "by": by, "old": m["text"], "text": text})
+        _own(cid, mid, by)
+        count = 1 + sum(1 for ev in _events(cid) if ev.get("t") == "edit" and ev.get("of") == mid)
+        _append(cid, {"seq": _next_seq(cid), "t": "edit", "of": mid, "ts": _iso(), "by": by, "text": text, "count": count})
+        new, changed = _superseded(_events(cid), mid)
+        if changed:
+            _rewrite(cid, new)
         out = _message(_fold(_events(cid))[0][mid], by, rl)
     _audit("message_edited", by, conv)
     _emit_message(conv, mid, "edit")
@@ -918,7 +964,8 @@ def edit(by: str, conv_id: str, mid: str, text, r: dict | None = None) -> dict:
 
 
 def delete(by: str, conv_id: str, mid: str, r: dict | None = None) -> dict:
-    """Delete your own message within 10 minutes: readers see a tombstone; the text stays in the file until retention removes it."""
+    """Delete your own message within 10 minutes: readers see a tombstone, and the file is rewritten at once with the text of the
+    message and of its edits emptied (whole-run review 9, I4); the events stay (who wrote when, and the delete)."""
     rl = r if r is not None else _roles_of(by)
     _need_use(rl)
     with _lock:
@@ -926,6 +973,9 @@ def delete(by: str, conv_id: str, mid: str, r: dict | None = None) -> dict:
         cid = conv["id"]
         _own(cid, mid, by)
         _append(cid, {"seq": _next_seq(cid), "t": "delete", "of": mid, "ts": _iso(), "by": by})
+        new, changed = _blank(_events(cid), {mid})
+        if changed:
+            _rewrite(cid, new)
         out = _message(_fold(_events(cid))[0][mid], by, rl)
     _audit("message_deleted", by, conv)
     _emit_message(conv, mid, "delete")
@@ -1194,8 +1244,9 @@ def typing(by: str, conv_id: str, r: dict | None = None) -> bool:
 # ---- retention ----------------------------------------------------------------------------------------------------------------------
 
 def retention(days: int | None = None, now: datetime | None = None) -> int:
-    """Remove the text (and the old text of edits) of conversations whose last message is older than `days` (default: the hospital's
-    message_retention_days; 0 keeps everything). The events stay, marked "removed". Returns how many conversations were touched."""
+    """Remove the text of every message sent more than `days` ago, and of its edits (default: the hospital's message_retention_days;
+    0 keeps everything). Per message, not per conversation (whole-run review 9, I4): a busy conversation loses its old texts while its
+    newer ones stay. The events stay, marked "removed". Returns how many conversations were touched."""
     if days is None:
         try:
             days = org.hospital().get("message_retention_days", 365)
@@ -1214,19 +1265,19 @@ def retention(days: int | None = None, now: datetime | None = None) -> int:
     touched = 0
     with _lock:
         for cid, conv in _index()["conversations"].items():
-            last = _parse(conv.get("last_ts") or conv.get("created"))
-            if last is None or last >= cutoff:
+            first = _parse(conv.get("created"))
+            if first is not None and first >= cutoff:  # started after the cutoff: no message in it is old enough
                 continue
-            changed, new = False, []
-            for ev in _events(cid):
-                ev = dict(ev)
-                if ev.get("t") in ("msg", "edit") and not ev.get("removed"):
-                    ev["text"] = ""
-                    if "old" in ev:
-                        ev["old"] = ""
-                    ev["removed"] = True
-                    changed = True
-                new.append(ev)
+            events = _events(cid)
+            old = set()
+            for ev in events:
+                if ev.get("t") == "msg" and ev.get("id"):
+                    sent = _parse(ev.get("ts"))
+                    if sent is not None and sent < cutoff:
+                        old.add(ev["id"])
+            if not old:
+                continue
+            new, changed = _blank(events, old)
             if changed:
                 _rewrite(cid, new)
                 touched += 1

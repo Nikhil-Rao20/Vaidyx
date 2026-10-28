@@ -11,7 +11,9 @@ open it: no clinical content and no name but the owner's. Archived and protected
 the MDT Coordinator (never an outside expert or a Vaidyx admin); the look-up by number is for those who may start a Case File
 (create_case) or the coordinator, and rate-limited (30 per 10 minutes per login;
 the case_id form is not, as it only answers for a Case File the person may open already, so opening Overviews never uses up the
-New Case File page's look-ups); both are audited in the organisation log (kind patient_case_files_checked) without the identifier."""
+New Case File page's look-ups); both are audited in the organisation log (kind patient_case_files_checked) with the ids of the Case
+Files returned and never the identifier, and each Case File returned gets its own line (by, how) in its hash-chained audit, so an
+auditor can tell whose files a look-up named (whole-run review 9, I3)."""
 from fastapi import Request
 
 from tumour_board import access, his_case, his_client, org, store
@@ -39,6 +41,14 @@ def _status_label(c: dict) -> str:
     if not c.get("protocol"):
         return "Cancer not chosen yet"
     return "Being prepared"
+
+
+def _audit(r: dict, how: str, found, **extra) -> None:
+    """The organisation line (the ids returned, never the identifier) and one line in each Case File returned."""
+    ids = [c["case_id"] for c in found if isinstance(c, dict) and c.get("case_id")]
+    org.audit("patient_case_files_checked", r["user"], how=how, count=len(ids), case_ids=ids, **extra)
+    for cid in ids:
+        store.audit(cid, {"kind": "patient_case_files_checked", "by": r["user"], "how": how, **extra})
 
 
 def rows(cases, r: dict) -> list:
@@ -80,7 +90,7 @@ async def patient_case_files(request: Request, identifier: str = "", case_id: st
             fail(404, "Case not found", "not_found")
         system = (c["his"].get("kind"), c["his"].get("label")) if isinstance(c.get("his"), dict) else None
         found = his_case.same_patient_cases(his_case.case_uhids(c), exclude=c["case_id"], his=system)
-        org.audit("patient_case_files_checked", r["user"], how="case_id", case_id=c["case_id"], count=len(found))
+        _audit(r, "case_id", found, from_case=c["case_id"])
         return {"cases": rows(found, r)}
     if not identifier:
         fail(400, "Give the UHID, IP No. or OP No.", "bad_identifier")
@@ -90,5 +100,5 @@ async def patient_case_files(request: Request, identifier: str = "", case_id: st
     client = his_client.client()
     system = (client.kind, client.label) if client is not None else None
     found = his_case.same_patient_cases(await _uhids_of(identifier), his=system)
-    org.audit("patient_case_files_checked", r["user"], how="identifier", count=len(found))  # never the identifier (night-v3 item 1.1)
+    _audit(r, "identifier", found)  # never the identifier (night-v3 item 1.1)
     return {"cases": rows(found, r)}

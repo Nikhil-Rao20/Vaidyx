@@ -8,7 +8,8 @@
 import { useState } from "react";
 import { FileText, Megaphone } from "lucide-react";
 import type { AgentCitation, AgentInfo } from "@/lib/live";
-import { LoadingButton, fmtDate, indianDates, niceTitle } from "@/features/casefile/components/common";
+import { LoadingButton, fmtDate, indianDates, modelLabel, niceTitle } from "@/features/casefile/components/common";
+import { drName } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { usePanelAction } from "../../components/People";
 import { useCall } from "../context";
@@ -68,14 +69,29 @@ export function pointsLine(a: BriefPick): string {
   return `${n} point${n === 1 ? "" : "s"} from the records`;
 }
 
-/** The header of the points: "Points from the records, AI draft, not reviewed" until a doctor reviewed the brief, then "Reviewed by
- * <name>". */
+/** The name of the doctor who reviewed a brief: "Dr <display name>" when the server sends one, else the login as it is. */
+export function reviewerName(b: Pick<NonNullable<AgentInfo["brief"]>, "reviewed_by" | "reviewed_by_name"> | null | undefined): string {
+  if (b?.reviewed_by_name) return drName(b.reviewed_by_name);
+  return b?.reviewed_by ? String(b.reviewed_by) : "";
+}
+
+/** True when a doctor reviewed the brief. */
+export function briefReviewed(a: Pick<AgentInfo, "brief">): boolean {
+  const b = a.brief;
+  return !!b?.reviewed_by || !!(b?.label && /^reviewed/i.test(b.label));
+}
+
+/** The header of the points: "Points from the records, AI draft, not reviewed. Gemma-4-31B (non-medical)" until a doctor reviewed the
+ * brief, then "Reviewed by Dr <name>. Gemma-4-31B (non-medical)" (the model that wrote the brief named beside it, review 9 C, S1). */
 export function pointsHeader(a: Pick<AgentInfo, "brief">): string {
   const b = a.brief;
   const stale = b?.status === "stale" ? "Records changed since this brief. " : "";
-  if (b?.reviewed_by) return `${stale}Reviewed by ${b.reviewed_by}`;
-  if (b?.label && /^reviewed/i.test(b.label)) return `${stale}Reviewed`;
-  return `${stale}Points from the records, AI draft, not reviewed`;
+  const m = modelLabel(b?.model);
+  const model = m ? `. ${m}` : "";
+  const who = reviewerName(b);
+  if (who) return `${stale}Reviewed by ${who}${model}`;
+  if (briefReviewed(a)) return `${stale}${b?.label && /^reviewed by/i.test(b.label) ? b.label : "Reviewed"}${model}`;
+  return `${stale}Points from the records, AI draft, not reviewed${model}`;
 }
 
 /** Why "Present your points" is not offered now, or null when it is: the brief is prepared, there is nothing to read, or no points. */
@@ -165,7 +181,7 @@ export function AgentPoints({ agent }: { agent: AgentInfo }) {
         <p className="text-xs text-muted-foreground">No {deptOf(agent)} reports in this Case File</p>
       ) : points.length ? (
         <>
-          <p className={cn("text-[11px] font-semibold", agent.brief?.reviewed_by ? "text-ok" : "text-review")} data-testid="points-header">{pointsHeader(agent)}</p>
+          <p className={cn("text-[11px] font-semibold", briefReviewed(agent) ? "text-ok" : "text-review")} data-testid="points-header">{pointsHeader(agent)}</p>
           <ol className="space-y-1.5">
             {points.map((p, i) => <li key={i}><CitedText text={p.text} citations={p.citations} /></li>)}
           </ol>

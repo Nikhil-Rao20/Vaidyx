@@ -326,6 +326,9 @@ test.describe("guided Case File", () => {
     await page.getByTestId("ask-bubble").click();
     await expect(page.getByTestId("side-panel").getByTestId("ask-panel")).toBeVisible();
     await expect(page.getByTestId("chat-thread").first()).toBeVisible();
+    // an answer names the model that wrote it (review 9 C, S3); a thread with no statements has no such line
+    await expect(page.getByTestId("chat-thread").first().getByTestId("chat-model-line")).toHaveText("From the records only. Gemma-4-31B (non-medical).");
+    await expect(page.getByTestId("chat-thread").nth(1).getByTestId("chat-model-line")).toHaveCount(0);
     await snap(page, "casefile", "ask", { sizes: DESKTOP_MOBILE, fullPage: false });
     expect(errors).toEqual([]);
   });
@@ -415,6 +418,8 @@ test.describe("guided Case File", () => {
     // code sentences carry no AI mark and no pencil; the model sentences do
     await expect(card.locator("[data-id=rBade0ac-decision_text] [aria-label='Written by the AI model']")).toHaveCount(0);
     await expect(card.locator("[data-id=presentation-2] [aria-label='Written by the AI model']")).toHaveCount(1);
+    // a sentence a doctor rewrote is theirs: no model mark (review 9 C, I5)
+    await expect(card.locator("[data-id=presentation-1] [aria-label='Written by the AI model']")).toHaveCount(0);
     await expect(card.getByTestId("cs-edit")).toHaveCount(3);
     // the pre-board summary folds under "Before the board on", closed
     const pre = page.getByTestId("summary-card");
@@ -534,6 +539,19 @@ test.describe("guided Case File", () => {
     await expect(ex.nth(1).getByTestId("meeting-exchange")).toHaveCount(0);
     await expect(ex.nth(0).getByTestId("agent-footer")).toHaveText("AI agent, support only. From the records and guidelines only. Check the source. Gemma-4-31B (non-medical).");
     await expect(detail.getByPlaceholder("Ask Pathology about this Case File")).toBeVisible();
+    // Human oversight (review 9 C, I1): the brief is an AI draft until a doctor marks it reviewed or flags it for correction
+    await expect(detail.getByTestId("brief-review")).toHaveText("AI draft, not reviewed");
+    await detail.getByTestId("brief-flag").click();
+    await detail.getByLabel("What needs correcting (optional)").fill("The grade line is quoted from the wrong report.");
+    const flagged = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith(`/cases/${CID}/review`));
+    await detail.getByTestId("brief-flag-send").click();
+    expect((await flagged).postDataJSON()).toEqual({ artefact: "brief_pathology", status: "flagged", comment: "The grade line is quoted from the wrong report." });
+    await expect(detail.getByTestId("brief-review")).toHaveText("Flagged for correction");
+    const marked = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith(`/cases/${CID}/review`));
+    await detail.getByTestId("brief-mark-reviewed").click();
+    expect((await marked).postDataJSON()).toEqual({ artefact: "brief_pathology", status: "reviewed", comment: "" });
+    await expect(detail.getByTestId("brief-review")).toHaveText("Reviewed by Dr Lakshmi Rao");
+    await expect(detail.getByTestId("brief-mark-reviewed")).toHaveCount(0);
     await snap(page, "casefile", "agents-detail", { sizes: DESKTOP_MOBILE, fullPage: false, before: under("helper-detail") });
     await snap(page, "casefile", "agents-thread", { sizes: DESKTOP_MOBILE, fullPage: false, before: under("agent-exchange") });
     await laptop(page);

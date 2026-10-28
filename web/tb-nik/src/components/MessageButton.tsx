@@ -30,10 +30,12 @@ export function useMayMessage(target?: MessageTarget): boolean {
   return true;
 }
 
-export function MessageButton({ target, caseId, label = "Message", size = "xs", variant = "ghost", className, newTab, iconOnly }: {
+export function MessageButton({ target, caseId, label = "Message", name, size = "xs", variant = "ghost", className, newTab, iconOnly }: {
   target: MessageTarget;
   caseId?: string;
   label?: string;
+  /** The accessible name when several links sit together ("Message Dr Ravi Kumar"); it starts with the visible label. */
+  name?: string;
   size?: ButtonProps["size"];
   variant?: ButtonProps["variant"];
   className?: string;
@@ -53,13 +55,13 @@ export function MessageButton({ target, caseId, label = "Message", size = "xs", 
   if (newTab) {
     return (
       <Button asChild size={size} variant={variant} className={className}>
-        <a href={`/tb-nik${href}`} target="_blank" rel="noopener noreferrer" aria-label={label} data-testid="message-button">{inner}</a>
+        <a href={`/tb-nik${href}`} target="_blank" rel="noopener noreferrer" aria-label={name ?? label} data-testid="message-button">{inner}</a>
       </Button>
     );
   }
   return (
     <Button asChild size={size} variant={variant} className={className}>
-      <Link to={href} aria-label={iconOnly ? label : undefined} data-testid="message-button">{inner}</Link>
+      <Link to={href} aria-label={name ?? (iconOnly ? label : undefined)} data-testid="message-button">{inner}</Link>
     </Button>
   );
 }

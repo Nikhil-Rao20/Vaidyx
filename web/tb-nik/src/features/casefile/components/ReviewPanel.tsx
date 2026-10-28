@@ -18,6 +18,7 @@ import type { StalePick } from "../steps/types";
 import { docStatusChip } from "./SourceViewer";
 import { LoadingButton, StatusChip, errorText, fmtDate, indianDates, niceTitle, useAnnounce } from "./common";
 import { cn } from "@/lib/utils";
+import { consultantTitle } from "@/lib/format";
 
 interface Candidate { value: string; quote: string; doc_id: string; doc_title: string; page: number; date?: string | null; status?: string; verification?: string; current: boolean; superseded?: boolean }
 
@@ -133,7 +134,7 @@ export function ReviewPanel({ caseId, cf, slot, queue, derived, resident, consul
   const staleLine = stale ? `Your pick of ${stale.value} from ${niceTitle(stale.doc_title) || "the report"} no longer matches the report: pick again` : "";
 
   const diffs = list.length >= 2 ? differences(list[0], list[1]) : [];
-  const signLabel = resident ? `Ask Dr ${consultantName} to sign off` : ctype === "note_discordance" ? "Noted, I read the difference" : "Approve";
+  const signLabel = resident ? `Ask ${consultantTitle(consultantName)} to sign off` : ctype === "note_discordance" ? "Noted, I read the difference" : "Approve";
 
   return (
     <div className="space-y-3" data-testid="review-panel">
@@ -189,7 +190,7 @@ export function ReviewPanel({ caseId, cf, slot, queue, derived, resident, consul
                         <Check className="size-3.5" />Use this value for the board
                       </LoadingButton>
                     ) : null}
-                    {sentPick === c.doc_id ? <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" data-testid="pick-sent"><Clock className="size-3.5" aria-hidden />Sent to Dr {consultantName} for sign-off</span> : null}
+                    {sentPick === c.doc_id ? <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" data-testid="pick-sent"><Clock className="size-3.5" aria-hidden />Sent to {consultantTitle(consultantName)} for sign-off</span> : null}
                   </div>
                 </li>
               );
@@ -198,7 +199,7 @@ export function ReviewPanel({ caseId, cf, slot, queue, derived, resident, consul
           {pick.isError ? <p role="alert" className="text-xs text-bad">{errorText(pick.error)}</p> : null}
           {!boardPick ? (
             <p className="text-xs text-muted-foreground">
-              Nothing is chosen for you. Pick the value the board should use{resident ? ` (Dr ${consultantName} signs it off)` : ""}, or record that you read the difference. Either way both reports stay on file and the difference stays listed.
+              Nothing is chosen for you. Pick the value the board should use{resident ? ` (${consultantTitle(consultantName)} signs it off)` : ""}, or record that you read the difference. Either way both reports stay on file and the difference stays listed.
             </p>
           ) : null}
         </div>

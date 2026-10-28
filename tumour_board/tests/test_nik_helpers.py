@@ -92,6 +92,8 @@ def test_prepare_runs_in_the_background_and_is_reused_until_stale(nik_app, tb001
     st = store.get_state(CASE); st["artefacts"]["brief_radiology"]["review"] = {"status": "reviewed", "by": "dr.rao"}; store.save_state(CASE, st)
     h = next(x for x in tc.get(f"/api/tb/cases/{CASE}/helpers").json()["helpers"] if x["role"] == "radiology")
     assert h["brief"]["reviewed_by"] == "dr.rao" and h["brief"]["label"] == "Reviewed"
+    assert h["brief"]["reviewed_by_name"] == "Dr Rao"  # a display name beside the login (review 9 C, M11)
+    assert "reviewed_by_name" not in helpers.brief_view({"review": {"status": "ai_draft"}, "signature": None}, rules.case_signature(CASE))
 
 
 def test_prepare_is_for_the_owner_team_and_the_coordinator(nik_app, tb001, fake_agents):

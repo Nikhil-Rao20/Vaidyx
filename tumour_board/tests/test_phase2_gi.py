@@ -329,7 +329,10 @@ def test_the_note_records_are_conditional_where_the_book_gives_a_tier_only_under
 def test_resection_histopathology_is_a_post_board_optional_record(pid):
     assert "resection_histopathology" not in {r["id"] for r in protocol.records(pid)}
     o = next(x for x in protocol.get(pid)["optional"] if x["id"] == "resection_histopathology")
-    assert o["doc_types"] == ["histopathology"] and o["department"] == "Pathology" and o["sources"] and "post-board" in o["note"]
+    assert o["doc_types"] == ["histopathology"] and o["department"] == "Pathology" and "post-board" in o["note"]
+    # a source, or none and the reason in tier_basis: the stomach book prints no resection pathology line (the whole-run review, I5)
+    assert o.get("sources") or "No source cited" in o["tier_basis"]
+    assert "D2 Dissection" not in str(o.get("sources"))
     assert {"margins"} <= set(protocol.get(pid)["extract_facts"])
 
 

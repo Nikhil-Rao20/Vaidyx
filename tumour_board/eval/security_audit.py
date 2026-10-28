@@ -1041,7 +1041,7 @@ def check_break_glass_window(base, logins, ctx):
     if rad is None or not cid:
         mark(name, True, "no tb-rad-doc login or no Breast Surgery file it cannot open", skip=True)
         return
-    r = rad.post("/api/tb/break-glass", json={"case_id": cid, "reason": "security audit probe: read-only window", "via": "audit"})
+    r = rad.post("/api/tb/break-glass", json={"case_id": cid, "reason": "security audit probe: read-only window", "via": ""})
     if r.status_code != 200 or (_json(r) or {}).get("scope") != "read":
         mark(name, r.status_code == 429, f"open: {said(r)}", skip=r.status_code == 429)
         return

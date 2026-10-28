@@ -301,7 +301,7 @@ def _reference(h, quote, by):
 
 def _in_scope(quote):
     """A reference quote may be shown under a patient's point only when it states no treatment, indication or eligibility."""
-    return not _DIRECTIVE.search(quote or "") and not guardrails.scan_output(quote or "")
+    return not _DIRECTIVE.search(quote or "") and not guardrails.scan_output(quote or "", reference=True)
 
 
 def _verify_references(point_refs, refs, protocol_id=None):
@@ -699,13 +699,23 @@ def _note_maker(case_id, role):
     return note
 
 
+def directive_outside_quotes(stmt):
+    """The issues of a verified statement that names a treatment, drug, dose, surgery or radiotherapy word (_DIRECTIVE) in its own words:
+    every such word must sit inside one of its cited quotes (the whole-run review, I1). "Margins are involved, so re-excision is needed"
+    citing "Margins: involved" is refused; "Paclitaxel 175 mg/m2 on 03/03/2026" citing that line word for word passes."""
+    words = guardrails.unquoted_words(stmt.get("text") or "", [c.get("quote") for c in stmt.get("citations") or [] if isinstance(c, dict)],
+                                      _DIRECTIVE)
+    return [{"sentence": (stmt.get("text") or "").strip(), "reason": "treatment words outside the quoted record text: " + ", ".join(words)}] \
+        if words else []
+
+
 def _screen(case_id, statements, note):
     """Statements as the model wrote them -> (kept, removed, unverified count): exact quotes only (qa.verify, as in Ask the Case File), then
-    the scope guardrail on each kept text; a kept statement outside the specialty gains its note."""
+    the scope guardrail on each kept text and no treatment word outside its quotes; a kept statement outside the specialty gains its note."""
     stmts, drop = qa.verify(case_id, statements)
     removed, kept = [{**x, "where": "answer"} for x in drop], []
     for st_ in stmts:
-        iss = guardrails.scan_output(st_["text"])
+        iss = guardrails.scan_output(st_["text"]) or directive_outside_quotes(st_)
         if iss:
             removed.append(_removed(st_, "guardrail", "; ".join(i["reason"] for i in iss), "answer"))
             continue

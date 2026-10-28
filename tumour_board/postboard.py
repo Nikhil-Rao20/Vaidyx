@@ -316,8 +316,13 @@ async def adjudicate(case_id, record):
 OUTCOMES = decision_record.OUTCOMES  # one table (night-v3 item 3.1); "information missing" is now a reason for not discussing
 INTENTS = ("", *decision_record._choice_ids("intent"))
 YES_NO = ("", *decision_record._choice_ids("trial_considered"))
-COMMUNICATION_FIELDS = ("patient_informed_date", "informed_by", "key_worker", "intent_as_recorded", "intent", "trial_considered", "trial_name",
+# The treatment intent is not one of them (the whole-run review, I4): it is a decision record field that needs a reason and a new version,
+# so it changes through correct_record only. update_communication still takes an intent equal to the stored one (the Case File's board tab
+# sends it with every save) and refuses a different one with INTENT_BY_CORRECTION.
+COMMUNICATION_FIELDS = ("patient_informed_date", "informed_by", "key_worker", "trial_considered", "trial_name",
                         "consent_recorded", "inform_by_date", "gp_informed_date")
+INTENT_BY_CORRECTION = ("The treatment intent is part of the board's decision: change it with a correction of the record (Correct this record), "
+                        "which asks for a reason and keeps the earlier version.")
 COMM_SOURCES = {"patient_informed_date": "Victorian MDM framework 2018 (8.5)", "key_worker": "Manual for Cancer Services 2013 (13-2N-113)",
                 "trial_considered": "NHS England, Streamlining MDT meetings 2020 (minimum core data)", "intent_as_recorded": "HBCR procedure manual 2025 (intention to treat)",
                 "consent_recorded": "Victorian MDM framework 2018 (5.2)"}
@@ -508,29 +513,36 @@ def _case_summary(fn, *args) -> None:
 
 def update_communication(case_id, record_id, fields: dict, user="") -> dict:
     """Set the patient-communication fields of a recorded decision later (who informed the patient and when, who tells the patient by
-    when, the referring doctor told, key worker, intent, trial, consent). Not a change of the decision: no new version; kept in the
-    record's history and audited. Completes the open 'Inform the patient' follow-up action when a date is given. A date the patient
-    was told earlier than the board date is refused unless `fields` carries a "reason"."""
+    when, the referring doctor told, key worker, trial, consent). Not a change of the decision: no new version; kept in the
+    record's history ({old, new} per field) and audited. Completes the open 'Inform the patient' follow-up action when a date is given. A
+    date the patient was told earlier than the board date is refused unless `fields` carries a "reason". The treatment intent is not
+    changed here: the same intent as stored (or a blank one) is ignored, a different one is refused (INTENT_BY_CORRECTION)."""
     st = store.get_state(case_id)
     rec = next((b for b in st.get("board_records") or [] if b["id"] == record_id), None)
     if not rec:
         raise KeyError(record_id)
-    allowed = {k: v for k, v in (fields or {}).items() if k in COMMUNICATION_FIELDS}
-    if "intent_as_recorded" in allowed and "intent" not in allowed:  # the old key from the Case File's board tab
-        allowed["intent"] = allowed["intent_as_recorded"]
-    allowed.pop("intent_as_recorded", None)
+    fields = fields if isinstance(fields, dict) else {}
+    outcome = rec.get("outcome_type") or rec.get("outcome") or "decision"
+    sent = fields.get("intent") if "intent" in fields else fields.get("intent_as_recorded")  # the old key from the Case File's board tab
+    if str(sent or "").strip():
+        want = decision_record.clean({"outcome": outcome, "intent": sent}, strict=False).get("intent") or ""
+        if want != (rec.get("intent") or rec.get("intent_as_recorded") or ""):
+            raise ValueError(INTENT_BY_CORRECTION)
+    allowed = {k: v for k, v in fields.items() if k in COMMUNICATION_FIELDS}
     # only the fields being set are checked against today's limits: an older record with a longer stored text can still be updated (M3)
-    fresh = decision_record.clean({"outcome": rec.get("outcome_type") or rec.get("outcome") or "decision", **allowed}, strict=False)
-    keys = set(allowed) | ({"intent_as_recorded"} if "intent" in allowed else set())
+    fresh = decision_record.clean({"outcome": outcome, **allowed}, strict=False)
+    keys = set(allowed)
     clean = {**rec, **{k: fresh[k] for k in keys}}
-    reason = " ".join(str((fields or {}).get("reason") or "").split())
+    reason = " ".join(str(fields.get("reason") or "").split())
     problem = informed_date_problem(clean)
     if problem and not reason and clean.get("patient_informed_date") != rec.get("patient_informed_date"):
         raise ValueError(problem)
     changed = {k: clean[k] for k in COMMUNICATION_FIELDS if k in keys and clean.get(k) != rec.get(k)}
+    before = {k: rec.get(k) for k in changed}
     for k, v in changed.items():
         rec[k] = v
-    rec.setdefault("communication_history", []).append({"ts": store.now_iso(), "by": user, "changed": changed, **({"reason": reason} if reason else {})})
+    rec.setdefault("communication_history", []).append({"ts": store.now_iso(), "by": user, "changed": {k: {"old": before[k], "new": v} for k, v in changed.items()},
+                                                        **({"reason": reason} if reason else {})})
     _refresh_communication_flags(rec)
     rec["resolution"] = resolution_status(rec)
     closed = _close_inform_actions(st, rec, user)

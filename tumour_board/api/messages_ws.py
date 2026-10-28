@@ -22,7 +22,38 @@ TYPING_EVERY = 3.0
 LAST_ACTIVE: dict = {}  # login -> monotonic time of the last activity
 _TYPED: dict = {}  # login -> monotonic time of the last typing event passed on
 _ANNOUNCED: dict = {}  # login -> the presence state last sent to the contacts
+_RESERVED: dict = {}  # login -> sockets past the cap check and not yet in the hub (whole-run review 9, M9)
 _state_lock = threading.Lock()
+_slot_lock = threading.Lock()
+
+
+def _mark(d: dict, user: str, now: float, window: float) -> None:
+    """Write `now` for `user`, dropping every entry older than `window` first, so the map never grows (whole-run review 9, M14)."""
+    with _state_lock:
+        for k in [k for k, t in d.items() if now - t > window]:
+            d.pop(k, None)
+        d[user] = now
+
+
+def _reserve(user: str) -> bool:
+    """Take one of the login's MAX_SOCKETS_PER_USER places before the socket is accepted (the count and the reservation as one step),
+    so upgrades at the same time never pass five. False when the places are taken."""
+    with _slot_lock:
+        held = _RESERVED.get(user, 0)
+        if live.messages_hub.user_count(room(user), user) + held >= live.MAX_SOCKETS_PER_USER:
+            return False
+        _RESERVED[user] = held + 1
+        return True
+
+
+def _release(user: str) -> None:
+    """The reservation ends: the socket is in the hub now, or it was never accepted."""
+    with _slot_lock:
+        left = _RESERVED.get(user, 0) - 1
+        if left > 0:
+            _RESERVED[user] = left
+        else:
+            _RESERVED.pop(user, None)
 
 
 def room(user: str) -> str:
@@ -74,6 +105,7 @@ def clear() -> None:
     LAST_ACTIVE.clear()
     _TYPED.clear()
     _ANNOUNCED.clear()
+    _RESERVED.clear()
 
 
 def _install() -> None:
@@ -114,12 +146,15 @@ async def messages_socket(websocket: WebSocket):
     if not messages.may_use(rl):
         await websocket.close(code=POLICY)
         return
-    if live.messages_hub.user_count(room(user), user) >= live.MAX_SOCKETS_PER_USER:
+    if not _reserve(user):
         await websocket.close(code=POLICY)
         return
-    await websocket.accept()
-    live.messages_hub.connect(room(user), websocket, user, rl)
-    LAST_ACTIVE[user] = time.monotonic()
+    try:
+        await websocket.accept()
+        live.messages_hub.connect(room(user), websocket, user, rl)
+    finally:
+        _release(user)
+    _mark(LAST_ACTIVE, user, time.monotonic(), messages.PRESENCE_AWAY_SECONDS)
     checked = time.monotonic()
     try:
         if not await _send(websocket, {"type": "unread", "total": messages.unread_total(user, r=rl)}):
@@ -145,15 +180,15 @@ async def messages_socket(websocket: WebSocket):
                 if not await _send(websocket, {"type": "pong"}):
                     return
             elif kind == "active":
-                LAST_ACTIVE[user] = time.monotonic()
+                _mark(LAST_ACTIVE, user, time.monotonic(), messages.PRESENCE_AWAY_SECONDS)
                 announce(user)
             elif kind == "typing":
                 now = time.monotonic()
-                LAST_ACTIVE[user] = now
+                _mark(LAST_ACTIVE, user, now, messages.PRESENCE_AWAY_SECONDS)
                 announce(user)
                 if now - _TYPED.get(user, -1e9) < TYPING_EVERY:
                     continue
-                _TYPED[user] = now
+                _mark(_TYPED, user, now, TYPING_EVERY)
                 messages.typing(user, str(msg.get("conversation_id") or ""), r=rl)
     except WebSocketDisconnect:
         pass

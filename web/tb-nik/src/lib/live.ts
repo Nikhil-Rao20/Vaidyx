@@ -174,9 +174,16 @@ export interface QuestionAnswer {
   message?: string;
   /** The exact sentences the devices read, each one a text on the screen; fetched by reference ({kind: "meeting_answer", index}). */
   speech?: string[];
-  /** A present_points answer: the brief's not documented items (strings) and the brief's label ("AI draft, not reviewed"). */
+  /** A present_points answer: the brief's not documented items (strings) and the brief's label ("AI draft, not reviewed" or
+   * "Reviewed by Dr <name>"), with the model that wrote the brief (review 9 C, S1). */
   not_documented?: string[];
   brief_label?: string;
+  brief_model?: string;
+  /** A present_points answer: how many of the brief's points no longer match the records and were left out, in a sentence. */
+  dropped_unverified?: number;
+  dropped_note?: string;
+  /** Who stopped the answer's voice for everyone (a login), or "system" when the meeting or the agent ended it. */
+  stopped_by?: string;
 }
 
 export interface MeetingQuestion {
@@ -223,7 +230,13 @@ export interface AgentState {
 }
 
 /** The agent's brief for the Case File on the floor (its points for review): none, preparing, ready, stale, no_documents, error. */
-export interface AgentBrief { status: string; label?: string; at?: string | null; reviewed_by?: string | null; message?: string }
+export interface AgentBrief {
+  status: string; label?: string; at?: string | null; reviewed_by?: string | null; message?: string;
+  /** The reviewer's display name beside the login, when the server sends it. */
+  reviewed_by_name?: string | null;
+  /** The model that wrote the brief (review 9 C, S1), named beside its points. */
+  model?: string;
+}
 
 /** One point for review of the brief, with the records it cites (at most five on the list). */
 export interface AgentPoint { text: string; citations: AgentCitation[] }

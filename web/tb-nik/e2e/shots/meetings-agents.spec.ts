@@ -99,7 +99,8 @@ test.describe("Meetings: AI agents", () => {
     test(`coordinator: the points with chips and Present your points at ${size.width}`, async ({ page }) => {
       const errors = watchConsole(page);
       await page.setViewportSize(size);
-      const live = await open(page, `/meetings/${MID}`, { wait: "control-view", state: meetingState("in_session") });
+      const st = meetingState("in_session") as unknown as { agents: Array<Record<string, unknown>> };
+      const live = await open(page, `/meetings/${MID}`, { wait: "control-view", state: st });
       const pathology = page.locator("[data-testid=agent-tile][data-role=pathology]");
       const nm = page.locator("[data-testid=agent-tile][data-role=nuclear_medicine]");
       if (size.width > 1000) {
@@ -116,7 +117,8 @@ test.describe("Meetings: AI agents", () => {
       await pathology.getByRole("button").first().click();
       const panel = page.getByTestId("agents-panel");
       const card = panel.locator("[data-testid=agent-card][data-role=pathology]");
-      await expect(card.getByTestId("points-header")).toHaveText("Points from the records, AI draft, not reviewed");
+      // the model that wrote the brief is named beside its review status (review 9 C, S1)
+      await expect(card.getByTestId("points-header")).toHaveText("Points from the records, AI draft, not reviewed. Gemma-4-31B (non-medical)");
       const chips = card.getByTestId("agent-points").getByTestId("point-chip");
       await expect(chips).toHaveCount(3);
       await expect(chips.first()).toHaveText("Histopathology report, 17/09/2026, p. 1");
@@ -140,8 +142,17 @@ test.describe("Meetings: AI agents", () => {
       await expect(answer).toBeVisible();
       await expect(answer.getByTestId("point-chip")).toHaveCount(3);
       await expect(answer.getByTestId("answer-not-documented")).toContainText("HER2 FISH result");
+      // its review status and the brief's model above the statements, and the points left out under them (review 9 C, S1)
+      await expect(answer.getByTestId("answer-brief-label")).toHaveText("AI draft, not reviewed. Gemma-4-31B (non-medical).");
+      await expect(answer.getByTestId("answer-dropped-note")).toHaveText("1 point no longer matches the records and was left out.");
       await answer.scrollIntoViewIfNeeded();
       await shot(page, "present-answer");
+      // While the agent answers someone, the server refuses (409 agent_busy) and its plain words stand under the button.
+      const busy = st.agents.map((a) => (a.role === "pathology" ? { ...a, state: "answering", by_name: "Lakshmi Rao" } : a));
+      st.agents = busy;
+      live.push({ type: "agents", agents: busy });
+      await card.getByTestId("present-points").click();
+      await expect(card.getByTestId("agent-points").getByRole("alert")).toHaveText("Pathology is answering Lakshmi Rao. Try again when it finishes.");
       // While the brief is prepared: "Reading the records" on the tile and the reason beside the disabled button.
       const agents = (meetingState("in_session") as unknown as { agents: Array<Record<string, unknown>> }).agents.map((a) => (a.role === "pathology" ? { ...a, brief: { status: "preparing", label: "", at: null, reviewed_by: null, message: "" }, points: [], points_count: 0 } : a));
       live.push({ type: "agents", agents });
@@ -168,8 +179,9 @@ test.describe("Meetings: AI agents", () => {
     await open(page, `/meetings/${MID}/room`, { wait: "room-screen", state: meetingState("in_session") });
     const tile = page.getByTestId("room-people").locator("[data-testid=agent-tile][data-role=pathology]");
     await expect(tile.locator("[data-part=count]")).toContainText("3 points from the records");
-    // a draft line on the room screen is marked as such (the Phase 6 review, M6)
-    await expect(tile.locator("[data-part=point]")).toHaveText("AI draft: The histopathology report records invasive breast carcinoma of no special type, Grade 2 (Nottingham score 6).");
+    // the first point on the room screen goes with its source and the brief's true review status and model (review 9 C, S2)
+    await expect(tile.locator("[data-part=point-status]")).toHaveText("Points from the records, AI draft, not reviewed. Gemma-4-31B (non-medical)");
+    await expect(tile.locator("[data-part=point]")).toHaveText("The histopathology report records invasive breast carcinoma of no special type, Grade 2 (Nottingham score 6). (Histopathology report, 17/09/2026, p. 1)");
     expect(await page.getByTestId("room-people").evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
     await shot(page, "room");
     expect(real(errors)).toEqual([]);

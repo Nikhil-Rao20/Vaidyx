@@ -275,6 +275,20 @@ def test_my_activity_lists_my_own_actions_and_the_full_log_is_for_the_auditor(ap
     assert api.as_(AUDIT).get("/case-list").status_code == 403  # the auditor reads the log, never the Case Files
 
 
+def test_message_events_in_the_full_log_are_for_the_auditor_and_the_root_admin_only(api, people):
+    """Whole-run review 9, M3: who messaged whom (message_* and conversation_* lines) stays out of the MDT Coordinator's GET /activity."""
+    make_case()
+    store.audit("TB-NIK-1", {"kind": "request_sent", "action": "A1", "department": "Radiology", "by": MEHTA})
+    org.audit("message_sent", RAO, conversation="C0123456789", type="direct", to=MEHTA)
+    org.audit("conversation_resolved", MEHTA, conversation="C0123456789", type="direct", to=RAO)
+    for who, sees in ((AUDIT, True), (ROOT, True), (ANIL, False)):
+        kinds = {e["kind"] for e in api.as_(who).get("/activity?limit=200").json()["events"]}
+        assert "request_sent" in kinds, who
+        assert ({"message_sent", "conversation_resolved"} <= kinds) is sees and (bool(kinds & {"message_sent", "conversation_resolved"}) is sees), who
+    mine = {e["kind"] for e in api.as_(RAO).get("/me/activity").json()["events"]}
+    assert "message_sent" in mine  # a person's own list keeps their own messages
+
+
 def test_disabled_login_is_refused_on_every_route(api):
     o = copy.deepcopy(org.load()); o["users"][RAVI]["disabled"] = True; org.save(o, by="test")
     assert api.as_(RAVI).get("/me").status_code == 403

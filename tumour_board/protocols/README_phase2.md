@@ -22,9 +22,9 @@ that discussion (the NCG line is kept in each file's `policy_basis`).
 | id | label | settings | records | quotes | books (under the guideline library) |
 |---|---|---|---|---|---|
 | `colorectal_colon` | Colon cancer | non_metastatic, metastatic | 11 + 2 optional | 16 | management-of-colorectal-cancer.pdf |
-| `stomach` | Stomach cancer | early_localized, locally_advanced, metastatic | 11 + 2 optional | 14 | ncg-gi-draft-2021-gastric-cancer.pdf |
+| `stomach` | Stomach cancer | early_localized, locally_advanced, metastatic | 11 + 2 optional | 13 | ncg-gi-draft-2021-gastric-cancer.pdf |
 | `oesophagus` | Oesophageal cancer | early_localized, locally_advanced, metastatic | 10 + 3 optional | 11 | ncg-guidelines-for-thoracic-cancer-2019.pdf |
-| `liver_hcc` | Liver cancer (hepatocellular carcinoma) | resectable, locoregional, extrahepatic | 16 + 1 optional | 17 | ncg-gi-hepatocellular-carcinoma.docx |
+| `liver_hcc` | Liver cancer (hepatocellular carcinoma) | resectable, locoregional, extrahepatic | 16 + 1 optional | 16 | ncg-gi-hepatocellular-carcinoma.docx |
 | `gallbladder` | Gallbladder cancer | per_primum, incidental, locally_advanced, metastatic | 13 + 1 optional | 23 | ncg-gi-draft-2021-gall-bladder-cancer.pdf; ncg-gi-draft-2021-gallbladder-cancer-radiology-synoptic.pdf |
 | `ovary` | Ovarian cancer (epithelial) | early, advanced, recurrent | 14 + 1 optional | 14 | ncg-guidelines-for-gynecological-cancer-2019.docx |
 | `corpus_uteri` | Cancer of the corpus uteri (endometrium) | early, advanced | 10 + 1 optional | 10 | ncg-guidelines-for-gynecological-cancer-2019.docx |
@@ -32,13 +32,13 @@ that discussion (the NCG line is kept in each file's `policy_basis`).
 | `kidney` | Kidney cancer (adult renal cell carcinoma) | localised, metastatic | 9 + 1 optional | 10 | ncg-guidelines-for-urological-malignancies-2019.pdf |
 | `germ_cell` | Germ cell tumour of the testis | stage_i, stage_ii_iii, relapsed | 11 + 1 optional | 12 | ncg-guidelines-for-urological-malignancies-2019.pdf |
 | `larynx` | Cancer of the larynx (head and neck) | early, locally_advanced, metastatic | 11 + 2 optional | 15 | ncg-guidelines-for-head-neck-cancer-2019.pdf |
-| `lymphoma` | Lymphoma (Hodgkin and non-Hodgkin) | adult_hodgkin, adult_nhl, child_hodgkin, child_nhl | 17 + 1 optional | 51 (19 from flow chart pictures, OCR) | ncg-guidelines-for-adult-hematolymphoid-2019.pdf; ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf |
-| `leukaemia` | Leukaemia (acute and chronic) | adult_acute, adult_chronic, child_acute, child_chronic | 15 + 2 optional | 64 (32 from flow chart pictures, OCR) | ncg-guidelines-for-adult-hematolymphoid-2019.pdf; ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf |
+| `lymphoma` | Lymphoma (Hodgkin and non-Hodgkin) | adult_hodgkin, adult_nhl, child_hodgkin, child_nhl | 17 + 1 optional | 50 (19 from flow chart pictures, OCR) | ncg-guidelines-for-adult-hematolymphoid-2019.pdf; ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf |
+| `leukaemia` | Leukaemia (acute and chronic) | adult_acute, adult_chronic, child_acute, child_chronic | 15 + 2 optional | 63 (32 from flow chart pictures, OCR) | ncg-guidelines-for-adult-hematolymphoid-2019.pdf; ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf |
 | `wilms` | Wilms tumour (child) | unilateral, bilateral | 7 + 2 optional | 11 | ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf |
 | `retinoblastoma` | Retinoblastoma (child) | unilateral, bilateral | 9 + 1 optional | 12 | ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf |
 | `bone_sarcoma` | Bone sarcoma (osteosarcoma, Ewing sarcoma, chondrosarcoma) | osteosarcoma, ewing, chondrosarcoma | 15 + 2 optional | 25 | ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf |
 | `soft_tissue_sarcoma` | Soft tissue sarcoma | non_metastatic, metastatic, paediatric_rhabdomyosarcoma | 13 + 1 optional | 21 | ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf; ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf |
-| `brain_cns` | Brain and CNS tumours | adult_glioma, adult_other, child | 10 + 1 optional | 15 | eano/EANO_2021_diffuse_gliomas_Weller.pdf |
+| `brain_cns` | Brain and CNS tumours | adult_glioma, adult_other, child | 9 + 2 optional | 15 | eano/EANO_2021_diffuse_gliomas_Weller.pdf |
 | `generic_haem` | Other blood cancer (no disease-specific Indian protocol) | as_recorded | 3 + 2 optional | 3 | Owner decision R05-Q04, 17 Oct 2026 |
 
 **Thyroid** has no checklist: NCG has no thyroid chapter, no Indian national guideline was found, ESMO 2019 is "All rights reserved",

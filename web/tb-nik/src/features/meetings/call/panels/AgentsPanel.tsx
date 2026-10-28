@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import type { AgentInfo, MeetingState } from "@/lib/live";
 import { cn } from "@/lib/utils";
 import { PanelSection, usePanelAction } from "../../components/People";
+import { Dots } from "../../components/shared";
 import { useCall } from "../context";
 import { agentBusy, agentDept, agentStateKey, agentStateWord, agentTitle } from "../Strip";
 import { AGENT_ROLES, AgentPoints } from "./AgentPoints";
@@ -53,9 +54,6 @@ export function rosterSentence(agent: AgentInfo | undefined, present: boolean): 
   return present ? "Not in this meeting: Head present" : "Not in this meeting";
 }
 
-function Dots() {
-  return <span className="ml-0.5 inline-flex gap-0.5" aria-hidden>{[0, 1, 2].map((i) => <motion.span key={i} className="size-1 rounded-full bg-current" animate={{ opacity: [0.2, 1, 0.2] }} transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }} />)}</span>;
-}
 
 const RING: Record<string, string> = {
   ready: "border-ok", preparing: "border-stage-muted", listening: "border-indigo", reading_question: "border-indigo", reading: "border-indigo",

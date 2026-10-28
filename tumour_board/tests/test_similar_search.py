@@ -826,6 +826,21 @@ def test_open_normal_with_reason_refused_and_gone(full, model, people):
         assert full.as_(RAO).post("/cases/TB-SIM-300/similar/open", {"past_case_id": bad}).status_code == 404
 
 
+def test_open_refuses_a_past_id_that_safe_id_would_change(full, model, people):
+    """Whole-run review 9, M7: "TB SIM 451" reaches the TB-SIM-451 folder through store.safe_id; it is refused (404), so no audit line
+    ever carries an id other than the stored one."""
+    source(participants=[{"department": "medical_oncology"}])
+    past("TB-SIM-451")
+    assert similar.open_info(org.roles(RAO), "TB-SIM-451", "TB-SIM-300")["how"] == "normal"
+    for bad in ("TB SIM 451", "TB/SIM/451", "TB-SIM-451#"):
+        with pytest.raises(ValueError, match="not_found"):
+            similar.open_info(org.roles(RAO), bad, "TB-SIM-300")
+    r = full.as_(RAO).post("/cases/TB-SIM-300/similar/open", {"past_case_id": "TB SIM 451"})
+    assert r.status_code == 404 and detail(r)["code"] == "not_found"
+    assert not [e for e in store.read_audit("TB-SIM-451") if e["kind"] == "similar_opened"]
+    assert not [x for x in org.read_audit() if x.get("kind") == "similar_opened"]
+
+
 def test_info_lists_the_last_five_searches_newest_first_and_is_off_inside_a_window(full, model):
     source()
     api = full.as_(RAO)

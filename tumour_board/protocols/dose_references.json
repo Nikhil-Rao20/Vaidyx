@@ -5932,6 +5932,7 @@
    "kind": "rt",
    "total_gy": 21,
    "fractions": 3,
+   "gy_per_fraction": 7,
    "schedule": "7 Gy* 3Fr",
    "source_kind": "regimen",
    "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
@@ -5939,7 +5940,8 @@
    "org": "National Cancer Grid (NCG), India",
    "region": "India",
    "page": 10,
-   "quote": "BT only: 7 Gy* 3Fr"
+   "quote": "BT only: 7 Gy* 3Fr",
+   "note": "The book prints 7 Gy per fraction and 3 fractions; the total of 21 Gy is worked out from 7 Gy x 3, not printed"
   },
   {
    "id": "corpus_uteri:ncg-guidelines-for-gynecolog:p10:rt:45-50Gy/25",

@@ -17,7 +17,7 @@ import { DateInput } from "@/components/DateInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MicButton } from "@/components/MicButton";
-import { SpeakButton } from "@/components/SpeakButton";
+import { SPEAK_TEXT_MAX, SpeakButton } from "@/components/SpeakButton";
 import type { Attendee } from "@/lib/live";
 import type { SttContext } from "@/lib/voice";
 import { cn } from "@/lib/utils";
@@ -337,8 +337,13 @@ export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRe
       <p className={`text-xs mt-0.5 ${liveErr ? "text-warn" : "text-muted-foreground"}`} data-testid="live-strip-note">{liveErr ? `The room screen did not get the text: ${liveErr}` : f.decision_text && liveText === f.decision_text ? "Shown on the room screen, marked not saved" : "Appears on the room screen as you type, marked not saved"}</p>
     ) : <Notes id={noteId} fd={fd} extra={ownerNote} />;
     const screen = fd.kind === "date" ? undefined : MIC_SCREEN[fd.key];
-    // "Read back": the decision as it stands in the box, read aloud so the coordinator hears what will be recorded.
-    const readBack = fd.key === "decision_text" && value.trim() ? <SpeakButton source={{ text: value }} screen="decision" label="Read back" /> : null;
+    // "Read back": the decision as it stands in the box, read aloud so the coordinator hears what will be recorded. A decision longer
+    // than the voice service reads at once (1,000 characters) is not offered: the line says to read it from the screen (review 9 C, I6).
+    const readBack = fd.key === "decision_text" && value.trim()
+      ? (value.length > SPEAK_TEXT_MAX
+        ? <span className="text-xs text-muted-foreground" data-testid="read-back-too-long">Too long to read aloud; read it from the screen</span>
+        : <SpeakButton source={{ text: value }} screen="decision" label="Read back" />)
+      : null;
     return (
       <div key={fd.key} className={fd.kind === "long" ? wide : ""} data-field={fd.key}>
         <Label htmlFor={id}>{fd.label}<Need on={need} /></Label>

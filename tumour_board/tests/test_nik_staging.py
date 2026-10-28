@@ -478,3 +478,86 @@ def test_a_residents_confirm_is_signed_off_by_the_consultant_and_pinned_to_the_d
     tc.post(f"/api/tb/cases/{CASE}/staging/run")
     r = tc.post(url, json={})
     assert r.status_code == 200 and "proposal" not in r.json() and r.json()["draft"]["confirmed"]["by"] == "dr.rao"
+
+
+# ---- the whole-run review, I2: a report line that writes both the anatomic and the prognostic stage is compared under both ----------
+
+COMBINED = "pT2 pN1a M0, Anatomic stage IIB, Prognostic stage group IB"
+
+
+def test_review_i2_the_kind_comes_from_the_value_and_a_line_can_be_both():
+    assert staging.written_kind(COMBINED) == ("anatomic", True)
+    assert staging.written_kind("pT2 pN1a M0") == ("anatomic", False)  # the quote around it no longer decides
+    assert staging.written_kind("AJCC prognostic stage group: IB") == ("prognostic", False)
+    assert staging.anatomic_parts(COMBINED) == {"T": "T2", "N": "N1a", "M": "M0", "stage": "IIB"}
+    draft = {"status": "staged", "stage": "IIB", "components": {"T": {"cat": "T2", "group": "T2"}, "N": {"cat": "cN1"}, "M": {"cat": "cM0", "group": "M0"}}}
+    w = {"value": COMBINED, "kind": "prognostic", "prefix": "p", "superseded": False}  # even an entry stored as prognostic: it has T, N, M
+    c = staging.compare(draft, [w])
+    assert c["written"]["value"] == COMBINED and c["result"] == "matches" and c["differences"] == []
+    assert staging.compare(draft, [{**w, "value": "AJCC prognostic stage group: IB"}]) is None  # a prognostic stage alone is not
+
+
+def test_review_i2_the_combined_line_is_compared_with_the_anatomic_draft_and_shown_under_both(breast):
+    tc, who, fake, calls = breast
+    text = f"OPD consultation note (SYNTHETIC)\n{COMBINED}\nECOG 1."
+    util.add(CASE, util.make_doc("DO1", "clinical_note", text=text, title="OPD CONSULTATION NOTE", date="2026-09-25",
+                                 facts={"recorded_stage": util.fact(COMBINED, quote=COMBINED)}))
+    service.recheck(CASE, "test")
+    v = tc.post(f"/api/tb/cases/{CASE}/staging/run").json()
+    w = [x for x in v["written"] if x["doc_id"] == "DO1"]
+    assert len(w) == 1 and w[0]["kind"] == "anatomic" and w[0]["also_prognostic"] is True  # the anatomic card's history keeps it
+    assert v["comparison"]["written"]["value"] == COMBINED and v["comparison"]["result"] == "matches"
+    pw = [x for x in v["prognostic_written"] if x["doc_id"] == "DO1"]
+    assert [x["stage"] for x in pw] == ["IB"]  # and the prognostic card lists it once
+
+
+# ---- the whole-run review, I3: a doctor's confirmation survives a re-run; every draft is kept ----------------------------------------
+
+def test_review_i3_a_rerun_with_the_same_result_keeps_the_confirmation(breast):
+    tc, who, fake, calls = breast
+    _prog_docs()
+    tc.post(f"/api/tb/cases/{CASE}/staging/run")
+    v = tc.post(f"/api/tb/cases/{CASE}/staging/confirm", json={"note": "Checked"}).json()
+    first = v["draft"]["confirmed"]
+    v = tc.post(f"/api/tb/cases/{CASE}/staging/confirm", json={"which": "prognostic"}).json()
+    pfirst = v["prognostic"]["confirmed"]
+    v = tc.post(f"/api/tb/cases/{CASE}/staging/run").json()
+    assert v["draft"]["confirmed"]["by"] == "dr.rao" and v["draft"]["confirmed"]["at"] == first["at"] and v["draft"]["confirmed"]["note"] == "Checked"
+    assert v["draft"]["confirmed"]["carried"]["by"] == "dr.rao"
+    assert v["prognostic"]["confirmed"]["at"] == pfirst["at"] and v["prognostic"]["confirmed"]["which"] == "prognostic"
+    hist = store.get_state(CASE)["staging_history"]
+    assert len(hist) == 1 and hist[-1]["confirmed"]["at"] == first["at"] and hist[-1]["replaced"]["by"] == "dr.rao"
+    ev = [e for e in store.read_audit(CASE) if e.get("kind") == "draft_stage"][-1]
+    assert ev["replaced_confirmed"] is True and ev["confirmation_kept"] == ["anatomic", "prognostic"]
+    # a later correction may still name the confirmed draft as the stage source
+    from tumour_board import postboard
+    assert postboard._check_stage_source(CASE, "confirmed_draft") is None
+
+
+def test_review_i3_a_changed_result_clears_the_confirmation_and_keeps_the_old_draft(breast):
+    tc, who, fake, calls = breast
+    tc.post(f"/api/tb/cases/{CASE}/staging/run")
+    tc.post(f"/api/tb/cases/{CASE}/staging/confirm", json={})
+    fake.answer = {**GOOD, "N": {"cat": "cN0", "quotes": [{"doc_id": "DC1", "quote": "No evidence of distant metastasis in the chest, abdomen or pelvis"}]}}
+    v = tc.post(f"/api/tb/cases/{CASE}/staging/run").json()
+    assert v["draft"]["stage"] != "IIB" and v["draft"]["confirmed"] is None
+    old = store.get_state(CASE)["staging_history"][-1]
+    assert old["stage"] == "IIB" and old["confirmed"]["by"] == "dr.rao" and old["replaced"]["why"] == "worked out again"
+    ev = [e for e in store.read_audit(CASE) if e.get("kind") == "draft_stage"][-1]
+    assert ev["replaced_confirmed"] is True and ev["confirmation_kept"] == []
+
+
+def test_review_i3_a_residents_run_on_a_confirmed_draft_is_refused(breast):
+    tc, who, fake, calls = breast
+    who["user"] = "res.asha"
+    assert tc.post(f"/api/tb/cases/{CASE}/staging/run").status_code == 200  # a team resident prepares an unconfirmed draft as before
+    who["user"] = "dr.rao"
+    tc.post(f"/api/tb/cases/{CASE}/staging/confirm", json={})
+    n = len(calls)
+    who["user"] = "res.asha"
+    r = tc.post(f"/api/tb/cases/{CASE}/staging/run")
+    assert r.status_code == 409 and r.json()["detail"]["message"] == staging.CONFIRMED_RUN and len(calls) == n  # no model call
+    assert "—" not in staging.CONFIRMED_RUN
+    assert store.get_state(CASE)["staging"]["confirmed"]["by"] == "dr.rao"
+    who["user"] = "dr.rao"  # the consultant may work it out again
+    assert tc.post(f"/api/tb/cases/{CASE}/staging/run").status_code == 200

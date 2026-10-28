@@ -7,7 +7,6 @@
 // answer lists the brief's not documented items.
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { format, isToday, isValid, parseISO } from "date-fns";
-import { motion } from "motion/react";
 import { ArrowDown, SendHorizontal, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,6 +16,7 @@ import { answerText, type AgendaRow, type AgentReference, type ChatMessage, type
 import { LoadingButton, fmtDateTime, indianDates, modelLabel } from "@/features/casefile/components/common";
 import { cn } from "@/lib/utils";
 import { usePanelAction } from "../../components/People";
+import { Dots, briefAnswerLabel, briefAnswerReviewed } from "../../components/shared";
 import { CitedText, parseMention, roleName } from "./AgentPoints";
 import { useCall } from "../context";
 import type { CallCtx } from "../types";
@@ -70,8 +70,14 @@ export function queueLine(q: MeetingQuestion, dept: string, answering?: string |
   return `${dept} is answering ${answering || "another question"}. Yours is next.`;
 }
 
-function Dots() {
-  return <span className="ml-0.5 inline-flex gap-0.5" aria-hidden>{[0, 1, 2].map((i) => <motion.span key={i} className="size-1 rounded-full bg-current" animate={{ opacity: [0.2, 1, 0.2] }} transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }} />)}</span>;
+
+/** "Stopped by <name>" when someone stopped the answer's voice for everyone (the asker's name, a name from the attendance, else the
+ * login); null when nobody did or the meeting or the agent ended it ("system", the answer's own message says why). */
+export function stoppedLine(a: Pick<QuestionAnswer, "stopped_by"> | null | undefined, q: Pick<MeetingQuestion, "by" | "by_name">, people?: Array<{ user: string; name?: string }>): string | null {
+  const who = String(a?.stopped_by ?? "").trim();
+  if (!who || who === "system") return null;
+  const name = who === q.by && q.by_name ? q.by_name : people?.find((p) => p.user === who)?.name || who;
+  return `Stopped by ${name}`;
 }
 
 /** One question with its answer: the statements as they arrive (each with its chips and its note), the guideline references, the
@@ -101,6 +107,8 @@ function QuestionItem({ q, onQuick }: { q: MeetingQuestion; onQuick?: (text: str
     if (mayStopAll && q.role) void ctx.actions.stopAgent(q.role, q.id).catch(() => undefined);
   };
   const quick = refused && !!onQuick && ctx.variant !== "room";
+  const present = a?.kind === "present_points";
+  const stopped = stoppedLine(a, q, ctx.state.attendance);
   return (
     <li className="rounded-md border border-border bg-card p-2" data-testid="question-item" data-status={status ?? "waiting"} data-question={q.id}>
       <p className="text-sm font-medium text-foreground">{q.text}</p>
@@ -108,6 +116,9 @@ function QuestionItem({ q, onQuick }: { q: MeetingQuestion; onQuick?: (text: str
       {q.role && !q.answer ? (
         q.queued ? <p className="mt-1 text-xs text-muted-foreground" data-testid="queue-line">{queueLine(q, dept, agent?.by_name)}</p>
           : <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground" role="status" data-testid="answer-waiting">Thinking<Dots /></p>
+      ) : null}
+      {present ? (
+        <p className={cn("mt-1 text-[11px] font-semibold", briefAnswerReviewed(a) ? "text-ok" : "text-review")} data-testid="answer-brief-label">{briefAnswerLabel(a)}</p>
       ) : null}
       {stmts.length ? (
         <div className="mt-1 space-y-1 border-l-2 border-primary pl-2" aria-live={streaming ? "polite" : undefined}>
@@ -117,6 +128,7 @@ function QuestionItem({ q, onQuick }: { q: MeetingQuestion; onQuick?: (text: str
               {st.note ? <p className="text-[10px] text-muted-foreground">{st.note}</p> : null}
             </div>
           ))}
+          {present && a?.dropped_note ? <p className="text-[10px] text-muted-foreground" data-testid="answer-dropped-note">{a.dropped_note}</p> : null}
         </div>
       ) : notDoc ? (
         <div className="mt-1 border-l-2 border-stage-line pl-2" data-testid="answer-not-documented-text">
@@ -134,6 +146,7 @@ function QuestionItem({ q, onQuick }: { q: MeetingQuestion; onQuick?: (text: str
         </div>
       ) : text ? <p className="mt-1 border-l-2 border-primary pl-2 text-sm text-foreground">{indianDates(text)}</p> : null}
       {streaming ? <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground" data-testid="answer-streaming">Answering<Dots /></p> : null}
+      {stopped ? <p className="mt-1 text-xs text-muted-foreground" data-testid="answer-stopped">{stopped}</p> : null}
       {quick ? (
         <div className="mt-1.5 flex flex-wrap gap-1" role="group" aria-label="Questions the agent can answer from the records">
           {QUICK_QUESTIONS.map((t) => (

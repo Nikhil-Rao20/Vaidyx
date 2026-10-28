@@ -11,6 +11,7 @@ import { Bot, CheckCheck, History, PenLine, RefreshCw, Send, Sparkles } from "lu
 import { Button } from "@/components/ui/button";
 import { SpeakButton } from "@/components/SpeakButton";
 import type { TtsRef } from "@/lib/voice";
+import { consultantTitle } from "@/lib/format";
 import type { SlotHandlers } from "../components/SlotLine";
 import { ProseBlock } from "../components/SummaryColumn";
 import { CaseSummaryCard } from "../components/CaseSummaryCard";
@@ -108,8 +109,8 @@ export function SummaryStep({ steps, docs, h, canWrite, canRead, busy, reading, 
             <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
               {prose.reviewed ? <span className="inline-flex items-center gap-1.5 text-sm text-ok"><CheckCheck className="size-4" aria-hidden />Read{prose.reviewed_by ? ` by ${prose.reviewed_by}` : ""}</span>
                 : canRead ? <LoadingButton variant="outline" loading={reading} onClick={onRead} data-testid="read-summary"><CheckCheck className="size-4" />I have read it</LoadingButton>
-                : <span className="text-sm text-muted-foreground">{resident ? `Dr ${consultantName} reads it and marks it read.` : "A doctor of the treating team reads it."}</span>}
-              {!sent && prose.reviewed && canWrite ? <Button onClick={onSend} data-testid="summary-send"><Send className="size-4" />{resident ? `Send to Dr ${consultantName} for sign-off` : "Send to the board"}</Button> : null}
+                : <span className="text-sm text-muted-foreground">{resident ? `${consultantTitle(consultantName, true)} reads it and marks it read.` : "A doctor of the treating team reads it."}</span>}
+              {!sent && prose.reviewed && canWrite ? <Button onClick={onSend} data-testid="summary-send"><Send className="size-4" />{resident ? `Send to ${consultantTitle(consultantName)} for sign-off` : "Send to the board"}</Button> : null}
               {sent ? <span className="text-sm text-ok">Sent to the board{sent.at ? `, ${fmtDateTime(sent.at)}` : ""}</span> : null}
             </div>
           ) : null}
@@ -128,7 +129,7 @@ export function SummaryStep({ steps, docs, h, canWrite, canRead, busy, reading, 
         </Card>
       ) : null}
       <Card title="Specialty agents" icon={<Bot className="size-4 text-brand" aria-hidden />} testId="summary-briefs"><div className="py-2">{briefs}</div></Card>
-      <Card title="Similar Case Files" testId="summary-similar"><div className="py-2">{similar}</div></Card>
+      {similar ? <Card title="Similar Case Files" testId="summary-similar"><div className="py-2">{similar}</div></Card> : null}
       <Card title="Similar published cases" testId="summary-published"><div className="py-2">{published}</div></Card>
     </div>
   );

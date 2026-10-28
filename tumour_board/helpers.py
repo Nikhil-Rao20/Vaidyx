@@ -53,7 +53,19 @@ def brief_view(art, sig, preparing=False) -> dict:
            "label": "AI draft, not reviewed" if rv.get("status") in ("ai_draft", None, "") else ("Reviewed" if rv.get("status") == "reviewed" else rv.get("status"))}
     if rv.get("status") == "reviewed":
         out["reviewed_by"] = rv.get("by")
+        out["reviewed_by_name"] = _name(rv.get("by"))  # the reviewer's display name beside the login (review 9 C, M11)
     return out
+
+
+def _name(user) -> str:
+    """The display name of a login (the profile store, else org.json, else the login itself)."""
+    if not user:
+        return ""
+    try:
+        from .slots import display_name
+        return display_name(user) or str(user)
+    except Exception:
+        return str(user)
 
 
 def load_chats(case_id) -> dict:

@@ -218,8 +218,10 @@ def test_edit_and_delete_within_ten_minutes(tc, clock, data_root):
     assert r.status_code == 403 and r.json()["detail"] == {"message": "You can only edit a message for 10 minutes.", "code": "edit_window_over"}
     assert As(tc, "priya").delete(f"/messages/conversations/{cid}/messages/{mid}").json()["detail"]["code"] == "edit_window_over"
     lines = [json.loads(x) for x in (data_root / "messages" / f"c_{cid}.jsonl").read_text().splitlines()]
-    assert any(e["t"] == "edit" and e["old"] == "Report at 10" and e["text"] == "Report at 11" for e in lines)  # history kept
-    # a delete inside the window leaves a tombstone; the text stays in the file until retention
+    edits = [e for e in lines if e["t"] == "edit"]  # when and how often, never the old text (whole-run review 9, I4)
+    assert len(edits) == 1 and edits[0]["text"] == "Report at 11" and edits[0]["count"] == 1 and edits[0]["ts"] and "old" not in edits[0]
+    assert "Report at 10" not in (data_root / "messages" / f"c_{cid}.jsonl").read_text()
+    # a delete inside the window leaves a tombstone and takes the text out of the file at once (I4)
     clock["now"] = T0 + timedelta(minutes=20)
     m2 = As(tc, "priya").post(f"/messages/conversations/{cid}/messages", json={"text": "Wrong patient"}).json()["message"]
     clock["now"] += timedelta(minutes=9, seconds=59)
@@ -229,7 +231,7 @@ def test_edit_and_delete_within_ten_minutes(tc, clock, data_root):
     gone = next(m for m in seen["messages"] if m["id"] == m2["id"])
     assert gone["deleted"] is True and gone["text"] == "" and gone["can_edit_until"] is None
     assert seen["conversation"]["last"]["preview"] == ""
-    assert "Wrong patient" in (data_root / "messages" / f"c_{cid}.jsonl").read_text()
+    assert "Wrong patient" not in (data_root / "messages" / f"c_{cid}.jsonl").read_text()
     assert P(tc, "priya").patch(f"/messages/conversations/{cid}/messages/{m2['id']}", json={"text": "x"}).json()["detail"]["code"] == "deleted"
     assert As(tc, "priya").delete(f"/messages/conversations/{cid}/messages/M0123456789").status_code == 404
 
@@ -450,6 +452,69 @@ def test_retention_removes_text_only_after_the_period(tc, clock, data_root):
     change_org(lambda o: o["hospital"].__setitem__("message_retention_days", 30))
     cid2 = start(tc, "priya", {"user": "suresh"}, text="Short lived")["conversation"]["id"]
     assert messages.retention(now=T0 + timedelta(days=31)) == 1 and "Short lived" not in (data_root / "messages" / f"c_{cid2}.jsonl").read_text()
+
+
+def test_a_delete_blanks_the_message_and_its_edits_on_disk(tc, clock, data_root):
+    """I4: the text of a deleted message and of every edit of it leave the file at once; every event stays, the thread says deleted."""
+    d = start(tc, "priya", {"department": "radiology"}, text="Keep this one")
+    cid = d["conversation"]["id"]
+    clock["now"] = T0 + timedelta(minutes=1)
+    m = As(tc, "priya").post(f"/messages/conversations/{cid}/messages", json={"text": "SENTINELZEBRA " + TEXT}).json()["message"]
+    for n in (1, 2):
+        r = P(tc, "priya").patch(f"/messages/conversations/{cid}/messages/{m['id']}", json={"text": f"SENTINELZEBRA edit {n}"})
+        assert r.status_code == 200 and r.json()["message"]["edited"] is True
+    assert As(tc, "priya").delete(f"/messages/conversations/{cid}/messages/{m['id']}").status_code == 200
+    path = data_root / "messages" / f"c_{cid}.jsonl"
+    raw = path.read_text()
+    for word in ("SENTINELZEBRA", NAME, "Lakshmi", UHID):
+        assert word not in raw, word
+    assert "Keep this one" in raw and stat.S_IMODE(os.stat(path).st_mode) == 0o600
+    ev = [json.loads(x) for x in raw.splitlines()]
+    assert [e["t"] for e in ev] == ["msg", "msg", "edit", "edit", "delete"]  # who wrote when stays
+    assert [e.get("count") for e in ev if e["t"] == "edit"] == [1, 2]
+    assert all(e["removed"] and e["text"] == "" for e in ev if e["t"] in ("msg", "edit") and m["id"] in (e.get("id"), e.get("of")))
+    assert not ev[0].get("removed")
+    for who in ("priya", "ravi"):
+        seen = As(tc, who).get(f"/messages/conversations/{cid}").json()["messages"]
+        gone = next(x for x in seen if x["id"] == m["id"])
+        assert gone["deleted"] is True and gone["text"] == "" and gone["link"] is None, who
+        assert next(x for x in seen if x["id"] == d["message"]["id"])["text"] == "Keep this one"
+
+
+def test_retention_is_per_message_in_a_busy_conversation(tc, clock, data_root):
+    """I4: an old message loses its text while a newer one in the same, still busy, conversation keeps it."""
+    d = start(tc, "priya", {"department": "radiology"}, text="SENTINELOLD from last year")
+    cid, old_id = d["conversation"]["id"], d["message"]["id"]
+    P(tc, "priya").patch(f"/messages/conversations/{cid}/messages/{old_id}", json={"text": "SENTINELOLD edited"})
+    clock["now"] = T0 + timedelta(days=300)
+    new = As(tc, "ravi").post(f"/messages/conversations/{cid}/messages", json={"text": "Newer note"}).json()["message"]
+    clock["now"] = T0 + timedelta(days=366)
+    As(tc, "priya").post(f"/messages/conversations/{cid}/messages", json={"text": "Today's note"})
+    assert messages.retention(now=T0 + timedelta(days=366)) == 1
+    raw = (data_root / "messages" / f"c_{cid}.jsonl").read_text()
+    assert "SENTINELOLD" not in raw and "Newer note" in raw and "Today's note" in raw
+    seen = {m["id"]: m for m in As(tc, "suresh").get(f"/messages/conversations/{cid}").json()["messages"]}
+    assert seen[old_id]["removed"] is True and seen[old_id]["text"] == "" and seen[old_id]["deleted"] is False
+    assert seen[new["id"]]["removed"] is False and seen[new["id"]]["text"] == "Newer note"
+    assert messages.retention(now=T0 + timedelta(days=366)) == 0  # nothing left to remove
+    assert messages.retention(now=T0 + timedelta(days=666)) == 1 and "Newer note" not in (data_root / "messages" / f"c_{cid}.jsonl").read_text()
+
+
+def test_the_in_memory_maps_drop_entries_past_their_window(monkeypatch):
+    """M14: the push and denied maps keep only entries inside their window."""
+    import time as _time
+    monkeypatch.setattr(push, "enabled", lambda: False)
+    messages._PUSHED[("old", "C0000000000")] = _time.monotonic() - messages.PUSH_EVERY - 1
+    messages._PUSHED[("new", "C0000000000")] = _time.monotonic()
+    monkeypatch.setattr(push, "enabled", lambda: True)
+    monkeypatch.setattr(push, "ASYNC", False)
+    monkeypatch.setattr(push, "send_to_users", lambda *a, **k: None)
+    messages._push(["someone"], "C0000000001", "Dr X")
+    assert ("old", "C0000000000") not in messages._PUSHED and ("new", "C0000000000") in messages._PUSHED
+    assert ("someone", "C0000000001") in messages._PUSHED
+    messages._DENIED["gone"] = _time.monotonic() - messages.DENIED_EVERY - 1
+    messages.note_denied("fresh", "send")
+    assert "gone" not in messages._DENIED and "fresh" in messages._DENIED
 
 
 # ---- no account changed --------------------------------------------------------------------------------------------------------------

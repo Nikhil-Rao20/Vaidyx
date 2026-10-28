@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MicButton } from "@/components/MicButton";
 import { cn } from "@/lib/utils";
+import { consultantTitle } from "@/lib/format";
 import type { SourceTarget } from "../components/SourceViewer";
 import { LoadingButton, errorText, fmtDateTime } from "../components/common";
 import { Card } from "./Overview";
@@ -97,7 +98,7 @@ export function QuestionStep({ steps, canEdit, onSaveQuestion, onReason, onUrgen
           <div className="flex flex-wrap items-center gap-2">
             {canEdit ? (
               <LoadingButton loading={busy === "q"} disabled={text.trim().length < 5 || saved} onClick={() => void run("q", () => onSaveQuestion(text.trim()))} data-testid="question-save">
-                {saved ? <><Check className="size-4" />Saved</> : resident ? `Send to Dr ${consultantName} for sign-off` : "Save the question"}
+                {saved ? <><Check className="size-4" />Saved</> : resident ? `Send to ${consultantTitle(consultantName)} for sign-off` : "Save the question"}
               </LoadingButton>
             ) : null}
             {q.text ? <span className="text-xs text-muted-foreground">Written by {q.by || "the treating doctor"}{q.at ? `, ${fmtDateTime(q.at)}` : ""}</span> : <span className="text-xs text-muted-foreground">The board sees exactly these words.</span>}
@@ -110,14 +111,14 @@ export function QuestionStep({ steps, canEdit, onSaveQuestion, onReason, onUrgen
       <Card title="Reason for discussion" testId="question-reason">
         <div className="space-y-1.5 py-2">
           <Choice options={steps.reasons} value={q.reason?.value ?? null} label="Reason for discussion" disabled={!canEdit || busy === "r"} onPick={(v) => void run("r", () => onReason(v))} />
-          {resident && canEdit ? <p className="text-xs text-muted-foreground">Dr {consultantName} signs off the reason.</p> : null}
+          {resident && canEdit ? <p className="text-xs text-muted-foreground">{consultantTitle(consultantName, true)} signs off the reason.</p> : null}
         </div>
       </Card>
 
       <Card title="Urgency" testId="question-urgency">
         <div className="space-y-1.5 py-2">
           <Choice options={URGENCY.map((n) => ({ id: n, label: `${n} ${URGENCY_WORD[n]}` }))} value={q.urgency?.level ?? null} label="Urgency, 1 routine to 5 most urgent" disabled={!canEdit || busy === "u"} onPick={(n) => void run("u", () => onUrgency(n))} />
-          {resident && canEdit ? <p className="text-xs text-muted-foreground">Dr {consultantName} signs off the urgency.</p> : null}
+          {resident && canEdit ? <p className="text-xs text-muted-foreground">{consultantTitle(consultantName, true)} signs off the urgency.</p> : null}
         </div>
       </Card>
 

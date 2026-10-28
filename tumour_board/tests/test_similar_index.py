@@ -427,6 +427,24 @@ def test_the_index_write_is_atomic():
     assert meta["version"] == similar.VERSION and meta["embed_model"] == search.EMBED_MODEL and len(meta["signature"]) == 16
 
 
+def test_profiles_the_index_and_the_vector_cache_are_private_and_atomic():
+    """Whole-run review 9, M12: every file under data/tumour_board/similar/ and the vector cache is written through a .tmp (mode 600)
+    and os.replace, so it is mode 600 and no .tmp is left behind."""
+    import os
+    import stat
+    decided("TB-SIM-045")
+    similar.ensure()
+    files = [f for f in similar.DIR().rglob("*") if f.is_file()] + list((config.DATA_ROOT / "embed_cache" / "chunks").glob("*"))
+    assert any(f.suffix == ".npy" for f in files) and any(f.name == "index.npz" for f in files) and any(f.parent.name == "profiles" for f in files)
+    for f in files:
+        assert stat.S_IMODE(os.stat(f).st_mode) == 0o600, f
+    assert not [f for f in files if f.name.endswith(".tmp")]
+    meta, m = similar.load_index()
+    assert [c["case_id"] for c in meta["chunks"]] == ["TB-SIM-045"] and m.shape == (1, DIM)
+    vec = np.load(next(f for f in files if f.suffix == ".npy"))
+    assert vec.shape == (DIM,) and vec.dtype == np.float32
+
+
 def test_a_changed_decision_rebuilds_only_that_profile_and_the_cache_is_reused(fake_embed):
     decided("TB-SIM-050", agesex="44 Y / F"); decided("TB-SIM-051", agesex="54 Y / F"); decided("TB-SIM-052", agesex="64 Y / F")
     first = similar.ensure()

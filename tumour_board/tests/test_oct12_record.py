@@ -65,13 +65,17 @@ def test_update_communication_closes_the_inform_action_and_is_audited(unit_case,
     rec = asyncio.run(postboard.record_decision(unit_case, {"board_date": "2026-09-10", "decision_text": "Plan agreed.", "recorded_by": "Dr A",
                                                             "participants": "Dr A (Med Onc)", "actions": []}, user="coord"))
     out = postboard.update_communication(unit_case, rec["id"], {"patient_informed_date": "12/09/2026", "informed_by": "Dr A", "key_worker": "Sr. Meena, 98450 00000",
-                                                                 "intent_as_recorded": "curative", "trial_considered": "yes", "consent_recorded": "yes", "decision_text": "HACK"}, user="coord")
+                                                                 "intent_as_recorded": "", "trial_considered": "yes", "consent_recorded": "yes", "decision_text": "HACK"}, user="coord")
     assert out["patient_informed_date"] == "2026-09-12" and out["decision_text"] == "Plan agreed." and out.get("version", 1) == 1
-    assert not any(f.get("kind") == "communication" for f in out["adjudication"]["flags"])
+    # the intent is set by a correction with a reason, never by this form (the whole-run review, I4): only its flag is left
+    assert {f.get("field") for f in out["adjudication"]["flags"] if f.get("kind") == "communication"} == {"intent_as_recorded"}
+    out = postboard.correct_record(unit_case, rec["id"], {"intent": "curative"}, "coord", "Coord", "As the board said")
+    assert out["version"] == 2 and not any(f.get("kind") == "communication" for f in out["adjudication"]["flags"])
     st = store.get_state(unit_case)
     a = [x for x in st["actions"] if x.get("communication")][0]
     assert a["status"] == "completed" and "informed on 2026-09-12" in a["history"][-1]["event"]
-    assert store.read_audit(unit_case)[-1]["kind"] == "board_record_communication"
+    kinds = [e["kind"] for e in store.read_audit(unit_case)]
+    assert "board_record_communication" in kinds and kinds[-1] == "board_record_corrected"
     with pytest.raises(KeyError):
         postboard.update_communication(unit_case, "Bnope", {}, user="coord")
 

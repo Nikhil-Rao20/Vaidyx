@@ -39,13 +39,15 @@ _RUNS = common.RateLimit(6, 60)
 
 @router.post("/cases/{case_id}/staging/run")
 async def run_staging(case_id: str, request: Request):
-    """Work the draft stage out from the reports (the owner's team: the same right as preparing the summary)."""
+    """Work the draft stage out from the reports (the owner's team: the same right as preparing the summary). A resident on the team may not
+    replace a draft a doctor confirmed (409, the whole-run review I3): the consultant works it out again."""
     u = common.user(request); rl = common.roles(request); c = _full(request, case_id)
-    if not access.is_team_resident(rl, c):  # a resident on the team prepares too (R03-Q03); everyone else needs the owner's right
+    consultant = access.may(rl, "confirm", c)
+    if not consultant and not access.is_team_resident(rl, c):  # a resident on the team prepares too (R03-Q03); everyone else needs the owner's right
         common.need_case(rl, "confirm", c)
     _RUNS.check(u, "Please wait a minute before working the stage out again.")
     try:
-        return await staging.run(case_id, u)
+        return await staging.run(case_id, u, may_replace_confirmed=consultant)
     except staging.StagingError as e:
         common.fail(e.status, str(e), "staging_" + str(e.status))
 

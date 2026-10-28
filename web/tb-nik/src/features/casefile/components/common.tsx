@@ -43,9 +43,8 @@ export function ago(iso?: string | null): string {
   const d = parseISO(String(iso));
   return isValid(d) ? formatDistanceToNowStrict(d, { addSuffix: true }) : "";
 }
-export function plural(n: number, one: string, many = one + "s"): string {
-  return `${n} ${n === 1 ? one : many}`;
-}
+/** The one plural of the site lives in lib/format (review 9 C, M5). */
+export { plural } from "@/lib/format";
 export function initials(name?: string): string {
   return (name ?? "").split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("") || "?";
 }
@@ -55,6 +54,9 @@ export function modelLabel(m?: string | null): string {
   if (!s) return "";
   if (/gemma/i.test(s)) return "Gemma-4-31B (non-medical)";
   if (/qwen/i.test(s)) return "Qwen3.5-4B (Chinese, non-medical)";
+  // the server's role names when no label is configured (config.models: the reasoner is Gemma, the reader is Qwen)
+  if (/^reasoner$/i.test(s)) return "Gemma-4-31B (non-medical)";
+  if (/^reader$/i.test(s)) return "Qwen3.5-4B (Chinese, non-medical)";
   return s;
 }
 

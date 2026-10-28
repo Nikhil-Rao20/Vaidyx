@@ -78,7 +78,7 @@ def test_scan_output_flags(s, reason):
 @pytest.mark.parametrize("s", [
     "The PET/CT report records stage IIIA (cT2a N2 M0).",
     "Stage IIIA as documented in the PET/CT report.",
-    "The previous tumour board recommended chemoradiotherapy.",
+    'The previous tumour board recorded "chemoradiotherapy recommended".',  # advice words pass only inside a quote (review I1)
     "The treating team planned surgery after neoadjuvant therapy.",
     "Dr. Nair noted ECOG 1.",
     'The report reads "consistent with adenocarcinoma".',
@@ -89,6 +89,48 @@ def test_scan_output_flags(s, reason):
 ])
 def test_scan_output_keeps_in_scope_or_attributed(s):
     assert g.scan_output(s) == []
+
+
+# ---- the whole-run review, I1: advice put as a need, a fitness or a verdict; reported speech excuses it only inside a quote --------
+I1_SENTENCES = ["She needs adjuvant chemotherapy.", "The patient requires a mastectomy.", "Neoadjuvant chemotherapy is advisable.",
+                "Radiotherapy to the chest wall is warranted.", "Proceed with surgery.", "She is fit for surgery.",
+                "Mastectomy would be appropriate.", "This is a metastatic adenocarcinoma.", "The mass is malignant.",
+                "The report records a 3.2 cm mass, so she should undergo surgery first.",
+                "Margins are involved, so re-excision is needed.", "A biopsy is required.", "She should go to theatre next week.",
+                "The previous tumour board recommended chemoradiotherapy."]
+
+
+@pytest.mark.parametrize("s", I1_SENTENCES)
+def test_review_i1_advice_sentences_are_refused(s):
+    assert g.scan_output(s) == [{"sentence": s, "reason": "prescriptive or diagnostic wording"}]
+
+
+@pytest.mark.parametrize("s", ["Margins: involved", "The report records margins involved.", 'The report records "margins involved".',
+                               'The minutes read "re-excision is needed".', "This is a CT record; the Radiology agent can say more.",
+                               "The PET/CT report records stage IIIA (cT2a N2 M0)."])
+def test_review_i1_plain_record_sentences_pass(s):
+    assert g.scan_output(s) == []
+
+
+def test_review_i1_a_guideline_quote_keeps_its_own_reporting_wording():
+    q = "The histopathology report should include the margin status and the number of nodes examined."
+    assert g.scan_output(q) and g.scan_output(q, reference=True) == []  # reference text only, never a statement about the patient
+    assert g.scan_output("Patients should receive adjuvant chemotherapy.", reference=True)  # the base list still holds for references
+
+
+def test_review_i1_words_outside_the_quotes():
+    from tumour_board import agents
+    assert g.outside_quotes("MARGINS - involved, so re-excision is needed.", ["Margins: involved"]).strip() == ", so re-excision is needed."
+    assert g.unquoted_words("Margins are involved, so re-excision is needed.", ["Margins: involved"], agents._DIRECTIVE) == ["excision"]
+    assert g.unquoted_words("Paclitaxel 175 mg/m2 given on 03/03/2026.", ["PACLITAXEL 175 mg/m2 given on 03/03/2026"], agents._DIRECTIVE) == []
+    assert g.unquoted_words("The chart records paclitaxel 175 mg/m2.", ["175 mg/m2"], agents._DIRECTIVE) == ["paclitaxel"]
+
+
+def test_review_i1_the_eval_counts_the_same_advice_words():
+    from tumour_board.eval import agent_live_eval as e
+    for s in I1_SENTENCES[:9]:
+        assert e.ADVICE.search(s), s
+    assert not e.ADVICE.search("The report records margins involved.")
 
 
 def test_scan_output_splits_sentences_and_lines():

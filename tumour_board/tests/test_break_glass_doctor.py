@@ -78,8 +78,8 @@ def test_a_consultant_without_access_opens_the_case_file_read_only_with_a_reason
     assert full.as_(RAO).get("/me").json()["break_glass"] == []
 
     # a second opening renews the one window; closing it shuts the Case File again
-    r = full.as_(MEHTA).post("/break-glass", {"case_id": CASE, "reason": "Board tomorrow (synthetic)", "via": "similar to TB-001"})
-    assert r.status_code == 200 and r.json()["renewed"] is True and r.json()["via"] == "similar to TB-001"
+    r = full.as_(MEHTA).post("/break-glass", {"case_id": CASE, "reason": "Board tomorrow (synthetic)", "via": "similar:TB-001"})
+    assert r.status_code == 200 and r.json()["renewed"] is True and r.json()["via"] == "similar:TB-001"
     ws = access.doctor_windows(MEHTA)
     assert len(ws) == 1 and ws[0]["id"] == w["id"] and ws[0]["reason"] == "Board tomorrow (synthetic)"
     assert kinds(CASE).count("break_glass_doctor") == 2
@@ -164,3 +164,83 @@ def test_the_read_scope_reads_only(people):
     assert access.may_open_with_reason(mehta, c)  # its own window: a new opening renews it
     assert not access.may_open_with_reason(people[VX], c) and not access.may_open_with_reason(people[ANIL], c)
     assert access.scope(people[VX], c) is None  # the Vaidyx admin keeps its own store and route
+
+
+# ---- whole-run review 9 (area A) --------------------------------------------------------------------------------------------------
+
+READ_ONLY_EXPORT = "A Case File opened with a reason is read on screen only."
+
+
+def test_a_window_never_exports_the_case_file(full, tb002):
+    """I1: a doctor's window and the Vaidyx admin's break-glass read on screen only: the four exports answer 403. M5: the Case File view
+    says the reader's real scope."""
+    assert full.as_(MEHTA).post("/break-glass", {"case_id": CASE, "reason": REASON}).status_code == 200
+    assert full.get(f"/cases/{CASE}").json()["access"]["scope"] == access.READ
+    for path in ("/export", "/export/fhir", "/export/registry", "/export/registry?format=csv", "/export/vtb"):
+        r = full.as_(MEHTA).get(f"/cases/{CASE}{path}")
+        assert r.status_code == 403, (path, r.text)
+        assert detail(r) == {"message": READ_ONLY_EXPORT, "code": "break_glass_read_only"}, path
+    assert not any(str(k).startswith("export") for k in kinds(CASE))
+    r = full.as_(VX).post("/break-glass", {"case_id": CASE, "reason": "Support check (synthetic)", "hours": 1})
+    assert r.status_code == 200, r.text
+    assert full.as_(VX).get(f"/cases/{CASE}").status_code == 200
+    r = full.as_(VX).get(f"/cases/{CASE}/export")
+    assert r.status_code == 403 and detail(r)["code"] == "break_glass_read_only"
+    # the owner still exports, and is told it has full scope
+    assert full.as_(RAO).get(f"/cases/{CASE}").json()["access"]["scope"] == access.FULL
+    assert full.as_(RAO).get(f"/cases/{CASE}/export").status_code == 200
+    assert full.as_(RAO).get(f"/cases/{CASE}/export/registry").status_code == 200
+    assert "export_case_file" in kinds(CASE)
+
+
+def test_an_opening_without_an_owner_tells_the_creator_and_the_coordinator(full, people):
+    """I2: no owning department: the creator and the MDT Coordinator role are told (the role's notice names no patient)."""
+    make_case("TB-NIK-B", owner=None)  # created by Dr Rao
+    r = full.as_(MEHTA).post("/break-glass", {"case_id": "TB-NIK-B", "reason": REASON})
+    assert r.status_code == 200, r.text
+    rao = [n for n in notes_for(RAO, "break_glass") if n["case_id"] == "TB-NIK-B"]
+    assert len(rao) == 1 and "SYNTHETIC, Test Patient" in rao[0]["title"]  # the creator opens it: the patient line
+    assert "no owning department yet" in rao[0]["text"]
+    coord = [n for n in notes_for(ANIL, "break_glass") if n["case_id"] == "TB-NIK-B"]
+    assert len(coord) == 1 and coord[0]["to"] == {"role": "coordinator"}
+    assert coord[0]["title"] == "Opened with a reason: Dr Mehta (synthetic) opened Case File TB-NIK-B (Breast cancer)"
+    assert "SYNTHETIC, Test Patient" not in str(coord[0]) and "SYN-900001" not in str(coord[0])
+
+
+def test_an_opening_nobody_would_hear_of_is_refused(full, people):
+    """I2: no owner, no creator to tell and no MDT Coordinator: 409 no_owner and no window."""
+    make_case("TB-NIK-N", owner=None, created_by="")
+    o = org.load()
+    o["users"][ANIL]["disabled"] = True
+    org.save(o, by="test")
+    r = full.as_(MEHTA).post("/break-glass", {"case_id": "TB-NIK-N", "reason": REASON})
+    assert r.status_code == 409, r.text
+    assert detail(r) == {"message": "This Case File has no owning department yet: ask the MDT Coordinator.", "code": "no_owner"}
+    assert access.doctor_window(MEHTA, "TB-NIK-N") is None and "break_glass_doctor" not in kinds("TB-NIK-N")
+
+
+def test_via_is_empty_or_a_similar_case_file_and_the_windows_are_listed(full, tb002):
+    """M1: `via` is "" or "similar:<id>", else 400 bad_via and no window. M2: GET /break-glass lists the doctors' windows too."""
+    for bad in ("similar to TB-001", "anything", "similar:", "similar:TB 001", "similar:" + "x" * 65, "<b>similar:TB-001</b>"):
+        r = full.as_(MEHTA).post("/break-glass", {"case_id": CASE, "reason": REASON, "via": bad})
+        assert r.status_code == 400 and detail(r)["code"] == "bad_via", bad
+    assert access.doctor_windows(MEHTA) == []
+    r = full.as_(MEHTA).post("/break-glass", {"case_id": CASE, "reason": REASON, "via": "similar:TB-001"})
+    assert r.status_code == 200 and r.json()["via"] == "similar:TB-001"
+    for who in (ROOT, AUDIT):
+        b = full.as_(who).get("/break-glass").json()
+        assert [(w["case_id"], w["user"], w["reason"], w["via"]) for w in b["doctors"]] == [(CASE, MEHTA, REASON, "similar:TB-001")], who
+        assert b["doctors"][0]["until"]
+    assert full.as_(MEHTA).get("/break-glass").status_code == 403
+
+
+def test_a_bad_board_record_id_or_body_is_a_400_never_a_500(full, tb002):
+    """M10 (the correct route sits next to the export routes in routes/tumour_board_routes.py): a record id store.safe_id refuses, or a
+    body that is not JSON, answers 400 bad_request."""
+    url = f"/api/tb/cases/{CASE}/board-records/.hidden/correct"
+    r = full.as_(RAO).tc.post(url, json={"changes": {}})
+    assert r.status_code == 400 and detail(r)["code"] == "bad_request", r.text
+    r = full.tc.post(f"/api/tb/cases/{CASE}/board-records/B1/correct", content=b"{not json", headers={"content-type": "application/json"})
+    assert r.status_code == 400 and detail(r)["code"] == "bad_request", r.text
+    r = full.tc.post(f"/api/tb/cases/{CASE}/board-records/Bnope/correct", json={"changes": {}})
+    assert r.status_code == 404  # a well-formed id that is not there stays a 404

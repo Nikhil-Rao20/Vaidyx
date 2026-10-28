@@ -462,9 +462,14 @@ def test_the_intent_choice_and_communication_fields_clear_their_flags(unit_case,
     _no_claims(monkeypatch)
     rec = asyncio.run(postboard.record_decision(unit_case, {**DECISION, "intent": "", "board_date": "2026-10-27"}, "coord"))
     assert "intent_as_recorded" in _comm(rec)
+    # the intent is part of the decision: a correction with a reason sets it (the whole-run review, I4), never the communication form
+    with pytest.raises(ValueError, match="correction of the record"):
+        postboard.update_communication(unit_case, rec["id"], {"intent": "palliative"}, user="coord")
+    out = postboard.correct_record(unit_case, rec["id"], {"intent": "palliative"}, "coord", "Coord", "The board said palliative")
+    assert out["intent"] == out["intent_as_recorded"] == "palliative" and out["version"] == 2
     out = postboard.update_communication(unit_case, rec["id"], {"intent": "palliative", "key_worker": "Sr Meena, 98450 00000", "trial_considered": "no",
                                                                  "consent_recorded": "yes", "gp_informed_date": "29/10/2026", "trial_name": ""}, user="coord")
-    assert out["intent"] == out["intent_as_recorded"] == "palliative" and out["gp_informed_date"] == "2026-10-29" and out.get("version", 1) == 1
+    assert out["intent"] == out["intent_as_recorded"] == "palliative" and out["gp_informed_date"] == "2026-10-29" and out["version"] == 2
     assert _comm(out) == {"patient_informed_date"}
     # a date the patient was told before the board date is refused unless a reason is given
     with pytest.raises(ValueError, match="earlier than the board date"):
@@ -710,8 +715,43 @@ def test_a_communication_change_the_rounds_show_writes_the_case_summary_again(un
     monkeypatch.setattr(case_summary, "schedule", lambda cid, trig, user="": asked.append((cid, trig, user)))
     postboard.update_communication(unit_case, rec["id"], {"key_worker": "Sr Meena"}, user="coord")
     assert asked == []  # the key worker is not in the board rounds: the status refresh is enough
-    postboard.update_communication(unit_case, rec["id"], {"intent": "palliative"}, user="coord")
+    postboard.update_communication(unit_case, rec["id"], {"trial_considered": "no"}, user="coord")
     assert asked == [(unit_case, {"kind": "communication", "record": rec["id"]}, "coord")]
+
+
+# ---- the whole-run review, I4: the intent changes only through a correction (a reason and a new version) ------------------------------
+
+def test_review_i4_an_intent_change_through_the_communication_route_is_refused(tc):
+    from datetime import date
+    from tumour_board import store
+    owned("TB-002")
+    rec = asyncio.run(postboard.record_decision("TB-002", {**DECISION, "board_date": date.today().isoformat()}, "anil"))
+    url = f"/cases/TB-002/board-records/{rec['id']}/communication"
+    r = As(tc, "anil").post(url, json={"intent_as_recorded": "palliative", "key_worker": "Sr Meena"})  # the board tab's old key
+    assert r.status_code == 400 and postboard.INTENT_BY_CORRECTION in r.text and "\u2014" not in postboard.INTENT_BY_CORRECTION
+    r = As(tc, "anil").post(url, json={"intent": "palliative"})
+    assert r.status_code == 400
+    b = next(x for x in store.get_state("TB-002")["board_records"] if x["id"] == rec["id"])
+    assert b["intent"] == "curative" and b.get("key_worker") != "Sr Meena" and not b.get("communication_history")  # nothing was written
+    # the same intent as stored (the board tab sends it with every save), or none, is accepted and changes nothing
+    r = As(tc, "anil").post(url, json={"intent_as_recorded": "curative", "key_worker": "Sr Meena"})
+    assert r.status_code == 200, r.text
+    assert r.json()["record"]["intent"] == "curative" and r.json()["record"].get("version", 1) == 1
+    r = As(tc, "anil").post(url, json={"intent_as_recorded": "", "key_worker": "Sr Meena, 98450 00000"})
+    assert r.status_code == 200 and r.json()["record"]["intent"] == "curative"
+    hist = r.json()["record"]["communication_history"]
+    assert hist[0]["changed"] == {"key_worker": {"old": rec.get("key_worker"), "new": "Sr Meena"}}  # the old value is kept beside the new
+    assert hist[1]["changed"] == {"key_worker": {"old": "Sr Meena", "new": "Sr Meena, 98450 00000"}}
+    assert "intent" not in postboard.COMMUNICATION_FIELDS and "intent_as_recorded" not in postboard.COMMUNICATION_FIELDS
+    # a correction with a reason makes a new version that keeps the old intent
+    r = As(tc, "priya").post(f"/cases/TB-002/board-records/{rec['id']}/correct", json={"changes": {"intent": "palliative"}})
+    assert r.status_code == 400  # a reason is needed
+    r = As(tc, "priya").post(f"/cases/TB-002/board-records/{rec['id']}/correct", json={"changes": {"intent": "palliative"}, "reason": "Metastases on the PET-CT"})
+    assert r.status_code == 200, r.text
+    out = r.json()["record"]
+    assert out["intent"] == out["intent_as_recorded"] == "palliative" and out["version"] == 2
+    v = out["versions"][-1]
+    assert v["reason"] == "Metastases on the PET-CT" and {"key": "intent", "old": "curative", "new": "palliative"} in v["changed"]
 
 
 def test_the_inform_the_patient_action_is_of_kind_communication(unit_case, monkeypatch):

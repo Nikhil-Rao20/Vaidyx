@@ -3,9 +3,11 @@ the Origin check and the idle rule of the Tumour Board router; each also needs a
 audio service (tumour_board/audio_proxy.py); the browser never does. Speech to text only fills the person's own text box; text to speech
 reads a saved statement by reference (the screen's own check first) or text already on screen (at most 1,000 characters). Rate limits per
 user: status 60 a minute, dictation 40, saved statements 240 sentences and on-screen text 60 per 10 minutes. Audited without content.
-Everything degrades to text: voice off, down or busy is a plain refusal the interface shows beside the text box."""
+Everything degrades to text: voice off, down or busy is a plain refusal the interface shows beside the text box. The recording is
+read and parsed in memory only (_form_in_memory), never spooled to a temporary file."""
 from fastapi import Request
 from fastapi.responses import Response
+from python_multipart.multipart import MultipartParser, parse_options_header
 
 from tumour_board import audio_proxy as ap
 
@@ -52,6 +54,77 @@ async def _capped_body(request, cap: int) -> bytes:
     return b"".join(chunks)
 
 
+class _Part:
+    __slots__ = ("name", "filename", "ctype", "data")
+
+    def __init__(self):
+        self.name, self.filename, self.ctype, self.data = None, None, "", bytearray()
+
+
+def _form_in_memory(body: bytes, content_type: str, max_files: int = 1, max_fields: int = 10) -> tuple[dict, dict | None]:
+    """The multipart form of /audio/stt parsed from the capped body in memory (python-multipart's MultipartParser with callbacks into
+    a bytearray per part): Starlette's request.form() spools a file part over 1 MiB into a temporary file, and the audio is never
+    stored (D1; review 9 D, S1). Returns ({field: text}, {"data", "content_type"} of the one file, or None). ValueError when the form
+    cannot be read, or has more than `max_files` files or `max_fields` fields."""
+    _, params = parse_options_header(content_type)
+    boundary = params.get(b"boundary")
+    if not boundary:
+        raise ValueError("no boundary")
+    charset = params.get(b"charset", b"utf-8").decode("latin-1")
+    parts: list[_Part] = []
+    cur = {"part": _Part(), "h_name": b"", "h_value": b"", "headers": {}}
+    ended = []
+
+    def on_part_begin():
+        cur["part"], cur["headers"] = _Part(), {}
+
+    def on_part_data(data, start, end):
+        cur["part"].data += data[start:end]
+
+    def on_part_end():
+        parts.append(cur["part"])
+
+    def on_header_field(data, start, end):
+        cur["h_name"] += data[start:end]
+
+    def on_header_value(data, start, end):
+        cur["h_value"] += data[start:end]
+
+    def on_header_end():
+        cur["headers"][cur["h_name"].lower()] = cur["h_value"]
+        cur["h_name"], cur["h_value"] = b"", b""
+
+    def on_headers_finished():
+        _, opts = parse_options_header(cur["headers"].get(b"content-disposition", b""))
+        if b"name" not in opts:
+            raise ValueError("a part without a name")
+        part = cur["part"]
+        part.name = opts[b"name"].decode(charset, "replace")
+        if b"filename" in opts:
+            part.filename = opts[b"filename"].decode(charset, "replace")
+            part.ctype = cur["headers"].get(b"content-type", b"").decode("latin-1", "replace")
+        if sum(1 for p in parts if p.filename is not None) + (part.filename is not None) > max_files:
+            raise ValueError("too many files")
+        if sum(1 for p in parts if p.filename is None) + (part.filename is None) > max_fields:
+            raise ValueError("too many fields")
+
+    parser = MultipartParser(boundary, {"on_part_begin": on_part_begin, "on_part_data": on_part_data, "on_part_end": on_part_end,
+                                        "on_header_field": on_header_field, "on_header_value": on_header_value, "on_header_end": on_header_end,
+                                        "on_headers_finished": on_headers_finished, "on_end": lambda: ended.append(True)},
+                             max_size=len(body) or 1)
+    parser.write(body)
+    parser.finalize()
+    if not ended:
+        raise ValueError("the form ended early")
+    fields, file = {}, None
+    for p in parts:
+        if p.filename is None:
+            fields.setdefault(p.name, bytes(p.data).decode(charset, "replace"))
+        elif file is None:
+            file = {"name": p.name, "data": bytes(p.data), "content_type": p.ctype}
+    return fields, file
+
+
 @router.post("/audio/stt")
 async def audio_stt(request: Request):
     """Multipart {audio, screen, case_id?, context?, engine?} -> {text, segments, duration, engine, took_ms, code}. At most 4 MiB and one
@@ -70,23 +143,19 @@ async def audio_stt(request: Request):
             common.fail(400, "The request has a bad Content-Length.", "bad_request")
         if too_big:
             common.fail(413, ap.TOO_BIG, "too_big")
-    request._body = await _capped_body(request, cap)  # Starlette's form() then reads this copy
-    try:
-        form = await request.form(max_files=1, max_fields=10)
+    body = await _capped_body(request, cap)
+    try:  # parsed in memory: never request.form(), which spools a part over 1 MiB to a temporary file (S1)
+        form, audio = _form_in_memory(body, request.headers.get("content-type") or "")
     except Exception:
         common.fail(400, "The form upload could not be read.", "bad_request")
-    try:
-        audio = form.get("audio")
-        if audio is None or isinstance(audio, str) or not hasattr(audio, "read"):
-            common.fail(400, "Attach the recording.", "bad_request")
-        data = await audio.read()
-        ctype = str(getattr(audio, "content_type", "") or "")
-        screen = str(form.get("screen") or "")
-        case_id = str(form.get("case_id") or "").strip()
-        context = str(form.get("context") or "")
-        engine = "parakeet" if str(form.get("engine") or "") == "parakeet" else "whisper"
-    finally:
-        await form.close()
+    del body
+    if audio is None or audio["name"] != "audio":
+        common.fail(400, "Attach the recording.", "bad_request")
+    data, ctype = audio["data"], str(audio["content_type"] or "")
+    screen = str(form.get("screen") or "")
+    case_id = str(form.get("case_id") or "").strip()
+    context = str(form.get("context") or "")
+    engine = "parakeet" if str(form.get("engine") or "") == "parakeet" else "whisper"
     if not ap.valid_screen(screen):
         common.fail(400, "Say which box the recording is for.", "bad_screen")
     if len(data) > ap.STT_MAX_BYTES:
@@ -100,6 +169,7 @@ async def audio_stt(request: Request):
     except ap.ServiceError as e:
         _service_failed(e)
     seconds = out.get("duration")
+    case_id = ap.audit_case_id({"case_id": case_id}) if case_id else ""  # the stored id, never the field as typed (whole-run review 9, M7)
     ap.audit_transcribed(u, screen, case_id, seconds, out.get("engine") or engine, out.get("took_ms"), len(out.get("text") or ""))
     return out
 

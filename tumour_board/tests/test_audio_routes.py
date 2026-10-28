@@ -245,12 +245,67 @@ def test_stt_case_id_allowed_writes_both_lines(tc, stub):
     assert SPOKEN not in json.dumps(store.read_audit(CASE))
 
 
+def test_stt_audits_the_stored_id_never_the_field_as_typed(tc, stub):
+    """Whole-run review 9, M7: "TB 002" reaches the TB-002 folder through store.safe_id; the lines carry the id stored in it."""
+    r = stt(tc, "priya", case_id=" TB 002 ", screen="decision", context="decision")
+    assert r.status_code == 200, r.text
+    c = case_lines(CASE, "audio_transcribed")
+    assert len(c) == 1 and org_lines("audio_transcribed")[0]["case_id"] == CASE
+
+
 def test_stt_size_cap_before_any_call(tc, stub):
     r = stt(tc, "priya", audio=b"\0" * (4 * 1024 * 1024 + 1))
     assert r.status_code == 413 and r.json()["detail"]["code"] == "too_big"
     r = stt(tc, "priya", audio=b"\0" * (4 * 1024 * 1024 + 100 * 1024))  # refused on the Content-Length
     assert r.status_code == 413 and r.json()["detail"]["code"] == "too_big"
     assert stub.calls == []
+
+
+def test_stt_keeps_a_3_mib_recording_in_memory(tc, stub, monkeypatch):
+    """Review 9 D, S1: the form is parsed from the capped body in memory; nothing spools to a temporary file, and Starlette's
+    request.form() (which spools a part over 1 MiB) is never called."""
+    import tempfile
+
+    from starlette.requests import Request as StarletteRequest
+
+    def refuse(*a, **k):
+        raise AssertionError("the recording touched the disk")
+    monkeypatch.setattr(tempfile.SpooledTemporaryFile, "rollover", refuse)
+    monkeypatch.setattr(tempfile, "mkstemp", refuse)
+    monkeypatch.setattr(tempfile, "NamedTemporaryFile", refuse)
+    monkeypatch.setattr(tempfile, "TemporaryFile", refuse)
+    monkeypatch.setattr(StarletteRequest, "form", refuse)
+    seen = []
+    orig = ap.transcribe
+
+    async def spy(data, ctype, engine, context):
+        seen.append((data, ctype, engine, context))
+        return await orig(data, ctype, engine, context)
+    monkeypatch.setattr(ap, "transcribe", spy)
+    audio = bytes(range(256)) * (3 * 1024 * 4)  # 3 MiB
+    r = stt(tc, "priya", audio=audio, engine="parakeet", context="question", case_id=CASE)
+    assert r.status_code == 200 and r.json()["text"] == SPOKEN
+    assert len(seen) == 1 and seen[0][0] == audio and seen[0][1:] == ("audio/webm", "parakeet", "question")
+
+
+def test_stt_form_in_memory_refuses_what_form_refused(tc, stub):
+    As(tc, "priya")._c()
+    two = [("audio", ("a.webm", b"x", "audio/webm")), ("audio2", ("b.webm", b"y", "audio/webm"))]
+    r = tc.post("/api/tb/audio/stt", files=two, data={"screen": "ask"})
+    assert r.status_code == 400 and r.json()["detail"]["message"] == "The form upload could not be read."
+    r = tc.post("/api/tb/audio/stt", files={"audio": ("a.webm", b"x", "audio/webm")}, data={f"f{i}": "1" for i in range(11)})
+    assert r.status_code == 400 and r.json()["detail"]["message"] == "The form upload could not be read."
+    body = b'--XyZ\r\nContent-Disposition: form-data; name="audio"; filename="a.webm"\r\nContent-Type: audio/webm\r\n\r\nabc'
+    r = tc.post("/api/tb/audio/stt", content=body, headers={"content-type": "multipart/form-data; boundary=XyZ"})
+    assert r.status_code == 400 and r.json()["detail"]["message"] == "The form upload could not be read."
+    r = tc.post("/api/tb/audio/stt", content=b"--XyZ--\r\n", headers={"content-type": "multipart/form-data"})
+    assert r.status_code == 400
+    assert stub.calls == []
+    fields, file = api_audio._form_in_memory(
+        b'--B\r\nContent-Disposition: form-data; name="screen"\r\n\r\nask\r\n'
+        b'--B\r\nContent-Disposition: form-data; name="audio"; filename="d.webm"\r\nContent-Type: audio/webm\r\n\r\n\x00\x01\r\n--B--\r\n',
+        "multipart/form-data; boundary=B")
+    assert fields == {"screen": "ask"} and file == {"name": "audio", "data": b"\x00\x01", "content_type": "audio/webm"}
 
 
 def test_stt_needs_a_form_upload_and_a_screen(tc, stub):
@@ -613,3 +668,19 @@ def test_meeting_answer_sentence_by_index(tc, stub):
     assert r.status_code == 200 and r.headers["x-parts"] == "1" and json.loads(stub.calls[-1].content)["text"] == "HER2 is 3+ on IHC."
     assert tts(tc, "priya", {"ref": {**ref, "index": 9}, "screen": "meeting"}).status_code == 404
     assert org_lines("audio_spoken")[-1]["ref"] == f"meeting_answer:{mid}:Q1:1"
+
+
+def test_the_audio_url_must_be_loopback(caplog):
+    """Review 9 D, M3: TB_AUDIO_URL is used only as http://127.0.0.1:<port> or http://localhost:<port>; anything else turns voice off
+    with one log line that names no value (the recordings and the token never leave the machine)."""
+    import logging
+    for ok in ("http://127.0.0.1:7120", "http://localhost:7120/", " http://127.0.0.1:65535 "):
+        assert config.loopback_audio_url(ok) == ok.strip().rstrip("/")
+    assert config.loopback_audio_url("") == "" and config.loopback_audio_url(None) == ""
+    caplog.set_level(logging.WARNING, logger="tumour_board.config")
+    for bad in ("http://10.0.0.5:7120", "https://127.0.0.1:7120", "http://127.0.0.1", "http://127.0.0.1:7120/stt", "http://127.0.0.1.evil.example:7120",
+                "http://user@127.0.0.1:7120", "http://127.0.0.1:0", "http://127.0.0.1:99999", "http://[::1]:7120", "127.0.0.1:7120"):
+        caplog.clear()
+        assert config.loopback_audio_url(bad) == "", bad
+        lines = [r.getMessage() for r in caplog.records]
+        assert lines == ["TB_AUDIO_URL is not http://127.0.0.1:<port> or http://localhost:<port>; voice is off"]  # the fixed line, never the value

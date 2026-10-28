@@ -258,3 +258,53 @@ def test_listing_after_intake_refuses_the_same_cancer_but_not_the_file_itself(ap
     assert r.status_code == 200, r.text
     r = app.as_(ANIL).post("/cases/TB-DUP-A/listing", json={"protocol": "breast", "setting": "locally_advanced"})  # the file itself is never its own duplicate
     assert r.status_code == 200, r.text
+
+
+# ---- whole-run review 9 (area A) --------------------------------------------------------------------------------------------------
+
+def test_a_rejected_ask_to_join_names_no_patient_to_the_asker(app, people):
+    """S1: the asker cannot open the Case File, so the rejection names it by id and cancer only: no name, age / sex or UHID."""
+    assert from_his(app, RAO, case_id="TB-DUP-A").status_code == 200
+    assert app.as_(RAVI).post("/case-join/ask", json={"case_id": "TB-DUP-A"}).status_code == 200
+    assert app.as_(RAO).post(f"/cases/TB-DUP-A/team/pending/{RAVI}/reject", json={"note": "not for now"}).status_code == 200
+    r = app.as_(RAVI).get("/notifications")
+    assert r.status_code == 200, r.text
+    mine = [n for n in r.json()["notifications"] if n["case_id"] == "TB-DUP-A"]
+    assert len(mine) == 1 and mine[0]["title"] == "Your request to join the team of Case File TB-DUP-A (Breast cancer) was not approved"
+    for secret in (PAT["name"], "Anitha", UHID, "46 Y / F"):
+        assert secret not in r.text, secret
+    # the person who gains access is still told whose file it is
+    assert app.as_(MEHTA).post("/case-join/ask", json={"case_id": "TB-DUP-A"}).status_code == 200
+    assert app.as_(RAO).post(f"/cases/TB-DUP-A/team/pending/{MEHTA}/approve", json={}).status_code == 200
+    ok = [n for n in notify.for_roles(org.roles(MEHTA)) if n["case_id"] == "TB-DUP-A" and n["kind"] == "team_changed"]
+    assert ok and UHID in ok[0]["title"]
+    # removed from the team: no access any more, so no patient detail either
+    assert app.as_(RAO).delete(f"/cases/TB-DUP-A/team/residents/{MEHTA}").status_code == 200
+    gone = [n for n in notify.for_roles(org.roles(MEHTA)) if n["case_id"] == "TB-DUP-A" and n.get("status") == "removed"]
+    assert gone and gone[0]["title"] == "You are no longer on the team of Case File TB-DUP-A (Breast cancer)"
+
+
+def test_case_name_for_without_a_cancer(data_root, people):
+    c = make_case("TB-DUP-Z", patient=dict(util.PATIENT))
+    assert team.case_name_plain({"case_id": "TB-DUP-Z"}) == "Case File TB-DUP-Z (cancer not chosen)"
+    assert team.case_name_for(c, "nobody-at-all").startswith("Case File TB-DUP-Z (")
+
+
+def test_patient_look_up_audits_the_ids_returned_never_the_identifier(app, people):
+    """I3: the organisation line keeps the ids returned; each Case File returned holds its own chained line with who looked."""
+    assert from_his(app, RAO, case_id="TB-DUP-A").status_code == 200
+    assert from_his(app, MEHTA, protocol="lung_nsclc", setting="non_metastatic", case_id="TB-DUP-B").status_code == 200
+    assert app.as_(MEHTA).get("/patient-case-files", params={"identifier": UHID}).status_code == 200
+    ev = [e for e in org.read_audit(50) if e["kind"] == "patient_case_files_checked"]
+    assert ev[0]["how"] == "identifier" and sorted(ev[0]["case_ids"]) == ["TB-DUP-A", "TB-DUP-B"] and ev[0]["by"] == MEHTA
+    for cid in ("TB-DUP-A", "TB-DUP-B"):
+        lines = [e for e in store.read_audit(cid) if e["kind"] == "patient_case_files_checked"]
+        assert len(lines) == 1 and lines[0]["by"] == MEHTA and lines[0]["how"] == "identifier"
+        assert "VXH" not in str(lines[0])
+    assert all("VXH" not in str(e) for e in ev)
+    # the Overview's form: the other Case Files found, with the file it was asked from
+    assert app.as_(RAO).get("/patient-case-files", params={"case_id": "TB-DUP-A"}).status_code == 200
+    ev = [e for e in org.read_audit(50) if e["kind"] == "patient_case_files_checked"]
+    assert ev[0]["how"] == "case_id" and ev[0]["case_ids"] == ["TB-DUP-B"] and ev[0]["from_case"] == "TB-DUP-A"
+    line = [e for e in store.read_audit("TB-DUP-B") if e["kind"] == "patient_case_files_checked"][-1]
+    assert line["by"] == RAO and line["how"] == "case_id" and line["from_case"] == "TB-DUP-A"

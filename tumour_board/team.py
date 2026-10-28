@@ -19,7 +19,7 @@ Every change is audited in the Case File; the people concerned are told in-app (
 import hmac, secrets
 from datetime import date, datetime, timedelta
 
-from . import access, config, notify, org, profiles, store
+from . import access, config, notify, org, profiles, protocol, store
 
 URGENCY_LEVELS = (1, 2, 3, 4, 5)
 URGENCY_LABELS = {1: "Not urgent", 2: "Routine", 3: "Soon", 4: "Urgent", 5: "Most urgent"}
@@ -76,6 +76,24 @@ def patient_line(case: dict) -> str:
     if p.get("mrn"):
         parts.append(f"UHID {p['mrn']}")
     return ", ".join(parts)
+
+
+def case_name_for(case: dict, user: str) -> str:
+    """How a notice to one person names the Case File: the patient line and the id for someone who can open it, else the id and the
+    cancer only, never a name, age, sex or UHID (whole-run review 9, S1: a rejected "Ask to join" or a removal reaches a person without
+    access)."""
+    cid = str((case or {}).get("case_id") or "")
+    try:
+        ok = bool(user) and access.scope(org.roles(user), case) is not None
+    except Exception:  # the organisation file could not be read: name the file without the patient
+        ok = False
+    return f"{patient_line(case)} ({cid})" if ok else case_name_plain(case)
+
+
+def case_name_plain(case: dict) -> str:
+    """"Case File <id> (<cancer>)" without any patient detail."""
+    cid = str((case or {}).get("case_id") or "")
+    return f"Case File {cid} ({protocol.case_label(case) or 'cancer not chosen'})"
 
 
 def owner_consultants(case: dict) -> list[str]:
@@ -344,7 +362,7 @@ def approve_pending(case_id: str, user: str, by: str, note: str = "") -> dict:
         t["residents"] = [x for x in t["residents"] if x.get("user") != user] + [rec]
         store.save_case(c)
         store.audit(case_id, {"kind": "resident_approved", "by": by, "user": user, "note": _note(note)})
-    _tell({"user": user}, "team_changed", case_id, f"You are on the team of {patient_line(c)} ({case_id})",
+    _tell({"user": user}, "team_changed", case_id, f"You are on the team of {case_name_for(c, user)}",
           f"{profiles.display_name(by)} approved your request." + (f" Note: {_note(note)}" if note else ""), status="approved", by=by)
     return rec
 
@@ -355,7 +373,7 @@ def reject_pending(case_id: str, user: str, by: str, note: str = "") -> dict:
     p = _pop_pending(t, user)
     store.save_case(c)
     store.audit(case_id, {"kind": "join_rejected", "by": by, "user": user, "note": _note(note)})
-    _tell({"user": user}, "team_changed", case_id, f"Your request to join the team of {patient_line(c)} ({case_id}) was not approved",
+    _tell({"user": user}, "team_changed", case_id, f"Your request to join the team of {case_name_for(c, user)} was not approved",
           f"{profiles.display_name(by)} did not approve the request." + (f" Note: {_note(note)}" if note else ""), status="rejected", by=by)
     return p
 
@@ -379,7 +397,7 @@ def add_resident(case_id: str, user: str, by: str, end_date: str = "") -> dict:
     t["pending"] = [x for x in t["pending"] if x.get("user") != user]
     store.save_case(c)
     store.audit(case_id, {"kind": "resident_added", "by": by, "user": user, "end_date": ed})
-    _tell({"user": user}, "team_changed", case_id, f"You are on the team of {patient_line(c)} ({case_id})", f"Added by {profiles.display_name(by)}.", status="added", by=by)
+    _tell({"user": user}, "team_changed", case_id, f"You are on the team of {case_name_for(c, user)}", f"Added by {profiles.display_name(by)}.", status="added", by=by)
     return rec
 
 
@@ -393,7 +411,7 @@ def remove_resident(case_id: str, user: str, by: str, reason: str = "") -> dict:
         store.save_case(c)
         store.audit(case_id, {"kind": "member_removed", "by": by, "user": user, "reason": m["removed"]["reason"]})
         if by != user:
-            _tell({"user": user}, "team_changed", case_id, f"You are no longer on the team of {patient_line(c)} ({case_id})",
+            _tell({"user": user}, "team_changed", case_id, f"You are no longer on the team of {case_name_for(c, user)}",
                   f"Removed by {profiles.display_name(by)}." + (f" Reason: {m['removed']['reason']}" if reason else ""), status="removed", by=by)
         return m
     x = next((x for x in t["residents"] if x.get("user") == user and not x.get("removed")), None)
@@ -408,7 +426,7 @@ def remove_resident(case_id: str, user: str, by: str, reason: str = "") -> dict:
     store.save_case(c)
     store.audit(case_id, {"kind": "resident_removed", "by": by, "user": user, "reason": x["removed"]["reason"]})
     if by != user:
-        _tell({"user": user}, "team_changed", case_id, f"You are no longer on the team of {patient_line(c)} ({case_id})",
+        _tell({"user": user}, "team_changed", case_id, f"You are no longer on the team of {case_name_for(c, user)}",
               f"Removed by {profiles.display_name(by)}." + (f" Reason: {x['removed']['reason']}" if reason else ""), status="removed", by=by)
     return x
 
@@ -489,6 +507,14 @@ def break_glass_doctor(user: str, roles: dict, case_id: str, reason: str, via: s
     if not access.may_open_with_reason(roles, c):
         raise TeamError("Only a doctor placed in a department (a consultant or a resident) opens a Case File with a reason.", 403, "not_placed")
     try:
+        via = access.clean_via(via)
+    except access.AccessError as e:
+        raise TeamError(str(e), e.status, e.code or "bad_via")
+    owned = bool(access.owner(c))
+    fallback = [] if owned else _no_owner_recipients(c, user)  # whole-run review 9, I2: someone is always told, or the file stays shut
+    if not owned and not fallback:
+        raise TeamError("This Case File has no owning department yet: ask the MDT Coordinator.", 409, "no_owner")
+    try:
         w = access.open_doctor_window(user, case_id, reason, via)
     except access.AccessError as e:
         raise TeamError(str(e), e.status, e.code or "bad_reason")
@@ -496,10 +522,35 @@ def break_glass_doctor(user: str, roles: dict, case_id: str, reason: str, via: s
                           "window": w["id"], "renewed": w["renewed"]})
     org.audit("break_glass_doctor", user, case_id=case_id, reason=w["reason"], via=w["via"], until=w["until"])
     name = profiles.display_name(user)
-    tell_consultants(c, "break_glass", f"Opened with a reason: {name} opened the Case File of {patient_line(c)} ({case_id})",
-                     f"{name} reads this Case File read-only until {_dmy_hm(w['until'])}. Reason: {w['reason']}"
-                     + (f" ({w['via']})" if w["via"] else ""), user=user, until=w["until"], by=user, via=w["via"], read_only=True)
+    text = (f"{name} reads this Case File read-only until {_dmy_hm(w['until'])}. Reason: {w['reason']}"
+            + (f" ({w['via']})" if w["via"] else ""))
+    extra = {"user": user, "until": w["until"], "by": user, "via": w["via"], "read_only": True}
+    if owned:
+        tell_consultants(c, "break_glass", f"Opened with a reason: {name} opened the Case File of {patient_line(c)} ({case_id})", text, **extra)
+        return w
+    for to in fallback:  # no owning department: the creator and the MDT Coordinator role (the role's notice names no patient)
+        named = case_name_for(c, to["user"]) if "user" in to else case_name_plain(c)
+        _tell(to, "break_glass", case_id, f"Opened with a reason: {name} opened {named}",
+              text + " This Case File has no owning department yet.", **extra)
     return w
+
+
+def _no_owner_recipients(case: dict, user: str) -> list[dict]:
+    """Who hears of an opening with a reason on a Case File without an owning department: its creator (a placed, active login other
+    than the doctor opening it) and the MDT Coordinator role when at least one active login holds it. Empty when nobody would read it."""
+    out = []
+    creator = str(case.get("created_by") or "").strip()
+    if creator and creator != user:
+        try:
+            cr = org.roles(creator)
+        except Exception:
+            cr = {}
+        if cr.get("known") and not cr.get("disabled") and not cr.get("expired"):
+            out.append({"user": creator})
+    users = org.load().get("users") or {}
+    if any(isinstance(v, dict) and v.get("coordinator") and not v.get("disabled") for v in users.values()):
+        out.append({"role": "coordinator"})
+    return out
 
 
 def close_break_glass_doctor(user: str, case_id: str) -> dict:

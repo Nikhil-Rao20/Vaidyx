@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MicButton } from "@/components/MicButton";
 import { cn } from "@/lib/utils";
+import { consultantTitle } from "@/lib/format";
 import { LoadingButton, errorText, fmtDate, niceTitle, plural, screenNote } from "../components/common";
 import { Card } from "./Overview";
 import type { MissingItem, Steps } from "./types";
@@ -110,7 +111,7 @@ export function PreAuthStep({ steps, h, canAct, resident, consultantName, onNext
             {canAct ? (
               <div className="flex flex-wrap items-center gap-2 border-t border-border py-2.5">
                 <Button onClick={() => h.sendGroup(g.items, key)} disabled={pending || !g.department.name} data-testid="send-request">
-                  <Send className="size-4" />{resident ? `Send to Dr ${consultantName} for sign-off` : `Send request to ${g.department.label}`}
+                  <Send className="size-4" />{resident ? `Send to ${consultantTitle(consultantName)} for sign-off` : `Send request to ${g.department.label}`}
                 </Button>
                 {!resident && g.items[0]?.department?.action_id ? <button type="button" className="text-sm text-link hover:underline" onClick={() => h.changeMessage(g.items[0])} disabled={pending}>Change the message</button> : null}
               </div>

@@ -9,16 +9,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Bot, Loader2, SendHorizontal } from "lucide-react";
+import { ArrowLeft, Bot, CheckCheck, Flag, Loader2, SendHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MicButton } from "@/components/MicButton";
 import { SpeakButton } from "@/components/SpeakButton";
-import { askAgentOld, getHelperChat, getHelpers, getRoles, notBuiltYet, postHelperChat, prepareAllHelpers, prepareHelper, streamAgentOld } from "../api";
+import { drName, plural } from "@/lib/format";
+import { askAgentOld, getHelperChat, getHelpers, getRoles, notBuiltYet, postHelperChat, prepareAllHelpers, prepareHelper, reviewArtefact, streamAgentOld } from "../api";
 import { useJob } from "../hooks";
 import type { CaseFile, Helper, HelperMessage } from "../types";
 import type { SourceTarget } from "./SourceViewer";
-import { ErrorState, LoadingButton, NotYetState, SkeletonLines, StatusChip, docTitleOf, errorText, fmtDate, fmtDateTime, indianDates, modelLabel } from "./common";
+import { ErrorState, LoadingButton, NotYetState, SkeletonLines, StatusChip, docTitleOf, errorText, fmtDate, fmtDateTime, indianDates, modelLabel, useAnnounce } from "./common";
 import { cn } from "@/lib/utils";
 
 const MAX_Q = 1000;
@@ -34,7 +35,16 @@ const ANSWER_FOOTER = "AI agent, support only. From the records and guidelines o
 export const agentName = (h: Pick<Helper, "role" | "label" | "department">) => NAMES[h.role] ?? h.department ?? h.label;
 /** "Radiology, AI agent". */
 export const agentTitle = (h: Pick<Helper, "role" | "label" | "department" | "title">) => h.title || `${agentName(h)}, AI agent`;
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+/** Who reviewed a brief: "Dr <display name>" when the server sends one, else the login. */
+export const briefReviewer = (b: Pick<Helper["brief"], "reviewed_by" | "reviewed_by_name">) => (b.reviewed_by_name ? drName(b.reviewed_by_name) : b.reviewed_by ?? "");
+
+/** The brief's review chip: "Reviewed by Dr <name>", "Flagged for correction", or "AI draft, not reviewed". */
+export function BriefReviewChip({ brief }: { brief: Helper["brief"] }) {
+  const chip = brief.reviewed_by || brief.review === "reviewed" ? <StatusChip kind="ok" icon={CheckCheck}>{brief.reviewed_by ? `Reviewed by ${briefReviewer(brief)}` : "Reviewed"}</StatusChip>
+    : brief.review === "flagged" ? <StatusChip kind="bad" icon={Flag}>Flagged for correction</StatusChip>
+    : <StatusChip kind="review" icon={Bot}>AI draft, not reviewed</StatusChip>;
+  return <span className="inline-flex" data-testid="brief-review">{chip}</span>;
+}
 /** The counts of the badges (the server's, or worked out from the brief on an older server). */
 export function agentCounts(h: Helper) {
   const live = h.brief.status === "ready" || h.brief.status === "stale";
@@ -132,7 +142,7 @@ export function HelpersPanel({ caseId, cf, onOpenSource, onCaseChanged }: { case
   let body;
   if (isLoading) body = <SkeletonLines n={6} />;
   else if (error) body = <ErrorState error={error} retry={() => void refetch()} compact />;
-  else if (h) body = <HelperDetail caseId={caseId} helper={h} notBuilt={notBuilt} docs={cf.documents} onBack={back} onOpenSource={onOpenSource} onChanged={async () => { await refetch(); await onCaseChanged(); }} />;
+  else if (h) body = <HelperDetail caseId={caseId} helper={h} notBuilt={notBuilt} docs={cf.documents} canReview={!!cf.permissions?.review} onBack={back} onOpenSource={onOpenSource} onChanged={async () => { await refetch(); await onCaseChanged(); }} />;
   else body = (
     <div className="space-y-3" data-testid="helpers-list">
       {notBuilt ? <NotYetState what="Specialty agent briefs" fallback="Showing the briefs the old route already prepared; Prepare uses the old helper stream." /> : null}
@@ -164,8 +174,14 @@ export function HelpersPanel({ caseId, cf, onOpenSource, onCaseChanged }: { case
   return <div ref={box} className="scroll-mt-24">{body}</div>;
 }
 
-function HelperDetail({ caseId, helper, notBuilt, docs, onBack, onOpenSource, onChanged }: { caseId: string; helper: Helper; notBuilt: boolean; docs: CaseFile["documents"]; onBack: () => void; onOpenSource: (t: SourceTarget) => void; onChanged: () => Promise<void> }) {
+function HelperDetail({ caseId, helper, notBuilt, docs, canReview, onBack, onOpenSource, onChanged }: { caseId: string; helper: Helper; notBuilt: boolean; docs: CaseFile["documents"]; canReview: boolean; onBack: () => void; onOpenSource: (t: SourceTarget) => void; onChanged: () => Promise<void> }) {
   const qc = useQueryClient();
+  const [announce, liveNode] = useAnnounce();
+  // Human oversight (review 9 C, I1): a doctor with the review permission marks the brief reviewed or flags it for correction.
+  const [flagging, setFlagging] = useState(false);
+  const [comment, setComment] = useState("");
+  const [reviewBusy, setReviewBusy] = useState<"" | "reviewed" | "flagged">("");
+  const [reviewErr, setReviewErr] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [steps, setSteps] = useState<string[]>([]);
   const [streaming, setStreaming] = useState(false);
@@ -212,9 +228,21 @@ function HelperDetail({ caseId, helper, notBuilt, docs, onBack, onOpenSource, on
   const messages = useMemo(() => [...(chatQ.data?.messages ?? []), ...local], [chatQ.data, local]);
   const busy = prepare.isPending || streaming || !!jobId || brief.status === "preparing";
   const name = agentName(helper);
+  const reviewed = !!brief.reviewed_by || brief.review === "reviewed";
+  const mayReview = canReview && !notBuilt && !busy && (brief.status === "ready" || brief.status === "stale");
+  const review = async (status: "reviewed" | "flagged") => {
+    setReviewBusy(status); setReviewErr(null);
+    try {
+      await reviewArtefact(caseId, `brief_${role}`, status, status === "flagged" ? comment.trim() : "");
+      setFlagging(false); setComment("");
+      announce(status === "reviewed" ? "Brief marked reviewed." : "Brief flagged for correction.");
+      await onChanged();
+    } catch (e) { setReviewErr(errorText(e)); } finally { setReviewBusy(""); }
+  };
 
   return (
     <div className="space-y-3" data-testid="helper-detail">
+      {liveNode}
       <Button variant="ghost" size="sm" onClick={onBack} className="-ml-2"><ArrowLeft className="size-4" />All agents</Button>
       <div className="flex items-start gap-2">
         <Bot className="size-5 text-brand shrink-0 mt-0.5" aria-hidden />
@@ -232,7 +260,7 @@ function HelperDetail({ caseId, helper, notBuilt, docs, onBack, onOpenSource, on
         {brief.status === "none" ? <StatusChip kind="muted">not prepared yet</StatusChip> : null}
         {busy ? <AgentState h={{ ...helper, brief: { ...brief, status: "preparing" } }} /> : null}
         <AgentBadges h={helper} />
-        {brief.reviewed_by ? <StatusChip kind="ok">reviewed by {brief.reviewed_by}</StatusChip> : <StatusChip kind="review" icon={Bot}>AI draft</StatusChip>}
+        <BriefReviewChip brief={brief} />
         <span className="flex-1" />
         {helper.prepare_allowed ? <LoadingButton size="sm" variant={brief.status === "ready" ? "outline" : "default"} loading={busy} loadingText="Preparing" onClick={() => prepare.mutate()}>{brief.status === "ready" ? "Prepare again" : "Prepare"}</LoadingButton> : null}
       </div>
@@ -247,6 +275,26 @@ function HelperDetail({ caseId, helper, notBuilt, docs, onBack, onOpenSource, on
         </div>
       ) : null}
       {prepErr ? <p role="alert" className="text-xs text-bad">{prepErr}</p> : null}
+      {mayReview ? (
+        <div className="space-y-1.5" data-testid="brief-review-actions">
+          <div className="flex flex-wrap items-center gap-2">
+            {!reviewed ? <LoadingButton size="sm" variant="secondary" loading={reviewBusy === "reviewed"} disabled={!!reviewBusy} onClick={() => void review("reviewed")} data-testid="brief-mark-reviewed"><CheckCheck className="size-4" />Mark reviewed</LoadingButton> : null}
+            {!flagging ? <Button size="sm" variant="outline" disabled={!!reviewBusy} onClick={() => setFlagging(true)} data-testid="brief-flag"><Flag className="size-4" />Flag for correction</Button> : null}
+            <span className="text-xs text-muted-foreground">Read the points against their report lines first.</span>
+          </div>
+          {flagging ? (
+            <div className="space-y-1.5 rounded-md border border-border bg-muted/40 p-2" data-testid="brief-flag-form">
+              <label htmlFor={`brief-flag-${role}`} className="text-xs font-medium text-foreground">What needs correcting (optional)</label>
+              <Textarea id={`brief-flag-${role}`} value={comment} onChange={(e) => setComment(e.target.value)} className="min-h-16 text-sm" maxLength={2000} />
+              <div className="flex gap-2">
+                <LoadingButton size="sm" loading={reviewBusy === "flagged"} disabled={!!reviewBusy} onClick={() => void review("flagged")} data-testid="brief-flag-send">Flag for correction</LoadingButton>
+                <Button size="sm" variant="outline" onClick={() => { setFlagging(false); setComment(""); }}>Cancel</Button>
+              </div>
+            </div>
+          ) : null}
+          {reviewErr ? <p role="alert" className="text-xs text-bad">{reviewErr}</p> : null}
+        </div>
+      ) : null}
 
       {(brief.status === "ready" || brief.status === "stale") && !busy ? (
         <div className="space-y-3" data-testid="helper-brief">

@@ -10,6 +10,7 @@ import { LoadingButton, NotYetState, SkeletonLines, StatusChip, docTitleOf, fmtD
 import type { CaseCitation } from "../steps/types";
 import { fieldOf } from "@/features/meetings/components/DecisionForm";
 import { cn } from "@/lib/utils";
+import { consultantTitle } from "@/lib/format";
 
 type Docs = Array<{ doc_id: string; filename: string; classification?: { title?: string } }>;
 const OPEN = new Set(["not_found", "waiting", "needs_confirmation"]);
@@ -227,7 +228,7 @@ export function SummaryColumn({ slots, derived, ctx, h, onReviewProse, onPrepare
               <ol className="mt-1 list-decimal space-y-1 pl-5 text-sm">{prose.points_for_review!.map((pt, i) => <li key={i} className="text-foreground">{indianDates(pt.text)}<Cites cites={pt.citations} docs={docs} h={h} /></li>)}</ol>
             </div>
           ) : null}
-          {proseShown && !prose.reviewed && ctx.resident ? <p className="mt-2 text-xs text-muted-foreground">Dr {ctx.consultantName} reads it against the records and marks it reviewed.</p> : null}
+          {proseShown && !prose.reviewed && ctx.resident ? <p className="mt-2 text-xs text-muted-foreground">{consultantTitle(ctx.consultantName, true)} reads it against the records and marks it reviewed.</p> : null}
           {prose.status === "ready" && !prose.paragraphs.length ? <p className="text-sm text-muted-foreground">The summary came back empty: nothing could be written without a verified quote.</p> : null}
           {prose.status === "ready" && !prose.reviewed && !canReview ? <p className="mt-2 text-xs text-muted-foreground">Only a doctor of the owning department marks this reviewed.</p> : null}
           {prose.status === "ready" && !prose.reviewed && canReview && !ctx.resident ? <p className="mt-2 text-xs text-muted-foreground print:hidden">Read it against the records; every sentence keeps its quote. The export opens after review.</p> : null}

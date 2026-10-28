@@ -29,7 +29,8 @@ export interface SpeakButtonProps {
 }
 
 /** On-screen text the server reads aloud, at most (the same cap and words as the server's, for the whole text). */
-const TEXT_MAX = 1000;
+export const SPEAK_TEXT_MAX = 1000;
+const TEXT_MAX = SPEAK_TEXT_MAX;
 const TOO_LONG = "That text is too long to read aloud. Read it in shorter parts.";
 
 const isNotAllowed = (e: unknown) => !!e && typeof e === "object" && "name" in e && (e as { name: unknown }).name === "NotAllowedError";

@@ -105,33 +105,59 @@ async def check_input(text, audit=None):
 
 
 # ---------------------------------------------------------------------------------------------- output policy
-PRESCRIPTIVE = re.compile(
+_PRESCRIPTIVE_BASE = (
     r"\b(i|we) (would )?(recommend|suggest|advise)|\brecommend(ed|s|ation)?\b|\bshould (be )?(receive|undergo|start|begin|be treated|be given|be offered|consider|have)\b|"
     r"\b(is|are) (indicated|eligible|a candidate|candidates)\b|\b(best|preferred|optimal) (option|treatment|therapy|approach|management)\b|"
     r"\b(start|initiate|commence) (on )?(chemo|immuno|targeted|radio|treatment|therapy)|\bconsider (starting|giving|surgery|chemo|radiotherapy|resection)\b|"
-    r"\b(likely|probably|suggestive of|consistent with|in keeping with|diagnosis is|diagnosed as having)\b|\bprognosis\b|\bsurvival (is|would)\b", re.I)
+    r"\b(likely|probably|suggestive of|consistent with|in keeping with|diagnosis is|diagnosed as having)\b|\bprognosis\b|\bsurvival (is|would)\b")
+# Advice put as a need, a fitness or a verdict (the whole-run review, I1): "she needs", "requires", "is warranted", "proceed with surgery",
+# "fit for", "would be appropriate", "malignant", "this is a ... carcinoma", and "should" before any verb. Checked in what the models write
+# about a patient; a guideline's own reporting wording ("the report should include") is reference text and keeps the base list only.
+HISTOLOGY = r"(?:\w*(?:oma|omas)|tumou?rs?|cancers?|neoplasms?|malignan\w*|metasta\w*|leuka?emias?|disease)"
+ADVICE_WORDS = (r"\bneeds?\b|\bneeded\b|\brequires?\b|\brequired\b|\bwarranted\b|\badvisable\b|\bappropriate\b|\bproceed(ing)? with\b|"
+                r"\bfit for\b|\bmalignant\b|\bthis is (a|an)\s+(?:[\w-]+\s+){0,3}?" + HISTOLOGY + r"\b|\bshould\s+(?:not\s+)?\w+")
+PRESCRIPTIVE = re.compile(_PRESCRIPTIVE_BASE + "|" + ADVICE_WORDS, re.I)
+PRESCRIPTIVE_REFERENCE = re.compile(_PRESCRIPTIVE_BASE, re.I)  # for a verified guideline quote shown as reference text only
 STAGE = re.compile(r"\b[cpyr]?T[0-4][a-d]?\s*N[0-3][a-c]?(\s*M[01][a-c]?)?\b|\bstage\s+(0|I{1,3}V?|IV|[1-4])[A-C]?\b", re.I)
 QUOTE = re.compile(r"\"[^\"]{2,400}\"|“[^”]{2,400}”")
 
 
-# Reported speech: the sentence attributes the wording to a document or to the clinicians, so it is documentation, not advice.
+# Reported speech: the sentence attributes the wording to a document or to the clinicians. It excuses a stage written in a report ("the
+# PET/CT report records stage IIIA"), never advice: since the whole-run review (I1) prescriptive wording passes only inside a quoted span
+# ('The report records "adjuvant chemotherapy recommended"'), so "the report records a mass, so she should undergo surgery" is refused.
 REPORTED = re.compile(r"\b(the |previous |prior |earlier )?(tumou?r board|board|mdt|record|minutes|report|note|letter|summary|plan|decision|"
                       r"radiologist|pathologist|oncologist|surgeon|physician|clinician|treating team|team|dr\.?\s*[A-Z][a-z]+)\b.{0,60}"
                       r"\b(recorded|records|documented|documents|noted|notes|stated|states|wrote|writes|advised|recommended|recommends|planned|plans|decided|decision was|suggested|impression|concluded|reads)\b", re.I)
 
 
-def scan_output(text):
-    """Find policy violations outside quoted source text. Returns list of {sentence, reason}."""
+def scan_output(text, reference=False):
+    """Find policy violations outside quoted source text. Returns list of {sentence, reason}. reference=True is for a verified guideline
+    quote shown as labelled reference text (its own "should include" is the guideline's wording, not advice to anyone)."""
+    rx = PRESCRIPTIVE_REFERENCE if reference else PRESCRIPTIVE
     issues = []
     for sent in re.split(r"(?<=[.!?])\s+|\n", text):
         bare = QUOTE.sub(" ", sent)
-        if REPORTED.search(bare) and not re.search(r"\b(i|we)\b\s+(would\s+)?(recommend|suggest|advise)", bare, re.I):
-            continue  # documented wording attributed to its source
-        if PRESCRIPTIVE.search(bare):
+        if rx.search(bare):
             issues.append({"sentence": sent.strip(), "reason": "prescriptive or diagnostic wording"})
-        elif STAGE.search(bare) and not re.search(r"\b(recorded|documented|as written|states|reported)\b", bare, re.I):
+        elif STAGE.search(bare) and not REPORTED.search(bare) and not re.search(r"\b(recorded|documented|as written|states|reported)\b", bare, re.I):
             issues.append({"sentence": sent.strip(), "reason": "stage stated without attribution to a source"})
     return issues
+
+
+def outside_quotes(text, quotes):
+    """The text with each cited quote taken out (its words in order, case and spacing and punctuation between them ignored), so what is
+    left is what the statement says in its own words."""
+    out = str(text or "")
+    for q in sorted({str(q or "") for q in quotes or []}, key=len, reverse=True):
+        words = re.findall(r"\w+", q)
+        if words:
+            out = re.sub(r"(?<!\w)" + r"\W+".join(map(re.escape, words)) + r"(?!\w)", " ", out, flags=re.I)
+    return out
+
+
+def unquoted_words(text, quotes, pattern):
+    """The words of pattern that the text uses outside its cited quotes (lower case, sorted); empty when every such word sits in a quote."""
+    return sorted({m.group(0).lower() for m in pattern.finditer(outside_quotes(text, quotes))})
 
 
 def enforce(text, audit=None, where=""):

@@ -421,6 +421,7 @@ def _meeting_text(ref, roles=None):
     i = i if isinstance(i, int) and not isinstance(i, bool) else None
     q = next((x for x in s.get("questions") or [] if isinstance(x, dict) and x.get("id") == rid), None)
     if q is not None:
+        q = meetings._for_outside(roles, s, {"question": q})["question"]  # read as the screen shows it to an outside expert (review 9 D, S2)
         a = q.get("answer")
         if i is not None:
             return _spoken(a, i)

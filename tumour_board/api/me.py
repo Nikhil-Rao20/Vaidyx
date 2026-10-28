@@ -6,7 +6,8 @@ notifications, what waits for the person, the open requests of its departments),
 (video, push) and the Case Files the doctor opened read-only with a reason (break_glass, night-v3 item 1.9). POST /me/password
 changes the password through the Vaidyx login system (which clears the must-change flag); PUT /me/profile saves the profile;
 GET /me/activity lists the person's own audited actions across the Case Files, the organisation and the board sessions;
-GET /activity is the whole log for the auditor, the MDT Coordinator and the root admin. No model calls."""
+GET /activity is the whole log for the auditor, the MDT Coordinator and the root admin (the Messages events, who messaged whom, for the
+auditor and the root admin only). No model calls."""
 import importlib.util, os
 from pathlib import Path
 
@@ -199,6 +200,7 @@ async def get_profile(request: Request):
 _DETAIL_KEYS = ("action", "requirement", "department", "type", "key", "reason", "note", "level", "to", "proposal", "username", "fields", "changes",
                 "conversation")  # conversation: the Phase 8 message events (an id, never the text)
 _SKIP_KINDS = {"org_saved"}
+_MESSAGE_KINDS = ("message_", "conversation_")  # the Messages events (Phase 8): in GET /activity for the auditor and the root admin only
 
 
 def _title(kind: str) -> str:
@@ -280,5 +282,7 @@ async def activity(request: Request, case_id: str = "", user: str = "", limit: i
         need(r, "read_audit")
     n = max(1, min(int(limit or 100), FULL_LOG_CAP))
     evs = _events(user=(user or None), case_id=cid)
+    if not (r.get("auditor") or r.get("root_admin")):  # who messaged whom: the auditor and the root admin only (whole-run review 9, M3)
+        evs = [e for e in evs if not str(e.get("kind") or "").startswith(_MESSAGE_KINDS)]
     org.audit("activity_read", r.get("user") or "", case_id=cid or "", user=user or "", count=min(n, len(evs)))
     return {"events": evs[:n], "total": len(evs)}

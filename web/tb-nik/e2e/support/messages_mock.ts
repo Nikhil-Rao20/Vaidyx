@@ -25,7 +25,7 @@ type Conv = {
 const PEOPLE: Person[] = [
   { user: "ravi@vxh.example", display_name: "Dr Ravi Kumar", title: "Consultant Radiologist", departments: [{ id: "radiology", name: "Radiology", role: "Consultant" }], coordinator: false, online: "online", photo: null, phone: null },
   { user: "menon@vxh.example", display_name: "Dr Suresh Menon", title: "Head of Radiology", departments: [{ id: "radiology", name: "Radiology", role: "Head" }], coordinator: false, online: "away", photo: null, phone: null },
-  { user: "meena@vxh.example", display_name: "Dr Meena Iyer", title: "Consultant Pathologist", departments: [{ id: "pathology", name: "Pathology", role: "Head" }], coordinator: false, online: "offline", photo: null, phone: null },
+  { user: "meena@vxh.example", display_name: "Dr Meena Iyer", title: "Consultant Pathologist", departments: [{ id: "pathology", name: "Pathology", role: "Head" }], coordinator: false, online: "away", photo: null, phone: null },
   { user: "verma@vxh.example", display_name: "Dr Anil Verma", title: "Consultant Medical Oncologist", departments: [{ id: "medical_oncology", name: "Medical Oncology", role: "Consultant" }], coordinator: false, online: "online", photo: null, phone: null },
   { user: "reddy@vxh.example", display_name: "Dr Kavya Reddy", title: "Resident", departments: [{ id: "breast_surgery", name: "Breast Surgery", role: "Resident" }], coordinator: false, online: "offline", photo: null, phone: null },
   { user: "mdt@vxh.example", display_name: "Priya Nair", title: "MDT Coordinator", departments: [], coordinator: true, online: "online", photo: null, phone: null },
@@ -107,7 +107,7 @@ export async function routeMessages(page: Page, o: MessagesMockOptions = {}): Pr
       id: c.id, kind: c.kind,
       title: c.kind === "direct" ? p?.display_name ?? c.with : c.kind === "department" ? d?.name ?? c.department : "MDT Coordinator",
       subtitle: c.subtitle ?? (p ? [p.title, ...p.departments.map((x) => x.name)].join(", ") : c.kind === "coordinator" ? "Reaches 1 coordinator" : ""),
-      with: p ? { user: p.user, display_name: p.display_name, title: p.title, departments: p.departments.map((x) => x.name), online: p.online === "online" } : null,
+      with: p ? { user: p.user, display_name: p.display_name, title: p.title, departments: p.departments.map((x) => x.name), online: p.online === "online", presence: p.online } : null,
       department: d ? { id: d.id, name: d.name, members: d.members } : null,
       created_by: c.created_by,
       last: last ? { seq: last.seq, ts: last.ts, by: last.by, by_name: last.by_name, preview: last.deleted ? "" : last.text.slice(0, 120) } : null,

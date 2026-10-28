@@ -6,14 +6,41 @@ fixtures of test_nik_meetings (a fake login system, synthetic Case Files, no mod
 import asyncio, time
 from datetime import datetime, timedelta
 
+import pytest
+
 from tumour_board import agents, board, live, meetings, rules, service, store
 from tumour_board.tests.test_nik_meetings import As, app, join_and_admit, started, tc, wait_for, with_agenda  # noqa: F401
 
 STATE_WORDS = {"ready", "preparing", "listening", "thinking", "answering", "speaking", "error"}
 
 
+@pytest.fixture(autouse=True)
+def _fresh_agent_limits():
+    """The per-login limits of the agent routes are module-wide: each test starts with none used."""
+    from tumour_board.api import meetings as api_meetings
+    for lim in (api_meetings.AGENT_ASK_LIMIT, api_meetings.AGENT_LIMIT):
+        lim._hits.clear()
+    yield
+
+
 def _agents(tc, mid, user="priya"):
     return {a["role"]: a for a in As(tc, user).get(f"/meetings/{mid}").json()["agents"]}
+
+
+CT_LINE = "Spiculated mass in the right upper lobe measuring 5.2 x 4.1 cm"   # TB-001's CECT thorax report (D41f9d46c), synthetic
+PDL1_LINE = "PD-L1 (22C3) TPS Pending"                                         # TB-001's histopathology report (D67977cf8), synthetic
+REAL_POINTS = [("The CECT thorax reports a spiculated right upper lobe mass of 5.2 x 4.1 cm.", "D41f9d46c", CT_LINE),
+               ("PD-L1 (22C3) TPS is pending.", "D67977cf8", PDL1_LINE)]
+
+
+def _brief_real(case_id, role, points, **extra):
+    """A brief whose points cite lines that are in the Case File's records ((text, doc_id, quote) each)."""
+    _brief(case_id, role, [])
+    st = store.get_state(case_id)
+    art = st["artefacts"][f"brief_{role}"]
+    art["points_for_review"] = [{"text": x, "citations": [{"doc_id": d, "doc_title": "", "date": None, "page": 0, "quote": q}], "references": []} for x, d, q in points]
+    art.update(extra)
+    store.save_state(case_id, st)
 
 
 def _brief(case_id, role, points):
@@ -143,10 +170,11 @@ def test_listening_is_true_only_while_the_askers_device_records(tc, monkeypatch)
     r = As(tc, "priya").post(f"/meetings/{mid}/agents/radiology/listening", json={"on": False})
     assert r.status_code == 200 and r.json()["state"] == "ready"
     au = [e for e in board.read_audit() if e["session"] == mid and e["kind"] == "agent_listening"]
-    assert [x["on"] for x in au] == [True, False] and "seconds" in au[1] and not any(k in au[1] for k in ("text", "audio", "question"))
+    assert [(x["by"], x["on"]) for x in au] == [("priya", True), ("meena", True), ("meena", False), ("priya", False)]  # every device's on and off
+    assert "seconds" in au[3] and not any(k in au[3] for k in ("text", "audio", "question"))
     # a closed tab: the entry expires by itself
     As(tc, "priya").post(f"/meetings/{mid}/agents/radiology/listening", json={"on": True})
-    meetings.AGENT_STATE[mid]["radiology"]["expires"] = time.time() - 1
+    meetings.AGENT_LISTEN[mid]["radiology"]["priya"]["expires"] = time.time() - 1
     assert _agents(tc, mid)["radiology"]["state"] == "ready"
     # while the agent thinks, listening is not shown
     meetings._set_agent(mid, "radiology", "thinking", by="meena", question="Q1")
@@ -289,19 +317,24 @@ def test_present_your_points_speaks_the_brief_by_code(tc, monkeypatch):
     assert As(tc, "priya").post(f"/meetings/{mid}/agents/pathology/present").json()["detail"]["code"] == "brief_preparing"
     board.set_agent(mid, "TB-001", "pathology", "ready")
     # the brief's points, each with its records, by code: no model call; the not documented items are counted, never read as facts
-    _brief("TB-001", "pathology", ["The histopathology report of 10/03/2026 records grade 2.", "ER and PR results are pending in the IHC report."])
+    _brief_real("TB-001", "pathology", REAL_POINTS)
     events.clear()
     r = As(tc, "priya").post(f"/meetings/{mid}/agents/pathology/present")
     assert r.status_code == 200, r.text
     a = r.json()["question"]["answer"]
-    assert a["status"] == "answered" and [x["text"] for x in a["statements"]] == ["The histopathology report of 10/03/2026 records grade 2.", "ER and PR results are pending in the IHC report."]
-    assert a["statements"][0]["citations"][0]["quote"] == "The histopathology report of 10/03/2026 records grade 2." and a["statements"][0]["citations"][0]["doc_title"] == "CT chest"
-    assert a["speech"] == ["AI agent, Pathology.", "The histopathology report of 10/03/2026 records grade 2.", "ER and PR results are pending in the IHC report.",
-                           "1 item is listed as not documented; the list is on the screen.", "Sources are on the screen."]
+    texts = [x for x, _, _ in REAL_POINTS]
+    assert a["status"] == "answered" and [x["text"] for x in a["statements"]] == texts
+    assert a["statements"][0]["citations"][0]["quote"] == CT_LINE and a["statements"][0]["citations"][0]["doc_title"] == "CECT THORAX REPORT"  # located now
+    assert a["speech"] == ["AI agent, Pathology.", *texts, "1 item is listed as not documented; the list is on the screen.", "Sources are on the screen."]
     assert a["not_documented"] == ["ECOG performance status"] and a["kind"] == "present_points" and a["brief_label"] == "AI draft, not reviewed"
+    assert a["brief_model"] == "fake" and a["dropped_unverified"] == 0 and a["dropped_note"] == ""
     assert called == []
-    assert [e["type"] for e in events] == ["question"] + ["agent_speech"] * 5 and events[-1]["final"] is True and events[1]["final"] is False
-    assert all(e.get("question") == r.json()["question"]["id"] for e in events[1:])
+    # answering while its speech is announced (review 9 D, I6), then ready: speaking only while a device plays
+    assert [e["type"] for e in events] == ["question", "agent_state"] + ["agent_speech"] * 5 + ["agent_state"]
+    assert events[1]["state"] == "answering" and events[1]["by_name"] == "Dr Priya Nair" and events[-1]["state"] == "ready"
+    sp = [e for e in events if e["type"] == "agent_speech"]
+    assert sp[-1]["final"] is True and sp[0]["final"] is False
+    assert all(e.get("question") == r.json()["question"]["id"] for e in events[1:-1])
     # kept with the meeting: the question list, the session's agent log, the audit; the state stays ready (speaking only while a device plays)
     s = board.get(mid)
     assert [x["kind"] for x in s["log"] if x.get("kind") == "answer"] and s["log"][-1]["question"] == "Present your points" and len(s["log"][-1]["statements"]) == 2
@@ -438,3 +471,269 @@ def test_the_members_switch_covers_present_and_listening_and_a_called_agent_step
     assert _agents(tc, mid)["radiology"]["state"] == "speaking"
     As(tc, "anil").post(f"/meetings/{mid}/agents/audio", json={"question": qid, "playing": False, "device": "tab2"})
     assert _agents(tc, mid)["radiology"]["state"] == "ready"
+
+
+# ---- the whole-run review, area D (night-v3 item 9.2) ------------------------------------------------------------------------------
+
+def _admit_guest(tc, mid):
+    code = As(tc, "anil").post(f"/meetings/{mid}/code").json()["value"]
+    assert As(tc, "guest").post("/meetings/join", json={"code": code}).status_code == 200
+    assert As(tc, "anil").post(f"/meetings/{mid}/admit", json={"user": "guest"}).status_code == 200
+
+
+def _named_question(mid):
+    """An agent answer whose statement and quote carry TB-001's synthetic patient name and UHID (a plausible citation for an identity
+    question), saved on the meeting."""
+    s = board.get(mid)
+    stmt = {"text": "The CECT thorax is for Ramesh Kumar, UHID SYN-100231.", "citations": [{"doc_id": "D41f9d46c", "quote": "Patient SYNTHETIC, Ramesh Kumar\nUHID SYN-100231"}]}
+    q = {"id": "Qname", "by": "priya", "by_name": "Dr Priya Nair", "text": "Whose scan is SYN-100231?", "at": meetings._now(), "case_id": "TB-001", "role": "radiology",
+         "queued": False, "answer": {"status": "answered", "text": stmt["text"], "statements": [stmt], "references": [], "role": "radiology", "label": "x",
+                                     "speech": ["AI agent, Radiology.", stmt["text"], "Sources are on the screen."], "message": ""}}
+    s.setdefault("questions", []).append(q)
+    board.save_session(s)
+    return q
+
+
+def _no_identity(obj):
+    text = str(obj)
+    return "Ramesh" not in text and "Kumar" not in text and "SYN-100231" not in text
+
+
+def test_an_outside_expert_without_consent_gets_answers_and_points_without_the_identity(tc, monkeypatch):
+    """Review 9 D, S2: the questions, the streamed answers (statements, quotes, speech) and the agents' points reach an admitted
+    outside expert with [withheld] for the patient's name and numbers, unless the owner recorded consent; members are unaffected."""
+    from tumour_board import audio_proxy, org
+    mid = started(tc)
+    join_and_admit(tc, mid, "priya")
+    _admit_guest(tc, mid)
+    _brief_real("TB-001", "pathology", [("The CECT thorax report names Ramesh Kumar.", "D41f9d46c", "Patient SYNTHETIC, Ramesh Kumar")])
+    q = _named_question(mid)
+    # the view (GET and the socket's first message)
+    g = As(tc, "guest").get(f"/meetings/{mid}").json()
+    gq = next(x for x in g["questions"] if x["id"] == "Qname")
+    gp = {a["role"]: a for a in g["agents"]}["pathology"]["points"]
+    assert _no_identity(gq) and _no_identity(gp) and "[withheld]" in gq["answer"]["statements"][0]["citations"][0]["quote"]
+    assert "[withheld]" in gq["text"] and "[withheld]" in gq["answer"]["speech"][1] and "[withheld]" in gp[0]["citations"][0]["quote"]
+    assert gq["by_name"] == "Dr Priya Nair" and gq["answer"]["speech"][0] == "AI agent, Radiology."  # only the patient's identity goes
+    p = As(tc, "priya").get(f"/meetings/{mid}").json()
+    assert "SYN-100231" in str(next(x for x in p["questions"] if x["id"] == "Qname")) and "Ramesh Kumar" in str({a["role"]: a for a in p["agents"]}["pathology"]["points"])
+    # the events: a streamed statement and the agents list, per socket
+    shape = meetings._shape(board.get(mid))
+    ev_q = {"type": "question", "question": q}
+    ev_a = {"type": "agents", "agents": p["agents"]}
+    assert _no_identity(shape("guest", org.roles("guest"), ev_q)) and _no_identity(shape("guest", org.roles("guest"), ev_a))
+    assert shape("priya", org.roles("priya"), ev_q) == ev_q and shape("priya", org.roles("priya"), ev_a) == ev_a
+    assert shape("anil", org.roles("anil"), ev_q) == ev_q
+    # read aloud by reference: the sentence the outside expert's device fetches carries no identity either
+    ref = {"kind": "meeting_answer", "meeting_id": mid, "id": "Qname", "index": 1}
+    assert "[withheld]" in audio_proxy.resolve(org.roles("guest"), ref) and "Ramesh" in audio_proxy.resolve(org.roles("priya"), ref)
+    # with the owner's consent for an outside discussion, the expert reads it as the members do
+    c = store.get_case("TB-001"); c["consent"] = {"outside_discussion": True}; store.save_case(c)
+    g = As(tc, "guest").get(f"/meetings/{mid}").json()
+    assert "SYN-100231" in str(next(x for x in g["questions"] if x["id"] == "Qname")) and "Ramesh Kumar" in str({a["role"]: a for a in g["agents"]}["pathology"]["points"])
+    assert meetings._shape(board.get(mid))("guest", org.roles("guest"), ev_q) == ev_q
+
+
+def _gated_ask(loops, started_, gate_name="gate"):
+    """A fake agents.ask that waits for a gate before streaming two verified statements; `loops` gets the app's loop and the gate."""
+    async def fake_ask(case_id, role, question, history=None, user="", on_statement=None, **kw):
+        gate = asyncio.Event()
+        loops.append((asyncio.get_running_loop(), gate))
+        started_.append(question)
+        try:
+            await gate.wait()
+        except asyncio.CancelledError:
+            started_.append("cancelled")
+            raise
+        s1 = {"text": "Lesion 3.2 cm", "citations": [{"doc_id": "D1", "quote": "Lesion 3.2 cm"}]}
+        s2 = {"text": "Nodes clear", "citations": [{"doc_id": "D1", "quote": "Nodes clear"}]}
+        await on_statement(s1, 0)
+        await on_statement(s2, 1)
+        return {"role": role, "label": "x", "status": "answered", "statements": [s1, s2], "references": [], "removed": [], "model": "m", "seconds": 0.3}
+    return fake_ask
+
+
+def test_a_stop_while_the_agent_thinks_holds_for_the_whole_answer(tc, monkeypatch):
+    """Review 9 D, I2: Stop for everyone before the first statement is kept on the question; no sentence is announced afterwards and
+    the saved answer shows who stopped it (a device that reloads or joins later plays nothing)."""
+    mid = started(tc)
+    join_and_admit(tc, mid, "priya")
+    events = []
+    monkeypatch.setattr(live, "broadcast", lambda m, ev, **kw: events.append(ev) or True)
+    loops, started_ = [], []
+    monkeypatch.setattr(agents, "ask", _gated_ask(loops, started_))
+    qid = As(tc, "priya").post(f"/meetings/{mid}/questions", json={"text": "What size?", "role": "radiology"}).json()["question"]["id"]
+    wait_for(lambda: started_ == ["What size?"])
+    assert _agents(tc, mid)["radiology"]["state"] == "thinking"
+    r = As(tc, "priya").post(f"/meetings/{mid}/agents/radiology/stop", json={"question": qid})
+    assert r.status_code == 200, r.text
+    sr = meetings._question(board.get(mid), qid)["stop_requested"]
+    assert sr["by"] == "priya" and sr["at"]
+    loop, gate = loops[0]
+    loop.call_soon_threadsafe(gate.set)
+    wait_for(lambda: (meetings._question(board.get(mid), qid).get("answer") or {}).get("status") == "answered")
+    a = meetings._question(board.get(mid), qid)["answer"]
+    assert a["stopped_by"] == "priya" and [x["text"] for x in a["statements"]] == ["Lesion 3.2 cm", "Nodes clear"]  # the text stays
+    idx = [i for i, e in enumerate(events) if e["type"] == "agent_stop"][0]
+    assert not any(e["type"] == "agent_speech" for e in events[idx:])
+    assert not any(e["type"] == "agent_speech" for e in events)  # nothing was spoken at all
+
+
+def test_ending_the_meeting_stops_the_agents(tc, monkeypatch):
+    """Review 9 D, I3: the end cancels the answer in flight and the question waiting behind it (no model call after the close), no
+    sentence is announced after `ended`, and no live state comes back."""
+    mid = started(tc)
+    join_and_admit(tc, mid, "priya"); join_and_admit(tc, mid, "meena")
+    events = []
+    monkeypatch.setattr(live, "broadcast", lambda m, ev, **kw: events.append(ev) or True)
+    loops, started_ = [], []
+    monkeypatch.setattr(agents, "ask", _gated_ask(loops, started_))
+    q1 = As(tc, "priya").post(f"/meetings/{mid}/questions", json={"text": "first", "role": "radiology"}).json()["question"]["id"]
+    wait_for(lambda: started_ == ["first"])
+    q2 = As(tc, "meena").post(f"/meetings/{mid}/questions", json={"text": "second", "role": "radiology"}).json()["question"]
+    assert q2["queued"] is True
+    assert meetings._TASKS_BY_MID.get(mid)
+    r = As(tc, "anil").post(f"/meetings/{mid}/end")
+    assert r.status_code == 200, r.text
+
+    def closed(qid):
+        a = meetings._question(board.get(mid), qid).get("answer")
+        return isinstance(a, dict) and a.get("status") == "not_listed"
+    wait_for(lambda: closed(q1) and closed(q2["id"]))
+    s = board.get(mid)
+    for qid in (q1, q2["id"]):
+        a = meetings._question(s, qid)["answer"]
+        assert a["message"] == meetings.MEETING_ENDED and a["statements"] == []
+    assert started_ == ["first", "cancelled"]  # the waiting question never reached the model
+    idx = [i for i, e in enumerate(events) if e["type"] == "ended"][0]
+    assert not any(e["type"] in ("agent_speech", "agent_state") for e in events[idx:])
+    wait_for(lambda: not meetings._TASKS_BY_MID.get(mid))
+    assert mid not in meetings.AGENT_STATE and s["status"] == "closed"
+    assert any(e["kind"] == "meeting_ended" and e.get("agent_tasks_stopped") == 2 for e in board.read_audit() if e["session"] == mid)
+    # an answer asked of a closed meeting (a restart, a late call) ends at once without the model
+    s["questions"].append({"id": "Qlate", "by": "priya", "by_name": "Dr Priya Nair", "text": "late", "at": meetings._now(), "case_id": "TB-001", "answer": None, "role": "radiology", "queued": False})
+    board.save_session(s)
+    out = asyncio.run(meetings.answer(mid, "Qlate", "priya"))
+    assert out["status"] == "not_listed" and out["message"] == meetings.MEETING_ENDED and started_ == ["first", "cancelled"]
+    assert meetings._set_agent(mid, "radiology", "thinking", by="priya") == {} and mid not in meetings.AGENT_STATE
+
+
+def test_listening_goes_when_the_askers_last_socket_closes_and_when_it_expires(tc, monkeypatch):
+    """Review 9 D, I4: the asker's tab closes, every screen hears ready at once; an entry left alone is announced when it expires; and
+    an answer never erases another member's listening."""
+    mid = started(tc)
+    join_and_admit(tc, mid, "priya"); join_and_admit(tc, mid, "meena")
+    events = []
+    real = live.broadcast
+    monkeypatch.setattr(live, "broadcast", lambda m, ev, **kw: events.append(ev) or real(m, ev, **kw))
+    tc.cookies.set("vaidyx_session", "tok-priya")
+    with tc.websocket_connect(f"/api/tb/meetings/{mid}/ws") as ws:
+        assert ws.receive_json()["type"] == "state"
+        r = As(tc, "priya").post(f"/meetings/{mid}/agents/radiology/listening", json={"on": True})
+        assert r.json()["state"] == "listening" and r.json()["accepted"] is True
+        tc.cookies.set("vaidyx_session", "tok-priya")
+        with tc.websocket_connect(f"/api/tb/meetings/{mid}/ws") as ws2:  # a second tab: closing one keeps the word
+            assert ws2.receive_json()["type"] == "state"
+        assert _agents(tc, mid)["radiology"]["state"] == "listening"
+        events.clear()
+    wait_for(lambda: any(e["type"] == "agent_state" and e["role"] == "radiology" and e["state"] == "ready" for e in events))
+    assert "priya" not in (meetings.AGENT_LISTEN.get(mid) or {}).get("radiology", {})
+    # an entry left alone: announced when it expires, without anyone reading the state
+    monkeypatch.setattr(meetings, "LISTEN_TTL", 0.2)
+    r = As(tc, "meena").post(f"/meetings/{mid}/agents/medical_oncology/listening", json={"on": True})
+    assert r.json()["state"] == "listening", r.text
+    events.clear()
+    wait_for(lambda: any(e["type"] == "agent_state" and e["role"] == "medical_oncology" and e["state"] == "ready" for e in events), 3)
+    # kept per (role, user): an answer to someone else shows thinking, then the member still recording is shown again
+    monkeypatch.setattr(meetings, "LISTEN_TTL", 65.0)
+    As(tc, "meena").post(f"/meetings/{mid}/agents/radiology/listening", json={"on": True})
+    meetings._set_agent(mid, "radiology", "thinking", by="priya", question="Q1")
+    assert _agents(tc, mid)["radiology"]["state"] == "thinking"
+    meetings._set_agent(mid, "radiology", "ready")
+    a = _agents(tc, mid)["radiology"]
+    assert a["state"] == "listening" and a["by"] == "meena"
+
+
+def test_present_your_points_speaks_only_points_that_match_the_records_now(tc, monkeypatch):
+    """Review 9 D, I5: a stale brief whose quoted line is no longer in the records is not spoken, a point kept on an approximate
+    quote is never spoken, and the answer counts what was left out."""
+    mid = started(tc)
+    join_and_admit(tc, mid, "priya")
+    removed = ("The CECT thorax reports a 7.4 cm mass.", "D41f9d46c", "Spiculated mass measuring 7.4 cm")  # the line is not in the records now
+    _brief_real("TB-001", "pathology", [REAL_POINTS[0], removed], signature={"hash": "old", "docs": []})
+    st = store.get_state("TB-001")
+    pts = st["artefacts"]["brief_pathology"]["points_for_review"]
+    pts.append({"text": "PD-L1 (22C3) TPS is pending.", "citations": [{"doc_id": "D67977cf8", "quote": PDL1_LINE, "approximate": True}], "references": [], "approximate": True})
+    store.save_state("TB-001", st)
+    a = As(tc, "priya").post(f"/meetings/{mid}/agents/pathology/present").json()["question"]["answer"]
+    assert a["stale"] is True and a["status"] == "answered"
+    assert [x["text"] for x in a["statements"]] == [REAL_POINTS[0][0]]
+    note = "2 points no longer match the records and were left out."
+    assert a["dropped_unverified"] == 2 and a["dropped_note"] == note
+    assert a["speech"] == ["AI agent, Pathology.", meetings.STALE_BRIEF, REAL_POINTS[0][0], note,
+                           "1 item is listed as not documented; the list is on the screen.", "Sources are on the screen."]
+    assert "7.4" not in " ".join(a["speech"]) and "PD-L1" not in " ".join(a["speech"])
+    assert any(e["kind"] == "present_points" and e.get("dropped") == 2 for e in board.read_audit() if e["session"] == mid)
+    # nothing left that matches: nothing is read as fact, the count is said
+    _brief_real("TB-001", "pathology", [removed])
+    a = As(tc, "priya").post(f"/meetings/{mid}/agents/pathology/present").json()["question"]["answer"]
+    assert a["status"] == "not_documented" and a["statements"] == [] and a["message"] == "1 point no longer matches the records and was left out."
+    assert a["speech"] == ["AI agent, Pathology.", "1 point no longer matches the records and was left out."]
+
+
+def test_present_your_points_waits_for_the_agent_to_finish(tc, monkeypatch):
+    """Review 9 D, I6: one answer at a time per agent; Present your points is refused while the agent thinks or answers."""
+    mid = started(tc)
+    join_and_admit(tc, mid, "priya")
+    _brief_real("TB-001", "pathology", REAL_POINTS)
+    for word in ("thinking", "answering"):
+        meetings._set_agent(mid, "pathology", word, by="meena", question="Q1")
+        r = As(tc, "priya").post(f"/meetings/{mid}/agents/pathology/present")
+        assert r.status_code == 409 and r.json()["detail"] == {"message": "Pathology is answering Dr Meena. Try again when it finishes.", "code": "agent_busy"}, r.text
+    meetings._set_agent(mid, "pathology", "ready")
+
+    class Held:
+        def locked(self):
+            return True
+    meetings.AGENT_LOCKS[(mid, "pathology")] = Held()  # an answer holds the agent's lock (waiting to start)
+    r = As(tc, "priya").post(f"/meetings/{mid}/agents/pathology/present")
+    assert r.status_code == 409 and r.json()["detail"]["message"] == "Pathology is answering someone. Try again when it finishes."
+    meetings.AGENT_LOCKS.pop((mid, "pathology"))
+    assert As(tc, "priya").post(f"/meetings/{mid}/agents/pathology/present").status_code == 200
+    assert not any(q.get("kind") == "present_points" and q.get("answer", {}).get("status") != "answered" for q in board.get(mid)["questions"])
+    assert sum(1 for q in board.get(mid)["questions"] if q.get("kind") == "present_points") == 1  # the refusals saved nothing
+
+
+def test_the_brief_names_its_model_and_its_review(tc):
+    """Review 9 C, S1 (the backend half): the agent's brief carries the model that wrote it; a Present your points answer carries
+    brief_model and brief_label."""
+    mid = started(tc)
+    join_and_admit(tc, mid, "priya")
+    _brief_real("TB-001", "pathology", REAL_POINTS, model="Gemma-4-31B")
+    a = _agents(tc, mid)["pathology"]
+    assert a["brief"]["model"] == "Gemma-4-31B" and a["brief"]["label"] == "AI draft, not reviewed"
+    ans = As(tc, "priya").post(f"/meetings/{mid}/agents/pathology/present").json()["question"]["answer"]
+    assert ans["brief_model"] == "Gemma-4-31B" and ans["brief_label"] == "AI draft, not reviewed"
+    st = store.get_state("TB-001"); st["artefacts"]["brief_pathology"]["review"] = {"status": "reviewed", "by": "meena"}; store.save_state("TB-001", st)
+    ans = As(tc, "priya").post(f"/meetings/{mid}/agents/pathology/present").json()["question"]["answer"]
+    assert ans["brief_label"] == "Reviewed by Dr Meena"
+    st["artefacts"]["brief_pathology"]["review"] = {"status": "reviewed", "by": "anil"}; store.save_state("TB-001", st)
+    assert meetings._brief_label(st["artefacts"]["brief_pathology"]) == "Reviewed by Dr Anil Kumar"
+
+
+def test_the_agent_error_names_no_python_class(tc, monkeypatch):
+    """Review 9 D, M5: a failed answer says "The agent could not answer. Try again."; the class name is in the audit only."""
+    mid = started(tc)
+    join_and_admit(tc, mid, "priya")
+
+    async def boom(*a, **k):
+        raise TimeoutError("model slow")
+    monkeypatch.setattr(agents, "ask", boom)
+    qid = As(tc, "priya").post(f"/meetings/{mid}/questions", json={"text": "Lesion size?", "role": "radiology"}).json()["question"]["id"]
+    wait_for(lambda: (meetings._question(board.get(mid), qid).get("answer") or {}).get("status") == "error")
+    a = meetings._question(board.get(mid), qid)["answer"]
+    assert a["text"] == "The agent could not answer. Try again." and a["message"] == a["text"] and "TimeoutError" not in str(a) and "error" not in a
+    v = As(tc, "priya").get(f"/meetings/{mid}").json()
+    assert "TimeoutError" not in str(v)
+    au = [e for e in board.read_audit() if e["session"] == mid and e["kind"] == "question_answered"]
+    assert au[-1]["status"] == "error" and au[-1]["error"] == "TimeoutError"

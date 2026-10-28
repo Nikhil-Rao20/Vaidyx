@@ -14,6 +14,7 @@ import { useSession } from "@/lib/session";
 import { OpenWithReasonButton, ReadOnlyBanner, mayOpenWithReason, windowFor } from "./components/OpenWithReason";
 import { ApiError } from "@/lib/api";
 import { notify } from "@/components/Toasts";
+import { consultantTitle } from "@/lib/format";
 import {
   archiveCase, buildSummary, createFreeRequest, deckUrl, exportVtbUrl, markReady, moveCase, notBuiltYet, postConfirmation, postProposal, remindRequest, reviewArtefact,
   setSlotValue, setUrgency, slotAskDepartment, slotNotNeeded, undoConfirmation, withdrawCase,
@@ -134,7 +135,8 @@ export default function GuidedCaseFilePage() {
 
   useEffect(() => { if (section !== "overview") { try { localStorage.setItem(leftOffKey(id), SLUG[section]); } catch { /* storage blocked */ } } }, [id, section]);
 
-  const consultantName = (teamq.data?.owner?.doctors?.[0]?.name ?? cf?.access?.owner_name ?? "the consultant").replace(/^Dr\.?\s+/i, "");
+  // the bare name ("" when not known): every label titles it through consultantTitle, so it never reads "Dr the consultant" (M18)
+  const consultantName = (teamq.data?.owner?.doctors?.[0]?.name ?? cf?.access?.owner_name ?? "").replace(/^Dr\.?\s+/i, "");
   const allSlots = useMemo(() => (slotsq.data?.sections ?? []).flatMap((s) => s.slots), [slotsq.data]);
   const slotById = useCallback((sid: string) => allSlots.find((s) => s.id === sid) ?? null, [allSlots]);
   const prepare = steps?.mode === "prepare";
@@ -171,7 +173,7 @@ export default function GuidedCaseFilePage() {
   const propose = useCallback(async (action: string, payload: Record<string, unknown>, label: string) => {
     try { await postProposal(id, action, payload); }
     catch (e) { if (notBuiltYet(e)) throw new Error("Sign-off by the consultant is not available on this server yet."); throw e; }
-    notify.success(`Sent to Dr ${consultantName} for sign-off`, label);
+    notify.success(`Sent to ${consultantTitle(consultantName)} for sign-off`, label);
     await refresh();
   }, [id, consultantName, refresh]);
 
@@ -248,7 +250,7 @@ export default function GuidedCaseFilePage() {
   const checkH: CheckHandlers = {
     confirmKey: async (k) => {
       const r = (await postKeyCheck(id, { fact_id: k.fact_id ?? "", value: k.value, doc_id: k.quote?.doc_id ?? "" })) as Proposed | null;
-      if (r?.proposal) notify.success(`Sent to Dr ${consultantName} for sign-off`, `Confirm ${k.label}: ${k.value}`);
+      if (r?.proposal) notify.success(`Sent to ${consultantTitle(consultantName)} for sign-off`, `Confirm ${k.label}: ${k.value}`);
       else announce(`${k.label} confirmed.`);
       await refresh();
     },
@@ -355,7 +357,7 @@ export default function GuidedCaseFilePage() {
       body = <Overview steps={steps} h={overviewH} inWindow={!!bg} onBoard={() => setSide({ kind: "panel", panel: "board" })} signoffs={!resident && proposalsq.proposals.length ? <div id="signoffs"><ProposalsStrip caseId={id} proposals={proposalsq.proposals} onChanged={refresh} labelOf={(sid) => slotById(sid)?.label} /></div> : null}
         staging={stagingq.data && (stagingq.data.switch.on || stagingq.data.written.length) ? (
           <StagingCard caseId={id} view={stagingq.data} loading={stagingq.isLoading} canRun={prepare} canConfirm={prepare && !resident && !!cf.permissions?.review}
-            canPropose={prepare && resident} consultantName={consultantName}
+            canPropose={prepare && resident} consultantName={consultantName || undefined}
             onOpen={openSource} onBook={setBookAt} onChanged={(v) => { if (v) qc.setQueryData(["staging", id], v); else void qc.invalidateQueries({ queryKey: ["staging", id] }); }} />
         ) : null} />;
     } else if (section === "question") {
@@ -363,10 +365,10 @@ export default function GuidedCaseFilePage() {
         onSaveQuestion={(t) => typed("fact:clinical_question", t, `Question for the board: ${t}`)}
         onReason={async (v) => {
           const r = (await putReason(id, v)) as Proposed;
-          if (r.proposal) notify.success(`Sent to Dr ${consultantName} for sign-off`, `Reason for discussion: ${steps.reasons.find((x) => x.id === v)?.label ?? v}`);
+          if (r.proposal) notify.success(`Sent to ${consultantTitle(consultantName)} for sign-off`, `Reason for discussion: ${steps.reasons.find((x) => x.id === v)?.label ?? v}`);
           await refresh();
         }}
-        onUrgency={async (n) => { const r = await setUrgency(id, n); if (r.proposal) notify.success(`Dr ${consultantName} asked to set urgency ${n}`); await refresh(); }}
+        onUrgency={async (n) => { const r = await setUrgency(id, n); if (r.proposal) notify.success(`${consultantTitle(consultantName, true)} asked to set urgency ${n}`); await refresh(); }}
         onSaveFact={(sid, v) => typed(sid, v, `${slotById(sid)?.label ?? "Value"}: ${v}`)} />;
     } else if (section === "reports") {
       body = <ReportsStep steps={steps} cf={cf} caseId={id} onOpen={openSource} onCheckDoc={checkDoc} onChanged={refresh} onNext={() => go("check")} />;
@@ -380,7 +382,7 @@ export default function GuidedCaseFilePage() {
         onRead={() => void (async () => { setReading(true); try { await reviewArtefact(id, "summary", "reviewed"); await refresh(); } catch (e) { notify.error("Could not save", errorText(e)); } finally { setReading(false); } })()}
         onSend={() => setReadyOpen(true)}
         briefs={<HelpersPanel caseId={id} cf={cf} onOpenSource={openSource} onCaseChanged={refresh} />}
-        similar={<SimilarPanel caseId={id} />}
+        similar={bg ? null : <SimilarPanel caseId={id} />}  // not inside a read-only window, as on the Overview (review 9 C, M17)
         published={<PublishedPanel caseId={id} resident={resident} consultantName={consultantName} onPropose={(payload, label) => propose("published_case", payload, label)} />} />;
     }
   }

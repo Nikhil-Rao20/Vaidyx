@@ -9,7 +9,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Archive, CalendarDays, CalendarMinus, CalendarSync, ChevronDown, ClipboardList, Download, MessageSquare, MoreHorizontal, Pencil, Presentation, Printer, Send, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { drName } from "@/lib/format";
+import { consultantTitle, drName } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { UrgencyTag } from "@/components/UrgencyTag";
@@ -129,7 +129,7 @@ export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, deckHref
           {withdrawn ? <StatusChip kind="warn" icon={CalendarMinus} title={c.board_send?.withdrawn?.reason ? `Reason: ${c.board_send.withdrawn.reason}` : undefined}>Taken off the agenda{c.board_send?.withdrawn?.at ? `, ${fmtDate(c.board_send.withdrawn.at)}` : ""}</StatusChip> : null}
           {prepare && !sent ? (
             <Button onClick={onSend} data-testid="send-to-board" title={steps?.left ? `${steps.left} still open: you will be asked why the board should discuss it anyway` : "Send this Case File to the board"}>
-              <Send className="size-4" />{resident ? `Send to Dr ${consultantName} for sign-off` : "Send to the board"}
+              <Send className="size-4" />{resident ? `Send to ${consultantTitle(consultantName)} for sign-off` : "Send to the board"}
             </Button>
           ) : null}
           <DropdownMenu>

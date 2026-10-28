@@ -10,7 +10,7 @@ import { Stepper, Step } from "@/components/Stepper";
 import { KeyValue, KeyValueList } from "@/components/KeyValue";
 import { useQuery } from "@tanstack/react-query";
 import { useSession } from "@/lib/session";
-import { drName, formatDateWords, parseDate } from "@/lib/format";
+import { consultantTitle, drName, formatDateWords, parseDate } from "@/lib/format";
 import type { Meeting } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import type { SendToBoardBody, SlotsResponse, Team } from "../types";
@@ -89,12 +89,12 @@ export function MarkReadyDialog({ open, onOpenChange, slots, resident, consultan
   const residents = (team?.residents ?? []).filter((r) => !r.expired);
   // Who may present: the consultant (the sender; an empty value) or a resident on the team. A resident sees the consultant by name.
   const presenters: Array<{ value: string; title: string; text?: string }> = [
-    resident ? { value: "", title: `Dr ${consultantName}`, text: "The consultant" } : { value: "", title: `You (${meName})` },
+    resident ? { value: "", title: `${consultantTitle(consultantName, true)}`, text: "The consultant" } : { value: "", title: `You (${meName})` },
     ...residents.map((r) => ({ value: r.user, title: r.user === me?.user ? `You (${drName(r.name)})` : drName(r.name), text: "Resident on the team" })),
   ];
   const chosenMeeting = meetings.find((m) => m.id === meetingId);
   const presenterTitle = presenters.find((p) => p.value === presenter)?.title ?? presenters[0].title;
-  const sendLabel = resident ? `Send to Dr ${consultantName} for sign-off` : "Send to the board";
+  const sendLabel = resident ? `Send to ${consultantTitle(consultantName)} for sign-off` : "Send to the board";
 
   const stepOk = step === 1 ? meetingId !== null : step === 4 ? !needReason || reason.trim().length > 0 : step === 5 ? !boardQuestionMissing : true;
 
@@ -192,7 +192,7 @@ export function MarkReadyDialog({ open, onOpenChange, slots, resident, consultan
               <KeyValue label="Note" value={note.trim()} fallback="none" />
             </KeyValueList>
             <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">{resident ? <NotebookPen className="mt-0.5 size-3.5 shrink-0" aria-hidden /> : <MessageSquareText className="mt-0.5 size-3.5 shrink-0" aria-hidden />}
-              {resident ? `Dr ${consultantName} signs off before it goes to the board.` : "The MDT Coordinator is told; the coordinator may still move it on the agenda."}</p>
+              {resident ? `${consultantTitle(consultantName, true)} signs off before it goes to the board.` : "The MDT Coordinator is told; the coordinator may still move it on the agenda."}</p>
             {boardQuestionMissing ? <p role="alert" className="mt-2 rounded-md px-2 py-1.5 text-sm status-bad">The board question is not written yet. Enter it on the Board question line first.</p> : null}
             {err ? <p role="alert" className="mt-2 text-sm text-bad">{err}</p> : null}
           </Step>

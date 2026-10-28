@@ -85,8 +85,7 @@ def token(identity: str, name: str, room: str, ttl: int = TOKEN_TTL, now: int | 
     grant = {"roomJoin": True, "room": str(room), "canPublish": bool(can_publish), "canSubscribe": bool(can_subscribe)}
     if can_publish_sources:
         grant["canPublishSources"] = [str(x) for x in can_publish_sources]
-    if can_publish_data:
-        grant["canPublishData"] = True
+    grant["canPublishData"] = bool(can_publish_data)  # always written: LiveKit reads a missing field as allowed (review 9 D, I1)
     payload = {"iss": k["api_key"], "sub": str(identity), "nbf": now, "exp": now + int(ttl), "iat": now, "name": str(name or identity), "video": grant}
     try:
         import jwt  # PyJWT

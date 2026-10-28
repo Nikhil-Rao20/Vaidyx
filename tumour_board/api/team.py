@@ -258,7 +258,8 @@ async def break_glass_windows(request: Request):
     r = roles(request)
     if not (r.get("vaidyx_admin") or r.get("root_admin") or r.get("auditor")):
         fail(403, "Only an admin or the auditor sees the break-glass windows.", "forbidden")
-    return {"windows": access.break_glass_windows(), "mine": access.break_glass_window(r["user"]) if r.get("vaidyx_admin") else None}
+    return {"windows": access.break_glass_windows(), "mine": access.break_glass_window(r["user"]) if r.get("vaidyx_admin") else None,
+            "doctors": access.doctor_windows_all()}  # the doctors' windows opened with a reason (whole-run review 9, M2)
 
 
 @router.delete("/break-glass")

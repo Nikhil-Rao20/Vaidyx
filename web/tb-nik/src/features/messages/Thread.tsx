@@ -26,12 +26,23 @@ import { ConversationAvatar, REACTIONS, TEXT_MAX, clock, groupDays, minutesLeft,
 import { usePresence, useTyping } from "@/features/messages/useMessagesLive";
 import type { Chip, ConversationRow, ConversationView, Message, PickedLink, Presence, ReactionKind } from "@/features/messages/types";
 
-/** The first-use notice with the hospital's own retention setting (0 keeps every message until the hospital removes it). */
+/** The first-use notice with the hospital's own retention setting (0 keeps every message until the hospital removes it). It says what
+ *  the code does and no more (whole-run review 9, I5): edit and delete within ten minutes, the text removed per message after the
+ *  keeping time, who reads a direct, a department and an MDT Coordinator conversation. */
 export function noticeText(days?: number | null): string {
   const kept = typeof days === "number" && days > 0
-    ? `They are kept for ${days} days after the last message, then the text is removed.`
-    : typeof days === "number" ? "They are kept until the hospital removes them." : "They are kept for a set time after the last message, then the text is removed.";
-  return `Messages are for work between the staff of this hospital. ${kept} Only the people in a conversation can read it; the activity log records who messaged whom, never the text. Ask the MDT Coordinator to have a message removed.`;
+    ? `Messages are kept for ${days} ${days === 1 ? "day" : "days"} after they were sent, then their text is removed.`
+    : typeof days === "number" ? "Messages are kept until the hospital removes them." : "Messages are kept for a set time after they were sent, then their text is removed.";
+  return [
+    "Messages are for work between the staff of this hospital.",
+    "You can edit or delete your own message within ten minutes of sending it.",
+    kept,
+    "A direct conversation is read by its two people.",
+    "A department conversation is read by everyone placed in that department, including people who join it later.",
+    "A message to the MDT Coordinator is read by every MDT Coordinator.",
+    "The activity log records who messaged whom, never the text.",
+    "For anything else, ask the MDT Coordinator.",
+  ].join(" ");
 }
 export const NOTICE_TEXT = noticeText(365);
 
@@ -141,6 +152,8 @@ function MessageItem({ m, me, kind, names, seen, onReact, onEdit, onDelete }: {
     press.current = window.setTimeout(() => setMenu(true), 500);
   };
   const endPress = () => { if (press.current) { window.clearTimeout(press.current); press.current = null; } };
+  // a message that leaves the screen mid-press (deleted, the thread changed) leaves no timer behind (review 9 C, M1)
+  useEffect(() => () => { if (press.current) window.clearTimeout(press.current); }, []);
 
   return (
     <li data-testid="message" data-mine={mine ? "true" : "false"} data-id={m.id} className={cn("group flex items-start gap-1", mine ? "flex-row-reverse" : "flex-row")}>
@@ -261,7 +274,7 @@ export function Thread({ view, me, phone, initialLink }: { view: ConversationVie
   const c = view.conversation;
   const id = c.id;
   const key = msgKeys.conversation(id);
-  const presence = usePresence(c.with?.user, c.with?.online ?? null);
+  const presence = usePresence(c.with?.user, c.with?.presence ?? c.with?.online ?? null);
   const typing = useTyping(id);
   const [older, setOlder] = useState<Message[]>([]);
   const [moreBusy, setMoreBusy] = useState(false);

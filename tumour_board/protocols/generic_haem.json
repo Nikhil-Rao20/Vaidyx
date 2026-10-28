@@ -1,10 +1,10 @@
 {
  "id": "generic_haem",
  "label": "Other blood cancer (no disease-specific Indian protocol)",
- "version": "0.1",
+ "version": "0.1-draft",
  "approval": {
-  "status": "owner_decision",
-  "note": "Owner decision R05-Q04 (17 Oct 2026) and the night-v3 plan, item 2.9 (27 Oct 2026). Not a clinical guideline: the hospital Tumour Board reviews this minimum set before real use."
+  "status": "draft",
+  "note": "Draft checklist (owner decision R05-Q04, not a book): needs a clinician's check"
  },
  "note": "Not a clinical guideline. Used for a blood cancer that has no built checklist yet (a cancer typed by the doctor and marked as a blood cancer, for example multiple myeloma or a myeloproliferative neoplasm): the Case File requires three core records only, a histopathology, bone marrow, flow cytometry or cytogenetics report (any one), a clinical note with performance status, and the question for the board (an earlier treatment summary is optional), labelled 'No disease-specific Indian protocol'. A blood cancer has no staging imaging record (the marrow and the immunophenotype take its place: night-v3 plan item 2.9); otherwise the three records rest on the owner decision R05-Q04 (17 Oct 2026), not on a guideline, and say nothing about which investigations this cancer needs: the treating team decides that. The cancer's name is kept on the Case File as the doctor wrote it (case.json cancer_name). Must be reviewed by the hospital Tumour Board before real use (clinical review); a disease-specific checklist replaces it as soon as one is built.",
  "settings_note": "One setting only: the records are the same whatever the extent of disease. The system never computes a stage or a risk group.",
@@ -37,7 +37,7 @@
      "quote": "Histopathology, staging imaging, a clinical note with performance status, and a typed question for the board; labelled 'No disease-specific Indian protocol'."
     }
    ],
-   "tier_basis": "one of the three core records (blood cancer variant) of the owner decision R05-Q04; not a guideline tier",
+   "tier_basis": "one of the three core records (blood cancer variant) of the owner decision R05-Q04; not a guideline tier. The quote is the owner's sentence for solid cancers (four core records); this blood cancer variant leaves staging imaging out on purpose (night-v3 plan item 2.9)",
    "note": "Any final, signed histopathology, bone marrow, flow cytometry or cytogenetics report of this patient counts (a lymph node biopsy, a marrow aspirate and trephine, an immunophenotype or a karyotype). Not a clinical guideline: what the board needs from it is the treating team's call."
   },
   {
@@ -62,7 +62,7 @@
      "quote": "Histopathology, staging imaging, a clinical note with performance status, and a typed question for the board; labelled 'No disease-specific Indian protocol'."
     }
    ],
-   "tier_basis": "one of the three core records (blood cancer variant) of the owner decision R05-Q04; not a guideline tier",
+   "tier_basis": "one of the three core records (blood cancer variant) of the owner decision R05-Q04; not a guideline tier. The quote is the owner's sentence for solid cancers (four core records); this blood cancer variant leaves staging imaging out on purpose (night-v3 plan item 2.9)",
    "note": "A clinical record of the owning treating department (route owner); Haematology is only the default before a Case File records its owner. The treating doctor may type the performance status where no note records it (shown 'entered by Dr X, no report'); the note itself is still needed."
   },
   {
@@ -89,7 +89,7 @@
      "quote": "Histopathology, staging imaging, a clinical note with performance status, and a typed question for the board; labelled 'No disease-specific Indian protocol'."
     }
    ],
-   "tier_basis": "one of the three core records (blood cancer variant) of the owner decision R05-Q04; not a guideline tier",
+   "tier_basis": "one of the three core records (blood cancer variant) of the owner decision R05-Q04; not a guideline tier. The quote is the owner's sentence for solid cancers (four core records); this blood cancer variant leaves staging imaging out on purpose (night-v3 plan item 2.9)",
    "note": "The treating doctor types the question on the Case File (audited 'typed_value', shown 'entered by Dr X, no report'), or a clinical note records it. Like every values-only record, it is carried by a final, signed clinical note or referral of this Case File."
   }
  ],

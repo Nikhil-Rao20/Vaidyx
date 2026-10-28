@@ -51,8 +51,10 @@ AUTOMATIC = "Vaidyx (automatic)"
 LIVE_DECISION: dict[str, dict] = {}  # mid -> {text, by, at, case_id}: what the coordinator types, shown "not saved" on the room screen
 AGENT_STATE: dict[str, dict] = {}    # mid -> {role: {state, by, by_name, question, at, since, expires}}: each agent's live entry (memory only)
 AGENT_AUDIO: dict[str, dict] = {}    # mid -> {question id: {role, devices: {user: expires}}}: the devices that report playing an answer
+AGENT_LISTEN: dict[str, dict] = {}   # mid -> {role: {user: {by, by_name, at, since, expires}}}: each member's device recording for an agent
 AGENT_LOCKS: dict[tuple, asyncio.Lock] = {}  # (mid, role) -> one answer at a time per agent
 _TASKS: set = set()                  # background answers (kept referenced until done)
+_TASKS_BY_MID: dict[str, set] = {}   # mid -> its background tasks, cancelled when the meeting ends (review 9 D, I3)
 _ANSWERING: set = set()              # (mid, question id) being answered now
 
 
@@ -185,7 +187,7 @@ def _shape(s: dict):
         if user in admitted or (isinstance(info, dict) and manage(info)):
             if ev.get("type") == "chat" and isinstance(info, dict) and info.get("outside_expert") and isinstance(ev.get("message"), dict):
                 return {**ev, "message": _chat_lines(s, info, [ev["message"]])[0]}
-            return ev
+            return _for_outside(info, s, ev)
         if ev.get("type") in PRIVATE_EVENTS:
             return None
         if isinstance(ev.get("agents"), list):
@@ -523,6 +525,16 @@ def _agent_entry(mid: str, role: str) -> dict | None:
     return e
 
 
+def _listener(mid: str, role: str) -> dict | None:
+    """The member whose device records a question for this agent, the first who started when several do (each entry per (role, user),
+    so an answer never erases another member's listening); expired entries go (a closed tab never leaves a false state)."""
+    by_user = (AGENT_LISTEN.get(mid) or {}).get(role) or {}
+    now = time.time()
+    for u in [u for u, e in by_user.items() if (e.get("expires") or 0) < now]:
+        by_user.pop(u, None)
+    return min(by_user.values(), key=lambda e: e.get("since") or 0) if by_user else None
+
+
 def _audio_playing(mid: str, role: str) -> str | None:
     """The question id of this role's answer that at least one device reports playing now (a report expires AUDIO_TTL after it was
     made; the device renews it while it plays)."""
@@ -547,8 +559,12 @@ def agent_live_state(s: dict, role: str) -> dict:
     e = _agent_entry(mid, role) or {}
     st = e.get("state")
     base = {"by": e.get("by"), "by_name": e.get("by_name"), "question": e.get("question"), "at": e.get("at")}
-    if st in ("listening", "thinking"):
+    if st == "thinking":
         return {"state": st, **base}
+    if st != "answering":
+        lis = _listener(mid, role)
+        if lis:
+            return {"state": "listening", "by": lis.get("by"), "by_name": lis.get("by_name"), "question": None, "at": lis.get("at")}
     playing = _audio_playing(mid, role)
     if playing:
         return {"state": "speaking", **base, "question": e.get("question") or playing}
@@ -572,7 +588,8 @@ def _agent_brief(s: dict, cid: str, role: str) -> tuple:
         bv = helpers.brief_view(art if isinstance(art, dict) else None, rules.case_signature(cid, st))
     except Exception:
         bv = {"status": "none", "label": "", "at": None, "points_for_review": [], "not_documented": [], "message": ""}
-    out = {"status": bv.get("status") or "none", "label": bv.get("label") or "", "at": bv.get("at"), "reviewed_by": bv.get("reviewed_by"), "message": bv.get("message") or ""}
+    out = {"status": bv.get("status") or "none", "label": bv.get("label") or "", "at": bv.get("at"), "reviewed_by": bv.get("reviewed_by"), "reviewed_by_name": bv.get("reviewed_by_name"), "message": bv.get("message") or "",
+           "model": str(bv.get("model") or "")}  # the model that wrote the brief, named beside it (review 9 C, S1)
     if status in ("queued", "running"):
         out["status"] = "preparing"
     elif status == "error" and out["status"] == "none":
@@ -674,6 +691,54 @@ def _chat_lines(s: dict, r: dict | None, lines) -> list[dict]:
             if c and outside_view(r, c):
                 text = strip_identity(text, c)
         out.append({**m, "text": text})
+    return out
+
+
+_ANSWER_TEXT = ("text", "message", "statements", "speech", "references", "not_documented", "stale_note", "dropped_note")
+
+
+def _withhold_question(q: dict, case: dict | None) -> dict:
+    """A question with the patient's identity replaced by [withheld] in its text and in its answer's text, statements (with their
+    citation quotes), speech and the other text fields; the ids, roles and names of the people asking stay."""
+    if not case or not isinstance(q, dict):
+        return q
+    out = {**q, "text": strip_identity(q.get("text") or "", case)}
+    a = q.get("answer")
+    if isinstance(a, dict):
+        out["answer"] = {**a, **{k: strip_identity(a[k], case) for k in _ANSWER_TEXT if k in a}}
+    elif isinstance(a, str):
+        out["answer"] = strip_identity(a, case)
+    return out
+
+
+def _for_outside(r: dict | None, s: dict, obj):
+    """The agents' answers and points as an outside expert may read them (review 9 D, S2): without the owner's consent for an outside
+    discussion of that Case File (outside_view), the patient's name and numbers are replaced by [withheld] in a `question` (an event),
+    in `questions` (the view) and in the `points` of `agents` (text and quotes). Anyone else gets `obj` as it is."""
+    if not (isinstance(r, dict) and r.get("outside_expert")) or not isinstance(obj, dict):
+        return obj
+    cache: dict = {}
+
+    def case_for(cid):
+        if not cid:
+            return None
+        if cid not in cache:
+            try:
+                c = store.get_case(cid)
+            except Exception:
+                c = None
+            cache[cid] = c if c and outside_view(r, c) else None
+        return cache[cid]
+    out = dict(obj)
+    if isinstance(obj.get("question"), dict):
+        out["question"] = _withhold_question(obj["question"], case_for(obj["question"].get("case_id")))
+    if isinstance(obj.get("questions"), list):
+        out["questions"] = [_withhold_question(q, case_for(q.get("case_id"))) if isinstance(q, dict) else q for q in obj["questions"]]
+    if isinstance(obj.get("agents"), list):
+        c = case_for(s.get("current"))
+        if c:
+            out["agents"] = [{**a, "points": strip_identity(a["points"], c)} if isinstance(a, dict) and isinstance(a.get("points"), list) else a
+                             for a in obj["agents"]]
     return out
 
 
@@ -785,7 +850,7 @@ def view(mid: str, r: dict) -> dict:
     af = _agent_fields(s)
     if not member:
         af["agents"] = agents_public(af["agents"])  # no record quotes for a viewer who is not admitted
-    return {"meeting": summary_row(s), "agenda": agenda,
+    return _for_outside(r, s, {"meeting": summary_row(s), "agenda": agenda,
             "code": {"value": code["value"], "expires_at": code.get("expires_at"), "attempts": code.get("attempts", 0)} if code else None,
             "attendance": attendance_rows(s), "current": cv, "decision_live": dl, "questions": list(s.get("questions") or []) if member else [],
             "hands": list(s.get("hands") or []), **af, "spotlight": spotlight_view(s),
@@ -798,7 +863,7 @@ def view(mid: str, r: dict) -> dict:
                     "present": member and s.get("status") == "in_session" and may_present(s, r), "chat": member and s.get("status") in ("planned", "in_session")},
             "me": {"user": user, "status": me.get("status"), "mode": me.get("mode"), "department": me.get("department") or ""},
             "online": live.online(mid), "outcomes": outcomes, "ended": sorted((s.get("ended") or {}).keys()), "cards_given": cards,
-            "heads": board.heads(), "absent_roles": board.absent_roles(s, cur) if cur else [], "status": s.get("status")}
+            "heads": board.heads(), "absent_roles": board.absent_roles(s, cur) if cur else [], "status": s.get("status")})
 
 
 # ---- create, update, list ------------------------------------------------------------------------------------------------------------
@@ -862,6 +927,9 @@ def cancel(mid: str, by: str, reason: str = "") -> dict:
     s["cancelled"] = {"by": by, "at": _now(), "reason": reason}
     s["code"] = None
     _save(s)
+    _cancel_tasks(mid)
+    for m in (AGENT_STATE, AGENT_LISTEN, AGENT_AUDIO):
+        m.pop(mid, None)
     board.audit_event(mid, "meeting_cancelled", by, reason=reason)
     title = f"Tumour Board on {_dmy(s.get('date'))}" + (f" {s['time']}" if s.get("time") else "") + " cancelled"
     for did in _member_departments(s):
@@ -1360,9 +1428,12 @@ def end(mid: str, by: str) -> dict:
     _save(s)
     LIVE_DECISION.pop(mid, None)
     AGENT_STATE.pop(mid, None)
+    AGENT_LISTEN.pop(mid, None)
     AGENT_AUDIO.pop(mid, None)
+    cancelled = _cancel_tasks(mid)  # the agents stop with the meeting: no answer streams into a closed meeting (review 9 D, I3)
     pacs.end_session(mid)
-    board.audit_event(mid, "meeting_ended", by, outcomes=len(s.get("outcomes") or {}), cards=sum(len(v) for v in (s.get("cards") or {}).values()))
+    board.audit_event(mid, "meeting_ended", by, outcomes=len(s.get("outcomes") or {}), cards=sum(len(v) for v in (s.get("cards") or {}).values()),
+                      agent_tasks_stopped=cancelled)
     _send(s, {"type": "ended", "meeting": summary_row(s)})
     return {"meeting": summary_row(s)}
 
@@ -1379,6 +1450,7 @@ def set_current(mid: str, by: str, case_id: str = "", slide=None) -> dict:
         s["live"] = {"slide": 0, "opened": None, "timer": _fresh_timer(s, case_id), "case_started_at": time.time()}
         LIVE_DECISION.pop(mid, None)
         AGENT_STATE.pop(mid, None)
+        AGENT_LISTEN.pop(mid, None)
         AGENT_AUDIO.pop(mid, None)
         changed_case = True
     if slide is not None:
@@ -1502,9 +1574,9 @@ def _question(s: dict, qid: str) -> dict | None:
     return next((x for x in s.get("questions") or [] if isinstance(x, dict) and x.get("id") == qid), None)
 
 
-def _announce(mid: str, role: str) -> dict:
+def _announce(mid: str, role: str, s: dict | None = None) -> dict:
     """Broadcast one agent's true state (agent_live_state) as an agent_state event, per role."""
-    s = get(mid)
+    s = s or get(mid)
     if not s:
         return {}
     st = agent_live_state(s, role)
@@ -1512,21 +1584,138 @@ def _announce(mid: str, role: str) -> dict:
     return st
 
 
+def _later(delay: float, fn, *args) -> bool:
+    """Run fn(*args) on the running loop `delay` seconds from now (an expiry announced when it happens, review 9 D, I4); False when
+    there is no loop (the state is then corrected by the next read)."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+
+    def run():
+        try:
+            fn(*args)
+        except Exception as e:
+            log.info("meeting %s: expiry not announced (%s)", args[0] if args else "", e.__class__.__name__)
+    loop.call_later(max(0.0, float(delay)) + 0.05, run)
+    return True
+
+
+def _in_session_now(mid: str) -> dict | None:
+    s = get(mid)
+    return s if s and s.get("status") == "in_session" else None
+
+
+def _entry_expired(mid: str, role: str, expires: float) -> None:
+    """An agent's entry with an expiry (an error word) reached it untouched: it goes and the agent's state is announced."""
+    e = (AGENT_STATE.get(mid) or {}).get(role)
+    if e and e.get("expires") == expires:
+        AGENT_STATE[mid].pop(role, None)
+        s = _in_session_now(mid)
+        if s:
+            _announce(mid, role, s)
+
+
+def _listen_expired(mid: str, role: str, user: str, expires: float) -> None:
+    e = ((AGENT_LISTEN.get(mid) or {}).get(role) or {}).get(user)
+    if e and e.get("expires") == expires:
+        AGENT_LISTEN[mid][role].pop(user, None)
+        s = _in_session_now(mid)
+        if s:
+            _announce(mid, role, s)
+
+
+def _audio_expired(mid: str, qid: str, key: str, expires: float) -> None:
+    a = (AGENT_AUDIO.get(mid) or {}).get(qid)
+    if a and (a.get("devices") or {}).get(key) == expires:
+        a["devices"].pop(key, None)
+        s = _in_session_now(mid)
+        if s and a.get("role"):
+            _announce(mid, a["role"], s)
+
+
+def user_left(mid: str, user: str) -> list[str]:
+    """The last socket of `user` in this meeting closed (api/live.py): that user's listening entries and playback reports go at once,
+    and each agent whose entries changed is announced, so no screen keeps "Listening to <name>" or "Speaking" for a closed tab."""
+    roles = set()
+    for role, by_user in list((AGENT_LISTEN.get(mid) or {}).items()):
+        if by_user.pop(user, None) is not None:
+            roles.add(role)
+    for qid, a in list((AGENT_AUDIO.get(mid) or {}).items()):
+        devs = a.get("devices") or {}
+        gone = [k for k in devs if k == user or str(k).startswith(user + ":")]
+        for k in gone:
+            devs.pop(k, None)
+        if gone and a.get("role"):
+            roles.add(a["role"])
+    s = _in_session_now(mid) if roles else None
+    if s:
+        for role in sorted(roles):
+            _announce(mid, role, s)
+    return sorted(roles)
+
+
 def _set_agent(mid: str, role: str, state: str, by: str | None = None, question: str | None = None, ttl: float | None = None) -> dict:
     """One agent's live entry (per role, never per meeting; `ready` clears it) and the agent_state event with the state as it is
-    computed (speaking wins over ready while a device still plays)."""
+    computed (speaking wins over ready while a device still plays). Nothing for a meeting that is not in session (an answer ending
+    after the meeting ended never brings its live state back, review 9 D, I3). An entry with an expiry is announced when it expires."""
+    s = _in_session_now(mid)
+    if not s:
+        AGENT_STATE.pop(mid, None)
+        return {}
     if state == "ready":
         (AGENT_STATE.get(mid) or {}).pop(role, None)
     else:
+        expires = (time.time() + ttl) if ttl else None
         AGENT_STATE.setdefault(mid, {})[role] = {"state": state, "by": by, "by_name": display_name(by) if by else None, "question": question,
-                                                 "at": _now(), "since": time.time(), "expires": (time.time() + ttl) if ttl else None}
-    return _announce(mid, role)
+                                                 "at": _now(), "since": time.time(), "expires": expires}
+        if expires:
+            _later(ttl, _entry_expired, mid, role, expires)
+    return _announce(mid, role, s)
 
 
 def _stop_audio(s: dict, role: str, qid: str | None, by: str) -> None:
     if qid:
         (AGENT_AUDIO.get(s["id"]) or {}).pop(qid, None)
     _send(s, {"type": "agent_stop", "role": role, "question": qid, "by": by})
+
+
+def _track(mid: str, t) -> None:
+    """Keep a background task referenced until it is done, and listed under its meeting so the end of the meeting cancels it."""
+    _TASKS.add(t)
+    _TASKS_BY_MID.setdefault(mid, set()).add(t)
+
+    def done(task):
+        _TASKS.discard(task)
+        ts = _TASKS_BY_MID.get(mid)
+        if ts is not None:
+            ts.discard(task)
+            if not ts:
+                _TASKS_BY_MID.pop(mid, None)
+    t.add_done_callback(done)
+
+
+def _cancel_tasks(mid: str) -> int:
+    """Cancel the meeting's agent tasks (answers in flight, questions waiting in the queue, context pre-loads); from the task's own
+    loop, or through it when called from another thread. Returns how many were still running."""
+    n = 0
+    try:
+        running = asyncio.get_running_loop()
+    except RuntimeError:
+        running = None
+    for t in list(_TASKS_BY_MID.pop(mid, ())):
+        if t.done():
+            continue
+        n += 1
+        try:
+            loop = t.get_loop()
+            if loop is running:
+                t.cancel()
+            else:
+                loop.call_soon_threadsafe(t.cancel)
+        except RuntimeError:  # its loop is closed: nothing left to stop
+            pass
+    return n
 
 
 def _warm_agents(s: dict, roles: list | None = None) -> int:
@@ -1542,8 +1731,7 @@ def _warm_agents(s: dict, roles: list | None = None) -> int:
     from . import agents
     n = 0
     for role in (roles if roles is not None else active_roles(s, cid)):
-        t = loop.create_task(agents.warm(cid, role))
-        _TASKS.add(t); t.add_done_callback(_TASKS.discard)
+        _track(s["id"], loop.create_task(agents.warm(cid, role)))
         n += 1
     return n
 
@@ -1584,6 +1772,7 @@ def set_agent(mid: str, by: str, role: str, on: bool) -> list[dict]:
         _warm_agents(s, [role])
     if not on:
         e = (AGENT_STATE.get(mid) or {}).pop(role, None) or {}
+        (AGENT_LISTEN.get(mid) or {}).pop(role, None)
         _stop_audio(s, role, e.get("question") or _audio_playing(mid, role), by)
     s = need(mid)
     ag = agents_view(s)
@@ -1608,24 +1797,34 @@ def _members_may_ask(s: dict, manager: bool) -> None:
 
 def set_listening(mid: str, user: str, role: str, on: bool, manager: bool = False) -> dict:
     """A member's device records a question for this agent (on), or stopped (off): the only trigger of "listening", shown with the
-    asker's name and expiring after LISTEN_TTL so a closed tab never leaves it on. Not while the agent thinks or answers, nor while
-    it listens to someone else (the device still records; the tile keeps its true word). Audited as seconds: never audio or words."""
+    asker's name and expiring after LISTEN_TTL so a closed tab never leaves it on (announced when it expires, and at once when the
+    asker's last socket closes, user_left). Kept per (role, user): the tile shows the first member who started, and only while the agent
+    neither thinks nor answers; `accepted` is False when the tile shows another word (the device still records; its entry waits and
+    shows when the other word ends). Audited as seconds: never audio or words."""
     s = need(mid); _in_session(s)
     cid = s.get("current")
     if role not in active_roles(s, cid):
         raise MeetingError("That agent is not in this meeting. The coordinator can add it.", 409, "agent_not_in_meeting")
     if on:
         _members_may_ask(s, manager)
-    e = _agent_entry(mid, role) or {}
+    by_user = AGENT_LISTEN.setdefault(mid, {}).setdefault(role, {})
+    mine = by_user.get(user)
+    if mine and (mine.get("expires") or 0) < time.time():
+        by_user.pop(user, None)
+        mine = None
     if on:
-        if e.get("state") in ("thinking", "answering") or (e.get("state") == "listening" and e.get("by") != user):
-            return {"role": role, **agent_live_state(s, role), "accepted": False}
-        st = _set_agent(mid, role, "listening", by=user, ttl=LISTEN_TTL)
+        now = time.time()
+        entry = {"by": user, "by_name": display_name(user), "at": (mine or {}).get("at") or _now(), "since": (mine or {}).get("since") or now,
+                 "expires": now + LISTEN_TTL}
+        by_user[user] = entry
+        _later(LISTEN_TTL, _listen_expired, mid, role, user, entry["expires"])
+        st = _announce(mid, role, s)
         board.audit_event(mid, "agent_listening", user, case_id=cid, role=role, on=True)
-        return {"role": role, **st, "accepted": True}
-    if e.get("state") == "listening" and e.get("by") == user:
-        st = _set_agent(mid, role, "ready")
-        board.audit_event(mid, "agent_listening", user, case_id=cid, role=role, on=False, seconds=round(time.time() - (e.get("since") or time.time()), 1))
+        return {"role": role, **st, "accepted": st.get("state") == "listening" and st.get("by") == user}
+    if mine:
+        by_user.pop(user, None)
+        st = _announce(mid, role, s)
+        board.audit_event(mid, "agent_listening", user, case_id=cid, role=role, on=False, seconds=round(time.time() - (mine.get("since") or time.time()), 1))
         return {"role": role, **st, "accepted": True}
     return {"role": role, **agent_live_state(s, role), "accepted": True}
 
@@ -1642,7 +1841,8 @@ def agent_audio(mid: str, user: str, qid: str, playing: bool, device: str = "") 
     a = AGENT_AUDIO.setdefault(mid, {}).setdefault(qid, {"role": role, "devices": {}})
     key = f"{user}:{str(device)[:24]}" if device else user  # one login may run two screens (the control view and the room screen)
     if playing:
-        a["devices"][key] = time.time() + AUDIO_TTL
+        a["devices"][key] = expires = time.time() + AUDIO_TTL
+        _later(AUDIO_TTL, _audio_expired, mid, qid, key, expires)
     else:
         a["devices"].pop(key, None)
     after = agent_live_state(s, role)
@@ -1662,6 +1862,9 @@ def stop_agent(mid: str, user: str, role: str, qid: str | None = None, manager: 
         raise MeetingError("Only the MDT Coordinator or the person who asked can stop this answer for everyone.", 403, "not_allowed")
     if q and isinstance(q.get("answer"), dict):
         q["answer"]["stopped_by"] = user
+        _save(s)
+    elif q and q.get("role"):  # still thinking (or waiting): the stop is kept and holds when the answer comes (review 9 D, I2)
+        q["stop_requested"] = {"by": user, "at": _now()}
         _save(s)
     _stop_audio(s, role, qid, user)
     board.audit_event(mid, "agent_stop", user, case_id=s.get("current"), role=role, question_id=qid)
@@ -1726,7 +1929,7 @@ def _speech_events(s: dict, role: str, qid: str, speech: list, sent: int, final:
     """Sends agent_speech for the sentences not yet announced (the devices fetch each by reference); none once the answer was stopped;
     `final` marks the last sentence of a complete answer."""
     q = _question(s, qid)
-    if q and isinstance(q.get("answer"), dict) and q["answer"].get("stopped_by"):
+    if q and (q.get("stop_requested") or (isinstance(q.get("answer"), dict) and q["answer"].get("stopped_by"))):
         return len(speech)
     for i in range(sent, len(speech)):
         _send(s, {"type": "agent_speech", "role": role, "question": qid, "index": i, "final": bool(final and i == len(speech) - 1)})
@@ -1734,10 +1937,31 @@ def _speech_events(s: dict, role: str, qid: str, speech: list, sent: int, final:
 
 
 class _AgentLeft(Exception):
-    """The agent was removed from the meeting, or the case moved on, while it was answering."""
+    """The agent was removed from the meeting, the case moved on, or the meeting ended, while it was answering."""
 
 
 AGENT_LEFT = "The agent left this meeting before answering."
+MEETING_ENDED = "The meeting ended before the agent answered."
+AGENT_FAILED = "The agent could not answer. Try again."
+
+
+def _still_on(s: dict, cid: str, role: str) -> None:
+    """Raises _AgentLeft unless the meeting is in session, the Case File is still on the floor and the agent still active for it."""
+    if s.get("status") != "in_session":
+        raise _AgentLeft(MEETING_ENDED)
+    if s.get("current") != cid or role not in active_roles(s, cid):
+        raise _AgentLeft(AGENT_LEFT)
+
+
+def _stopper(q: dict | None) -> str:
+    """Who stopped this answer for everyone: on the answer, or kept on the question while the agent was still thinking."""
+    if not isinstance(q, dict):
+        return ""
+    a = q.get("answer")
+    if isinstance(a, dict) and a.get("stopped_by"):
+        return str(a["stopped_by"])
+    sr = q.get("stop_requested")
+    return str(sr.get("by") or "") if isinstance(sr, dict) else ""
 STALE_BRIEF = "The records changed since this brief was prepared; prepare it again for the current records."
 INTERRUPTED = "Interrupted (the app restarted while the agent was answering). Ask again."
 STUCK_AFTER = 120  # seconds: an agent question with no answer task this old was interrupted by a restart
@@ -1763,6 +1987,7 @@ async def answer(mid: str, qid: str, user: str = "") -> dict | None:
                "at": _now(), "speech": [], "note": ANSWER_NOTE}
     spoken = 0
     out = None
+    failed, cancelled = "", False
     t0 = time.time()
     try:
         async with lock:
@@ -1782,11 +2007,9 @@ async def answer(mid: str, qid: str, user: str = "") -> dict | None:
                 q2 = _question(s2, qid)
                 if q2 is None:
                     return
-                if s2.get("current") != cid or role not in active_roles(s2, cid):
-                    raise _AgentLeft()  # removed by the coordinator, or the case moved on: no more statements, no more speech
-                prev = q2.get("answer") if isinstance(q2.get("answer"), dict) else {}
-                if prev.get("stopped_by"):
-                    partial["stopped_by"] = prev["stopped_by"]  # a Stop for everyone during the stream holds
+                _still_on(s2, cid, role)  # removed by the coordinator, the case moved on, or the meeting ended: no more statements, no more speech
+                if _stopper(q2):
+                    partial["stopped_by"] = _stopper(q2)  # a Stop for everyone, during the stream or while thinking, holds
                 if not partial["statements"]:
                     partial["speech"].append(f"AI agent, {dept}.")
                     partial["first_seconds"] = round(time.time() - t0, 1)
@@ -1800,8 +2023,7 @@ async def answer(mid: str, qid: str, user: str = "") -> dict | None:
                 _send(s2, {"type": "question", "question": q2})
                 spoken = _speech_events(s2, role, qid, partial["speech"], spoken)
 
-            if s.get("current") != cid or role not in active_roles(s, cid):
-                raise _AgentLeft()  # queued behind an earlier answer and the agent left meanwhile
+            _still_on(s, cid, role)  # queued behind an earlier answer and the agent left, or the meeting ended, meanwhile
             a = await agents.ask(cid, role, text, history, asker, on_statement=on_statement)
             stmts = list(a.get("statements") or [])
             if stmts and not partial["statements"]:  # an answer that came whole (no stream): the same steps, at once
@@ -1822,24 +2044,31 @@ async def answer(mid: str, qid: str, user: str = "") -> dict | None:
             except ValueError as e:
                 log.info("meeting %s: answer not logged (%s)", mid, e)
             _record_exchange(need(mid), cid, role, asker, text, a, status)
-    except _AgentLeft:
-        out = {**partial, "status": "not_listed", "text": partial["text"] or AGENT_LEFT, "message": AGENT_LEFT, "statements": list(partial["statements"]),
+    except _AgentLeft as e:
+        why = str(e) or AGENT_LEFT
+        out = {**partial, "status": "not_listed", "text": partial["text"] or why, "message": why, "statements": list(partial["statements"]),
+               "references": [], "at": _now(), "speech": list(partial["speech"]), "stopped_by": partial.get("stopped_by") or "system"}
+    except asyncio.CancelledError:  # the meeting ended (end() cancels its tasks): close the answer as not listed, then stop
+        cancelled = True
+        out = {**partial, "status": "not_listed", "text": partial["text"] or MEETING_ENDED, "message": MEETING_ENDED, "statements": list(partial["statements"]),
                "references": [], "at": _now(), "speech": list(partial["speech"]), "stopped_by": partial.get("stopped_by") or "system"}
     except Exception as e:
         log.exception("meeting %s: the %s agent could not answer", mid, role)
-        out = {**partial, "status": "error", "text": partial["text"] or f"The agent could not answer ({e.__class__.__name__}). Try again.",
-               "statements": list(partial["statements"]), "references": [], "at": _now(), "speech": list(partial["speech"]), "error": e.__class__.__name__}
+        failed = e.__class__.__name__  # in the audit only (review 9 D, M5)
+        out = {**partial, "status": "error", "text": partial["text"] or AGENT_FAILED, "message": AGENT_FAILED,
+               "statements": list(partial["statements"]), "references": [], "at": _now(), "speech": list(partial["speech"])}
     finally:
         try:
             s = need(mid)
             q2 = _question(s, qid)
             if q2 is not None and out is not None:
-                if isinstance(q2.get("answer"), dict) and q2["answer"].get("stopped_by"):
-                    out["stopped_by"] = q2["answer"]["stopped_by"]
+                if _stopper(q2):
+                    out["stopped_by"] = _stopper(q2)
                 q2["answer"] = out
                 _save(s)
+                extra = {"error": failed} if failed else {}
                 board.audit_event(mid, "question_answered", "system", case_id=cid, question_id=qid, role=role, status=out.get("status"),
-                                  statements=len(out.get("statements") or []), seconds=out.get("seconds"), first_seconds=out.get("first_seconds"))
+                                  statements=len(out.get("statements") or []), seconds=out.get("seconds"), first_seconds=out.get("first_seconds"), **extra)
                 _send(s, {"type": "question", "question": q2})
                 if out.get("status") not in ("error", "not_listed"):
                     _speech_events(s, role, qid, out.get("speech") or [], spoken, final=True)
@@ -1849,23 +2078,66 @@ async def answer(mid: str, qid: str, user: str = "") -> dict | None:
         if out is not None and out.get("status") == "error":
             _set_agent(mid, role, "error", by=asker, question=qid, ttl=ERROR_TTL)
         else:
-            _set_agent(mid, role, "ready")
+            _set_agent(mid, role, "ready")  # nothing once the meeting is over
+    if cancelled:
+        raise asyncio.CancelledError()
     return out
+
+
+def _points_now(cid: str, points) -> tuple[list[dict], int]:
+    """The brief's points for review that still match the records now (review 9 D, I5): each checked again with qa.verify (exact quotes
+    only, no near match, no model call); a point kept on an approximate quote is never spoken. Returns (statements with the located
+    citations and the point's references, the count left out)."""
+    from . import qa
+    rows = [p for p in (points or []) if isinstance(p, dict) and p.get("text")]
+    out = []
+    for p in rows:
+        cites = [c for c in (p.get("citations") or []) if isinstance(c, dict)]
+        if p.get("approximate") or any(c.get("approximate") for c in cites):
+            continue
+        try:
+            kept, _dropped = qa.verify(cid, [{"text": str(p["text"]), "citations": cites}], near_match=False)
+        except Exception as e:
+            log.info("points of %s not checked (%s)", cid, e.__class__.__name__)
+            kept = []
+        if kept and not kept[0].get("approximate"):
+            out.append({"text": kept[0]["text"], "citations": list(kept[0].get("citations") or []), "references": list(p.get("references") or []),
+                        **({"flags": kept[0]["flags"]} if kept[0].get("flags") else {})})
+    return out, len(rows) - len(out)
+
+
+def _dropped_note(n: int) -> str:
+    return (f"{n} points no longer match the records and were left out." if n != 1 else "1 point no longer matches the records and was left out.") if n else ""
+
+
+def _brief_label(art: dict) -> str:
+    """"AI draft, not reviewed", or "Reviewed by Dr <name>" when a doctor reviewed the brief."""
+    rv = art.get("review") if isinstance(art.get("review"), dict) else {}
+    if rv.get("status") == "reviewed" and rv.get("by"):
+        name = display_name(rv["by"])
+        return f"Reviewed by {name}" if name.lower().startswith("dr") else f"Reviewed by Dr {name}"
+    return "AI draft, not reviewed"
 
 
 def present_points(mid: str, user: str, role: str, manager: bool = False) -> dict:
     """"Present your points" (night-v3 6.2): the agent presents a short summary of its brief for the Case File on the floor: the brief's
-    points for review as statements with their citations, built by code (no model call), saved as a question "Present your points"
-    with its answer, logged and announced like any answer, spoken sentence by sentence on the devices with agent voices on."""
+    points for review that still match the records (_points_now) as statements with their citations, built by code (no model call),
+    saved as a question "Present your points" with its answer, logged and announced like any answer, spoken sentence by sentence on the
+    devices with agent voices on. One answer at a time per agent: refused while the agent thinks or answers (review 9 D, I6); this
+    function never awaits, so nothing interleaves with it, and the agent shows answering while its speech is announced."""
     s = need(mid); _in_session(s)
     cid = s.get("current")
     if role not in active_roles(s, cid):
         raise MeetingError("That agent is not in this meeting. The coordinator can add it.", 409, "agent_not_in_meeting")
     _members_may_ask(s, manager)
+    dept = org.department_name(board.ROLE_DEPARTMENT.get(role, role))
+    e = _agent_entry(mid, role) or {}
+    lock = AGENT_LOCKS.get((mid, role))
+    if (lock is not None and lock.locked()) or e.get("state") in ("thinking", "answering"):
+        raise MeetingError(f"{dept} is answering {e.get('by_name') or 'someone'}. Try again when it finishes.", 409, "agent_busy")
     brief, _pts, nd, npts = _agent_brief(s, cid, role)
     if brief["status"] == "preparing":
         raise MeetingError("The brief is still being prepared from the records. Try again in a moment.", 409, "brief_preparing")
-    dept = org.department_name(board.ROLE_DEPARTMENT.get(role, role))
     try:
         from . import agents
         label = agents.spec(role)["label"]
@@ -1873,8 +2145,8 @@ def present_points(mid: str, user: str, role: str, manager: bool = False) -> dic
         label = dept
     art = (store.get_state(cid).get("artefacts") or {}).get(f"brief_{role}")
     art = art if isinstance(art, dict) else {}
-    stmts = [{"text": str(p["text"]), "citations": list(p.get("citations") or []), "references": list(p.get("references") or [])}
-             for p in (art.get("points_for_review") or []) if isinstance(p, dict) and p.get("text")]
+    stmts, dropped = _points_now(cid, art.get("points_for_review"))
+    dropped_note = _dropped_note(dropped)
     speech = [f"AI agent, {dept}."]
     stale = brief["status"] == "stale"
     if stale:
@@ -1882,9 +2154,14 @@ def present_points(mid: str, user: str, role: str, manager: bool = False) -> dic
     if stmts:
         status, message = "answered", ""
         speech += [x["text"] for x in stmts]
+        if dropped_note:
+            speech.append(dropped_note)
         if nd:
             speech.append(f"{nd} item{'s are' if nd != 1 else ' is'} listed as not documented; the list is on the screen.")
         speech.append("Sources are on the screen.")
+    elif dropped:
+        status, message = "not_documented", dropped_note
+        speech.append(message)
     elif brief["status"] == "no_documents":
         status, message = "not_documented", brief.get("message") or f"No {dept} reports in this Case File."
         speech.append(message)
@@ -1897,21 +2174,23 @@ def present_points(mid: str, user: str, role: str, manager: bool = False) -> dic
     q = {"id": "Q" + uuid.uuid4().hex[:6], "by": user, "by_name": display_name(user), "text": "Present your points", "at": _now(), "case_id": cid, "role": role,
          "agent_label": label, "kind": "present_points", "queued": False}
     a = {"status": status, "statements": stmts, "references": [], "message": message, "label": label, "model": art.get("model") or "", "removed": [],
-         "seconds": 0.0, "kind": "present_points", "not_documented": list(art.get("not_documented") or [])}
+         "seconds": 0.0, "kind": "present_points", "not_documented": list(art.get("not_documented") or []), "dropped_unverified": dropped}
     q["answer"] = {"status": status, "text": " ".join(x["text"] for x in stmts) or message, "statements": stmts, "references": [], "role": role, "label": label,
                    "model": a["model"], "at": _now(), "seconds": 0.0, "first_seconds": 0.0, "speech": speech, "message": message, "kind": "present_points",
-                   "not_documented": a["not_documented"], "brief_label": brief.get("label") or "", "note": ANSWER_NOTE, "stale": stale,
-                   "stale_note": STALE_BRIEF if stale else ""}
+                   "not_documented": a["not_documented"], "brief_label": _brief_label(art), "brief_model": str(art.get("model") or ""), "note": ANSWER_NOTE,
+                   "stale": stale, "stale_note": STALE_BRIEF if stale else "", "dropped_unverified": dropped, "dropped_note": dropped_note}
     s.setdefault("questions", []).append(q)
     _save(s)
-    board.audit_event(mid, "present_points", user, case_id=cid, role=role, question_id=q["id"], status=status, statements=len(stmts))
+    board.audit_event(mid, "present_points", user, case_id=cid, role=role, question_id=q["id"], status=status, statements=len(stmts), dropped=dropped)
     try:
         board.log_answer(mid, cid, role, "Present your points", a, by=user)
     except ValueError as e:
         log.info("meeting %s: points not logged (%s)", mid, e)
     _record_exchange(s, cid, role, user, "Present your points", a, status)
     _send(s, {"type": "question", "question": q})
+    _set_agent(mid, role, "answering", by=user, question=q["id"])
     _speech_events(s, role, q["id"], speech, 0, final=True)
+    _set_agent(mid, role, "ready")  # speaking from here while a device reports playing it
     return q
 
 
@@ -1921,9 +2200,7 @@ def answer_in_background(mid: str, qid: str, user: str = "") -> bool:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         return False
-    t = loop.create_task(answer(mid, qid, user))
-    _TASKS.add(t)
-    t.add_done_callback(_TASKS.discard)
+    _track(mid, loop.create_task(answer(mid, qid, user)))
     return True
 
 

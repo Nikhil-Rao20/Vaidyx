@@ -45,7 +45,8 @@ export interface ConversationRow {
   title: string;
   /** Person: title and departments; department: "Reaches N people" or "From Dr X"; coordinator: "Reaches N coordinators". */
   subtitle: string;
-  with: { user: string; display_name: string; title?: string; departments: string[]; online: boolean | Presence } | null;
+  /** `online` is true only when online; `presence` is the word ("online", "away", "offline", review 9 C, I4). */
+  with: { user: string; display_name: string; title?: string; departments: string[]; online: boolean | Presence; presence?: Presence } | null;
   department: { id: string; name: string; members: number } | null;
   created_by: string;
   last: { seq: number; ts: string; by: string; by_name: string; preview: string } | null;

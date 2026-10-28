@@ -154,6 +154,30 @@ def test_live_answer_output_guardrail(monkeypatch, pack):
     assert [x["reason"] for x in a["removed"]] == ["guardrail"] and a["dropped_unverified"] == 0
 
 
+HPE_I1 = ("SYNTHETIC\nHISTOPATHOLOGY REPORT\nMargins: involved\nPaclitaxel 175 mg/m2 given on 03/03/2026\nReport status: FINAL")
+
+
+def test_review_i1_a_treatment_word_outside_the_quote_is_refused(monkeypatch, pack):
+    """The review's margins example: the quote is found and has no number, so only the treatment word outside it can refuse it."""
+    case_id = _case(make_doc("Dhpe00001", "histopathology", text=HPE_I1))
+    cite = [{"doc_id": "Dhpe00001", "quote": "Margins: involved"}]
+    drug = [{"doc_id": "Dhpe00001", "quote": "Paclitaxel 175 mg/m2 given on 03/03/2026"}]
+    _live(monkeypatch, {"answer_found": True, "references": [], "statements": [
+        {"text": "Margins are involved, so re-excision is needed.", "citations": cite},
+        {"text": "Margins are involved; re-excision will follow.", "citations": cite},  # no advice word, but a surgery word of its own
+        {"text": "Margins: involved", "citations": cite},
+        {"text": "The report records margins involved.", "citations": cite},
+        {"text": "Paclitaxel 175 mg/m2 given on 03/03/2026.", "citations": drug}]})
+    a = asyncio.run(agents.ask(case_id, "pathology", "What does the pathology report say about the margins?"))
+    assert [s["text"] for s in a["statements"]] == ["Margins: involved", "The report records margins involved.",
+                                                    "Paclitaxel 175 mg/m2 given on 03/03/2026."]
+    by = {x["text"]: x for x in a["removed"]}
+    assert by["Margins are involved, so re-excision is needed."]["reason"] == "guardrail"
+    assert by["Margins are involved; re-excision will follow."]["reason"] == "guardrail"
+    assert "treatment words outside the quoted record text: excision" in by["Margins are involved; re-excision will follow."]["detail"]
+    assert "—" not in by["Margins are involved; re-excision will follow."]["detail"]
+
+
 def test_live_answer_on_an_unlisted_case_file(monkeypatch):
     calls = _no_model(monkeypatch)
     store.create_case("TB-UNL", {"name": "SYNTHETIC, X"}, "", created_by="test")

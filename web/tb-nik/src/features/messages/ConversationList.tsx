@@ -38,7 +38,7 @@ function FilterBar({ value, onChange }: { value: ConversationFilter; onChange: (
 }
 
 function Row({ c, me, active }: { c: ConversationRow; me: string; active: boolean }) {
-  const presence = usePresence(c.with?.user, c.with?.online ?? null);
+  const presence = usePresence(c.with?.user, c.with?.presence ?? c.with?.online ?? null);
   const unread = c.unread > 0;
   const from = c.last ? (c.last.by === me ? "You: " : c.kind !== "direct" ? `${c.last.by_name}: ` : "") : "";
   return (

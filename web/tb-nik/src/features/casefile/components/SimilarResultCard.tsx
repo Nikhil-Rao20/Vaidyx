@@ -6,7 +6,7 @@
 // (Phase 7 review, S1).
 import { FolderOpen } from "lucide-react";
 import type { SimilarLine, SimilarResult } from "../types";
-import { LoadingButton, StatusChip } from "./common";
+import { LoadingButton, StatusChip, indianDates } from "./common";
 
 export const SIMILAR_LABEL = "Past Case File, not advice for this patient";
 
@@ -65,7 +65,7 @@ export function SimilarResultCard({ r, onOpen, opening, message }: { r: SimilarR
           <ul className="space-y-1">
             {r.stage.map((s, i) => (
               <li key={i} className="text-sm">
-                <span className="font-medium text-foreground">{s.text}</span>{" "}
+                <span className="font-medium text-foreground">{indianDates(s.text)}</span>{" "}
                 <span className="text-xs text-muted-foreground">({[s.label, s.where].filter(Boolean).join(", ")})</span>
                 {s.quote && !same(s.quote, s.text) ? <Quoted text={s.quote} /> : null}
               </li>
@@ -79,7 +79,7 @@ export function SimilarResultCard({ r, onOpen, opening, message }: { r: SimilarR
           <ul className="space-y-1">
             {values.map((v, i) => (
               <li key={`${v.fact}-${i}`} className="text-sm">
-                <span className="text-muted-foreground">{v.label}:</span> <span className="text-foreground">{v.value}</span>
+                <span className="text-muted-foreground">{v.label}:</span> <span className="text-foreground">{indianDates(v.value)}</span>
                 {v.shared ? <> <StatusChip kind="muted">also on this file</StatusChip></> : null}
                 {v.quote && !same(v.quote, v.value) ? <Quoted text={v.quote} where={v.where} /> : v.where ? <> <span className="text-xs text-muted-foreground">({v.where})</span></> : null}
               </li>
@@ -118,7 +118,7 @@ export function SimilarResultCard({ r, onOpen, opening, message }: { r: SimilarR
                 {outcome.sentences.map((s, i) => (
                   <li key={i} className="space-y-0.5 text-sm" data-testid="similar-outcome">
                     <span className="block">
-                      <span className="text-foreground">{s.text}</span>
+                      <span className="text-foreground">{indianDates(s.text)}</span>
                       {s.label ? <> <StatusChip kind="muted" className="whitespace-normal">{s.label}</StatusChip></> : null}
                       {s.where ? <> <span className="text-xs text-muted-foreground">({s.where})</span></> : null}
                     </span>

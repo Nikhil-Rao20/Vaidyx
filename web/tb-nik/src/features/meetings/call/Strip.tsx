@@ -16,9 +16,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { VaidyxIcon } from "@/components/Wordmark";
 import { cn } from "@/lib/utils";
 import { indianDates } from "@/features/casefile/components/common";
+import { Dots } from "../components/shared";
 import { LiveVideo, TileFrame, micStateOf, useSpeaking, type TilePerson, type TileSize } from "../components/VideoTiles";
 import { useCall } from "./context";
-import { pointsLine, presentBlockedReason } from "./panels/AgentPoints";
+import { chipText, pointsHeader, pointsLine, presentBlockedReason } from "./panels/AgentPoints";
 import { AGENT_STATE_WORD, BADGE_WORD, REACTIONS, badgesOf, type CallCtx, type LayoutKind, type RoleBadge } from "./types";
 
 // ---- pure helpers ---------------------------------------------------------------------------------------------------------
@@ -409,9 +410,6 @@ export const AGENT_RING: Record<string, string> = {
   thinking: "border-review", answering: "border-primary", speaking: "border-primary", error: "border-bad",
 };
 
-function Dots() {
-  return <span className="ml-0.5 inline-flex gap-0.5" aria-hidden>{[0, 1, 2].map((i) => <motion.span key={i} className="size-1 rounded-full bg-current" animate={{ opacity: [0.2, 1, 0.2] }} transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }} />)}</span>;
-}
 
 /** What "Stop" on an agent's tile stops: the answer this device plays for that agent (this device), and for the coordinator or the
  * asker the voice for everyone while the agent speaks. Null when nothing of it is being spoken. Pure. */
@@ -480,7 +478,11 @@ export function AgentCallTile({ agent, big, className }: { agent: AgentInfo; big
   const busy = agentBusy(key);
   const line = agentTitle(agent);
   const count = pointsLine(agent);
-  const first = big && agent.brief?.status !== "preparing" ? agent.points?.[0]?.text ?? null : null;
+  // The first point on a big tile goes with its source and the brief's true review status and model (review 9 C, S2).
+  const p0 = big && agent.brief?.status !== "preparing" ? agent.points?.[0] ?? null : null;
+  const c0 = p0?.citations?.[0];
+  const first = p0?.text ? `${indianDates(p0.text)}${c0 ? ` (${chipText(c0)})` : ""}` : null;
+  const firstStatus = first ? pointsHeader(agent) : null;
   const interactive = ctx.variant !== "room";
   const body = (
     <>
@@ -497,13 +499,18 @@ export function AgentCallTile({ agent, big, className }: { agent: AgentInfo; big
           {big ? <span className="text-stage-fg/80" data-part="count">{" · "}{count}</span> : null}
         </span>{" "}
         {!big ? <span className="hidden truncate text-[10px] text-stage-muted @min-[9rem]:block" data-part="count">{count}</span> : null}
-        {first ? <span className="block truncate text-base text-stage-fg/80 [@media(max-height:899px)]:hidden" data-part="point" title={`AI draft, not reviewed: ${first}`}>AI draft: {indianDates(first)}</span> : null}
+        {first ? (
+          <span className="block [@media(max-height:899px)]:hidden" title={`${firstStatus}: ${first}`}>
+            <span className="block truncate text-xs font-semibold text-stage-fg/80" data-part="point-status">{firstStatus}</span>
+            <span className="block truncate text-base text-stage-fg/80" data-part="point">{first}</span>
+          </span>
+        ) : null}
       </span>
     </>
   );
   // The name starts with the visible words in the same order (axe label-content-name-mismatch): the title, "AI agent, support
   // only", the state word.
-  const label = agentTileLabel(line, word, count, first ? indianDates(first) : null);
+  const label = agentTileLabel(line, word, count, firstStatus, first);
   return (
     <div className={cn("@container group/tile relative aspect-video overflow-hidden rounded-xl border-2 border-dashed bg-stage-raised", AGENT_RING[key] ?? "border-stage-line", className)} data-testid="agent-tile" data-agent-state={key} data-role={agent.role}>
       {interactive ? (

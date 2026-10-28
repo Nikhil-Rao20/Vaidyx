@@ -17,6 +17,7 @@ PARAKEET_NAME = "parakeet-tdt-0.6b-v2"
 FALLBACK_LABEL = "parakeet-v2-cpu"
 VAD_PARAMS = {"threshold": 0.5, "min_silence_duration_ms": 500, "min_speech_duration_ms": 250, "speech_pad_ms": 400}
 ENGINES = ("whisper", "parakeet", "cohere")
+RUN_TIMEOUT = 90.0  # seconds one engine run may take; past it the engine is marked error and the slot is given back (review 9 D, M1)
 
 
 class Unavailable(Exception):
@@ -128,6 +129,7 @@ class _Holder:
     def __init__(self):
         self.state = "not_loaded"
         self.obj = None
+        self.stuck = False  # a run passed RUN_TIMEOUT: never reloaded while its thread may still hold the device
         self.lock = asyncio.Lock()
 
 
@@ -175,7 +177,7 @@ class SttService:
         async with h.lock:
             if h.state == "ready":
                 return
-            if h.state == "error" and name != "whisper":
+            if h.state == "error" and (name != "whisper" or h.stuck):
                 raise Unavailable(name)
             h.state = "loading"
             try:
@@ -212,6 +214,18 @@ class SttService:
             except Unavailable:
                 pass
 
+    async def _run(self, name: str, fn, *args):
+        """One engine call in a worker thread, at most RUN_TIMEOUT seconds. A run that does not finish marks the engine error (the
+        health says so, the app hides the microphone) and is refused as unavailable; the log names the class of the error only."""
+        try:
+            return await asyncio.wait_for(asyncio.get_running_loop().run_in_executor(None, fn, *args), RUN_TIMEOUT)
+        except asyncio.TimeoutError as e:
+            h = self._holder(name)
+            h.state, h.obj, h.stuck = "error", None, True
+            if self.log:
+                self.log.warning("run failed engine=%s error=%s", name, type(e).__name__)
+            raise Unavailable(name) from None
+
     def check_not_loading(self, engine: str) -> None:
         name = "parakeet" if engine == "parakeet" else self.primary
         if self._holder(name).state == "loading" or self.vad.state == "loading":
@@ -219,9 +233,8 @@ class SttService:
 
     async def transcribe(self, audio: np.ndarray, duration: float, engine: str, words: bool, context: str | None) -> dict:
         """VAD, then the engine, then the clean-up. Runs inside the server's STT slot."""
-        loop = asyncio.get_running_loop()
         await self.ensure("vad")
-        speech = await loop.run_in_executor(None, self.vad.obj.speech_seconds, audio)
+        speech = await self._run("vad", self.vad.obj.speech_seconds, audio)
         result = {"text": "", "segments": [], "language": "en", "duration": round(duration, 2),
                   "speech_seconds": round(speech, 2), "engine": None, "device": None, "code": None}
         if speech < limits.MIN_SPEECH_SECONDS:
@@ -234,7 +247,7 @@ class SttService:
             name = await self.ensure_primary()
         eng = self._holder(name).obj
         result["engine"], result["device"] = eng.name, eng.device
-        segments = await loop.run_in_executor(None, eng.run, audio, words, text_norm.prompt_for(context))
+        segments = await self._run(name, eng.run, audio, words, text_norm.prompt_for(context))
         tidy = []
         for seg in segments:
             t = seg["text"]
@@ -258,6 +271,8 @@ class SttService:
         else:
             out = {"engine": PARAKEET_NAME, "state": self.parakeet.state, "device": "cpu", "precision": "float32",
                    "fallback": FALLBACK_LABEL, "fallback_reason": self.fallback_reason}
+        if self.vad.stuck:  # no dictation runs without the VAD
+            out["state"] = "error"
         return out
 
     def engines(self) -> dict:

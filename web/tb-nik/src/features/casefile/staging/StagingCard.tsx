@@ -8,6 +8,7 @@
 // A resident on the team sends the confirmation to the treating consultant for sign-off, pinned to the draft on the card (night-v3 item
 // 1.8); the card says "Waiting for Dr X's sign-off" while that proposal is pending.
 import { useState } from "react";
+import { consultantTitle } from "@/lib/format";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowRight, BookOpen, Check, CheckCircle2, Clock, FlaskConical, History, Info, Layers, PenLine, RefreshCw, Send, XCircle } from "lucide-react";
 import { notify } from "@/components/Toasts";
@@ -32,8 +33,8 @@ const cap = (x?: string) => (x ? x.charAt(0).toUpperCase() + x.slice(1) : "");
 interface SignOff { canPropose: boolean; consultantName: string; waiting: (which: Which) => boolean; send: (which: Which) => void; sending: Which | null }
 
 function SignOffButton({ which, stage, s, testId }: { which: Which; stage: string; s: SignOff; testId: string }) {
-  if (s.waiting(which)) return <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1.5 text-sm text-muted-foreground" data-testid={`${testId}-waiting`}><Clock className="size-4" aria-hidden />Waiting for Dr {s.consultantName}'s sign-off</span>;
-  return <LoadingButton onClick={() => s.send(which)} loading={s.sending === which} data-testid={testId} aria-label={`Send ${which === "prognostic" ? "prognostic stage" : "Stage"} ${stage} to Dr ${s.consultantName} for sign-off`}><Send className="size-4" />Send to Dr {s.consultantName} for sign-off</LoadingButton>;
+  if (s.waiting(which)) return <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1.5 text-sm text-muted-foreground" data-testid={`${testId}-waiting`}><Clock className="size-4" aria-hidden />Waiting for {consultantTitle(s.consultantName)}'s sign-off</span>;
+  return <LoadingButton onClick={() => s.send(which)} loading={s.sending === which} data-testid={testId} aria-label={`Send ${which === "prognostic" ? "prognostic stage" : "Stage"} ${stage} to ${consultantTitle(s.consultantName)} for sign-off`}><Send className="size-4" />Send to {consultantTitle(s.consultantName)} for sign-off</LoadingButton>;
 }
 
 function BookChip({ book, page, find, label, onOpen, here = true }: { book: string; page: number | null; find?: string; label: string; onOpen: (t: BookTarget) => void; here?: boolean }) {
@@ -226,7 +227,7 @@ function Prognostic({ caseId, view, p, book, bookShort, here, canConfirm, signOf
             <span className="flex-1" />
             <BookChip book={book} page={p.row.page} find={p.row.page === ref?.page ? ref?.find : undefined} label={bookShort} onOpen={onBook} here={here} />
           </div>
-          <p className="text-xs text-muted-foreground">The book prints this row as: {p.row.printed}</p>
+          <p className="text-xs text-muted-foreground">The table row, as transcribed: {p.row.printed}</p>
           {p.row.changed_from_anatomic ? <p className="text-xs text-muted-foreground">The book marks this group with ***: grade and the markers move it more than one stage group from the anatomic stage group (footnote ***, p. {foot("***")?.page ?? 624}).</p> : null}
           {p.row.note ? <p className="text-xs text-muted-foreground">Note: {p.row.note}</p> : null}
         </div>
@@ -250,7 +251,7 @@ function Prognostic({ caseId, view, p, book, bookShort, here, canConfirm, signOf
   );
 }
 
-export function StagingCard({ caseId, view, loading, canRun, canConfirm, canPropose = false, consultantName = "the consultant", onOpen, onBook, onChanged }: {
+export function StagingCard({ caseId, view, loading, canRun, canConfirm, canPropose = false, consultantName = "", onOpen, onBook, onChanged }: {
   caseId: string; view: StagingView | null | undefined; loading: boolean; canRun: boolean; canConfirm: boolean;
   /** A resident on the team: the confirm buttons send the draft to the consultant for sign-off (night-v3 item 1.8). */
   canPropose?: boolean; consultantName?: string;
@@ -403,6 +404,8 @@ export function StagingCard({ caseId, view, loading, canRun, canConfirm, canProp
                   : `${niceTitle(view.comparison.written.doc_title)} writes ${view.comparison.written.value}.`}
               </p>
             ) : null}
+            {/* a line that writes both stages ("pT2 pN1a M0, Anatomic stage IIB, Prognostic stage group IB") comes as kind "anatomic"
+                and is listed here and in the prognostic history as well; only a prognostic stage alone is left to that card */}
             <History_ written={view.prognostic_ref ? view.written.filter((w) => w.kind !== "prognostic") : view.written} onOpen={onOpen} />
           </div>
         ) : null}

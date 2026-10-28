@@ -180,6 +180,21 @@ def test_failing_model_sentences_are_removed_with_their_reason(decided, monkeypa
         assert t["text"] not in texts(v, "presentation")
 
 
+def test_review_i1_a_treatment_word_outside_the_quote_is_removed(decided, monkeypatch):
+    """Every treatment, drug, dose, surgery or radiotherapy word of a model sentence sits inside its quote (the whole-run review, I1)."""
+    case_id, _ = decided
+    outside = {"text": "The CT report records a 3.2 cm mass in the right upper lobe for resection.",
+               "citations": [{"doc_id": "Da0000003", "quote": "Right upper lobe mass measuring 3.2 cm"}]}
+    needs = {"text": "Adenocarcinoma, grade 2 needs adjuvant treatment.", "citations": [{"doc_id": "Da0000001", "quote": "Diagnosis: Adenocarcinoma, grade 2"}]}
+    fake(monkeypatch, pres=[P_OK, outside, needs], since=[S_OK])  # S_OK's "lobectomy" sits inside its quote
+    v = build(case_id)
+    assert texts(v, "presentation")[0] == P_OK["text"] and S_OK["text"] in texts(v, "since")
+    by = {x["text"]: x for x in v["removed"]}
+    assert by[outside["text"]]["reason"] == "guardrail" and "resection" in by[outside["text"]]["detail"]
+    assert by[needs["text"]]["reason"] == "guardrail"
+    assert outside["text"] not in texts(v, "presentation") and needs["text"] not in texts(v, "presentation")
+
+
 def test_a_sentence_citing_a_record_of_the_other_period_is_dropped(decided, monkeypatch):
     case_id, _ = decided
     fake(monkeypatch, pres=[S_OK], since=[])  # the presentation is written from the records up to the board only
@@ -450,6 +465,14 @@ def test_versions_reviews_and_edits(decided, monkeypatch, app):
     ev = store.read_audit(case_id)
     assert sum(1 for x in ev if x.get("kind") == "case_summary_edit") == 5
     assert [(x.get("version"), x.get("status")) for x in ev if x.get("kind") == "expert_review" and x.get("artefact") == "case_summary"] == [(1, "reviewed"), (2, "flagged")]
+
+
+def test_review_m6_an_edit_loses_the_en_dash_as_well_as_the_em_dash(decided, monkeypatch):
+    case_id, _ = decided
+    fake(monkeypatch, pres=[P_OK])
+    build(case_id)
+    s = cs.edit(case_id, 1, "spresentation-1", "Adenocarcinoma \u2013 grade 2 \u2014 in the histopathology report.", "dr.rao", "Dr Rao")
+    assert s["text"] == "Adenocarcinoma - grade 2 - in the histopathology report."
 
 
 def test_an_edit_whose_record_changed_is_marked(decided, monkeypatch):

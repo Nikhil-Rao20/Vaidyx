@@ -28,7 +28,7 @@ the owning department's consultants; a resident of the team may upload and propo
 its own upload through its membership (the V1 rule), the coordinator keeps the board and session actions. An archived Case File keeps
 its readers but refuses every change except taking it out of the archive ("This Case File is archived"). Every change here is audited in
 the Case File. No model calls."""
-import json, os, threading
+import json, os, re, threading
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -363,12 +363,32 @@ def clean_reason(reason) -> str:
     return text
 
 
+_VIA = re.compile(r"similar:[A-Za-z0-9_.-]{1,64}")
+
+
+def clean_via(via) -> str:
+    """Where a doctor came from when opening with a reason: "" or "similar:<Case File id>" (Phase 7, D10), so every opening is
+    attributable; anything else is AccessError 400 `bad_via` (whole-run review 9, M1)."""
+    v = str(via or "").strip()
+    if v and not _VIA.fullmatch(v):
+        raise AccessError("Vaidyx cannot record where this opening came from. Open the Case File again from its page or from the similar list.", 400, "bad_via")
+    return v
+
+
+def doctor_windows_all() -> list[dict]:
+    """Every open doctor window, for the root admin and the auditor (GET /break-glass, whole-run review 9 M2): case_id, user, until,
+    reason, via, the newest first."""
+    out = [{"case_id": w.get("case_id"), "user": u, "until": w.get("until"), "reason": w.get("reason") or "", "via": w.get("via") or "",
+            "opened": w.get("opened") or ""} for u, ws in _read_doctor_windows().items() for w in ws if _active(w)]
+    return sorted(out, key=lambda w: str(w.get("opened") or ""), reverse=True)
+
+
 def open_doctor_window(user: str, case_id: str, reason: str, via: str = "") -> dict:
     """Write the doctor's read-only window on one Case File for DOCTOR_WINDOW_HOURS (a new opening of the same Case File renews the one
     window). Only the store: team.break_glass_doctor checks who may, audits and tells the owner's consultants. Returns the window and
     "renewed"."""
     reason = clean_reason(reason)
-    via = " ".join(str(via or "").split())[:VIA_MAX]
+    via = clean_via(via)[:VIA_MAX]
     c = store.get_case(case_id)
     if not c or is_protected(c):  # a protected Case File never opens through a doctor's window, and is never named
         raise AccessError("Case not found", 404, "not_found")

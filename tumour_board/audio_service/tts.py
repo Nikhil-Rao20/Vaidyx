@@ -8,7 +8,7 @@ import os
 import numpy as np
 
 from . import audio_io, limits, text_norm
-from .stt import Unavailable, hub_snapshot
+from .stt import RUN_TIMEOUT, Unavailable, hub_snapshot
 
 KOKORO_REPO = "hexgrad/Kokoro-82M"
 ENGINE_NAME = "kokoro-82m"
@@ -145,6 +145,17 @@ class TtsService:
                 parts.append(audio)
         return np.concatenate(parts) if parts else np.zeros(0, dtype=np.float32)
 
+    async def _render(self, chunks: list[str], voice: str, speed: float) -> np.ndarray:
+        """_render_all in a worker thread, at most RUN_TIMEOUT seconds; past it Kokoro is marked error (the health says so) and the
+        request is refused as unavailable. The log names the class of the error only."""
+        try:
+            return await asyncio.wait_for(asyncio.get_running_loop().run_in_executor(None, self._render_all, chunks, voice, speed), RUN_TIMEOUT)
+        except asyncio.TimeoutError as e:
+            self.state = "error"
+            if self.log:
+                self.log.warning("run failed engine=kokoro error=%s", type(e).__name__)
+            raise Unavailable("kokoro") from None
+
     async def synthesise(self, text: str, voice: str, speed: float, normalise: bool = True) -> tuple[bytes, float]:
         """(WAV bytes, seconds of audio). Runs inside the server's TTS slot."""
         spoken = text_norm.normalise_for_speech(text) if normalise else text
@@ -152,7 +163,7 @@ class TtsService:
         if not chunks:
             raise EmptyText()
         await self.ensure()
-        audio = await asyncio.get_running_loop().run_in_executor(None, self._render_all, chunks, voice, speed)
+        audio = await self._render(chunks, voice, speed)
         if audio.size == 0:
             raise EmptyText()
         return audio_io.wav_bytes(audio, limits.TTS_SAMPLE_RATE), audio.size / limits.TTS_SAMPLE_RATE

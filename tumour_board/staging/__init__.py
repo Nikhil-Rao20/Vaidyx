@@ -160,9 +160,10 @@ def written_stages(case_id) -> list[dict]:
             v = str(h["value"])
             prefix = "yp" if re.search(r"\byp", v, re.I) else "p" if re.search(r"\bp[TN]", v) else "c" if re.search(r"\bc[TN]|\bmr[TN]", v) else ""
             loc = h.get("location") if isinstance(h.get("location"), dict) else {}
-            kind = "prognostic" if re.search(r"\bprognostic\b", v + " " + str(h.get("quote") or ""), re.I) else "anatomic"
+            kind, also = written_kind(v)
             out.append({"fact": fid, "value": v, "quote": h.get("quote") or "", "doc_id": h.get("doc_id"), "doc_title": h.get("doc_title"), "date": h.get("date"),
-                        "page": loc.get("page"), "prefix": prefix, "superseded": bool(h.get("superseded")), "final": bool(h.get("doc_final")), "kind": kind})
+                        "page": loc.get("page"), "prefix": prefix, "superseded": bool(h.get("superseded")), "final": bool(h.get("doc_final")), "kind": kind,
+                        **({"also_prognostic": True} if also else {})})
     seen, uniq = set(), []
     for w in sorted(out, key=lambda x: x.get("date") or ""):  # the same words from the same report under two fields: once
         k = (w["doc_id"], re.sub(r"\s+", " ", w["value"]).strip().lower())
@@ -170,6 +171,22 @@ def written_stages(case_id) -> list[dict]:
             seen.add(k)
             uniq.append(w)
     return uniq
+
+
+def anatomic_parts(v: str) -> dict:
+    """The T, N, M and anatomic stage group a written stage names once its prognostic stage words are taken out ("pT2 pN1a M0, Anatomic
+    stage IIB, Prognostic stage group IB" -> T2, N1a, M0, IIB); missing parts are None."""
+    return parse_written(_PROG_WRITTEN.sub(" ", str(v or "")))
+
+
+def written_kind(v: str) -> tuple[str, bool]:
+    """(kind, also prognostic) of a written stage, from its value only, never from the quote around it (the whole-run review, I2): a value
+    with T, N or M categories or an anatomic stage group is "anatomic", and also prognostic when it names a prognostic stage too (a line can
+    be both, and then it is shown and compared under both drafts); a value that names only a prognostic stage is "prognostic"."""
+    prog = bool(re.search(r"\bprognostic\b", str(v or ""), re.I))
+    if not prog:
+        return "anatomic", False
+    return ("anatomic", True) if any(anatomic_parts(v).values()) else ("prognostic", False)
 
 
 def parse_written(v: str) -> dict:
@@ -306,12 +323,14 @@ def decide(rule: dict, answer: dict, by_id: dict, fallback_size: dict | None = N
 
 def compare(draft: dict, written: list[dict]) -> dict | None:
     """The newest clinical (or unprefixed) stage a report wrote against the draft: "matches", "differs" (what differs) or "partial"."""
-    written = [w for w in written if w.get("kind") != "prognostic"]  # a prognostic stage is compared with the prognostic draft
+    # a prognostic stage alone is compared with the prognostic draft; any line with T, N or M parts or an anatomic stage group is compared
+    # here, whatever its kind (the whole-run review, I2: "pT2 pN1a M0, Anatomic stage IIB, Prognostic stage group IB" is both)
+    written = [w for w in written if w.get("kind") != "prognostic" or any(anatomic_parts(w["value"]).values())]
     pool = [w for w in written if not w["superseded"] and w["prefix"] in ("", "c")] or [w for w in written if not w["superseded"]]
     if not pool or draft.get("status") != "staged":
         return None
     w = pool[-1]
-    p = parse_written(w["value"])
+    p = anatomic_parts(w["value"])
     comps = draft["components"]
     mine = {"T": comps["T"]["group"], "N": group_of(comps["N"]["cat"], "N"), "M": comps["M"]["group"], "stage": re.sub(r"[rp]$", "", draft["stage"] or "")}
     diffs = []
@@ -529,7 +548,8 @@ def parse_prognostic(v: str) -> str | None:
 def written_prognostic(case_id, written: list[dict]) -> list[dict]:
     """Every prognostic stage a report wrote, oldest first: the stages as recorded that say "prognostic", and any report line with the
     words "prognostic stage" and a stage (the line checked word for word against its report like every quote)."""
-    out = [{**w, "stage": parse_prognostic(w["value"]) or parse_prognostic(w["quote"])} for w in written if w.get("kind") == "prognostic"]
+    out = [{**w, "stage": parse_prognostic(w["value"]) or parse_prognostic(w["quote"])} for w in written
+           if w.get("kind") == "prognostic" or w.get("also_prognostic")]  # a line that is both is listed under both drafts (review I2)
     seen = {(w["doc_id"], w["stage"]) for w in out}
     for d in rules.case_docs(case_id):
         if d.get("state") != "ready" or d.get("superseded") or d.get("dismissed"):
@@ -567,7 +587,45 @@ def prognostic_for(case_id, rule, anatomic) -> dict | None:
     return decide_prognostic(rule, anatomic, prognostic_inputs(rule, facts, by_id))
 
 
-async def run(case_id, user) -> dict:
+CONFIRMED_RUN = "A doctor confirmed this draft stage: only a consultant of the owning department can work it out again."
+
+
+def _confirmed(d, rule) -> bool:
+    """Whether the current draft of these rules carries a doctor's confirmation that is not marked wrong."""
+    return isinstance(d, dict) and d.get("rules") == (rule or {}).get("id") and bool(d.get("confirmed")) and not d.get("rejected")
+
+
+def _cats(d) -> dict:
+    return {k: (v or {}).get("cat") for k, v in ((d or {}).get("components") or {}).items()}
+
+
+def _keep_old(st, old, user, why):
+    """The draft about to be replaced goes into st["staging_history"], newest last, with who replaced it and why (the whole-run review,
+    I3): a confirmation stays in the state, not only in the audit log."""
+    if isinstance(old, dict) and old:
+        st.setdefault("staging_history", []).append({**old, "replaced": {"at": store.now_iso(), "by": user, "why": why}})
+
+
+def _carry(old, rec, user) -> list[str]:
+    """Carry a doctor's confirmation forward to a new draft with the same result (the stage, the T, N and M, the prognostic stage and the
+    signature of the reports): clinician confirmations survive a re-run. Returns which drafts kept theirs."""
+    if not (isinstance(old, dict) and old.get("confirmed") and not old.get("rejected")):
+        return []
+    op, np_ = old.get("prognostic") or {}, rec.get("prognostic") or {}
+    if (old.get("rules"), old.get("status"), old.get("stage"), _cats(old), old.get("signature"), op.get("stage")) != \
+            (rec.get("rules"), rec.get("status"), rec.get("stage"), _cats(rec), rec.get("signature"), np_.get("stage")) or rec.get("status") != "staged":
+        return []
+    rec["confirmed"] = {**old["confirmed"], "carried": {"at": store.now_iso(), "by": user}}
+    kept = ["anatomic"]
+    if op.get("confirmed") and not op.get("rejected") and np_.get("status") == "staged" and _cats(op) == _cats(np_):
+        np_["confirmed"] = {**op["confirmed"], "carried": {"at": store.now_iso(), "by": user}}
+        kept.append("prognostic")
+    return kept
+
+
+async def run(case_id, user, may_replace_confirmed=True) -> dict:
+    """Work the draft out again. The draft it replaces is kept in staging_history; a confirmation carries forward when the result is the
+    same. may_replace_confirmed=False (a team resident) refuses the run while a confirmed draft is current: the consultant re-runs it."""
     case = store.get_case(case_id)
     if not case:
         raise StagingError("Case File not found.", 404)
@@ -579,6 +637,8 @@ async def run(case_id, user) -> dict:
     if not docs:
         raise StagingError("No imaging report or clinical note is in the Case File yet: nothing to stage from.", 409)
     st = store.get_state(case_id)
+    if not may_replace_confirmed and _confirmed(st.get("staging"), rule):
+        raise StagingError(CONFIRMED_RUN, 409)
     sig = rules.case_signature(case_id, st)
     au = store.auditor(case_id)
     answer = await llm.chat("reasoner", _prompt(case, rule, docs), json_schema=SCHEMA, max_tokens=1600, purpose="draft stage", audit=au)
@@ -592,9 +652,15 @@ async def run(case_id, user) -> dict:
     prog = prognostic_for(case_id, rule, draft)
     if prog is not None:
         rec["prognostic"] = prog
+    old = st.get("staging")
+    if not may_replace_confirmed and _confirmed(old, rule):  # confirmed while the model was working
+        raise StagingError(CONFIRMED_RUN, 409)
+    kept = _carry(old, rec, user)
+    _keep_old(st, old, user, "worked out again")
     st["staging"] = rec
     store.save_state(case_id, st)
     store.audit(case_id, {"kind": "draft_stage", "by": user, "status": draft["status"], "stage": draft.get("stage"),
+                          "replaced_confirmed": bool(isinstance(old, dict) and old.get("confirmed") and not old.get("rejected")), "confirmation_kept": kept,
                           "components": {k: v["cat"] for k, v in draft["components"].items()}, "rules": rule["id"],
                           **({"prognostic": {"status": prog["status"], "stage": prog["stage"], "components": {k: v["cat"] for k, v in prog["components"].items()}}} if prog else {})})
     return view(case_id)
@@ -667,6 +733,7 @@ def enter(case_id, user, part, cat, reason) -> dict:
     st["staging_entered"] = ent
     d = st.get("staging")
     if isinstance(d, dict) and d.get("rules") == rule["id"] and isinstance(d.get("answer"), dict):  # an older draft without its reading: work it out again
+        _keep_old(st, json.loads(json.dumps(d)), user, f"{part} entered" if cat else f"{part} entry taken back")
         by_id = {x["doc_id"]: x for x in evidence_docs(case_id, rule)}
         again = decide(rule, d.get("answer") or {}, by_id, size_fact(case_id, by_id), ent)
         d.update({**again, "confirmed": None, "rejected": None})

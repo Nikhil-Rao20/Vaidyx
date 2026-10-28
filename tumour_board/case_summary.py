@@ -28,7 +28,7 @@ import re
 import threading
 import time
 
-from . import config, dates, decision_record, grounding, guardrails, llm, protocol, qa, rules, search, store, summary
+from . import agents, config, dates, decision_record, grounding, guardrails, llm, protocol, qa, rules, search, store, summary
 
 log = logging.getLogger("tumour_board")
 
@@ -204,7 +204,7 @@ def _check_model(case_id, items, allowed, where, removed, issues, near):
     removed.extend({**d, "where": where} for d in drops)
     keep = []
     for s in ok:
-        iss = guardrails.scan_output(s["text"])
+        iss = guardrails.scan_output(s["text"]) or agents.directive_outside_quotes(s)  # every treatment word inside a quote (review I1)
         if iss:
             issues.extend(iss)
             removed.append({**qa.removed_item(s, "guardrail", "; ".join(dict.fromkeys(i["reason"] for i in iss))), "where": where})
@@ -1010,7 +1010,7 @@ def edit(case_id, n, sentence_id, text, user, user_name="") -> dict:
     """The owner's consultant changes one sentence of the presentation or since section of the current version. Every edit is a new
     entry in the version's edits (nothing deleted; undo is an edit back). The citations stay; `checked` says whether every number and
     name of the new text is still in its quotes. Returns the sentence."""
-    text = " ".join(str(text or "").replace("\u2014", "-").split())
+    text = " ".join(str(text or "").replace("\u2014", "-").replace("\u2013", "-").split())  # em and en dash (review M6)
     if not 1 <= len(text) <= MAX_EDIT:
         raise ValueError(f"Write the sentence (1 to {MAX_EDIT} characters).")
     st = store.get_state(case_id)

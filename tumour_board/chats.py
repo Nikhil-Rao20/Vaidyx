@@ -6,7 +6,7 @@ Audited "chat_asked" / "chat_pinned". The model is called only through qa.ask.""
 import threading
 import uuid
 
-from . import qa, rules, store
+from . import config, qa, rules, store
 
 FILE = "chats.json"
 MAX_QUESTION = 1000
@@ -61,9 +61,23 @@ def display_name(user) -> str:
     return dn(user)
 
 
+def _model(res) -> str:
+    """The model that wrote the answer, named beside it on the thread (review 9 C, S3): the answer's own, else the reasoner's label;
+    "" when no model was called (a request refused by the scope check before the answer)."""
+    if res.get("model"):
+        return str(res["model"])
+    if res.get("status") == "out_of_scope":
+        return ""
+    try:
+        return str(config.models()["reasoner"].get("label") or "reasoner")
+    except Exception:
+        return "reasoner"
+
+
 def public(t, sig_hash) -> dict:
     stale = bool(t.get("signature") and sig_hash and t["signature"].get("hash") != sig_hash)
-    return {**{k: t.get(k) for k in ("id", "by", "by_name", "at", "question", "status", "statements", "message", "pinned", "seconds", "dropped_unverified", "category")},
+    return {**{k: t.get(k) for k in ("id", "by", "by_name", "at", "question", "status", "statements", "message", "pinned", "seconds", "dropped_unverified", "category",
+                                     "model")},
             "stale": stale, "stale_reason": "The records changed since this answer was computed" if stale else "", "signature": (t.get("signature") or {}).get("hash")}
 
 
@@ -88,7 +102,7 @@ async def ask(case_id, question, user, history=None) -> dict:
     res = await qa.ask(case_id, q, _history(history))
     t = {"id": "T" + uuid.uuid4().hex[:8], "by": user, "by_name": display_name(user), "at": store.now_iso(), "question": q, "status": res.get("status") or "not_documented",
          "statements": _citations(res.get("statements")), "message": res.get("message") or "", "pinned": False, "seconds": res.get("seconds"),
-         "dropped_unverified": res.get("dropped_unverified", 0), "category": res.get("category"), "signature": {k: sig.get(k) for k in ("hash", "documents", "ready", "confirmations")},
+         "dropped_unverified": res.get("dropped_unverified", 0), "category": res.get("category"), "model": _model(res), "signature": {k: sig.get(k) for k in ("hash", "documents", "ready", "confirmations")},
          "shared": True}
     with _lock:
         data = load(case_id)

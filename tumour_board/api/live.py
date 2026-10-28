@@ -116,6 +116,11 @@ async def meeting_socket(websocket: WebSocket, mid: str):
     finally:
         live.hub.disconnect(mid, websocket)
         try:
+            if live.hub.user_count(mid, user) == 0:  # the user's last tab closed: no "Listening" or "Speaking" left behind (review 9 D, I4)
+                meetings.user_left(mid, user)
+        except Exception as e:
+            log.info("meeting socket: live state not cleared (%s)", e.__class__.__name__)
+        try:
             s = meetings.get(mid)
             if s:
                 live.broadcast(mid, {"type": "presence", "attendance": meetings.attendance_rows(s), "online": live.online(mid), "left": user})

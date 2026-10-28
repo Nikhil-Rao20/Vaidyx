@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MicButton } from "@/components/MicButton";
 import { cn } from "@/lib/utils";
+import { consultantTitle } from "@/lib/format";
 import type { CaseDocument } from "../types";
 import { SourceViewer, type SourceTarget } from "../components/SourceViewer";
 import { LoadingButton, errorText, fmtDateTime, niceTitle } from "../components/common";
@@ -105,10 +106,10 @@ function KeyRow({ k, selected, onSelect, h, canConfirm, canPropose, deptLabel, c
         ) : canConfirm ? (
           <LoadingButton size="sm" loading={busy} onClick={() => void run(() => h.confirmKey(k))} data-testid="confirm-key"><Check className="size-4" />Confirm {k.value.length <= 32 ? k.value : k.label.replace(/\s*\(.*\)$/, "")}</LoadingButton>
         ) : canPropose && sent === k.value ? (
-          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" data-testid="key-waiting"><Clock className="size-3.5" aria-hidden />Waiting for Dr {consultantName}'s sign-off</span>
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" data-testid="key-waiting"><Clock className="size-3.5" aria-hidden />Waiting for {consultantTitle(consultantName)}'s sign-off</span>
         ) : canPropose ? (
-          <LoadingButton size="sm" variant="outline" loading={busy} onClick={() => void run(async () => { await h.confirmKey(k); setSent(k.value); })} data-testid="propose-key"><Send className="size-4" />Send to Dr {consultantName} for sign-off</LoadingButton>
-        ) : <span className="text-xs text-muted-foreground">Dr {consultantName} confirms the key values.</span>}
+          <LoadingButton size="sm" variant="outline" loading={busy} onClick={() => void run(async () => { await h.confirmKey(k); setSent(k.value); })} data-testid="propose-key"><Send className="size-4" />Send to {consultantTitle(consultantName)} for sign-off</LoadingButton>
+        ) : <span className="text-xs text-muted-foreground">{consultantTitle(consultantName, true)} confirms the key values.</span>}
       </div>
       {canConfirm && !k.confirmed ? <div className="mt-1"><WrongValue k={k} h={h} deptLabel={deptLabel} caseId={caseId} /></div> : null}
       {err ? <p role="alert" className="mt-1 text-xs text-bad">{err}</p> : null}
@@ -166,7 +167,7 @@ export function CheckStep({ steps, caseId, docs, h, canConfirm, consultantName, 
           {keys.length ? (
             <section className="space-y-2" aria-labelledby="h-keys">
               <h2 id="h-keys" className="text-[15px]">Key values ({keys.filter((k) => k.confirmed).length} of {keys.length} confirmed)</h2>
-              {resident && !canConfirm ? <p className="text-xs text-muted-foreground">Dr {consultantName} confirms the key values. Read each one against its report line, then send it for sign-off.</p> : null}
+              {resident && !canConfirm ? <p className="text-xs text-muted-foreground">{consultantTitle(consultantName, true)} confirms the key values. Read each one against its report line, then send it for sign-off.</p> : null}
               <ul className="space-y-2">{keys.map((k) => <KeyRow key={k.slot_id} k={k} selected={sel === k.slot_id} onSelect={() => setSel(k.slot_id)} h={h} canConfirm={canConfirm} canPropose={resident && !canConfirm} deptLabel={deptOf(k)} consultantName={consultantName} caseId={caseId} />)}</ul>
             </section>
           ) : null}

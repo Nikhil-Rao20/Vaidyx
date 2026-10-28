@@ -10,7 +10,7 @@ import { Bot, CheckCheck, Flag, Pencil, RefreshCw, Sparkles } from "lucide-react
 import { Button } from "@/components/ui/button";
 import { SpeakButton } from "@/components/SpeakButton";  // voice (night-v3 item 4.4): a section of the current version read aloud
 import { Textarea } from "@/components/ui/textarea";
-import { drName } from "@/lib/format";
+import { drName, plural } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { buildCaseSummary, editCaseSentence, getCase, getCaseSummary, reviewCaseSummary } from "../api";
 import type { CaseDocument, CaseFile } from "../types";
@@ -21,8 +21,8 @@ import { LoadingButton, SkeletonLines, StatusChip, errorText, fmtDate, fmtDateTi
 
 const MAX_EDIT = 1000;
 const count = (v: unknown) => (typeof v === "number" ? v : Array.isArray(v) ? v.length : 0);
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-const modelWords = (line?: string) => modelLabel(String(line ?? "").replace(/^Written by\s+/i, "")) || "the reasoner model";
+/** The model that wrote a version, labelled: from the server's line, else its model field; "a model" only when it names none (M19). */
+const modelWords = (v: { model_line?: string; model?: unknown }) => modelLabel(String(v.model_line ?? "").replace(/^Written by\s+/i, "").replace(/\s*\(non-medical\)\s*$/i, "")) || modelLabel(typeof v.model === "string" ? v.model : "") || "a model";
 
 /** The label chip: reviewed, flagged, out of date, being written, or an AI draft not reviewed. */
 export function CaseSummaryLabel({ v, current = true }: { v: Pick<CaseSummaryView, "status" | "review" | "stale_reason">; current?: boolean }) {
@@ -36,6 +36,8 @@ export function CaseSummaryLabel({ v, current = true }: { v: Pick<CaseSummaryVie
 
 /** A sentence the owner's consultant may change: written by the model, in the current version. */
 const editable = (s: CaseSentence, sec: CaseSummarySection) => sec.built_by === "model" && !s.code && !s.fixed && !s.from_fields;
+/** A sentence that carries the model's mark: written by the model and not since rewritten by a doctor (review 9 C, I5). */
+const modelMark = (s: CaseSentence, sec: CaseSummarySection) => editable(s, sec) && !s.edited;
 
 function Sentence({ s, sec, docs, h, onBoard, canEdit, onEdit }: {
   s: CaseSentence; sec: CaseSummarySection; docs?: CaseDocument[]; h: Pick<SlotHandlers, "openSource">; onBoard?: () => void; canEdit: boolean;
@@ -73,7 +75,7 @@ function Sentence({ s, sec, docs, h, onBoard, canEdit, onEdit }: {
   return (
     <span data-testid="cs-sentence" data-id={s.id} data-model={model || undefined}>
       {indianDates(s.text)}
-      {model ? <Bot className="ml-1 inline size-3.5 align-[-2px] text-review" aria-label="Written by the AI model" /> : null}
+      {model && !e ? <Bot className="ml-1 inline size-3.5 align-[-2px] text-review" aria-label="Written by the AI model" /> : null}
       <Cites cites={s.citations} docs={docs} h={h} onBoard={onBoard} max={4} />
       {s.approximate ? <span className="ml-1 text-xs text-muted-foreground">(quote matched closely, not word for word)</span> : null}
       {canEdit && editable(s, sec) ? (
@@ -165,7 +167,7 @@ export function CaseSummaryCard({ caseId, view, docs, h, onBoard }: { caseId: st
         {shown ? (
           <>
             <p className="text-xs text-muted-foreground" data-testid="cs-header-line">
-              Version {shownN}{shown.built_at ? `, written ${fmtDateTime(shown.built_at)}` : ""} by {modelWords(shown.model_line)}{older ? ". An earlier version, read-only." : ""}
+              Version {shownN}{shown.built_at ? `, written ${fmtDateTime(shown.built_at)}` : ""} by {modelWords(shown)}{older ? ". An earlier version, read-only." : ""}
             </p>
             {older ? <p className="rounded-md status-info px-3 py-1.5 text-sm">You are reading version {shownN}. <button type="button" className="text-link underline underline-offset-2" onClick={() => setPick(view.current)}>Back to the current version</button></p> : null}
             <div className={cn("space-y-3", shown.review?.status !== "reviewed" && "border-l-2 border-review/50 pl-3")}>
@@ -215,11 +217,12 @@ export function CaseSummaryGlance({ view, h, onBoard, onOpen, line, docs }: { vi
   const rounds = view.sections.find((s) => s.id === "rounds");
   const last = rounds?.blocks?.length ? rounds.blocks[rounds.blocks.length - 1] : null;
   const decided = (last?.sentences ?? []).filter((s) => /-(outcome|decision_text)$/.test(s.id));
-  const pres = (view.sections.find((s) => s.id === "presentation")?.sentences ?? []).filter((s) => !s.fixed).slice(0, 2);
-  const row = (s: CaseSentence) => (
+  const presSec = view.sections.find((s) => s.id === "presentation");
+  const pres = (presSec?.sentences ?? []).filter((s) => !s.fixed).slice(0, 2);
+  const row = (sec: CaseSummarySection | undefined) => (s: CaseSentence) => (
     <span key={s.id} data-testid="cs-sentence" data-id={s.id}>
       {indianDates(s.text)}
-      {!s.code && !s.fixed && !s.from_fields ? <Bot className="ml-1 inline size-3.5 align-[-2px] text-review" aria-label="Written by the AI model" /> : null}
+      {sec && modelMark(s, sec) ? <Bot className="ml-1 inline size-3.5 align-[-2px] text-review" aria-label="Written by the AI model" /> : null}
       <Cites cites={s.citations} docs={docs} h={h} onBoard={onBoard} max={2} />{" "}
     </span>
   );
@@ -232,8 +235,8 @@ export function CaseSummaryGlance({ view, h, onBoard, onOpen, line, docs }: { vi
       </header>
       <div className="space-y-2 px-4 py-3 text-[0.97rem] leading-relaxed">
         {line ? <p className="font-semibold text-foreground" data-testid="overview-summary-line">{line}</p> : null}
-        {decided.length ? <p className="text-foreground">{decided.map(row)}</p> : null}
-        {pres.length ? <p className="text-foreground">{pres.map(row)}</p> : null}
+        {decided.length ? <p className="text-foreground">{decided.map(row(rounds))}</p> : null}
+        {pres.length ? <p className="text-foreground">{pres.map(row(presSec))}</p> : null}
         <Button size="sm" variant="outline" onClick={onOpen} data-testid="open-case-summary">Open the Case summary</Button>
       </div>
     </section>

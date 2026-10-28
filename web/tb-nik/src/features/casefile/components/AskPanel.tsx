@@ -16,11 +16,14 @@ import { primeAudio, stopSpeaking, VOICE_TEXT } from "@/lib/voice";
 import { askOld, getChats, notBuiltYet, pinChat, postChat } from "../api";
 import type { CaseDocument, ChatThread } from "../types";
 import type { SourceTarget } from "./SourceViewer";
-import { EmptyState, ErrorState, LoadingButton, SkeletonLines, StatusChip, errorText, fmtDateTime, useAnnounce, niceTitle } from "./common";
+import { EmptyState, ErrorState, LoadingButton, SkeletonLines, StatusChip, errorText, fmtDateTime, indianDates, modelLabel, useAnnounce, niceTitle } from "./common";
 import { cn } from "@/lib/utils";
 
 const MAX_Q = 600;
 /** A thread with a final answer (or a final "not found" / "outside" message) that the server can read aloud. */
+/** The line under an answer with statements: "From the records only. Gemma-4-31B (non-medical)." (review 9 C, S3); "a model" only when
+ * the server names none. */
+export const answerModelLine = (t: Pick<ChatThread, "model">) => `From the records only. ${modelLabel(t.model) || "Written by a model"}.`;
 const speakable = (t: ChatThread) => !t.unsaved && (t.status === "answered" || t.status === "not_documented" || t.status === "out_of_scope");
 
 export function AskPanel({ caseId, docs, onOpenSource, compact }: { caseId: string; docs: CaseDocument[]; onOpenSource: (t: SourceTarget) => void; compact?: boolean }) {
@@ -147,7 +150,7 @@ export function AskPanel({ caseId, docs, onOpenSource, compact }: { caseId: stri
               <ol className="mt-2 space-y-2">
                 {(t.statements ?? []).map((s, i) => (
                   <li key={i} className="text-sm text-foreground">
-                    <span>{s.text}</span>
+                    <span>{indianDates(s.text)}</span>
                     <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
                       {(s.citations ?? []).map((c, j) => (
                         <button key={j} type="button" className="quote-chip hover:brightness-95 active:scale-95 transition" onClick={() => onOpenSource({ docId: c.doc_id, page: c.page ?? 0, quote: c.quote, title: c.doc_title || docTitle(c.doc_id) })} title={`Open ${c.doc_title || docTitle(c.doc_id)}, page ${(c.page ?? 0) + 1}`}>
@@ -158,6 +161,7 @@ export function AskPanel({ caseId, docs, onOpenSource, compact }: { caseId: stri
                   </li>
                 ))}
               </ol>
+              {(t.statements ?? []).length ? <p className="mt-1 text-[11px] text-muted-foreground" data-testid="chat-model-line">{answerModelLine(t)}</p> : null}
             </motion.article>
           ))}
         </AnimatePresence>

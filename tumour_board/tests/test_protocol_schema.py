@@ -90,6 +90,31 @@ def _strings_outside_quotes(node, path=""):
         yield path, node
 
 
+def test_review_i7_generic_haem_carries_the_draft_label():
+    p = protocol.get("generic_haem")
+    assert _is_phase2_draft(p) and p["version"] == "0.1-draft" and p["approval"]["status"] == "draft"
+    assert p["approval"]["note"] == "Draft checklist (owner decision R05-Q04, not a book): needs a clinician's check"
+    assert all("staging imaging out on purpose" in r["tier_basis"] for _, r in _all_records(p) if _sources(r))
+    listed = next(x for x in protocol.list_protocols() if x["id"] == "generic_haem")
+    assert listed["version"].endswith("-draft")  # the picker's isDraftChecklist (web/tb-nik/src/lib/cancers.ts) reads the version
+    assert "generic_haem" in _draft_pids()
+
+
+def test_review_i5_i6_the_named_sources_are_gone():
+    def quotes(pid, rid):
+        return [s["quote"] for _, r in _all_records(protocol.get(pid)) if r["id"] == rid for s in _sources(r)]
+    assert "If MRD> 0.01% at" not in quotes("leukaemia", "mrd_leukaemia")
+    assert {"Minimal residual disease panel (b)", "Minimal residual disease panel (c)", "7. B-ALL MRD"} <= set(quotes("leukaemia", "mrd_leukaemia"))
+    assert quotes("liver_hcc", "hvpg") == ["Endoscopy for varices, HVPG"]
+    assert quotes("stomach", "resection_histopathology") == []
+    assert not [q for q in quotes("lymphoma", "pet_ct_lymphoma") if "Deauville" in q] and len(quotes("lymphoma", "pet_ct_lymphoma")) == 4
+    refs = json.loads((config.PROTOCOL_DIR / "dose_references.json").read_text())["references"]
+    bt = next(r for r in refs if r["id"] == "corpus_uteri:ncg-guidelines-for-gynecolog:p10:rt:21Gy/3")
+    assert bt["gy_per_fraction"] == 7 and bt["fractions"] == 3 and "worked out from 7 Gy x 3" in bt["note"]
+    from tumour_board import dosecheck
+    assert dosecheck.fmt_rt(bt) == "7 Gy x 3 fractions (21 Gy)"  # shown the way the book prints it, the worked-out total in brackets
+
+
 def test_there_are_protocols():
     assert {"breast", "cervix", "colorectal_rectum", "cup", "generic", "lung_nsclc", "oral_cavity"} <= set(PIDS)
 
@@ -145,6 +170,8 @@ def test_phase2_draft_sources_and_text(pid):
     for _, r in _all_records(p):
         for src in _sources(r):
             f = src.get("file")
+            if f is None and str(src.get("guideline") or "").startswith("Owner decision") and src.get("page") == "n/a" and src.get("where"):
+                continue  # generic_haem (the whole-run review, I7): a draft resting on the owner's decision, not on a book
             if not isinstance(f, str) or not f or f.startswith("/") or ".." in f.split("/"):
                 bad.append((r["id"], "file", f))
             elif config.GUIDELINE_DIR.is_dir() and not (config.GUIDELINE_DIR / f).is_file():

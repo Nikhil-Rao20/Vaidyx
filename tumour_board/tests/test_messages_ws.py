@@ -184,3 +184,37 @@ def test_the_socket_cap_per_login(tc):
     finally:
         for ws in open_:
             ws.__exit__(None, None, None)
+
+
+# ---- whole-run review 9 (area A) -----------------------------------------------------------------------------------------------------
+
+def test_the_cap_is_reserved_before_accept_so_five_is_a_hard_cap(tc):
+    """M9: the place is taken (count and reservation as one step) before the socket is accepted, so upgrades at the same time never
+    pass five; the reservation ends once the socket is in the hub, or when it never was."""
+    assert all(messages_ws._reserve("ravi") for _ in range(live.MAX_SOCKETS_PER_USER))
+    assert messages_ws._reserve("ravi") is False  # five upgrades in flight: the sixth is refused before any accept
+    with pytest.raises(WebSocketDisconnect) as e:
+        with connect(tc, "ravi") as extra:
+            extra.receive_json()
+    assert e.value.code == 1008
+    for _ in range(live.MAX_SOCKETS_PER_USER):
+        messages_ws._release("ravi")
+    assert messages_ws._RESERVED == {}
+    with connect(tc, "ravi") as ws:
+        until(ws, "unread")
+        assert messages_ws._RESERVED == {} and live.messages_hub.user_count(messages_ws.room("ravi"), "ravi") == 1
+        held = [messages_ws._reserve("ravi") for _ in range(live.MAX_SOCKETS_PER_USER)]
+        assert held == [True] * (live.MAX_SOCKETS_PER_USER - 1) + [False]  # the open socket counts with the reservations
+
+
+def test_the_activity_maps_drop_entries_past_their_window():
+    """M14: LAST_ACTIVE and _TYPED keep only entries inside their window."""
+    import time
+    now = time.monotonic()
+    messages_ws.LAST_ACTIVE["gone"] = now - messages.PRESENCE_AWAY_SECONDS - 5
+    messages_ws.LAST_ACTIVE["recent"] = now - 5
+    messages_ws._mark(messages_ws.LAST_ACTIVE, "ravi", now, messages.PRESENCE_AWAY_SECONDS)
+    assert set(messages_ws.LAST_ACTIVE) == {"recent", "ravi"}
+    messages_ws._TYPED["gone"] = now - messages_ws.TYPING_EVERY - 1
+    messages_ws._mark(messages_ws._TYPED, "ravi", now, messages_ws.TYPING_EVERY)
+    assert set(messages_ws._TYPED) == {"ravi"}
