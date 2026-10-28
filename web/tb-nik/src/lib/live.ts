@@ -24,6 +24,12 @@ export function meetingWsUrl(mid: string): string {
   return `${proto}://${window.location.host}${TB}/meetings/${encodeURIComponent(mid)}/ws`;
 }
 
+/** The messages socket (Phase 8): one per signed-in person, events for every conversation they read. */
+export function messagesWsUrl(): string {
+  const proto = window.location.protocol === "https:" ? "wss" : "ws";
+  return `${proto}://${window.location.host}${TB}/messages/ws`;
+}
+
 export interface LiveClientOptions {
   onEvent: (ev: LiveEvent) => void;
   onStatus?: (s: LiveStatus, detail?: string) => void;

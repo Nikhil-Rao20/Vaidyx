@@ -2,7 +2,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Bell, CalendarDays, CheckCircle2, ClipboardList, FileCheck2, FilePlus2, Gavel, Handshake, Inbox, Link2, MailWarning,
-  PenLine, RefreshCw, Send, ShieldAlert, Timer, UserPlus, Users,
+  MessageSquare, PenLine, RefreshCw, Send, ShieldAlert, Timer, UserPlus, Users,
 } from "lucide-react";
 import type { Notification } from "@/lib/types";
 import { parseDate } from "@/lib/format";
@@ -40,6 +40,7 @@ export const KIND_INFO: Record<string, KindInfo> = {
   summary_stale: { label: "Summary out of date", icon: MailWarning, tone: "warn" },
   record_arrived: { label: "A record arrived", icon: FilePlus2, tone: "ok" },
   linked: { label: "Linked", icon: Link2, tone: "neutral" },
+  message: { label: "Message", icon: MessageSquare, tone: "neutral" },
 };
 
 export function kindInfo(kind: string): KindInfo {
@@ -48,6 +49,7 @@ export function kindInfo(kind: string): KindInfo {
 
 /** Where a click goes: the Case File, the meeting, or nowhere. */
 export function notificationLink(n: Notification): string | null {
+  if (n.kind === "message") return n.conversation ? `/messages/${encodeURIComponent(n.conversation)}` : "/messages";
   if (n.meeting_id) return `/meetings/${encodeURIComponent(n.meeting_id)}`;
   if (n.kind === "agenda" || n.kind === "meeting_starting") return "/meetings";
   if (n.kind === "request" || n.kind === "request_reminder") return n.case_id ? `/requests?case=${encodeURIComponent(n.case_id)}` : "/requests";
@@ -78,4 +80,5 @@ export const PREF_KINDS: Array<{ id: string; label: string; hint: string }> = [
   { id: "agenda", label: "Agenda and meetings", hint: "Agenda sent, meeting about to start" },
   { id: "outcome", label: "Board outcomes", hint: "The decision on my Case File" },
   { id: "reminder_automatic", label: "Automatic reminders", hint: "Sent by Vaidyx when a request is due" },
+  { id: "message", label: "Messages", hint: "A colleague or a department writes to you" },
 ];

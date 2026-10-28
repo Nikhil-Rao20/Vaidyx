@@ -160,6 +160,8 @@ export interface Notification {
   kind: string;
   case_id?: string;
   meeting_id?: string;
+  /** Phase 8: the conversation a "message" item points to. */
+  conversation?: string;
   title: string;
   text?: string;
   read: boolean;

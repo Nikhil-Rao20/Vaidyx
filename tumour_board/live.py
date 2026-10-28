@@ -68,6 +68,11 @@ class Hub:
         with self._lock:
             return sorted({u for u in (self._rooms.get(mid) or {}).values() if u})
 
+    def online_users(self) -> list[str]:
+        """Every login with a socket in any room (presence over the whole hub, Phase 8)."""
+        with self._lock:
+            return sorted({u for room in self._rooms.values() for u in room.values() if u})
+
     def count(self, mid: str) -> int:
         with self._lock:
             return len(self._rooms.get(mid) or {})
@@ -100,18 +105,21 @@ class Hub:
 
 
 hub = Hub()
+messages_hub = Hub()  # night-v3 Phase 8: one room per login ("u:<login>") for the person-to-person messages
 
 
 def online(mid: str) -> list[str]:
     return hub.online(mid)
 
 
-def broadcast(mid: str, event: dict, shape=None) -> bool:
+def broadcast(mid: str, event: dict, shape=None, hub_=None) -> bool:
     """Queue `event` for every socket of the meeting; with `shape(user, info, event)` each socket gets the copy it returns (None: not
-    sent to that socket). True when a send was scheduled (there were recipients and a loop)."""
+    sent to that socket). True when a send was scheduled (there were recipients and a loop). `hub_`: another Hub than the meetings' one
+    (the messages hub of Phase 8)."""
     if not isinstance(event, dict):
         return False
-    entries = hub.entries(mid)
+    h = hub_ if hub_ is not None else hub
+    entries = h.entries(mid)
     if not entries:
         return False
     targets = []
@@ -129,13 +137,13 @@ def broadcast(mid: str, event: dict, shape=None) -> bool:
     except RuntimeError:
         loop = None
     if loop is not None:
-        t = loop.create_task(hub.send_all(mid, event, targets))
-        hub._tasks.add(t)
-        t.add_done_callback(hub._tasks.discard)
+        t = loop.create_task(h.send_all(mid, event, targets))
+        h._tasks.add(t)
+        t.add_done_callback(h._tasks.discard)
         return True
-    if hub.loop is not None and not hub.loop.is_closed():
+    if h.loop is not None and not h.loop.is_closed():
         try:
-            asyncio.run_coroutine_threadsafe(hub.send_all(mid, event, targets), hub.loop)
+            asyncio.run_coroutine_threadsafe(h.send_all(mid, event, targets), h.loop)
             return True
         except RuntimeError:
             return False
