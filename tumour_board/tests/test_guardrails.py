@@ -91,23 +91,64 @@ def test_scan_output_keeps_in_scope_or_attributed(s):
     assert g.scan_output(s) == []
 
 
-# ---- the whole-run review, I1: advice put as a need, a fitness or a verdict; reported speech excuses it only inside a quote --------
+# ---- the whole-run review, I1, narrowed by the Phase 9 review E, S1: advice in the sentence's own words, outside its cited quotes ------
 I1_SENTENCES = ["She needs adjuvant chemotherapy.", "The patient requires a mastectomy.", "Neoadjuvant chemotherapy is advisable.",
                 "Radiotherapy to the chest wall is warranted.", "Proceed with surgery.", "She is fit for surgery.",
-                "Mastectomy would be appropriate.", "This is a metastatic adenocarcinoma.", "The mass is malignant.",
+                "Mastectomy would be appropriate.", "This is a metastatic adenocarcinoma.",
                 "The report records a 3.2 cm mass, so she should undergo surgery first.",
-                "Margins are involved, so re-excision is needed.", "A biopsy is required.", "She should go to theatre next week.",
-                "The previous tumour board recommended chemoradiotherapy."]
+                "Margins are involved, so re-excision is needed.", "She should go to theatre next week.",
+                "The previous tumour board recommended chemoradiotherapy.",
+                # the examples of the 9.R decision
+                "She requires adjuvant chemotherapy.", "Surgery is warranted.", "The patient is fit for surgery.", "Proceed with mastectomy.",
+                "Consider re-biopsy.", "Adjuvant radiotherapy should be offered.", "This is a triple-negative carcinoma.",
+                "The report records a mass, so she should undergo surgery.", "Resection is not indicated.", "She is eligible for trastuzumab.",
+                "Neoadjuvant therapy is an option to offer.", "She may benefit from radiotherapy.", "A re-excision is necessary.",
+                "Re-excision is needed.", "The patient should not have surgery."]
 
 
 @pytest.mark.parametrize("s", I1_SENTENCES)
 def test_review_i1_advice_sentences_are_refused(s):
-    assert g.scan_output(s) == [{"sentence": s, "reason": "prescriptive or diagnostic wording"}]
+    got = g.scan_output(s)
+    assert [x["sentence"] for x in got] == [s]
+    assert got[0]["reason"] == "prescriptive or diagnostic wording" or got[0]["reason"].startswith("advice wording outside the quoted record text: ")
+
+
+@pytest.mark.parametrize("s,quotes", [
+    ("Margins are involved, so re-excision is needed.", ["Margins: involved"]),
+    ("The margins are involved; she requires re-excision.", ["Margins: involved"]),
+    ("The PD-L1 score is 60 percent, so pembrolizumab should be considered.", ["PD-L1 (22C3) tumour proportion score 60 percent"]),
+    ("Paclitaxel 175 mg/m2 was given, so further cycles are warranted.", ["Paclitaxel 175 mg/m2 given on 03/03/2026"]),
+    ("Given the involved margins, proceed with mastectomy.", ["Margins: involved"]),
+])
+def test_advice_outside_the_cited_quote_is_refused(s, quotes):
+    got = g.scan_output(s, quotes=quotes)
+    assert [x["sentence"] for x in got] == [s]
+
+
+def test_a_need_word_is_advice_only_next_to_a_treatment_word():
+    assert g.directive_words("Margins are involved, so re-excision is needed.", ["Margins: involved"]) == ["needed"]
+    assert g.directive_words("She requires adjuvant chemotherapy.") == ["requires"]
+    assert g.directive_words("Confirmation required if the CECT Thorax and Abdomen report is the final signed version.") == []
+    assert g.directive_words("A final signed report is required for staging.") == []
+    assert g.directive_words("The MET exon 14 RT-PCR result is required.") == []  # RT-PCR is a test, not radiotherapy
+    # a need word inside the cited quote is the record's own wording
+    assert g.directive_words("The minutes record re-excision is needed.", ["re-excision is needed"]) == []
+
+
+def test_advice_words_inside_the_cited_quote_pass():
+    assert g.scan_output("The pathology report records no malignant cells in station 4R.", quotes=["No malignant cells seen in station 4R"]) == []
+    assert g.scan_output("The checklist line reads: report should include the margin status.",
+                         quotes=["report should include the margin status"]) == []
+    assert g.scan_output("The checklist line reads: report should include the margin status.")  # without its citation the word is its own
+    # a quote of two sentences is taken out of each sentence of the statement
+    two = "Margins: involved. Re-excision is advised by the surgeon."
+    assert g.scan_output("The note records margins involved. Re-excision is advised by the surgeon.", quotes=[two]) == []
 
 
 @pytest.mark.parametrize("s", ["Margins: involved", "The report records margins involved.", 'The report records "margins involved".',
                                'The minutes read "re-excision is needed".', "This is a CT record; the Radiology agent can say more.",
-                               "The PET/CT report records stage IIIA (cT2a N2 M0)."])
+                               "The PET/CT report records stage IIIA (cT2a N2 M0).", "The mass is malignant.",
+                               "Radiotherapy ended on 10/08/2026.", "The patient received four cycles of paclitaxel."])
 def test_review_i1_plain_record_sentences_pass(s):
     assert g.scan_output(s) == []
 
@@ -115,6 +156,7 @@ def test_review_i1_plain_record_sentences_pass(s):
 def test_review_i1_a_guideline_quote_keeps_its_own_reporting_wording():
     q = "The histopathology report should include the margin status and the number of nodes examined."
     assert g.scan_output(q) and g.scan_output(q, reference=True) == []  # reference text only, never a statement about the patient
+    assert g.scan_output("The report should include the margin status.", reference=True) == []
     assert g.scan_output("Patients should receive adjuvant chemotherapy.", reference=True)  # the base list still holds for references
 
 
@@ -126,11 +168,31 @@ def test_review_i1_words_outside_the_quotes():
     assert g.unquoted_words("The chart records paclitaxel 175 mg/m2.", ["175 mg/m2"], agents._DIRECTIVE) == ["paclitaxel"]
 
 
+def test_directive_outside_quotes_is_the_directive_check_with_the_cited_quotes():
+    from tumour_board import agents
+    cite = [{"doc_id": "D1", "quote": "Margins: involved"}]
+    assert agents.directive_outside_quotes({"text": "Margins are involved, so re-excision is needed.", "citations": cite}) == [
+        {"sentence": "Margins are involved, so re-excision is needed.", "reason": "advice wording outside the quoted record text: needed"}]
+    assert agents.directive_outside_quotes({"text": "Margins are involved; re-excision will follow.", "citations": cite}) == [  # a plan of its own
+        {"sentence": "Margins are involved; re-excision will follow.", "reason": "advice wording outside the quoted record text: will"}]
+    note = [{"doc_id": "D1", "quote": "RT planned 12/11/2026"}]  # a plan the record reports passes
+    assert agents.directive_outside_quotes({"text": "The OPD note records that radiotherapy is planned for 12/11/2026.", "citations": note}) == []
+    assert agents.directive_outside_quotes({"text": "The follow-up visit will be on 12/11/2026.", "citations": note}) == []  # no treatment word
+    rt = [{"doc_id": "D1", "quote": "RT completed 10-Aug-2026"}]
+    assert agents.directive_outside_quotes({"text": "Radiotherapy ended on 10/08/2026.", "citations": rt}) == []
+    # the base list is scan_output's own: directive_outside_quotes is the directive part only
+    assert agents.directive_outside_quotes({"text": "We recommend surgery.", "citations": []}) == [
+        {"sentence": "We recommend surgery.", "reason": "advice wording outside the quoted record text: recommend"}]
+
+
 def test_review_i1_the_eval_counts_the_same_advice_words():
     from tumour_board.eval import agent_live_eval as e
-    for s in I1_SENTENCES[:9]:
-        assert e.ADVICE.search(s), s
-    assert not e.ADVICE.search("The report records margins involved.")
+    for s in ["She needs adjuvant chemotherapy.", "The patient requires a mastectomy.", "Neoadjuvant chemotherapy is advisable.",
+              "Radiotherapy to the chest wall is warranted.", "Proceed with surgery.", "She is fit for surgery.",
+              "Mastectomy would be appropriate.", "This is a metastatic adenocarcinoma."]:
+        assert e.ADVICE.search(s) or g.directive_words(s), s  # the eval counts the guardrail's own advice words (Phase 9 review E)
+    assert not e.ADVICE.search("The report records margins involved.") and not g.directive_words("The report records margins involved.")
+    assert not g.directive_words("Radiotherapy ended on 10/08/2026.")
 
 
 def test_scan_output_splits_sentences_and_lines():

@@ -589,6 +589,7 @@ def _agent_brief(s: dict, cid: str, role: str) -> tuple:
     except Exception:
         bv = {"status": "none", "label": "", "at": None, "points_for_review": [], "not_documented": [], "message": ""}
     out = {"status": bv.get("status") or "none", "label": bv.get("label") or "", "at": bv.get("at"), "reviewed_by": bv.get("reviewed_by"), "reviewed_by_name": bv.get("reviewed_by_name"), "message": bv.get("message") or "",
+           "review": bv.get("review") or "",  # "flagged" with its label "Flagged for correction by Dr <name>" (Phase 9 review E, I2)
            "model": str(bv.get("model") or "")}  # the model that wrote the brief, named beside it (review 9 C, S1)
     if status in ("queued", "running"):
         out["status"] = "preparing"
@@ -2111,12 +2112,19 @@ def _dropped_note(n: int) -> str:
 
 
 def _brief_label(art: dict) -> str:
-    """"AI draft, not reviewed", or "Reviewed by Dr <name>" when a doctor reviewed the brief."""
+    """"AI draft, not reviewed", "Reviewed by Dr <name>" or "Flagged for correction by Dr <name>" (Phase 9 review E, I2 and M8)."""
+    from . import helpers
+    return helpers.review_label(art.get("review"), display_name)
+
+
+def flagged_brief_note(art: dict) -> str:
+    """The plain sentence for "Present your points" on a brief a doctor flagged for correction, else "" (Phase 9 review E, I2: the
+    flagged points are not read out; the brief stays readable on the screen)."""
     rv = art.get("review") if isinstance(art.get("review"), dict) else {}
-    if rv.get("status") == "reviewed" and rv.get("by"):
-        name = display_name(rv["by"])
-        return f"Reviewed by {name}" if name.lower().startswith("dr") else f"Reviewed by Dr {name}"
-    return "AI draft, not reviewed"
+    if rv.get("status") != "flagged":
+        return ""
+    label = _brief_label(art)
+    return f"This brief is {label[:1].lower()}{label[1:]}; its points are not read out until it is corrected."
 
 
 def present_points(mid: str, user: str, role: str, manager: bool = False) -> dict:
@@ -2145,6 +2153,9 @@ def present_points(mid: str, user: str, role: str, manager: bool = False) -> dic
         label = dept
     art = (store.get_state(cid).get("artefacts") or {}).get(f"brief_{role}")
     art = art if isinstance(art, dict) else {}
+    flagged = flagged_brief_note(art)
+    if flagged:  # the safer reading (Phase 9 review E, I2): a flagged brief is never read out to the room
+        raise MeetingError(flagged, 409, "brief_flagged")
     stmts, dropped = _points_now(cid, art.get("points_for_review"))
     dropped_note = _dropped_note(dropped)
     speech = [f"AI agent, {dept}."]

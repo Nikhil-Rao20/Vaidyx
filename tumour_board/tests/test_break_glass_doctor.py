@@ -193,6 +193,46 @@ def test_a_window_never_exports_the_case_file(full, tb002):
     assert "export_case_file" in kinds(CASE)
 
 
+def test_a_window_never_downloads_the_case_file_deck(full, tb002, monkeypatch):
+    """Phase 9 review E, I1: the deck is an export too. A doctor's window and the Vaidyx admin's break-glass answer 403
+    break_glass_read_only on GET /cases/{id}/deck (the same rule as /export, access.no_export_in_window); the owner downloads it, and the Vaidyx
+    admin who created a protected Case File passes the rule (that file has no slides, so no deck)."""
+    assert full.as_(MEHTA).post("/break-glass", {"case_id": CASE, "reason": REASON}).status_code == 200
+    r = full.as_(MEHTA).get(f"/cases/{CASE}/deck")
+    assert r.status_code == 403 and detail(r) == {"message": READ_ONLY_EXPORT, "code": "break_glass_read_only"}, r.text
+    r = full.as_(VX).post("/break-glass", {"case_id": CASE, "reason": "Support check (synthetic)", "hours": 1})
+    assert r.status_code == 200, r.text
+    r = full.as_(VX).get(f"/cases/{CASE}/deck")
+    assert r.status_code == 403 and detail(r) == {"message": READ_ONLY_EXPORT, "code": "break_glass_read_only"}, r.text
+    assert not any(k == "deck_downloaded" for k in kinds(CASE))
+    r = full.as_(RAO).get(f"/cases/{CASE}/deck")
+    assert r.status_code == 200 and r.content[:2] == b"PK", r.text
+    assert "deck_downloaded" in kinds(CASE)
+    # a protected Case File the Vaidyx admin created: the window rule lets its creator through (the export answers 200); a protected
+    # Case File has no slides at all (meetings.slides), so its deck is a plain 404, never the window's 403 and never a 500
+    access.close_break_glass(VX)
+    monkeypatch.setattr(config, "PROTECTED_CASES", {CASE})
+    c = store.get_case(CASE)
+    c["created_by"] = VX
+    store.save_case(c)
+    assert full.as_(VX).get(f"/cases/{CASE}/export").status_code == 200
+    r = full.as_(VX).get(f"/cases/{CASE}/deck")
+    assert r.status_code == 404 and detail(r)["code"] == "no_case", r.text
+
+
+def test_the_export_rule_lives_in_access(people):
+    """The rule the export routes and the deck share (access.no_export_in_window): a READ scope or a Vaidyx admin is refused, except the
+    Vaidyx admin who created a protected Case File; a doctor with full scope is not."""
+    c = make_case("TB-NIK-E")
+    with pytest.raises(access.AccessError) as e:
+        access.no_export_in_window(people[MEHTA], c, access.READ)
+    assert (str(e.value), e.value.status, e.value.code) == (READ_ONLY_EXPORT, 403, "break_glass_read_only")
+    with pytest.raises(access.AccessError):
+        access.no_export_in_window(people[VX], c, access.FULL)
+    assert access.no_export_in_window(people[RAO], c, access.FULL) is None
+    assert access.READ_ONLY_EXPORT == READ_ONLY_EXPORT
+
+
 def test_an_opening_without_an_owner_tells_the_creator_and_the_coordinator(full, people):
     """I2: no owning department: the creator and the MDT Coordinator role are told (the role's notice names no patient)."""
     make_case("TB-NIK-B", owner=None)  # created by Dr Rao

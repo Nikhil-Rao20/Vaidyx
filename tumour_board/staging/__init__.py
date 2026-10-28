@@ -182,11 +182,18 @@ def anatomic_parts(v: str) -> dict:
 def written_kind(v: str) -> tuple[str, bool]:
     """(kind, also prognostic) of a written stage, from its value only, never from the quote around it (the whole-run review, I2): a value
     with T, N or M categories or an anatomic stage group is "anatomic", and also prognostic when it names a prognostic stage too (a line can
-    be both, and then it is shown and compared under both drafts); a value that names only a prognostic stage is "prognostic"."""
-    prog = bool(re.search(r"\bprognostic\b", str(v or ""), re.I))
-    if not prog:
+    be both, and then it is shown and compared under both drafts); a value that names only a prognostic stage is "prognostic". A bare
+    stage group beside the word prognostic ("Stage IIB (prognostic)") is that prognostic stage, unless T, N or M parts, a "prognostic
+    stage" of its own or the word anatomic are there too (Phase 9 review E, M3: it was compared with the anatomic draft)."""
+    s = str(v or "")
+    if not re.search(r"\bprognostic\b", s, re.I):
         return "anatomic", False
-    return ("anatomic", True) if any(anatomic_parts(v).values()) else ("prognostic", False)
+    p = anatomic_parts(s)
+    if not any(p.values()):
+        return "prognostic", False
+    if p["T"] or p["N"] or p["M"] or _PROG_WRITTEN.search(s) or re.search(r"\banatomic\b", s, re.I):
+        return "anatomic", True
+    return "prognostic", False
 
 
 def parse_written(v: str) -> dict:
@@ -325,7 +332,8 @@ def compare(draft: dict, written: list[dict]) -> dict | None:
     """The newest clinical (or unprefixed) stage a report wrote against the draft: "matches", "differs" (what differs) or "partial"."""
     # a prognostic stage alone is compared with the prognostic draft; any line with T, N or M parts or an anatomic stage group is compared
     # here, whatever its kind (the whole-run review, I2: "pT2 pN1a M0, Anatomic stage IIB, Prognostic stage group IB" is both)
-    written = [w for w in written if w.get("kind") != "prognostic" or any(anatomic_parts(w["value"]).values())]
+    # a bare stage group beside the word prognostic ("Stage IIB (prognostic)") is not an anatomic stage (Phase 9 review E, M3)
+    written = [w for w in written if w.get("kind") != "prognostic" or any(anatomic_parts(w["value"]).get(k) for k in ("T", "N", "M"))]
     pool = [w for w in written if not w["superseded"] and w["prefix"] in ("", "c")] or [w for w in written if not w["superseded"]]
     if not pool or draft.get("status") != "staged":
         return None
@@ -545,10 +553,17 @@ def parse_prognostic(v: str) -> str | None:
     return (m.group(1).upper() + (m.group(2) or "").upper()) if m else None
 
 
+def _bare_prognostic(w: dict) -> str | None:
+    """The stage of a value filed as prognostic only for the word beside it ("Stage IIB (prognostic)" -> IIB, Phase 9 review E, M3)."""
+    if w.get("kind") != "prognostic":
+        return None
+    return parse_written(re.sub(r"[()]|\bprognostic\b", " ", str(w.get("value") or ""), flags=re.I)).get("stage")
+
+
 def written_prognostic(case_id, written: list[dict]) -> list[dict]:
     """Every prognostic stage a report wrote, oldest first: the stages as recorded that say "prognostic", and any report line with the
     words "prognostic stage" and a stage (the line checked word for word against its report like every quote)."""
-    out = [{**w, "stage": parse_prognostic(w["value"]) or parse_prognostic(w["quote"])} for w in written
+    out = [{**w, "stage": parse_prognostic(w["value"]) or parse_prognostic(w["quote"]) or _bare_prognostic(w)} for w in written
            if w.get("kind") == "prognostic" or w.get("also_prognostic")]  # a line that is both is listed under both drafts (review I2)
     seen = {(w["doc_id"], w["stage"]) for w in out}
     for d in rules.case_docs(case_id):

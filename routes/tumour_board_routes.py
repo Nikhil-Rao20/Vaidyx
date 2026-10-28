@@ -1282,14 +1282,12 @@ def setup_tumour_board_routes():
         ids = None if b.get("all") else [str(x) for x in (b.get("ids") or [])]
         return {"changed": notify.mark_read(rl, ids), "unread": notify.unread_count(rl)}
 
-    _READ_ONLY_EXPORT = "A Case File opened with a reason is read on screen only."
-
     def _no_export_in_window(request, rl, c):
-        """A window (a doctor's opened with a reason, D8, or the Vaidyx admin's break-glass) reads the Case File on screen only: no bulk
-        download of the file, its records or its audit (whole-run review 9, I1). 403 break_glass_read_only."""
-        admin_window = bool(rl.get("vaidyx_admin")) and not (access.is_protected(c) and access.is_creator(rl, c))
-        if admin_window or _scope(request) == access.READ:
-            raise HTTPException(403, {"message": _READ_ONLY_EXPORT, "code": "break_glass_read_only"})
+        """A window reads the Case File on screen only (access.no_export_in_window, also used by the deck): 403 break_glass_read_only."""
+        try:
+            access.no_export_in_window(rl, c, _scope(request))
+        except access.AccessError as e:
+            raise HTTPException(e.status, {"message": str(e), "code": e.code})
 
     @r.get("/cases/{case_id}/export/vtb")
     async def export_vtb(case_id: str, request: Request):

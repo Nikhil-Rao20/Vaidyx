@@ -548,7 +548,7 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
         dropped += len(drop); removed += [{**x, "where": sec.get("heading", "")} for x in drop]
         kept = []
         for it in items:
-            iss = guardrails.scan_output(it["text"])
+            iss = guardrails.scan_output(it["text"], quotes=guardrails.statement_quotes(it))
             if iss:
                 issues += iss; removed.append(_removed(it, "guardrail", "; ".join(i["reason"] for i in iss), sec.get("heading", "")))
             else:
@@ -561,7 +561,7 @@ async def run_agent(case_id, role, focus_question="", max_steps=5):
         if not v:
             dropped += 1; removed += [{**x, "where": "points_for_review"} for x in drop]; continue
         p = v[0]
-        iss = guardrails.scan_output(p["text"])
+        iss = guardrails.scan_output(p["text"], quotes=guardrails.statement_quotes(p))
         if not iss and _POINT_SCOPE.search(p["text"]):
             iss = [{"sentence": p["text"], "reason": "asks for a treatment or work-up decision for this patient"}]
         issues += iss
@@ -700,22 +700,23 @@ def _note_maker(case_id, role):
 
 
 def directive_outside_quotes(stmt):
-    """The issues of a verified statement that names a treatment, drug, dose, surgery or radiotherapy word (_DIRECTIVE) in its own words:
-    every such word must sit inside one of its cited quotes (the whole-run review, I1). "Margins are involved, so re-excision is needed"
-    citing "Margins: involved" is refused; "Paclitaxel 175 mg/m2 on 03/03/2026" citing that line word for word passes."""
-    words = guardrails.unquoted_words(stmt.get("text") or "", [c.get("quote") for c in stmt.get("citations") or [] if isinstance(c, dict)],
-                                      _DIRECTIVE)
-    return [{"sentence": (stmt.get("text") or "").strip(), "reason": "treatment words outside the quoted record text: " + ", ".join(words)}] \
-        if words else []
+    """The advice issues of a verified statement: the directive check of guardrails.scan_output with the statement's cited quotes taken out
+    (advice words such as should, consider, offer, warranted, fit for in its own words; a need word only next to a treatment word).
+    "Margins are involved, so re-excision is needed" citing "Margins: involved" is refused; "Radiotherapy ended on 10/08/2026" citing
+    "RT completed 10-Aug-2026" passes (a treatment named in the record is not advice)."""
+    text = stmt.get("text") or ""
+    return [{"sentence": sent.strip(), "reason": "advice wording outside the quoted record text: " + ", ".join(words)}
+            for sent in guardrails.SENTENCE.split(text) if (words := guardrails.directive_words(sent, guardrails.statement_quotes(stmt)))]
 
 
 def _screen(case_id, statements, note):
     """Statements as the model wrote them -> (kept, removed, unverified count): exact quotes only (qa.verify, as in Ask the Case File), then
-    the scope guardrail on each kept text and no treatment word outside its quotes; a kept statement outside the specialty gains its note."""
+    the scope guardrail on each kept text, its cited quotes taken out of the advice check; a kept statement outside the specialty gains
+    its note."""
     stmts, drop = qa.verify(case_id, statements)
     removed, kept = [{**x, "where": "answer"} for x in drop], []
     for st_ in stmts:
-        iss = guardrails.scan_output(st_["text"]) or directive_outside_quotes(st_)
+        iss = guardrails.scan_output(st_["text"], quotes=guardrails.statement_quotes(st_))
         if iss:
             removed.append(_removed(st_, "guardrail", "; ".join(i["reason"] for i in iss), "answer"))
             continue

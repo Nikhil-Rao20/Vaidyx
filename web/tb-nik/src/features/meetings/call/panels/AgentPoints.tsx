@@ -81,24 +81,41 @@ export function briefReviewed(a: Pick<AgentInfo, "brief">): boolean {
   return !!b?.reviewed_by || !!(b?.label && /^reviewed/i.test(b.label));
 }
 
+/** True when a doctor flagged the brief for correction: the server's label "Flagged for correction by Dr <name>" (Phase 9 review E, I2). */
+export function briefFlagged(a: Pick<AgentInfo, "brief">): boolean {
+  return /^flagged/i.test(String(a.brief?.label ?? ""));
+}
+
+/** The plain sentence when "Present your points" is refused on a flagged brief, as the server words it (409 brief_flagged). */
+export function flaggedNote(a: Pick<AgentInfo, "brief">): string | null {
+  if (!briefFlagged(a)) return null;
+  const label = String(a.brief?.label ?? "").trim().replace(/\.+$/, "");
+  return `This brief is ${label.charAt(0).toLowerCase()}${label.slice(1)}; its points are not read out until it is corrected.`;
+}
+
 /** The header of the points: "Points from the records, AI draft, not reviewed. Gemma-4-31B (non-medical)" until a doctor reviewed the
- * brief, then "Reviewed by Dr <name>. Gemma-4-31B (non-medical)" (the model that wrote the brief named beside it, review 9 C, S1). */
+ * brief, then "Reviewed by Dr <name>. Gemma-4-31B (non-medical)" (the model that wrote the brief named beside it, review 9 C, S1), or
+ * "Flagged for correction by Dr <name>. Gemma-4-31B (non-medical)" when a doctor flagged it (Phase 9 review E, I2). */
 export function pointsHeader(a: Pick<AgentInfo, "brief">): string {
   const b = a.brief;
   const stale = b?.status === "stale" ? "Records changed since this brief. " : "";
   const m = modelLabel(b?.model);
   const model = m ? `. ${m}` : "";
+  if (briefFlagged(a)) return `${stale}${String(b?.label ?? "").trim().replace(/\.+$/, "")}${model}`;
   const who = reviewerName(b);
   if (who) return `${stale}Reviewed by ${who}${model}`;
   if (briefReviewed(a)) return `${stale}${b?.label && /^reviewed by/i.test(b.label) ? b.label : "Reviewed"}${model}`;
   return `${stale}Points from the records, AI draft, not reviewed${model}`;
 }
 
-/** Why "Present your points" is not offered now, or null when it is: the brief is prepared, there is nothing to read, or no points. */
+/** Why "Present your points" is not offered now, or null when it is: the brief is prepared, there is nothing to read, a doctor
+ * flagged the brief for correction, or no points. */
 export function presentBlockedReason(a: BriefPick): string | null {
   const status = a.brief?.status;
   if (status === "preparing") return "The brief is still being prepared from the records.";
   if (status === "no_documents") return `No ${deptOf(a)} reports in this Case File.`;
+  const flagged = flaggedNote(a);
+  if (flagged) return flagged;
   if (!pointsCount(a)) return status === "none" || status === "error" || !status ? "No brief has been prepared from the records yet." : "The brief lists no points for review.";
   return null;
 }
@@ -181,7 +198,7 @@ export function AgentPoints({ agent }: { agent: AgentInfo }) {
         <p className="text-xs text-muted-foreground">No {deptOf(agent)} reports in this Case File</p>
       ) : points.length ? (
         <>
-          <p className={cn("text-[11px] font-semibold", briefReviewed(agent) ? "text-ok" : "text-review")} data-testid="points-header">{pointsHeader(agent)}</p>
+          <p className={cn("text-[11px] font-semibold", briefFlagged(agent) ? "text-bad" : briefReviewed(agent) ? "text-ok" : "text-review")} data-testid="points-header">{pointsHeader(agent)}</p>
           <ol className="space-y-1.5">
             {points.map((p, i) => <li key={i}><CitedText text={p.text} citations={p.citations} /></li>)}
           </ol>

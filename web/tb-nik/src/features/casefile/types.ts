@@ -183,6 +183,9 @@ export interface HelperBrief {
   reviewed_by?: string;
   /** The reviewer's display name beside the login (review 9 C, M11). */
   reviewed_by_name?: string;
+  /** The doctor who flagged the brief for correction, and their display name (Phase 9 review E, I2). */
+  flagged_by?: string;
+  flagged_by_name?: string;
   /** The review status of the brief: "reviewed", "flagged", "ai_draft" or "". */
   review?: string;
   label?: string;

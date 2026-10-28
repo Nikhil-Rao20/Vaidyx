@@ -370,14 +370,17 @@ function outcomeHTML(b) {
   const oc = b.outcome_type || "decision", label = (S.data.outcomes || {})[oc] || oc;
   return `<div class="small" style="margin:6px 0"><span class="chip ${oc === "decision" ? "c-ok" : oc === "not_discussed" ? "c-bad" : "c-warn"}">${esc(label)}</span>${b.deferred_reason ? ` ${esc(b.deferred_reason)}` : ""}${b.referred_to ? ` to ${esc(b.referred_to)}` : ""}</div>`;
 }
+// the treatment intent changes only through a correction (Phase 9 review E, M2): shown read-only here, the stored value sent unchanged
+const INTENT_WORDS = { curative: "Curative / radical", palliative: "Palliative" };
 function communicationHTML(b) {
   if ((b.outcome_type || "decision") !== "decision") return "";
+  const intentNow = b.intent || b.intent_as_recorded || "";
   const kv = [["Patient informed", b.patient_informed_date ? `${fmtDate(b.patient_informed_date)}${b.informed_by ? ` by ${esc(b.informed_by)}` : ""}` : '<span class="chip c-warn">not yet recorded</span>'],
-    ["Key worker", b.key_worker ? esc(b.key_worker) : '<span class="muted">not recorded</span>'], ["Intention to treat (as recorded)", b.intent_as_recorded ? esc(b.intent_as_recorded) : '<span class="muted">not stated</span>'],
+    ["Key worker", b.key_worker ? esc(b.key_worker) : '<span class="muted">not recorded</span>'], ["Intention to treat (as recorded)", intentNow ? esc(INTENT_WORDS[intentNow] || intentNow) : '<span class="muted">not stated</span>'],
     ["Clinical trial considered", b.trial_considered ? esc(b.trial_considered) : '<span class="muted">not recorded</span>'], ["Consent recorded", b.consent_recorded ? esc(b.consent_recorded) : '<span class="muted">not recorded</span>']];
   const form = can("board_record") ? `<details class="small" style="margin-top:6px"><summary>Record communication with the patient</summary><div class="form">
       <div class="grid2"><div><label>Date the patient was informed</label><input type="date" class="cm-date" value="${esc(b.patient_informed_date || "")}"></div><div><label>Informed by</label><input class="cm-by" value="${esc(b.informed_by || "")}" placeholder="lead clinician"></div></div>
-      <div class="grid2"><div><label>Key worker</label><input class="cm-kw" value="${esc(b.key_worker || "")}"></div><div><label>Intention to treat (as recorded)</label><select class="cm-intent"><option value="" ${!b.intent_as_recorded ? "selected" : ""}>Not stated</option><option value="curative" ${b.intent_as_recorded === "curative" ? "selected" : ""}>Curative / radical</option><option value="palliative" ${b.intent_as_recorded === "palliative" ? "selected" : ""}>Palliative</option></select></div></div>
+      <div class="grid2"><div><label>Key worker</label><input class="cm-kw" value="${esc(b.key_worker || "")}"></div><div><label>Intention to treat (as recorded)</label><input class="cm-intent" readonly aria-readonly="true" data-stored="${esc(intentNow)}" value="${esc(INTENT_WORDS[intentNow] || intentNow || "Not stated")}"><div class="muted small">Changed through Correct this record</div></div></div>
       <div class="grid2"><div><label>Clinical trial considered</label><select class="cm-trial"><option value="" ${!b.trial_considered ? "selected" : ""}>Not recorded</option><option value="yes" ${b.trial_considered === "yes" ? "selected" : ""}>Yes</option><option value="no" ${b.trial_considered === "no" ? "selected" : ""}>No</option></select></div><div><label>Consent recorded</label><select class="cm-consent"><option value="" ${!b.consent_recorded ? "selected" : ""}>Not recorded</option><option value="yes" ${b.consent_recorded === "yes" ? "selected" : ""}>Yes</option><option value="no" ${b.consent_recorded === "no" ? "selected" : ""}>No</option></select></div></div>
       <div style="margin-top:8px"><button class="ghost sm" data-cmsave="${esc(b.id)}">Save (audited, no new version)</button></div></div></details>` : "";
   return `<div class="stagebox" style="margin-top:8px"><b>Patient and communication</b><div class="kv small" style="margin-top:4px">${kv.map(([k, v]) => `<div>${k}</div><div>${v}</div>`).join("")}</div>${form}</div>`;
@@ -1443,7 +1446,7 @@ function renderBoard() {
   bindDiscord($("#tab-board"));
   $$("[data-cmsave]", $("#tab-board")).forEach((x) => (x.onclick = async () => {
     const box = x.closest(".stagebox");
-    const body = { patient_informed_date: $(".cm-date", box).value, informed_by: $(".cm-by", box).value, key_worker: $(".cm-kw", box).value, intent_as_recorded: $(".cm-intent", box).value,
+    const body = { patient_informed_date: $(".cm-date", box).value, informed_by: $(".cm-by", box).value, key_worker: $(".cm-kw", box).value, intent_as_recorded: $(".cm-intent", box).dataset.stored || "",
       trial_considered: $(".cm-trial", box).value, consent_recorded: $(".cm-consent", box).value };
     try { await api(`/cases/${S.caseId}/board-records/${x.dataset.cmsave}/communication`, { json: body }); toast("Communication recorded"); S.data = await api("/cases/" + S.caseId); renderBoard(); }
     catch (e) { toast(e.message, 7000); }

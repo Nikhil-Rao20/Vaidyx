@@ -561,3 +561,37 @@ def test_review_i3_a_residents_run_on_a_confirmed_draft_is_refused(breast):
     assert store.get_state(CASE)["staging"]["confirmed"]["by"] == "dr.rao"
     who["user"] = "dr.rao"  # the consultant may work it out again
     assert tc.post(f"/api/tb/cases/{CASE}/staging/run").status_code == 200
+
+
+# ---- Phase 9 review E, M3: a bare stage group beside the word prognostic is a prognostic stage, never compared as anatomic ---------------
+
+BARE = "Stage IIB (prognostic)"
+
+
+def test_review_e_m3_a_bare_group_beside_prognostic_is_filed_as_prognostic():
+    assert staging.written_kind(BARE) == ("prognostic", False)
+    assert staging.written_kind("IIB (prognostic)") == ("prognostic", False)
+    # T, N or M parts, a "prognostic stage" of its own or the word anatomic keep the line anatomic (and also prognostic)
+    assert staging.written_kind("Stage IIB prognostic, pT2 N1 M0") == ("anatomic", True)
+    assert staging.written_kind("Stage IIA, prognostic stage group IB") == ("anatomic", True)
+    assert staging.written_kind("Anatomic stage IIA (prognostic factors pending)") == ("anatomic", True)
+    assert staging.written_kind(COMBINED) == ("anatomic", True) and staging.written_kind("stage IIB") == ("anatomic", False)
+    # not compared with the anatomic draft (no false "differs"); listed under the prognostic draft with its stage
+    draft = {"status": "staged", "stage": "IIA", "components": {"T": {"cat": "T2", "group": "T2"}, "N": {"cat": "cN0"}, "M": {"cat": "cM0", "group": "M0"}}}
+    w = {"value": BARE, "quote": BARE, "kind": "prognostic", "prefix": "", "superseded": False, "doc_id": "DX", "date": "2026-09-25"}
+    assert staging.compare(draft, [w]) is None
+    assert staging._bare_prognostic(w) == "IIB" and staging._bare_prognostic({**w, "kind": "anatomic"}) is None
+
+
+def test_review_e_m3_the_bare_prognostic_line_is_shown_under_the_prognostic_draft(breast):
+    tc, who, fake, calls = breast
+    text = f"OPD consultation note (SYNTHETIC)\n{BARE}\nECOG 1."
+    util.add(CASE, util.make_doc("DO2", "clinical_note", text=text, title="OPD CONSULTATION NOTE", date="2026-09-26",
+                                 facts={"recorded_stage": util.fact(BARE, quote=BARE)}))
+    service.recheck(CASE, "test")
+    v = tc.post(f"/api/tb/cases/{CASE}/staging/run").json()
+    w = [x for x in v["written"] if x["doc_id"] == "DO2"]
+    assert len(w) == 1 and w[0]["kind"] == "prognostic" and "also_prognostic" not in w[0]
+    assert (v.get("comparison") or {}).get("written", {}).get("doc_id") != "DO2"  # never the anatomic comparison
+    pw = [x for x in v["prognostic_written"] if x["doc_id"] == "DO2"]
+    assert len(pw) == 1 and pw[0]["stage"] == "IIB"

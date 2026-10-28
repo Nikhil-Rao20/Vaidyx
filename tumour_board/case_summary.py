@@ -28,7 +28,7 @@ import re
 import threading
 import time
 
-from . import agents, config, dates, decision_record, grounding, guardrails, llm, protocol, qa, rules, search, store, summary
+from . import config, dates, decision_record, grounding, guardrails, llm, protocol, qa, rules, search, store, summary
 
 log = logging.getLogger("tumour_board")
 
@@ -204,7 +204,7 @@ def _check_model(case_id, items, allowed, where, removed, issues, near):
     removed.extend({**d, "where": where} for d in drops)
     keep = []
     for s in ok:
-        iss = guardrails.scan_output(s["text"]) or agents.directive_outside_quotes(s)  # every treatment word inside a quote (review I1)
+        iss = guardrails.scan_output(s["text"], quotes=guardrails.statement_quotes(s))  # advice words only outside the cited quotes (review E, S1)
         if iss:
             issues.extend(iss)
             removed.append({**qa.removed_item(s, "guardrail", "; ".join(dict.fromkeys(i["reason"] for i in iss))), "where": where})

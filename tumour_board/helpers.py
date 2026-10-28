@@ -6,6 +6,7 @@ state.artefacts.brief_<role> (none / preparing / ready / stale by the Case File 
 cases/<id>/helper_chats.json and shared with the team."""
 import asyncio
 import logging
+import re
 import threading
 import time
 import uuid
@@ -50,11 +51,46 @@ def brief_view(art, sig, preparing=False) -> dict:
            "not_documented": art.get("not_documented") or [], "no_documents": bool(art.get("no_documents")), "message": art.get("message") or "",
            "open_items": art.get("open_items") or [], "model": art.get("model") or "", "removed": len(art.get("removed") or []), "dropped_unverified": art.get("dropped_unverified", 0),
            "references_dropped": art.get("references_dropped", 0), "stale_reason": why, "review": rv.get("status") or "", "pack": art.get("pack"),
-           "label": "AI draft, not reviewed" if rv.get("status") in ("ai_draft", None, "") else ("Reviewed" if rv.get("status") == "reviewed" else rv.get("status"))}
+           # "Reviewed" (the name goes beside it), "Flagged for correction by Dr <name>" or "AI draft, not reviewed" (Phase 9 review E, I2)
+           "label": "Reviewed" if rv.get("status") == "reviewed" else review_label(rv)}
     if rv.get("status") == "reviewed":
         out["reviewed_by"] = rv.get("by")
         out["reviewed_by_name"] = _name(rv.get("by"))  # the reviewer's display name beside the login (review 9 C, M11)
+    elif rv.get("status") == "flagged":
+        out["flagged_by"] = rv.get("by")
+        out["flagged_by_name"] = _name(rv.get("by"))
     return out
+
+
+_TITLED = re.compile(r"^(dr|prof)\.?\s", re.I)  # a word, so "Drishti Rao" is not read as titled (Phase 9 review E, M8)
+
+
+def dr_name(name) -> str:
+    """"Dr <name>" unless the name already starts with the word Dr or Prof ("Dr Rao", "Dr. Rao", "Prof Iyer"); "" for none."""
+    n = str(name or "").strip()
+    if not n:
+        return ""
+    return n if _TITLED.match(n) else f"Dr {n}"
+
+
+def reviewer(user, name_of=None) -> str:
+    """The reviewer as a line names it: "Dr <display name>", or the login as it is when no display name is known."""
+    if not user:
+        return ""
+    name = str((name_of or _name)(user) or "").strip()
+    return dr_name(name) if name and name != str(user) else str(user)
+
+
+def review_label(rv, name_of=None) -> str:
+    """The review status of an AI artefact in words: "Reviewed by Dr <name>", "Flagged for correction by Dr <name>" (a doctor flagged
+    it), else "AI draft, not reviewed". Shown on the Case File, the meeting tiles and spoken with "Present your points"."""
+    rv = rv if isinstance(rv, dict) else {}
+    who = reviewer(rv.get("by"), name_of)
+    if rv.get("status") == "reviewed":
+        return f"Reviewed by {who}" if who else "Reviewed"
+    if rv.get("status") == "flagged":
+        return f"Flagged for correction by {who}" if who else "Flagged for correction"
+    return "AI draft, not reviewed"
 
 
 def _name(user) -> str:

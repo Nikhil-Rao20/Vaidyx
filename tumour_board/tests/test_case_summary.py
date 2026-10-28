@@ -180,19 +180,33 @@ def test_failing_model_sentences_are_removed_with_their_reason(decided, monkeypa
         assert t["text"] not in texts(v, "presentation")
 
 
-def test_review_i1_a_treatment_word_outside_the_quote_is_removed(decided, monkeypatch):
-    """Every treatment, drug, dose, surgery or radiotherapy word of a model sentence sits inside its quote (the whole-run review, I1)."""
+def test_review_i1_advice_outside_the_quote_is_removed(decided, monkeypatch):
+    """Advice in the sentence's own words is removed (the whole-run review I1, as narrowed by the Phase 9 review E, S1): an advice word
+    outside the cited quote, or a need word next to a treatment word."""
     case_id, _ = decided
-    outside = {"text": "The CT report records a 3.2 cm mass in the right upper lobe for resection.",
+    outside = {"text": "The CT report records a 3.2 cm mass in the right upper lobe, so resection is warranted.",
                "citations": [{"doc_id": "Da0000003", "quote": "Right upper lobe mass measuring 3.2 cm"}]}
     needs = {"text": "Adenocarcinoma, grade 2 needs adjuvant treatment.", "citations": [{"doc_id": "Da0000001", "quote": "Diagnosis: Adenocarcinoma, grade 2"}]}
     fake(monkeypatch, pres=[P_OK, outside, needs], since=[S_OK])  # S_OK's "lobectomy" sits inside its quote
     v = build(case_id)
     assert texts(v, "presentation")[0] == P_OK["text"] and S_OK["text"] in texts(v, "since")
     by = {x["text"]: x for x in v["removed"]}
-    assert by[outside["text"]]["reason"] == "guardrail" and "resection" in by[outside["text"]]["detail"]
-    assert by[needs["text"]]["reason"] == "guardrail"
+    assert by[outside["text"]]["reason"] == "guardrail" and "warranted" in by[outside["text"]]["detail"]
+    assert by[needs["text"]]["reason"] == "guardrail" and "needs" in by[needs["text"]]["detail"]
     assert outside["text"] not in texts(v, "presentation") and needs["text"] not in texts(v, "presentation")
+
+
+def test_review_e_s1_record_wording_with_a_treatment_word_is_kept(decided, monkeypatch):
+    """The Phase 9 review E, S1: a document title or a past treatment named in the sentence's own words is not advice."""
+    case_id, _ = decided
+    title = {"text": "The surgical discharge summary records a right upper lobectomy done on 18/10/2026.",
+             "citations": [{"doc_id": "Da0000004", "quote": "Right upper lobectomy done on 18/10/2026"}]}
+    past = {"text": "Surgery was done on 18/10/2026: a right upper lobectomy.",
+            "citations": [{"doc_id": "Da0000004", "quote": "Right upper lobectomy done on 18/10/2026"}]}
+    fake(monkeypatch, pres=[P_OK], since=[title, past])
+    v = build(case_id)
+    assert title["text"] in texts(v, "since") and past["text"] in texts(v, "since")
+    assert not [x for x in v["removed"] if x["reason"] == "guardrail"]
 
 
 def test_a_sentence_citing_a_record_of_the_other_period_is_dropped(decided, monkeypatch):

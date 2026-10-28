@@ -523,6 +523,18 @@ def refusal(r: dict, case: dict) -> str:
             "that received a request sees the items it was asked about.")
 
 
+READ_ONLY_EXPORT = "A Case File opened with a reason is read on screen only."
+
+
+def no_export_in_window(r: dict, case: dict, scope_now: str | None) -> None:
+    """A window (a doctor's opened with a reason, D8, or the Vaidyx admin's break-glass) reads the Case File on screen only: no bulk
+    download of the file, its records, its deck or its audit (whole-run review 9, I1; the deck from Phase 9 review E, I1). A Vaidyx admin
+    who created a protected Case File still exports that one. `scope_now` is the request's scope. AccessError 403 break_glass_read_only."""
+    admin_window = bool((r or {}).get("vaidyx_admin")) and not (is_protected(case) and is_creator(r, case))
+    if admin_window or scope_now == READ:
+        raise AccessError(READ_ONLY_EXPORT, 403, "break_glass_read_only")
+
+
 def visible(r: dict, cases, states=None) -> list:
     """The Case Files the user may open (any scope but a doctor's window: a Case File opened with a reason is reached by its address or
     the notification, never listed among the doctor's own), each as given."""

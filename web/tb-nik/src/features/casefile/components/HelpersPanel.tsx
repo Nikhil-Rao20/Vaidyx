@@ -38,10 +38,10 @@ export const agentTitle = (h: Pick<Helper, "role" | "label" | "department" | "ti
 /** Who reviewed a brief: "Dr <display name>" when the server sends one, else the login. */
 export const briefReviewer = (b: Pick<Helper["brief"], "reviewed_by" | "reviewed_by_name">) => (b.reviewed_by_name ? drName(b.reviewed_by_name) : b.reviewed_by ?? "");
 
-/** The brief's review chip: "Reviewed by Dr <name>", "Flagged for correction", or "AI draft, not reviewed". */
+/** The brief's review chip: "Reviewed by Dr <name>", "Flagged for correction by Dr <name>", or "AI draft, not reviewed". */
 export function BriefReviewChip({ brief }: { brief: Helper["brief"] }) {
   const chip = brief.reviewed_by || brief.review === "reviewed" ? <StatusChip kind="ok" icon={CheckCheck}>{brief.reviewed_by ? `Reviewed by ${briefReviewer(brief)}` : "Reviewed"}</StatusChip>
-    : brief.review === "flagged" ? <StatusChip kind="bad" icon={Flag}>Flagged for correction</StatusChip>
+    : brief.review === "flagged" ? <StatusChip kind="bad" icon={Flag}>{brief.flagged_by_name || brief.flagged_by ? `Flagged for correction by ${drName(brief.flagged_by_name || brief.flagged_by)}` : "Flagged for correction"}</StatusChip>
     : <StatusChip kind="review" icon={Bot}>AI draft, not reviewed</StatusChip>;
   return <span className="inline-flex" data-testid="brief-review">{chip}</span>;
 }

@@ -148,7 +148,7 @@ async def build(case_id, force=False):
         removed.extend({**x, "where": where} for x in drops)
         keep = []
         for s in ok:
-            iss = guardrails.scan_output(s["text"])
+            iss = guardrails.scan_output(s["text"], quotes=guardrails.statement_quotes(s))
             if iss:
                 issues.extend(iss)
                 removed.append({**qa.removed_item(s, "guardrail", "; ".join(dict.fromkeys(i["reason"] for i in iss))), "where": where})

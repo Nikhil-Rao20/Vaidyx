@@ -164,7 +164,7 @@ def test_review_i1_a_treatment_word_outside_the_quote_is_refused(monkeypatch, pa
     drug = [{"doc_id": "Dhpe00001", "quote": "Paclitaxel 175 mg/m2 given on 03/03/2026"}]
     _live(monkeypatch, {"answer_found": True, "references": [], "statements": [
         {"text": "Margins are involved, so re-excision is needed.", "citations": cite},
-        {"text": "Margins are involved; re-excision will follow.", "citations": cite},  # no advice word, but a surgery word of its own
+        {"text": "Margins are involved; re-excision will follow.", "citations": cite},  # a treatment step put in the future in its own words
         {"text": "Margins: involved", "citations": cite},
         {"text": "The report records margins involved.", "citations": cite},
         {"text": "Paclitaxel 175 mg/m2 given on 03/03/2026.", "citations": drug}]})
@@ -174,7 +174,7 @@ def test_review_i1_a_treatment_word_outside_the_quote_is_refused(monkeypatch, pa
     by = {x["text"]: x for x in a["removed"]}
     assert by["Margins are involved, so re-excision is needed."]["reason"] == "guardrail"
     assert by["Margins are involved; re-excision will follow."]["reason"] == "guardrail"
-    assert "treatment words outside the quoted record text: excision" in by["Margins are involved; re-excision will follow."]["detail"]
+    assert "advice wording outside the quoted record text: will" in by["Margins are involved; re-excision will follow."]["detail"]
     assert "—" not in by["Margins are involved; re-excision will follow."]["detail"]
 
 
