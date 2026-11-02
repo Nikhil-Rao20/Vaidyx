@@ -1,4 +1,4 @@
-// The hospital's logo for the deck covers and the website: a PNG or JPEG up to 1 MB, chosen from the laptop, previewed, sent at once
+// The hospital's logo for the meeting PDF covers and the website: a PNG or JPEG up to 1 MB, chosen from the laptop, previewed, sent at once
 // (not with the step), removable. The preview reads /hospital/logo with a cache-busting stamp after each change.
 import { useRef, useState } from "react";
 import { ImagePlus, Trash2 } from "lucide-react";
@@ -29,7 +29,7 @@ export function LogoUpload({ hasLogo, onChanged, className }: { hasLogo: boolean
   const upload = useAsyncAction(async () => {
     const f = input.current?.files?.[0];
     if (!f) throw new Error("Choose a PNG or JPEG file first.");
-    if (!["image/png", "image/jpeg"].includes(f.type)) throw new Error("PNG or JPEG only (a deck cannot carry an SVG).");
+    if (!["image/png", "image/jpeg"].includes(f.type)) throw new Error("PNG or JPEG only.");
     if (f.size > MAX) throw new Error("At most 1 MB. A wide version of the logo, about 1200 px across, reads best.");
     const data = await readAsDataUrl(f);
     await api.post(EP.setupHospitalLogo, { data });
@@ -56,7 +56,7 @@ export function LogoUpload({ hasLogo, onChanged, className }: { hasLogo: boolean
           {present && !preview ? <ActionButton type="button" variant="ghost" size="sm" state={remove.state} doneText="Removed" onClick={() => void remove.run()} icon={<Trash2 className="size-4" aria-hidden />}>Remove</ActionButton> : null}
         </div>
       </div>
-      <p className={cn("text-xs", error ? "text-bad" : "text-muted-foreground")}>{error ?? "PNG or JPEG, up to 1 MB. It goes on the cover of every deck and next to the Vaidyx mark."}</p>
+      <p className={cn("text-xs", error ? "text-bad" : "text-muted-foreground")}>{error ?? "PNG or JPEG, up to 1 MB. It goes on the cover of every meeting PDF and next to the Vaidyx mark."}</p>
     </div>
   );
 }

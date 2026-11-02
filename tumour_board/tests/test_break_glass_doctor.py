@@ -193,35 +193,35 @@ def test_a_window_never_exports_the_case_file(full, tb002):
     assert "export_case_file" in kinds(CASE)
 
 
-def test_a_window_never_downloads_the_case_file_deck(full, tb002, monkeypatch):
-    """Phase 9 review E, I1: the deck is an export too. A doctor's window and the Vaidyx admin's break-glass answer 403
-    break_glass_read_only on GET /cases/{id}/deck (the same rule as /export, access.no_export_in_window); the owner downloads it, and the Vaidyx
-    admin who created a protected Case File passes the rule (that file has no slides, so no deck)."""
+def test_a_window_never_downloads_the_board_record_pdf(full, tb002, monkeypatch):
+    """Phase 9 review E, I1, carried from the deck to the board record PDF that replaced it (meetings-v2 items 4.1 and 4.2): a doctor's
+    window and the Vaidyx admin's break-glass answer 403 break_glass_read_only on GET /cases/{id}/board-pdf (the same rule as /export,
+    access.no_export_in_window); the owner passes the rule (no board record yet: 404 no_board_record); the deck route is gone; a protected
+    Case File is never printed (403 protected, never a 500)."""
     assert full.as_(MEHTA).post("/break-glass", {"case_id": CASE, "reason": REASON}).status_code == 200
-    r = full.as_(MEHTA).get(f"/cases/{CASE}/deck")
+    r = full.as_(MEHTA).get(f"/cases/{CASE}/board-pdf")
     assert r.status_code == 403 and detail(r) == {"message": READ_ONLY_EXPORT, "code": "break_glass_read_only"}, r.text
     r = full.as_(VX).post("/break-glass", {"case_id": CASE, "reason": "Support check (synthetic)", "hours": 1})
     assert r.status_code == 200, r.text
-    r = full.as_(VX).get(f"/cases/{CASE}/deck")
+    r = full.as_(VX).get(f"/cases/{CASE}/board-pdf")
     assert r.status_code == 403 and detail(r) == {"message": READ_ONLY_EXPORT, "code": "break_glass_read_only"}, r.text
-    assert not any(k == "deck_downloaded" for k in kinds(CASE))
-    r = full.as_(RAO).get(f"/cases/{CASE}/deck")
-    assert r.status_code == 200 and r.content[:2] == b"PK", r.text
-    assert "deck_downloaded" in kinds(CASE)
-    # a protected Case File the Vaidyx admin created: the window rule lets its creator through (the export answers 200); a protected
-    # Case File has no slides at all (meetings.slides), so its deck is a plain 404, never the window's 403 and never a 500
+    assert not any(k == "board_pdf_downloaded" for k in kinds(CASE))
+    r = full.as_(RAO).get(f"/cases/{CASE}/board-pdf")
+    assert r.status_code == 404 and detail(r)["code"] == "no_board_record", r.text
+    assert full.as_(RAO).get(f"/cases/{CASE}/deck").status_code == 404  # meetings-v2 4.2: the .pptx deck is gone
     access.close_break_glass(VX)
     monkeypatch.setattr(config, "PROTECTED_CASES", {CASE})
     c = store.get_case(CASE)
     c["created_by"] = VX
     store.save_case(c)
     assert full.as_(VX).get(f"/cases/{CASE}/export").status_code == 200
-    r = full.as_(VX).get(f"/cases/{CASE}/deck")
-    assert r.status_code == 404 and detail(r)["code"] == "no_case", r.text
+    r = full.as_(VX).get(f"/cases/{CASE}/board-pdf")
+    assert r.status_code in (403, 404) and r.status_code != 500, r.text
+    assert not any(k == "board_pdf_downloaded" for k in kinds(CASE))
 
 
 def test_the_export_rule_lives_in_access(people):
-    """The rule the export routes and the deck share (access.no_export_in_window): a READ scope or a Vaidyx admin is refused, except the
+    """The rule the export routes and the board record PDF share (access.no_export_in_window): a READ scope or a Vaidyx admin is refused, except the
     Vaidyx admin who created a protected Case File; a doctor with full scope is not."""
     c = make_case("TB-NIK-E")
     with pytest.raises(access.AccessError) as e:

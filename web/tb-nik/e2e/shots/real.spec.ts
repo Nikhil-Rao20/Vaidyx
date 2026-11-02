@@ -526,6 +526,7 @@ test.describe("MDT Coordinator (tb-mdt)", () => {
     // The new meeting dialog is always shot; the meeting is created only when the UI review meeting does not exist yet.
     await page.getByTestId("new-meeting").click();
     await expect(page.getByTestId("new-meeting-dialog")).toBeVisible();
+    await page.getByTestId("plan-once").click();  // the planner's chooser (meetings-v2 3.3): the date fields show on Once
     const d = new Date(Date.now() + 7 * 864e5);
     await page.locator("#nm-date").fill(`${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`);
     await page.locator("#nm-time").fill("16:00");

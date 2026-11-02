@@ -16,7 +16,7 @@ import { ApiError } from "@/lib/api";
 import { notify } from "@/components/Toasts";
 import { consultantTitle } from "@/lib/format";
 import {
-  archiveCase, buildSummary, createFreeRequest, deckUrl, exportVtbUrl, markReady, moveCase, notBuiltYet, postConfirmation, postProposal, remindRequest, reviewArtefact,
+  archiveCase, buildSummary, createFreeRequest, exportVtbUrl, markReady, moveCase, notBuiltYet, postConfirmation, postProposal, remindRequest, reviewArtefact,
   setSlotValue, setUrgency, slotAskDepartment, slotNotNeeded, undoConfirmation, withdrawCase,
 } from "./api";
 import { useCaseFile, useMyRole, useProposals, useRememberCase, useSlots, useTeam } from "./hooks";
@@ -54,6 +54,7 @@ import { BookViewer } from "./staging/BookViewer";
 import { StagingCard } from "./staging/StagingCard";
 import { useStaging, type BookTarget } from "./staging/api";
 import { SLUG, fromSlug, type MissingItem, type SectionId } from "./steps/types";
+import { caseBoardPdfUrl } from "@/features/meetings/api";
 import "./print.css";
 
 type Side =
@@ -340,6 +341,8 @@ export default function GuidedCaseFilePage() {
 
   const prose = steps?.summary.prose;
   const exportAllowed = !!prose?.reviewed;
+  // The board record PDF (meetings-v2 4.1) replaces the .pptx deck (4.2): after the board, never inside a read-only window.
+  const hasBoardRecord = !!(cf.state?.board_records?.length || cf.case?.board_record);
   const canWrite = prepare && (resident || !!cf.permissions?.mark_ready || !!cf.permissions?.review);
   const canConfirm = prepare && !resident && !!steps?.permissions?.review;
   const canMove = !resident && !teamq.data?.archived && (!!cf.permissions?.mark_ready || role.coordinator) && (!!cf.case.board_ready || !!steps?.summary.sent);
@@ -399,7 +402,7 @@ export default function GuidedCaseFilePage() {
       </AnimatePresence>
 
       <CaseHeader cf={cf} team={teamq.data} steps={steps} resident={resident} consultantName={consultantName} onSend={() => setReadyOpen(true)}
-        onPanel={(p) => setSide({ kind: "panel", panel: p })} onPrint={() => window.print()} deckHref={deckUrl(id)} exportHref={exportVtbUrl(id)} exportAllowed={exportAllowed}
+        onPanel={(p) => setSide({ kind: "panel", panel: p })} onPrint={() => window.print()} boardPdfHref={hasBoardRecord && !bg ? caseBoardPdfUrl(id) : null} exportHref={exportVtbUrl(id)} exportAllowed={exportAllowed}
         onArchive={teamq.data?.can?.archive && !teamq.data?.archived ? () => setArchiveOpen(true) : undefined}
         onMove={canMove ? () => setMoveOpen(true) : undefined} onWithdraw={canMove ? () => setTakeOffOpen(true) : undefined} />
 

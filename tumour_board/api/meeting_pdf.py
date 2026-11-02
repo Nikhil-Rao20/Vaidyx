@@ -1,4 +1,4 @@
-"""The meeting PDF downloads (meetings-v2 item 4.1, owner decision D10): they replace the .pptx deck (the deck routes stay until item 4.2).
+"""The meeting PDF downloads (meetings-v2 item 4.1, owner decision D10): they replace the .pptx deck, removed in item 4.2.
 
     GET /meetings/{mid}/pdf          the PDF of a meeting: the MDT Coordinator and the admitted members (the deck's rule); never an
                                      outside expert. A member gets the decision records of the Case Files it may read in full; the others

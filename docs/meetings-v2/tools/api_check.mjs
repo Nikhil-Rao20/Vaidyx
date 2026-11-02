@@ -696,11 +696,13 @@ async function inSession(fresh) {
   is("GET /meetings/{mid} (admitted later)", who("M"), "in session", "member, sees chat", `member ${(vv.can || {}).member}, chat ${(vv.chat || []).length}`, (vv.can || {}).member === true && (vv.chat || []).length > 0);
 
   // deck and minutes while in session
-  const dk = await ck("GET /meetings/{mid}/deck", "C", "in session", "GET", `/api/tb/meetings/${T}/deck`, undefined, 200, "", { timeout: 180000 });
-  is("GET /meetings/{mid}/deck (type)", who("C"), "in session", "pptx", `${dk.ct.slice(0, 70)}, ${dk.len} bytes`, /presentationml/.test(dk.ct) && dk.len > 1000);
-  await ck("GET /meetings/{mid}/deck", "R", "in session", "GET", `/api/tb/meetings/${T}/deck`, undefined, 200, "an admitted member", { timeout: 180000 });
-  await ck("GET /meetings/{mid}/deck", "B", "in session", "GET", `/api/tb/meetings/${T}/deck`, undefined, 403);
-  await ck("GET /meetings/{mid}/deck", "A", "in session", "GET", `/api/tb/meetings/${T}/deck`, undefined, 403);
+  // the PowerPoint deck was replaced by the meeting PDF (meetings-v2 4.1 and 4.2): the old route is gone
+  await ck("GET /meetings/{mid}/deck (removed)", "C", "in session", "GET", `/api/tb/meetings/${T}/deck`, undefined, 404);
+  const dk = await ck("GET /meetings/{mid}/pdf", "C", "in session", "GET", `/api/tb/meetings/${T}/pdf`, undefined, 200, "", { timeout: 180000 });
+  is("GET /meetings/{mid}/pdf (type)", who("C"), "in session", "pdf", `${dk.ct.slice(0, 70)}, ${dk.len} bytes`, /application\/pdf/.test(dk.ct) && dk.len > 1000);
+  await ck("GET /meetings/{mid}/pdf", "R", "in session", "GET", `/api/tb/meetings/${T}/pdf`, undefined, 200, "an admitted member", { timeout: 180000 });
+  await ck("GET /meetings/{mid}/pdf", "B", "in session", "GET", `/api/tb/meetings/${T}/pdf`, undefined, 403);
+  await ck("GET /meetings/{mid}/pdf", "A", "in session", "GET", `/api/tb/meetings/${T}/pdf`, undefined, 403);
 }
 
 async function closed(fresh) {

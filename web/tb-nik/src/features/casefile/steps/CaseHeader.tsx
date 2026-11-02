@@ -1,13 +1,13 @@
 // The guided Case File's header (B1, B9): who the patient is (name and UHID on every section, NISTIR two identifiers), the cancer as
 // recorded, the owner, the board date and the urgency; on the right the one final action "Send to the board" and one "More" menu
-// (Team, Board decisions, Print, Download, Move to another meeting, Take off the agenda, Archive). Nothing else: the work is in the sections.
+// (Team, Board decisions, Print, the board record PDF, Move to another meeting, Take off the agenda, Archive). Nothing else: the work is in the sections.
 // A draft checklist (version "x-draft", owner decision D6; night-v3 item 2.10) carries the chip "Checklist built (draft): needs a
 // clinician's check" next to the cancer; the version comes from GET /protocols (cached).
 // Under the patient the Case File's summary line (night-v3 3.4: built by Vaidyx from the Case summary, full readers only); the owner's
 // consultant changes it in place (at most 160 characters) or goes back to the Vaidyx line.
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Archive, CalendarDays, CalendarMinus, CalendarSync, ChevronDown, ClipboardList, Download, MessageSquare, MoreHorizontal, Pencil, Presentation, Printer, Send, Users } from "lucide-react";
+import { Archive, CalendarDays, CalendarMinus, CalendarSync, ChevronDown, ClipboardList, Download, MessageSquare, FileDown, MoreHorizontal, Pencil, Printer, Send, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { consultantTitle, drName } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -76,9 +76,10 @@ function SummaryLineRow({ caseId, line, canEdit }: { caseId: string; line: Summa
   );
 }
 
-export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, deckHref, exportHref, exportAllowed, onArchive, onMove, onWithdraw, resident, consultantName }: {
+export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, boardPdfHref, exportHref, exportAllowed, onArchive, onMove, onWithdraw, resident, consultantName }: {
   cf: CaseFile; team: Team | null; steps: Steps | null; onSend: () => void; onPanel: (p: MorePanel) => void; onPrint: () => void;
-  deckHref: string; exportHref: string; exportAllowed: boolean; onArchive?: () => void; resident: boolean; consultantName: string;
+  /** The board record PDF (meetings-v2 4.1, in place of the .pptx deck); null before the board or inside a read-only window. */
+  boardPdfHref: string | null; exportHref: string; exportAllowed: boolean; onArchive?: () => void; resident: boolean; consultantName: string;
   /** Move to another meeting / Take off the agenda (night-v3 item 1.6): given only when the viewer may act (owner's consultant or coordinator). */
   onMove?: () => void; onWithdraw?: () => void;
 }) {
@@ -142,7 +143,8 @@ export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, deckHref
               {mayMessageCoordinator ? <DropdownMenuItem asChild><Link to={messageHref({ coordinator: true }, c.case_id)} data-testid="more-message-coordinator"><MessageSquare className="size-4" />Message the MDT Coordinator</Link></DropdownMenuItem> : null}
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={onPrint}><Printer className="size-4" />Print</DropdownMenuItem>
-              <DropdownMenuItem asChild><a href={deckHref} download><Presentation className="size-4" />Download the slides (.pptx)</a></DropdownMenuItem>
+              {boardPdfHref ? <DropdownMenuItem asChild><a href={boardPdfHref} download data-testid="more-board-pdf"><FileDown className="size-4" />Board record (PDF)</a></DropdownMenuItem>
+                : <DropdownMenuItem disabled data-testid="more-board-pdf"><FileDown className="size-4" />Board record (PDF)<span className="ml-auto text-xs">after the board</span></DropdownMenuItem>}
               {exportAllowed ? <DropdownMenuItem asChild><a href={exportHref} download><Download className="size-4" />NCG VTB template (.pptx)</a></DropdownMenuItem>
                 : <DropdownMenuItem disabled><Download className="size-4" />NCG VTB template<span className="ml-auto text-xs">after you read the summary</span></DropdownMenuItem>}
               {sent && (onMove || onWithdraw) ? <DropdownMenuSeparator /> : null}
