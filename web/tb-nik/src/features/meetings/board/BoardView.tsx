@@ -140,10 +140,8 @@ export function BoardView({ caseId, view, mode, onNavigate, followingName, onLoo
       {/* narrow (a phone): the header scrolls away with the content; wide (the projector): the header stays, the body scrolls */}
       <div ref={frame} className="scroll-thin flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto @3xl:overflow-visible" data-testid="board-frame">
         <header className="space-y-3">
-          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-            <div className="min-w-0 flex-1 basis-[20rem]"><CaseLine cf={cf.data} steps={s} presenter={presenter} /></div>
-            <FollowBar mode={mode} followingName={followingName} onLookAround={onLookAround} onBackToRoom={onBackToRoom} pending={pending} />
-          </div>
+          {/* the patient line has the whole width (it took four lines on a laptop beside the follow bar; 2 Nov review) */}
+          <CaseLine cf={cf.data} steps={s} presenter={presenter} />
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <div role="tablist" aria-label="Board view" className="flex flex-wrap gap-2" onKeyDown={onTabKey}>
               {TABS.map((t, i) => {
@@ -159,6 +157,7 @@ export function BoardView({ caseId, view, mode, onNavigate, followingName, onLoo
                 );
               })}
             </div>
+            <div className="ml-auto"><FollowBar mode={mode} followingName={followingName} onLookAround={onLookAround} onBackToRoom={onBackToRoom} pending={pending} /></div>
           </div>
           {error ? <p role="alert" className="rounded-md status-bad px-3 py-2 text-sm" data-testid="board-error">{error}</p> : null}
         </header>
