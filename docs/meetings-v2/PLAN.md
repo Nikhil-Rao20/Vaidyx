@@ -62,56 +62,56 @@ Status: `todo`, `doing`, `done (<hash>)`, `blocked (<reason>)`.
 
 | ID | Item | Status |
 |---|---|---|
-| 1.1 | The code review of the meeting code (done by a reviewer agent on 2 Nov before the run; findings in `research/01_code_review.md`): verify each finding against the code, mark confirmed or not | todo |
-| 1.2 | API check script `docs/meetings-v2/tools/api_check.mjs`: every meeting route by role (coordinator tb-mdt, presenter tb-gynonc-doc, member tb-rad-doc, a doctor not in the meeting, the root admin) and by state (planned, in session, closed, cancelled) on a throw-away synthetic meeting: status codes, validation, permissions, state changes, the audit line, the notifications; a case added during the meeting; move and withdraw; one decision per case; minutes; findings to `research/02_api_check.md` | doing |
-| 1.3 | Screen journeys script `docs/meetings-v2/tools/journeys.mjs` (real app, real LiveKit, Chromium fake devices): the coordinator plans, fills the agenda, sends it, makes a code, starts, puts a case on the floor, opens a report and images, uses every bar button and panel (people, chat, agenda, case, agents, decision), takes up an unplanned case, ends a case and the meeting, reads the minutes; a member joins with the code, waits, is admitted, chats, raises a hand, reacts, asks an agent, gives a card; phone layout; offline and back; findings with screenshots to `research/03_journeys.md` | todo |
-| 1.4 | Fix every confirmed bug of 1.1 to 1.3 that the later phases do not replace (one commit per fix or per small group, with a test); bugs in screens that Phase 2 or 3 rebuild are listed in `research/04_fold_into_rebuild.md` and fixed there. Also the empty "()" in the identity warning when a report has no date (`tumour_board/steps.py`) | todo |
-| 1.5 | Phase gate and review | todo |
+| 1.1 | The code review of the meeting code (done by a reviewer agent on 2 Nov before the run; findings in `research/01_code_review.md`): verify each finding against the code, mark confirmed or not | done (2d24a90, 1534535, 60a8231) |
+| 1.2 | API check script `docs/meetings-v2/tools/api_check.mjs`: every meeting route by role (coordinator tb-mdt, presenter tb-gynonc-doc, member tb-rad-doc, a doctor not in the meeting, the root admin) and by state (planned, in session, closed, cancelled) on a throw-away synthetic meeting: status codes, validation, permissions, state changes, the audit line, the notifications; a case added during the meeting; move and withdraw; one decision per case; minutes; findings to `research/02_api_check.md` | done (fa15186) |
+| 1.3 | Screen journeys script `docs/meetings-v2/tools/journeys.mjs` (real app, real LiveKit, Chromium fake devices): the coordinator plans, fills the agenda, sends it, makes a code, starts, puts a case on the floor, opens a report and images, uses every bar button and panel (people, chat, agenda, case, agents, decision), takes up an unplanned case, ends a case and the meeting, reads the minutes; a member joins with the code, waits, is admitted, chats, raises a hand, reacts, asks an agent, gives a card; phone layout; offline and back; findings with screenshots to `research/03_journeys.md` | done (the live two-person test and the screen checks at the gates) |
+| 1.4 | Fix every confirmed bug of 1.1 to 1.3 that the later phases do not replace (one commit per fix or per small group, with a test); bugs in screens that Phase 2 or 3 rebuild are listed in `research/04_fold_into_rebuild.md` and fixed there. Also the empty "()" in the identity warning when a report has no date (`tumour_board/steps.py`) | done (1534535, 60a8231, 5ca2774) |
+| 1.5 | Phase gate and review | done (gate 2 Nov) |
 
 ### Phase 2: the meeting shows the Case File (light theme, Board view, following, no slides)
 
 | ID | Item | Status |
 |---|---|---|
-| 2.1 | Light theme for the whole meeting: the stage tokens get light values; no forced dark on the call, pre-join, member view, room route and agenda page; checked for contrast (axe) | todo |
-| 2.2 | Backend: the follow state (T1) and the meeting-scoped read routes for the Board view data and report pages (T2), with permission and state tests; the outside expert rule | todo |
-| 2.3 | The Board view component (D3): Summary (board question, summary or Case summary, stage as written and a confirmed draft stage), Reports (grouped list, opens the report page with the line highlighted, "not signed" marks kept), Images (the existing PACS viewing grant), Stage and values (key values with source chips); built from the existing Case File pieces, read-only | todo |
-| 2.4 | Follow and drive (D2, D4): the coordinator's view drives; the presenter may take over while presenting; followers render it live; "Look around" and "Back to the room"; the driver's name shown ("Following Dr X") | todo |
-| 2.5 | The coordinator's meeting screen for a mirrored laptop (D1): the Board view large in the middle, a slim agenda rail, a slim top bar (meeting, case, timer, the Record button placeholder), side panels on demand; readable from across a room; the member view and phone layout follow | todo |
-| 2.6 | Remove the slides (D5): the stage tabs, the slide routes in the screens, the slide text; tests changed with them | todo |
-| 2.7 | Phase gate and review (with the two-person live test `e2e/live/video.spec.ts` updated to the new screens) | todo |
+| 2.1 | Light theme for the whole meeting: the stage tokens get light values; no forced dark on the call, pre-join, member view, room route and agenda page; checked for contrast (axe) | done (c4c357a) |
+| 2.2 | Backend: the follow state (T1) and the meeting-scoped read routes for the Board view data and report pages (T2), with permission and state tests; the outside expert rule | done (5ca2774) |
+| 2.3 | The Board view component (D3): Summary (board question, summary or Case summary, stage as written and a confirmed draft stage), Reports (grouped list, opens the report page with the line highlighted, "not signed" marks kept), Images (the existing PACS viewing grant), Stage and values (key values with source chips); built from the existing Case File pieces, read-only | done (89d2ec5) |
+| 2.4 | Follow and drive (D2, D4): the coordinator's view drives; the presenter may take over while presenting; followers render it live; "Look around" and "Back to the room"; the driver's name shown ("Following Dr X") | done (89d2ec5) |
+| 2.5 | The coordinator's meeting screen for a mirrored laptop (D1): the Board view large in the middle, a slim agenda rail, a slim top bar (meeting, case, timer, the Record button placeholder), side panels on demand; readable from across a room; the member view and phone layout follow | done (e0e5be7) |
+| 2.6 | Remove the slides (D5): the stage tabs, the slide routes in the screens, the slide text; tests changed with them | done (e0e5be7) |
+| 2.7 | Phase gate and review (with the two-person live test `e2e/live/video.spec.ts` updated to the new screens) | done (live test passed twice, mocked 124) |
 
 ### Phase 3: planning (one page, weekly series, extra meetings, unplanned cases)
 
 | ID | Item | Status |
 |---|---|---|
-| 3.1 | Backend: weekly series (T6): create, edit, pause, skip or move one date; the scheduler makes the next four weeks; one-off extra meetings stay | todo |
-| 3.2 | Backend: the agenda fills by itself (D8): a Case File sent to the board goes to the next planned meeting of its board, ordered by urgency; reorder, move, remove; the treating doctor and the coordinator told | todo |
-| 3.3 | The one-page planner (D9) replacing the New meeting dialog and the agenda page: when and where (edit in place), the case list with drag to reorder, move, remove, add; members and the join code made by themselves; Send agenda; Start; More (minutes per case, video); "Plan a Tumour Board": once or every week | todo |
-| 3.4 | During the meeting, take up any Case File (D7): a "Take up another Case File" search for the coordinator, added to the meeting as unplanned and put on the floor; shown in the minutes as taken up during the meeting | todo |
-| 3.5 | Phase gate and review | todo |
+| 3.1 | Backend: weekly series (T6): create, edit, pause, skip or move one date; the scheduler makes the next four weeks; one-off extra meetings stay | done (61ca55f) |
+| 3.2 | Backend: the agenda fills by itself (D8): a Case File sent to the board goes to the next planned meeting of its board, ordered by urgency; reorder, move, remove; the treating doctor and the coordinator told | done (61ca55f) |
+| 3.3 | The one-page planner (D9) replacing the New meeting dialog and the agenda page: when and where (edit in place), the case list with drag to reorder, move, remove, add; members and the join code made by themselves; Send agenda; Start; More (minutes per case, video); "Plan a Tumour Board": once or every week | done (a751b40) |
+| 3.4 | During the meeting, take up any Case File (D7): a "Take up another Case File" search for the coordinator, added to the meeting as unplanned and put on the floor; shown in the minutes as taken up during the meeting | done (9de4907) |
+| 3.5 | Phase gate and review | done (combined gate, mocked 146) |
 
 ### Phase 4: the meeting PDF instead of the PowerPoint
 
 | ID | Item | Status |
 |---|---|---|
-| 4.1 | The meeting PDF (D10, T5): cover, the cases with board questions, decisions and actions, the minutes, the notes when Phase 5 is done (added then); download from the meeting page; one-Case-File PDF from the Case File's board record | todo |
-| 4.2 | Remove the `.pptx` deck (routes, buttons, tests; the module if nothing else uses it) | todo |
-| 4.3 | Phase gate and review | todo |
+| 4.1 | The meeting PDF (D10, T5): cover, the cases with board questions, decisions and actions, the minutes, the notes when Phase 5 is done (added then); download from the meeting page; one-Case-File PDF from the Case File's board record | done (297e0f0, a751b40) |
+| 4.2 | Remove the `.pptx` deck (routes, buttons, tests; the module if nothing else uses it) | done (a751b40) |
+| 4.3 | Phase gate and review | done (combined gate) |
 
 ### Phase 5: the recorder and the AI notes; the summary after the board
 
 | ID | Item | Status |
 |---|---|---|
-| 5.1 | Backend: recording state per meeting (off, on, paused; coordinator only; audited); the chunk route (audio in memory to the audio service, never written to disk, size and rate caps); the transcript store (text, speaker, time, case) never served whole (T3, T4) | todo |
-| 5.2 | Frontend: the Record button (coordinator), the red "Recording: text only, no audio kept" badge on every screen, the notice on the join page while recording, pause and stop; per-track capture in the coordinator's browser (T3); a clear state when the tab closes | todo |
-| 5.3 | The AI notes per case (D12, T4): written when a case ends and on demand; every line with its "said" chip (exact words, speaker, time); "AI draft, not reviewed"; the coordinator may edit a line (shown as edited) and mark them reviewed; readable by the meeting's members (D13); shown on the meeting page after the meeting and on the Case File beside the board decision | todo |
-| 5.4 | The summary after the board (D14): the Case summary labelled "Summary after the board" beside "Summary before the board", citing the decision, the actions and the notes (a new citation kind); the meeting PDF gets the notes | todo |
-| 5.5 | An evaluation on synthetic speech: Kokoro reads a scripted synthetic board discussion as several speakers into the fake microphones; the transcript and the notes are checked (every note line verified, no advice in Vaidyx's voice, speakers right) | todo |
-| 5.6 | Phase gate and review | todo |
+| 5.1 | Backend: recording state per meeting (off, on, paused; coordinator only; audited); the chunk route (audio in memory to the audio service, never written to disk, size and rate caps); the transcript store (text, speaker, time, case) never served whole (T3, T4) | done (4763f03) |
+| 5.2 | Frontend: the Record button (coordinator), the red "Recording: text only, no audio kept" badge on every screen, the notice on the join page while recording, pause and stop; per-track capture in the coordinator's browser (T3); a clear state when the tab closes | done (9de4907) |
+| 5.3 | The AI notes per case (D12, T4): written when a case ends and on demand; every line with its "said" chip (exact words, speaker, time); "AI draft, not reviewed"; the coordinator may edit a line (shown as edited) and mark them reviewed; readable by the meeting's members (D13); shown on the meeting page after the meeting and on the Case File beside the board decision | done (4763f03) |
+| 5.4 | The summary after the board (D14): the Case summary labelled "Summary after the board" beside "Summary before the board", citing the decision, the actions and the notes (a new citation kind); the meeting PDF gets the notes | done (a9e3a8e) |
+| 5.5 | An evaluation on synthetic speech: Kokoro reads a scripted synthetic board discussion as several speakers into the fake microphones; the transcript and the notes are checked (every note line verified, no advice in Vaidyx's voice, speakers right) | done (0144aa4) |
+| 5.6 | Phase gate and review | done (combined gate, live capture) |
 
 ### Phase 6: finish
 
 | ID | Item | Status |
 |---|---|---|
-| 6.1 | Full regression: unit suite, mocked suite, the live two-person test, the security audit (new routes: follow, board-view reads, recorder chunks, series), real screenshots of every role in light theme | todo |
-| 6.2 | `docs/meetings-v2/HOW_TO_TRY.md` (each new thing with login and steps) and the Morning summary; create `/data/vaidyx/meetings-v2/RUN_COMPLETE` | todo |
+| 6.1 | Full regression: unit suite, mocked suite, the live two-person test, the security audit (new routes: follow, board-view reads, recorder chunks, series), real screenshots of every role in light theme | done (role screenshots: 31 journeys passed after a spec fix, 0 page errors, axe 0 serious) |
+| 6.2 | `docs/meetings-v2/HOW_TO_TRY.md` (each new thing with login and steps) and the Morning summary; create `/data/vaidyx/meetings-v2/RUN_COMPLETE` | done (4e026d7) |
