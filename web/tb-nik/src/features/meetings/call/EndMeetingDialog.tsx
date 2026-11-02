@@ -13,7 +13,7 @@ export function EndMeetingDialog({ open, onOpenChange }: { open: boolean; onOpen
   const done = c.order.filter((r) => r.decided || r.outcome).length;
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!finish.isPending) onOpenChange(o); }}>
-      <DialogContent aria-describedby="end-desc" data-testid="end-meeting-dialog" data-theme="dark" className="text-foreground">
+      <DialogContent aria-describedby="end-desc" data-testid="end-meeting-dialog" className="text-foreground">
         <DialogHeader><DialogTitle>End the meeting?</DialogTitle><DialogDescription id="end-desc">The outcomes already saved go to the owners. Case Files without a saved outcome keep their place; mark them Not discussed first to move them to the next meeting.</DialogDescription></DialogHeader>
         <p className="text-sm">{done} of {c.order.length} Case Files have a saved outcome.</p>
         {finish.isError ? <p role="alert" className="text-sm text-bad">{errorText(finish.error)}</p> : null}

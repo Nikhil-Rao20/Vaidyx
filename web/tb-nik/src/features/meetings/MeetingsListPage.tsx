@@ -17,6 +17,7 @@ import { createMeeting, listMeetings, listOldSessions, notBuiltYet } from "./api
 import type { MeetingRow, NewMeeting } from "./types";
 import { EmptyState, ErrorState, LoadingButton, NotYetState, SkeletonLines, errorText, fmtDate, fmtDateTime, todayIso } from "@/features/casefile/components/common";
 import { MeetingStatusChip } from "./components/shared";
+import { useLightForMeeting } from "@/lib/appearance";
 
 function NewMeetingDialog({ open, onOpenChange, videoAvailable, onCreated }: { open: boolean; onOpenChange: (o: boolean) => void; videoAvailable: boolean; onCreated: (id: string) => void }) {
   const today = todayIso();
@@ -89,6 +90,7 @@ function OldSessions() {
 }
 
 export default function MeetingsListPage() {
+  useLightForMeeting();  // the meeting is always light (owner, 2 Nov 2026)
   const { me } = useSession();
   const nav = useNavigate();
   const qc = useQueryClient();

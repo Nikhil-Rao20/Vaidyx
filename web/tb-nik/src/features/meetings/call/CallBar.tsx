@@ -42,7 +42,7 @@ export const RoundButton = forwardRef<HTMLButtonElement, RoundProps>(function Ro
       <span className={cn(
         "relative grid place-items-center rounded-full transition-[background-color,transform] duration-150 group-active:scale-95 group-focus-visible:ring-2 group-focus-visible:ring-primary",
         compact ? "size-11" : "size-11",
-        tone === "danger" ? "bg-[#d64545] text-white hover:bg-[#c23b3b]" : tone === "primary" ? "bg-primary text-primary-foreground hover:bg-primary-hover" : active ? "bg-stage-fg text-stage" : "bg-stage-raised text-stage-fg hover:bg-[#232d38]",
+        tone === "danger" ? "bg-[#d64545] text-white hover:bg-[#c23b3b]" : tone === "primary" ? "bg-primary text-primary-foreground hover:bg-primary-hover" : active ? "bg-stage-fg text-stage" : "bg-stage-raised text-stage-fg hover:bg-stage-line",
       )}>
         <Icon className="size-5" aria-hidden />
       </span>
@@ -219,7 +219,7 @@ export function CallBar() {
     <ControlBar
       left={<>
         {coordinator ? <button type="button" className="mr-1 shrink-0 whitespace-nowrap rounded-md border border-stage-line px-2 py-1.5 text-sm text-stage-muted outline-none hover:bg-stage-raised hover:text-stage-fg focus-visible:ring-2 focus-visible:ring-primary" onClick={c.actions.leave} title="Back to the meetings list; the meeting goes on" data-testid="leave-controls">Leave the controls</button> : null}
-        <p className={cn("min-w-0 truncate text-xs", v.error ? "text-[#ffb4a8]" : "text-stage-muted")} title={line} role={v.error ? "alert" : undefined} data-testid="bar-status">{line}</p>
+        <p className={cn("min-w-0 truncate text-xs", v.error ? "text-bad" : "text-stage-muted")} title={line} role={v.error ? "alert" : undefined} data-testid="bar-status">{line}</p>
       </>}
       right={<>
         <div className="flex items-center gap-1" role="group" aria-label="Panels">{panelKinds(c).map((k) => <PanelButton key={k} kind={k} />)}</div>

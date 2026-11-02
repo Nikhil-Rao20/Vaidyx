@@ -76,7 +76,7 @@ function RowMenu({ a, ctx, busy, onSpot, onPresent }: { a: Attendee; ctx: CallCt
       <DropdownMenuTrigger asChild>
         <Button size="icon-xs" variant="ghost" className={cn("text-stage-muted hover:bg-stage-raised hover:text-stage-fg", ctx.phone && "size-11")} aria-label={`More for ${a.name}`} title={`More for ${a.name}`} disabled={busy}><MoreVertical className="size-4" /></Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" data-theme="dark">
+      <DropdownMenuContent align="end">
         <DropdownMenuItem disabled={full} onSelect={() => onSpot(!on)} title={full ? "Up to three people can be in the spotlight" : undefined}>
           {on ? <StarOff className="size-4" /> : <Star className="size-4" />}{on ? "Remove from spotlight" : full ? "Spotlight is full (three people)" : "Spotlight for everyone"}
         </DropdownMenuItem>

@@ -12,8 +12,10 @@ import { StageFrame, StageTopBar } from "./components/Stage";
 import { LiveDot } from "./components/shared";
 import { CallShell } from "./call/CallShell";
 import { ErrorState, SkeletonLines } from "@/features/casefile/components/common";
+import { useLightForMeeting } from "@/lib/appearance";
 
 export default function MeetingRoomPage() {
+  useLightForMeeting();  // the meeting is always light (owner, 2 Nov 2026)
   const { id = "" } = useParams();
   const { me } = useSession();
   // every live event in order to the shell (a burst of spoken sentences, a stop, a decision): reading only the last one dropped some
@@ -26,11 +28,11 @@ export default function MeetingRoomPage() {
     return (
       <StageFrame testId="room-screen" attrs={{ "data-meeting-status": undefined }}>
         <StageTopBar left={<span className="text-sm text-stage-muted">Tumour Board</span>} right={<LiveDot status={live.status} detail={live.statusDetail} />} />
-        {live.notBuilt ? <div className="p-8" data-theme="dark"><ErrorState error={live.error} title="The meeting rooms are not on this server yet" /></div>
-          : live.missing ? <div className="p-8" data-theme="dark"><ErrorState error={live.error} title="This meeting does not exist" /></div>
-          : live.forbidden ? <div className="p-8" data-theme="dark"><ErrorState error={live.error} title="This computer is not signed in as a member of the meeting" /></div>
-          : live.error ? <div className="p-8" data-theme="dark"><ErrorState error={live.error} retry={() => void live.refresh()} /></div>
-          : <div className="p-8" data-theme="dark"><SkeletonLines n={6} /></div>}
+        {live.notBuilt ? <div className="p-8"><ErrorState error={live.error} title="The meeting rooms are not on this server yet" /></div>
+          : live.missing ? <div className="p-8"><ErrorState error={live.error} title="This meeting does not exist" /></div>
+          : live.forbidden ? <div className="p-8"><ErrorState error={live.error} title="This computer is not signed in as a member of the meeting" /></div>
+          : live.error ? <div className="p-8"><ErrorState error={live.error} retry={() => void live.refresh()} /></div>
+          : <div className="p-8"><SkeletonLines n={6} /></div>}
         <div className="flex-1" />
       </StageFrame>
     );

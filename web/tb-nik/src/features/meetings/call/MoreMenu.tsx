@@ -59,7 +59,7 @@ export function layoutChoices(phone: boolean, spotlightSet: boolean): LayoutKind
 /** A row of the phone sheet: 44 px high, an icon and a plain word. */
 function SheetRow({ icon: Icon, children, onClick, tone, disabled, testId, pressed, hint, describedBy }: { icon: typeof Phone; children: ReactNode; onClick: () => void; tone?: "danger"; disabled?: boolean; testId?: string; pressed?: boolean; hint?: string; describedBy?: string }) {
   return (
-    <button type="button" onClick={onClick} disabled={disabled} aria-pressed={pressed} aria-describedby={describedBy} data-testid={testId} className={cn("flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm outline-none hover:bg-stage-raised focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40", tone === "danger" ? "bg-[#d64545] font-semibold text-white hover:bg-[#c23b3b]" : "text-stage-fg")}>
+    <button type="button" onClick={onClick} disabled={disabled} aria-pressed={pressed} aria-describedby={describedBy} data-testid={testId} className={cn("flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm outline-none hover:bg-stage-raised focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40", tone === "danger" ? "bg-[#c23b3b] font-semibold text-white hover:bg-[#ad3434]" : "text-stage-fg")}>
       <Icon className="size-5 shrink-0" aria-hidden /><span className="min-w-0 flex-1">{children}</span>{hint ? <span className="shrink-0 text-xs text-stage-muted">{hint}</span> : null}
       {pressed ? <Check className="size-4 shrink-0" aria-hidden /> : null}
     </button>
@@ -126,13 +126,13 @@ export function MoreMenu({ mode = "more" }: { mode?: "more" | "coordinator" }) {
   const dialogs = (
     <>
       <Dialog open={devices} onOpenChange={setDevices}>
-        <DialogContent aria-describedby="devices-desc" data-testid="devices-dialog" data-theme="dark" className="text-foreground">
+        <DialogContent aria-describedby="devices-desc" data-testid="devices-dialog" className="text-foreground">
           <DialogHeader><DialogTitle>Devices</DialogTitle><DialogDescription id="devices-desc">The microphone, the speaker and the camera of this call.</DialogDescription></DialogHeader>
           <DeviceSettings />
         </DialogContent>
       </Dialog>
       <Dialog open={numbers} onOpenChange={setNumbers}>
-        <DialogContent aria-describedby="numbers-desc" data-testid="call-numbers" data-theme="dark" className="text-foreground">
+        <DialogContent aria-describedby="numbers-desc" data-testid="call-numbers" className="text-foreground">
           <DialogHeader><DialogTitle>Call by phone</DialogTitle><DialogDescription id="numbers-desc">The meeting room and the members who share their number.</DialogDescription></DialogHeader>
           <CallNumbers s={c.state} />
         </DialogContent>
@@ -148,7 +148,7 @@ export function MoreMenu({ mode = "more" }: { mode?: "more" | "coordinator" }) {
       <>
         {trigger}
         <Sheet open={open} onOpenChange={setOpen}>
-          <SheetContent side="bottom" showCloseButton={false} data-theme="dark" className="max-h-[85vh] gap-0 rounded-t-2xl border-stage-line bg-stage-panel p-0 text-stage-fg" data-testid={mode === "coordinator" ? "coordinator-menu" : "more-menu"}>
+          <SheetContent side="bottom" showCloseButton={false} className="max-h-[85vh] gap-0 rounded-t-2xl border-stage-line bg-stage-panel p-0 text-stage-fg" data-testid={mode === "coordinator" ? "coordinator-menu" : "more-menu"}>
             <div className="mx-auto mt-2 h-1.5 w-10 rounded-full bg-stage-line" aria-hidden />
             <div className="flex items-center gap-2 border-b border-stage-line px-4 py-2">
               <SheetTitle className="min-w-0 flex-1 text-base text-stage-fg">{mode === "coordinator" ? "Coordinator" : "More"}</SheetTitle>
@@ -214,7 +214,7 @@ export function MoreMenu({ mode = "more" }: { mode?: "more" | "coordinator" }) {
         <DropdownMenuTrigger asChild>
           <RoundButton icon={Ellipsis} label="More" title="More options" testId="more" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent side="top" align="end" className="w-64" data-testid="more-menu" data-theme="dark">
+        <DropdownMenuContent side="top" align="end" className="w-64" data-testid="more-menu">
           {c.videoAvailable && x.joined ? <DropdownMenuItem onSelect={() => setDevices(true)}><Settings2 />Devices</DropdownMenuItem> : null}
           <DropdownMenuLabel className="text-xs text-muted-foreground">Layout</DropdownMenuLabel>
           <DropdownMenuRadioGroup value={c.layout} onValueChange={(v) => c.setLayout(v as LayoutKind)}>

@@ -16,6 +16,7 @@ import { AgendaLists, JustAddedContext } from "./components/AgendaLists";
 import { ControlView } from "./components/ControlView";
 import { LiveDot, MeetingStatusChip, MembersStrip } from "./components/shared";
 import { EmptyState, ErrorState, LoadingButton, NotYetState, SkeletonLines, errorText, fmtDate, fmtDateTime, useAnnounce, useCopy } from "@/features/casefile/components/common";
+import { useLightForMeeting } from "@/lib/appearance";
 
 function OldSessionView({ sid }: { sid: string }) {
   const q = useQuery({ queryKey: ["old-session", sid], queryFn: () => getOldSession(sid), retry: false });
@@ -80,6 +81,7 @@ function reorderLocally(s: MeetingState, discussion: string[], noting: string[])
 }
 
 export default function MeetingAgendaPage() {
+  useLightForMeeting();  // the meeting is always light (owner, 2 Nov 2026)
   const { id = "" } = useParams();
   const { me } = useSession();
   const controlEvents = useRef<((ev: LiveEvent) => void) | null>(null);  // the control view's shell takes every event in order

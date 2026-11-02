@@ -9,6 +9,7 @@ import { errorCode, useMeetingLive } from "@/lib/live";
 import { joinMeeting, notBuiltYet } from "./api";
 import { EmptyState, LoadingButton, NotYetState, errorText, fmtDate } from "@/features/casefile/components/common";
 import { cn } from "@/lib/utils";
+import { useLightForMeeting } from "@/lib/appearance";
 
 function WaitingRoom({ mid, label }: { mid: string; label?: string }) {
   const nav = useNavigate();
@@ -27,6 +28,7 @@ function WaitingRoom({ mid, label }: { mid: string; label?: string }) {
 }
 
 export default function JoinPage() {
+  useLightForMeeting();  // the meeting is always light (owner, 2 Nov 2026)
   const nav = useNavigate();
   const [code, setCode] = useState("");
   const [waitingFor, setWaitingFor] = useState<{ id: string; label?: string } | null>(null);

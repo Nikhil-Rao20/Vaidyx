@@ -1,4 +1,4 @@
-// The meeting stage, the way a video call is laid out: a dark frame over the whole window, a thin top bar, the shared screen
+// The meeting stage, the way a video call is laid out: a light frame over the whole window, a thin top bar, the shared screen
 // in the middle, the people beside it, panels that slide in from the right, and a round-button control bar at the bottom.
 // The member view, the coordinator's conduct view and the room screen all build on these pieces.
 import { useEffect, type ReactNode } from "react";
@@ -27,7 +27,7 @@ export function StageFrame({ children, className, testId, attrs }: { children: R
   return (
     // overflow-clip, not hidden: a script scroll (a focus or a scroll-into-view of something wider than the frame) can never shift the
     // whole call sideways (seen once in the live check at 1366 with video on, night-v3 6.3); the inner panels keep their own scrolling
-    <div className={cn("fixed inset-0 z-50 flex flex-col overflow-clip bg-stage text-stage-fg", className)} data-theme="dark" data-testid={testId} {...attrs}>
+    <div className={cn("fixed inset-0 z-50 flex flex-col overflow-clip bg-stage text-stage-fg", className)} data-testid={testId} {...attrs}>
       {children}
     </div>
   );
@@ -38,7 +38,7 @@ export function StageTopBar({ left, center, right, className }: { left?: ReactNo
     <header className={cn("flex min-h-12 items-center gap-3 border-b border-stage-line px-3 py-1.5 lg:px-4", className)}>
       {/* the meeting line may shrink: the case on the floor in the middle must stay readable at laptop width (2 Nov test pass) */}
       <div className="flex min-w-0 max-w-[22%] items-center gap-2.5">
-        <VaidyxIcon tone="white" className="h-5 shrink-0 opacity-90" />
+        <VaidyxIcon className="h-5 shrink-0" />
         {left}
       </div>
       <div className="min-w-0 flex-1">{center}</div>
@@ -64,7 +64,7 @@ export function BarButton({ icon: Icon, label, onClick, active, tone = "default"
     >
       <span className={cn(
         "relative grid size-11 place-items-center rounded-full transition-[background-color,transform] duration-150 group-active:scale-95 group-focus-visible:ring-2 group-focus-visible:ring-primary",
-        tone === "danger" ? "bg-[#d64545] text-white hover:bg-[#c23b3b]" : tone === "primary" ? "bg-primary text-primary-foreground hover:bg-primary-hover" : active ? "bg-stage-fg text-stage" : "bg-stage-raised text-stage-fg hover:bg-[#232d38]",
+        tone === "danger" ? "bg-[#d64545] text-white hover:bg-[#c23b3b]" : tone === "primary" ? "bg-primary text-primary-foreground hover:bg-primary-hover" : active ? "bg-stage-fg text-stage" : "bg-stage-raised text-stage-fg hover:bg-stage-line",
       )}>
         <Icon className="size-5" aria-hidden />
         {badge ? <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-primary px-1.5 text-center text-[11px] font-bold leading-5 text-primary-foreground">{badge}</span> : null}
@@ -122,7 +122,7 @@ export function SharedScreen({ cid, opened, slide, empty, big, children, classNa
         {viewer ? (
           <motion.iframe key={`img-${viewer}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} title={`Image viewer${opened?.title ? `: ${opened.title}` : ""}`} src={viewer} className="absolute inset-0 h-full w-full bg-black" allow="fullscreen" />
         ) : opened?.kind === "record" && opened.doc_id && cid ? (
-          <motion.div key={`rec-${opened.doc_id}-${opened.page ?? 0}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="scroll-thin absolute inset-0 overflow-auto bg-[#1a1f26] p-3">
+          <motion.div key={`rec-${opened.doc_id}-${opened.page ?? 0}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="scroll-thin absolute inset-0 overflow-auto bg-stage-raised p-3">
             {opened.title ? <p className="sticky top-0 z-10 mb-2 inline-block rounded-md bg-stage-raised/90 px-2 py-1 text-sm font-medium text-stage-fg shadow">{opened.title}</p> : null}
             <img src={recordPageUrl(cid, opened.doc_id, opened.page ?? 0)} alt={`${opened.title ?? "Record"}, page ${(opened.page ?? 0) + 1}`} className="mx-auto h-auto max-w-full rounded-md bg-white" />
           </motion.div>

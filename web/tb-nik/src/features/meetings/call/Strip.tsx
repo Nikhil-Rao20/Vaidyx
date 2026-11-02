@@ -335,7 +335,7 @@ export function TileMenu({ p }: { p: CallPerson }) {
       <DropdownMenuTrigger asChild>
         <button type="button" className={menuBtn} aria-label={`More for ${p.name}`} title={`More for ${p.name}`} data-testid="tile-menu"><MoreVertical className="size-4" aria-hidden /></button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56" data-theme="dark">
+      <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="truncate">{p.name}</DropdownMenuLabel>
         <DropdownMenuItem onSelect={() => ctx.setPinned(pinned ? null : p.key)} data-testid="tile-pin">
           {pinned ? <PinOff aria-hidden /> : <Pin aria-hidden />}{pinned ? "Unpin" : "Pin for me"}
@@ -437,7 +437,7 @@ function AgentTileMenu({ agent, line }: { agent: AgentInfo; line: string }) {
       <DropdownMenuTrigger asChild>
         <button type="button" className={menuBtn} aria-label={`More for the ${line}`} title="More" data-testid="agent-tile-menu"><MoreVertical className="size-4" aria-hidden /></button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56" data-theme="dark">
+      <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="truncate">{line}</DropdownMenuLabel>
         <DropdownMenuItem onSelect={ask} data-testid="agent-ask"><MessageSquareText aria-hidden />Ask the agent</DropdownMenuItem>
         {stop ? (
@@ -487,12 +487,12 @@ export function AgentCallTile({ agent, big, className }: { agent: AgentInfo; big
   const body = (
     <>
       <motion.span animate={reduce ? {} : busy ? { scale: [1, 1.08, 1] } : { scale: 1 }} transition={busy ? { repeat: Infinity, duration: key === "thinking" || key === "preparing" ? 1.2 : 0.8 } : {}} className={cn("grid shrink-0 place-items-center rounded-full bg-stage-panel", big ? "size-14" : "size-9")} aria-hidden>
-        <VaidyxIcon tone="white" className={big ? "h-7" : "h-4"} />
+        <VaidyxIcon className={big ? "h-7" : "h-4"} />
       </motion.span>
       <span className="min-w-0 flex-1 text-left">
         <span className={cn("block truncate font-medium leading-tight text-stage-fg", big ? "text-xl" : "text-xs")} data-part="title">{line}</span>{" "}
         <span className={cn("block truncate", big ? "text-base text-stage-fg/80" : "text-[10px] text-stage-muted")}>AI agent, support only</span>{" "}
-        <span className={cn("block truncate", key === "error" ? "text-[#ffb4a8]" : "text-stage-fg", big ? "text-lg" : "text-[11px]")} aria-live="polite" data-part="state">
+        <span className={cn("block truncate", key === "error" ? "text-bad" : "text-stage-fg", big ? "text-lg" : "text-[11px]")} aria-live="polite" data-part="state">
           <AnimatePresence mode="wait" initial={false}>
             <motion.span key={`${key}:${word}`} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="inline-flex items-center gap-1">{word}{busy ? <Dots /> : null}</motion.span>
           </AnimatePresence>

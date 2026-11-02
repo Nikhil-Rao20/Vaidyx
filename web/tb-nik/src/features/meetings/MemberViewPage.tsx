@@ -18,8 +18,10 @@ import { BarButton, ControlBar, StageFrame, StageTopBar } from "./components/Sta
 import { LiveDot } from "./components/shared";
 import { CallShell } from "./call/CallShell";
 import { EmptyState, ErrorState, SkeletonLines, fmtDate, useAnnounce } from "@/features/casefile/components/common";
+import { useLightForMeeting } from "@/lib/appearance";
 
 export default function MemberViewPage() {
+  useLightForMeeting();  // the meeting is always light (owner, 2 Nov 2026)
   const { id = "" } = useParams();
   const nav = useNavigate();
   const { me } = useSession();

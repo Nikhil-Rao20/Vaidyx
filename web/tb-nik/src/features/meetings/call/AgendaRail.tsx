@@ -39,16 +39,17 @@ export function stateWord(st: RowState, r: AgendaRow, outcomes?: MeetingState["o
   return st === "now" ? "Now" : st === "next" ? "Next" : st === "later" ? "Later" : "Not ready";
 }
 
+// "Now" in a deep teal on the light stage (the brand teal is 2:1 on the raised row); the brand teal stays on a dark stage.
 const TONE: Record<RowState, string> = {
-  done: "text-[#8fe0b3]",
-  now: "text-primary",
+  done: "text-ok",
+  now: "text-[#006b65] dark:text-primary",
   next: "text-stage-fg",
   later: "text-stage-muted",
   not_ready: "text-stage-muted",
 };
 
-/** The remaining time's colour on the dark stage: amber under 2 minutes, red at 0 (the words say it too). */
-export const CLOCK_TONE: Record<ClockTone, string> = { normal: "text-stage-fg", low: "text-[#ffd48a]", up: "text-[#ffb4a8]" };
+/** The remaining time's colour on the stage: amber under 2 minutes, red at 0 (the words say it too). */
+export const CLOCK_TONE: Record<ClockTone, string> = { normal: "text-stage-fg", low: "text-warn", up: "text-bad" };
 
 /** The most agenda rows the room screen shows; the rest are "+n more" (the page never scrolls). */
 export const ROOM_ROWS = 12;
@@ -62,8 +63,9 @@ export function roomRows<T extends { case_id: string }>(rows: T[], cid: string |
 }
 
 const ROOM_WORD: Record<RowState, string> = { done: "Done", now: "Now", next: "Next", later: "Later", not_ready: "Not ready" };
-/** The room's colours: at least 7:1 on the panel (the muted grey is too faint on a projector for the later rows). */
-const ROOM_TONE: Record<RowState, string> = { done: "text-[#8fe0b3]", now: "text-[#7cc4ff]", next: "text-stage-fg", later: "text-stage-fg/80", not_ready: "text-stage-fg/80" };
+/** The room's colours: at least 7:1 on the panel and on the raised "Now" row, light or dark (the muted grey is too faint on a
+ * projector for the later rows). */
+const ROOM_TONE: Record<RowState, string> = { done: "text-[#155a3a] dark:text-[#8fe0b3]", now: "text-[#08506a] dark:text-[#7cc4ff]", next: "text-stage-fg", later: "text-stage-fg/80", not_ready: "text-stage-fg/80" };
 
 /** The room screen's agenda column: large type, no click; the numbers only under 1600 px. */
 function RoomAgenda({ className }: { className?: string }) {
@@ -168,7 +170,7 @@ function CallAgendaRail({ className }: { className?: string }) {
               </span>
             </>
           ) : <span className={cn("w-full text-center text-sm tabular-nums", TONE[st], now && remaining && remaining.tone !== "normal" && CLOCK_TONE[remaining.tone])}>{n ?? "·"}</span>;
-          const cls = cn("flex w-full items-start gap-1.5 rounded-lg px-1.5 py-1.5 text-left outline-none", st === "now" && "bg-stage-raised ring-1 ring-primary/60", st === "not_ready" && "opacity-55", clickable && "hover:bg-stage-raised focus-visible:ring-2 focus-visible:ring-primary");
+          const cls = cn("flex w-full items-start gap-1.5 rounded-lg px-1.5 py-1.5 text-left outline-none", st === "now" && "bg-stage-raised ring-1 ring-primary/60", st === "not_ready" && "text-stage-muted", clickable && "hover:bg-stage-raised focus-visible:ring-2 focus-visible:ring-primary");
           return (
             <li key={r.case_id} aria-current={st === "now" ? "true" : undefined} data-state={st}>
               {clickable

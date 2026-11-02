@@ -1,8 +1,8 @@
 // The one side panel of the call (night-v3 5.1, research/04 section 6.9): People, Chat and questions, Agenda, Case, Agents or
 // Decision, one at a time. On a laptop it slides in on the right of the stage (22 rem; the Decision panel 26 rem, for its six step
 // tabs); on a phone it is a bottom sheet, 85 % high,
-// with a handle and a visible Close. Esc closes it (the sheet by itself; on a laptop the shell's shortcut). The body is dark as the
-// stage is. The badge and title helpers here feed the bar's panel buttons.
+// with a handle and a visible Close. Esc closes it (the sheet by itself; on a laptop the shell's shortcut). The body follows the
+// stage's (light) theme. The badge and title helpers here feed the bar's panel buttons.
 import { useRef } from "react";
 import { Bot, ClipboardList, FileText, ListOrdered, MessageSquareText, Users, X, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -96,7 +96,7 @@ export function SidePanel() {
   if (phone) {
     return (
       <Sheet open={!!panel} onOpenChange={(o) => { if (!o) setPanel(null); }}>
-        <SheetContent side="bottom" showCloseButton={false} data-theme="dark" data-testid={`${kind}-panel`} aria-label={title}
+        <SheetContent side="bottom" showCloseButton={false} data-testid={`${kind}-panel`} aria-label={title}
           className="h-[85dvh] gap-0 rounded-t-2xl border-stage-line bg-stage-panel p-0 pb-[env(safe-area-inset-bottom)] text-stage-fg">
           <div className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-stage-line" aria-hidden />
           <header className="flex items-center gap-2 border-b border-stage-line px-4 py-2">
@@ -104,7 +104,7 @@ export function SidePanel() {
             <SheetDescription className="sr-only">{PANEL_WORD[kind].about}</SheetDescription>
             <Button variant="ghost" className="min-h-11 text-stage-fg hover:bg-stage-raised hover:text-stage-fg" onClick={() => setPanel(null)} aria-label="Close the panel"><X className="size-4" />Close</Button>
           </header>
-          <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4" data-theme="dark">
+          <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
             <PanelBody kind={kind} />
           </div>
         </SheetContent>
@@ -114,7 +114,7 @@ export function SidePanel() {
 
   return (
     <StagePanel open={!!panel} title={title} onClose={() => setPanel(null)} testId={`${kind}-panel`} width={panelWidth(kind)}>
-      <div data-theme="dark" className="space-y-3">
+      <div className="space-y-3">
         <PanelBody kind={kind} />
       </div>
     </StagePanel>

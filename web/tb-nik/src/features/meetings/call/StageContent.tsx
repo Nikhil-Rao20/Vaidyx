@@ -53,7 +53,7 @@ function ShareBadge({ name, user }: { name: string; user: string }) {
   return (
     <p className={cn("absolute left-3 top-3 z-10 flex items-center gap-2 rounded-full bg-black/70 py-1 pl-3 font-medium text-white", canStop ? "pr-1" : "pr-3", big ? "text-lg" : "text-xs")} data-testid="share-badge">
       <MonitorUp className={big ? "size-5" : "size-3.5"} aria-hidden />{name} presenting
-      {canStop ? <button type="button" onClick={stop} className="rounded-full bg-[#d64545] px-2.5 py-0.5 text-xs font-semibold text-white outline-none hover:bg-[#c23b3b] focus-visible:ring-2 focus-visible:ring-white" aria-label={mine ? "Stop presenting" : "Stop the share for everyone"} title={mine ? "Stop presenting (Ctrl+Alt+T)" : "Stop the share for everyone"} data-testid="share-stop">Stop</button> : null}
+      {canStop ? <button type="button" onClick={stop} className="rounded-full bg-[#c23b3b] px-2.5 py-0.5 text-xs font-semibold text-white outline-none hover:bg-[#ad3434] focus-visible:ring-2 focus-visible:ring-white" aria-label={mine ? "Stop presenting" : "Stop the share for everyone"} title={mine ? "Stop presenting (Ctrl+Alt+T)" : "Stop the share for everyone"} data-testid="share-stop">Stop</button> : null}
     </p>
   );
 }
@@ -81,7 +81,7 @@ export function StageContent({ className, children }: { className?: string; chil
     stage = mine ? "share-self" : track ? "share" : "share-waiting";
     bodyKey = `${stage}-${user}`;
     body = (
-      <motion.div key={bodyKey} {...fade} className="absolute inset-0 bg-black" data-testid="stage-share">
+      <motion.div key={bodyKey} {...fade} className={cn("absolute inset-0", track && "bg-black")} data-testid="stage-share">
         {track ? <VideoTrack trackRef={track} className="h-full w-full bg-black object-contain" /> : (
           <div className="grid h-full place-items-center p-6 text-center">
             <p className={cn("flex flex-col items-center gap-2 text-stage-muted", big ? "text-2xl" : "text-base")}>
@@ -135,7 +135,7 @@ export function StageContent({ className, children }: { className?: string; chil
   } else if (mode.kind === "opened" && opened?.kind === "record" && opened.doc_id && ctx.cid) {
     bodyKey = `rec-${opened.doc_id}-${opened.page ?? 0}`;
     body = (
-      <motion.div key={bodyKey} {...fade} className="scroll-thin absolute inset-0 overflow-auto bg-[#1a1f26] p-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary" tabIndex={0} role="region" aria-label="Record">
+      <motion.div key={bodyKey} {...fade} className="scroll-thin absolute inset-0 overflow-auto bg-stage-raised p-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary" tabIndex={0} role="region" aria-label="Record">
         {opened.title ? <p className="sticky top-0 z-10 mb-2 inline-block rounded-md bg-stage-raised/90 px-2 py-1 text-sm font-medium text-stage-fg shadow">{opened.title}</p> : null}
         <img src={recordPageUrl(ctx.cid, opened.doc_id, opened.page ?? 0)} alt={`${opened.title ?? "Record"}, page ${(opened.page ?? 0) + 1}`} className="mx-auto h-auto max-w-full rounded-md bg-white" />
       </motion.div>

@@ -59,7 +59,7 @@ function VideoChip() {
   const Bars = v.status !== "connected" ? VideoOff : v.quality === "excellent" ? SignalHigh : v.quality === "good" ? SignalMedium : v.quality === "poor" ? SignalLow : v.quality === "lost" ? Signal : Video;
   const bad = v.status !== "connected" || v.quality === "poor" || v.quality === "lost";
   return (
-    <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs", bad ? "bg-warn/20 text-[#ffd48a]" : "bg-stage-raised text-stage-muted")} role="status" aria-label={words} title={words} data-testid="video-chip" data-video-status={v.status}>
+    <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs", bad ? "bg-warn-soft text-warn" : "bg-stage-raised text-stage-muted")} role="status" aria-label={words} title={words} data-testid="video-chip" data-video-status={v.status}>
       <Bars className="size-3.5" aria-hidden /><span className="hidden xl:inline">{words}</span>
     </span>
   );
@@ -77,7 +77,7 @@ function TimerControl() {
           <TimerBadge timer={t} /><ChevronDown className="size-3.5 text-stage-muted" aria-hidden />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-64 space-y-3" aria-label="Case timer" data-theme="dark">
+      <PopoverContent align="end" className="w-64 space-y-3" aria-label="Case timer">
         <p className="text-sm font-medium">Case timer</p>
         <label className="flex items-center gap-2 text-sm text-muted-foreground">Minutes for this case <Input type="number" min={1} max={60} value={x.minutes} onChange={(e) => x.setMinutes(Math.max(1, Math.min(60, Number(e.target.value) || 1)))} className="h-8 w-16 text-sm" aria-label="Minutes for this case" /></label>
         <div className="flex flex-wrap gap-2">
@@ -105,7 +105,7 @@ function QuorumChip({ room }: { room: boolean }) {
           <Users className={room ? "size-4" : "size-3.5"} aria-hidden />{words}<ChevronDown className="size-3 text-stage-muted" aria-hidden />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className={cn("space-y-2", room ? "w-[28rem]" : "w-80")} aria-label="Quorum" data-testid="quorum-popover" data-theme="dark">
+      <PopoverContent align="end" className={cn("space-y-2", room ? "w-[28rem]" : "w-80")} aria-label="Quorum" data-testid="quorum-popover">
         <p className={cn("font-medium", room ? "text-base" : "text-sm")}>Quorum</p>
         <QuorumLine big={room} />
         <p className="text-xs text-muted-foreground">Information only: it does not make a decision valid or invalid.</p>
@@ -130,7 +130,7 @@ export function TopBar() {
       center={(
         <div className="min-w-0">
           {room ? <h1 className="truncate text-xl text-stage-fg lg:text-2xl">{headline}</h1> : <p className="truncate text-sm font-semibold text-stage-fg" data-testid="case-headline">{headline}</p>}
-          {question ? <p className={cn("truncate text-stage-muted", room ? "text-sm lg:text-base" : "text-xs")}><span className="text-stage-muted/80">Board question: </span><span className="text-stage-fg/90">{question}</span></p>
+          {question ? <p className={cn("truncate text-stage-muted", room ? "text-sm lg:text-base" : "text-xs")}><span className="text-stage-muted">Board question: </span><span className="text-stage-fg/90">{question}</span></p>
             : coordinator && c.row ? <p className="truncate text-xs text-stage-muted">The board question is not written on this Case File</p> : null}
         </div>
       )}

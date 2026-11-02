@@ -53,6 +53,15 @@
   --shadow-lift: 0 10px 30px rgba(18, 26, 36, 0.14), 0 2px 6px rgba(18, 26, 36, 0.06);
   --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  /* The meeting stage (call, pre-join, member view, room screen): the app's light surfaces. Page a very light grey, panels white,
+     raised surfaces (call buttons, tiles, the current agenda row) a step darker so they show on the page grey, lines light grey,
+     text ink, muted text 5.0:1 or more on the page, the panels and the raised surfaces. */
+  --stage: #f5f7fa;
+  --stage-panel: #ffffff;
+  --stage-raised: #e9eef4;
+  --stage-line: #dde4ec;
+  --stage-fg: #121a24;
+  --stage-muted: #5a6673;
   color-scheme: light;
 }
 
@@ -95,6 +104,12 @@
   --shadow-outer: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.3);
   --shadow-inner: 0 1px 2px rgba(0, 0, 0, 0.45), 0 6px 18px rgba(0, 0, 0, 0.4);
   --shadow-lift: 0 10px 30px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.4);
+  --stage: #0b0f14;
+  --stage-panel: #141a21;
+  --stage-raised: #1b232d;
+  --stage-line: #28323e;
+  --stage-fg: #eef2f6;
+  --stage-muted: #9aa6b3;
   color-scheme: dark;
 }
 
@@ -145,13 +160,17 @@
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
-  /* The meeting stage is dark in both themes, as a video call is. */
-  --color-stage: #0b0f14;
-  --color-stage-panel: #141a21;
-  --color-stage-raised: #1b232d;
-  --color-stage-line: #28323e;
-  --color-stage-fg: #eef2f6;
-  --color-stage-muted: #9aa6b3;
+  /* The meeting stage is light, like the rest of Vaidyx: the owner, 2 Nov 2026, "the meeting must be in light theme not in the dark
+     theme, it is not good for doctors, they are not dark theme guys" (docs/meetings-v2 D6). It follows the app's theme, so a person
+     who switched the whole app to dark gets a dark stage that matches the dialogs and menus inside it, never a mix of the two.
+     Only the video picture itself keeps a dark backdrop (stage-video), as a camera picture does. */
+  --color-stage: var(--stage);
+  --color-stage-panel: var(--stage-panel);
+  --color-stage-raised: var(--stage-raised);
+  --color-stage-line: var(--stage-line);
+  --color-stage-fg: var(--stage-fg);
+  --color-stage-muted: var(--stage-muted);
+  --color-stage-video: #161c23;
 }
 
 @layer base {

@@ -399,7 +399,7 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
                     </motion.div>
                   ) : null}
                 </AnimatePresence>
-                {error ? <p role="alert" className="flex items-center gap-2 rounded-lg bg-[#3a1c1c] px-3 py-1.5 text-xs text-[#ffb4a8]"><span className="min-w-0 flex-1">{error}</span><button type="button" className="rounded p-1 hover:bg-white/10" onClick={() => setError(null)} aria-label="Dismiss the message"><X className="size-3.5" /></button></p> : null}
+                {error ? <p role="alert" className="flex items-center gap-2 rounded-lg bg-bad-soft px-3 py-1.5 text-xs text-bad"><span className="min-w-0 flex-1">{error}</span><button type="button" className="rounded p-1 hover:bg-bad/10" onClick={() => setError(null)} aria-label="Dismiss the message"><X className="size-3.5" /></button></p> : null}
               </div>
               {landscape ? <div className="scroll-thin w-28 shrink-0 overflow-y-auto overflow-x-hidden" data-testid="landscape-strip"><Strip orientation="column" max={8} small /></div> : null}
               <SidePanel />
@@ -427,10 +427,10 @@ function StageOverlays({ ended, voiceChip }: { ended: boolean; voiceChip: ReactN
       {ended ? <EndedCard /> : null}
       <div className="pointer-events-none absolute inset-x-0 top-14 z-20 flex flex-col items-center gap-1.5 px-3 [&>*]:pointer-events-auto"><PresentingBar />{voiceChip}</div>
       {c.variant === "member" ? (
-        <span className={cn("pointer-events-none absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium", c.following ? "bg-ok/20 text-[#8fe0b3]" : "bg-warn/20 text-[#ffd48a]")}>
+        <span className={cn("pointer-events-none absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium", c.following ? "bg-ok-soft text-ok" : "bg-warn-soft text-warn")}>
           {c.following ? <MonitorCheck className="size-3.5" aria-hidden /> : <Footprints className="size-3.5" aria-hidden />}<span className={c.phone ? "sr-only" : undefined}>{c.following ? "Following the shared screen" : "Stepped away"}</span>
         </span>
-      ) : c.variant === "coordinator" ? <span className="pointer-events-none absolute right-3 top-3 z-10 rounded-full bg-black/50 px-2.5 py-1 text-xs font-medium text-white">What the room sees</span> : null}
+      ) : c.variant === "coordinator" ? <span className="pointer-events-none absolute right-3 top-3 z-10 rounded-full bg-black/70 px-2.5 py-1 text-xs font-medium text-white">What the room sees</span> : null}
       {!openedItem && !c.state.presenting ? <SlideDots slides={c.slides} index={c.shownSlide} className="absolute bottom-2 right-3 z-10" /> : null}
       <AdmitToast className="absolute bottom-3 left-3" />
     </>
@@ -539,9 +539,9 @@ function RoomBody({ summaryOn, setSummaryOn, videoOn, liveText, ended, voiceChip
         {showColumn ? (
           <section className="hidden w-[30%] min-w-0 overflow-hidden rounded-xl border border-stage-line bg-stage-panel p-5 [mask-image:linear-gradient(to_bottom,#000_88%,transparent)] lg:block" aria-label="Summary" data-testid="room-summary">
             {!c.cid ? <p className="text-xl text-stage-fg/80">The summary of the current case appears here.</p> : null}
-            {c.cid && c.slidesStatus === "loading" ? <div data-theme="dark"><SkeletonLines n={8} /></div> : null}
+            {c.cid && c.slidesStatus === "loading" ? <SkeletonLines n={8} /> : null}
             {c.cid && c.slidesStatus === "error" ? <p className="text-xl text-warn">The slides for this case could not be loaded.</p> : null}
-            {summary ? <div data-theme="dark"><SlideContent slide={summary} big /></div> : null}
+            {summary ? <SlideContent slide={summary} big /> : null}
           </section>
         ) : null}
         <AgendaRail room className="hidden lg:flex" />
@@ -557,7 +557,7 @@ function RoomBody({ summaryOn, setSummaryOn, videoOn, liveText, ended, voiceChip
             {latest.length ? (
               <motion.section key="q" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="max-h-[30%] shrink-0 overflow-hidden rounded-xl border border-stage-line bg-stage-panel p-3 [&_li_p]:text-xl [&_li_p]:leading-snug" aria-label="Questions" data-testid="room-questions">
                 <h2 className="mb-1 flex items-baseline gap-2 text-lg font-semibold text-stage-fg/80">Questions from members{earlier > 0 ? <span className="text-base font-normal" data-testid="room-questions-more">(the latest {latest.length}; +{earlier} more)</span> : null}</h2>
-                <div data-theme="dark"><QuestionsList questions={latest} caseId={c.cid} big /></div>
+                <QuestionsList questions={latest} caseId={c.cid} big />
               </motion.section>
             ) : null}
           </AnimatePresence>
@@ -570,8 +570,8 @@ function RoomBody({ summaryOn, setSummaryOn, videoOn, liveText, ended, voiceChip
       <footer className="space-y-2 border-t border-stage-line px-3 py-2 lg:px-4">
         <div className="flex flex-wrap items-center gap-3 text-xl text-stage-fg/80">
           <span data-testid="room-count">{count} in the meeting</span>
-          {handNames.length ? <span className="rounded-full bg-warn/20 px-3 py-0.5 text-xl font-medium text-[#ffd48a]" data-testid="room-hands">{handNames.length} hand{handNames.length === 1 ? "" : "s"} raised: {handNames.join(", ")}</span> : null}
-          {c.video.error ? <span className="text-lg text-[#ffb4a8]">{c.video.error}</span> : null}
+          {handNames.length ? <span className="rounded-full bg-warn-soft px-3 py-0.5 text-xl font-medium text-warn" data-testid="room-hands">{handNames.length} hand{handNames.length === 1 ? "" : "s"} raised: {handNames.join(", ")}</span> : null}
+          {c.video.error ? <span className="text-lg text-bad">{c.video.error}</span> : null}
         </div>
         <DecisionStrip text={liveText} saved={c.savedNow} big className={cn("[&>p]:line-clamp-2 [&>p]:text-[28px] [&>span]:text-base", !liveText && !c.savedNow && "hidden")} />
         {!liveText && !c.savedNow ? <p className="rounded-xl border border-dashed border-stage-line px-4 py-2 text-xl text-stage-fg/80">The decision appears here as the coordinator types it, until it is read back and saved.</p> : null}
