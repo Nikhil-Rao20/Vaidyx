@@ -4,9 +4,10 @@
 // below. No control bar: a small bar at the bottom right (room microphone and camera, the summary column, the agent voices, full
 // screen, close). It joins the video room under its own identity ("<user>#room"); its microphone and camera stay off until the
 // coordinator turns them on here, so the remote members see and hear the room.
+import { useRef } from "react";
 import { useParams } from "react-router-dom";
 import { useSession } from "@/lib/session";
-import { useMeetingLive } from "@/lib/live";
+import { useMeetingLive, type LiveEvent } from "@/lib/live";
 import { StageFrame, StageTopBar } from "./components/Stage";
 import { LiveDot } from "./components/shared";
 import { CallShell } from "./call/CallShell";
@@ -15,7 +16,10 @@ import { ErrorState, SkeletonLines } from "@/features/casefile/components/common
 export default function MeetingRoomPage() {
   const { id = "" } = useParams();
   const { me } = useSession();
-  const live = useMeetingLive(id);
+  // every live event in order to the shell (a burst of spoken sentences, a stop, a decision): reading only the last one dropped some
+  // on the projector (review finding 9)
+  const shellEvents = useRef<((ev: LiveEvent) => void) | null>(null);
+  const live = useMeetingLive(id, { onEvent: (ev: LiveEvent) => shellEvents.current?.(ev) });
   const s = live.state;
 
   if (!s) {
@@ -33,5 +37,5 @@ export default function MeetingRoomPage() {
   }
 
   const videoOn = !!s.meeting.video && !!me?.features?.video && s.meeting.status === "in_session" && !!s.can?.manage;
-  return <CallShell mid={id} variant="room" live={{ ...live, state: s }} me={me} videoAvailable={videoOn} />;
+  return <CallShell mid={id} variant="room" live={{ ...live, state: s }} me={me} videoAvailable={videoOn} events={shellEvents} />;
 }

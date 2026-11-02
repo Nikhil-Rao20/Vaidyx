@@ -1293,13 +1293,20 @@ def _expired(code: dict, now: datetime | None = None) -> bool:
 
 
 def new_code(mid: str, by: str) -> dict:
-    """A fresh 6-digit code (the old one stops working), valid 12 hours; never written to the audit log."""
+    """A fresh 6-digit code (the old one stops working), valid 12 hours and at least until 12 hours after the meeting's start; never
+    written to the audit log."""
     s = need(mid); _active(s)
     used = {(x.get("code") or {}).get("value") for x in board.all_sessions() if x.get("status") in ("planned", "in_session") and isinstance(x.get("code"), dict)}
     value = f"{secrets.randbelow(10 ** 6):06d}"
     while value in used:
         value = f"{secrets.randbelow(10 ** 6):06d}"
-    expires = (datetime.now() + timedelta(hours=CODE_TTL_HOURS)).isoformat(timespec="seconds")
+    until = datetime.now() + timedelta(hours=CODE_TTL_HOURS)
+    try:  # valid through the meeting itself: a code made the evening before still works on the day (review finding 2)
+        start = datetime.fromisoformat(f"{s.get('date')}T{s.get('time') or '00:00'}")
+        until = max(until, start + timedelta(hours=CODE_TTL_HOURS))
+    except (TypeError, ValueError):
+        pass
+    expires = until.isoformat(timespec="seconds")
     s["code"] = {"value": value, "expires_at": expires, "attempts": 0, "created_at": _now(), "created_by": by}
     _save(s)
     board.audit_event(mid, "code_issued", by, expires_at=expires)

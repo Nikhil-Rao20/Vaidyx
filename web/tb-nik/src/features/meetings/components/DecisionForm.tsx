@@ -233,6 +233,9 @@ function Voiced({ box, screen, label, context = "decision", caseId, max, onValue
   );
 }
 
+/** Half-filled decision forms by meeting and Case File, for this browser tab only (review finding 6). */
+const DRAFTS = new Map<string, { f: Form; step: number }>();
+
 export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRecord = true, compact = false, mode = "record", initial }: {
   mid: string; caseId: string; attendance: Attendee[];
   /** Called after a save with the server's answer (a correction answers {record}). */
@@ -261,11 +264,13 @@ export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRe
   }, [attendance, meeting, correcting, initial]);
   const admitted = () => attendance.filter((a) => a.status === "present" || a.status === "remote").map((a) => a.name);
 
-  const start = (): Form => (correcting ? formFromRecord(initial) : emptyForm(admitted(), owner));
+  const draftKey = `${mid}:${caseId}`;
+  // a form half filled is kept while the panel is closed or another panel is open (it was rebuilt empty; review finding 6)
+  const start = (): Form => (correcting ? formFromRecord(initial) : DRAFTS.get(draftKey)?.f ?? emptyForm(admitted(), owner));
   const [f, setF] = useState<Form>(start);
   const [init, setInit] = useState<Form>(start);
   const [reason, setReason] = useState("");
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(() => (correcting ? 0 : DRAFTS.get(draftKey)?.step ?? 0));
   const [saved, setSaved] = useState(false);
   const [liveErr, setLiveErr] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
@@ -275,7 +280,8 @@ export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRe
   const heading = useRef<HTMLHeadingElement | null>(null);
   const stepButtons = useRef<Array<HTMLButtonElement | null>>([]);
 
-  useEffect(() => { const s0 = start(); setF(s0); setInit(s0); setReason(""); setStep(0); setSaved(false); setTouched(false); lastSent.current = ""; }, [caseId, initial?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!correcting && !saved) DRAFTS.set(draftKey, { f, step }); }, [f, step, draftKey, correcting, saved]);
+  useEffect(() => { const s0 = start(); setF(s0); setInit(s0); setReason(""); setStep(correcting ? 0 : DRAFTS.get(draftKey)?.step ?? 0); setSaved(false); setTouched(false); lastSent.current = ""; }, [caseId, initial?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // The owner doctor may arrive after the form opened: fill the responsible clinician only while it is still empty.
   useEffect(() => { if (owner) setF((x) => (x.responsible_doctor ? x : { ...x, responsible_doctor: owner })); }, [caseId, owner]);
   useEffect(() => { stepButtons.current[step]?.scrollIntoView?.({ block: "nearest", inline: "nearest" }); }, [step]);
@@ -297,7 +303,7 @@ export function DecisionForm({ mid, caseId, attendance, onSaved, liveText, canRe
       const changes = Object.fromEntries(changed.map((k) => [k, b[k] ?? ""])) as Partial<DecisionBody>;
       return correctBoardRecord(caseId, String(initial?.id ?? ""), changes, reason.trim());
     },
-    onSuccess: (r) => { if (!correcting) { setSaved(true); announce("Decision saved."); } onSaved(r); },
+    onSuccess: (r) => { if (!correcting) { DRAFTS.delete(draftKey); setSaved(true); announce("Decision saved."); } onSaved(r); },
   });
   const set = <K extends Key>(k: K, v: Form[K]) => { setF((x) => ({ ...x, [k]: v })); setSaved(false); };
   const problems = problemsOf(f);

@@ -32,7 +32,8 @@ export function DecisionPanel() {
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-foreground">Decision{row ? ` for ${row.patient_line}` : ""}</h3>
       {outcome ? <p className="rounded-md status-ok px-2 py-1 text-sm">Recorded: {outcome.label ?? outcome.outcome}. To change it, correct the record from the Case File's Board decisions panel.</p> : null}
-      {cid ? <DecisionForm mid={mid} caseId={cid} attendance={state.attendance} onSaved={() => ctx.refresh()} liveText={state.decision_live?.case_id && state.decision_live.case_id !== cid ? undefined : state.decision_live?.text} canRecord={state.can?.record !== false} compact /> : <p className="text-sm text-muted-foreground">Pick a case first.</p>}
+      {/* once the outcome is recorded the form is gone: no more live text on the room screen, no Save that answers 409 (review finding 12) */}
+      {cid && !outcome ? <DecisionForm mid={mid} caseId={cid} attendance={state.attendance} onSaved={() => ctx.refresh()} liveText={state.decision_live?.case_id && state.decision_live.case_id !== cid ? undefined : state.decision_live?.text} canRecord={state.can?.record !== false} compact /> : <p className="text-sm text-muted-foreground">Pick a case first.</p>}
       <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
         {canManage ? <LoadingButton size="sm" variant="outline" loading={act.pending === "end"} onClick={() => void act.run("end", async () => { await ctx.actions.endCase(); void cards.refetch(); })} disabled={!cid} title="Asks each board head for their card (Agree / Concern)" data-testid="end-case"><StopCircle className="size-4" />{ended ? "Ask for the cards again" : "End case, ask for cards"}</LoadingButton> : null}
         {caseCards ? <span className="text-xs text-muted-foreground" data-testid="cards-summary">{cardsLine(caseCards)}</span> : null}

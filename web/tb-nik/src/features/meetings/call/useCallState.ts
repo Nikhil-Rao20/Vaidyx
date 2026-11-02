@@ -295,6 +295,7 @@ export function useShortcuts(ctx: CallCtx | null, extra: { openHelp: () => void;
       switch (id) {
         case "escape":
           if (layerOpen()) return;
+          if (isTypingTarget(e.target)) return;  // Esc in a text box (the decision form) never closes its panel (review finding 6)
           // an agent speaking on this device stops first (here only; the others keep hearing it), the next Esc closes the panel
           if (c.speakingNow) { c.stopAgentAudio(); e.preventDefault(); return; }
           if (c.panel) { c.setPanel(null); e.preventDefault(); }

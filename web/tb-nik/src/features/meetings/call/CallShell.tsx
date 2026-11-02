@@ -174,8 +174,10 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
   const [endOpen, setEndOpen] = useState(false);
   const [menu, setMenu] = useState<ShellExtras["menu"]>(null);
   const [summaryOn, setSummaryOn] = useState(true);
-  const [minutes, setMinutes] = useState<number>(row?.minutes ?? s.meeting.minutes_per_case ?? 10);
-  useEffect(() => { setMinutes(row?.minutes ?? s.meeting.minutes_per_case ?? 10); }, [cid]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the minutes the running timer was set to, else the agenda row's: a reload keeps a paused 15-minute timer (review finding 11)
+  const seedMinutes = () => { const t = s.current?.timer?.total; return t ? Math.round(t / 60) : row?.minutes ?? s.meeting.minutes_per_case ?? 10; };
+  const [minutes, setMinutes] = useState<number>(seedMinutes);
+  useEffect(() => { setMinutes(seedMinutes()); }, [cid]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!phone) setMenu((m) => (m === "coordinator" ? null : m)); }, [phone]);
 
   // ---- screen share (night-v3 5.2): LiveKit carries the pixels, the meeting records who presents -----------------------------

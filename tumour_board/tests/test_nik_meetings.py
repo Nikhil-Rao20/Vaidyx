@@ -1114,3 +1114,11 @@ def test_not_discussed_keeps_an_agenda_change_made_while_the_record_was_saved(tc
     assert r.status_code == 200, r.text
     v = As(tc, "anil").get(f"/meetings/{nxt}").json()
     assert [x["case_id"] for x in v["agenda"]["discussion"]] == ["TB-001"] and [x["case_id"] for x in v["agenda"]["noting"]] == ["TB-003"]
+
+
+def test_a_join_code_lasts_through_the_meeting_it_was_made_for(tc):
+    """Finding 2: a code made days before the meeting still works on the day (12 hours after the start at least)."""
+    day = (date.today() + timedelta(days=3)).isoformat()
+    mid = new_meeting(tc, date_=day, time_="14:00")
+    code = As(tc, "anil").post(f"/meetings/{mid}/code").json()
+    assert datetime.fromisoformat(code["expires_at"]) >= datetime.fromisoformat(f"{day}T14:00") + timedelta(hours=12)

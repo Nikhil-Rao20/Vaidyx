@@ -332,7 +332,9 @@ export interface MeetingState {
   agent?: AgentState | null;
   can?: { manage?: boolean; record?: boolean; ask?: boolean; card?: boolean; card_required?: boolean; video?: boolean; present?: boolean; chat?: boolean;
     /** I may ask the agents now (the coordinator always; members while "Members can ask the agents" is on). */
-    ask_agents?: boolean };
+    ask_agents?: boolean;
+    /** The coordinator's switch "Members can ask the agents" (the coordinator may always ask). */
+    members_ask?: boolean };
   /** Every absent head's stand-in agent (night-v3 5.1, D2); `agent` above stays for older readers. */
   agents?: AgentInfo[];
   /** The people the coordinator spotlighted for everyone (night-v3 5.1). */
@@ -524,22 +526,24 @@ export function useMeetingLive(mid: string, opts: { enabled?: boolean; onEvent?:
   onEventRef.current = opts.onEvent;
   const client = useRef<LiveClient | null>(null);
   const lastEventAt = useRef(0);
+  const fetchStartedAt = useRef(0);
 
   const poll = useQuery({
     queryKey: ["meeting", mid],
-    queryFn: () => api.get<MeetingState>(meetingUrl(mid)),
+    queryFn: () => { fetchStartedAt.current = Date.now(); return api.get<MeetingState>(meetingUrl(mid)); },
     enabled: enabled && !!mid,
     refetchInterval: (q) => (q.state.error instanceof ApiError && (q.state.error.status === 404 || q.state.error.status === 403) ? false : 10_000),
     refetchIntervalInBackground: true,
     retry: (n, e) => !(e instanceof ApiError && (e.status === 404 || e.status === 403)) && n < 2,
   });
 
-  // The poll is the truth unless a live event arrived while it was in flight (then the live part stays).
+  // The poll is the truth unless a live event arrived while it was in flight (then the live part stays): measured from when the
+  // request left, so a slow answer never brings back the case before a Next (review finding 14).
   useEffect(() => {
     if (!poll.data) return;
     setLoaded(true);
     const fresh = poll.data;
-    const recentLive = Date.now() - lastEventAt.current < 2500;
+    const recentLive = lastEventAt.current >= fetchStartedAt.current;
     setState((old) => (old && recentLive ? { ...fresh, current: old.current ?? fresh.current, decision_live: old.decision_live ?? fresh.decision_live, questions: old.questions?.length > (fresh.questions?.length ?? 0) ? old.questions : fresh.questions } : fresh));
   }, [poll.data, poll.dataUpdatedAt]);
 
@@ -551,7 +555,9 @@ export function useMeetingLive(mid: string, opts: { enabled?: boolean; onEvent?:
         setLastEvent(ev);
         setState((s) => applyLiveEvent(s, ev));
         onEventRef.current?.(ev);
-        if (ev.type === "decision" || ev.type === "agenda" || ev.type === "ended" || ev.type === "meeting") void qc.invalidateQueries({ queryKey: ["meeting", mid] });
+        // an admission changes what the person may do (video, chat, questions): the whole state is read again at once, not at the next
+        // poll, which swapped a just-admitted member's call for the pre-join (review finding 7)
+        if (ev.type === "decision" || ev.type === "agenda" || ev.type === "ended" || ev.type === "meeting" || ev.type === "admit") void qc.invalidateQueries({ queryKey: ["meeting", mid] });
       },
       onStatus: (st, d) => { setStatus(st); setStatusDetail(d); },
     });
