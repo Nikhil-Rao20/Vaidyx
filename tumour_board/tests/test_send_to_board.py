@@ -117,13 +117,24 @@ def test_for_discussion_by_default_and_presenter_defaults_to_the_sender(ready_ca
     assert "for discussion, presenter" in n[0]["text"]
 
 
-def test_not_scheduled_yet_marks_ready_with_no_meeting(ready_case, meeting, monkeypatch):
+def test_no_meeting_chosen_goes_on_the_next_planned_meeting(ready_case, meeting, monkeypatch):
+    """Changed by meetings-v2 item 3.2 (D8): before, a send without a meeting waited for the coordinator even with a meeting planned;
+    now it goes on the next planned meeting by itself (board_send.auto) and the coordinator is told which one."""
     _open(monkeypatch, 0)
     c = board.send_to_board(CASE, RAO, list="discussion")
-    assert c["board_ready"]["by"] == RAO and c["board_send"]["meeting_id"] == ""
-    assert _list_of(meeting["id"], CASE) is None and not c.get("meeting_id")
+    assert c["board_ready"]["by"] == RAO and c["board_send"]["meeting_id"] == meeting["id"] and c["board_send"]["auto"] is True
+    assert _list_of(meeting["id"], CASE) == "discussion" and c["meeting_id"] == meeting["id"] and "board_waiting" not in c
     n = notes_for(ANIL, "board_ready")
-    assert "Meeting not scheduled yet: pick a meeting" in n[0]["text"]
+    assert f"Meeting {_dmy(meeting['date'])} 16:00 (the next planned meeting, chosen by itself)" in n[0]["text"]
+
+
+def test_not_scheduled_yet_marks_ready_and_waits_when_no_meeting_is_planned(ready_case, monkeypatch):
+    _open(monkeypatch, 0)
+    c = board.send_to_board(CASE, RAO, list="discussion")
+    assert c["board_ready"]["by"] == RAO and c["board_send"]["meeting_id"] == "" and "auto" not in c["board_send"]
+    assert not c.get("meeting_id") and c["board_waiting"]["why"] == "sent" and c["board_waiting"]["list"] == "discussion"
+    n = notes_for(ANIL, "board_ready")
+    assert "No meeting is planned yet: it joins the first meeting made" in n[0]["text"]
 
 
 # ---- what it refuses ------------------------------------------------------------------------------------------------------------------

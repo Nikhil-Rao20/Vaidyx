@@ -134,11 +134,17 @@ async def meetings_get(mid: str, request: Request):
 
 @router.put("/meetings/{mid}/agenda")
 async def meetings_agenda(mid: str, request: Request):
+    """{discussion[], noting[], not_ready[]?, by_urgency[]?}: the coordinator's order is kept; a list put in an order that is not the
+    urgency order is arranged by hand from then on (new Case Files go at its end, marked new); by_urgency names the lists to put back in
+    urgency order (meetings-v2 item 3.2)."""
     u, rl = _who(request); common.need(rl, "session"); b = await common.body(request); s = _meeting(mid)
     disc = [_case_id(x) for x in (b.get("discussion") or [])]
     note = [_case_id(x) for x in (b.get("noting") or [])]
     nr = [_case_id(x) for x in b["not_ready"]] if isinstance(b.get("not_ready"), list) else None
-    s = _call(meetings.set_agenda, s["id"], u, disc, note, nr)
+    bu = b.get("by_urgency")
+    if bu is not None and not (isinstance(bu, list) and all(isinstance(x, str) for x in bu)):
+        common.fail(400, "by_urgency must be a list of list names (discussion, noting).", "bad_list")
+    s = _call(meetings.set_agenda, s["id"], u, disc, note, nr, tuple(bu or ()))
     return meetings.view(s["id"], rl)
 
 
@@ -149,6 +155,56 @@ async def meetings_agenda_add(mid: str, request: Request):
     async with store.lock(cid):  # it may clear a withdraw on the Case File (meetings._one_agenda)
         s = _call(meetings.add_to_agenda, s["id"], u, cid, str(b.get("list") or "discussion"), str(b.get("reason") or ""))
     return meetings.view(s["id"], rl)
+
+
+# ---- weekly series (meetings-v2 item 3.1): the MDT Coordinator only ---------------------------------------------------------------------
+
+def _series_id(sid: str) -> str:
+    sid = str(sid or "").strip()
+    if not (sid[:1] == "W" and sid[1:].isalnum() and len(sid) <= 20):
+        common.fail(404, "Weekly series not found.", "not_found")
+    return sid
+
+
+@router.get("/meeting-series")
+async def series_list(request: Request):
+    """{series: [series row], weekdays: [Monday .. Sunday]}; a series row: its fields, status (active, paused, stopped), label ("Every
+    week on Friday at 10:00") and its meetings dated today or later (summary rows, cancelled ones too)."""
+    u, rl = _who(request); common.need(rl, "session")
+    return {"series": meetings.list_series(), "weekdays": list(meetings.WEEKDAY_NAMES)}
+
+
+@router.post("/meeting-series")
+async def series_create(request: Request):
+    """{title?, weekday 0..6 (or the name), time HH:MM, room?, video?, minutes_per_case?} -> {series, made: [meeting ids]}."""
+    u, rl = _who(request); common.need(rl, "session"); b = await common.body(request)
+    return _call(meetings.create_series, u, b)
+
+
+@router.put("/meeting-series/{sid}")
+async def series_update(sid: str, request: Request):
+    """The same fields (only those given) -> {series, changed, cancelled, made: [meeting ids]}."""
+    u, rl = _who(request); common.need(rl, "session"); b = await common.body(request)
+    return _call(meetings.update_series, _series_id(sid), u, b)
+
+
+@router.post("/meeting-series/{sid}/pause")
+async def series_pause(sid: str, request: Request):
+    u, rl = _who(request); common.need(rl, "session")
+    return _call(meetings.pause_series, _series_id(sid), u)
+
+
+@router.post("/meeting-series/{sid}/resume")
+async def series_resume(sid: str, request: Request):
+    u, rl = _who(request); common.need(rl, "session")
+    return _call(meetings.resume_series, _series_id(sid), u)
+
+
+@router.post("/meeting-series/{sid}/stop")
+async def series_stop(sid: str, request: Request):
+    """-> {series, cancelled: [ids of the empty future meetings cancelled], kept: [summary rows of the future meetings with Case Files]}."""
+    u, rl = _who(request); common.need(rl, "session")
+    return _call(meetings.stop_series, _series_id(sid), u)
 
 
 # ---- the owner moves or withdraws its Case File (night-v3 item 1.6) ------------------------------------------------------------------

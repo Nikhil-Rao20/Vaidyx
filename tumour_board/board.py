@@ -216,6 +216,7 @@ def mark_ready(case_id: str, user: str, ready: bool = True, note: str = "", *, e
         c["board_ready"] = {"by": user or "", "at": now, "note": note}
     else:
         c.pop("board_ready", None)
+        c.pop("board_waiting", None)  # the mark taken back: no longer waiting for a meeting (meetings-v2 item 3.2)
     c.setdefault("board_ready_history", []).append({"ready": bool(ready), "by": user or "", "at": now, "note": note})
     store.save_case(c)
     store.audit(case_id, {"kind": "board_ready" if ready else "board_ready_withdrawn", "by": user or "", "note": note, "before": before})
@@ -236,12 +237,15 @@ SEND_LISTS = {"discussion": "for discussion", "noting": "for noting"}
 
 def send_to_board(case_id: str, user: str, *, list: str = "discussion", meeting_id: str = "", presenter: str = "", note: str = "",
                   reason: str = "") -> dict:
-    """Send to the board (night-v3 item 1.4, design B7): the treating consultant picks the meeting (or none yet: the coordinator picks),
-    for discussion or for noting, the presenter (the consultant or a resident on the team), a note for the coordinator and, when items
-    are still open, the reason the board should see it anyway. The server requires the question for the board and that reason. Stores
-    the choices on case.json ("presenter", "board_send", "board_send_history"), marks the Case File ready (mark_ready: audited, the
-    coordinator told with the meeting, list and presenter), puts it on that meeting's list (the coordinator may still move it) and
-    audits board_send. ValueError with a plain message. A resident's send is a proposal that runs this in the consultant's name."""
+    """Send to the board (night-v3 item 1.4, design B7): the treating consultant picks the meeting, for discussion or for noting, the
+    presenter (the consultant or a resident on the team), a note for the coordinator and, when items are still open, the reason the board
+    should see it anyway. The server requires the question for the board and that reason. Stores the choices on case.json ("presenter",
+    "board_send", "board_send_history"), marks the Case File ready (mark_ready: audited, the coordinator told with the meeting, list and
+    presenter), puts it on that meeting's list (the coordinator may still move it) and audits board_send. ValueError with a plain message.
+    A resident's send is a proposal that runs this in the consultant's name.
+    No meeting chosen (meetings-v2 item 3.2, D8): the open meeting already listing it, else the next open meeting (planned, not cancelled,
+    not past its time; meetings.meeting_for_send), board_send.auto = true; with none it waits (case.json board_waiting) and joins the first
+    meeting made later (meetings.create, the weekly series)."""
     from . import access, meetings, profiles, steps
     if case_id in config.PROTECTED_CASES:
         raise ValueError("That Case File is protected")
@@ -274,6 +278,12 @@ def send_to_board(case_id: str, user: str, *, list: str = "discussion", meeting_
             raise ValueError("That meeting is not open")
         if str(s.get("date") or "") < datetime.now().date().isoformat():
             raise ValueError("That meeting date has passed: pick another meeting")
+    auto = False
+    if not meeting_id:  # meetings-v2 item 3.2: the agenda fills itself
+        s = meetings.meeting_for_send(case_id)
+        if s:
+            meeting_id, auto = s["id"], True
+    if s:
         try:  # the checks add_to_agenda makes, before anything is written: a refused add leaves no ready mark and no notice
             meetings._active(s)
             meetings._check([case_id])
@@ -281,14 +291,20 @@ def send_to_board(case_id: str, user: str, *, list: str = "discussion", meeting_
             raise ValueError(str(e)) from None
     now = store.now_iso()
     pname = profiles.display_name(presenter)
-    send = {"list": list, "meeting_id": meeting_id, "presenter": presenter, "note": note, "reason": reason, "open_items": open_items, "by": user or "", "at": now}
+    send = {"list": list, "meeting_id": meeting_id, "presenter": presenter, "note": note, "reason": reason, "open_items": open_items, "by": user or "", "at": now,
+            **({"auto": True} if auto else {})}
     c["presenter"] = {"user": presenter, "name": pname, "set_by": user or "", "at": now}
     c["board_send"] = send
     c.setdefault("board_send_history", []).append(send)
+    if s:
+        c.pop("board_waiting", None)
+    else:  # no meeting open: it waits and joins the first meeting made later
+        c["board_waiting"] = {"since": now, "list": list, "by": user or "", "why": "sent", "reason": reason, "sent_at": now}
     store.save_case(c)
     store.audit(case_id, {"kind": "board_send", "by": user or "", "list": list, "meeting_id": meeting_id, "presenter": presenter,
-                          "open_items": open_items, "reason": reason})
-    where = (f"Meeting {_ddmmyyyy(s.get('date'))}" + (f" {s['time']}" if s.get("time") else "")) if s else "Meeting not scheduled yet: pick a meeting"
+                          "open_items": open_items, "reason": reason, **({"auto": True} if auto else {}), **({} if s else {"waiting": True})})
+    where = ((f"Meeting {_ddmmyyyy(s.get('date'))}" + (f" {s['time']}" if s.get("time") else "") + (" (the next planned meeting, chosen by itself)" if auto else ""))
+             if s else "No meeting is planned yet: it joins the first meeting made")
     extra = f"{where}, {SEND_LISTS[list]}, presenter {pname}." + (f" Sent with {open_items} open: {reason}" if open_items and reason else "")
     c = mark_ready(case_id, user, True, note, extra_text=extra)
     if s:
