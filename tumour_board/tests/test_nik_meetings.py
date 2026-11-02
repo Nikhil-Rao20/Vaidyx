@@ -661,6 +661,9 @@ def test_slides_summary_first_from_the_gate_then_from_the_summary(tc):
     join_and_admit(tc, mid, "priya")
     assert As(tc, "priya").get(f"/meetings/{mid}/cases/TB-999/slides").status_code == 404
     assert As(tc, "ravi").get(f"/meetings/{mid}/cases/TB-002/slides").status_code == 403
+    # only the Case File on the floor, for anyone without the whole Case File (meetings-v2 2.6 and the API check)
+    assert As(tc, "priya").get(f"/meetings/{mid}/cases/TB-002/slides").json()["detail"]["code"] == "not_current"
+    As(tc, "anil").post(f"/meetings/{mid}/current", json={"case_id": "TB-002"})
     r = As(tc, "priya").get(f"/meetings/{mid}/cases/TB-002/slides")
     assert r.status_code == 200, r.text
     slides = r.json()["slides"]

@@ -496,10 +496,11 @@ async def meetings_slides(mid: str, cid: str, request: Request):
     cid = _case_id(cid)
     if not meetings._on_lists(s, cid) and cid not in {a.get("case_id") for a in s.get("agenda") or []}:
         common.fail(404, "This Case File is not on the meeting's agenda.", "not_on_agenda")
-    if rl.get("outside_expert") and not meetings.manage(rl):  # an outside expert follows the shared screen only (security review #9)
+    if not meetings.manage(rl):  # this summary is the outside expert's view now (meetings-v2 2.6): anyone without the whole Case File sees
+        # only the Case File on the floor, while the meeting is in session (the API check: members read every agenda case, also after the end)
         c = store.get_case(cid) if cid not in config.PROTECTED_CASES else None
         if not (c and access.scope(rl, c) == access.FULL) and (s.get("status") != "in_session" or s.get("current") != cid):
-            common.fail(403, "An outside expert sees the slides of the Case File on the floor, while the meeting is in session.", "not_current")
+            common.fail(403, "Only the Case File on the floor is shown here, while the meeting is in session.", "not_current")
     from .. import board
     board.audit_event(s["id"], "slides_read", u, case_id=cid)
     return {"case_id": cid, "slides": _call(meetings.slides, cid, rl)}

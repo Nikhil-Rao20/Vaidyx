@@ -778,9 +778,10 @@ async function closed(fresh) {
     ((mg.b || {}).cases || []).some((x) => x.case_id === REKHA && !x.restricted) && ((mg.b || {}).cases || []).some((x) => x.case_id === ARIF && x.restricted));
   await ck("GET /sessions/{mid}/minutes", "B", "closed", "GET", `/api/tb/sessions/${T}/minutes`, undefined, 403, "Breast Surgery: not on the sheet, no case", { failAs: "NOTE" });
   await ck("GET /sessions/{mid}/minutes", "A", "closed", "GET", `/api/tb/sessions/${T}/minutes`, undefined, 403, "root admin");
-  const dk = await ck("GET /meetings/{mid}/deck", "C", "closed", "GET", `/api/tb/meetings/${T}/deck`, undefined, 200, "", { timeout: 180000 });
-  is("GET /meetings/{mid}/deck (closed)", who("C"), "closed", "pptx attachment", `${dk.ct.slice(0, 60)}; ${dk.disp.slice(0, 60)}`, /presentationml/.test(dk.ct) && /attachment/.test(dk.disp));
-  await ck("GET /meetings/{mid}/deck", "M", "closed", "GET", `/api/tb/meetings/${T}/deck`, undefined, 200, "admitted during the meeting", { timeout: 180000 });
+  // the PowerPoint deck was replaced by the meeting PDF (meetings-v2 4.1 and 4.2)
+  const dk = await ck("GET /meetings/{mid}/pdf", "C", "closed", "GET", `/api/tb/meetings/${T}/pdf`, undefined, 200, "", { timeout: 180000 });
+  is("GET /meetings/{mid}/pdf (closed)", who("C"), "closed", "pdf attachment", `${dk.ct.slice(0, 60)}; ${dk.disp.slice(0, 60)}`, /application\/pdf/.test(dk.ct));
+  await ck("GET /meetings/{mid}/pdf", "M", "closed", "GET", `/api/tb/meetings/${T}/pdf`, undefined, 200, "admitted during the meeting", { timeout: 180000 });
   const vt = await ck("GET /cases/{id}/export/vtb", "C", "-", "GET", `/api/tb/cases/${REKHA}/export/vtb`, undefined, [200, 409], "Rekha (a Case summary exists)", { timeout: 180000 });
   if (vt.s === 200) is("GET /cases/{id}/export/vtb (type)", who("C"), "-", "pptx", `${vt.ct.slice(0, 60)}, ${vt.len} bytes`, /presentationml/.test(vt.ct) && vt.len > 1000);
   if (fresh) await ck("GET /cases/{id}/export/vtb", "C", "-", "GET", `/api/tb/cases/${fresh}/export/vtb`, undefined, [200, 409], "the fresh Case File (no summary yet: 409)", { timeout: 180000 });
