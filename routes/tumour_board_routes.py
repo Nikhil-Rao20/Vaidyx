@@ -163,7 +163,8 @@ class _ModelErrorRoute(APIRoute):
                         if ((rl.get("vaidyx_admin") or sc == access.READ) and request.method in ("POST", "PUT", "PATCH", "DELETE")
                                 and not _BREAK_GLASS_OK.match(m.group(2) or "")):  # a window (the admin's, or a doctor's opened with a reason) only reads
                             msg = ("A break-glass window is read only: the Vaidyx admin reads the Case File, the owning department acts on it."
-                                   if rl.get("vaidyx_admin") else access.READ_ONLY_MESSAGE)
+                                   if rl.get("vaidyx_admin") else access.READ_ONLY_MESSAGE
+                                   if access._doctor_open(rl, store.get_case(m.group(1)) or {}) else access.MEETING_READ_MESSAGE)  # the meeting window (meetings-v2 2.2)
                             return JSONResponse({"detail": {"message": msg, "code": "break_glass_read_only"}}, status_code=403)
                         if request.method in ("POST", "PUT", "PATCH", "DELETE") and not _ARCHIVE_OK.match(m.group(2) or ""):
                             try:

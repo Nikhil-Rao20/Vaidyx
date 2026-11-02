@@ -265,6 +265,19 @@ async def meetings_open(mid: str, request: Request):
     return {"opened": await _acall(meetings.open_item(s["id"], u, str(b.get("kind") or "none"), doc_id))}
 
 
+VIEW_LIMIT = common.RateLimit(120, 60)  # Board view moves per login per minute (each click of the driver posts one)
+
+
+@router.post("/meetings/{mid}/view")
+async def meetings_view_set(mid: str, request: Request):
+    """{tab, doc_id?, page?, quote?}: the driver (the coordinator, or the presenter of the Case File on the floor while admitted) moves the
+    Board view every follower renders (meetings-v2 item 2.2, meetings.set_view). Answers {"view": {case_id, tab, doc_id, page, quote, opened,
+    by, by_name, at}}."""
+    u, rl = _who(request); b = await common.body(request); s = _meeting(mid); _member(rl, s)
+    VIEW_LIMIT.check(u, "Too many Board view changes in a minute. Wait a moment.")
+    return {"view": await _acall(meetings.set_view(s["id"], u, rl, str(b.get("tab") or ""), str(b.get("doc_id") or ""), b.get("page"), b.get("quote")))}
+
+
 @router.post("/meetings/{mid}/timer")
 async def meetings_timer(mid: str, request: Request):
     u, rl = _who(request); common.need(rl, "session"); b = await common.body(request); s = _meeting(mid)
@@ -353,6 +366,8 @@ async def meetings_spotlight(mid: str, request: Request):
     """The coordinator spotlights up to three admitted people for everyone (night-v3 5.1); an empty list removes the spotlight."""
     u, rl = _who(request); common.need(rl, "session"); b = await common.body(request); s = _meeting(mid)
     users = b.get("users")
+    if users is not None and not isinstance(users, list):  # it cleared the spotlight (the API check, meetings-v2 1.2)
+        common.fail(400, "Send the people to spotlight as a list.", "bad_users")
     users = [str(x) for x in users][:10] if isinstance(users, list) else []
     return {"spotlight": _call(meetings.spotlight, s["id"], u, users)}
 

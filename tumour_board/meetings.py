@@ -15,7 +15,8 @@ a model except the stand-in answer, which goes through agents.ask (verified quot
 
 Storage keys added to the session file: time, room, video, minutes_per_case, code {value, expires_at, attempts}, agenda_lists
 {discussion[], noting[], not_ready[]} (entries {case_id, reason, minutes, added_at, added_by}), people {user: {name, department,
-status, mode, joined_at}}, live {slide, opened, timer}, questions[], hands[], cards {case_id: {user: {agree, note, at}}},
+status, mode, joined_at}}, live {slide, opened, timer}, view (the follow state the driver sets for the Board view, meetings-v2 item 2.2:
+{case_id, tab, doc_id, page, quote, opened, by, by_name, at}), questions[], hands[], cards {case_id: {user: {agree, note, at}}},
 outcomes {case_id: {...}}, ended {case_id: {...}}, agenda_sent_at, agenda_sent_cases[]. The live decision and the agent state live in
 memory only. All functions are synchronous read-modify-write (except the two that await the PACS lookup and the decision record):
 call them from the app's event loop, never from threads (the scheduler calls expire_codes / notify_starting, which touch no case).
@@ -172,10 +173,12 @@ def _in_session(s) -> None:
 
 
 def _save(s) -> dict:
-    return board.save_session(s)
+    out = board.save_session(s)
+    access.meeting_window_reset()  # who is admitted and which Case File is on the floor decide the meeting window (2.2): count the change at once
+    return out
 
 
-PRIVATE_EVENTS = ("open", "question", "decision_live", "decision", "card", "chat", "agent_speech", "agent_stop")  # live content: for the admitted members and the coordinator only
+PRIVATE_EVENTS = ("open", "view", "question", "decision_live", "decision", "card", "chat", "agent_speech", "agent_stop")  # live content: for the admitted members and the coordinator only
 
 
 def _shape(s: dict):
@@ -467,6 +470,30 @@ def presenter_view(s: dict) -> dict | None:
     return {"user": u, "name": display_name(u), "department": did, "department_name": org.department_name(did) if did else ""}
 
 
+VIEW_TABS = ("summary", "reports", "images", "stage")  # the Board view's four tabs (D3)
+QUOTE_MAX = 300   # characters of the highlighted line in the follow state
+PAGE_MAX = 10000  # a page number past this is not a page of a report
+
+
+def _fresh_view(cid: str, by: str = "", at: str | None = None) -> dict:
+    """The follow state of a Case File that just came on the floor: its Summary tab."""
+    return {"case_id": cid, "tab": "summary", "doc_id": None, "page": None, "quote": "", "opened": None, "by": by or "",
+            "by_name": display_name(by) if by else "", "at": at or _now()}
+
+
+def view_state(s: dict) -> dict | None:
+    """The follow state (T1, meetings-v2 item 2.2): {case_id, tab, doc_id, page, quote, opened, by, by_name, at}, what the room and every
+    follower render. None when the meeting is not in session or nothing is on the floor; a stored state of another Case File (the floor
+    changed by a route that does not reset it) reads as the Summary of the Case File on the floor."""
+    cid = (s or {}).get("current")
+    if not cid or s.get("status") != "in_session":
+        return None
+    v = s.get("view")
+    if isinstance(v, dict) and v.get("case_id") == cid:
+        return dict(v)
+    return _fresh_view(cid, at=s.get("current_since"))
+
+
 def current_view(s: dict) -> dict:
     lv = s.get("live") or {}
     return {"case_id": s.get("current"), "slide": int(lv.get("slide") or 0), "opened": lv.get("opened"), "timer": timer_view(lv.get("timer")),
@@ -740,6 +767,13 @@ def _for_outside(r: dict | None, s: dict, obj):
         if c:
             out["agents"] = [{**a, "points": strip_identity(a["points"], c)} if isinstance(a, dict) and isinstance(a.get("points"), list) else a
                              for a in obj["agents"]]
+    if isinstance(obj.get("view"), dict):  # the follow state (2.2): the quoted line and the record's title
+        c = case_for(obj["view"].get("case_id"))
+        if c:
+            v = {**obj["view"], "quote": strip_identity(obj["view"].get("quote") or "", c)}
+            if isinstance(v.get("opened"), dict):
+                v["opened"] = {**v["opened"], "title": strip_identity(v["opened"].get("title") or "", c)}
+            out["view"] = v
     return out
 
 
@@ -853,7 +887,8 @@ def view(mid: str, r: dict) -> dict:
         af["agents"] = agents_public(af["agents"])  # no record quotes for a viewer who is not admitted
     return _for_outside(r, s, {"meeting": summary_row(s), "agenda": agenda,
             "code": {"value": code["value"], "expires_at": code.get("expires_at"), "attempts": code.get("attempts", 0)} if code else None,
-            "attendance": attendance_rows(s), "current": cv, "decision_live": dl, "questions": list(s.get("questions") or []) if member else [],
+            "attendance": attendance_rows(s), "current": cv, "view": view_state(s) if member else None,  # the follow state for the members only (2.2)
+            "decision_live": dl, "questions": list(s.get("questions") or []) if member else [],
             "hands": list(s.get("hands") or []), **af, "spotlight": spotlight_view(s),
             "quorum": quorum_view(s), "present_allowed": present_allowed_view(s), "presenting": (s.get("live") or {}).get("presenting") or None,
             "chat": _chat_lines(s, r, list(s.get("chat") or [])[-CHAT_VIEW:]) if member else [],
@@ -874,6 +909,8 @@ def view(mid: str, r: dict) -> dict:
 def create(by: str, date_: str, time_: str = "", room=None, video: bool = False, minutes_per_case=None, title: str = "") -> dict:
     """The MDT Coordinator creates a meeting by hand (date, time, room, video on or off; no cut-off). Defaults from the hospital settings."""
     d = _defaults()
+    if str(date_ or "").strip()[:10] and str(date_).strip()[:10] < date.today().isoformat() and board._DATE.match(str(date_).strip()):
+        raise MeetingError("That date has passed: choose today or a later date.", 400, "past")  # the API check (meetings-v2 1.2)
     try:
         s = board.new_session(date_, by, title, time=_check_time(time_ or d.get("time") or ""), room=str(d.get("room") if room is None else room or "").strip()[:MAX_ROOM],
                               video=bool(video), minutes_per_case=_check_minutes(minutes_per_case) or int(d.get("minutes_per_case") or 10))
@@ -892,6 +929,8 @@ def update(mid: str, by: str, fields: dict) -> dict:
             new = board._check_date(fields["date"])
         except ValueError as e:
             raise MeetingError(str(e), 400, "bad_date")
+        if new < date.today().isoformat():
+            raise MeetingError("That date has passed: choose today or a later date.", 400, "past")
         if new != s.get("date"):
             s["date"] = changed["date"] = new
     if "time" in fields and fields["time"] is not None:
@@ -1431,6 +1470,7 @@ def start(mid: str, by: str) -> dict:
         raise MeetingError(str(e), 409, "not_planned")
     s = need(mid)
     s["live"] = {"slide": 0, "opened": None, "timer": _fresh_timer(s, s.get("current")) if s.get("current") else None, "case_started_at": time.time()}
+    s["view"] = _fresh_view(s["current"], by) if s.get("current") else None  # the follow state starts on the first Case File's Summary (2.2)
     _save(s)
     pairs = []
     try:
@@ -1439,12 +1479,17 @@ def start(mid: str, by: str) -> dict:
     except Exception as e:  # the briefs are support; the meeting starts without them
         log.warning("meeting %s: briefs not prepared (%s)", mid, e)
     board.audit_event(mid, "meeting_started", by, preparing=len(pairs), warming=_warm_agents(s))
+    fv = view_state(s)
+    if fv:
+        _send(s, {"type": "view", "view": fv})
     _send(s, {"type": "current", **current_view(s), **_agent_fields(s), "quorum": quorum_view(s), "spotlight": [], "status": "in_session"})
-    return {"meeting": summary_row(s), "preparing": len(pairs), "current": current_view(s)}
+    return {"meeting": summary_row(s), "preparing": len(pairs), "current": current_view(s), "view": fv}
 
 
 def end(mid: str, by: str) -> dict:
     s = need(mid); _active(s)
+    if s.get("status") == "planned":  # it closed as if it had been held (the API check, meetings-v2 1.2)
+        raise MeetingError("This meeting has not started: cancel it instead.", 409, "not_started")
     try:
         from . import service
         service.close_session(mid, by)
@@ -1481,6 +1526,7 @@ def set_current(mid: str, by: str, case_id: str = "", slide=None) -> dict:
             raise MeetingError(str(e), 404, "not_on_agenda")
         s = need(mid)
         s["live"] = {"slide": 0, "opened": None, "timer": _fresh_timer(s, case_id), "case_started_at": time.time()}
+        s["view"] = _fresh_view(case_id, by)  # Next, Previous, a click on the agenda: the followers start on the Summary (2.2)
         LIVE_DECISION.pop(mid, None)
         AGENT_STATE.pop(mid, None)
         AGENT_LISTEN.pop(mid, None)
@@ -1497,11 +1543,51 @@ def set_current(mid: str, by: str, case_id: str = "", slide=None) -> dict:
     else:
         board.audit_event(mid, "slide", by, case_id=s.get("current"), slide=s.get("live", {}).get("slide"))
     cv = current_view(s)
+    fv = view_state(s)
     ev = {"type": "current", **cv, **_agent_fields(s), "quorum": quorum_view(s)}
     if changed_case:
         ev["spotlight"] = []  # a spotlight is for one case: the next case clears it
+        _send(s, {"type": "view", "view": fv})
     _send(s, ev)
-    return {**cv, **_agent_fields(s)}
+    return {**cv, **_agent_fields(s), "view": fv}
+
+
+async def _opened(s: dict, cid: str, kind: str, doc_id: str, d: dict, by: str) -> dict:
+    """One record of the Case File on the floor as the shared screen shows it (open_item and set_view): kind "record" {kind, doc_id, title,
+    url, by, at}; kind "images" (the imaging study looked up in the hospital system, every admitted member granted the viewer on it, an
+    outside expert only with the patient's consent) {kind, doc_id, title, study_uid, url, modality, granted, by, at}. Audited in the Case
+    File. The caller reads the meeting again after this (the hospital system may take seconds)."""
+    mid = s["id"]
+    title = (d.get("classification") or {}).get("title") or d.get("filename") or doc_id
+    if kind == "record":
+        store.audit(cid, {"kind": "record_opened_in_meeting", "by": by, "doc_id": doc_id, "session": mid})
+        return {"kind": "record", "doc_id": doc_id, "title": title, "url": f"/api/tb/cases/{cid}/documents/{doc_id}/file", "by": by, "at": _now()}
+    h = d.get("his") or {}
+    if not h.get("imaging_study_ref"):
+        raise MeetingError("This record has no imaging study in the hospital system.", 404, "no_images")
+    study = None
+    client = his_client.client()
+    if client is None and h.get("study"):
+        study = pacs._study_view(h["study"])
+    else:
+        try:
+            study = await pacs.study_for_doc(cid, d, client)
+        except Exception as e:
+            if h.get("study"):
+                study = pacs._study_view(h["study"])
+            else:
+                raise MeetingError(f"The hospital system did not answer about the study: {type(e).__name__}.", 502, "his_down")
+    if not study or not study.get("available"):
+        raise MeetingError((study or {}).get("reason") or "Images not available in the PACS.", 409, "images_not_available")
+    uid = study["study_uid"]
+    consent = bool(((store.get_case(cid) or {}).get("consent") or {}).get("outside_discussion"))  # images carry the patient's identity
+    users = sorted({u for u, p in (s.get("people") or {}).items() if p.get("status") in ADMITTED and (consent or not p.get("outside_expert"))} | {by})
+    for u in users:
+        pacs.grant(u, uid, cid, doc_id, session=mid)
+    store.audit(cid, {"kind": "images_opened", "by": by, "doc_id": doc_id, "study_uid": uid, "accession": study.get("accession") or "", "available": True,
+                      "session": mid, "granted_to": users})
+    return {"kind": "images", "doc_id": doc_id, "title": title, "study_uid": uid, "url": pacs.viewer_url(uid), "modality": study.get("modality"),
+            "granted": users, "by": by, "at": _now()}
 
 
 async def open_item(mid: str, by: str, kind: str, doc_id: str = "") -> dict | None:
@@ -1521,37 +1607,7 @@ async def open_item(mid: str, by: str, kind: str, doc_id: str = "") -> dict | No
             d = None
         if not d:
             raise MeetingError("Record not found in this Case File.", 404, "no_record")
-        title = (d.get("classification") or {}).get("title") or d.get("filename") or doc_id
-        if kind == "record":
-            opened = {"kind": "record", "doc_id": doc_id, "title": title, "url": f"/api/tb/cases/{cid}/documents/{doc_id}/file", "by": by, "at": _now()}
-            store.audit(cid, {"kind": "record_opened_in_meeting", "by": by, "doc_id": doc_id, "session": mid})
-        else:
-            h = d.get("his") or {}
-            if not h.get("imaging_study_ref"):
-                raise MeetingError("This record has no imaging study in the hospital system.", 404, "no_images")
-            study = None
-            client = his_client.client()
-            if client is None and h.get("study"):
-                study = pacs._study_view(h["study"])
-            else:
-                try:
-                    study = await pacs.study_for_doc(cid, d, client)
-                except Exception as e:
-                    if h.get("study"):
-                        study = pacs._study_view(h["study"])
-                    else:
-                        raise MeetingError(f"The hospital system did not answer about the study: {type(e).__name__}.", 502, "his_down")
-            if not study or not study.get("available"):
-                raise MeetingError((study or {}).get("reason") or "Images not available in the PACS.", 409, "images_not_available")
-            uid = study["study_uid"]
-            consent = bool(((store.get_case(cid) or {}).get("consent") or {}).get("outside_discussion"))  # images carry the patient's identity
-            users = sorted({u for u, p in (s.get("people") or {}).items() if p.get("status") in ADMITTED and (consent or not p.get("outside_expert"))} | {by})
-            for u in users:
-                pacs.grant(u, uid, cid, doc_id, session=mid)
-            opened = {"kind": "images", "doc_id": doc_id, "title": title, "study_uid": uid, "url": pacs.viewer_url(uid), "modality": study.get("modality"),
-                      "granted": users, "by": by, "at": _now()}
-            store.audit(cid, {"kind": "images_opened", "by": by, "doc_id": doc_id, "study_uid": uid, "accession": study.get("accession") or "", "available": True,
-                              "session": mid, "granted_to": users})
+        opened = await _opened(s, cid, kind, doc_id, d, by)
         # the hospital system may take seconds: read the meeting again, so a Next, an admission or a decision saved meanwhile is kept
         # (saving the copy read before the wait undid them; meetings-v2 review finding 1)
         s = need(mid); _in_session(s)
@@ -1564,6 +1620,90 @@ async def open_item(mid: str, by: str, kind: str, doc_id: str = "") -> dict | No
     return opened
 
 
+def may_drive(r: dict, s: dict, user: str = "") -> bool:
+    """Who leads the Board view (D4): whoever manages the meeting, or the presenter of the Case File on the floor while admitted."""
+    if manage(r):
+        return True
+    user = user or (r or {}).get("user") or ""
+    if not user or not is_member(r, s):
+        return False
+    cid = s.get("current")
+    c = store.get_case(cid) if cid and cid not in config.PROTECTED_CASES else None
+    return bool(c) and presenter_of(c) == user
+
+
+def _check_page(page) -> int | None:
+    if page is None or page == "":
+        return None
+    if isinstance(page, bool) or not isinstance(page, (int, str)) or (isinstance(page, str) and not page.strip().isdigit()):
+        raise MeetingError("The page must be a whole number from 0.", 400, "bad_page")
+    n = int(page)
+    if not 0 <= n <= PAGE_MAX:
+        raise MeetingError("The page must be a whole number from 0.", 400, "bad_page")
+    return n
+
+
+def _check_quote(quote) -> str:
+    if quote is None:
+        return ""
+    if not isinstance(quote, str):
+        raise MeetingError("The quote must be text.", 400, "bad_quote")
+    q = quote.strip()
+    if len(q) > QUOTE_MAX:
+        raise MeetingError(f"Keep the highlighted line to {QUOTE_MAX} characters.", 400, "bad_quote")
+    return q
+
+
+async def set_view(mid: str, user: str, roles: dict, tab: str, doc_id: str = "", page=None, quote="") -> dict:
+    """The driver (the coordinator, or the presenter of the Case File on the floor while admitted) moves the Board view (T1, meetings-v2
+    item 2.2): `tab` one of VIEW_TABS, `doc_id` a record of the Case File on the floor, `page` a whole number from 0 (kept only with a
+    record), `quote` the highlighted line (at most QUOTE_MAX characters). Images with a record: the PACS viewer as open_item opens it (the
+    viewing grant for every admitted member) in `opened`; any other tab with a record: `opened` as open_item(kind="record"). Saved in the
+    meeting record (`view`), sent to the members as {"type": "view", "view"}, audited as `view` (tab and record, never the quote).
+    Returns the new view."""
+    s = need(mid); _in_session(s)
+    cid = s.get("current")
+    if not cid:
+        raise MeetingError("No Case File is on the floor.", 409, "no_current")
+    if not may_drive(roles, s, user):
+        raise MeetingError("Only the MDT Coordinator or the presenter of the Case File on the floor can lead the Board view.", 403, "forbidden")
+    tab = str(tab or "").strip()
+    if tab not in VIEW_TABS:
+        raise MeetingError("The tab must be summary, reports, images or stage.", 400, "bad_tab")
+    doc_id = str(doc_id or "").strip()
+    d = None
+    if doc_id:
+        try:
+            doc_id = store.safe_id(doc_id)
+            d = store.get_doc(cid, doc_id)
+        except ValueError:
+            raise MeetingError("A record id is not valid.", 400, "bad_record")
+        if not d:
+            raise MeetingError("Record not found in this Case File.", 404, "no_record")
+    page = _check_page(page)
+    quote = _check_quote(quote)
+    opened = None
+    if d is not None:
+        prev = (view_state(s) or {}).get("opened") or {}
+        if tab != "images" and prev.get("kind") == "record" and prev.get("doc_id") == doc_id:
+            opened = prev  # another page or line of the same report: the record is open already
+        else:
+            opened = await _opened(s, cid, "images" if tab == "images" else "record", doc_id, d, user)
+        # the hospital system may take seconds: read the meeting again, so a Next, an admission or a decision saved meanwhile is kept
+        s = need(mid); _in_session(s)
+        if s.get("current") != cid:
+            raise MeetingError("The board has moved to another Case File.", 409, "moved_on")
+        if not may_drive(roles, s, user):
+            raise MeetingError("Only the MDT Coordinator or the presenter of the Case File on the floor can lead the Board view.", 403, "forbidden")
+    v = {"case_id": cid, "tab": tab, "doc_id": doc_id or None, "page": page if doc_id else None, "quote": quote, "opened": opened,
+         "by": user, "by_name": display_name(user), "at": _now()}
+    s["view"] = v
+    _save(s)
+    board.audit_event(mid, "view", user, cid, tab=tab, doc_id=doc_id)
+    _send(s, {"type": "view", "view": v})
+    return dict(v)
+
+
 def shows_record(r: dict, case_id: str, doc_id: str) -> str | None:
     """The meeting whose shared screen shows this record of this Case File now, when `r` is one of its admitted members (an outside
     expert only with the patient's consent to an outside discussion); else None. The room screen and the remote members follow the shared
@@ -1571,8 +1711,8 @@ def shows_record(r: dict, case_id: str, doc_id: str) -> str | None:
     if not isinstance(r, dict) or r.get("disabled") or not case_id or not doc_id:
         return None
     for s in board.running_sessions():
-        opened = (s.get("live") or {}).get("opened") or {}
-        if s.get("current") != case_id or opened.get("kind") != "record" or opened.get("doc_id") != doc_id or not is_member(r, s):
+        shown = ((s.get("live") or {}).get("opened") or {}, (view_state(s) or {}).get("opened") or {})  # the old shared screen, the follow state (2.2)
+        if s.get("current") != case_id or not any(o.get("kind") == "record" and o.get("doc_id") == doc_id for o in shown) or not is_member(r, s):
             continue
         if r.get("outside_expert") and not bool(((store.get_case(case_id) or {}).get("consent") or {}).get("outside_discussion")):
             continue
@@ -1917,7 +2057,9 @@ def ask(mid: str, user: str, text: str, role: str | None = None, manager: bool =
     cid = s.get("current")
     if not cid:
         raise MeetingError("No Case File is on the floor.", 409, "no_current")
-    text = " ".join(str(text or "").split())[:MAX_QUESTION]
+    text = " ".join(str(text or "").split())
+    if len(text) > MAX_QUESTION:
+        raise MeetingError(f"A question can be at most {MAX_QUESTION:,} characters. Shorten it.", 400, "too_long")
     if not text:
         raise MeetingError("Type a question.", 400, "empty")
     role = str(role or "").strip() or None
@@ -2404,6 +2546,8 @@ async def record_decision(mid: str, cid: str, body: dict, user: str) -> dict:
     s = need(mid)
     if s.get("status") == "cancelled":
         raise MeetingError("This meeting was cancelled.", 409, "meeting_over")
+    if s.get("status") == "planned":
+        raise MeetingError("The meeting has not started yet: the outcome is recorded during or after the meeting.", 409, "not_started")
     if not _on_lists(s, cid, ("discussion", "noting")) and cid not in {a.get("case_id") for a in s.get("agenda") or []}:
         raise MeetingError("This Case File is not on the meeting's agenda.", 404, "not_on_agenda")
     c = store.get_case(cid) if cid not in config.PROTECTED_CASES else None
@@ -2550,6 +2694,8 @@ def card(mid: str, cid: str, user: str, agree, note: str = "") -> dict:
     """A member's card for a Case File (required for the board heads; the client asks for it): Agree or Concern with a note. A concern
     always reaches the record. Audited in the session and the Case File."""
     s = need(mid); _active(s)
+    if s.get("status") == "planned":
+        raise MeetingError("The meeting has not started yet.", 409, "not_started")
     if not _on_lists(s, cid, ("discussion", "noting")) and cid not in {a.get("case_id") for a in s.get("agenda") or []}:
         raise MeetingError("This Case File is not on the meeting's agenda.", 404, "not_on_agenda")
     if not isinstance(agree, bool):

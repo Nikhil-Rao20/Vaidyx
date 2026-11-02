@@ -1122,3 +1122,28 @@ def test_a_join_code_lasts_through_the_meeting_it_was_made_for(tc):
     mid = new_meeting(tc, date_=day, time_="14:00")
     code = As(tc, "anil").post(f"/meetings/{mid}/code").json()
     assert datetime.fromisoformat(code["expires_at"]) >= datetime.fromisoformat(f"{day}T14:00") + timedelta(hours=12)
+
+
+def test_the_api_check_rules(tc, monkeypatch):
+    """The meetings-v2 API check (1.2): no meeting in the past; a planned meeting is cancelled, not ended; no card or decision before the
+    start; an over-long question is refused, not cut; a spotlight that is not a list is refused; a refusal says the action in words."""
+    past = (date.today() - timedelta(days=1)).isoformat()
+    r = As(tc, "anil").post("/meetings", json={"date": past, "time": "10:00"})
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "past"
+    mid = with_agenda(tc)
+    assert As(tc, "anil").put(f"/meetings/{mid}", json={"date": past}).json()["detail"]["code"] == "past"
+    r = As(tc, "anil").post(f"/meetings/{mid}/end")
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "not_started"
+    join_and_admit(tc, mid, "suresh")
+    assert As(tc, "suresh").post(f"/meetings/{mid}/cases/TB-001/card", json={"agree": True}).json()["detail"]["code"] == "not_started"
+    assert As(tc, "anil").post(f"/meetings/{mid}/cases/TB-001/decision", json={"outcome": "noted"}).json()["detail"]["code"] == "not_started"
+    assert As(tc, "anil").post(f"/meetings/{mid}/start").status_code == 200
+    As(tc, "anil").post(f"/meetings/{mid}/current", json={"case_id": "TB-001"})
+    monkeypatch.setattr(meetings, "answer_in_background", lambda *a, **k: None)
+    r = As(tc, "suresh").post(f"/meetings/{mid}/questions", json={"text": "x" * 1001})
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "too_long"
+    r = As(tc, "anil").post(f"/meetings/{mid}/spotlight", json={"users": "suresh"})
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "bad_users"
+    r = As(tc, "suresh").post(f"/meetings/{mid}/start")
+    msg = str(r.json()["detail"])
+    assert r.status_code == 403 and "plan or run a meeting" in msg and "'session'" not in msg

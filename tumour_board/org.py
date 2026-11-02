@@ -1079,7 +1079,14 @@ def require(r: dict, action: str, department: str | None = None) -> None:
     if isinstance(r, dict) and r.get("disabled"):
         raise PermissionError("Your Tumour Board access is disabled. Ask your department admin or the root admin.")
     where = f" for {department_name(department_id(department) or department)}" if department else ""
-    raise PermissionError(f"You do not have permission for '{action}'{where}. Ask a Tumour Board admin if you need it.")
+    words = ACTION_WORDS.get(action, f"'{action}'")
+    raise PermissionError(f"You do not have permission to {words}{where}. Ask a Tumour Board admin if you need it.")
+
+
+# what a refused action means, in plain words for the message (the API check, meetings-v2 1.2: it said "permission for 'session'")
+ACTION_WORDS = {"session": "plan or run a meeting (the MDT Coordinator does)", "board_record": "record the board's decision",
+                "remind": "send a reminder", "confirm": "confirm for the owning department", "mark_ready": "send it to the board",
+                "propose": "propose for sign-off"}
 
 
 def my_departments(r: dict) -> list[dict]:

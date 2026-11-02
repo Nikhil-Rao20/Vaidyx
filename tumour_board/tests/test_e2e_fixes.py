@@ -123,8 +123,8 @@ def _imaging_doc(case_id):
 def test_an_admitted_member_without_the_case_files_scope_views_the_shared_images(tc):
     owned("TB-001", department="medical_oncology", owner="dev", residents=())
     mid = started(tc)
-    join_and_admit(tc, mid, "ravi")  # Radiology: no request, not a participant: no scope on TB-001
-    assert access.scope(org.roles("ravi"), store.get_case("TB-001")) is None
+    join_and_admit(tc, mid, "ravi")  # Radiology: no request, not a participant: only the meeting window on TB-001 (meetings-v2 item 2.2)
+    assert access.scope(org.roles("ravi"), store.get_case("TB-001")) == access.READ
     doc = _imaging_doc("TB-001")
     r = As(tc, "anil").post(f"/meetings/{mid}/open", json={"kind": "images", "doc_id": doc["doc_id"]})
     assert r.status_code == 200 and "ravi" in r.json()["opened"]["granted"]
@@ -133,27 +133,27 @@ def test_an_admitted_member_without_the_case_files_scope_views_the_shared_images
     assert pacs.check("ohif/viewer", q, org.roles("ravi")) is None
     assert pacs.check(f"dicom-web/studies/{UID}/series", "", org.roles("ravi")) is None
     assert As(tc, "anil").post(f"/meetings/{mid}/end").status_code == 200  # the meeting ends: the viewer ends with it
+    assert access.scope(org.roles("ravi"), store.get_case("TB-001")) is None
     assert pacs.check("ohif/viewer", q, org.roles("ravi"))[0] == 403
     pacs.grant("mohan", UID, "TB-001", doc["doc_id"])  # a grant outside any meeting still needs the Case File scope
     assert pacs.check("ohif/viewer", q, org.roles("mohan"))[0] == 403
 
 
-def test_an_admitted_member_reads_only_the_record_on_the_shared_screen(tc):
+def test_an_admitted_member_reads_the_case_file_on_the_floor_only(tc):
     owned("TB-001", department="medical_oncology", owner="dev", residents=())
     mid = started(tc)
     join_and_admit(tc, mid, "ravi")
     shown = store.add_document_file("TB-001", "cbc.pdf", b"synthetic cbc")
     other = next(d for d in store.list_docs("TB-001") if d["doc_id"] != shown["doc_id"])
-    assert As(tc, "ravi").get(f"/cases/TB-001/documents/{shown['doc_id']}/file").status_code == 403  # nothing on the screen yet
-    assert As(tc, "anil").post(f"/meetings/{mid}/open", json={"kind": "record", "doc_id": shown["doc_id"]}).status_code == 200
-    r = As(tc, "ravi").get(f"/cases/TB-001/documents/{shown['doc_id']}/file")
+    r = As(tc, "ravi").get(f"/cases/TB-001/documents/{shown['doc_id']}/file")  # the meeting window (meetings-v2 item 2.2): the whole Case File, read only
     assert r.status_code == 200 and r.content == b"synthetic cbc"
-    assert As(tc, "ravi").get(f"/cases/TB-001/documents/{other['doc_id']}/file").status_code == 403  # only that record
-    assert As(tc, "ravi").get(f"/cases/TB-001/documents/{shown['doc_id']}").status_code == 403  # the file only, not the record's data
-    assert As(tc, "ravi").get("/cases/TB-001").status_code == 403
+    assert As(tc, "ravi").get(f"/cases/TB-001/documents/{other['doc_id']}").status_code == 200  # any record, not only the one on the screen
+    assert As(tc, "ravi").get("/cases/TB-001").status_code == 200
+    assert As(tc, "ravi").delete(f"/cases/TB-001/documents/{shown['doc_id']}").status_code == 403  # read only
     assert As(tc, "mohan").get(f"/cases/TB-001/documents/{shown['doc_id']}/file").status_code == 403  # not admitted
-    assert As(tc, "anil").post(f"/meetings/{mid}/open", json={"kind": "none"}).status_code == 200
-    assert As(tc, "ravi").get(f"/cases/TB-001/documents/{shown['doc_id']}/file").status_code == 403
+    assert As(tc, "anil").post(f"/meetings/{mid}/current", json={"case_id": "TB-002"}).status_code == 200
+    assert As(tc, "ravi").get(f"/cases/TB-001/documents/{shown['doc_id']}/file").status_code == 403  # off the floor
+    assert As(tc, "ravi").get("/cases/TB-001").status_code == 403
 
 
 def test_briefs_queued_by_the_ready_hook_show_as_preparing(demo_cases, monkeypatch):
