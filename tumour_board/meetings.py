@@ -857,9 +857,11 @@ def view(mid: str, r: dict) -> dict:
             "hands": list(s.get("hands") or []), **af, "spotlight": spotlight_view(s),
             "quorum": quorum_view(s), "present_allowed": present_allowed_view(s), "presenting": (s.get("live") or {}).get("presenting") or None,
             "chat": _chat_lines(s, r, list(s.get("chat") or [])[-CHAT_VIEW:]) if member else [],
-            "can": {"manage": manage(r), "record": org.can(r, "board_record"), "ask": member and bool(cur),
-                    "ask_agents": member and bool(cur) and (manage(r) or bool(s.get("agents_ask", True))), "members_ask": bool(s.get("agents_ask", True)),
-                    "card": member and bool(cur), "card_required": user in card_holders(s),
+            # an outside expert may not ask or give a card (those routes refuse a login that is not placed): no such buttons (review finding 8)
+            "can": {"manage": manage(r), "record": org.can(r, "board_record"), "ask": member and bool(cur) and not r.get("outside_expert"),
+                    "ask_agents": member and bool(cur) and not r.get("outside_expert") and (manage(r) or bool(s.get("agents_ask", True))),
+                    "members_ask": bool(s.get("agents_ask", True)),
+                    "card": member and bool(cur) and not r.get("outside_expert"), "card_required": user in card_holders(s),
                     "video": bool(s.get("video")) and member, "member": member,
                     "present": member and s.get("status") == "in_session" and may_present(s, r), "chat": member and s.get("status") in ("planned", "in_session")},
             "me": {"user": user, "status": me.get("status"), "mode": me.get("mode"), "department": me.get("department") or ""},
@@ -913,10 +915,32 @@ def update(mid: str, by: str, fields: dict) -> dict:
         if new != (s.get("title") or ""):
             s["title"] = changed["title"] = new
     if changed:
+        if "date" in changed or "time" in changed:
+            _moved_in_time(s, by)
         _save(s)
         board.audit_event(mid, "meeting_updated", by, **changed)
         _send(s, {"type": "meeting", "meeting": summary_row(s)})
     return s
+
+
+def _moved_in_time(s, by) -> None:
+    """A planned meeting moved to another date or time (meetings-v2 review finding 10): its Case Files carry the new board date (requests
+    and reminders quote it), the 15-minute notice is sent again for the new time, and the member departments are told when the agenda had
+    already gone out."""
+    s.pop("starting_notified_at", None)
+    for k in ("discussion", "noting"):
+        for it in (s.get("agenda_lists") or {}).get(k) or []:
+            if it.get("case_id"):
+                _link_case(it["case_id"], s, by)
+    if not s.get("agenda_sent_at"):
+        return
+    when = _dmy(s.get("date")) + (f" at {s['time']}" if s.get("time") else "")
+    for did in _member_departments(s):
+        try:
+            notify.notify({"department": did}, "agenda", "", f"The Tumour Board moved to {when}",
+                          "The meeting's date or time changed. Open the meeting page for the agenda.", meeting_id=s["id"], by=by)
+        except Exception as e:
+            log.warning("meeting %s: the move notice to %s failed (%s)", s.get("id"), did, e)
 
 
 def cancel(mid: str, by: str, reason: str = "") -> dict:
@@ -1095,7 +1119,8 @@ def take_off_agendas(case_id: str, by: str, keep: str = "", **extra) -> list[str
 
 def _sent_case(case_id: str) -> dict:
     """The Case File the owner moves or withdraws: it exists, is not protected or archived, was sent to the board (the ready mark) and
-    its current meeting is not running or over."""
+    its current meeting is not running right now. A Case File left on a meeting that ended (not discussed there) or on one left in session
+    from an earlier day can be moved or withdrawn; that meeting's own lists stay as they were (meetings-v2 review finding 3)."""
     if case_id in config.PROTECTED_CASES:
         raise MeetingError("That Case File is protected.", 400, "protected")
     c = store.get_case(case_id)
@@ -1106,8 +1131,8 @@ def _sent_case(case_id: str) -> dict:
     if not (isinstance(c.get("board_ready"), dict) and c["board_ready"].get("at")):
         raise MeetingError("Send it to the board first.", 400, "not_sent")
     cur = get(c.get("meeting_id")) if c.get("meeting_id") else None
-    if cur and cur.get("status") in ("in_session", "closed"):
-        raise MeetingError("That meeting is not open.", 400, "not_open")
+    if cur and cur.get("status") == "in_session" and board.running_now(cur):
+        raise MeetingError("That meeting is running now: the MDT Coordinator moves Case Files during a meeting.", 400, "not_open")
     return c
 
 
@@ -1520,6 +1545,11 @@ async def open_item(mid: str, by: str, kind: str, doc_id: str = "") -> dict | No
                       "granted": users, "by": by, "at": _now()}
             store.audit(cid, {"kind": "images_opened", "by": by, "doc_id": doc_id, "study_uid": uid, "accession": study.get("accession") or "", "available": True,
                               "session": mid, "granted_to": users})
+        # the hospital system may take seconds: read the meeting again, so a Next, an admission or a decision saved meanwhile is kept
+        # (saving the copy read before the wait undid them; meetings-v2 review finding 1)
+        s = need(mid); _in_session(s)
+        if s.get("current") != cid:
+            raise MeetingError("The board has moved to another Case File.", 409, "moved_on")
     s.setdefault("live", {})["opened"] = opened
     _save(s)
     board.audit_event(mid, "opened", by, cid, what=kind, doc_id=doc_id)
@@ -2431,6 +2461,7 @@ async def _record_decision(s, mid, cid, c, body, user) -> dict:
     s = need(mid)
     oc = {"outcome": outcome, "label": OUTCOMES[outcome], "record": record["id"], "by": user, "at": _now(), "decision_text": text, "moved_to": None, "flagged": False}
     if outcome == "not_discussed":
+        nxt = board.next_planned_after(s)  # read again after the record was saved (seconds): an agenda change meanwhile is kept (review finding 13)
         if nxt:
             board.ensure_meeting_fields(nxt)
             lists = nxt["agenda_lists"]
@@ -2526,7 +2557,30 @@ def card(mid: str, cid: str, user: str, agree, note: str = "") -> dict:
     _save(s)
     board.audit_event(mid, "card", user, cid, "card", agree=agree, note=note[:300], department=did)
     _send(s, {"type": "card", "case_id": cid, "user": user, "agree": agree, "cards_given": sorted(s["cards"][cid].keys())})
+    _late_concern(s, cid, user, rec)
     return {"user": user, **rec}
+
+
+def _late_concern(s, cid, user, card_rec) -> None:
+    """A Concern given after the outcome of this Case File was saved in this meeting still reaches the board record and the minutes: the
+    record gets a new version with the concern added (a correction with its reason; version 1 kept). The caller holds the Case File lock.
+    (meetings-v2 review finding 5: the concern stayed in the meeting only.)"""
+    oc = (s.get("outcomes") or {}).get(cid) or {}
+    if card_rec.get("agree") or not oc.get("record"):
+        return
+    try:
+        rec = postboard._find_record(store.get_state(cid), oc["record"])
+    except (KeyError, ValueError):
+        return
+    text = card_rec.get("note") or "Concern raised (no note)"
+    concerns = [{"by": x.get("by") or "", "text": x.get("text") or ""} for x in rec.get("concerns") or [] if isinstance(x, dict)]
+    if any(x["by"] == card_rec["name"] and x["text"] == text for x in concerns):
+        return
+    try:
+        postboard.correct_record(cid, oc["record"], {"concerns": concerns + [{"by": card_rec["name"], "text": text}]}, user, card_rec["name"],
+                                 reason=f"Concern card given by {card_rec['name']} after the outcome was recorded")
+    except (KeyError, ValueError) as e:
+        log.warning("meeting %s: late concern on %s not added to the record (%s)", s.get("id"), cid, e)
 
 
 def cards(mid: str, r: dict) -> dict:

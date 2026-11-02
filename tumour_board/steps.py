@@ -279,7 +279,7 @@ def warnings(case, docs, view) -> list[dict]:
     for d in docs:
         if d["check"]["status"] == "please_check" and any("does not match" in r for r in d["check"]["reasons"]):
             out.append({"id": f"identity:{d['doc_id']}", "kind": "identity", "section": "reports", "severity": "bad", "doc_id": d["doc_id"],
-                        "text": f"The patient's name or number on {slots_title(d['title'])} ({_dmy(d['date'])}) does not match this Case File.",
+                        "text": f"The patient's name or number on {slots_title(d['title'])}{_on(d['date'])} does not match this Case File.",
                         "fixes": [{"kind": "open_report", "label": "Open the report", "doc_id": d["doc_id"]}]})
     drafts = {}
     for s in slots._all_slots(view):
@@ -295,7 +295,7 @@ def warnings(case, docs, view) -> list[dict]:
                 fixes.insert(0, {"kind": "ask_department", "label": f"Send request to {_dept_words(ask.get('department'))}", "slot_id": s["id"],
                                  "department": ask.get("department")})
             out.append({"id": f"preliminary:{d['doc_id']}", "kind": "preliminary", "section": "pre_authorization", "severity": "warn", "doc_id": d["doc_id"],
-                        "text": f"{slots_title(d['title'])} ({_dmy(d['date'])}) is only preliminary" + (": a request is waiting on the department." if s.get("status") == "waiting" else "."),
+                        "text": f"{slots_title(d['title'])}{_on(d['date'])} is only preliminary" + (": a request is waiting on the department." if s.get("status") == "waiting" else "."),
                         "fixes": fixes})
     return out
 
@@ -372,6 +372,12 @@ def undo_key(case_id, fact_id, user) -> None:
 def _dmy(iso) -> str:
     s = str(iso or "")[:10]
     return f"{s[8:10]}/{s[5:7]}/{s[0:4]}" if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s) else s
+
+
+def _on(iso) -> str:
+    """" (DD/MM/YYYY)" after a report's title, or nothing when the report has no date (it read "Claim Form ()"; 2 Nov test pass)."""
+    d = _dmy(iso)
+    return f" ({d})" if d else ""
 
 
 def _dept_words(name) -> str:

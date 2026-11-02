@@ -344,3 +344,7 @@ def test_the_summary_section_follows_the_case_summary(nik_app, tb001, monkeypatc
     assert v["summary"]["case_summary"]["label"] == "Reviewed by Dr Rao" and not any(t["id"] == "case_summary" for t in v["todo"])
     who["user"] = "anil"  # the MDT Coordinator reads: may write it again, not review or edit it
     assert get(tc)["summary"]["case_summary"]["can"] == {"build": True, "review": False, "edit": False}
+
+
+def test_a_report_without_a_date_reads_without_empty_brackets():
+    assert steps._on("2026-09-11") == " (11/09/2026)" and steps._on(None) == "" and steps._on("") == ""

@@ -2,7 +2,7 @@
 sent to the board to another open meeting, or takes it off the agenda with a reason; the Case File sits on one agenda only, the coordinator
 is told, every step is audited in the Case File and on the meetings. Synthetic Case Files only (the TB-002 fixture), the conftest
 temporary data root, no model call."""
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -128,15 +128,30 @@ def test_a_case_file_not_sent_yet_cannot_be_moved_or_withdrawn(full, ready_case,
     assert _list_of(b["id"], CASE) is None
 
 
-def test_a_running_or_closed_current_meeting_refuses_both(sent):
+def test_a_meeting_running_now_refuses_both(sent):
     a, b = sent
-    for state in ("in_session", "closed"):
-        s = meetings.get(a["id"]); s["status"] = state; board.save_session(s)
-        with pytest.raises(meetings.MeetingError, match="That meeting is not open"):
-            meetings.move_case(CASE, RAO, b["id"])
-        with pytest.raises(meetings.MeetingError, match="That meeting is not open"):
-            meetings.withdraw_case(CASE, RAO, "synthetic reason")
+    s = meetings.get(a["id"]); s["status"] = "in_session"; s["started_at"] = datetime.now().isoformat(timespec="seconds"); board.save_session(s)
+    with pytest.raises(meetings.MeetingError, match="running now"):
+        meetings.move_case(CASE, RAO, b["id"])
+    with pytest.raises(meetings.MeetingError, match="running now"):
+        meetings.withdraw_case(CASE, RAO, "synthetic reason")
     assert _list_of(b["id"], CASE) is None and store.get_case(CASE)["meeting_id"] == a["id"]
+
+
+@pytest.mark.parametrize("state", ["closed", "left_in_session"])
+def test_a_case_file_left_on_an_ended_or_stuck_meeting_can_be_moved(sent, state):
+    """meetings-v2 review finding 3: a Case File not discussed at a meeting that ended, or left on a meeting nobody closed (in session
+    since an earlier day), is not stranded; that meeting's own lists stay as they were."""
+    a, b = sent
+    s = meetings.get(a["id"])
+    if state == "closed":
+        s["status"] = "closed"
+    else:
+        s["status"] = "in_session"; s["started_at"] = (datetime.now() - timedelta(days=3)).isoformat(timespec="seconds")
+    board.save_session(s)
+    meetings.move_case(CASE, RAO, b["id"], "synthetic reason")
+    assert _list_of(b["id"], CASE) and store.get_case(CASE)["meeting_id"] == b["id"]
+    assert _list_of(a["id"], CASE)  # the ended or stuck meeting keeps its own record of the list
 
 
 # ---- withdraw ---------------------------------------------------------------------------------------------------------------------

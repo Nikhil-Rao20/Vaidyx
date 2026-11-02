@@ -409,7 +409,8 @@ async def meetings_end_case(mid: str, cid: str, request: Request):
 @router.post("/meetings/{mid}/cases/{cid}/card")
 async def meetings_card(mid: str, cid: str, request: Request):
     u, rl = _who(request); b = await common.body(request); s = _meeting(mid); _member(rl, s)
-    return {"card": _call(meetings.card, s["id"], _case_id(cid), u, b.get("agree"), str(b.get("note") or ""))}
+    async with store.lock(_case_id(cid)):  # a late concern corrects the board record (review finding 5)
+        return {"card": _call(meetings.card, s["id"], _case_id(cid), u, b.get("agree"), str(b.get("note") or ""))}
 
 
 @router.get("/meetings/{mid}/cards")
