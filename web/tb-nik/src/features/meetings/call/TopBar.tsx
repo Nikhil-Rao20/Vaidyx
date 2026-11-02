@@ -1,11 +1,11 @@
 // The top bar of the call: the Vaidyx mark, "Tumour Board · DD/MM/YYYY HH:MM" ("Conducting · ..." for the coordinator), the case
 // headline ("3 of 8: patient line") and the board question, the case timer (the coordinator opens its controls from it), the presenter
 // and quorum chips when the server sends them (the quorum chip opens the full quorum line), the live-channel dot, the video chip and,
-// for the coordinator, the Record button (meetings-v2 2.5: a placeholder, off, until the recorder of Phase 5 comes) and the room
-// screen link (for a hospital that drives the projector from another PC).
+// for the coordinator, the Record button (meetings-v2 5.2: Record, then the red "Recording" time with Pause or Resume and Stop;
+// recorder/RecordControl.tsx) and the room screen link (for a hospital that drives the projector from another PC).
 import { useContext } from "react";
 import { Link } from "react-router-dom";
-import { ChevronDown, Circle, MonitorUp, Pause, Play, RotateCcw, Signal, SignalHigh, SignalLow, SignalMedium, Users, Video, VideoOff } from "lucide-react";
+import { ChevronDown, MonitorUp, Pause, Play, RotateCcw, Signal, SignalHigh, SignalLow, SignalMedium, Users, Video, VideoOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -16,6 +16,7 @@ import { useCall } from "./context";
 import type { CallCtx } from "./types";
 import { ShellContext } from "./useCallState";
 import { QuorumLine } from "./QuorumLine";
+import { RecordControl } from "../recorder/RecordControl";
 import { cn } from "@/lib/utils";
 
 /** "Tumour Board · 27/10/2026 16:00" (the coordinator: "Conducting · ..."), with the room when asked. */
@@ -116,20 +117,6 @@ function QuorumChip({ room }: { room: boolean }) {
   );
 }
 
-/** The coordinator's Record button: shown where it will live, switched off until the meeting recorder is built (meetings-v2 Phase 5:
- *  speech becomes text live, no audio is ever kept). */
-export const RECORD_SOON = "The meeting recorder is not switched on yet. When it comes, it keeps text only, never audio.";
-function RecordPlaceholder() {
-  return (
-    <span title={RECORD_SOON} className="hidden md:inline-flex" data-testid="record-placeholder" data-phase="5">
-      <Button size="sm" variant="outline" disabled aria-label="Record, not available yet" aria-describedby="record-soon" className="border-stage-line bg-transparent text-stage-fg">
-        <Circle className="size-3.5 fill-current text-stage-muted" aria-hidden />Record
-      </Button>
-      <span id="record-soon" className="sr-only">{RECORD_SOON}</span>
-    </span>
-  );
-}
-
 export function TopBar() {
   const c = useCall();
   const s = c.state;
@@ -157,8 +144,8 @@ export function TopBar() {
           {q ? <QuorumChip room={room} /> : null}
           <LiveDot status={c.liveStatus} detail={c.liveDetail} className={c.phone && !room ? "hidden" : undefined} />
           {room ? null : <VideoChip />}
-          {coordinator ? <RecordPlaceholder /> : null}
-          {coordinator ? <Button asChild size="sm" variant="ghost" className="hidden text-stage-fg hover:bg-stage-raised hover:text-stage-fg md:inline-flex"><Link to={`/meetings/${c.mid}/room`} target="_blank" rel="noopener" title="Opens the full-screen room screen in a new tab, for the room computer"><MonitorUp className="size-4" />Room screen</Link></Button> : null}
+          {coordinator ? <RecordControl /> : null}
+          {coordinator ? <Button asChild size="sm" variant="ghost" className="hidden text-stage-fg hover:bg-stage-raised hover:text-stage-fg md:inline-flex"><Link to={`/meetings/${c.mid}/room`} target="_blank" rel="noopener" aria-label="Room screen" title="Room screen: opens the full-screen room screen in a new tab, for the room computer"><MonitorUp className="size-4" /><span className="hidden xl:inline">Room screen</span></Link></Button> : null}
         </>
       )}
     />

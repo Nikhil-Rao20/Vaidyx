@@ -10,8 +10,9 @@ import type { Follow } from "../board/useFollow";
 
 export type CallVariant = "member" | "coordinator" | "room";
 
-/** One side panel at a time (null: none). The Case File itself is on the stage (the Board view), so there is no Case panel. */
-export type PanelKind = "people" | "chat" | "agenda" | "agents" | "decision" | null;
+/** One side panel at a time (null: none). The Case File itself is on the stage (the Board view), so there is no Case panel. "notes":
+ *  the discussion notes of a Case File (meetings-v2 5.2 / 5.3), opened from "Read the notes" or the More menu, never a bar button. */
+export type PanelKind = "people" | "chat" | "agenda" | "agents" | "decision" | "notes" | null;
 
 /** Auto: stage plus strip when something is on the floor, a grid when nothing is. Speaker: the active speaker large. Grid: tiles
  * only. Spotlight: what the coordinator set (chosen by itself when a spotlight arrives and the person has no pin). */

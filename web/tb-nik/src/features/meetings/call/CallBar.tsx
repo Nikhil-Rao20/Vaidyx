@@ -154,6 +154,7 @@ const PANEL_TITLE: Record<Exclude<PanelKind, null>, { label: string; title: stri
   agenda: { label: "Agenda", title: "Show the agenda (Ctrl+Alt+A)", keys: "Control+Alt+A" },
   agents: { label: "Agents", title: "Show the agents" },
   decision: { label: "Decision", title: "Open the decision form" },
+  notes: { label: "Notes", title: "The discussion notes of the Case Files (AI draft, not reviewed)" },
 };
 export const panelWord = (k: Exclude<PanelKind, null>) => (k === "chat" ? "Chat and questions" : PANEL_TITLE[k].label);
 

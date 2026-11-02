@@ -4,8 +4,10 @@
 // Coordinator button opens the same sheet with the coordinator's part only: the case, the timer, Previous, Next case, End case,
 // the Decision form, the waiting room and End meeting (the Case File itself is the Board view on the stage).
 // Night-v3 5.5: "Save data" in both (camera off, the remote video at the lower quality, remembered for this tab).
+// Meetings-v2 3.4 and 5.2: the coordinator's "Take up another Case File" (in both) and, in the phone's Coordinator sheet, the recorder
+// (Record, Pause or Resume, Stop); "Discussion notes" for everyone admitted (the notes panel).
 import { useContext, useState, type ReactNode } from "react";
-import { Check, ChevronLeft, ChevronRight, Copy, DoorOpen, Ellipsis, Gauge, Keyboard, LayoutGrid, LogOut, Maximize2, Minimize2, MonitorCheck, Pause, Phone, Play, RotateCcw, Settings2, ShieldCheck, StopCircle, Volume2, VolumeX, Vote } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Copy, DoorOpen, Ellipsis, FileText, FilePlus2, Gauge, Keyboard, LayoutGrid, LogOut, Maximize2, Minimize2, MonitorCheck, Pause, Phone, Play, RotateCcw, Settings2, ShieldCheck, StopCircle, Volume2, VolumeX, Vote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -20,6 +22,7 @@ import { DeviceSettings } from "./DevicePopover";
 import { PANEL_ICONS } from "./panels";
 import { RoundButton, panelKinds, panelWord } from "./CallBar";
 import { TimerBadge } from "../components/shared";
+import { RecordSheetRows } from "../recorder/RecordControl";
 import { cn } from "@/lib/utils";
 
 /** The room phone and the members who share theirs (no dialer in this build); today's CallButton content. */
@@ -94,8 +97,10 @@ function CoordinatorPart({ close, heading = true }: { close: () => void; heading
       <SheetRow icon={ChevronLeft} onClick={x.previous} disabled={x.idx <= 0 || x.goPending} testId="sheet-previous">Previous case</SheetRow>
       <SheetRow icon={ChevronRight} onClick={x.next} disabled={c.order.length === 0 || x.idx >= c.order.length - 1 || x.goPending} testId="sheet-next">{x.idx < 0 ? "First case" : "Next case"}</SheetRow>
       <SheetRow icon={StopCircle} onClick={() => void c.actions.endCase().catch(() => {})} disabled={!c.cid || x.endPending}>End case, ask for cards</SheetRow>
+      {c.inSession ? <SheetRow icon={FilePlus2} onClick={x.openTakeUp} testId="sheet-take-up">Take up another Case File</SheetRow> : null}
       <SheetRow icon={PANEL_ICONS.decision} onClick={() => openPanel("decision")}>Decision form</SheetRow>
       <SheetRow icon={PANEL_ICONS.people} onClick={() => openPanel("people")} hint={waiting ? `${waiting} waiting` : undefined}>People and the waiting room</SheetRow>
+      {c.inSession ? <><SheetHeading>Recorder, text only</SheetHeading><RecordSheetRows row={SheetRow} /></> : null}
       <div className="px-1 pt-2"><SheetRow icon={DoorOpen} tone="danger" onClick={() => { close(); c.actions.endMeeting(); }} testId="sheet-end-meeting">End meeting</SheetRow></div>
     </section>
   );
@@ -170,6 +175,7 @@ export function MoreMenu({ mode = "more" }: { mode?: "more" | "coordinator" }) {
                   ) : null}
                   <SheetHeading>Panels</SheetHeading>
                   {panelKinds(c).filter((k) => coordinator || k !== "chat").map((k) => <SheetRow key={k} icon={PANEL_ICONS[k]} onClick={() => { close(); c.setPanel(k); }} pressed={c.panel === k} testId={`sheet-panel-${k}`}>{panelWord(k)}</SheetRow>)}
+                  {c.admitted ? <SheetRow icon={FileText} onClick={() => x.openNotes(null)} pressed={c.panel === "notes"} testId="sheet-panel-notes">Discussion notes</SheetRow> : null}
                   {coordinator ? <CoordinatorPart close={close} /> : null}
                   <SheetHeading>This device</SheetHeading>
                   {c.videoAvailable && x.joined ? <SheetRow icon={Settings2} onClick={() => setDevices(true)}>Devices</SheetRow> : null}
@@ -226,6 +232,8 @@ export function MoreMenu({ mode = "more" }: { mode?: "more" | "coordinator" }) {
           {x.saveData ? <p className="px-2 pb-1.5 pl-8 text-xs text-muted-foreground" data-testid="save-data-note">{SAVE_DATA_NOTE}</p> : null}
           <DropdownMenuItem onSelect={x.openShortcuts}><Keyboard />Show shortcuts<DropdownMenuShortcut>?</DropdownMenuShortcut></DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setNumbers(true)} data-testid="call-button" aria-label={phones ? `Call by phone (${phones} number${phones === 1 ? "" : "s"})` : "Call by phone"}><Phone />Call by phone{phones ? <DropdownMenuShortcut>{phones}</DropdownMenuShortcut> : null}</DropdownMenuItem>
+          {c.admitted || coordinator ? <DropdownMenuItem onSelect={() => x.openNotes(null)} data-testid="menu-notes"><FileText />Discussion notes</DropdownMenuItem> : null}
+          {coordinator && c.inSession ? <DropdownMenuItem onSelect={x.openTakeUp} data-testid="menu-take-up"><FilePlus2 />Take up another Case File</DropdownMenuItem> : null}
           {member ? (
             <>
               <DropdownMenuSeparator />

@@ -4,7 +4,7 @@
 // with a handle and a visible Close. Esc closes it (the sheet by itself; on a laptop the shell's shortcut). The body follows the
 // stage's (light) theme. The badge and title helpers here feed the bar's panel buttons.
 import { useRef } from "react";
-import { Bot, ClipboardList, ListOrdered, MessageSquareText, Users, X, type LucideIcon } from "lucide-react";
+import { Bot, ClipboardList, FileText, ListOrdered, MessageSquareText, Users, X, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { StagePanel } from "../../components/Stage";
@@ -15,6 +15,7 @@ import { AgentsPanel, busyAgents } from "./AgentsPanel";
 import { ChatPanel, unansweredCount } from "./ChatPanel";
 import { DecisionPanel } from "./DecisionPanel";
 import { PeoplePanel } from "./PeoplePanel";
+import { NotesPanel } from "../../recorder/NotesPanel";
 
 type Kind = Exclude<PanelKind, null>;
 
@@ -24,11 +25,12 @@ export const PANEL_ICONS: Record<Kind, LucideIcon> = {
   agenda: ListOrdered,
   agents: Bot,
   decision: ClipboardList,
+  notes: FileText,
 };
 
 /** The laptop width of a panel: the Decision panel is wider so its six step tabs are not cut. */
 export function panelWidth(kind: PanelKind): string {
-  return kind === "decision" ? "w-[26rem]" : "w-[22rem]";
+  return kind === "decision" ? "w-[26rem]" : kind === "notes" ? "w-[24rem]" : "w-[22rem]";
 }
 
 /** The words of each panel's button and the screen reader's description of the sheet. */
@@ -38,6 +40,7 @@ export const PANEL_WORD: Record<Kind, { label: string; about: string }> = {
   agenda: { label: "Agenda", about: "The Case Files of this meeting in order." },
   agents: { label: "Agents", about: "The AI agents standing in for absent heads: support only, never a decision." },
   decision: { label: "Decision", about: "The decision record of the Case File on the screen, and the cards." },
+  notes: { label: "Discussion notes", about: "The AI notes of what was said about a Case File, each line with the exact words said. AI draft, not reviewed." },
 };
 
 type BadgeCtx = Pick<CallCtx, "state" | "cid" | "canManage" | "hands" | "agents">;
@@ -49,7 +52,7 @@ export function panelBadge(kind: PanelKind, ctx: BadgeCtx): number | undefined {
     case "people": return ctx.canManage ? ctx.state.attendance.filter((a) => a.status === "waiting").length : ctx.hands.size;
     case "chat": return unansweredCount(ctx.state.questions, ctx.cid);
     case "agents": return busyAgents(ctx.agents);
-    case "agenda": case "decision": return 0;
+    case "agenda": case "decision": case "notes": return 0;
     default: return undefined;
   }
 }
@@ -64,6 +67,7 @@ export function panelTitle(kind: PanelKind, ctx: TitleCtx): string {
     case "agenda": return `Agenda · ${ctx.order.length}`;
     case "agents": return `AI agents · ${ctx.agents.length}`;
     case "decision": return "Decision";
+    case "notes": return "Discussion notes";
     default: return "";
   }
 }
@@ -75,6 +79,7 @@ function PanelBody({ kind }: { kind: Kind }) {
     case "agenda": return <AgendaPanel />;
     case "agents": return <AgentsPanel />;
     case "decision": return <DecisionPanel />;
+    case "notes": return <NotesPanel />;
   }
 }
 

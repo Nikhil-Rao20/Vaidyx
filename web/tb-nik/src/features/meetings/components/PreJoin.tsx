@@ -1,5 +1,6 @@
 // Before joining a meeting with video: see your own camera, check the microphone level, pick a device, then "Join now" with the
-// camera and microphone as chosen (or join without video). The choice is kept for the session.
+// camera and microphone as chosen (or join without video). The choice is kept for the session. Meetings-v2 5.2: while the meeting is
+// recorded, "This meeting is being recorded as text. No audio is kept." above the join buttons.
 import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { Camera, CameraOff, Mic, MicOff, Settings2, Video, VideoOff } from "lucide-react";
@@ -9,8 +10,11 @@ import { MicLevel } from "@/components/MicLevel";
 import { isAudioTrack, isVideoTrack, listDevices, previewTracks, recallChoice, rememberChoice, stopTracks, type JoinChoice } from "@/lib/video";
 import type { LocalTrack } from "livekit-client";
 import { cn } from "@/lib/utils";
+import { RecordingNotice } from "../recorder/notice";
 
-export function PreJoin({ title, subtitle, onJoin, onSkip, allowSkip = true }: { title: string; subtitle?: string; onJoin: (c: JoinChoice) => void; onSkip?: () => void; allowSkip?: boolean }) {
+export function PreJoin({ title, subtitle, onJoin, onSkip, allowSkip = true, recording }: { title: string; subtitle?: string; onJoin: (c: JoinChoice) => void; onSkip?: () => void; allowSkip?: boolean;
+  /** The meeting recorder's state (off, on, paused): the notice shows while on or paused. */
+  recording?: string | null }) {
   const remembered = recallChoice();
   const [cam, setCam] = useState(remembered?.cam ?? true);
   const [mic, setMic] = useState(remembered?.mic ?? true);
@@ -83,12 +87,13 @@ export function PreJoin({ title, subtitle, onJoin, onSkip, allowSkip = true }: {
               </label>
             </div>
           ) : null}
+          <RecordingNotice state={recording} />
           {err ? <p role="alert" className="rounded-md bg-bad-soft px-3 py-2 text-sm text-bad">{/[.!?]$/.test(err.trim()) ? err.trim() : `${err.trim()}.`} You can still join and follow the shared screen.</p> : null}
           <div className="flex flex-wrap items-center gap-2">
             <Button size="lg" className="h-11 rounded-full px-6" onClick={() => join(true)} data-testid="prejoin-join"><Video className="size-4" />Join now</Button>
             {allowSkip ? <Button size="lg" variant="ghost" className="h-11 rounded-full text-stage-fg hover:bg-stage-raised hover:text-stage-fg" onClick={() => join(false)}><VideoOff className="size-4" />Join without video</Button> : null}
           </div>
-          <p className="text-xs text-stage-muted">Video and sound stay on the hospital's own server. Nothing is recorded.</p>
+          <p className="text-xs text-stage-muted">Video and sound stay on the hospital's own server. No audio is ever kept.</p>
         </div>
       </motion.div>
     </div>

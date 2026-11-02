@@ -22,9 +22,15 @@
 // Esc, voices off, the case changing, Leave and the meeting ending stop it. A browser that blocks sound until a tap shows
 // "Tap to allow agent voices". The coordinator's agent actions (add, remove, members may ask) and everyone's (listening, present
 // your points, stop for everyone) go through the meeting API like the other actions.
+// Meetings-v2 3.4: the coordinator takes up a Case File that is not on the agenda (TakeUpDialog: added as taken up during the meeting and
+// put on the floor). Meetings-v2 5.2: the recorder that keeps no audio: the coordinator's Record, Pause, Resume and Stop in the top
+// bar and the capture in this browser (recorder/useRecorder.ts; never on a member's screen or the room screen), the red "Recording:
+// text only, no audio kept" line on every screen while on, and before the case on the floor changes or ends the last words are posted
+// first (so they are stored under that Case File). Meetings-v2 5.3: "Discussion notes written for <patient>" for the coordinator when
+// a "notes" event comes, and the notes panel ("Read the notes", the More menu) for the coordinator and the members.
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, Camera, CameraOff, LogOut, Maximize2, Mic, MicOff, Minimize2, MonitorUp, Volume2, VolumeX, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -55,6 +61,10 @@ import { StageContent } from "./StageContent";
 import { Strip } from "./Strip";
 import { PresentDialog, markPresentAsked, presentAsked } from "./PresentDialog";
 import { SidePanel } from "./panels";
+import { TakeUpDialog } from "./TakeUpDialog";
+import { useRecorder } from "../recorder/useRecorder";
+import { RecorderLine, RecordingBadge } from "../recorder/RecordControl";
+import { NotesWrittenLine, notesKey } from "../recorder/NotesPanel";
 import { cn } from "@/lib/utils";
 
 /** What the shell needs of the live channel (useMeetingLive's result; the control view builds it from its props). */
@@ -98,6 +108,7 @@ export function meetingEnded(status: string | null | undefined): boolean {
  * conducts without joining by code); people only, so a room screen ("<user>#room") never counts. Pure. */
 export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvailable, onJoinVideo, events }: CallShellProps) {
   const nav = useNavigate();
+  const qc = useQueryClient();
   const s = live.state;
   const stateRef = useRef(s);
   stateRef.current = s;
@@ -174,6 +185,10 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
   const [helpOpen, setHelpOpen] = useState(false);
   const [endOpen, setEndOpen] = useState(false);
   const [menu, setMenu] = useState<ShellExtras["menu"]>(null);
+  const [takeUpOpen, setTakeUpOpen] = useState(false);
+  const [notesCase, setNotesCase] = useState<string | null>(null);
+  const [notesNote, setNotesNote] = useState<{ caseId: string; lines: number } | null>(null);
+  const notesSeen = useRef(new Map<string, string>());
   // the minutes the running timer was set to, else the agenda row's: a reload keeps a paused 15-minute timer (review finding 11)
   const seedMinutes = () => { const t = s.current?.timer?.total; return t ? Math.round(t / 60) : row?.minutes ?? s.meeting.minutes_per_case ?? 10; };
   const [minutes, setMinutes] = useState<number>(seedMinutes);
@@ -208,6 +223,18 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
     if (ev.type === "reaction") { cs.addReaction({ user: String(ev.user ?? ""), name: ev.name as string | undefined, kind: String(ev.kind ?? ""), at: ev.at as string | undefined }); return; }
     if (ev.type === "decision") { cs.markSaved(); return; }
     if (ev.type === "ended") { speaker.stopAll(); announce("The meeting has ended."); return; }
+    if (ev.type === "notes") {
+      // the notes of a Case File were written, edited or reviewed: the panel reads them again; a new build is told to the coordinator
+      void qc.invalidateQueries({ queryKey: notesKey(mid) });
+      const c = String(ev.case_id ?? "");
+      const at = String(ev.generated_at ?? "");
+      const lines = typeof ev.lines === "number" ? ev.lines : 0;
+      if (c && at && notesSeen.current.get(c) !== at) {
+        notesSeen.current.set(c, at);
+        if (variant === "coordinator" && lines > 0) { setNotesNote({ caseId: c, lines }); announce("Discussion notes were written for a Case File."); }
+      }
+      return;
+    }
     if (variant !== "member") return;
     if (ev.type === "end_case") {
       const c = String(ev.case_id ?? "");
@@ -220,7 +247,7 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
         announce("The coordinator asks for your card on this case.");
       }
     }
-  }, [announce, cs.addReaction, cs.markSaved, variant, myUser, speaker]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [announce, cs.addReaction, cs.markSaved, variant, myUser, speaker, qc, mid]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!events) return undefined;
     events.current = onEvent;
@@ -235,6 +262,14 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
 
   // ---- actions -----------------------------------------------------------------------------------------------------------
   const refresh = useCallback(() => { void live.refresh(); }, [live]);
+
+  // ---- the recorder (meetings-v2 5.2): the coordinator's control view only; members and the room screen never capture ------------
+  const recorder = useRecorder({
+    mid, enabled: conduct && canManage, recording: s.recording, inSession,
+    room: rawVideo.room, videoStatus: rawVideo.status, videoWanted: videoOn, micOn: rawVideo.micOn, dictating,
+    attendance: s.attendance, me: myUser, tick: rawVideo.tick, announce, refresh,
+  });
+  const cutFirst = conduct && canManage ? recorder.cut : null;
   const run = useCallback(async <T,>(fn: () => Promise<T>, said?: string | ((r: T) => string)): Promise<T> => {
     setError(null);
     try {
@@ -258,9 +293,9 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
       for (const a of list) await admit(mid, a.user);
       return list.length;
     }, (n) => (n === 1 ? "Admitted." : `Admitted ${n} people.`)),
-    go: (caseId) => run(() => goM.mutateAsync({ caseId }), "Next case on the screen."),
+    go: (caseId) => run(async () => { await cutFirst?.(); return goM.mutateAsync({ caseId }); }, "Next case on the screen."),
     timer: (action, m) => run(() => timerM.mutateAsync({ action, minutes: action === "stop" ? undefined : m ?? minutes }), action === "start" ? "Timer started." : action === "stop" ? "Timer stopped." : "Timer reset."),
-    endCase: () => (cid ? run(() => endM.mutateAsync(cid), (r) => (r?.cards_requested?.length ? `Cards asked of ${r.cards_requested.length} board heads.` : "Discussion ended.")) : Promise.reject(new Error("No case on the screen."))),
+    endCase: () => (cid ? run(async () => { await cutFirst?.(); return endM.mutateAsync(cid); }, (r) => (r?.cards_requested?.length ? `Cards asked of ${r.cards_requested.length} board heads.` : "Discussion ended.")) : Promise.reject(new Error("No case on the screen."))),
     endMeeting: () => setEndOpen(true),
     ask: (text, role) => { if (role) primeVoices(); return run(() => askQuestion(mid, text, role), "Question sent to the shared screen."); },
     hand: (raised) => run(() => handM.mutateAsync(raised), raised ? "Hand raised." : "Hand lowered."),
@@ -329,8 +364,9 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
   };
   const video: CallVideo = { ...rawVideo, toggleShare: mayShare || shareOn ? toggleShare : undefined };
 
-  const next = () => { if (order.length && idx < order.length - 1 && !goM.isPending) void actions.go(order[idx + 1].case_id).catch(() => {}); };
-  const previous = () => { if (idx > 0 && !goM.isPending) void actions.go(order[idx - 1].case_id).catch(() => {}); };
+  const moving = goM.isPending || recorder.busy === "cut";
+  const next = () => { if (order.length && idx < order.length - 1 && !moving) void actions.go(order[idx + 1].case_id).catch(() => {}); };
+  const previous = () => { if (idx > 0 && !moving) void actions.go(order[idx - 1].case_id).catch(() => {}); };
 
   const ctx: CallCtx = {
     mid, variant, state: s, me: myUser, cid, row, order, follow, expert,
@@ -347,13 +383,17 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
   const cardAsked = member && !!cid && (s.ended ?? []).includes(cid) && !!(s.can?.card || s.can?.card_required);
   const extras: ShellExtras = {
     joined: room || !!joinChoice, idx, minutes, setMinutes, next, previous, openShortcuts: () => setHelpOpen(true), cardAsked,
-    handPending: handM.isPending, goPending: goM.isPending, timerPending: timerM.isPending, endPending: endM.isPending, presencePending: presenceM.isPending,
+    handPending: handM.isPending, goPending: moving, timerPending: timerM.isPending, endPending: endM.isPending || recorder.busy === "cut", presencePending: presenceM.isPending,
     menu, setMenu, saveData, setSaveData,
+    recorder: conduct && canManage ? recorder : null,
+    openTakeUp: () => { setMenu(null); setTakeUpOpen(true); },
+    openNotes: (caseId) => { setMenu(null); setNotesCase(caseId ?? null); cs.setPanel("notes"); },
+    notesCase,
   };
   useShortcuts(ctx, { openHelp: () => setHelpOpen(true), next, previous });
 
   // Phone: the controls fade after 4 s without a touch, except while something needs them.
-  const holdControls = ended || !!cs.panel || !!menu || helpOpen || endOpen || !!card || presentAsk || ctx.hands.has(myUser) || dictating || shareOn || !!s.presenting;
+  const holdControls = ended || !!cs.panel || !!menu || helpOpen || endOpen || !!card || presentAsk || takeUpOpen || ctx.hands.has(myUser) || dictating || shareOn || !!s.presenting;
   const controls = useControlsAutoHide(phone && !room, holdControls);
   const landscape = phone && !room && sideways;
   const fade = cn("transition-opacity duration-300 focus-within:pointer-events-auto focus-within:opacity-100", controls.hidden && "pointer-events-none opacity-0");
@@ -372,6 +412,8 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
         <StageFrame testId={testId} attrs={attrs}>
           {liveNode}
           {phone && !room ? <div className={fade} data-testid="top-controls"><TopBar /></div> : <TopBar />}
+          {/* the recorder's line on every screen while on: never faded, the room reads it on the projector (meetings-v2 5.2) */}
+          <RecordingBadge />
           {room ? <RoomBody videoOn={videoOn} liveText={liveText} ended={ended} voiceChip={voiceChip} /> : (
             <section aria-label="Call" className={cn("flex min-h-0 flex-1 gap-3 p-2 lg:p-3", phone && !landscape && "flex-col overflow-y-auto", landscape && "gap-2")}>
               {desktop ? <AgendaRail /> : null}
@@ -385,6 +427,8 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
                 </div>
                 {(phone && !landscape) || (desktop && cs.panel) ? <div className="shrink-0"><Strip orientation="row" max={phone ? 8 : 10} /></div> : null}
                 {conduct ? <AdmitToast /> : null}
+                {conduct ? <RecorderLine /> : null}
+                {conduct && notesNote ? <NotesWrittenLine caseId={notesNote.caseId} lines={notesNote.lines} onClose={() => setNotesNote(null)} /> : null}
                 <AnimatePresence>
                   {liveText || cs.savedNow ? (
                     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
@@ -402,6 +446,7 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
           {room ? null : <ShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} coordinator={canManage} present={!!video.toggleShare} />}
           {mayShare ? <PresentDialog open={presentAsk} onOpenChange={setPresentAsk} onShare={() => { markPresentAsked(mid); setPresentAsk(false); void rawToggleShare?.(); }} /> : null}
           {canManage ? <EndMeetingDialog open={endOpen} onOpenChange={setEndOpen} /> : null}
+          {canManage && inSession ? <TakeUpDialog open={takeUpOpen} onOpenChange={setTakeUpOpen} mid={mid} agenda={s.agenda} beforeMove={cutFirst ?? undefined} onDone={(name) => { announce(`${name} is taken up and on the screen now.`); refresh(); }} /> : null}
           {card ? <CardDialog mid={mid} caseId={card.caseId} patientLine={card.patientLine} required={!!s.can?.card_required} open onOpenChange={(o) => { if (!o) setCard(null); }} onSent={() => announce("Card sent.")} /> : null}
         </StageFrame>
       </ShellContext.Provider>

@@ -327,7 +327,7 @@ test("two people in a meeting with video, chat, case flow and the ending", async
     await expect(doc.page.getByTestId("board-follow")).toContainText("Following");
     await expect(mdt.page.getByTestId("board-question")).toBeVisible({ timeout: 20_000 });
     await expect(doc.page.getByTestId("board-question")).toBeVisible({ timeout: 20_000 });
-    await expect(mdt.page.getByTestId("record-placeholder").getByRole("button")).toBeDisabled();
+    await expect(mdt.page.getByTestId("record")).toBeEnabled();  // meetings-v2 5.2: the recorder, off until the coordinator presses it
     await boardShot(mdt.page, "coordinator-summary", LAPTOP);
     await boardShot(doc.page, "member-following-summary", LAPTOP);
     const viewPosted = mdt.page.waitForResponse((r) => r.request().method() === "POST" && r.url().endsWith(`/meetings/${mid}/view`));

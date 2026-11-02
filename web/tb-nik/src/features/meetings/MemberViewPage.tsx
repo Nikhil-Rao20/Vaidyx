@@ -6,6 +6,8 @@
 // loading, missing, not joined, waiting to be admitted, and the pre-join.
 // Voice (night-v3 4.4): the question box takes dictation; while the member dictates in the call, the call microphone is muted so
 // the room does not hear it twice, and it comes back after (only if it was on); the shell keeps that guard.
+// Meetings-v2 5.2: while the coordinator records the meeting as text, the waiting room and the pre-join say so; in the call the red
+// "Recording: text only, no audio kept" line shows (the shell). A member's screen never captures anything.
 import { useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { motion } from "motion/react";
@@ -20,6 +22,7 @@ import { LiveDot } from "./components/shared";
 import { CallShell } from "./call/CallShell";
 import { EmptyState, ErrorState, SkeletonLines, fmtDate, useAnnounce } from "@/features/casefile/components/common";
 import { useLightForMeeting } from "@/lib/appearance";
+import { RecordingNotice } from "./recorder/notice";
 
 export default function MemberViewPage() {
   useLightForMeeting();  // the meeting is always light (owner, 2 Nov 2026)
@@ -75,6 +78,7 @@ export default function MemberViewPage() {
             <span className="relative mx-auto mb-4 grid size-14 place-items-center rounded-full bg-stage-raised"><span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/30" /><Users className="relative size-6 text-primary" /></span>
             <h1 className="text-xl text-stage-fg">Waiting for the coordinator to admit you</h1>
             <p className="mt-1 text-sm text-stage-muted">Keep this page open; it moves on by itself.</p>
+            <RecordingNotice state={s.recording?.state} className="mt-4 text-left" />
           </motion.div>
         </main>
         <ControlBar right={<span className="text-xs text-stage-muted">{s.meeting.room ?? ""}</span>}>
@@ -85,7 +89,7 @@ export default function MemberViewPage() {
   }
 
   if (videoAvailable && !choice) {
-    return <PreJoin title={`Tumour Board, ${fmtDate(s.meeting.date)}${s.meeting.time ? ` at ${s.meeting.time}` : ""}`} subtitle={row ? `On the screen now: ${row.patient_line}` : "Check your camera and microphone, then join."} onJoin={(c) => setChoice(c)} onSkip={() => setChoice("skipped")} />;
+    return <PreJoin title={`Tumour Board, ${fmtDate(s.meeting.date)}${s.meeting.time ? ` at ${s.meeting.time}` : ""}`} subtitle={row ? `On the screen now: ${row.patient_line}` : "Check your camera and microphone, then join."} onJoin={(c) => setChoice(c)} onSkip={() => setChoice("skipped")} recording={s.recording?.state} />;
   }
 
   return (

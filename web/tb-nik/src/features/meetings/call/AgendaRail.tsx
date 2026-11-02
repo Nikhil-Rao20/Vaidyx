@@ -4,16 +4,20 @@
 // for Done the minutes it took when known. The presenter under the current row. The coordinator clicks a row to put that case on the
 // screen. Under 1280 px (and while a side panel is open under 1536 px) it folds to a column of numbers; a button opens it. The quorum
 // line (QuorumLine compact) sits at its foot when the server sends one.
+// Meetings-v2 3.4: a Case File taken up during the meeting is marked "Taken up"; the coordinator's "Take up another Case File" sits at
+// the rail's foot while the meeting is in session (the search dialog lives in the shell, TakeUpDialog.tsx).
 // The room screen (night-v3 5.5, research/04 section 6.4) has its own look (RoomAgenda): the number, the patient line and the word
 // (Done, Now, Next, Later) in 20 px type, no click, no fold button; folded to the numbers under 1600 px; "+n more" past ROOM_ROWS.
-import { useEffect, useState } from "react";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { useContext, useEffect, useState } from "react";
+import { FilePlus2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { AgendaRow, MeetingState } from "@/lib/live";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { useCall } from "./context";
 import { fmtClock } from "../components/shared";
 import { fmtMinutes, presenterOf, remainingOf, rowElapsed, spokenClock, useCaseClock, type ClockTone } from "./CaseFlow";
 import { QuorumLine } from "./QuorumLine";
+import { ShellContext } from "./useCallState";
+import { TAKEN_UP_WORD, takenUp } from "./TakeUpDialog";
 import { cn } from "@/lib/utils";
 
 export type RowState = "done" | "now" | "next" | "later" | "not_ready";
@@ -111,6 +115,7 @@ export function AgendaRail({ className, room }: { className?: string; room?: boo
 
 function CallAgendaRail({ className }: { className?: string }) {
   const c = useCall();
+  const x = useContext(ShellContext);
   const wide = useMediaQuery("(min-width: 1280px)");
   const roomy = useMediaQuery("(min-width: 1536px)");
   // Open from 1280 px; folded while a side panel is open below 1536 px so the stage keeps its width. The button overrides it.
@@ -150,7 +155,8 @@ function CallAgendaRail({ className }: { className?: string }) {
           const timeSaid = now
             ? [clock.elapsed > 0 || clock.timer ? `${spokenClock(clock.elapsed)} spent` : "", remainingSaid, mins ? `${mins} minutes planned` : ""].filter(Boolean).join(", ")
             : st === "done" ? (took ? `took ${took}` : "") : mins && st !== "not_ready" ? `${mins} minutes planned` : "";
-          const label = `${n ? `${n}. ` : ""}${line}, ${word}${timeSaid ? `, ${timeSaid}` : ""}${presenter ? `, presenter ${presenter}` : ""}`;
+          const taken = st !== "not_ready" && takenUp(r);
+          const label = `${n ? `${n}. ` : ""}${line}, ${word}${taken ? `, ${TAKEN_UP_WORD.toLowerCase()} during the meeting` : ""}${timeSaid ? `, ${timeSaid}` : ""}${presenter ? `, presenter ${presenter}` : ""}`;
           const clickable = coordinator && st !== "not_ready" && !now;
           const times = now ? (
             <>
@@ -166,13 +172,14 @@ function CallAgendaRail({ className }: { className?: string }) {
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm">{line}</span>
                 <span className="flex flex-wrap items-center gap-x-1.5 text-[11px]"><span className={cn("truncate font-medium", TONE[st])}>{word}</span>{times}</span>
+                {taken ? <span className="mt-0.5 inline-block rounded-full bg-stage-raised px-1.5 text-[11px] font-medium text-stage-fg ring-1 ring-stage-line" data-testid="rail-taken-up" title="Taken up during the meeting: it was not on the planned agenda">{TAKEN_UP_WORD}</span> : null}
                 {presenter ? <span className="block truncate text-[11px] text-stage-muted" data-testid="rail-presenter">Presenter: {presenter}</span> : null}
               </span>
             </>
           ) : <span className={cn("w-full text-center text-sm tabular-nums", TONE[st], now && remaining && remaining.tone !== "normal" && CLOCK_TONE[remaining.tone])}>{n ?? "·"}</span>;
           const cls = cn("flex w-full items-start gap-1.5 rounded-lg px-1.5 py-1.5 text-left outline-none", st === "now" && "bg-stage-raised ring-1 ring-primary/60", st === "not_ready" && "text-stage-muted", clickable && "hover:bg-stage-raised focus-visible:ring-2 focus-visible:ring-primary");
           return (
-            <li key={r.case_id} aria-current={st === "now" ? "true" : undefined} data-state={st}>
+            <li key={r.case_id} aria-current={st === "now" ? "true" : undefined} data-state={st} data-taken-up={taken ? "true" : undefined}>
               {clickable
                 ? <button type="button" className={cls} onClick={() => void c.actions.go(r.case_id).catch(() => {})} title={`Put this case on the screen: ${line}`} aria-label={`Put on the screen: ${label}`}>{inner}</button>
                 : <div className={cls} title={label} aria-label={open ? undefined : label}>{inner}</div>}
@@ -180,6 +187,14 @@ function CallAgendaRail({ className }: { className?: string }) {
           );
         })}
       </ol>
+      {coordinator && c.inSession ? (
+        <div className={cn("shrink-0 border-t border-stage-line p-1.5", !open && "flex justify-center")}>
+          <button type="button" onClick={x.openTakeUp} title="Take up another Case File: search one that is not on this agenda and put it on the screen" aria-label="Take up another Case File"
+            className={cn("flex items-center gap-1.5 rounded-lg text-sm text-stage-fg outline-none hover:bg-stage-raised focus-visible:ring-2 focus-visible:ring-primary", open ? "w-full px-1.5 py-1.5 text-left" : "size-8 justify-center")} data-testid="rail-take-up">
+            <FilePlus2 className="size-4 shrink-0 text-stage-muted" aria-hidden />{open ? <span className="min-w-0 truncate">Take up another Case File</span> : null}
+          </button>
+        </div>
+      ) : null}
       {q && open ? (
         <div className="scroll-thin max-h-56 shrink-0 overflow-y-auto border-t border-stage-line p-2.5" data-testid="rail-quorum">
           <QuorumLine compact />

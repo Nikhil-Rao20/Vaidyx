@@ -2,8 +2,11 @@
 // state (Done with the outcome, Now, Next, Later, Not ready), its time as the agenda rail shows it (planned minutes; for Now the time
 // spent and what is left, amber under 2 minutes and "time up" at 0; for Done the minutes it took), "waiting on Dr X" and the
 // presenter; the coordinator clicks a row to put that case on the floor. The not-ready Case Files are listed greyed at the end.
-// "Started" at the foot; on a phone (no rail) the quorum line too.
-import { Fragment, type ReactNode } from "react";
+// "Started" at the foot; on a phone (no rail) the quorum line too. Meetings-v2 3.4: "Taken up" on a Case File taken up during the
+// meeting, and the coordinator's "Take up another Case File" (the phone has no rail).
+import { Fragment, useContext, type ReactNode } from "react";
+import { FilePlus2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import type { AgendaRow, MeetingOutcome } from "@/lib/live";
 import { StatusChip, fmtDateTime, type ChipKind } from "@/features/casefile/components/common";
@@ -13,6 +16,8 @@ import { useCall } from "../context";
 import { fmtClock } from "../../components/shared";
 import { fmtMinutes, presenterOf, remainingOf, rowElapsed, useCaseClock, type ClockTone } from "../CaseFlow";
 import { QuorumLine } from "../QuorumLine";
+import { ShellContext } from "../useCallState";
+import { TAKEN_UP_WORD, takenUp } from "../TakeUpDialog";
 
 export type AgendaStateKind = "done" | "now" | "next" | "later" | "not_ready";
 export interface AgendaState { kind: AgendaStateKind; word: string }
@@ -43,6 +48,7 @@ const CLOCK_TONE: Record<ClockTone, string> = { normal: "text-foreground", low: 
 
 export function AgendaPanel() {
   const ctx = useCall();
+  const x = useContext(ShellContext);
   const { state: s, order, cid, canManage } = ctx;
   const act = usePanelAction();
   const notReady = s.agenda.not_ready ?? [];
@@ -67,6 +73,7 @@ export function AgendaPanel() {
     if (presenter) parts.push(`Presenter: ${presenter}`);
     if (r.waiting_on) parts.push(`waiting on ${r.waiting_on.name}`);
     if (greyed && r.reason) parts.push(r.reason);
+    if (!greyed && takenUp(r)) parts.push(<span className="font-medium text-foreground" data-testid="agenda-taken-up">{TAKEN_UP_WORD} during the meeting</span>);
     return (
       <li key={r.case_id} className={cn("rounded-md px-2 py-1.5", now && "bg-secondary", greyed && "opacity-60")} aria-current={now ? "true" : undefined} data-case={r.case_id}>
         <div className="flex items-center gap-2 text-sm">
@@ -94,6 +101,7 @@ export function AgendaPanel() {
         </section>
       ) : null}
       {act.error ? <p role="alert" className="text-xs text-bad">{act.error}</p> : null}
+      {conduct && ctx.inSession ? <Button size="sm" variant="outline" className={cn(ctx.phone && "min-h-11")} onClick={x.openTakeUp} data-testid="agenda-take-up"><FilePlus2 className="size-4" />Take up another Case File</Button> : null}
       {ctx.phone && s.quorum ? <section className="border-t border-border pt-2" aria-label="Quorum"><QuorumLine /></section> : null}
       {s.meeting.started_at ? <p className="border-t border-border pt-2 text-xs text-muted-foreground">Started {fmtDateTime(s.meeting.started_at)}</p> : null}
     </div>

@@ -83,14 +83,14 @@ test.describe("Meetings", () => {
     const live = await open(page, `/meetings/${MID}`, { wait: "control-view", state: meetingState("in_session") });
     await expect(page.getByTestId("waiting-banner")).toContainText("Kiran Shetty");
     // The mirrored laptop (D1): the Board view of the Case File on the floor in the middle, led from here; no slides; the Record button
-    // waits for the recorder (Phase 5).
+    // (meetings-v2 5.2) is ready while the meeting is in session.
     const board = page.getByTestId("board-view");
     await expect(board).toHaveAttribute("data-mode", "drive");
     await expect(board).toHaveAttribute("data-tab", "summary");
     await expect(page.getByTestId("board-question")).toContainText("breast conservation surgery");
     await expect(page.getByTestId("board-follow")).toContainText("You lead: everyone follows what you open.");
     await expect(page.getByTestId("shared-screen")).toHaveAttribute("data-stage", "board");
-    await expect(page.getByTestId("record-placeholder").getByRole("button", { name: /^Record/ })).toBeDisabled();
+    await expect(page.getByTestId("record")).toBeEnabled();  // meetings-v2 5.2: the recorder (meetings-recorder.spec.ts checks it)
     await expect(page.getByTestId("stage-tabs")).toHaveCount(0);
     await expect(page.getByTestId("slide")).toHaveCount(0);
     await expect(page.getByTestId("panel-case")).toHaveCount(0);
