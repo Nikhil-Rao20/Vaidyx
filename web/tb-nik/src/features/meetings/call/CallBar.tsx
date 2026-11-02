@@ -1,8 +1,9 @@
 // The bottom control bar of the call (research/04 section 6.8). Laptop: the call group in the middle (member: Mic, Camera, Present
 // (night-v3 5.2; never on a phone, where the browser cannot capture a screen), Raise hand, Reactions, More, then Leave apart; coordinator: Mic, Camera, Raise hand, Reactions,
-// Previous, Next case, Timer, End case, More, then End meeting), the side panel buttons on the right with their counts; the
-// coordinator's "Leave the controls" sits at the far left, apart from End meeting. Phone: five buttons (mic, camera, hand, chat or Coordinator, more); the rest is in
-// the More sheet. Every button has a name, a tooltip with its key and aria-pressed on the toggles.
+// Previous, Next case, Timer, End case, More, then End meeting), the side panel buttons on the right with their counts and their words
+// (meetings-v2 2.5: the coordinator's panels are People, Chat, Agents and Decision; the agenda is the rail at the left); the
+// coordinator's "Leave the controls" sits at the far left, apart from End meeting. Phone: five buttons (mic, camera, hand, chat or
+// Coordinator, more); the rest is in the More sheet. Every button has a name, a tooltip with its key and aria-pressed on the toggles.
 import { createContext, forwardRef, useContext, useState, type ButtonHTMLAttributes } from "react";
 import { Camera, CameraOff, ChevronDown, ChevronLeft, ChevronRight, Hand, LogOut, Mic, MicOff, MonitorUp, Pause, Play, Smile, StopCircle, Vote, DoorOpen } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -151,15 +152,16 @@ const PANEL_TITLE: Record<Exclude<PanelKind, null>, { label: string; title: stri
   chat: { label: "Chat", title: "Open chat and questions to the board (Ctrl+Alt+C)", keys: "Control+Alt+C" },
   people: { label: "People", title: "Show people (Ctrl+Alt+P)", keys: "Control+Alt+P" },
   agenda: { label: "Agenda", title: "Show the agenda (Ctrl+Alt+A)", keys: "Control+Alt+A" },
-  case: { label: "Case", title: "Show the case" },
   agents: { label: "Agents", title: "Show the agents" },
   decision: { label: "Decision", title: "Open the decision form" },
 };
 export const panelWord = (k: Exclude<PanelKind, null>) => (k === "chat" ? "Chat and questions" : PANEL_TITLE[k].label);
 
-/** The side panels this person may open, in the bar's order. */
-export function panelKinds(c: { agents: unknown[]; canManage: boolean; canRecord: boolean }): Array<Exclude<PanelKind, null>> {
-  const out: Array<Exclude<PanelKind, null>> = ["chat", "people", "agenda", "case"];
+/** The side panels this person may open, in the bar's order. The coordinator's laptop has the agenda rail beside the Board view, so
+ *  its bar leaves Agenda out (Ctrl+Alt+A still opens the panel); a phone has no rail and keeps it. */
+export function panelKinds(c: { agents: unknown[]; canManage: boolean; canRecord: boolean; phone?: boolean; variant?: string }): Array<Exclude<PanelKind, null>> {
+  const rail = !c.phone && c.variant === "coordinator" && c.canManage;
+  const out: Array<Exclude<PanelKind, null>> = rail ? ["chat", "people"] : ["chat", "people", "agenda"];
   if (c.agents.length) out.push("agents");
   if (c.canManage || c.canRecord) out.push("decision");
   return out;
@@ -170,7 +172,8 @@ function PanelButton({ kind, compact = true }: { kind: Exclude<PanelKind, null>;
   const t = PANEL_TITLE[kind];
   const badge = panelBadge(kind, c);
   const open = c.panel === kind;
-  return <RoundButton icon={PANEL_ICONS[kind]} label={badge ? `${t.label} ${badge}` : t.label} title={open ? `Close ${t.label.toLowerCase()}` : t.title} keys={t.keys} active={open} badge={badge || undefined} onClick={() => c.togglePanel(kind)} compact={compact} disabled={c.waiting && kind !== "people"} testId={`panel-${kind}`} />;
+  // the word under the button is the panel's name; its count is the bubble, and the button's name says both ("Chat 2")
+  return <RoundButton icon={PANEL_ICONS[kind]} label={t.label} aria-label={badge ? `${t.label} ${badge}` : t.label} title={open ? `Close ${t.label.toLowerCase()}` : t.title} keys={t.keys} active={open} badge={badge || undefined} onClick={() => c.togglePanel(kind)} compact={compact} disabled={c.waiting && kind !== "people"} testId={`panel-${kind}`} />;
 }
 
 function CardButton() {
@@ -222,7 +225,7 @@ export function CallBar() {
         <p className={cn("min-w-0 truncate text-xs", v.error ? "text-bad" : "text-stage-muted")} title={line} role={v.error ? "alert" : undefined} data-testid="bar-status">{line}</p>
       </>}
       right={<>
-        <div className="flex items-center gap-1" role="group" aria-label="Panels">{panelKinds(c).map((k) => <PanelButton key={k} kind={k} />)}</div>
+        <div className="flex items-center gap-1" role="group" aria-label="Panels">{panelKinds(c).map((k) => <PanelButton key={k} kind={k} compact={false} />)}</div>
       </>}
     >
       <DenseBar.Provider value={coordinator}>

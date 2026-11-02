@@ -40,3 +40,25 @@
   .board-view .text-\[0\.97rem\] { font-size: 1.0625rem; }
   .board-view .text-\[1\.05rem\] { font-size: 1.1875rem; }
 }
+
+/* The room screen (a separate projector PC, meetings-v2 2.5): the same Board view a step larger again, so the back of the room reads
+   it; nothing smaller than 18 px. Only on a wide screen: a narrow window keeps the sizes above. */
+@media (min-width: 1024px) {
+  .board-view.board-big {
+    --text-xs: 1.125rem;    /* 18 px */
+    --text-sm: 1.3125rem;   /* 21 px */
+    --text-base: 1.5rem;    /* 24 px */
+    --text-lg: 1.625rem;
+    --text-xl: 1.75rem;
+    --text-2xl: 2rem;
+    --text-3xl: 2.5rem;
+    font-size: 1.3125rem;
+  }
+  .board-view.board-big .quote-chip,
+  .board-view.board-big .text-\[10px\],
+  .board-view.board-big .text-\[11px\] { font-size: 1.125rem; }
+  .board-view.board-big .text-\[15px\],
+  .board-view.board-big .text-\[0\.95rem\],
+  .board-view.board-big .text-\[0\.97rem\] { font-size: 1.5rem; }
+  .board-view.board-big .text-\[1\.05rem\] { font-size: 1.625rem; }
+}

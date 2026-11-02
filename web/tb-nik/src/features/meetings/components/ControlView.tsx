@@ -1,8 +1,9 @@
 // The coordinator's view during a meeting (MeetingAgendaPage shows it while the meeting is in session), laid out as the same call as
-// the member view (call/CallShell.tsx, variant "coordinator"): the agenda rail, the slide tabs that change what the room sees, the
-// stage with the admit toast, the people and the agents, one side panel (People with the waiting room, Chat and questions, Agenda,
-// Case with the records and images, Agents, Decision with the form and the cards) and the control bar with the case moves, the
-// timer, End case and End meeting. The camera and microphone go through the pre-join first. While the coordinator dictates in the
+// the member view (call/CallShell.tsx, variant "coordinator"). The laptop is mirrored to the projector (meetings-v2 D1): the Board view
+// of the Case File on the floor large in the middle, led from here (every click moves the room and the remote members), the slim agenda
+// rail, the slim top bar with the timer and the Record placeholder, a narrow strip of people and agents, the admit line under the
+// stage, one side panel on demand (People with the waiting room, Chat and questions, Agents, Decision with the form and the cards)
+// and the control bar with the case moves, the timer, End case and End meeting. The camera and microphone go through the pre-join first. While the coordinator dictates in the
 // call, the call microphone is muted so the room does not hear it twice, and it comes back after (only if it was on).
 import { useState, type MutableRefObject } from "react";
 import { useSession } from "@/lib/session";

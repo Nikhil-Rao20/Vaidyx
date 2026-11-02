@@ -27,8 +27,8 @@ export const admit = (mid: string, user: string) => api.post(`${mUrl(mid)}/admit
 export const present = (mid: string, mode: "room" | "remote") => api.post(`${mUrl(mid)}/present`, { mode });
 export const startMeeting = (mid: string) => api.post(`${mUrl(mid)}/start`, {});
 export const endMeeting = (mid: string) => api.post(`${mUrl(mid)}/end`, {});
-export const setCurrent = (mid: string, case_id: string, slide?: number) => api.post(`${mUrl(mid)}/current`, { case_id, slide });
-export const openOnScreen = (mid: string, kind: "record" | "images" | "none", doc_id?: string) => api.post<{ opened: Opened | null }>(`${mUrl(mid)}/open`, { kind, doc_id });
+/** Put a Case File on the floor (the Board view starts on its Summary for everyone). */
+export const setCurrent = (mid: string, case_id: string) => api.post(`${mUrl(mid)}/current`, { case_id });
 /** The Board view's follow state (meetings-v2 2.2 / 2.4): the coordinator, or the presenter of the Case File on the floor, moves every
  *  follower to a tab, a report at a page with its line highlighted, or the images (the server grants the admitted members the viewer).
  *  Refusals: 409 not_in_session, no_current, moved_on; 403 not_member, forbidden; 400 bad_tab, bad_record, bad_page, bad_quote; 404
@@ -76,6 +76,8 @@ export const endCase = (mid: string, cid: string) => api.post<{ case_id: string;
 export const sendCard = (mid: string, cid: string, agree: boolean, note?: string) => api.post<{ card: MemberCard }>(`${mUrl(mid)}/cases/${enc(cid)}/card`, { agree, note });
 export const getCards = (mid: string) => api.get<CardsResponse>(`${mUrl(mid)}/cards`);
 export const meetingDeckUrl = (mid: string) => `${mUrl(mid)}/deck`;
+/** The summary of the Case File on the floor with the patient's identity removed, for an outside expert only (security review #9): the
+ *  Board view reads the Case File itself for everyone else (meetings-v2 2.6). */
 export const getSlides = (mid: string, cid: string) => api.get<SlidesResponse>(`${mUrl(mid)}/cases/${enc(cid)}/slides`);
 
 // Old sessions, read-only.
@@ -84,10 +86,7 @@ export const getOldSession = (sid: string) => api.get<{ session: { id: string; d
 
 /** The hospital image viewer for a study, served through the app so the viewer stays same-origin. */
 export const ohifUrl = (studyUid: string) => `${TB}/pacs/ohif/viewer?StudyInstanceUIDs=${enc(studyUid)}`;
-/** One page of a record as a PNG (pages are 0-based in the API). */
-export const recordPageUrl = (cid: string, doc: string, page = 0) => `${TB}/cases/${enc(cid)}/documents/${enc(doc)}/file?render=1&page=${page}`;
-
-/** Only a same-origin path is put in an iframe on the shared screen. */
+/** Only a same-origin path is put in an iframe (the Board view's Images tab). */
 export function viewerSrc(o: Opened | null | undefined): string | null {
   if (!o) return null;
   const u = o.viewer_url ?? (o.kind === "images" ? o.url : undefined);

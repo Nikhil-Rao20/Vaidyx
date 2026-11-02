@@ -1,10 +1,11 @@
 // The top bar of the call: the Vaidyx mark, "Tumour Board · DD/MM/YYYY HH:MM" ("Conducting · ..." for the coordinator), the case
 // headline ("3 of 8: patient line") and the board question, the case timer (the coordinator opens its controls from it), the presenter
 // and quorum chips when the server sends them (the quorum chip opens the full quorum line), the live-channel dot, the video chip and,
-// for the coordinator, the room screen link.
+// for the coordinator, the Record button (meetings-v2 2.5: a placeholder, off, until the recorder of Phase 5 comes) and the room
+// screen link (for a hospital that drives the projector from another PC).
 import { useContext } from "react";
 import { Link } from "react-router-dom";
-import { ChevronDown, MonitorUp, Pause, Play, RotateCcw, Signal, SignalHigh, SignalLow, SignalMedium, Users, Video, VideoOff } from "lucide-react";
+import { ChevronDown, Circle, MonitorUp, Pause, Play, RotateCcw, Signal, SignalHigh, SignalLow, SignalMedium, Users, Video, VideoOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -60,7 +61,8 @@ function VideoChip() {
   const bad = v.status !== "connected" || v.quality === "poor" || v.quality === "lost";
   return (
     <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs", bad ? "bg-warn-soft text-warn" : "bg-stage-raised text-stage-muted")} role="status" aria-label={words} title={words} data-testid="video-chip" data-video-status={v.status}>
-      <Bars className="size-3.5" aria-hidden /><span className="hidden xl:inline">{words}</span>
+      {/* the coordinator's bar keeps the room for the case on the floor: the words only on a wide screen (the icon and its name stay) */}
+      <Bars className="size-3.5" aria-hidden /><span className={c.variant === "coordinator" ? "hidden 2xl:inline" : "hidden xl:inline"}>{words}</span>
     </span>
   );
 }
@@ -114,6 +116,20 @@ function QuorumChip({ room }: { room: boolean }) {
   );
 }
 
+/** The coordinator's Record button: shown where it will live, switched off until the meeting recorder is built (meetings-v2 Phase 5:
+ *  speech becomes text live, no audio is ever kept). */
+export const RECORD_SOON = "The meeting recorder is not switched on yet. When it comes, it keeps text only, never audio.";
+function RecordPlaceholder() {
+  return (
+    <span title={RECORD_SOON} className="hidden md:inline-flex" data-testid="record-placeholder" data-phase="5">
+      <Button size="sm" variant="outline" disabled aria-label="Record, not available yet" aria-describedby="record-soon" className="border-stage-line bg-transparent text-stage-fg">
+        <Circle className="size-3.5 fill-current text-stage-muted" aria-hidden />Record
+      </Button>
+      <span id="record-soon" className="sr-only">{RECORD_SOON}</span>
+    </span>
+  );
+}
+
 export function TopBar() {
   const c = useCall();
   const s = c.state;
@@ -126,7 +142,7 @@ export function TopBar() {
 
   return (
     <StageTopBar
-      left={<span className={cn("truncate text-stage-muted", room ? "text-sm" : "hidden text-sm sm:inline")} title={meetingLine(c, room || coordinator)}>{meetingLine(c, room || coordinator)}</span>}
+      left={<span className="hidden truncate text-sm text-stage-muted sm:inline" title={meetingLine(c, room || coordinator)}>{meetingLine(c, room || coordinator)}</span>}
       center={(
         <div className="min-w-0">
           {room ? <h1 className="truncate text-xl text-stage-fg lg:text-2xl">{headline}</h1> : <p className="truncate text-sm font-semibold text-stage-fg" data-testid="case-headline">{headline}</p>}
@@ -141,6 +157,7 @@ export function TopBar() {
           {q ? <QuorumChip room={room} /> : null}
           <LiveDot status={c.liveStatus} detail={c.liveDetail} className={c.phone && !room ? "hidden" : undefined} />
           {room ? null : <VideoChip />}
+          {coordinator ? <RecordPlaceholder /> : null}
           {coordinator ? <Button asChild size="sm" variant="ghost" className="hidden text-stage-fg hover:bg-stage-raised hover:text-stage-fg md:inline-flex"><Link to={`/meetings/${c.mid}/room`} target="_blank" rel="noopener" title="Opens the full-screen room screen in a new tab, for the room computer"><MonitorUp className="size-4" />Room screen</Link></Button> : null}
         </>
       )}

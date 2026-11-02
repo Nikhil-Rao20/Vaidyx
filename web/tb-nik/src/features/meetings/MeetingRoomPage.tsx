@@ -1,8 +1,8 @@
-// /meetings/:id/room: the room computer, on the projector, as the call shell's room variant (call/CallShell.tsx): the summary of the
-// case in a column on the left (a toggle, "Summary on the side", on by default), what the coordinator shares in the middle (a slide,
-// a record, the images), the remote members' cameras and the agents standing in on the right, the questions and the live decision
-// below. No control bar: a small bar at the bottom right (room microphone and camera, the summary column, the agent voices, full
-// screen, close). It joins the video room under its own identity ("<user>#room"); its microphone and camera stay off until the
+// /meetings/:id/room: a separate room computer on the projector (for a hospital that does not mirror the coordinator's laptop,
+// meetings-v2 D1), as the call shell's room variant (call/CallShell.tsx): the agenda column, the Board view of the Case File on the
+// floor in large type, always following the coordinator and taking no clicks, the remote members' cameras and the agents standing in
+// on the right, the questions and the live decision below. No control bar: a small bar at the bottom right (room microphone and
+// camera, the agent voices, full screen, close). It joins the video room under its own identity ("<user>#room"); its microphone and camera stay off until the
 // coordinator turns them on here, so the remote members see and hear the room.
 import { useRef } from "react";
 import { useParams } from "react-router-dom";

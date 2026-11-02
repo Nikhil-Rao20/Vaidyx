@@ -1,15 +1,17 @@
 // The call shell (night-v3 Phase 5, research/04 section 6): one in-call layout for the member view, the coordinator's control view
 // and the room screen. This file is the contract between the shell (CallShell.tsx), the stage and strip (StageContent.tsx,
 // Strip.tsx) and the side panels (panels/*.tsx): shared kinds, the context every piece reads, and the actions the shell wires.
+// Meetings-v2 2.5 and 2.6: the stage shows the Board view of the Case File on the floor (board/BoardView.tsx), led through the follow
+// state (board/useFollow.ts); no slides.
 import type { Room } from "livekit-client";
-import type { AgendaRow, AgentInfo, LiveStatus, MeetingState, Opened, ReactionEvent } from "@/lib/live";
+import type { AgendaRow, AgentInfo, LiveStatus, MeetingState, ReactionEvent } from "@/lib/live";
 import type { VideoStatus } from "@/lib/video";
-import type { Slide } from "../types";
+import type { Follow } from "../board/useFollow";
 
 export type CallVariant = "member" | "coordinator" | "room";
 
-/** One side panel at a time (null: none). */
-export type PanelKind = "people" | "chat" | "agenda" | "case" | "agents" | "decision" | null;
+/** One side panel at a time (null: none). The Case File itself is on the stage (the Board view), so there is no Case panel. */
+export type PanelKind = "people" | "chat" | "agenda" | "agents" | "decision" | null;
 
 /** Auto: stage plus strip when something is on the floor, a grid when nothing is. Speaker: the active speaker large. Grid: tiles
  * only. Spotlight: what the coordinator set (chosen by itself when a spotlight arrives and the person has no pin). */
@@ -63,10 +65,8 @@ export interface CallVideo {
 export interface CallActions {
   admit: (user: string) => Promise<unknown>;
   admitAll: () => Promise<unknown>;
-  /** Coordinator: put a case (and a slide) on the floor. */
-  go: (caseId: string, slide?: number) => Promise<unknown>;
-  /** Coordinator (or the case's presenter): a record page, the images, or back to the slide. */
-  open: (kind: "record" | "images" | "none", docId?: string) => Promise<unknown>;
+  /** Coordinator: put a Case File on the floor (the Board view starts on its Summary). */
+  go: (caseId: string) => Promise<unknown>;
   timer: (action: "start" | "stop" | "reset", minutes?: number) => Promise<unknown>;
   endCase: () => Promise<unknown>;
   /** Opens the End meeting confirmation. */
@@ -109,18 +109,11 @@ export interface CallCtx {
   row: AgendaRow | null;
   /** The agenda in order: for discussion then for noting. */
   order: AgendaRow[];
-  slides: Slide[];
-  slidesStatus: "idle" | "loading" | "error" | "ready";
-  slidesError?: unknown;
-  /** What the room shows (the coordinator's slide index). */
-  sharedSlide: number;
-  /** What my stage shows: the shared slide while following, else my own. */
-  shownSlide: number;
-  following: boolean;
-  setFollowing: (f: boolean) => void;
-  /** Member: look at another slide on my own (steps away); coordinator: changes the room's slide (actions.go). */
-  showSlide: (i: number) => void;
-  opened: Opened | null;
+  /** The Board view's follow state for this screen (useFollow): drive (the coordinator, or the presenter while presenting), follow,
+   *  or look around (a remote member, on this screen only). The room screen always follows. */
+  follow: Follow;
+  /** An outside expert: the Case File's read routes are closed to them; the stage shows the identity-stripped summary instead. */
+  expert: boolean;
   video: CallVideo;
   videoAvailable: boolean;
   /** The app's live channel (WebSocket) state, apart from the video. */

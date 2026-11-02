@@ -9,8 +9,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Track, type Participant, type Room } from "livekit-client";
 import type { TrackReference } from "@livekit/components-react";
-import { Images, Megaphone, MessageSquareText, MonitorOff, MonitorPlay, MonitorUp, MoreVertical, Pin, PinOff, Sparkles, Square, UserRoundMinus, X } from "lucide-react";
-import type { AgendaRow, AgentInfo, Attendee, MeetingState, Opened } from "@/lib/live";
+import { FileText, Images, Megaphone, MessageSquareText, MonitorOff, MonitorPlay, MonitorUp, MoreVertical, Pin, PinOff, Sparkles, Square, UserRoundMinus, X } from "lucide-react";
+import type { AgendaRow, AgentInfo, Attendee, MeetingState } from "@/lib/live";
 import { identityUser, isRoomScreen, videoExtras } from "@/lib/video";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { VaidyxIcon } from "@/components/Wordmark";
@@ -122,14 +122,13 @@ export type StageMode =
   | { kind: "spotlight"; keys: string[] }
   | { kind: "share" }
   | { kind: "grid" }
-  | { kind: "opened" }
-  | { kind: "slide" }
+  | { kind: "board" }
   | { kind: "floor" };
 
 /** What the main stage shows, in the order of research/04 section 6.6 (a person first when pinned or spotlighted, as Meet does; then
- * a screen someone presents (night-v3 5.2); then the speaker view, the grid, the opened item, the slide, and the grid when nothing is
- * on the floor). Pure. */
-export function stageMode(i: { layout: LayoutKind; pinned: string | null; spotlight: string[]; speakerKey: string | null; opened: Opened | null; cid: string | null; has: (key: string) => boolean; presenting?: string | null }): StageMode {
+ * a screen someone presents (night-v3 5.2); then the speaker view, the grid, the Board view of the Case File on the floor
+ * (meetings-v2 2.5), and the grid when nothing is on the floor). Pure. */
+export function stageMode(i: { layout: LayoutKind; pinned: string | null; spotlight: string[]; speakerKey: string | null; cid: string | null; has: (key: string) => boolean; presenting?: string | null }): StageMode {
   if (i.pinned && i.has(i.pinned)) return { kind: "person", keys: [i.pinned], why: "pinned" };
   if (i.presenting) return { kind: "share" };  // a share is for everyone: only a personal pin beats it on one's own screen (review M1)
   if (i.layout === "spotlight") {
@@ -138,8 +137,7 @@ export function stageMode(i: { layout: LayoutKind; pinned: string | null; spotli
   }
   if (i.layout === "speaker" && i.speakerKey && i.has(i.speakerKey)) return { kind: "person", keys: [i.speakerKey], why: "speaker" };
   if (i.layout === "grid") return { kind: "grid" };
-  if (i.opened && (i.opened.kind === "images" || i.opened.kind === "record")) return { kind: "opened" };
-  if (i.cid) return { kind: "slide" };
+  if (i.cid) return { kind: "board" };
   return { kind: "floor" };
 }
 
@@ -305,9 +303,8 @@ function useRecentSpeakers(): string[] {
 export function useStageMode(people: CallPerson[]): StageMode {
   const ctx = useCall();
   const speakerKey = useSpeakerKey(people);
-  const opened = ctx.variant === "member" && !ctx.following ? null : ctx.opened;
   const keys = new Set(people.map((p) => p.key));
-  return stageMode({ layout: ctx.layout, pinned: ctx.pinned, spotlight: ctx.spotlight ?? [], speakerKey, opened, cid: ctx.cid, has: (k) => keys.has(k), presenting: ctx.state.presenting ?? null });
+  return stageMode({ layout: ctx.layout, pinned: ctx.pinned, spotlight: ctx.spotlight ?? [], speakerKey, cid: ctx.cid, has: (k) => keys.has(k), presenting: ctx.state.presenting ?? null });
 }
 
 // ---- tiles ----------------------------------------------------------------------------------------------------------------
@@ -525,15 +522,17 @@ export function AgentCallTile({ agent, big, className }: { agent: AgentInfo; big
   );
 }
 
+/** The Board view's tabs in words, for the content tile. */
+const BOARD_TAB_WORD: Record<string, string> = { summary: "Summary", reports: "Reports", images: "Images", stage: "Stage and values" };
+
 /** The shared content as a tile (when a person is on the stage): what it is, and "Show" to put it back. */
 export function ContentTile({ className, big }: { className?: string; big?: boolean }) {
   const ctx = useCall();
-  const opened = ctx.variant === "member" && !ctx.following ? null : ctx.opened;
-  const slide = ctx.slides[ctx.shownSlide];
   const sharing = ctx.state.presenting ?? null;
+  const tab = ctx.follow.tab;
   const what = sharing ? `${presenterName(sharing, ctx.state.attendance ?? [], ctx.video.room)} is presenting`
-    : opened?.kind === "images" ? (opened.title || "The images") : opened?.kind === "record" ? (opened.title || "A record") : slide?.title ?? (ctx.cid ? "The slides" : "The shared screen");
-  const Icon = sharing ? MonitorUp : opened?.kind === "images" ? Images : MonitorPlay;
+    : ctx.cid ? (ctx.expert ? "The summary of the Case File" : `The Case File: ${BOARD_TAB_WORD[tab] ?? "Summary"}`) : "The shared screen";
+  const Icon = sharing ? MonitorUp : !ctx.cid ? MonitorPlay : tab === "images" ? Images : FileText;
   const show = () => { ctx.setPinned(null); ctx.setLayout("auto"); };
   return (
     <div className={cn("relative flex aspect-video flex-col justify-between overflow-hidden rounded-xl border border-stage-line bg-stage-panel p-2", className)} data-testid="content-tile" role="group" aria-label={`Shared screen: ${what}`}>
@@ -561,9 +560,9 @@ export function UnpinChip({ big }: { big?: boolean }) {
 
 /** The room screen's column: at most `max` remote tiles in two columns, "+n more" in words, then the agents in the meeting under
  * their own heading (at most four, then "+n more"). No menus, no scroll. */
-function RoomStrip({ people, agents, showContent, max, className }: { people: CallPerson[]; agents: AgentInfo[]; showContent: boolean; max: number; className?: string }) {
+function RoomStrip({ people, agents, showContent, max, maxAgents = 4, className }: { people: CallPerson[]; agents: AgentInfo[]; showContent: boolean; max: number; maxAgents?: number; className?: string }) {
   const cut = roomCut(people, max - (showContent ? 1 : 0));
-  const agentCut = roomCut(agents, 4);
+  const agentCut = roomCut(agents, maxAgents);
   return (
     <div className={cn("flex min-h-0 flex-col gap-3 overflow-hidden", className)} data-testid="tile-grid" data-orientation="column" aria-label="Remote members and agents">
       {people.length || showContent ? (
@@ -591,7 +590,7 @@ function RoomStrip({ people, agents, showContent, max, className }: { people: Ca
 
 /** The participant strip: a column beside the stage (laptop; small tiles for a phone in landscape), a swipe row (phone, or while a
  * panel is open), or the room screen's column. */
-export function Strip({ orientation, max, small, className }: { orientation: "row" | "column"; max?: number; small?: boolean; className?: string }) {
+export function Strip({ orientation, max, maxAgents, small, className }: { orientation: "row" | "column"; max?: number; /** the room screen's agent tiles before "+n more" (default 4) */ maxAgents?: number; small?: boolean; className?: string }) {
   const ctx = useCall();
   const people = useCallPeople();
   const agents = useCallAgents();
@@ -603,7 +602,7 @@ export function Strip({ orientation, max, small, className }: { orientation: "ro
   const limit = max ?? (orientation === "column" ? 8 : 12);
   const showContent = onStage.size > 0;
   const room = ctx.variant === "room";
-  if (room && orientation === "column") return <RoomStrip people={ordered} agents={agents} showContent={showContent} max={limit} className={className} />;
+  if (room && orientation === "column") return <RoomStrip people={ordered} agents={agents} showContent={showContent} max={limit} maxAgents={maxAgents} className={className} />;
   const shownPeople = ordered.slice(0, Math.max(0, limit - agents.length));
   const hidden = ordered.length - shownPeople.length;
   const cls = orientation === "column"

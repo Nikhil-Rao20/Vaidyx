@@ -82,7 +82,7 @@ function FollowBar({ mode, followingName, onLookAround, onBackToRoom, pending }:
   let words: ReactNode;
   let action: ReactNode = null;
   if (mode === "drive") {
-    words = <><MonitorUp className="size-5 shrink-0 text-brand" aria-hidden />You lead the Board view: everyone follows what you open.{pending ? <Loader2 className="size-4 animate-spin" aria-label="Sending" /> : null}</>;
+    words = <><MonitorUp className="size-5 shrink-0 text-brand" aria-hidden />You lead: everyone follows what you open.{pending ? <Loader2 className="size-4 animate-spin" aria-label="Sending" /> : null}</>;
   } else if (mode === "look") {
     words = <><Eye className="size-5 shrink-0" aria-hidden />You are looking around on your own. The room has not moved.</>;
     action = onBackToRoom ? <Button onClick={onBackToRoom} data-testid="board-back-to-room"><Users className="size-4" />Back to the room</Button> : null;
@@ -90,9 +90,10 @@ function FollowBar({ mode, followingName, onLookAround, onBackToRoom, pending }:
     words = <><Users className="size-5 shrink-0 text-brand" aria-hidden />Following {followingName || "the room"}</>;
     action = onLookAround ? <Button variant="outline" onClick={onLookAround} data-testid="board-look-around"><Eye className="size-4" />Look around</Button> : null;
   }
+  // beside the patient's line on a wide view (the tabs keep the whole width under it), under it on a narrow one
   return (
-    <div className={cn("flex min-w-0 flex-1 flex-wrap items-center justify-end gap-x-3 gap-y-2 rounded-lg px-3 py-1.5", mode === "look" ? "status-info" : "bg-muted/60")} data-testid="board-follow" data-mode={mode}>
-      <p role="status" className="flex min-w-[12rem] flex-1 items-center gap-2 text-sm font-medium text-foreground">{words}</p>
+    <div className={cn("flex w-full min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2 rounded-lg px-3 py-1.5 @3xl:w-auto @3xl:max-w-[24rem] @3xl:shrink-0", mode === "look" ? "status-info" : "bg-muted/60")} data-testid="board-follow" data-mode={mode}>
+      <p role="status" className="flex min-w-[10rem] flex-1 items-center gap-2 text-sm font-medium text-foreground">{words}</p>
       {action}
     </div>
   );
@@ -139,7 +140,10 @@ export function BoardView({ caseId, view, mode, onNavigate, followingName, onLoo
       {/* narrow (a phone): the header scrolls away with the content; wide (the projector): the header stays, the body scrolls */}
       <div ref={frame} className="scroll-thin flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto @3xl:overflow-visible" data-testid="board-frame">
         <header className="space-y-3">
-          <CaseLine cf={cf.data} steps={s} presenter={presenter} />
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+            <div className="min-w-0 flex-1 basis-[20rem]"><CaseLine cf={cf.data} steps={s} presenter={presenter} /></div>
+            <FollowBar mode={mode} followingName={followingName} onLookAround={onLookAround} onBackToRoom={onBackToRoom} pending={pending} />
+          </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <div role="tablist" aria-label="Board view" className="flex flex-wrap gap-2" onKeyDown={onTabKey}>
               {TABS.map((t, i) => {
@@ -155,7 +159,6 @@ export function BoardView({ caseId, view, mode, onNavigate, followingName, onLoo
                 );
               })}
             </div>
-            <FollowBar mode={mode} followingName={followingName} onLookAround={onLookAround} onBackToRoom={onBackToRoom} pending={pending} />
           </div>
           {error ? <p role="alert" className="rounded-md status-bad px-3 py-2 text-sm" data-testid="board-error">{error}</p> : null}
         </header>

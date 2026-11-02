@@ -2,7 +2,7 @@
 // phone and "I am in the room" / "I am remote" for a member. A dropdown on a laptop; on a phone a bottom sheet (85 % high, a visible
 // Close) that also carries what the five-button bar leaves out: reactions, the panels, the card and Leave (red, last). The phone's
 // Coordinator button opens the same sheet with the coordinator's part only: the case, the timer, Previous, Next case, End case,
-// the Decision form, the records, the waiting room and End meeting.
+// the Decision form, the waiting room and End meeting (the Case File itself is the Board view on the stage).
 // Night-v3 5.5: "Save data" in both (camera off, the remote video at the lower quality, remembered for this tab).
 import { useContext, useState, type ReactNode } from "react";
 import { Check, ChevronLeft, ChevronRight, Copy, DoorOpen, Ellipsis, Gauge, Keyboard, LayoutGrid, LogOut, Maximize2, Minimize2, MonitorCheck, Pause, Phone, Play, RotateCcw, Settings2, ShieldCheck, StopCircle, Volume2, VolumeX, Vote } from "lucide-react";
@@ -70,7 +70,7 @@ function SheetHeading({ children }: { children: ReactNode }) {
   return <h3 className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide text-stage-muted">{children}</h3>;
 }
 
-/** The coordinator's part: the case, the timer, the case moves, the decision, the records, the waiting room and End meeting. */
+/** The coordinator's part: the case, the timer, the case moves, the decision, the waiting room and End meeting. */
 function CoordinatorPart({ close, heading = true }: { close: () => void; heading?: boolean }) {
   const c = useCall();
   const x = useContext(ShellContext);
@@ -95,7 +95,6 @@ function CoordinatorPart({ close, heading = true }: { close: () => void; heading
       <SheetRow icon={ChevronRight} onClick={x.next} disabled={c.order.length === 0 || x.idx >= c.order.length - 1 || x.goPending} testId="sheet-next">{x.idx < 0 ? "First case" : "Next case"}</SheetRow>
       <SheetRow icon={StopCircle} onClick={() => void c.actions.endCase().catch(() => {})} disabled={!c.cid || x.endPending}>End case, ask for cards</SheetRow>
       <SheetRow icon={PANEL_ICONS.decision} onClick={() => openPanel("decision")}>Decision form</SheetRow>
-      <SheetRow icon={PANEL_ICONS.case} onClick={() => openPanel("case")}>Slides, records and images</SheetRow>
       <SheetRow icon={PANEL_ICONS.people} onClick={() => openPanel("people")} hint={waiting ? `${waiting} waiting` : undefined}>People and the waiting room</SheetRow>
       <div className="px-1 pt-2"><SheetRow icon={DoorOpen} tone="danger" onClick={() => { close(); c.actions.endMeeting(); }} testId="sheet-end-meeting">End meeting</SheetRow></div>
     </section>

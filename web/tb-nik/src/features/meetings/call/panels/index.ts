@@ -11,7 +11,6 @@ export {
   caseChipLabel, chatClosedReason, chatDays, chatSeenKey, chatTime, countUnread, newestAt, readChatSeen, unreadChat, writeChatSeen,
 } from "./ChatPanel";
 export { AgendaPanel, agendaRowState, isDone, outcomeWord, type AgendaState, type AgendaStateKind } from "./AgendaPanel";
-export { CasePanel, mayOpen } from "./CasePanel";
 export { AgentsPanel, AGENT_BUSY, busyAgents } from "./AgentsPanel";
 export { DecisionPanel, cardsLine } from "./DecisionPanel";
 export { handOrder, whereWord } from "../../components/People";

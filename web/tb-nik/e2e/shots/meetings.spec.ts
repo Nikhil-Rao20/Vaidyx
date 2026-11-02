@@ -1,10 +1,12 @@
 // Screenshots of the meeting pages: list, agenda, coordinator control view, room screen, member view, join and waiting room,
-// with the live channel mocked (page.routeWebSocket) so live events (agent states, the decision strip, the card request)
-// can be pushed. Run: cd web/tb-nik && npx vite build && TBNIK_MOCK=1 npx playwright test -c e2e/playwright.config.ts meetings
+// with the live channel mocked (page.routeWebSocket) so live events (agent states, the decision strip, the card request, the Board
+// view's follow state) can be pushed. Meetings-v2 2.5 and 2.6: the stage is the Board view of the Case File on the floor (the
+// coordinator leads, the room follows, a member follows and may look around, an outside expert reads the stripped summary); no slides.
+// Run: cd web/tb-nik && npx vite build && TBNIK_MOCK=1 npx playwright test -c e2e/playwright.config.ts meetings
 // Files: docs/ui/build/shots/meetings-<state>-<theme>-<width>.png. Routes: e2e/support/f2.ts (SYNTHETIC).
 import { expect, test, type Page } from "@playwright/test";
 import { SIZES, login, prepare, shoot, watchConsole } from "../support/helpers";
-import { CID, MID, meetingState, memberState, routeCaseFile, routeMeetings, type MeetingRouteOptions } from "../support/f2";
+import { CID, MID, boardView, meetingState, memberState, routeBoardCases, routeMeetings, type MeetingRouteOptions } from "../support/f2";
 import type { Role } from "../support/fixtures";
 
 const DESKTOP_MOBILE = [SIZES[0], SIZES[2]];
@@ -14,7 +16,7 @@ const snap: typeof shoot = (page, name, state, opts = {}) => shoot(page, name, s
 
 async function open(page: Page, to: string, o: MeetingRouteOptions & { role?: Role; wait: string }) {
   await prepare(page, { role: o.role ?? "coordinator" });
-  await routeCaseFile(page);
+  await routeBoardCases(page);
   const live = await routeMeetings(page, o);
   await login(page);
   await page.goto(`/tb-nik${to}`);
@@ -80,7 +82,44 @@ test.describe("Meetings", () => {
     const errors = watchConsole(page);
     const live = await open(page, `/meetings/${MID}`, { wait: "control-view", state: meetingState("in_session") });
     await expect(page.getByTestId("waiting-banner")).toContainText("Kiran Shetty");
+    // The mirrored laptop (D1): the Board view of the Case File on the floor in the middle, led from here; no slides; the Record button
+    // waits for the recorder (Phase 5).
+    const board = page.getByTestId("board-view");
+    await expect(board).toHaveAttribute("data-mode", "drive");
+    await expect(board).toHaveAttribute("data-tab", "summary");
+    await expect(page.getByTestId("board-question")).toContainText("breast conservation surgery");
+    await expect(page.getByTestId("board-follow")).toContainText("You lead: everyone follows what you open.");
+    await expect(page.getByTestId("shared-screen")).toHaveAttribute("data-stage", "board");
+    await expect(page.getByTestId("record-placeholder").getByRole("button", { name: /^Record/ })).toBeDisabled();
+    await expect(page.getByTestId("stage-tabs")).toHaveCount(0);
+    await expect(page.getByTestId("slide")).toHaveCount(0);
+    await expect(page.getByTestId("panel-case")).toHaveCount(0);
+    // The admit line sits under the stage, never over the Board view.
+    await page.setViewportSize(SIZES[0]);
+    const stageBox = await page.getByTestId("shared-screen").boundingBox();
+    const admitBox = await page.getByTestId("waiting-banner").boundingBox();
+    expect(stageBox && admitBox && admitBox.y >= stageBox.y + stageBox.height - 1, "the admit line is under the stage").toBeTruthy();
+    // The bar's panel buttons carry their words: People, Chat, Agents, Decision (the agenda is the rail).
+    for (const k of ["chat", "people", "agents", "decision"]) await expect(page.getByTestId(`panel-${k}`)).toBeVisible();
+    await expect(page.getByTestId("panel-agenda")).toHaveCount(0);
+    await expect(page.getByTestId("panel-decision")).toContainText("Decision");
     await snap(page, "meetings", "control", { fullPage: false });
+    // Every click moves the room: a tab, then a report opened inside the Board view at its page.
+    await page.setViewportSize(SIZES[0]);
+    let viewPost = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith(`/meetings/${MID}/view`));
+    await page.getByTestId("board-tab-reports").click();
+    expect((await viewPost).postDataJSON()).toEqual({ tab: "reports" });
+    await expect(board).toHaveAttribute("data-tab", "reports");
+    viewPost = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith(`/meetings/${MID}/view`));
+    await page.locator('[data-testid=board-report-row][data-doc="D8a2c165d"]').click();
+    expect((await viewPost).postDataJSON()).toEqual({ tab: "reports", doc_id: "D8a2c165d", page: 0 });
+    await expect(board).toHaveAttribute("data-doc", "D8a2c165d");
+    await expect(page.getByTestId("board-report-page")).toBeVisible();
+    await snap(page, "meetings", "control-board-report", { sizes: DESKTOP_MOBILE, fullPage: false });
+    await page.setViewportSize(SIZES[0]);
+    viewPost = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith(`/meetings/${MID}/view`));
+    await page.getByTestId("board-tab-summary").click();
+    expect((await viewPost).postDataJSON()).toEqual({ tab: "summary" });
     // The agenda rail (laptop) and the Agenda panel (phone, from the More sheet's panels).
     await page.setViewportSize(SIZES[0]);
     await expect(page.getByTestId("agenda-rail")).toHaveAttribute("data-open", "true");
@@ -91,7 +130,7 @@ test.describe("Meetings", () => {
       await expect(p.getByTestId("agenda-panel")).toBeVisible();
     } });
     await page.setViewportSize(SIZES[0]);
-    await page.getByTestId("panel-agenda").click();
+    await page.keyboard.press("Escape");
     await expect(page.getByTestId("agenda-panel")).toHaveCount(0);
     // The Decision panel opens from the bar's Decision button.
     await page.getByTestId("panel-decision").click();
@@ -158,18 +197,28 @@ test.describe("Meetings", () => {
     expect(errors).toEqual([]);
   });
 
-  test("room screen: slides, stand-in, questions, live decision strip", async ({ page }) => {
+  test("room screen: the Board view following, stand-in, questions, live decision strip", async ({ page }) => {
     const errors = watchConsole(page);
     const live = await open(page, `/meetings/${MID}/room`, { wait: "room-screen", state: meetingState("in_session") });
     const pathology = page.locator("[data-testid=agent-tile][data-role=pathology]");
     await expect(pathology).toHaveAttribute("data-agent-state", "thinking");
     await expect(page.locator("[data-testid=agent-tile][data-role=nuclear_medicine]")).toHaveAttribute("data-agent-state", "ready");
     await expect(page.getByTestId("decision-strip")).toContainText("not saved");
-    await expect(page.getByTestId("room-summary")).toBeVisible();
+    // The room screen is signed in as the coordinator, yet it never leads: it follows, and nothing in the Board view takes a click.
+    const board = page.getByTestId("board-view");
+    await expect(board).toHaveAttribute("data-mode", "follow");
+    await expect(page.getByTestId("board-follow")).toContainText("Following Priya Nair");
+    await expect(page.getByTestId("board-look-around")).toHaveCount(0);
+    await expect(page.getByTestId("board-tab-reports")).toBeDisabled();
+    await expect(page.getByTestId("room-summary")).toHaveCount(0);
+    await expect(page.getByTestId("summary-toggle")).toHaveCount(0);
     await snap(page, "meetings", "room", { fullPage: false });
     live.push({ type: "agent_state", agent: { active: true, role: "pathology", state: "answering", question: "Q2" } });
-    live.push({ type: "open", case_id: CID, opened: { kind: "record", doc_id: "D8a2c165d", title: "HISTOPATHOLOGY REPORT", url: `/api/tb/cases/${CID}/documents/D8a2c165d/file` } });
-    await expect(page.getByTestId("shared-screen")).toHaveAttribute("data-opened", "record");
+    // The coordinator opens the histopathology report at its line: the room follows (tab, report, page, the line boxed).
+    live.push({ type: "view", view: boardView({ tab: "reports", doc_id: "D8a2c165d", page: 0, quote: "Grade: Grade 2 (Nottingham score 6)", opened: { kind: "record", doc_id: "D8a2c165d", title: "HISTOPATHOLOGY REPORT", url: `/api/tb/cases/${CID}/documents/D8a2c165d/file` } }) });
+    await expect(board).toHaveAttribute("data-tab", "reports");
+    await expect(board).toHaveAttribute("data-doc", "D8a2c165d");
+    await expect(page.getByTestId("board-report-page")).toBeVisible();
     await expect(pathology).toHaveAttribute("data-agent-state", "answering");
     await snap(page, "meetings", "room-record-open", { sizes: [SIZES[0], SIZES[1]], fullPage: false });
     live.push({ type: "decision", case_id: CID, outcome: { outcome: "decision", label: "Decision recorded" }, record: "R1" });
@@ -185,25 +234,39 @@ test.describe("Meetings", () => {
     expect(errors).toEqual([]);
   });
 
-  test("member view: follow, step away, question, card", async ({ page }) => {
+  test("member view: follow, look around, back to the room, question, card", async ({ page }) => {
     const errors = watchConsole(page);
     const live = await open(page, `/meetings/${MID}/member`, { role: "treating", wait: "member-view", state: memberState() });
-    await expect(page.getByTestId("member-view")).toHaveAttribute("data-following", "true");
+    const view = page.getByTestId("member-view");
+    const board = page.getByTestId("board-view");
+    await expect(view).toHaveAttribute("data-following", "true");
+    await expect(board).toHaveAttribute("data-mode", "follow");
+    await expect(page.getByTestId("board-follow")).toContainText("Following Priya Nair");
+    await expect(page.getByTestId("stage-tabs")).toHaveCount(0);
+    let viewPosts = 0;
+    page.on("request", (r) => { if (r.method() === "POST" && r.url().endsWith(`/meetings/${MID}/view`)) viewPosts += 1; });
+    // The coordinator opens a report: the member's Board view follows.
+    live.push({ type: "view", view: boardView({ tab: "reports", doc_id: "D8a2c165d", page: 0, quote: "Grade: Grade 2 (Nottingham score 6)" }) });
+    await expect(board).toHaveAttribute("data-tab", "reports");
+    await expect(board).toHaveAttribute("data-doc", "D8a2c165d");
     await snap(page, "meetings", "member");
     await page.setViewportSize(SIZES[0]);
-    // Step away through the slide tabs: the room shows slide 2; the member looks at the gaps on their own.
-    await expect(page.getByRole("tab", { name: "Key values with sources" })).toHaveAttribute("aria-selected", "true");
-    await page.getByRole("tab", { name: "Gaps and waivers" }).click();
-    await expect(page.getByTestId("member-view")).toHaveAttribute("data-following", "false");
-    await expect(page.getByTestId("back-to-shared")).toBeVisible();
-    await snap(page, "meetings", "member-stepped-away", { sizes: DESKTOP_MOBILE, fullPage: false });
+    // Look around: the member clicks freely on this screen only; nothing is posted and the room does not move.
+    await page.getByTestId("board-look-around").click();
+    await expect(view).toHaveAttribute("data-following", "false");
+    await expect(board).toHaveAttribute("data-mode", "look");
+    await page.getByTestId("board-tab-stage").click();
+    await expect(board).toHaveAttribute("data-tab", "stage");
+    await expect(page.getByTestId("board-back-to-room")).toBeVisible();
+    // The room moves on meanwhile; the member stays where they are until Back to the room.
+    live.push({ type: "view", view: boardView({ tab: "summary" }) });
+    await expect(board).toHaveAttribute("data-tab", "stage");
+    await snap(page, "meetings", "member-looking-around", { sizes: DESKTOP_MOBILE, fullPage: false });
     await page.setViewportSize(SIZES[0]);
-    await page.getByTestId("back-to-shared").click();
-    await expect(page.getByTestId("member-view")).toHaveAttribute("data-following", "true");
-    // The tab strip's own Step away still steps away (the next slide).
-    await page.getByTestId("step-away").click();
-    await expect(page.getByRole("tab", { name: "Gaps and waivers" })).toHaveAttribute("aria-selected", "true");
-    await page.getByTestId("back-to-shared").click();
+    await page.getByTestId("board-back-to-room").click();
+    await expect(view).toHaveAttribute("data-following", "true");
+    await expect(board).toHaveAttribute("data-tab", "summary");
+    expect(viewPosts, "a member never moves the room").toBe(0);
     // One side panel at a time: People, then Chat replaces it; Esc closes.
     await page.getByTestId("panel-people").click();
     await expect(page.getByTestId("people-panel")).toBeVisible();
@@ -284,6 +347,24 @@ test.describe("Meetings", () => {
     expect(errors).toEqual([]);
   });
 
+  test("outside expert: the identity-stripped summary, never the Board view", async ({ page }) => {
+    const errors = watchConsole(page);
+    const base = memberState();
+    const attendance = (base.attendance as Array<Record<string, unknown>>).map((a) => (a.user === "rao@vxh.example" ? { ...a, outside_expert: true, status: "remote", mode: "remote" } : a));
+    const state = memberState({ attendance, can: { ...(base.can as object), ask: false, card: false, card_required: false, ask_agents: false } });
+    let caseReads = 0;
+    page.on("request", (r) => { if (r.url().includes(`/api/tb/cases/${CID}`)) caseReads += 1; });
+    await open(page, `/meetings/${MID}/member`, { role: "treating", wait: "member-view", state });
+    const summary = page.getByTestId("expert-summary");
+    await expect(summary).toBeVisible();
+    await expect(summary).toContainText("outside expert");
+    await expect(page.getByTestId("board-view")).toHaveCount(0);
+    await expect(page.getByTestId("stage-tabs")).toHaveCount(0);
+    expect(caseReads, "no Case File route is asked for an outside expert").toBe(0);
+    await snap(page, "meetings", "member-expert", { sizes: DESKTOP_MOBILE, fullPage: false });
+    expect(errors).toEqual([]);
+  });
+
   test("member view with video on (server without video)", async ({ page }) => {
     const errors = watchConsole(page);
     const s = memberState({ meeting: { ...memberState().meeting, video: true }, can: { ...memberState().can, video: true } });
@@ -323,9 +404,10 @@ test.describe("Meetings", () => {
     await expect(stage).toHaveAttribute("data-stage", "share-waiting");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.setViewportSize(SIZES[0]);
-    // The share ends: the slide again.
+    // The share ends: the Board view again.
     live.push({ type: "presenting", user: "mdt@vxh.example", name: "Priya Nair", on: false, by: "mdt@vxh.example" });
-    await expect(stage).toHaveAttribute("data-stage", "slide");
+    await expect(stage).toHaveAttribute("data-stage", "board");
+    await expect(page.getByTestId("board-view")).toBeVisible();
     await expect(page.getByTestId("share-badge")).toHaveCount(0);
     expect(errors).toEqual([]);
   });

@@ -1,10 +1,10 @@
-// The one side panel of the call (night-v3 5.1, research/04 section 6.9): People, Chat and questions, Agenda, Case, Agents or
-// Decision, one at a time. On a laptop it slides in on the right of the stage (22 rem; the Decision panel 26 rem, for its six step
+// The one side panel of the call (night-v3 5.1, research/04 section 6.9): People, Chat and questions, Agenda, Agents or Decision, one
+// at a time (meetings-v2 2.6: the Case panel with its slides, records and images is gone; the Board view on the stage shows them). On a laptop it slides in on the right of the stage (22 rem; the Decision panel 26 rem, for its six step
 // tabs); on a phone it is a bottom sheet, 85 % high,
 // with a handle and a visible Close. Esc closes it (the sheet by itself; on a laptop the shell's shortcut). The body follows the
 // stage's (light) theme. The badge and title helpers here feed the bar's panel buttons.
 import { useRef } from "react";
-import { Bot, ClipboardList, FileText, ListOrdered, MessageSquareText, Users, X, type LucideIcon } from "lucide-react";
+import { Bot, ClipboardList, ListOrdered, MessageSquareText, Users, X, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { StagePanel } from "../../components/Stage";
@@ -12,7 +12,6 @@ import { useCall } from "../context";
 import type { CallCtx, PanelKind } from "../types";
 import { AgendaPanel } from "./AgendaPanel";
 import { AgentsPanel, busyAgents } from "./AgentsPanel";
-import { CasePanel } from "./CasePanel";
 import { ChatPanel, unansweredCount } from "./ChatPanel";
 import { DecisionPanel } from "./DecisionPanel";
 import { PeoplePanel } from "./PeoplePanel";
@@ -23,7 +22,6 @@ export const PANEL_ICONS: Record<Kind, LucideIcon> = {
   people: Users,
   chat: MessageSquareText,
   agenda: ListOrdered,
-  case: FileText,
   agents: Bot,
   decision: ClipboardList,
 };
@@ -38,7 +36,6 @@ export const PANEL_WORD: Record<Kind, { label: string; about: string }> = {
   people: { label: "People", about: "Who is in the room, remote and waiting, and the AI agents standing in." },
   chat: { label: "Chat", about: "Questions to the board and to the AI agents standing in." },
   agenda: { label: "Agenda", about: "The Case Files of this meeting in order." },
-  case: { label: "Case", about: "The slides, records and images of the Case File on the screen." },
   agents: { label: "Agents", about: "The AI agents standing in for absent heads: support only, never a decision." },
   decision: { label: "Decision", about: "The decision record of the Case File on the screen, and the cards." },
 };
@@ -52,7 +49,7 @@ export function panelBadge(kind: PanelKind, ctx: BadgeCtx): number | undefined {
     case "people": return ctx.canManage ? ctx.state.attendance.filter((a) => a.status === "waiting").length : ctx.hands.size;
     case "chat": return unansweredCount(ctx.state.questions, ctx.cid);
     case "agents": return busyAgents(ctx.agents);
-    case "agenda": case "case": case "decision": return 0;
+    case "agenda": case "decision": return 0;
     default: return undefined;
   }
 }
@@ -65,7 +62,6 @@ export function panelTitle(kind: PanelKind, ctx: TitleCtx): string {
     case "people": return `People · ${ctx.state.attendance.filter((a) => a.status === "present" || a.status === "remote").length}`;
     case "chat": return "Chat and questions";
     case "agenda": return `Agenda · ${ctx.order.length}`;
-    case "case": return "Case";
     case "agents": return `AI agents · ${ctx.agents.length}`;
     case "decision": return "Decision";
     default: return "";
@@ -77,7 +73,6 @@ function PanelBody({ kind }: { kind: Kind }) {
     case "people": return <PeoplePanel />;
     case "chat": return <ChatPanel />;
     case "agenda": return <AgendaPanel />;
-    case "case": return <CasePanel />;
     case "agents": return <AgentsPanel />;
     case "decision": return <DecisionPanel />;
   }

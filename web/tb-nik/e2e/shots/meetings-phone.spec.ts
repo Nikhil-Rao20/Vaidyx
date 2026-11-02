@@ -2,13 +2,14 @@
 // without a touch and coming back on a tap, never while a sheet is open; the decision strip on one line that opens on a tap;
 // landscape with the strip at the right edge; Save data in the More sheet and the laptop More menu) and the room screen on a
 // projector (1920 x 1080: large type, the compact agenda column, six remote tiles and "+3 more", nothing scrolling the page, the
-// wake lock while it is open). The live channel is mocked (page.routeWebSocket).
+// wake lock while it is open; meetings-v2 2.5: the Board view of the Case File on the floor following, in large type). The live channel
+// is mocked (page.routeWebSocket).
 // Run: cd web/tb-nik && npx vite build && TBNIK_MOCK=1 npx playwright test -c e2e/playwright.config.ts meetings-phone
 // Files: docs/ui/build/shots/meetings-member-phone-landscape-*, meetings-member-save-data-*, meetings-room-large-dark-1920.png.
 // Routes: e2e/support/f2.ts (SYNTHETIC).
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { SIZES, login, prepare, shoot, watchConsole } from "../support/helpers";
-import { MID, meetingState, memberState, routeCaseFile, routeMeetings, type MeetingRouteOptions } from "../support/f2";
+import { MID, meetingState, memberState, routeBoardCases, routeMeetings, type MeetingRouteOptions } from "../support/f2";
 import type { Role } from "../support/fixtures";
 
 const PHONE = { width: 390, height: 844 };
@@ -19,7 +20,7 @@ const snap: typeof shoot = (page, name, state, opts = {}) => shoot(page, name, s
 
 async function open(page: Page, to: string, o: MeetingRouteOptions & { role?: Role; wait: string }) {
   await prepare(page, { role: o.role ?? "coordinator" });
-  await routeCaseFile(page);
+  await routeBoardCases(page);
   const live = await routeMeetings(page, o);
   await login(page);
   await page.goto(`/tb-nik${to}`);
@@ -139,7 +140,7 @@ test.describe("Phone and room screen", () => {
     expect(errors).toEqual([]);
   });
 
-  test("room screen on a projector: large type, the agenda column, six tiles and +2 more, no page scroll, the wake lock", async ({ page }) => {
+  test("room screen on a projector: the Board view in large type, the agenda column, six tiles and +2 more, no page scroll, the wake lock", async ({ page }) => {
     const errors = watchConsole(page);
     // The wake lock as the browser would give it, counted.
     await page.addInitScript(() => {
@@ -152,7 +153,10 @@ test.describe("Phone and room screen", () => {
     const state = meetingState("in_session", { attendance: [...(base.attendance as object[]), ...MORE_REMOTE] });
     await open(page, `/meetings/${MID}/room`, { wait: "room-screen", state });
     const frame = page.getByTestId("room-screen");
-    await expect(page.getByTestId("room-summary")).toBeVisible();
+    const board = page.getByTestId("board-view");
+    await expect(board).toHaveAttribute("data-mode", "follow");
+    await expect(page.getByTestId("board-question")).toBeVisible();
+    await expect(page.getByTestId("room-summary")).toHaveCount(0);
     // Nine remote members, one of them offline and out of the video (no tile, night-v3 5.6): six tiles and "+2 more" (never a
     // scroll); the agents apart.
     const people = page.getByTestId("room-people");
@@ -171,19 +175,20 @@ test.describe("Phone and room screen", () => {
     await expect(now).toContainText("Priya Venkatesan");
     expect(await px(now)).toBeGreaterThanOrEqual(20);
     await expect(rail.locator("button")).toHaveCount(0);
-    // The decision strip at 28 px; the stage text at 28 px or more (the source chips apart).
+    // The decision strip at 28 px; every line of the Board view at 18 px or more, the body at 24 px, the question for the board larger.
     expect(await px(page.getByTestId("decision-strip").locator("p"))).toBeGreaterThanOrEqual(28);
-    const stageSizes = await page.getByTestId("shared-screen").evaluate((el) => {
+    const boardSizes = await board.evaluate((el) => {
       const out: number[] = [];
-      el.querySelectorAll(".stage-slide *").forEach((n) => {
-        if (n.closest(".quote-chip")) return;
+      el.querySelectorAll("*").forEach((n) => {
+        if ((n as HTMLElement).closest(".sr-only")) return;
         const own = [...n.childNodes].some((c) => c.nodeType === Node.TEXT_NODE && (c.textContent ?? "").trim());
         if (own) out.push(parseFloat(getComputedStyle(n).fontSize));
       });
       return out;
     });
-    expect(stageSizes.length).toBeGreaterThan(3);
-    expect(Math.min(...stageSizes)).toBeGreaterThanOrEqual(28);
+    expect(boardSizes.length).toBeGreaterThan(5);
+    expect(Math.min(...boardSizes)).toBeGreaterThanOrEqual(18);
+    expect(await px(page.getByTestId("board-question").locator("p").first())).toBeGreaterThanOrEqual(28);
     // The hands by name; the agent voices chip.
     await expect(page.getByTestId("room-hands")).toContainText("Shanthi Raman");
     await expect(page.getByTestId("agent-voices")).toBeVisible();

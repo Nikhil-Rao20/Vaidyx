@@ -1,6 +1,7 @@
-// /meetings/:id/member: a member in the meeting, laid out like a video call (the call shell, call/CallShell.tsx): the shared screen
-// with the slide tabs (follow it, or step away to the other slides), the people and the agents beside it, one side panel at a time
-// (people, chat and questions, agenda, case, agents) and the control bar. Video goes through a pre-join screen (see your camera
+// /meetings/:id/member: a member in the meeting, laid out like a video call (the call shell, call/CallShell.tsx): the Board view of the
+// Case File on the floor, following the coordinator (meetings-v2 2.5: "Following <name>", Look around on one's own, Back to the room;
+// an outside expert reads the identity-stripped summary instead), the people and the agents beside it, one side panel at a time
+// (people, chat and questions, agenda, agents) and the control bar; on a phone the Board view full width, the tabs as chips. Video goes through a pre-join screen (see your camera
 // first). Members in the room keep video off on their own device. This page keeps the states before the call: not on this server,
 // loading, missing, not joined, waiting to be admitted, and the pre-join.
 // Voice (night-v3 4.4): the question box takes dictation; while the member dictates in the call, the call microphone is muted so

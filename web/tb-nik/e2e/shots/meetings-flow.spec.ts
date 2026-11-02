@@ -6,7 +6,7 @@
 // Files: docs/ui/build/shots/meetings-<state>-<theme>-<width>.png. Routes: e2e/support/f2.ts (SYNTHETIC).
 import { expect, test, type Page } from "@playwright/test";
 import { SIZES, login, prepare, shoot, watchConsole } from "../support/helpers";
-import { CID, MID, meetingState, memberState, routeCaseFile, routeMeetings, type MeetingRouteOptions } from "../support/f2";
+import { CID, MID, meetingState, memberState, routeBoardCases, routeMeetings, type MeetingRouteOptions } from "../support/f2";
 import type { Role } from "../support/fixtures";
 
 /** helpers.shoot from the top of the page: full-page captures of a scrolled page put the sticky top bar mid-image. */
@@ -14,7 +14,7 @@ const snap: typeof shoot = (page, name, state, opts = {}) => shoot(page, name, s
 
 async function open(page: Page, to: string, o: MeetingRouteOptions & { role?: Role; wait: string }) {
   await prepare(page, { role: o.role ?? "coordinator" });
-  await routeCaseFile(page);
+  await routeBoardCases(page);
   const live = await routeMeetings(page, o);
   await login(page);
   await page.goto(`/tb-nik${to}`);
@@ -73,12 +73,13 @@ test.describe("Meetings: case flow", () => {
     await snap(page, "meetings", "control-quorum", { sizes: [SIZES[0]], fullPage: false });
     await page.keyboard.press("Escape");
     await expect(pop).toHaveCount(0);
-    // The Agenda panel: the same times and the presenter per row.
-    await page.getByTestId("panel-agenda").click();
+    // The Agenda panel (Ctrl+Alt+A; the coordinator's bar leaves it out for the rail): the same times and the presenter per row.
+    await page.keyboard.press("Control+Alt+a");
     const panel = page.getByTestId("agenda-panel");
     await expect(panel.locator(`[data-case="${CID}"] [data-testid=agenda-row-times]`)).toContainText(/spent · \d+:\d\d left · 10 min planned · Presenter: Asha Menon/);
     await expect(panel.locator(`[data-case="${SECOND}"] [data-testid=agenda-row-times]`)).toContainText("10 min planned · Presenter: Lakshmi Rao");
-    await page.getByTestId("panel-agenda").click();
+    await page.keyboard.press("Control+Alt+a");
+    await expect(panel).toHaveCount(0);
     // The phone: no rail and no chip; the Agenda sheet carries the times and the quorum line. No sideways scroll.
     await page.setViewportSize(SIZES[2]);
     await expect(page.getByTestId("quorum-chip")).toBeHidden();
