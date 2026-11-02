@@ -5,8 +5,9 @@ assign stage, predict prognosis or make clinical decisions. It retrieves, extrac
 signed records say, with sources, for clinicians who decide.
 
 Layer 1 (input):  rules + a small LLM classifier decide whether a request is in scope.
-Layer 2 (output): any sentence of generated text, outside a verified source quote, that contains prescriptive /
-                  diagnostic wording or a stage pattern is removed and logged. Values must come with citations.
+Layer 2 (output): any sentence of generated text that contains prescriptive / diagnostic wording, advice words in its own words
+                  (outside its verified source quotes) or a stage pattern with no source is removed and logged. Values must come
+                  with citations.
 """
 import re
 
@@ -24,7 +25,42 @@ _RULES = [
     ("scan_interpretation", r"\b(look at|read|interpret|analy[sz]e|review|see)\b.{0,30}\b(scan|image|images|ct|mri|x-?ray|pet|slide|film|mammogram)\b(?!.{0,15}report)"),
     ("stage_derivation", r"\b(what|calculate|derive|assign|determine|work out)\b.{0,30}\b(stage|tnm)\b(?!.{0,40}\b(recorded|documented|written|reported)\b)"),
     ("prognosis", r"\b(prognosis|survival|life expectancy|how long (will|does) (he|she|the patient)|chance of cure)\b"),
+    # night-v3 item 6.4: a decision asked of an agent the way one asks a colleague; refused by rule because the classifier fails open
+    ("treatment_recommendation", r"\bwhat would you do\b"),
+    ("treatment_recommendation", r"\bwhich (one )?would you (pick|choose|go for)\b"),
+    ("other_out_of_scope", r"\bdo you agree (with|that)\b"),
+    ("treatment_recommendation", r"\bis (it|he|she|the patient|this|the tumou?r|the lesion|the disease|the mass) (operable|resectable|curable|fit for|a candidate)\b"),
+    ("treatment_recommendation", r"\b(a |the )?candidate for\b.{0,30}\b(surgery|resection|chemo\w*|radiotherapy|radiation|treatment|therapy|transplant\w*)\b"),
+    ("treatment_recommendation", r"\bbenefit from\b"),
+    ("treatment_recommendation", r"\bdo you think\b.{0,40}\b(fit|operable|resectable|candidate|benefit|should)\b"),
+    ("treatment_recommendation", r"\bcan we (go ahead|proceed) with\b"),
+    ("treatment_recommendation", r"\bwould you (recommend|suggest|advise|give|offer|operate)\b"),
 ]
+
+# Reference questions (night-v3 item 6.4): what a report, record, summary or checklist should contain, or which investigations a work-up
+# lists, is answered with labelled reference text from the specialty's guideline pack, never applied to the patient. Such a question is in
+# scope by rule when no refusal rule matches, so the classifier (which reads "what the documents hold" narrowly) does not refuse it.
+_REFERENCE_OPENER = re.compile(r"\b(what|which|how)\b", re.I)
+_REFERENCE_NOUN = re.compile(r"\b(report\w*|record\w*|summary|summaries|checklist\w*|work-?up|staging (investigation|imaging|test)\w*|"
+                             r"baseline (test|investigation)\w*|follow-?up (investigation|test|imaging)\w*|investigations?|tests?|biomarkers?|template\w*)\b", re.I)
+_REFERENCE_VERB = re.compile(r"\b(contain\w*|include\w*|list\w*|document\w*|state\w*|mention\w*|cover\w*|comprise\w*|require\w*)\b", re.I)
+
+
+# A reference question never names a treatment, an indication or this patient: such a question goes to the classifier as before (the
+# Phase 6 review, S1), so "what does the checklist list as the best treatment for this patient" is never let through by rule.
+_REFERENCE_BLOCK = re.compile(r"\b(treat\w*|therap\w*|regimen\w*|drugs?|dos(e|es|age|ing)|chemo\w*|surg\w*|radiat\w*|radiother\w*|adjuvant|neoadjuvant|"
+                              r"best|options?|indicat\w*|candidates?|eligib\w*|benefits?|next step\w*|manage\w*|prescri\w*|give|start|"
+                              r"for (this|the|our|my) patient|for (her|him|them)|she|he|his|her)\b", re.I)
+
+
+def reference_check(text) -> bool:
+    """True for a question about what records should contain (reference text), when no refusal rule matches it and it names no
+    treatment, indication or patient."""
+    t = str(text or "")
+    if rule_check(t) or _REFERENCE_BLOCK.search(t):
+        return False
+    return bool(_REFERENCE_OPENER.search(t) and _REFERENCE_NOUN.search(t) and _REFERENCE_VERB.search(t))
+
 
 REFUSALS = {
     "treatment_recommendation": "I can't recommend or choose treatment. Treatment decisions belong to the Tumour Board. I can show what the signed records document, list pending results, and surface the relevant guideline sections for the board to review.",
@@ -53,10 +89,13 @@ async def check_input(text, audit=None):
     hit = rule_check(text)
     if hit:
         return {"allowed": False, "category": hit, "message": REFUSALS[hit], "layer": "rule"}
+    if reference_check(text):  # what a report or a work-up should contain: labelled reference text, in scope by rule (item 6.4)
+        return {"allowed": True, "category": "in_scope", "message": "", "layer": "rule", "reference": True}
     msg = [{"role": "system", "content": "You are a scope classifier for a Tumour Board Case File assistant. The assistant may ONLY find, quote, list, "
             "compare dates, check completeness and organise information that is written in the patient's documents (including values, results, "
-            "the stage or diagnosis AS RECORDED in a report, pending tests, timelines, who is responsible). It must NOT recommend or choose treatment, "
-            "diagnose, interpret images, derive stage, or predict prognosis."},
+            "the stage or diagnosis AS RECORDED in a report, pending tests, timelines, who is responsible), and it may show, as labelled reference "
+            "text never applied to the patient, what a guideline says a report, record, summary or work-up should contain. It must NOT recommend or "
+            "choose treatment, diagnose, interpret images, derive stage, or predict prognosis."},
            {"role": "user", "content": f"Request: {text}\n\nClassify the request."}]
     try:
         r = await llm.chat("reasoner", msg, json_schema=CLASSIFIER_SCHEMA, max_tokens=120, purpose="scope check", audit=audit)
@@ -67,33 +106,114 @@ async def check_input(text, audit=None):
 
 
 # ---------------------------------------------------------------------------------------------- output policy
-PRESCRIPTIVE = re.compile(
+_PRESCRIPTIVE_BASE = (
     r"\b(i|we) (would )?(recommend|suggest|advise)|\brecommend(ed|s|ation)?\b|\bshould (be )?(receive|undergo|start|begin|be treated|be given|be offered|consider|have)\b|"
     r"\b(is|are) (indicated|eligible|a candidate|candidates)\b|\b(best|preferred|optimal) (option|treatment|therapy|approach|management)\b|"
     r"\b(start|initiate|commence) (on )?(chemo|immuno|targeted|radio|treatment|therapy)|\bconsider (starting|giving|surgery|chemo|radiotherapy|resection)\b|"
-    r"\b(likely|probably|suggestive of|consistent with|in keeping with|diagnosis is|diagnosed as having)\b|\bprognosis\b|\bsurvival (is|would)\b", re.I)
+    r"\b(likely|probably|suggestive of|consistent with|in keeping with|diagnosis is|diagnosed as having)\b|\bprognosis\b|\bsurvival (is|would)\b")
+# Advice put as a need, a fitness or a verdict (the whole-run review I1, narrowed by the Phase 9 review E, S1). Checked in what the models
+# write about a patient, outside the inline quotation marks and outside the statement's cited quotes, so a word of the verified record text
+# ("Report should include ...", "no malignant cells") never refuses the statement that quotes it. A guideline's own reporting wording ("the
+# report should include") shown as reference text keeps the base list only.
+HISTOLOGY = r"(?:\w*(?:oma|omas)|tumou?rs?|cancers?|neoplasms?|malignan\w*|metasta\w*|leuka?emias?|disease)"
+DIRECTIVE = re.compile(
+    r"\brecommend\w*|\bshould\s+(?:not\s+)?\w+|\bconsider\w*|\bindicat(?:ed|ion|ions)\b|\beligib\w*|\bcandidates?\b|\bbenefit\w*|"
+    r"\badvis\w*|\boffer\w*|\bwarranted\b|\bappropriate\b|\bproceed(?:ing)? with\b|\bfit for\b|"
+    r"\bthis is (?:a|an)\s+(?:[\w-]+\s+){0,3}?" + HISTOLOGY + r"\b", re.I)
+# A need ("needs", "required", "necessary") is advice only next to a treatment word in the same sentence, quotes included: "re-excision is
+# needed" is refused, "Confirmation required if the CECT report is the final signed version" is a point about the records and passes.
+NEED = re.compile(r"\b(?:needs?|needed|requires?|required|necessary)\b", re.I)
+TREATMENT = re.compile(
+    r"\b(?:surg\w*|excision|resect\w*|lobectomy|pneumonectomy|mastectomy|lumpectomy|dissection|chemo\w*|radiother\w*|radiation therapy|"
+    r"irradiation|RT(?!-?PCR)|SBRT|SABR|brachytherap\w*|CTRT|CRT|NACT|TNT|therap\w*|treatment\w*|regimens?|dos(?:e|es|age|ing)|Gy|fractions?|"
+    r"cycles?|TKIs?|\w+(?:mab|nib|platin|taxel|rubicin)|tamoxifen|letrozole|anastrozole|capecitabine|5-?FU|adjuvant|neoadjuvant|palliat\w*)\b", re.I)
+# A treatment step the model puts in the future in its own words ("re-excision will follow", "chemotherapy is planned"), a treatment
+# word and a plan word both outside the quotes and no record reported in the sentence, is a plan of the model's own (Phase 9 review E,
+# after S1): refused like advice. "The OPD note records that radiotherapy is planned for 12/11/2026" is reported and passes.
+PLAN = re.compile(r"\bwill\b|\b(?:is|are) (?:planned|scheduled|due)\b|\bplanned for\b|\bdue for\b|\bto be (?:done|given|started|offered|planned)\b|"
+                  r"\bnext step\b", re.I)
+PRESCRIPTIVE = re.compile(_PRESCRIPTIVE_BASE, re.I)
 STAGE = re.compile(r"\b[cpyr]?T[0-4][a-d]?\s*N[0-3][a-c]?(\s*M[01][a-c]?)?\b|\bstage\s+(0|I{1,3}V?|IV|[1-4])[A-C]?\b", re.I)
 QUOTE = re.compile(r"\"[^\"]{2,400}\"|“[^”]{2,400}”")
 
 
-# Reported speech: the sentence attributes the wording to a document or to the clinicians, so it is documentation, not advice.
+# Reported speech: the sentence attributes the wording to a document or to the clinicians. It excuses a stage written in a report ("the
+# PET/CT report records stage IIIA"), never advice: since the whole-run review (I1) prescriptive wording passes only inside a quoted span
+# ('The report records "adjuvant chemotherapy recommended"'), so "the report records a mass, so she should undergo surgery" is refused.
 REPORTED = re.compile(r"\b(the |previous |prior |earlier )?(tumou?r board|board|mdt|record|minutes|report|note|letter|summary|plan|decision|"
                       r"radiologist|pathologist|oncologist|surgeon|physician|clinician|treating team|team|dr\.?\s*[A-Z][a-z]+)\b.{0,60}"
                       r"\b(recorded|records|documented|documents|noted|notes|stated|states|wrote|writes|advised|recommended|recommends|planned|plans|decided|decision was|suggested|impression|concluded|reads)\b", re.I)
 
 
-def scan_output(text):
-    """Find policy violations outside quoted source text. Returns list of {sentence, reason}."""
+def _quote_parts(quotes):
+    """The cited quotes, and the sentences of each quote of more than one sentence, so a quote that runs over two sentences of the
+    statement is still taken out of each of them."""
+    out = []
+    for q in quotes or []:
+        q = str(q or "")
+        out.append(q)
+        parts = SENTENCE.split(q)
+        if len(parts) > 1:  # a piece of fewer than three words is too short to stand for the quote on its own
+            out += [x for x in parts if len(re.findall(r"\w+", x)) >= 3]
+    return out
+
+
+SENTENCE = re.compile(r"(?<=[.!?])\s+|\n")
+
+
+def directive_words(sentence, quotes=None):
+    """The advice words a sentence uses in its own words (lower case, sorted): DIRECTIVE outside the inline quotation marks and outside
+    the cited quotes, a NEED word there when the sentence (quotes included) also names a treatment, and a PLAN word there when a
+    treatment word is there too and no record is reported. Empty when it gives no advice."""
+    own = outside_quotes(QUOTE.sub(" ", sentence), _quote_parts(quotes))
+    words = {m.group(0).lower() for m in DIRECTIVE.finditer(own)}
+    if TREATMENT.search(sentence):
+        words |= {m.group(0).lower() for m in NEED.finditer(own)}
+    if TREATMENT.search(own) and PLAN.search(own) and not REPORTED.search(sentence):
+        words |= {m.group(0).lower() for m in PLAN.finditer(own)}
+    return sorted(words)
+
+
+def scan_output(text, reference=False, quotes=None):
+    """Find policy violations in generated text. Returns a list of {sentence, reason}, one per sentence at most.
+    (a) The base list (recommend, should receive, likely, consistent with ...) on each sentence outside its inline quotation marks.
+    (b) Unless reference: the advice words of directive_words on each sentence outside its inline quotation marks and outside the cited
+        quotes (quotes=None, for text without citations: the whole sentence is checked).
+    (c) A stage pattern with no attribution to a record.
+    reference=True is for a verified guideline quote shown as labelled reference text (its own "should include" is the guideline's
+    wording, not advice to anyone)."""
     issues = []
-    for sent in re.split(r"(?<=[.!?])\s+|\n", text):
+    for sent in SENTENCE.split(str(text or "")):
         bare = QUOTE.sub(" ", sent)
-        if REPORTED.search(bare) and not re.search(r"\b(i|we)\b\s+(would\s+)?(recommend|suggest|advise)", bare, re.I):
-            continue  # documented wording attributed to its source
+        words = [] if reference else directive_words(sent, quotes)
         if PRESCRIPTIVE.search(bare):
             issues.append({"sentence": sent.strip(), "reason": "prescriptive or diagnostic wording"})
-        elif STAGE.search(bare) and not re.search(r"\b(recorded|documented|as written|states|reported)\b", bare, re.I):
+        elif words:
+            issues.append({"sentence": sent.strip(), "reason": "advice wording outside the quoted record text: " + ", ".join(words)})
+        elif STAGE.search(bare) and not REPORTED.search(bare) and not re.search(r"\b(recorded|documented|as written|states|reported)\b", bare, re.I):
             issues.append({"sentence": sent.strip(), "reason": "stage stated without attribution to a source"})
     return issues
+
+
+def statement_quotes(stmt):
+    """The cited quotes of a statement {text, citations}."""
+    return [str(c.get("quote") or "") for c in (stmt or {}).get("citations") or [] if isinstance(c, dict)]
+
+
+def outside_quotes(text, quotes):
+    """The text with each cited quote taken out (its words in order, case and spacing and punctuation between them ignored), so what is
+    left is what the statement says in its own words."""
+    out = str(text or "")
+    for q in sorted({str(q or "") for q in quotes or []}, key=len, reverse=True):
+        words = re.findall(r"\w+", q)
+        if words:
+            out = re.sub(r"(?<!\w)" + r"\W+".join(map(re.escape, words)) + r"(?!\w)", " ", out, flags=re.I)
+    return out
+
+
+def unquoted_words(text, quotes, pattern):
+    """The words of pattern that the text uses outside its cited quotes (lower case, sorted); empty when every such word sits in a quote."""
+    return sorted({m.group(0).lower() for m in pattern.finditer(outside_quotes(text, quotes))})
 
 
 def enforce(text, audit=None, where=""):

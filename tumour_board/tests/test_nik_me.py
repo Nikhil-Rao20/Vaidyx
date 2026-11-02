@@ -168,7 +168,8 @@ def test_me_shape_per_role(api, user, primary, known):
     assert m["user"] == user and m["primary_role"] == primary and m["roles"]["known"] is known
     assert set(m) >= {"user", "display_name", "roles", "primary_role", "must_change_password", "profile", "setup_needed", "counts", "hospital", "features"}
     assert set(m["roles"]) >= {"admin", "root_admin", "coordinator", "auditor", "departments", "treating", "supporting", "resident", "admin_of", "outside_expert", "disabled"}
-    assert set(m["counts"]) == {"unread", "waiting_for_me", "open_requests"} and all(isinstance(v, int) for v in m["counts"].values())
+    assert set(m["counts"]) == {"unread", "waiting_for_me", "open_requests", "messages_unread"} and all(isinstance(v, int) for v in m["counts"].values())
+    assert isinstance(m.get("messages"), bool)  # Phase 8: may this person use Messages
     assert m["features"] == {"video": False, "push": False} and m["hospital"]["level"] == "essential"
     assert m["must_change_password"] is False and set(m["profile"]) == set(profiles.FIELDS)
     assert "password" not in json.dumps(m["profile"]).lower()
@@ -215,10 +216,11 @@ def test_profile_validation_and_mirroring(api):
     assert api.put("/me/profile", {"photo": "data:image/png;base64,iVBORw0KGgo="}).status_code == 200
     assert api.put("/me/profile", {"saved_filters": [{"name": "Mine", "query": {"mine": "1"}, "pinned": True}]}).json()["profile"]["saved_filters"][0]["pinned"] is True
     assert api.put("/me/profile", {"display_name": "x" * 81}).status_code == 400
-    for bad in ("Dr Rao (synthetic)", "<b>Rao</b>", "R", "Dr Rao 2"):  # letters, spaces, dots, apostrophes, hyphens; 2 to 80 (review #19)
+    for bad in ("<b>Rao</b>", "R", "Dr Rao 2", "Dr Rao [x]", "Dr Rao {x}"):  # letters, spaces, dots, apostrophes, hyphens, round brackets; 2 to 80 (review #19)
         r = api.put("/me/profile", {"display_name": bad})
         assert r.status_code == 400 and "letters, spaces, dots" in r.json()["detail"]["message"], bad
     assert api.put("/me/profile", {"display_name": "Dr. K. O'Neil-Rao"}).status_code == 200
+    assert api.put("/me/profile", {"display_name": "Dr Rao (synthetic)"}).status_code == 200  # as a placement may write it (2 Nov 2026)
     r = api.put("/me/profile", {"display_name": "Dr Rao Renamed Synthetic"})
     assert r.status_code == 200
     assert org.load()["users"][RAO]["display_name"] == "Dr Rao Renamed Synthetic" and profiles.display_name(RAO) == "Dr Rao Renamed Synthetic"
@@ -272,6 +274,20 @@ def test_my_activity_lists_my_own_actions_and_the_full_log_is_for_the_auditor(ap
     assert all(e["case_id"] == "TB-NIK-1" for e in r.json()["events"]) and len(r.json()["events"]) >= 2
     assert any(e["kind"] == "activity_read" and e["by"] == AUDIT for e in org.read_audit())  # reading the log is itself recorded
     assert api.as_(AUDIT).get("/case-list").status_code == 403  # the auditor reads the log, never the Case Files
+
+
+def test_message_events_in_the_full_log_are_for_the_auditor_and_the_root_admin_only(api, people):
+    """Whole-run review 9, M3: who messaged whom (message_* and conversation_* lines) stays out of the MDT Coordinator's GET /activity."""
+    make_case()
+    store.audit("TB-NIK-1", {"kind": "request_sent", "action": "A1", "department": "Radiology", "by": MEHTA})
+    org.audit("message_sent", RAO, conversation="C0123456789", type="direct", to=MEHTA)
+    org.audit("conversation_resolved", MEHTA, conversation="C0123456789", type="direct", to=RAO)
+    for who, sees in ((AUDIT, True), (ROOT, True), (ANIL, False)):
+        kinds = {e["kind"] for e in api.as_(who).get("/activity?limit=200").json()["events"]}
+        assert "request_sent" in kinds, who
+        assert ({"message_sent", "conversation_resolved"} <= kinds) is sees and (bool(kinds & {"message_sent", "conversation_resolved"}) is sees), who
+    mine = {e["kind"] for e in api.as_(RAO).get("/me/activity").json()["events"]}
+    assert "message_sent" in mine  # a person's own list keeps their own messages
 
 
 def test_disabled_login_is_refused_on_every_route(api):

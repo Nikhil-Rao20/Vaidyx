@@ -342,11 +342,13 @@ def test_ready_route_calls_the_hook_only_for_a_ready_mark(nik_app, tb001, monkey
     tc, who = nik_app
     calls = []
     monkeypatch.setattr(ready_hook, "on_ready", lambda case_id, user: calls.append((case_id, user)) or {"scheduled": True})
-    r = tc.post(f"/api/tb/cases/{CASE}/ready", json={"ready": True, "note": "question typed"})
+    c = store.get_case(CASE); c["board_question"] = "Is the patient fit for surgery? (synthetic)"; store.save_case(c)  # the send needs the question (1.4)
+    send = {"ready": True, "note": "question typed", "reason": "the board should see it now (synthetic)"}  # and, with items open, a reason
+    r = tc.post(f"/api/tb/cases/{CASE}/ready", json=send)
     assert r.status_code == 200 and r.json()["board_ready"]["by"] == "dr.rao" and calls == [(CASE, "dr.rao")]
     assert tc.post(f"/api/tb/cases/{CASE}/ready", json={"ready": False}).status_code == 200 and len(calls) == 1
     monkeypatch.setattr(ready_hook, "on_ready", lambda case_id, user: 1 / 0)  # a failing hook never fails the mark
-    assert tc.post(f"/api/tb/cases/{CASE}/ready", json={"ready": True}).status_code == 200
+    assert tc.post(f"/api/tb/cases/{CASE}/ready", json=send).status_code == 200
 
 
 def test_ready_hook_schedules_nothing_when_off(tb001, monkeypatch):

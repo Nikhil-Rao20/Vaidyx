@@ -1,0 +1,543 @@
+{
+ "id": "ovary",
+ "label": "Ovarian cancer (epithelial)",
+ "version": "0.1-draft",
+ "approval": {
+  "status": "draft",
+  "note": "Draft checklist from NCG Guidelines for Gynaecological Cancers (2019): needs a clinician's check"
+ },
+ "site": "ovar|adnex|tubo-ovarian|fallopian",
+ "site_note": "V2 item 5.3 (two primaries): only on a Case File linked to the same patient's other Case File, and only for histopathology, cytology, IHC and molecular records: among several candidates for one record, or several documents carrying a required value, one that names another protocol's site and not this one steps aside and is named on the row for review; a document naming no site never does, and when every candidate names another site every candidate stays. Organ words only. A preference, never a filter; a patient with one cancer is checked as before.",
+ "note": "DRAFT, not approved for real use: needs a clinician's check. Configurable by the clinical team. Required records transcribed from the NCG Guidelines for Gynaecological Cancers (2019) (National Cancer Grid, India), the epithelial ovarian cancer section ('Work Up & Investigations' text and the summary table of imaging and management recommendations: Essential (a), Optimal (b), Optional (c)), each with its verbatim quote under where (the Word file has no page numbers). Tiers printed by NCG are kept; the tiers whose tier_basis says 'proposed' or 'proposal' (clinical_history, histopathology, gi_endoscopy, mammogram_bilateral) are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). A record NCG gives only under a condition the system never judges (an age, a finding, a plan) is shown with NCG's own tier and the condition, never counted. Epithelial ovarian cancer only: borderline, germ cell and sex cord-stromal ovarian tumours have their own sections of the book and are not covered here. The FIGO stage is the stage as recorded by the clinician, never computed. Nothing here suggests treatment.",
+ "settings_note": "Setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes stage). The three settings follow the rows of the book's summary table, 'Early Stage I/II', 'Locally advanced Stage III/IV' and 'Recurrent' (the treatment algorithm splits 'Clinical early stage' and 'Clinical advanced stage', and relapsed disease).",
+ "settings": [
+  {
+   "id": "early",
+   "label": "Early (FIGO Stage I/II), as recorded"
+  },
+  {
+   "id": "advanced",
+   "label": "Locally advanced to metastatic (FIGO Stage III/IV), as recorded"
+  },
+  {
+   "id": "recurrent",
+   "label": "Recurrent or relapsed, as recorded"
+  }
+ ],
+ "records": [
+  {
+   "id": "clinical_history",
+   "label": "Personal and family history, clinical and pelvic examination, performance status",
+   "tier": "a",
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ],
+   "department": "Gynaecologic Oncology",
+   "required_facts": [
+    "ecog",
+    "comorbidities",
+    "clinical_question",
+    "presenting_complaint"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "Thorough clinical examination including pelvic and per rectal examination.",
+     "where": "Section \"EPITHELIAL OVARIAN CANCER (LEVELS OF EVIDENCE IN PARENTHESES)\", part \"Work Up & Investigations\"; summary table \"Summary of  Imaging and Management Recommendations for Optimal and Optional Resource Setting\" (columns (a)Essential, (b)Optimal, (c)Optional, Remarks)"
+    }
+   ],
+   "tier_basis": "No letter printed; proposed a (listed first in the book work-up for every patient, as for the oral and rectal checklists)",
+   "route": "owner"
+  },
+  {
+   "id": "ca125_cea",
+   "label": "Serum tumour markers CA-125 and CEA (CA 19.9 optional)",
+   "tier": "a",
+   "doc_types": [
+    "lab"
+   ],
+   "department": "Biochemistry",
+   "required_facts": [
+    "ca125",
+    "cea"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "Serum tumor markers: CA-125, CEA, CA 19.9 (Ca 19.9-(c))",
+     "where": "Section \"EPITHELIAL OVARIAN CANCER (LEVELS OF EVIDENCE IN PARENTHESES)\", part \"Work Up & Investigations\"; summary table \"Summary of  Imaging and Management Recommendations for Optimal and Optional Resource Setting\" (columns (a)Essential, (b)Optimal, (c)Optional, Remarks)"
+    }
+   ],
+   "tier_basis": "Summary table lists \"CA 125, CEA\" under (a)Essential and CA19.9 under (b)Optimal; CA 19.9 alone is printed (c) in the text, so CA 19.9 is c"
+  },
+  {
+   "id": "germ_cell_markers",
+   "label": "AFP, beta-hCG, LDH, inhibin B",
+   "tier": "c",
+   "doc_types": [
+    "lab"
+   ],
+   "department": "Biochemistry",
+   "required_facts": [
+    "afp",
+    "beta_hcg",
+    "ldh",
+    "inhibin_b"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "(In patients <40 years to also do AFP, βHCG, S LDH, S Inhibin B if indicated)",
+     "where": "Section \"EPITHELIAL OVARIAN CANCER (LEVELS OF EVIDENCE IN PARENTHESES)\", part \"Work Up & Investigations\"; summary table \"Summary of  Imaging and Management Recommendations for Optimal and Optional Resource Setting\" (columns (a)Essential, (b)Optimal, (c)Optional, Remarks)"
+    }
+   ],
+   "tier_basis": "Condition is the book's own (age under 40, \"if indicated\"); the summary table remark says \"as indicated\"; the system never judges the condition, so the record is shown, not counted",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "in patients under 40 years, or if indicated"
+   }
+  },
+  {
+   "id": "he4",
+   "label": "HE4 (optional marker)",
+   "tier": "c",
+   "doc_types": [
+    "lab"
+   ],
+   "department": "Biochemistry",
+   "required_facts": [
+    "he4"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "HE4",
+     "where": "Section \"EPITHELIAL OVARIAN CANCER (LEVELS OF EVIDENCE IN PARENTHESES)\", part \"Work Up & Investigations\"; summary table \"Summary of  Imaging and Management Recommendations for Optimal and Optional Resource Setting\" (columns (a)Essential, (b)Optimal, (c)Optional, Remarks)"
+    }
+   ],
+   "tier_basis": "Summary table, tumour markers row, column (c)Optional"
+  },
+  {
+   "id": "imaging_cect",
+   "label": "CECT abdomen and pelvis, chest X-ray (CECT thorax if indicated)",
+   "tier": "a",
+   "doc_types": [
+    "ct",
+    "xray"
+   ],
+   "department": "Radiology",
+   "required_facts": [
+    "lesion_size",
+    "nodal_findings",
+    "distant_findings",
+    "recorded_stage"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "Contrast CT scan of abdomen and pelvis and chest X-ray (a) (b).CT scan of the chest if clinically indicated or Germ Cell tumor is suspected.",
+     "where": "Section \"EPITHELIAL OVARIAN CANCER (LEVELS OF EVIDENCE IN PARENTHESES)\", part \"Work Up & Investigations\"; summary table \"Summary of  Imaging and Management Recommendations for Optimal and Optional Resource Setting\" (columns (a)Essential, (b)Optimal, (c)Optional, Remarks)"
+    }
+   ],
+   "tier_basis": "Printed letters (a) (b) are on the line; summary table puts CECT abdomen + pelvis and chest X-ray in (a)Essential and (b)Optimal for all three rows"
+  },
+  {
+   "id": "imaging_mri_pet",
+   "label": "MRI abdomen and pelvis, PET-CT / PET-MRI (optional)",
+   "tier": "c",
+   "doc_types": [
+    "mri",
+    "pet_ct"
+   ],
+   "department": "Radiology",
+   "required_facts": [
+    "suv_max",
+    "comparison_prior"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "MRI may help to better characterise benign from malignant ovarian lesion",
+     "where": "Section \"EPITHELIAL OVARIAN CANCER (LEVELS OF EVIDENCE IN PARENTHESES)\", part \"Work Up & Investigations\"; summary table \"Summary of  Imaging and Management Recommendations for Optimal and Optional Resource Setting\" (columns (a)Essential, (b)Optimal, (c)Optional, Remarks)"
+    }
+   ],
+   "tier_basis": "Summary table column (c) Optional in all three rows: \"MRI Abdomen and Pelvis, PET-CT/PET-MRI\" (early), \"PET-CT/PET-MRI\" (advanced, listed after a staging laparoscopy, which is a procedure and not a record here) and \"PET-CT\" (recurrent)"
+  },
+  {
+   "id": "blood_counts_org",
+   "label": "Blood counts, liver, kidney tests, electrolytes, ECG",
+   "tier": "a",
+   "doc_types": [
+    "lab"
+   ],
+   "department": "Biochemistry",
+   "required_facts": [
+    "haemoglobin",
+    "wbc",
+    "platelets",
+    "creatinine",
+    "bilirubin"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "Haematological and biochemical investigations",
+     "where": "Section \"EPITHELIAL OVARIAN CANCER (LEVELS OF EVIDENCE IN PARENTHESES)\", part \"Work Up & Investigations\"; summary table \"Summary of  Imaging and Management Recommendations for Optimal and Optional Resource Setting\" (columns (a)Essential, (b)Optimal, (c)Optional, Remarks)"
+    }
+   ],
+   "tier_basis": "Summary table \"Other work up\": \"CBC, LFT, RFT, Serum electrolytes, ECG\" in (a) and (b); iron studies, B12, folate, 2D echo are (c) \"if Clinically indicated\""
+  },
+  {
+   "id": "histopathology",
+   "label": "Histopathology: tumour type and grade (biopsy or surgical specimen)",
+   "tier": "a",
+   "doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type",
+    "grade"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "Grossing and complete reporting of the surgical specimen should be done",
+     "where": "Section \"EPITHELIAL OVARIAN CANCER (LEVELS OF EVIDENCE IN PARENTHESES)\", part \"Work Up & Investigations\"; summary table \"Summary of  Imaging and Management Recommendations for Optimal and Optional Resource Setting\" (columns (a)Essential, (b)Optimal, (c)Optional, Remarks)"
+    }
+   ],
+   "tier_basis": "Summary table Pathology, column (a): \"Pathology reporting Tumour type, grade\"; recurrent row has no separate pathology entry, kept a as proposal"
+  },
+  {
+   "id": "ascitic_cytology",
+   "label": "Ascitic or pleural fluid cytology (if present)",
+   "tier": "a",
+   "tiers": {
+    "early": "none",
+    "advanced": "a",
+    "recurrent": "none"
+   },
+   "doc_types": [
+    "cytology"
+   ],
+   "region": "ascit|pleural|peritone|effusion|fluid",
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "Ascitic fluid/ pleural fluid cytology (if present).",
+     "where": "Section \"EPITHELIAL OVARIAN CANCER (LEVELS OF EVIDENCE IN PARENTHESES)\", part \"Work Up & Investigations\"; summary table \"Summary of  Imaging and Management Recommendations for Optimal and Optional Resource Setting\" (columns (a)Essential, (b)Optimal, (c)Optional, Remarks)"
+    }
+   ],
+   "tier_basis": "Summary table Pathology column (a): \"Ascitic fluid cytology in advanced cancers\""
+  },
+  {
+   "id": "cell_block_ihc",
+   "label": "Ascitic fluid cell block and IHC markers as indicated",
+   "tier": "c",
+   "tiers": {
+    "early": "c",
+    "advanced": "c",
+    "recurrent": "none"
+   },
+   "doc_types": [
+    "ihc",
+    "cytology"
+   ],
+   "region": "ascit|pleural|peritone|effusion|fluid",
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "Cell block preparation for IHC may be done (IHC (c))",
+     "where": "Section \"EPITHELIAL OVARIAN CANCER (LEVELS OF EVIDENCE IN PARENTHESES)\", part \"Work Up & Investigations\"; summary table \"Summary of  Imaging and Management Recommendations for Optimal and Optional Resource Setting\" (columns (a)Essential, (b)Optimal, (c)Optional, Remarks)"
+    }
+   ],
+   "tier_basis": "Text prints (c); the summary table places the cell block and the IHC markers in column (b) Optimal. Kept c, the letter printed in the text; a clinician should check it against the formatted book"
+  },
+  {
+   "id": "image_guided_biopsy",
+   "label": "Image-guided biopsy or FNAC",
+   "tier": "c",
+   "tiers": {
+    "early": "none",
+    "advanced": "c",
+    "recurrent": "none"
+   },
+   "doc_types": [
+    "histopathology",
+    "cytology"
+   ],
+   "department": "Radiology",
+   "required_facts": [
+    "histologic_type"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "Biopsy or FNAC to be done only in advanced disease where primary surgery not planned.",
+     "where": "Section \"EPITHELIAL OVARIAN CANCER (LEVELS OF EVIDENCE IN PARENTHESES)\", part \"Work Up & Investigations\"; summary table \"Summary of  Imaging and Management Recommendations for Optimal and Optional Resource Setting\" (columns (a)Essential, (b)Optimal, (c)Optional, Remarks)"
+    }
+   ],
+   "tier_basis": "Summary table Pathology column (a)/(b): \"Image guided biopsy /FNAC if indicated (in advanced cancers)\"",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "in advanced disease where primary surgery is not planned"
+   }
+  },
+  {
+   "id": "genetic_testing",
+   "label": "BRCA 1 and 2 testing, genetic counselling",
+   "tier": "c",
+   "doc_types": [
+    "molecular"
+   ],
+   "department": "Medical Genetics",
+   "required_facts": [
+    "brca_status"
+   ],
+   "sla_days": 10,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "Genetic Testing for BRCA 1 and 2 in case family history suggestive. Consider in all high grade non mucinous epithelial ovarian carcinoma (c)",
+     "where": "Section \"EPITHELIAL OVARIAN CANCER (LEVELS OF EVIDENCE IN PARENTHESES)\", part \"Work Up & Investigations\"; summary table \"Summary of  Imaging and Management Recommendations for Optimal and Optional Resource Setting\" (columns (a)Essential, (b)Optimal, (c)Optional, Remarks)"
+    }
+   ],
+   "tier_basis": "Printed (c) in the text; the summary table says genetic counselling and testing are to be offered to all non mucinous epithelial ovarian cancers (no letter legible in the text copy of the book)"
+  },
+  {
+   "id": "gi_endoscopy",
+   "label": "Upper and lower GI endoscopy (if clinically indicated)",
+   "tier": "c",
+   "tiers": {
+    "early": "c",
+    "advanced": "c",
+    "recurrent": "none"
+   },
+   "doc_types": [
+    "endoscopy"
+   ],
+   "department": "Gastrointestinal Surgery",
+   "required_facts": [],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "Upper and Lower GI endoscopy if clinically indicated eg.",
+     "where": "Section \"EPITHELIAL OVARIAN CANCER (LEVELS OF EVIDENCE IN PARENTHESES)\", part \"Work Up & Investigations\"; summary table \"Summary of  Imaging and Management Recommendations for Optimal and Optional Resource Setting\" (columns (a)Essential, (b)Optimal, (c)Optional, Remarks)"
+    }
+   ],
+   "tier_basis": "No letter printed in the text; summary table \"Upper GI endoscopy, Lower GI endoscopy\" is in the Remarks as \"If clinically indicated to rule out Krukenberg tumor\"; proposed c",
+   "note": "NCG: if clinically indicated, to rule out a Krukenberg tumour"
+  },
+  {
+   "id": "mammogram_bilateral",
+   "label": "Bilateral mammogram (if clinically indicated)",
+   "tier": "c",
+   "tiers": {
+    "early": "c",
+    "advanced": "c",
+    "recurrent": "none"
+   },
+   "doc_types": [
+    "mammogram"
+   ],
+   "department": "Radiology",
+   "required_facts": [],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+     "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+     "page": "n/a",
+     "quote": "B/L Mammogram",
+     "where": "Section \"EPITHELIAL OVARIAN CANCER (LEVELS OF EVIDENCE IN PARENTHESES)\", part \"Work Up & Investigations\"; summary table \"Summary of  Imaging and Management Recommendations for Optimal and Optional Resource Setting\" (columns (a)Essential, (b)Optimal, (c)Optional, Remarks)"
+    }
+   ],
+   "tier_basis": "Same summary table row, remark \"If clinically indicated to rule out Krukenberg tumor\"; proposed c",
+   "note": "NCG remark: if clinically indicated, to rule out a Krukenberg tumour"
+  }
+ ],
+ "optional": [
+  {
+   "id": "previous_board",
+   "label": "Previous Tumour Board record",
+   "doc_types": [
+    "tumour_board_record"
+   ],
+   "department": "MDT Coordinator",
+   "route": "coordinator"
+  }
+ ],
+ "extract_facts": [
+  "presenting_complaint",
+  "ecog",
+  "comorbidities",
+  "clinical_question",
+  "recorded_stage",
+  "figo_stage",
+  "lesion_size",
+  "nodal_findings",
+  "distant_findings",
+  "histologic_type",
+  "grade",
+  "haemoglobin",
+  "wbc",
+  "platelets",
+  "creatinine",
+  "bilirubin",
+  "patient_preference",
+  "clinical_trial_note",
+  "diagnosis_date_mode",
+  "treatment_received",
+  "ca125",
+  "cea",
+  "afp",
+  "beta_hcg",
+  "ldh",
+  "inhibin_b",
+  "he4",
+  "suv_max",
+  "comparison_prior",
+  "brca_status"
+ ],
+ "core_data": [
+  {
+   "id": "diagnosis",
+   "label": "Histopathological / cytological diagnosis",
+   "facts": [
+    "histologic_type"
+   ]
+  },
+  {
+   "id": "diagnosis_date_mode",
+   "label": "Date and mode of diagnosis",
+   "facts": [
+    "diagnosis_date_mode"
+   ]
+  },
+  {
+   "id": "stage",
+   "label": "FIGO stage as recorded (with the investigations used)",
+   "facts": [
+    "figo_stage",
+    "recorded_stage"
+   ]
+  },
+  {
+   "id": "performance_status",
+   "label": "Performance status",
+   "facts": [
+    "ecog"
+   ]
+  },
+  {
+   "id": "comorbidities",
+   "label": "Co-morbidities",
+   "facts": [
+    "comorbidities"
+   ]
+  },
+  {
+   "id": "biomarkers",
+   "label": "Relevant genomic / biomarker testing",
+   "facts": [
+    "brca_status",
+    "ca125",
+    "he4"
+   ]
+  },
+  {
+   "id": "treatment_history",
+   "label": "Treatment history",
+   "facts": [
+    "treatment_received"
+   ]
+  },
+  {
+   "id": "patient_preference",
+   "label": "Patient preference / special circumstances",
+   "facts": [
+    "patient_preference"
+   ]
+  },
+  {
+   "id": "clinical_trial",
+   "label": "Clinical trial availability / suitability recorded",
+   "facts": [
+    "clinical_trial_note"
+   ]
+  },
+  {
+   "id": "question",
+   "label": "Question for the Tumour Board",
+   "facts": [
+    "clinical_question"
+   ]
+  }
+ ],
+ "core_data_source": "NHS England, Streamlining MDT meetings (2020), p.11 'minimum core data requirements'; aligned with the NCG Virtual Tumour Board case template (India)",
+ "post_board": {
+  "required_record_fields": [
+   "decision_text",
+   "recorded_by",
+   "participants",
+   "actions"
+  ],
+  "follow_up_default_days": 14,
+  "record_fields_source": "EUSOMA 2020 (names of all participants, evidence on decisions); Victorian Cancer MDM quality framework 2018 (report errors/changes raised, divergent recommendations and dissenting clinicians); PM-JAY HBP 2.2 s.3.9 (tumour board decision and treatment plan)"
+ },
+ "policy_basis": "PM-JAY Health Benefit Package 2.2 user guidelines (NHA, 2021), section 3.9: pre-authorization is mandatory at each step of cancer care and the decision on appropriate care is to be taken by a multidisciplinary tumour board; NHS England MDT streamlining guidance (2020) pre-listing conditions.",
+ "guideline_sources": [
+  {
+   "guideline": "NCG Guidelines for Gynaecological Cancers (2019)",
+   "file": "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx",
+   "pages": "n/a (Word file with no page numbers: each source names its section under where)"
+  }
+ ]
+}

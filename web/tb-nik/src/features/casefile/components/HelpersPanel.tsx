@@ -1,20 +1,102 @@
-// Specialty helpers: six "<Specialty> records check" cards. Pick one: its brief (prepared at the ready mark for the five
-// heads, on click for Nuclear Medicine) with sections and points for review, then a chat thread with that helper.
-// Everything comes from the records and guideline points; never an opinion.
+// The Specialty agents (night-v3 item 6.5, owner decision D2; formerly the six "<Specialty> records check" helpers): one AI agent per
+// specialty, support only, never a member of the board. Pick one: its brief (prepared at the ready mark for the five heads, on request
+// for Nuclear Medicine, or all at once with "Prepare all") with sections, points for review and what is not documented, then the one
+// thread per Case File and role that the board meetings share (each meeting exchange labelled with the meeting's date). Everything comes
+// from the records and guideline points; never a decision or treatment advice.
+// Voice (night-v3 item 4.4): the mic fills the question box as an editable edit (nothing is sent until Ask); "Read aloud" on each
+// saved answer reads its statements as shown.
+// The Summary section opens a given agent from the address (?item=<role>), which the Overview card's chips use (AgentsCard.tsx).
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Bot, Loader2, SendHorizontal, Sparkles } from "lucide-react";
+import { ArrowLeft, Bot, CheckCheck, Flag, Loader2, SendHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { askAgentOld, getHelperChat, getHelpers, getRoles, notBuiltYet, postHelperChat, prepareHelper, streamAgentOld } from "../api";
+import { MicButton } from "@/components/MicButton";
+import { SpeakButton } from "@/components/SpeakButton";
+import { drName, plural } from "@/lib/format";
+import { askAgentOld, getHelperChat, getHelpers, getRoles, notBuiltYet, postHelperChat, prepareAllHelpers, prepareHelper, reviewArtefact, streamAgentOld } from "../api";
 import { useJob } from "../hooks";
 import type { CaseFile, Helper, HelperMessage } from "../types";
 import type { SourceTarget } from "./SourceViewer";
-import { ErrorState, LoadingButton, NotYetState, SkeletonLines, StatusChip, docTitleOf, errorText, fmtDateTime, indianDates, modelLabel } from "./common";
+import { ErrorState, LoadingButton, NotYetState, SkeletonLines, StatusChip, NotSigned, docTitleOf, errorText, finalWordOf, fmtDate, fmtDateTime, indianDates, modelLabel, useAnnounce } from "./common";
 import { cn } from "@/lib/utils";
 
-const ORDER = ["radiology", "pathology", "medical_oncology", "surgical_oncology", "radiation_oncology", "nuclear_medicine"];
+const MAX_Q = 1000;
+const HEARD = "Heard this. Check it before asking.";
+
+export const ORDER = ["radiology", "pathology", "medical_oncology", "surgical_oncology", "radiation_oncology", "nuclear_medicine"];
 export const NAMES: Record<string, string> = { radiology: "Radiology", pathology: "Pathology", medical_oncology: "Medical Oncology", surgical_oncology: "Surgical Oncology", radiation_oncology: "Radiation Oncology", nuclear_medicine: "Nuclear Medicine" };
+/** The labels of owner decision D2, shown wherever an agent is named. */
+export const AGENT_LABEL = "AI agent, support only";
+export const AGENT_LINE = "Reads this Case File and the guidelines. Does not decide or advise. Not a member of the board.";
+const ANSWER_FOOTER = "AI agent, support only. From the records and guidelines only. Check the source.";
+
+export const agentName = (h: Pick<Helper, "role" | "label" | "department">) => NAMES[h.role] ?? h.department ?? h.label;
+/** "Radiology, AI agent". */
+export const agentTitle = (h: Pick<Helper, "role" | "label" | "department" | "title">) => h.title || `${agentName(h)}, AI agent`;
+/** Who reviewed a brief: "Dr <display name>" when the server sends one, else the login. */
+export const briefReviewer = (b: Pick<Helper["brief"], "reviewed_by" | "reviewed_by_name">) => (b.reviewed_by_name ? drName(b.reviewed_by_name) : b.reviewed_by ?? "");
+
+/** The brief's review chip: "Reviewed by Dr <name>", "Flagged for correction by Dr <name>", or "AI draft, not reviewed". */
+export function BriefReviewChip({ brief }: { brief: Helper["brief"] }) {
+  const chip = brief.reviewed_by || brief.review === "reviewed" ? <StatusChip kind="ok" icon={CheckCheck}>{brief.reviewed_by ? `Reviewed by ${briefReviewer(brief)}` : "Reviewed"}</StatusChip>
+    : brief.review === "flagged" ? <StatusChip kind="bad" icon={Flag}>{brief.flagged_by_name || brief.flagged_by ? `Flagged for correction by ${drName(brief.flagged_by_name || brief.flagged_by)}` : "Flagged for correction"}</StatusChip>
+    : <StatusChip kind="review" icon={Bot}>AI draft, not reviewed</StatusChip>;
+  return <span className="inline-flex" data-testid="brief-review">{chip}</span>;
+}
+/** The counts of the badges (the server's, or worked out from the brief on an older server). */
+export function agentCounts(h: Helper) {
+  const live = h.brief.status === "ready" || h.brief.status === "stale";
+  return {
+    points: live ? (h.points_count ?? (h.brief.points_for_review ?? []).length) : 0,
+    notDocumented: live ? (h.not_documented_count ?? (h.brief.not_documented ?? []).length) : 0,
+    questions: h.thread_count ?? 0,
+  };
+}
+
+/** The agent's state in words: a spinner and "Reading the records" while its brief is prepared, "Records changed" for a brief the
+ *  records have moved past, "Not prepared" when there is none. */
+export function AgentState({ h, className }: { h: Helper; className?: string }) {
+  const st = h.brief.status;
+  if (st === "preparing") {
+    return (
+      <span className={cn("inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium whitespace-nowrap text-secondary-foreground", className)} title={h.brief.message || undefined} data-testid="agent-state" data-state="preparing">
+        <Loader2 className="size-3.5 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden />Reading the records
+      </span>
+    );
+  }
+  if (st === "stale") return <span data-testid="agent-state" data-state="stale"><StatusChip kind="warn" className={className} title={h.brief.stale_reason || undefined}>Records changed</StatusChip></span>;
+  if (st === "none") return <span data-testid="agent-state" data-state="none"><StatusChip kind="muted" className={className}>Not prepared</StatusChip></span>;
+  return null;
+}
+
+/** The count badges: points for review, items not documented, questions on the shared thread. */
+export function AgentBadges({ h, className }: { h: Helper; className?: string }) {
+  const c = agentCounts(h);
+  const live = h.brief.status === "ready" || h.brief.status === "stale";
+  const pill = "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap";
+  return (
+    <span className={cn("inline-flex flex-wrap items-center gap-1", className)} data-testid="agent-badges">
+      {live ? <span className={cn(pill, c.points ? "status-review" : "bg-muted text-muted-foreground")} data-testid="badge-points">{plural(c.points, "point", "points")}</span> : null}
+      {c.notDocumented ? <span className={cn(pill, "status-warn")} data-testid="badge-not-documented">{c.notDocumented} not documented</span> : null}
+      {c.questions ? <span className={cn(pill, "bg-secondary text-secondary-foreground")} data-testid="badge-questions">{plural(c.questions, "question", "questions")}</span> : null}
+    </span>
+  );
+}
+
+/** "Prepare all": every agent without a brief that stands for the Case File, one after the other in the background (useHelpers polls). */
+export function usePrepareAll(caseId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => prepareAllHelpers(caseId),
+    onSettled: () => qc.invalidateQueries({ queryKey: ["helpers", caseId] }),
+  });
+}
+
+/** Whether "Prepare all" has anything to do and may be offered. */
+export const canPrepareAll = (helpers: Helper[], notBuilt: boolean) =>
+  !notBuilt && helpers.some((h) => h.prepare_allowed) && helpers.some((h) => h.brief.status === "none" || h.brief.status === "stale");
 
 export function useHelpers(caseId: string, cf: CaseFile | null, enabled: boolean) {
   const q = useQuery({ queryKey: ["helpers", caseId], queryFn: () => getHelpers(caseId), retry: false, enabled, refetchInterval: (query) => (query.state.data?.helpers.some((h) => h.brief.status === "preparing") ? 4000 : false) });
@@ -39,40 +121,67 @@ export function useHelpers(caseId: string, cf: CaseFile | null, enabled: boolean
 
 export function HelpersPanel({ caseId, cf, onOpenSource, onCaseChanged }: { caseId: string; cf: CaseFile; onOpenSource: (t: SourceTarget) => void; onCaseChanged: () => Promise<void> }) {
   const { helpers, notBuilt, isLoading, error, refetch } = useHelpers(caseId, cf, true);
-  const [picked, setPicked] = useState<string | null>(null);
+  const [search, setSearch] = useSearchParams();
+  const asked = search.get("item");
+  const fromAddress = asked && ORDER.includes(asked) ? asked : null;
+  const [picked, setPicked] = useState<string | null>(fromAddress);
+  const box = useRef<HTMLDivElement>(null);
+  const all = usePrepareAll(caseId);
+  // An agent chip on the Overview opens its agent here (?item=<role>): open it and bring the card into view.
+  useEffect(() => {
+    if (!fromAddress) return;
+    setPicked(fromAddress);
+    const t = window.setTimeout(() => box.current?.scrollIntoView({ block: "start" }), 80);
+    return () => window.clearTimeout(t);
+  }, [fromAddress]);
+  const back = () => {
+    setPicked(null);
+    if (fromAddress) { const next = new URLSearchParams(search); next.delete("item"); setSearch(next, { replace: true }); }
+  };
   const h = helpers.find((x) => x.role === picked) ?? null;
-  if (isLoading) return <SkeletonLines n={6} />;
-  if (error) return <ErrorState error={error} retry={() => void refetch()} compact />;
-  if (h) return <HelperDetail caseId={caseId} helper={h} notBuilt={notBuilt} docs={cf.documents} onBack={() => setPicked(null)} onOpenSource={onOpenSource} onChanged={async () => { await refetch(); await onCaseChanged(); }} />;
-  return (
+  let body;
+  if (isLoading) body = <SkeletonLines n={6} />;
+  else if (error) body = <ErrorState error={error} retry={() => void refetch()} compact />;
+  else if (h) body = <HelperDetail caseId={caseId} helper={h} notBuilt={notBuilt} docs={cf.documents} canReview={!!cf.permissions?.review} onBack={back} onOpenSource={onOpenSource} onChanged={async () => { await refetch(); await onCaseChanged(); }} />;
+  else body = (
     <div className="space-y-3" data-testid="helpers-list">
-      {notBuilt ? <NotYetState what="Specialty helper briefs" fallback="Showing the briefs the old route already prepared; Prepare uses the old helper stream." /> : null}
-      <p className="text-sm text-muted-foreground">Each helper checks the records for its specialty and lists points for review. Records and guideline points only, never opinions. Briefs for the five board heads are prepared at the ready mark; Nuclear Medicine on request.</p>
+      {notBuilt ? <NotYetState what="Specialty agent briefs" fallback="Showing the briefs the old route already prepared; Prepare uses the old helper stream." /> : null}
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+        <p className="min-w-[14rem] flex-1 text-sm text-muted-foreground">One AI agent per specialty, support only. Each reads this Case File and its specialty&apos;s guidelines and lists points for review; it never decides or advises and is not a member of the board. Briefs for the five board heads are prepared at the ready mark; Nuclear Medicine on request.</p>
+        {canPrepareAll(helpers, notBuilt) ? <LoadingButton size="sm" variant="outline" loading={all.isPending} loadingText="Starting" onClick={() => all.mutate()} data-testid="agents-prepare-all">Prepare all</LoadingButton> : null}
+      </div>
+      {all.isError ? <p role="alert" className="text-xs text-bad">{errorText(all.error)}</p> : null}
       <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-        {helpers.map((x) => {
-          const st = x.brief.status;
-          return (
-            <li key={x.role}>
-              <button type="button" onClick={() => setPicked(x.role)} className="row-lift w-full text-left rounded-md border border-border bg-card p-3 hover:border-primary/60 focus-visible:outline-2" data-testid={`helper-${x.role}`}>
-                <div className="flex items-center gap-2">
-                  <Sparkles className="size-4 text-brand shrink-0" aria-hidden />
-                  <span className="font-medium text-foreground">{NAMES[x.role] ?? x.label} records check</span>
-                  <span className="ml-auto">
-                    {st === "ready" ? <StatusChip kind="ok">brief ready</StatusChip> : st === "preparing" ? <StatusChip kind="info" icon={Loader2}>preparing</StatusChip> : st === "stale" ? <StatusChip kind="warn">records changed</StatusChip> : <StatusChip kind="muted">not prepared</StatusChip>}
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">{x.thread_count ? `${x.thread_count} question${x.thread_count === 1 ? "" : "s"} asked` : "No questions yet"}{x.brief.at ? `, brief ${fmtDateTime(x.brief.at)}` : ""}</p>
-              </button>
-            </li>
-          );
-        })}
+        {helpers.map((x) => (
+          <li key={x.role}>
+            <button type="button" onClick={() => setPicked(x.role)} className="row-lift w-full text-left rounded-md border border-border bg-card p-3 hover:border-primary/60 focus-visible:outline-2" data-testid={`helper-${x.role}`}>
+              <div className="flex flex-wrap items-center gap-2">
+                <Bot className="size-4 text-brand shrink-0" aria-hidden />
+                <span className="font-medium text-foreground">{agentTitle(x)}</span>
+                <span className="inline-flex flex-wrap items-center gap-1 sm:ml-auto"><AgentState h={x} /><AgentBadges h={x} /></span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                <span className="font-medium text-review">{AGENT_LABEL}</span>
+                {x.brief.at && x.brief.status !== "preparing" ? `. Brief of ${fmtDateTime(x.brief.at)}` : ""}
+                {x.meeting_exchanges ? `. ${plural(x.meeting_exchanges, "question", "questions")} from board meetings` : ""}
+              </p>
+            </button>
+          </li>
+        ))}
       </ul>
     </div>
   );
+  return <div ref={box} className="scroll-mt-24">{body}</div>;
 }
 
-function HelperDetail({ caseId, helper, notBuilt, docs, onBack, onOpenSource, onChanged }: { caseId: string; helper: Helper; notBuilt: boolean; docs: CaseFile["documents"]; onBack: () => void; onOpenSource: (t: SourceTarget) => void; onChanged: () => Promise<void> }) {
+function HelperDetail({ caseId, helper, notBuilt, docs, canReview, onBack, onOpenSource, onChanged }: { caseId: string; helper: Helper; notBuilt: boolean; docs: CaseFile["documents"]; canReview: boolean; onBack: () => void; onOpenSource: (t: SourceTarget) => void; onChanged: () => Promise<void> }) {
   const qc = useQueryClient();
+  const [announce, liveNode] = useAnnounce();
+  // Human oversight (review 9 C, I1): a doctor with the review permission marks the brief reviewed or flags it for correction.
+  const [flagging, setFlagging] = useState(false);
+  const [comment, setComment] = useState("");
+  const [reviewBusy, setReviewBusy] = useState<"" | "reviewed" | "flagged">("");
+  const [reviewErr, setReviewErr] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [steps, setSteps] = useState<string[]>([]);
   const [streaming, setStreaming] = useState(false);
@@ -80,6 +189,9 @@ function HelperDetail({ caseId, helper, notBuilt, docs, onBack, onOpenSource, on
   const [question, setQuestion] = useState("");
   const [local, setLocal] = useState<HelperMessage[]>([]);
   const abort = useRef<AbortController | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  /** The text in the box came from the mic and the box has not been cleared or sent since. */
+  const [dictated, setDictated] = useState(false);
   const role = helper.role;
   const brief = helper.brief;
 
@@ -95,7 +207,7 @@ function HelperDetail({ caseId, helper, notBuilt, docs, onBack, onOpenSource, on
       try {
         await streamAgentOld(caseId, role, (ev) => {
           if (ev.type === "step") setSteps((s) => [...s, String(ev.text ?? ev.step ?? "working")].slice(-6));
-          if (ev.type === "error") setPrepErr(String(ev.text ?? ev.message ?? "The helper stopped."));
+          if (ev.type === "error") setPrepErr(String(ev.text ?? ev.message ?? "The agent stopped."));
         }, abort.current.signal);
       } finally { setStreaming(false); }
       await onChanged();
@@ -110,35 +222,52 @@ function HelperDetail({ caseId, helper, notBuilt, docs, onBack, onOpenSource, on
       if (notBuilt) setLocal((l) => [...l, { ...m, question: m.question || question, at: new Date().toISOString() }]);
       else void qc.invalidateQueries({ queryKey: ["helper-chat", caseId, role] });
       setQuestion("");
+      setDictated(false);
     },
   });
   const messages = useMemo(() => [...(chatQ.data?.messages ?? []), ...local], [chatQ.data, local]);
   const busy = prepare.isPending || streaming || !!jobId || brief.status === "preparing";
-  const name = NAMES[role] ?? helper.label;
+  const name = agentName(helper);
+  const reviewed = !!brief.reviewed_by || brief.review === "reviewed";
+  const mayReview = canReview && !notBuilt && !busy && (brief.status === "ready" || brief.status === "stale");
+  const review = async (status: "reviewed" | "flagged") => {
+    setReviewBusy(status); setReviewErr(null);
+    try {
+      await reviewArtefact(caseId, `brief_${role}`, status, status === "flagged" ? comment.trim() : "");
+      setFlagging(false); setComment("");
+      announce(status === "reviewed" ? "Brief marked reviewed." : "Brief flagged for correction.");
+      await onChanged();
+    } catch (e) { setReviewErr(errorText(e)); } finally { setReviewBusy(""); }
+  };
 
   return (
     <div className="space-y-3" data-testid="helper-detail">
-      <Button variant="ghost" size="sm" onClick={onBack} className="-ml-2"><ArrowLeft className="size-4" />All helpers</Button>
+      {liveNode}
+      <Button variant="ghost" size="sm" onClick={onBack} className="-ml-2"><ArrowLeft className="size-4" />All agents</Button>
       <div className="flex items-start gap-2">
-        <Sparkles className="size-5 text-brand shrink-0 mt-0.5" aria-hidden />
+        <Bot className="size-5 text-brand shrink-0 mt-0.5" aria-hidden />
         <div className="flex-1 min-w-0">
-          <h3 className="text-base">{name} records check</h3>
-          <p className="text-xs text-muted-foreground">From the records and guideline points only. The brief is an AI draft until a doctor reviews it.{brief.model ? ` Model: ${modelLabel(brief.model)}.` : ""}</p>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <h3 className="text-base">{agentTitle(helper)}</h3>
+            <StatusChip kind="review" icon={Bot}>{AGENT_LABEL}</StatusChip>
+          </div>
+          <p className="mt-0.5 text-xs text-muted-foreground">{AGENT_LINE} The brief is an AI draft until a doctor reviews it.{brief.model ? ` Model: ${modelLabel(brief.model)}.` : ""}</p>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {brief.status === "ready" ? <StatusChip kind="ok">brief ready{brief.at ? `, ${fmtDateTime(brief.at)}` : ""}</StatusChip> : null}
         {brief.status === "stale" ? <StatusChip kind="warn">records changed since this brief</StatusChip> : null}
         {brief.status === "none" ? <StatusChip kind="muted">not prepared yet</StatusChip> : null}
-        {busy ? <StatusChip kind="info" icon={Loader2}>preparing</StatusChip> : null}
-        {brief.reviewed_by ? <StatusChip kind="ok">reviewed by {brief.reviewed_by}</StatusChip> : <StatusChip kind="review" icon={Bot}>AI draft</StatusChip>}
+        {busy ? <AgentState h={{ ...helper, brief: { ...brief, status: "preparing" } }} /> : null}
+        <AgentBadges h={helper} />
+        <BriefReviewChip brief={brief} />
         <span className="flex-1" />
         {helper.prepare_allowed ? <LoadingButton size="sm" variant={brief.status === "ready" ? "outline" : "default"} loading={busy} loadingText="Preparing" onClick={() => prepare.mutate()}>{brief.status === "ready" ? "Prepare again" : "Prepare"}</LoadingButton> : null}
       </div>
       {busy ? (
         <div className="rounded-md border border-border bg-muted/60 p-2 text-xs" role="status" aria-live="polite">
           <p className="font-medium text-foreground">Reading the records for {name}</p>
-          <p className="text-muted-foreground">You can go back to the other helpers or close this panel: it keeps preparing, and you are told when the brief is ready.</p>
+          <p className="text-muted-foreground">You can go back to the other agents or close this panel: it keeps preparing, and you are told when the brief is ready.</p>
           <ul className="mt-1 space-y-0.5 text-muted-foreground">
             {(job ? job.events.slice(-5).map((e) => e.text ?? `${e.doc_id ?? ""} ${e.state ?? ""}`) : steps).map((s, i) => <li key={i}>{s}</li>)}
           </ul>
@@ -146,6 +275,26 @@ function HelperDetail({ caseId, helper, notBuilt, docs, onBack, onOpenSource, on
         </div>
       ) : null}
       {prepErr ? <p role="alert" className="text-xs text-bad">{prepErr}</p> : null}
+      {mayReview ? (
+        <div className="space-y-1.5" data-testid="brief-review-actions">
+          <div className="flex flex-wrap items-center gap-2">
+            {!reviewed ? <LoadingButton size="sm" variant="secondary" loading={reviewBusy === "reviewed"} disabled={!!reviewBusy} onClick={() => void review("reviewed")} data-testid="brief-mark-reviewed"><CheckCheck className="size-4" />Mark reviewed</LoadingButton> : null}
+            {!flagging ? <Button size="sm" variant="outline" disabled={!!reviewBusy} onClick={() => setFlagging(true)} data-testid="brief-flag"><Flag className="size-4" />Flag for correction</Button> : null}
+            <span className="text-xs text-muted-foreground">Read the points against their report lines first.</span>
+          </div>
+          {flagging ? (
+            <div className="space-y-1.5 rounded-md border border-border bg-muted/40 p-2" data-testid="brief-flag-form">
+              <label htmlFor={`brief-flag-${role}`} className="text-xs font-medium text-foreground">What needs correcting (optional)</label>
+              <Textarea id={`brief-flag-${role}`} value={comment} onChange={(e) => setComment(e.target.value)} className="min-h-16 text-sm" maxLength={2000} />
+              <div className="flex gap-2">
+                <LoadingButton size="sm" loading={reviewBusy === "flagged"} disabled={!!reviewBusy} onClick={() => void review("flagged")} data-testid="brief-flag-send">Flag for correction</LoadingButton>
+                <Button size="sm" variant="outline" onClick={() => { setFlagging(false); setComment(""); }}>Cancel</Button>
+              </div>
+            </div>
+          ) : null}
+          {reviewErr ? <p role="alert" className="text-xs text-bad">{reviewErr}</p> : null}
+        </div>
+      ) : null}
 
       {(brief.status === "ready" || brief.status === "stale") && !busy ? (
         <div className="space-y-3" data-testid="helper-brief">
@@ -158,7 +307,7 @@ function HelperDetail({ caseId, helper, notBuilt, docs, onBack, onOpenSource, on
                   <li key={j} className="text-sm text-foreground">
                     {indianDates(it.text)}
                     {(it.citations ?? []).map((c, k) => (
-                      <button key={k} type="button" className="quote-chip ml-1 align-middle hover:brightness-95" onClick={() => onOpenSource({ docId: c.doc_id, page: c.page ?? 0, quote: c.quote, title: docTitleOf(docs, c.doc_id, c.doc_title) })}>{docTitleOf(docs, c.doc_id, c.doc_title)}{typeof c.page === "number" ? ` p. ${c.page + 1}` : ""}</button>
+                      <button key={k} type="button" className="quote-chip ml-1 align-middle hover:brightness-95" onClick={() => onOpenSource({ docId: c.doc_id, page: c.page ?? 0, quote: c.quote, title: docTitleOf(docs, c.doc_id, c.doc_title) })}>{docTitleOf(docs, c.doc_id, c.doc_title)}{typeof c.page === "number" ? ` p. ${c.page + 1}` : ""}<NotSigned word={finalWordOf(docs, c.doc_id)} /></button>
                     ))}
                   </li>
                 ))}
@@ -170,7 +319,7 @@ function HelperDetail({ caseId, helper, notBuilt, docs, onBack, onOpenSource, on
               <h4 className="text-sm font-semibold text-foreground">Points for review</h4>
               <ol className="mt-1 list-decimal pl-5 space-y-1">
                 {brief.points_for_review!.map((p, i) => (
-                  <li key={i} className="text-sm text-foreground">{indianDates(p.text)}{(p.citations ?? []).map((c, k) => <button key={k} type="button" className="quote-chip ml-1 align-middle hover:brightness-95" onClick={() => onOpenSource({ docId: c.doc_id, page: c.page ?? 0, quote: c.quote, title: docTitleOf(docs, c.doc_id, c.doc_title) })}>{docTitleOf(docs, c.doc_id, c.doc_title)}{typeof c.page === "number" ? ` p. ${c.page + 1}` : ""}</button>)}</li>
+                  <li key={i} className="text-sm text-foreground">{indianDates(p.text)}{(p.citations ?? []).map((c, k) => <button key={k} type="button" className="quote-chip ml-1 align-middle hover:brightness-95" onClick={() => onOpenSource({ docId: c.doc_id, page: c.page ?? 0, quote: c.quote, title: docTitleOf(docs, c.doc_id, c.doc_title) })}>{docTitleOf(docs, c.doc_id, c.doc_title)}{typeof c.page === "number" ? ` p. ${c.page + 1}` : ""}<NotSigned word={finalWordOf(docs, c.doc_id)} /></button>)}</li>
                 ))}
               </ol>
             </section>
@@ -185,28 +334,41 @@ function HelperDetail({ caseId, helper, notBuilt, docs, onBack, onOpenSource, on
         </div>
       ) : null}
 
-      <section className="border-t border-border pt-3" aria-label={`Questions to the ${name} helper`}>
-        <h4 className="text-sm font-semibold text-foreground mb-1">Ask the {name} helper</h4>
-        {notBuilt ? <p className="text-xs text-muted-foreground mb-1">Saved helper threads are not on this server yet; answers here are not kept.</p> : null}
+      <section className="border-t border-border pt-3" aria-label={`Questions to the ${name} AI agent`}>
+        <h4 className="text-sm font-semibold text-foreground">Ask the {name} AI agent</h4>
+        <p className="text-xs text-muted-foreground mb-1">{notBuilt ? "Saved agent threads are not on this server yet; answers here are not kept." : "One thread for this Case File, shared with the board meetings."}</p>
         {chatQ.isLoading ? <SkeletonLines n={2} /> : null}
         <ul className="space-y-2 max-h-[40dvh] overflow-y-auto">
           {messages.map((m, i) => (
-            <li key={m.id ?? i} className="rounded-md border border-border p-2">
-              <p className="text-sm font-medium text-foreground">{m.question}</p>
+            <li key={m.id ?? i} className="rounded-md border border-border p-2" data-testid="agent-exchange" data-source={(m.source ?? "case").startsWith("meeting:") ? "meeting" : "case"}>
+              {(m.source ?? "").startsWith("meeting:") ? (
+                <p className="mb-1 inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground" data-testid="meeting-exchange">
+                  Asked of the {name} AI agent in {m.meeting_date ? `the board meeting of ${fmtDate(m.meeting_date)}` : "a board meeting"}
+                </p>
+              ) : null}
+              <div className="flex items-start gap-2">
+                <p className="flex-1 text-sm font-medium text-foreground">{m.question}</p>
+                {m.id && !notBuilt ? <SpeakButton source={{ ref: { kind: "agent", case_id: caseId, role, id: m.id } }} screen={`helper-${role}`} size="icon-xs" className="justify-end" /> : null}
+              </div>
               <p className="text-xs text-muted-foreground">{m.by_name ?? m.by ?? ""}{m.at ? ` ${fmtDateTime(m.at)}` : ""}</p>
               {m.answer ? <p className="text-sm mt-1">{m.answer}</p> : null}
               {(m.statements ?? []).map((s, j) => (
-                <p key={j} className="text-sm mt-1 text-foreground">{indianDates(s.text)}{(s.citations ?? []).map((c, k) => <button key={k} type="button" className="quote-chip ml-1 align-middle hover:brightness-95" onClick={() => onOpenSource({ docId: c.doc_id, page: c.page ?? 0, quote: c.quote, title: docTitleOf(docs, c.doc_id, c.doc_title) })}>{docTitleOf(docs, c.doc_id, c.doc_title)}{typeof c.page === "number" ? ` p. ${c.page + 1}` : ""}</button>)}</p>
+                <p key={j} className="text-sm mt-1 text-foreground">{indianDates(s.text)}{(s.citations ?? []).map((c, k) => <button key={k} type="button" className="quote-chip ml-1 align-middle hover:brightness-95" onClick={() => onOpenSource({ docId: c.doc_id, page: c.page ?? 0, quote: c.quote, title: docTitleOf(docs, c.doc_id, c.doc_title) })}>{docTitleOf(docs, c.doc_id, c.doc_title)}{typeof c.page === "number" ? ` p. ${c.page + 1}` : ""}<NotSigned word={finalWordOf(docs, c.doc_id)} /></button>)}</p>
               ))}
-              {!m.answer && !(m.statements ?? []).length ? <p className="text-sm text-muted-foreground mt-1">{m.message ?? "Nothing in the records answers this."}</p> : null}
+              {!m.answer && !(m.statements ?? []).length ? <p className="text-sm text-muted-foreground mt-1">{m.message || "Nothing in the records answers this."}</p> : null}
+              {m.stale ? <p className="mt-1 text-xs text-warn">Records changed since this answer.</p> : null}
+              <p className="mt-1 text-[11px] text-muted-foreground" data-testid="agent-footer">{ANSWER_FOOTER}{m.model ? ` ${modelLabel(m.model)}.` : ""}</p>
             </li>
           ))}
         </ul>
         <form className="mt-2 flex flex-col gap-1.5" onSubmit={(e) => { e.preventDefault(); if (question.trim().length >= 3) ask.mutate(question.trim()); }}>
-          <label htmlFor={`helper-q-${role}`} className="sr-only">Question for the {name} helper</label>
-          <Textarea id={`helper-q-${role}`} value={question} onChange={(e) => setQuestion(e.target.value)} className={cn("min-h-12 text-sm")} placeholder={`Ask the ${name} helper about the records`} maxLength={1000} disabled={ask.isPending} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (question.trim().length >= 3) ask.mutate(question.trim()); } }} />
+          <label htmlFor={`helper-q-${role}`} className="sr-only">Question for the {name} AI agent</label>
+          <Textarea ref={inputRef} id={`helper-q-${role}`} value={question} onChange={(e) => { setQuestion(e.target.value); if (!e.target.value.trim()) setDictated(false); }} className={cn("min-h-12 text-sm")} placeholder={`Ask ${name} about this Case File`} maxLength={MAX_Q} disabled={ask.isPending} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (question.trim().length >= 3) ask.mutate(question.trim()); } }} />
           <div className="flex items-center gap-2">
-            {ask.isError ? <p role="alert" className="text-xs text-bad flex-1">{errorText(ask.error)}</p> : <span className="flex-1" />}
+            {ask.isError ? <p role="alert" className="text-xs text-bad flex-1">{errorText(ask.error)}</p>
+              : dictated && question.trim() ? <span className="text-xs text-muted-foreground flex-1" data-testid="helper-heard">{HEARD}</span> : <span className="flex-1" />}
+            <MicButton target={inputRef} screen={`helper-${role}`} context="question" caseId={caseId} label="Dictate the question" hint={false}
+              onInsert={(next) => { setDictated(true); if (next.length > MAX_Q) setQuestion(next.slice(0, MAX_Q)); }} />
             <LoadingButton size="sm" type="submit" loading={ask.isPending} loadingText="Reading" disabled={question.trim().length < 3}><SendHorizontal className="size-4" />Ask</LoadingButton>
           </div>
         </form>

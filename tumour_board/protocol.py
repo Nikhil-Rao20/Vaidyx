@@ -14,6 +14,8 @@ STRICTNESS = {"a": 3, "b": 2, "c": 1, "none": 0}
 # A cancer with no built checklist (a typed name, or a listed cancer not built yet): four core records (owner decision R05-Q04,
 # protocols/generic.json). The cancer's name is kept on the Case File as the doctor wrote it (case.json "cancer_name").
 GENERIC = "generic"
+GENERIC_HAEM = "generic_haem"  # the blood cancer variant (night-v3 item 2.9): marrow, flow cytometry or cytogenetics instead of staging imaging
+GENERIC_IDS = frozenset({GENERIC, GENERIC_HAEM})
 NO_CHECKLIST = "no checklist yet"
 NO_PROTOCOL_LABEL = "No disease-specific Indian protocol"
 
@@ -24,7 +26,7 @@ def case_label(case, label: str = "") -> str:
     case = case if isinstance(case, dict) else {}
     pid = str(case.get("protocol") or "")
     name = " ".join(str(case.get("cancer_name") or "").split())
-    if pid == GENERIC and name:
+    if pid in GENERIC_IDS and name:
         return f"{name} ({NO_CHECKLIST})"
     if label or not pid:
         return label

@@ -8,7 +8,12 @@ proposals wait for this consultant, a reading needs a confirmation, no cancer is
 asked, or every check is met and the ready mark is the next step); draft (records are still being read, or nothing is checked yet).
 For anyone but the owner's consultants and the team's residents the needs_me label reads "Needs the treating team". Archived Case Files
 are listed only with status=archived. Filters are simple server-side matches; the client may filter further. Sorted newest first.
-Nothing here judges the patient: the words describe the paperwork."""
+Nothing here judges the patient: the words describe the paperwork.
+
+Each row also says why the person sees it (`relation`, night-v3 item 1.3): owner, team, participant, referred, coordinator, linked,
+asked, creator (or admin inside a break-glass window). A "linked" row is another department's Case File seen only because it is linked to
+one of the person's own (the same patient's other cancer): it carries linked_only, read_only and owned_by, is never "mine", and the
+website lists it apart and leaves it out of every count."""
 
 import re
 from fastapi import Request
@@ -154,6 +159,39 @@ def _left_of(cid, gate) -> int:
     return sum(1 for q in gate.get("requirements") or [] if isinstance(q, dict) and q.get("status") not in ("satisfied", "not_applicable", "waived"))
 
 
+MINE_RELATIONS = ("owner", "team", "creator")
+
+
+def relation(r: dict, c: dict) -> str | None:
+    """Why this person sees this Case File, the strongest reason first (the same paths as access.scope): "owner" (a consultant of the
+    owning department), "team" (a resident or member of its team, or a resident of the owning department), "creator" (no owner yet, it
+    made it), "participant", "referred" (an open referral to its department), "coordinator", "linked" (only through a linked Case File of
+    its own department), "asked" (requests only), "admin" (a break-glass window or single-user mode); None when it may not open it."""
+    sc = access.scope(r, c)
+    if sc is None:
+        return None
+    if access.is_protected(c) or r.get("admin"):
+        return "creator" if access.is_creator(r, c) else "admin"
+    own = access.owner(c)
+    cons = set(r.get("departments") or {}) - set(r.get("resident") or {})  # consultant placements, as access.scope reads them
+    if own and own in cons:
+        return "owner"
+    if access.is_team_resident(r, c) or access.is_team_member(r, c):
+        return "team"
+    if not own:
+        return "creator" if access.is_creator(r, c) else "coordinator"
+    if cons & set(access.participants(c)):
+        return "participant"
+    ref = access.open_referral(c)
+    if ref and org.department_id(ref.get("to")) in cons:
+        return "referred"
+    if r.get("coordinator"):
+        return "coordinator"
+    if cons & set(access.linked_owners(c)):
+        return "linked"
+    return "asked" if sc == access.REQUESTS else "coordinator"
+
+
 def row(c: dict, r: dict, sched: dict, labels: dict) -> dict:
     cid = c["case_id"]
     st = store.get_state(cid) or {}
@@ -164,6 +202,11 @@ def row(c: dict, r: dict, sched: dict, labels: dict) -> dict:
     status = status_of(c, st, docs, r, sched)
     p = c.get("patient") if isinstance(c.get("patient"), dict) else {}
     sc = sched.get(cid)
+    rel = relation(r, c)
+    mine = rel in MINE_RELATIONS or bool(own and own in (r.get("resident") or {}) and rel != "linked") or bool(rel != "linked" and c.get("created_by") == r.get("user"))  # as before, its creator too; never a linked row
+    extra = {"linked_only": True, "read_only": True, "owned_by": {"department": own, "label": org.department_name(own)}} if rel == "linked" else {}
+    scope = access.scope(r, c)
+    clinical = _clinical_text(c, st) if scope == access.FULL else {"summary_line": "", "decision_text": ""}  # never to a department only asked
     return {"case_id": cid, "patient": {"name": p.get("name") or "", "agesex": p.get("agesex") or "", "uhid": p.get("mrn") or ""},
             "protocol": c.get("protocol") or "", "setting": c.get("setting") or "",
             # a cancer with no checklist yet (generic rule, R05-Q04) reads "<cancer name> (no checklist yet)"; the name is kept as typed
@@ -175,8 +218,18 @@ def row(c: dict, r: dict, sched: dict, labels: dict) -> dict:
             "imaging_present": any(((d.get("classification") or {}).get("doc_type") in IMAGING_TYPES) and d.get("state") == "ready" and not d.get("dismissed") for d in docs),
             "ids": _identifiers(c), "accessions": _accessions(docs),
             "documents": len(docs), "last_change": _last_change(cid), "created": c.get("created") or "", "created_by": c.get("created_by") or "",
-            "residents_count": len(access.team_residents(c)), "scope": access.scope(r, c), "archived": access.is_archived(c),
-            "mine": bool(own and (own in (r.get("treating") or {}) or own in (r.get("resident") or {}))) or access.is_team_resident(r, c) or c.get("created_by") == r.get("user")}
+            "residents_count": len(access.team_residents(c)), "scope": scope, "archived": access.is_archived(c),
+            "relation": rel, "mine": mine, **clinical, **extra}
+
+
+def _clinical_text(c: dict, st: dict) -> dict:
+    """The summary line (night-v3 item 3.4) and the latest board record's decision text (at most 200 characters), for FULL readers only."""
+    line = c.get("summary_line")
+    text = str(line.get("text") or "") if isinstance(line, dict) else ""
+    recs = [b for b in (st or {}).get("board_records") or [] if isinstance(b, dict)]
+    recs.sort(key=lambda b: (str(b.get("board_date") or b.get("recorded_at") or "")[:10], str(b.get("recorded_at") or "")))
+    dec = " ".join(str((recs[-1] if recs else {}).get("decision_text") or "").split())
+    return {"summary_line": text, "decision_text": dec[:200]}
 
 
 def _compact(s: str) -> str:
@@ -201,7 +254,8 @@ def _match(x: dict, q: str) -> bool:
     VDX/2026/00764; the owner, 19 Oct 2026)."""
     ids = [x["patient"]["uhid"], *x.get("ids", []), *x.get("accessions", []), x["case_id"]]
     parts = [x["patient"]["name"], x["patient"].get("agesex"), *ids, x["protocol_label"], x.get("cancer_name"), (x.get("setting") or "").replace("_", " "),
-             x["owner"]["doctor_name"], x["owner"]["department_label"], (x.get("status") or {}).get("label"), _dmy(x.get("board_date") or "")]
+             x["owner"]["doctor_name"], x["owner"]["department_label"], (x.get("status") or {}).get("label"), _dmy(x.get("board_date") or ""),
+             x.get("summary_line"), x.get("decision_text")]  # both "" unless the reader has the whole Case File (item 3.4)
     words = " ".join(str(v) for v in parts if v).lower()
     id_text = " ".join(str(v) for v in ids if v)
     comp, loose = _compact(id_text), _loose(id_text)
@@ -248,7 +302,7 @@ async def case_list(request: Request, q: str = "", urgency: str = "", status: st
     sched = _scheduled()
     rows = []
     for c in store.list_cases():  # the same visibility as GET /cases (access.scope)
-        if access.scope(r, c) is None:
+        if access.scope(r, c) in (None, access.READ):  # a Case File opened with a reason is never listed among the person's own (item 1.9)
             continue
         rows.append(row(c, r, sched, labels))
     filters = {"departments": sorted({(x["owner"]["department"], x["owner"]["department_label"]) for x in rows if x["owner"]["department"]}),
@@ -288,4 +342,5 @@ async def case_list(request: Request, q: str = "", urgency: str = "", status: st
         demo = service.list_demo()
     except Exception:
         demo = []
-    return {"cases": rows, "filters": filters, "total": len(rows), "demo": demo, "can_create": org.can(r, "create_case")}
+    linked = sum(1 for x in rows if x.get("linked_only"))  # another department's linked Case Files: listed, never counted as the person's own
+    return {"cases": rows, "filters": filters, "total": len(rows) - linked, "linked": linked, "demo": demo, "can_create": org.can(r, "create_case")}

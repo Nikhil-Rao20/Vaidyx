@@ -1,17 +1,30 @@
 // Ask this Case File: the team's saved chat. Every answer is statements with quote chips that open the page with the
 // quote marked. Pin keeps a thread on top; "records changed since" stamps an answer older than the Case File.
+// Voice (night-v3 item 4.4): the mic fills the question box as an editable edit; "Read aloud" reads a saved answer. Talk mode: a
+// question that came from the mic (and was not cleared) gets its answer read aloud once, by itself; a typed question never does.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { MessageSquareText, Pin, PinOff, SendHorizontal } from "lucide-react";
+import { MessageSquareText, Pin, PinOff, SendHorizontal, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { MicButton } from "@/components/MicButton";
+import { SpeakButton } from "@/components/SpeakButton";
+import { useAudioStatus } from "@/hooks/useAudioStatus";
 import { ApiError } from "@/lib/api";
+import { primeAudio, stopSpeaking, VOICE_TEXT } from "@/lib/voice";
 import { askOld, getChats, notBuiltYet, pinChat, postChat } from "../api";
 import type { CaseDocument, ChatThread } from "../types";
 import type { SourceTarget } from "./SourceViewer";
-import { EmptyState, ErrorState, LoadingButton, SkeletonLines, StatusChip, errorText, fmtDateTime, useAnnounce, niceTitle } from "./common";
+import { EmptyState, ErrorState, LoadingButton, SkeletonLines, StatusChip, errorText, fmtDateTime, indianDates, modelLabel, useAnnounce, niceTitle, NotSigned, finalWordOf } from "./common";
 import { cn } from "@/lib/utils";
+
+const MAX_Q = 600;
+/** A thread with a final answer (or a final "not found" / "outside" message) that the server can read aloud. */
+/** The line under an answer with statements: "From the records only. Gemma-4-31B (non-medical)." (review 9 C, S3); "a model" only when
+ * the server names none. */
+export const answerModelLine = (t: Pick<ChatThread, "model">) => `From the records only. ${modelLabel(t.model) || "Written by a model"}.`;
+const speakable = (t: ChatThread) => !t.unsaved && (t.status === "answered" || t.status === "not_documented" || t.status === "out_of_scope");
 
 export function AskPanel({ caseId, docs, onOpenSource, compact }: { caseId: string; docs: CaseDocument[]; onOpenSource: (t: SourceTarget) => void; compact?: boolean }) {
   const qc = useQueryClient();
@@ -20,12 +33,18 @@ export function AskPanel({ caseId, docs, onOpenSource, compact }: { caseId: stri
   const [local, setLocal] = useState<ChatThread[]>([]);
   const [announce, liveNode] = useAnnounce();
   const listRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const audio = useAudioStatus();
+  /** The text in the box came from the mic (talk mode) and the box has not been cleared since. */
+  const [dictated, setDictated] = useState(false);
+  /** The thread whose answer is read aloud once, by itself (talk mode); cleared when the reading ends or is stopped. */
+  const [talkId, setTalkId] = useState<string | null>(null);
   const q = useQuery({ queryKey: ["chats", caseId], queryFn: () => getChats(caseId), retry: false });
   const notBuilt = q.isError && notBuiltYet(q.error);
   const docTitle = (id: string) => niceTitle(docs.find((d) => d.doc_id === id)?.classification?.title ?? docs.find((d) => d.doc_id === id)?.filename ?? "record");
 
   const ask = useMutation({
-    mutationFn: async (text: string): Promise<ChatThread> => {
+    mutationFn: async ({ text }: { text: string; talk: boolean }): Promise<ChatThread> => {
       if (notBuilt) {
         const r = await askOld(caseId, text);
         return {
@@ -36,10 +55,12 @@ export function AskPanel({ caseId, docs, onOpenSource, compact }: { caseId: stri
       }
       return postChat(caseId, text);
     },
-    onSuccess: (t) => {
+    onSuccess: (t, vars) => {
       if (t.unsaved) setLocal((l) => [t, ...l]);
       else void qc.invalidateQueries({ queryKey: ["chats", caseId] });
       setQuestion("");
+      setDictated(false);
+      setTalkId(vars.talk && !t.unsaved ? t.id : null);
       announce(t.status === "answered" ? "Answer ready." : t.message ?? "No answer found in the records.");
     },
   });
@@ -59,8 +80,14 @@ export function AskPanel({ caseId, docs, onOpenSource, compact }: { caseId: stri
   const submit = () => {
     const t = question.trim();
     if (t.length < 3 || ask.isPending) return;
-    ask.mutate(t);
+    const talk = dictated && audio.tts === "ready";
+    stopSpeaking(); // a new question stops an answer still being read
+    if (talk) primeAudio(); // inside the click or key press, so the browser lets the answer play when it arrives
+    setTalkId(null);
+    ask.mutate({ text: t, talk });
   };
+  const talkThread = talkId ? threads.find((t) => t.id === talkId) ?? null : null;
+  const talking = !!talkThread && speakable(talkThread) && audio.tts === "ready";
   const askErr = ask.error ? (ask.error instanceof ApiError && ask.error.status === 429 ? "Too many questions in a short time. Please wait a minute." : errorText(ask.error)) : null;
 
   return (
@@ -73,9 +100,13 @@ export function AskPanel({ caseId, docs, onOpenSource, compact }: { caseId: stri
       </header>
       <form className="flex flex-col gap-1.5" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <label htmlFor="ask-input" className="sr-only">Your question about the records</label>
-        <Textarea id="ask-input" value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }} placeholder="For example: what did the HPE report say about the margins? Is ECOG noted?" className="min-h-14 text-sm resize-y" maxLength={600} disabled={ask.isPending} />
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground flex-1">Answers come only from the reports, each with its line.</span>
+        <Textarea ref={inputRef} id="ask-input" value={question} onChange={(e) => { setQuestion(e.target.value); if (!e.target.value.trim()) setDictated(false); }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }} placeholder="For example: what did the HPE report say about the margins? Is ECOG noted?" className="min-h-14 text-sm resize-y" maxLength={MAX_Q} disabled={ask.isPending} />
+        <div className="flex flex-wrap items-center gap-2">
+          {dictated && question.trim() ? <span className="min-w-[11rem] flex-1 text-xs text-muted-foreground" data-testid="ask-heard">{VOICE_TEXT.heard}</span>
+            : <span className="min-w-[11rem] flex-1 text-xs text-muted-foreground">Answers come only from the reports, each with its line.</span>}
+          {talking ? <Button type="button" variant="outline" size="xs" onClick={() => stopSpeaking()} data-testid="ask-stop-reading"><Square className="size-3 fill-current" aria-hidden />{VOICE_TEXT.stopReading}</Button> : null}
+          <MicButton target={inputRef} screen="ask" context="question" caseId={caseId} label="Dictate the question" hint={false}
+            onInsert={(next) => { setDictated(true); if (next.length > MAX_Q) setQuestion(next.slice(0, MAX_Q)); }} />
           <LoadingButton type="submit" size="sm" loading={ask.isPending} loadingText="Reading the records" disabled={question.trim().length < 3}><SendHorizontal className="size-4" />Ask</LoadingButton>
         </div>
         {askErr ? <p role="alert" className="text-xs text-bad">{askErr}</p> : null}
@@ -97,6 +128,10 @@ export function AskPanel({ caseId, docs, onOpenSource, compact }: { caseId: stri
             <motion.article key={t.id} layout initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={cn("rounded-md border p-3", t.pinned ? "border-primary/60 bg-secondary/40" : "border-border")} data-testid="chat-thread">
               <div className="flex items-start gap-2">
                 <p className="text-sm font-medium text-foreground flex-1">{t.question}</p>
+                {speakable(t) ? (
+                  <SpeakButton source={{ ref: { kind: "chat", case_id: caseId, id: t.id } }} screen="ask" size="icon-xs" className="justify-end"
+                    autoplay={t.id === talkId} onEnd={t.id === talkId ? () => setTalkId(null) : undefined} />
+                ) : null}
                 {!t.unsaved ? (
                   <Button variant="ghost" size="icon-xs" aria-label={t.pinned ? "Unpin" : "Pin"} aria-pressed={!!t.pinned} title={t.pinned ? "Unpin" : "Pin to the top"} onClick={() => pin.mutate({ tid: t.id, pinned: !t.pinned })} disabled={pin.isPending}>
                     {t.pinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
@@ -115,17 +150,18 @@ export function AskPanel({ caseId, docs, onOpenSource, compact }: { caseId: stri
               <ol className="mt-2 space-y-2">
                 {(t.statements ?? []).map((s, i) => (
                   <li key={i} className="text-sm text-foreground">
-                    <span>{s.text}</span>
+                    <span>{indianDates(s.text)}</span>
                     <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
                       {(s.citations ?? []).map((c, j) => (
                         <button key={j} type="button" className="quote-chip hover:brightness-95 active:scale-95 transition" onClick={() => onOpenSource({ docId: c.doc_id, page: c.page ?? 0, quote: c.quote, title: c.doc_title || docTitle(c.doc_id) })} title={`Open ${c.doc_title || docTitle(c.doc_id)}, page ${(c.page ?? 0) + 1}`}>
-                          {niceTitle(c.doc_title) || docTitle(c.doc_id)} p. {(c.page ?? 0) + 1}
+                          {niceTitle(c.doc_title) || docTitle(c.doc_id)} p. {(c.page ?? 0) + 1}<NotSigned word={finalWordOf(docs, c.doc_id)} />
                         </button>
                       ))}
                     </span>
                   </li>
                 ))}
               </ol>
+              {(t.statements ?? []).length ? <p className="mt-1 text-[11px] text-muted-foreground" data-testid="chat-model-line">{answerModelLine(t)}</p> : null}
             </motion.article>
           ))}
         </AnimatePresence>

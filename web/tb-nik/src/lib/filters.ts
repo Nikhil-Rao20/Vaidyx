@@ -183,9 +183,24 @@ export function applyFilters(cases: CaseListItem[], q: FilterQuery, user?: strin
     if (urg.length && !urgencyMatches(c.urgency?.level ?? null, urg)) return false;
     if (status.length && !status.includes(c.status?.key)) return false;
     if (!within(c.board_date, q.board_from, q.board_to)) return false;
-    if (q.mine === "1" && user && !(c.mine ?? c.owner?.doctor === user)) return false;
+    if (q.mine === "1" && (isLinkedOnly(c) || (user && !(c.mine ?? c.owner?.doctor === user)))) return false;
     return true;
   });
+}
+
+/** Another department's Case File seen only because it is linked to one of the person's own (night-v3 item 1.3). */
+export function isLinkedOnly(c: CaseListItem): boolean {
+  return Boolean(c.linked_only) || c.relation === "linked";
+}
+
+/** The person's own list: every row but the linked-only ones, which no view or count includes. */
+export function ownRows(cases: CaseListItem[]): CaseListItem[] {
+  return cases.filter((c) => !isLinkedOnly(c));
+}
+
+/** The rows in their order, then the linked-only ones at the end (listed apart, under their own heading). */
+export function linkedLast(cases: CaseListItem[]): CaseListItem[] {
+  return [...ownRows(cases), ...cases.filter(isLinkedOnly)];
 }
 
 /** Saved views live in the profile (saved_filters). Names are unique; saving the same name replaces. */

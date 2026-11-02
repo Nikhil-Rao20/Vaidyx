@@ -22,6 +22,13 @@
   "treatment_summary",
   "tumour_board_record",
   "pulmonary_function",
+  "bone_marrow",
+  "flow_cytometry",
+  "cytogenetics",
+  "csf",
+  "echocardiogram",
+  "ophthalmology_note",
+  "audiometry",
   "other"
  ],
  "facts": {
@@ -479,6 +486,600 @@
     "referral",
     "discharge_summary"
    ]
+  },
+  "tumour_site_colon": {
+   "label": "Colon segment of the tumour",
+   "desc": "segment of the colon where the tumour sits as written (caecum, ascending colon, hepatic flexure, transverse colon, splenic flexure, descending colon, sigmoid colon)",
+   "doc_types": [
+    "endoscopy",
+    "ct",
+    "histopathology",
+    "operative_note"
+   ]
+  },
+  "nodes_examined": {
+   "label": "Lymph nodes examined",
+   "desc": "number of lymph nodes examined and the number involved as written in the resection histopathology (for example 3 of 15)",
+   "doc_types": [
+    "histopathology"
+   ]
+  },
+  "obstruction_perforation": {
+   "label": "Obstruction or perforation",
+   "desc": "whether the report records bowel obstruction or perforation, as written",
+   "doc_types": [
+    "ct",
+    "operative_note",
+    "clinical_note",
+    "discharge_summary"
+   ]
+  },
+  "tumour_site_stomach": {
+   "label": "Site in the stomach",
+   "desc": "site of the tumour in the stomach as written (gastro-oesophageal junction, cardia, fundus, body, antrum, pylorus)",
+   "doc_types": [
+    "endoscopy",
+    "ct",
+    "histopathology",
+    "operative_note"
+   ]
+  },
+  "cdh1_result": {
+   "label": "CDH1 germline test",
+   "desc": "CDH1 mutation result as written (detected, not detected, or that the test is pending)",
+   "doc_types": [
+    "molecular"
+   ],
+   "critical": true
+  },
+  "tumour_location_oesophagus": {
+   "label": "Tumour location in the oesophagus",
+   "desc": "location of the tumour as written (upper, middle or lower third, gastro-oesophageal junction) and the distance from the incisors if given",
+   "doc_types": [
+    "endoscopy",
+    "ct",
+    "histopathology",
+    "operative_note"
+   ]
+  },
+  "siewert_type": {
+   "label": "Siewert type",
+   "desc": "Siewert type of a gastro-oesophageal junction tumour as written (I, II or III)",
+   "doc_types": [
+    "endoscopy",
+    "ct",
+    "histopathology",
+    "operative_note"
+   ]
+  },
+  "trg": {
+   "label": "Tumour regression grade",
+   "desc": "tumour regression grade after neoadjuvant therapy as written in the resection histopathology, with the grading system if named",
+   "doc_types": [
+    "histopathology"
+   ]
+  },
+  "lirads_category": {
+   "label": "LI-RADS category",
+   "desc": "LI-RADS category of the liver lesion as written in the imaging report",
+   "doc_types": [
+    "ct",
+    "mri",
+    "ultrasound"
+   ]
+  },
+  "inr": {
+   "label": "INR",
+   "desc": "INR (prothrombin time ratio) as written",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "hbsag": {
+   "label": "HBsAg",
+   "desc": "hepatitis B surface antigen result as written",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "anti_hcv": {
+   "label": "Anti-HCV",
+   "desc": "hepatitis C antibody result as written",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "hbv_core_ab": {
+   "label": "Anti-HBc",
+   "desc": "hepatitis B core antibody result as written",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "afp": {
+   "label": "AFP",
+   "desc": "alpha-fetoprotein with unit",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "pivka": {
+   "label": "PIVKA-II",
+   "desc": "PIVKA-II (des-gamma-carboxy prothrombin) with unit",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "child_pugh_class": {
+   "label": "Child-Pugh class",
+   "desc": "Child-Pugh class or score exactly as written by the clinician (never derive)",
+   "doc_types": [
+    "clinical_note",
+    "referral",
+    "discharge_summary",
+    "tumour_board_record"
+   ]
+  },
+  "varices_finding": {
+   "label": "Varices",
+   "desc": "oesophageal or gastric varices as written in the endoscopy report (present or absent, grade)",
+   "doc_types": [
+    "endoscopy"
+   ]
+  },
+  "hvpg_mmhg": {
+   "label": "HVPG",
+   "desc": "hepatic venous pressure gradient in mmHg as written",
+   "doc_types": [
+    "other",
+    "clinical_note",
+    "operative_note"
+   ]
+  },
+  "flr_percent": {
+   "label": "Future liver remnant",
+   "desc": "future liver remnant volume as a percentage as written in the imaging or volumetry report",
+   "doc_types": [
+    "ct",
+    "mri"
+   ]
+  },
+  "gb_mass": {
+   "label": "Gallbladder mass",
+   "desc": "gallbladder mass or wall thickening as written in the imaging report, with its size",
+   "doc_types": [
+    "ultrasound",
+    "ct",
+    "mri"
+   ]
+  },
+  "ca19_9": {
+   "label": "CA 19-9",
+   "desc": "CA 19-9 with unit",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "vessel_involvement": {
+   "label": "Vascular involvement",
+   "desc": "involvement of the hepatic artery, portal vein or other vessels as written in the imaging report",
+   "doc_types": [
+    "ct",
+    "mri"
+   ]
+  },
+  "bile_duct_involvement": {
+   "label": "Bile duct involvement",
+   "desc": "involvement of the common bile duct or the biliary tree as written in the imaging report",
+   "doc_types": [
+    "ct",
+    "mri",
+    "ultrasound"
+   ]
+  },
+  "cystic_duct_margin": {
+   "label": "Cystic duct margin",
+   "desc": "cystic duct margin status as written in the cholecystectomy histopathology",
+   "doc_types": [
+    "histopathology"
+   ]
+  },
+  "ca125": {
+   "label": "CA-125",
+   "desc": "CA-125 with unit",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "beta_hcg": {
+   "label": "Beta-hCG",
+   "desc": "beta-hCG with unit",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "ldh": {
+   "label": "LDH",
+   "desc": "lactate dehydrogenase with unit",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "inhibin_b": {
+   "label": "Inhibin B",
+   "desc": "inhibin B with unit",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "he4": {
+   "label": "HE4",
+   "desc": "HE4 with unit (and the ROMA value if written)",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "brca_status": {
+   "label": "BRCA1 / BRCA2",
+   "desc": "BRCA1 / BRCA2 germline or tumour result as written (pathogenic variant detected, not detected, variant of uncertain significance, or that the test is pending)",
+   "doc_types": [
+    "molecular",
+    "histopathology"
+   ],
+   "critical": true
+  },
+  "p53": {
+   "label": "p53",
+   "desc": "p53 immunohistochemistry pattern as written (wild type, mutant or aberrant, null)",
+   "doc_types": [
+    "ihc",
+    "histopathology"
+   ]
+  },
+  "pole": {
+   "label": "POLE",
+   "desc": "POLE mutation result as written",
+   "doc_types": [
+    "molecular",
+    "histopathology"
+   ]
+  },
+  "psa": {
+   "label": "PSA",
+   "desc": "serum PSA with unit",
+   "doc_types": [
+    "lab",
+    "clinical_note",
+    "referral"
+   ]
+  },
+  "gleason_isup": {
+   "label": "Gleason score / ISUP grade group",
+   "desc": "Gleason score (primary + secondary) and ISUP grade group as written in the biopsy or prostatectomy report",
+   "doc_types": [
+    "histopathology"
+   ],
+   "critical": true
+  },
+  "positive_cores": {
+   "label": "Positive biopsy cores",
+   "desc": "number of positive cores out of the cores taken, and the percentage of core involvement, as written",
+   "doc_types": [
+    "histopathology"
+   ]
+  },
+  "hrd_status": {
+   "label": "HRD status",
+   "desc": "homologous recombination deficiency result as written",
+   "doc_types": [
+    "molecular"
+   ]
+  },
+  "corrected_calcium": {
+   "label": "Corrected calcium",
+   "desc": "serum calcium (corrected if written) with unit",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "embryonal_component": {
+   "label": "Embryonal carcinoma component",
+   "desc": "presence and percentage of embryonal carcinoma (and the other germ cell components) as written in the orchidectomy report",
+   "doc_types": [
+    "histopathology"
+   ]
+  },
+  "igcccg_group": {
+   "label": "IGCCCG risk group as recorded",
+   "desc": "IGCCCG prognostic group exactly as written by the clinician (never derive)",
+   "doc_types": [
+    "clinical_note",
+    "referral",
+    "discharge_summary",
+    "tumour_board_record"
+   ],
+   "critical": true
+  },
+  "fertility_preservation": {
+   "label": "Fertility preservation",
+   "desc": "whether sperm banking or another fertility preservation was discussed or done, as written",
+   "doc_types": [
+    "clinical_note",
+    "referral",
+    "discharge_summary",
+    "operative_note"
+   ]
+  },
+  "testosterone": {
+   "label": "Testosterone",
+   "desc": "serum testosterone with unit",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "lh": {
+   "label": "LH",
+   "desc": "luteinising hormone with unit",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "fsh": {
+   "label": "FSH",
+   "desc": "follicle stimulating hormone with unit",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "cord_mobility": {
+   "label": "Vocal cord mobility",
+   "desc": "vocal cord mobility as written in the laryngoscopy (mobile, impaired, fixed), each side",
+   "doc_types": [
+    "endoscopy",
+    "clinical_note",
+    "operative_note"
+   ]
+  },
+  "laryngeal_function": {
+   "label": "Laryngeal function",
+   "desc": "voice, swallowing and airway status as written (stridor, aspiration, tracheostomy)",
+   "doc_types": [
+    "clinical_note",
+    "referral",
+    "endoscopy"
+   ]
+  },
+  "laryngeal_subsite": {
+   "label": "Laryngeal subsite",
+   "desc": "subsite of the larynx as written (supraglottis, glottis, subglottis) and the structures involved",
+   "doc_types": [
+    "endoscopy",
+    "ct",
+    "mri",
+    "histopathology",
+    "operative_note"
+   ]
+  },
+  "bethesda_category": {
+   "label": "Bethesda category",
+   "desc": "Bethesda category of the thyroid FNAC as written (I to VI)",
+   "doc_types": [
+    "cytology"
+   ]
+  },
+  "thyroglobulin": {
+   "label": "Thyroglobulin",
+   "desc": "serum thyroglobulin with unit, and the anti-thyroglobulin antibody if written",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "calcitonin": {
+   "label": "Calcitonin",
+   "desc": "serum calcitonin with unit",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "tirads": {
+   "label": "TI-RADS category",
+   "desc": "TI-RADS category of the thyroid nodule as written in the ultrasound report",
+   "doc_types": [
+    "ultrasound"
+   ]
+  },
+  "extrathyroid_extension": {
+   "label": "Extrathyroidal extension",
+   "desc": "extrathyroidal extension as written in the imaging or histopathology report (present, absent, minimal, gross)",
+   "doc_types": [
+    "ultrasound",
+    "ct",
+    "mri",
+    "histopathology"
+   ]
+  },
+  "b_symptoms": {
+   "label": "B symptoms",
+   "desc": "fever, night sweats or weight loss (B symptoms) as written: present or absent",
+   "doc_types": [
+    "clinical_note",
+    "referral",
+    "discharge_summary"
+   ]
+  },
+  "molecular_markers_haem": {
+   "label": "Molecular markers (blood cancer)",
+   "desc": "molecular results of a blood cancer as written (for example BCR-ABL1, FLT3, NPM1, PML-RARA, MYD88, IGHV), with the method",
+   "doc_types": [
+    "molecular",
+    "bone_marrow",
+    "flow_cytometry",
+    "cytogenetics"
+   ],
+   "critical": true
+  },
+  "bone_marrow_result": {
+   "label": "Bone marrow result",
+   "desc": "bone marrow aspirate and biopsy conclusion as written (cellularity, blast percentage, involvement)",
+   "doc_types": [
+    "bone_marrow",
+    "histopathology",
+    "cytology"
+   ]
+  },
+  "deauville_score": {
+   "label": "Deauville score",
+   "desc": "Deauville five-point score as written in the PET-CT report",
+   "doc_types": [
+    "pet_ct"
+   ]
+  },
+  "csf_cytology": {
+   "label": "CSF cytology",
+   "desc": "cerebrospinal fluid cytology result as written (positive or negative, cell count)",
+   "doc_types": [
+    "csf",
+    "cytology"
+   ]
+  },
+  "flow_cytometry_result": {
+   "label": "Flow cytometry result",
+   "desc": "immunophenotype conclusion of the flow cytometry as written (lineage, markers expressed)",
+   "doc_types": [
+    "flow_cytometry",
+    "bone_marrow"
+   ]
+  },
+  "cytogenetics_result": {
+   "label": "Cytogenetics / FISH result",
+   "desc": "karyotype or FISH result as written (for example t(9;22), t(15;17), del(17p), MYCN)",
+   "doc_types": [
+    "cytogenetics",
+    "molecular",
+    "bone_marrow"
+   ],
+   "critical": true
+  },
+  "beta2_microglobulin": {
+   "label": "Beta-2 microglobulin",
+   "desc": "beta-2 microglobulin with unit",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "anaplasia": {
+   "label": "Anaplasia",
+   "desc": "presence or absence of anaplasia (focal or diffuse) as written in the histopathology of a Wilms tumour",
+   "doc_types": [
+    "histopathology"
+   ]
+  },
+  "loh_1p_16q": {
+   "label": "LOH 1p / 16q",
+   "desc": "loss of heterozygosity at 1p and 16q as written",
+   "doc_types": [
+    "molecular",
+    "cytogenetics"
+   ]
+  },
+  "ophthalmic_examination": {
+   "label": "Eye examination",
+   "desc": "findings of the examination under anaesthesia or the ophthalmic examination as written (tumour size, location, seeding, both eyes)",
+   "doc_types": [
+    "ophthalmology_note",
+    "clinical_note",
+    "operative_note"
+   ]
+  },
+  "rb_group": {
+   "label": "Retinoblastoma group as recorded",
+   "desc": "International Classification of Retinoblastoma group (A to E) exactly as written by the ophthalmologist (never derive)",
+   "doc_types": [
+    "ophthalmology_note",
+    "clinical_note"
+   ],
+   "critical": true
+  },
+  "germline_result": {
+   "label": "Germline test result",
+   "desc": "germline genetic test result as written (for example RB1), or that the test is pending",
+   "doc_types": [
+    "molecular"
+   ],
+   "critical": true
+  },
+  "alkaline_phosphatase": {
+   "label": "Alkaline phosphatase",
+   "desc": "serum alkaline phosphatase with unit",
+   "doc_types": [
+    "lab"
+   ]
+  },
+  "sarcoma_fusion": {
+   "label": "Fusion / translocation (sarcoma)",
+   "desc": "fusion gene or translocation result as written (for example EWSR1-FLI1, SS18-SSX, PAX3-FOXO1), with the method",
+   "doc_types": [
+    "molecular",
+    "histopathology",
+    "cytogenetics"
+   ],
+   "critical": true
+  },
+  "percent_necrosis": {
+   "label": "Necrosis after chemotherapy",
+   "desc": "percentage of tumour necrosis in the resection specimen after neoadjuvant chemotherapy as written",
+   "doc_types": [
+    "histopathology"
+   ]
+  },
+  "tumour_depth": {
+   "label": "Tumour depth",
+   "desc": "depth of the soft tissue tumour relative to the fascia as written (superficial or deep)",
+   "doc_types": [
+    "mri",
+    "ct",
+    "ultrasound",
+    "histopathology",
+    "operative_note"
+   ]
+  },
+  "kps": {
+   "label": "Karnofsky performance status",
+   "desc": "Karnofsky performance status as written",
+   "doc_types": [
+    "clinical_note",
+    "referral",
+    "discharge_summary"
+   ]
+  },
+  "idh_status": {
+   "label": "IDH status",
+   "desc": "IDH1 / IDH2 mutation result as written (immunohistochemistry or sequencing)",
+   "doc_types": [
+    "ihc",
+    "molecular",
+    "histopathology"
+   ],
+   "critical": true
+  },
+  "codeletion_1p19q": {
+   "label": "1p/19q codeletion",
+   "desc": "1p/19q codeletion result as written",
+   "doc_types": [
+    "molecular",
+    "cytogenetics",
+    "histopathology"
+   ],
+   "critical": true
+  },
+  "mgmt_promoter": {
+   "label": "MGMT promoter methylation",
+   "desc": "MGMT promoter methylation result as written",
+   "doc_types": [
+    "molecular",
+    "histopathology"
+   ]
   }
- }
+ },
+ "_phase2_note": "Phase 2 (night-v3, 27 Oct 2026): the facts and document types from the Phase 2 checklist research (docs/night-v3/research/01_cancer_checklists.md) were added for the new draft checklists; the new document types are bone_marrow, flow_cytometry, cytogenetics, csf, echocardiogram, ophthalmology_note and audiometry."
 }

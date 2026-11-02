@@ -1,7 +1,7 @@
 """The board deck downloads (19 Oct 2026) and the hospital's logo.
 
     GET  /meetings/{mid}/deck        the deck of a meeting (.pptx): the coordinator and the admitted members; an outside expert is refused
-    GET  /cases/{cid}/deck           the deck of one Case File (.pptx): whoever may open the whole Case File
+    GET  /cases/{cid}/deck           the deck of one Case File (.pptx): whoever may open the whole Case File, never in a read-only window
     GET  /hospital/logo              the hospital's logo (PNG or JPEG), for the website and the deck; 404 when none was uploaded
     POST /setup/hospital/logo        {data: "data:image/png;base64,..."} (root admin): kept under the data root as hospital_logo.<ext>,
                                      at most 1 MB, PNG or JPEG only (a deck cannot carry an SVG); DELETE removes it
@@ -15,7 +15,7 @@ from fastapi import Request
 from fastapi.responses import FileResponse, Response
 
 from tumour_board import access, board, config, deck, meetings, org, store
-from tumour_board.api.common import body, case, fail, make_router, need, need_known, roles, user
+from tumour_board.api.common import body, case, fail, make_router, need, need_known, roles, scope, user
 
 router = make_router(["tumour-board-deck"])
 PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
@@ -49,9 +49,16 @@ async def meeting_deck(mid: str, request: Request):
 async def case_deck(case_id: str, request: Request):
     u = user(request); rl = roles(request); need_known(rl)
     c = case(case_id)
+    try:  # a window (a doctor's opened with a reason, a Vaidyx admin's break-glass) never downloads the deck (Phase 9 review E, I1)
+        access.no_export_in_window(rl, c, scope(request))
+    except access.AccessError as e:
+        fail(e.status, str(e), e.code)
     if str(access.scope(rl, c) or "").upper() != "FULL":
         fail(403, "Only the people who may open the whole Case File download its deck.", "forbidden")
-    data = await asyncio.to_thread(deck.build_case, case_id, rl)
+    try:
+        data = await asyncio.to_thread(deck.build_case, case_id, rl)
+    except meetings.MeetingError as e:  # a protected Case File has no slides (meetings.slides): a plain refusal, never a 500
+        fail(e.status, str(e), e.code)
     store.audit(case_id, {"kind": "deck_downloaded", "by": u, "bytes": len(data)})
     return _pptx(data, deck.filename("case", case_id))
 

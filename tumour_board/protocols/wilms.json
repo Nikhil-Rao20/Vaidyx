@@ -1,0 +1,368 @@
+{
+ "id": "wilms",
+ "label": "Wilms tumour (child)",
+ "version": "0.1-draft",
+ "approval": {
+  "status": "draft",
+  "note": "Draft checklist from NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019): needs a clinician's check"
+ },
+ "site": "wilms|nephroblastoma|kidney|renal",
+ "site_note": "V2 item 5.3 (two primaries): only on a Case File linked to the same patient's other Case File, and only for histopathology, cytology, IHC and molecular records: among several candidates for one record, or several documents carrying a required value, one that names another protocol's site and not this one steps aside and is named on the row for review; a document naming no site never does, and when every candidate names another site every candidate stays. Organ words only. A preference, never a filter; a patient with one cancer is checked as before.",
+ "note": "DRAFT, not approved for real use: needs a clinician's check. Configurable by the clinical team. Required records transcribed from the NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019) (National Cancer Grid, India), the Wilms tumour pages (algorithm p 44, chemotherapy and SIOP note p 45, staging p 46, Annexure 1 p 64; PDF pages, the printed footer is one less), each with its verbatim quote and page. Tiers printed by NCG are kept; the tiers whose tier_basis says 'proposed' are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). A record NCG gives only under a condition the system never judges (a finding, a plan) is shown with NCG's own tier and the condition, never counted. The stage and the risk group are as recorded by the clinician, never computed. Nothing here suggests treatment. The book lists no baseline blood tests for Wilms tumour, only imaging and tissue, so none is listed. The CT scan for reassessment after chemotherapy is a follow-up step and is not listed. The paediatric renal tumour pathology proforma named in the book's contents is not in the file. Adult kidney cancer is a separate checklist (kidney).",
+ "settings_note": "Setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes stage and never decides the setting). The two settings follow the book's algorithm (p 44): 'Unilateral Renal Mass' and 'Bilateral Renal Mass'. Each record carries its tier per setting; until a setting is recorded the strictest tier applies. Draft checklist: needs a clinician's check.",
+ "settings": [
+  {
+   "id": "unilateral",
+   "label": "Unilateral renal mass, suspected Wilms tumour (as recorded)"
+  },
+  {
+   "id": "bilateral",
+   "label": "Bilateral renal mass, suspected Wilms tumour (as recorded)"
+  }
+ ],
+ "records": [
+  {
+   "id": "clinical_history",
+   "label": "Clinical history and examination of the child",
+   "tier": "a",
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ],
+   "department": "Paediatric Oncology",
+   "required_facts": [
+    "comorbidities",
+    "clinical_question"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 44,
+     "quote": "Suspected Wilms Tumour"
+    }
+   ],
+   "tier_basis": "Proposed a. The book has no history box for Wilms tumour: its algorithm starts at \"Suspected Wilms Tumour\" (p 44). Blood pressure and urine are not named, so only history and examination are proposed",
+   "route": "owner"
+  },
+  {
+   "id": "usg_abdomen_wilms",
+   "label": "Ultrasound abdomen",
+   "tier": "a",
+   "doc_types": [
+    "ultrasound"
+   ],
+   "department": "Radiology",
+   "required_facts": [
+    "lesion_size"
+   ],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 44,
+     "quote": "Essential: US abdomen, CT scan thorax, abdomen and pelvis (a),"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 64,
+     "quote": "USG abdomen to be part of basic diagnostic workup"
+    }
+   ],
+   "tier_basis": "NCG a (p 44). Annexure 1 (p 64) says the ultrasound is part of the basic diagnostic work-up"
+  },
+  {
+   "id": "ct_thorax_abdomen_pelvis_wilms",
+   "label": "CT thorax, abdomen and pelvis",
+   "tier": "a",
+   "doc_types": [
+    "ct"
+   ],
+   "region": "thorax|chest|abdomen|abdo|pelvis|tap|whole body",
+   "department": "Radiology",
+   "required_facts": [
+    "lesion_size",
+    "nodal_findings",
+    "distant_findings"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 44,
+     "quote": "Essential: US abdomen, CT scan thorax, abdomen and pelvis (a),"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 64,
+     "quote": "Wilms Tumor  CT scan thorax, abdomen and pelvis  USG doppler"
+    }
+   ],
+   "tier_basis": "NCG a: the same line as the ultrasound (p 44); the Annexure 1 table row is on p 64"
+  },
+  {
+   "id": "usg_doppler_wilms",
+   "label": "Ultrasound doppler (vessels, vena cava)",
+   "tier": "b",
+   "doc_types": [
+    "ultrasound"
+   ],
+   "region": "doppler",
+   "department": "Radiology",
+   "required_facts": [],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 44,
+     "quote": "Optimal: USG doppler, MRI for Bilateral WT and nephroblastomatosis (b)"
+    }
+   ],
+   "tier_basis": "NCG b"
+  },
+  {
+   "id": "mri_bilateral_wilms",
+   "label": "MRI for bilateral Wilms tumour and nephroblastomatosis",
+   "tier": "b",
+   "tiers": {
+    "unilateral": "none",
+    "bilateral": "b"
+   },
+   "doc_types": [
+    "mri"
+   ],
+   "region": "abdomen|abdo|renal|kidney|nephr|pelvis",
+   "department": "Radiology",
+   "required_facts": [
+    "lesion_size"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 44,
+     "quote": "Optimal: USG doppler, MRI for Bilateral WT and nephroblastomatosis (b)"
+    }
+   ],
+   "tier_basis": "NCG b; the text ties the MRI to bilateral disease, so it is not applicable in the unilateral setting"
+  },
+  {
+   "id": "biopsy_wilms",
+   "label": "Image-guided core biopsy or cytology (borderline or unresectable disease)",
+   "tier": "c",
+   "tiers": {
+    "unilateral": "c",
+    "bilateral": "none"
+   },
+   "doc_types": [
+    "histopathology",
+    "cytology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 44,
+     "quote": "Optional: Image guided core"
+    }
+   ],
+   "tier_basis": "The book prints this line as Optional with (b), and it applies only to borderline or unresectable disease on imaging, a finding the system never judges: system tier c with the condition",
+   "condition": {
+    "ncg_tier": "b",
+    "text": "borderline or unresectable disease on imaging"
+   }
+  },
+  {
+   "id": "loh_1p_16q",
+   "label": "LOH 1p/16q and 1p gain",
+   "tier": "c",
+   "doc_types": [
+    "molecular"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "loh_1p_16q"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 44,
+     "quote": "Optional: LOH1p/16q and 1p gain (c)"
+    }
+   ],
+   "tier_basis": "NCG c"
+  }
+ ],
+ "optional": [
+  {
+   "id": "nephrectomy_histopathology",
+   "label": "Histopathology of the nephrectomy: histology type, anaplasia, surgico-pathologic stage",
+   "doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "note": "The histopathology of the nephrectomy specimen is an after-surgery record (never a gap before the board; NCG's tier is kept in tiers_in_the_book: orchestrator, Phase 2).",
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 44,
+     "quote": "Surgico-pathologic stage assessment*"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 45,
+     "quote": "DA- diffuse anaplasia, FA-focal anaplasia"
+    }
+   ],
+   "tier_basis": "Proposed a (a post-surgery record): the book lists the surgico-pathologic stage assessment on p 44 and the anaplasia labels (diffuse and focal) on p 45. The stage is the one written in the report, never computed",
+   "required_facts": [
+    "histologic_type",
+    "recorded_stage",
+    "margins",
+    "anaplasia"
+   ],
+   "tiers_in_the_book": "a"
+  },
+  {
+   "id": "previous_board",
+   "label": "Previous Tumour Board record",
+   "doc_types": [
+    "tumour_board_record"
+   ],
+   "department": "MDT Coordinator",
+   "route": "coordinator"
+  }
+ ],
+ "extract_facts": [
+  "presenting_complaint",
+  "ecog",
+  "comorbidities",
+  "clinical_question",
+  "recorded_stage",
+  "lesion_size",
+  "nodal_findings",
+  "distant_findings",
+  "histologic_type",
+  "grade",
+  "haemoglobin",
+  "wbc",
+  "platelets",
+  "creatinine",
+  "bilirubin",
+  "patient_preference",
+  "clinical_trial_note",
+  "diagnosis_date_mode",
+  "treatment_received",
+  "margins",
+  "anaplasia",
+  "loh_1p_16q"
+ ],
+ "core_data": [
+  {
+   "id": "diagnosis",
+   "label": "Histopathological / cytological diagnosis",
+   "facts": [
+    "histologic_type"
+   ]
+  },
+  {
+   "id": "diagnosis_date_mode",
+   "label": "Date and mode of diagnosis",
+   "facts": [
+    "diagnosis_date_mode"
+   ]
+  },
+  {
+   "id": "stage",
+   "label": "Stage as recorded (with the investigations used)",
+   "facts": [
+    "recorded_stage"
+   ]
+  },
+  {
+   "id": "performance_status",
+   "label": "Performance status",
+   "facts": [
+    "ecog"
+   ]
+  },
+  {
+   "id": "comorbidities",
+   "label": "Co-morbidities",
+   "facts": [
+    "comorbidities"
+   ]
+  },
+  {
+   "id": "biomarkers",
+   "label": "Relevant genomic / biomarker testing",
+   "facts": [
+    "anaplasia",
+    "loh_1p_16q"
+   ]
+  },
+  {
+   "id": "treatment_history",
+   "label": "Treatment history",
+   "facts": [
+    "treatment_received"
+   ]
+  },
+  {
+   "id": "patient_preference",
+   "label": "Patient preference / special circumstances",
+   "facts": [
+    "patient_preference"
+   ]
+  },
+  {
+   "id": "clinical_trial",
+   "label": "Clinical trial availability / suitability recorded",
+   "facts": [
+    "clinical_trial_note"
+   ]
+  },
+  {
+   "id": "question",
+   "label": "Question for the Tumour Board",
+   "facts": [
+    "clinical_question"
+   ]
+  }
+ ],
+ "core_data_source": "NHS England, Streamlining MDT meetings (2020), p.11 'minimum core data requirements'; aligned with the NCG Virtual Tumour Board case template (India)",
+ "post_board": {
+  "required_record_fields": [
+   "decision_text",
+   "recorded_by",
+   "participants",
+   "actions"
+  ],
+  "follow_up_default_days": 14,
+  "record_fields_source": "EUSOMA 2020 (names of all participants, evidence on decisions); Victorian Cancer MDM quality framework 2018 (report errors/changes raised, divergent recommendations and dissenting clinicians); PM-JAY HBP 2.2 s.3.9 (tumour board decision and treatment plan)"
+ },
+ "policy_basis": "PM-JAY Health Benefit Package 2.2 user guidelines (NHA, 2021), section 3.9: pre-authorization is mandatory at each step of cancer care and the decision on appropriate care is to be taken by a multidisciplinary tumour board; NHS England MDT streamlining guidance (2020) pre-listing conditions.",
+ "guideline_sources": [
+  {
+   "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+   "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+   "pages": "44, 45, 64 (PDF page; the printed footer is one less)"
+  }
+ ]
+}

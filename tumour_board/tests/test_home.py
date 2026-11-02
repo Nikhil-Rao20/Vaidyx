@@ -95,7 +95,7 @@ def test_treating_home_lists_the_departments_case_files_owned_first(people, case
     assert a["suggested_unsent"] == 1 and a["open_actions"] == 2
     b = next(c for c in t["cases"] if c["case_id"] == "TB-H-B")
     assert b["relation"] == "referred" and b["referral"] == "Breast Surgery"
-    assert t["counts"] == {"visible": 2, "mine": 1, "participating": 1, "asked": 0, "awaiting_listing": 0, "gate_passed": 0, "ready_marked": 1,
+    assert t["counts"] == {"visible": 2, "mine": 1, "participating": 1, "asked": 0, "linked": 0, "awaiting_listing": 0, "gate_passed": 0, "ready_marked": 1,
                            "referral_waiting": 0, "suggested_unsent": 1}
     assert t["referrals_to_answer"] == 1 and t["referrals"][0]["case_id"] == "TB-H-B" and t["referrals"][0]["can_answer"] is True
     assert t["can_create"] is True and [d["id"] for d in t["departments"]] == ["breast_surgery"]

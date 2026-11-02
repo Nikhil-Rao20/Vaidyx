@@ -36,7 +36,8 @@ OPEN = ("pending", "overdue")
 # (operative note, discharge / treatment summary, clinical note, referral, tumour board record, other) are left out on
 # purpose: "Surgery: APR" or "Follow up in 3 months" is not a request for one document.
 REQUESTABLE = ("ct", "mri", "xray", "ultrasound", "mammogram", "pet_ct", "bone_scan", "histopathology", "cytology", "ihc",
-               "molecular", "lab", "endoscopy", "pulmonary_function")
+               "molecular", "lab", "endoscopy", "pulmonary_function",
+               "bone_marrow", "flow_cytometry", "cytogenetics", "csf", "echocardiogram", "audiometry", "ophthalmology_note")
 
 # Words a task uses for a record that the header keywords of item 3.2 do not carry (those read report titles, not requests).
 TASK_WORDS = {
@@ -45,6 +46,15 @@ TASK_WORDS = {
     "molecular": ["mutation", "mutational", "genetic testing", "germline testing", "MSI"],
     "lab": ["blood counts", "tumour marker levels", "tumor marker levels"],
     "pulmonary_function": ["lung function"],
+    # Phase 2 cancers (night-v3 item 2.1). "EUA" alone is left out (also the examination under anaesthesia of a cervix case) and so is
+    # "FISH" for cytogenetics (a lone FISH stays molecular, as in doc_type_keywords.json: "HER2 FISH" asks for a molecular report).
+    "bone_marrow": ["bone marrow", "marrow", "bone marrow aspiration and biopsy", "marrow aspiration and biopsy", "BMA and biopsy"],
+    "flow_cytometry": ["flow cytometry", "immunophenotyping", "FCM"],  # not a bare "flow": a Doppler flow study is an ultrasound (review, Phase 2)
+    "cytogenetics": ["karyotype"],
+    "csf": ["CSF", "lumbar puncture"],
+    "echocardiogram": ["echo", "2D echo"],
+    "audiometry": ["audiometry", "audiogram", "hearing test"],
+    "ophthalmology_note": ["eye examination", "EUA eyes", "EUA of the eyes", "EUA of both eyes"],
 }
 
 
@@ -90,6 +100,11 @@ def default_days(case: dict | None) -> int:
     return days if days > 0 else DEFAULT_DAYS
 
 
+def default_due(case: dict | None) -> str:
+    """The due date a board action gets when none was typed: today plus the protocol's follow-up days."""
+    return (_today() + timedelta(days=default_days(case))).isoformat()
+
+
 def _patient(case: dict | None, case_id: str) -> str:
     return ((case or {}).get("patient") or {}).get("name") or case_id
 
@@ -99,7 +114,8 @@ def _patient(case: dict | None, case_id: str) -> str:
 def board_actions(case_id: str, record: dict, by: str = "") -> list[dict]:
     """The follow-up actions for a newly recorded board decision (the caller appends them to state["actions"] and saves).
 
-    One action per entry of record["actions"] ({task, department, due}). The department is kept as typed and resolved to a
+    One action per entry of record["actions"] ({task, department, due, kind?}; kind "investigation" or "referral" for the rows of the
+    decision form's further investigations and referrals, night-v3 item 3.1, else "action"). The department is kept as typed and resolved to a
     department id through org (names and aliases: "Radio-diagnosis" -> radiology); a department that does not resolve gets
     department_id None and no notification (the coordinator sees it in the Case File); an action typed for the MDT Coordinator
     goes to the coordinator role (V2 item 2.1). A known department is notified (kind "board_action")."""
@@ -119,7 +135,7 @@ def board_actions(case_id: str, record: dict, by: str = "") -> list[dict]:
         now = store.now_iso()
         act = {"id": "A" + uuid.uuid4().hex[:6], "source": "board", "board_record": rid, "label": task or "Board action",
                "department": org.COORDINATOR_NAME if to_coord else dept, "department_id": did, "requirement": None, "what": task, "status": "pending",
-               "created": now, "due": due, "history": [{"ts": now, "event": "Created from Tumour Board record " + rid}]}
+               "created": now, "due": due, "kind": str(a.get("kind") or "action"), "history": [{"ts": now, "event": "Created from Tumour Board record " + rid}]}
         if to_coord:
             act["role"] = "coordinator"
         if did or to_coord:
@@ -148,7 +164,7 @@ def communication_action(case_id: str, record: dict, by: str = "") -> dict | Non
     act = {"id": "A" + uuid.uuid4().hex[:6], "source": "board", "board_record": rid, "label": "Inform the patient of the Tumour Board outcome and record the date",
            "department": org.COORDINATOR_NAME, "department_id": None, "role": "coordinator", "requirement": None, "communication": True,
            "what": "Tell the patient (or carer) the board's outcome through the lead clinician and record the date and who informed them on the board record (within one week).",
-           "status": "pending", "created": now, "due": due, "history": [{"ts": now, "event": "Created from Tumour Board record " + rid + " (patient not yet recorded as informed)"}]}
+           "status": "pending", "created": now, "due": due, "kind": "communication", "history": [{"ts": now, "event": "Created from Tumour Board record " + rid + " (patient not yet recorded as informed)"}]}
     _notify({"role": "coordinator"}, "board_action", case_id, f"Tumour Board action for {patient} ({case_id}): {act['label']}", f"Due {_dmy(due)}.", action_id=act["id"], due=due, board_record=rid, by=by)
     return act
 
@@ -289,6 +305,15 @@ def _find(state: dict, action_id: str) -> dict:
     raise KeyError(action_id)
 
 
+def _refresh_case_summary(state: dict) -> None:
+    """The Case summary's status section follows a closure (night-v3 item 3.3), in this state: the caller saves it. Never breaks a closure."""
+    try:
+        from . import case_summary
+        case_summary.refresh_status(None, state)
+    except Exception as e:
+        log.warning("Case summary status not refreshed (%s: %s)", e.__class__.__name__, e)
+
+
 def close_action(state: dict, action_id: str, by: str, doc_id: str | None = None, note: str = "") -> dict:
     """A person closes a board action (optionally with the document that answers it). Mutates the state in place.
 
@@ -315,6 +340,7 @@ def close_action(state: dict, action_id: str, by: str, doc_id: str | None = None
         a["closed_doc_id"] = doc_id
     a.pop("suggested_close", None)
     a.setdefault("history", []).append({"ts": now, "event": event, **({"doc_id": doc_id} if doc_id else {})})
+    _refresh_case_summary(state)
     return {"kind": "board_action_closed", "action": action_id, "by": by, "doc_id": doc_id, "note": note, "suggested": suggested}
 
 

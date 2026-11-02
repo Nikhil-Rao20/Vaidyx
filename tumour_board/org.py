@@ -107,7 +107,10 @@ DEFAULT_DEPARTMENTS = [
 # resolve_route() treats them as "owner". A hospital that adds such a department again gets it back as a real department.
 OWNER_ALIASES = {"dental surgery / oral and maxillofacial surgery", "dental surgery", "dental", "oral and maxillofacial surgery", "omfs",
                  "dentistry", "dental evaluation", "anaesthesiology", "anaesthesia", "anesthesiology", "anesthesia", "pre anaesthetic check up",
-                 "pre anaesthetic check", "pre anesthetic check up", "pac"}
+                 "pre anaesthetic check", "pre anesthetic check up", "pac",
+                 # night-v3 item 2.1: an eye examination, an echocardiogram or an audiogram is asked of the owning treating team (the hospital
+                 # set-up has no ophthalmology, cardiology or audiology department)
+                 "ophthalmology", "eye", "ophthalmologist", "cardiology", "echocardiography", "2d echo", "audiology"}
 # V2 -> V3 (18 Oct): where the users and stored ids of the removed V2 departments go; None means the owning department (OWNER_ALIASES),
 # so such a department is dropped unless someone is still placed in it (then it is kept as a hospital-added department: no loss).
 V2_REMOVED = {"medical_gastroenterology": "gastrointestinal_surgery", "dental_surgery": None, "anaesthesiology": None}
@@ -126,7 +129,8 @@ SURGICAL_DEPARTMENTS = ["surgical_oncology", "general_surgery", "breast_surgery"
 PMJAY_SURGICAL_ONCOLOGY = ["surgical_oncology", "gynaecologic_oncology", "orthopaedic_oncology"]
 DEFAULT_HOSPITAL = {"name": "", "level": "essential", "type": "", "pmjay_empanelled": True, "fetch_window_months": 12,
                     "board_heads": list(BOARD_HEADS), "board_attendance": [], "surgical_departments": list(SURGICAL_DEPARTMENTS),
-                    "pmjay_surgical_oncology": list(PMJAY_SURGICAL_ONCOLOGY), "meeting_defaults": dict(DEFAULT_MEETING)}
+                    "pmjay_surgical_oncology": list(PMJAY_SURGICAL_ONCOLOGY), "meeting_defaults": dict(DEFAULT_MEETING),
+                    "message_retention_days": 365}  # Phase 8: the text of a conversation is removed this many days after its last message (0 = kept)
 BOARD_LISTS = ("board_heads", "board_attendance", "surgical_departments", "pmjay_surgical_oncology")  # hospital keys that list department ids
 DEFAULT_ORG = {"version": VERSION, "hospital": DEFAULT_HOSPITAL, "departments": DEFAULT_DEPARTMENTS, "users": {}, "admins": [], "routes": {}}
 LEVELS = ("essential", "optimal")
@@ -137,6 +141,7 @@ RESIDENT = "resident"
 ROLE_SYNONYMS = {"doctor": "member", "consultant": "member", "pg": "resident", "fellow": "resident", "senior_resident": "resident"}  # the UI says "doctor"; the stored role stays "member" (V1 files)
 USER_FLAGS = ("coordinator", "disabled", "auditor", "outside_expert")
 FETCH_WINDOW_RANGE = (1, 120)  # months
+MESSAGE_RETENTION_RANGE = (0, 3650)  # days; 0 keeps every message (Phase 8)
 
 # V1 (12 departments) -> V2: where each V1 department's users and stored ids go (plan 2.1 migration table). An empty list means the
 # department is removed: General Medicine's records go to the owning department (V2 item 2.4); Tumour Board coordination became the
@@ -245,7 +250,7 @@ _PHONE = re.compile(r"^[0-9+()\-/ ]{3,30}$")
 _UNKNOWN = object()  # a department name that does not resolve: matches no membership
 _cache: dict = {}
 _setup_lock = threading.Lock()  # the first set-up: load, check, save as one step (review Phase 7)
-HOSPITAL_AUDITED = ("name", "level", "type", "pmjay_empanelled", "fetch_window_months", "board_heads", "board_attendance", "surgical_departments", "pmjay_surgical_oncology", "first_setup", "meeting_defaults")
+HOSPITAL_AUDITED = ("name", "level", "type", "pmjay_empanelled", "fetch_window_months", "board_heads", "board_attendance", "surgical_departments", "pmjay_surgical_oncology", "first_setup", "meeting_defaults", "message_retention_days")
 
 
 def path() -> Path:
@@ -635,6 +640,13 @@ def validate(org: dict) -> dict:
     if not FETCH_WINDOW_RANGE[0] <= fw <= FETCH_WINDOW_RANGE[1]:
         raise ValueError(f"The fetch window must be {FETCH_WINDOW_RANGE[0]} to {FETCH_WINDOW_RANGE[1]} months.")
     h["fetch_window_months"] = fw
+    try:
+        mr = int(h.get("message_retention_days", 365))
+    except (TypeError, ValueError):
+        raise ValueError("The message retention must be a number of days.")
+    if not MESSAGE_RETENTION_RANGE[0] <= mr <= MESSAGE_RETENTION_RANGE[1]:
+        raise ValueError(f"The message retention must be {MESSAGE_RETENTION_RANGE[0]} to {MESSAGE_RETENTION_RANGE[1]} days.")
+    h["message_retention_days"] = mr
     md = h.get("meeting_defaults")
     md = dict(md) if isinstance(md, dict) else {}
     wd = md.get("weekday")
@@ -1115,6 +1127,8 @@ def resolve_route(target: str | None, fallback_name: str, owner_dept: str | None
         if did:
             return department_name(did), did, OWNER_ID
         did = department_id(fallback_name)
+        if not did and is_owner_alias(fallback_name):  # "route": "owner" on an eye examination or a pre-anaesthetic check (night-v3 2.1)
+            return OWNER_NAME, None, OWNER_ID
         return (department_name(did) if did else str(fallback_name or "")), did, OWNER_ID
     did = department_id(t) if t else None
     if did:

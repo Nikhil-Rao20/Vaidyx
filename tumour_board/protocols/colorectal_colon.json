@@ -1,0 +1,477 @@
+{
+ "id": "colorectal_colon",
+ "label": "Colon cancer",
+ "version": "0.1-draft",
+ "approval": {
+  "status": "draft",
+  "note": "Draft checklist from the NCG Management of Colorectal Cancer flow (colon): needs a clinician's check"
+ },
+ "site": "colon|caec|ascending|transverse|descending|sigmoid|hemicolect|colect|colorectal|bowel|intestin",
+ "site_note": "V2 item 5.3 (two primaries): only on a Case File linked to the same patient's other Case File, and only for histopathology, cytology, IHC and molecular records: among several candidates for one record, or several documents carrying a required value, one that names another protocol's site and not this one steps aside and is named on the row for review; a document naming no site never does, and when every candidate names another site every candidate stays. Organ words only. A preference, never a filter; a patient with one cancer is checked as before. The rectal checklist shares the colorectal words (colon, colorectal, sigmoid, bowel, intestin), so a report that names both sites does not step aside; the preference only applies between two linked primaries.",
+ "note": "Draft checklist from the NCG Management of Colorectal Cancer flow, colon (pages 2 to 4): needs a clinician's check. Colon only: rectal cancer has its own checklist. This NCG file prints no Essential / Optimal / Optional letters, so every tier is a proposal (an item in the page 2 Workup list is proposed Essential; items NCG calls optional, 'not routinely' or 'may be' are proposed Optional), to be confirmed by the hospital Tumour Board (clinical review before real use). The MMR and RAS / BRAF tiers differ from the rectal checklist on purpose. The system records the stage as written and never computes it; no treatment advice. India first: the National Cancer Grid guideline is the only source, and its page 2 footnote allows a chest X-ray in place of CT chest.",
+ "settings_note": "The setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes a stage and never decides the setting). Each record carries its tier per setting; until a setting is recorded the strictest tier applies. Draft checklist: needs a clinician's check.",
+ "settings": [
+  {
+   "id": "non_metastatic",
+   "label": "Non-metastatic (any T, any N, M0), as recorded"
+  },
+  {
+   "id": "metastatic",
+   "label": "Metastatic (limited or disseminated), as recorded"
+  }
+ ],
+ "records": [
+  {
+   "id": "clinical_history",
+   "label": "Clinical history and performance status",
+   "tier": "a",
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ],
+   "department": "Colorectal Surgery",
+   "required_facts": [
+    "ecog",
+    "clinical_question"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Management of Colorectal Cancer (colon flow)",
+     "file": "ncg_india/management-of-colorectal-cancer.pdf",
+     "page": 2,
+     "quote": "Nutritional support for severely malnourished"
+    }
+   ],
+   "tier_basis": "Proposed Essential. The colon page has no history item, so this is carried over from the rectal checklist because the board needs the question and the ECOG status. The quote is the only clinical-status line in the colon work-up",
+   "route": "owner",
+   "note": "a clinical record of the owning treating department; the department named here is the default before a Case File has an owner"
+  },
+  {
+   "id": "colonoscopy",
+   "label": "Colonoscopy report",
+   "tier": "a",
+   "doc_types": [
+    "endoscopy"
+   ],
+   "department": "Gastrointestinal Surgery",
+   "required_facts": [
+    "tumour_site_colon"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Management of Colorectal Cancer (colon flow)",
+     "file": "ncg_india/management-of-colorectal-cancer.pdf",
+     "page": 2,
+     "quote": "Workup: Complete colonoscopy with multiple (8 or more) biopsies"
+    }
+   ],
+   "tier_basis": "Proposed Essential: in the page 2 Workup list. The rectal record asks for the distance from the anal verge; the colon record asks for the colon segment instead"
+  },
+  {
+   "id": "histopathology",
+   "label": "Histopathology report (biopsy)",
+   "tier": "a",
+   "doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type",
+    "grade"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Management of Colorectal Cancer (colon flow)",
+     "file": "ncg_india/management-of-colorectal-cancer.pdf",
+     "page": 2,
+     "quote": "Workup: Complete colonoscopy with multiple (8 or more) biopsies"
+    }
+   ],
+   "tier_basis": "Proposed Essential: implied by the multiple biopsies in the page 2 Workup list"
+  },
+  {
+   "id": "cea",
+   "label": "Serum CEA",
+   "tier": "a",
+   "doc_types": [
+    "lab"
+   ],
+   "region": "cea|carcinoembryonic|tumou?r markers?",
+   "department": "Biochemistry",
+   "required_facts": [
+    "cea"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Management of Colorectal Cancer (colon flow)",
+     "file": "ncg_india/management-of-colorectal-cancer.pdf",
+     "page": 2,
+     "quote": "Serum CEA"
+    }
+   ],
+   "tier_basis": "Proposed Essential: in the page 2 Workup list"
+  },
+  {
+   "id": "cect_abdomen_pelvis_chest",
+   "label": "CECT abdomen and pelvis; CECT chest or chest X-ray",
+   "tier": "a",
+   "doc_types": [
+    "ct",
+    "xray"
+   ],
+   "region": "abdomen|abdo|abdominal|thorax|chest|pelvis|pelvic",
+   "department": "Radiology",
+   "required_facts": [
+    "distant_findings",
+    "nodal_findings",
+    "lesion_size"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Management of Colorectal Cancer (colon flow)",
+     "file": "ncg_india/management-of-colorectal-cancer.pdf",
+     "page": 2,
+     "quote": "CECT scan abdomen and pelvis; CECT chest or Chest X-raya"
+    },
+    {
+     "guideline": "NCG Management of Colorectal Cancer (colon flow)",
+     "file": "ncg_india/management-of-colorectal-cancer.pdf",
+     "page": 2,
+     "quote": "aA chest X-ray is an acceptable alternative to CT chest since there is no clear evidence to favour the latter."
+    }
+   ],
+   "tier_basis": "Proposed Essential: in the page 2 Workup list. Footnote a gives a chest X-ray as an acceptable alternative to CT chest",
+   "note": "NCG lists CECT abdomen and pelvis plus CECT chest or a chest X-ray; V1 counts this record when any one listed study is present: check that both the abdomen and pelvis and the chest were imaged (clinical review)"
+  },
+  {
+   "id": "pet_ct",
+   "label": "PET-CT (select indications only)",
+   "tier": "c",
+   "doc_types": [
+    "pet_ct"
+   ],
+   "department": "Nuclear Medicine",
+   "required_facts": [],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Management of Colorectal Cancer (colon flow)",
+     "file": "ncg_india/management-of-colorectal-cancer.pdf",
+     "page": 2,
+     "quote": "PET-CT is not routinely advicedb"
+    },
+    {
+     "guideline": "NCG Management of Colorectal Cancer (colon flow)",
+     "file": "ncg_india/management-of-colorectal-cancer.pdf",
+     "page": 2,
+     "quote": "bPET-CT may be ordered ina)those with limited metastatic disease in liver and being planned for potentially curative treatment"
+    }
+   ],
+   "tier_basis": "Proposed Optional: NCG says PET-CT is not routinely advised and limits it to three scenarios (footnote b names, for example, limited metastatic disease in the liver planned for potentially curative treatment)"
+  },
+  {
+   "id": "mri_liver",
+   "label": "MRI liver (problem solving)",
+   "tier": "c",
+   "doc_types": [
+    "mri"
+   ],
+   "region": "liver|hepat|abdomen|abdo",
+   "department": "Radiology",
+   "required_facts": [
+    "distant_findings"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Management of Colorectal Cancer (colon flow)",
+     "file": "ncg_india/management-of-colorectal-cancer.pdf",
+     "page": 2,
+     "quote": "Optional- MRI can be problem solving for"
+    }
+   ],
+   "tier_basis": "Proposed Optional: NCG writes 'Optional' for MRI as a problem-solving test"
+  },
+  {
+   "id": "mmr",
+   "label": "MMR / MSI status",
+   "tier": "a",
+   "tiers": {
+    "non_metastatic": "b",
+    "metastatic": "a"
+   },
+   "doc_types": [
+    "histopathology",
+    "ihc",
+    "molecular"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "mmr"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NCG Management of Colorectal Cancer (colon flow)",
+     "file": "ncg_india/management-of-colorectal-cancer.pdf",
+     "page": 2,
+     "quote": "Stage II (pT3-4,N0): MSI testing indicated"
+    },
+    {
+     "guideline": "NCG Management of Colorectal Cancer (colon flow)",
+     "file": "ncg_india/management-of-colorectal-cancer.pdf",
+     "page": 2,
+     "quote": "Check for RAS, BRAF and MSI status"
+    }
+   ],
+   "tier_basis": "Proposed. Non-metastatic: Optimal, because NCG says MSI testing is indicated for stage II (pT3-4, N0) only, one sub-group, which the system does not judge. Metastatic: Essential, from 'Check for RAS, BRAF and MSI status'. Differs from the rectal checklist (Optional / Essential) on purpose"
+  },
+  {
+   "id": "ras_braf",
+   "label": "RAS / BRAF",
+   "tier": "a",
+   "tiers": {
+    "non_metastatic": "none",
+    "metastatic": "a"
+   },
+   "doc_types": [
+    "molecular",
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "ras_braf"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NCG Management of Colorectal Cancer (colon flow)",
+     "file": "ncg_india/management-of-colorectal-cancer.pdf",
+     "page": 4,
+     "quote": "Determine the MSI status, mutation status in"
+    }
+   ],
+   "tier_basis": "Proposed Essential for metastatic disease only: the colon flow asks for RAS, BRAF and MSI status in metastatic disease. Differs from the rectal checklist (Optional / Essential) on purpose"
+  },
+  {
+   "id": "her2",
+   "label": "HER2 amplification (metastatic)",
+   "tier": "b",
+   "tiers": {
+    "non_metastatic": "none",
+    "metastatic": "b"
+   },
+   "doc_types": [
+    "ihc",
+    "molecular"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "her2"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NCG Management of Colorectal Cancer (colon flow)",
+     "file": "ncg_india/management-of-colorectal-cancer.pdf",
+     "page": 4,
+     "quote": "Determine the MSI status, mutation status in"
+    }
+   ],
+   "tier_basis": "Proposed Optimal for metastatic disease: new for colon (not in the rectal file); named once, in Appendix B"
+  },
+  {
+   "id": "restaging_ct",
+   "label": "Restaging CT abdomen and pelvis",
+   "tier": "c",
+   "tiers": {
+    "non_metastatic": "none",
+    "metastatic": "c"
+   },
+   "doc_types": [
+    "ct"
+   ],
+   "region": "abdomen|abdo|pelvis|pelvic",
+   "department": "Radiology",
+   "required_facts": [
+    "distant_findings"
+   ],
+   "sla_days": 5,
+   "must_postdate_doc_type": "treatment_summary",
+   "applies_if_doc_type_present": "treatment_summary",
+   "sources": [
+    {
+     "guideline": "NCG Management of Colorectal Cancer (colon flow)",
+     "file": "ncg_india/management-of-colorectal-cancer.pdf",
+     "page": 2,
+     "quote": "CT Abdomen and Pelvis with/ without CT Angiography may be used"
+    },
+    {
+     "guideline": "NCG Management of Colorectal Cancer (colon flow)",
+     "file": "ncg_india/management-of-colorectal-cancer.pdf",
+     "page": 2,
+     "quote": "for restaging after therapy in advanced disease"
+    }
+   ],
+   "tier_basis": "Proposed Optional: NCG says CT abdomen and pelvis 'may be used' for restaging after therapy in advanced disease",
+   "note": "asked only after a treatment summary is in the Case File, and dated after it (as the rectal restaging records)"
+  }
+ ],
+ "optional": [
+  {
+   "id": "resection_histopathology",
+   "label": "Histopathology of the resected colon",
+   "doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "sources": [
+    {
+     "guideline": "NCG Management of Colorectal Cancer (colon flow)",
+     "file": "ncg_india/management-of-colorectal-cancer.pdf",
+     "page": 2,
+     "quote": "dHigh risk includes inadequate nodal sampling(< 12 nodes), pT4 stage, perforation - (major); poorly differentiated tumors, LVI/PNI, obstruction."
+    }
+   ],
+   "tier_basis": "Proposed Essential after surgery for non-metastatic disease (a post-board record: the page 2 adjuvant box reads pT, nodes examined, grade and LVI / PNI). Kept under optional because a resection report exists only after the board and the gate cannot tell it from the biopsy report",
+   "note": "post-board record: histologic type, grade, LVI, PNI, margins, stage as recorded and lymph nodes examined (the book's high-risk list names fewer than 12 nodes)"
+  },
+  {
+   "id": "previous_board",
+   "label": "Previous Tumour Board record",
+   "doc_types": [
+    "tumour_board_record"
+   ],
+   "department": "MDT Coordinator",
+   "route": "coordinator"
+  }
+ ],
+ "extract_facts": [
+  "presenting_complaint",
+  "ecog",
+  "comorbidities",
+  "clinical_question",
+  "recorded_stage",
+  "lesion_size",
+  "nodal_findings",
+  "distant_findings",
+  "histologic_type",
+  "grade",
+  "haemoglobin",
+  "wbc",
+  "platelets",
+  "creatinine",
+  "bilirubin",
+  "patient_preference",
+  "clinical_trial_note",
+  "diagnosis_date_mode",
+  "treatment_received",
+  "tumour_site_colon",
+  "cea",
+  "mmr",
+  "ras_braf",
+  "her2",
+  "lvi",
+  "pni",
+  "margins",
+  "nodes_examined"
+ ],
+ "core_data": [
+  {
+   "id": "diagnosis",
+   "label": "Histopathological / cytological diagnosis",
+   "facts": [
+    "histologic_type"
+   ]
+  },
+  {
+   "id": "diagnosis_date_mode",
+   "label": "Date and mode of diagnosis",
+   "facts": [
+    "diagnosis_date_mode"
+   ]
+  },
+  {
+   "id": "stage",
+   "label": "Stage as recorded (with the investigations used)",
+   "facts": [
+    "recorded_stage"
+   ]
+  },
+  {
+   "id": "performance_status",
+   "label": "Performance status",
+   "facts": [
+    "ecog"
+   ]
+  },
+  {
+   "id": "comorbidities",
+   "label": "Co-morbidities",
+   "facts": [
+    "comorbidities"
+   ]
+  },
+  {
+   "id": "biomarkers",
+   "label": "Relevant genomic / biomarker testing",
+   "facts": [
+    "mmr",
+    "ras_braf",
+    "her2"
+   ]
+  },
+  {
+   "id": "treatment_history",
+   "label": "Treatment history",
+   "facts": [
+    "treatment_received"
+   ]
+  },
+  {
+   "id": "patient_preference",
+   "label": "Patient preference / special circumstances",
+   "facts": [
+    "patient_preference"
+   ]
+  },
+  {
+   "id": "clinical_trial",
+   "label": "Clinical trial availability / suitability recorded",
+   "facts": [
+    "clinical_trial_note"
+   ]
+  },
+  {
+   "id": "question",
+   "label": "Question for the Tumour Board",
+   "facts": [
+    "clinical_question"
+   ]
+  }
+ ],
+ "core_data_source": "NHS England, Streamlining MDT meetings (2020), p.11 'minimum core data requirements'; aligned with the NCG Virtual Tumour Board case template (India)",
+ "post_board": {
+  "required_record_fields": [
+   "decision_text",
+   "recorded_by",
+   "participants",
+   "actions"
+  ],
+  "follow_up_default_days": 14,
+  "record_fields_source": "EUSOMA 2020 (names of all participants, evidence on decisions); Victorian Cancer MDM quality framework 2018 (report errors/changes raised, divergent recommendations and dissenting clinicians); PM-JAY HBP 2.2 s.3.9 (tumour board decision and treatment plan)"
+ },
+ "policy_basis": "PM-JAY Health Benefit Package 2.2 user guidelines (NHA, 2021), section 3.9: pre-authorization is mandatory at each step of cancer care and the decision on appropriate care is to be taken by a multidisciplinary tumour board; NHS England MDT streamlining guidance (2020) pre-listing conditions. The NCG book itself asks for the board: \"(DISCUSS IN MULTIDISCIPLINARY MEETING,\" (NCG Management of Colorectal Cancer (colon flow), page 2); the Tumour Board Case File is that discussion, so no separate record is required for it (orchestrator, night-v3 Phase 2).",
+ "guideline_sources": [
+  {
+   "guideline": "NCG Management of Colorectal Cancer (colon flow)",
+   "file": "ncg_india/management-of-colorectal-cancer.pdf",
+   "pages": "2, 4"
+  }
+ ]
+}

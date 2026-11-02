@@ -19,6 +19,23 @@ test.describe("home", () => {
     await shoot(page, "home", "filtered", { sizes: [SIZES[0], SIZES[2]] });
   });
 
+  test("the summary line on a row, found by the search (night-v3 3.4)", async ({ page }) => {
+    test.skip(!runsFor("treating"));
+    await visit(page, "/cases");
+    const box = page.getByRole("searchbox").first();
+    await box.fill("radiotherapy");
+    const row = page.getByRole("link", { name: /Sunita P\./ });
+    await expect(row).toBeVisible();
+    await expect(row.getByTestId("row-summary-line")).toContainText("adjuvant radiotherapy referral open");
+    await expect(row.getByTestId("row-summary-line").locator("mark")).toHaveText("radiotherapy");
+    await expect(page.getByRole("link", { name: /Lakshmi R\./ })).toHaveCount(0);
+    await shoot(page, "home", "search-summary-line", { sizes: [SIZES[0], SIZES[2]], fullPage: false });
+    // a word of the board's decision text (searched, not shown)
+    await box.fill("conservation");
+    await expect(page.getByRole("link", { name: /Sunita P\./ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Fatima B\./ })).toHaveCount(0);
+  });
+
   test("empty, error, loading", async ({ page }) => {
     test.skip(!runsFor("treating"));
     await visit(page, "/home", { overrides: { "GET /api/tb/case-list": { body: { cases: [], filters: {} } }, "GET /api/tb/waiting": { body: { items: [] } } } });

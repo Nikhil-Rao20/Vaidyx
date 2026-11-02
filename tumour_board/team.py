@@ -5,9 +5,12 @@ Stored on case.json:
              5 is the most urgent. Urgency is a person's call: Vaidyx never sets or suggests it.
   "team"     {"residents": [{"user", "added_by", "since", "end_date", "removed": {"by", "at", "reason"} | absent}],
               "join_code": {"code" (6 digits), "created_by", "created_at", "expires", "uses"} | absent,
-              "pending": [{"user", "requested_at", "department"}]}: the residents on the Case File (full read scope, upload, ask,
-             propose), the join code the owner hands out (7 days) and the join requests of residents from other departments waiting
-             for the owner's approval.
+              "pending": [{"user", "requested_at", "department", "role" ("resident" | "consultant"), "note"?, "how"?}],
+              "members": [{"user", "department", "role": "consultant", "added_by", "added_at", "removed"?}]}: the residents on the
+             Case File (full read scope, upload, ask, propose), the join code the owner hands out (7 days), the join requests waiting
+             for the owner's approval (a resident with the code, or any doctor through "Ask to join" from the New Case File page, night-v3
+             item 1.1) and the consultants of other departments the owner let in (they read the whole Case File; the owner's rights stay
+             with the owning department's consultants, access.py).
   "archived" {"by", "at", "reason"}: archived instead of deleted; every change is refused until it is taken back (access.py).
   "consent"  {"outside_discussion": bool, "note", "by", "at"}: whether the patient agreed to an outside expert seeing the Case File
              in a meeting (without it an outside expert sees initials, age and sex only: meetings.py).
@@ -16,7 +19,7 @@ Every change is audited in the Case File; the people concerned are told in-app (
 import hmac, secrets
 from datetime import date, datetime, timedelta
 
-from . import access, config, notify, org, profiles, store
+from . import access, config, notify, org, profiles, protocol, store
 
 URGENCY_LEVELS = (1, 2, 3, 4, 5)
 URGENCY_LABELS = {1: "Not urgent", 2: "Routine", 3: "Soon", 4: "Urgent", 5: "Most urgent"}
@@ -73,6 +76,24 @@ def patient_line(case: dict) -> str:
     if p.get("mrn"):
         parts.append(f"UHID {p['mrn']}")
     return ", ".join(parts)
+
+
+def case_name_for(case: dict, user: str) -> str:
+    """How a notice to one person names the Case File: the patient line and the id for someone who can open it, else the id and the
+    cancer only, never a name, age, sex or UHID (whole-run review 9, S1: a rejected "Ask to join" or a removal reaches a person without
+    access)."""
+    cid = str((case or {}).get("case_id") or "")
+    try:
+        ok = bool(user) and access.scope(org.roles(user), case) is not None
+    except Exception:  # the organisation file could not be read: name the file without the patient
+        ok = False
+    return f"{patient_line(case)} ({cid})" if ok else case_name_plain(case)
+
+
+def case_name_plain(case: dict) -> str:
+    """"Case File <id> (<cancer>)" without any patient detail."""
+    cid = str((case or {}).get("case_id") or "")
+    return f"Case File {cid} ({protocol.case_label(case) or 'cancer not chosen'})"
 
 
 def owner_consultants(case: dict) -> list[str]:
@@ -140,6 +161,7 @@ def _team(case: dict) -> dict:
     t = case.get("team") if isinstance(case.get("team"), dict) else {}
     t.setdefault("residents", [])
     t.setdefault("pending", [])
+    t.setdefault("members", [])
     case["team"] = t
     return t
 
@@ -168,11 +190,15 @@ def view(case: dict, show_code: bool = False) -> dict:
             "residents": [{"user": x.get("user"), "name": profiles.display_name(x.get("user")), "end_date": x.get("end_date") or "", "added_by": x.get("added_by") or "",
                            "since": x.get("since") or "", "expired": bool(x.get("end_date")) and str(x["end_date"])[:10] < today}
                           for x in t["residents"] if isinstance(x, dict) and x.get("user") and not x.get("removed")],
+            "members": [{"user": x.get("user"), "name": profiles.display_name(x.get("user")), "role": x.get("role") or "consultant", "department": x.get("department") or "",
+                         "department_label": org.department_name(x.get("department")) if x.get("department") else "", "added_by": x.get("added_by") or "",
+                         "added_at": x.get("added_at") or ""} for x in access.team_members(case)],
             "departments": [{"id": org.department_id(p.get("department")), "label": org.department_name(org.department_id(p.get("department"))), "since": p.get("since") or ""}
                             for p in case.get("participants") or [] if isinstance(p, dict) and org.department_id(p.get("department"))],
             "join_code": ({"code": jc["code"] if show_code else "", "expires_at": jc.get("expires"), "uses": int(jc.get("uses") or 0)} if jc else None),
             "pending": [{"user": x.get("user"), "name": profiles.display_name(x.get("user")), "requested_at": x.get("requested_at") or "",
-                         "department": x.get("department") or "", "department_label": org.department_name(x.get("department")) if x.get("department") else ""}
+                         "department": x.get("department") or "", "department_label": org.department_name(x.get("department")) if x.get("department") else "",
+                         "role": x.get("role") or "resident", "note": x.get("note") or ""}
                         for x in t["pending"] if isinstance(x, dict) and x.get("user")],
             "archived": dict(case["archived"]) if access.is_archived(case) else None,
             "consent": dict(case["consent"]) if isinstance(case.get("consent"), dict) else None}
@@ -230,7 +256,44 @@ def find_by_code(code: str) -> dict | None:
 
 
 def on_team(case: dict, user: str) -> bool:
-    return any(x.get("user") == user for x in access.team_residents(case))
+    """A resident or a consultant member on this Case File's team."""
+    return any(x.get("user") == user for x in access.team_residents(case)) or any(x.get("user") == user for x in access.team_members(case))
+
+
+def ask_to_join(case_id: str, roles: dict, user: str, note: str = "") -> dict:
+    """"Ask to join" without a code (night-v3 item 1.1): a placed doctor (a consultant or a resident of any department) who cannot open
+    this Case File asks its owner; the request waits in the team's pending list with the asker's role and department, is audited
+    (join_requested) and the owner's consultants are told (join_request). Someone who can open it already: 409 can_open."""
+    r = roles if isinstance(roles, dict) else {}
+    if r.get("disabled") or r.get("expired") or not r.get("known") or r.get("vaidyx_admin"):
+        raise TeamError("Only a doctor placed in a department asks to join a Case File.", 403, "not_placed")
+    consultant_of = [d for d in (r.get("departments") or {}) if d not in (r.get("resident") or {})]
+    resident_of = list(r.get("resident") or {})
+    if not consultant_of and not resident_of:
+        raise TeamError("Only a doctor placed in a department asks to join a Case File.", 403, "not_placed")
+    c = store.get_case(case_id) if case_id else None
+    if not c or access.is_protected(c):  # a protected Case File is never named to anyone else (security review finding 0)
+        raise TeamError("Case not found", 404, "not_found")
+    if access.is_archived(c):
+        raise TeamError(access.ARCHIVED_MESSAGE + ": nobody joins it until it is taken out of the archive.", 409, "archived")
+    if access.scope(r, c) == access.FULL:
+        raise TeamError("You can open this Case File.", 409, "can_open")
+    t = _team(c)
+    if any(x.get("user") == user for x in t["pending"]):
+        return {"status": "pending", "case_id": case_id, "already": True}
+    role = "consultant" if consultant_of else "resident"
+    dept = (consultant_of or resident_of)[0]
+    rec = {"user": user, "requested_at": store.now_iso(), "department": dept, "role": role, "how": "ask"}
+    if _note(note):
+        rec["note"] = _note(note)
+    t["pending"].append(rec)
+    store.save_case(c)
+    store.audit(case_id, {"kind": "join_requested", "by": user, "department": dept, "role": role, "how": "ask", **({"note": rec["note"]} if rec.get("note") else {})})
+    name = profiles.display_name(user)
+    tell_consultants(c, "join_request", f"{name} asks to join the team of {patient_line(c)} ({case_id})",
+                     f"{name} ({org.department_name(dept)}, {role}) asked to join from the New Case File page."
+                     + (f" Note: {rec['note']}" if rec.get("note") else "") + " Approve or reject the request from the Team panel.", user=user, by=user)
+    return {"status": "pending", "case_id": case_id}
 
 
 def join(code: str, roles: dict, user: str) -> dict:
@@ -289,11 +352,17 @@ def approve_pending(case_id: str, user: str, by: str, note: str = "") -> dict:
     t = _team(c)
     p = _pop_pending(t, user)
     r = org.roles(user)
-    rec = {"user": user, "added_by": by, "since": store.now_iso(), "end_date": r.get("end_date") or "", "department": p.get("department") or ""}
-    t["residents"] = [x for x in t["residents"] if x.get("user") != user] + [rec]
-    store.save_case(c)
-    store.audit(case_id, {"kind": "resident_approved", "by": by, "user": user, "note": _note(note)})
-    _tell({"user": user}, "team_changed", case_id, f"You are on the team of {patient_line(c)} ({case_id})",
+    if p.get("role") == "consultant":  # a consultant of another department (Ask to join): reads the whole Case File, never the owner's rights
+        rec = {"user": user, "department": p.get("department") or "", "role": "consultant", "added_by": by, "added_at": store.now_iso()}
+        t["members"] = [x for x in t["members"] if x.get("user") != user] + [rec]
+        store.save_case(c)
+        store.audit(case_id, {"kind": "member_approved", "by": by, "user": user, "department": rec["department"], "note": _note(note)})
+    else:
+        rec = {"user": user, "added_by": by, "since": store.now_iso(), "end_date": r.get("end_date") or "", "department": p.get("department") or ""}
+        t["residents"] = [x for x in t["residents"] if x.get("user") != user] + [rec]
+        store.save_case(c)
+        store.audit(case_id, {"kind": "resident_approved", "by": by, "user": user, "note": _note(note)})
+    _tell({"user": user}, "team_changed", case_id, f"You are on the team of {case_name_for(c, user)}",
           f"{profiles.display_name(by)} approved your request." + (f" Note: {_note(note)}" if note else ""), status="approved", by=by)
     return rec
 
@@ -304,7 +373,7 @@ def reject_pending(case_id: str, user: str, by: str, note: str = "") -> dict:
     p = _pop_pending(t, user)
     store.save_case(c)
     store.audit(case_id, {"kind": "join_rejected", "by": by, "user": user, "note": _note(note)})
-    _tell({"user": user}, "team_changed", case_id, f"Your request to join the team of {patient_line(c)} ({case_id}) was not approved",
+    _tell({"user": user}, "team_changed", case_id, f"Your request to join the team of {case_name_for(c, user)} was not approved",
           f"{profiles.display_name(by)} did not approve the request." + (f" Note: {_note(note)}" if note else ""), status="rejected", by=by)
     return p
 
@@ -328,7 +397,7 @@ def add_resident(case_id: str, user: str, by: str, end_date: str = "") -> dict:
     t["pending"] = [x for x in t["pending"] if x.get("user") != user]
     store.save_case(c)
     store.audit(case_id, {"kind": "resident_added", "by": by, "user": user, "end_date": ed})
-    _tell({"user": user}, "team_changed", case_id, f"You are on the team of {patient_line(c)} ({case_id})", f"Added by {profiles.display_name(by)}.", status="added", by=by)
+    _tell({"user": user}, "team_changed", case_id, f"You are on the team of {case_name_for(c, user)}", f"Added by {profiles.display_name(by)}.", status="added", by=by)
     return rec
 
 
@@ -336,6 +405,15 @@ def remove_resident(case_id: str, user: str, by: str, reason: str = "") -> dict:
     """The owner, a department admin or the resident itself takes the resident off the team; the removed resident loses access."""
     c = _case(case_id)
     t = _team(c)
+    m = next((x for x in t["members"] if x.get("user") == user and not x.get("removed")), None)
+    if m:  # a consultant member (Ask to join) leaves or is taken off the team the same way
+        m["removed"] = {"by": by, "at": store.now_iso(), "reason": _note(reason)}
+        store.save_case(c)
+        store.audit(case_id, {"kind": "member_removed", "by": by, "user": user, "reason": m["removed"]["reason"]})
+        if by != user:
+            _tell({"user": user}, "team_changed", case_id, f"You are no longer on the team of {case_name_for(c, user)}",
+                  f"Removed by {profiles.display_name(by)}." + (f" Reason: {m['removed']['reason']}" if reason else ""), status="removed", by=by)
+        return m
     x = next((x for x in t["residents"] if x.get("user") == user and not x.get("removed")), None)
     if not x:
         own = access.owner(c)
@@ -348,7 +426,7 @@ def remove_resident(case_id: str, user: str, by: str, reason: str = "") -> dict:
     store.save_case(c)
     store.audit(case_id, {"kind": "resident_removed", "by": by, "user": user, "reason": x["removed"]["reason"]})
     if by != user:
-        _tell({"user": user}, "team_changed", case_id, f"You are no longer on the team of {patient_line(c)} ({case_id})",
+        _tell({"user": user}, "team_changed", case_id, f"You are no longer on the team of {case_name_for(c, user)}",
               f"Removed by {profiles.display_name(by)}." + (f" Reason: {x['removed']['reason']}" if reason else ""), status="removed", by=by)
     return x
 
@@ -403,4 +481,81 @@ def break_glass(user: str, case_id: str, reason: str, hours=None) -> dict:
     w = access.open_break_glass(user, case_id, reason, hours)
     tell_consultants(c, "break_glass", f"Break-glass: {user} opened the Case File of {patient_line(c)} ({case_id})",
                      f"The Vaidyx admin {user} opened this Case File until {w['until'][:16].replace('T', ' ')}. Reason: {w['reason']}", user=user, until=w["until"], by=user)
+    return w
+
+
+def _dmy_hm(iso: str) -> str:
+    """2026-10-28T14:05:00 as 28/10/2026 14:05."""
+    try:
+        d = datetime.fromisoformat(str(iso))
+    except (TypeError, ValueError):
+        return str(iso or "")[:16].replace("T", " ")
+    return d.strftime("%d/%m/%Y %H:%M")
+
+
+def break_glass_doctor(user: str, roles: dict, case_id: str, reason: str, via: str = "") -> dict:
+    """A doctor without access opens one Case File read-only with a reason (owner decision D8, night-v3 item 1.9): 24 hours, audited in
+    the Case File and the organisation log, the owning department's consultants told. A protected or unknown Case File answers 404
+    (never named); a person who can open it already 409 `can_open`; anyone but a placed consultant or resident 403 `not_placed`. A new
+    opening of the same Case File renews the window. `via` is a short tag of where the doctor came from (Phase 7: "similar to TB-xxx")."""
+    c = store.get_case(case_id)
+    if not c or access.is_protected(c):
+        raise TeamError("Case not found", 404, "not_found")
+    sc = access.scope(roles, c)
+    if sc is not None and sc != access.READ:
+        raise TeamError("You can open this Case File already.", 409, "can_open")
+    if not access.may_open_with_reason(roles, c):
+        raise TeamError("Only a doctor placed in a department (a consultant or a resident) opens a Case File with a reason.", 403, "not_placed")
+    try:
+        via = access.clean_via(via)
+    except access.AccessError as e:
+        raise TeamError(str(e), e.status, e.code or "bad_via")
+    owned = bool(access.owner(c))
+    fallback = [] if owned else _no_owner_recipients(c, user)  # whole-run review 9, I2: someone is always told, or the file stays shut
+    if not owned and not fallback:
+        raise TeamError("This Case File has no owning department yet: ask the MDT Coordinator.", 409, "no_owner")
+    try:
+        w = access.open_doctor_window(user, case_id, reason, via)
+    except access.AccessError as e:
+        raise TeamError(str(e), e.status, e.code or "bad_reason")
+    store.audit(case_id, {"kind": "break_glass_doctor", "by": user, "reason": w["reason"], "via": w["via"], "until": w["until"],
+                          "window": w["id"], "renewed": w["renewed"]})
+    org.audit("break_glass_doctor", user, case_id=case_id, reason=w["reason"], via=w["via"], until=w["until"])
+    name = profiles.display_name(user)
+    text = (f"{name} reads this Case File read-only until {_dmy_hm(w['until'])}. Reason: {w['reason']}"
+            + (f" ({w['via']})" if w["via"] else ""))
+    extra = {"user": user, "until": w["until"], "by": user, "via": w["via"], "read_only": True}
+    if owned:
+        tell_consultants(c, "break_glass", f"Opened with a reason: {name} opened the Case File of {patient_line(c)} ({case_id})", text, **extra)
+        return w
+    for to in fallback:  # no owning department: the creator and the MDT Coordinator role (the role's notice names no patient)
+        named = case_name_for(c, to["user"]) if "user" in to else case_name_plain(c)
+        _tell(to, "break_glass", case_id, f"Opened with a reason: {name} opened {named}",
+              text + " This Case File has no owning department yet.", **extra)
+    return w
+
+
+def _no_owner_recipients(case: dict, user: str) -> list[dict]:
+    """Who hears of an opening with a reason on a Case File without an owning department: its creator (a placed, active login other
+    than the doctor opening it) and the MDT Coordinator role when at least one active login holds it. Empty when nobody would read it."""
+    out = []
+    creator = str(case.get("created_by") or "").strip()
+    if creator and creator != user:
+        try:
+            cr = org.roles(creator)
+        except Exception:
+            cr = {}
+        if cr.get("known") and not cr.get("disabled") and not cr.get("expired"):
+            out.append({"user": creator})
+    users = org.load().get("users") or {}
+    if any(isinstance(v, dict) and v.get("coordinator") and not v.get("disabled") for v in users.values()):
+        out.append({"role": "coordinator"})
+    return out
+
+
+def close_break_glass_doctor(user: str, case_id: str) -> dict:
+    """The doctor closes its own window on a Case File (audited, access.close_doctor_window); 404 `no_window` when none is open."""
+    w = access.close_doctor_window(user, case_id, by=user)
+    if not w:
+        raise TeamError("You have no open window on this Case File.", 404, "no_window")
     return w

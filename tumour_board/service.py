@@ -120,6 +120,21 @@ async def process_docs(case_id, doc_ids, job, from_stored=False):
     _save_job(job)
     store.audit(case_id, {"kind": "ingestion_finished", "documents": len(doc_ids), "seconds": job["seconds"], "gate_passed": gate["passed"] if gate else None,
                           "readiness": gate["readiness"] if gate else None})
+    after_send(case_id, job)
+
+
+def after_send(case_id, job=None) -> dict | None:
+    """A report became ready after the Case File was sent to the board (night-v3 item 1.5, B8): the ready hook runs again (the summary and
+    the briefs written again when stale, never during a meeting; the MDT Coordinator only is told). Never fails the ingestion."""
+    try:
+        from . import after_send as asend, ready_hook
+        case = store.get_case(case_id)
+        if not asend.is_sent(case) or not asend.new_docs(case_id, case):
+            return None
+        return ready_hook.on_ready(case_id, (job or {}).get("by") or "Vaidyx (automatic)", again=True)
+    except Exception:
+        log.exception("after-send hook failed for %s", case_id)
+        return None
 
 
 def scan_warnings(case_id, doc_ids, user="", intake=False):
@@ -495,11 +510,16 @@ def list_demo():
 
 def review(case_id, artefact, status, comment, user):
     """Human oversight (expert-in-the-loop): mark an AI artefact reviewed, or flag it for correction."""
+    if artefact in ("case_summary", "summary_history"):  # its own route checks the owner's consultant and the version (Phase 3 review M7)
+        raise ValueError("The Case summary is reviewed version by version by the owning department's consultants: use the review of the "
+                         "Case summary (POST /cases/{id}/case-summary/{n}/review)." if artefact == "case_summary" else
+                         "Earlier versions of the summary are not reviewed here: each version keeps the review it had.")
     st = store.get_state(case_id)
     a = st.get("artefacts", {}).get(artefact)
-    if a is None:
+    if not isinstance(a, dict):  # summary_history (a list of archived versions, night-v3 item 3.5) is not an artefact to review
         raise KeyError(artefact)
-    a["review"] = {"status": status, "comment": comment, "by": user, "at": store.now_iso()}
+    # "generated" links the review to the version it judged (night-v3 item 3.5): a rebuild archives that version with this review inside it
+    a["review"] = {"status": status, "comment": comment, "by": user, "at": store.now_iso(), "generated": a.get("generated")}
     st.setdefault("reviews", []).append({"artefact": artefact, **a["review"]})
     store.save_state(case_id, st)
     store.audit(case_id, {"kind": "expert_review", "artefact": artefact, "status": status, "by": user, "comment": comment})

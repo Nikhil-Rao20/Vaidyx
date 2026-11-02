@@ -16,13 +16,19 @@ The Vaidyx admin (the server administrator) has no clinical scope: it reads a Ca
 route is in api/team.py). A resident past its end date, an auditor and an outside expert get no scope here (the meeting screens have
 their own rule for outside experts).
 
+A doctor without access (a consultant or a resident placed in a department) may open one Case File read-only with a reason (owner
+decision D8, night-v3 item 1.9): a window of 24 hours in break_glass_doctors.json (several per doctor, one per Case File, renewed on a
+new opening), scope READ: the read actions only (BREAK_GLASS_ACTIONS), never the board, the meetings, the deck or the chats (those check
+FULL), never listed among the doctor's Case Files (visible), never on a protected Case File. The owner's consultants are told and it is
+audited (team.break_glass_doctor, route POST /break-glass).
+
 Acting: the clinical actions of a treating doctor (confirm, waive, dismiss, upload an outside report, re-fetch, link, send and close
 requests, refer, manage the participants and the team, set the urgency, approve a resident's proposal, change the listing) belong to
 the owning department's consultants; a resident of the team may upload and propose, never sign; a department still confirms or deletes
 its own upload through its membership (the V1 rule), the coordinator keeps the board and session actions. An archived Case File keeps
 its readers but refuses every change except taking it out of the archive ("This Case File is archived"). Every change here is audited in
 the Case File. No model calls."""
-import json, os, threading
+import json, os, re, threading
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -30,7 +36,8 @@ from . import config, org, store
 
 FULL = "full"          # the whole Case File
 REQUESTS = "requests"  # only the items the department was asked about (a supporting department)
-SCOPES = (FULL, REQUESTS)
+READ = "read"          # the whole Case File, read only: a doctor's window opened with a reason (night-v3 item 1.9, owner decision D8)
+SCOPES = (FULL, REQUESTS, READ)
 # The clinical actions a treating doctor does on the Case Files its department owns (plan section 4). The other actions keep their
 # org.ACTIONS rule (board and session actions for the coordinator, a department's own upload for its doctors, reading for everyone in scope).
 OWNER_ACTIONS = frozenset({"waive", "confirm", "dismiss_failed", "upload_to_case", "send_request", "create_request", "close_request",
@@ -44,15 +51,19 @@ RECENT_DAYS = 7  # a department that received a request keeps its limited view t
 REFERRAL_OPEN = "requested"
 BREAK_GLASS_HOURS = 4  # a break-glass window's default length
 BREAK_GLASS_MAX_HOURS = 24
+DOCTOR_WINDOW_HOURS = 24  # a doctor's window opened with a reason lasts this long (owner decision D8)
+REASON_MIN, REASON_MAX, VIA_MAX = 3, 500, 80
+READ_ONLY_MESSAGE = "This Case File is open read-only (opened with a reason): the owning department acts on it."
 _bg_lock = threading.Lock()
 
 
 class AccessError(Exception):
     """A plain message for the user; `status` is the HTTP status the route answers."""
 
-    def __init__(self, message, status=400):
+    def __init__(self, message, status=400, code=""):
         super().__init__(message)
         self.status = status
+        self.code = code
 
 
 # ---- what the Case File records -------------------------------------------------------------------------------------------
@@ -160,6 +171,21 @@ def is_team_resident(r: dict, case: dict) -> bool:
     return any(x.get("user") == r.get("user") for x in team_residents(case))
 
 
+def team_members(case) -> list[dict]:
+    """The consultants of other departments the owner let into this Case File's team (an approved "Ask to join", night-v3 item 1.1):
+    the entries not removed. They read the whole Case File; the owner's rights stay with the owning department's consultants."""
+    return [x for x in ((case or {}).get("team") or {}).get("members") or [] if isinstance(x, dict) and x.get("user") and not x.get("removed")]
+
+
+def is_team_member(r: dict, case: dict) -> bool:
+    """A consultant (member or head of a department, not only a resident) on this Case File's team (team_members)."""
+    if not isinstance(r, dict) or r.get("disabled") or r.get("expired") or not r.get("known"):
+        return False
+    if not (set(r.get("departments") or {}) - set(r.get("resident") or {})):
+        return False
+    return any(x.get("user") == r.get("user") for x in team_members(case))
+
+
 def _action_department(a: dict) -> str | None:
     if a.get("role") == "coordinator":
         return org.COORDINATOR_ID
@@ -209,8 +235,8 @@ def _read_windows() -> dict:
     return d if isinstance(d, dict) else {}
 
 
-def _write_windows(d: dict) -> None:
-    p = break_glass_path()
+def _write_windows(d: dict, path: Path | None = None) -> None:
+    p = path or break_glass_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(p.suffix + ".tmp")
     tmp.write_text(json.dumps(d, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -280,13 +306,144 @@ def close_break_glass(user: str, by: str = "") -> dict | None:
 
 
 def expire_break_glass() -> int:
-    """Drop windows past their end (the scheduler's housekeeping); returns how many went."""
+    """Drop windows past their end, the Vaidyx admin's and the doctors' (the scheduler's housekeeping); returns how many went."""
     with _bg_lock:
         d = _read_windows()
         keep = {u: w for u, w in d.items() if _active(w)}
         if len(keep) != len(d):
             _write_windows(keep)
-    return len(d) - len(keep)
+        dd = _read_doctor_windows()
+        gone = sum(len(ws) for ws in dd.values())
+        kept = {u: [w for w in ws if _active(w)] for u, ws in dd.items()}
+        kept = {u: ws for u, ws in kept.items() if ws}
+        gone -= sum(len(ws) for ws in kept.values())
+        if gone:
+            _write_windows(kept, doctor_windows_path())
+    return len(d) - len(keep) + gone
+
+
+# ---- a doctor opens a Case File with a reason (night-v3 item 1.9, owner decision D8) ------------------------------------------
+
+def doctor_windows_path() -> Path:
+    return Path(config.DATA_ROOT) / "break_glass_doctors.json"
+
+
+def _read_doctor_windows() -> dict:
+    """{user: [{"id", "case_id", "reason", "via", "opened", "until"}]}; anything malformed is left out."""
+    try:
+        d = json.loads(doctor_windows_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(d, dict):
+        return {}
+    return {str(u): [w for w in ws if isinstance(w, dict)] for u, ws in d.items() if isinstance(ws, list)}
+
+
+def doctor_window(user: str, case_id: str) -> dict | None:
+    """The doctor's open window on this Case File, or None."""
+    for w in _read_doctor_windows().get(str(user or ""), []):
+        if w.get("case_id") == case_id and _active(w):
+            return dict(w)
+    return None
+
+
+def doctor_windows(user: str) -> list[dict]:
+    """The doctor's open windows, the newest first."""
+    ws = [dict(w) for w in _read_doctor_windows().get(str(user or ""), []) if _active(w)]
+    return sorted(ws, key=lambda w: str(w.get("opened") or ""), reverse=True)
+
+
+def clean_reason(reason) -> str:
+    """The reason as recorded (whitespace collapsed), or AccessError 400 `bad_reason`."""
+    text = " ".join(str(reason or "").split())
+    if len(text) < REASON_MIN:
+        raise AccessError("Give the reason for opening this Case File (it is recorded and the owner's consultants are told).", 400, "bad_reason")
+    if len(text) > REASON_MAX:
+        raise AccessError(f"Keep the reason to {REASON_MAX} characters.", 400, "bad_reason")
+    return text
+
+
+_VIA = re.compile(r"similar:[A-Za-z0-9_.-]{1,64}")
+
+
+def clean_via(via) -> str:
+    """Where a doctor came from when opening with a reason: "" or "similar:<Case File id>" (Phase 7, D10), so every opening is
+    attributable; anything else is AccessError 400 `bad_via` (whole-run review 9, M1)."""
+    v = str(via or "").strip()
+    if v and not _VIA.fullmatch(v):
+        raise AccessError("Vaidyx cannot record where this opening came from. Open the Case File again from its page or from the similar list.", 400, "bad_via")
+    return v
+
+
+def doctor_windows_all() -> list[dict]:
+    """Every open doctor window, for the root admin and the auditor (GET /break-glass, whole-run review 9 M2): case_id, user, until,
+    reason, via, the newest first."""
+    out = [{"case_id": w.get("case_id"), "user": u, "until": w.get("until"), "reason": w.get("reason") or "", "via": w.get("via") or "",
+            "opened": w.get("opened") or ""} for u, ws in _read_doctor_windows().items() for w in ws if _active(w)]
+    return sorted(out, key=lambda w: str(w.get("opened") or ""), reverse=True)
+
+
+def open_doctor_window(user: str, case_id: str, reason: str, via: str = "") -> dict:
+    """Write the doctor's read-only window on one Case File for DOCTOR_WINDOW_HOURS (a new opening of the same Case File renews the one
+    window). Only the store: team.break_glass_doctor checks who may, audits and tells the owner's consultants. Returns the window and
+    "renewed"."""
+    reason = clean_reason(reason)
+    via = clean_via(via)[:VIA_MAX]
+    c = store.get_case(case_id)
+    if not c or is_protected(c):  # a protected Case File never opens through a doctor's window, and is never named
+        raise AccessError("Case not found", 404, "not_found")
+    now = datetime.now()
+    until = (now + timedelta(hours=DOCTOR_WINDOW_HOURS)).isoformat(timespec="seconds")
+    with _bg_lock:
+        d = _read_doctor_windows()
+        ws = [w for w in d.get(str(user), []) if _active(w, now)]
+        old = next((w for w in ws if w.get("case_id") == case_id), None)
+        w = {"id": (old or {}).get("id") or "BG-" + now.strftime("%Y%m%d%H%M%S") + "-" + os.urandom(3).hex(), "case_id": case_id,
+             "reason": reason, "via": via, "opened": now.isoformat(timespec="seconds"), "until": until}
+        d[str(user)] = [x for x in ws if x.get("case_id") != case_id] + [w]
+        _write_windows(d, doctor_windows_path())
+    return {**w, "renewed": old is not None}
+
+
+def close_doctor_window(user: str, case_id: str, by: str = "") -> dict | None:
+    """Close the doctor's window on this Case File early (audited in the Case File and the organisation log); None when there was none."""
+    with _bg_lock:
+        d = _read_doctor_windows()
+        ws = d.get(str(user), [])
+        w = next((x for x in ws if x.get("case_id") == case_id and _active(x)), None)
+        if w is not None:
+            rest = [x for x in ws if x.get("case_id") != case_id and _active(x)]
+            if rest:
+                d[str(user)] = rest
+            else:
+                d.pop(str(user), None)
+            _write_windows(d, doctor_windows_path())
+    if w:
+        store.audit(case_id, {"kind": "break_glass_doctor_closed", "by": by or user, "user": user, "window": w.get("id")})
+        org.audit("break_glass_doctor_closed", by or user, case_id=case_id, user=user)
+    return w
+
+
+def placed_doctor(r: dict) -> bool:
+    """A known, placed login with a consultant or resident placement, not disabled or past its end date; never the Vaidyx admin, the
+    login of single-user mode or the MDT Coordinator (who opens every Case File anyway), never an outside expert without a placement."""
+    if not isinstance(r, dict) or r.get("disabled") or r.get("expired") or not r.get("known"):
+        return False
+    if r.get("admin") or r.get("vaidyx_admin") or r.get("coordinator"):
+        return False
+    return bool(r.get("departments"))
+
+
+def _doctor_open(r: dict, case: dict) -> bool:
+    return placed_doctor(r) and doctor_window(r.get("user") or "", (case or {}).get("case_id")) is not None
+
+
+def may_open_with_reason(r: dict, case: dict) -> bool:
+    """Decision 3 of item 1.9: a placed doctor (consultant or resident) with no other access to this Case File (or only its own window,
+    which a new opening renews); never on a protected Case File."""
+    if not isinstance(case, dict) or is_protected(case) or not placed_doctor(r):
+        return False
+    return scope(r, case) in (None, READ)
 
 
 def _admin_open(r: dict, case: dict) -> bool:
@@ -321,17 +478,23 @@ def scope(r: dict, case: dict, state=None) -> str | None:
         return FULL
     own = owner(case)
     if not own:  # no owning department recorded (before 5.1, a manual Case File): the coordinator (above) and its creator only (owner, 16 Oct)
-        return FULL if is_creator(r, case) else None
+        if is_creator(r, case):
+            return FULL
+        return READ if _doctor_open(r, case) else None  # or a doctor's window opened with a reason (D8)
     mine = _mine(r) - set(r.get("resident") or {})  # the consultant placements; a resident reads through is_team_resident only
     if own in mine or (mine & set(participants(case))) or (mine & set(linked_owners(case))):
         return FULL
     if is_team_resident(r, case):  # a resident of the owning department or of this Case File's team
+        return FULL
+    if is_team_member(r, case):  # a consultant of another department the owner let into the team: reads, never the owner's rights (may)
         return FULL
     ref = open_referral(case)
     if ref and org.department_id(ref.get("to")) in mine:
         return FULL
     if mine & set(asked(case["case_id"], state)):  # a resident never answers requests
         return REQUESTS
+    if _doctor_open(r, case):  # a doctor's window opened with a reason (night-v3 item 1.9, D8): read only
+        return READ
     return None
 
 
@@ -360,9 +523,22 @@ def refusal(r: dict, case: dict) -> str:
             "that received a request sees the items it was asked about.")
 
 
+READ_ONLY_EXPORT = "A Case File opened with a reason is read on screen only."
+
+
+def no_export_in_window(r: dict, case: dict, scope_now: str | None) -> None:
+    """A window (a doctor's opened with a reason, D8, or the Vaidyx admin's break-glass) reads the Case File on screen only: no bulk
+    download of the file, its records, its deck or its audit (whole-run review 9, I1; the deck from Phase 9 review E, I1). A Vaidyx admin
+    who created a protected Case File still exports that one. `scope_now` is the request's scope. AccessError 403 break_glass_read_only."""
+    admin_window = bool((r or {}).get("vaidyx_admin")) and not (is_protected(case) and is_creator(r, case))
+    if admin_window or scope_now == READ:
+        raise AccessError(READ_ONLY_EXPORT, 403, "break_glass_read_only")
+
+
 def visible(r: dict, cases, states=None) -> list:
-    """The Case Files the user may open (any scope), each as given."""
-    return [c for c in cases or [] if isinstance(c, dict) and scope(r, c, (states or {}).get(c.get("case_id"))) is not None]
+    """The Case Files the user may open (any scope but a doctor's window: a Case File opened with a reason is reached by its address or
+    the notification, never listed among the doctor's own), each as given."""
+    return [c for c in cases or [] if isinstance(c, dict) and scope(r, c, (states or {}).get(c.get("case_id"))) not in (None, READ)]
 
 
 def my_actions(r: dict, case_id: str, state=None) -> list:
@@ -419,6 +595,8 @@ def may(r: dict, action: str, case: dict, department: str | None = None) -> bool
     A Vaidyx admin inside its break-glass window only reads (BREAK_GLASS_ACTIONS, security review #6)."""
     if isinstance(r, dict) and r.get("vaidyx_admin") and not r.get("disabled"):
         return action in BREAK_GLASS_ACTIONS and _admin_open(r, case)
+    if isinstance(case, dict) and _doctor_open(r, case) and scope(r, case) == READ:  # a doctor's window opened with a reason: read only (D8)
+        return action in BREAK_GLASS_ACTIONS
     if not org.can(r, action, department):
         return False
     if is_archived(case) and action not in ARCHIVE_ALLOWED:
@@ -453,6 +631,8 @@ def require(r: dict, action: str, case: dict, department: str | None = None) -> 
         raise PermissionError(ARCHIVED_MESSAGE + ". Take it out of the archive first.")
     if isinstance(r, dict) and r.get("expired"):
         raise PermissionError("Your placement ended on " + str(r.get("end_date") or "")[:10] + ". Ask your department admin to extend it.")
+    if isinstance(case, dict) and _doctor_open(r, case) and scope(r, case) == READ:
+        raise PermissionError(READ_ONLY_MESSAGE)
     if isinstance(r, dict) and r.get("vaidyx_admin"):
         if _admin_open(r, case):
             raise PermissionError("A break-glass window is read only: a Vaidyx admin reads the Case File, the owning department acts on it.")

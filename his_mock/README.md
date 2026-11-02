@@ -118,8 +118,8 @@ with 404, so a HEAD is sent upstream as a GET and only its headers are returned.
 ## Data and build
 
 `python -m his_mock.build [--out DIR] [--seed N] [--no-pdf] [--no-hl7] [--no-dicom] [--upload]` replays every fixture of
-`scenarios.json` (v0.3.5: 19 patients, 21 registrations, 31 scenarios; 30 departments, 22 treating and 8 supporting;
-38 tests; 22 practitioners) through the transitions of `model.Store` in time order, deterministic per seed, and writes:
+`scenarios.json` (v0.4.0: 23 patients, 25 registrations, 32 scenarios; 31 departments, 23 treating and 8 supporting;
+50 tests; 25 practitioners) through the transitions of `model.Store` in time order, deterministic per seed, and writes: (v0.4.0, night-v3 item 2.11, 27 Oct 2026: four Phase 2 patients P20 to P23 for ovary, prostate, stomach and lymphoma, twelve new tests and Cardiology as a treating department for the echo report.)
 
 | File | What |
 |---|---|

@@ -9,6 +9,9 @@ Policy (human oversight, expert-in-the-loop):
   - Undo marks the record undone (who, when); nothing is erased from state.json or the audit log.
   - attest_final and waive are mirrored into the legacy state["overrides"] shape that rules.evaluate, agents and summary
     read today; the mirror entry carries the confirmation id so undo only removes its own entry.
+  - board_uses (night-v3 item 1.7, design B5): when two reports differ, the doctor picks the report whose value the board uses. Key = the
+    fact id, fields = the chosen report and its value as that report writes it (never a typed value). Mirrored into
+    state["overrides"]["picks"][fact id], which rules.resolve_facts reads; the difference stays listed (discord.py).
 """
 import copy
 import uuid
@@ -25,7 +28,9 @@ TYPES = {
     "confirm_value":    {"target": "fact",        "fields": ["value"],                     "reason_required": False, "action": "confirm"},
     "resolve_flag":     {"target": "flag",        "fields": ["resolution", "value"],       "reason_required": False, "action": "resolve_flag"},
     "note_discordance": {"target": "discordance", "fields": [],                            "reason_required": False, "action": "confirm"},  # 12 Oct
+    "board_uses":       {"target": "pick",        "fields": ["doc_id", "value"],           "reason_required": False, "action": "confirm"},  # night-v3 1.7
 }
+PICK_GONE = "That report no longer gives this value: look again"
 RESOLUTIONS = ("corrected", "intentional_deviation", "false_alarm")
 LEGACY = {"documents": ("attest_final", "attested_final"), "requirements": ("waive", "waived")}
 _LEGACY_KIND = {t: k for k, (t, _) in LEGACY.items()}
@@ -48,6 +53,8 @@ def _key(target, key):
         doc_id, _, fid = key.partition(":")
         if not (_id_ok(doc_id) and _id_ok(fid)):
             raise ValueError("A value confirmation needs the document and the field (document id:field id)")
+    if target == "pick" and not _id_ok(key):
+        raise ValueError(f"Not a valid field id: {key}")
     if target == "flag" and len(key) > 128:
         raise ValueError("Flag id is too long")
     if target == "discordance" and (len(key) > 200 or key.count(":") < 3):
@@ -91,6 +98,12 @@ def validate(ctype, key, fields=None, reason=""):
         if not raw.get("value"):
             raise ValueError("Type the value as written in the source document")
         out["value"] = raw["value"]
+    elif ctype == "board_uses":
+        if not _id_ok(raw.get("doc_id", "")):
+            raise ValueError("Choose the report whose value the board uses")
+        if not raw.get("value"):
+            raise ValueError("Choose the value as the report writes it")
+        out = {"doc_id": raw["doc_id"], "value": raw["value"]}
     elif ctype == "resolve_flag":
         res = raw.get("resolution", "")
         if res not in RESOLUTIONS:
@@ -122,6 +135,9 @@ def latest(state_or_case_id, ctype, key):
 
 
 def _mirror_set(st, rec):
+    if rec["type"] == "board_uses":  # the value the board uses, read by rules.resolve_facts (night-v3 item 1.7)
+        st.setdefault("overrides", {}).setdefault("picks", {})[rec["key"]] = {**rec["fields"], "by": rec["by"], "at": rec["at"], "confirmation": rec["id"]}
+        return
     if rec["type"] == "note_discordance":  # a noted discordance stays listed, greyed (12 Oct)
         st.setdefault("discordance_notes", {})[rec["key"]] = {"by": rec["by"], "at": rec["at"], "note": rec["reason"], "confirmation": rec["id"]}
         return
@@ -135,6 +151,11 @@ def _mirror_set(st, rec):
 
 
 def _mirror_drop(st, rec):
+    if rec["type"] == "board_uses":
+        picks = (st.get("overrides") or {}).get("picks") or {}
+        if (picks.get(rec["key"]) or {}).get("confirmation") == rec["id"]:
+            picks.pop(rec["key"])
+        return
     if rec["type"] == "note_discordance":
         notes = st.get("discordance_notes") or {}
         if (notes.get(rec["key"]) or {}).get("confirmation") == rec["id"]:
@@ -146,9 +167,23 @@ def _mirror_drop(st, rec):
         ov.pop(rec["key"])
 
 
+def check_pick(case_id, fact_id, doc_id, value, state=None):
+    """A pick names a report of this Case File that still gives this value word for word, as it is read now (after the other
+    confirmations), from a verified line; else ValueError(PICK_GONE). A report replaced by a newer version or dismissed is refused too."""
+    from . import rules  # rules imports this module
+    st = store.get_state(case_id) if state is None else state
+    d = next((x for x in rules.case_docs(case_id, st) if x.get("doc_id") == doc_id), None)
+    f = ((d or {}).get("facts") or {}).get(fact_id) or {}
+    if (not d or d.get("state") != "ready" or d.get("superseded") or d.get("dismissed") or f.get("value") != value
+            or f.get("verification") not in rules.VERIFIED or f.get("state", "present") != "present"):
+        raise ValueError(PICK_GONE)
+
+
 def record(case_id, ctype, key, fields=None, reason="", by=""):
     """Validate and store one confirmation; an active one of the same type and key is superseded. Audited."""
     clean = validate(ctype, key, fields, reason)
+    if ctype == "board_uses":
+        check_pick(case_id, clean["key"], clean["fields"]["doc_id"], clean["fields"]["value"])
     st = store.get_state(case_id)
     confs = st.setdefault("confirmations", [])
     at = store.now_iso()

@@ -63,13 +63,18 @@ def test_closed_meeting_deck_carries_the_outcomes_and_minutes(tc):
     s = As(tc, "anil").get(f"/meetings/{mid}").json()
     cid = s["agenda"]["discussion"][0]["case_id"]
     As(tc, "anil").post(f"/meetings/{mid}/current", json={"case_id": cid})
-    r = As(tc, "anil").post(f"/meetings/{mid}/cases/{cid}/decision", json={"outcome": "decision", "decision_text": "Upfront surgery, then adjuvant therapy as per the final histopathology.", "members_present": ["Anil Kumar"]})
+    # night-v3 item 3.1: the meeting form needs the intent and the responsible clinician for a decision; the new fields reach the deck
+    r = As(tc, "anil").post(f"/meetings/{mid}/cases/{cid}/decision", json={"outcome": "decision", "decision_text": "Upfront surgery, then adjuvant therapy as per the final histopathology.", "members_present": ["Anil Kumar"],
+                                                                         "intent": "curative", "responsible_doctor": "Dr Priya Nair", "modalities": ["surgery", "chemotherapy"],
+                                                                         "stage_as_agreed": "cT2 N0 M0", "stage_source": "report", "investigations": [{"item": "Echocardiogram", "department": "Cardiology", "due": "05/11/2026"}]})
     assert r.status_code == 200, r.text
     assert As(tc, "anil").post(f"/meetings/{mid}/end").status_code == 200
     r = As(tc, "anil").get(f"/meetings/{mid}/deck")
     assert r.status_code == 200
     joined = " ".join(_texts(r.content))
     assert "Upfront surgery, then adjuvant therapy" in joined and "Outcomes of the meeting" in joined and "Closed: outcomes and minutes inside" in joined
+    assert "Treatment intent: Curative" in joined and "Modalities: Surgery, Chemotherapy" in joined and "Stage as agreed by the board: cT2 N0 M0" in joined
+    assert "Echocardiogram (Cardiology, due 05/11/2026)" in joined and "Responsible clinician: Dr Priya Nair" in joined
 
 
 def test_hospital_logo_upload_and_use(tc, data_root):

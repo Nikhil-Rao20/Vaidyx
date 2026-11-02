@@ -1,0 +1,958 @@
+{
+ "id": "leukaemia",
+ "label": "Leukaemia (acute and chronic)",
+ "version": "0.1-draft",
+ "approval": {
+  "status": "draft",
+  "note": "Draft checklist from NCG Guidelines for Adult Hematolymphoid Malignancies (2019) and NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019): needs a clinician's check"
+ },
+ "site": "leukaemia|leukemia|marrow",
+ "site_note": "V2 item 5.3 (two primaries): only on a Case File linked to the same patient's other Case File, and only for histopathology, cytology, IHC and molecular records: among several candidates for one record, or several documents carrying a required value, one that names another protocol's site and not this one steps aside and is named on the row for review; a document naming no site never does, and when every candidate names another site every candidate stays. Organ words only. A preference, never a filter; a patient with one cancer is checked as before.",
+ "note": "DRAFT, not approved for real use: needs a clinician's check. Configurable by the clinical team. Required records transcribed from the National Cancer Grid (India) books: NCG Guidelines for Adult Hematolymphoid Malignancies (2019) (the work-up boxes of the AML, APML, ALL, CLL and CML flow charts, pages 5, 8, 11, 13 and 16, and the flow cytometry annexure, pages 91 to 95) and NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019) (ALL page 7, AML page 13, APML page 15, CML page 17; the printed footer is one less than the PDF page cited). The adult flow charts are pictures with no text layer: their lines were read with the project's own OCR engine (Tesseract) and each such quote is marked ocr and checked against that engine's reading of the page. Four settings group the diseases: where two diseases of one setting carry different letters, the record keeps the higher and its tier_basis names both. Child APML is in the child acute setting, child CML in the child chronic setting. Tiers printed by NCG are kept; the tiers whose tier_basis says 'proposed' are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). A record NCG gives only under a condition the system never judges (an indication, a finding) is shown with NCG's own tier and the condition, never counted. Leukaemia has no stage: the risk group or phase (for example AML favourable, intermediate or poor risk; CML chronic, accelerated or blast phase) is as recorded in a report, never computed; risk scores are never calculated. Langerhans cell histiocytosis is not in this checklist. Nothing here suggests treatment. India first: the National Cancer Grid books are the only source (the adult book points to the ICMR guideline for flow cytometry quality control, page 91).",
+ "settings_note": "The setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes a stage or a risk group and never decides the setting; a child is under 15 years as the picker decides, the books give no age cut-off). Each record carries its tier per setting; until a setting is recorded the strictest tier applies. Draft checklist: needs a clinician's check.",
+ "settings": [
+  {
+   "id": "adult_acute",
+   "label": "Adult acute leukaemia: AML, APML or ALL (as recorded)"
+  },
+  {
+   "id": "adult_chronic",
+   "label": "Adult chronic leukaemia: CLL or CML (as recorded)"
+  },
+  {
+   "id": "child_acute",
+   "label": "Child acute leukaemia: ALL, AML or APML (as recorded)"
+  },
+  {
+   "id": "child_chronic",
+   "label": "Child chronic myeloid leukaemia (as recorded)"
+  }
+ ],
+ "records": [
+  {
+   "id": "clinical_history",
+   "label": "History, examination (CNS, testis, nodes, liver, spleen), performance status",
+   "tier": "a",
+   "tiers": {
+    "adult_acute": "a",
+    "adult_chronic": "a",
+    "child_acute": "a",
+    "child_chronic": "a"
+   },
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ],
+   "department": "Haematology",
+   "route": "owner",
+   "required_facts": [
+    "ecog",
+    "comorbidities"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 5,
+     "ocr": true,
+     "quote": "EXAMINATION: CNS, Testis, Lymph nodes, Liver, Spleen, gum hypertrophy"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 16,
+     "ocr": true,
+     "quote": "Examination Spleen size by palpation (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 7,
+     "quote": "CNS, Lymph nodes, Liver, Spleen, Testes"
+    }
+   ],
+   "tier_basis": "Proposed a: the first box of every flow chart (adult AML page 5, ALL page 11, CLL page 13; child ALL page 7, AML page 13) lists the examination and performance status without a letter; adult CML page 16 prints spleen size by palpation (a)",
+   "note": "A clinical record of the owning treating department (route owner); the department named here is the default before a Case File has an owner (a child's Case File is usually owned by Paediatric Oncology)"
+  },
+  {
+   "id": "cbc_smear",
+   "label": "CBC and peripheral smear (MPO stain)",
+   "tier": "a",
+   "tiers": {
+    "adult_acute": "a",
+    "adult_chronic": "a",
+    "child_acute": "a",
+    "child_chronic": "a"
+   },
+   "doc_types": [
+    "lab"
+   ],
+   "region": "cbc|cbp|blood count|haemogram|hemogram|haematolog|hematolog|blood tests|routine labs|peripheral smear|smear",
+   "department": "Pathology",
+   "required_facts": [
+    "haemoglobin",
+    "wbc",
+    "platelets"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 13,
+     "ocr": true,
+     "quote": "CBC, P Smear ,Biochemistry"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 16,
+     "ocr": true,
+     "quote": "CBC, P.smear, RFT, LFT, uric acid (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 91,
+     "quote": "1. Smears stained with a Romanowsky stain and Myeloperoxidase or Sudan Black B"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 7,
+     "quote": "CBC, peripheral smear, blood group,"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 17,
+     "quote": "Complete blood Counts Peripheral Smear"
+    }
+   ],
+   "tier_basis": "Adult CML page 16 prints (a); the other adult flow charts (pages 5, 11, 13) and the child baseline lists (pages 7, 13, 17) carry no letter, proposed a"
+  },
+  {
+   "id": "biochemistry_ldh_leukaemia",
+   "label": "Kidney and liver tests, electrolytes, LDH, calcium, phosphate, uric acid",
+   "tier": "a",
+   "tiers": {
+    "adult_acute": "a",
+    "adult_chronic": "a",
+    "child_acute": "a",
+    "child_chronic": "a"
+   },
+   "doc_types": [
+    "lab"
+   ],
+   "region": "lft|rft|kft|liver|renal|kidney|biochem|creatinine|bilirubin|urea|sgot|sgpt|ldh|lactate|uric|electrolyte|calcium|blood tests|routine labs",
+   "department": "Biochemistry",
+   "required_facts": [
+    "creatinine",
+    "bilirubin",
+    "ldh"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 5,
+     "ocr": true,
+     "quote": "LDH, SE, Ca, PO4, Uric acid"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 11,
+     "ocr": true,
+     "quote": "LDH, SE, Ca, PO4, UA"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 7,
+     "quote": "Test(LFT), Serum electrolyte, LDH"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 17,
+     "quote": "Renal function test (RFT) Liver function test (LFT)"
+    }
+   ],
+   "tier_basis": "Adult CML page 16 prints RFT, LFT, uric acid (a); adult ALL page 11 prints (a) at the end of the same list; AML page 5, CLL page 13 and the child lists (pages 7, 13, 17) carry no letter, proposed a"
+  },
+  {
+   "id": "coagulation_leukaemia",
+   "label": "Coagulation profile and fibrinogen",
+   "tier": "a",
+   "tiers": {
+    "adult_acute": "a",
+    "adult_chronic": "none",
+    "child_acute": "a",
+    "child_chronic": "none"
+   },
+   "doc_types": [
+    "lab"
+   ],
+   "region": "coagulation|coag|prothrombin|aptt|inr|fibrinogen|d-dimer",
+   "department": "Pathology",
+   "required_facts": [],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 8,
+     "ocr": true,
+     "quote": "Coagulation profile and fibrinogen (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 7,
+     "quote": "Coagulation profile(a), Viral markers(b)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 13,
+     "quote": "Coagulation profile, (a),"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 15,
+     "quote": "CBC, peripheral smear, coagulation profile including"
+    }
+   ],
+   "tier_basis": "NCG a: adult APML page 8, child ALL page 7 and child AML page 13 print (a); child APML page 15 lists it; not in the chronic leukaemia work-ups"
+  },
+  {
+   "id": "viral_markers_leukaemia",
+   "label": "Viral markers (HIV, hepatitis)",
+   "tier": "a",
+   "tiers": {
+    "adult_acute": "a",
+    "adult_chronic": "a",
+    "child_acute": "b",
+    "child_chronic": "none"
+   },
+   "doc_types": [
+    "lab"
+   ],
+   "region": "viral|hiv|hbsag|hepatitis|hcv|serolog",
+   "department": "Microbiology",
+   "required_facts": [
+    "hiv_status"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 11,
+     "ocr": true,
+     "quote": "Blood group , Viral markers (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 13,
+     "quote": "Viral markers(b) "
+    }
+   ],
+   "tier_basis": "Adult ALL page 11 prints (a); adult AML page 5 and CLL page 13 list viral markers without a letter, proposed a; child ALL page 7 and child AML page 13 print (b); not in the child CML list (page 17)"
+  },
+  {
+   "id": "bone_marrow_leukaemia",
+   "label": "Bone marrow aspirate, biopsy, morphology (peripheral blood when counts are high or the child is unstable)",
+   "tier": "a",
+   "tiers": {
+    "adult_acute": "a",
+    "adult_chronic": "b",
+    "child_acute": "a",
+    "child_chronic": "a"
+   },
+   "doc_types": [
+    "bone_marrow",
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "bone_marrow_result"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 5,
+     "ocr": true,
+     "quote": "BONE MARROW [or Peripheral blood if high counts (b)]"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 11,
+     "ocr": true,
+     "quote": "Morphology, Biopsy Immunocytochemistry (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 16,
+     "ocr": true,
+     "quote": "Aspiration and biopsy (b)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 7,
+     "quote": "Bone marrow/peripheral blood if child"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 17,
+     "quote": "Bone marrow aspirate and biopsy."
+    }
+   ],
+   "tier_basis": "Adult AML page 5 and ALL page 11: bone marrow morphology, biopsy, immunocytochemistry (a), peripheral blood if counts are high (b); adult CML page 16 bone marrow aspiration and biopsy (b) (CLL page 13: not required unless for an unexplained cytopenia), so b for the chronic setting; child ALL page 7, AML page 13 and CML page 17 list it without a letter, proposed a"
+  },
+  {
+   "id": "flow_cytometry_acute",
+   "label": "Flow cytometry immunophenotype (acute leukaemia panel; peripheral blood in CLL)",
+   "tier": "a",
+   "tiers": {
+    "adult_acute": "a",
+    "adult_chronic": "a",
+    "child_acute": "a",
+    "child_chronic": "none"
+   },
+   "doc_types": [
+    "flow_cytometry"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "flow_cytometry_result"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 5,
+     "ocr": true,
+     "quote": "Flow cytometry (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 11,
+     "ocr": true,
+     "quote": "Baseline + ploidy studies(a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 91,
+     "quote": "Essential (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 7,
+     "quote": "Baseline ALL panel (a) + ploidy(DNA"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 34,
+     "quote": "A. Acute Leukemia - Essential panel (a)"
+    }
+   ],
+   "tier_basis": "NCG a: adult AML page 5 and ALL page 11, CLL page 13 (peripheral blood flow cytometry (a)), the adult annexure panel (page 91), child ALL page 7 and AML page 13 and the child appendix (page 34); not in the child CML work-up (page 17)"
+  },
+  {
+   "id": "cytogenetics_fish",
+   "label": "Karyotype and FISH (BCR-ABL, PML-RARA, ETV6-RUNX1, 11q23, 17p, 5q, 7q)",
+   "tier": "a",
+   "tiers": {
+    "adult_acute": "a",
+    "adult_chronic": "a",
+    "child_acute": "a",
+    "child_chronic": "a"
+   },
+   "doc_types": [
+    "cytogenetics",
+    "molecular"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "cytogenetics_result"
+   ],
+   "sla_days": 10,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 5,
+     "ocr": true,
+     "quote": "t (15;17)PML-RAR-alfa(a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 8,
+     "ocr": true,
+     "quote": "Confirm PML-RARA by FISH /PCR (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 13,
+     "ocr": true,
+     "quote": "Del 17p or p53 mutation (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 7,
+     "quote": "Cytogenetics (a) karyotyping for"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 13,
+     "quote": "Cytogenetics combination of conventional"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 15,
+     "quote": "Diagnosis by FISH for PML-RARA (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 17,
+     "quote": "Cytogenetics (FISH)"
+    }
+   ],
+   "tier_basis": "NCG a: adult AML page 5 (conventional cytogenetics, t(8;21), inv(16), PML-RARA, BCR-ABL (a)), APML page 8, CLL page 13 (del 17p (a); del 11q, trisomy 12, del 13q (b)); adult CML page 16 lists conventional cytogenetics (b); child ALL page 7, AML page 13, APML page 15 print (a); child CML page 17 lists FISH and page 18 prints FISH at diagnosis (a)"
+  },
+  {
+   "id": "molecular_markers_leukaemia",
+   "label": "Molecular tests (NPM1, FLT3, CEBPA, KIT, BCR-ABL PCR, IgHV)",
+   "tier": "a",
+   "tiers": {
+    "adult_acute": "a",
+    "adult_chronic": "a",
+    "child_acute": "b",
+    "child_chronic": "a"
+   },
+   "doc_types": [
+    "molecular"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "molecular_markers_haem"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 5,
+     "ocr": true,
+     "quote": "Fragment length analysis with quantification (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 16,
+     "ocr": true,
+     "quote": "BCR ABL Qualitative PCR (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 13,
+     "ocr": true,
+     "quote": "IgHV hypermutation (c)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 13,
+     "quote": "FLT3-ITD, NPM1 mutation Biallelic mutation"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 7,
+     "quote": "Molecular PCR studies as indicated (b)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 17,
+     "quote": "RT/RQ-PCR (a)"
+    }
+   ],
+   "tier_basis": "Adult AML page 5: NPM and FLT3 by fragment length analysis (a); adult CML page 16: BCR-ABL qualitative PCR (a); CLL IgHV (c) on page 13; child ALL page 7 and AML page 13 print (b); child CML page 17 prints RT/RQ-PCR (a)"
+  },
+  {
+   "id": "csf_leukaemia",
+   "label": "CSF cell count and cytospin",
+   "tier": "a",
+   "tiers": {
+    "adult_acute": "a",
+    "adult_chronic": "none",
+    "child_acute": "a",
+    "child_chronic": "none"
+   },
+   "doc_types": [
+    "csf"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "csf_cytology"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 11,
+     "ocr": true,
+     "quote": "CSF cytomorphology (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 7,
+     "quote": "CSF studies cell count + cytospin (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 13,
+     "quote": "CSF studies cell count + cytospin at baseline"
+    }
+   ],
+   "tier_basis": "NCG a: adult ALL page 11, child ALL page 7 and child AML page 13; the adult AML box (page 5) lists only the CNS examination; not in the chronic leukaemia work-ups"
+  },
+  {
+   "id": "echo_leukaemia",
+   "label": "2-D echocardiogram",
+   "tier": "a",
+   "tiers": {
+    "adult_acute": "a",
+    "adult_chronic": "none",
+    "child_acute": "a",
+    "child_chronic": "none"
+   },
+   "doc_types": [
+    "echocardiogram"
+   ],
+   "department": "Cardiology",
+   "route": "owner",
+   "required_facts": [],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 5,
+     "ocr": true,
+     "quote": "2-D Echocardiography(a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 11,
+     "ocr": true,
+     "quote": "2-D Echocardiography (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 13,
+     "quote": "2-D ECHO (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 7,
+     "quote": "2D-ECHO (b)"
+    }
+   ],
+   "tier_basis": "NCG a: adult AML page 5 and ALL page 11, child AML page 13; child ALL page 7 prints (b), so the child acute setting keeps the higher (a); not in the chronic leukaemia work-ups",
+   "note": "Routed to the owning team (no cardiology department in the hospital set-up)"
+  },
+  {
+   "id": "chest_imaging_leukaemia",
+   "label": "Chest X-ray (CT chest when the book lists it)",
+   "tier": "a",
+   "tiers": {
+    "adult_acute": "a",
+    "adult_chronic": "c",
+    "child_acute": "a",
+    "child_chronic": "none"
+   },
+   "doc_types": [
+    "xray",
+    "ct"
+   ],
+   "department": "Radiology",
+   "required_facts": [
+    "distant_findings"
+   ],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 5,
+     "ocr": true,
+     "quote": "Chest X ray/NCCT chest (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 11,
+     "ocr": true,
+     "quote": "Chest X ray (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 13,
+     "ocr": true,
+     "quote": "CXR and USG abdomen and pelvis ( if treatment is indicated) (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 13,
+     "quote": "Chest Radiograph (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 13,
+     "quote": "CT scan thorax (b)"
+    }
+   ],
+   "tier_basis": "NCG a: adult AML page 5 (chest X-ray or NCCT chest), ALL page 11, child ALL page 7 and AML page 13 (chest radiograph (a); CT thorax (b)); adult CLL page 13 only if treatment is indicated, a condition the system never judges, so c; not in the CML work-ups",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "in adult CLL only if treatment is indicated (chest X-ray, USG abdomen and pelvis; CECT chest, abdomen and pelvis Optimal if therapy is indicated)"
+   }
+  },
+  {
+   "id": "hla_typing_leukaemia",
+   "label": "HLA typing and transplant work-up",
+   "tier": "b",
+   "tiers": {
+    "adult_acute": "b",
+    "adult_chronic": "c",
+    "child_acute": "b",
+    "child_chronic": "none"
+   },
+   "doc_types": [
+    "lab"
+   ],
+   "region": "hla|transplant|tissue typing",
+   "department": "Haematology",
+   "route": "owner",
+   "required_facts": [],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 5,
+     "ocr": true,
+     "quote": "HLA typing (b)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 16,
+     "ocr": true,
+     "quote": "HLA typing for AP and BC (c)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 13,
+     "quote": "HLA typing upfront"
+    }
+   ],
+   "tier_basis": "Adult AML page 5 prints (b); adult CML page 16 (c) for accelerated or blast phase; child AML page 13: HLA typing upfront for high-risk AML and transplant work-up (a) when not in remission, proposed b at diagnosis; not in the ALL or CLL work-ups",
+   "note": "A clinical record of the owning treating department (route owner); the department named here is the default before a Case File has an owner (a child's Case File is usually owned by Paediatric Oncology)"
+  },
+  {
+   "id": "testicular_assessment",
+   "label": "Testicular ultrasound or biopsy",
+   "tier": "c",
+   "tiers": {
+    "adult_acute": "none",
+    "adult_chronic": "none",
+    "child_acute": "c",
+    "child_chronic": "none"
+   },
+   "doc_types": [
+    "ultrasound"
+   ],
+   "region": "testi|scrot",
+   "department": "Radiology",
+   "required_facts": [],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 13,
+     "quote": "USG/testicular biopsy when indicated (b)"
+    }
+   ],
+   "tier_basis": "Child ALL page 7 lists it when indicated without a letter, child AML page 13 when indicated (b): a condition the system never judges, so c; not in the adult work-ups",
+   "condition": {
+    "ncg_tier": "b",
+    "text": "in child AML when indicated"
+   }
+  },
+  {
+   "id": "cll_special_labs",
+   "label": "Coombs test, beta-2 microglobulin, immunoglobulin levels",
+   "tier": "b",
+   "tiers": {
+    "adult_acute": "none",
+    "adult_chronic": "b",
+    "child_acute": "none",
+    "child_chronic": "none"
+   },
+   "doc_types": [
+    "lab"
+   ],
+   "region": "beta|b2m|microglobulin|immunoglobulin|coomb",
+   "department": "Biochemistry",
+   "required_facts": [
+    "beta2_microglobulin"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 13,
+     "ocr": true,
+     "quote": "Beta-2 microglobulin (b)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 13,
+     "ocr": true,
+     "quote": "Immunoglobulin levels (b)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 13,
+     "ocr": true,
+     "quote": "Coomb’s test (a) if hemolysis is"
+    }
+   ],
+   "tier_basis": "Adult CLL page 13: beta-2 microglobulin (b), immunoglobulin levels (b), Coombs test (a) only if haemolysis is suspected; the group is b"
+  }
+ ],
+ "optional": [
+  {
+   "id": "mrd_leukaemia",
+   "label": "Minimal residual disease (flow cytometry or PCR)",
+   "doc_types": [
+    "flow_cytometry",
+    "molecular"
+   ],
+   "department": "Pathology",
+   "note": "A test done after induction, not at diagnosis (an after-board record, so never a gap on a newly listed Case File; the NCG tiers per setting are kept in tiers_in_the_book: orchestrator, Phase 2). A response test done after induction, not at diagnosis: a Case File listed before induction may show it as missing (clinical review)",
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 11,
+     "ocr": true,
+     "quote": "Minimal residual disease panel (b)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 13,
+     "ocr": true,
+     "quote": "Minimal residual disease panel (c)"
+    },
+    {
+     "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+     "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+     "page": 94,
+     "quote": "7. B-ALL MRD"
+    }
+   ],
+   "tier_basis": "Adult ALL page 11 (b), AML page 5 (c), CLL page 13 (c), annexure MRD panels pages 94 to 95; child ALL: the child appendix lists the B-ALL MRD panel as Essential, child AML page 13 MRD panel (b). The child page 7 risk-arm line is not cited: it starts a treatment branch (the whole-run review, I5)",
+   "required_facts": [
+    "flow_cytometry_result"
+   ],
+   "tiers_in_the_book": {
+    "adult_acute": "b",
+    "adult_chronic": "c",
+    "child_acute": "a",
+    "child_chronic": "none"
+   }
+  },
+  {
+   "id": "previous_board",
+   "label": "Previous Tumour Board record",
+   "doc_types": [
+    "tumour_board_record"
+   ],
+   "department": "MDT Coordinator",
+   "route": "coordinator"
+  }
+ ],
+ "extract_facts": [
+  "presenting_complaint",
+  "ecog",
+  "comorbidities",
+  "clinical_question",
+  "recorded_stage",
+  "lesion_size",
+  "nodal_findings",
+  "distant_findings",
+  "histologic_type",
+  "grade",
+  "haemoglobin",
+  "wbc",
+  "platelets",
+  "creatinine",
+  "bilirubin",
+  "patient_preference",
+  "clinical_trial_note",
+  "diagnosis_date_mode",
+  "treatment_received",
+  "ldh",
+  "hiv_status",
+  "bone_marrow_result",
+  "flow_cytometry_result",
+  "cytogenetics_result",
+  "molecular_markers_haem",
+  "csf_cytology",
+  "beta2_microglobulin",
+  "hbsag",
+  "anti_hcv"
+ ],
+ "core_data": [
+  {
+   "id": "diagnosis",
+   "label": "Histopathological / cytological diagnosis",
+   "facts": [
+    "histologic_type"
+   ]
+  },
+  {
+   "id": "diagnosis_date_mode",
+   "label": "Date and mode of diagnosis",
+   "facts": [
+    "diagnosis_date_mode"
+   ]
+  },
+  {
+   "id": "stage",
+   "label": "Stage or risk group as recorded (with the investigations used)",
+   "facts": [
+    "recorded_stage"
+   ]
+  },
+  {
+   "id": "performance_status",
+   "label": "Performance status",
+   "facts": [
+    "ecog"
+   ]
+  },
+  {
+   "id": "comorbidities",
+   "label": "Co-morbidities",
+   "facts": [
+    "comorbidities"
+   ]
+  },
+  {
+   "id": "biomarkers",
+   "label": "Relevant genomic / biomarker testing",
+   "facts": [
+    "bone_marrow_result",
+    "flow_cytometry_result",
+    "cytogenetics_result",
+    "molecular_markers_haem"
+   ]
+  },
+  {
+   "id": "treatment_history",
+   "label": "Treatment history",
+   "facts": [
+    "treatment_received"
+   ]
+  },
+  {
+   "id": "patient_preference",
+   "label": "Patient preference / special circumstances",
+   "facts": [
+    "patient_preference"
+   ]
+  },
+  {
+   "id": "clinical_trial",
+   "label": "Clinical trial availability / suitability recorded",
+   "facts": [
+    "clinical_trial_note"
+   ]
+  },
+  {
+   "id": "question",
+   "label": "Question for the Tumour Board",
+   "facts": [
+    "clinical_question"
+   ]
+  }
+ ],
+ "core_data_source": "NHS England, Streamlining MDT meetings (2020), p.11 'minimum core data requirements'; aligned with the NCG Virtual Tumour Board case template (India)",
+ "post_board": {
+  "required_record_fields": [
+   "decision_text",
+   "recorded_by",
+   "participants",
+   "actions"
+  ],
+  "follow_up_default_days": 14,
+  "record_fields_source": "EUSOMA 2020 (names of all participants, evidence on decisions); Victorian Cancer MDM quality framework 2018 (report errors/changes raised, divergent recommendations and dissenting clinicians); PM-JAY HBP 2.2 s.3.9 (tumour board decision and treatment plan)"
+ },
+ "policy_basis": "PM-JAY Health Benefit Package 2.2 user guidelines (NHA, 2021), section 3.9: pre-authorization is mandatory at each step of cancer care and the decision on appropriate care is to be taken by a multidisciplinary tumour board; NHS England MDT streamlining guidance (2020) pre-listing conditions.",
+ "guideline_sources": [
+  {
+   "guideline": "NCG Guidelines for Adult Hematolymphoid Malignancies (2019)",
+   "file": "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf",
+   "pages": "5, 8, 11, 13, 16 (flow chart pictures, read by OCR), 91, 94 (PDF page = printed page)"
+  },
+  {
+   "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+   "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+   "pages": "7, 13, 15, 17, 34 (PDF page; the printed footer is one less)"
+  }
+ ]
+}

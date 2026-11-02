@@ -3,9 +3,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Bot, FileText, Hand, Images, Radio, Timer as TimerIcon, Wifi, WifiOff } from "lucide-react";
-import { answerText, handUsers, type AgentState, type Attendee, type LiveStatus, type MeetingQuestion, type MeetingState, type MeetingTimer } from "@/lib/live";
+import { answerText, handUsers, type AgentState, type Attendee, type LiveStatus, type MeetingQuestion, type MeetingState, type MeetingTimer, type QuestionAnswer } from "@/lib/live";
 import type { Slide, SlideCitation, SlideContentMap, SlideSentence } from "../types";
-import { StatusChip, fmtDate, indianDates, initials, niceTitle } from "@/features/casefile/components/common";
+import { NotSigned, StatusChip, fmtDate, indianDates, initials, modelLabel, niceTitle } from "@/features/casefile/components/common";
 import { cn } from "@/lib/utils";
 
 export function MeetingStatusChip({ status }: { status: string }) {
@@ -118,13 +118,32 @@ export function AgentTile({ agent, big }: { agent?: AgentState | null; big?: boo
   );
 }
 
-function Dots() {
-  return <span className="inline-flex gap-0.5 ml-0.5" aria-hidden>{[0, 1, 2].map((i) => <motion.span key={i} className="size-1 rounded-full bg-current" animate={{ opacity: [0.2, 1, 0.2] }} transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }} />)}</span>;
+/** Three pulsing dots after a busy word ("Thinking", "Answering"); the one copy the meeting screens share (review 9 C, M5). */
+export function Dots() {
+  return <span className="ml-0.5 inline-flex gap-0.5" aria-hidden>{[0, 1, 2].map((i) => <motion.span key={i} className="size-1 rounded-full bg-current" animate={{ opacity: [0.2, 1, 0.2] }} transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }} />)}</span>;
 }
 
 function Cite({ c, big }: { c: SlideCitation; big?: boolean }) {
   const page = typeof c.page === "number" ? ` p. ${c.page + 1}` : "";
-  return <span className={cn("quote-chip ml-1 align-middle", big && "text-sm")} title={c.quote ? `"${c.quote}"` : undefined}><FileText className="size-3" aria-hidden />{niceTitle(c.doc_title) || "record"}{page}</span>;
+  return <span className={cn("quote-chip ml-1 align-middle", big && "text-sm")} title={c.quote ? `"${c.quote}"` : undefined}><FileText className="size-3" aria-hidden />{niceTitle(c.doc_title) || "record"}{page}<NotSigned word={c.final_word} /></span>;
+}
+
+/** The review-status line of a "Present your points" answer: the brief's label ("AI draft, not reviewed", or "Reviewed by Dr <name>")
+ * with the model that wrote the brief: "AI draft, not reviewed. Gemma-4-31B (non-medical)." (review 9 C, S1). */
+export function briefAnswerLabel(a: Pick<QuestionAnswer, "brief_label" | "brief_model"> | null | undefined): string {
+  const label = String(a?.brief_label || "AI draft, not reviewed").trim().replace(/\.+$/, "");
+  const m = modelLabel(a?.brief_model);
+  return m ? `${label}. ${m}.` : `${label}.`;
+}
+
+/** True when the brief behind a "Present your points" answer was reviewed by a doctor. */
+export const briefAnswerReviewed = (a: Pick<QuestionAnswer, "brief_label"> | null | undefined) => /^reviewed/i.test(String(a?.brief_label ?? ""));
+
+/** The department of the agent a question went to ("Medical Oncology", as the call names it): the role in words, title case. */
+function agentDeptName(q: Pick<MeetingQuestion, "agent_label" | "role">): string {
+  const r = String(q.role ?? "").trim();
+  if (r) return r.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+  return String(q.agent_label ?? "").replace(/\s+(support|stand-in|records check)$/i, "").trim();
 }
 
 export function QuestionsList({ questions, big, emptyText = "No questions yet.", caseId }: { questions: MeetingQuestion[]; big?: boolean; emptyText?: string; caseId?: string | null }) {
@@ -139,15 +158,19 @@ export function QuestionsList({ questions, big, emptyText = "No questions yet.",
         return (
           <li key={q.id} className={cn("rounded-md border border-border bg-card p-2", big && "p-3")}>
             <p className={cn("font-medium text-foreground", big ? "text-lg" : "text-sm")}>{q.text}</p>
-            <p className={cn("text-muted-foreground", big ? "text-sm" : "text-xs")}>{q.by_name}{q.role ? `, to the ${q.agent_label ?? q.role.replace(/_/g, " ")} stand-in` : ""}</p>
+            <p className={cn("text-muted-foreground", big ? "text-sm" : "text-xs")}>{q.by_name}{q.role ? `, to the ${agentDeptName(q)} AI agent` : ""}</p>
+            {a?.kind === "present_points" ? (
+              <p className={cn("mt-1 font-semibold", briefAnswerReviewed(a) ? "text-ok" : "text-review", big ? "text-sm" : "text-[11px]")} data-testid="answer-brief-label">{briefAnswerLabel(a)}</p>
+            ) : null}
             {a && (a.statements ?? []).length ? (
               <div className={cn("mt-1 border-l-2 border-primary pl-2 space-y-1", big ? "text-base" : "text-sm")}>
                 {a.statements!.map((s, i) => <p key={i} className="text-foreground">{indianDates(s.text)}{(s.citations ?? []).map((c, j) => <Cite key={j} c={c} big={big} />)}</p>)}
-                <p className={cn("text-muted-foreground", big ? "text-xs" : "text-[10px]")}>{a.note ?? "From the records only; the stand-in is not a member of the board."}</p>
+                {a.kind === "present_points" && a.dropped_note ? <p className={cn("text-muted-foreground", big ? "text-xs" : "text-[10px]")} data-testid="answer-dropped-note">{a.dropped_note}</p> : null}
+                <p className={cn("text-muted-foreground", big ? "text-xs" : "text-[10px]")}>{a.note ?? "From the records only; the AI agent is not a member of the board."}{a.model ? ` ${modelLabel(a.model)}.` : ""}</p>
               </div>
-            ) : text ? <p className={cn("mt-1 text-foreground border-l-2 border-primary pl-2", big ? "text-base" : "text-sm")}>{text}</p> : null}
+            ) : text ? <p className={cn("mt-1 text-foreground border-l-2 border-primary pl-2", big ? "text-base" : "text-sm")}>{indianDates(text)}</p> : null}
             {a?.status === "not_documented" ? <p className={cn("text-muted-foreground", big ? "text-sm" : "text-xs")}>Not documented in the records.</p> : null}
-            {waiting ? <p className={cn("text-muted-foreground italic", big ? "text-sm" : "text-xs")}>The stand-in is reading the records</p> : null}
+            {waiting ? <p className={cn("text-muted-foreground italic", big ? "text-sm" : "text-xs")}>The AI agent is reading the records</p> : null}
           </li>
         );
       })}

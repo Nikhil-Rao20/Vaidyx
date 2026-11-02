@@ -412,6 +412,15 @@ def remind_owner(case_id: str, user: str, roles: dict | None = None, note: str =
     return {"case_id": case_id, "to": _owner_name(case), "text": text, "unsent": len(unsent), "overdue": len(overdue), "notification_id": n.get("id")}
 
 
+def _refresh_case_summary(case_id: str) -> None:
+    """The Case summary's status section follows a closed request (night-v3 item 3.3); a failure never breaks the request."""
+    try:
+        from . import case_summary
+        case_summary.refresh_status(case_id)
+    except Exception:
+        pass
+
+
 def acknowledge(case_id: str, action_id: str, user: str) -> dict:
     """The supporting department has read the request and is working on it."""
     case = store.get_case(case_id)
@@ -464,6 +473,8 @@ def done(case_id: str, action_id: str, user: str, note: str = "") -> dict:
     store.save_state(case_id, st)
     store.audit(case_id, {"kind": "request_done", "action": a["id"], "requirement": a.get("requirement"), "department": a.get("department"), "by": user, "note": note,
                           "closed": free})
+    if free:
+        _refresh_case_summary(case_id)
     patient = (case.get("patient") or {}).get("name") or case_id
     his = bool(case.get("his"))
     if free:
@@ -495,6 +506,7 @@ def close_free(case_id: str, action_id: str, user: str, note: str = "") -> dict:
     a.setdefault("history", []).append({"ts": now, "event": f"Closed by {user}" + (f": {note}" if note else "")})
     store.save_state(case_id, st)
     store.audit(case_id, {"kind": "request_closed_by_owner", "action": a["id"], "department": a.get("department"), "by": user, "note": note})
+    _refresh_case_summary(case_id)
     if a.get("sent") and a.get("department_id"):
         try:
             notify.notify({"department": a["department_id"]}, "request_closed", case_id,

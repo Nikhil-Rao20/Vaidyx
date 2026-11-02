@@ -1,0 +1,576 @@
+{
+ "id": "liver_hcc",
+ "label": "Liver cancer (hepatocellular carcinoma)",
+ "version": "0.1-draft",
+ "approval": {
+  "status": "draft",
+  "note": "Draft checklist from the NCG GI guideline on hepatocellular carcinoma: needs a clinician's check"
+ },
+ "site": "liver|hepat|hcc",
+ "site_note": "V2 item 5.3 (two primaries): only on a Case File linked to the same patient's other Case File, and only for histopathology, cytology, IHC and molecular records: among several candidates for one record, or several documents carrying a required value, one that names another protocol's site and not this one steps aside and is named on the row for review; a document naming no site never does, and when every candidate names another site every candidate stays. Organ words only. A preference, never a filter; a patient with one cancer is checked as before.",
+ "note": "Draft checklist from the NCG GI guideline on hepatocellular carcinoma (a Word file with no page numbers: each source names its section): needs a clinician's check. The file's key reads 'Normal font- Essential, Underlined -desirable, italics- optional'; the tier of each work-up item was read from that formatting (normal font Essential, underlined Optimal, italics Optional). Tiers marked proposed are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). PET: the NOTES say 'FDG PET CT has no role in routine evaluation or follow up of HCC', so no PET record is listed. Child class, HKLC, BCLC and LI-RADS are recorded as the report states them and never computed; poor liver function (Child C) is a recorded fact, not a setting. No treatment advice. India first: the National Cancer Grid guideline is the only source (hepatitis B and C also need evaluation, and cost in India is noted in the NOTES).",
+ "settings_note": "The setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes a stage and never decides the setting). Each record carries its tier per setting; until a setting is recorded the strictest tier applies. Draft checklist: needs a clinician's check.",
+ "settings": [
+  {
+   "id": "resectable",
+   "label": "Resectable tumour, adequate FLR (as recorded)"
+  },
+  {
+   "id": "locoregional",
+   "label": "Multiple or bilobar tumour, inadequate FLR, no extrahepatic disease (as recorded)"
+  },
+  {
+   "id": "extrahepatic",
+   "label": "Extrahepatic disease (as recorded)"
+  }
+ ],
+ "records": [
+  {
+   "id": "clinical_history",
+   "label": "Clinical history and performance status",
+   "tier": "a",
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ],
+   "department": "Hepatobiliary and Pancreatic Surgery",
+   "required_facts": [
+    "ecog",
+    "presenting_complaint",
+    "clinical_question"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG GI: Hepatocellular carcinoma",
+     "file": "ncg_india/ncg-gi-hepatocellular-carcinoma.docx",
+     "page": "n/a",
+     "where": "Hepatocellular carcinoma flow chart, presentation lines",
+     "quote": "Right upper Quadrant pain/mass, Jaundice, Nausea, weight loss, symptoms related to metastasis"
+    }
+   ],
+   "tier_basis": "Proposed Essential: the first lines of the flow chart describe the presentation",
+   "route": "owner",
+   "note": "a clinical record of the owning treating department; the department named here is the default before a Case File has an owner"
+  },
+  {
+   "id": "triphasic_cect",
+   "label": "Triphasic CECT abdomen and pelvis",
+   "tier": "a",
+   "doc_types": [
+    "ct"
+   ],
+   "region": "abdomen|abdo|abdominal|pelvis|pelvic|liver|hepat",
+   "department": "Radiology",
+   "required_facts": [
+    "lesion_size",
+    "nodal_findings",
+    "lirads_category"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG GI: Hepatocellular carcinoma",
+     "file": "ncg_india/ncg-gi-hepatocellular-carcinoma.docx",
+     "page": "n/a",
+     "where": "Hepatocellular carcinoma flow chart, work-up list",
+     "quote": "Triphasic CECT Abdomen and pelvis"
+    }
+   ],
+   "tier_basis": "NCG Essential (normal font) in the work-up list"
+  },
+  {
+   "id": "mri_liver",
+   "label": "Gadolinium MRI abdomen (cirrhotic or suspected cirrhotic)",
+   "tier": "b",
+   "doc_types": [
+    "mri"
+   ],
+   "region": "abdomen|abdo|abdominal|liver|hepat",
+   "department": "Radiology",
+   "required_facts": [
+    "lesion_size",
+    "lirads_category"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG GI: Hepatocellular carcinoma",
+     "file": "ncg_india/ncg-gi-hepatocellular-carcinoma.docx",
+     "page": "n/a",
+     "where": "Hepatocellular carcinoma flow chart, work-up list",
+     "quote": "Gadolinium enhanced MRI scan abdomen (in cirrhotics and suspected cirrhotic patients)"
+    }
+   ],
+   "tier_basis": "NCG Optimal (underlined, desirable) in the work-up list"
+  },
+  {
+   "id": "cbc",
+   "label": "Complete blood count (CBC)",
+   "tier": "a",
+   "doc_types": [
+    "lab"
+   ],
+   "region": "cbc|cbp|blood count|haemogram|hemogram|haematolog|hematolog|blood tests|routine labs",
+   "department": "Pathology",
+   "required_facts": [
+    "haemoglobin",
+    "platelets"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG GI: Hepatocellular carcinoma",
+     "file": "ncg_india/ncg-gi-hepatocellular-carcinoma.docx",
+     "page": "n/a",
+     "where": "Hepatocellular carcinoma flow chart, work-up list",
+     "quote": "CBC , Liver function tests, PT/INR HBSAg"
+    }
+   ],
+   "tier_basis": "NCG Essential (normal font) in the work-up list",
+   "note": "the NCG line 'CBC , Liver function tests, PT/INR' is split by test so each request reaches the desk that does it (CBC: Pathology; liver function tests and PT/INR: Biochemistry)"
+  },
+  {
+   "id": "liver_function_inr",
+   "label": "Liver function tests and PT/INR",
+   "tier": "a",
+   "doc_types": [
+    "lab"
+   ],
+   "region": "lft|liver|biochem|bilirubin|inr|coagul|prothrombin|blood tests|routine labs",
+   "department": "Biochemistry",
+   "required_facts": [
+    "bilirubin",
+    "inr"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG GI: Hepatocellular carcinoma",
+     "file": "ncg_india/ncg-gi-hepatocellular-carcinoma.docx",
+     "page": "n/a",
+     "where": "Hepatocellular carcinoma flow chart, work-up list",
+     "quote": "CBC , Liver function tests, PT/INR HBSAg"
+    }
+   ],
+   "tier_basis": "NCG Essential (normal font) in the work-up list",
+   "note": "the NCG line 'CBC , Liver function tests, PT/INR' is split by test so each request reaches the desk that does it (CBC: Pathology; liver function tests and PT/INR: Biochemistry)"
+  },
+  {
+   "id": "hepatitis_serology",
+   "label": "HBsAg and anti-HCV",
+   "tier": "a",
+   "doc_types": [
+    "lab"
+   ],
+   "region": "hbsag|hbs ag|hcv|hepatitis|viral|serolog|hiv|elisa|cmia",
+   "department": "Microbiology",
+   "required_facts": [
+    "hbsag",
+    "anti_hcv"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG GI: Hepatocellular carcinoma",
+     "file": "ncg_india/ncg-gi-hepatocellular-carcinoma.docx",
+     "page": "n/a",
+     "where": "Hepatocellular carcinoma flow chart, work-up list",
+     "quote": "CBC , Liver function tests, PT/INR HBSAg"
+    }
+   ],
+   "tier_basis": "NCG Essential (normal font) in the work-up list"
+  },
+  {
+   "id": "hbv_core_antibody",
+   "label": "HBV total core antibody",
+   "tier": "c",
+   "doc_types": [
+    "lab"
+   ],
+   "region": "hbv|hbc|core|hepatitis|viral|serolog",
+   "department": "Microbiology",
+   "required_facts": [
+    "hbv_core_ab"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG GI: Hepatocellular carcinoma",
+     "file": "ncg_india/ncg-gi-hepatocellular-carcinoma.docx",
+     "page": "n/a",
+     "where": "Hepatocellular carcinoma flow chart, work-up list",
+     "quote": "HBV Total Core Ab"
+    }
+   ],
+   "tier_basis": "NCG Optional (italics) in the work-up list"
+  },
+  {
+   "id": "afp",
+   "label": "Alpha fetoprotein",
+   "tier": "a",
+   "doc_types": [
+    "lab"
+   ],
+   "region": "afp|alpha ?-?feto|alfa ?-?feto|tumou?r markers?",
+   "department": "Biochemistry",
+   "required_facts": [
+    "afp"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG GI: Hepatocellular carcinoma",
+     "file": "ncg_india/ncg-gi-hepatocellular-carcinoma.docx",
+     "page": "n/a",
+     "where": "Hepatocellular carcinoma flow chart, work-up list",
+     "quote": "Alfa feto protein"
+    }
+   ],
+   "tier_basis": "NCG Essential (normal font) in the work-up list"
+  },
+  {
+   "id": "pivka",
+   "label": "PIVKA",
+   "tier": "c",
+   "doc_types": [
+    "lab"
+   ],
+   "region": "pivka|des ?-?gamma|tumou?r markers?",
+   "department": "Biochemistry",
+   "required_facts": [
+    "pivka"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG GI: Hepatocellular carcinoma",
+     "file": "ncg_india/ncg-gi-hepatocellular-carcinoma.docx",
+     "page": "n/a",
+     "where": "Hepatocellular carcinoma flow chart, work-up list",
+     "quote": "PIVKA"
+    }
+   ],
+   "tier_basis": "NCG Optional (italics) in the work-up list"
+  },
+  {
+   "id": "child_bclc_recorded",
+   "label": "Child score and BCLC / HKLC as recorded",
+   "tier": "a",
+   "doc_types": [
+    "clinical_note",
+    "tumour_board_record"
+   ],
+   "department": "Hepatobiliary and Pancreatic Surgery",
+   "required_facts": [
+    "child_pugh_class",
+    "recorded_stage"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG GI: Hepatocellular carcinoma",
+     "file": "ncg_india/ncg-gi-hepatocellular-carcinoma.docx",
+     "page": "n/a",
+     "where": "Hepatocellular carcinoma flow chart, work-up list",
+     "quote": "Child and HKLC/BCLC scoring"
+    }
+   ],
+   "tier_basis": "NCG Essential (normal font) in the work-up list; the system records the score as the report states it and never computes it",
+   "route": "owner"
+  },
+  {
+   "id": "varices_endoscopy",
+   "label": "Endoscopy for varices",
+   "tier": "a",
+   "doc_types": [
+    "endoscopy"
+   ],
+   "department": "Gastrointestinal Surgery",
+   "required_facts": [
+    "varices_finding"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG GI: Hepatocellular carcinoma",
+     "file": "ncg_india/ncg-gi-hepatocellular-carcinoma.docx",
+     "page": "n/a",
+     "where": "Hepatocellular carcinoma flow chart, work-up list",
+     "quote": "Endoscopy for varices"
+    }
+   ],
+   "tier_basis": "NCG Essential (normal font) in the work-up list"
+  },
+  {
+   "id": "hvpg",
+   "label": "HVPG",
+   "tier": "c",
+   "tiers": {
+    "resectable": "c",
+    "locoregional": "none",
+    "extrahepatic": "none"
+   },
+   "doc_types": [
+    "other"
+   ],
+   "department": "Hepatobiliary and Pancreatic Surgery",
+   "required_facts": [
+    "hvpg_mmhg"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG GI: Hepatocellular carcinoma",
+     "file": "ncg_india/ncg-gi-hepatocellular-carcinoma.docx",
+     "page": "n/a",
+     "where": "Hepatocellular carcinoma flow chart, work-up list",
+     "quote": "Endoscopy for varices, HVPG"
+    }
+   ],
+   "tier_basis": "NCG Optional (italics) in the work-up list. Proposed not applicable where no resection is recorded. The NOTES sentence on resection candidacy is not cited: it is a treatment-selection line (the whole-run review, I5)"
+  },
+  {
+   "id": "chest_ct",
+   "label": "CT chest (metastatic work-up for curative treatment)",
+   "tier": "a",
+   "tiers": {
+    "resectable": "a",
+    "locoregional": "c",
+    "extrahepatic": "a"
+   },
+   "doc_types": [
+    "ct"
+   ],
+   "region": "chest|thorax|lung",
+   "department": "Radiology",
+   "required_facts": [
+    "distant_findings"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG GI: Hepatocellular carcinoma",
+     "file": "ncg_india/ncg-gi-hepatocellular-carcinoma.docx",
+     "page": "n/a",
+     "where": "Hepatocellular carcinoma flow chart, work-up list",
+     "quote": "Metastatic workup if curative treatment : CT Scan chest,"
+    }
+   ],
+   "tier_basis": "NCG Essential (normal font) when curative treatment is planned (resectable setting); proposed Optional for the locoregional setting and Essential for extrahepatic disease"
+  },
+  {
+   "id": "flr_measurement",
+   "label": "Future liver remnant measurement",
+   "tier": "a",
+   "tiers": {
+    "resectable": "a",
+    "locoregional": "b",
+    "extrahepatic": "none"
+   },
+   "doc_types": [
+    "ct"
+   ],
+   "region": "liver|hepat|abdomen|abdo|volumetr|flr",
+   "department": "Radiology",
+   "required_facts": [
+    "flr_percent"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG GI: Hepatocellular carcinoma",
+     "file": "ncg_india/ncg-gi-hepatocellular-carcinoma.docx",
+     "page": "n/a",
+     "where": "Hepatocellular carcinoma flow chart, work-up list",
+     "quote": "Measurement of FLR (functional Liver Remnant) for major resections"
+    }
+   ],
+   "tier_basis": "NCG Essential (normal font) if surgery is planned (resectable setting); proposed Optimal for the locoregional setting, where the book names inadequate FLR, and not applicable in extrahepatic disease"
+  },
+  {
+   "id": "biopsy",
+   "label": "Image-guided biopsy (conditional)",
+   "tier": "c",
+   "doc_types": [
+    "histopathology",
+    "cytology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG GI: Hepatocellular carcinoma",
+     "file": "ncg_india/ncg-gi-hepatocellular-carcinoma.docx",
+     "page": "n/a",
+     "where": "Hepatocellular carcinoma flow chart, work-up list",
+     "quote": "US / CT guided Biopsy only LIRADS 4 and AFP< 400ng/mL"
+    }
+   ],
+   "tier_basis": "NCG Essential (normal font) but only under a condition (LI-RADS 4 and AFP below 400 ng/mL) that the system does not judge, so it is shown and not counted; the book diagnoses mainly by imaging",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "only when the lesion is LI-RADS 4 and AFP is below 400 ng/mL"
+   }
+  },
+  {
+   "id": "nutrition_supportive",
+   "label": "Nutritional evaluation and supportive care",
+   "tier": "b",
+   "doc_types": [
+    "clinical_note"
+   ],
+   "department": "Palliative Medicine",
+   "required_facts": [],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG GI: Hepatocellular carcinoma",
+     "file": "ncg_india/ncg-gi-hepatocellular-carcinoma.docx",
+     "page": "n/a",
+     "where": "Hepatocellular carcinoma flow chart, work-up list",
+     "quote": "Nutritional evaluation and supportive care for liver disease"
+    }
+   ],
+   "tier_basis": "NCG Essential (normal font) in the flow; proposed Optimal because no result can be checked in a report"
+  }
+ ],
+ "optional": [
+  {
+   "id": "previous_board",
+   "label": "Previous Tumour Board record",
+   "doc_types": [
+    "tumour_board_record"
+   ],
+   "department": "MDT Coordinator",
+   "route": "coordinator"
+  }
+ ],
+ "extract_facts": [
+  "presenting_complaint",
+  "ecog",
+  "comorbidities",
+  "clinical_question",
+  "recorded_stage",
+  "lesion_size",
+  "nodal_findings",
+  "distant_findings",
+  "histologic_type",
+  "grade",
+  "haemoglobin",
+  "wbc",
+  "platelets",
+  "creatinine",
+  "bilirubin",
+  "patient_preference",
+  "clinical_trial_note",
+  "diagnosis_date_mode",
+  "treatment_received",
+  "lirads_category",
+  "inr",
+  "hbsag",
+  "anti_hcv",
+  "hbv_core_ab",
+  "afp",
+  "pivka",
+  "child_pugh_class",
+  "varices_finding",
+  "hvpg_mmhg",
+  "flr_percent"
+ ],
+ "core_data": [
+  {
+   "id": "diagnosis",
+   "label": "Histopathological / cytological diagnosis",
+   "facts": [
+    "histologic_type"
+   ]
+  },
+  {
+   "id": "diagnosis_date_mode",
+   "label": "Date and mode of diagnosis",
+   "facts": [
+    "diagnosis_date_mode"
+   ]
+  },
+  {
+   "id": "stage",
+   "label": "Stage as recorded (with the investigations used)",
+   "facts": [
+    "recorded_stage"
+   ]
+  },
+  {
+   "id": "performance_status",
+   "label": "Performance status",
+   "facts": [
+    "ecog"
+   ]
+  },
+  {
+   "id": "comorbidities",
+   "label": "Co-morbidities",
+   "facts": [
+    "comorbidities"
+   ]
+  },
+  {
+   "id": "biomarkers",
+   "label": "Relevant genomic / biomarker testing",
+   "facts": [
+    "afp",
+    "pivka"
+   ]
+  },
+  {
+   "id": "treatment_history",
+   "label": "Treatment history",
+   "facts": [
+    "treatment_received"
+   ]
+  },
+  {
+   "id": "patient_preference",
+   "label": "Patient preference / special circumstances",
+   "facts": [
+    "patient_preference"
+   ]
+  },
+  {
+   "id": "clinical_trial",
+   "label": "Clinical trial availability / suitability recorded",
+   "facts": [
+    "clinical_trial_note"
+   ]
+  },
+  {
+   "id": "question",
+   "label": "Question for the Tumour Board",
+   "facts": [
+    "clinical_question"
+   ]
+  }
+ ],
+ "core_data_source": "NHS England, Streamlining MDT meetings (2020), p.11 'minimum core data requirements'; aligned with the NCG Virtual Tumour Board case template (India)",
+ "post_board": {
+  "required_record_fields": [
+   "decision_text",
+   "recorded_by",
+   "participants",
+   "actions"
+  ],
+  "follow_up_default_days": 14,
+  "record_fields_source": "EUSOMA 2020 (names of all participants, evidence on decisions); Victorian Cancer MDM quality framework 2018 (report errors/changes raised, divergent recommendations and dissenting clinicians); PM-JAY HBP 2.2 s.3.9 (tumour board decision and treatment plan)"
+ },
+ "policy_basis": "PM-JAY Health Benefit Package 2.2 user guidelines (NHA, 2021), section 3.9: pre-authorization is mandatory at each step of cancer care and the decision on appropriate care is to be taken by a multidisciplinary tumour board; NHS England MDT streamlining guidance (2020) pre-listing conditions. The NCG book itself asks for the board: \"The decision should be taken by a multidisciplinary team.\" (NCG GI: Hepatocellular carcinoma, NOTES, ablation paragraph); the Tumour Board Case File is that discussion, so no separate record is required for it (orchestrator, night-v3 Phase 2).",
+ "guideline_sources": [
+  {
+   "guideline": "NCG GI: Hepatocellular carcinoma",
+   "file": "ncg_india/ncg-gi-hepatocellular-carcinoma.docx",
+   "pages": "n/a (Word file, no page numbers)"
+  }
+ ]
+}

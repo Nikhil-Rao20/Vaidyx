@@ -416,7 +416,7 @@ def test_fact_for_codes_and_labels():
         "Dental evaluation": "dental_evaluation", "Presenting complaint": "presenting_complaint",
         "Clinical question": "clinical_question",
         # printed by the mock, no fact
-        "BI-RADS category": "", "Blood urea": "", "SGOT (AST)": "", "SGPT (ALT)": "", "HBsAg": "", "Anti-HCV antibodies": "",
+        "BI-RADS category": "", "Blood urea": "", "SGOT (AST)": "", "SGPT (ALT)": "", "HBsAg": "hbsag", "Anti-HCV antibodies": "anti_hcv",
         "Bladder": "", "Rectum": "", "Kidneys and ureters": "", "Tracheobronchial tree": "",
     }
     got = {k: fact_for(None, k) for k in labels}
@@ -429,7 +429,7 @@ def test_fact_for_codes_and_labels():
 
 def test_every_observation_label_of_the_mock_maps_or_is_known_unmapped():
     """Every label in the captured answers either maps to a fact or is one of the mock's non-fact values."""
-    no_fact = {"BI-RADS category", "Blood urea", "SGOT (AST)", "SGPT (ALT)", "HBsAg", "Anti-HCV antibodies", "Bladder", "Rectum",
+    no_fact = {"BI-RADS category", "Blood urea", "SGOT (AST)", "SGPT (ALT)", "Bladder", "Rectum",
                "Kidneys and ureters", "Tracheobronchial tree"}
     seen = set()
     for name in INDEX.values():

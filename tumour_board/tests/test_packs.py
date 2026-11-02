@@ -57,7 +57,8 @@ def test_known_indian_folders_are_tagged_india():
 def test_allowed_sources_shape():
     src = packs.allowed_sources("radiology")
     assert src[0] == ("iria", None)
-    assert src[1] == ("ncg_india", frozenset({"synoptic-reporting-radiology-template.pdf"}))  # not the whole NCG head and neck file (review M7)
+    # not the whole NCG head and neck file (review M7); the gallbladder radiology synoptic file added with night-v3 item 2.10
+    assert src[1] == ("ncg_india", frozenset({"synoptic-reporting-radiology-template.pdf", "ncg-gi-draft-2021-gallbladder-cancer-radiology-synoptic.pdf"}))
     assert all(isinstance(f, str) and (files is None or isinstance(files, frozenset)) for f, files in src)
     with pytest.raises(KeyError):
         packs.allowed_sources("cardiology")
@@ -90,6 +91,25 @@ def test_checklists_and_text():
     assert packs.checklist("pathology", "cervix") is None and "Cervix: none" in packs.pack("pathology")["checklist_note"]
 
 
+def test_new_cancer_checklists_are_indian_formats():
+    """Night-v3 item 2.10: the colon, larynx and gallbladder radiology forms of the NCG-KCDO synoptic template and the prostate,
+    kidney and germ cell pathology formats of the NCG urological guideline (Annexure 2), all Indian."""
+    for role, pid, book, words in (
+        ("radiology", "colorectal_colon", "synoptic-reporting-radiology-template.pdf", "EMVI"),
+        ("radiology", "larynx", "synoptic-reporting-radiology-template.pdf", "Cartilage erosion"),
+        ("radiology", "gallbladder", "synoptic-reporting-radiology-template.pdf", "Bile duct involvement"),
+        ("pathology", "prostate", "ncg-guidelines-for-urological-malignancies-2019.pdf", "Gleason"),
+        ("pathology", "kidney", "ncg-guidelines-for-urological-malignancies-2019.pdf", "ISUP"),
+        ("pathology", "germ_cell", "ncg-guidelines-for-urological-malignancies-2019.pdf", "Spermatic cord margin"),
+    ):
+        cl = packs.checklist(role, pid)
+        assert cl and cl["region"] == "India" and cl["file"] == f"ncg_india/{book}", (role, pid)
+        assert words in packs.checklist_text(role, pid), (role, pid)
+    assert "Annexure 2" in packs.pack("pathology")["checklist_note"] and "Cervix: none" in packs.pack("pathology")["checklist_note"]
+    for role in ("medical_oncology", "surgical_oncology", "radiation_oncology", "nuclear_medicine"):
+        assert ("ncg_india", None) in packs.allowed_sources(role)  # the whole NCG folder: every new cancer's book is searched already
+
+
 def test_checklist_items_are_reporting_elements_not_actions():
     """Short element names, plain words, no em dashes; staging or impressions only as 'documented in the report'."""
     for role in agents.ROLES:
@@ -118,7 +138,7 @@ def test_describe():
     (lambda d: d["packs"]["radiology"]["sources"].append({"folder": "no_such_folder"}), "unknown guideline folder"),
     (lambda d: d["packs"]["pathology"]["sources"].append({"folder": "icmr"}), "after international"),
     (lambda d: d["packs"].pop("nuclear_medicine"), "no pack for role"),
-    (lambda d: d["packs"]["radiology"]["checklists"].__setitem__("prostate", d["packs"]["radiology"]["checklists"]["breast"]), "not a protocol"),
+    (lambda d: d["packs"]["radiology"]["checklists"].__setitem__("no_such_cancer", d["packs"]["radiology"]["checklists"]["breast"]), "not a protocol"),
     (lambda d: d["packs"]["radiology"]["checklists"]["breast"]["items"][0].pop("page"), "has no page"),
     (lambda d: d["packs"]["radiology"]["checklists"]["breast"]["items"][0].__setitem__("quote", "  "), "has no quote"),
     (lambda d: d["packs"]["radiology"]["sources"][1].__setitem__("files", "x.pdf"), "files"),

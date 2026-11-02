@@ -30,7 +30,8 @@ KINDS = ("request", "request_closed", "request_acknowledged", "request_done", "c
          # the agenda sent to the members; a meeting starts in 15 minutes; the scheduler's reminder for an overdue request; the summary went
          # stale; a record arrived; a board head is asked for its card after a case; the 08:00 digest of unread notifications
          "sign_off", "join_request", "outcome", "agenda", "meeting_starting", "reminder_automatic", "summary_stale", "summary_ready", "record_arrived",
-         "card_requested", "digest", "team_changed", "break_glass")  # summary_ready: the summary and briefs were prepared at the ready mark; team_changed, break_glass: team.py (B1)
+         "card_requested", "digest", "team_changed", "break_glass",
+         "message")  # message: a person or a department wrote to you (night-v3 Phase 8; the title names the sender, never any text). summary_ready: the summary and briefs were prepared at the ready mark; team_changed, break_glass: team.py (B1)
 UNSENT = "suggested"  # a request the gate proposed and nobody sent yet: in no inbox (V2 item 4.2)
 ROLES = ("coordinator",)
 CORE = ("id", "ts", "to", "kind", "case_id", "title", "text", "read_by")

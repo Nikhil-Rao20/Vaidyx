@@ -25,7 +25,9 @@ export function useStageLayer() {
 export function StageFrame({ children, className, testId, attrs }: { children: ReactNode; className?: string; testId?: string; attrs?: Record<string, string | undefined> }) {
   useStageLayer();
   return (
-    <div className={cn("fixed inset-0 z-50 flex flex-col overflow-hidden bg-stage text-stage-fg", className)} data-theme="dark" data-testid={testId} {...attrs}>
+    // overflow-clip, not hidden: a script scroll (a focus or a scroll-into-view of something wider than the frame) can never shift the
+    // whole call sideways (seen once in the live check at 1366 with video on, night-v3 6.3); the inner panels keep their own scrolling
+    <div className={cn("fixed inset-0 z-50 flex flex-col overflow-clip bg-stage text-stage-fg", className)} data-theme="dark" data-testid={testId} {...attrs}>
       {children}
     </div>
   );
@@ -34,8 +36,9 @@ export function StageFrame({ children, className, testId, attrs }: { children: R
 export function StageTopBar({ left, center, right, className }: { left?: ReactNode; center?: ReactNode; right?: ReactNode; className?: string }) {
   return (
     <header className={cn("flex min-h-12 items-center gap-3 border-b border-stage-line px-3 py-1.5 lg:px-4", className)}>
-      <div className="flex min-w-0 shrink-0 items-center gap-2.5">
-        <VaidyxIcon tone="white" className="h-5 opacity-90" />
+      {/* the meeting line may shrink: the case on the floor in the middle must stay readable at laptop width (2 Nov test pass) */}
+      <div className="flex min-w-0 max-w-[22%] items-center gap-2.5">
+        <VaidyxIcon tone="white" className="h-5 shrink-0 opacity-90" />
         {left}
       </div>
       <div className="min-w-0 flex-1">{center}</div>

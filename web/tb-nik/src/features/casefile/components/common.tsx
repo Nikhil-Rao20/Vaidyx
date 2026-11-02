@@ -6,6 +6,7 @@ import { CheckCircle2, CircleDashed, Clock, HelpCircle, Loader2, MinusCircle, Se
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ApiError } from "@/lib/api";
+import type { DocFinal } from "../types";
 
 // ---- dates -------------------------------------------------------------------------------------------------------
 // On screen: DD/MM/YYYY (India first); the API sends ISO 8601.
@@ -21,7 +22,18 @@ export function fmtDateTime(iso?: string | null): string {
 }
 /** ISO dates inside a sentence written by the server or a model ("on 2026-09-17") shown as DD/MM/YYYY. Never used on quotes. */
 export function indianDates(text?: string | null): string {
+  return indianSpelling(indianDatesOnly(text));
+}
+
+/** ISO dates as DD/MM/YYYY and nothing else changed: for a report's own value, which stays as printed. */
+export function indianDatesOnly(text?: string | null): string {
   return (text ?? "").replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (_m, y, mo, d) => `${d}/${mo}/${y}`);
+}
+
+/** "tumor" in a sentence the model wrote reads "tumour", as everywhere else on the screens (2 Nov test pass); a part in quotation marks
+ *  is a report's own words and stays exactly as printed. */
+function indianSpelling(text: string): string {
+  return text.split(/("[^"]*"|“[^”]*”)/).map((part, i) => (i % 2 ? part : part.replace(/\b([Tt])umor(s?)\b/g, "$1umour$2"))).join("");
 }
 
 const ACRONYMS = ["PET/CT", "PET-CT", "MRI", "CECT", "CT", "USG", "IHC", "HPE", "FNAC", "ECOG", "HER2", "CBC", "LFT", "RFT", "PSA", "CEA", "NCG", "UHID", "ABHA"];
@@ -43,9 +55,8 @@ export function ago(iso?: string | null): string {
   const d = parseISO(String(iso));
   return isValid(d) ? formatDistanceToNowStrict(d, { addSuffix: true }) : "";
 }
-export function plural(n: number, one: string, many = one + "s"): string {
-  return `${n} ${n === 1 ? one : many}`;
-}
+/** The one plural of the site lives in lib/format (review 9 C, M5). */
+export { plural } from "@/lib/format";
 export function initials(name?: string): string {
   return (name ?? "").split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("") || "?";
 }
@@ -55,6 +66,9 @@ export function modelLabel(m?: string | null): string {
   if (!s) return "";
   if (/gemma/i.test(s)) return "Gemma-4-31B (non-medical)";
   if (/qwen/i.test(s)) return "Qwen3.5-4B (Chinese, non-medical)";
+  // the server's role names when no label is configured (config.models: the reasoner is Gemma, the reader is Qwen)
+  if (/^reasoner$/i.test(s)) return "Gemma-4-31B (non-medical)";
+  if (/^reader$/i.test(s)) return "Qwen3.5-4B (Chinese, non-medical)";
   return s;
 }
 
@@ -83,6 +97,22 @@ export function docTitleOf(docs: Array<{ doc_id: string; filename: string; class
   if (given) return niceTitle(given);
   const d = (docs ?? []).find((x) => x.doc_id === docId);
   return niceTitle(d?.classification?.title || d?.filename || "record");
+}
+
+
+/** The word for a source chip whose report is not final and signed: a value from such a report is shown everywhere, marked (owner,
+ *  2 Nov 2026). None for a final, signed report. */
+export function finalWord(f?: DocFinal | null): string | null {
+  if (!f || !f.warn) return null;
+  return f.final ? "not signed" : f.preliminary ? "preliminary" : f.status === "CANCELLED" ? "cancelled" : "not final";
+}
+
+export const finalWordOf = (docs: Array<{ doc_id: string; final?: DocFinal }> | undefined, docId: string) =>
+  finalWord((docs ?? []).find((d) => d.doc_id === docId)?.final);
+
+/** The amber mark itself, inside or beside a source chip. */
+export function NotSigned({ word }: { word?: string | null }) {
+  return word ? <span className="ml-1 rounded px-1 text-[10px] font-semibold status-warn" data-testid="not-signed">{word}</span> : null;
 }
 
 

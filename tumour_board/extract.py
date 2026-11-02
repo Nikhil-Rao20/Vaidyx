@@ -50,7 +50,12 @@ async def classify(text, audit=None):
             "- ihc: stand-alone immunohistochemistry / receptor report or its addendum\n- molecular: mutation / NGS / PCR / FISH report\n"
             "- lab: blood tests, biochemistry, tumour markers\n- endoscopy: colonoscopy / bronchoscopy / endoscopy procedure report\n"
             "- operative_note: surgery note\n- treatment_summary: a summary of a COMPLETED chemotherapy / radiotherapy course\n"
-            "- tumour_board_record: minutes or decision record of a previous Tumour Board\n- pulmonary_function: PFT report\n- other: anything else\n\n"
+            "- tumour_board_record: minutes or decision record of a previous Tumour Board\n- pulmonary_function: PFT report\n"
+            "- bone_marrow: bone marrow aspiration / biopsy / trephine report\n- flow_cytometry: flow cytometry / immunophenotyping report\n"
+            "- cytogenetics: karyotype / cytogenetics report (a FISH report of a blood cancer done with the karyotype)\n"
+            "- csf: CSF (cerebrospinal fluid) cytology or analysis\n- echocardiogram: 2D echo / echocardiography report\n"
+            "- ophthalmology_note: eye examination or ophthalmology note (fundus, EUA of the eyes)\n- audiometry: audiometry / audiogram (hearing test)\n"
+            "- other: anything else\n\n"
             "DOCUMENT:\n" + text[:12000]}]
     return await llm.chat("extractor", msg, json_schema=schema, max_tokens=600, purpose="classify document", audit=audit)
 

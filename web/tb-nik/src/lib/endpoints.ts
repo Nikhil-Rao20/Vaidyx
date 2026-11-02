@@ -21,6 +21,13 @@ export const EP = {
   urgency: (c: string) => `${TB}/cases/${id(c)}/urgency`,
   /** POST /case-join (not /cases/join: the Case File guard would read "join" as a Case File id). */
   joinCase: `${TB}/case-join`,
+  /** POST {case_id, note?}: "Ask to join" a Case File without a code (night-v3 item 1.1). */
+  askToJoin: `${TB}/case-join/ask`,
+  /** GET ?identifier=<UHID, IP No. or OP No.> or ?case_id=<id>: the patient's live Case Files (night-v3 item 1.1). */
+  patientCaseFiles: `${TB}/patient-case-files`,
+  /** POST {case_id, reason, via?}: a doctor without access opens a Case File read-only for 24 hours with a reason; DELETE {case_id}
+   *  closes it early (night-v3 item 1.9). The Vaidyx admin's own window uses the same path. */
+  breakGlass: `${TB}/break-glass`,
   team: (c: string) => `${TB}/cases/${id(c)}/team`,
   proposals: (c: string) => `${TB}/cases/${id(c)}/proposals`,
   proposalApprove: (c: string, p: string) => `${TB}/cases/${id(c)}/proposals/${id(p)}/approve`,
@@ -46,6 +53,8 @@ export const EP = {
   job: (j: string) => `${TB}/jobs/${id(j)}`,
   org: `${TB}/org`,
   meetings: `${TB}/meetings`,
+  /** GET: the meetings a Case File may still go to (planned, not cancelled, today or later) for any placed account (night-v3 item 1.6). */
+  openMeetings: `${TB}/meetings/open`,
   joinMeeting: `${TB}/meetings/join`,
 
   setup: `${TB}/setup`,
@@ -72,6 +81,13 @@ export const EP = {
 
   pushKey: `${TB}/push/key`,
   pushSubscribe: `${TB}/push/subscribe`,
+
+  /** GET: whether voice is on and the speech to text and read-aloud services are ready (night-v3 item 4.2). */
+  audioStatus: `${TB}/audio/status`,
+  /** POST multipart {audio, screen, case_id?, context?}: a short recording turned into editable text; the audio is never kept. */
+  audioStt: `${TB}/audio/stt`,
+  /** POST {ref, part} or {text, screen}: one sentence of a statement on screen read aloud, as a WAV (headers X-Parts, X-Part). */
+  audioTts: `${TB}/audio/tts`,
 };
 
 /** The demo hospital system. On this machine (localhost or 127.0.0.1, with the ssh tunnel) it is on port 7130 of the host

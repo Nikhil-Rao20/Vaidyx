@@ -5,33 +5,10 @@ import { motion } from "motion/react";
 import { Camera, CameraOff, Mic, MicOff, Settings2, Video, VideoOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { VaidyxIcon, VaidyxWordmark } from "@/components/Wordmark";
+import { MicLevel } from "@/components/MicLevel";
 import { isAudioTrack, isVideoTrack, listDevices, previewTracks, recallChoice, rememberChoice, stopTracks, type JoinChoice } from "@/lib/video";
 import type { LocalTrack } from "livekit-client";
 import { cn } from "@/lib/utils";
-
-function MicLevel({ track }: { track: LocalTrack | null }) {
-  const [level, setLevel] = useState(0);
-  useEffect(() => {
-    if (!track?.mediaStreamTrack) { setLevel(0); return; }
-    let ctx: AudioContext | null = null;
-    let raf = 0;
-    try {
-      ctx = new AudioContext();
-      const src = ctx.createMediaStreamSource(new MediaStream([track.mediaStreamTrack]));
-      const an = ctx.createAnalyser(); an.fftSize = 512;
-      src.connect(an);
-      const buf = new Uint8Array(an.frequencyBinCount);
-      const loop = () => { an.getByteTimeDomainData(buf); let sum = 0; for (const v of buf) { const d = (v - 128) / 128; sum += d * d; } setLevel(Math.min(1, Math.sqrt(sum / buf.length) * 4)); raf = requestAnimationFrame(loop); };
-      loop();
-    } catch { /* no audio context */ }
-    return () => { cancelAnimationFrame(raf); void ctx?.close(); };
-  }, [track]);
-  return (
-    <span className="flex items-end gap-0.5" aria-label={`Microphone level ${Math.round(level * 100)} percent`} role="meter" aria-valuenow={Math.round(level * 100)} aria-valuemin={0} aria-valuemax={100}>
-      {[0.15, 0.35, 0.55, 0.75, 0.95].map((t, i) => <span key={i} className={cn("w-1 rounded-sm transition-colors", level >= t ? "bg-primary" : "bg-stage-line")} style={{ height: 6 + i * 3 }} />)}
-    </span>
-  );
-}
 
 export function PreJoin({ title, subtitle, onJoin, onSkip, allowSkip = true }: { title: string; subtitle?: string; onJoin: (c: JoinChoice) => void; onSkip?: () => void; allowSkip?: boolean }) {
   const remembered = recallChoice();
@@ -84,7 +61,7 @@ export function PreJoin({ title, subtitle, onJoin, onSkip, allowSkip = true }: {
             <button type="button" onClick={() => setCam((v) => !v)} aria-pressed={cam} aria-label={cam ? "Turn the camera off" : "Turn the camera on"} className={cn("grid size-12 place-items-center rounded-full border transition", cam ? "border-white/30 bg-white/10 text-white hover:bg-white/20" : "border-[#d64545] bg-[#d64545] text-white")}>{cam ? <Camera className="size-5" /> : <CameraOff className="size-5" />}</button>
             <button type="button" onClick={() => setShowDevices((v) => !v)} aria-expanded={showDevices} aria-label="Choose the camera and microphone" className="grid size-12 place-items-center rounded-full border border-white/30 bg-white/10 text-white transition hover:bg-white/20"><Settings2 className="size-5" /></button>
           </div>
-          <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-black/50 px-2.5 py-1 text-xs text-white">{mic ? <Mic className="size-3.5" /> : <MicOff className="size-3.5" />}<MicLevel track={mic ? audio : null} /></div>
+          <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-black/50 px-2.5 py-1 text-xs text-white">{mic ? <Mic className="size-3.5" /> : <MicOff className="size-3.5" />}<MicLevel track={mic ? audio?.mediaStreamTrack ?? null : null} /></div>
         </div>
         <div className="space-y-4">
           <div className="flex items-center gap-2"><VaidyxIcon tone="white" className="h-6" /><VaidyxWordmark tone="white" className="h-5" /></div>
@@ -106,7 +83,7 @@ export function PreJoin({ title, subtitle, onJoin, onSkip, allowSkip = true }: {
               </label>
             </div>
           ) : null}
-          {err ? <p role="alert" className="rounded-md bg-bad/15 px-3 py-2 text-sm text-[#ffb4a8]">{err} You can still join and follow the shared screen.</p> : null}
+          {err ? <p role="alert" className="rounded-md bg-bad/15 px-3 py-2 text-sm text-[#ffb4a8]">{/[.!?]$/.test(err.trim()) ? err.trim() : `${err.trim()}.`} You can still join and follow the shared screen.</p> : null}
           <div className="flex flex-wrap items-center gap-2">
             <Button size="lg" className="h-11 rounded-full px-6" onClick={() => join(true)} data-testid="prejoin-join"><Video className="size-4" />Join now</Button>
             {allowSkip ? <Button size="lg" variant="ghost" className="h-11 rounded-full text-stage-fg hover:bg-stage-raised hover:text-stage-fg" onClick={() => join(false)}><VideoOff className="size-4" />Join without video</Button> : null}

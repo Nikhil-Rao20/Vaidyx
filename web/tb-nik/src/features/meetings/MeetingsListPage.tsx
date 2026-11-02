@@ -12,6 +12,7 @@ import { TimeInput } from "@/components/TimeInput";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useSession } from "@/lib/session";
+import { MessageButton } from "@/components/MessageButton";
 import { createMeeting, listMeetings, listOldSessions, notBuiltYet } from "./api";
 import type { MeetingRow, NewMeeting } from "./types";
 import { EmptyState, ErrorState, LoadingButton, NotYetState, SkeletonLines, errorText, fmtDate, fmtDateTime, todayIso } from "@/features/casefile/components/common";
@@ -107,6 +108,7 @@ export default function MeetingsListPage() {
       <header className="flex flex-wrap items-center gap-2">
         <h1>Meetings</h1>
         <span className="flex-1" />
+        {!canManage ? <MessageButton target={{ coordinator: true }} label="Message the MDT Coordinator" variant="outline" size="sm" /> : null}
         <Button asChild variant="outline" size="sm"><Link to="/meetings/join"><KeyRound className="size-4" />Join with a code</Link></Button>
         {canManage && !notBuilt ? <Button size="sm" onClick={() => setOpen(true)} data-testid="new-meeting"><CalendarPlus className="size-4" />New meeting</Button> : null}
       </header>

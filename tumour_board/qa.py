@@ -244,17 +244,17 @@ async def ask(case_id, question, history=None):
     r = await answer_task
     stmts, removed = verify(case_id, r.get("statements"))  # Q&A stays exact-only (V1 item 6.5)
     dropped = len(removed)
-    text = " ".join(s["text"] for s in stmts)
-    clean, issues = guardrails.enforce(text, au, "ask")
+    issues, keep = [], []
+    for s in stmts:  # each statement on its own, its cited quotes taken out of the advice check (Phase 9 review E, S1)
+        iss = guardrails.scan_output(s["text"], quotes=guardrails.statement_quotes(s))
+        if iss:  # kept for reviewers with the reason (V1 item 6.4)
+            issues += iss
+            removed.append(removed_item(s, "guardrail", "; ".join(dict.fromkeys(i["reason"] for i in iss))))
+        else:
+            keep.append(s)
+    stmts = keep
     if issues:
-        keep = []
-        for s in stmts:
-            iss = guardrails.scan_output(s["text"])
-            if iss:  # kept for reviewers with the reason (V1 item 6.4)
-                removed.append(removed_item(s, "guardrail", "; ".join(dict.fromkeys(i["reason"] for i in iss))))
-            else:
-                keep.append(s)
-        stmts = keep
+        au({"kind": "guardrail_output", "where": "ask", "issues": issues})
     res = {"status": "answered" if stmts else "not_documented", "statements": stmts, "dropped_unverified": dropped, "removed": removed,
            "message": "" if stmts else "Not documented in the Case File. No statement could be verified against the source documents.",
            "value_hits": values["hits"][:12], "mode": mode, "guardrail_issues": issues, "seconds": round(time.time() - t0, 2)}

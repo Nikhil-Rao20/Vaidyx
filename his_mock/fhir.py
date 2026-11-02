@@ -121,6 +121,11 @@ REPORT_LOINC = {
     "rft": ("24362-6", "Renal function 2000 panel - Serum or Plasma"),
     "cea": ("2039-6", "Carcinoembryonic Ag [Mass/volume] in Serum or Plasma"),
     "viral_markers": ("18725-2", "Microbiology studies (set)"),
+    # night-v3 item 2.11: the tumour markers carry the marker's own code; Vaidyx-TB's code tables do not map these to a document
+    # type, so the report title ("Serum PSA (total)") decides there, as doc_type_keywords.json reads it
+    "psa": ("2857-1", "Prostate specific Ag [Mass/volume] in Serum or Plasma"),
+    "ca125_cea": ("10334-1", "Cancer Ag 125 [Units/volume] in Serum or Plasma"),
+    "ldh": ("2532-0", "Lactate dehydrogenase [Enzymatic activity/volume] in Serum or Plasma"),
 }
 DOC_TYPE_LOINC = {
     "lab": ("18725-2", "Microbiology studies (set)"),            # only reached by an unknown lab test (see _report_code)
@@ -134,7 +139,12 @@ DOC_TYPE_LOINC = {
     "referral": ("57133-1", "Referral note"),
     "discharge_summary": ("18842-5", "Discharge summary"),
     **{t: ("18748-4", "Diagnostic imaging study") for t in IMAGING_MODALITY},
+    # night-v3 item 2.11: without these the two fell back to "Pathology study", which Vaidyx-TB reads as histopathology; these
+    # codes are not in its tables, so the report title decides ("2D echocardiography", "Pulmonary function test")
+    "echocardiogram": ("34552-0", "Cardiac 2D echo panel"),
+    "pulmonary_function": ("18759-1", "Spirometry study"),
 }
+PROCEDURE_DOC_TYPES = {"endoscopy", "echocardiogram", "pulmonary_function"}   # no SNOMED service category; Observations "procedure"
 # DiagnosticReport.category (SNOMED service / specialty)
 CAT_HAEMATOLOGY = ("708196005", "Hematology service")
 CAT_CT = ("310128004", "Computerized tomography service")
@@ -190,6 +200,9 @@ OBS_LOINC = {
     "er": ("16112-5", "Estrogen receptor [Interpretation] in Tissue"),
     "pr": ("16113-3", "Progesterone receptor [Interpretation] in Tissue"),
     "her2": ("48676-1", "HER2 [Interpretation] in Tissue"),
+    "psa": ("2857-1", "Prostate specific Ag [Mass/volume] in Serum or Plasma"),
+    "ca125": ("10334-1", "Cancer Ag 125 [Units/volume] in Serum or Plasma"),
+    "ldh": ("2532-0", "Lactate dehydrogenase [Enzymatic activity/volume] in Serum or Plasma"),
 }
 UCUM_UNITS = {"mg/dL", "ng/mL"}       # printed units that are certainly UCUM; others carry no system
 SPECIMEN_TYPES = {"blood": ("119297000", "Blood specimen"), "tissue": ("119376003", "Tissue specimen")}
@@ -687,7 +700,7 @@ def _report_category(report):
         c = CAT_CT
     elif t in IMAGING_MODALITY:
         c = CAT_RADIOLOGY
-    elif t == "endoscopy":
+    elif t in PROCEDURE_DOC_TYPES:
         c = None
     else:
         c = CAT_PATHOLOGY
@@ -698,7 +711,7 @@ def _observation_category(report):
     t = report["doc_type"]
     if t in IMAGING_MODALITY:
         return concept(OBS_CATEGORY, "imaging", "Imaging")
-    if t == "endoscopy":
+    if t in PROCEDURE_DOC_TYPES:
         return concept(OBS_CATEGORY, "procedure", "Procedure")
     return concept(OBS_CATEGORY, "laboratory", "Laboratory")
 

@@ -1,11 +1,14 @@
 // Every call the Case File page makes. New endpoints (SPEC-API) first; where one answers 404 the page falls back
 // to what the old routes already carry, and says so.
 import { api, ApiError, TB } from "@/lib/api";
+import { EP } from "@/lib/endpoints";
+import type { Meeting } from "@/lib/types";
 import { errorCode, routeMissing } from "@/lib/live";
 import type {
-  CaseFile, SlotsResponse, Slot, SlotSection, QuoteBoxes, ChatThread, Helper, HelperMessage, PublishedResult, PublishedSearch, Team, Proposal,
-  Urgency, Job, RequestDraft, GateRequirement, CaseAction,
+  CaseFile, SlotsResponse, Slot, SlotSection, QuoteBoxes, ChatThread, Helper, HelperMessage, PublishedResult, PublishedSearch, SimilarInfo, SimilarOpen, SimilarResponse, Team, Proposal,
+  Urgency, Job, RequestDraft, GateRequirement, CaseAction, SendToBoardBody, MeetingMoveResult, SummaryLine,
 } from "./types";
+import type { CaseSentence, CaseSummaryReview, CaseSummaryVersionRow, CaseSummaryView } from "./steps/types";
 
 const enc = encodeURIComponent;
 export const caseUrl = (id: string) => `${TB}/cases/${enc(id)}`;
@@ -44,8 +47,20 @@ export const createFreeRequest = (id: string, body: { department: string; label:
 export const postConfirmation = (id: string, body: { type: string; key: string; fields?: Record<string, unknown>; reason?: string }) =>
   api.post<{ confirmation: { id: string }; state: unknown }>(`${caseUrl(id)}/confirmations`, body);
 export const undoConfirmation = (id: string, conf: string) => api.post(`${caseUrl(id)}/confirmations/${enc(conf)}/undo`, {});
-export const markReady = (id: string, ready: boolean, note?: string) => api.post(`${caseUrl(id)}/ready`, { ready, note });
+/** Send to the board (night-v3 1.4): ready true with the dialog's choices; ready false takes the mark back. */
+export const markReady = (id: string, ready: boolean, body?: Partial<SendToBoardBody>) => api.post(`${caseUrl(id)}/ready`, { ready, ...body });
+/** Move a Case File sent to the board to another open meeting, or take it off the agenda with a reason (night-v3 item 1.6). */
+export const moveCase = (id: string, meetingId: string, reason = "") => api.post<MeetingMoveResult>(`${caseUrl(id)}/meeting/move`, { meeting_id: meetingId, reason });
+export const withdrawCase = (id: string, reason: string) => api.post<MeetingMoveResult>(`${caseUrl(id)}/meeting/withdraw`, { reason });
+/** The meetings a Case File may still go to: planned, not cancelled, today or later, earliest first. */
+export const getOpenMeetings = () => api.get<{ meetings: Meeting[] }>(EP.openMeetings);
 export const buildSummary = (id: string, force = false) => api.post<Record<string, unknown>>(`${caseUrl(id)}/summary`, { force });
+// The Case summary (night-v3 3.3 / 3.4, tumour_board/api/case_summary.py) and the summary line.
+export const getCaseSummary = (id: string, n?: number) => api.get<{ current: number | null; versions: CaseSummaryVersionRow[]; version: CaseSummaryView | null; status?: unknown }>(`${caseUrl(id)}/case-summary${n ? `?n=${n}` : ""}`);
+export const buildCaseSummary = (id: string) => api.post<Record<string, unknown>>(`${caseUrl(id)}/case-summary`, {});
+export const reviewCaseSummary = (id: string, n: number, status: "reviewed" | "flagged" | "ai_draft", comment = "") => api.post<CaseSummaryReview>(`${caseUrl(id)}/case-summary/${n}/review`, { status, comment });
+export const editCaseSentence = (id: string, n: number, sentenceId: string, text: string) => api.post<CaseSentence>(`${caseUrl(id)}/case-summary/${n}/edit`, { sentence_id: sentenceId, text });
+export const setSummaryLine = (id: string, text: string) => api.post<{ summary_line: SummaryLine }>(`${caseUrl(id)}/summary-line`, { text });
 export const reviewArtefact = (id: string, artefact: string, status = "reviewed", comment = "") => api.post(`${caseUrl(id)}/review`, { artefact, status, comment });
 export const refetchHis = (id: string) => api.post<{ job: string; total: number }>(`${caseUrl(id)}/his/refetch`, {});
 export const uploadDocuments = (id: string, files: File[], outside: boolean) => {
@@ -74,6 +89,8 @@ export const prepareHelper = async (id: string, role: string, refresh = false) =
   const job = typeof r.job === "string" ? r.job : r.job && typeof r.job === "object" ? r.job.id : null;
   return { job, status: r.status, reused: !!r.reused };
 };
+/** "Prepare all" (night-v3 item 6.5): every agent without a brief standing for the Case File, one after the other in the background. */
+export const prepareAllHelpers = (id: string) => api.post<{ helpers: Array<{ role: string; status: "preparing" | "ready" | "queued"; job: string | null }>; started: number }>(`${caseUrl(id)}/helpers/prepare-all`, {});
 export const getHelperChat = (id: string, role: string) => api.get<{ messages: HelperMessage[] }>(`${caseUrl(id)}/helpers/${enc(role)}/chat`);
 export const postHelperChat = (id: string, role: string, question: string) => api.post<HelperMessage>(`${caseUrl(id)}/helpers/${enc(role)}/chat`, { question });
 export const askAgentOld = (id: string, role: string, question: string) => api.post<HelperMessage>(`${caseUrl(id)}/agents/${enc(role)}/ask`, { question });
@@ -103,6 +120,13 @@ export const getPublished = (id: string) => api.get<{ items: PublishedResult[]; 
 export const searchPublished = (id: string, terms: string) => api.post<{ results: PublishedResult[]; error?: string }>(`${caseUrl(id)}/published/search`, { terms });
 export const addPublished = (id: string, result: PublishedResult, quotes?: PublishedResult["quotes"]) => api.post<PublishedResult>(`${caseUrl(id)}/published`, { result, quotes });
 export const removePublished = (id: string, pid: string) => api.del(`${caseUrl(id)}/published/${enc(pid)}`);
+
+// ---- similar Case Files (night-v3 Phase 7: past Case Files of this hospital, read only, "Past Case File, not advice for this patient") --
+export const getSimilar = (id: string) => api.get<SimilarInfo>(`${caseUrl(id)}/similar`);
+/** The doctor's words are optional (at most 200 characters); without them the recorded facts of this file are the query. */
+export const searchSimilar = (id: string, words?: string) => api.post<SimilarResponse>(`${caseUrl(id)}/similar/search`, words ? { words } : {});
+/** How this person may open a past file: "normal" (audited by the server), "with_reason" (the break-glass dialog first) or "refused". */
+export const openSimilar = (id: string, past: string) => api.post<SimilarOpen>(`${caseUrl(id)}/similar/open`, { past_case_id: past });
 
 // ---- team, proposals, urgency ----------------------------------------------------------------------------------------
 export const getTeam = (id: string) => api.get<Team>(`${caseUrl(id)}/team`);

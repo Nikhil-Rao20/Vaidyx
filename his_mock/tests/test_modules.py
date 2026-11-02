@@ -489,7 +489,7 @@ def test_admin_practitioners_accounts_and_audit(users, store, data_dir):
     html = c.get("/his/admin").text
     clean(html)
     deps = html.split("id=departments>", 1)[1].split("</table>", 1)[0]
-    assert deps.count("<tr>") == 1 + len(store.departments) == 31
+    assert deps.count("<tr>") == 1 + len(store.departments) == 32
     accounts = html.split("id=accounts>", 1)[1].split("</table>", 1)[0]
     assert accounts.count("<tr>") == 1 + len(auth.ACCOUNT_SPECS) == 10 and "Dr Kavitha Raghunathan" in accounts
     assert "password_hash" not in html and "$2b$" not in html

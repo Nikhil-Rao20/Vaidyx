@@ -5,7 +5,8 @@
     "Indian first: lakh(s) / lac(s) per cumm, gm%, cumm / cmm. A bare 'lakh' without '/cumm' is NOT a unit here (it is also a rupee amount).",
     "analyte_conversions: conversions that depend on the analyte (mg/dL to µmol/L). They are not exact (rounded factors), so they are compared with a 2 % tolerance and only when the analyte label (see analytes) is next to the number.",
     "analytes: label synonyms and the units customarily used for that analyte. A number with a label but no unit ('WBC 7.2') is compared with a quoted quantity of the same analyte expressed in one of these units only.",
-    "Clinical team: add a spelling under its family, a synonym under its analyte, or a new analyte; keep factors exact and mark rounded conversions exact: false."
+    "Clinical team: add a spelling under its family, a synonym under its analyte, or a new analyte; keep factors exact and mark rounded conversions exact: false.",
+    "units_per_volume (night-v3 item 2.1): enzyme activities and tumour markers or hormones in units. U and IU are written interchangeably on Indian reports for the same value (ALP 110 U/L = 110 IU/L); mIU/mL = IU/L and U/mL = kU/L exactly. A unit is never converted to a mass (AFP IU/mL to ng/mL only through its rounded analyte conversion). INR has no unit."
   ],
   "families": {
     "count_per_volume": {
@@ -36,6 +37,10 @@
       "base": "mm", "exact": true,
       "units": {"mm": 1, "cm": 10}
     },
+    "units_per_volume": {
+      "base": "U/L", "exact": true,
+      "units": {"U/L": 1, "IU/L": 1, "mU/mL": 1, "mIU/mL": 1, "U/mL": 1000, "IU/mL": 1000, "kU/L": 1000, "kIU/L": 1000, "mIU/L": 0.001}
+    },
     "percent": {
       "base": "%", "exact": true,
       "units": {"%": 1, "percent": 1}
@@ -44,7 +49,10 @@
   "analyte_conversions": [
     {"analyte": "creatinine", "from_unit": "mg/dL", "to_unit": "µmol/L", "factor": 88.4, "exact": false, "_note": "1 mg/dL creatinine = 88.4 µmol/L"},
     {"analyte": "bilirubin", "from_unit": "mg/dL", "to_unit": "µmol/L", "factor": 17.1, "exact": false, "_note": "1 mg/dL bilirubin = 17.1 µmol/L"},
-    {"analyte": "glucose", "from_unit": "mmol/L", "to_unit": "mg/dL", "factor": 18.0, "exact": false, "_note": "1 mmol/L glucose = 18.0 mg/dL"}
+    {"analyte": "glucose", "from_unit": "mmol/L", "to_unit": "mg/dL", "factor": 18.0, "exact": false, "_note": "1 mmol/L glucose = 18.0 mg/dL"},
+    {"analyte": "corrected_calcium", "from_unit": "mmol/L", "to_unit": "mg/dL", "factor": 4.008, "exact": false, "_note": "1 mmol/L calcium = 4.008 mg/dL"},
+    {"analyte": "testosterone", "from_unit": "nmol/L", "to_unit": "ng/dL", "factor": 28.84, "exact": false, "_note": "1 nmol/L testosterone = 28.84 ng/dL"},
+    {"analyte": "afp", "from_unit": "IU/mL", "to_unit": "ng/mL", "factor": 1.21, "exact": false, "_note": "1 IU/mL AFP = 1.21 ng/mL (WHO standard 72/225)"}
   ],
   "analytes": {
     "wbc": {"labels": ["TLC", "WBC", "WBC count", "total WBC count", "total WBC", "total leucocyte count", "total leukocyte count", "total count", "white cell count", "white blood cell count", "leucocyte count", "leukocyte count", "leucocytes", "leukocytes"],
@@ -54,6 +62,19 @@
     "platelets": {"labels": ["plt", "platelets", "platelet count", "platelet", "PLT count"], "units": ["/cumm", "x10^3/µL", "lakhs/cumm", "x10^9/L"]},
     "creatinine": {"labels": ["S. creatinine", "serum creatinine", "creatinine", "S.Cr"], "units": ["mg/dL", "µmol/L"]},
     "bilirubin": {"labels": ["T. bilirubin", "total bilirubin", "S. bilirubin", "serum bilirubin", "bilirubin"], "units": ["mg/dL", "µmol/L"]},
-    "glucose": {"labels": ["glucose", "blood sugar", "blood glucose", "FBS", "RBS", "PPBS", "FBG"], "units": ["mg/dL", "mmol/L"]}
+    "glucose": {"labels": ["glucose", "blood sugar", "blood glucose", "FBS", "RBS", "PPBS", "FBG"], "units": ["mg/dL", "mmol/L"]},
+    "psa": {"labels": ["PSA", "S. PSA", "serum PSA", "total PSA", "prostate specific antigen", "prostate-specific antigen"], "units": ["ng/mL"]},
+    "ca125": {"labels": ["CA-125", "CA 125", "CA125", "S. CA-125", "serum CA-125", "cancer antigen 125"], "units": ["U/mL"]},
+    "afp": {"labels": ["AFP", "S. AFP", "serum AFP", "alpha fetoprotein", "alpha-fetoprotein", "alfa fetoprotein", "alpha feto protein"], "units": ["ng/mL", "IU/mL"]},
+    "beta_hcg": {"labels": ["beta-hCG", "beta hCG", "β-hCG", "β hCG", "hCG", "serum beta-hCG", "S. beta-hCG", "total beta-hCG"], "units": ["mIU/mL", "IU/L"]},
+    "ldh": {"labels": ["LDH", "S. LDH", "serum LDH", "lactate dehydrogenase"], "units": ["U/L"]},
+    "ca19_9": {"labels": ["CA 19-9", "CA19-9", "CA 19.9", "S. CA 19-9", "serum CA 19-9", "carbohydrate antigen 19-9"], "units": ["U/mL"]},
+    "thyroglobulin": {"labels": ["thyroglobulin", "S. thyroglobulin", "serum thyroglobulin"], "units": ["ng/mL"]},
+    "calcitonin": {"labels": ["calcitonin", "S. calcitonin", "serum calcitonin"], "units": ["pg/mL"]},
+    "alkaline_phosphatase": {"labels": ["ALP", "S. ALP", "alkaline phosphatase", "S. alkaline phosphatase", "serum alkaline phosphatase", "alk phos"], "units": ["U/L", "IU/L"]},
+    "beta2_microglobulin": {"labels": ["beta-2 microglobulin", "beta 2 microglobulin", "beta2 microglobulin", "β2 microglobulin", "β2-microglobulin", "B2M", "S. beta-2 microglobulin"], "units": ["mg/L"]},
+    "corrected_calcium": {"labels": ["corrected calcium", "S. calcium", "serum calcium", "calcium"], "units": ["mg/dL", "mmol/L"]},
+    "testosterone": {"labels": ["testosterone", "S. testosterone", "serum testosterone", "total testosterone"], "units": ["ng/dL", "nmol/L"]},
+    "inr": {"labels": ["INR", "PT INR", "PT/INR", "international normalised ratio", "international normalized ratio"], "units": []}
   }
 }

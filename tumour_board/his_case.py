@@ -110,14 +110,14 @@ def clean_cancer_name(value, protocol_id: str = "") -> str:
     """The cancer's name as the doctor picked or typed it (case.json "cancer_name"): trimmed, inner spaces collapsed, 2 to 80
     characters. Required under the generic rule (a cancer with no built checklist: protocol "generic", four core records), optional
     under a built checklist. Returns "" when none is given and none is needed; HISCaseError (400) with a plain message otherwise."""
-    from .protocol import GENERIC
+    from .protocol import GENERIC_IDS
     if value is not None and not isinstance(value, str):
         raise HISCaseError("The cancer's name must be text")
     name = " ".join(str(value or "").split())
     if any(ord(ch) < 32 or ord(ch) == 127 for ch in name):
         raise HISCaseError("The cancer's name has characters that cannot be shown: type it again")
     if not name:
-        if protocol_id == GENERIC:
+        if protocol_id in GENERIC_IDS:
             raise HISCaseError(f"Type the cancer's name: a cancer with no checklist yet needs it ({CANCER_NAME_MIN} to {CANCER_NAME_MAX} characters)")
         return ""
     if not CANCER_NAME_MIN <= len(name) <= CANCER_NAME_MAX:
@@ -129,8 +129,108 @@ def _same_cancer(c: dict, protocol_id: str, cancer_name: str) -> bool:
     """Another Case File of the same UHID is for the same cancer: the same protocol and, under the generic rule, the same typed name."""
     if c.get("protocol") != protocol_id:
         return False
-    from .protocol import GENERIC
-    return protocol_id != GENERIC or " ".join(str(c.get("cancer_name") or "").split()).lower() == cancer_name.lower()
+    from .protocol import GENERIC_IDS
+    return protocol_id not in GENERIC_IDS or " ".join(str(c.get("cancer_name") or "").split()).lower() == cancer_name.lower()
+
+
+# ---- the same patient and the same cancer (night-v3 item 1.1: one Case File per patient and cancer) ----------------------------
+
+DUPLICATE_CODE = "duplicate_case_file"
+
+
+class DuplicateCaseFile(HISCaseError):
+    """A non-archived Case File for this patient and this cancer exists: the creation is refused (409) and the caller is shown who owns
+    it, with "Open it" when the caller may already open it, else "Ask to join". `body()` is the JSON the routes answer."""
+
+    def __init__(self, existing: dict, message: str):
+        super().__init__(message, 409)
+        self.existing = existing
+
+    def body(self) -> dict:
+        return {"detail": str(self), "code": DUPLICATE_CODE, "existing": dict(self.existing)}
+
+
+def case_uhids(c: dict) -> set:
+    """Every UHID a Case File answers for, normalised (identity.normalise_id): the HIS registration it was made from, the patient's UHID
+    (patient.mrn) and every patient identifier of kind uhid, the registrations a person linked to it included."""
+    c = c if isinstance(c, dict) else {}
+    p = c.get("patient") if isinstance(c.get("patient"), dict) else {}
+    raw = [(c.get("his") or {}).get("uhid") if isinstance(c.get("his"), dict) else "", p.get("mrn")]
+    raw += [x.get("value") for x in p.get("ids") or [] if isinstance(x, dict) and x.get("kind") == "uhid"]
+    return {n for n in (identity.normalise_id(x) for x in raw if x) if n}
+
+
+def same_patient_cases(uhids, exclude: str = "", his=None) -> list:
+    """The live Case Files of the same patient: their UHID set overlaps `uhids` (linked registrations count). Archived and protected
+    Case Files (config.PROTECTED_CASES, real patient data) never count. `his` = (kind, label) of the hospital system in use: a Case File
+    made from another hospital system answers for another numbering and is left out; a Case File made by hand (no HIS) counts."""
+    from . import access
+    want = {n for n in (identity.normalise_id(u) for u in uhids or () if u) if n}
+    if not want:
+        return []
+    out = []
+    for c in store.list_cases():
+        cid = c.get("case_id")
+        if not cid or cid == exclude or cid in config.PROTECTED_CASES or access.is_archived(c):
+            continue
+        h = c.get("his") if isinstance(c.get("his"), dict) else None
+        if his and h and (h.get("kind"), str(h.get("label") or "")) != (his[0], str(his[1] or "")):
+            continue
+        if case_uhids(c) & want:
+            out.append(c)
+    return out
+
+
+def owner_doctor(c: dict) -> str:
+    """The consultant shown as the Case File's owner, as the Case Files list names it: its creator when a consultant of the owning
+    department, else the first one (the creator when none is placed)."""
+    from . import team
+    cons = team.owner_consultants(c)
+    by = str((c or {}).get("created_by") or "")
+    return by if by in cons else (cons[0] if cons else by)
+
+
+def dr_name(name: str) -> str:
+    """"Dr Rao" when the name has no title yet (as the interface writes it)."""
+    name = str(name or "").strip()
+    return name if not name or re.match(r"^(dr|prof)\.?\s", name, re.I) else f"Dr {name}"
+
+
+def file_brief(c: dict, roles: dict | None) -> dict:
+    """A Case File as another Case File's creator may see it: the cancer, the owning department and consultant, and whether this person
+    may open it. No clinical content and no patient detail."""
+    from . import access, profiles, protocol
+    own = access.owner(c)
+    doc = owner_doctor(c)
+    return {"case_id": c["case_id"], "protocol": c.get("protocol") or "", "cancer_name": c.get("cancer_name") or "",
+            "cancer_label": protocol.case_label(c) or "Cancer not chosen yet",
+            "department": own or "", "department_name": org.department_name(own) if own else "",
+            "owner": doc, "owner_name": profiles.display_name(doc) if doc else "",
+            "can_open": bool(roles) and access.scope(roles, c) == access.FULL}
+
+
+def owner_words(brief: dict) -> str:
+    """"Breast Surgery, Dr X" (the department alone when no consultant is placed yet)."""
+    return ", ".join(x for x in (brief.get("department_name") or "", dr_name(brief.get("owner_name") or "")) if x) or "owner not set"
+
+
+def duplicate_of(uhids, protocol_id: str, cancer_name: str = "", his=None, exclude: str = ""):
+    """The live Case File of the same patient and the same cancer (_same_cancer), or None. No cancer chosen yet: never a duplicate."""
+    if not protocol_id:
+        return None
+    return next((c for c in same_patient_cases(uhids, exclude, his) if _same_cancer(c, protocol_id, cancer_name or "")), None)
+
+
+def refuse_duplicate(uhids, protocol_id: str, cancer_name: str, user: str, roles: dict, his=None, via: str = "", exclude: str = "") -> None:
+    """DuplicateCaseFile (409) when a live Case File of this patient and this cancer exists; the refusal is audited in that Case File
+    (kind duplicate_refused: who and the cancer tried; nothing more of the patient). `exclude`: the Case File being listed itself."""
+    dup = duplicate_of(uhids, protocol_id, cancer_name, his, exclude)
+    if not dup:
+        return
+    brief = file_brief(dup, roles)
+    store.audit(dup["case_id"], {"kind": "duplicate_refused", "by": user, "protocol": protocol_id, **({"cancer_name": cancer_name} if cancer_name else {}),
+                                 **({"via": via} if via else {})})
+    raise DuplicateCaseFile(brief, f"A Case File for this patient and this cancer exists ({owner_words(brief)})")
 
 
 # ---- helpers ---------------------------------------------------------------------------------------------------------
@@ -300,14 +400,15 @@ async def create(identifier: str, protocol_id: str, setting: str, hospital_level
             raise HISCaseError("Case already exists", 409)
     else:
         case_id = intake.next_case_id()
-    dup = next((c["case_id"] for c in store.list_cases() if c.get("his") and c["case_id"] not in config.PROTECTED_CASES and str((c["his"] or {}).get("uhid") or "").upper() == str(p["uhid"]).upper()
-                and _same_cancer(c, protocol_id, cancer_name)), None)  # under the generic rule, two different typed cancers are not the same one
+    # one Case File per patient and cancer (night-v3 item 1.1): the registration's UHID, and the identifier typed when it is a UHID
+    uhids = {p["uhid"]} | ({(p.get("matched_on") or {}).get("value")} if isinstance(p.get("matched_on"), dict) and (p["matched_on"].get("kind") or "") == "uhid" else set())
+    system = (client.kind, client.label)  # the same hospital system (review Phase 5 minor 3): another system numbers its patients apart
+    refuse_duplicate(uhids, protocol_id, cancer_name, user, roles, his=system, via="from_his")  # under the generic rule, two different typed cancers are not the same one
     try:
         encs = await client.encounters(p["id"])
     except his_client.HISError as e:
         raise HISCaseError(f"The hospital system did not answer: {e}", 502)
-    others = [c for c in store.list_cases() if c.get("his") and c["case_id"] not in config.PROTECTED_CASES and str((c["his"] or {}).get("uhid") or "").upper() == str(p["uhid"]).upper() and c["case_id"] != case_id
-              and (c["his"] or {}).get("kind") == client.kind and str((c["his"] or {}).get("label") or "") == str(client.label or "")]  # the same hospital system (review Phase 5 minor 3)
+    others = same_patient_cases(uhids, exclude=case_id, his=system)  # the same patient's other cancers (linked registrations count)
     case = store.create_case(case_id, patient_record(p, encs), protocol_id, board_date, user, setting, hospital_level)
     case["department"] = owner
     if cancer_name:
@@ -321,14 +422,11 @@ async def create(identifier: str, protocol_id: str, setting: str, hospital_level
                    "similar": [{**_public_patient(s), "linked": False} for s in p.get("similar") or []], "linked": [],
                    "encounters": encs, "orders": [], "referrals": [], "older_available": 0, "fetches": []}
     store.save_case(case)
-    if dup:
-        case["his"]["same_uhid_case"] = dup  # another Case File of this UHID under the same protocol: shown, never blocked (two primaries are 5.3)
-    store.save_case(case)
     store.audit(case_id, {"kind": "case_created", "by": user, "listing": case["listing"]["status"], "protocol": protocol_id, "setting": setting,
                           **({"cancer_name": cancer_name} if cancer_name else {}),
                           "from_his": {"label": client.label, "identifier": identifier, "matched_on": p.get("matched_on"), "uhid": p["uhid"],
                                        "registration_kind": p.get("registration_kind"), "similar": [s.get("uhid") for s in p.get("similar") or []]},
-                          "owner": owner, "window": window, "same_uhid_case": dup, "linked_cases": [o["case_id"] for o in others]})
+                          "owner": owner, "window": window, "linked_cases": [o["case_id"] for o in others]})
     for o in others:  # the link is recorded on both sides and audited in both Case Files
         full = store.get_case(o["case_id"]) or {}
         if full and not any((l or {}).get("case_id") == case_id for l in full.get("linked_cases") or []):

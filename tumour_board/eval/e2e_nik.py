@@ -551,7 +551,7 @@ class Scenario:
         self.need(s, "the board question is typed on its line", r.status_code == 200 and q.get("status") == "entered", f"{q.get('status')}: {q.get('note', '')[:120]}")
         v, sl = self.slots(doc, cid)
         self.check(s, "Mark ready is allowed", v.get("ready_allowed") is True, f"left before the board {v.get('left_before_board')}; blockers {[b.get('why') for b in v.get('blockers') or []]}")
-        r = doc.post(f"/api/tb/cases/{cid}/ready", json={"ready": True, "note": "E2E: ready for the board"})
+        r = doc.post(f"/api/tb/cases/{cid}/ready", json={"ready": True, "note": "E2E: ready for the board", "reason": "E2E: the board sees it now"})  # 1.4: a reason when items are open
         self.need(s, "Mark ready (POST ready)", r.status_code == 200 and (self.j(r).get("board_ready") or {}).get("by") == "tb-breast-doc", f"HTTP {r.status_code}")
         t0 = time.time()
         prose = {}
@@ -702,10 +702,24 @@ class Scenario:
         doc = self.vx("tb-breast-doc")
         cid = f"E2E-{self.stamp}-B"
         sex = {"F": "F", "M": "M"}.get(str(p.get("sex") or "").upper()[:1], "F")
-        r = doc.post("/api/tb/cases", json={"case_id": cid, "patient": {"name": p.get("name"), "mrn": DEMO_PATIENT, "agesex": f"{p.get('age')} Y / {sex}"},
-                                             "protocol": "breast", "setting": "early", "board_date": (self.today + timedelta(days=7)).isoformat()})
+        pat = {"name": p.get("name"), "mrn": DEMO_PATIENT, "agesex": f"{p.get('age')} Y / {sex}"}
+        bd = (self.today + timedelta(days=7)).isoformat()
+        r = doc.post("/api/tb/cases", json={"case_id": cid, "patient": pat, "protocol": "breast", "setting": "early", "board_date": bd})
+        if r.status_code == 409 and self.j(r).get("code") == "duplicate_case_file":  # a live breast Case File of that patient exists (night-v3 item 1.1)
+            ex = self.j(r).get("existing") or {}
+            self.check(s, "a breast Case File of that patient exists already: a second one is refused (409, one Case File per patient and cancer)",
+                       ex.get("case_id"), f"{ex.get('case_id')}: {self.j(r).get('detail')}")
+            r = doc.post("/api/tb/cases", json={"case_id": cid, "patient": pat, "protocol": "generic", "cancer_name": f"Thyroid (E2E {self.stamp})", "board_date": bd})
         self.need(s, "a second fresh Case File for that patient", r.status_code == 200, f"{cid}: HTTP {r.status_code} {r.text[:120] if r.status_code != 200 else ''}")
         self.ids["case_b"] = cid
+        prot = self.j(r).get("protocol") or "breast"
+        rd = doc.post("/api/tb/cases", json={"case_id": f"{cid}-DUP", "patient": pat, "protocol": prot, "board_date": bd,
+                                              **({"cancer_name": self.j(r).get("cancer_name")} if prot == "generic" else {"setting": "early"})})
+        if rd.status_code == 200:  # never expected: removed again so the run leaves nothing behind
+            self.vx("tb-mdt").delete(f"/api/tb/cases/{cid}-DUP")
+        self.check(s, "the same patient and the same cancer again is refused (409) naming this Case File and its owner",
+                   rd.status_code == 409 and self.j(rd).get("code") == "duplicate_case_file" and (self.j(rd).get("existing") or {}).get("case_id") == cid,
+                   f"HTTP {rd.status_code}: {str(self.j(rd).get('detail') or '')[:120]}")
         up = [("files", (f.name, f.read_bytes(), "application/pdf")) for f in files]
         r = doc.post(f"/api/tb/cases/{cid}/documents", files=up, data={"paths": json.dumps([f.name for f in files]), "outside": "1"})
         b = self.j(r)

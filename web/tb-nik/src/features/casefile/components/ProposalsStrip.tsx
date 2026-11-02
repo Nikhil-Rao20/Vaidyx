@@ -8,11 +8,27 @@ import { Input } from "@/components/ui/input";
 import { approveProposal, returnProposal } from "../api";
 import type { Proposal } from "../types";
 import { LoadingButton, errorText, fmtDateTime, useAnnounce } from "./common";
+import { drName, formatDate } from "@/lib/format";
 
-const ACTION_WORDS: Record<string, string> = { waive: "mark not needed", not_needed: "mark not needed", confirm: "confirm a value", mark_ready: "mark ready", send_request: "send a request", urgency: "change the urgency", refer: "refer the Case File", typed_value: "enter a value", published_case: "add a published case" };
+const ACTION_WORDS: Record<string, string> = { waive: "mark not needed", not_needed: "mark not needed", confirm: "confirm a value", mark_ready: "mark ready", send_request: "send a request", urgency: "change the urgency", refer: "refer the Case File", typed_value: "enter a value", published_case: "add a published case", key_value: "confirm", reason: "set the reason for discussion to", staging_confirm: "confirm the draft stage" };
+// The reasons for discussion (tumour_board/steps.py REASONS).
+const REASON_WORDS: Record<string, string> = { new_diagnosis: "New diagnosis: plan first treatment", after_surgery: "After surgery: plan next", recurrence: "Recurrence or progression", diagnosis_unclear: "Diagnosis not clear", other: "Other" };
 
 function describe(p: Proposal, labelOf?: (slotId: string) => string | undefined): string {
   const pl = p.payload ?? {};
+  // night-v3 item 1.8: a key value, the reason for discussion and the draft stage
+  if (p.action === "key_value") {
+    const fid = String(pl.fact_id ?? "");
+    return `confirm ${labelOf?.(`fact:${fid}`) ?? fid.replace(/_/g, " ")}: ${String(pl.value ?? "")}`;
+  }
+  if (p.action === "reason") return `${ACTION_WORDS.reason} ${REASON_WORDS[String(pl.value)] ?? String(pl.value ?? "").replace(/_/g, " ")}`;
+  // night-v3 item 1.4: the whole send, "send to the board (for discussion, meeting DD/MM/YYYY, presenter Dr Y)"
+  if (p.action === "mark_ready" && pl.ready !== false) {
+    const bits = [pl.list === "noting" ? "for noting" : "for discussion", pl.meeting_date ? `meeting ${formatDate(String(pl.meeting_date))}` : "meeting not scheduled yet",
+      `presenter ${pl.presenter_name ? drName(String(pl.presenter_name)) : "you"}`];
+    return `send to the board (${bits.join(", ")})${typeof pl.reason === "string" && pl.reason ? `, with items open because: ${pl.reason}` : ""}`;
+  }
+  if (p.action === "staging_confirm") return `${pl.which === "prognostic" ? "confirm the prognostic stage group" : ACTION_WORDS.staging_confirm} ${String(pl.stage ?? "")}`;
   const bits = [ACTION_WORDS[p.action] ?? p.action];
   const slot = typeof pl.slot === "string" ? pl.slot : typeof pl.key === "string" && !String(pl.key).includes(":") ? pl.key : null;
   if (slot) bits.push(`(${labelOf?.(slot) ?? labelOf?.(`record:${slot}`) ?? slot.replace(/^(fact|record):/, "").replace(/_/g, " ")})`);

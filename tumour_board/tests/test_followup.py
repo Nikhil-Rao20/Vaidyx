@@ -61,6 +61,10 @@ def test_board_actions_fields_and_department_mapping(case, today, data_root):
     assert cardio["department_id"] is None and blank["department_id"] is None
     assert blank["label"] == "Board action" and blank["what"] == ""
     assert len({a["id"] for a in acts}) == 4 and all(a["id"].startswith("A") for a in acts)
+    assert [a["kind"] for a in acts] == ["action"] * 4  # night-v3 item 3.1: a typed action; the decision form's rows say investigation or referral
+    kinds = followup.board_actions(case, {"id": "B9", "actions": [{"task": "PET-CT", "department": "Radiology", "kind": "investigation"},
+                                                                  {"task": "Referral: Palliative care", "department": "Medical Oncology", "kind": "referral"}]})
+    assert [a["kind"] for a in kinds] == ["investigation", "referral"]
 
 
 def test_board_actions_default_due_from_protocol(case, today, monkeypatch):

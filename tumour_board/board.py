@@ -197,9 +197,10 @@ def listed_for_date(date: str) -> list[dict]:
     return out
 
 
-def mark_ready(case_id: str, user: str, ready: bool = True, note: str = "") -> dict:
+def mark_ready(case_id: str, user: str, ready: bool = True, note: str = "", *, extra_text: str = "") -> dict:
     """The owning department marks its Case File ready for the board (or takes the mark back); the MDT Coordinator is told and builds
-    the agenda from the ready Case Files (V2 item 6.1). Audited. A Case File must be listed to be marked ready."""
+    the agenda from the ready Case Files (V2 item 6.1). Audited. A Case File must be listed to be marked ready. `extra_text` is added to
+    the coordinator's notice (send_to_board: the meeting, the list and the presenter)."""
     from . import notify
     if case_id in config.PROTECTED_CASES:
         raise ValueError("That Case File is protected")
@@ -223,9 +224,80 @@ def mark_ready(case_id: str, user: str, ready: bool = True, note: str = "") -> d
         try:
             notify.notify({"role": "coordinator"}, "board_ready", case_id, f"Ready for the board: {patient} ({case_id})",
                           f"{org.department_name(c['department']) if c.get('department') else user} marked this Case File ready for the board"
-                          + (f" on {_ddmmyyyy(c.get('board_date'))}" if c.get("board_date") else "") + (f". Note: {note}" if note else "."), by=user)
+                          + (f" on {_ddmmyyyy(c.get('board_date'))}" if c.get("board_date") else "") + (f". Note: {note}" if note else ".")
+                          + (f" {extra_text.strip()}" if str(extra_text or "").strip() else ""), by=user)
         except Exception:  # a notice never fails the mark
             pass
+    return c
+
+
+SEND_LISTS = {"discussion": "for discussion", "noting": "for noting"}
+
+
+def send_to_board(case_id: str, user: str, *, list: str = "discussion", meeting_id: str = "", presenter: str = "", note: str = "",
+                  reason: str = "") -> dict:
+    """Send to the board (night-v3 item 1.4, design B7): the treating consultant picks the meeting (or none yet: the coordinator picks),
+    for discussion or for noting, the presenter (the consultant or a resident on the team), a note for the coordinator and, when items
+    are still open, the reason the board should see it anyway. The server requires the question for the board and that reason. Stores
+    the choices on case.json ("presenter", "board_send", "board_send_history"), marks the Case File ready (mark_ready: audited, the
+    coordinator told with the meeting, list and presenter), puts it on that meeting's list (the coordinator may still move it) and
+    audits board_send. ValueError with a plain message. A resident's send is a proposal that runs this in the consultant's name."""
+    from . import access, meetings, profiles, steps
+    if case_id in config.PROTECTED_CASES:
+        raise ValueError("That Case File is protected")
+    c = store.get_case(case_id)
+    if not c:
+        raise ValueError(f"Case File {case_id} not found")
+    if access.is_archived(c):
+        raise ValueError(access.ARCHIVED_MESSAGE)
+    if not _listed(c):
+        raise ValueError("List the Case File for the board first (protocol and board date)")
+    if not str(meetings._board_question(c, store.get_state(case_id)) or "").strip():
+        raise ValueError("Write the question for the board first")
+    if list not in SEND_LISTS:
+        raise ValueError("Choose for discussion or for noting")
+    reason = " ".join(str(reason or "").split())[:MAX_NOTE]
+    note = " ".join(str(note or "").split())[:MAX_NOTE]
+    open_items = steps.open_count(case_id) or 0
+    if open_items > 0 and not reason:
+        raise ValueError(f"Say why the board should see it with {open_items} {'item' if open_items == 1 else 'items'} open")
+    presenter = str(presenter or "").strip() or user
+    if presenter != user and presenter not in {x["user"] for x in access.team_residents(c)}:
+        raise ValueError("The presenter must be you or a resident on the Case File team")
+    s = None
+    meeting_id = str(meeting_id or "").strip()
+    if meeting_id:
+        s = meetings.get(meeting_id)
+        if not s:
+            raise ValueError("Meeting not found")
+        if s.get("status") != "planned" or s.get("cancelled"):
+            raise ValueError("That meeting is not open")
+        if str(s.get("date") or "") < datetime.now().date().isoformat():
+            raise ValueError("That meeting date has passed: pick another meeting")
+        try:  # the checks add_to_agenda makes, before anything is written: a refused add leaves no ready mark and no notice
+            meetings._active(s)
+            meetings._check([case_id])
+        except meetings.MeetingError as e:
+            raise ValueError(str(e)) from None
+    now = store.now_iso()
+    pname = profiles.display_name(presenter)
+    send = {"list": list, "meeting_id": meeting_id, "presenter": presenter, "note": note, "reason": reason, "open_items": open_items, "by": user or "", "at": now}
+    c["presenter"] = {"user": presenter, "name": pname, "set_by": user or "", "at": now}
+    c["board_send"] = send
+    c.setdefault("board_send_history", []).append(send)
+    store.save_case(c)
+    store.audit(case_id, {"kind": "board_send", "by": user or "", "list": list, "meeting_id": meeting_id, "presenter": presenter,
+                          "open_items": open_items, "reason": reason})
+    where = (f"Meeting {_ddmmyyyy(s.get('date'))}" + (f" {s['time']}" if s.get("time") else "")) if s else "Meeting not scheduled yet: pick a meeting"
+    extra = f"{where}, {SEND_LISTS[list]}, presenter {pname}." + (f" Sent with {open_items} open: {reason}" if open_items and reason else "")
+    c = mark_ready(case_id, user, True, note, extra_text=extra)
+    if s:
+        try:
+            meetings.take_off_agendas(case_id, user, keep=meeting_id, why="sent", sent_to=meeting_id)  # one agenda only (night-v3 item 1.6)
+            meetings.add_to_agenda(meeting_id, user, case_id, list, reason, one_agenda=False)  # board_send is written above
+        except meetings.MeetingError as e:
+            raise ValueError(str(e))
+        c = store.get_case(case_id) or c
     return c
 
 
@@ -666,11 +738,13 @@ def allowed_cases(r: dict, session) -> set | None:
 def session_view(session, allowed) -> dict:
     """The session as a doctor may see it: the log entries, the decisions and the agent records of the Case Files in `allowed` only
     (entries without a Case File, such as the start and close, stay). `allowed` None: the whole session."""
+    out = {k: v for k, v in session.items() if k != "chat"}  # the meeting chat is for the admitted members only (night-v3 5.3, review S1)
     if allowed is None:
-        return session
-    return {**session, "log": [e for e in session.get("log") or [] if not e.get("case_id") or e.get("case_id") in allowed],
+        return out
+    return {**out, "log": [e for e in session.get("log") or [] if not e.get("case_id") or e.get("case_id") in allowed],
             "decisions": {k: v for k, v in (session.get("decisions") or {}).items() if k in allowed},
-            "agents": {k: v for k, v in (session.get("agents") or {}).items() if k in allowed}}
+            "agents": {k: v for k, v in (session.get("agents") or {}).items() if k in allowed},
+            "questions": [q for q in session.get("questions") or [] if q.get("case_id") in allowed]}
 
 
 def session_surgical(session) -> set:
@@ -1023,6 +1097,9 @@ def _att_label(v) -> str:
     return {"present": "Present", "absent": "Absent", "not_marked": "Not recorded"}.get(v, v or "Not recorded")
 
 
+MINUTES_SKIP = ("outcome", "decision_text", "members_present")  # the outcome is the heading, the text printed above, the members in the participants line
+
+
 def minutes(sid, allowed=None) -> dict:
     """The minutes of a board session (V2 item 6.1): the hospital, the session, the attendance sheet (heads first) with the members by
     name and the AI support agents that stood in, then per Case File the patient, the protocol, the owner, who marked it ready, the
@@ -1030,7 +1107,7 @@ def minutes(sid, allowed=None) -> dict:
     the PM-JAY composition result, then the follow-up of every action. Nothing here is a model output: the agents' points are in the
     agent log export (6.3). `allowed`: the Case Files this reader may see in full (None: all); the others print as restricted,
     with no patient data, decision or seat (Phase 6 review S2)."""
-    from . import postboard, protocol
+    from . import decision_record, postboard, protocol
     s = _need(sid)
     att = attendance(s)
     members = s.get("members") or []
@@ -1074,7 +1151,8 @@ def minutes(sid, allowed=None) -> dict:
                       "seat": seat(s, c), "agents": agents_of(cid), "agenda_status": a.get("status"), "minutes_on_floor": round((timing(s).get(cid) or 0) / 60, 1),
                       "decision": None if not rec else {
                           "record": rec["id"], "recorded_by": rec.get("recorded_by") or rec.get("entered_by"), "recorded_at": rec.get("recorded_at"),
-                          "outcome": rec.get("outcome_type") or "decision", "outcome_label": postboard.OUTCOMES.get(rec.get("outcome_type") or "decision", "Decision recorded"),
+                          "outcome": rec.get("outcome_type") or "decision", "outcome_label": decision_record.OUTCOMES.get(rec.get("outcome_type") or "decision", "Decision recorded"),
+                          "fields": decision_record.display_lines(rec, skip=MINUTES_SKIP), "corrected": decision_record.corrected_line(rec),
                           "text": d.get("decision_text") if d else rec.get("decision_text"), "version": rec.get("version", 1),
                           "intent": rec.get("intent_as_recorded") or "", "trial_considered": rec.get("trial_considered") or "", "key_worker": rec.get("key_worker") or "",
                           "deferred_reason": rec.get("deferred_reason") or "", "referred_to": rec.get("referred_to") or "",
@@ -1138,11 +1216,9 @@ def minutes_html(sid, allowed=None) -> str:
             out.append("<div><i>No board decision recorded for this Case File.</i></div>"); continue
         out.append(f"<div><b>{_h(d['outcome_label'])}</b></div><div style='white-space:pre-wrap'>{_h(d['text'])}</div>")
         meta = [f"Record {d['record']}" + (f", version {d['version']}" if (d.get('version') or 1) > 1 else ""), f"recorded by {d.get('recorded_by') or ''}", _ddmmyyyy(d.get("recorded_at"))]
-        for k, lbl in (("intent", "Intention to treat"), ("trial_considered", "Clinical trial considered"), ("key_worker", "Key worker"), ("deferred_reason", "Awaited"),
-                       ("referred_to", "Referred to"), ("report_corrections_raised", "Report corrections raised"), ("divergent_opinions", "Divergent opinions"), ("next_review", "Next review")):
-            if d.get(k):
-                meta.append(f"{lbl}: {_ddmmyyyy(d[k]) if k == 'next_review' else d[k]}")
         out.append(f"<div class='meta'>{_h(' | '.join(m for m in meta if m))}</div>")
+        if d.get("fields"):  # every field of the decision record with a value, in the form's step order (night-v3 item 3.1)
+            out.append("<table class='fields'>" + "".join(f"<tr><th>{_h(x['label'])}</th><td style='white-space:pre-wrap'>{_h(x['text'])}</td></tr>" for x in d["fields"]) + "</table>")
         if d.get("participants"):
             out.append(f"<div class='meta'>Participants: {_h(d['participants'])}</div>")
         if d["actions"]:

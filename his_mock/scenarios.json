@@ -1,6 +1,6 @@
 {
- "version": "0.3.5",
- "note": "SYNTHETIC only. Fixtures for the V2 mock Indian hospital (his_mock, plan item 1.1) and the outcomes Vaidyx-TB must show (e2e in Phases 3 to 6). Every patient, doctor, number, laboratory, hospital and certifying authority here is invented; nothing comes from a real patient or the real case. Aadhaar appears only once, masked, on one scanned outside report, to test masking.",
+ "version": "0.4.0",
+ "note": "SYNTHETIC only. Fixtures for the V2 mock Indian hospital (his_mock, plan item 1.1) and the outcomes Vaidyx-TB must show (e2e in Phases 3 to 6); night-v3 item 2.11 adds four patients for the new cancer checklists (ovary, prostate, stomach, lymphoma). Every patient, doctor, number, laboratory, hospital and certifying authority here is invented; nothing comes from a real patient or the real case. Aadhaar appears only once, masked, on one scanned outside report, to test masking.",
  "hospital": {
   "name": "Vaidyx Demo Hospital (SYNTHETIC)",
   "ncg_level": "optimal",
@@ -110,7 +110,14 @@
   "tumour_board_record",
   "clinical_note",
   "referral",
-  "pulmonary_function"
+  "pulmonary_function",
+  "bone_marrow",
+  "flow_cytometry",
+  "cytogenetics",
+  "csf",
+  "echocardiogram",
+  "ophthalmology_note",
+  "audiometry"
  ],
  "tests": {
   "opd_note": {
@@ -302,6 +309,66 @@
    "label": "Examination under anaesthesia",
    "doc_type": "operative_note",
    "department": "Gynaecologic Oncology"
+  },
+  "ca125_cea": {
+   "label": "Serum CA-125 and CEA",
+   "doc_type": "lab",
+   "department": "Biochemistry"
+  },
+  "psa": {
+   "label": "Serum PSA (total)",
+   "doc_type": "lab",
+   "department": "Biochemistry"
+  },
+  "ldh": {
+   "label": "Serum LDH",
+   "doc_type": "lab",
+   "department": "Biochemistry"
+  },
+  "ascitic_fluid_cytology": {
+   "label": "Ascitic fluid cytology (with cell block)",
+   "doc_type": "cytology",
+   "department": "Pathology"
+  },
+  "trus_biopsy": {
+   "label": "Histopathology: TRUS-guided prostate biopsy",
+   "doc_type": "histopathology",
+   "department": "Pathology"
+  },
+  "her2_ihc": {
+   "label": "IHC: HER2 (gastric)",
+   "doc_type": "ihc",
+   "department": "Pathology"
+  },
+  "lymph_node_biopsy": {
+   "label": "Histopathology: lymph node excision biopsy",
+   "doc_type": "histopathology",
+   "department": "Pathology"
+  },
+  "ihc_lymphoma": {
+   "label": "IHC panel: lymphoma (CD45, CD30, CD15, CD20, PAX5, CD3, Ki-67)",
+   "doc_type": "ihc",
+   "department": "Pathology"
+  },
+  "mri_prostate": {
+   "label": "Multiparametric MRI prostate",
+   "doc_type": "mri",
+   "department": "Radiology"
+  },
+  "cect_neck_tap": {
+   "label": "CECT neck, thorax, abdomen and pelvis",
+   "doc_type": "ct",
+   "department": "Radiology"
+  },
+  "ugi_endoscopy": {
+   "label": "Upper GI endoscopy",
+   "doc_type": "endoscopy",
+   "department": "Medical Gastroenterology"
+  },
+  "echo": {
+   "label": "2D echocardiography",
+   "doc_type": "echocardiogram",
+   "department": "Cardiology"
   }
  },
  "departments": [
@@ -413,7 +480,13 @@
    "group": "treating",
    "source": "list",
    "produces": [],
-   "consultants": [],
+   "consultants": [
+    {
+     "name": "Dr Rajiv Malhotra",
+     "qualification": "MS (General Surgery), MCh (Urology)",
+     "reg_no": "VXREG-20112"
+    }
+   ],
    "note": "Also writes its own clinical records (opd_note, referral_note, discharge_summary)"
   },
   {
@@ -498,7 +571,13 @@
    "group": "treating",
    "source": "list",
    "produces": [],
-   "consultants": [],
+   "consultants": [
+    {
+     "name": "Dr Shalini Gupta",
+     "qualification": "MD (General Medicine), DM (Clinical Haematology)",
+     "reg_no": "VXREG-20113"
+    }
+   ],
    "note": "Also writes its own clinical records (opd_note, referral_note, discharge_summary)"
   },
   {
@@ -558,7 +637,8 @@
    "group": "treating",
    "source": "added",
    "produces": [
-    "colonoscopy"
+    "colonoscopy",
+    "ugi_endoscopy"
    ],
    "consultants": [
     {
@@ -579,6 +659,23 @@
    "note": "Also writes its own clinical records (opd_note, referral_note, discharge_summary)"
   },
   {
+   "name": "Cardiology",
+   "code": "CARD",
+   "group": "treating",
+   "source": "added",
+   "produces": [
+    "echo"
+   ],
+   "consultants": [
+    {
+     "name": "Dr Sudhir Kamath",
+     "qualification": "MD (General Medicine), DM (Cardiology)",
+     "reg_no": "VXREG-20114"
+    }
+   ],
+   "note": "Also writes its own clinical records (opd_note, referral_note, discharge_summary). Added in night-v3 item 2.11: the 2D echocardiography of the lymphoma work-up is reported here (Vaidyx-TB has no Cardiology department: a heart record it asks for goes to the Case File's owning team)"
+  },
+  {
    "name": "Radiology",
    "code": "RAD",
    "group": "supporting",
@@ -587,6 +684,7 @@
     "cect_abdomen_pelvis",
     "cect_chest_abdomen_pelvis",
     "cect_face_neck",
+    "cect_neck_tap",
     "cect_tap",
     "chest_xray",
     "mammogram",
@@ -594,6 +692,7 @@
     "mri_oral_cavity_neck",
     "mri_pelvis",
     "mri_pelvis_rectum",
+    "mri_prostate",
     "usg_abdomen_pelvis",
     "usg_breast_axilla"
    ],
@@ -621,14 +720,19 @@
    "group": "supporting",
    "source": "list",
    "produces": [
+    "ascitic_fluid_cytology",
     "cbc",
     "cytology_ebus",
+    "her2_ihc",
     "hpe_biopsy",
     "hpe_slide_review",
     "ihc_breast",
+    "ihc_lymphoma",
     "ihc_panel",
+    "lymph_node_biopsy",
     "molecular_lung",
-    "pdl1_ihc"
+    "pdl1_ihc",
+    "trus_biopsy"
    ],
    "consultants": [
     {
@@ -665,8 +769,11 @@
    "group": "supporting",
    "source": "list",
    "produces": [
+    "ca125_cea",
     "cea",
+    "ldh",
     "lft",
+    "psa",
     "rft"
    ],
    "consultants": [
@@ -11862,6 +11969,2268 @@
      ]
     }
    ]
+  },
+  {
+   "slot": "P20",
+   "marker": "SYNTHETIC",
+   "name": "Lalitha Subramanian (SYNTHETIC)",
+   "sex": "F",
+   "age": 52,
+   "protocol": "ovary",
+   "uhid": "VXH/26/004220",
+   "abha": {
+    "number": "99-2600-0000-0120",
+    "address": "lalitha.subramanian@sbx"
+   },
+   "pmjay_id": "PMJAY-VX-26000120",
+   "treating_department": "Gynaecologic Oncology",
+   "case_files": [
+    {
+     "protocol": "ovary",
+     "ncg_setting": "advanced",
+     "owner": "Gynaecologic Oncology",
+     "first_fetch": {
+      "result": "pass",
+      "gaps": []
+     }
+    }
+   ],
+   "encounters": [
+    {
+     "kind": "OP",
+     "number": "OP/26/118727",
+     "registration": "VXH/26/004220",
+     "department": "Gynaecologic Oncology",
+     "unit": "Unit I",
+     "consultant": {
+      "name": "Dr Nandini Kulkarni",
+      "qualification": "MS (Obstetrics and Gynaecology), MCh (Gynaecologic Oncology)",
+      "reg_no": "VXREG-20105"
+     },
+     "visit_type": "new",
+     "date": {
+      "display": "14/09/2026",
+      "value": "2026-09-14"
+     }
+    }
+   ],
+   "records": [
+    {
+     "id": "P20-R01",
+     "test": "opd_note",
+     "type": "clinical_note",
+     "title": "OPD consultation note",
+     "source": "his",
+     "producing_department": "Gynaecologic Oncology",
+     "encounter": "OP/26/118727",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "14/09/2026",
+      "value": "2026-09-14"
+     },
+     "reported_on": {
+      "display": "14/09/2026 11:30",
+      "value": "2026-09-14T11:30:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Nandini Kulkarni",
+      "qualification": "MS (Obstetrics and Gynaecology), MCh (Gynaecologic Oncology)",
+      "reg_no": "VXREG-20105"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Nandini Kulkarni",
+       "qualification": "MS (Obstetrics and Gynaecology), MCh (Gynaecologic Oncology)",
+       "reg_no": "VXREG-20105"
+      },
+      "signed_at": {
+       "display": "14/09/2026 11:30",
+       "value": "2026-09-14T11:30:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B235",
+      "block": "Digitally signed by Dr Nandini Kulkarni, MS (Obstetrics and Gynaecology), MCh (Gynaecologic Oncology), Reg. No. VXREG-20105, 14/09/2026 11:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B235",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "presenting_complaint": "Abdominal distension and loss of appetite for 2 months",
+      "ecog": "1",
+      "menopausal_status": "Postmenopausal for 3 years",
+      "comorbidities": "Type 2 diabetes mellitus on metformin, controlled",
+      "family_history": "No family history of breast or ovarian cancer",
+      "clinical_question": "Neoadjuvant chemotherapy with interval cytoreduction versus primary cytoreductive surgery: board opinion"
+     },
+     "serves": {
+      "ovary": [
+       "clinical_history"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P20-R02",
+     "test": "ca125_cea",
+     "type": "lab",
+     "title": "Serum CA-125 and CEA",
+     "source": "his",
+     "producing_department": "Biochemistry",
+     "encounter": "OP/26/118727",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "14/09/2026",
+      "value": "2026-09-14"
+     },
+     "accession": "BIO/26/02235",
+     "sample_barcode": "VXS26000191",
+     "reported_on": {
+      "display": "14/09/2026 17:10",
+      "value": "2026-09-14T17:10:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Anil Saxena",
+      "qualification": "MD (Biochemistry)",
+      "reg_no": "VXREG-20206"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Anil Saxena",
+       "qualification": "MD (Biochemistry)",
+       "reg_no": "VXREG-20206"
+      },
+      "signed_at": {
+       "display": "14/09/2026 17:10",
+       "value": "2026-09-14T17:10:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 14/09/2026 17:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "ca125": "1,246 U/mL",
+      "cea": "2.4 ng/mL"
+     },
+     "serves": {
+      "ovary": [
+       "ca125_cea"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P20-R03",
+     "test": "cbc",
+     "type": "lab",
+     "title": "Complete blood count",
+     "source": "his",
+     "producing_department": "Pathology",
+     "encounter": "OP/26/118727",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "14/09/2026",
+      "value": "2026-09-14"
+     },
+     "accession": "PATH/26/00464",
+     "sample_barcode": "VXS26000192",
+     "reported_on": {
+      "display": "14/09/2026 14:20",
+      "value": "2026-09-14T14:20:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Revathi Krishnan",
+      "qualification": "MD (Pathology)",
+      "reg_no": "VXREG-20204"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Revathi Krishnan",
+       "qualification": "MD (Pathology)",
+       "reg_no": "VXREG-20204"
+      },
+      "signed_at": {
+       "display": "14/09/2026 14:20",
+       "value": "2026-09-14T14:20:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 14/09/2026 14:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "haemoglobin": "10.8 gm%",
+      "wbc": "8,200 /cumm",
+      "platelets": "3.9 lakhs/cumm"
+     },
+     "serves": {
+      "ovary": [
+       "blood_counts_org"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P20-R04",
+     "test": "lft",
+     "type": "lab",
+     "title": "Liver function tests",
+     "source": "his",
+     "producing_department": "Biochemistry",
+     "encounter": "OP/26/118727",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "14/09/2026",
+      "value": "2026-09-14"
+     },
+     "accession": "BIO/26/02236",
+     "sample_barcode": "VXS26000193",
+     "reported_on": {
+      "display": "14/09/2026 15:40",
+      "value": "2026-09-14T15:40:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Anil Saxena",
+      "qualification": "MD (Biochemistry)",
+      "reg_no": "VXREG-20206"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Anil Saxena",
+       "qualification": "MD (Biochemistry)",
+       "reg_no": "VXREG-20206"
+      },
+      "signed_at": {
+       "display": "14/09/2026 15:40",
+       "value": "2026-09-14T15:40:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 14/09/2026 15:40, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "bilirubin": "0.6 mg/dL",
+      "sgot": "26 U/L",
+      "sgpt": "21 U/L"
+     },
+     "serves": {
+      "ovary": [
+       "blood_counts_org"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P20-R05",
+     "test": "rft",
+     "type": "lab",
+     "title": "Renal function tests",
+     "source": "his",
+     "producing_department": "Biochemistry",
+     "encounter": "OP/26/118727",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "14/09/2026",
+      "value": "2026-09-14"
+     },
+     "accession": "BIO/26/02237",
+     "sample_barcode": "VXS26000194",
+     "reported_on": {
+      "display": "14/09/2026 15:45",
+      "value": "2026-09-14T15:45:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Anil Saxena",
+      "qualification": "MD (Biochemistry)",
+      "reg_no": "VXREG-20206"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Anil Saxena",
+       "qualification": "MD (Biochemistry)",
+       "reg_no": "VXREG-20206"
+      },
+      "signed_at": {
+       "display": "14/09/2026 15:45",
+       "value": "2026-09-14T15:45:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 14/09/2026 15:45, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "creatinine": "0.9 mg/dL",
+      "urea": "28 mg/dL"
+     },
+     "serves": {
+      "ovary": [
+       "blood_counts_org"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P20-R06",
+     "test": "cect_tap",
+     "type": "ct",
+     "title": "CECT thorax, abdomen and pelvis",
+     "source": "his",
+     "producing_department": "Radiology",
+     "encounter": "OP/26/118727",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "14/09/2026",
+      "value": "2026-09-14"
+     },
+     "accession": "RAD/26/01021",
+     "reported_on": {
+      "display": "16/09/2026 17:30",
+      "value": "2026-09-16T17:30:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Sanjay Joshi",
+      "qualification": "MD (Radiodiagnosis)",
+      "reg_no": "VXREG-20201"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Sanjay Joshi",
+       "qualification": "MD (Radiodiagnosis)",
+       "reg_no": "VXREG-20201"
+      },
+      "signed_at": {
+       "display": "16/09/2026 17:30",
+       "value": "2026-09-16T17:30:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 16/09/2026 17:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "lesion_size": "Bilateral complex solid-cystic adnexal masses, right 9.2 x 7.8 cm and left 6.4 x 5.1 cm",
+      "nodal_findings": "Enlarged right external iliac and left para-aortic lymph nodes, largest 1.8 cm",
+      "distant_findings": "Gross ascites with omental caking and peritoneal deposits; no liver parenchymal or lung metastasis; no pleural effusion",
+      "impression": "Bilateral ovarian neoplasm with peritoneal carcinomatosis and ascites",
+      "recorded_stage": "FIGO stage IIIC (radiological, as reported)"
+     },
+     "serves": {
+      "ovary": [
+       "imaging_cect"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P20-R07",
+     "test": "ascitic_fluid_cytology",
+     "type": "cytology",
+     "title": "Ascitic fluid cytology (with cell block)",
+     "source": "his",
+     "producing_department": "Pathology",
+     "encounter": "OP/26/118727",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "15/09/2026",
+      "value": "2026-09-15"
+     },
+     "accession": "PATH/26/00465",
+     "sample_barcode": "VXS26000195",
+     "reported_on": {
+      "display": "17/09/2026 15:00",
+      "value": "2026-09-17T15:00:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Revathi Krishnan",
+      "qualification": "MD (Pathology)",
+      "reg_no": "VXREG-20204"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Revathi Krishnan",
+       "qualification": "MD (Pathology)",
+       "reg_no": "VXREG-20204"
+      },
+      "signed_at": {
+       "display": "17/09/2026 15:00",
+       "value": "2026-09-17T15:00:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 17/09/2026 15:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "specimen": "Ascitic fluid, 500 mL, straw coloured, from a diagnostic paracentesis; smears and a cell block prepared",
+      "microscopy": "Smears show papillary clusters and three dimensional groups of atypical cells with a high nuclear to cytoplasmic ratio and prominent nucleoli, in a background of reactive mesothelial cells and lymphocytes.",
+      "histologic_type": "Positive for malignant cells: serous carcinoma"
+     },
+     "serves": {
+      "ovary": [
+       "ascitic_cytology"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P20-R08",
+     "test": "hpe_biopsy",
+     "type": "histopathology",
+     "title": "Histopathology report (USG-guided omental biopsy)",
+     "source": "his",
+     "producing_department": "Pathology",
+     "encounter": "OP/26/118727",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "17/09/2026",
+      "value": "2026-09-17"
+     },
+     "accession": "PATH/26/00466",
+     "sample_barcode": "VXS26000196",
+     "block_no": "PATH/26/00466-A1",
+     "reported_on": {
+      "display": "22/09/2026 16:00",
+      "value": "2026-09-22T16:00:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Revathi Krishnan",
+      "qualification": "MD (Pathology)",
+      "reg_no": "VXREG-20204"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Revathi Krishnan",
+       "qualification": "MD (Pathology)",
+       "reg_no": "VXREG-20204"
+      },
+      "signed_at": {
+       "display": "22/09/2026 16:00",
+       "value": "2026-09-22T16:00:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 22/09/2026 16:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "specimen": "USG-guided core biopsy of the omental deposit, four cores, in 10% buffered formalin",
+      "microscopy": "Cores show tumour arranged in papillae and solid sheets with slit-like spaces; marked nuclear pleomorphism and brisk mitotic activity.",
+      "ihc_markers": "WT1 positive, PAX8 positive, p53 aberrant (diffuse strong)",
+      "histologic_type": "High-grade serous carcinoma",
+      "grade": "High grade"
+     },
+     "serves": {
+      "ovary": [
+       "histopathology",
+       "image_guided_biopsy"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    }
+   ]
+  },
+  {
+   "slot": "P21",
+   "marker": "SYNTHETIC",
+   "name": "Suresh Chandra Mishra (SYNTHETIC)",
+   "sex": "M",
+   "age": 68,
+   "protocol": "prostate",
+   "uhid": "VXH/26/004221",
+   "abha": null,
+   "pmjay_id": "PMJAY-VX-26000121",
+   "treating_department": "Urology",
+   "case_files": [
+    {
+     "protocol": "prostate",
+     "ncg_setting": "locally_extensive",
+     "owner": "Urology",
+     "first_fetch": {
+      "result": "pass",
+      "gaps": []
+     }
+    }
+   ],
+   "encounters": [
+    {
+     "kind": "OP",
+     "number": "OP/26/118728",
+     "registration": "VXH/26/004221",
+     "department": "Urology",
+     "unit": "Unit I",
+     "consultant": {
+      "name": "Dr Rajiv Malhotra",
+      "qualification": "MS (General Surgery), MCh (Urology)",
+      "reg_no": "VXREG-20112"
+     },
+     "visit_type": "new",
+     "date": {
+      "display": "01/09/2026",
+      "value": "2026-09-01"
+     }
+    }
+   ],
+   "records": [
+    {
+     "id": "P21-R01",
+     "test": "opd_note",
+     "type": "clinical_note",
+     "title": "OPD consultation note",
+     "source": "his",
+     "producing_department": "Urology",
+     "encounter": "OP/26/118728",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "01/09/2026",
+      "value": "2026-09-01"
+     },
+     "reported_on": {
+      "display": "01/09/2026 12:00",
+      "value": "2026-09-01T12:00:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Rajiv Malhotra",
+      "qualification": "MS (General Surgery), MCh (Urology)",
+      "reg_no": "VXREG-20112"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Rajiv Malhotra",
+       "qualification": "MS (General Surgery), MCh (Urology)",
+       "reg_no": "VXREG-20112"
+      },
+      "signed_at": {
+       "display": "01/09/2026 12:00",
+       "value": "2026-09-01T12:00:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B293",
+      "block": "Digitally signed by Dr Rajiv Malhotra, MS (General Surgery), MCh (Urology), Reg. No. VXREG-20112, 01/09/2026 12:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B293",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "presenting_complaint": "Increased frequency of urination and poor urinary stream for 6 months",
+      "ecog": "1",
+      "comorbidities": "Hypertension on amlodipine 5 mg",
+      "dre": "Hard nodular prostate, right lobe more than left, irregular on the right side; rectal mucosa free",
+      "clinical_question": "Radical radiotherapy with long-term androgen deprivation versus radical prostatectomy: board opinion"
+     },
+     "serves": {
+      "prostate": [
+       "clinical_history"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P21-R02",
+     "test": "psa",
+     "type": "lab",
+     "title": "Serum PSA (total)",
+     "source": "his",
+     "producing_department": "Biochemistry",
+     "encounter": "OP/26/118728",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "01/09/2026",
+      "value": "2026-09-01"
+     },
+     "accession": "BIO/26/02238",
+     "sample_barcode": "VXS26000197",
+     "reported_on": {
+      "display": "01/09/2026 16:30",
+      "value": "2026-09-01T16:30:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Anil Saxena",
+      "qualification": "MD (Biochemistry)",
+      "reg_no": "VXREG-20206"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Anil Saxena",
+       "qualification": "MD (Biochemistry)",
+       "reg_no": "VXREG-20206"
+      },
+      "signed_at": {
+       "display": "01/09/2026 16:30",
+       "value": "2026-09-01T16:30:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 01/09/2026 16:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "psa": "38.6 ng/mL"
+     },
+     "serves": {
+      "prostate": [
+       "psa"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P21-R03",
+     "test": "mri_prostate",
+     "type": "mri",
+     "title": "Multiparametric MRI prostate",
+     "source": "his",
+     "producing_department": "Radiology",
+     "encounter": "OP/26/118728",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "01/09/2026",
+      "value": "2026-09-01"
+     },
+     "accession": "RAD/26/01022",
+     "reported_on": {
+      "display": "03/09/2026 18:00",
+      "value": "2026-09-03T18:00:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Meenakshi Pillai",
+      "qualification": "MD (Radiodiagnosis)",
+      "reg_no": "VXREG-20202"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Meenakshi Pillai",
+       "qualification": "MD (Radiodiagnosis)",
+       "reg_no": "VXREG-20202"
+      },
+      "signed_at": {
+       "display": "03/09/2026 18:00",
+       "value": "2026-09-03T18:00:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B295",
+      "block": "Digitally signed by Dr Meenakshi Pillai, MD (Radiodiagnosis), Reg. No. VXREG-20202, 03/09/2026 18:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B295",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "prostate_volume": "42 cc",
+      "lesion_size": "Right peripheral zone lesion, mid gland to base, 2.4 x 1.9 cm",
+      "extraprostatic_extension": "Present on the right posterolateral aspect; right seminal vesicle involved",
+      "nodal_findings": "No enlarged pelvic lymph nodes",
+      "pirads": "PI-RADS 5",
+      "recorded_stage": "mrT3b N0 (as reported)"
+     },
+     "serves": {
+      "prostate": [
+       "mri_prostate"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P21-R04",
+     "test": "trus_biopsy",
+     "type": "histopathology",
+     "title": "Histopathology report (TRUS-guided prostate biopsy)",
+     "source": "his",
+     "producing_department": "Pathology",
+     "encounter": "OP/26/118728",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "04/09/2026",
+      "value": "2026-09-04"
+     },
+     "accession": "PATH/26/00467",
+     "sample_barcode": "VXS26000198",
+     "block_no": "PATH/26/00467-A1",
+     "reported_on": {
+      "display": "09/09/2026 16:30",
+      "value": "2026-09-09T16:30:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Revathi Krishnan",
+      "qualification": "MD (Pathology)",
+      "reg_no": "VXREG-20204"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Revathi Krishnan",
+       "qualification": "MD (Pathology)",
+       "reg_no": "VXREG-20204"
+      },
+      "signed_at": {
+       "display": "09/09/2026 16:30",
+       "value": "2026-09-09T16:30:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 09/09/2026 16:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "specimen": "TRUS-guided systematic biopsy, 12 cores (right and left; base, mid and apex), in 12 labelled containers",
+      "microscopy": "Cores show infiltrating small and fused glands with prominent nucleoli; cribriform glands present in the right mid cores.",
+      "pni": "Present",
+      "histologic_type": "Acinar adenocarcinoma of the prostate",
+      "gleason_isup": "Gleason score 4+3=7, ISUP grade group 3",
+      "positive_cores": "6 of 12 cores positive (right 5, left 1); maximum core involvement 70 % (right mid)"
+     },
+     "serves": {
+      "prostate": [
+       "histopathology",
+       "biopsy_technique"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P21-R05",
+     "test": "cect_abdomen_pelvis",
+     "type": "ct",
+     "title": "CECT abdomen and pelvis",
+     "source": "his",
+     "producing_department": "Radiology",
+     "encounter": "OP/26/118728",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "09/09/2026",
+      "value": "2026-09-09"
+     },
+     "accession": "RAD/26/01023",
+     "reported_on": {
+      "display": "10/09/2026 17:00",
+      "value": "2026-09-10T17:00:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Sanjay Joshi",
+      "qualification": "MD (Radiodiagnosis)",
+      "reg_no": "VXREG-20201"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Sanjay Joshi",
+       "qualification": "MD (Radiodiagnosis)",
+       "reg_no": "VXREG-20201"
+      },
+      "signed_at": {
+       "display": "10/09/2026 17:00",
+       "value": "2026-09-10T17:00:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 10/09/2026 17:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "prostate_findings": "Bulky prostate with an irregular right posterolateral contour",
+      "nodal_findings": "No significant retroperitoneal or pelvic lymphadenopathy",
+      "distant_findings": "No liver lesion; no lytic or sclerotic lesion in the skeleton included in the scan"
+     },
+     "serves": {
+      "prostate": [
+       "ct_abdomen_pelvis"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P21-R06",
+     "test": "bone_scan",
+     "type": "bone_scan",
+     "title": "Whole-body bone scan (Tc-99m MDP)",
+     "source": "his",
+     "producing_department": "Nuclear Medicine",
+     "encounter": "OP/26/118728",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "09/09/2026",
+      "value": "2026-09-09"
+     },
+     "accession": "NM/26/00156",
+     "reported_on": {
+      "display": "11/09/2026 15:30",
+      "value": "2026-09-11T15:30:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Vikram Rathore",
+      "qualification": "MD (Nuclear Medicine)",
+      "reg_no": "VXREG-20208"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Vikram Rathore",
+       "qualification": "MD (Nuclear Medicine)",
+       "reg_no": "VXREG-20208"
+      },
+      "signed_at": {
+       "display": "11/09/2026 15:30",
+       "value": "2026-09-11T15:30:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B20F",
+      "block": "Digitally signed by Dr Vikram Rathore, MD (Nuclear Medicine), Reg. No. VXREG-20208, 11/09/2026 15:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B20F",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "distant_findings": "No scintigraphic evidence of skeletal metastasis; degenerative uptake in the lower lumbar spine"
+     },
+     "serves": {
+      "prostate": [
+       "bone_scan"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P21-R07",
+     "test": "cbc",
+     "type": "lab",
+     "title": "Complete blood count",
+     "source": "his",
+     "producing_department": "Pathology",
+     "encounter": "OP/26/118728",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "01/09/2026",
+      "value": "2026-09-01"
+     },
+     "accession": "PATH/26/00468",
+     "sample_barcode": "VXS26000199",
+     "reported_on": {
+      "display": "01/09/2026 13:40",
+      "value": "2026-09-01T13:40:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Revathi Krishnan",
+      "qualification": "MD (Pathology)",
+      "reg_no": "VXREG-20204"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Revathi Krishnan",
+       "qualification": "MD (Pathology)",
+       "reg_no": "VXREG-20204"
+      },
+      "signed_at": {
+       "display": "01/09/2026 13:40",
+       "value": "2026-09-01T13:40:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 01/09/2026 13:40, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "haemoglobin": "13.4 gm%",
+      "wbc": "6,900 /cumm",
+      "platelets": "2.4 lakhs/cumm"
+     },
+     "serves": {},
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P21-R08",
+     "test": "rft",
+     "type": "lab",
+     "title": "Renal function tests",
+     "source": "his",
+     "producing_department": "Biochemistry",
+     "encounter": "OP/26/118728",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "01/09/2026",
+      "value": "2026-09-01"
+     },
+     "accession": "BIO/26/02239",
+     "sample_barcode": "VXS26000200",
+     "reported_on": {
+      "display": "01/09/2026 15:10",
+      "value": "2026-09-01T15:10:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Anil Saxena",
+      "qualification": "MD (Biochemistry)",
+      "reg_no": "VXREG-20206"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Anil Saxena",
+       "qualification": "MD (Biochemistry)",
+       "reg_no": "VXREG-20206"
+      },
+      "signed_at": {
+       "display": "01/09/2026 15:10",
+       "value": "2026-09-01T15:10:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 01/09/2026 15:10, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "creatinine": "1.1 mg/dL",
+      "urea": "34 mg/dL"
+     },
+     "serves": {},
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    }
+   ]
+  },
+  {
+   "slot": "P22",
+   "marker": "SYNTHETIC",
+   "name": "Dinesh Kumar Verma (SYNTHETIC)",
+   "sex": "M",
+   "age": 58,
+   "protocol": "stomach",
+   "uhid": "VXH/26/004222",
+   "abha": {
+    "number": "99-2600-0000-0122",
+    "address": "dinesh.verma@sbx"
+   },
+   "pmjay_id": null,
+   "treating_department": "Gastrointestinal Surgery",
+   "case_files": [
+    {
+     "protocol": "stomach",
+     "ncg_setting": "locally_advanced",
+     "owner": "Gastrointestinal Surgery",
+     "first_fetch": {
+      "result": "gaps",
+      "gaps": [
+       {
+        "requirement": "eus",
+        "level": 1,
+        "reason": "never_ordered",
+        "department": "Gastrointestinal Surgery",
+        "accession": null,
+        "note": "Optimal record left out on purpose: no endoscopic ultrasonography was ordered, so the HIS holds no order and no report"
+       }
+      ]
+     }
+    }
+   ],
+   "encounters": [
+    {
+     "kind": "OP",
+     "number": "OP/26/118729",
+     "registration": "VXH/26/004222",
+     "department": "Gastrointestinal Surgery",
+     "unit": "Unit I",
+     "consultant": {
+      "name": "Dr Manoj Tiwari",
+      "qualification": "MS (General Surgery), MCh (Surgical Gastroenterology)",
+      "reg_no": "VXREG-20107"
+     },
+     "visit_type": "new",
+     "date": {
+      "display": "07/09/2026",
+      "value": "2026-09-07"
+     }
+    }
+   ],
+   "records": [
+    {
+     "id": "P22-R01",
+     "test": "opd_note",
+     "type": "clinical_note",
+     "title": "OPD consultation note",
+     "source": "his",
+     "producing_department": "Gastrointestinal Surgery",
+     "encounter": "OP/26/118729",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "07/09/2026",
+      "value": "2026-09-07"
+     },
+     "reported_on": {
+      "display": "07/09/2026 12:15",
+      "value": "2026-09-07T12:15:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Manoj Tiwari",
+      "qualification": "MS (General Surgery), MCh (Surgical Gastroenterology)",
+      "reg_no": "VXREG-20107"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Manoj Tiwari",
+       "qualification": "MS (General Surgery), MCh (Surgical Gastroenterology)",
+       "reg_no": "VXREG-20107"
+      },
+      "signed_at": {
+       "display": "07/09/2026 12:15",
+       "value": "2026-09-07T12:15:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B288",
+      "block": "Digitally signed by Dr Manoj Tiwari, MS (General Surgery), MCh (Surgical Gastroenterology), Reg. No. VXREG-20107, 07/09/2026 12:15, Vaidyx Demo CA, certificate serial VXDCA-00A1B288",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "presenting_complaint": "Upper abdominal pain, early satiety and loss of weight (6 kg) for 3 months",
+      "ecog": "1",
+      "comorbidities": "Type 2 diabetes mellitus on metformin; ex-smoker",
+      "nutrition": "Weight 54 kg, BMI 19.8 kg/m2, 6 kg weight loss in 3 months; dietitian review done, oral nutritional supplements started",
+      "clinical_question": "Perioperative chemotherapy followed by D2 gastrectomy versus upfront surgery: board opinion"
+     },
+     "serves": {
+      "stomach": [
+       "clinical_history",
+       "nutrition"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P22-R02",
+     "test": "ugi_endoscopy",
+     "type": "endoscopy",
+     "title": "Upper GI endoscopy",
+     "source": "his",
+     "producing_department": "Medical Gastroenterology",
+     "encounter": "OP/26/118729",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "07/09/2026",
+      "value": "2026-09-07"
+     },
+     "accession": "MGE/26/00105",
+     "reported_on": {
+      "display": "08/09/2026 13:00",
+      "value": "2026-09-08T13:00:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Deepa Hegde",
+      "qualification": "MD (General Medicine), DM (Gastroenterology)",
+      "reg_no": "VXREG-20111"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Deepa Hegde",
+       "qualification": "MD (General Medicine), DM (Gastroenterology)",
+       "reg_no": "VXREG-20111"
+      },
+      "signed_at": {
+       "display": "08/09/2026 13:00",
+       "value": "2026-09-08T13:00:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B273",
+      "block": "Digitally signed by Dr Deepa Hegde, MD (General Medicine), DM (Gastroenterology), Reg. No. VXREG-20111, 08/09/2026 13:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B273",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "oesophagus": "Oesophagus and gastro-oesophageal junction normal",
+      "tumour_site_stomach": "Ulceroproliferative growth in the antrum along the lesser curvature, extending up to the pylorus, about 4 cm long",
+      "biopsies": "Multiple biopsies taken from the edge of the growth and sent for histopathology",
+      "impression": "Growth in the gastric antrum, suspicious of malignancy"
+     },
+     "serves": {
+      "stomach": [
+       "upper_gi_endoscopy"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P22-R03",
+     "test": "hpe_biopsy",
+     "type": "histopathology",
+     "title": "Histopathology report (gastric biopsy)",
+     "source": "his",
+     "producing_department": "Pathology",
+     "encounter": "OP/26/118729",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "08/09/2026",
+      "value": "2026-09-08"
+     },
+     "accession": "PATH/26/00469",
+     "sample_barcode": "VXS26000201",
+     "block_no": "PATH/26/00469-A1",
+     "reported_on": {
+      "display": "11/09/2026 16:00",
+      "value": "2026-09-11T16:00:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Revathi Krishnan",
+      "qualification": "MD (Pathology)",
+      "reg_no": "VXREG-20204"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Revathi Krishnan",
+       "qualification": "MD (Pathology)",
+       "reg_no": "VXREG-20204"
+      },
+      "signed_at": {
+       "display": "11/09/2026 16:00",
+       "value": "2026-09-11T16:00:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 11/09/2026 16:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "specimen": "Endoscopic biopsies from the gastric antrum, multiple grey-white bits, in 10% buffered formalin",
+      "microscopy": "Gastric mucosa with an infiltrating tumour in irregular glands and cribriform structures lined by pleomorphic cells with vesicular nuclei, in a desmoplastic stroma.",
+      "histologic_type": "Adenocarcinoma, intestinal type (Lauren classification)",
+      "grade": "Moderately differentiated"
+     },
+     "serves": {
+      "stomach": [
+       "histopathology"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P22-R04",
+     "test": "her2_ihc",
+     "type": "ihc",
+     "title": "IHC: HER2 (gastric)",
+     "source": "his",
+     "producing_department": "Pathology",
+     "encounter": "OP/26/118729",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "11/09/2026",
+      "value": "2026-09-11"
+     },
+     "accession": "PATH/26/00470",
+     "sample_barcode": "VXS26000202",
+     "block_no": "PATH/26/00470-A1",
+     "reported_on": {
+      "display": "14/09/2026 15:30",
+      "value": "2026-09-14T15:30:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Revathi Krishnan",
+      "qualification": "MD (Pathology)",
+      "reg_no": "VXREG-20204"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Revathi Krishnan",
+       "qualification": "MD (Pathology)",
+       "reg_no": "VXREG-20204"
+      },
+      "signed_at": {
+       "display": "14/09/2026 15:30",
+       "value": "2026-09-14T15:30:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 14/09/2026 15:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "her2": "Score 1+ (Negative), gastric biopsy scoring"
+     },
+     "serves": {
+      "stomach": [
+       "her2"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P22-R05",
+     "test": "cect_tap",
+     "type": "ct",
+     "title": "CECT thorax, abdomen and pelvis",
+     "source": "his",
+     "producing_department": "Radiology",
+     "encounter": "OP/26/118729",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "08/09/2026",
+      "value": "2026-09-08"
+     },
+     "accession": "RAD/26/01024",
+     "reported_on": {
+      "display": "09/09/2026 18:30",
+      "value": "2026-09-09T18:30:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Sanjay Joshi",
+      "qualification": "MD (Radiodiagnosis)",
+      "reg_no": "VXREG-20201"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Sanjay Joshi",
+       "qualification": "MD (Radiodiagnosis)",
+       "reg_no": "VXREG-20201"
+      },
+      "signed_at": {
+       "display": "09/09/2026 18:30",
+       "value": "2026-09-09T18:30:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 09/09/2026 18:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "lesion_size": "Irregular circumferential wall thickening of the gastric antrum and pylorus, maximum thickness 1.8 cm, length 5.2 cm, with perigastric fat stranding",
+      "nodal_findings": "Multiple perigastric lymph nodes along the lesser curvature, largest 1.4 cm",
+      "distant_findings": "No liver lesion; no ascites or peritoneal nodularity; lungs clear; no distant metastasis",
+      "recorded_stage": "cT4a N1 M0 (radiological, as reported)"
+     },
+     "serves": {
+      "stomach": [
+       "cect_tap"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P22-R06",
+     "test": "cbc",
+     "type": "lab",
+     "title": "Complete blood count",
+     "source": "his",
+     "producing_department": "Pathology",
+     "encounter": "OP/26/118729",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "07/09/2026",
+      "value": "2026-09-07"
+     },
+     "accession": "PATH/26/00471",
+     "sample_barcode": "VXS26000203",
+     "reported_on": {
+      "display": "07/09/2026 13:30",
+      "value": "2026-09-07T13:30:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Revathi Krishnan",
+      "qualification": "MD (Pathology)",
+      "reg_no": "VXREG-20204"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Revathi Krishnan",
+       "qualification": "MD (Pathology)",
+       "reg_no": "VXREG-20204"
+      },
+      "signed_at": {
+       "display": "07/09/2026 13:30",
+       "value": "2026-09-07T13:30:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 07/09/2026 13:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "haemoglobin": "9.6 gm%",
+      "wbc": "7,100 /cumm",
+      "platelets": "3.2 lakhs/cumm"
+     },
+     "serves": {},
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P22-R07",
+     "test": "lft",
+     "type": "lab",
+     "title": "Liver function tests",
+     "source": "his",
+     "producing_department": "Biochemistry",
+     "encounter": "OP/26/118729",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "07/09/2026",
+      "value": "2026-09-07"
+     },
+     "accession": "BIO/26/02240",
+     "sample_barcode": "VXS26000204",
+     "reported_on": {
+      "display": "07/09/2026 15:00",
+      "value": "2026-09-07T15:00:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Anil Saxena",
+      "qualification": "MD (Biochemistry)",
+      "reg_no": "VXREG-20206"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Anil Saxena",
+       "qualification": "MD (Biochemistry)",
+       "reg_no": "VXREG-20206"
+      },
+      "signed_at": {
+       "display": "07/09/2026 15:00",
+       "value": "2026-09-07T15:00:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 07/09/2026 15:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "bilirubin": "0.8 mg/dL",
+      "sgot": "31 U/L",
+      "sgpt": "27 U/L"
+     },
+     "serves": {},
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P22-R08",
+     "test": "rft",
+     "type": "lab",
+     "title": "Renal function tests",
+     "source": "his",
+     "producing_department": "Biochemistry",
+     "encounter": "OP/26/118729",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "07/09/2026",
+      "value": "2026-09-07"
+     },
+     "accession": "BIO/26/02241",
+     "sample_barcode": "VXS26000205",
+     "reported_on": {
+      "display": "07/09/2026 15:05",
+      "value": "2026-09-07T15:05:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Anil Saxena",
+      "qualification": "MD (Biochemistry)",
+      "reg_no": "VXREG-20206"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Anil Saxena",
+       "qualification": "MD (Biochemistry)",
+       "reg_no": "VXREG-20206"
+      },
+      "signed_at": {
+       "display": "07/09/2026 15:05",
+       "value": "2026-09-07T15:05:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 07/09/2026 15:05, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "creatinine": "0.9 mg/dL",
+      "urea": "26 mg/dL"
+     },
+     "serves": {},
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P22-R09",
+     "test": "pre_anaesthetic_check",
+     "type": "clinical_note",
+     "title": "Pre-anaesthetic check-up",
+     "source": "his",
+     "producing_department": "Anaesthesiology",
+     "encounter": "OP/26/118729",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "14/09/2026",
+      "value": "2026-09-14"
+     },
+     "reported_on": {
+      "display": "14/09/2026 12:30",
+      "value": "2026-09-14T12:30:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Lata Deshmukh",
+      "qualification": "MD (Anaesthesiology)",
+      "reg_no": "VXREG-20210"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Lata Deshmukh",
+       "qualification": "MD (Anaesthesiology)",
+       "reg_no": "VXREG-20210"
+      },
+      "signed_at": {
+       "display": "14/09/2026 12:30",
+       "value": "2026-09-14T12:30:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B291",
+      "block": "Digitally signed by Dr Lata Deshmukh, MD (Anaesthesiology), Reg. No. VXREG-20210, 14/09/2026 12:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B291",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "presenting_complaint": "Referred for a pre-anaesthetic check-up before the planned gastric surgery",
+      "comorbidities": "Type 2 diabetes mellitus on metformin; ex-smoker",
+      "airway": "Mallampati grade II; adequate mouth opening and neck movements",
+      "asa_grade": "ASA physical status II",
+      "plan": "Fit for surgery under general anaesthesia (ASA II)"
+     },
+     "serves": {
+      "stomach": [
+       "pre_anaesthetic"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    }
+   ]
+  },
+  {
+   "slot": "P23",
+   "marker": "SYNTHETIC",
+   "name": "Arjun Prakash Nair (SYNTHETIC)",
+   "sex": "M",
+   "age": 34,
+   "protocol": "lymphoma",
+   "uhid": "VXH/26/004223",
+   "abha": {
+    "number": "99-2600-0000-0123",
+    "address": "arjun.nair@sbx"
+   },
+   "pmjay_id": "PMJAY-VX-26000123",
+   "treating_department": "Haematology",
+   "case_files": [
+    {
+     "protocol": "lymphoma",
+     "ncg_setting": "adult_hodgkin",
+     "owner": "Haematology",
+     "first_fetch": {
+      "result": "pass",
+      "gaps": []
+     }
+    }
+   ],
+   "encounters": [
+    {
+     "kind": "OP",
+     "number": "OP/26/118730",
+     "registration": "VXH/26/004223",
+     "department": "Haematology",
+     "unit": "Unit I",
+     "consultant": {
+      "name": "Dr Shalini Gupta",
+      "qualification": "MD (General Medicine), DM (Clinical Haematology)",
+      "reg_no": "VXREG-20113"
+     },
+     "visit_type": "new",
+     "date": {
+      "display": "21/09/2026",
+      "value": "2026-09-21"
+     }
+    }
+   ],
+   "records": [
+    {
+     "id": "P23-R01",
+     "test": "opd_note",
+     "type": "clinical_note",
+     "title": "OPD consultation note",
+     "source": "his",
+     "producing_department": "Haematology",
+     "encounter": "OP/26/118730",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "21/09/2026",
+      "value": "2026-09-21"
+     },
+     "reported_on": {
+      "display": "21/09/2026 12:30",
+      "value": "2026-09-21T12:30:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Shalini Gupta",
+      "qualification": "MD (General Medicine), DM (Clinical Haematology)",
+      "reg_no": "VXREG-20113"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Shalini Gupta",
+       "qualification": "MD (General Medicine), DM (Clinical Haematology)",
+       "reg_no": "VXREG-20113"
+      },
+      "signed_at": {
+       "display": "21/09/2026 12:30",
+       "value": "2026-09-21T12:30:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B294",
+      "block": "Digitally signed by Dr Shalini Gupta, MD (General Medicine), DM (Clinical Haematology), Reg. No. VXREG-20113, 21/09/2026 12:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B294",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "presenting_complaint": "Painless swelling on the left side of the neck for 3 months",
+      "b_symptoms": "Present: evening fever and drenching night sweats for 1 month; weight loss of 7 kg (more than 10 % of body weight) in 3 months",
+      "ecog": "1",
+      "comorbidities": "No known comorbidities",
+      "examination": "Left cervical (levels III and IV) and left supraclavicular lymph nodes, largest 3.5 x 3 cm, firm and non-tender; no hepatosplenomegaly",
+      "fertility": "Semen cryopreservation discussed with the patient before chemotherapy",
+      "clinical_question": "Treatment plan for the lymph node disease and fertility preservation before chemotherapy: board opinion"
+     },
+     "serves": {
+      "lymphoma": [
+       "clinical_history",
+       "fertility_semen_lymphoma"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P23-R02",
+     "test": "lymph_node_biopsy",
+     "type": "histopathology",
+     "title": "Histopathology report (lymph node excision biopsy)",
+     "source": "his",
+     "producing_department": "Pathology",
+     "encounter": "OP/26/118730",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "21/09/2026",
+      "value": "2026-09-21"
+     },
+     "accession": "PATH/26/00472",
+     "sample_barcode": "VXS26000206",
+     "block_no": "PATH/26/00472-A1",
+     "reported_on": {
+      "display": "25/09/2026 16:00",
+      "value": "2026-09-25T16:00:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Sameer Kapoor",
+      "qualification": "MD (Pathology)",
+      "reg_no": "VXREG-20205"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Sameer Kapoor",
+       "qualification": "MD (Pathology)",
+       "reg_no": "VXREG-20205"
+      },
+      "signed_at": {
+       "display": "25/09/2026 16:00",
+       "value": "2026-09-25T16:00:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B296",
+      "block": "Digitally signed by Dr Sameer Kapoor, MD (Pathology), Reg. No. VXREG-20205, 25/09/2026 16:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B296",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "specimen": "Excision biopsy, left supraclavicular lymph node, 3.2 x 2.8 x 2.0 cm, in 10% buffered formalin",
+      "gross": "Grey-white nodular cut surface with fibrous bands; entirely submitted",
+      "microscopy": "Lymph node with effaced architecture, divided into nodules by broad collagen bands. The nodules show scattered large mononuclear and binucleate Reed-Sternberg cells and lacunar cells in a mixed background of small lymphocytes, eosinophils and histiocytes.",
+      "histologic_type": "Classical Hodgkin lymphoma, nodular sclerosis subtype"
+     },
+     "serves": {
+      "lymphoma": [
+       "lymph_node_histopathology",
+       "lymphoma_ihc"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P23-R03",
+     "test": "ihc_lymphoma",
+     "type": "ihc",
+     "title": "IHC panel: lymphoma (CD45, CD30, CD15, CD20, PAX5, CD3, Ki-67)",
+     "source": "his",
+     "producing_department": "Pathology",
+     "encounter": "OP/26/118730",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "25/09/2026",
+      "value": "2026-09-25"
+     },
+     "accession": "PATH/26/00473",
+     "sample_barcode": "VXS26000207",
+     "block_no": "PATH/26/00473-A1",
+     "reported_on": {
+      "display": "28/09/2026 15:00",
+      "value": "2026-09-28T15:00:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Sameer Kapoor",
+      "qualification": "MD (Pathology)",
+      "reg_no": "VXREG-20205"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Sameer Kapoor",
+       "qualification": "MD (Pathology)",
+       "reg_no": "VXREG-20205"
+      },
+      "signed_at": {
+       "display": "28/09/2026 15:00",
+       "value": "2026-09-28T15:00:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B296",
+      "block": "Digitally signed by Dr Sameer Kapoor, MD (Pathology), Reg. No. VXREG-20205, 28/09/2026 15:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B296",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "cd45": "Negative in the Reed-Sternberg cells",
+      "cd30": "Positive in the Reed-Sternberg cells (membranous and Golgi pattern)",
+      "cd15": "Positive in the Reed-Sternberg cells",
+      "cd20": "Negative in the Reed-Sternberg cells; background small B cells positive",
+      "pax5": "Weakly positive (dim) in the Reed-Sternberg cells",
+      "cd3": "Negative in the Reed-Sternberg cells; background T cells positive",
+      "ki67": "40 % (MIB-1, in the large atypical cells)",
+      "diagnosis": "Immunoprofile consistent with classical Hodgkin lymphoma"
+     },
+     "serves": {
+      "lymphoma": [
+       "lymphoma_ihc"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P23-R04",
+     "test": "cbc",
+     "type": "lab",
+     "title": "Complete blood count",
+     "source": "his",
+     "producing_department": "Pathology",
+     "encounter": "OP/26/118730",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "21/09/2026",
+      "value": "2026-09-21"
+     },
+     "accession": "PATH/26/00474",
+     "sample_barcode": "VXS26000208",
+     "reported_on": {
+      "display": "21/09/2026 14:00",
+      "value": "2026-09-21T14:00:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Revathi Krishnan",
+      "qualification": "MD (Pathology)",
+      "reg_no": "VXREG-20204"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Revathi Krishnan",
+       "qualification": "MD (Pathology)",
+       "reg_no": "VXREG-20204"
+      },
+      "signed_at": {
+       "display": "21/09/2026 14:00",
+       "value": "2026-09-21T14:00:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B204",
+      "block": "Digitally signed by Dr Revathi Krishnan, MD (Pathology), Reg. No. VXREG-20204, 21/09/2026 14:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B204",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "haemoglobin": "11.6 gm%",
+      "wbc": "12,800 /cumm",
+      "platelets": "4.1 lakhs/cumm"
+     },
+     "serves": {
+      "lymphoma": [
+       "cbc_lymphoma"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P23-R05",
+     "test": "lft",
+     "type": "lab",
+     "title": "Liver function tests",
+     "source": "his",
+     "producing_department": "Biochemistry",
+     "encounter": "OP/26/118730",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "21/09/2026",
+      "value": "2026-09-21"
+     },
+     "accession": "BIO/26/02242",
+     "sample_barcode": "VXS26000209",
+     "reported_on": {
+      "display": "21/09/2026 15:20",
+      "value": "2026-09-21T15:20:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Anil Saxena",
+      "qualification": "MD (Biochemistry)",
+      "reg_no": "VXREG-20206"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Anil Saxena",
+       "qualification": "MD (Biochemistry)",
+       "reg_no": "VXREG-20206"
+      },
+      "signed_at": {
+       "display": "21/09/2026 15:20",
+       "value": "2026-09-21T15:20:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 21/09/2026 15:20, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "bilirubin": "0.5 mg/dL",
+      "sgot": "22 U/L",
+      "sgpt": "19 U/L"
+     },
+     "serves": {
+      "lymphoma": [
+       "biochemistry_lymphoma"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P23-R06",
+     "test": "rft",
+     "type": "lab",
+     "title": "Renal function tests",
+     "source": "his",
+     "producing_department": "Biochemistry",
+     "encounter": "OP/26/118730",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "21/09/2026",
+      "value": "2026-09-21"
+     },
+     "accession": "BIO/26/02243",
+     "sample_barcode": "VXS26000210",
+     "reported_on": {
+      "display": "21/09/2026 15:25",
+      "value": "2026-09-21T15:25:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Anil Saxena",
+      "qualification": "MD (Biochemistry)",
+      "reg_no": "VXREG-20206"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Anil Saxena",
+       "qualification": "MD (Biochemistry)",
+       "reg_no": "VXREG-20206"
+      },
+      "signed_at": {
+       "display": "21/09/2026 15:25",
+       "value": "2026-09-21T15:25:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 21/09/2026 15:25, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "creatinine": "0.8 mg/dL",
+      "urea": "21 mg/dL"
+     },
+     "serves": {
+      "lymphoma": [
+       "biochemistry_lymphoma"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P23-R07",
+     "test": "ldh",
+     "type": "lab",
+     "title": "Serum LDH",
+     "source": "his",
+     "producing_department": "Biochemistry",
+     "encounter": "OP/26/118730",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "21/09/2026",
+      "value": "2026-09-21"
+     },
+     "accession": "BIO/26/02244",
+     "sample_barcode": "VXS26000211",
+     "reported_on": {
+      "display": "21/09/2026 15:30",
+      "value": "2026-09-21T15:30:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Anil Saxena",
+      "qualification": "MD (Biochemistry)",
+      "reg_no": "VXREG-20206"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Anil Saxena",
+       "qualification": "MD (Biochemistry)",
+       "reg_no": "VXREG-20206"
+      },
+      "signed_at": {
+       "display": "21/09/2026 15:30",
+       "value": "2026-09-21T15:30:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B207",
+      "block": "Digitally signed by Dr Anil Saxena, MD (Biochemistry), Reg. No. VXREG-20206, 21/09/2026 15:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B207",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "ldh": "312 U/L"
+     },
+     "serves": {
+      "lymphoma": [
+       "biochemistry_lymphoma"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P23-R08",
+     "test": "viral_markers",
+     "type": "lab",
+     "title": "Viral markers: HIV, HBsAg, anti-HCV",
+     "source": "his",
+     "producing_department": "Microbiology",
+     "encounter": "OP/26/118730",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "21/09/2026",
+      "value": "2026-09-21"
+     },
+     "accession": "MIC/26/00615",
+     "sample_barcode": "VXS26000212",
+     "reported_on": {
+      "display": "22/09/2026 11:00",
+      "value": "2026-09-22T11:00:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Pooja Banerjee",
+      "qualification": "MD (Microbiology)",
+      "reg_no": "VXREG-20207"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Pooja Banerjee",
+       "qualification": "MD (Microbiology)",
+       "reg_no": "VXREG-20207"
+      },
+      "signed_at": {
+       "display": "22/09/2026 11:00",
+       "value": "2026-09-22T11:00:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B243",
+      "block": "Digitally signed by Dr Pooja Banerjee, MD (Microbiology), Reg. No. VXREG-20207, 22/09/2026 11:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B243",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "hiv_status": "Non-reactive",
+      "hbsag": "Non-reactive",
+      "anti_hcv": "Non-reactive"
+     },
+     "serves": {
+      "lymphoma": [
+       "viral_markers_lymphoma"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P23-R09",
+     "test": "cect_neck_tap",
+     "type": "ct",
+     "title": "CECT neck, thorax, abdomen and pelvis",
+     "source": "his",
+     "producing_department": "Radiology",
+     "encounter": "OP/26/118730",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "22/09/2026",
+      "value": "2026-09-22"
+     },
+     "accession": "RAD/26/01025",
+     "reported_on": {
+      "display": "23/09/2026 18:00",
+      "value": "2026-09-23T18:00:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Sanjay Joshi",
+      "qualification": "MD (Radiodiagnosis)",
+      "reg_no": "VXREG-20201"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Sanjay Joshi",
+       "qualification": "MD (Radiodiagnosis)",
+       "reg_no": "VXREG-20201"
+      },
+      "signed_at": {
+       "display": "23/09/2026 18:00",
+       "value": "2026-09-23T18:00:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B202",
+      "block": "Digitally signed by Dr Sanjay Joshi, MD (Radiodiagnosis), Reg. No. VXREG-20201, 23/09/2026 18:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B202",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "nodal_findings": "Multiple enlarged left level III, IV and supraclavicular lymph nodes, largest 3.4 x 2.9 cm; anterior mediastinal (prevascular) nodal mass 4.6 x 3.2 cm; no axillary, abdominal or pelvic lymphadenopathy",
+      "distant_findings": "Liver and spleen normal in size with no focal lesion; no lung parenchymal lesion; no bone lesion",
+      "impression": "Left cervical, supraclavicular and anterior mediastinal lymphadenopathy, consistent with the known lymphoma"
+     },
+     "serves": {
+      "lymphoma": [
+       "staging_ct_lymphoma"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P23-R10",
+     "test": "pet_ct",
+     "type": "pet_ct",
+     "title": "Whole-body FDG PET-CT",
+     "source": "his",
+     "producing_department": "Nuclear Medicine",
+     "encounter": "OP/26/118730",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "25/09/2026",
+      "value": "2026-09-25"
+     },
+     "accession": "NM/26/00157",
+     "reported_on": {
+      "display": "29/09/2026 16:00",
+      "value": "2026-09-29T16:00:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Vikram Rathore",
+      "qualification": "MD (Nuclear Medicine)",
+      "reg_no": "VXREG-20208"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Vikram Rathore",
+       "qualification": "MD (Nuclear Medicine)",
+       "reg_no": "VXREG-20208"
+      },
+      "signed_at": {
+       "display": "29/09/2026 16:00",
+       "value": "2026-09-29T16:00:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B20F",
+      "block": "Digitally signed by Dr Vikram Rathore, MD (Nuclear Medicine), Reg. No. VXREG-20208, 29/09/2026 16:00, Vaidyx Demo CA, certificate serial VXDCA-00A1B20F",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "nodal_findings": "FDG-avid left cervical (levels III and IV), left supraclavicular and anterior mediastinal lymph nodes",
+      "suv_max": "SUVmax 14.2 (left supraclavicular node)",
+      "distant_findings": "No FDG-avid lesion below the diaphragm; no focal uptake in the spleen or the bone marrow",
+      "recorded_stage": "Ann Arbor stage IIB (as reported)"
+     },
+     "serves": {
+      "lymphoma": [
+       "pet_ct_lymphoma",
+       "stage_as_recorded_lymphoma"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P23-R11",
+     "test": "echo",
+     "type": "echocardiogram",
+     "title": "2D echocardiography",
+     "source": "his",
+     "producing_department": "Cardiology",
+     "encounter": "OP/26/118730",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "28/09/2026",
+      "value": "2026-09-28"
+     },
+     "accession": "CARD/26/00318",
+     "reported_on": {
+      "display": "29/09/2026 11:30",
+      "value": "2026-09-29T11:30:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Sudhir Kamath",
+      "qualification": "MD (General Medicine), DM (Cardiology)",
+      "reg_no": "VXREG-20114"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Sudhir Kamath",
+       "qualification": "MD (General Medicine), DM (Cardiology)",
+       "reg_no": "VXREG-20114"
+      },
+      "signed_at": {
+       "display": "29/09/2026 11:30",
+       "value": "2026-09-29T11:30:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B292",
+      "block": "Digitally signed by Dr Sudhir Kamath, MD (General Medicine), DM (Cardiology), Reg. No. VXREG-20114, 29/09/2026 11:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B292",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "chambers": "All cardiac chambers normal in size; no regional wall motion abnormality",
+      "valves": "All valves normal; no pericardial effusion",
+      "lvef": "62 %",
+      "ecg": "Normal sinus rhythm, rate 78 per minute",
+      "impression": "Normal biventricular function, LVEF 62 %"
+     },
+     "serves": {
+      "lymphoma": [
+       "echo_ecg_lymphoma"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    },
+    {
+     "id": "P23-R12",
+     "test": "pft",
+     "type": "pulmonary_function",
+     "title": "Pulmonary function test",
+     "source": "his",
+     "producing_department": "Pulmonology",
+     "encounter": "OP/26/118730",
+     "order_status": "completed",
+     "report_status": "final",
+     "signed": true,
+     "ordered_on": {
+      "display": "28/09/2026",
+      "value": "2026-09-28"
+     },
+     "accession": "PUL/26/00105",
+     "reported_on": {
+      "display": "29/09/2026 14:30",
+      "value": "2026-09-29T14:30:00+05:30"
+     },
+     "reported_by": {
+      "name": "Dr Rohit Bhattacharya",
+      "qualification": "MD (Pulmonary Medicine)",
+      "reg_no": "VXREG-20108"
+     },
+     "signature": {
+      "signer": {
+       "name": "Dr Rohit Bhattacharya",
+       "qualification": "MD (Pulmonary Medicine)",
+       "reg_no": "VXREG-20108"
+      },
+      "signed_at": {
+       "display": "29/09/2026 14:30",
+       "value": "2026-09-29T14:30:00+05:30"
+      },
+      "ca": "Vaidyx Demo CA",
+      "certificate_serial": "VXDCA-00A1B25F",
+      "block": "Digitally signed by Dr Rohit Bhattacharya, MD (Pulmonary Medicine), Reg. No. VXREG-20108, 29/09/2026 14:30, Vaidyx Demo CA, certificate serial VXDCA-00A1B25F",
+      "verification_status": "verified",
+      "document_hash": null
+     },
+     "values": {
+      "fev1": "3.42 L (91 % predicted)",
+      "fvc": "4.10 L (93 % predicted)",
+      "fev1_fvc": "83 %",
+      "dlco": "88 % predicted",
+      "impression": "Normal spirometry; DLCO within normal limits"
+     },
+     "serves": {
+      "lymphoma": [
+       "pft_lymphoma"
+      ]
+     },
+     "scenarios": [
+      "phase2_new_cancers"
+     ]
+    }
+   ]
   }
  ],
  "scenarios": [
@@ -13376,6 +15745,90 @@
     "final_signed",
     "pathology_head_absent",
     "abha_present"
+   ]
+  },
+  {
+   "id": "phase2_new_cancers",
+   "title": "New cancer checklists: ovary, prostate, stomach and lymphoma (night-v3 item 2.11)",
+   "plan_1_1": false,
+   "patients": [
+    "P20",
+    "P21",
+    "P22",
+    "P23"
+   ],
+   "setup": "Four patients worked up under the night-v3 Phase 2 draft checklists (needs a clinician's check), each with an OPD note and the report set its NCG setting asks for: ovary (advanced), prostate (locally extensive), stomach (locally advanced) and lymphoma (adult Hodgkin). Every Essential record and every Optimal record but one is in the HIS, final and digitally signed (Vaidyx Demo CA), with every required value printed in Indian units. Left out on purpose: the stomach patient's endoscopic ultrasonography (Optimal). The ovary checklist has no Optimal record in the advanced setting, so nothing can be left out there; the Optional BRCA test is not ordered (shown, never counted).",
+   "expected": {
+    "text": "The ovary, prostate and lymphoma Case Files pass at both levels on the first fetch; the stomach Case File has one Level 1 gap, the endoscopic ultrasonography, routed to Gastrointestinal Surgery with no accession No. The reports are read by the real models (Qwen3.5-4B, Chinese, non-medical; Gemma-4-31B, non-medical): every required value is shown with a verified quote.",
+    "gate": [
+     {
+      "patient": "P20",
+      "protocol": "ovary",
+      "ncg_setting": "advanced",
+      "when": "first_fetch",
+      "result": "pass",
+      "level1": [],
+      "level2": []
+     },
+     {
+      "patient": "P21",
+      "protocol": "prostate",
+      "ncg_setting": "locally_extensive",
+      "when": "first_fetch",
+      "result": "pass",
+      "level1": [],
+      "level2": []
+     },
+     {
+      "patient": "P22",
+      "protocol": "stomach",
+      "ncg_setting": "locally_advanced",
+      "when": "first_fetch",
+      "result": "gaps",
+      "level1": [
+       "eus"
+      ],
+      "level2": []
+     },
+     {
+      "patient": "P23",
+      "protocol": "lymphoma",
+      "ncg_setting": "adult_hodgkin",
+      "when": "first_fetch",
+      "result": "pass",
+      "level1": [],
+      "level2": []
+     }
+    ],
+    "requests": [
+     {
+      "patient": "P22",
+      "requirement": "eus",
+      "department": "Gastrointestinal Surgery",
+      "accession": null,
+      "origin": "suggested_from_gap",
+      "level": 1
+     }
+    ],
+    "labels": [
+     "Final",
+     "Digitally signed",
+     "OP No. on every record",
+     "Draft checklist: needs a clinician's check"
+    ],
+    "values": [
+     "Shown as written (1,246 U/mL, 38.6 ng/mL, Gleason score 4+3=7, ISUP grade group 3, 312 U/L, SUVmax 14.2) with a verified quote from the report text"
+    ]
+   },
+   "phase": 4,
+   "also_phases": [
+    3
+   ],
+   "checklist": [
+    "entry_uhid",
+    "final_signed",
+    "value_present",
+    "indian_units"
    ]
   }
  ],

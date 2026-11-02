@@ -19,7 +19,7 @@ import { SettingsCard } from "@/features/settings/SettingsCard";
 
 type StartPage = "home" | "last_case" | "meetings";
 const STARTS: Array<{ id: StartPage; label: string; hint: string }> = [
-  { id: "home", label: "Home", hint: "Your Case File list" },
+  { id: "home", label: "Case Files", hint: "Your Case File list" },
   { id: "last_case", label: "Last Case File", hint: "Where you left off" },
   { id: "meetings", label: "Meetings", hint: "The board calendar" },
 ];
@@ -93,7 +93,7 @@ export function SavedFiltersSection() {
     }
   };
   return (
-    <SettingsCard id="filters" icon={Filter} title="Saved filters" text="Views pinned on your home list. Pin a new one from the filter chips on Home.">
+    <SettingsCard id="filters" icon={Filter} title="Saved filters" text="Views saved on your Case Files list. Save a new one from the filter on Case Files.">
       {saved.list.length ? (
         <ul className="grid gap-2">
           <AnimatePresence initial={false}>
@@ -115,7 +115,7 @@ export function SavedFiltersSection() {
           </AnimatePresence>
         </ul>
       ) : (
-        <EmptyState compact kind="search" title="No saved filters yet" text="On Home, pick a few filter chips and press Pin this." action={<Button type="button" variant="outline" size="sm" asChild><Link to="/home#cases">Go to Home</Link></Button>} />
+        <EmptyState compact kind="search" title="No saved filters yet" text="On Case Files, pick a few filters and press Save as a view." action={<Button type="button" variant="outline" size="sm" asChild><Link to="/cases#cases">Go to Case Files</Link></Button>} />
       )}
     </SettingsCard>
   );

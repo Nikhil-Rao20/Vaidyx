@@ -61,6 +61,14 @@ def test_table_types_are_facts_doc_types():
     ("Department of Medical Oncology", "MEDICAL ONCOLOGY OPD NOTE", "clinical_note"),
     ("Department of Medical Oncology", "REFERRAL LETTER", "referral"),
     ("Department of Pulmonary Medicine", "PULMONARY FUNCTION TEST (SPIROMETRY)", "pulmonary_function"),
+    # night-v3 item 2.1: blood cancer, eye, heart and hearing reports
+    ("Department of Haematology", "BONE MARROW ASPIRATION AND BIOPSY REPORT", "bone_marrow"),
+    ("Department of Haematology", "FLOW CYTOMETRY IMMUNOPHENOTYPING", "flow_cytometry"),
+    ("Department of Laboratory Medicine", "CYTOGENETICS REPORT (KARYOTYPE)", "cytogenetics"),
+    ("Department of Pathology", "CSF CYTOLOGY", "csf"),
+    ("Department of Cardiology", "2D ECHOCARDIOGRAPHY REPORT", "echocardiogram"),
+    ("Department of Paediatric Oncology", "OPHTHALMOLOGY: EXAMINATION UNDER ANAESTHESIA", "ophthalmology_note"),
+    ("Department of ENT", "PURE TONE AUDIOMETRY", "audiometry"),
 ])
 def test_keyword_families(department, title, expected):
     r = doctype.keyword_type([hdr(department, title)], "")

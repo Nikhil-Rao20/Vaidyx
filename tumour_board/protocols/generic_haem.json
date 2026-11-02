@@ -1,0 +1,221 @@
+{
+ "id": "generic_haem",
+ "label": "Other blood cancer (no disease-specific Indian protocol)",
+ "version": "0.1-draft",
+ "approval": {
+  "status": "draft",
+  "note": "Draft checklist (owner decision R05-Q04, not a book): needs a clinician's check"
+ },
+ "note": "Not a clinical guideline. Used for a blood cancer that has no built checklist yet (a cancer typed by the doctor and marked as a blood cancer, for example multiple myeloma or a myeloproliferative neoplasm): the Case File requires three core records only, a histopathology, bone marrow, flow cytometry or cytogenetics report (any one), a clinical note with performance status, and the question for the board (an earlier treatment summary is optional), labelled 'No disease-specific Indian protocol'. A blood cancer has no staging imaging record (the marrow and the immunophenotype take its place: night-v3 plan item 2.9); otherwise the three records rest on the owner decision R05-Q04 (17 Oct 2026), not on a guideline, and say nothing about which investigations this cancer needs: the treating team decides that. The cancer's name is kept on the Case File as the doctor wrote it (case.json cancer_name). Must be reviewed by the hospital Tumour Board before real use (clinical review); a disease-specific checklist replaces it as soon as one is built.",
+ "settings_note": "One setting only: the records are the same whatever the extent of disease. The system never computes a stage or a risk group.",
+ "settings": [
+  {
+   "id": "as_recorded",
+   "label": "As recorded by the doctor"
+  }
+ ],
+ "records": [
+  {
+   "id": "histopathology",
+   "label": "Histopathology, bone marrow, flow cytometry or cytogenetics report (any one)",
+   "tier": "a",
+   "doc_types": [
+    "histopathology",
+    "bone_marrow",
+    "flow_cytometry",
+    "cytogenetics",
+    "cytology"
+   ],
+   "department": "Pathology",
+   "required_facts": [],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "Owner decision R05-Q04, 17 Oct 2026",
+     "page": "n/a",
+     "where": "question round R05, Manual entry: the answer 'Four core records'",
+     "quote": "Histopathology, staging imaging, a clinical note with performance status, and a typed question for the board; labelled 'No disease-specific Indian protocol'."
+    }
+   ],
+   "tier_basis": "one of the three core records (blood cancer variant) of the owner decision R05-Q04; not a guideline tier. The quote is the owner's sentence for solid cancers (four core records); this blood cancer variant leaves staging imaging out on purpose (night-v3 plan item 2.9)",
+   "note": "Any final, signed histopathology, bone marrow, flow cytometry or cytogenetics report of this patient counts (a lymph node biopsy, a marrow aspirate and trephine, an immunophenotype or a karyotype). Not a clinical guideline: what the board needs from it is the treating team's call."
+  },
+  {
+   "id": "clinical_history",
+   "label": "Clinical note with performance status",
+   "tier": "a",
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ],
+   "department": "Haematology",
+   "route": "owner",
+   "required_facts": [
+    "ecog"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "Owner decision R05-Q04, 17 Oct 2026",
+     "page": "n/a",
+     "where": "question round R05, Manual entry: the answer 'Four core records'",
+     "quote": "Histopathology, staging imaging, a clinical note with performance status, and a typed question for the board; labelled 'No disease-specific Indian protocol'."
+    }
+   ],
+   "tier_basis": "one of the three core records (blood cancer variant) of the owner decision R05-Q04; not a guideline tier. The quote is the owner's sentence for solid cancers (four core records); this blood cancer variant leaves staging imaging out on purpose (night-v3 plan item 2.9)",
+   "note": "A clinical record of the owning treating department (route owner); Haematology is only the default before a Case File records its owner. The treating doctor may type the performance status where no note records it (shown 'entered by Dr X, no report'); the note itself is still needed."
+  },
+  {
+   "id": "board_question",
+   "label": "Question for the board (typed by the treating doctor, or written in the clinical note)",
+   "tier": "a",
+   "facts_only": true,
+   "fact_doc_types": [
+    "clinical_note",
+    "referral"
+   ],
+   "department": "Haematology",
+   "route": "owner",
+   "required_facts": [
+    "clinical_question"
+   ],
+   "typable": true,
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "Owner decision R05-Q04, 17 Oct 2026",
+     "page": "n/a",
+     "where": "question round R05, Manual entry: the answer 'Four core records'",
+     "quote": "Histopathology, staging imaging, a clinical note with performance status, and a typed question for the board; labelled 'No disease-specific Indian protocol'."
+    }
+   ],
+   "tier_basis": "one of the three core records (blood cancer variant) of the owner decision R05-Q04; not a guideline tier. The quote is the owner's sentence for solid cancers (four core records); this blood cancer variant leaves staging imaging out on purpose (night-v3 plan item 2.9)",
+   "note": "The treating doctor types the question on the Case File (audited 'typed_value', shown 'entered by Dr X, no report'), or a clinical note records it. Like every values-only record, it is carried by a final, signed clinical note or referral of this Case File."
+  }
+ ],
+ "optional": [
+  {
+   "id": "prior_treatment",
+   "label": "Treatment summary of any earlier treatment",
+   "doc_types": [
+    "treatment_summary"
+   ],
+   "department": "Haematology",
+   "route": "owner"
+  },
+  {
+   "id": "previous_board",
+   "label": "Previous Tumour Board record",
+   "doc_types": [
+    "tumour_board_record"
+   ],
+   "department": "MDT Coordinator",
+   "route": "coordinator"
+  }
+ ],
+ "extract_facts": [
+  "presenting_complaint",
+  "ecog",
+  "comorbidities",
+  "clinical_question",
+  "recorded_stage",
+  "nodal_findings",
+  "distant_findings",
+  "histologic_type",
+  "grade",
+  "haemoglobin",
+  "wbc",
+  "platelets",
+  "creatinine",
+  "bilirubin",
+  "treatment_received",
+  "patient_preference",
+  "clinical_trial_note",
+  "diagnosis_date_mode",
+  "b_symptoms",
+  "bone_marrow_result",
+  "flow_cytometry_result",
+  "cytogenetics_result",
+  "molecular_markers_haem",
+  "ldh"
+ ],
+ "post_board": {
+  "required_record_fields": [
+   "decision_text",
+   "recorded_by",
+   "participants",
+   "actions"
+  ],
+  "follow_up_default_days": 14,
+  "record_fields_source": "EUSOMA 2020 (names of all participants, evidence on decisions); Victorian Cancer MDM quality framework 2018 (report errors/changes raised, divergent recommendations and dissenting clinicians); PM-JAY HBP 2.2 s.3.9 (tumour board decision and treatment plan)"
+ },
+ "core_data": [
+  {
+   "id": "diagnosis",
+   "label": "Histopathological / cytological diagnosis",
+   "facts": [
+    "histologic_type"
+   ]
+  },
+  {
+   "id": "diagnosis_date_mode",
+   "label": "Date and mode of diagnosis",
+   "facts": [
+    "diagnosis_date_mode"
+   ]
+  },
+  {
+   "id": "stage",
+   "label": "Stage or risk group as recorded (with the investigations used)",
+   "facts": [
+    "recorded_stage",
+    "distant_findings",
+    "nodal_findings"
+   ]
+  },
+  {
+   "id": "performance_status",
+   "label": "Performance status",
+   "facts": [
+    "ecog"
+   ]
+  },
+  {
+   "id": "comorbidities",
+   "label": "Co-morbidities",
+   "facts": [
+    "comorbidities"
+   ]
+  },
+  {
+   "id": "treatment_history",
+   "label": "Treatment history",
+   "facts": [
+    "treatment_received"
+   ]
+  },
+  {
+   "id": "patient_preference",
+   "label": "Patient preference / special circumstances",
+   "facts": [
+    "patient_preference"
+   ]
+  },
+  {
+   "id": "clinical_trial",
+   "label": "Clinical trial availability / suitability recorded",
+   "facts": [
+    "clinical_trial_note"
+   ]
+  },
+  {
+   "id": "question",
+   "label": "Question for the Tumour Board",
+   "facts": [
+    "clinical_question"
+   ]
+  }
+ ],
+ "core_data_source": "NHS England, Streamlining MDT meetings (2020), p.11 'minimum core data requirements' (shown for information, never counted by the check)",
+ "policy_basis": "PM-JAY Health Benefit Package 2.2 user guidelines (NHA, 2021), section 3.9: pre-authorization is mandatory at each step of cancer care and the decision on appropriate care is to be taken by a multidisciplinary tumour board. Guideline basis of this checklist: none. No disease-specific Indian protocol is built for this cancer; the four core records are the owner decision R05-Q04 (17 Oct 2026), not a clinical guideline, to be reviewed by the hospital. Item 2.9 of the night-v3 plan (27 Oct 2026): a blood cancer with no built checklist asks for the marrow, the immunophenotype or the karyotype instead of staging imaging."
+}

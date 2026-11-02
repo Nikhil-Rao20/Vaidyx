@@ -1,5 +1,8 @@
 // SYNTHETIC answers for the screenshot run in mock mode (TBNIK_MOCK=1): fake people, fake UHIDs (VXH/...), the fictitious
 // "Vaidyx Demo Hospital". Shapes follow docs/ui/build/SPEC-API.md and the routes in tumour_board/api. No real patient data.
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export type Role = "treating" | "resident" | "supporting" | "coordinator" | "root_admin" | "dept_admin" | "auditor";
 
@@ -20,11 +23,14 @@ const iso = (daysAgo: number, h = 10) => { const d = new Date(now); d.setDate(d.
 const day = (daysAhead: number) => { const d = new Date(now); d.setDate(d.getDate() + daysAhead); return d.toISOString().slice(0, 10); };
 
 export function me(role: Role) {
+  // night-v3 8.4: placed hospital staff (and the MDT Coordinator) may use Messages; the others get no "messages" field.
+  const placed = role === "treating" || role === "resident" || role === "supporting" || role === "coordinator";
   const base = {
+    ...(placed ? { messages: true } : {}),
     must_change_password: false, setup_needed: false,
     profile: { title: "Dr", registration_no: "TNMC 45821", phone: "", phone_visible: false, photo: "", text_size: "normal", start_page: "home",
       saved_filters: role === "treating" ? [{ name: "My urgent ones", query: { urgency: "high", mine: "1" } }, { name: "Ready", query: { status: "ready" } }] : [] },
-    counts: { unread: 3, waiting_for_me: role === "treating" ? 2 : 0, open_requests: role === "supporting" ? 4 : 0 },
+    counts: { unread: 3, waiting_for_me: role === "treating" ? 2 : 0, open_requests: role === "supporting" ? 4 : 0, ...(placed ? { messages_unread: 2 } : {}) },
     hospital: { name: "Vaidyx Demo Hospital", level: "optimal" },
     features: { video: true, push: true },
   };
@@ -52,7 +58,10 @@ export const caseList = {
     { case_id: "TB-2026-0029", patient: P("Kamala S.", "61 F", "VXH/2026/000102"), ids: ids("VXH/2026/000102", "OP/2026/00102"), protocol: "cervix", protocol_label: "Cervix cancer", setting: "locally_advanced", owner: owner("gynaecologic_oncology", "Gynaecologic Oncology", "devi@vxh.example", "Radha Devi"), urgency: { level: 3 }, status: st("ready", "Ready for the board"), board_date: day(3), left_before_board: 0, imaging_present: true, last_change: iso(1), created: iso(4) },
     { case_id: "TB-2026-0027", patient: P("Ramesh K.", "64 M", "VXH/2026/000097"), ids: ids("VXH/2026/000097", "OP/2026/00097"), protocol: "lung_nsclc", protocol_label: "Lung cancer (NSCLC)", setting: "metastatic", owner: owner("pulmonology", "Pulmonology", "joseph@vxh.example", "Thomas Joseph"), urgency: { level: 2 }, status: st("scheduled", `Scheduled ${day(3)}`), board_date: day(3), left_before_board: 0, imaging_present: true, last_change: iso(2), created: iso(6) },
     { case_id: "TB-2026-0024", patient: P("Venkatesh M.", "55 M", "VXH/2026/000081"), ids: ids("VXH/2026/000081", "OP/2026/00081"), protocol: "oral_cavity", protocol_label: "Oral cavity cancer (head and neck)", setting: "early", owner: owner("ent_head_neck_surgery", "ENT and Head and Neck Surgery", "pillai@vxh.example", "Arun Pillai"), urgency: { level: null }, status: st("draft", "Reading records", "3 record(s) being read"), board_date: "", left_before_board: 4, imaging_present: false, last_change: iso(3), created: iso(8) },
-    { case_id: "TB-2026-0019", patient: P("Sunita P.", "50 F", "VXH/2026/000064"), ids: ids("VXH/2026/000064", "OP/2026/00064"), protocol: "breast", protocol_label: "Breast cancer", setting: "early", owner: owner("breast_surgery", "Breast Surgery"), urgency: { level: 1 }, status: st("decided", "Decided"), board_date: day(-11), left_before_board: 0, imaging_present: true, last_change: iso(11), created: iso(20), mine: true },
+    { case_id: "TB-2026-0019", patient: P("Sunita P.", "50 F", "VXH/2026/000064"), ids: ids("VXH/2026/000064", "OP/2026/00064"), protocol: "breast", protocol_label: "Breast cancer", setting: "early", owner: owner("breast_surgery", "Breast Surgery"), urgency: { level: 1 }, status: st("decided", "Decided"), board_date: day(-11), left_before_board: 0, imaging_present: true, last_change: iso(11), created: iso(20), mine: true,
+      summary_line: "50 F, early breast cancer: board decision recorded; adjuvant radiotherapy referral open (SYNTHETIC)", decision_text: "Breast conservation surgery with sentinel node biopsy (SYNTHETIC)" },
+    // night-v3 item 1.3: another department's Case File of the same patient, seen only through the link; read only, never counted
+    { case_id: "TB-2026-0032", patient: P("Lakshmi R.", "58 F", "VXH/2026/000123"), ids: ids("VXH/2026/000123", "OP/2026/00131"), protocol: "", protocol_label: "Chronic myeloid leukaemia (no checklist yet)", cancer_name: "Chronic myeloid leukaemia", setting: "", owner: owner("haematology", "Haematology", "iyer@vxh.example", "Meera Iyer"), urgency: { level: null }, status: st("needs_me", "Needs the treating team", "no cancer chosen yet"), board_date: "", left_before_board: null, imaging_present: false, last_change: iso(0, 7), created: iso(0, 7), mine: false, relation: "linked", linked_only: true, read_only: true, owned_by: { department: "haematology", label: "Haematology" } },
   ],
   filters: {
     departments: [{ id: "breast_surgery", label: "Breast Surgery" }, { id: "gynaecologic_oncology", label: "Gynaecologic Oncology" }, { id: "pulmonology", label: "Pulmonology" }],
@@ -60,7 +69,7 @@ export const caseList = {
     owners: [{ id: "rao@vxh.example", label: "Lakshmi Rao" }, { id: "devi@vxh.example", label: "Radha Devi" }, { id: "joseph@vxh.example", label: "Thomas Joseph" }],
     statuses: [{ key: "needs_me", label: "Needs you" }, { key: "waiting_department", label: "Waiting on a department" }, { key: "ready", label: "Ready for the board" }, { key: "scheduled", label: "Scheduled" }, { key: "decided", label: "Decided" }, { key: "draft", label: "Reading records" }],
   },
-  total: 6,
+  total: 7,
   can_create: true,
 };
 
@@ -109,16 +118,10 @@ export const meetings = {
 
 export const org = { hospital: { name: "Vaidyx Demo Hospital", level: "optimal" }, departments, admin_departments: [{ id: "radiology", name: "Radiology", group: "supporting" }] };
 
-export const protocols = {
-  protocols: [
-    { id: "breast", label: "Breast cancer", settings: [{ id: "early", label: "Early (operable), as recorded" }, { id: "locally_advanced", label: "Locally advanced, as recorded" }, { id: "metastatic", label: "Metastatic, as recorded" }] },
-    { id: "cervix", label: "Cervix cancer", settings: [{ id: "early", label: "Early (FIGO 2018 IA1 to IIA1), as recorded" }, { id: "locally_advanced", label: "Locally advanced (FIGO 2018 IB3, IIA2 to IVA), as recorded" }, { id: "metastatic", label: "Metastatic (FIGO 2018 IVB) or recurrent, as recorded" }] },
-    { id: "colorectal_rectum", label: "Rectal cancer", settings: [{ id: "non_metastatic", label: "Non-metastatic (no distant disease recorded)" }, { id: "metastatic", label: "Metastatic (distant disease recorded)" }] },
-    { id: "cup", label: "Cancer of Unknown Primary (CUP)", note: "DRAFT, not approved for real use.", settings: [{ id: "provisional_cup", label: "Provisional CUP, as recorded" }] },
-    { id: "lung_nsclc", label: "Lung cancer (NSCLC)", settings: [{ id: "non_metastatic", label: "Non-metastatic (no distant disease recorded)" }, { id: "metastatic", label: "Metastatic (distant disease recorded)" }] },
-    { id: "oral_cavity", label: "Oral cavity cancer (head and neck)", settings: [{ id: "early", label: "Early (Stage I and II), as recorded" }, { id: "locally_advanced", label: "Locally advanced (Stage III to IVB), as recorded" }] },
-  ],
-};
+// GET /protocols as the backend lists it (protocol.list_protocols(), saved to protocols.json on 27 Oct 2026 for night-v3 item
+// 2.10): the 24 checklists with their versions ("0.1-draft" for the new ones) plus generic and generic_haem.
+export const protocols: { protocols: Array<{ id: string; label: string; version?: string; note?: string; settings: Array<{ id: string; label: string; definition?: string }> }> } =
+  JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "protocols.json"), "utf8"));
 
 export const hisLookup = {
   found: true, identifier: "VXH/2026/000140", his: "DemoHIMS",

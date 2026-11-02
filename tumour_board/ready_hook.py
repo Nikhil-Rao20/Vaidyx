@@ -4,7 +4,16 @@ one after the other to keep the GPU calm, and the owning department is told when
 on_ready(case_id, user) is called by POST /cases/{id}/ready after the mark succeeds. It schedules the work on the running event loop (or
 on a thread with its own loop when none runs) and returns at once. Nothing runs during a meeting: while a board session is in_session the
 run waits five minutes and looks again. Pieces that still stand for the Case File (same signature) are skipped. TB_SCHEDULER=0 turns the
-hook off (tests). Every step is audited in the Case File; a failing step never stops the next."""
+hook off (tests). Every step is audited in the Case File; a failing step never stops the next.
+
+After sending (night-v3 item 1.5, design B8): a report that becomes ready after the ready mark calls on_ready(..., again=True) from
+service.process_docs. That run is audited as step "again", waits out a meeting the same way, writes the summary and the briefs again when
+stale, and tells the MDT Coordinator only (record_arrived: how many reports are new since sending and, when a value now waits on the treating
+doctor's check, "waiting on Dr X"); the owner is not told. A record that arrives while a run is going sets a flag and the run goes once more.
+A record that arrives during the last allowed pass (MAX_PASSES) is never dropped: it is audited (step "again_deferred") and the Case File's
+state keeps `ready_hook_needs_again`; the next on_ready call for that Case File honours it (audited "again_honoured"): its run reads every
+record, so it covers the deferred one, and a run that is still going then goes once more. The scheduler has no hook for a one-off job,
+so nothing runs before that next call."""
 import asyncio
 import logging
 import os
@@ -19,6 +28,8 @@ HEADS = ("radiology", "pathology", "medical_oncology", "surgical_oncology", "rad
 MEETING_DELAY = 300  # seconds between looks while a meeting is in session
 MAX_WAITS = 48  # four hours of waiting at most
 RUNNING: dict = {}  # case_id -> {"started", "user", "step"}
+AGAIN: set = set()  # case_ids whose records changed while a run was going: the run goes once more at its end (item 1.5)
+MAX_PASSES = 3  # one run and at most two more passes for records that kept arriving
 TASKS: set = set()
 _lock = threading.Lock()
 
@@ -70,84 +81,170 @@ def _notify_owner(case_id, case, user, done, failed):
     return None
 
 
-async def run(case_id, user) -> dict:
-    """The work itself: wait out a meeting, then the summary and the five briefs in turn, skipping what is fresh; the owner is told."""
-    out = {"case_id": case_id, "done": [], "skipped": [], "failed": [], "waited": 0}
+def _notify_coordinator(case_id, case, user, done, failed) -> dict | None:
+    """After sending, a new or changed report: the MDT Coordinator only is told what was updated and whom a value waits on (item 1.5)."""
+    from . import after_send, notify, team
+    try:
+        case = store.get_case(case_id) or case
+        n = after_send.new_since_sent(case_id, case)
+        title = f"New record after the ready mark: {team.patient_line(case)} ({case_id})"
+        text = f"{n} new or changed {'report' if n == 1 else 'reports'} since it was sent; "
+        text += ("the summary and the slides are updated." if "summary" not in failed
+                 else "the slides show the new values; the summary could not be written again (the Case File shows it as out of date).")
+        w = after_send.waiting_on(case)
+        if w:
+            k = w["values"]
+            text += f" {k} {'value needs' if k == 1 else 'values need'} the treating doctor's check: waiting on {w['name'] or 'the treating doctor'}."
+        return notify.notify({"role": "coordinator"}, "record_arrived", case_id, title, text, by=user, updated=done, failed=failed, new_records=n,
+                             waiting_on=w)
+    except Exception as e:
+        return {"error": f"{e.__class__.__name__}: {e}"}
+
+
+async def run(case_id, user, again=False) -> dict:
+    """The work itself: wait out a meeting, then the summary and the five briefs in turn, skipping what is fresh; the owner is told (the
+    first run) or the MDT Coordinator only (again=True: a report arrived after the ready mark). Records that arrive meanwhile: once more."""
     with _lock:
         if case_id in RUNNING:
-            return {**out, "skipped": ["already running"]}
+            if again:
+                AGAIN.add(case_id)
+            return {"case_id": case_id, "done": [], "skipped": ["already running"], "failed": [], "waited": 0, "again": bool(again)}
         RUNNING[case_id] = {"started": time.time(), "user": user, "step": "waiting"}
     try:
-        waits = 0
-        while meeting_in_session():
-            if waits >= MAX_WAITS:
-                _audit(case_id, step="gave_up", why="a board session stayed in session", by=user)
-                out["failed"].append("meeting")
-                return out
-            waits += 1; out["waited"] = waits
-            await asyncio.sleep(MEETING_DELAY)
-        case = store.get_case(case_id)
-        if not case or not case.get("protocol"):
-            return out
-        _audit(case_id, step="start", by=user)
-        st = store.get_state(case_id)
-        sig = rules.case_signature(case_id, st)
-        RUNNING[case_id]["step"] = "summary"
-        if summary_fresh(st, sig):
-            out["skipped"].append("summary")
-        else:
-            try:
-                res = await summary.build(case_id, force=True)  # the ready mark is the doctor's word: the draft is compiled even with open gaps
-                if res.get("status") in ("ready", "incomplete_gate"):
-                    out["done"].append("summary")
-                else:
-                    out["failed"].append("summary"); _audit(case_id, step="summary_failed", why=res.get("message") or res.get("status"), by=user)
-            except Exception as e:
-                out["failed"].append("summary"); _audit(case_id, step="summary_failed", why=f"{e.__class__.__name__}: {str(e)[:200]}", by=user)
-        for role in HEADS:
-            if store.gone(case_id) or not store.get_case(case_id):  # the Case File was deleted meanwhile: stop (nothing is written for it)
-                out["failed"].append("deleted")
-                return out
-            RUNNING[case_id]["step"] = role
-            st = store.get_state(case_id)
-            art = (st.get("artefacts") or {}).get(f"brief_{role}")
-            if agents.fresh(art, rules.case_signature(case_id, st)):
-                out["skipped"].append(role)
-                continue
-            try:
-                res = await agents.prepare(case_id, role)
-                (out["done"] if res.get("brief") else out["failed"]).append(role)
-                if not res.get("brief"):
-                    _audit(case_id, step=f"{role}_failed", why=res.get("error") or "no brief", by=user)
-            except Exception as e:
-                out["failed"].append(role); _audit(case_id, step=f"{role}_failed", why=f"{e.__class__.__name__}: {str(e)[:200]}", by=user)
-        _audit(case_id, step="finished", done=out["done"], skipped=out["skipped"], failed=out["failed"], waited=out["waited"], by=user)
-        if out["done"]:
-            n = _notify_owner(case_id, case, user, out["done"], out["failed"])
-            out["notified"] = bool(n and not n.get("error"))
+        out = await _pass(case_id, user, again)
+        passes = 1
+        while passes < MAX_PASSES:
+            with _lock:
+                more = case_id in AGAIN
+                AGAIN.discard(case_id)
+            if not more:
+                break
+            passes += 1
+            out = await _pass(case_id, user, True)
+        out["passes"] = passes
         return out
     finally:
         with _lock:
             RUNNING.pop(case_id, None)
+            deferred = case_id in AGAIN
+            AGAIN.discard(case_id)
+        if deferred:  # a record arrived during the last pass: kept for the next on_ready call, never dropped
+            _defer(case_id, user)
 
 
-def on_ready(case_id, user) -> dict:
-    """Schedule the preparation and return at once: {"scheduled": bool, "how": loop|thread|off}."""
+NEEDS_AGAIN = "ready_hook_needs_again"
+
+
+def _defer(case_id, user) -> None:
+    """Audit a record that arrived during the last allowed pass and leave the flag the next on_ready call honours."""
+    _audit(case_id, step="again_deferred", by=user, why=f"a record arrived during pass {MAX_PASSES}; it waits for the next run")
+    try:
+        st = store.get_state(case_id)
+        st[NEEDS_AGAIN] = {"at": store.now_iso(), "by": user}
+        store.save_state(case_id, st)
+    except Exception:
+        log.exception("ready hook: could not keep the deferred run for %s", case_id)
+
+
+def _take_needs_again(case_id) -> dict | None:
+    """The deferred-run flag of the Case File, cleared as it is read (None when there is none)."""
+    try:
+        st = store.get_state(case_id)
+        flag = st.pop(NEEDS_AGAIN, None)
+        if flag:
+            store.save_state(case_id, st)
+        return flag if isinstance(flag, dict) else ({"at": ""} if flag else None)
+    except Exception:
+        return None
+
+
+async def _pass(case_id, user, again=False) -> dict:
+    """One pass of the work (run holds the RUNNING guard around it)."""
+    out = {"case_id": case_id, "done": [], "skipped": [], "failed": [], "waited": 0, "again": bool(again)}
+    waits = 0
+    while meeting_in_session():
+        if waits >= MAX_WAITS:
+            _audit(case_id, step="gave_up", why="a board session stayed in session", by=user)
+            out["failed"].append("meeting")
+            return out
+        waits += 1; out["waited"] = waits
+        await asyncio.sleep(MEETING_DELAY)
+    case = store.get_case(case_id)
+    if not case or not case.get("protocol"):
+        return out
+    if again:
+        from . import after_send
+        if not after_send.is_sent(case):  # taken off the agenda while it waited: nothing to update for the board
+            return out
+        _audit(case_id, step="again", by=user, new_records=after_send.new_since_sent(case_id, case))
+    else:
+        _audit(case_id, step="start", by=user)
+    st = store.get_state(case_id)
+    sig = rules.case_signature(case_id, st)
+    RUNNING[case_id]["step"] = "summary"
+    if summary_fresh(st, sig):
+        out["skipped"].append("summary")
+    else:
+        try:
+            res = await summary.build(case_id, force=True)  # the ready mark is the doctor's word: the draft is compiled even with open gaps
+            if res.get("status") in ("ready", "incomplete_gate"):
+                out["done"].append("summary")
+            else:
+                out["failed"].append("summary"); _audit(case_id, step="summary_failed", why=res.get("message") or res.get("status"), by=user)
+        except Exception as e:
+            out["failed"].append("summary"); _audit(case_id, step="summary_failed", why=f"{e.__class__.__name__}: {str(e)[:200]}", by=user)
+    for role in HEADS:
+        if store.gone(case_id) or not store.get_case(case_id):  # the Case File was deleted meanwhile: stop (nothing is written for it)
+            out["failed"].append("deleted")
+            return out
+        RUNNING[case_id]["step"] = role
+        st = store.get_state(case_id)
+        art = (st.get("artefacts") or {}).get(f"brief_{role}")
+        if agents.fresh(art, rules.case_signature(case_id, st)):
+            out["skipped"].append(role)
+            continue
+        try:
+            res = await agents.prepare(case_id, role)
+            (out["done"] if res.get("brief") else out["failed"]).append(role)
+            if not res.get("brief"):
+                _audit(case_id, step=f"{role}_failed", why=res.get("error") or "no brief", by=user)
+        except Exception as e:
+            out["failed"].append(role); _audit(case_id, step=f"{role}_failed", why=f"{e.__class__.__name__}: {str(e)[:200]}", by=user)
+    _audit(case_id, step="finished", done=out["done"], skipped=out["skipped"], failed=out["failed"], waited=out["waited"], by=user,
+           **({"again": True} if again else {}))
+    if again:  # the coordinator only, every time a record arrived (the slides read the new values even when nothing was rewritten)
+        n = _notify_coordinator(case_id, case, user, out["done"], out["failed"])
+        out["notified"] = bool(n and not n.get("error"))
+    elif out["done"]:
+        n = _notify_owner(case_id, case, user, out["done"], out["failed"])
+        out["notified"] = bool(n and not n.get("error"))
+    return out
+
+
+def on_ready(case_id, user, again=False) -> dict:
+    """Schedule the preparation and return at once: {"scheduled": bool, "how": loop|thread|off|running}. again=True: a report became ready
+    after the ready mark (service.process_docs); while a run is going it is flagged to go once more."""
     if not enabled():
         return {"scheduled": False, "how": "off", "reason": "TB_SCHEDULER=0"}
     if case_id in config.PROTECTED_CASES:
         return {"scheduled": False, "how": "off", "reason": "protected Case File"}
-    if running(case_id):
-        return {"scheduled": False, "how": "running", "reason": "already running"}
+    flag = _take_needs_again(case_id)
+    if flag:  # a record that arrived during the last pass of an earlier run: this run reads every record, so it covers it
+        _audit(case_id, step="again_honoured", by=user, deferred_at=flag.get("at"))
+    with _lock:
+        if case_id in RUNNING:
+            if again or flag:
+                AGAIN.add(case_id)
+            return {"scheduled": False, "how": "running", "reason": "already running", "again": bool(again)}
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         loop = None
     if loop is not None:
-        task = loop.create_task(run(case_id, user))
+        task = loop.create_task(run(case_id, user, again))
         TASKS.add(task)
         task.add_done_callback(TASKS.discard)
         return {"scheduled": True, "how": "loop"}
-    t = threading.Thread(target=lambda: asyncio.run(run(case_id, user)), daemon=True, name=f"tb-ready-{case_id}")
+    t = threading.Thread(target=lambda: asyncio.run(run(case_id, user, again)), daemon=True, name=f"tb-ready-{case_id}")
     t.start()
     return {"scheduled": True, "how": "thread"}

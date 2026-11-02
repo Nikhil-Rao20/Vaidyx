@@ -8,9 +8,12 @@ Built from slots.build and the stored documents; no model call. Nothing here dia
 their gaps and what the doctor typed (always shown "entered by Dr X, no report").
 
 open_count() is the one count of what is left before the board; the Case File, the Case Files list and the meetings all use it."""
+import logging
 import re
 
-from . import access, dates, dept_requests, his_case, org, proposals, protocol, rules, slots, store
+from . import access, after_send, dates, dept_requests, discord, his_case, org, proposals, protocol, rules, slots, store
+
+log = logging.getLogger("tumour_board")
 
 SECTIONS = [("overview", "Overview"), ("question", "Question"), ("reports", "Reports"), ("check", "Check"),
             ("pre_authorization", "Pre-Authorization"), ("summary", "Summary")]
@@ -23,23 +26,36 @@ REASONS = {"new_diagnosis": "New diagnosis: plan first treatment", "after_surger
 # The patient at a glance (B2): four groups of protocol facts, in board order. A fact the protocol does not carry is left out.
 GLANCE = [
     ("diagnosis", "Diagnosis", ["presenting_complaint", "histologic_type", "grade", "er", "pr", "her2", "ki67", "pdl1", "egfr", "alk", "ros1", "met",
-                                "kras", "mmr", "ras_braf", "lvi", "pni", "margins", "depth_of_invasion", "cea"]),
+                                "kras", "mmr", "ras_braf", "lvi", "pni", "margins", "depth_of_invasion", "cea",
+                                # Phase 2 cancers (night-v3 item 2.1): grades, biomarkers, blood cancer results and tumour markers
+                                "gleason_isup", "positive_cores", "bethesda_category", "p53", "pole", "brca_status", "hrd_status", "cdh1_result",
+                                "germline_result", "idh_status", "codeletion_1p19q", "mgmt_promoter", "sarcoma_fusion", "loh_1p_16q",
+                                "bone_marrow_result", "flow_cytometry_result", "cytogenetics_result", "molecular_markers_haem",
+                                "psa", "ca125", "afp", "beta_hcg", "ldh", "ca19_9", "pivka", "he4", "inhibin_b", "thyroglobulin", "calcitonin",
+                                "beta2_microglobulin", "nodes_examined", "trg", "percent_necrosis", "cystic_duct_margin", "embryonal_component",
+                                "anaplasia"]),
     ("extent", "Extent", ["lesion_size", "nodal_findings", "ene", "distant_findings", "parametrial_involvement", "mrf_status", "emvi",
-                          "distance_from_anal_verge", "suv_max", "recorded_stage", "figo_stage"]),
-    ("fitness", "Fitness", ["ecog", "comorbidities", "menopausal_status", "haemoglobin", "wbc", "platelets", "creatinine", "bilirubin", "hiv_status"]),
+                          "distance_from_anal_verge", "suv_max", "recorded_stage", "figo_stage",
+                          "tumour_site_colon", "tumour_site_stomach", "tumour_location_oesophagus", "siewert_type", "lirads_category", "flr_percent",
+                          "gb_mass", "vessel_involvement", "bile_duct_involvement", "laryngeal_subsite", "cord_mobility", "extrathyroid_extension",
+                          "tirads", "tumour_depth", "deauville_score", "csf_cytology", "ophthalmic_examination", "rb_group", "igcccg_group",
+                          "obstruction_perforation", "varices_finding"]),
+    ("fitness", "Fitness", ["ecog", "comorbidities", "menopausal_status", "haemoglobin", "wbc", "platelets", "creatinine", "bilirubin", "hiv_status",
+                            "kps", "b_symptoms", "laryngeal_function", "child_pugh_class", "inr", "hbsag", "anti_hcv", "hbv_core_ab", "hvpg_mmhg",
+                            "corrected_calcium", "alkaline_phosphatase", "testosterone", "lh", "fsh"]),
     ("background", "Treatment so far and wishes", ["treatment_received", "treatment_completion_date", "diagnosis_date_mode", "patient_preference",
-                                                   "patient_awareness"]),
+                                                   "patient_awareness", "fertility_preservation"]),
 ]
 STAGE_FACTS = ("recorded_stage", "figo_stage")
 # Key values a doctor confirms one by one in Check (B5), whatever the quote check said: the diagnosis and the critical biomarkers and stage.
 KEY_ALWAYS = ("histologic_type", "grade")
 
 # Report groups by type (B4); an outside report is its own group.
-DOC_GROUPS = [("pathology", "Pathology", {"histopathology", "cytology", "ihc", "molecular"}),
+DOC_GROUPS = [("pathology", "Pathology", {"histopathology", "cytology", "ihc", "molecular", "bone_marrow", "flow_cytometry", "cytogenetics", "csf"}),
               ("imaging", "Imaging", {"ct", "mri", "xray", "ultrasound", "mammogram", "pet_ct", "bone_scan"}),
               ("labs", "Labs", {"lab"}),
               ("notes", "Clinical notes", {"clinical_note", "referral", "discharge_summary", "operative_note", "endoscopy", "treatment_summary",
-                                           "tumour_board_record", "pulmonary_function"}),
+                                           "tumour_board_record", "pulmonary_function", "echocardiogram", "ophthalmology_note", "audiometry"}),
               ("other", "Other reports", set())]  # an outside report keeps its type group, with an "Outside report" tag
 
 # The cancer chosen against the report titles (B2 warning). Words a report title uses for a site; only titles are read, never the text.
@@ -47,9 +63,34 @@ SITE_WORDS = {"breast": ("breast", "mammo", "axilla"),
               "cervix": ("cervix", "cervical", "colposcop", "pap smear", "vulva", "vagina"),
               "lung_nsclc": ("lung", "thorax", "thoracic", "bronch", "ebus", "pleura"),
               "colorectal_rectum": ("rectum", "rectal", "colon", "colonoscop", "sigmoid", "anal verge", "proctos"),
-              "oral_cavity": ("oral", "tongue", "buccal", "mandib", "gingiva", "palate", "lip ")}
+              "oral_cavity": ("oral", "tongue", "buccal", "mandib", "gingiva", "palate", "lip "),
+              # Phase 2 cancers (night-v3 item 2.1): clear report-title words only. Lymphoma, leukaemia, the sarcomas and the generic blood
+              # cancer list are left out on purpose (their titles name a body part, not the disease): a protocol not listed here gets no
+              # warning, the safer side. A word shared by related cancers (colon and rectum, kidney and Wilms) only prevents a warning.
+              # Review (Phase 2): tumour-specific words only. Organ words that routine work-up titles of every cancer use (liver function
+              # tests, renal function, MRI brain, thyroid function, upper GI endoscopy) would make the warning fire falsely; thyroid has no checklist.
+              "colorectal_colon": ("colon", "colonoscop", "caec", "sigmoid", "hemicolect", "colect"),
+              "stomach": ("stomach", "gastric", "antr", "pylor", "gastrectom"),
+              "oesophagus": ("oesophag", "esophag"),
+              "liver_hcc": ("hcc", "hepatocellular", "triphasic", "liver mass", "liver lesion", "hepatectom"),
+              "gallbladder": ("gallbladder", "gall bladder", "cholecyst"),
+              "ovary": ("ovar", "adnex", "ca-125", "ca125"),
+              "corpus_uteri": ("endometri", "uterus", "uterine", "corpus"),
+              "prostate": ("prostat", "psa"),
+              "kidney": ("renal mass", "renal cell", "kidney mass", "nephrectom"),
+              "germ_cell": ("testis", "testic", "scrot", "orchidect"),
+              "larynx": ("larynx", "laryng", "vocal cord", "glott"),
+              "brain_cns": ("glioma", "glioblastoma", "astrocytoma", "meningioma", "craniotom", "brain tumour", "brain tumor", "intracranial mass"),
+              "retinoblastoma": ("retinoblastoma", "orbit", "retcam", "ophthalm", "eua eyes"),
+              "wilms": ("wilms", "nephroblastoma", "renal mass", "nephrectom")}
 SITE_NAME = {"breast": "the breast", "cervix": "the cervix", "lung_nsclc": "the lung", "colorectal_rectum": "the colon or rectum",
-             "oral_cavity": "the oral cavity"}
+             "oral_cavity": "the oral cavity", "colorectal_colon": "the colon", "stomach": "the stomach", "oesophagus": "the oesophagus",
+             "liver_hcc": "the liver", "gallbladder": "the gallbladder", "ovary": "the ovary", "corpus_uteri": "the uterus",
+             "prostate": "the prostate", "kidney": "the kidney", "germ_cell": "the testis", "larynx": "the larynx",
+             "brain_cns": "the brain", "retinoblastoma": "the eye", "wilms": "the kidney"}
+
+# Routine work-up titles that name an organ without naming a tumour site: left out of the mismatch check (review, Phase 2).
+ROUTINE_TITLE = re.compile(r"function test|function|serolog|hepatitis|profile|markers|opinion|referral")
 
 FINAL = {"FINAL", "AMENDED", "CORRECTED"}
 VERIFIED = ("verified", "confirmed")
@@ -194,6 +235,8 @@ def _mentions(docs, by_fact) -> dict:
     out = {site: [] for site in SITE_WORDS}
     for d in docs:
         t = " " + d["title"].lower() + " "
+        if ROUTINE_TITLE.search(t):  # a liver function test or a hepatitis serology names no tumour site (review, Phase 2)
+            continue
         for site, words in SITE_WORDS.items():
             if any(w in t for w in words):
                 out[site].append(slots_title(d["title"]))
@@ -350,7 +393,51 @@ def _row(s) -> dict:
             out["report_value"] = s["report_value"]
     if s.get("confirmed_by"):
         out["corrected_by"] = slots.display_name(s["confirmed_by"])
+    dr = s.get("draft") or {}
+    if s.get("status") in ("not_found", "waiting") and dr.get("value"):  # only in a report not final and signed: shown, marked (owner, 2 Nov 2026)
+        out["unsigned"] = {"value": dr["value"], "word": unsigned_word(dr.get("status")), "quote": dr.get("quote")}
     return out
+
+
+def unsigned_word(status) -> str:
+    """The mark on a value from a report that is not final and signed: "not signed" (final, unsigned), "preliminary", "not final"."""
+    st = str(status or "").upper()
+    return "not signed" if st in FINAL else "preliminary" if st == "PRELIMINARY" else "not final"
+
+
+def unsigned_words(case_id, docs=None) -> dict:
+    """doc_id -> the mark of every report of the Case File that is not final and signed ("not signed", "preliminary", "not final")."""
+    if docs is None:
+        docs = rules.case_docs(case_id, store.get_state(case_id))
+    out = {}
+    for d in docs:
+        f = final_status(d)
+        if f["warn"] and d.get("doc_id"):
+            out[d["doc_id"]] = unsigned_word(f["status"])
+    return out
+
+
+def mark_citations(node, words: dict):
+    """A copy of node in which every citation of such a report carries "final_word" for the mark on its chip: a value from a report not
+    final and signed is shown everywhere, marked (owner, 2 Nov 2026). The saved summary, brief or answer is not touched."""
+    import copy
+    if not words:
+        return node
+
+    def walk(x):
+        if isinstance(x, dict):
+            for c in x.get("citations") or []:
+                if isinstance(c, dict) and c.get("doc_id") in words:
+                    c["final_word"] = words[c["doc_id"]]
+            for v in x.values():
+                if isinstance(v, (dict, list)):
+                    walk(v)
+        elif isinstance(x, list):
+            for v in x:
+                walk(v)
+    node = copy.deepcopy(node)
+    walk(node)
+    return node
 
 
 def slots_note(s) -> str:
@@ -402,9 +489,15 @@ def build(case_id, roles=None) -> dict:
     key_checks = st.get("key_checks") if isinstance(st.get("key_checks"), dict) else {}
     problems, keys = [], []
     for s in all_slots:
-        if s.get("kind") == "fact" and s.get("status") == "needs_confirmation" and s.get("fact_id") != "clinical_question":
+        picked = s.get("picked") if s.get("status") == "found" else None  # two reports differ and a doctor picked the value the board uses (1.7)
+        if s.get("kind") == "fact" and (s.get("status") == "needs_confirmation" or picked) and s.get("fact_id") != "clinical_question":
             conf = s.get("confirmation") or {}
-            problems.append({**_row(s), "kind": "problem", "confirmation": conf or None, "why": _problem_words(conf), "detail": conf.get("why") or s.get("note") or ""})
+            row = {**_row(s), "kind": "problem", "confirmation": conf or None, "why": _problem_words(conf), "detail": conf.get("why") or s.get("note") or ""}
+            if picked:  # settled: still listed, with the pick and its Undo, never counted as left
+                row.update(picked=picked, resolved=True, why=f"Picked: {picked.get('value')} from {picked.get('doc_title')}, by {picked.get('by_name') or picked.get('by')}")
+            elif s.get("pick_stale"):  # the doctor's pick no longer matches its report (item 1.7): said, never dropped silently
+                row.update(pick_stale=s["pick_stale"], why=discord.stale_why(s["pick_stale"]))
+            problems.append(row)
     for fid in key_facts(prot) if prot else []:
         s = by_fact.get(fid)
         if not s or s.get("status") != "found" or any(p["fact_id"] == fid for p in problems):
@@ -413,7 +506,8 @@ def build(case_id, roles=None) -> dict:
         doc_id = (s.get("quote") or {}).get("doc_id") or ""
         done = k.get("value") == (s.get("value") or "") and k.get("doc_id") == doc_id
         keys.append({**_row(s), "kind": "key", "confirmed": done, "confirmed_by": slots.display_name(k.get("by")) if done else "", "confirmed_at": k.get("at") if done else None})
-    check_todo = len(problems) + sum(1 for k in keys if not k["confirmed"])
+    open_problems = [p for p in problems if not p.get("resolved")]
+    check_todo = len(open_problems) + sum(1 for k in keys if not k["confirmed"])
 
     # Pre-Authorization (B6): what the board still needs, grouped by the department that will receive the request.
     missing, waiting, optional = [], [], []
@@ -445,6 +539,15 @@ def build(case_id, roles=None) -> dict:
     # Summary (B7): written before sending, read, then sent.
     prose = view.get("prose") or {}
     sent = case.get("board_ready") or None
+    # After the first board decision the Case summary is the main summary (night-v3 item 3.4, owner decision D3); the pre-board
+    # summaries stay in the history. `prose` stays the live pre-board summary for every existing reader.
+    cs_view, history = None, []
+    try:
+        from . import case_summary
+        cs_view = case_summary.view(case_id, st, r) if case_summary.current(st) else None
+        history = case_summary.pre_board_history(st)
+    except Exception as e:  # the Case File view never fails because of the Case summary
+        log.warning("Case summary view failed for %s (%s: %s)", case_id, e.__class__.__name__, e)
 
     # Sign-offs for the consultant (B9).
     signoffs = [p for p in proposals.list_(case) if p.get("status") == proposals.PENDING] if consultant else []
@@ -465,7 +568,10 @@ def build(case_id, roles=None) -> dict:
         pa = sec("pre_authorization", "waiting", "Waiting on " + deps[0] + (f" and {len(deps) - 1} more" if len(deps) > 1 else ""), len(waiting))
     else:
         pa = sec("pre_authorization", "done", "Done")
-    if prose.get("status") in ("ready",) and prose.get("reviewed"):
+    if cs_view:  # the Case summary's own words (item 3.4)
+        sm = {"reviewed": sec("summary", "done", "Reviewed"), "stale": sec("summary", "todo", "Decision recorded: update the Case summary", 1),
+              "building": sec("summary", "working", "Being written")}.get(cs_view["status"]) or sec("summary", "todo", "Read the Case summary", 1)
+    elif prose.get("status") in ("ready",) and prose.get("reviewed"):
         sm = sec("summary", "done", "Done")
     elif prose.get("status") == "ready":
         sm = sec("summary", "todo", "Read it", 1)
@@ -497,33 +603,53 @@ def build(case_id, roles=None) -> dict:
         n = len(g["items"])
         dep = g["department"]
         what = ", ".join(i["label"] for i in g["items"][:2]) + (f" and {n - 2} more" if n > 2 else "")
-        todo.append({"id": f"request:{dep['label']}", "section": "pre_authorization", "label": what, "why": "Not found in the reports",
+        unsigned = all(i.get("draft") for i in g["items"])  # the reports have it, but not final and signed (2 Nov 2026)
+        todo.append({"id": f"request:{dep['label']}", "section": "pre_authorization", "label": what,
+                     "why": "In a report not signed yet" if unsigned else "Not found in the reports",
                      "action": {"kind": "ask_department", "label": f"Send request to {dep['label']}", "department": dep, "slot_ids": [i["slot_id"] for i in g["items"]]}})
     for d in doc_todo:
         todo.append({"id": f"doc:{d['doc_id']}", "section": "reports", "label": d["title"], "why": d["check"]["reasons"][0],
                      "action": {"kind": "open_report", "label": "Check", "doc_id": d["doc_id"]}})
-    for p in problems:
+    # a report that came after sending differs from an earlier one (night-v3 item 1.5, B8): one task "Check N values", first in the list
+    fresh = after_send.since_sent(case_id, case, open_problems) if sent else []
+    for p in fresh:
+        p["since_sent"] = True
+    for p in open_problems:
+        if p.get("since_sent"):
+            continue
         todo.append({"id": f"check:{p['slot_id']}", "section": "check", "label": p["label"], "why": p["why"] or "Please check", "action": {"kind": "check", "label": "Check", "slot_id": p["slot_id"]}})
     unconfirmed = [k for k in keys if not k["confirmed"]]
     if unconfirmed:
         todo.append({"id": "keys", "section": "check", "label": f"Confirm {len(unconfirmed)} key {'value' if len(unconfirmed) == 1 else 'values'}",
                      "why": ", ".join(k["label"] for k in unconfirmed[:4]) + ("..." if len(unconfirmed) > 4 else ""), "action": {"kind": "go", "label": "Confirm"}})
-    if not todo and not sent:
+    if cs_view:  # after a decision the Case summary's to-do, whether or not the Case File was sent (item 3.4)
+        if cs_view["status"] == "ready" and cs_view["can"]["review"]:
+            todo.append({"id": "case_summary", "section": "summary", "label": "Read the Case summary", "action": {"kind": "go", "label": "Read it"}})
+        elif cs_view["status"] == "stale" and cs_view["can"]["build"]:
+            todo.append({"id": "case_summary", "section": "summary", "label": "Update the Case summary", "why": cs_view.get("stale_reason") or "",
+                         "action": {"kind": "go", "label": "Update it"}})
+    elif not todo and not sent:
         if prose.get("status") in ("none", "stale"):
             todo.append({"id": "summary", "section": "summary", "label": "Write the summary", "action": {"kind": "go", "label": "Write it"}})
         elif prose.get("status") == "ready" and not prose.get("reviewed"):
             todo.append({"id": "summary", "section": "summary", "label": "Read the summary", "action": {"kind": "go", "label": "Read it"}})
+    if fresh:
+        n = len(fresh)
+        todo.insert(0, {"id": "since_sent", "section": "check", "label": f"Check {n} {'value' if n == 1 else 'values'}", "since_sent": True,
+                        "why": ("A report that came after sending differs from an earlier one or is only preliminary: " if any((p.get("confirmation") or {}).get("kind") == "preliminary" for p in fresh)
+                                else "A report that came after sending differs from an earlier one: ") + ", ".join(p["label"] for p in fresh[:3]) + ("..." if n > 3 else ""),
+                        "action": {"kind": "check", "label": "Check", "slot_id": fresh[0]["slot_id"]}})
     waiting_rows = [{"id": f"wait:{w['slot_id']}", "section": "pre_authorization", "label": w["label"], "department": w["department"], "request": w["request"],
                      "action": {"kind": "remind", "label": "Send reminder", "action_id": (w["request"] or {}).get("action_id")}} for w in waiting]
 
     warnings_list = warnings(case, docs, view)
-    nxt = _next(missing, groups, doc_todo, problems, unconfirmed, question_done, prose, sent, warnings_list)
+    nxt = _next(missing, groups, doc_todo, open_problems, unconfirmed, question_done, prose, sent, warnings_list)
     glance = _glance(prot, by_fact)
     return {"case_id": case_id, "mode": "prepare" if prepare else "read", "role": "consultant" if consultant else "resident" if resident else "reader",
             "sections": sections, "next": nxt if prepare else None, "todo": todo if prepare else [], "waiting": waiting_rows if prepare else [],
             "warnings": warnings_list, "question": question, "glance": glance, "documents": docs,
             "check": {"problems": problems, "keys": keys}, "pre_authorization": {"groups": list(groups.values()), "waiting": waiting, "optional": optional},
-            "summary": {"prose": prose, "sent": sent}, "left": left, "permissions": perms, "signoffs": len(signoffs),
+            "summary": {"prose": prose, "sent": sent, "case_summary": cs_view, "history": history}, "left": left, "permissions": perms, "signoffs": len(signoffs),
             "protocol": case.get("protocol") or "", "protocol_label": view.get("protocol_label") or "", "reasons": [{"id": k, "label": v} for k, v in REASONS.items()],
             "blockers": view.get("blockers") or []}
 
@@ -532,6 +658,8 @@ def _problem_words(conf) -> str:
     """A problem value in a few plain words (the long reason stays in the detail)."""
     t = (conf or {}).get("type")
     why = str((conf or {}).get("why") or "").lower()
+    if t == "note_discordance" and (conf or {}).get("kind") == "preliminary":
+        return "Only a preliminary report since sending"
     if t == "note_discordance" or "differs" in why or "disagree" in why:
         return "Two reports differ"
     if t == "confirm_value" and "scan" in why:

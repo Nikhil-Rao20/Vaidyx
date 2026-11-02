@@ -80,6 +80,12 @@ def numbers(d):
             n.update(sum9_hit=sum(c["in_either"] for c in v9.values()), sum9_total=sum(c["expected_fields"] for c in v9.values()), sum9_cases=sorted(v9),
                      sum9_misses=[f"{cid}: {m['field']}" for cid, c in sorted(v9.items()) for m in c.get("misses") or []],
                      sum9_mean_seconds=round(statistics.mean([c["summary_seconds"] for c in v9.values() if c.get("summary_seconds")] or [0]), 1))
+    au = next(d.glob("audio_eval_*.json"), None)  # night-v3 item 4.5: the voice check (synthetic sentences, Kokoro to the STT engine)
+    if au:
+        j = json.loads(au.read_text())
+        n["audio_summary"], n["audio_checks"] = j.get("summary") or "", j.get("checks") or {}
+    elif "audio_eval" in rc:
+        n["audio_summary"], n["audio_checks"] = f"did not run (exit {rc['audio_eval']}, see audio_eval.log)", {}
     return n
 
 
@@ -159,6 +165,10 @@ def main(label, baseline, runs=None):
         lines += ["", f"Phase 9 timings (oral cavity / cervix Case Files; recorded, not in the 20 % rule): {t9}"]
     if run.get("sum9_misses"):
         lines += ["", "Phase 9 summary misses: " + "; ".join(run["sum9_misses"])]
+    if "audio_summary" in run:  # one line, not in the verdict: checks on a synthetic set, never an accuracy claim
+        ck = run["audio_checks"]
+        lines += ["", f"Voice check (synthetic sentences, not an accuracy claim; not in the verdict): {run['audio_summary']}"
+                  + (f"; thresholds {'met' if all(ck.values()) else 'not met: ' + ', '.join(k for k, v in ck.items() if not v)}" if ck else "")]
     lines += ["", f"**Gate: {verdict}** (unit tests and the end-to-end API are never optional; the other checks may be skipped when their code did not change, and a skipped check is never counted as a pass).", "",
               f"Timings note: the Q&A eval sends the {run.get('qa_n') or 33} questions of TB-001..003 at once, so its median includes queueing; the Phase 9 questions run "
               "afterwards as a second wave and are timed separately. The Q&A median and the summary mean in the 20 % rule are TB-001..003 only; compare like with like."]

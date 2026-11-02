@@ -5,6 +5,7 @@ from fastapi import Request
 from tumour_board import chats, helpers
 
 from . import common
+from .. import config
 
 router = common.make_router()
 PREPARE_LIMIT = common.RateLimit(10, 600)
@@ -19,7 +20,8 @@ def _role(role):
 
 @router.get("/cases/{case_id}/helpers")
 async def list_helpers(case_id: str, request: Request):
-    """{helpers[{role, label, department, brief{status: none|preparing|ready|stale, at, sections, points_for_review, reviewed_by?}, thread_count, prepare_allowed}]}."""
+    """{helpers[{role, label, title, department, brief{status: none|preparing|ready|stale, at, sections, points_for_review, reviewed_by?}, thread_count,
+    points_count, not_documented_count, meeting_exchanges, prepared_at, prepare_allowed}]}."""
     rl = common.roles(request); common.case(case_id)
     return {"helpers": helpers.list_helpers(case_id, rl), "heads": list(helpers.HEADS)}
 
@@ -32,10 +34,28 @@ async def prepare(case_id: str, role: str, request: Request):
     if not next((h["prepare_allowed"] for h in helpers.list_helpers(case_id, rl) if h["role"] == role), False):
         common.fail(403, "A helper brief is prepared by the owning department's doctors or the MDT Coordinator.", "prepare_forbidden")
     b = await common.body(request) if (await request.body()) else {}
+    if case_id in config.PROTECTED_CASES:
+        common.fail(403, "This Case File is protected: no brief is prepared for it.", "protected")
     PREPARE_LIMIT.check(common.client_key(request), "Too many preparations in a short time; please wait a few minutes.")
     if not c.get("protocol"):
         common.fail(409, "The Case File is not listed yet: list it before preparing a brief.", "not_listed")
     return helpers.prepare(case_id, role, u, refresh=bool(b.get("refresh")))
+
+
+@router.post("/cases/{case_id}/helpers/prepare-all")
+async def prepare_all(case_id: str, request: Request):
+    """-> {helpers[{role, status: preparing|ready|queued, job}], started}: "Prepare all" on the Case File (night-v3 item 6.5). Every role
+    without a brief standing for the Case File is prepared in the background, one after the other; poll GET /cases/{id}/helpers. The same
+    permission as one preparation."""
+    u = common.user(request); rl = common.roles(request); c = common.case(case_id); common.need_known(rl)
+    if not any(h["prepare_allowed"] for h in helpers.list_helpers(case_id, rl)):
+        common.fail(403, "A helper brief is prepared by the owning department's doctors or the MDT Coordinator.", "prepare_forbidden")
+    if case_id in config.PROTECTED_CASES:
+        common.fail(403, "This Case File is protected: no brief is prepared for it.", "protected")
+    PREPARE_LIMIT.check(common.client_key(request), "Too many preparations in a short time; please wait a few minutes.")
+    if not c.get("protocol"):
+        common.fail(409, "The Case File is not listed yet: list it before preparing a brief.", "not_listed")
+    return helpers.prepare_all(case_id, u)
 
 
 def _chat_reader(request, rl):

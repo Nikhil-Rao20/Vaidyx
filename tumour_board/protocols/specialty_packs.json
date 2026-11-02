@@ -6,7 +6,7 @@
       "label": "Radiology",
       "sources": [
         {"folder": "iria"},
-        {"folder": "ncg_india", "files": ["synoptic-reporting-radiology-template.pdf"]},
+        {"folder": "ncg_india", "files": ["synoptic-reporting-radiology-template.pdf", "ncg-gi-draft-2021-gallbladder-cancer-radiology-synoptic.pdf"]},
         {"folder": "acr_appropriateness"},
         {"folder": "acr_rads"},
         {"folder": "rcr"},
@@ -111,9 +111,69 @@
             {"text": "Comparison with previous study", "page": 133, "quote": "Comparison: if available"},
             {"text": "Impression documented in the report", "page": 133, "quote": "Impression: Mass in the cervix with infiltration"}
           ]
+        },
+        "colorectal_colon": {
+          "title": "NCG radiology synoptic reporting template, colon cancer",
+          "file": "ncg_india/synoptic-reporting-radiology-template.pdf",
+          "items": [
+            {"text": "Biopsy histopathology type", "page": 22, "quote": "Biopsy- HPE Type"},
+            {"text": "Differentiation grade, mucin and signet ring cells", "page": 22, "quote": "Differentiation Grade"},
+            {"text": "CEA level", "page": 22, "quote": "CEA"},
+            {"text": "Colonoscopy location and diagnosis", "page": 22, "quote": "Colonoscopy location and diagnosis"},
+            {"text": "Location of the colon mass", "page": 22, "quote": "Colon Mass"},
+            {"text": "Obstruction", "page": 23, "quote": "Obstruction"},
+            {"text": "Perforation", "page": 23, "quote": "Perforation"},
+            {"text": "T stage documented in the report", "page": 23, "quote": "T Stage"},
+            {"text": "Extent of extramural spread", "page": 23, "quote": "Extend of extramural spread"},
+            {"text": "Extramural venous invasion (EMVI)", "page": 23, "quote": "EMVI"},
+            {"text": "Infiltration of adjacent structures", "page": 23, "quote": "Adjacent structure infiltration to"},
+            {"text": "Pericolic lymph nodes: number, size, morphology", "page": 23, "quote": "Pericolic Nodes"},
+            {"text": "Metastases: liver, lungs, peritoneum, non-regional nodes, bones", "page": 24, "quote": "Metastases"},
+            {"text": "Hydronephrosis", "page": 25, "quote": "Hydronephrosis"}
+          ]
+        },
+        "larynx": {
+          "title": "NCG radiology synoptic reporting template, larynx and hypopharynx CT",
+          "file": "ncg_india/synoptic-reporting-radiology-template.pdf",
+          "items": [
+            {"text": "Technique: modality and IV contrast", "page": 44, "quote": "IV Contrast"},
+            {"text": "Comparison study and its date", "page": 44, "quote": "Modality of comparison study"},
+            {"text": "Laterality", "page": 44, "quote": "Laterality"},
+            {"text": "Epicentre of disease (glottic, supraglottic, subglottic)", "page": 45, "quote": "If Larynx, epicenter of disease"},
+            {"text": "Transverse dimensions or volume of measurable disease", "page": 45, "quote": "If Measurable, Transverse dimensions"},
+            {"text": "Pre-epiglottic space involvement", "page": 45, "quote": "Pre-epiglottic space"},
+            {"text": "Paraglottic space and vocal cord involvement", "page": 46, "quote": "Para Glottic space"},
+            {"text": "Anterior and posterior commissure involvement", "page": 46, "quote": "Anterior commissure"},
+            {"text": "Subglottic extension and its inferior extent", "page": 46, "quote": "If involved, Inferior extent in mm"},
+            {"text": "Cartilage erosion: thyroid, arytenoid, cricoid", "page": 46, "quote": "Cartilage Erosion"},
+            {"text": "Exolaryngeal spread", "page": 47, "quote": "Exolaryngeal spread"},
+            {"text": "Nodal disease: levels and laterality", "page": 47, "quote": "Presence of nodal disease"},
+            {"text": "Extracapsular spread of nodes", "page": 48, "quote": "Perinodal extension / extracapsular spread"},
+            {"text": "Lung nodules and other metastatic lesions", "page": 48, "quote": "Lung nodules"}
+          ]
+        },
+        "gallbladder": {
+          "title": "NCG radiology synoptic reporting template, gallbladder carcinoma",
+          "file": "ncg_india/synoptic-reporting-radiology-template.pdf",
+          "items": [
+            {"text": "Gallbladder mass: absent, indeterminate or present", "page": 104, "quote": "Gallbladder mass"},
+            {"text": "Size of the mass (cm)", "page": 104, "quote": "If present size (cm)"},
+            {"text": "Location: body, fundus, neck", "page": 104, "quote": "Location"},
+            {"text": "Plane with the liver and segments involved", "page": 104, "quote": "Plane with the liver and segments involved"},
+            {"text": "Plane with duodenum, antrum of stomach, head of pancreas", "page": 104, "quote": "Plane with D2 Duodenum, antrum of stomach, head of pancreas"},
+            {"text": "Plane with hepatic flexure and colon", "page": 104, "quote": "Plane with hepatic flexure, colon"},
+            {"text": "Other organ involvement", "page": 104, "quote": "Any other Organ Involvement"},
+            {"text": "Bile duct involvement and level", "page": 104, "quote": "Bile duct involvement"},
+            {"text": "Bile duct anatomy variation", "page": 105, "quote": "Bile duct anatomy variation"},
+            {"text": "Arterial abutment, encasement or infiltration", "page": 105, "quote": "Arterial abutment/ encasement/ infiltration"},
+            {"text": "Artery and portal vein anatomy variation", "page": 105, "quote": "Artery anatomy variation"},
+            {"text": "Portal vein involvement", "page": 105, "quote": "PV Involvement"},
+            {"text": "Regional lymph nodes and their location", "page": 106, "quote": "Regional lymph nodes"},
+            {"text": "Distant metastases: liver, peritoneum, distant nodes, other organs", "page": 106, "quote": "Distant Metastases"}
+          ]
         }
       },
-      "checklist_note": "From the ICRI / IRIA onco-imaging reporting checklists (India). The NCG-KCDO radiology synoptic template has rectal and colon templates but none for lung or breast. Oral cavity: the radiology synoptic reporting format of the NCG head and neck guideline (Annexure 1, India). Cervix: the ICRI / IRIA carcinoma cervix reporting format (CECT, the pelvis items also for MRI; the NCG gynaecological guideline has no radiology template)."
+      "checklist_note": "From the ICRI / IRIA onco-imaging reporting checklists (India). The NCG-KCDO radiology synoptic template has rectal and colon templates but none for lung or breast. Oral cavity: the radiology synoptic reporting format of the NCG head and neck guideline (Annexure 1, India). Cervix: the ICRI / IRIA carcinoma cervix reporting format (CECT, the pelvis items also for MRI; the NCG gynaecological guideline has no radiology template). Colon, larynx and gallbladder (night-v3 item 2.10, drafts like their checklists): the colon cancer, larynx and hypopharynx CT, and gallbladder carcinoma forms of the NCG-KCDO radiology synoptic template (India)."
     },
     "pathology": {
       "label": "Pathology",
@@ -205,9 +265,65 @@
             {"text": "Margin status and closest distance", "page": 53, "quote": "Close (specify distance of closest margin)"},
             {"text": "Extranodal extension (node dissection)", "page": 54, "quote": "Extanodal extension (ENE): - Absent"}
           ]
+        },
+        "prostate": {
+          "title": "NCG urological guideline pathology synoptic format, prostate cancer on biopsy or TURP",
+          "file": "ncg_india/ncg-guidelines-for-urological-malignancies-2019.pdf",
+          "items": [
+            {"text": "Nature of specimen: needle biopsy or TURP", "page": 53, "quote": "Needle biopsy"},
+            {"text": "Number of labelled containers and cores", "page": 53, "quote": "Number of site specific labelled containers:"},
+            {"text": "Histologic subtype", "page": 53, "quote": "Histologic subtypes (specify all subtypes present if tumour is mixed)"},
+            {"text": "Grade Group and Gleason score", "page": 53, "quote": "Histologic Grade Group and Gleason Score"},
+            {"text": "Percentage of pattern 4 in Gleason score 7", "page": 53, "quote": "Percentage of Pattern 4 in Gleason Score 7(3+4)"},
+            {"text": "Intraductal carcinoma", "page": 53, "quote": "Intraductal Carcinoma (IDC)"},
+            {"text": "Number of positive cores", "page": 53, "quote": "Number of positive cores:"},
+            {"text": "Total number of cores", "page": 54, "quote": "Total number of cores:"},
+            {"text": "Percentage of tissue involved by tumour", "page": 54, "quote": "Estimated percentage of prostatic tissue involved by tumor in each core"},
+            {"text": "Periprostatic fat, seminal vesicle or ejaculatory duct invasion", "page": 54, "quote": "Periprostatic Fat Invasion/Seminal Vesicle/Ejaculatory Duct Invasion"},
+            {"text": "Lymphovascular invasion", "page": 54, "quote": "Lymphovascular Invasion"},
+            {"text": "Perineural invasion", "page": 54, "quote": "Perineural Invasion"}
+          ]
+        },
+        "kidney": {
+          "title": "NCG urological guideline pathology synoptic format, renal cancer on radical nephrectomy",
+          "file": "ncg_india/ncg-guidelines-for-urological-malignancies-2019.pdf",
+          "items": [
+            {"text": "Specimen laterality and operative procedure", "page": 61, "quote": "Specimen laterality"},
+            {"text": "Tumour focality", "page": 61, "quote": "Tumour focality"},
+            {"text": "Maximum tumour dimension", "page": 61, "quote": "Maximum tumour dimension"},
+            {"text": "Perinephric extension and Gerota's fascia involvement", "page": 61, "quote": "Perinephric extension"},
+            {"text": "Renal vein and IVC thrombus", "page": 61, "quote": "Renal vein thrombus"},
+            {"text": "Histological tumour type", "page": 62, "quote": "Histological tumour type:"},
+            {"text": "WHO / ISUP tumour grade", "page": 62, "quote": "WHO/ISUP tumour grade"},
+            {"text": "Sarcomatoid and rhabdoid morphology", "page": 62, "quote": "Sarcomatoid morphology"},
+            {"text": "Tumour necrosis", "page": 62, "quote": "Tumour necrosis"},
+            {"text": "Renal sinus invasion", "page": 62, "quote": "Renal sinus invasion"},
+            {"text": "Tumour in major veins", "page": 62, "quote": "Tumour present in major veins microscopically"},
+            {"text": "Lymphovascular invasion", "page": 62, "quote": "Lymphovascular invasion"},
+            {"text": "Tumour in the adrenal gland", "page": 63, "quote": "Tumour in adrenal gland"},
+            {"text": "Lymph nodes examined and positive", "page": 63, "quote": "Total number of lymph nodes examined"}
+          ]
+        },
+        "germ_cell": {
+          "title": "NCG urological guideline pathology synoptic format, radical orchiectomy specimens",
+          "file": "ncg_india/ncg-guidelines-for-urological-malignancies-2019.pdf",
+          "items": [
+            {"text": "Nature of specimen: radical or high inguinal orchiectomy", "page": 49, "quote": "Radical/ High inguinal Orchiectomy"},
+            {"text": "Specimen laterality", "page": 49, "quote": "Specimen laterality"},
+            {"text": "Tumour focality", "page": 49, "quote": "Tumor focality"},
+            {"text": "Tumour size", "page": 49, "quote": "Greatest dimension of main tumor mass"},
+            {"text": "Histologic subtypes and their percentages", "page": 49, "quote": "Histologic subtypes (specify all subtypes present if tumour is mixed)"},
+            {"text": "Extent of tumour (pT stage documented in the report)", "page": 50, "quote": "Extent of tumor"},
+            {"text": "Spermatic cord margin", "page": 50, "quote": "Spermatic Cord Margin"},
+            {"text": "Lymphovascular invasion", "page": 50, "quote": "Lymphovascular Invasion"},
+            {"text": "Regional lymph nodes examined and involved", "page": 50, "quote": "Number of lymph nodes examined"},
+            {"text": "Extranodal extension", "page": 50, "quote": "Extranodal extension"},
+            {"text": "Germ cell neoplasia in situ (GCNIS)", "page": 50, "quote": "GCNIS"},
+            {"text": "Serum tumour markers before and after orchiectomy", "page": 50, "quote": "Pre-Orchiectomy Serum Tumor Markers"}
+          ]
         }
       },
-      "checklist_note": "Oral cavity: the NCG head and neck pathology synoptic format (Annexure 2, India; core items only). Other cancers: Indian sources (NCG, ICMR, TMC) define no pathology reporting dataset, so the checklists come from the international CAP protocols (resection specimens). Cervix: none (no CAP, ICCR or RCPath cervix dataset on disk; NCG lists only tumour type, grade, depth of invasion and LVSI, which the Pre-Authorization already checks)."
+      "checklist_note": "Oral cavity: the NCG head and neck pathology synoptic format (Annexure 2, India; core items only). Prostate, kidney and germ cell tumour (night-v3 item 2.10): the pathology synoptic formats of the NCG urological guideline (Annexure 2, India: prostate biopsy or TURP, radical nephrectomy, radical orchiectomy). Other cancers: no Indian pathology reporting dataset is on disk, so the checklists come from the international CAP protocols (resection specimens). Cervix: none (no CAP, ICCR or RCPath cervix dataset on disk; NCG lists only tumour type, grade, depth of invasion and LVSI, which the Pre-Authorization already checks)."
     },
     "medical_oncology": {
       "label": "Medical Oncology",

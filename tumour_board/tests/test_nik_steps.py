@@ -86,6 +86,28 @@ def test_a_signature_flag_alone_never_makes_a_draft_final():
     assert steps.final_status(d)["preliminary"] is True  # the stricter of the text and the hospital system
 
 
+def test_a_value_only_in_a_report_not_signed_is_shown_marked():
+    """Owner, 2 Nov 2026: the value of a report that is final but not signed is shown with its line and the mark "not signed" (never
+    counted: the row stays not found); every chip citing such a report gets the same mark, on a copy."""
+    q = {"doc_id": "D1", "doc_title": "HISTOPATHOLOGY REPORT", "page": 0, "text": "Grade: Moderately differentiated"}
+    s = {"id": "fact:grade", "fact_id": "grade", "label": "Grade", "status": "not_found", "note": "Only in a non-final document (HISTOPATHOLOGY REPORT)",
+         "draft": {"doc_id": "D1", "doc_title": "HISTOPATHOLOGY REPORT", "status": "FINAL", "value": "Moderately differentiated", "quote": q}}
+    row = steps._row(s)
+    assert row["status"] == "not_found" and row["value"] == "" and row["unsigned"] == {"value": "Moderately differentiated", "word": "not signed", "quote": q}
+    assert "unsigned" not in steps._row({**s, "status": "found", "value": "Moderately differentiated"})
+    assert "unsigned" not in steps._row({**s, "draft": {**s["draft"], "value": ""}})
+    assert [steps.unsigned_word(x) for x in ("FINAL", "PRELIMINARY", "")] == ["not signed", "preliminary", "not final"]
+    docs = [util.make_doc("D1", "histopathology", status="FINAL", signed="no"), util.make_doc("D2", "ct"),
+            util.make_doc("D3", "mammogram", status="PRELIMINARY", signed="no")]
+    words = steps.unsigned_words("TB-X", docs)
+    assert words == {"D1": "not signed", "D3": "preliminary"}
+    node = {"sections": [{"sentences": [{"text": "a", "citations": [{"doc_id": "D1"}, {"doc_id": "D2"}]}]}], "points": [{"citations": [{"doc_id": "D3"}]}]}
+    marked = steps.mark_citations(node, words)
+    assert marked["sections"][0]["sentences"][0]["citations"] == [{"doc_id": "D1", "final_word": "not signed"}, {"doc_id": "D2"}]
+    assert marked["points"][0]["citations"] == [{"doc_id": "D3", "final_word": "preliminary"}]
+    assert "final_word" not in node["sections"][0]["sentences"][0]["citations"][0]  # the saved summary is not touched
+
+
 def test_the_check_of_one_document():
     case = {"protocol": "lung_nsclc"}
     good = util.make_doc("D2", "ct", facts={"lesion_size": util.fact("3.2 cm", quote="Size: 3.2 cm")}); good["extracted_under"] = "lung_nsclc"
@@ -174,3 +196,151 @@ def test_the_count_is_one_everywhere(nik_app, tb001):
     assert n == get(tc)["left"]
     rows = {x["case_id"]: x for x in tc.get("/api/tb/case-list").json()["cases"]}
     assert rows[CASE]["left_before_board"] == n
+
+
+# ---- a resident's sign-offs (night-v3 item 1.8): the reason and a key value become proposals the consultant approves ------------------
+
+def _outsider(people):
+    """A resident of a department not on the Case File (not on its team)."""
+    import copy
+    from tumour_board import org
+    o = copy.deepcopy(people)
+    o["users"]["res.kiran"] = {"departments": {"breast_surgery": "resident"}, "display_name": "Dr Kiran"}
+    org.save(o, by="test")
+
+
+def _approve(tc, who, pid, user="dr.rao"):
+    who["user"] = user
+    return tc.post(f"/api/tb/cases/{CASE}/proposals/{pid}/approve")
+
+
+def _pending(pid):
+    from tumour_board import proposals
+    return proposals.find(store.get_case(CASE), pid)["status"]
+
+
+def test_a_residents_reason_for_discussion_is_signed_off_by_the_consultant(nik_app, tb001, people):
+    tc, who = nik_app
+    _outsider(people)
+    who["user"] = "res.asha"
+    assert tc.put(f"/api/tb/cases/{CASE}/reason", json={"value": "whatever"}).status_code == 400  # checked before it is stored
+    r = tc.put(f"/api/tb/cases/{CASE}/reason", json={"value": "recurrence"})
+    assert r.status_code == 200, r.text
+    p = r.json()["proposal"]
+    assert p["action"] == "reason" and p["payload"] == {"value": "recurrence"} and p["status"] == "pending" and p["by"] == "res.asha"
+    assert store.get_case(CASE).get("board_reason") is None  # nothing changed yet
+    assert "board_reason" not in [e.get("kind") for e in store.read_audit(CASE)]
+    # the consultant sees it under "Sign-offs from your team" and approves: written in the consultant's name
+    who["user"] = "dr.rao"
+    assert get(tc)["signoffs"] == 1
+    r = _approve(tc, who, p["id"])
+    assert r.status_code == 200, r.text
+    rec = store.get_case(CASE)["board_reason"]
+    assert rec["value"] == "recurrence" and rec["by"] == "dr.rao"
+    ev = next(e for e in store.read_audit(CASE) if e.get("kind") == "board_reason")
+    assert ev["by"] == "dr.rao"
+    ap = next(e for e in store.read_audit(CASE) if e.get("kind") == "proposal_approved")
+    assert ap["by"] == "dr.rao" and ap["proposed_by"] == "res.asha" and ap["action"] == "reason"
+    # a resident not on the team, and a doctor of another department, are refused; the consultant's own call works as before
+    who["user"] = "res.kiran"
+    assert tc.put(f"/api/tb/cases/{CASE}/reason", json={"value": "other"}).status_code == 403
+    who["user"] = "dr.nair"
+    assert tc.put(f"/api/tb/cases/{CASE}/reason", json={"value": "other"}).status_code == 403
+    who["user"] = "dr.rao"
+    r = tc.put(f"/api/tb/cases/{CASE}/reason", json={"value": "other"})
+    assert r.status_code == 200 and "proposal" not in r.json() and store.get_case(CASE)["board_reason"]["value"] == "other"
+
+
+def test_a_residents_key_value_check_is_signed_off_unless_the_value_changed(nik_app, tb001, people):
+    tc, who = nik_app
+    _outsider(people)
+    util.add(CASE, util.make_doc("DK1", "ihc", title="PD-L1 IHC REPORT", facts={"pdl1": util.fact("TPS 60 %", quote="PD-L1 (22C3): TPS 60 %")}))
+    service.recheck(CASE, "test")
+    k = next(x for x in get(tc)["check"]["keys"] if x["fact_id"] == "pdl1")
+    body = {"fact_id": "pdl1", "value": k["value"], "doc_id": k["quote"]["doc_id"]}
+    who["user"] = "res.asha"
+    assert tc.post(f"/api/tb/cases/{CASE}/key-checks", json={**body, "fact_id": "PD-L1!"}).status_code == 400
+    r = tc.post(f"/api/tb/cases/{CASE}/key-checks", json=body)
+    assert r.status_code == 200, r.text
+    p = r.json()["proposal"]
+    assert p["action"] == "key_value" and p["payload"] == body
+    assert "pdl1" not in (store.get_state(CASE).get("key_checks") or {})  # nothing changed yet
+    assert "key_value_confirmed" not in [e.get("kind") for e in store.read_audit(CASE)]
+    # a proposal on another report is stale at approval: 409, and it stays pending
+    stale = tc.post(f"/api/tb/cases/{CASE}/key-checks", json={**body, "doc_id": "DX0"}).json()["proposal"]
+    r = _approve(tc, who, stale["id"])
+    assert r.status_code == 409 and "check it again" in r.text and _pending(stale["id"]) == "pending"
+    # the consultant approves the right one: confirmed in the consultant's name, and the Check step shows it
+    r = _approve(tc, who, p["id"])
+    assert r.status_code == 200, r.text
+    kc = store.get_state(CASE)["key_checks"]["pdl1"]
+    assert kc["by"] == "dr.rao" and kc["value"] == k["value"] and kc["doc_id"] == k["quote"]["doc_id"]
+    ev = next(e for e in store.read_audit(CASE) if e.get("kind") == "key_value_confirmed")
+    assert ev["by"] == "dr.rao" and ev["fact"] == "pdl1"
+    k2 = next(x for x in get(tc)["check"]["keys"] if x["fact_id"] == "pdl1")
+    assert k2["confirmed"] is True and k2["confirmed_by"] == "Dr Rao"
+    # the value changes after the resident checked it (a corrected report): the approval is refused and the proposal stays pending
+    who["user"] = "res.asha"
+    again = tc.post(f"/api/tb/cases/{CASE}/key-checks", json=body).json()["proposal"]
+    util.add(CASE, util.make_doc("DK1", "ihc", title="PD-L1 IHC REPORT", facts={"pdl1": util.fact("TPS 10 %", quote="PD-L1 (22C3): TPS 10 %")}))
+    service.recheck(CASE, "test")
+    r = _approve(tc, who, again["id"])
+    assert r.status_code == 409 and _pending(again["id"]) == "pending"
+    # a resident not on the team is refused; the consultant's own call works as before
+    who["user"] = "res.kiran"
+    assert tc.post(f"/api/tb/cases/{CASE}/key-checks", json=body).status_code == 403
+    who["user"] = "dr.rao"
+    r = tc.post(f"/api/tb/cases/{CASE}/key-checks", json={**body, "value": "TPS 10 %"})
+    assert r.status_code == 200 and "proposal" not in r.json() and r.json()["by"] == "dr.rao"
+
+
+# ---- night-v3 item 3.4: after the first decision the Summary section follows the Case summary -----------------------------------
+
+def test_the_summary_section_follows_the_case_summary(nik_app, tb001, monkeypatch):
+    import asyncio
+    from tumour_board import case_summary as cs, llm, postboard, summary
+    tc, who = nik_app
+
+    async def chat(role, msgs, **kw):  # no model: the adjudication finds no claims, the summaries get no model sentence
+        return {"claims": [], "sentences": [], "points_for_review": []}
+    monkeypatch.setattr(llm, "chat", chat)
+    v = get(tc)
+    assert v["summary"]["case_summary"] is None and set(v["summary"]) == {"prose", "sent", "case_summary", "history"}
+    plain = section(v, "summary")
+    assert plain["detail"] in ("Not started", "Read it", "Done", "Records changed: write it again", "Being written")  # as before item 3.4
+    asyncio.run(summary.build(CASE, force=True))
+    asyncio.run(summary.build(CASE, force=True))
+    h = get(tc)["summary"]["history"]
+    assert len(h) >= 2 and h[-1]["live"] is True and h[0]["live"] is False and h[0]["archived_at"]
+    assert set(h[0]) == {"generated", "archived_at", "review", "model", "paragraphs", "points_for_review", "stage_as_recorded", "live", "sentences", "full"}
+    assert h[0]["full"] is True and h[-1]["full"] is True
+    assert set(h[0]["review"]) >= {"status", "by", "at"} and all(set(p) == {"id", "title", "sentences"} for p in h[0]["paragraphs"])
+    decision = {"outcome": "decision", "decision_text": "Concurrent chemoradiation.", "intent": "curative", "responsible_doctor": "Dr Rao", "board_date": "2026-10-20"}
+    asyncio.run(postboard.record_decision(CASE, decision, "anil"))
+    asyncio.run(cs.build(CASE, {"kind": "decision"}, "anil"))
+    v = get(tc)
+    cv = v["summary"]["case_summary"]
+    assert cv["status"] == "ready" and cv["current"] == 1 and cv["can"] == {"build": True, "review": True, "edit": True}
+    assert [s["id"] for s in cv["sections"]] == ["presentation", "stage", "rounds", "since", "status"] and cv["first_board_date"] == "2026-10-20"
+    assert section(v, "summary")["status"] == "todo" and section(v, "summary")["detail"] == "Read the Case summary"
+    assert any(t["id"] == "case_summary" and t["label"] == "Read the Case summary" for t in v["todo"])
+    assert v["summary"]["prose"]["paragraphs"]  # the live pre-board summary stays as it was for every existing reader
+    asyncio.run(postboard.record_decision(CASE, {**decision, "board_date": "2026-10-27"}, "anil"))  # a later decision: out of date
+    v = get(tc)
+    assert v["summary"]["case_summary"]["status"] == "stale" and "board record" in v["summary"]["case_summary"]["stale_reason"]
+    assert section(v, "summary")["status"] == "todo" and section(v, "summary")["detail"] == "Decision recorded: update the Case summary"
+    assert any(t["id"] == "case_summary" and t["label"] == "Update the Case summary" for t in v["todo"])
+    cs.RUNNING[CASE] = {"started": 0, "trigger": {}, "user": "anil"}
+    try:
+        v = get(tc)
+        assert section(v, "summary")["status"] == "working" and section(v, "summary")["detail"] == "Being written"
+        assert not any(t["id"] == "case_summary" for t in v["todo"])
+    finally:
+        cs.RUNNING.pop(CASE, None)
+    asyncio.run(cs.build(CASE, {"kind": "decision"}, "anil"))
+    cs.review(CASE, 2, "reviewed", "", "dr.rao")
+    v = get(tc)
+    assert section(v, "summary")["status"] == "done" and section(v, "summary")["detail"] == "Reviewed"
+    assert v["summary"]["case_summary"]["label"] == "Reviewed by Dr Rao" and not any(t["id"] == "case_summary" for t in v["todo"])
+    who["user"] = "anil"  # the MDT Coordinator reads: may write it again, not review or edit it
+    assert get(tc)["summary"]["case_summary"]["can"] == {"build": True, "review": False, "edit": False}

@@ -118,7 +118,12 @@ def test_parse_stage_needs_a_stage_not_a_sequence_name():
 
 # ---------------------------------------------------------------- the reference table
 
-CANCERS = ("breast", "lung_nsclc", "colorectal_rectum", "oral_cavity", "cervix")
+OLD_CANCERS = ("breast", "lung_nsclc", "colorectal_rectum", "oral_cavity", "cervix")
+# night-v3 item 2.12: the Phase 2 checklists whose NCG book prints a dose or schedule line (colon, liver HCC, gallbladder and brain / CNS
+# have none: their NCG files name regimens without a dose, the HCC 400 mg line does not name its drug, and no NCG book covers CNS)
+NEW_CANCERS = ("stomach", "oesophagus", "ovary", "corpus_uteri", "prostate", "kidney", "germ_cell", "larynx", "lymphoma", "leukaemia",
+               "wilms", "retinoblastoma", "bone_sarcoma", "soft_tissue_sarcoma")
+CANCERS = OLD_CANCERS + NEW_CANCERS
 
 
 def test_table_validates():
@@ -144,8 +149,11 @@ def test_table_validates():
         regions = [dosecheck.REGION_ORDER[r["region"]] for r in refs if r["cancer"] == cancer]
         assert regions == sorted(regions), f"{cancer}: Indian entries first"
         assert regions[0] == 0
-        # oral cavity (9.1): the NCG oral section gives no RT fractionation ("70 Gy" only), so no RT reference on disk
-        assert {r["kind"] for r in refs if r["cancer"] == cancer} == ({"drug"} if cancer == "oral_cavity" else {"drug", "rt"})
+        if cancer in OLD_CANCERS:
+            # oral cavity (9.1): the NCG oral section gives no RT fractionation ("70 Gy" only), so no RT reference on disk
+            assert {r["kind"] for r in refs if r["cancer"] == cancer} == ({"drug"} if cancer == "oral_cavity" else {"drug", "rt"})
+        else:  # a blood cancer may have drug lines only; every new cancer has at least one regimen line
+            assert any(r["source_kind"] == "regimen" for r in refs if r["cancer"] == cancer), cancer
     generics = {r["drug"] for r in refs if r["kind"] == "drug"}
     assert all(g in generics for g in t["aliases"].values())
 
@@ -627,3 +635,98 @@ def test_cervix_references_are_indian_and_check_the_demo_decision():
         rt = dosecheck.parse_rt(text)[0]
         assert dosecheck.compare_rt(rt, "cervix")[0] == "consistent", text
     assert dosecheck.compare_rt(dosecheck.parse_rt("5 Gy x 3 fractions")[0], "cervix")[0] != "consistent"
+
+
+# ---------------------------------------------------------------- night-v3 item 2.12: the Phase 2 cancers (NCG books only)
+
+NEW_FILES = {
+    "stomach": ("ncg_india/ncg-gi-draft-2021-gastric-cancer.pdf", {1}),
+    "oesophagus": ("ncg_india/ncg-guidelines-for-thoracic-cancer-2019.pdf", set(range(16, 21))),
+    "ovary": ("ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx", {6, 7}),
+    "corpus_uteri": ("ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx", {9, 10, 11, 12}),
+    "prostate": ("ncg_india/ncg-guidelines-for-urological-malignancies-2019.pdf", set(range(33, 42))),
+    "kidney": ("ncg_india/ncg-guidelines-for-urological-malignancies-2019.pdf", set(range(4, 9))),
+    "germ_cell": ("ncg_india/ncg-guidelines-for-urological-malignancies-2019.pdf", set(range(20, 28))),
+    "larynx": ("ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf", set(range(14, 21)) | {27, 28, 36}),
+    "wilms": ("ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf", set(range(44, 48))),
+    "retinoblastoma": ("ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf", set(range(52, 57))),
+}
+ADULT_HAEM = "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf"
+PAED = "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf"
+BONE = "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf"
+
+
+def test_new_cancers_are_ncg_only_on_their_own_pages():
+    """Each Phase 2 cancer's lines come from its own NCG book and chapter pages, so a line of another cancer in a shared book never lands
+    in its table (thoracic: oesophagus only; gynaecology: ovary and endometrium apart; urology: kidney, testis, prostate apart)."""
+    for cancer, (f, pages) in NEW_FILES.items():
+        refs = dosecheck.references(cancer)
+        assert refs, cancer
+        assert all(r["region"] == "India" and r["org"] and r["file"] == f and r["page"] in pages for r in refs), cancer
+    blood = {"lymphoma": ({ADULT_HAEM: set(range(17, 70)), PAED: set(range(22, 34))}),
+             "leukaemia": ({ADULT_HAEM: set(range(5, 17)), PAED: set(range(7, 20))})}
+    for cancer, files in blood.items():
+        refs = dosecheck.references(cancer)
+        assert {r["file"] for r in refs} == set(files), cancer
+        assert all(r["page"] in files[r["file"]] for r in refs), cancer
+        assert {r["kind"] for r in refs} == {"drug"}  # blood cancers: drug lines only (no RT schedule printed in a text page)
+    bone = dosecheck.references("bone_sarcoma")
+    assert bone and all(r["file"] == BONE and (7 <= r["page"] <= 19 or 44 <= r["page"] <= 51) for r in bone)
+    sts = dosecheck.references("soft_tissue_sarcoma")
+    assert sts and all((r["file"] == BONE and (20 <= r["page"] <= 24 or 48 <= r["page"] <= 52)) or (r["file"] == PAED and 59 <= r["page"] <= 62)
+                       for r in sts)
+    for cancer in ("colorectal_colon", "liver_hcc", "gallbladder", "brain_cns"):  # no NCG dose line for these
+        assert dosecheck.references(cancer) == [], cancer
+
+
+def test_new_cancers_curated_lines():
+    """Caps, tablet strengths, premedication, mesna doses and broken numbers are left out; other chapters' lines stay out."""
+    def has(cancer, drug, dose, unit):
+        return any(r["kind"] == "drug" and r["drug"] == drug and r["dose"] == dose and r["unit"] == unit for r in dosecheck.references(cancer))
+    assert has("oesophagus", "paclitaxel", 50, "mg/m2") and has("oesophagus", "carboplatin", 2, "AUC")
+    assert has("ovary", "paclitaxel", 175, "mg/m2") and has("ovary", "olaparib", 300, "mg")
+    assert not has("ovary", "etoposide", 100, "mg/m2") and not has("ovary", "pembrolizumab", 200, "mg")  # germ cell (p7), cervix (p5)
+    assert has("corpus_uteri", "paclitaxel", 175, "mg/m2")  # the megestrol line carries the Word file's glued anchor digits and is dropped (review) and has("corpus_uteri", "pembrolizumab", 200, "mg")
+    assert has("prostate", "abiraterone", 1000, "mg") and not has("prostate", "abiraterone", 250, "mg")  # 250 mg is the tablet
+    assert has("kidney", "sorafenib", 400, "mg")  # printed "Sorafinib"
+    assert has("germ_cell", "carboplatin", 7, "AUC") and not has("germ_cell", "etoposide", 240, "mg/m2")  # mesna 240 mg/m2
+    assert has("larynx", "nimotuzumab", 200, "mg") and has("larynx", "cisplatin", 100, "mg/m2")
+    assert has("leukaemia", "arsenic trioxide", 0.15, "mg/kg") and has("leukaemia", "tretinoin", 45, "mg/m2/day")
+    assert has("leukaemia", "methotrexate", 15, "mg/m2") and not has("leukaemia", "mercaptopurine", 15, "mg/m2")  # MTX, not 6-MP
+    assert not has("leukaemia", "ibrutinib", 140, "mg") and not has("leukaemia", "prednisolone", 1000, "mg")
+    assert has("lymphoma", "doxorubicin", 50, "mg/m2") and has("lymphoma", "vincristine", 1.4, "mg/m2")
+    assert not has("lymphoma", "vincristine", 2, "mg") and not has("lymphoma", "rituximab", 500, "mg")  # cap, premedication
+    assert not any(r["drug"] == "doxorubicin" and r["dose"] >= 375 for c in ("lymphoma", "bone_sarcoma") for r in dosecheck.references(c, "drug"))
+    assert has("bone_sarcoma", "methotrexate", 12, "g/m2") and not has("bone_sarcoma", "methotrexate", 20, "g/m2")
+    assert not has("bone_sarcoma", "doxorubicin", 5, "mg/m2") and not has("soft_tissue_sarcoma", "dexamethasone", 20, "mg")
+    assert has("soft_tissue_sarcoma", "dactinomycin", 0.045, "mg/kg") and not has("soft_tissue_sarcoma", "cyclophosphamide", 500, "mg/m2")
+    assert has("wilms", "vincristine", 0.046, "mg/kg") and has("retinoblastoma", "carboplatin", 500, "mg/m2")
+
+
+def test_new_cancers_rt_schedules():
+    def rt(cancer, text):
+        return dosecheck.compare_rt(dosecheck.parse_rt(text)[0], cancer)[0]
+    assert rt("stomach", "45 Gy in 25 fractions") == "consistent"
+    assert rt("oesophagus", "41.4 Gy in 23 fractions") == "consistent"
+    assert rt("larynx", "70 Gy/35#") == "consistent"
+    assert rt("corpus_uteri", "vaginal brachytherapy 7 Gy x 3 fractions") == "consistent"
+    assert rt("wilms", "10.8 Gy in 6 fractions") == "consistent"
+    assert rt("retinoblastoma", "45 Gy/25#") == "consistent"
+    assert rt("bone_sarcoma", "55.8 Gy in 31 fractions") == "consistent" and rt("bone_sarcoma", "60 Gy in 30 fractions") != "consistent"
+    assert rt("soft_tissue_sarcoma", "60 Gy in 30 fractions") == "consistent"
+    assert rt("larynx", "700 Gy/35#") == "possible_transcription_error"
+
+
+def test_new_cancer_decisions(no_items):
+    """A larynx and a leukaemia decision: correct doses consistent with an NCG line; a tenfold slip flagged with its NCG source."""
+    out = run("Concurrent chemoradiation 70 Gy/35# with Inj. Cisplatin 40 mg/m2 weekly.", cancer="larynx")
+    assert [c["result"] for c in out["checks"]] == ["consistent", "consistent"] and out["flags"] == []
+    out = run("Induction: Cap. ATRA 45 mg/m2/day and Inj. ATO 1.5 mg/kg daily.", cancer="leukaemia")
+    by = {c["drug"]: c["result"] for c in out["checks"]}
+    assert by["tretinoin"] == "consistent" and by["arsenic trioxide"] == "possible_transcription_error"
+    [f] = out["flags"]
+    assert (f["check"], f["severity"], f["recorded"]) == ("dose", "expert_review", "1.5 mg/kg") and "ATO" in f["span"]
+    assert f["reference"]["file"] in (ADULT_HAEM, PAED) and f["reference"]["region"] == "India" and f["reference"]["dose"] == 0.15
+    names = dosecheck.drug_names("lymphoma")
+    assert names["endoxan"] == "cyclophosphamide" and names["adriamycin"] == "doxorubicin" and names["vcr"] == "vincristine"
+

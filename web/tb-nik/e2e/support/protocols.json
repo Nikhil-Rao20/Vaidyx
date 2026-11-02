@@ -1,0 +1,502 @@
+{
+ "protocols": [
+  {
+   "id": "bone_sarcoma",
+   "label": "Bone sarcoma (osteosarcoma, Ewing sarcoma, chondrosarcoma)",
+   "version": "0.1-draft",
+   "note": "DRAFT, not approved for real use: needs a clinician's check. Configurable by the clinical team. Required records transcribed from the NCG Guidelines for Bone and Soft Tissue Tumours (2019) (National Cancer Grid, India), the bone sarcoma pages (evaluation p 4, osteosarcoma p 7, Ewing sarcoma p 12, chondrosarcoma p 17, appendices p 25 to 40; the PDF page is the printed page), each with its verbatim quote and page. Tiers printed by NCG are kept; the tiers whose tier_basis says 'proposed' are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). A record NCG gives only under a condition the system never judges (a finding, a plan) is shown with NCG's own tier and the condition, never counted. The stage and the risk group are as recorded by the clinician, never computed. Nothing here suggests treatment. There are three settings because the work-up differs: the chondrosarcoma flow has no alkaline phosphatase and LDH, no immunohistochemistry and no baseline organ tests, and prints the bone scan as Optional. The book has no Enneking and no bone-specific stage table. Echocardiogram and audiometry before chemotherapy are one line of the book (p 28), listed as separate records so each goes to the team that does it. Ewing sarcoma and osteosarcoma are not in the paediatric book. A child's treating team is Paediatric Oncology: clinical records go to the owner of the Case File.",
+   "settings": [
+    {
+     "id": "osteosarcoma",
+     "label": "Osteosarcoma (as recorded)"
+    },
+    {
+     "id": "ewing",
+     "label": "Ewing sarcoma (as recorded)"
+    },
+    {
+     "id": "chondrosarcoma",
+     "label": "Chondrosarcoma (as recorded)"
+    }
+   ]
+  },
+  {
+   "id": "brain_cns",
+   "label": "Brain and CNS tumours",
+   "version": "0.1-draft",
+   "note": "DRAFT, not approved for real use: needs a clinician's check, and the child setting needs it even more than the rest. The National Cancer Grid has no brain or CNS guideline and no Indian national guideline for brain tumours was found, so the adult records come from a European guideline: the EANO guidelines on the diagnosis and treatment of diffuse gliomas of adulthood (Weller et al., Nature Reviews Clinical Oncology 2021;18:170-186, https://doi.org/10.1038/s41571-020-00447-z), open access under a Creative Commons Attribution 4.0 licence (https://creativecommons.org/licenses/by/4.0/; the licence line was read on the PDF and is logged beside it). Selected sentences are quoted verbatim, each with its PDF page (journal page = PDF page + 169); the labels, the tiers and the routing are this draft's own. The guideline rests on the WHO 2016 classification and the cIMPACT-NOW updates and is not Indian; the Indian ISNO papers were not used because their reuse terms are not confirmed. Tiers: EANO uses classes of evidence and levels of recommendation, so one rule maps them. Level A or B for a record the text asks for in every patient is a (Essential, a proposal). The same test asked only in a subgroup the system never judges (a negative IDH1 stain, retained ATRX, glioblastoma, midline location) is system tier c with the condition shown, never counted. A sentence with no level (the post-operative MRI) is a proposed b. All tiers are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). The guideline has no line on CSF or spinal imaging for diffuse gliomas, so none is listed. No treatment line is copied; the system never grades or stages. Brain metastases of another cancer belong to that cancer's checklist. For a child the NCG paediatric book has no brain tumour chapter (it names the brain only as a screening MRI in retinoblastoma and as CNS spread in leukaemia and lymphoma), so the child setting reuses the same records.",
+   "settings": [
+    {
+     "id": "adult_glioma",
+     "label": "Adult diffuse glioma, as recorded"
+    },
+    {
+     "id": "adult_other",
+     "label": "Other adult brain or CNS tumour (for example meningioma or metastasis), as recorded"
+    },
+    {
+     "id": "child",
+     "label": "Child with a brain or CNS tumour, as recorded"
+    }
+   ]
+  },
+  {
+   "id": "breast",
+   "label": "Breast cancer",
+   "version": "0.7",
+   "note": "Configurable by the clinical team. The required records are rebuilt from the NCG Essential / Optimal / Optional tiers per setting (NCG breast cancer guidelines 2019, quoted with page on every record), then informed by ICMR, ESMO and the CAP breast biomarker template as before; to be confirmed by the hospital Tumour Board (clinical review before real use).",
+   "settings": [
+    {
+     "id": "early",
+     "label": "Early (operable), as recorded"
+    },
+    {
+     "id": "locally_advanced",
+     "label": "Locally advanced, as recorded"
+    },
+    {
+     "id": "metastatic",
+     "label": "Metastatic, as recorded"
+    }
+   ]
+  },
+  {
+   "id": "cervix",
+   "label": "Cervix cancer",
+   "version": "0.2",
+   "note": "Configurable by the clinical team. Required records derived from the NCG work-up for cervix cancer (NCG Guidelines for Gynaecological Cancers 2019, summary table of imaging investigations: Essential (a), Optimal (b) and Optional (c) columns for early and locally advanced disease, FIGO 2018). The Word file has no page numbers: each record cites the table or flow chart it rests on. The FIGO stage is the stage as recorded by the clinician, never computed. To be confirmed by the hospital Tumour Board (clinical review before real use).",
+   "settings": [
+    {
+     "id": "early",
+     "label": "Early (FIGO 2018 IA1 to IIA1), as recorded"
+    },
+    {
+     "id": "locally_advanced",
+     "label": "Locally advanced (FIGO 2018 IB3, IIA2 to IVA), as recorded"
+    },
+    {
+     "id": "metastatic",
+     "label": "Metastatic (FIGO 2018 IVB) or recurrent, as recorded"
+    }
+   ]
+  },
+  {
+   "id": "colorectal_colon",
+   "label": "Colon cancer",
+   "version": "0.1-draft",
+   "note": "Draft checklist from the NCG Management of Colorectal Cancer flow, colon (pages 2 to 4): needs a clinician's check. Colon only: rectal cancer has its own checklist. This NCG file prints no Essential / Optimal / Optional letters, so every tier is a proposal (an item in the page 2 Workup list is proposed Essential; items NCG calls optional, 'not routinely' or 'may be' are proposed Optional), to be confirmed by the hospital Tumour Board (clinical review before real use). The MMR and RAS / BRAF tiers differ from the rectal checklist on purpose. The system records the stage as written and never computes it; no treatment advice. India first: the National Cancer Grid guideline is the only source, and its page 2 footnote allows a chest X-ray in place of CT chest.",
+   "settings": [
+    {
+     "id": "non_metastatic",
+     "label": "Non-metastatic (any T, any N, M0), as recorded"
+    },
+    {
+     "id": "metastatic",
+     "label": "Metastatic (limited or disseminated), as recorded"
+    }
+   ]
+  },
+  {
+   "id": "colorectal_rectum",
+   "label": "Rectal cancer",
+   "version": "0.6",
+   "note": "Configurable by the clinical team. Includes a restaging rule for re-discussion after neoadjuvant therapy. The required records are rebuilt from the NCG work-up (NCG rectal cancer guideline, and the NCG colon flow for MMR / MSI and RAS / BRAF); NCG GI guidelines carry no Essential / Optimal / Optional letters, so the listed work-up is treated as Essential and the items NCG calls optional or select-only as Optional. Prototype defaults; to be confirmed by the hospital Tumour Board (clinical review before real use).",
+   "settings": [
+    {
+     "id": "non_metastatic",
+     "label": "Non-metastatic (no distant disease recorded)"
+    },
+    {
+     "id": "metastatic",
+     "label": "Metastatic (distant disease recorded)"
+    }
+   ]
+  },
+  {
+   "id": "corpus_uteri",
+   "label": "Cancer of the corpus uteri (endometrium)",
+   "version": "0.1-draft",
+   "note": "DRAFT, not approved for real use: needs a clinician's check. Configurable by the clinical team. Required records transcribed from the NCG Guidelines for Gynaecological Cancers (2019) (National Cancer Grid, India), the endometrial cancer section (the investigation algorithm and the summary table of imaging and management recommendations: Essential (a), Optimal (b), Optional (c)), each with its verbatim quote under where (the Word file has no page numbers). Tiers printed by NCG are kept; the tiers whose tier_basis says 'proposed' or 'proposal' (clinical_history, her2) are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). A record NCG gives only under a condition the system never judges (an age, a finding, a plan) is shown with NCG's own tier and the condition, never counted. Uterine sarcoma and carcinosarcoma are not separate in the book (carcinosarcoma is grouped with the Type II histology) and are not covered here. The book's algorithm for advanced disease says PET-CT should not be done in early lesions. The FIGO stage is the stage as recorded by the clinician, never computed. Nothing here suggests treatment.",
+   "settings": [
+    {
+     "id": "early",
+     "label": "Early, clinically confined to the uterus (FIGO Stage I and II), as recorded"
+    },
+    {
+     "id": "advanced",
+     "label": "Advanced (FIGO Stage III and IV), as recorded"
+    }
+   ]
+  },
+  {
+   "id": "cup",
+   "label": "Cancer of Unknown Primary (CUP)",
+   "version": "0.1-draft",
+   "note": "DRAFT, not approved for real use. Configurable by the clinical team. Required records derived from NICE CG104 (metastatic malignant disease of unknown primary origin in adults, 2010, last updated 26 April 2023, reviewed 16 July 2025 with no change) and the ESMO 2023 cancer of unknown primary guideline (Kramer et al.), quoted verbatim with the section or page on every record. No Indian source exists: NCG India has no CUP guideline, and neither ICMR, TMC nor the MoHFW STGs cover it (owner, 17 Oct 2026). Where NICE and ESMO differ (mammography, tumour markers) the owner chose NICE (R05-Q07). The checklist grows with the NICE diagnostic phase the doctor records (MUO, provisional CUP, confirmed CUP). Nothing here computes a stage, names a likely primary or suggests treatment. To be confirmed by a named doctor and the hospital Tumour Board (clinical review before real use). ESMO page numbers are the PDF page numbers (1 to 19) as the guideline library reads the file; the journal page is given under where.",
+   "settings": [
+    {
+     "id": "muo",
+     "label": "MUO (malignancy of undefined primary origin), as recorded",
+     "definition": "Metastatic malignancy identified on the basis of a limited number of tests, without an obvious primary site, before comprehensive investigation.",
+     "definition_source": "NICE CG104, Terms used in this guideline: malignancy of undefined primary origin (MUO)"
+    },
+    {
+     "id": "provisional_cup",
+     "label": "Provisional CUP (after the initial screen, before specialist review), as recorded",
+     "definition": "Metastatic epithelial or neuro-endocrine malignancy identified on the basis of histology or cytology, with no primary site detected despite a selected initial screen of investigations, before specialist review and possible further specialised investigations.",
+     "definition_source": "NICE CG104, Terms used in this guideline: provisional carcinoma of unknown primary origin (provisional CUP)"
+    },
+    {
+     "id": "confirmed_cup",
+     "label": "Confirmed CUP (after specialist review and special investigations), as recorded",
+     "definition": "Metastatic epithelial or neuro-endocrine malignancy identified on the basis of final histology, with no primary site detected despite a selected initial screen of investigations, specialist review, and further specialised investigations as appropriate.",
+     "definition_source": "NICE CG104, Terms used in this guideline: confirmed carcinoma of unknown primary origin (confirmed CUP)"
+    }
+   ]
+  },
+  {
+   "id": "gallbladder",
+   "label": "Gallbladder cancer",
+   "version": "0.1-draft",
+   "note": "Draft checklist from the NCG GI draft guidelines of 15 Jan 2021 on gall bladder cancer (page 1: basic work-up and the four-way split; page 2: per primum; page 3: incidental; page 4: locally advanced; page 5: metastatic) and its radiology synoptic (pages 1 and 2): needs a clinician's check. The files print no tier letters (only 'Optional:' and '(optimal)'), so every tier is a proposal, to be confirmed by the hospital Tumour Board (clinical review before real use). The system records the stage as written (the book names no staging edition) and never computes it; no treatment advice. India first: the National Cancer Grid draft is the only source; it advises radical surgery only where expertise and facilities exist (page 2), and the high share of incidental disease is the Indian presentation it shows (page 3).",
+   "settings": [
+    {
+     "id": "per_primum",
+     "label": "Per primum, suspected or proven before surgery (as recorded)"
+    },
+    {
+     "id": "incidental",
+     "label": "Incidental, found after cholecystectomy (as recorded)"
+    },
+    {
+     "id": "locally_advanced",
+     "label": "Locally advanced (as recorded)"
+    },
+    {
+     "id": "metastatic",
+     "label": "Metastatic (as recorded)"
+    }
+   ]
+  },
+  {
+   "id": "generic",
+   "label": "Other cancer (no disease-specific Indian protocol)",
+   "version": "0.1",
+   "note": "Not a clinical guideline. Used for a cancer that has no built checklist yet (a cancer typed by the doctor, or a listed cancer whose checklist is not built): the Case File requires four core records only, histopathology, staging imaging, a clinical note with performance status, and the question for the board, labelled 'No disease-specific Indian protocol'. The four records rest on the owner decision R05-Q04 (17 Oct 2026), not on a guideline, and say nothing about which investigations this cancer needs: the treating team decides that. The cancer's name is kept on the Case File as the doctor wrote it (case.json cancer_name). Must be reviewed by the hospital Tumour Board before real use (clinical review); a disease-specific checklist replaces it as soon as one is built.",
+   "settings": [
+    {
+     "id": "as_recorded",
+     "label": "As recorded by the doctor"
+    }
+   ]
+  },
+  {
+   "id": "generic_haem",
+   "label": "Other blood cancer (no disease-specific Indian protocol)",
+   "version": "0.1",
+   "note": "Not a clinical guideline. Used for a blood cancer that has no built checklist yet (a cancer typed by the doctor and marked as a blood cancer, for example multiple myeloma or a myeloproliferative neoplasm): the Case File requires four core records only, a histopathology, bone marrow, flow cytometry or cytogenetics report (any one), a clinical note with performance status, and the question for the board, labelled 'No disease-specific Indian protocol'. A blood cancer has no staging imaging record (the marrow and the immunophenotype take its place: night-v3 plan item 2.9); otherwise the four records rest on the owner decision R05-Q04 (17 Oct 2026), not on a guideline, and say nothing about which investigations this cancer needs: the treating team decides that. The cancer's name is kept on the Case File as the doctor wrote it (case.json cancer_name). Must be reviewed by the hospital Tumour Board before real use (clinical review); a disease-specific checklist replaces it as soon as one is built.",
+   "settings": [
+    {
+     "id": "as_recorded",
+     "label": "As recorded by the doctor"
+    }
+   ]
+  },
+  {
+   "id": "germ_cell",
+   "label": "Germ cell tumour of the testis",
+   "version": "0.1-draft",
+   "note": "DRAFT, not approved for real use: needs a clinician's check. Configurable by the clinical team. Required records transcribed from the NCG Guidelines for Urological Malignancies (2019) (National Cancer Grid, India), the testicular tumour pages (management p 20 to 25, the radiology and pathology formats p 46 and 49 to 50), each with its verbatim quote and page. Tiers printed by NCG are kept; the tiers whose tier_basis says 'proposed' or 'proposal' (clinical_history) are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). A record NCG gives only under a condition the system never judges (an age, a finding, a plan) is shown with NCG's own tier and the condition, never counted. Seminoma and non-seminoma differ in the book's pathways; this is one checklist with three settings, as the system never decides the histology. Ovarian or extragonadal and childhood germ cell tumours are in other books. The stage and the risk group are as recorded by the clinician, never computed. Nothing here suggests treatment.",
+   "settings": [
+    {
+     "id": "stage_i",
+     "label": "Stage I (seminoma or non-seminoma), as recorded"
+    },
+    {
+     "id": "stage_ii_iii",
+     "label": "Stage II and III (seminoma or non-seminoma), as recorded"
+    },
+    {
+     "id": "relapsed",
+     "label": "Relapsed or second relapse, as recorded"
+    }
+   ]
+  },
+  {
+   "id": "kidney",
+   "label": "Kidney cancer (adult renal cell carcinoma)",
+   "version": "0.1-draft",
+   "note": "DRAFT, not approved for real use: needs a clinician's check. Configurable by the clinical team. Required records transcribed from the NCG Guidelines for Urological Malignancies (2019) (National Cancer Grid, India), the renal cell carcinoma pages (investigations p 4, the pathways p 5 and 6, the pathology format p 61 to 63), each with its verbatim quote and page. Tiers printed by NCG are kept; the tiers whose tier_basis says 'proposed' or 'proposal' (clinical_history) are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). A record NCG gives only under a condition the system never judges (an age, a finding, a plan) is shown with NCG's own tier and the condition, never counted. Adult renal cell carcinoma only: paediatric renal tumours (Wilms) are in another book. The book says routine renal mass biopsy is not indicated (p 4); the biopsy record is shown, not counted, in the localised setting. The stage and the risk group are as recorded by the clinician, never computed. Nothing here suggests treatment.",
+   "settings": [
+    {
+     "id": "localised",
+     "label": "Localised (no distant disease), as recorded"
+    },
+    {
+     "id": "metastatic",
+     "label": "Metastatic, as recorded"
+    }
+   ]
+  },
+  {
+   "id": "larynx",
+   "label": "Cancer of the larynx (head and neck)",
+   "version": "0.1-draft",
+   "note": "DRAFT, not approved for real use: needs a clinician's check. Configurable by the clinical team. Required records transcribed from the NCG Guidelines for Head and Neck Cancer (2019) (National Cancer Grid, India), the shared oropharynx, hypopharynx and larynx work-up (p 10 and 11), the larynx pathways (p 14 to 20, 27 and 36) and the pathology format (p 56), each with its verbatim quote and page. NCG prints letters only for the imaging, the chest X-ray and the speech and swallowing assessment; the other work-up lines have no letter and are treated as Essential, as in the oral cavity checklist: the tiers whose tier_basis says 'proposed' or 'treated as Essential' are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). A record NCG gives only under a condition the system never judges (a stage, a risk of distant disease) is shown with NCG's own tier and the condition, never counted. HPV / p16 testing (p 11) is for the oropharynx only and is not listed. The pathway is shared with the oropharynx and hypopharynx; hypopharynx is named in the site words and not built as a separate checklist. The stage is as recorded by the clinician, never computed. Nothing here suggests treatment.",
+   "settings": [
+    {
+     "id": "early",
+     "label": "Early (T1 to T2, N0), as recorded"
+    },
+    {
+     "id": "locally_advanced",
+     "label": "Locally advanced (T1 to T2 with nodes, T3, T4, or inoperable neck nodes), as recorded"
+    },
+    {
+     "id": "metastatic",
+     "label": "Metastatic or recurrent, as recorded"
+    }
+   ]
+  },
+  {
+   "id": "leukaemia",
+   "label": "Leukaemia (acute and chronic)",
+   "version": "0.1-draft",
+   "note": "DRAFT, not approved for real use: needs a clinician's check. Configurable by the clinical team. Required records transcribed from the National Cancer Grid (India) books: NCG Guidelines for Adult Hematolymphoid Malignancies (2019) (the work-up boxes of the AML, APML, ALL, CLL and CML flow charts, pages 5, 8, 11, 13 and 16, and the flow cytometry annexure, pages 91 to 95) and NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019) (ALL page 7, AML page 13, APML page 15, CML page 17; the printed footer is one less than the PDF page cited). The adult flow charts are pictures with no text layer: their lines were read with the project's own OCR engine (Tesseract) and each such quote is marked ocr and checked against that engine's reading of the page. Four settings group the diseases: where two diseases of one setting carry different letters, the record keeps the higher and its tier_basis names both. Child APML is in the child acute setting, child CML in the child chronic setting. Tiers printed by NCG are kept; the tiers whose tier_basis says 'proposed' are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). A record NCG gives only under a condition the system never judges (an indication, a finding) is shown with NCG's own tier and the condition, never counted. Leukaemia has no stage: the risk group or phase (for example AML favourable, intermediate or poor risk; CML chronic, accelerated or blast phase) is as recorded in a report, never computed; risk scores are never calculated. Langerhans cell histiocytosis is not in this checklist. Nothing here suggests treatment. India first: the National Cancer Grid books are the only source (the adult book points to the ICMR guideline for flow cytometry quality control, page 91).",
+   "settings": [
+    {
+     "id": "adult_acute",
+     "label": "Adult acute leukaemia: AML, APML or ALL (as recorded)"
+    },
+    {
+     "id": "adult_chronic",
+     "label": "Adult chronic leukaemia: CLL or CML (as recorded)"
+    },
+    {
+     "id": "child_acute",
+     "label": "Child acute leukaemia: ALL, AML or APML (as recorded)"
+    },
+    {
+     "id": "child_chronic",
+     "label": "Child chronic myeloid leukaemia (as recorded)"
+    }
+   ]
+  },
+  {
+   "id": "liver_hcc",
+   "label": "Liver cancer (hepatocellular carcinoma)",
+   "version": "0.1-draft",
+   "note": "Draft checklist from the NCG GI guideline on hepatocellular carcinoma (a Word file with no page numbers: each source names its section): needs a clinician's check. The file's key reads 'Normal font- Essential, Underlined -desirable, italics- optional'; the tier of each work-up item was read from that formatting (normal font Essential, underlined Optimal, italics Optional). Tiers marked proposed are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). PET: the NOTES say 'FDG PET CT has no role in routine evaluation or follow up of HCC', so no PET record is listed. Child class, HKLC, BCLC and LI-RADS are recorded as the report states them and never computed; poor liver function (Child C) is a recorded fact, not a setting. No treatment advice. India first: the National Cancer Grid guideline is the only source (hepatitis B and C also need evaluation, and cost in India is noted in the NOTES).",
+   "settings": [
+    {
+     "id": "resectable",
+     "label": "Resectable tumour, adequate FLR (as recorded)"
+    },
+    {
+     "id": "locoregional",
+     "label": "Multiple or bilobar tumour, inadequate FLR, no extrahepatic disease (as recorded)"
+    },
+    {
+     "id": "extrahepatic",
+     "label": "Extrahepatic disease (as recorded)"
+    }
+   ]
+  },
+  {
+   "id": "lung_nsclc",
+   "label": "Lung cancer (NSCLC)",
+   "version": "0.8",
+   "note": "Configurable by the clinical team. The required records are rebuilt from the NCG Essential / Optimal / Optional tiers per setting (NCG thoracic cancer guidelines 2019, quoted with page on every record), then informed by ICMR, ESMO and CAP as before; to be confirmed by the hospital Tumour Board (clinical review before real use).",
+   "settings": [
+    {
+     "id": "non_metastatic",
+     "label": "Non-metastatic (no distant disease recorded)"
+    },
+    {
+     "id": "metastatic",
+     "label": "Metastatic (distant disease recorded)"
+    }
+   ]
+  },
+  {
+   "id": "lymphoma",
+   "label": "Lymphoma (Hodgkin and non-Hodgkin)",
+   "version": "0.1-draft",
+   "note": "DRAFT, not approved for real use: needs a clinician's check. Configurable by the clinical team. Required records transcribed from the National Cancer Grid (India) books: NCG Guidelines for Adult Hematolymphoid Malignancies (2019) (the newly diagnosed work-up boxes of the DLBCL, follicular and Hodgkin flow charts, pages 17, 24 and 61, and annexures 1 to 3, pages 83 to 89) and NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019) (NHL work-up page 22, Hodgkin work-up page 30; the printed footer is one less than the PDF page cited). The adult flow charts are pictures with no text layer: their lines were read with the project's own OCR engine (Tesseract) and each such quote is marked ocr and checked against that engine's reading of the page. The adult NHL work-up box is the same for every subtype, so one adult NHL setting covers them; myeloma and plasma cell disorders are not in this checklist. Tiers printed by NCG are kept; the tiers whose tier_basis says 'proposed' are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). A record NCG gives only under a condition the system never judges (a stage, an indication, a finding) is shown with NCG's own tier and the condition, never counted. The stage (Ann Arbor, Cotswolds modified; Murphy for child NHL) is as recorded in a report, never computed. Nothing here suggests treatment. India first: the National Cancer Grid books are the only source.",
+   "settings": [
+    {
+     "id": "adult_hodgkin",
+     "label": "Adult Hodgkin lymphoma (as recorded)"
+    },
+    {
+     "id": "adult_nhl",
+     "label": "Adult non-Hodgkin lymphoma (as recorded)"
+    },
+    {
+     "id": "child_hodgkin",
+     "label": "Child Hodgkin lymphoma (as recorded)"
+    },
+    {
+     "id": "child_nhl",
+     "label": "Child non-Hodgkin lymphoma, includes lymphoblastic lymphoma (as recorded)"
+    }
+   ]
+  },
+  {
+   "id": "oesophagus",
+   "label": "Oesophageal cancer",
+   "version": "0.1-draft",
+   "note": "Draft checklist from the NCG Guidelines for Thoracic Cancer (2019), oesophagus: management flow on page 16 (with the book's a, b and c tier letters), the pathology synoptic on pages 28 to 31 and the work-up line on page 4: needs a clinician's check. Tier letters are NCG's where a record's basis says so; the history, histopathology, endoscopy and resection records are proposals (the page 16 text layer shows no history, endoscopy or biopsy box), to be confirmed by the hospital Tumour Board (clinical review before real use). The book places Siewert type II and III tumours in this flow. The system records the stage as written (the pathology synoptic names the 8th AJCC edition) and never computes it; no treatment advice. India first: the National Cancer Grid guideline is the only source.",
+   "settings": [
+    {
+     "id": "early_localized",
+     "label": "Early, localised (as recorded)"
+    },
+    {
+     "id": "locally_advanced",
+     "label": "Loco-regionally advanced (as recorded)"
+    },
+    {
+     "id": "metastatic",
+     "label": "Metastatic (as recorded)"
+    }
+   ]
+  },
+  {
+   "id": "oral_cavity",
+   "label": "Oral cavity cancer (head and neck)",
+   "version": "0.3",
+   "note": "Configurable by the clinical team. Required records derived from the NCG work-up for oral cancer (NCG Guidelines for Head and Neck Cancer 2019, quoted with page on every record). NCG lists the oral cancer work-up without Essential / Optimal / Optional letters (letters appear only for the imaging modality, neck ultrasound, chest X-ray and PET-CT / CECT thorax), so the listed records are treated as Essential. Squamous cell carcinoma of the oral cavity; HPV / p16 testing is an NCG item for oropharynx only. To be confirmed by the hospital Tumour Board (clinical review before real use).",
+   "settings": [
+    {
+     "id": "early",
+     "label": "Early (Stage I and II), as recorded"
+    },
+    {
+     "id": "locally_advanced",
+     "label": "Locally advanced (Stage III to IVB), as recorded"
+    },
+    {
+     "id": "metastatic",
+     "label": "Metastatic (Stage IVC) or recurrent, as recorded"
+    }
+   ]
+  },
+  {
+   "id": "ovary",
+   "label": "Ovarian cancer (epithelial)",
+   "version": "0.1-draft",
+   "note": "DRAFT, not approved for real use: needs a clinician's check. Configurable by the clinical team. Required records transcribed from the NCG Guidelines for Gynaecological Cancers (2019) (National Cancer Grid, India), the epithelial ovarian cancer section ('Work Up & Investigations' text and the summary table of imaging and management recommendations: Essential (a), Optimal (b), Optional (c)), each with its verbatim quote under where (the Word file has no page numbers). Tiers printed by NCG are kept; the tiers whose tier_basis says 'proposed' or 'proposal' (clinical_history, histopathology, gi_endoscopy, mammogram_bilateral) are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). A record NCG gives only under a condition the system never judges (an age, a finding, a plan) is shown with NCG's own tier and the condition, never counted. Epithelial ovarian cancer only: borderline, germ cell and sex cord-stromal ovarian tumours have their own sections of the book and are not covered here. The FIGO stage is the stage as recorded by the clinician, never computed. Nothing here suggests treatment.",
+   "settings": [
+    {
+     "id": "early",
+     "label": "Early (FIGO Stage I/II), as recorded"
+    },
+    {
+     "id": "advanced",
+     "label": "Locally advanced to metastatic (FIGO Stage III/IV), as recorded"
+    },
+    {
+     "id": "recurrent",
+     "label": "Recurrent or relapsed, as recorded"
+    }
+   ]
+  },
+  {
+   "id": "prostate",
+   "label": "Prostate cancer",
+   "version": "0.1-draft",
+   "note": "DRAFT, not approved for real use: needs a clinician's check. Configurable by the clinical team. Required records transcribed from the NCG Guidelines for Urological Malignancies (2019) (National Cancer Grid, India), the prostate cancer pages (investigations p 33, the pathways p 34 to 39, the pathology formats p 53, 54 and 58 to 60), each with its verbatim quote and page. Tiers printed by NCG are kept; the tiers whose tier_basis says 'proposed' or 'proposal' (clinical_history, psa, histopathology, renal_dental_bone_agent) are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). A record NCG gives only under a condition the system never judges (an age, a finding, a plan) is shown with NCG's own tier and the condition, never counted. The book defines low, intermediate and high clinical risk groups by PSA, Gleason score and cT (p 33 and 34); the system never judges the risk group, so a record the book drops for low-risk disease is shown and the board decides. The stage and the risk group are as recorded by the clinician, never computed. Nothing here suggests treatment.",
+   "settings": [
+    {
+     "id": "localised",
+     "label": "Localised (T1 to T3a, N0), as recorded"
+    },
+    {
+     "id": "locally_extensive",
+     "label": "Locally extensive (T3b, or cN1), as recorded"
+    },
+    {
+     "id": "metastatic_hspc",
+     "label": "Metastatic, hormone sensitive, as recorded"
+    },
+    {
+     "id": "metastatic_crpc",
+     "label": "Metastatic, castration resistant, as recorded"
+    }
+   ]
+  },
+  {
+   "id": "retinoblastoma",
+   "label": "Retinoblastoma (child)",
+   "version": "0.1-draft",
+   "note": "DRAFT, not approved for real use: needs a clinician's check. Configurable by the clinical team. Required records transcribed from the NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019) (National Cancer Grid, India), the retinoblastoma pages (work-up and intraocular grouping p 52 and 53, algorithms p 54 and 55, adjuvant indications p 56, Annexure 1 p 64; PDF pages, the printed footer is one less), each with its verbatim quote and page. Tiers printed by NCG are kept; the tiers whose tier_basis says 'proposed' are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). A record NCG gives only under a condition the system never judges (a finding, a plan) is shown with NCG's own tier and the condition, never counted. The stage and the risk group are as recorded by the clinician, never computed. Nothing here suggests treatment. The eye examination is the ophthalmology team's own work and routes to the owner of the Case File (the hospital's department list has no ophthalmology department). The book lists no baseline blood tests for retinoblastoma and its pathology form is not in the file.",
+   "settings": [
+    {
+     "id": "unilateral",
+     "label": "Unilateral retinoblastoma (as recorded)"
+    },
+    {
+     "id": "bilateral",
+     "label": "Bilateral retinoblastoma (as recorded)"
+    }
+   ]
+  },
+  {
+   "id": "soft_tissue_sarcoma",
+   "label": "Soft tissue sarcoma",
+   "version": "0.1-draft",
+   "note": "DRAFT, not approved for real use: needs a clinician's check. Configurable by the clinical team. Required records transcribed from the NCG Guidelines for Bone and Soft Tissue Tumours (2019) (National Cancer Grid, India), the extremity soft tissue sarcoma pages (flow p 20 to 23, staging work-up p 26 and 27, pathology format p 41 to 43; the PDF page is the printed page), and, for rhabdomyosarcoma in a child, the NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019) (p 59, Annexure 1 p 64; PDF pages, the printed footer is one less; the heading of that page reads 'Treatment Algorithm: Neuroblastoma', a typing slip in the book). Each record has its verbatim quote and page; where both books give a record both are cited. Tiers printed by NCG are kept; the tiers whose tier_basis says 'proposed' are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). A record NCG gives only under a condition the system never judges (a finding, a plan) is shown with NCG's own tier and the condition, never counted. The stage and the risk group are as recorded by the clinician, never computed. Nothing here suggests treatment. The book has a flow for extremity soft tissue sarcoma only: retroperitoneal, trunk, head and neck and uterine sarcomas have none. The book's staging is TNM with grade and the surgico-pathologic grouping for rhabdomyosarcoma; it never names an AJCC edition. A child's treating team is Paediatric Oncology: clinical records go to the owner of the Case File.",
+   "settings": [
+    {
+     "id": "non_metastatic",
+     "label": "Extremity soft tissue sarcoma, no distant disease recorded (as recorded)"
+    },
+    {
+     "id": "metastatic",
+     "label": "Extremity soft tissue sarcoma, distant disease recorded (as recorded)"
+    },
+    {
+     "id": "paediatric_rhabdomyosarcoma",
+     "label": "Rhabdomyosarcoma, child (as recorded)"
+    }
+   ]
+  },
+  {
+   "id": "stomach",
+   "label": "Stomach cancer",
+   "version": "0.1-draft",
+   "note": "Draft checklist from the NCG GI draft 2021, gastric cancer (page 1: flow chart with work-up and settings; page 2: PET, CDH1 testing, endoscopy, EUS): needs a clinician's check. The file prints no tier letters, so every tier is a proposal (an item in the page 1 work-up block is proposed Essential; 'desirable' and 'encouraged' are proposed Optimal; 'consider' is proposed Optional), to be confirmed by the hospital Tumour Board (clinical review before real use). PET: page 2 says 'PET scan should NOT be performed in gastric cancer', so no PET record is listed. MMR / MSI is not in this file and is not listed. The system records the stage as written and never computes it; no treatment advice. India first: the National Cancer Grid draft is the only source (page 1 uses 'Poor PS/ ASA 4'; page 2 says EMR and follow up belong at tertiary care centres).",
+   "settings": [
+    {
+     "id": "early_localized",
+     "label": "Early, localised (as recorded)"
+    },
+    {
+     "id": "locally_advanced",
+     "label": "Loco-regionally advanced (as recorded)"
+    },
+    {
+     "id": "metastatic",
+     "label": "Metastatic (as recorded)"
+    }
+   ]
+  },
+  {
+   "id": "wilms",
+   "label": "Wilms tumour (child)",
+   "version": "0.1-draft",
+   "note": "DRAFT, not approved for real use: needs a clinician's check. Configurable by the clinical team. Required records transcribed from the NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019) (National Cancer Grid, India), the Wilms tumour pages (algorithm p 44, chemotherapy and SIOP note p 45, staging p 46, Annexure 1 p 64; PDF pages, the printed footer is one less), each with its verbatim quote and page. Tiers printed by NCG are kept; the tiers whose tier_basis says 'proposed' are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). A record NCG gives only under a condition the system never judges (a finding, a plan) is shown with NCG's own tier and the condition, never counted. The stage and the risk group are as recorded by the clinician, never computed. Nothing here suggests treatment. The book lists no baseline blood tests for Wilms tumour, only imaging and tissue, so none is listed. The CT scan for reassessment after chemotherapy is a follow-up step and is not listed. The paediatric renal tumour pathology proforma named in the book's contents is not in the file. Adult kidney cancer is a separate checklist (kidney).",
+   "settings": [
+    {
+     "id": "unilateral",
+     "label": "Unilateral renal mass, suspected Wilms tumour (as recorded)"
+    },
+    {
+     "id": "bilateral",
+     "label": "Bilateral renal mass, suspected Wilms tumour (as recorded)"
+    }
+   ]
+  }
+ ]
+}

@@ -17,7 +17,7 @@ PW="$(awk '{print $NF}' ~/vaidyx/.vaidyx_admin_login)"   # never printed
 cd "$REPO"
 if [ -e "$OUT" ]; then echo "gate: '$OUT' exists; a run never mixes with an earlier one. Use a new label or remove that folder." >&2; exit 2; fi
 mkdir -p "$OUT"
-rm -f "data/tumour_board/eval/qa_$VER-$LABEL.json" "data/tumour_board/eval/summary_eval_$VER-$LABEL.json"   # no stale JSON can be copied
+rm -f "data/tumour_board/eval/qa_$VER-$LABEL.json" "data/tumour_board/eval/summary_eval_$VER-$LABEL.json" "data/tumour_board/eval/audio_eval_$VER-$LABEL.json"   # no stale JSON can be copied
 echo "gate '$LABEL' started $(date -Is)" > "$OUT/run_timings.txt"
 step() {  # name, command...
   local name=$1; shift; local t0=$(date +%s)
@@ -37,7 +37,8 @@ step e2e_api "$PY" -m tumour_board.eval.e2e_api --password "$PW"
 if [ $SKIP_EVALS = 0 ]; then
   step qa_eval "$PY" -m tumour_board.eval.qa_eval --label "$VER-$LABEL" --prepare
   step summary_eval "$PY" -m tumour_board.eval.summary_eval --label "$VER-$LABEL"
-  cp -f "data/tumour_board/eval/qa_$VER-$LABEL.json" "data/tumour_board/eval/summary_eval_$VER-$LABEL.json" "$OUT/" 2>/dev/null
+  step audio_eval "$PY" -m tumour_board.eval.audio_eval --label "$VER-$LABEL"   # night-v3 item 4.5: the voice check (needs the audio service on :7120)
+  cp -f "data/tumour_board/eval/qa_$VER-$LABEL.json" "data/tumour_board/eval/summary_eval_$VER-$LABEL.json" "data/tumour_board/eval/audio_eval_$VER-$LABEL.json" "$OUT/" 2>/dev/null
 fi
 step prepare_fresh "$PY" -m tumour_board.eval.prepare_cases   # leave the demo Case Files fresh for the next user
 echo "gate '$LABEL' finished $(date -Is)" >> "$OUT/run_timings.txt"

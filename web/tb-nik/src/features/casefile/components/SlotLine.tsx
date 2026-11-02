@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { consultantTitle } from "@/lib/format";
 import type { Slot, SlotAction, SlotQuote } from "../types";
 import type { SourceTarget } from "./SourceViewer";
 import { LoadingButton, StatusChip, fmtDate, niceTitle, screenNote } from "./common";
@@ -249,14 +250,14 @@ export function SlotLine({ slot, ctx, h }: { slot: Slot; ctx: SlotContext; h: Sl
         {mode === "idle" && ctx.canAct ? (
           <div className="flex flex-wrap items-center gap-1.5">
             {askAction ? (
-              <LoadingButton size="xs" variant="default" loading={busy} onClick={doAsk} disabled={!!pending} title={ctx.resident ? `Dr ${ctx.consultantName} will be asked to sign off` : `Drafts the request and sends it; Undo for 10 s`} data-testid="slot-ask">
-                <Send className="size-3" />{ctx.resident ? `Ask ${dept} (via Dr ${ctx.consultantName})` : `Ask ${dept}`}
+              <LoadingButton size="xs" variant="default" loading={busy} onClick={doAsk} disabled={!!pending} title={ctx.resident ? `${consultantTitle(ctx.consultantName, true)} will be asked to sign off` : `Drafts the request and sends it; Undo for 10 s`} data-testid="slot-ask">
+                <Send className="size-3" />{ctx.resident ? `Ask ${dept} (via ${consultantTitle(ctx.consultantName)})` : `Ask ${dept}`}
               </LoadingButton>
             ) : null}
             {askAction?.action_id && !ctx.resident ? <Button size="xs" variant="ghost" onClick={() => h.editRequest(slot, askAction)} disabled={!!pending}>Edit request</Button> : null}
             {notNeededBtn}
             {valueBtn()}
-            {ctx.resident && (askAction || canNotNeeded || typable) ? residentAsk(`Dr ${ctx.consultantName} signs off`) : null}
+            {ctx.resident && (askAction || canNotNeeded || typable) ? residentAsk(`${consultantTitle(ctx.consultantName, true)} signs off`) : null}
           </div>
         ) : null}
       </div>
@@ -273,7 +274,7 @@ export function SlotLine({ slot, ctx, h }: { slot: Slot; ctx: SlotContext; h: Sl
             <motion.form key="reason" initial={reduce ? false : { opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex flex-wrap items-center gap-1.5" onSubmit={(e) => { e.preventDefault(); void doNotNeeded(); }}>
               <label htmlFor={fieldId} className="sr-only">Why is {slot.label} not needed?</label>
               <Input id={fieldId} ref={inputRef as React.RefObject<HTMLInputElement>} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why is it not needed? (recorded with your name)" className="h-8 max-w-sm text-sm" maxLength={200} aria-invalid={!!err} />
-              <LoadingButton size="xs" type="submit" loading={busy}>{ctx.resident ? `Ask Dr ${ctx.consultantName} to sign off` : "Done"}</LoadingButton>
+              <LoadingButton size="xs" type="submit" loading={busy}>{ctx.resident ? `Ask ${consultantTitle(ctx.consultantName)} to sign off` : "Done"}</LoadingButton>
               <Button size="xs" variant="ghost" type="button" onClick={() => { setMode("idle"); setErr(null); }} aria-label="Cancel"><X className="size-3" />Cancel</Button>
             </motion.form>
           ) : null}
@@ -292,7 +293,7 @@ export function SlotLine({ slot, ctx, h }: { slot: Slot; ctx: SlotContext; h: Sl
                   <Input id={fieldId} ref={inputRef as React.RefObject<HTMLInputElement>} value={value} onChange={(e) => setValue(e.target.value)} inputMode={rule?.kind === "number" ? "decimal" : "text"} placeholder={rule?.unit ? `in ${rule.unit}` : ""} className="h-8 w-40 text-sm" aria-invalid={!!valueErr} aria-describedby={`${fieldId}-help`} />
                 )}
                 {rule?.unit ? <span className="text-sm text-muted-foreground">{rule.unit}</span> : null}
-                <LoadingButton size="xs" type="submit" loading={busy}>{ctx.resident ? `Ask Dr ${ctx.consultantName} to sign off` : "Save"}</LoadingButton>
+                <LoadingButton size="xs" type="submit" loading={busy}>{ctx.resident ? `Ask ${consultantTitle(ctx.consultantName)} to sign off` : "Save"}</LoadingButton>
                 <Button size="xs" variant="ghost" type="button" onClick={() => { setMode("idle"); setValueErr(null); }}><X className="size-3" />Cancel</Button>
               </div>
               <p id={`${fieldId}-help`} className={cn("text-xs", valueErr ? "text-bad" : "text-muted-foreground")}>{valueErr ?? `${rule?.help ? `${rule.help}. ` : ""}Shown as "entered by you, no report".`}</p>

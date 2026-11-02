@@ -3,6 +3,28 @@
 
 export type { Me, RoleKind } from "@/lib/session";
 
+// ---- Opened with a reason (POST /break-glass, night-v3 item 1.9) ------------------------------------------------------
+/** A doctor's read-only window on a Case File it cannot open otherwise: 24 hours, audited, the owner's consultants told. */
+export interface BreakGlassWindow {
+  case_id: string;
+  /** ISO end of the window (24 hours after opening). */
+  until: string;
+  reason: string;
+  /** Where the doctor came from, e.g. "similar to TB-001" (Phase 7); empty otherwise. */
+  via?: string;
+}
+/** POST /break-glass answer for a doctor. */
+export interface BreakGlassOpened extends BreakGlassWindow {
+  scope: "read";
+  renewed?: boolean;
+}
+// GET /me lists the doctor's open windows (the Me type itself lives in lib/session.tsx).
+declare module "@/lib/session" {
+  interface Me {
+    break_glass?: BreakGlassWindow[];
+  }
+}
+
 // ---- Case File list (GET /case-list) ----------------------------------------------------------------------------------
 export interface CasePatient {
   name: string;
@@ -33,6 +55,8 @@ export interface CaseStatus {
   detail?: string;
 }
 
+export type CaseRelation = "owner" | "team" | "creator" | "participant" | "referred" | "coordinator" | "linked" | "asked" | "admin";
+
 export interface CaseListItem {
   case_id: string;
   patient: CasePatient;
@@ -51,8 +75,14 @@ export interface CaseListItem {
   residents_count?: number;
   /** Free text name when the cancer has no built checklist. */
   cancer_name?: string;
-  /** The person owns it, is on its team, or created it (server side "mine"). */
+  /** The person owns it, is on its team, or created it (server side "mine"). Never true for a linked-only row. */
   mine?: boolean;
+  /** Why the person sees it: owner, team, creator, participant, referred, coordinator, linked, asked, admin. */
+  relation?: CaseRelation | null;
+  /** Another department's Case File seen only because it is linked to one of the person's own: read only, never counted. */
+  linked_only?: boolean;
+  read_only?: boolean;
+  owned_by?: { department: string; label: string };
   scope?: "FULL" | "REQUESTS" | string | null;
   documents?: number;
   gate_passed?: boolean | null;
@@ -60,6 +90,10 @@ export interface CaseListItem {
   ids?: string[];
   /** Accession / Lab numbers of the records in the file, for the search. */
   accessions?: string[];
+  /** The Case File's summary line (night-v3 3.4); "" unless the reader has full access to the Case File. */
+  summary_line?: string;
+  /** The latest board decision in the board's words (at most 200 characters), for the search; "" unless full access. */
+  decision_text?: string;
 }
 
 export type FilterOption = string | { id: string; label: string } | { key: string; label: string };
@@ -126,6 +160,8 @@ export interface Notification {
   kind: string;
   case_id?: string;
   meeting_id?: string;
+  /** Phase 8: the conversation a "message" item points to. */
+  conversation?: string;
   title: string;
   text?: string;
   read: boolean;
@@ -288,6 +324,35 @@ export interface CreateFromHisResponse {
   job: string;
   total: number;
   his?: unknown;
+}
+
+/** One Case File of a patient as the New Case File page and the Overview see it (GET /patient-case-files, night-v3 item 1.1):
+ * the cancer, the owning department and consultant, a status word and whether this person may open it; no clinical content. */
+export interface PatientCaseFile {
+  case_id: string;
+  protocol: string;
+  cancer_name?: string;
+  cancer_label: string;
+  department: string;
+  department_name: string;
+  owner: string;
+  owner_name: string;
+  /** "Breast Surgery, Dr Rao" */
+  owner_words?: string;
+  can_open: boolean;
+  created_at?: string;
+  status_label?: string;
+}
+
+export interface PatientCaseFilesResponse {
+  cases: PatientCaseFile[];
+}
+
+/** The 409 body when a Case File for this patient and this cancer exists (code "duplicate_case_file"). */
+export interface DuplicateCaseFileBody {
+  detail: string;
+  code: "duplicate_case_file";
+  existing: PatientCaseFile;
 }
 
 // ---- Meetings (GET /meetings) ---------------------------------------------------------------------------------------

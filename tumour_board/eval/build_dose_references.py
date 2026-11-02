@@ -28,7 +28,20 @@ dose that are not in the drug lexicon (to extend DRUGS when a new guideline file
 
 The table is a reference for the clinical team to review before real use; coverage is limited to the doses our guideline files
 state. Rebuild after adding a guideline file: rebuild the guideline index, run with --candidates, read the new candidates, update
-PAGES / DROP_QUOTE / DROP / SOURCE_KIND, then --write. A DROP or SOURCE_KIND id that is no longer produced is printed.
+PAGES / DROP_QUOTE / DROP / DROP_RX / SOURCE_KIND, then --write. A DROP or SOURCE_KIND id (or a DROP_RX pattern) that is no longer
+produced is printed.
+
+Night-v3 item 2.12 (Phase 2 cancers): lines from the NCG books only (the NCG manual 2021 and the ICMR STW file print no dose line naming
+these cancers; no TMC, ICMR or international file on disk covers them), every book limited by PAGES to the cancer's own chapter. NCG
+prints no dose line for colon (regimen names only), gallbladder (regimen names only) or CNS (no NCG book); the HCC file's one dose line
+("The recommended dose is 400mg bd") does not name its drug in the line, so liver_hcc has none either. The adult haematolymphoid book's
+flow charts are pictures (no text layer, not read here): its lines come from the text regimen pages. The lexicon gained the drugs these
+books dose (blood cancers, sarcomas, urology, gynaecology) and the short names, one brand (Endoxan) and misspellings the books print
+(ATRA, ATO, MTX, VCR, 6MP, CDDP, Sorafinib, Gemicitabine ...); with dexamethasone in the lexicon three supportive-care lines of the old
+files are dropped, so the five V1 cancers' rows are unchanged. DROP_RX drops doses wherever the scan reads them for a cancer: caps,
+capsule and tablet strengths, premedication and antiemetic doses, mesna doses read after the drug before them, broken numbers; three
+lines that look misprinted (a rescue schedule printed under the methotrexate name, "VINBLASTINE 25MG/M2" in GVD, "325MG/M2 IV D2" after
+rituximab) are left out for clinical review.
 """
 import argparse
 import json
@@ -59,12 +72,30 @@ DRUGS = [
     "aflibercept", "tremelimumab", "cemiplimab", "dostarlimab", "nab-paclitaxel", "topotecan", "vincristine", "prednisone",
     "tucatinib", "alpelisib", "sacituzumab govitecan", "fruquintinib", "tegafur", "uracil", "trametinib", "binimetinib",
     "necitumumab", "datopotamab deruxtecan", "rituximab", "levamisole", "celecoxib",
+    # night-v3 item 2.12: the drugs the NCG books of the Phase 2 cancers name with a dose (blood cancers, sarcomas, urology, gynaecology)
+    "prednisolone", "dexamethasone", "cytarabine", "vinblastine", "procarbazine", "dacarbazine", "brentuximab vedotin", "daunorubicin",
+    "idarubicin", "mitoxantrone", "lenalidomide", "thalidomide", "bortezomib", "ibrutinib", "imatinib", "dasatinib", "nilotinib",
+    "bosutinib", "decitabine", "azacitidine", "cladribine", "fludarabine", "chlorambucil", "bendamustine", "mercaptopurine",
+    "thioguanine", "arsenic trioxide", "tretinoin", "asparaginase", "pegaspargase", "hydroxyurea", "dactinomycin", "bleomycin",
+    "melphalan", "carmustine", "busulfan", "temozolomide", "trabectedin", "pazopanib", "nimotuzumab", "sorafenib", "sunitinib",
+    "axitinib", "cabozantinib", "abiraterone", "enzalutamide", "apalutamide", "darolutamide", "bicalutamide", "degarelix",
+    "triptorelin", "cabazitaxel", "rucaparib", "niraparib", "megestrol acetate", "medroxyprogesterone", "fosfesterol",
+    "obinutuzumab", "polatuzumab vedotin", "venetoclax", "ponatinib", "gemtuzumab ozogamicin", "cyclosporine",
 ]
 # Aliases the guideline text itself uses (and the standard abbreviation 5-FU); brand names come only from the hospital formulary.
 ALIASES = {"adriamycin": "doxorubicin", "5-fluorouracil": "fluorouracil", "5-fu": "fluorouracil", "5fu": "fluorouracil",
            "fluorouracil": "fluorouracil", "folinic acid": "leucovorin", "tdm1": "trastuzumab emtansine",
            "t-dm1": "trastuzumab emtansine", "nab paclitaxel": "nab-paclitaxel", "zoledronate": "zoledronic acid",
-           "trifluridine/tipiracil": "trifluridine", "flurouracil": "fluorouracil", "lv": "leucovorin", "dato-dxd": "datopotamab deruxtecan"}
+           "trifluridine/tipiracil": "trifluridine", "flurouracil": "fluorouracil", "lv": "leucovorin", "dato-dxd": "datopotamab deruxtecan",
+           # night-v3 item 2.12: short names, a brand and misspellings printed in the NCG books of the Phase 2 cancers
+           "atra": "tretinoin", "ato": "arsenic trioxide", "arsenic": "arsenic trioxide", "cddp": "cisplatin", "endoxan": "cyclophosphamide",
+           "adrimaycin": "doxorubicin", "brentuximab": "brentuximab vedotin", "actinomycin d": "dactinomycin", "actinomycin-d": "dactinomycin",
+           "l-asparaginase": "asparaginase", "peg-asparaginase": "pegaspargase", "6-mercaptopurine": "mercaptopurine",
+           "6-mp": "mercaptopurine", "6-thioguanine": "thioguanine", "megestrol": "megestrol acetate", "ifosfomide": "ifosfamide",
+           "gemicitabine": "gemcitabine", "bendabustine": "bendamustine", "cladiribine": "cladribine", "cladarabine": "cladribine",
+           "sorafinib": "sorafenib", "ceritiinib": "ceritinib", "polatuzumab": "polatuzumab vedotin", "ara-c": "cytarabine",
+           "cytosine arabinoside": "cytarabine", "ciclosporin": "cyclosporine", "vcr": "vincristine", "mtx": "methotrexate",
+           "6mp": "mercaptopurine", "6 mp": "mercaptopurine", "6-tg": "thioguanine", "actinomycin": "dactinomycin"}
 
 # Files per protocol cancer. "all": the whole file is about this cancer; a regex: a multi-cancer file, only chunks naming it.
 SOURCES = {
@@ -115,6 +146,28 @@ SOURCES = {
         ("ncg_india/ncg-guidelines-manual-2021.pdf", r"\b(cervix|carcinoma cervix|cervical (cancer|carcinoma))\b"),
         ("icmr/ICMR-STW-oncology-all-2020.pdf", r"\b(cervix|carcinoma cervix|cervical (cancer|carcinoma))\b"),
     ],
+    # Night-v3 item 2.12: the Phase 2 checklists. Only the NCG books state their doses (the NCG manual 2021 and the ICMR STW file
+    # print no dose line naming these cancers; no TMC, ICMR or international file on disk covers them), so each list is NCG only.
+    "colorectal_colon": [("ncg_india/management-of-colorectal-cancer.pdf", "all")],
+    "stomach": [("ncg_india/ncg-gi-draft-2021-gastric-cancer.pdf", "all")],
+    "oesophagus": [("ncg_india/ncg-guidelines-for-thoracic-cancer-2019.pdf", "all")],
+    "liver_hcc": [("ncg_india/ncg-gi-hepatocellular-carcinoma.docx", "all")],
+    "gallbladder": [("ncg_india/ncg-gi-draft-2021-gall-bladder-cancer.pdf", "all")],
+    "ovary": [("ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx", "all")],
+    "corpus_uteri": [("ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx", "all")],
+    "prostate": [("ncg_india/ncg-guidelines-for-urological-malignancies-2019.pdf", "all")],
+    "kidney": [("ncg_india/ncg-guidelines-for-urological-malignancies-2019.pdf", "all")],
+    "germ_cell": [("ncg_india/ncg-guidelines-for-urological-malignancies-2019.pdf", "all")],
+    "larynx": [("ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf", "all")],
+    "lymphoma": [("ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf", "all"),
+                 ("ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf", "all")],
+    "leukaemia": [("ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf", "all"),
+                  ("ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf", "all")],
+    "wilms": [("ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf", "all")],
+    "retinoblastoma": [("ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf", "all")],
+    "bone_sarcoma": [("ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf", "all")],
+    "soft_tissue_sarcoma": [("ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf", "all"),
+                            ("ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf", "all")],
 }
 
 # Curation (step 2), recorded after reading the candidates. Pages of a file kept for a cancer (others are another cancer).
@@ -128,12 +181,50 @@ PAGES = {
     # NCG gynaecological 2019 (Word file, 6,000-character parts): parts 1-5 hold the cervix chapter (part 1 opens with the front matter,
     # part 5 ends the cervix table and opens the ovarian chapter, which has no dose line in that part); 6 onwards ovary, endometrium, vulva.
     ("cervix", "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx"): {1, 2, 3, 4, 5},
+    # Night-v3 item 2.12 (PDF page = the index page throughout)
+    # NCG thoracic 2019: p16-20 oesophagus / GEJ (work-up, RT schedules, neoadjuvant, definitive and metastatic regimens).
+    ("oesophagus", "ncg_india/ncg-guidelines-for-thoracic-cancer-2019.pdf"): set(range(16, 21)),
+    # NCG gynaecological 2019 (Word parts): part 5 ends the cervix chapter (its palliative regimens are cervix lines) and opens the ovarian
+    # one; parts 6-7 epithelial ovarian cancer (part 7 ends with the ovarian germ cell regimens, dropped below); part 8 sex cord stromal
+    # tumours then the endometrial chapter (no endometrial dose line in that part); parts 9-12 endometrium; part 12 then opens vulva.
+    ("ovary", "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx"): {6, 7},
+    ("corpus_uteri", "ncg_india/ncg-guidelines-for-gynecological-cancer-2019.docx"): {9, 10, 11, 12},
+    # NCG urological 2019: p4-8 renal cell carcinoma (p8 drug doses), p9-19 upper tract and bladder, p20-27 testicular germ cell tumours
+    # (p26-27 regimen doses), p28-32 penis, p33-41 prostate (p34 RT, p40-41 drug doses); p42 onwards annexures.
+    ("kidney", "ncg_india/ncg-guidelines-for-urological-malignancies-2019.pdf"): set(range(4, 9)),
+    ("germ_cell", "ncg_india/ncg-guidelines-for-urological-malignancies-2019.pdf"): set(range(20, 28)),
+    ("prostate", "ncg_india/ncg-guidelines-for-urological-malignancies-2019.pdf"): set(range(33, 42)),
+    # NCG head and neck 2019: larynx p14-20 (glottis / supraglottis pathways, their chemoradiation footnotes on p16, 18, 20), p27-28
+    # (larynx / hypopharynx with inoperable nodes and its footnotes), p36 (recurrent / metastatic chart, no dose line); p12-13
+    # oropharynx and p21-26 hypopharynx are other sites.
+    ("larynx", "ncg_india/ncg-guidelines-for-head-neck-cancer-2019.pdf"): set(range(14, 21)) | {27, 28, 36},
+    # NCG adult haematolymphoid 2019 (flow charts are pictures, only the text pages give lines): p5-16 leukaemias (AML, APML, ALL, CLL,
+    # CML), p17-69 lymphomas (DLBCL to relapsed Hodgkin, hairy cell and Waldenstrom included), p70 onwards myeloma and annexures.
+    # NCG paediatric 2019 (PDF pages): p7-19 leukaemias (ALL, AML, APML, CML), p20-21 Langerhans cell histiocytosis (not a leukaemia),
+    # p22-28 NHL, p29-33 Hodgkin, p44-47 Wilms, p52-56 retinoblastoma, p59-62 rhabdomyosarcoma.
+    ("lymphoma", "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf"): set(range(17, 70)),
+    ("lymphoma", "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf"): set(range(22, 34)),
+    ("leukaemia", "ncg_india/ncg-guidelines-for-adult-hematolymphoid-2019.pdf"): set(range(5, 17)),
+    ("leukaemia", "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf"): set(range(7, 20)),
+    ("wilms", "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf"): set(range(44, 48)),
+    ("retinoblastoma", "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf"): set(range(52, 57)),
+    # NCG bone and soft tissue 2019: p7-19 osteosarcoma, Ewing and chondrosarcoma chapters, p20-24 soft tissue sarcoma; appendix 5
+    # (chemotherapy) p44-47 bone, p48-49 soft tissue; appendix 6 (radiotherapy) p50-51 bone (p51 then opens the soft tissue part,
+    # its lines are dropped for bone below), p51-52 soft tissue.
+    ("bone_sarcoma", "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf"): set(range(7, 20)) | {44, 45, 46, 47, 50, 51},
+    ("soft_tissue_sarcoma", "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf"): set(range(20, 25)) | {48, 49, 51, 52},
+    ("soft_tissue_sarcoma", "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf"): set(range(59, 63)),
 }
 # Lines that are not a dosing statement: dose reductions, caps, cumulative limits, HDR boosts.
 DROP_QUOTE = [r"reduce[sd]? (the )?(starting )?dose|dose reduces|reduced starting dose|use starting dose|reduce the \w+ dose",
-              r"cumulative dose|not exceeding", r"HDR boost"]
+              r"cumulative dose|not exceeding|cumulative lifetime|limit cumulative", r"HDR boost",
+              # Phase 2 review (27 Oct 2026): an intrathecal dose is not a systemic dose; a boost or a phase is not a course; the gynaecology
+              # Word file glues drawing-anchor digits to some lines, which a doctor cannot read as a source line
+              r"\bIT\b|intrathecal", r"\(Boost", r"\bPh-2\b|shrinking portals", r"^\d{2,}(Chemotherapy|!:)"]
 # Candidate ids (a trailing * drops every id with that prefix), after reading the candidates.
 DROP = {
+    # Phase 2 review (night-v3, 27 Oct 2026): lines a decision check must not compare a course against
+    "prostate:ncg-guidelines-for-urologica:p34:rt:74Gy/30",  # "74 Gy /30 fractions or equivalent": a misprint kept for clinical review, not a reference schedule
     # breast
     "breast:esmo-2024-early-breast-cance:p19:ribociclib:400mg/day",  # trial description ("evaluated the addition of"), not a dosing line
     "breast:breast-treatment-pdq:p20:rt:54Gy/30", "breast:breast-treatment-pdq:p20:rt:45Gy/15",  # brachial plexus toxicity comparison
@@ -159,7 +250,50 @@ DROP = {
     # oral cavity
     "oral_cavity:ncg-guidelines-for-head-neck:p8:fluorouracil:10000mg/m2*", "oral_cavity:ncg-guidelines-for-head-neck:p9:fluorouracil:10000mg/m2*",  # "5FU 10000 mg/m2" (CF, EXTREME):
     # likely a misprint for 1000 mg/m2 a day (D1-D4); kept, it would flag a correct 1000 mg/m2 as a tenfold slip. For clinical review (pendings).
+    # night-v3 item 2.12: dexamethasone joined the lexicon (blood cancer regimens); its supportive-care lines in the old files are not
+    # anticancer doses (tumour oedema, a metoclopramide dose, a stomatitis mouthwash trial), so the old cancers' table is unchanged
+    "colorectal_rectum:colorectal-cancer-0:p38:dexamethasone:*", "colorectal_rectum:colorectal-cancer-0:p43:dexamethasone:*",
+    "breast:breast-treatment-pdq:p51:dexamethasone:*",
+    # night-v3 item 2.12 (Phase 2 cancers, NCG books only)
+    # ovary: part 7 ends with the ovarian germ cell regimens (BEP / EP, TIP, VeIP, GemOxPacli), not epithelial ovarian cancer
+    "ovary:ncg-guidelines-for-gynecolog:p7:etoposide:100mg/m2*", "ovary:ncg-guidelines-for-gynecolog:p7:cisplatin:20mg/m2*",
+    "ovary:ncg-guidelines-for-gynecolog:p7:paclitaxel:250mg/m2*", "ovary:ncg-guidelines-for-gynecolog:p7:ifosfamide:1200mg/m2*",
+    "ovary:ncg-guidelines-for-gynecolog:p7:vinblastine:*", "ovary:ncg-guidelines-for-gynecolog:p7:gemcitabine:800mg/m2*",
+    "ovary:ncg-guidelines-for-gynecolog:p7:paclitaxel:80mg/m2#5", "ovary:ncg-guidelines-for-gynecolog:p7:oxaliplatin:130mg/m2*",
+    # prostate: tablet strengths, not doses ("250 mg 4 tablets or 500 mg 2 tablet", "40 mg ,4 tablets daily")
+    "prostate:ncg-guidelines-for-urologica:p40:abiraterone:250mg", "prostate:ncg-guidelines-for-urologica:p40:abiraterone:500mg",
+    "prostate:ncg-guidelines-for-urologica:p40:enzalutamide:40mg",
+    # germ cell: two mesna doses read after the drug before them; "1000-1.250mg/m2" read as a range 1000 to 1.25
+    "germ_cell:ncg-guidelines-for-urologica:p26:etoposide:240mg/m2", "germ_cell:ncg-guidelines-for-urologica:p26:ifosfamide:1200mg/m2/day",
+    "germ_cell:ncg-guidelines-for-urologica:p27:gemcitabine:1000-1.25mg/m2",
+    # leukaemia: methylprednisolone premedication before rituximab; "100mg – 200mg/m2" read as 100 mg
+    "leukaemia:ncg-guidelines-for-adult-hem:p15:prednisolone:1000mg*", "leukaemia:ncg-guidelines-for-pediatric:p14:cytarabine:100mg",
+    "leukaemia:ncg-guidelines-for-pediatric:p14:mercaptopurine:40mg/m2*",  # "6MP/6TG 50mg/40mg/m2": 40 mg/m2 is the 6TG dose
+    # lymphoma: "METHOTREXATE 50MG PO AT THE END OF MTX INFUSION FOLLOWED BY 25MG PO ... TILL MTX LEVEL <0.03" is the rescue schedule
+    # printed under the methotrexate name (a likely misprint, for clinical review); "325MG/M2 IV D2" after rituximab 375 mg/m2 on day 1
+    # is unclear; "Ifosfamide 1200mg" (paediatric p26) has no /m2 and would flag a correct 1200 mg/m2 as a unit slip
+    "lymphoma:ncg-guidelines-for-adult-hem:p37:methotrexate:50mg*", "lymphoma:ncg-guidelines-for-adult-hem:p37:methotrexate:25mg*",
+    "lymphoma:ncg-guidelines-for-pediatric:p26:ifosfamide:1200mg*",
+    # bone sarcoma: p51 soft tissue sarcoma RT lines (after the osteosarcoma and chondrosarcoma part)
+    "bone_sarcoma:ncg-guidelines-for-bone-soft:p51:rt:*",
 }
+# Doses dropped wherever the scan reads them for a cancer (regexes on the candidate id): caps ("(2mg max)", "(maximum dose 20 gm)"),
+# capsule and tablet strengths, premedication and antiemetic doses (paracetamol, dexamethasone, methylprednisolone), mesna doses read
+# after the drug before them, an IgM threshold ("GIM >4GM"), and numbers broken by the PDF text ("37·5" read as 5, "1 5" read as 5).
+DROP_RX = [
+    r"^(lymphoma|bone_sarcoma):.*:vincristine:2mg(#\d+)?$",  # (2mg max) / (max 2mg)
+    r"^(leukaemia|lymphoma):.*:ibrutinib:140mg(#\d+)?$", r"^leukaemia:.*:chlorambucil:2mg(#\d+)?$",  # capsule size, "multiples of 2 mg"
+    r"^lymphoma:.*:rituximab:500mg(#\d+)?$",  # TAB CROCIN 500 MG premedication read after rituximab
+    r"^lymphoma:.*:rituximab:4g/m2(#\d+)?$",  # "OMIT RITUXIMAB IF GIM >4GM"
+    r"^lymphoma:.*:vinblastine:25mg/m2(#\d+)?$",  # GVD "VINBLASTINE 25MG/M2" (p67): likely a misprint (vinorelbine), for clinical review
+    r"^lymphoma:.*:rituximab:325mg/m2(#\d+)?$",  # "325MG/M2 IV D2" after 375 mg/m2 on day 1 (DRC, p42-43): unclear, for clinical review
+    r"^lymphoma:.*:dexamethasone:8mg(#\d+)?$",  # antiemetic with granisetron (day 2 to day 4)
+    r"^lymphoma:.*:cytarabine:375mg/m2(#\d+)?$",  # MESNA 375MG/M2
+    r"^(bone_sarcoma|soft_tissue_sarcoma):.*:dexamethasone:20mg(#\d+)?$",  # premedication before trabectedin
+    r"^bone_sarcoma:.*:doxorubicin:5mg/m2(#\d+)?$", r"^bone_sarcoma:.*:leucovorin:5mg/m2(#\d+)?$",  # "37·5", "1 5" broken numbers
+    r"^bone_sarcoma:.*:methotrexate:20g/m2(#\d+)?$",  # "(maximum dose 20 gm)"
+    r"^soft_tissue_sarcoma:.*:(cyclophosphamide:500mg/m2|ifosfamide:600mg/m2)(#\d+)?$",  # Inj. Mesna (500 mg/m2), (600 mg/m2)
+]
 
 
 # Source kind (step 2): every kept line is either a regimen / schedule line ("regimen") or a line describing what a trial gave its
@@ -198,7 +332,7 @@ def source_kind(c):
 
 
 def dropped(c):
-    if any(re.search(rx, c["quote"], re.I) for rx in DROP_QUOTE):
+    if any(re.search(rx, c["quote"], re.I) for rx in DROP_QUOTE) or any(re.search(rx, c["id"]) for rx in DROP_RX):
         return True
     return any(c["id"] == d or (d.endswith("*") and c["id"].startswith(d[:-1])) for d in DROP)
 
@@ -412,6 +546,9 @@ def main(argv=None):
         stale = {d for d in keys if not (d in ids or (d.endswith("*") and any(i.startswith(d[:-1]) for i in ids)))}
         if stale:
             print(f"{name} ids no longer produced:", sorted(stale))
+    stale = [rx for rx in DROP_RX if not any(re.search(rx, i) for i in ids)]
+    if stale:
+        print("DROP_RX patterns that match no candidate:", stale)
     return 0
 
 

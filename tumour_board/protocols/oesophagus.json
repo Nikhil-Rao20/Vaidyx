@@ -1,0 +1,453 @@
+{
+ "id": "oesophagus",
+ "label": "Oesophageal cancer",
+ "version": "0.1-draft",
+ "approval": {
+  "status": "draft",
+  "note": "Draft checklist from the NCG Guidelines for Thoracic Cancer (2019), oesophagus: needs a clinician's check"
+ },
+ "site": "oesophag|esophag|siewert",
+ "site_note": "V2 item 5.3 (two primaries): only on a Case File linked to the same patient's other Case File, and only for histopathology, cytology, IHC and molecular records: among several candidates for one record, or several documents carrying a required value, one that names another protocol's site and not this one steps aside and is named on the row for review; a document naming no site never does, and when every candidate names another site every candidate stays. Organ words only. A preference, never a filter; a patient with one cancer is checked as before.",
+ "note": "Draft checklist from the NCG Guidelines for Thoracic Cancer (2019), oesophagus: management flow on page 16 (with the book's a, b and c tier letters), the pathology synoptic on pages 28 to 31 and the work-up line on page 4: needs a clinician's check. Tier letters are NCG's where a record's basis says so; the history, histopathology, endoscopy and resection records are proposals (the page 16 text layer shows no history, endoscopy or biopsy box), to be confirmed by the hospital Tumour Board (clinical review before real use). The book places Siewert type II and III tumours in this flow. The system records the stage as written (the pathology synoptic names the 8th AJCC edition) and never computes it; no treatment advice. India first: the National Cancer Grid guideline is the only source.",
+ "settings_note": "The setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes a stage and never decides the setting). Each record carries its tier per setting; until a setting is recorded the strictest tier applies. Draft checklist: needs a clinician's check.",
+ "settings": [
+  {
+   "id": "early_localized",
+   "label": "Early, localised (as recorded)"
+  },
+  {
+   "id": "locally_advanced",
+   "label": "Loco-regionally advanced (as recorded)"
+  },
+  {
+   "id": "metastatic",
+   "label": "Metastatic (as recorded)"
+  }
+ ],
+ "records": [
+  {
+   "id": "clinical_history",
+   "label": "Clinical history and performance status",
+   "tier": "a",
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ],
+   "department": "Gastrointestinal Surgery",
+   "required_facts": [
+    "ecog",
+    "presenting_complaint",
+    "clinical_question"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Thoracic Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-thoracic-cancer-2019.pdf",
+     "page": 4,
+     "quote": "Performance status; General and systemic examination"
+    }
+   ],
+   "tier_basis": "Proposed Essential. The quote is the lung chapter's work-up line on page 4: the oesophagus flow on page 16 carries no history box in its text layer. Same tier as the lung checklist",
+   "route": "owner",
+   "note": "a clinical record of the owning treating department; the department named here is the default before a Case File has an owner"
+  },
+  {
+   "id": "histopathology",
+   "label": "Biopsy and histopathology report",
+   "tier": "a",
+   "doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type",
+    "grade"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Thoracic Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-thoracic-cancer-2019.pdf",
+     "page": 16,
+     "quote": "Squamous cell carcinoma"
+    }
+   ],
+   "tier_basis": "Proposed Essential: the page 16 flow separates squamous cell carcinoma from adenocarcinoma, so the type has to be recorded"
+  },
+  {
+   "id": "upper_gi_endoscopy",
+   "label": "Upper GI endoscopy report",
+   "tier": "a",
+   "doc_types": [
+    "endoscopy"
+   ],
+   "department": "Gastrointestinal Surgery",
+   "required_facts": [
+    "tumour_location_oesophagus"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Thoracic Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-thoracic-cancer-2019.pdf",
+     "page": 28,
+     "quote": "d. Tumor/Lesion location: Gastro-oesophageal junction/Lower third/Middle third/Upper third"
+    }
+   ],
+   "tier_basis": "Proposed Essential: the page 16 text layer shows no endoscopy box, and tumour location is a field of the page 28 pathology synoptic form"
+  },
+  {
+   "id": "cect_staging",
+   "label": "CECT lower neck, thorax, abdomen (pelvis for GE junction)",
+   "tier": "a",
+   "doc_types": [
+    "ct"
+   ],
+   "region": "neck|thorax|chest|abdomen|abdo|abdominal|pelvis|pelvic",
+   "department": "Radiology",
+   "required_facts": [
+    "lesion_size",
+    "nodal_findings",
+    "distant_findings"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Thoracic Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-thoracic-cancer-2019.pdf",
+     "page": 16,
+     "quote": "CECT scan lower neck, thorax, abdomen (pelvis"
+    }
+   ],
+   "tier_basis": "NCG Essential (a) on page 16"
+  },
+  {
+   "id": "bronchoscopy",
+   "label": "Bronchoscopy (upper and middle third, or voice change)",
+   "tier": "c",
+   "tiers": {
+    "early_localized": "c",
+    "locally_advanced": "c",
+    "metastatic": "none"
+   },
+   "doc_types": [
+    "endoscopy"
+   ],
+   "region": "bronch",
+   "department": "Pulmonology",
+   "required_facts": [],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Thoracic Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-thoracic-cancer-2019.pdf",
+     "page": 16,
+     "quote": "Bronchoscopy (upper and middle third or H/o"
+    }
+   ],
+   "tier_basis": "NCG Optimal (b) on page 16, but only for an upper or middle third tumour or a history of voice change, which the system does not judge: shown and not counted",
+   "condition": {
+    "ncg_tier": "b",
+    "text": "when the tumour is in the upper or middle third, or there is a history of voice change"
+   }
+  },
+  {
+   "id": "pet_cect",
+   "label": "PET-CECT",
+   "tier": "b",
+   "doc_types": [
+    "pet_ct"
+   ],
+   "department": "Nuclear Medicine",
+   "required_facts": [
+    "suv_max",
+    "distant_findings"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Thoracic Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-thoracic-cancer-2019.pdf",
+     "page": 16,
+     "quote": "PET-CECT(b)"
+    }
+   ],
+   "tier_basis": "NCG Optimal (b) on page 16"
+  },
+  {
+   "id": "eus",
+   "label": "Endoscopic ultrasonography",
+   "tier": "c",
+   "tiers": {
+    "early_localized": "c",
+    "locally_advanced": "c",
+    "metastatic": "none"
+   },
+   "doc_types": [
+    "endoscopy"
+   ],
+   "region": "eus|endoscopic ultraso|endosonograph",
+   "department": "Gastrointestinal Surgery",
+   "required_facts": [],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Thoracic Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-thoracic-cancer-2019.pdf",
+     "page": 16,
+     "quote": "Endoscopic ultrasonography (EUS)(c) for"
+    }
+   ],
+   "tier_basis": "NCG Optional (c) on page 16, under 'Optional Procedures- C', for borderline operable disease or early T1, T2, N0"
+  },
+  {
+   "id": "staging_laparoscopy",
+   "label": "Staging laparoscopy",
+   "tier": "c",
+   "tiers": {
+    "early_localized": "none",
+    "locally_advanced": "c",
+    "metastatic": "none"
+   },
+   "doc_types": [
+    "operative_note"
+   ],
+   "region": "laparoscop",
+   "department": "Surgical Oncology",
+   "required_facts": [],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Thoracic Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-thoracic-cancer-2019.pdf",
+     "page": 16,
+     "quote": "If Siewart type II/III- Staging laparoscopy(b)"
+    }
+   ],
+   "tier_basis": "NCG Optimal (b) on page 16, but only for Siewert type II or III adenocarcinoma and poorly differentiated tumours, which the system does not judge: shown and not counted",
+   "condition": {
+    "ncg_tier": "b",
+    "text": "for Siewert type II or III adenocarcinoma and for poorly differentiated tumours"
+   }
+  },
+  {
+   "id": "her2",
+   "label": "HER2 (metastatic adenocarcinoma)",
+   "tier": "c",
+   "tiers": {
+    "early_localized": "none",
+    "locally_advanced": "none",
+    "metastatic": "c"
+   },
+   "doc_types": [
+    "ihc",
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "her2"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Thoracic Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-thoracic-cancer-2019.pdf",
+     "page": 16,
+     "quote": "Her2 positive"
+    }
+   ],
+   "tier_basis": "NCG Optional (c) on page 16, for HER2 in metastatic adenocarcinoma (the letter is printed on the line after the quoted words); this record is the HER2 test only"
+  },
+  {
+   "id": "restaging_ct",
+   "label": "Re-evaluation CT after neoadjuvant therapy",
+   "tier": "a",
+   "tiers": {
+    "early_localized": "none",
+    "locally_advanced": "a",
+    "metastatic": "none"
+   },
+   "doc_types": [
+    "ct"
+   ],
+   "region": "neck|thorax|chest|abdomen|abdo|abdominal|pelvis|pelvic",
+   "department": "Radiology",
+   "required_facts": [
+    "lesion_size",
+    "distant_findings"
+   ],
+   "sla_days": 5,
+   "must_postdate_doc_type": "treatment_summary",
+   "applies_if_doc_type_present": "treatment_summary",
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Thoracic Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-thoracic-cancer-2019.pdf",
+     "page": 16,
+     "quote": "Followed by reevaluation with CECT(a)"
+    }
+   ],
+   "tier_basis": "NCG Essential (a) on page 16, for the re-evaluation after neoadjuvant therapy",
+   "note": "asked only after a treatment summary is in the Case File, and dated after it (as the rectal restaging records)"
+  }
+ ],
+ "optional": [
+  {
+   "id": "resection_histopathology",
+   "label": "Histopathology of the oesophagectomy",
+   "doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Thoracic Cancer (2019)",
+     "file": "ncg_india/ncg-guidelines-for-thoracic-cancer-2019.pdf",
+     "page": 30,
+     "quote": "Margin type  Involved by invasive carcinoma,"
+    }
+   ],
+   "tier_basis": "Proposed Essential after surgery for early and locally advanced disease (a post-board record: the page 16 adjuvant box depends on margins and pT / pN; synoptic fields on pages 29 to 31). Kept under optional because a resection report exists only after the board and the gate cannot tell it from the biopsy report",
+   "note": "post-board record: histologic type, grade, LVI, PNI, margins, stage as recorded; the synoptic also records the tumour regression grade"
+  },
+  {
+   "id": "previous_board",
+   "label": "Previous Tumour Board record",
+   "doc_types": [
+    "tumour_board_record"
+   ],
+   "department": "MDT Coordinator",
+   "route": "coordinator"
+  },
+  {
+   "id": "palliative_care_referral",
+   "label": "Palliative care referral note (dysphagia, metastatic disease)",
+   "doc_types": [
+    "clinical_note"
+   ],
+   "department": "Palliative Medicine",
+   "note": "NCG page 16 refers metastatic disease with dysphagia to the palliative care guidelines; proposed Optional in the research note, shown only (no verbatim quote)"
+  }
+ ],
+ "extract_facts": [
+  "presenting_complaint",
+  "ecog",
+  "comorbidities",
+  "clinical_question",
+  "recorded_stage",
+  "lesion_size",
+  "nodal_findings",
+  "distant_findings",
+  "histologic_type",
+  "grade",
+  "haemoglobin",
+  "wbc",
+  "platelets",
+  "creatinine",
+  "bilirubin",
+  "patient_preference",
+  "clinical_trial_note",
+  "diagnosis_date_mode",
+  "treatment_received",
+  "tumour_location_oesophagus",
+  "suv_max",
+  "her2",
+  "lvi",
+  "pni",
+  "margins",
+  "siewert_type",
+  "trg"
+ ],
+ "core_data": [
+  {
+   "id": "diagnosis",
+   "label": "Histopathological / cytological diagnosis",
+   "facts": [
+    "histologic_type"
+   ]
+  },
+  {
+   "id": "diagnosis_date_mode",
+   "label": "Date and mode of diagnosis",
+   "facts": [
+    "diagnosis_date_mode"
+   ]
+  },
+  {
+   "id": "stage",
+   "label": "Stage as recorded (with the investigations used)",
+   "facts": [
+    "recorded_stage"
+   ]
+  },
+  {
+   "id": "performance_status",
+   "label": "Performance status",
+   "facts": [
+    "ecog"
+   ]
+  },
+  {
+   "id": "comorbidities",
+   "label": "Co-morbidities",
+   "facts": [
+    "comorbidities"
+   ]
+  },
+  {
+   "id": "biomarkers",
+   "label": "Relevant genomic / biomarker testing",
+   "facts": [
+    "her2"
+   ]
+  },
+  {
+   "id": "treatment_history",
+   "label": "Treatment history",
+   "facts": [
+    "treatment_received"
+   ]
+  },
+  {
+   "id": "patient_preference",
+   "label": "Patient preference / special circumstances",
+   "facts": [
+    "patient_preference"
+   ]
+  },
+  {
+   "id": "clinical_trial",
+   "label": "Clinical trial availability / suitability recorded",
+   "facts": [
+    "clinical_trial_note"
+   ]
+  },
+  {
+   "id": "question",
+   "label": "Question for the Tumour Board",
+   "facts": [
+    "clinical_question"
+   ]
+  }
+ ],
+ "core_data_source": "NHS England, Streamlining MDT meetings (2020), p.11 'minimum core data requirements'; aligned with the NCG Virtual Tumour Board case template (India)",
+ "post_board": {
+  "required_record_fields": [
+   "decision_text",
+   "recorded_by",
+   "participants",
+   "actions"
+  ],
+  "follow_up_default_days": 14,
+  "record_fields_source": "EUSOMA 2020 (names of all participants, evidence on decisions); Victorian Cancer MDM quality framework 2018 (report errors/changes raised, divergent recommendations and dissenting clinicians); PM-JAY HBP 2.2 s.3.9 (tumour board decision and treatment plan)"
+ },
+ "policy_basis": "PM-JAY Health Benefit Package 2.2 user guidelines (NHA, 2021), section 3.9: pre-authorization is mandatory at each step of cancer care and the decision on appropriate care is to be taken by a multidisciplinary tumour board; NHS England MDT streamlining guidance (2020) pre-listing conditions.",
+ "guideline_sources": [
+  {
+   "guideline": "NCG Guidelines for Thoracic Cancer (2019)",
+   "file": "ncg_india/ncg-guidelines-for-thoracic-cancer-2019.pdf",
+   "pages": "4, 16, 28, 30"
+  }
+ ]
+}

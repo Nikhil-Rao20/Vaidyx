@@ -73,7 +73,7 @@ def test_build_writes_every_file(built):
 
 def test_patient_count_is_one_per_registration(store, fx):
     regs = sum(1 + bool(p.get("temporary_uhid")) + bool(p.get("duplicate_uhid")) for p in fx["patients"])
-    assert len(store.patients) == regs == 21
+    assert len(store.patients) == regs == 25  # 23 patients (P20 to P23 from night-v3 item 2.11), two with a second UHID
     kinds = sorted(p["registration_kind"] for p in store.patients.values())
     assert kinds.count("temporary") == 1 and kinds.count("duplicate") == 1
 
@@ -342,7 +342,7 @@ def test_p12_has_an_opd_note_older_than_the_fetch_window(store, fx):
 
 # ------------------------------------------------------------------ master data
 def test_departments_and_practitioners(store, fx):
-    assert len(store.departments) == len(fx["departments"]) == 30
+    assert len(store.departments) == len(fx["departments"]) == 31  # 30 of plan section 4 + Cardiology (night-v3 2.11)
     for d in fx["departments"]:
         s = store.department(d["name"])
         assert s["code"] == d["code"] and s["group"] == d["group"] and s["email"] == f"{d['code'].lower()}@vaidyx-demo.invalid"
@@ -475,6 +475,6 @@ def test_build_refuses_inconsistent_fixtures(tmp_path, fx):
 def test_cli_prints_summary(tmp_path, capsys):
     assert build_cli.main(["--out", str(tmp_path), "--seed", "2026", "--no-pdf", "--no-hl7", "--no-dicom"]) == 0
     line = capsys.readouterr().out.strip()
-    assert "21 patients" in line and "173 orders" in line and "events" in line and "\n" not in line
+    assert "25 patients" in line and "210 orders" in line and "events" in line and "\n" not in line
     with pytest.raises(SystemExit):
         build_cli.main(["--out", str(tmp_path / "data" / "tumour_board" / "x")])

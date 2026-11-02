@@ -1,21 +1,17 @@
 // Step 1: find the patient in the hospital system (GET /his/lookup). Shows the registration, its encounters, how many
-// reports fall in the window, similar registrations ("link, never merge") and any existing Case File for the same UHID.
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+// reports fall in the window, similar registrations ("link, never merge") and the patient's live Case Files (GET /patient-case-files, night-v3 item 1.1):
+// "Open it" or "Ask to join" for each; another cancer gets its own Case File, linked to these.
+import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { AlertTriangle, CheckCircle2, Link2, Search, UserSearch } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Field } from "@/components/Field";
 import { ActionButton } from "@/components/ActionButton";
 import { ErrorState } from "@/components/ErrorState";
 import { EmptyState } from "@/components/EmptyState";
 import { KeyValue, KeyValueList } from "@/components/KeyValue";
 import { DateText } from "@/components/DateText";
-import { StatusPill } from "@/components/StatusPill";
-import { JoinDialog } from "@/components/JoinDialog";
 import { useAsyncAction } from "@/hooks/useAsyncAction";
-import { useCaseList } from "@/hooks/useQueries";
 import { api } from "@/lib/api";
 import { EP } from "@/lib/endpoints";
 import type { HisLookup, HisPatient } from "@/lib/types";
@@ -31,11 +27,11 @@ function matchedOn(m: HisPatient["matched_on"]): string {
   return [kind, m.value].filter(Boolean).join(" ");
 }
 import type { NewCaseForm } from "@/features/newcase/form";
+import { PatientCaseFilesCard, patientKey, usePatientCaseFiles } from "@/features/newcase/PatientCaseFiles";
 
 export function StepPatient({ form, onChange, autoLookup }: { form: NewCaseForm; onChange: (patch: Partial<NewCaseForm>) => void; autoLookup?: boolean }) {
   const [text, setText] = useState(form.identifier);
   const [error, setError] = useState<unknown>(null);
-  const [joinOpen, setJoinOpen] = useState(false);
   const lookup = useAsyncAction(async (identifier: string): Promise<HisLookup> => {
     setError(null);
     try {
@@ -49,9 +45,7 @@ export function StepPatient({ form, onChange, autoLookup }: { form: NewCaseForm;
     }
   });
   useEffect(() => { if (autoLookup && form.identifier && !form.lookup) void lookup.run(form.identifier); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const uhid = form.lookup?.patient?.uhid;
-  const existing = useCaseList({}, { enabled: Boolean(uhid) });
-  const sameUhid = useMemo(() => (uhid ? (existing.data?.cases ?? []).filter((c) => c.patient?.uhid === uhid) : []), [existing.data, uhid]);
+  const files = usePatientCaseFiles(patientKey(form));
   const p = form.lookup?.patient;
 
   return (
@@ -121,24 +115,8 @@ export function StepPatient({ form, onChange, autoLookup }: { form: NewCaseForm;
             </section>
           ) : null}
 
-          {sameUhid.length ? (
-            <section className="rounded-md status-review p-4" aria-label="Existing Case Files">
-              <p className="text-sm font-bold">This patient already has {sameUhid.length === 1 ? "a Case File" : `${sameUhid.length} Case Files`}</p>
-              <ul className="mt-2 grid gap-2">
-                {sameUhid.map((c) => (
-                  <li key={c.case_id} className="flex flex-wrap items-center gap-2 rounded-md bg-card/70 p-2 text-sm">
-                    <span className="font-medium">{c.protocol_label || c.cancer_name || "Cancer not set"}</span>
-                    <StatusPill status={c.status} />
-                    <span className="text-xs text-muted-foreground">from {c.owner?.doctor_name || c.owner?.department_label}</span>
-                    <span className="ml-auto flex gap-1">
-                      <Button type="button" size="sm" variant="outline" asChild><Link to={`/cases/${encodeURIComponent(c.case_id)}`}>Open it</Link></Button>
-                      {c.mine ? <span className="self-center px-2 text-xs text-muted-foreground">yours</span> : <Button type="button" size="sm" variant="ghost" onClick={() => setJoinOpen(true)}>Join</Button>}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-2 text-xs">For the same cancer, join the existing one instead of starting a second. A new cancer gets its own Case File.</p>
-            </section>
+          {files.data?.cases.length ? <PatientCaseFilesCard files={files.data.cases} /> : files.error ? (
+            <ErrorState compact error={files.error} what="this patient's Case Files" onRetry={() => void files.refetch()} retrying={files.isFetching} />
           ) : null}
         </motion.div>
       ) : (
@@ -146,7 +124,6 @@ export function StepPatient({ form, onChange, autoLookup }: { form: NewCaseForm;
           <UserSearch className="size-5 shrink-0" aria-hidden /> Type the number and press Look up. Nothing is created until the last step.
         </div>
       )}
-      <JoinDialog kind="case" open={joinOpen} onOpenChange={setJoinOpen} />
     </div>
   );
 }

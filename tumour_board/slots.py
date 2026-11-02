@@ -23,7 +23,9 @@ DOC_SECTION = {"clinical_note": "presenting", "referral": "presenting", "dischar
                "histopathology": "pathology", "cytology": "pathology", "ihc": "pathology", "molecular": "pathology",
                "ct": "imaging", "mri": "imaging", "xray": "imaging", "ultrasound": "imaging", "mammogram": "imaging", "pet_ct": "imaging", "bone_scan": "imaging",
                "lab": "labs", "treatment_summary": "prior_treatment", "tumour_board_record": "prior_treatment",
-               "endoscopy": "other", "operative_note": "other", "pulmonary_function": "other", "other": "other"}
+               "endoscopy": "other", "operative_note": "other", "pulmonary_function": "other", "other": "other",
+               "bone_marrow": "pathology", "flow_cytometry": "pathology", "cytogenetics": "pathology", "csf": "pathology",
+               "echocardiogram": "other", "ophthalmology_note": "other", "audiometry": "other"}
 FACT_SECTION = {"presenting_complaint": "presenting", "ecog": "presenting", "smoking_history": "presenting", "tobacco_use": "presenting",
                 "menopausal_status": "presenting", "comorbidities": "presenting", "diagnosis_date_mode": "presenting", "patient_preference": "presenting", "patient_awareness": "presenting",
                 "clinical_trial_note": "presenting", "weight": "presenting", "height": "presenting", "dental_evaluation": "other",
@@ -34,7 +36,27 @@ FACT_SECTION = {"presenting_complaint": "presenting", "ecog": "presenting", "smo
                 "lesion_size": "imaging", "nodal_findings": "imaging", "distant_findings": "imaging", "comparison_prior": "imaging", "suv_max": "imaging",
                 "parametrial_involvement": "imaging", "distance_from_anal_verge": "imaging", "mrf_status": "imaging", "emvi": "imaging",
                 "haemoglobin": "labs", "wbc": "labs", "platelets": "labs", "creatinine": "labs", "bilirubin": "labs", "hiv_status": "labs", "cea": "labs",
-                "treatment_received": "prior_treatment", "treatment_completion_date": "prior_treatment"}
+                "treatment_received": "prior_treatment", "treatment_completion_date": "prior_treatment",
+                # Phase 2 cancers (night-v3 item 2.1), matching steps.GLANCE
+                "kps": "presenting", "b_symptoms": "presenting", "child_pugh_class": "presenting", "igcccg_group": "presenting",
+                "laryngeal_function": "presenting", "fertility_preservation": "presenting",
+                "gleason_isup": "pathology", "positive_cores": "pathology", "bethesda_category": "pathology", "p53": "pathology", "pole": "pathology",
+                "brca_status": "pathology", "hrd_status": "pathology", "cdh1_result": "pathology", "germline_result": "pathology",
+                "idh_status": "pathology", "codeletion_1p19q": "pathology", "mgmt_promoter": "pathology", "sarcoma_fusion": "pathology",
+                "loh_1p_16q": "pathology", "bone_marrow_result": "pathology", "flow_cytometry_result": "pathology",
+                "cytogenetics_result": "pathology", "molecular_markers_haem": "pathology", "nodes_examined": "pathology", "trg": "pathology",
+                "percent_necrosis": "pathology", "cystic_duct_margin": "pathology", "embryonal_component": "pathology", "anaplasia": "pathology",
+                "csf_cytology": "pathology",
+                "tumour_site_colon": "imaging", "tumour_site_stomach": "imaging", "tumour_location_oesophagus": "imaging", "siewert_type": "imaging",
+                "lirads_category": "imaging", "flr_percent": "imaging", "gb_mass": "imaging", "vessel_involvement": "imaging",
+                "bile_duct_involvement": "imaging", "laryngeal_subsite": "imaging", "cord_mobility": "imaging", "extrathyroid_extension": "imaging",
+                "tirads": "imaging", "tumour_depth": "imaging", "deauville_score": "imaging", "obstruction_perforation": "imaging",
+                "varices_finding": "imaging", "hvpg_mmhg": "imaging",
+                "psa": "labs", "ca125": "labs", "afp": "labs", "beta_hcg": "labs", "ldh": "labs", "ca19_9": "labs", "pivka": "labs", "he4": "labs",
+                "inhibin_b": "labs", "thyroglobulin": "labs", "calcitonin": "labs", "beta2_microglobulin": "labs", "inr": "labs", "hbsag": "labs",
+                "anti_hcv": "labs", "hbv_core_ab": "labs", "corrected_calcium": "labs", "alkaline_phosphatase": "labs", "testosterone": "labs",
+                "lh": "labs", "fsh": "labs",
+                "ophthalmic_examination": "other", "rb_group": "other"}
 # The doctor may also type the patient's wishes, the comorbidities and whether the patient knows the diagnosis (owner, 21 Oct 2026, B3):
 # facts reports rarely carry; shown "entered by Dr X, no report", never as a verified value.
 DOCTOR_FACTS = {"patient_preference", "comorbidities", "patient_awareness"}
@@ -459,7 +481,13 @@ def _record_slot(rec, r, action, by_doc, required, cat):
     return s
 
 
-def _fact_slot(fid, recs, rows, facts, typed, needs, disc, typable, required_ids, actions, cat):
+def _discord_confirmation(fid, item) -> dict:
+    """The note_discordance confirmation of a slot whose reports differ (or, after sending, changed or only preliminary)."""
+    return {"type": "note_discordance", "key": item["key"], "fact_id": fid, "kind": item.get("kind"), "kind_label": item.get("kind_label"),
+            "why": item.get("text") or "", "citations": item.get("citations") or []}
+
+
+def _fact_slot(fid, recs, rows, facts, typed, needs, disc, typable, required_ids, actions, cat, stale=None):
     label = cat.get(fid, {}).get("label") or EXTRA_FACTS.get(fid) or fid
     rec_rows = [rows[r["id"]] for r in recs if r["id"] in rows]
     live = [r for r in rec_rows if r["status"] not in ("waived", "not_applicable")]
@@ -484,6 +512,9 @@ def _fact_slot(fid, recs, rows, facts, typed, needs, disc, typable, required_ids
         s["report_value"] = {"value": g.get("value") or "", "quote": _quote(g, fid), "as_of": g.get("date")}
     elif good:
         g = sorted(good, key=lambda h: ((h.get("date") or ""), (h.get("report_date") or "")))[-1]
+        pk = (f.get("current") or {}).get("picked")  # the value a doctor picked for the board when two reports differ (night-v3 item 1.7)
+        if pk:
+            g = next((h for h in hist if h.get("doc_id") == pk.get("doc_id") and h.get("value") == pk.get("value")), g)
         s["status"] = "found"; s["value"] = g.get("value") or ""; s["as_of"] = g.get("date"); s["quote"] = _quote(g, fid)
         if g.get("confirmed_by"):
             s["confirmed_by"] = g["confirmed_by"]; s["note"] = f"confirmed by {display_name(g['confirmed_by'])} against the source, no quote"
@@ -494,9 +525,18 @@ def _fact_slot(fid, recs, rows, facts, typed, needs, disc, typable, required_ids
             s["confirmation"] = {"type": need.get("type"), "key": f"{need.get('doc_id')}:{fid}", "doc_id": need.get("doc_id"), "fact_id": fid, "value": need.get("value"),
                                  "page": need.get("page"), "start": need.get("start"), "end": need.get("end"), "boxes": need.get("boxes") or [], "why": need.get("why") or ""}
         elif item:
-            s["status"] = "needs_confirmation"
-            s["confirmation"] = {"type": "note_discordance", "key": item["key"], "fact_id": fid, "kind": item.get("kind"), "kind_label": item.get("kind_label"),
-                                 "why": item.get("text") or "", "citations": item.get("citations") or []}
+            s["status"] = "found" if item.get("picked") else "needs_confirmation"  # a picked value settles it; the difference stays shown
+            s["confirmation"] = _discord_confirmation(fid, item)
+            if item.get("picked"):
+                s["picked"] = s["confirmation"]["picked"] = item["picked"]
+        sp = (stale or {}).get(fid)
+        if sp and not sp.get("noted"):  # the doctor's pick no longer matches its report (rules.resolve_facts pick_stale): never dropped silently
+            s["pick_stale"] = {k: sp.get(k) for k in ("doc_id", "doc_title", "value", "by", "by_name", "at", "confirmation")}
+            s["note"] = discord.stale_why(sp)
+            if s["status"] == "found":  # nothing else open on the fact: pick again (or note it) on the current value
+                s["status"] = "needs_confirmation"
+                s["confirmation"] = {"type": "note_discordance", "key": sp["key"], "fact_id": fid, "kind": "pick_stale", "kind_label": discord.LABEL["pick_stale"],
+                                     "why": discord.stale_why(sp), "citations": [discord._cite(g)] if g.get("quote") else []}
     elif rec_rows and not live:
         s["status"] = "not_needed"
         w = (rec_rows[0].get("waiver") or {}) if rec_rows[0]["status"] == "waived" else {}
@@ -508,6 +548,17 @@ def _fact_slot(fid, recs, rows, facts, typed, needs, disc, typable, required_ids
     elif t:
         s["status"] = "entered"; s["value"] = t.get("value") or ""; s["typed_by"] = t.get("by"); s["typed_by_name"] = display_name(t.get("by")); s["typed_at"] = t.get("at")
         s["note"] = ENTERED_LABEL.format(who=display_name(t.get("by")) or "the treating doctor") + (f"; {t['note']}" if t.get("note") else "")
+    elif (disc.get(fid) or {}).get("kind") == "preliminary":  # after sending, only a preliminary report gives it (night-v3 item 1.5): the doctor checks it
+        item = disc[fid]
+        c = (item.get("citations") or [{}])[0]
+        h = next((h for h in hist if h.get("doc_id") == c.get("doc_id") and h.get("value") == c.get("value")), None)
+        s["status"] = "found" if item.get("picked") else "needs_confirmation"
+        s["value"] = c.get("value") or ""; s["as_of"] = c.get("date"); s["quote"] = _quote(h, fid) if h else None
+        s["note"] = f"Only in a {(c.get('status') or 'non-final').lower()} report ({c.get('doc_title')}) read after sending: no final report gives it yet"
+        s["draft"] = {"doc_id": c.get("doc_id"), "doc_title": c.get("doc_title"), "status": c.get("status"), "value": c.get("value")}
+        s["confirmation"] = _discord_confirmation(fid, item)
+        if item.get("picked"):
+            s["picked"] = s["confirmation"]["picked"] = item["picked"]
     elif any(h.get("state") == "pending" for h in hist):
         h = [h for h in hist if h.get("state") == "pending"][-1]
         s["status"] = "not_found"; s["pending"] = True; s["value"] = ""; s["quote"] = _quote(h, fid) if h.get("quote") else None
@@ -521,7 +572,8 @@ def _fact_slot(fid, recs, rows, facts, typed, needs, disc, typable, required_ids
     elif hist and not any(h.get("doc_final") for h in hist):
         h = hist[-1]
         s["status"] = "not_found"; s["note"] = f"Only in a non-final document ({h.get('doc_title')}): a final, signed report is required"
-        s["draft"] = {"doc_id": h.get("doc_id"), "doc_title": h.get("doc_title"), "status": h.get("doc_status"), "value": h.get("value")}
+        s["draft"] = {"doc_id": h.get("doc_id"), "doc_title": h.get("doc_title"), "status": h.get("doc_status"), "value": h.get("value"),
+                      "quote": _quote(h, fid) if h.get("quote") else None}  # shown, marked "not signed" (owner, 2 Nov 2026)
     else:
         s["status"] = "not_found"; s["note"] = "Not found in the file"
     action = next((actions.get(r["id"]) for r in live if actions.get(r["id"])), None)
@@ -606,11 +658,20 @@ def build(case_id, roles=None) -> dict:
             actions.setdefault(a["requirement"], a)
     try:
         disc = {}
-        for it in discord.items(case_id, st):
-            if it.get("severity") == "review" and not it.get("noted") and it.get("field") and it["field"] not in disc:
+        its = discord.items(case_id, st)
+        for it in its:
+            if it.get("severity") == "review" and (not it.get("noted") or it.get("picked")) and it.get("field") and it["field"] not in disc:
+                disc[it["field"]] = it
+        # after sending (night-v3 item 1.5, B8): a value a newer final report changed, or one only a preliminary report gives, waits on the doctor
+        for it in discord.after_send_items(case_id, st, its, facts):
+            if (not it.get("noted") or it.get("picked")) and it.get("field") and it["field"] not in disc:
                 disc[it["field"]] = it
     except Exception:
         disc = {}
+    try:  # a pick for the board that no longer matches its report (night-v3 item 1.7)
+        stale = discord.stale_picks(case_id, st, facts)
+    except Exception:
+        stale = {}
     needs = _needs_by_fact(gate)
     typable = typable_facts(prot)
     sections = {sid: [] for sid, _ in SECTIONS}
@@ -637,7 +698,7 @@ def build(case_id, roles=None) -> dict:
             if fid in made:
                 continue
             made.add(fid)
-            fs = _fact_slot(fid, fact_recs.get(fid) or [rec], rows, facts, typed, needs, disc, typable, required_ids, actions, cat)
+            fs = _fact_slot(fid, fact_recs.get(fid) or [rec], rows, facts, typed, needs, disc, typable, required_ids, actions, cat, stale)
             if merge:  # "Ki-67" the record and "Ki-67" the value: one line, the value's, carrying the record's request (18 Oct)
                 fs["record_id"], fs["required"] = rec["id"], bool(fs.get("required") or rs.get("required"))
                 fs["note"] = fs.get("note") or rs.get("note") or ""
@@ -651,17 +712,17 @@ def build(case_id, roles=None) -> dict:
             continue
         f = facts.get(fid) or {}
         good = [h for h in f.get("history") or [] if h.get("verification") in rules.VERIFIED and h.get("doc_final") and h.get("state") == "present" and not h.get("superseded")]
-        if not good and not (isinstance(typed.get(fid), dict) and fid in typable):
+        if not good and not (isinstance(typed.get(fid), dict) and fid in typable) and (disc.get(fid) or {}).get("kind") != "preliminary":
             continue
         made.add(fid)
-        fs = _fact_slot(fid, [], rows, facts, typed, needs, disc, typable, required_ids, actions, cat)
+        fs = _fact_slot(fid, [], rows, facts, typed, needs, disc, typable, required_ids, actions, cat, stale)
         fs["extra"] = True
         sections[fs["section"]].append(fs)
     for fid, label in EXTRA_FACTS.items():
         if fid in made:
             continue
         made.add(fid)
-        fs = _fact_slot(fid, [], rows, facts, typed, needs, disc, typable, required_ids, actions, cat)
+        fs = _fact_slot(fid, [], rows, facts, typed, needs, disc, typable, required_ids, actions, cat, stale)
         fs["label"], fs["extra"], fs["required"] = label, True, False
         if fs["status"] == "not_found":
             fs["note"] = "Not recorded; type it if the board needs it"

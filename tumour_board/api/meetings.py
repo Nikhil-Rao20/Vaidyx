@@ -4,7 +4,7 @@ meetings.py. Also GET /scheduler/status for the root admin and the Vaidyx admin.
 from fastapi import Request
 
 from . import common
-from .. import access, config, meetings, org, scheduler, store
+from .. import access, board, config, decision_record, meetings, org, scheduler, store
 
 router = common.make_router(["tumour-board-meetings"])
 JOIN_LIMIT = common.RateLimit(5, 15 * 60)
@@ -70,6 +70,23 @@ async def meetings_list(request: Request):
     return meetings.list_meetings(rl)
 
 
+@router.get("/meetings/open")
+async def meetings_open_list(request: Request):
+    """The meetings a Case File may still go to (planned, not cancelled, today or later, earliest first) for any placed account: a
+    treating doctor sees an empty planned meeting here even when GET /meetings does not list it (night-v3 item 1.6, Move)."""
+    u, rl = _who(request)
+    rows = [meetings.summary_row(board.ensure_meeting_fields(s)) for s in meetings.open_meetings()]
+    org.audit("meetings_open_listed", u, count=len(rows))
+    return {"meetings": rows}
+
+
+@router.get("/meetings/decision-fields")
+async def meetings_decision_fields(request: Request):
+    """The decision record table (night-v3 item 3.1): outcomes, steps, fields, choices and limits, the same as decision_fields.json."""
+    _who(request)
+    return decision_record.spec()
+
+
 @router.post("/meetings/join")
 async def meetings_join(request: Request):
     """{"code"}: 404 no_such_code, 410 code_expired; rate limited 5 tries per 15 minutes per user (a code that is not 6 digits cannot
@@ -128,8 +145,40 @@ async def meetings_agenda(mid: str, request: Request):
 @router.post("/meetings/{mid}/agenda/add")
 async def meetings_agenda_add(mid: str, request: Request):
     u, rl = _who(request); common.need(rl, "session"); b = await common.body(request); s = _meeting(mid)
-    s = _call(meetings.add_to_agenda, s["id"], u, _case_id(b.get("case_id")), str(b.get("list") or "discussion"), str(b.get("reason") or ""))
+    cid = _case_id(b.get("case_id"))
+    async with store.lock(cid):  # it may clear a withdraw on the Case File (meetings._one_agenda)
+        s = _call(meetings.add_to_agenda, s["id"], u, cid, str(b.get("list") or "discussion"), str(b.get("reason") or ""))
     return meetings.view(s["id"], rl)
+
+
+# ---- the owner moves or withdraws its Case File (night-v3 item 1.6) ------------------------------------------------------------------
+
+def _may_move(rl, c):
+    """The owning department's consultants (the right to send it to the board) and the MDT Coordinator."""
+    if not (access.may(rl, "mark_ready", c) or rl.get("coordinator")):
+        common.fail(403, "Only the owning department's consultants or the MDT Coordinator can move this Case File or take it off the agenda.", "forbidden")
+
+
+def _moved(c: dict) -> dict:
+    s = meetings.get(c.get("meeting_id")) if c.get("meeting_id") else None
+    return {"case_id": c["case_id"], "meeting_id": c.get("meeting_id") or "", "board_date": c.get("board_date") or "",
+            "board_send": c.get("board_send"), "meeting": meetings.summary_row(s) if s else None}
+
+
+@router.post("/cases/{case_id}/meeting/move")
+async def case_meeting_move(case_id: str, request: Request):
+    """{meeting_id, reason?}: move a Case File sent to the board to another open meeting (meetings.move_case); the coordinator is told."""
+    u, rl = _who(request); c = common.case(_case_id(case_id)); _may_move(rl, c); b = await common.body(request)
+    async with store.lock(c["case_id"]):
+        return _moved(_call(meetings.move_case, c["case_id"], u, str(b.get("meeting_id") or ""), str(b.get("reason") or "")))
+
+
+@router.post("/cases/{case_id}/meeting/withdraw")
+async def case_meeting_withdraw(case_id: str, request: Request):
+    """{reason}: take a Case File off the agenda (meetings.withdraw_case); the ready mark stays; the coordinator is told."""
+    u, rl = _who(request); c = common.case(_case_id(case_id)); _may_move(rl, c); b = await common.body(request)
+    async with store.lock(c["case_id"]):
+        return _moved(_call(meetings.withdraw_case, c["case_id"], u, str(b.get("reason") or "")))
 
 
 @router.post("/meetings/{mid}/send-agenda")
@@ -226,16 +275,115 @@ async def meetings_timer(mid: str, request: Request):
 async def meetings_question(mid: str, request: Request):
     """A member types a question; when a stand-in agent is active for the current Case File it answers in the background (text only)."""
     u, rl = _who(request); b = await common.body(request); s = _meeting(mid); _member(rl, s)
-    q = _call(meetings.ask, s["id"], u, str(b.get("text") or ""), b.get("role"))
+    if b.get("role"):
+        AGENT_ASK_LIMIT.check(u, "Too many questions to the agents in a minute. Wait a moment.")
+    q = _call(meetings.ask, s["id"], u, str(b.get("text") or ""), b.get("role"), manager=meetings.manage(rl))
     if q.get("role"):
         meetings.answer_in_background(s["id"], q["id"], u)
     return {"question": q, "agent": meetings.agent_state(meetings.get(s["id"]))}
+
+
+# ---- the specialty agents of the meeting (night-v3 Phase 6, owner decision D2) -------------------------------------------------------------
+AGENT_LIMIT = common.RateLimit(120, 60)  # listening and playback reports per login per minute
+AGENT_ASK_LIMIT = common.RateLimit(20, 60)  # questions to the agents and Present your points per login per minute (each is a model call)
+
+
+def _flag(v, default=False) -> bool:
+    """A JSON boolean, or the words true, false, on, off, 1, 0 (a string "false" is False)."""
+    if isinstance(v, bool):
+        return v
+    if v is None:
+        return default
+    return str(v).strip().lower() in ("1", "true", "on", "yes")
+
+
+@router.post("/meetings/{mid}/agents")
+async def meetings_agents_set(mid: str, request: Request):
+    """The coordinator adds an agent to the meeting for the Case File on the floor, or removes one (any of the six roles)."""
+    u, rl = _who(request); common.need(rl, "session"); b = await common.body(request); s = _meeting(mid)
+    return {"agents": _call(meetings.set_agent, s["id"], u, str(b.get("role") or ""), _flag(b.get("on")))}
+
+
+@router.put("/meetings/{mid}/agents/settings")
+async def meetings_agents_settings(mid: str, request: Request):
+    """The coordinator's switch: members can ask the agents (the coordinator always may)."""
+    u, rl = _who(request); common.need(rl, "session"); b = await common.body(request); s = _meeting(mid)
+    return _call(meetings.set_agents_settings, s["id"], u, _flag(b.get("members_ask"), True))
+
+
+@router.post("/meetings/{mid}/agents/{role}/listening")
+async def meetings_agent_listening(mid: str, role: str, request: Request):
+    """An admitted member's device records a question for this agent (on) or stopped (off): the "listening" state, with an expiry."""
+    u, rl = _who(request); b = await common.body(request); s = _meeting(mid); _member(rl, s)
+    AGENT_LIMIT.check(u)
+    return _call(meetings.set_listening, s["id"], u, role, _flag(b.get("on")), manager=meetings.manage(rl))
+
+
+@router.post("/meetings/{mid}/agents/{role}/present")
+async def meetings_agent_present(mid: str, role: str, request: Request):
+    """"Present your points": the agent presents the points of its brief (code, no model call), spoken where agent voices are on."""
+    u, rl = _who(request); s = _meeting(mid); _member(rl, s)
+    AGENT_ASK_LIMIT.check(u, "Too many questions to the agents in a minute. Wait a moment.")
+    return {"question": _call(meetings.present_points, s["id"], u, role, manager=meetings.manage(rl))}
+
+
+@router.post("/meetings/{mid}/agents/{role}/stop")
+async def meetings_agent_stop(mid: str, role: str, request: Request):
+    """Stops the agent's voice for everyone: the coordinator, or the person who asked."""
+    u, rl = _who(request); b = await common.body(request); s = _meeting(mid); _member(rl, s)
+    return _call(meetings.stop_agent, s["id"], u, role, b.get("question"), manager=meetings.manage(rl))
+
+
+@router.post("/meetings/{mid}/agents/audio")
+async def meetings_agent_audio(mid: str, request: Request):
+    """A device (a member's, or the room screen's) reports that it plays or stopped playing an answer: drives "speaking"."""
+    u, rl = _who(request, guest=True); b = await common.body(request); s = _meeting(mid); _member(rl, s)
+    AGENT_LIMIT.check(u)
+    return _call(meetings.agent_audio, s["id"], u, str(b.get("question") or ""), _flag(b.get("playing")), str(b.get("device") or ""))
 
 
 @router.post("/meetings/{mid}/hand")
 async def meetings_hand(mid: str, request: Request):
     u, rl = _who(request, guest=True); b = await common.body(request); s = _meeting(mid); _member(rl, s)
     return {"hands": _call(meetings.hand, s["id"], u, bool(b.get("raised", True)))}
+
+
+@router.post("/meetings/{mid}/spotlight")
+async def meetings_spotlight(mid: str, request: Request):
+    """The coordinator spotlights up to three admitted people for everyone (night-v3 5.1); an empty list removes the spotlight."""
+    u, rl = _who(request); common.need(rl, "session"); b = await common.body(request); s = _meeting(mid)
+    users = b.get("users")
+    users = [str(x) for x in users][:10] if isinstance(users, list) else []
+    return {"spotlight": _call(meetings.spotlight, s["id"], u, users)}
+
+
+@router.post("/meetings/{mid}/reaction")
+async def meetings_reaction(mid: str, request: Request):
+    """A short reaction from an admitted member (agree, thanks, applause, question): broadcast, never stored (night-v3 5.1)."""
+    u, rl = _who(request, guest=True); b = await common.body(request); s = _meeting(mid); _member(rl, s)
+    return _call(meetings.react, s["id"], u, str(b.get("kind") or ""))
+
+
+@router.post("/meetings/{mid}/present-allow")
+async def meetings_present_allow(mid: str, request: Request):
+    """The coordinator allows or withdraws a member's right to present a screen (night-v3 5.2)."""
+    u, rl = _who(request); common.need(rl, "session"); b = await common.body(request); s = _meeting(mid)
+    return {"present_allowed": _call(meetings.present_allow, s["id"], u, str(b.get("user") or ""), bool(b.get("allowed", True)))}
+
+
+@router.post("/meetings/{mid}/presenting")
+async def meetings_presenting(mid: str, request: Request):
+    """A member starts or stops a screen share (night-v3 5.2): the coordinator, the presenter of the Case File on the floor, or an allowed
+    member; the coordinator may stop anyone's."""
+    u, rl = _who(request, guest=True); b = await common.body(request); s = _meeting(mid); _member(rl, s)
+    return _call(meetings.set_presenting, s["id"], u, rl, bool(b.get("on", True)))
+
+
+@router.post("/meetings/{mid}/chat")
+async def meetings_chat(mid: str, request: Request):
+    """A meeting chat line from an admitted member (night-v3 5.3): kept with the meeting record, apart from the questions."""
+    u, rl = _who(request, guest=True); b = await common.body(request); s = _meeting(mid); _member(rl, s)
+    return {"message": _call(meetings.chat, s["id"], u, str(b.get("text") or ""))}
 
 
 @router.put("/meetings/{mid}/decision-live")

@@ -24,7 +24,7 @@ from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Emu, Inches, Pt
 
-from .. import board, config, meetings, org, store
+from .. import board, config, decision_record, meetings, org, store
 
 ASSETS = Path(__file__).resolve().parent / "assets"
 W, H = Inches(13.333), Inches(7.5)
@@ -418,21 +418,18 @@ def chapter(deck: Deck, m: dict, number: int | None = None, total: int | None = 
     if outcome or record:
         rec = record or {}
         oc = outcome or {}
-        label = _clean(oc.get("label") or rec.get("outcome_type") or "Outcome")
+        label = _clean(oc.get("label") or decision_record.OUTCOMES.get(rec.get("outcome_type") or "", "") or rec.get("outcome_type") or "Outcome")
         lines = []
         txt = _clean(rec.get("decision_text") or oc.get("decision_text"))
         if txt:
             lines.append([("Decision, in the board's words: ", {"bold": True, "color": INK}), (txt, {})])
-        for key, lab in (("rationale", "Rationale as discussed"), ("intent_as_stated", "Treatment intent as stated"), ("responsible_doctor", "Responsible doctor"), ("next_step", "Next step"), ("awaited", "Awaited"), ("awaited_from", "From"), ("referred_to", "Referred to")):
-            v = _clean(rec.get(key))
-            if v:
-                lines.append([(lab + ": ", {"bold": True, "color": INK}), (v + (f" by {_dmy(rec.get('next_step_date'))}" if key == "next_step" and rec.get("next_step_date") else ""), {})])
+        # every other field of the decision record with a value, in the form's step order, and the correction line (night-v3 item 3.1)
+        for x in decision_record.display_lines(rec, skip=("outcome", "decision_text", "concerns")):
+            warn = x["key"] == "corrected"
+            lines.append([(x["label"] + ": ", {"bold": True, "color": WARN if warn else INK}), (_clean(x["text"]), {})])
         for cc in rec.get("concerns") or []:
             if isinstance(cc, dict) and _clean(cc.get("text")):
                 lines.append([("Concern: ", {"bold": True, "color": WARN}), (_clean(cc.get("text")) + (f" ({_clean(cc.get('by'))})" if cc.get("by") else ""), {})])
-        present = rec.get("members_present") or []
-        if present:
-            lines.append([("Members present: ", {"bold": True, "color": INK}), (", ".join(_clean(x) for x in present), {})])
         for u, card in (cards or {}).items():
             if isinstance(card, dict):
                 lines.append([(("Agrees: " if card.get("agree") else "Concern: "), {"bold": True, "color": OK if card.get("agree") else WARN}), (f"{_clean(card.get('name') or u)}" + (f", {_clean(card.get('note'))}" if card.get("note") else ""), {})])
@@ -537,7 +534,7 @@ def build_case(cid: str, r: dict | None = None) -> bytes:
     deck.cover(name or m["patient_line"], [x for x in (ident, cancer + (f", {_clean(c.get('setting')).replace('_', ' ')} (as recorded)" if c.get("setting") else ""), f"Case File {cid}", f"Board date {_dmy(c.get('board_date'))}" if c.get("board_date") else "Board date not set") if x],
                [f"Prepared by Vaidyx Tumour Board on {_dmy(date.today().isoformat())}", "For the owner's team and the board. Patient records: handle as confidential.", "Every sentence carries its source in the Case File."])
     rec = _record_for(m["state"], None, None)
-    chapter(deck, m, record=rec, outcome={"label": _clean(rec.get("outcome_type") or "Decision").replace("_", " ").capitalize(), "outcome": rec.get("outcome_type"), "by": rec.get("recorded_by"), "at": rec.get("recorded_at")} if rec else None)
+    chapter(deck, m, record=rec, outcome={"label": decision_record.OUTCOMES.get(rec.get("outcome_type") or "decision", "Decision recorded"), "outcome": rec.get("outcome_type"), "by": rec.get("recorded_by"), "at": rec.get("recorded_at")} if rec else None)
     closing(deck)
     return deck.save()
 

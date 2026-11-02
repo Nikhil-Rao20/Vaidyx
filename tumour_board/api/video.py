@@ -33,7 +33,7 @@ async def video_token(mid: str, request: Request):
     if screen == "room":  # the room computer: its own identity, so the coordinator's laptop and the room screen are both in the call
         if not meetings.manage(rl):
             common.fail(403, "Only the MDT Coordinator opens the room screen's video.", "not_coordinator")
-        out = video.for_meeting(mid, f"{u}#room", f"Room screen ({meetings.display_name(u)})")
+        out = video.for_meeting(mid, f"{u}#room", f"Room screen ({meetings.display_name(u)})", screen=True)
     else:
         out = video.for_meeting(mid, u, meetings.display_name(u))
     from .. import board

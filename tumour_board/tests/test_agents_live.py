@@ -108,7 +108,7 @@ def test_live_answer_is_cited_and_unverified_statements_are_kept_aside(monkeypat
         {"text": "A PET-CT was done.", "citations": [{"doc_id": "Dnope0000", "quote": "PET-CT"}]}],
         "references": [{"ref_id": "G1", "quote": "Molecular testing for EGFR(a) and ALK(a) on the biopsy specimen"}]})
     a = asyncio.run(agents.ask(case_id, "radiology", "What size is the lung mass on the CT?"))
-    assert a["status"] == "answered" and a["kind"] == "AI support (role-specific)" and a["label"] == "Radiology support"
+    assert a["status"] == "answered" and a["kind"] == "AI agent, support only" and a["label"] == "Radiology support"
     assert [s["text"] for s in a["statements"]] == ["The CECT thorax records a spiculated mass of 3.2 cm in the right upper lobe."]
     assert a["statements"][0]["citations"][0]["doc_id"] == "Dct000001"
     assert sorted(x["reason"] for x in a["removed"]) == ["document_not_found", "number_not_in_quote"] and a["dropped_unverified"] == 2
@@ -152,6 +152,30 @@ def test_live_answer_output_guardrail(monkeypatch, pack):
     a = asyncio.run(agents.ask(case_id, "radiology", "Is there a pleural effusion?"))
     assert [s["text"] for s in a["statements"]] == ["The CECT records no pleural effusion."]
     assert [x["reason"] for x in a["removed"]] == ["guardrail"] and a["dropped_unverified"] == 0
+
+
+HPE_I1 = ("SYNTHETIC\nHISTOPATHOLOGY REPORT\nMargins: involved\nPaclitaxel 175 mg/m2 given on 03/03/2026\nReport status: FINAL")
+
+
+def test_review_i1_a_treatment_word_outside_the_quote_is_refused(monkeypatch, pack):
+    """The review's margins example: the quote is found and has no number, so only the treatment word outside it can refuse it."""
+    case_id = _case(make_doc("Dhpe00001", "histopathology", text=HPE_I1))
+    cite = [{"doc_id": "Dhpe00001", "quote": "Margins: involved"}]
+    drug = [{"doc_id": "Dhpe00001", "quote": "Paclitaxel 175 mg/m2 given on 03/03/2026"}]
+    _live(monkeypatch, {"answer_found": True, "references": [], "statements": [
+        {"text": "Margins are involved, so re-excision is needed.", "citations": cite},
+        {"text": "Margins are involved; re-excision will follow.", "citations": cite},  # a treatment step put in the future in its own words
+        {"text": "Margins: involved", "citations": cite},
+        {"text": "The report records margins involved.", "citations": cite},
+        {"text": "Paclitaxel 175 mg/m2 given on 03/03/2026.", "citations": drug}]})
+    a = asyncio.run(agents.ask(case_id, "pathology", "What does the pathology report say about the margins?"))
+    assert [s["text"] for s in a["statements"]] == ["Margins: involved", "The report records margins involved.",
+                                                    "Paclitaxel 175 mg/m2 given on 03/03/2026."]
+    by = {x["text"]: x for x in a["removed"]}
+    assert by["Margins are involved, so re-excision is needed."]["reason"] == "guardrail"
+    assert by["Margins are involved; re-excision will follow."]["reason"] == "guardrail"
+    assert "advice wording outside the quoted record text: will" in by["Margins are involved; re-excision will follow."]["detail"]
+    assert "—" not in by["Margins are involved; re-excision will follow."]["detail"]
 
 
 def test_live_answer_on_an_unlisted_case_file(monkeypatch):

@@ -1,5 +1,5 @@
 // The agenda: For discussion and For noting, in the coordinator's order (drag to reorder, keyboard too), Not ready folded.
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Link } from "react-router-dom";
@@ -9,22 +9,31 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import type { AgendaRow } from "@/lib/live";
 import { StatusChip } from "@/features/casefile/components/common";
 import { cn } from "@/lib/utils";
+import { drName, plural } from "@/lib/format";
+
+/** The Case File the coordinator has just added (night-v3 1.11): its row is ringed for a few seconds so the add is seen in the page. */
+export const JustAddedContext = createContext<string | null>(null);
 
 export function AgendaRowView({ r, canManage, onRemind, remindBusy, dragHandle, moveLabel, onMove, current, decided }: {
   r: AgendaRow; canManage: boolean; onRemind?: (cid: string) => void; remindBusy?: boolean; dragHandle?: React.ReactNode; moveLabel?: string; onMove?: () => void; current?: boolean; decided?: boolean;
 }) {
   const left = r.left_before_board;
+  const justAdded = useContext(JustAddedContext) === r.case_id;
   return (
-    <div className={cn("flex items-start gap-2 rounded-md border px-2 py-2 text-sm bg-card", current ? "border-primary ring-2 ring-primary/30" : "border-border")} data-testid="agenda-row" data-case-id={r.case_id}>
+    <div className={cn("flex items-start gap-2 rounded-md border px-2 py-2 text-sm bg-card transition-[box-shadow,border-color,background-color] duration-500", current ? "border-primary ring-2 ring-primary/30" : justAdded ? "border-ok bg-ok-soft ring-2 ring-ok/40" : "border-border")} data-testid="agenda-row" data-case-id={r.case_id} data-just-added={justAdded || undefined}>
       {dragHandle}
       <div className="min-w-0 flex-1">
         <p className="font-medium text-foreground truncate"><Link className="hover:underline underline-offset-2" to={`/cases/${r.case_id}`}>{r.patient_line || r.case_id}</Link>{r.missing ? <span className="ml-1 text-xs text-bad">(Case File not found)</span> : null}</p>
-        <p className="text-xs text-muted-foreground truncate">{[r.owner_name ? `owner ${r.owner_name}` : null, r.presenter_name ? `presenter ${r.presenter_name}` : null].filter(Boolean).join(", ")}</p>
+        <p className="text-xs text-muted-foreground truncate">{[r.owner_name ? `owner ${r.owner_name}` : null, r.presenter_name && !r.presenter ? `presenter ${r.presenter_name}` : null].filter(Boolean).join(", ")}</p>
         {r.board_question ? <p className="text-xs text-foreground mt-0.5 line-clamp-2">{r.board_question}</p> : <p className="text-xs text-warn mt-0.5">board question not written</p>}
         <div className="mt-1 flex flex-wrap items-center gap-1">
           {decided || r.decided || r.outcome ? <StatusChip kind="ok">{r.outcome_label ?? (r.outcome ? r.outcome.replace(/_/g, " ") : "decided")}</StatusChip> : left == null ? <StatusChip kind="muted">not checked yet</StatusChip> : left > 0 ? <StatusChip kind="warn">{left} left</StatusChip> : <StatusChip kind="ok">nothing left</StatusChip>}
           {r.ready === false && !r.outcome ? <StatusChip kind="muted">not marked ready</StatusChip> : null}
+          {justAdded ? <StatusChip kind="ok">added just now</StatusChip> : null}
+          {r.presenter?.name ? <StatusChip kind="muted">Presenter {drName(r.presenter.name)}</StatusChip> : null}
           {r.added_after_send ? <StatusChip kind="review">added after the agenda was sent</StatusChip> : null}
+          {r.new_since_sent ? <StatusChip kind="muted">{plural(r.new_since_sent, "new record")} since sent</StatusChip> : null}
+          {r.waiting_on ? <StatusChip kind="warn">waiting on {r.waiting_on.name ? drName(r.waiting_on.name) : "the treating doctor"}</StatusChip> : null}
           {typeof r.minutes === "number" ? <span className="text-xs text-muted-foreground">{r.minutes} min</span> : null}
           {r.reason ? <span className="text-xs text-muted-foreground">{r.reason}</span> : null}
         </div>

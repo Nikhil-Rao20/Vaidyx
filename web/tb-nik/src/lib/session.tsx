@@ -40,9 +40,11 @@ export interface Me {
     start_page?: "home" | "last_case" | "meetings";
     saved_filters?: Array<{ name: string; query: Record<string, string> }>;
   };
-  counts: { unread: number; waiting_for_me: number; open_requests: number };
+  counts: { unread: number; waiting_for_me: number; open_requests: number; messages_unread?: number };
   hospital: { name: string; level?: string };
   features: { video: boolean; push: boolean };
+  /** Phase 8: this person may use Messages (placed, or the MDT Coordinator). */
+  messages?: boolean;
 }
 
 interface SessionState {

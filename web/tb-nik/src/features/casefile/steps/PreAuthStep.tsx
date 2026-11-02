@@ -2,11 +2,14 @@
 // request. Each group: one click "Send request to <department>" (a ready-written request with a due date, Undo for 10 s, "Change the
 // message" beside it); each item: Fill it in myself (values a doctor may type), Upload outside report, Not needed for this patient (with a
 // reason). After sending: "Request sent to <department>, date · reply due"; overdue rows offer Send reminder and Call the department.
-import { useState, type ReactNode } from "react";
+// Voice (night-v3 item 4.4): a mic beside "Why is it not needed?" fills it as an editable edit; values filled in are typed.
+import { useRef, useState, type ReactNode } from "react";
 import { ArrowRight, ChevronDown, Hourglass, PenLine, Phone, Send, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MicButton } from "@/components/MicButton";
 import { cn } from "@/lib/utils";
+import { consultantTitle } from "@/lib/format";
 import { LoadingButton, errorText, fmtDate, niceTitle, plural, screenNote } from "../components/common";
 import { Card } from "./Overview";
 import type { MissingItem, Steps } from "./types";
@@ -24,15 +27,20 @@ export interface PreAuthHandlers {
 }
 
 function why(it: MissingItem): string {
-  if (it.draft?.doc_title) return `${niceTitle(it.draft.doc_title)} is only ${String(it.draft.status || "not final").toLowerCase()}: a final, signed report is needed`;
+  if (it.draft?.doc_title) {  // a report marked final but not signed is "not signed yet", not "only final" (2 Nov test pass)
+    const st = String(it.draft.status || "").toUpperCase();
+    const state = ["FINAL", "AMENDED", "CORRECTED"].includes(st) ? "is not signed yet" : st === "PRELIMINARY" ? "is only preliminary" : "is not final yet";
+    return `${niceTitle(it.draft.doc_title)} ${state}: a final, signed report is needed`;
+  }
   if (it.pending) return screenNote(it.note) || "Pending in the report";
   const n = screenNote(it.note);
   return n && !/^No .* in the Case File$/i.test(n) ? n : "Not found in the reports";
 }
 
-function ItemRow({ it, h, canAct, resident }: { it: MissingItem; h: PreAuthHandlers; canAct: boolean; resident: boolean }) {
+function ItemRow({ it, h, canAct, resident, caseId }: { it: MissingItem; h: PreAuthHandlers; canAct: boolean; resident: boolean; caseId: string }) {
   const [mode, setMode] = useState<"idle" | "fill" | "not_needed">("idle");
   const [text, setText] = useState("");
+  const boxRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const run = async (fn: () => Promise<void>) => { setBusy(true); setErr(null); try { await fn(); setMode("idle"); setText(""); } catch (e) { setErr(errorText(e)); } finally { setBusy(false); } };
@@ -49,8 +57,10 @@ function ItemRow({ it, h, canAct, resident }: { it: MissingItem; h: PreAuthHandl
       ) : null}
       {mode !== "idle" ? (
         <form className="mt-1.5 flex flex-wrap items-center gap-1.5" onSubmit={(e) => { e.preventDefault(); void run(() => (mode === "fill" ? h.fillIn(it, text.trim()) : h.notNeeded(it, text.trim()))); }}>
-          <Input autoFocus value={text} onChange={(e) => setText(e.target.value)} className="h-8 max-w-sm text-sm" maxLength={200}
+          <Input ref={boxRef} autoFocus value={text} onChange={(e) => setText(e.target.value)} className="h-8 max-w-sm text-sm" maxLength={200}
             placeholder={mode === "fill" ? `${it.label}, as you know it` : "Why is it not needed? (recorded with your name)"} aria-label={mode === "fill" ? it.label : "Why it is not needed"} />
+          {mode === "not_needed" ? <MicButton target={boxRef} screen="preauth-why" context="reason" caseId={caseId} size="icon-xs" label="Dictate the reason"
+            onInsert={(next) => { if (next.length > 200) setText(next.slice(0, 200)); }} /> : null}
           <LoadingButton size="xs" type="submit" loading={busy} disabled={mode === "fill" ? !text.trim() : text.trim().length < 3}>{resident ? "Send for sign-off" : mode === "fill" ? "Save" : "Mark not needed"}</LoadingButton>
           <Button size="xs" variant="ghost" type="button" onClick={() => { setMode("idle"); setErr(null); }}>Cancel</Button>
         </form>
@@ -101,11 +111,11 @@ export function PreAuthStep({ steps, h, canAct, resident, consultantName, onNext
         const pending = h.isPending(key);
         return (
           <Card key={key} title={g.department.label} count={g.items.length} testId="missing-group">
-            <ul className="divide-y divide-border">{g.items.map((it) => <ItemRow key={it.slot_id} it={it} h={h} canAct={canAct && !pending} resident={resident} />)}</ul>
+            <ul className="divide-y divide-border">{g.items.map((it) => <ItemRow key={it.slot_id} it={it} h={h} canAct={canAct && !pending} resident={resident} caseId={steps.case_id} />)}</ul>
             {canAct ? (
               <div className="flex flex-wrap items-center gap-2 border-t border-border py-2.5">
                 <Button onClick={() => h.sendGroup(g.items, key)} disabled={pending || !g.department.name} data-testid="send-request">
-                  <Send className="size-4" />{resident ? `Send to Dr ${consultantName} for sign-off` : `Send request to ${g.department.label}`}
+                  <Send className="size-4" />{resident ? `Send to ${consultantTitle(consultantName)} for sign-off` : `Send request to ${g.department.label}`}
                 </Button>
                 {!resident && g.items[0]?.department?.action_id ? <button type="button" className="text-sm text-link hover:underline" onClick={() => h.changeMessage(g.items[0])} disabled={pending}>Change the message</button> : null}
               </div>
@@ -125,7 +135,7 @@ export function PreAuthStep({ steps, h, canAct, resident, consultantName, onNext
             <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", !showOptional && "-rotate-90")} aria-hidden />
             <span className="text-[15px] font-semibold">The board may also ask for</span><span className="text-sm text-muted-foreground">({optional.length})</span>
           </button>
-          {showOptional ? <ul className="divide-y divide-border border-t border-border px-4">{optional.map((it) => <ItemRow key={it.slot_id} it={it} h={h} canAct={canAct} resident={resident} />)}</ul> : null}
+          {showOptional ? <ul className="divide-y divide-border border-t border-border px-4">{optional.map((it) => <ItemRow key={it.slot_id} it={it} h={h} canAct={canAct} resident={resident} caseId={steps.case_id} />)}</ul> : null}
         </section>
       ) : null}
       <div className="flex justify-end"><Button variant="outline" onClick={onNext}>Next: Summary<ArrowRight className="size-4" /></Button></div>

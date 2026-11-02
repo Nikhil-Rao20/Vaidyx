@@ -12,6 +12,7 @@ import { meetingRoutes } from "@/features/meetings/routes";
 import { requestRoutes } from "@/features/requests/routes";
 import { settingsRoutes } from "@/features/settings/routes";
 import { adminRoutes } from "@/features/admin/routes";
+import { messageRoutes } from "@/features/messages/routes";
 import { NotFound } from "@/app/NotFound";
 
 // Every feature folder exports its own RouteObject[] (src/features/<name>/routes.tsx).
@@ -31,6 +32,7 @@ const routes: RouteObject[] = [
           ...requestRoutes,
           ...settingsRoutes,
           ...adminRoutes,
+          ...messageRoutes,
         ],
       },
     ],

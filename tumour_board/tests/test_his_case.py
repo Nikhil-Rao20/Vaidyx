@@ -339,8 +339,13 @@ def test_create_by_ip_or_op_number_resolves_to_the_uhid_and_needs_a_treating_dep
     out = _create("IP/26/01871", case_id="TB-HIS-IP")
     assert out["case"]["his"]["uhid"] == UHID and out["case"]["his"]["matched_on"] == {"kind": "ip_no", "value": "IP/26/01871"}
     assert out["case"]["case_id"] == "TB-HIS-IP"
+    from tumour_board import team
+    with pytest.raises(his_case.DuplicateCaseFile):  # the same patient by another number and the same cancer: refused (night-v3 item 1.1)
+        _create("OP/26/118701")
+    team.archive("TB-HIS-IP", "dr.breast", "duplicate (synthetic)")
     out = _create("OP/26/118701")
     assert out["case"]["his"]["matched_on"]["kind"] == "op_no"
+    team.archive(out["case"]["case_id"], "dr.breast", "duplicate (synthetic)")
     with pytest.raises(his_case.HISCaseError) as e:
         _create("VXH/26/999999")
     assert e.value.status == 404
@@ -831,10 +836,19 @@ def test_a_second_cancer_of_the_same_uhid_gets_its_own_case_file_linked_both_way
     foreign = _create(protocol="colorectal_rectum", setting="non_metastatic", roles=roles_gi, case_id="TB-TWO-X")["case"]
     assert "linked_cases" not in foreign and rechecked == [] and [l["case_id"] for l in store.get_case("TB-TWO-A")["linked_cases"]] == ["TB-TWO-B"]
     _use(monkeypatch, FakeHIS(_two_reports()))
-    # a third Case File of the same UHID under the first protocol again: linked to both, and flagged as the same listing
-    third = _create(case_id="TB-TWO-C")["case"]
+    # a third Case File of the same UHID under the first protocol again: refused (night-v3 item 1.1), naming the existing file's owner
+    with pytest.raises(his_case.DuplicateCaseFile) as e:
+        _create(case_id="TB-TWO-D")
+    assert e.value.status == 409 and str(e.value) == "A Case File for this patient and this cancer exists (Breast Surgery, Dr dr.breast)"
+    assert e.value.existing["case_id"] == "TB-TWO-A" and e.value.existing["can_open"] is True and e.value.body()["code"] == "duplicate_case_file"
+    assert store.get_case("TB-TWO-D") is None and rechecked == []  # nothing made, nothing re-checked
+    refused = [x for x in store.read_audit("TB-TWO-A") if x["kind"] == "duplicate_refused"]
+    assert len(refused) == 1 and refused[0]["by"] == "dr.breast" and refused[0]["protocol"] == "breast" and refused[0]["via"] == "from_his"
+    # a third cancer of the same UHID is allowed: linked to both, which re-check their gates
+    roles_gyn = {**ROLES_DOC, "user": "dr.gyn", "departments": {"gynaecologic_oncology": "member"}, "treating": {"gynaecologic_oncology": "member"}}
+    third = _create(protocol="cervix", setting="early", roles=roles_gyn, case_id="TB-TWO-C")["case"]
     assert sorted(c for c, _ in rechecked) == ["TB-TWO-A", "TB-TWO-B"] and all(u == "dr.breast" for _, u in rechecked)
-    assert sorted(l["case_id"] for l in third["linked_cases"]) == ["TB-TWO-A", "TB-TWO-B"] and third["his"]["same_uhid_case"] == "TB-TWO-A"
+    assert sorted(l["case_id"] for l in third["linked_cases"]) == ["TB-TWO-A", "TB-TWO-B"] and "same_uhid_case" not in third["his"]
     # deleting one Case File unlinks it from the others
     assert sorted(his_case.unlink_cases("TB-TWO-C", "dr.breast")) == ["TB-TWO-A", "TB-TWO-B"]
     store.delete_case("TB-TWO-X")

@@ -1,30 +1,37 @@
 // The guided Case File (21 Oct 2026, docs/ui/casefile-steps/DESIGN.md): a slim header, the left list of six sections in working order
 // with one loud Continue (guide, do not lock), the section the doctor is in, a right side panel for the report, reviews and team, and the
 // "Ask about this patient" bubble on every section. Each section is an address (/cases/:id/<section>); the Case File opens on Overview.
-// A department that was only asked keeps its request view.
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+// A department that was only asked keeps its request view. Opened from Similar Case Files (?from=similar&of=<id>, night-v3 item 7.3) a
+// banner says so above the sections: "Past Case File, not advice for this patient". It stays on every section (the section moves carry
+// the two params) and after a reload or a fresh visit while the person's read-only window came from there (via "similar:<id>").
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft, BellRing, Eye, MessageSquareText } from "lucide-react";
+import { ArrowLeft, BellRing, Eye, FolderSearch, MessageSquareText } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { useSession } from "@/lib/session";
+import { OpenWithReasonButton, ReadOnlyBanner, mayOpenWithReason, windowFor } from "./components/OpenWithReason";
 import { ApiError } from "@/lib/api";
 import { notify } from "@/components/Toasts";
+import { consultantTitle } from "@/lib/format";
 import {
-  archiveCase, buildSummary, createFreeRequest, deckUrl, exportVtbUrl, markReady, notBuiltYet, postConfirmation, postProposal, remindRequest, reviewArtefact,
-  setSlotValue, setUrgency, slotAskDepartment, slotNotNeeded,
+  archiveCase, buildSummary, createFreeRequest, deckUrl, exportVtbUrl, markReady, moveCase, notBuiltYet, postConfirmation, postProposal, remindRequest, reviewArtefact,
+  setSlotValue, setUrgency, slotAskDepartment, slotNotNeeded, undoConfirmation, withdrawCase,
 } from "./api";
 import { useCaseFile, useMyRole, useProposals, useRememberCase, useSlots, useTeam } from "./hooks";
-import type { Slot, SlotAction } from "./types";
+import type { Proposed, SendToBoardBody, Slot, SlotAction } from "./types";
 import { ArchiveDialog } from "./components/ArchiveDialog";
 import { AskPanel } from "./components/AskPanel";
-import { BoardFormPanel } from "./components/BoardFormPanel";
-import { EmptyState, ErrorState, SkeletonLines, errorText, plural, useAnnounce } from "./components/common";
+import { BoardDecisionsPanel } from "./components/BoardDecisionsPanel";
+import { EmptyState, ErrorState, SkeletonLines, errorText, fmtDate, plural, useAnnounce } from "./components/common";
 import { UndoBar, useDeferred } from "./components/deferred";
 import { HelpersPanel, NAMES as HELPER_NAMES, useHelpers } from "./components/HelpersPanel";
 import { MarkReadyDialog } from "./components/MarkReadyDialog";
+import { MoveMeetingDialog, TakeOffDialog } from "./components/MoveMeetingDialog";
 import { ProposalsStrip } from "./components/ProposalsStrip";
 import { PublishedPanel } from "./components/PublishedPanel";
+import { SimilarPanel } from "./components/SimilarPanel";
 import { UploadDialog } from "./components/ReportsPanel";
 import { RequestEditPanel } from "./components/RequestEditPanel";
 import { ReviewPanel } from "./components/ReviewPanel";
@@ -48,9 +55,6 @@ import { StagingCard } from "./staging/StagingCard";
 import { useStaging, type BookTarget } from "./staging/api";
 import { SLUG, fromSlug, type MissingItem, type SectionId } from "./steps/types";
 import "./print.css";
-
-// A server without the guided view (an instance not restarted since 21 Oct, such as the public demo) keeps the previous Case File page.
-const PreviousCaseFilePage = lazy(() => import("./CaseFilePage"));
 
 type Side =
   | { kind: "panel"; panel: MorePanel }
@@ -76,6 +80,10 @@ function useMinWidth(px: number): boolean {
   return ok;
 }
 
+/** A Case File id as the banner may show it; anything else in the address is not shown (Phase 7 review, finding 13). */
+const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const safeId = (x?: string | null) => (x && SAFE_ID.test(x) ? x : null);
+
 const leftOffKey = (id: string) => `tbnik.cf.${id}.section`;
 function readLeftOff(id: string): SectionId | null {
   try { return fromSlug(localStorage.getItem(leftOffKey(id)) ?? undefined); } catch { return null; }
@@ -83,6 +91,8 @@ function readLeftOff(id: string): SectionId | null {
 
 export default function GuidedCaseFilePage() {
   const { id = "", view } = useParams();
+  const { me } = useSession();
+  const bg = windowFor(me, id);  // the doctor's read-only window on this Case File, if any (night-v3 item 1.9)
   const [search] = useSearchParams();
   const nav = useNavigate();
   const qc = useQueryClient();
@@ -106,10 +116,17 @@ export default function GuidedCaseFilePage() {
   const legacy = view ? LEGACY[view] : undefined;
   const section: SectionId = fromSlug(view) ?? legacy?.section ?? "overview";
   const target = search.get("item");
+  // Opened from the Similar Case Files of another file (night-v3 item 7.3): the banner stays while the address carries it, or while the
+  // read-only window on this file was opened from there (its via is "similar:<id>").
+  const fromParam = search.get("from");
+  const ofParam = search.get("of");
+  const similarOf = (fromParam === "similar" ? safeId(ofParam) : null) ?? (bg?.via?.startsWith("similar:") ? safeId(bg.via.slice("similar:".length)) : null);
   const [leftOff] = useState<SectionId | null>(() => readLeftOff(id));
   const [side, setSide] = useState<Side | null>(legacy?.side ?? null);
   const [readyOpen, setReadyOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [takeOffOpen, setTakeOffOpen] = useState(false);
   const [cancerOpen, setCancerOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [writing, setWriting] = useState(false);
@@ -118,7 +135,8 @@ export default function GuidedCaseFilePage() {
 
   useEffect(() => { if (section !== "overview") { try { localStorage.setItem(leftOffKey(id), SLUG[section]); } catch { /* storage blocked */ } } }, [id, section]);
 
-  const consultantName = (teamq.data?.owner?.doctors?.[0]?.name ?? cf?.access?.owner_name ?? "the consultant").replace(/^Dr\.?\s+/i, "");
+  // the bare name ("" when not known): every label titles it through consultantTitle, so it never reads "Dr the consultant" (M18)
+  const consultantName = (teamq.data?.owner?.doctors?.[0]?.name ?? cf?.access?.owner_name ?? "").replace(/^Dr\.?\s+/i, "");
   const allSlots = useMemo(() => (slotsq.data?.sections ?? []).flatMap((s) => s.slots), [slotsq.data]);
   const slotById = useCallback((sid: string) => allSlots.find((s) => s.id === sid) ?? null, [allSlots]);
   const prepare = steps?.mode === "prepare";
@@ -130,9 +148,14 @@ export default function GuidedCaseFilePage() {
   }, [cfq, slotsq, qc, id, proposalsq, teamq]);
 
   const go = useCallback((s: SectionId, t?: string) => {
-    nav(`/cases/${encodeURIComponent(id)}/${SLUG[s]}${t ? `?item=${encodeURIComponent(t)}` : ""}`);
+    // the Similar Case Files params travel with every section move, so the "Past Case File" banner stays (Phase 7 review, S2)
+    const q = new URLSearchParams();
+    if (t) q.set("item", t);
+    if (fromParam && ofParam) { q.set("from", fromParam); q.set("of", ofParam); }
+    const qs = q.toString();
+    nav(`/cases/${encodeURIComponent(id)}/${SLUG[s]}${qs ? `?${qs}` : ""}`);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [nav, id]);
+  }, [nav, id, fromParam, ofParam]);
   const openSource = useCallback((t: SourceTarget) => setSide({ kind: "source", target: t }), []);
 
   // A helper brief prepared in the background is announced once when it is ready.
@@ -150,7 +173,7 @@ export default function GuidedCaseFilePage() {
   const propose = useCallback(async (action: string, payload: Record<string, unknown>, label: string) => {
     try { await postProposal(id, action, payload); }
     catch (e) { if (notBuiltYet(e)) throw new Error("Sign-off by the consultant is not available on this server yet."); throw e; }
-    notify.success(`Sent to Dr ${consultantName} for sign-off`, label);
+    notify.success(`Sent to ${consultantTitle(consultantName)} for sign-off`, label);
     await refresh();
   }, [id, consultantName, refresh]);
 
@@ -178,10 +201,8 @@ export default function GuidedCaseFilePage() {
     const seen = new Set<string>();
     const once = items.filter((it) => { const k = it.department?.action_id || it.slot_id; if (seen.has(k)) return false; seen.add(k); return true; });
     deferred.schedule(key, `Request to ${dept}`, async () => {
-      for (const it of once) {
-        try { await slotAskDepartment(id, it.slot_id); }
-        catch (e) { if (!(e instanceof ApiError && e.status === 409)) throw e; }
-      }
+      // all at once: when the page is being left only the requests started right away reach the server (2 Nov test pass)
+      await Promise.all(once.map((it) => slotAskDepartment(id, it.slot_id).catch((e) => { if (!(e instanceof ApiError && e.status === 409)) throw e; })));
       announce(`Request sent to ${dept}.`);
       await refresh();
     });
@@ -225,7 +246,12 @@ export default function GuidedCaseFilePage() {
   };
 
   const checkH: CheckHandlers = {
-    confirmKey: async (k) => { await postKeyCheck(id, { fact_id: k.fact_id ?? "", value: k.value, doc_id: k.quote?.doc_id ?? "" }); announce(`${k.label} confirmed.`); await refresh(); },
+    confirmKey: async (k) => {
+      const r = (await postKeyCheck(id, { fact_id: k.fact_id ?? "", value: k.value, doc_id: k.quote?.doc_id ?? "" })) as Proposed | null;
+      if (r?.proposal) notify.success(`Sent to ${consultantTitle(consultantName)} for sign-off`, `Confirm ${k.label}: ${k.value}`);
+      else announce(`${k.label} confirmed.`);
+      await refresh();
+    },
     undoKey: async (k) => { await deleteKeyCheck(id, k.fact_id ?? ""); await refresh(); },
     correct: async (k, value, reason) => {
       const body = { type: "confirm_value", key: `${k.quote?.doc_id}:${k.fact_id}`, fields: { value }, reason };
@@ -243,6 +269,12 @@ export default function GuidedCaseFilePage() {
       return <ReviewPanel caseId={id} cf={cf} slot={s} queue={allSlots.filter((x) => x.status === "needs_confirmation")} derived={slotsq.derived} resident={resident} consultantName={consultantName}
         onOpenSource={openSource} onDone={refresh} onPropose={propose} onNext={() => onDone()} />;
     },
+    undoPick: async (k) => {  // two reports differ: take back the value picked for the board (night-v3 item 1.7)
+      if (!k.picked?.confirmation) return;
+      await undoConfirmation(id, k.picked.confirmation);
+      announce(`Pick undone for ${k.label}. Both values are open again.`);
+      await refresh();
+    },
   };
 
   const preAuthH: PreAuthHandlers = {
@@ -259,10 +291,26 @@ export default function GuidedCaseFilePage() {
     isPending: (k) => !!deferred.get(k),
   };
 
-  const onMarkReady = async (note: string) => {
-    if (resident) { await propose("mark_ready", { note }, "send to the board"); return; }
-    await markReady(id, true, note);
+  const onMarkReady = async (body: SendToBoardBody) => {  // the multi-step send (night-v3 item 1.4, design B7): a resident's send is a sign-off proposal
+    if (resident) { await propose("mark_ready", { ready: true, ...body }, "send to the board"); return; }
+    await markReady(id, true, body);
     announce("Sent to the board.");
+    await refresh();
+  };
+
+  // Move to another meeting / Take off the agenda (night-v3 item 1.6): the owner's consultants and the MDT Coordinator; the coordinator is told.
+  const onMove = async (meetingId: string, reason: string) => {
+    const r = await moveCase(id, meetingId, reason);
+    announce(`Moved to the meeting of ${fmtDate(r.meeting?.date || r.board_date)}.`);
+    notify.success("Moved to another meeting", `The meeting of ${fmtDate(r.meeting?.date || r.board_date)}. The MDT Coordinator is told.`);
+    void qc.invalidateQueries({ queryKey: ["meetings"] });
+    await refresh();
+  };
+  const onWithdraw = async (reason: string) => {
+    await withdrawCase(id, reason);
+    announce("Taken off the agenda.");
+    notify.success("Taken off the agenda", "The MDT Coordinator is told. You can send it to the board again.");
+    void qc.invalidateQueries({ queryKey: ["meetings"] });
     await refresh();
   };
 
@@ -278,24 +326,25 @@ export default function GuidedCaseFilePage() {
   if (cfq.error && !cf) {
     const e = cfq.error;
     const status = e instanceof ApiError ? e.status : 0;
+    // a doctor without access may open the Case File read-only with a reason (owner decision D8, night-v3 item 1.9)
     return (
       <div className="mx-auto max-w-xl py-8" data-testid="casefile-error" data-status={status}>
         {status === 404 ? <EmptyState title="This Case File does not exist" text={`No Case File with the id ${id}. The link may be old.`} action={<Button asChild variant="outline"><Link to="/cases"><ArrowLeft className="size-4" />Back to the Case Files</Link></Button>} />
-          : status === 403 ? <EmptyState title="You do not have access to this Case File" text="Only the owner's team, the departments asked, and the MDT Coordinator can open it." action={<Button asChild variant="outline"><Link to="/cases"><ArrowLeft className="size-4" />Back to the Case Files</Link></Button>} />
+          : status === 403 ? <EmptyState title="You do not have access to this Case File" text="Only the owner's team, the departments asked, and the MDT Coordinator can open it." action={<div className="flex flex-wrap justify-center gap-2">{mayOpenWithReason(e) ? <OpenWithReasonButton caseId={id} onOpened={() => void cfq.refetch()} /> : null}<Button asChild variant="outline"><Link to="/cases"><ArrowLeft className="size-4" />Back to the Case Files</Link></Button></div>} />
           : <ErrorState error={e} retry={() => void cfq.refetch()} />}
       </div>
     );
   }
   if (!cf) return null;
   if (requestsOnly) return <RequestsOnlyView id={id} cf={cf} />;
-  if (stepsq.error && notBuiltYet(stepsq.error)) return <Suspense fallback={<div className="surface p-4"><SkeletonLines n={8} /></div>}><PreviousCaseFilePage /></Suspense>;
 
   const prose = steps?.summary.prose;
   const exportAllowed = !!prose?.reviewed;
   const canWrite = prepare && (resident || !!cf.permissions?.mark_ready || !!cf.permissions?.review);
   const canConfirm = prepare && !resident && !!steps?.permissions?.review;
+  const canMove = !resident && !teamq.data?.archived && (!!cf.permissions?.mark_ready || role.coordinator) && (!!cf.case.board_ready || !!steps?.summary.sent);
   const sectionTitle = steps?.sections.find((s) => s.id === section)?.label ?? "";
-  const panelTitle = side?.kind === "panel" ? (side.panel === "team" ? "Team" : "Board form") : side?.kind === "source" ? (side.target.title ?? "Report") : side?.kind === "review" ? "Please check" : side?.kind === "request" ? "Change the message" : side?.kind === "ask" ? "Ask about this patient" : "";
+  const panelTitle = side?.kind === "panel" ? (side.panel === "team" ? "Team" : "Board decisions") : side?.kind === "source" ? (side.target.title ?? "Report") : side?.kind === "review" ? "Please check" : side?.kind === "request" ? "Change the message" : side?.kind === "ask" ? "Ask about this patient" : "";
   const reviewSlot = side?.kind === "review" ? slotById(side.slotId) : null;
   const requestSlot = side?.kind === "request" ? slotById(side.slotId) : null;
 
@@ -303,16 +352,21 @@ export default function GuidedCaseFilePage() {
   if (stepsq.error && !steps) body = <ErrorState error={stepsq.error} retry={() => void stepsq.refetch()} />;
   else if (steps) {
     if (section === "overview") {
-      body = <Overview steps={steps} h={overviewH} signoffs={!resident && proposalsq.proposals.length ? <div id="signoffs"><ProposalsStrip caseId={id} proposals={proposalsq.proposals} onChanged={refresh} labelOf={(sid) => slotById(sid)?.label} /></div> : null}
+      body = <Overview steps={steps} h={overviewH} inWindow={!!bg} onBoard={() => setSide({ kind: "panel", panel: "board" })} signoffs={!resident && proposalsq.proposals.length ? <div id="signoffs"><ProposalsStrip caseId={id} proposals={proposalsq.proposals} onChanged={refresh} labelOf={(sid) => slotById(sid)?.label} /></div> : null}
         staging={stagingq.data && (stagingq.data.switch.on || stagingq.data.written.length) ? (
           <StagingCard caseId={id} view={stagingq.data} loading={stagingq.isLoading} canRun={prepare} canConfirm={prepare && !resident && !!cf.permissions?.review}
+            canPropose={prepare && resident} consultantName={consultantName || undefined}
             onOpen={openSource} onBook={setBookAt} onChanged={(v) => { if (v) qc.setQueryData(["staging", id], v); else void qc.invalidateQueries({ queryKey: ["staging", id] }); }} />
         ) : null} />;
     } else if (section === "question") {
       body = <QuestionStep steps={steps} canEdit={prepare} resident={resident} consultantName={consultantName} onOpen={openSource} onNext={() => go("reports")}
         onSaveQuestion={(t) => typed("fact:clinical_question", t, `Question for the board: ${t}`)}
-        onReason={async (v) => { await putReason(id, v); await refresh(); }}
-        onUrgency={async (n) => { const r = await setUrgency(id, n); if (r.proposal) notify.success(`Dr ${consultantName} asked to set urgency ${n}`); await refresh(); }}
+        onReason={async (v) => {
+          const r = (await putReason(id, v)) as Proposed;
+          if (r.proposal) notify.success(`Sent to ${consultantTitle(consultantName)} for sign-off`, `Reason for discussion: ${steps.reasons.find((x) => x.id === v)?.label ?? v}`);
+          await refresh();
+        }}
+        onUrgency={async (n) => { const r = await setUrgency(id, n); if (r.proposal) notify.success(`${consultantTitle(consultantName, true)} asked to set urgency ${n}`); await refresh(); }}
         onSaveFact={(sid, v) => typed(sid, v, `${slotById(sid)?.label ?? "Value"}: ${v}`)} />;
     } else if (section === "reports") {
       body = <ReportsStep steps={steps} cf={cf} caseId={id} onOpen={openSource} onCheckDoc={checkDoc} onChanged={refresh} onNext={() => go("check")} />;
@@ -321,11 +375,12 @@ export default function GuidedCaseFilePage() {
     } else if (section === "pre_authorization") {
       body = <PreAuthStep steps={steps} h={preAuthH} canAct={prepare} resident={resident} consultantName={consultantName} onNext={() => go("summary")} />;
     } else {
-      body = <SummaryStep steps={steps} docs={cf.documents} h={slotHandlers} canWrite={!!canWrite} canRead={!resident && !!cf.permissions?.review} busy={writing} reading={reading} resident={resident} consultantName={consultantName}
+      body = <SummaryStep steps={steps} docs={cf.documents} onBoard={() => setSide({ kind: "panel", panel: "board" })} h={slotHandlers} canWrite={!!canWrite} canRead={!resident && !!cf.permissions?.review} busy={writing} reading={reading} resident={resident} consultantName={consultantName}
         onWrite={() => void (async () => { setWriting(true); try { await buildSummary(id, true); await refresh(); } catch (e) { notify.error("Could not write the summary", errorText(e)); } finally { setWriting(false); } })()}
         onRead={() => void (async () => { setReading(true); try { await reviewArtefact(id, "summary", "reviewed"); await refresh(); } catch (e) { notify.error("Could not save", errorText(e)); } finally { setReading(false); } })()}
         onSend={() => setReadyOpen(true)}
         briefs={<HelpersPanel caseId={id} cf={cf} onOpenSource={openSource} onCaseChanged={refresh} />}
+        similar={bg ? null : <SimilarPanel caseId={id} />}  // not inside a read-only window, as on the Overview (review 9 C, M17)
         published={<PublishedPanel caseId={id} resident={resident} consultantName={consultantName} onPropose={(payload, label) => propose("published_case", payload, label)} />} />;
     }
   }
@@ -345,14 +400,29 @@ export default function GuidedCaseFilePage() {
 
       <CaseHeader cf={cf} team={teamq.data} steps={steps} resident={resident} consultantName={consultantName} onSend={() => setReadyOpen(true)}
         onPanel={(p) => setSide({ kind: "panel", panel: p })} onPrint={() => window.print()} deckHref={deckUrl(id)} exportHref={exportVtbUrl(id)} exportAllowed={exportAllowed}
-        onArchive={teamq.data?.can?.archive && !teamq.data?.archived ? () => setArchiveOpen(true) : undefined} />
+        onArchive={teamq.data?.can?.archive && !teamq.data?.archived ? () => setArchiveOpen(true) : undefined}
+        onMove={canMove ? () => setMoveOpen(true) : undefined} onWithdraw={canMove ? () => setTakeOffOpen(true) : undefined} />
 
       {teamq.data?.archived ? <p role="status" className="rounded-md border border-border bg-muted px-3 py-2 text-sm">Archived{teamq.data.archived.reason ? `: ${teamq.data.archived.reason}` : ""}. Read only.</p> : null}
+      {bg ? <ReadOnlyBanner until={bg.until} reason={bg.reason} /> : null}
+      {similarOf ? (
+        <p role="status" className="flex items-start gap-2 rounded-md status-review px-3 py-2 text-sm" data-testid="similar-from-banner">
+          <FolderSearch className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>You opened this from the Similar Case Files of {similarOf}. Past Case File, not advice for this patient.</span>
+        </p>
+      ) : null}
 
       {steps ? (
         wide ? (
           <div className="grid items-start gap-5 lg:grid-cols-[248px_minmax(0,1fr)]">
-            <aside className="sticky top-[4.5rem] print:hidden"><SectionNav steps={steps} active={section} leftOff={leftOff} onOpen={(s) => go(s)} onGo={go} /></aside>
+            <aside className="sticky top-[4.5rem] space-y-3 print:hidden">
+              <SectionNav steps={steps} active={section} leftOff={leftOff} onOpen={(s) => go(s)} onGo={go} />
+              {/* on a laptop Ask sits under the sections, never over the page (it covered a Prepare button; 2 Nov test pass) */}
+              <button type="button" onClick={() => setSide({ kind: "ask" })} data-testid="ask-bubble"
+                className="inline-flex w-full items-center gap-2 rounded-xl bg-foreground px-4 py-3 text-sm font-semibold text-background shadow-[var(--shadow-lift)] transition hover:brightness-110 active:scale-[0.98]">
+                <MessageSquareText className="size-5" aria-hidden />Ask about this patient
+              </button>
+            </aside>
             <main className="min-w-0" aria-label={sectionTitle} data-print-area>
               <h2 className="sr-only">{sectionTitle}</h2>
               {body}
@@ -366,15 +436,17 @@ export default function GuidedCaseFilePage() {
         )
       ) : body}
 
-      <button type="button" onClick={() => setSide({ kind: "ask" })} data-testid="ask-bubble" aria-label="Ask about this patient"
-        className="fixed bottom-28 right-4 z-40 inline-flex size-12 items-center justify-center gap-2 rounded-full bg-foreground text-sm font-semibold text-background shadow-[var(--shadow-lift)] transition hover:brightness-110 active:scale-95 lg:bottom-6 lg:right-6 lg:size-auto lg:px-4 lg:py-3 print:hidden">
-        <MessageSquareText className="size-5" aria-hidden /><span className="hidden lg:inline">Ask about this patient</span>
-      </button>
+      {steps && wide ? null : (
+        <button type="button" onClick={() => setSide({ kind: "ask" })} data-testid="ask-bubble" aria-label="Ask about this patient"
+          className="fixed bottom-28 right-4 z-40 inline-flex size-12 items-center justify-center rounded-full bg-foreground text-background shadow-[var(--shadow-lift)] transition hover:brightness-110 active:scale-95 print:hidden">
+          <MessageSquareText className="size-5" aria-hidden />
+        </button>
+      )}
 
       <SidePanel open={!!side} onClose={() => setSide(null)} title={panelTitle} width={side?.kind === "source" ? "wide" : "normal"}
         subtitle={side?.kind === "source" ? "Shown as printed; nothing is interpreted." : side?.kind === "ask" ? "Answers come only from this patient's reports, each with the line it came from." : undefined}>
         {side?.kind === "panel" && side.panel === "team" ? <TeamPanel caseId={id} team={teamq.data} derived={teamq.derived} isOwner={teamq.data?.can?.manage ?? !!cf.permissions?.manage_participants} resident={resident} onChanged={refresh} me={role.me?.user ?? ""} /> : null}
-        {side?.kind === "panel" && side.panel === "board" ? <BoardFormPanel cf={cf} coordinator={role.coordinator} /> : null}
+        {side?.kind === "panel" && side.panel === "board" ? <BoardDecisionsPanel cf={cf} coordinator={role.coordinator} onChanged={refresh} /> : null}
         {side?.kind === "source" ? <SourceViewer caseId={id} target={side.target} doc={cf.documents.find((d) => d.doc_id === side.target.docId)} /> : null}
         {side?.kind === "review" ? (reviewSlot ? <ReviewPanel caseId={id} cf={cf} slot={reviewSlot} queue={allSlots.filter((s) => s.status === "needs_confirmation")} derived={slotsq.derived} resident={resident} consultantName={consultantName}
           onOpenSource={openSource} onDone={refresh} onPropose={propose} onNext={(n) => setSide(n ? { kind: "review", slotId: n.id } : null)} /> : <EmptyState title="Nothing left to check here" className="py-6" />) : null}
@@ -383,8 +455,10 @@ export default function GuidedCaseFilePage() {
       </SidePanel>
 
       <ArchiveDialog open={archiveOpen} onOpenChange={setArchiveOpen} patient={cf.case.patient?.name || id} onConfirm={async (reason) => { await archiveCase(id, reason); nav("/cases", { replace: true }); }} />
-      <MarkReadyDialog open={readyOpen} onOpenChange={setReadyOpen} slots={slotsq.data} resident={resident} consultantName={consultantName} onConfirm={onMarkReady}
+      <MarkReadyDialog open={readyOpen} onOpenChange={setReadyOpen} slots={slotsq.data} resident={resident} consultantName={consultantName} onConfirm={onMarkReady} team={teamq.data ?? null} openCount={steps?.left ?? null}
         boardQuestionMissing={!steps?.question.text} />
+      <MoveMeetingDialog open={moveOpen} onOpenChange={setMoveOpen} patient={cf.case.patient?.name || id} currentMeetingId={cf.case.meeting_id} currentDate={cf.case.meeting_id ? cf.case.board_date : null} onConfirm={onMove} />
+      <TakeOffDialog open={takeOffOpen} onOpenChange={setTakeOffOpen} patient={cf.case.patient?.name || id} currentDate={cf.case.board_date} onConfirm={onWithdraw} />
       <BookViewer target={bookAt} onClose={() => setBookAt(null)} />
       <ChangeCancerDialog open={cancerOpen} onOpenChange={setCancerOpen} caseId={id} current={steps?.protocol ?? cf.case.protocol ?? ""} onChanged={() => { announce("Reading the reports again for the new cancer."); void refresh(); }} />
       <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} caseId={id} hisCase={!!cf.his} onStarted={() => { announce("Upload started; reading the files."); window.setTimeout(() => void refresh(), 4000); }} />

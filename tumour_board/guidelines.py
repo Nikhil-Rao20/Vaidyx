@@ -37,7 +37,21 @@ SOURCES = {  # folder -> (organisation label, region tag, boost)
 }
 CANCER_WORDS = {"lung_nsclc": ["lung", "nsclc", "thoracic"], "breast": ["breast"], "colorectal_rectum": ["rect", "colorectal", "colon"],
                 "oral_cavity": ["oral cavity", "oral cancer", "head neck", "head-neck", "head and neck", "buccal", "tongue", "floor of mouth"],
-                "cervix": ["cervix", "carcinoma cervix", "cervical cancer", "cervical carcinoma", "gynaecolog", "gynecolog"]}  # not "cervical" alone: neck nodes
+                "cervix": ["cervix", "carcinoma cervix", "cervical cancer", "cervical carcinoma", "gynaecolog", "gynecolog"],  # not "cervical" alone: neck nodes
+                # Phase 2 cancers (night-v3 item 2.1): words the guideline file names and titles use (NCG books first)
+                "colorectal_colon": ["colon", "colorectal"], "stomach": ["gastric", "stomach"],
+                "oesophagus": ["oesophag", "esophag", "thoracic"],  # NCG keeps oesophagus in the thoracic book
+                "liver_hcc": ["hepatocellular", "liver", "hcc"], "gallbladder": ["gallbladder", "gall bladder", "gall-bladder", "cholangio"],
+                "ovary": ["ovary", "ovarian", "gynaecolog", "gynecolog"], "corpus_uteri": ["endometri", "uterine", "corpus uteri", "gynaecolog", "gynecolog"],
+                "prostate": ["prostate", "urolog"], "kidney": ["renal", "kidney", "urolog"], "germ_cell": ["germ cell", "testis", "testicular", "urolog"],
+                "larynx": ["larynx", "laryngeal", "head neck", "head-neck", "head and neck"], "thyroid": ["thyroid"],
+                "lymphoma": ["lymphoma", "hodgkin", "hematolymphoid", "haematolymphoid"],
+                "leukaemia": ["leukaemia", "leukemia", "hematolymphoid", "haematolymphoid"],
+                "generic_haem": ["hematolymphoid", "haematolymphoid", "haematolog", "hematolog"],
+                "wilms": ["wilms", "pediatric", "paediatric"], "retinoblastoma": ["retinoblastoma", "pediatric", "paediatric"],
+                "bone_sarcoma": ["bone soft tissue", "bone-soft-tissue", "sarcoma", "osteosarcoma", "ewing"],
+                "soft_tissue_sarcoma": ["soft tissue", "soft-tissue", "sarcoma"],
+                "brain_cns": ["glioma", "brain", "cns", "neuro-oncology"]}
 INDEX_VERSION = 6  # bump when chunking or filtering changes: the cached index is rebuilt, embeddings of unchanged chunks reused
 _lock = threading.Lock()
 _IDX = None
@@ -405,5 +419,45 @@ def queries_for_case(case_id):
             "oral_cavity": ["oral cancer work-up imaging of the primary and neck chest X-ray dental evaluation",
                             "oral cavity carcinoma pathology reporting depth of invasion perineural invasion margins extranodal extension"],
             "cervix": ["carcinoma cervix staging work-up FIGO imaging MRI CECT abdomen pelvis cystoscopy",
-                       "cervix cancer pathology tumour type grade depth of invasion LVSI"]}
+                       "cervix cancer pathology tumour type grade depth of invasion LVSI"],
+            "colorectal_colon": ["colon cancer work-up colonoscopy CECT chest abdomen pelvis CEA",
+                                 "colon cancer pathology reporting lymph nodes examined margins MMR"],
+            "stomach": ["gastric cancer work-up upper GI endoscopy biopsy CECT staging laparoscopy",
+                        "gastric cancer pathology reporting histological type HER2 MMR"],
+            "oesophagus": ["oesophageal cancer work-up endoscopy CECT PET-CT EUS",
+                           "oesophageal cancer pathology reporting resection margins tumour regression grade"],
+            "liver_hcc": ["hepatocellular carcinoma work-up triphasic CECT MRI AFP Child-Pugh HBsAg anti-HCV",
+                          "hepatocellular carcinoma LI-RADS imaging reporting and biopsy"],
+            "gallbladder": ["gallbladder cancer work-up CECT MRI CA 19-9 staging laparoscopy",
+                            "gallbladder cancer pathology reporting cystic duct margin and radiology synoptic report"],
+            "ovary": ["ovarian cancer work-up CECT abdomen pelvis CA-125 tumour markers",
+                      "ovarian cancer pathology reporting histological type BRCA testing"],
+            "corpus_uteri": ["endometrial cancer work-up MRI pelvis endometrial biopsy",
+                             "endometrial cancer pathology reporting histological type grade myometrial invasion p53 MMR POLE"],
+            "prostate": ["prostate cancer work-up PSA multiparametric MRI biopsy bone scan PSMA PET",
+                         "prostate cancer pathology reporting Gleason score ISUP grade group positive cores"],
+            "kidney": ["renal cell carcinoma work-up CECT abdomen chest imaging renal function",
+                       "renal cell carcinoma pathology reporting histological subtype grade"],
+            "germ_cell": ["testicular germ cell tumour work-up AFP beta-hCG LDH CECT scrotal ultrasound",
+                          "germ cell tumour pathology reporting orchidectomy histological components"],
+            "larynx": ["laryngeal cancer work-up laryngoscopy biopsy CECT neck vocal cord mobility",
+                       "laryngeal cancer pathology reporting subsite margins nodes"],
+            "thyroid": ["thyroid cancer work-up ultrasound neck FNAC Bethesda TI-RADS",
+                        "thyroid cancer pathology reporting histological type extrathyroidal extension"],
+            "lymphoma": ["lymphoma work-up excision biopsy PET-CT bone marrow LDH",
+                         "lymphoma pathology reporting immunohistochemistry subtype"],
+            "leukaemia": ["leukaemia work-up bone marrow aspiration flow cytometry cytogenetics molecular markers",
+                          "leukaemia diagnosis reporting immunophenotyping karyotype FISH"],
+            "generic_haem": ["haematolymphoid malignancy work-up bone marrow flow cytometry cytogenetics",
+                             "haematolymphoid malignancy pathology reporting immunophenotyping"],
+            "wilms": ["Wilms tumour work-up CECT abdomen chest imaging",
+                      "Wilms tumour pathology reporting anaplasia histology"],
+            "retinoblastoma": ["retinoblastoma work-up eye examination under anaesthesia MRI orbit brain",
+                               "retinoblastoma pathology reporting enucleation high risk features"],
+            "bone_sarcoma": ["bone sarcoma work-up MRI of the whole bone CT chest bone scan biopsy",
+                             "bone sarcoma pathology reporting percent necrosis margins"],
+            "soft_tissue_sarcoma": ["soft tissue sarcoma work-up MRI of the primary CT chest core biopsy",
+                                    "soft tissue sarcoma pathology reporting grade depth margins"],
+            "brain_cns": ["brain tumour work-up MRI brain with contrast",
+                          "glioma pathology reporting IDH 1p/19q codeletion MGMT promoter"]}
     return (qs + base.get(prot["id"], []))[:6]

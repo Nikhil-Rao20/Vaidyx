@@ -1140,7 +1140,7 @@ def phase6(c):
     for q in qs:
         t1 = time.time(); a = c.post(f"/api/tb/sessions/{sid}/cases/TB-001/agents/radiology/ask", json={"question": q}).json(); a["_s"] = round(time.time() - t1, 1); ans.append(a)
     check("6.2 three live answers from the Radiology agent, every statement cited",
-          all(a.get("status") == "answered" and a["statements"] and all(x["citations"] for x in a["statements"]) and a.get("kind") == "AI support (role-specific)" for a in ans),
+          all(a.get("status") == "answered" and a["statements"] and all(x["citations"] for x in a["statements"]) and a.get("kind") == "AI agent, support only" for a in ans),
           "; ".join(f"{a.get('status')} {len(a.get('statements') or [])} st {a['_s']} s" for a in ans))
     bad = [c.post(f"/api/tb/sessions/{sid}/cases/TB-001/agents/radiology/ask", json={"question": q}).json()
            for q in ("Which chemotherapy regimen should the patient receive?", "Look at the CT images and tell us whether the lesion is malignant")]
@@ -2356,6 +2356,15 @@ def v2_phase5(c, base, ctx):
               [x["case_id"] for x in b_links] == ["TB-H5-P18A"] and b_links[0]["department"] == "colorectal_surgery" and b_links[0]["protocol"] == "colorectal_rectum" and b_links[0]["department_name"] == "Colorectal Surgery"
               and [x["case_id"] for x in a_links] == ["TB-H5-P18B"] and a_links[0]["department"] == "breast_surgery" and d2b["case"]["department"] == "breast_surgery"
               and (d2b["case"]["his"] or {}).get("same_uhid_case") is None, json.dumps([a_links, b_links])[:200])
+        # the same cancer again for the same UHID is refused (night-v3 item 1.1): 409 naming the existing file's owner, nothing made
+        rd = colo.post("/api/tb/cases/from-his", json={"identifier": "VXH/26/004218", "protocol": "colorectal_rectum", "setting": "non_metastatic", "hospital_level": "optimal", "case_id": "TB-H5-P18C"})
+        if rd.status_code == 200:
+            ctx["cases"].append("TB-H5-P18C")
+        dup = rd.json() if rd.headers.get("content-type", "").startswith("application/json") else {}
+        check("5.3 P18 a second Case File for the same patient and the same cancer is refused (409) with the existing file and its owner; nothing is made",
+              rd.status_code == 409 and dup.get("code") == "duplicate_case_file" and (dup.get("existing") or {}).get("case_id") == "TB-H5-P18A"
+              and "Colorectal Surgery" in str(dup.get("detail") or "") and (dup.get("existing") or {}).get("can_open") is True
+              and colo.get("/api/tb/cases/TB-H5-P18C").status_code == 404 and "duplicate_refused" in audit_kinds(colo, "TB-H5-P18A"), rd.text[:200])
         check("5.3 P18 both Case Files hold the patient's HIS records and each gate passes (the rectal records never satisfy the breast requirements, nor the reverse)",
               len(d1["documents"]) == len(d2b["documents"]) >= 8 and d1["state"]["gate"]["passed"] and d2b["state"]["gate"]["passed"]
               and _gaps(d1) == fixture_gaps("P18", "colorectal_rectum") == [] and _gaps(d2b) == fixture_gaps("P18", "breast") == [], json.dumps([_gaps(d1), _gaps(d2b)]))
@@ -2446,7 +2455,9 @@ def v2_phase6(c, base, ctx):
     check("6.1 only the owning department marks a Case File ready (403 for a supporting doctor, another treating department and the coordinator)",
           rad.post(f"/api/tb/cases/{p01}/ready", json={"ready": True}).status_code == 403 and medonc.post(f"/api/tb/cases/{p01}/ready", json={"ready": True}).status_code == 403
           and mdt.post(f"/api/tb/cases/{p01}/ready", json={"ready": True}).status_code == 403)
-    r = breast.post(f"/api/tb/cases/{p01}/ready", json={"ready": True, "note": "Summary to follow"})
+    # night-v3 1.4: the send needs the question for the board and, with items open, a reason
+    breast.post(f"/api/tb/cases/{p01}/slots/fact:clinical_question/value", json={"value": "Breast conservation surgery or mastectomy? (e2e h6)"})
+    r = breast.post(f"/api/tb/cases/{p01}/ready", json={"ready": True, "note": "Summary to follow", "reason": "E2E: the board sees it now"})
     j = r.json() if r.status_code == 200 else {}
     nts = mdt.get("/api/tb/notifications", params={"limit": 50}).json()["notifications"]
     check("6.1 the owner marks it ready: recorded with the name and the note, audited, the coordinator told", r.status_code == 200 and (j.get("board_ready") or {}).get("by") == "tb-e2e-h6-breast"
@@ -2735,7 +2746,8 @@ def v2_phase7(c, base, ctx):
         print(f"INFO 7.1 the live store holds {bt['gyn']['visible']} Case File(s) without an owning department (before 5.1): every placed doctor's home lists them as 'open'", flush=True)
 
     # ---- 2. the ready mark ---------------------------------------------------------------------------------------------------------
-    r = breast.post(f"/api/tb/cases/{p01}/ready", json={"ready": True, "note": "Summary to follow (e2e h7)"})
+    breast.post(f"/api/tb/cases/{p01}/slots/fact:clinical_question/value", json={"value": "Breast conservation surgery or mastectomy? (e2e h7)"})  # 1.4
+    r = breast.post(f"/api/tb/cases/{p01}/ready", json={"ready": True, "note": "Summary to follow (e2e h7)", "reason": "E2E: the board sees it now"})
     hb = home(breast); r1 = row(hb, p01) or {}
     tc = (hb.get("treating") or {}).get("counts") or {}
     check("7.1 after the owner marks it ready the home row carries who and the note; ready_marked counts it", r.status_code == 200 and (r1.get("ready") or {}).get("by") == "tb-e2e-h7-breast"

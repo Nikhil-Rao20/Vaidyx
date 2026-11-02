@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, ExternalLink, Plus, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { consultantTitle } from "@/lib/format";
 import { addPublished, getPublished, notBuiltYet, removePublished, searchPublished } from "../api";
 import type { PublishedResult } from "../types";
 import { EmptyState, ErrorState, LoadingButton, NotYetState, SkeletonLines, StatusChip, errorText, fmtDateTime } from "./common";
@@ -81,7 +82,7 @@ export function PublishedPanel({ caseId, resident, consultantName, onPropose }: 
           {results.length === 0 ? <EmptyState kind="search" title="No papers found" text="Try different words, or fewer of them." className="py-4" /> : null}
           <ul className="mt-1 space-y-2">
             {results.map((r, i) => (
-              <Paper key={i} p={r} action={have.has(r.doi ?? r.url ?? r.title) ? <StatusChip kind="ok">added</StatusChip> : <LoadingButton size="xs" loading={add.isPending && add.variables === r} onClick={() => add.mutate(r)}><Plus className="size-3" />{resident ? `Ask Dr ${consultantName}` : "Add"}</LoadingButton>} />
+              <Paper key={i} p={r} action={have.has(r.doi ?? r.url ?? r.title) ? <StatusChip kind="ok">added</StatusChip> : <LoadingButton size="xs" loading={add.isPending && add.variables === r} onClick={() => add.mutate(r)}><Plus className="size-3" />{resident ? `Ask ${consultantTitle(consultantName)}` : "Add"}</LoadingButton>} />
             ))}
           </ul>
           {add.isError ? <p role="alert" className="text-xs text-bad mt-1">{errorText(add.error)}</p> : null}

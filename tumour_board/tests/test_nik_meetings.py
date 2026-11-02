@@ -91,10 +91,14 @@ class As:
 def app(data_root, demo_cases, monkeypatch):
     monkeypatch.setenv("TB_SCHEDULER", "0")
     org.save(hospital_org(), by="test")
-    pacs.clear(); live.hub.clear(); meetings.LIVE_DECISION.clear(); meetings.AGENT_STATE.clear()
+    pacs.clear(); live.hub.clear(); meetings.LIVE_DECISION.clear(); meetings.AGENT_STATE.clear(); meetings.AGENT_AUDIO.clear(); meetings.AGENT_LOCKS.clear()
     api_meetings.JOIN_LIMIT._hits.clear()
     from tumour_board import service
     monkeypatch.setattr(service, "prepare_session_agents", lambda sid, user, roles=None, case_ids=None, refresh=False: [])
+
+    async def no_warm(case_id, role):
+        return None
+    monkeypatch.setattr(agents, "warm", no_warm)  # the context pre-load is a model call (night-v3 6.4); tested on its own
     monkeypatch.setattr(his_client, "client", lambda d=None, transport=None: None)  # never the hospital system: cached studies only
 
     async def fake_chat(role, msgs, **kw):
@@ -411,32 +415,40 @@ def test_questions_are_answered_by_the_stand_in_agent_in_text(tc, monkeypatch):
     monkeypatch.setattr(live, "broadcast", lambda m, ev, **kw: events.append(ev) or True)
     asked = []
 
-    async def fake_ask(case_id, role, question, history=None, user=""):
+    async def fake_ask(case_id, role, question, history=None, user="", **kw):
         asked.append((case_id, role, question, user))
         return {"role": role, "label": "Radiology", "status": "answered", "statements": [{"text": "Lesion 3.2 cm", "citations": [{"doc_id": "D1", "quote": "Lesion 3.2 cm"}]}],
                 "references": [], "removed": [], "model": "reasoner", "seconds": 0.2}
     monkeypatch.setattr(agents, "ask", fake_ask)
     v = As(tc, "priya").get(f"/meetings/{mid}").json()
     assert v["agent"]["active"] is True and v["agent"]["role"] == "radiology" and v["agent"]["state"] == "ready"  # no radiology head present
-    assert v["can"]["ask"] is True
-    r = As(tc, "priya").post(f"/meetings/{mid}/questions", json={"text": "  What size is the lung lesion?  "})
+    assert v["can"]["ask"] is True and v["can"]["ask_agents"] is True
+    # a question with no role goes to the board (nobody answers it by itself); the role names the agent (night-v3 6.1)
+    r = As(tc, "priya").post(f"/meetings/{mid}/questions", json={"text": "Who presents?"})
+    assert r.status_code == 200 and r.json()["question"]["role"] is None and r.json()["question"]["answer"] is None, r.text
+    r = As(tc, "priya").post(f"/meetings/{mid}/questions", json={"text": "  What size is the lung lesion?  ", "role": "radiology"})
     assert r.status_code == 200, r.text
     q = r.json()["question"]
     assert q["text"] == "What size is the lung lesion?" and q["role"] == "radiology" and q["by_name"] == "Dr Priya Nair" and q["case_id"] == "TB-001"
-    # the stand-in answers in a background task on the app's loop, its true states broadcast
+    # the agent answers in a background task on the app's loop, its true states broadcast per role (no "reading the question")
     wait_for(lambda: any(e["type"] == "agent_state" and e["agent"]["state"] == "ready" for e in events))
     assert asked == [("TB-001", "radiology", "What size is the lung lesion?", "priya")]
     states = [e["agent"]["state"] for e in events if e["type"] == "agent_state"]
-    assert states == ["reading_question", "thinking", "answering", "ready"]
-    assert [e["type"] for e in events][-2:] == ["question", "agent_state"]
+    assert states == ["thinking", "answering", "ready"]
+    assert all(e["role"] == "radiology" for e in events if e["type"] == "agent_state")
+    assert [e["type"] for e in events][-3:] == ["question", "agent_speech", "agent_state"]
+    speech = [e for e in events if e["type"] == "agent_speech"]
+    assert [x["index"] for x in speech] == [0, 1, 2] and speech[-1]["final"] is True and "text" not in speech[0]  # spoken by reference only
     out = asyncio.run(meetings.answer(mid, q["id"], "priya"))  # asked again: the stored answer, no second model call
     assert out["status"] == "answered" and out["text"] == "Lesion 3.2 cm" and out["role"] == "radiology" and len(asked) == 1
+    assert out["speech"] == ["AI agent, Radiology.", "Lesion 3.2 cm", "Sources are on the screen."] and out["first_seconds"] is not None
     assert As(tc, "priya").post(f"/meetings/{mid}/questions", json={"text": " "}).status_code == 400
     assert As(tc, "ravi").post(f"/meetings/{mid}/questions", json={"text": "x"}).status_code == 403
     v = As(tc, "anil").get(f"/meetings/{mid}").json()
-    assert v["questions"][0]["answer"]["text"] == "Lesion 3.2 cm" and v["questions"][0]["answer"]["statements"][0]["citations"] and v["agent"]["state"] == "ready"
+    assert v["questions"][1]["answer"]["text"] == "Lesion 3.2 cm" and v["questions"][1]["answer"]["statements"][0]["citations"] and v["agent"]["state"] == "ready"
     s = board.get(mid)
     assert [e["kind"] for e in s["log"]] == ["answer"] and s["log"][0]["question"] == "What size is the lung lesion?"  # the session's agent log, for the minutes
+    assert [x["text"] for x in v["questions"]] == ["Who presents?", "What size is the lung lesion?"]
     assert "question_answered" in [e["kind"] for e in board.read_audit() if e["session"] == mid]
     # the head arrives: no stand-in for Radiology any more
     join_and_admit(tc, mid, "suresh")
@@ -458,11 +470,12 @@ def test_stand_in_failure_is_shown_not_hidden(tc, monkeypatch):
     async def boom(*a, **k):
         raise RuntimeError("model down")
     monkeypatch.setattr(agents, "ask", boom)
-    q = As(tc, "priya").post(f"/meetings/{mid}/questions", json={"text": "Lesion size?"}).json()["question"]
-    wait_for(lambda: (board.get(mid)["questions"][0].get("answer") or {}).get("status") == "error" and meetings.AGENT_STATE.get(mid, {}).get("state") == "ready")
+    q = As(tc, "priya").post(f"/meetings/{mid}/questions", json={"text": "Lesion size?", "role": "radiology"}).json()["question"]
+    wait_for(lambda: (board.get(mid)["questions"][0].get("answer") or {}).get("status") == "error" and meetings.AGENT_STATE.get(mid, {}).get("radiology", {}).get("state") == "error")
     out = asyncio.run(meetings.answer(mid, q["id"]))
     assert out["status"] == "error" and "could not answer" in out["text"]
-    assert board.get(mid)["questions"][0]["answer"]["status"] == "error" and meetings.AGENT_STATE[mid]["state"] == "ready"
+    assert board.get(mid)["questions"][0]["answer"]["status"] == "error" and meetings.AGENT_STATE[mid]["radiology"]["state"] == "error"  # "Could not answer, try again" for a minute
+    assert {a["role"]: a["state"] for a in As(tc, "priya").get(f"/meetings/{mid}").json()["agents"]}["radiology"] == "error"
 
 
 def test_hands_and_the_live_decision(tc, monkeypatch):
@@ -516,13 +529,17 @@ def test_decision_is_recorded_through_postboard_and_sent_to_the_owner(tc):
     # the old minutes carry it
     m = As(tc, "anil").get(f"/sessions/{mid}/minutes?format=json").json()
     assert next(c for c in m["cases"] if c["case_id"] == "TB-002")["decision"]["text"] == body["decision_text"]
+    # saving the form again records nothing more: no second round, no second request (Phase 3 review S2)
+    r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-002/decision", json=body)
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "already_recorded" and "Board decisions panel" in r.json()["detail"]["message"]
+    assert [b["id"] for b in store.get_state("TB-002")["board_records"]] == [rec["id"]]
 
 
 def test_not_discussed_moves_the_case_to_the_next_meeting_else_flags_it(tc):
     owned("TB-002")
     mid = started(tc)
     nxt = new_meeting(tc, date_=(date.today() + timedelta(days=8)).isoformat(), time_="09:00")
-    r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-001/decision", json={"outcome": "not_discussed"})
+    r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-001/decision", json={"outcome": "not_discussed", "not_discussed_reason": "information_missing"})
     assert r.status_code == 200, r.text
     oc = r.json()["outcome"]
     assert oc["moved_to"] == nxt and oc["flagged"] is False and "moved to the meeting on" in r.json()["record"]["decision_text"]
@@ -534,7 +551,7 @@ def test_not_discussed_moves_the_case_to_the_next_meeting_else_flags_it(tc):
     assert c["meeting_id"] == nxt and c["board_date"] == board.get(nxt)["date"] and "board_flags" not in c
     # no later meeting: flagged
     As(tc, "anil").post(f"/meetings/{nxt}/cancel")
-    r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-002/decision", json={"outcome": "not_discussed"})
+    r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-002/decision", json={"outcome": "not_discussed", "not_discussed_reason": "information_missing"})
     assert r.json()["outcome"]["flagged"] is True and r.json()["outcome"]["moved_to"] is None
     assert store.get_case("TB-002")["board_flags"][0]["kind"] == "not_discussed"
     ns = [n for n in notify.for_roles(org.roles("priya"), limit=None) if n["kind"] == "outcome"]
@@ -554,8 +571,49 @@ def test_deferred_referred_and_noted(tc):
     r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-002/decision", json={"outcome": "referred", "referred_to": "State cancer centre sarcoma board"})
     assert r.json()["record"]["outcome_type"] == "referred" and r.json()["record"]["referred_to"] == "State cancer centre sarcoma board"
     r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-003/decision", json={"outcome": "noted"})
-    assert r.json()["record"]["outcome_type"] == "decision" and r.json()["record"]["meeting_outcome"] == "noted" and r.json()["outcome"]["label"] == "Noted for information"
+    assert r.json()["record"]["outcome_type"] == "noted" and r.json()["record"]["meeting_outcome"] == "noted" and r.json()["outcome"]["label"] == "Noted for information"  # night-v3 item 3.1: the real outcome
     assert As(tc, "anil").post(f"/meetings/{mid}/cases/TB-999/decision", json={"outcome": "noted"}).status_code == 404
+
+
+def test_the_meeting_form_applies_the_required_by_outcome_rule(tc):
+    """night-v3 item 3.1: the coordinator's form is strict (decision_record.clean); the message names what is missing."""
+    owned("TB-002")
+    mid = started(tc)
+    url = f"/meetings/{mid}/cases/TB-002/decision"
+    r = As(tc, "anil").post(url, json={"outcome": "decision", "decision_text": "Upfront surgery.", "responsible_doctor": "Dr Priya Nair"})
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "bad_record" and "Choose the treatment intent" in r.json()["detail"]["message"]
+    r = As(tc, "anil").post(url, json={"outcome": "decision", "decision_text": "Upfront surgery.", "intent": "curative", "responsible_doctor": "Dr Priya Nair", "sequence": "s" * 301})
+    assert r.status_code == 400 and "Sequence: at most 300 characters" in r.json()["detail"]["message"]  # refused, never cut
+    r = As(tc, "anil").post(url, json={"outcome": "deferred", "awaited": "IHC report"})
+    assert r.status_code == 400 and "Say which department it is awaited from." in r.json()["detail"]["message"]
+    r = As(tc, "anil").post(url, json={"outcome": "decision", "decision_text": "Upfront surgery.", "intent": "curative", "responsible_doctor": "Dr Priya Nair",
+                                       "patient_informed_date": "01/01/2020"})
+    assert r.status_code == 400 and "earlier than the board date" in r.json()["detail"]["message"]
+    r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-003/decision", json={"outcome": "noted"})
+    assert r.status_code == 200, r.text
+    rec = r.json()["record"]
+    assert rec["outcome_type"] == "noted" and not [f for f in rec["adjudication"]["flags"] if f.get("kind") == "communication"]
+    body = {"outcome": "decision", "decision_text": "Upfront surgery, then adjuvant chemotherapy.", "intent": "curative", "responsible_doctor": "Dr Priya Nair",
+            "modalities": ["surgery", "chemotherapy"], "sequence": "Surgery then adjuvant chemotherapy", "stage_as_agreed": "cT2 N1 M0", "stage_source": "report",
+            "investigations": [{"item": "MUGA scan", "department": "Nuclear Medicine"}], "referrals": [{"kind": "genetics", "department": "Medical Oncology", "note": "BRCA"}],
+            "pmjay_plan_approval": "yes", "pmjay_plan_note": "PA-123"}
+    r = As(tc, "anil").post(url, json=body)
+    assert r.status_code == 200, r.text
+    rec = r.json()["record"]
+    assert rec["modalities"] == ["surgery", "chemotherapy"] and rec["stage_source"] == "report" and rec["informed_by"] == "Dr Priya Nair" and rec["inform_by_date"]
+    assert [a["kind"] for a in store.get_state("TB-002")["actions"] if a.get("board_record") == rec["id"] and not a.get("communication")] == ["investigation", "referral"]
+    m = As(tc, "anil").get(f"/sessions/{mid}/minutes?format=json").json()
+    d = next(c for c in m["cases"] if c["case_id"] == "TB-002")["decision"]
+    lines = {x["label"]: x["text"] for x in d["fields"]}
+    assert lines["Modalities"] == "Surgery, Chemotherapy" and lines["Further investigations"] == "MUGA scan (Nuclear Medicine)"  # the board gave no date: the action gets the default
+    assert lines["Referrals"] == "Genetics and counselling (Medical Oncology, BRCA)" and lines["PM-JAY treatment plan approval"] == "Yes"
+    # the owner's consultant corrects it later: a new version, the meeting shows it, the minutes carry the correction line
+    r = As(tc, "priya").post(f"/cases/TB-002/board-records/{rec['id']}/correct", json={"changes": {"stage_as_agreed": "cT2 N0 M0"}, "reason": "N stage misread"})
+    assert r.status_code == 200, r.text
+    assert board.get(mid)["decisions"]["TB-002"]["version"] == 2
+    html = As(tc, "anil").get(f"/sessions/{mid}/minutes").text
+    assert "Stage as agreed by the board" in html and "cT2 N0 M0" in html and "Corrected by Dr Priya Nair on" in html and "N stage misread" in html
+    assert "\u2014" not in html
 
 
 # ---- end of a case and the cards ---------------------------------------------------------------------------------------------------------
@@ -677,3 +735,292 @@ def test_scheduler_status_is_for_admins(tc):
     r = As(tc, "tbroot").get("/scheduler/status")
     assert r.status_code == 200 and r.json()["running"] is False and r.json()["enabled"] is False and [j["name"] for j in r.json()["jobs"]][0] == "codes"
     assert As(tc, "admin").get("/scheduler/status").status_code == 200
+
+
+def test_a_case_file_sits_on_one_planned_agenda_when_the_coordinator_lists_it_again(tc):
+    """Review fix (night-v3 item 1.6): the coordinator putting a Case File on a second planned meeting's agenda takes it off the first."""
+    first = with_agenda(tc, discussion=("TB-001", "TB-002"), noting=())
+    second = new_meeting(tc, date_=(date.today() + timedelta(days=8)).isoformat())
+    r = As(tc, "anil").put(f"/meetings/{second}/agenda", json={"discussion": ["TB-002"], "noting": []})
+    assert r.status_code == 200, r.text
+    assert [x["case_id"] for x in As(tc, "anil").get(f"/meetings/{first}").json()["agenda"]["discussion"]] == ["TB-001"]
+    assert [a["case_id"] for a in board.get(first)["agenda"]] == ["TB-001"]
+    assert store.get_case("TB-002")["meeting_id"] == second
+    r = As(tc, "anil").post(f"/meetings/{first}/agenda/add", json={"case_id": "TB-002", "list": "noting"})
+    assert r.status_code == 200 and [x["case_id"] for x in r.json()["agenda"]["noting"]] == ["TB-002"]
+    assert As(tc, "anil").get(f"/meetings/{second}").json()["agenda"]["discussion"] == [] and store.get_case("TB-002")["meeting_id"] == first
+
+
+# ---- the call shell (night-v3 5.1): the agents list, the spotlight, reactions ----------------------------------------------------------------
+
+def test_every_absent_head_has_a_stand_in_agent_in_the_list(tc, monkeypatch):
+    mid = started(tc)
+    join_and_admit(tc, mid, "priya")
+    v = As(tc, "priya").get(f"/meetings/{mid}").json()
+    roles = [a["role"] for a in v["agents"]]
+    assert "radiology" in roles and "pathology" in roles and "medical_oncology" in roles and "radiation_oncology" in roles
+    first = v["agents"][0]
+    assert first["standing_in"] is True and first["state"] == "ready" and first["question"] is None and "support only" in first["note"]
+    assert first["department_name"] and first["label"]
+    assert v["agent"]["role"] == roles[0]  # the single-agent field stays for older readers
+    # the head who joins is no longer stood in for
+    join_and_admit(tc, mid, "suresh")
+    roles2 = [a["role"] for a in As(tc, "priya").get(f"/meetings/{mid}").json()["agents"]]
+    assert "radiology" not in roles2 and "pathology" in roles2
+    # the shared state names the role it belongs to
+    meetings._set_agent(mid, "pathology", "thinking", by="priya", question="Q1")
+    ag = {a["role"]: a for a in As(tc, "priya").get(f"/meetings/{mid}").json()["agents"]}
+    assert ag["pathology"]["state"] == "thinking" and ag["pathology"]["question"] == "Q1" and ag["medical_oncology"]["state"] == "ready"
+    # outside a session: nothing
+    assert As(tc, "anil").get(f"/meetings/{with_agenda(tc)}").json()["agents"] == []
+
+
+def test_spotlight_is_the_coordinators_and_clears_on_the_next_case(tc, monkeypatch):
+    mid = started(tc)
+    join_and_admit(tc, mid, "priya"); join_and_admit(tc, mid, "ravi")
+    events = []
+    monkeypatch.setattr(live, "broadcast", lambda m, ev, **kw: events.append(ev) or True)
+    assert As(tc, "priya").post(f"/meetings/{mid}/spotlight", json={"users": ["ravi"]}).status_code == 403
+    r = As(tc, "anil").post(f"/meetings/{mid}/spotlight", json={"users": ["ravi", "priya", "ravi"]})
+    assert r.status_code == 200 and r.json()["spotlight"] == ["ravi", "priya"], r.text
+    assert events[-1]["type"] == "spotlight" and events[-1]["users"] == ["ravi", "priya"]
+    assert As(tc, "priya").get(f"/meetings/{mid}").json()["spotlight"] == ["ravi", "priya"]
+    # only admitted people; at most three
+    assert As(tc, "anil").post(f"/meetings/{mid}/spotlight", json={"users": ["meena"]}).status_code == 409
+    join_and_admit(tc, mid, "meena"); join_and_admit(tc, mid, "dev")
+    assert As(tc, "anil").post(f"/meetings/{mid}/spotlight", json={"users": ["ravi", "priya", "meena", "dev"]}).status_code == 400
+    # audited by ids, and the next case clears it
+    assert any(e.get("kind") == "spotlight" and e.get("users") == ["ravi", "priya"] for e in board.read_audit() if e["session"] == mid)
+    r = As(tc, "anil").post(f"/meetings/{mid}/current", json={"case_id": "TB-002"})
+    assert r.status_code == 200
+    assert events[-1]["type"] == "current" and events[-1]["spotlight"] == [] and isinstance(events[-1]["agents"], list)
+    assert As(tc, "priya").get(f"/meetings/{mid}").json()["spotlight"] == []
+    assert As(tc, "anil").post(f"/meetings/{mid}/spotlight", json={"users": []}).json()["spotlight"] == []
+
+
+def test_reactions_are_broadcast_never_stored_and_rate_limited(tc, monkeypatch):
+    mid = started(tc)
+    join_and_admit(tc, mid, "priya")
+    events = []
+    monkeypatch.setattr(live, "broadcast", lambda m, ev, **kw: events.append(ev) or True)
+    meetings._REACTED.clear()
+    r = As(tc, "priya").post(f"/meetings/{mid}/reaction", json={"kind": "agree"})
+    assert r.status_code == 200 and r.json()["kind"] == "agree", r.text
+    assert events[-1]["type"] == "reaction" and events[-1]["user"] == "priya" and events[-1]["name"] == "Dr Priya Nair" and events[-1]["kind"] == "agree"
+    assert As(tc, "priya").post(f"/meetings/{mid}/reaction", json={"kind": "thanks"}).status_code == 429
+    meetings._REACTED.clear()
+    assert As(tc, "priya").post(f"/meetings/{mid}/reaction", json={"kind": "wave"}).status_code == 400
+    assert As(tc, "ravi").post(f"/meetings/{mid}/reaction", json={"kind": "agree"}).status_code == 403  # not admitted
+    saved = (board.sessions_dir() / f"{mid}.json").read_text()
+    assert "agree" not in saved and "reaction" not in saved
+    audit = [e for e in board.read_audit() if e["session"] == mid and e.get("kind") == "reaction"]
+    assert audit and audit[-1]["by"] == "priya" and "agree" not in str(audit[-1])
+
+
+# ---- present a screen (night-v3 5.2) -------------------------------------------------------------------------------------------------------
+
+def test_who_may_present_a_screen_and_a_new_share_replaces_the_old(tc, monkeypatch):
+    mid = started(tc, discussion=("TB-002",), noting=())
+    owned("TB-002", owner="priya")  # priya presents TB-002 (the owner)
+    join_and_admit(tc, mid, "priya"); join_and_admit(tc, mid, "ravi")
+    events = []
+    monkeypatch.setattr(live, "broadcast", lambda m, ev, **kw: events.append(ev) or True)
+    v = As(tc, "ravi").get(f"/meetings/{mid}").json()
+    assert v["can"]["present"] is False and v["present_allowed"] == [] and v["presenting"] is None and v["current"]["presenting"] is None
+    assert As(tc, "priya").get(f"/meetings/{mid}").json()["can"]["present"] is True   # the case's presenter
+    assert As(tc, "anil").get(f"/meetings/{mid}").json()["can"]["present"] is True    # the coordinator
+    assert As(tc, "ravi").post(f"/meetings/{mid}/presenting", json={"on": True}).status_code == 403
+    r = As(tc, "priya").post(f"/meetings/{mid}/presenting", json={"on": True})
+    assert r.status_code == 200 and r.json()["presenting"] == "priya", r.text
+    assert events[-1] == {**events[-1], "type": "presenting", "user": "priya", "on": True}
+    assert As(tc, "ravi").get(f"/meetings/{mid}").json()["presenting"] == "priya"
+    # ravi cannot stop priya's share; the coordinator allows ravi, whose share replaces priya's
+    assert As(tc, "ravi").post(f"/meetings/{mid}/presenting", json={"on": False}).status_code == 403
+    assert As(tc, "ravi").post(f"/meetings/{mid}/present-allow", json={"user": "ravi"}).status_code == 403
+    assert As(tc, "anil").post(f"/meetings/{mid}/present-allow", json={"user": "meena"}).status_code == 409  # not admitted
+    r = As(tc, "anil").post(f"/meetings/{mid}/present-allow", json={"user": "ravi", "allowed": True})
+    assert r.status_code == 200 and r.json()["present_allowed"] == ["ravi"] and events[-1]["type"] == "present_allowed" and events[-1]["users"] == ["ravi"]
+    assert As(tc, "ravi").get(f"/meetings/{mid}").json()["can"]["present"] is True
+    r = As(tc, "ravi").post(f"/meetings/{mid}/presenting", json={"on": True})
+    assert r.status_code == 200 and r.json() == {"presenting": "ravi", "replaced": "priya"}
+    assert [e for e in events if e["type"] == "presenting"][-2:] == [{**events[-2], "user": "priya", "on": False, "replaced": True}, {**events[-1], "user": "ravi", "on": True}]
+    # the coordinator stops it; withdrawing the right ends a share too; the next case clears the share
+    assert As(tc, "anil").post(f"/meetings/{mid}/presenting", json={"on": False}).status_code == 200
+    assert As(tc, "anil").get(f"/meetings/{mid}").json()["presenting"] is None
+    As(tc, "ravi").post(f"/meetings/{mid}/presenting", json={"on": True})
+    r = As(tc, "anil").post(f"/meetings/{mid}/present-allow", json={"user": "ravi", "allowed": False})
+    assert r.status_code == 200 and r.json()["present_allowed"] == [] and events[-1] == {**events[-1], "type": "presenting", "user": "ravi", "on": False}
+    assert As(tc, "anil").get(f"/meetings/{mid}").json()["presenting"] is None
+    As(tc, "priya").post(f"/meetings/{mid}/presenting", json={"on": True})
+    As(tc, "anil").put(f"/meetings/{mid}/agenda", json={"discussion": ["TB-002", "TB-001"], "noting": []})
+    As(tc, "anil").post(f"/meetings/{mid}/current", json={"case_id": "TB-001"})
+    assert As(tc, "anil").get(f"/meetings/{mid}").json()["presenting"] is None
+    kinds = [e["kind"] for e in board.read_audit() if e["session"] == mid]
+    assert "presenting" in kinds and "present_allowed" in kinds
+
+
+# ---- the meeting chat (night-v3 5.3) --------------------------------------------------------------------------------------------------------
+
+def test_chat_is_for_admitted_members_kept_with_the_record_and_never_in_the_audit(tc, monkeypatch):
+    mid = with_agenda(tc)
+    join_and_admit(tc, mid, "priya")
+    code = As(tc, "anil").post(f"/meetings/{mid}/code").json()["value"]
+    As(tc, "ravi").post("/meetings/join", json={"code": code})  # ravi waits
+    sent = []
+    shapes = []
+    monkeypatch.setattr(live, "broadcast", lambda m, ev, shape=None: (sent.append(ev), shapes.append(shape)) and True)
+    meetings._CHATTED.clear()
+    assert As(tc, "priya").get(f"/meetings/{mid}").json()["can"]["chat"] is True  # before the start too
+    r = As(tc, "priya").post(f"/meetings/{mid}/chat", json={"text": "  The PET report for Kavitha is signed now.  "})
+    assert r.status_code == 200, r.text
+    m = r.json()["message"]
+    assert m["by"] == "priya" and m["by_name"] == "Dr Priya Nair" and m["text"] == "The PET report for Kavitha is signed now." and m["id"].startswith("C")
+    assert sent[-1]["type"] == "chat" and sent[-1]["message"]["id"] == m["id"]
+    # the event is private: a waiting viewer's socket gets nothing, a member's gets it
+    sh = shapes[-1]
+    assert sh("ravi", {"user": "ravi"}, sent[-1]) is None and sh("priya", {"user": "priya"}, sent[-1]) is sent[-1]
+    assert As(tc, "ravi").post(f"/meetings/{mid}/chat", json={"text": "hello"}).status_code == 403
+    assert As(tc, "priya").get(f"/meetings/{mid}").json()["chat"][-1]["text"] == "The PET report for Kavitha is signed now."
+    assert As(tc, "ravi").get(f"/meetings/{mid}").json()["chat"] == []
+    assert "The PET report for Kavitha" in (board.sessions_dir() / f"{mid}.json").read_text()  # kept with the meeting record
+    audit = [e for e in board.read_audit() if e["session"] == mid and e.get("kind") == "chat"]
+    assert audit and audit[-1]["chars"] == len("The PET report for Kavitha is signed now.") and "PET" not in str(audit[-1])
+    assert As(tc, "priya").post(f"/meetings/{mid}/chat", json={"text": ""}).status_code == 400
+    assert As(tc, "priya").post(f"/meetings/{mid}/chat", json={"text": "x" * 1001}).status_code == 413
+    for i in range(meetings.CHAT_PER_MINUTE):
+        As(tc, "priya").post(f"/meetings/{mid}/chat", json={"text": f"line {i}"})
+    assert As(tc, "priya").post(f"/meetings/{mid}/chat", json={"text": "one more"}).status_code == 429
+    # questions never land in the chat
+    As(tc, "anil").post(f"/meetings/{mid}/start")
+    As(tc, "priya").post(f"/meetings/{mid}/questions", json={"text": "Is the PET final?"})
+    assert all("PET final" not in x["text"] for x in As(tc, "priya").get(f"/meetings/{mid}").json()["chat"])
+
+
+# ---- the case flow: the quorum, the presenter, the elapsed time (night-v3 5.4) ------------------------------------------------------------
+
+def test_quorum_presenter_and_elapsed_time(tc, monkeypatch):
+    mid = started(tc, discussion=("TB-002", "TB-001"), noting=())
+    owned("TB-002", owner="priya")
+    join_and_admit(tc, mid, "priya")
+    v = As(tc, "priya").get(f"/meetings/{mid}").json()
+    q = v["quorum"]
+    assert q["total"] == 5 and q["present"] == 0 and [h["id"] for h in q["heads"]][:2] == ["radiology", "medical_oncology"]
+    # priya (Breast Surgery) fills the surgical seat for her own Case File, as the decision record's rule says (postboard.pmjay_seat)
+    assert q["pmjay"]["surgical"] is True and q["pmjay"]["present"] == 1 and q["pmjay"]["total"] == 3 and "advises" in q["pmjay"]["note"] and q["pmjay"]["seat_check"] is True
+    assert "Radiology" in q["agents"] and "Pathology" in q["agents"]
+    assert v["current"]["presenter"] == {"user": "priya", "name": "Dr Priya Nair", "department": "breast_surgery", "department_name": "Breast Surgery"}
+    assert v["current"]["elapsed_seconds"] == 0
+    # a head joins: present as a person, no longer stood in for; PM-JAY counts Medical Oncology
+    events = []
+    monkeypatch.setattr(live, "broadcast", lambda m, ev, **kw: events.append(ev) or True)
+    join_and_admit(tc, mid, "dev")
+    assert events[-1]["type"] == "admit" and events[-1]["quorum"]["present"] == 1
+    q = As(tc, "priya").get(f"/meetings/{mid}").json()["quorum"]
+    med = next(h for h in q["heads"] if h["id"] == "medical_oncology")
+    assert med["present"] is True and med["by"] == "Dr Dev" and "Medical Oncology" not in q["agents"] and q["pmjay"]["medical"] is True and q["pmjay"]["present"] == 2
+    # the elapsed time counts from the moment the case came on the floor (not the countdown), is kept when the case ends; the record keeps the quorum
+    As(tc, "anil").post(f"/meetings/{mid}/timer", json={"action": "start", "minutes": 10})
+    s = meetings.need(mid); s["live"]["case_started_at"] -= 125; board.save_session(s)
+    assert 124 <= As(tc, "priya").get(f"/meetings/{mid}").json()["current"]["elapsed_seconds"] <= 127
+    # Stop then Start with the same minutes resumes the countdown; other minutes reset it (review M2)
+    s = meetings.need(mid); s["live"]["timer"]["started_at"] -= 100; board.save_session(s)
+    As(tc, "anil").post(f"/meetings/{mid}/timer", json={"action": "stop"})
+    left = As(tc, "priya").get(f"/meetings/{mid}").json()["current"]["timer"]["seconds_left"]
+    assert 495 <= left <= 501
+    assert As(tc, "anil").post(f"/meetings/{mid}/timer", json={"action": "start", "minutes": 10}).json()["timer"]["seconds_left"] <= 501
+    assert As(tc, "anil").post(f"/meetings/{mid}/timer", json={"action": "start", "minutes": 5}).json()["timer"]["seconds_left"] == 300
+    r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-002/end")
+    assert r.status_code == 200
+    row = As(tc, "priya").get(f"/meetings/{mid}").json()["agenda"]["discussion"][0]
+    assert row["case_id"] == "TB-002" and 124 <= row["elapsed_seconds"] <= 128
+    r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-002/decision", json={"outcome": "decision", "decision_text": "Surgery first", "intent": "curative", "responsible_doctor": "Dr Priya Nair"})
+    assert r.status_code == 200, r.text
+    rec = r.json()["record"]
+    assert rec["quorum"]["present"] == 1 and rec["quorum"]["agents"] and rec["quorum"]["pmjay"]["present"] == 2
+    assert "quorum" in store.get_state("TB-002")["board_records"][-1]
+    # the presenter changes with the case (TB-001 has no owner, no chosen presenter and was created by the coordinator: nobody); the event carries the quorum
+    c = store.get_case("TB-001"); c["team"] = None; c.pop("presenter", None); c["created_by"] = "anil"; store.save_case(c)
+    As(tc, "anil").post(f"/meetings/{mid}/current", json={"case_id": "TB-001"})
+    assert events[-1]["type"] == "current" and events[-1]["presenter"] is None and events[-1]["quorum"]["total"] == 5 and events[-1]["elapsed_seconds"] <= 1
+
+
+def test_the_creating_doctor_presents_when_the_file_has_no_team_owner(tc):
+    mid = started(tc, discussion=("TB-002",), noting=())
+    c = store.get_case("TB-002"); c["department"] = "breast_surgery"; c["team"] = {"residents": []}; c["created_by"] = "priya"; c.pop("presenter", None); store.save_case(c)
+    join_and_admit(tc, mid, "priya")
+    v = As(tc, "priya").get(f"/meetings/{mid}").json()
+    assert v["current"]["presenter"]["user"] == "priya" and v["agenda"]["discussion"][0]["presenter_name"] == "Dr Priya Nair" and v["can"]["present"] is True
+    # created by the coordinator, or by a doctor of another department: nobody presents by default
+    c = store.get_case("TB-002"); c["created_by"] = "anil"; store.save_case(c)
+    assert As(tc, "priya").get(f"/meetings/{mid}").json()["current"]["presenter"] is None
+    c = store.get_case("TB-002"); c["created_by"] = "ravi"; store.save_case(c)
+    assert As(tc, "priya").get(f"/meetings/{mid}").json()["current"]["presenter"] is None
+    # a chosen presenter or a team owner still wins
+    c = store.get_case("TB-002"); c["created_by"] = "priya"; c["team"] = {"owner": "asha", "residents": []}; store.save_case(c)
+    assert As(tc, "priya").get(f"/meetings/{mid}").json()["current"]["presenter"]["user"] == "asha"
+
+
+def test_old_sessions_route_never_carries_the_chat_and_filters_the_questions(tc):
+    mid = started(tc)
+    join_and_admit(tc, mid, "priya")
+    meetings._CHATTED.clear()
+    assert As(tc, "priya").post(f"/meetings/{mid}/chat", json={"text": "The MRI for SYN-200417 is signed."}).status_code == 200
+    As(tc, "priya").post(f"/meetings/{mid}/questions", json={"text": "Is the MRI final?"})
+    for who in ("ravi", "anil", "priya"):  # a doctor never admitted (Radiology is on the attendance sheet), the coordinator, a member
+        r = As(tc, who).get(f"/sessions/{mid}")
+        assert r.status_code == 200, (who, r.text)
+        assert "chat" not in r.json()["session"] and "SYN-200417 is signed" not in r.text, who
+    assert As(tc, "priya").get(f"/meetings/{mid}").json()["chat"][-1]["text"].endswith("is signed.")
+
+
+def test_an_outside_expert_reads_the_chat_with_the_identity_withheld(tc, monkeypatch):
+    mid = started(tc)
+    join_and_admit(tc, mid, "priya")
+    code = As(tc, "anil").post(f"/meetings/{mid}/code").json()["value"]
+    As(tc, "guest").post("/meetings/join", json={"code": code})
+    As(tc, "anil").post(f"/meetings/{mid}/admit", json={"user": "guest"})
+    As(tc, "anil").post(f"/meetings/{mid}/current", json={"case_id": "TB-002"})
+    sent, shapes = [], []
+    monkeypatch.setattr(live, "broadcast", lambda m, ev, shape=None: (sent.append(ev), shapes.append(shape)) and True)
+    meetings._CHATTED.clear()
+    assert As(tc, "priya").post(f"/meetings/{mid}/chat", json={"text": "SYN-200417: the biopsy is final."}).status_code == 200
+    assert As(tc, "priya").get(f"/meetings/{mid}").json()["chat"][-1]["text"].startswith("SYN-200417")
+    g = As(tc, "guest").get(f"/meetings/{mid}").json()["chat"][-1]["text"]
+    assert "SYN-200417" not in g and "[withheld]" in g
+    shaped = shapes[-1]("guest", org.roles("guest"), sent[-1])
+    assert "SYN-200417" not in shaped["message"]["text"] and "[withheld]" in shaped["message"]["text"]
+    assert shapes[-1]("priya", org.roles("priya"), sent[-1])["message"]["text"].startswith("SYN-200417")
+
+
+def test_quorum_counts_the_attendance_sheet_and_the_pmjay_seat(tc, monkeypatch):
+    mid = started(tc, discussion=("TB-002",), noting=())
+    # nobody admitted, but Radiology marked present on the old attendance sheet: a head present without a name
+    s = meetings.need(mid); s.setdefault("attendance", {})["radiology"] = "present"; board.save_session(s)
+    q = As(tc, "anil").get(f"/meetings/{mid}").json()["quorum"]
+    rad = next(h for h in q["heads"] if h["id"] == "radiology")
+    assert rad["present"] is True and rad["by"] is None and q["present"] == 1 and "Radiology" not in q["agents"]
+    assert q["pmjay"]["present"] == 0 and q["pmjay"]["seat_check"] is False and "not_applicable" not in q["pmjay"]
+    # the surgical seat follows postboard's rule: a surgeon of the Case File's own surgical department fills it with a check note
+    monkeypatch.setattr(board, "_case_surgical", lambda c: ["breast_surgery"])
+    base0 = org.hospital()
+    monkeypatch.setattr(org, "hospital", lambda: {**base0, "surgical_departments": ["surgical_oncology", "breast_surgery"]})
+    join_and_admit(tc, mid, "priya")
+    q = As(tc, "anil").get(f"/meetings/{mid}").json()["quorum"]
+    assert q["pmjay"]["surgical"] is True and q["pmjay"]["present"] == 1 and q["pmjay"]["seat_check"] is True and "check the PM-JAY requirement" in q["pmjay"]["seat_note"]
+    # a hospital that is not empanelled: the line does not apply
+    base = org.hospital()
+    monkeypatch.setattr(org, "hospital", lambda: {**base, "pmjay_empanelled": False})
+    q = As(tc, "anil").get(f"/meetings/{mid}").json()["quorum"]
+    assert q["pmjay"]["not_applicable"] is True and "not PM-JAY empanelled" in q["pmjay"]["note"]
+
+
+def test_withdrawing_a_presenting_coordinators_right_does_not_stop_the_share(tc, monkeypatch):
+    mid = started(tc)
+    code = As(tc, "anil").post(f"/meetings/{mid}/code").json()["value"]
+    As(tc, "anil").post("/meetings/join", json={"code": code})  # the coordinator joins by code too (present at once)
+    events = []
+    monkeypatch.setattr(live, "broadcast", lambda m, ev, **kw: events.append(ev) or True)
+    assert As(tc, "anil").post(f"/meetings/{mid}/presenting", json={"on": True}).json()["presenting"] == "anil"
+    assert As(tc, "anil").post(f"/meetings/{mid}/present-allow", json={"user": "anil", "allowed": False}).status_code == 200
+    assert As(tc, "anil").get(f"/meetings/{mid}").json()["presenting"] == "anil"  # the coordinator presents by right, not by permission
+    assert events[-1]["type"] == "present_allowed"

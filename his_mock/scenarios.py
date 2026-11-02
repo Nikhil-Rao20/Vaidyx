@@ -53,10 +53,15 @@ CHECKLIST_SCENARIOS = (
 REQUIRED_SCENARIOS = PLAN_SCENARIOS + CHECKLIST_SCENARIOS
 
 PROTOCOLS = ("breast", "oral_cavity", "cervix", "lung_nsclc", "colorectal_rectum")  # ids in tumour_board/protocols/
+# night-v3 item 2.11: one patient each for four of the Phase 2 draft checklists (needs a clinician's check)
+NEW_PROTOCOLS = ("ovary", "prostate", "stomach", "lymphoma")
+ALL_PROTOCOLS = PROTOCOLS + NEW_PROTOCOLS
 BOARD_HEADS = ("Radiology", "Medical Oncology", "Surgical Oncology", "Pathology")
 PHASES = (3, 4, 5, 6, 8)
-N_TREATING, N_SUPPORTING = 22, 8
-MIN_PATIENTS, MAX_PATIENTS = 15, 20
+# plan section 4 lists 22 treating and 8 supporting departments; night-v3 item 2.11 adds Cardiology (treating), which reports the
+# 2D echocardiography of the lymphoma work-up
+N_TREATING, N_SUPPORTING = 23, 8
+MIN_PATIENTS, MAX_PATIENTS = 15, 30  # V2 asked for 15 to 20; night-v3 item 2.11 adds four (P20 to P23)
 
 # order_status -> the report statuses it allows (lifecycle in research/indian_his.md)
 LIFECYCLE = {
@@ -235,7 +240,7 @@ def validate(data):
         add(f"department code used twice: {x}")
     groups = [d.get("group") for d in data["departments"]]
     if groups.count("treating") != N_TREATING:
-        add(f"{groups.count('treating')} treating departments, plan section 4 lists {N_TREATING}")
+        add(f"{groups.count('treating')} treating departments, the seed needs {N_TREATING} (plan section 4 lists 22, plus Cardiology)")
     if groups.count("supporting") != N_SUPPORTING:
         add(f"{groups.count('supporting')} supporting departments, plan section 4 lists {N_SUPPORTING}")
     codes = {d.get("code") for d in data["departments"]}
@@ -333,7 +338,7 @@ def validate(data):
         elif p.get("protocol") != cfs[0].get("protocol"):
             add(f"{where}: protocol must be the first case file's protocol")
         for cf in cfs:
-            if cf.get("protocol") not in PROTOCOLS:
+            if cf.get("protocol") not in ALL_PROTOCOLS:
                 add(f"{where}: unknown protocol {cf.get('protocol')!r}")
             if cf.get("owner") not in treating:
                 add(f"{where}: case file owner {cf.get('owner')!r} is not a treating department")
@@ -565,3 +570,23 @@ def validate(data):
         if any("aadhaar" in str(k).lower() for k in p):
             add(f"patient {p.get('slot')}: no Aadhaar field on a patient")
     return problems
+
+
+def main(argv=None):
+    """`python -m his_mock.scenarios --validate`: print every problem of scenarios.json; exit 1 when there is one."""
+    import argparse
+
+    ap = argparse.ArgumentParser(prog="python -m his_mock.scenarios", description="Check the V2 scenario fixtures (SYNTHETIC).")
+    ap.add_argument("--validate", action="store_true", help="validate scenarios.json (the default action)")
+    ap.add_argument("--path", help="another fixtures file")
+    args = ap.parse_args(argv)
+    data = load(args.path)
+    problems = validate(data)
+    for p in problems:
+        print(p)
+    print(f"{len(problems)} problem(s): {len(data['patients'])} patients, {len(data['scenarios'])} scenarios")
+    return 1 if problems else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

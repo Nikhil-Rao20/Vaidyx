@@ -4,28 +4,50 @@
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Bot, CheckCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown, CircleAlert, Hourglass, ListChecks, MessageSquareQuote, ShieldCheck, Sparkles } from "lucide-react";
-import type { Citation, ProseSection, Slot, SlotSection, SlotsResponse } from "../types";
+import type { Citation, DocFinal, ProseSection, Slot, SlotSection, SlotsResponse } from "../types";
 import { SlotLine, type SlotContext, type SlotHandlers } from "./SlotLine";
-import { LoadingButton, NotYetState, SkeletonLines, StatusChip, docTitleOf, fmtDateTime, indianDates, modelLabel } from "./common";
+import { LoadingButton, NotYetState, SkeletonLines, StatusChip, NotSigned, docTitleOf, finalWordOf, fmtDate, fmtDateTime, indianDates, modelLabel } from "./common";
+import type { CaseCitation } from "../steps/types";
+import { fieldOf } from "@/features/meetings/components/DecisionForm";
 import { cn } from "@/lib/utils";
+import { consultantTitle } from "@/lib/format";
 
-type Docs = Array<{ doc_id: string; filename: string; classification?: { title?: string } }>;
+type Docs = Array<{ doc_id: string; filename: string; classification?: { title?: string }; final?: DocFinal }>;
 const OPEN = new Set(["not_found", "waiting", "needs_confirmation"]);
 const isQuestion = (s: Slot) => (s.fact_id ?? s.id.replace(/^fact:/, "")) === "clinical_question";
 
-function Cites({ cites, docs, h }: { cites?: Citation[]; docs?: Docs; h: SlotHandlers }) {
-  return (
-    <>
-      {(cites ?? []).slice(0, 3).map((c, j) => {
-        const title = docTitleOf(docs, c.doc_id, c.doc_title);
-        return (
-          <button key={j} type="button" className="quote-chip ml-1 align-middle active:scale-95" onClick={() => h.openSource({ docId: c.doc_id, page: c.page ?? 0, quote: c.quote, title })} title={`Open ${title} with the quote marked`}>
-            {title}{typeof c.page === "number" ? ` p. ${c.page + 1}` : ""}
-          </button>
-        );
-      })}
-    </>
-  );
+/** The field words of the board-record citations the decision record table does not hold (code-built lines of the Case summary). */
+const BOARD_FIELD: Record<string, string> = { board_date: "Date", outcome_type: "Outcome", outcome: "Outcome", versions: "Correction", intent_as_recorded: "Treatment intent", divergent_opinions: "Divergent views", deferred_reason: "What is awaited" };
+const ACTION_FIELD: Record<string, string> = { label: "task", department: "department", due: "due date", completed: "done", status: "status" };
+
+/** One citation chip: a record line opens its report with the quote marked (as before); the Case summary (night-v3 3.4) also cites a
+ *  board-record field ("Board DD/MM/YYYY, Decision", opens Board decisions when `onBoard` is given), an action, the stage confirmation
+ *  or a member's card (no click: the quote shows on hover). */
+export function CiteChip({ c, docs, h, onBoard }: { c: Citation | CaseCitation; docs?: Docs; h: Pick<SlotHandlers, "openSource">; onBoard?: () => void }) {
+  const kind = "kind" in c ? c.kind : undefined;
+  if (!kind) {
+    const r = c as Citation;
+    const title = docTitleOf(docs, r.doc_id, r.doc_title);
+    return (
+      <button type="button" className="quote-chip ml-1 align-middle active:scale-95" onClick={() => h.openSource({ docId: r.doc_id, page: r.page ?? 0, quote: r.quote, title })} title={`Open ${title} with the quote marked`}>
+        {title}{typeof r.page === "number" ? ` p. ${r.page + 1}` : ""}<NotSigned word={finalWordOf(docs, r.doc_id)} />
+      </button>
+    );
+  }
+  const x = c as Exclude<CaseCitation, { kind?: undefined }>;
+  const quote = x.quote ? `Quoted: ${x.quote}` : undefined;
+  if (x.kind === "board") {
+    const words = `Board${x.board_date ? ` ${fmtDate(x.board_date)}` : ""}, ${x.label || BOARD_FIELD[x.field] || fieldOf(x.field).label}`;
+    return onBoard
+      ? <button type="button" className="quote-chip ml-1 align-middle active:scale-95" onClick={onBoard} title={quote ? `${quote}. Opens Board decisions` : "Opens Board decisions"} data-cite="board">{words}</button>
+      : <span className="quote-chip ml-1 align-middle" title={quote} data-cite="board">{words}</span>;
+  }
+  const words = x.kind === "action" ? `Action: ${x.label || ACTION_FIELD[x.field] || x.field.replace(/_/g, " ")}` : x.kind === "staging" ? "Stage confirmation" : x.kind === "card" ? "Member's card" : "Record";
+  return <span className="quote-chip ml-1 align-middle" title={quote} data-cite={x.kind}>{words}</span>;
+}
+
+export function Cites({ cites, docs, h, onBoard, max = 3 }: { cites?: Array<Citation | CaseCitation>; docs?: Docs; h: Pick<SlotHandlers, "openSource">; onBoard?: () => void; max?: number }) {
+  return <>{(cites ?? []).slice(0, max).map((c, j) => <CiteChip key={j} c={c} docs={docs} h={h} onBoard={onBoard} />)}</>;
 }
 
 export function ProseBlock({ p, docs, h }: { p: string | ProseSection; docs?: Docs; h: SlotHandlers }) {
@@ -206,7 +228,7 @@ export function SummaryColumn({ slots, derived, ctx, h, onReviewProse, onPrepare
               <ol className="mt-1 list-decimal space-y-1 pl-5 text-sm">{prose.points_for_review!.map((pt, i) => <li key={i} className="text-foreground">{indianDates(pt.text)}<Cites cites={pt.citations} docs={docs} h={h} /></li>)}</ol>
             </div>
           ) : null}
-          {proseShown && !prose.reviewed && ctx.resident ? <p className="mt-2 text-xs text-muted-foreground">Dr {ctx.consultantName} reads it against the records and marks it reviewed.</p> : null}
+          {proseShown && !prose.reviewed && ctx.resident ? <p className="mt-2 text-xs text-muted-foreground">{consultantTitle(ctx.consultantName, true)} reads it against the records and marks it reviewed.</p> : null}
           {prose.status === "ready" && !prose.paragraphs.length ? <p className="text-sm text-muted-foreground">The summary came back empty: nothing could be written without a verified quote.</p> : null}
           {prose.status === "ready" && !prose.reviewed && !canReview ? <p className="mt-2 text-xs text-muted-foreground">Only a doctor of the owning department marks this reviewed.</p> : null}
           {prose.status === "ready" && !prose.reviewed && canReview && !ctx.resident ? <p className="mt-2 text-xs text-muted-foreground print:hidden">Read it against the records; every sentence keeps its quote. The export opens after review.</p> : null}

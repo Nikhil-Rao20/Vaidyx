@@ -2,11 +2,13 @@
 // before the Case File can be marked ready), the urgency tag 1 to 5 (required, no default: the consultant's own call),
 // the board date (the next planned meeting when there is one), the presenter (you), a join code for residents, and the
 // consent to discuss with outside experts. A read-back of the whole Case File sits at the end; for a cancer with no checklist
-// yet it says what the generic rule checks (four core records, owner decision R05-Q04).
-import { useEffect, useMemo } from "react";
+// yet it says what the generic rule checks (four core records, owner decision R05-Q04; the blood cancer rule for "generic_haem").
+// The board question takes dictation (night-v3 4.4): the words go into the box as an edit, kept with the form like typed text.
+import { useEffect, useMemo, useRef } from "react";
 import { motion } from "motion/react";
 import { CalendarDays, ClipboardList, Flame, KeyRound, ShieldCheck, TriangleAlert, UserRound } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { MicButton } from "@/components/MicButton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Field } from "@/components/Field";
 import { DateInput } from "@/components/DateInput";
@@ -16,7 +18,7 @@ import { useMeetings, useOrg } from "@/hooks/useQueries";
 import { useSession } from "@/lib/session";
 import { ageSex, drName, formatDate, parseDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { GENERIC_RULE, NO_CHECKLIST_WORDS, cleanCancerName, isGeneric } from "@/lib/cancers";
+import { NO_CHECKLIST_WORDS, cleanCancerName, genericRecords, genericRule, isGeneric } from "@/lib/cancers";
 import { WINDOW_CHOICES, type NewCaseForm } from "@/features/newcase/form";
 import { NOT_RECORDED } from "@/features/newcase/StepCancer";
 
@@ -62,6 +64,7 @@ export function StepLogistics({ form, onChange, settingLabel, protocolLabel }: {
   protocolLabel?: string;
 }) {
   const { me } = useSession();
+  const questionRef = useRef<HTMLTextAreaElement>(null);
   const meetings = useMeetings();
   const owners = useOwnerChoices();
   const needOwner = owners.length > 1;
@@ -131,8 +134,9 @@ export function StepLogistics({ form, onChange, settingLabel, protocolLabel }: {
       </fieldset>
 
       <Field id="board-question" label="The question for the board"
-        hint={generic ? "One of the four core records of a cancer with no checklist yet: needed before the Case File can be marked ready. You can type it later." : "Needed before the Case File can be marked ready. You can type it later."}>
-        <Textarea rows={3} value={form.boardQuestion} onChange={(e) => onChange({ boardQuestion: e.target.value })} placeholder="e.g. Upfront surgery or neoadjuvant therapy?" maxLength={600} />
+        hint={generic ? "One of the four core records of a cancer with no checklist yet: needed before the Case File can be marked ready. You can type it later." : "Needed before the Case File can be marked ready. You can type it later."}
+        trailing={<div className="flex justify-end"><MicButton target={questionRef} screen="board-question" context="question" label="Dictate the question" onInsert={(next) => { if (next.length > 600) onChange({ boardQuestion: next.slice(0, 600) }); }} /></div>}>
+        <Textarea ref={questionRef} rows={3} value={form.boardQuestion} onChange={(e) => onChange({ boardQuestion: e.target.value })} placeholder="e.g. Upfront surgery or neoadjuvant therapy?" maxLength={600} />
       </Field>
 
       {needOwner ? (
@@ -157,7 +161,8 @@ export function StepLogistics({ form, onChange, settingLabel, protocolLabel }: {
           <KeyValue label="UHID" value={p?.uhid} mono />
           <KeyValue label="Cancer" value={cancerWords(form, protocolLabel)} />
           {generic ? (
-            <KeyValue label="Checked" value={<span className="inline-flex items-start gap-1" data-testid="generic-readback"><ClipboardList className="mt-0.5 size-3.5 shrink-0" aria-hidden /> {GENERIC_RULE}</span>} />
+            <KeyValue label="Checked" value={<span className="inline-flex items-start gap-1" data-testid="generic-readback"><ClipboardList className="mt-0.5 size-3.5 shrink-0" aria-hidden /> {genericRule(form.protocol)}</span>}
+              hint={<span className="mt-0.5 block" data-testid="generic-records">{genericRecords(form.protocol).join("; ")}</span>} />
           ) : (
             <KeyValue label="Setting" value={form.setting === NOT_RECORDED ? "not recorded yet" : settingLabel} fallback="none" />
           )}

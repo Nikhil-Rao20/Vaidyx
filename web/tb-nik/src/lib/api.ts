@@ -67,6 +67,14 @@ function messageFor(status: number, data: unknown): string {
   }
 }
 
+// Set while the page is being left (pagehide): a request started then must outlive the page, or the browser cancels it (2 Nov test pass).
+let leaving = false;
+/** Runs fn with every request it starts marked keepalive, so the request reaches the server after the page is gone. */
+export function whileLeaving(fn: () => void) {
+  leaving = true;
+  try { fn(); } finally { leaving = false; }
+}
+
 export async function request<T = unknown>(path: string, opts: RequestOptions = {}): Promise<T> {
   const method = opts.method ?? "GET";
   const headers: Record<string, string> = { "X-Requested-With": "tb-nik", Accept: "application/json", ...(opts.headers ?? {}) };
@@ -76,7 +84,7 @@ export async function request<T = unknown>(path: string, opts: RequestOptions = 
   else if (opts.body !== undefined) { headers["Content-Type"] = "application/json"; body = JSON.stringify(opts.body); }
   let res: Response;
   try {
-    res = await fetch(path, { method, headers, body, credentials: "same-origin", signal: opts.signal });
+    res = await fetch(path, { method, headers, body, credentials: "same-origin", signal: opts.signal, keepalive: leaving || undefined });
   } catch (e) {
     if ((e as Error).name === "AbortError") throw e;
     throw new ApiError(0, "No connection to the server. Check the network and try again.", "network");

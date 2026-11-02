@@ -1,6 +1,8 @@
 // The Case File list: the views (All, Mine, Needs me, ...), the search, the filter panel, the sort, the active filter tokens
 // and the rows. The whole list comes once from GET /case-list and every match runs here, so the search and the filters react
 // as the person types; the query lives in the URL (?status=ready&q=...) so a link or a saved view lands on the same list.
+// A scheduled row the reader may act on (its owner's consultant, the MDT Coordinator) opens Move / Take off the agenda from its
+// meeting chip; the dialogs live here, outside the rows' links (night-v3 item 1.6).
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ArrowUpDown, Plus } from "lucide-react";
@@ -11,14 +13,17 @@ import { FilterButton, ActiveFilters } from "@/components/FilterPanel";
 import { DataList } from "@/components/DataList";
 import { EmptyState } from "@/components/EmptyState";
 import { notify } from "@/components/Toasts";
-import { CaseRow } from "@/features/home/CaseRow";
+import { CaseRow, type MeetingAction } from "@/features/home/CaseRow";
+import { moveCase, withdrawCase } from "@/features/casefile/api";
+import { MoveMeetingDialog, TakeOffDialog } from "@/features/casefile/components/MoveMeetingDialog";
+import { fmtDate } from "@/features/casefile/components/common";
 import { ViewsBar } from "@/features/home/ViewsBar";
 import { useCaseList } from "@/hooks/useQueries";
 import { useSavedFilters } from "@/hooks/useProfile";
 import { useDebounce } from "@/hooks/useDebounce";
 import type { Me } from "@/lib/session";
 import type { CaseListItem, FilterOption } from "@/lib/types";
-import { SORT_CHOICES, VIEWS, activeKeys, applyFilters, parseQuery, sortCases, toSearchParams, type FilterQuery, type SortKey } from "@/lib/filters";
+import { SORT_CHOICES, VIEWS, activeKeys, applyFilters, isLinkedOnly, linkedLast, ownRows, parseQuery, sortCases, toSearchParams, type FilterQuery, type SortKey } from "@/lib/filters";
 import { errorMessage } from "@/hooks/useAsyncAction";
 
 export interface ListCounts { all: number; ready: number; waiting: number }
@@ -44,19 +49,30 @@ export function CaseFileList({ me, canCreate, onCount }: { me: Me; canCreate: bo
   };
 
   const list = useCaseList({});
+  const [act, setAct] = useState<{ c: CaseListItem; action: MeetingAction } | null>(null);
+  const actName = act ? act.c.patient?.name || act.c.case_id : "";
+  const afterMeeting = async (title: string, text: string) => {
+    notify.success(title, text);
+    await list.refetch();
+  };
   const allCases = useMemo(() => list.data?.cases ?? [], [list.data]);
-  const shown = useMemo(() => sortCases(applyFilters(allCases, query, me.user), sort), [allCases, query, me.user, sort]);
+  // Another department's Case File linked to one of this department's own (night-v3 item 1.3) is listed last, under its own heading,
+  // and left out of every count: the views, the footer, the gift box and the coordinator's card count the person's own files only.
+  const ownCases = useMemo(() => ownRows(allCases), [allCases]);
+  const shown = useMemo(() => linkedLast(sortCases(applyFilters(allCases, query, me.user), sort)), [allCases, query, me.user, sort]);
+  const ownShown = useMemo(() => ownRows(shown).length, [shown]);
+  const firstLinked = useMemo(() => shown.find(isLinkedOnly)?.case_id, [shown]);
   const saved = useSavedFilters();
   const counts = useMemo(() => {
     const out: Record<string, number> = {};
-    for (const v of VIEWS) out[v.id] = applyFilters(allCases, v.query, me.user).length;
-    for (const s of saved.list) out[`saved:${s.name}`] = applyFilters(allCases, s.query as FilterQuery, me.user).length;
+    for (const v of VIEWS) out[v.id] = applyFilters(ownCases, v.query, me.user).length;
+    for (const s of saved.list) out[`saved:${s.name}`] = applyFilters(ownCases, s.query as FilterQuery, me.user).length;
     return out;
-  }, [allCases, saved.list, me.user]);
+  }, [ownCases, saved.list, me.user]);
   // The counts drive the gift box and the coordinator's ready card.
   useEffect(() => {
-    if (list.data) onCount?.({ all: allCases.length, ready: allCases.filter((c) => c.status?.key === "ready").length, waiting: allCases.filter((c) => c.status?.key === "waiting_department").length });
-  }, [allCases, onCount, list.data]);
+    if (list.data) onCount?.({ all: ownCases.length, ready: ownCases.filter((c) => c.status?.key === "ready").length, waiting: ownCases.filter((c) => c.status?.key === "waiting_department").length });
+  }, [ownCases, onCount, list.data]);
 
   const organs = useMemo<FilterOption[]>(() => {
     const m = new Map<string, string>();
@@ -116,7 +132,13 @@ export function CaseFileList({ me, canCreate, onCount }: { me: Me; canCreate: bo
         retrying={list.isFetching}
         what="the Case File list"
         keyFor={(c) => c.case_id}
-        renderRow={(c) => <CaseRow c={c} q={query.q || ""} showOwner={!treating || coordinator || !c.mine} />}
+        renderRow={(c) => (
+          <>
+            {c.case_id === firstLinked ? <h2 className="mb-1.5 pt-3 text-sm font-semibold text-muted-foreground">Linked Case Files of other departments</h2> : null}
+            <CaseRow c={c} q={query.q || ""} showOwner={!treating || coordinator || !c.mine}
+              onMeeting={coordinator || (c.mine && c.relation === "owner") ? (action) => setAct({ c, action }) : undefined} />
+          </>
+        )}
         empty={
           hasAny || filtersOn || query.q ? (
             <EmptyState kind="search" title={query.q ? `Nothing matches "${query.q}"` : "No Case File matches these filters"} text={query.q ? "Try a part of the UHID, the OP or IP number, or the patient's name." : "Take a filter off, or choose another view."} action={<Button type="button" variant="outline" size="sm" onClick={() => { setText(""); setQuery({}); }}>Show all</Button>} />
@@ -124,8 +146,12 @@ export function CaseFileList({ me, canCreate, onCount }: { me: Me; canCreate: bo
             <EmptyState kind="empty" title="No Case Files yet" text={canCreate ? "Start with one UHID: Vaidyx fetches the records and shows what is missing for the board." : "When a treating doctor adds you to a Case File, it appears here."} action={canCreate ? <Button asChild><Link to="/cases/new"><Plus className="size-4" aria-hidden /> New Case File</Link></Button> : undefined} />
           )
         }
-        footer={shown.length && list.data ? <p className="pt-2 text-center text-xs text-muted-foreground">{shown.length === allCases.length ? `${allCases.length} Case Files` : `${shown.length} of ${allCases.length} Case Files`}. Cancer and setting as recorded by the treating doctor.</p> : null}
+        footer={shown.length && list.data ? <p className="pt-2 text-center text-xs text-muted-foreground">{ownShown === ownCases.length ? `${ownCases.length} Case Files` : `${ownShown} of ${ownCases.length} Case Files`}{shown.length > ownShown ? `, and ${shown.length - ownShown} linked of other departments` : ""}. Cancer and setting as recorded by the treating doctor.</p> : null}
       />
+      <MoveMeetingDialog open={act?.action === "move"} onOpenChange={(o) => { if (!o) setAct(null); }} patient={actName} currentMeetingId={act?.c.meeting_id} currentDate={act?.c.board_date}
+        onConfirm={async (mid, reason) => { const r = await moveCase(act!.c.case_id, mid, reason); await afterMeeting("Moved to another meeting", `${actName}: the meeting of ${fmtDate(r.meeting?.date || r.board_date)}. The MDT Coordinator is told.`); }} />
+      <TakeOffDialog open={act?.action === "withdraw"} onOpenChange={(o) => { if (!o) setAct(null); }} patient={actName} currentDate={act?.c.board_date}
+        onConfirm={async (reason) => { await withdrawCase(act!.c.case_id, reason); await afterMeeting("Taken off the agenda", `${actName}. The MDT Coordinator is told.`); }} />
     </section>
   );
 }

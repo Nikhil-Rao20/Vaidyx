@@ -79,17 +79,19 @@ def test_pmjay_on_and_off_and_surgeon_outside_list(data):
 
 def test_patient_count_and_protocol_spread(data):
     pts = data["patients"]
-    assert 15 <= len(pts) <= 20
+    assert sc.MIN_PATIENTS <= len(pts) <= sc.MAX_PATIENTS and len(pts) == 23
     per = Counter(cf["protocol"] for p in pts for cf in p["case_files"])
     for proto in sc.PROTOCOLS:
         assert per[proto] >= 2, (proto, per[proto])
-    assert set(per) <= set(sc.PROTOCOLS)
+    for proto in sc.NEW_PROTOCOLS:  # night-v3 item 2.11: one patient each
+        assert per[proto] == 1, (proto, per[proto])
+    assert set(per) <= set(sc.ALL_PROTOCOLS)
 
 
 def test_protocol_ids_exist_in_vaidyx_tb():
     if not PROTOCOL_DIR.is_dir():
         pytest.skip("tumour_board protocols not present")
-    for proto in sc.PROTOCOLS:
+    for proto in sc.ALL_PROTOCOLS:
         assert json.loads((PROTOCOL_DIR / f"{proto}.json").read_text())["id"] == proto
 
 

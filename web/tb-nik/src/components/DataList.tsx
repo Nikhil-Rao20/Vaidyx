@@ -5,6 +5,15 @@ import { ChevronRight } from "lucide-react";
 import { ErrorState } from "@/components/ErrorState";
 import { cn } from "@/lib/utils";
 
+/** The classes of a row (DataRow, and a row that carries its own control beside a stretched link, CaseRow). */
+export const rowClass = (clickable: boolean, className?: string) =>
+  cn("group surface-inner row-lift flex min-h-12 items-center gap-3 px-3 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring", clickable && "cursor-pointer hover:border-tint-line", className);
+
+/** The arrow at the end of a row, shown on hover and focus. */
+export function RowArrow() {
+  return <ChevronRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 group-focus-within:opacity-100" aria-hidden />;
+}
+
 /** Rows that lift and show an arrow on hover; the whole row is the link. Roomy: 48 px minimum. */
 export function DataRow({ to, onClick, children, className, arrow = true }: {
   to?: string;
@@ -21,7 +30,7 @@ export function DataRow({ to, onClick, children, className, arrow = true }: {
       {arrow && (to || onClick) ? <ChevronRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" aria-hidden /> : null}
     </>
   );
-  const cls = cn("group surface-inner row-lift flex min-h-12 items-center gap-3 px-3 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring", (to || onClick) && "cursor-pointer hover:border-tint-line", className);
+  const cls = rowClass(!!(to || onClick), className);
   if (to) return <Link to={to} className={cls}>{inner}</Link>;
   if (onClick) return <button type="button" onClick={onClick} className={cn(cls, "w-full")}>{inner}</button>;
   return <div className={cls}>{inner}</div>;

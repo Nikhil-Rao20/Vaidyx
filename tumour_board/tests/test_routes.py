@@ -6,7 +6,7 @@ import pytest
 
 from tumour_board import org, protocol, rules
 
-PROTOCOLS = ("breast", "cervix", "colorectal_rectum", "cup", "generic", "lung_nsclc", "oral_cavity")
+PROTOCOLS = tuple(sorted(p["id"] for p in protocol.list_protocols()))  # every shipped protocol is routed (night-v3 item 2.1)
 
 
 def _all_records():
@@ -110,9 +110,13 @@ def test_root_admin_override_wins(data_root):
 def test_resolve_route_fallbacks(data_root):
     assert org.resolve_route(None, "Radiology") == ("Radiology", "radiology", "department")
     assert org.resolve_route(None, "Laboratory Medicine") == ("Biochemistry", "biochemistry", "department")  # V1 name
-    assert org.resolve_route(None, "Cardiology") == ("Cardiology", None, "department")  # unresolved: the coordinator handles it (V1 rule)
+    assert org.resolve_route(None, "Psychiatry") == ("Psychiatry", None, "department")  # unresolved: the coordinator handles it (V1 rule)
     assert org.resolve_route(None, "Tumour Board coordinator") == (org.COORDINATOR_NAME, None, "coordinator")
-    assert org.resolve_route("cardiology", "Radiology") == ("Radiology", "radiology", "department")  # a stale override falls back
+    assert org.resolve_route("psychiatry", "Radiology") == ("Radiology", "radiology", "department")  # a stale override falls back
+    # no ophthalmology or cardiology department (night-v3 2.1): an eye examination or an echo is the owning team's, "route": "owner" or not
+    assert org.resolve_route(None, "Cardiology") == (org.OWNER_NAME, None, "owner")
+    assert org.resolve_route("owner", "Ophthalmology", None) == (org.OWNER_NAME, None, "owner")
+    assert org.resolve_route("owner", "Ophthalmology", "Paediatric Oncology") == ("Paediatric Oncology", "paediatric_oncology", "owner")
     assert org.resolve_route("owner", "Medical Oncology", None) == ("Medical Oncology", "medical_oncology", "owner")
     assert org.resolve_route("owner", "Medical Oncology", "Pulmonology") == ("Pulmonology", "pulmonology", "owner")
 

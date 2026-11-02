@@ -481,3 +481,252 @@ def test_brief_is_written_without_pack_or_index(monkeypatch):
     assert brief["pack"] is None and searched == []  # no pack, no search while the index is loading
     assert any("still loading" in (e.get("observation") or "") for e in ev)
     assert [p["text"] for p in brief["points_for_review"]] == ["EGFR mutation analysis is awaited."] and brief["guardrail_removed"] == 1
+
+
+# ---- night-v3 items 6.3 and 6.4: the streamed live answer, statement by statement -------------------------------------------
+import json  # noqa: E402
+
+from tumour_board import guardrails  # noqa: E402
+
+CT_TEXT = "SYNTHETIC\nCECT THORAX REPORT\nSpiculated mass 3.2 cm in the right upper lobe.\nNo pleural effusion.\nReport status: FINAL"
+HP_TEXT = "SYNTHETIC\nHISTOPATHOLOGY REPORT\nAdenocarcinoma, moderately differentiated.\nReport status: FINAL"
+GOOD = {"text": "The CECT thorax records a spiculated mass of 3.2 cm in the right upper lobe.",
+        "citations": [{"doc_id": "Dct000001", "quote": "Spiculated mass 3.2 cm in the right upper lobe"}]}
+WRONG = {"text": "The CECT records a moderate pleural effusion.", "citations": [{"doc_id": "Dct000001", "quote": "Moderate pleural effusion"}]}
+ADVICE = {"text": "Surgery is recommended because there is no pleural effusion.", "citations": [{"doc_id": "Dct000001", "quote": "No pleural effusion."}]}
+END = {"end": True, "answer_found": True, "references": []}
+
+
+def _stream_case():
+    store.create_case("TB-STREAM", {"name": "SYNTHETIC, Stream Patient", "mrn": "SYN-900311", "agesex": "60 Y / M"}, "lung_nsclc", created_by="test")
+    add("TB-STREAM", make_doc("Dct000001", "ct", text=CT_TEXT), make_doc("Dhist0001", "histopathology", text=HP_TEXT),
+        make_doc("Doth00001", "other", text="SYNTHETIC\nLETTER\nPatient seen in OPD.\nReport status: FINAL"))
+    return "TB-STREAM"
+
+
+def _chunks(text, size=7):
+    return [text[i:i + size] for i in range(0, len(text), size)]
+
+
+class FakeModel:
+    """llm.stream and llm.chat replaced: the stream yields the given chunks (and raises `fail` after them when set); chat answers the scope
+    classifier with `category` and the one-shot call with `oneshot`. Records what was consumed, closed and asked."""
+
+    def __init__(self, monkeypatch, chunks, category="in_scope", oneshot=None, fail=None):
+        self.chunks, self.category, self.oneshot, self.fail = chunks, category, oneshot, fail
+        self.consumed, self.closed, self.streams, self.chats = 0, False, [], []
+        monkeypatch.setattr(agents.llm, "stream", self.stream)
+        monkeypatch.setattr(agents.llm, "chat", self.chat)
+        monkeypatch.setattr(agents.guidelines, "ready", lambda: False)
+
+    async def stream(self, role, msgs, max_tokens=1024, temperature=0.0, audit=None):
+        self.streams.append(msgs)
+        try:
+            for c in self.chunks:
+                self.consumed += 1
+                yield c
+            if self.fail:
+                raise self.fail
+        finally:
+            self.closed = True
+
+    async def chat(self, role, msgs, json_schema=None, **kw):
+        if json_schema is guardrails.CLASSIFIER_SCHEMA:
+            await asyncio.sleep(0.01)  # the classifier answers after the stream has begun
+            return {"category": self.category, "reason": "test"}
+        self.chats.append((msgs, json_schema))
+        return self.oneshot
+
+
+def _lines(*objs, final_newline=True):
+    text = "\n".join(json.dumps(o) for o in objs)
+    return text + ("\n" if final_newline else "")
+
+
+def _ask_streaming(case_id, question, role="radiology", history=None, callback=None):
+    got = []
+
+    def cb(stmt, i):
+        got.append((i, stmt["text"]))
+    res = asyncio.run(agents.ask(case_id, role, question, history, "dr.rao", on_statement=callback or cb))
+    return res, got
+
+
+@pytest.mark.parametrize("final_newline", [True, False])
+def test_streamed_answer_passes_on_only_verified_statements(monkeypatch, final_newline):
+    case_id = _stream_case()
+    fm = FakeModel(monkeypatch, _chunks(_lines(GOOD, WRONG, ADVICE, END, final_newline=final_newline)))
+    a, got = _ask_streaming(case_id, "What does the CT record about the lung mass?")
+    assert got == [(0, GOOD["text"])]
+    assert a["status"] == "answered" and [s["text"] for s in a["statements"]] == [GOOD["text"]]
+    assert a["statements"][0]["citations"][0]["doc_id"] == "Dct000001" and "note" not in a["statements"][0]
+    assert [x["reason"] for x in a["removed"]] == ["quote_not_found", "guardrail"] and a["dropped_unverified"] == 1
+    assert [x["text"] for x in a["removed"]] == [WRONG["text"], ADVICE["text"]]
+    assert a["streamed"] is True and isinstance(a["first_seconds"], float) and a["first_seconds"] <= a["seconds"]
+    assert a["kind"] == "AI agent, support only" and fm.closed and fm.chats == []  # no one-shot call
+    sys_ = fm.streams[0][0]["content"]
+    assert '{"end": true' in sys_ and "one JSON object on each line" in sys_ and "colleague" not in sys_
+    assert fm.streams[0][-1]["content"].endswith("QUESTION FROM THE BOARD: What does the CT record about the lung mass?")
+    ev = [e for e in store.read_audit(case_id) if e["kind"] == "agent_answer"]
+    assert ev[-1]["streamed"] is True and ev[-1]["statements"] == 1 and ev[-1]["malformed"] == 0
+
+
+def test_streamed_answer_stops_reading_after_the_end_line(monkeypatch):
+    case_id = _stream_case()
+    chunks = [_lines(GOOD), _lines({**END, "references": [{"ref_id": "G9", "quote": "x"}]}), "trailing words\n", _lines(WRONG)]
+    fm = FakeModel(monkeypatch, chunks)
+    a, got = _ask_streaming(case_id, "What does the CT record?")
+    assert got == [(0, GOOD["text"])] and fm.consumed == 2 and fm.closed
+    assert a["removed"] == [] and a["references"] == [] and a["references_dropped"] == 1  # an unknown passage id is never shown
+
+
+def test_streamed_answer_refused_by_the_scope_check_passes_nothing_on(monkeypatch):
+    case_id = _stream_case()
+    fm = FakeModel(monkeypatch, _chunks(_lines(GOOD, GOOD, END)), category="prognosis")
+    a, got = _ask_streaming(case_id, "Tell me about the outlook")
+    assert got == [] and a["status"] == "out_of_scope" and a["category"] == "prognosis" and a["statements"] == []
+    assert a["message"] == guardrails.REFUSALS["prognosis"] and fm.closed and fm.consumed < len(fm.chunks)
+    assert any(e["kind"] == "guardrail_input" for e in store.read_audit(case_id))
+    assert not any(e["kind"] == "agent_answer" for e in store.read_audit(case_id))
+
+
+def test_rule_refusal_with_a_callback_starts_no_stream(monkeypatch):
+    case_id = _stream_case()
+    fm = FakeModel(monkeypatch, _chunks(_lines(GOOD, END)))
+    a, got = _ask_streaming(case_id, "Which one would you pick for her?")
+    assert a["status"] == "out_of_scope" and a["category"] == "treatment_recommendation" and fm.streams == [] and got == []
+
+
+def test_malformed_stream_falls_back_to_the_one_shot_call_once(monkeypatch):
+    case_id = _stream_case()
+    fm = FakeModel(monkeypatch, ["Here is the answer:\n```json\n", "not json at all\n", "```"],
+                   oneshot={"answer_found": True, "statements": [GOOD, WRONG], "references": []})
+    got = []
+
+    async def cb(stmt, i):  # a coroutine callback is awaited
+        await asyncio.sleep(0)
+        got.append((i, stmt["text"]))
+    a = asyncio.run(agents.ask(case_id, "radiology", "What does the CT record?", None, "dr.rao", on_statement=cb))
+    assert got == [(0, GOOD["text"])] and len(fm.streams) == 1
+    assert [s for _, s in fm.chats] == [agents.LIVE_SCHEMA]  # the one-shot call, once, with today's prompt
+    assert "one JSON object on each line" not in fm.chats[0][0][0]["content"]
+    assert [x["reason"] for x in a["removed"]] == ["malformed", "malformed", "quote_not_found"]
+    assert [x["text"] for x in a["removed"][:2]] == ["Here is the answer:", "not json at all"]
+    assert a["removed"][0]["reason_label"] == agents.REMOVED_REASONS["malformed"]
+    assert a["status"] == "answered" and a["streamed"] is False and a["first_seconds"] is not None and a["dropped_unverified"] == 1
+
+
+def test_malformed_lines_beside_good_ones_are_dropped_without_a_fallback(monkeypatch):
+    case_id = _stream_case()
+    fm = FakeModel(monkeypatch, _chunks(_lines(GOOD) + '{"text": "half a line\n' + _lines(END)))
+    a, got = _ask_streaming(case_id, "What does the CT record?")
+    assert got == [(0, GOOD["text"])] and fm.chats == [] and [x["reason"] for x in a["removed"]] == ["malformed"]
+    assert a["removed"][0]["text"] == '{"text": "half a line'
+
+
+def test_a_stream_that_fails_after_a_statement_is_not_restarted(monkeypatch):
+    case_id = _stream_case()
+    fm = FakeModel(monkeypatch, _chunks(_lines(GOOD)) + ['{"text": "The CECT'], fail=agents.llm.LLMError("reasoner unreachable"))
+    got = []
+    with pytest.raises(agents.llm.LLMError):
+        asyncio.run(agents.ask(case_id, "radiology", "What does the CT record?", None, "dr.rao", on_statement=lambda s, i: got.append(s["text"])))
+    assert got == [GOOD["text"]] and len(fm.streams) == 1 and fm.chats == [] and fm.closed
+    ev = [e for e in store.read_audit(case_id) if e["kind"] == "agent_answer_failed"]
+    assert ev and ev[-1]["statements"] == 1 and "reasoner unreachable" in ev[-1]["error"]
+
+
+def test_a_stream_with_only_an_end_line_is_not_documented(monkeypatch):
+    case_id = _stream_case()
+    fm = FakeModel(monkeypatch, [_lines({"end": True, "answer_found": False, "references": []}, final_newline=False)])
+    a, got = _ask_streaming(case_id, "Is there a brain MRI report?")
+    assert got == [] and fm.chats == [] and a["status"] == "not_documented" and a["first_seconds"] is None and a["streamed"] is True
+    assert a["message"] == agents.NOT_DOCUMENTED
+
+
+def test_without_a_callback_nothing_is_streamed(monkeypatch):
+    case_id = _stream_case()
+    fm = FakeModel(monkeypatch, [], oneshot={"answer_found": True, "statements": [GOOD], "references": []})
+    a = asyncio.run(agents.ask(case_id, "radiology", "What does the CT record?", None, "dr.rao"))
+    assert fm.streams == [] and len(fm.chats) == 1 and a["status"] == "answered" and a["streamed"] is False
+    assert a["first_seconds"] == a["seconds"]
+
+
+def test_history_keeps_three_exchanges(monkeypatch):
+    case_id = _stream_case()
+    fm = FakeModel(monkeypatch, _chunks(_lines(GOOD, END)))
+    hist = [{"role": "user" if i % 2 == 0 else "assistant", "content": f"m{i}"} for i in range(8)]
+    _ask_streaming(case_id, "And its size?", history=hist)
+    msgs = fm.streams[0]
+    assert [m["content"] for m in msgs[2:-1]] == ["m2", "m3", "m4", "m5", "m6", "m7"] and msgs[0]["role"] == "system"
+    assert msgs[1]["content"].startswith("DOCUMENTS:") and msgs[-1]["content"].endswith("QUESTION FROM THE BOARD: And its size?")  # the documents first (item 6.4)
+
+
+def test_a_statement_from_another_specialtys_record_gets_the_note(monkeypatch):
+    case_id = _stream_case()
+    hp = {"text": "The histopathology records adenocarcinoma, moderately differentiated.",
+          "citations": [{"doc_id": "Dhist0001", "quote": "Adenocarcinoma, moderately differentiated."}]}
+    letter = {"text": "The letter records that the patient was seen in OPD.", "citations": [{"doc_id": "Doth00001", "quote": "Patient seen in OPD."}]}
+    FakeModel(monkeypatch, _chunks(_lines(GOOD, hp, letter, END)))
+    seen = []
+    a, _ = _ask_streaming(case_id, "What do the reports record?", callback=lambda s, i: seen.append(s.get("note")))
+    notes = [s.get("note") for s in a["statements"]]
+    assert notes == [None, "This is a histopathology record; the Pathology agent can say more.", None]  # an unknown type gets no note
+    assert seen == notes  # the callback gets the note too (shown, never spoken)
+    a, _ = _ask_streaming(case_id, "What does the CT record?", role="pathology")
+    assert a["statements"][0]["note"] == "This is a CT record; the Radiology agent can say more."
+    note = agents._note_maker(case_id, "nuclear_medicine")
+    assert note({"citations": [{"doc_id": "Dct000001"}]}) == "This is a CT record; the Radiology agent can say more."
+    assert note({"citations": [{"doc_id": "Dnope0000"}]}) is None and note({"citations": []}) is None
+    assert agents._type_phrase("mri") == "an MRI" and agents._type_phrase("bone_marrow") == "a bone marrow"
+
+
+@pytest.mark.parametrize("line,kind", [
+    ("", "skip"), ("```json", "skip"), ("[", "skip"),
+    ('{"text": "x", "citations": []}', "statement"), ('{"text": "x", "citations": []},', "statement"),
+    ('{"end": true, "answer_found": false, "references": []}', "end"),
+    ('{"answer_found": true, "statements": [], "references": []}', "whole"),
+    ('{"text": "", "citations": []}', "malformed"), ('{"text": "x"}', "malformed"), ("[1, 2]", "malformed"), ("The CT shows", "malformed"),
+])
+def test_line_protocol(line, kind):
+    assert agents._parse_line(line)[0] == kind
+
+
+def test_a_whole_answer_on_one_line_is_read(monkeypatch):
+    case_id = _stream_case()
+    fm = FakeModel(monkeypatch, [json.dumps({"answer_found": True, "statements": [GOOD, WRONG], "references": []})])
+    a, got = _ask_streaming(case_id, "What does the CT record?")
+    assert got == [(0, GOOD["text"])] and fm.chats == [] and a["streamed"] is True
+
+
+def test_warm_sends_the_documents_block_once_per_signature_and_the_live_prompt_shares_it(monkeypatch):
+    """Item 6.4: the warm call's documents message equals the first user message of a later streamed answer (the reasoner's prefix
+    cache then holds it); a second warm for the same Case File signature is skipped; a failed warm is audited and never raises."""
+    case_id = _stream_case()
+    chats = []
+
+    async def fake_chat(role, msgs, max_tokens=None, **kw):
+        chats.append((msgs, max_tokens, kw.get("purpose")))
+        return ""
+    monkeypatch.setattr(agents.llm, "chat", fake_chat)
+    agents._WARM.clear()
+    secs = asyncio.run(agents.warm(case_id, "radiology"))
+    assert secs is not None and len(chats) == 1
+    msgs, max_tokens, purpose = chats[0]
+    assert max_tokens == 1 and purpose == "agent warm" and msgs[0]["role"] == "system" and msgs[1]["content"].startswith("DOCUMENTS:")
+    assert asyncio.run(agents.warm(case_id, "radiology")) is None and len(chats) == 1  # the same signature: skipped
+    fm = FakeModel(monkeypatch, _chunks(_lines(GOOD, END)))
+    _ask_streaming(case_id, "What size is the lesion?")
+    live = fm.streams[0]
+    assert live[0] == msgs[0] and live[1] == msgs[1]  # the same prefix, token for token
+    assert "QUESTION FROM THE BOARD" in live[-1]["content"] and "DOCUMENTS:" not in live[-1]["content"]
+    kinds = [e["kind"] for e in store.read_audit(case_id)]
+    assert "agent_warm" in kinds
+
+    async def down(*a, **k):
+        raise RuntimeError("model down")
+    monkeypatch.setattr(agents.llm, "chat", down)
+    agents._WARM.clear()
+    assert asyncio.run(agents.warm(case_id, "pathology")) is None
+    assert "agent_warm_failed" in [e["kind"] for e in store.read_audit(case_id)]
+    with pytest.raises(ValueError):
+        asyncio.run(agents.warm(case_id, "cardiology"))

@@ -175,9 +175,20 @@ def _type_note(d):
     return dis.get("note") or f"the reader model (Qwen3.5-4B, Chinese, non-medical) called it {c.get('doc_type')} and the title keywords say {dis.get('keyword_type')}"
 
 
+def _picked(h, pick, dismissed):
+    """The history entry a doctor picked for the board (overrides["picks"], a board_uses confirmation, night-v3 item 1.7), when its report is
+    still there, not replaced by a newer version, not dismissed, and still gives the same value from a verified line; else None."""
+    return next((e for e in reversed(h) if e["doc_id"] == pick.get("doc_id") and e["doc_id"] not in dismissed and not e.get("superseded")
+                 and e.get("value") == pick.get("value") and e.get("verification") in VERIFIED and e.get("state", "present") == "present"), None)
+
+
 def resolve_facts(docs, overrides=None):
     """Case-level view of every fact. Current value = most recent verified value from a FINAL/SIGNED document; if none,
-    the most recent verified value; else the most recent value. Every value is kept in `history` (longitudinal record)."""
+    the most recent verified value; else the most recent value. Every value is kept in `history` (longitudinal record).
+    A value a doctor picked for the board when two reports differ (night-v3 item 1.7) is the current value instead, carrying `picked`
+    (the report, who, when, the confirmation); a pick whose report or value is gone is ignored and the current value says `pick_stale`."""
+    picks = (overrides or {}).get("picks") or {}
+    dismissed = {d.get("doc_id") for d in docs if d.get("dismissed")}
     hist = {}
     for d in sorted([d for d in docs if d.get("state") == "ready"], key=_doc_sort_key):
         c = d.get("classification") or {}
@@ -194,7 +205,13 @@ def resolve_facts(docs, overrides=None):
         live = [e for e in h if not e.get("superseded")] or h  # an earlier version of an amended report is history, never the current value (review M7)
         tiers = [[e for e in live if e["verification"] in VERIFIED and e["doc_final"] and e["state"] == "present"],
                  [e for e in live if e["verification"] in VERIFIED], live]
-        out[fid] = {"current": next(t[-1] for t in tiers if t), "history": h}
+        cur = next(t[-1] for t in tiers if t)
+        pick = picks.get(fid)
+        if isinstance(pick, dict):
+            e = _picked(h, pick, dismissed)
+            cur = ({**e, "picked": {k: pick.get(k) for k in ("doc_id", "value", "by", "at", "confirmation")}} if e
+                   else {**cur, "pick_stale": True, "stale_pick": {k: pick.get(k) for k in ("doc_id", "value", "by", "at", "confirmation")}})
+        out[fid] = {"current": cur, "history": h}
     return out
 
 

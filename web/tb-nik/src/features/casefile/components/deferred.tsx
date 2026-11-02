@@ -3,6 +3,7 @@
 // Undo inside that window cancels it and the row goes back to what it was.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Loader2, Undo2 } from "lucide-react";
+import { whileLeaving } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 export const UNDO_MS = 10_000;
@@ -68,9 +69,12 @@ export function useDeferred() {
     for (const [key, e] of entries.current) if (e.phase === "waiting") void fire(key);
   }, [fire]);
 
-  // Leaving the page must not lose a step the doctor saw as done.
+  // Leaving the page must not lose a step the doctor saw as done: the requests go out marked keepalive, which the browser lets finish
+  // after the page is gone (a plain request is cancelled; 2 Nov test pass).
   useEffect(() => {
-    const onHide = () => { for (const e of entries.current.values()) if (e.phase === "waiting") { window.clearTimeout(e.timer); e.phase = "running"; void e.run().catch(() => undefined); } };
+    const onHide = () => whileLeaving(() => {
+      for (const e of entries.current.values()) if (e.phase === "waiting") { window.clearTimeout(e.timer); e.phase = "running"; void e.run().catch(() => undefined); }
+    });
     window.addEventListener("pagehide", onHide);
     return () => { window.removeEventListener("pagehide", onHide); onHide(); };
   }, []);

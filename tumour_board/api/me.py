@@ -2,16 +2,18 @@
 
 GET /me tells the interface who is signed in and what it holds: the Tumour Board roles (org.roles), the primary role that picks the
 start page, whether the first password must still be changed, the profile (profiles.py), the counts for the top bar (unread
-notifications, what waits for the person, the open requests of its departments), the hospital and the features the server has
-(video, push). POST /me/password changes the password through the Vaidyx login system (which clears the must-change flag);
-PUT /me/profile saves the profile; GET /me/activity lists the person's own audited actions across the Case Files, the organisation and
-the board sessions; GET /activity is the whole log for the auditor, the MDT Coordinator and the root admin. No model calls."""
+notifications, what waits for the person, the open requests of its departments), the hospital, the features the server has
+(video, push) and the Case Files the doctor opened read-only with a reason (break_glass, night-v3 item 1.9). POST /me/password
+changes the password through the Vaidyx login system (which clears the must-change flag); PUT /me/profile saves the profile;
+GET /me/activity lists the person's own audited actions across the Case Files, the organisation and the board sessions;
+GET /activity is the whole log for the auditor, the MDT Coordinator and the root admin (the Messages events, who messaged whom, for the
+auditor and the root admin only). No model calls."""
 import importlib.util, os
 from pathlib import Path
 
 from fastapi import Request
 
-from tumour_board import board, config, notify, org, profiles, proposals, store
+from tumour_board import access, board, config, notify, org, profiles, proposals, store
 from tumour_board.api.common import RateLimit, auth_manager, body, fail, make_router, need, roles
 
 router = make_router()
@@ -77,6 +79,15 @@ def public_roles(r: dict) -> dict:
             "expired": bool(r.get("expired")), "end_date": r.get("end_date") or ""}
 
 
+def _may_message(r: dict) -> bool:
+    """Phase 8: whether this person may use Messages (placed, or the MDT Coordinator; never a disabled or expired login)."""
+    try:
+        from .. import messages
+        return bool(messages.may_use(r))
+    except Exception:
+        return False
+
+
 def counts(r: dict) -> dict:
     """The top bar's numbers: unread notifications, what waits for this person (a consultant: residents' proposals, join requests and
     confirmations; a resident: its returned proposals), and the open requests of the person's departments."""
@@ -91,7 +102,15 @@ def counts(r: dict) -> dict:
             open_requests = int(notify.inbox(r).get("open") or 0)
         except Exception:
             open_requests = 0
-    return {"unread": notify.unread_count(r) if r.get("known") else 0, "waiting_for_me": waiting, "open_requests": open_requests}
+    messages_unread = 0
+    try:
+        from .. import messages  # Phase 8: the Messages badge
+        if messages.may_use(r):
+            messages_unread = int(messages.unread_total(r.get("user") or ""))
+    except Exception:
+        messages_unread = 0
+    return {"unread": notify.unread_count(r) if r.get("known") else 0, "waiting_for_me": waiting, "open_requests": open_requests,
+            "messages_unread": messages_unread}
 
 
 @router.get("/me")
@@ -107,7 +126,15 @@ async def me(request: Request):
             "setup_needed": not profiles.setup_complete(u, doctor), "counts": counts(r),
             "hospital": {"name": h.get("name") or "", "level": h.get("level") or "", "pmjay_empanelled": bool(h.get("pmjay_empanelled", True))},
             "features": features(), "departments": [{"id": d["id"], "name": d["name"], "group": d.get("group"), "role": d.get("role")} for d in org.my_departments(r)]
-            if not r.get("admin") else []}
+            if not r.get("admin") else [],
+            "break_glass": break_glass_mine(r), "messages": _may_message(r)}
+
+
+def break_glass_mine(r: dict) -> list:
+    """The doctor's open windows on Case Files opened with a reason (night-v3 item 1.9): the page shows "Read-only until ..." on them."""
+    if not access.placed_doctor(r):
+        return []
+    return [{k: w.get(k) for k in ("case_id", "until", "reason", "via")} for w in access.doctor_windows(r.get("user") or "")]
 
 
 @router.post("/me/password")
@@ -170,8 +197,10 @@ async def get_profile(request: Request):
 
 # ---- activity -------------------------------------------------------------------------------------------------------------------------
 
-_DETAIL_KEYS = ("action", "requirement", "department", "type", "key", "reason", "note", "level", "to", "proposal", "username", "fields", "changes")
+_DETAIL_KEYS = ("action", "requirement", "department", "type", "key", "reason", "note", "level", "to", "proposal", "username", "fields", "changes",
+                "conversation")  # conversation: the Phase 8 message events (an id, never the text)
 _SKIP_KINDS = {"org_saved"}
+_MESSAGE_KINDS = ("message_", "conversation_")  # the Messages events (Phase 8): in GET /activity for the auditor and the root admin only
 
 
 def _title(kind: str) -> str:
@@ -253,5 +282,7 @@ async def activity(request: Request, case_id: str = "", user: str = "", limit: i
         need(r, "read_audit")
     n = max(1, min(int(limit or 100), FULL_LOG_CAP))
     evs = _events(user=(user or None), case_id=cid)
+    if not (r.get("auditor") or r.get("root_admin")):  # who messaged whom: the auditor and the root admin only (whole-run review 9, M3)
+        evs = [e for e in evs if not str(e.get("kind") or "").startswith(_MESSAGE_KINDS)]
     org.audit("activity_read", r.get("user") or "", case_id=cid or "", user=user or "", count=min(n, len(evs)))
     return {"events": evs[:n], "total": len(evs)}

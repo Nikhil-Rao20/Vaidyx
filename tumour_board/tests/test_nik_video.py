@@ -33,7 +33,7 @@ def test_token_decodes_with_the_secret(keys):
     claims = jwt.decode(tok, KEYS["api_secret"], algorithms=["HS256"], options={"verify_exp": False})
     assert claims["iss"] == KEYS["api_key"] and claims["sub"] == "priya" and claims["name"] == "Dr Priya Nair"
     assert claims["nbf"] == 1_700_000_000 and claims["exp"] == 1_700_000_000 + 7200
-    assert claims["video"] == {"roomJoin": True, "room": "tb-S1", "canPublish": True, "canSubscribe": True}
+    assert claims["video"] == {"roomJoin": True, "room": "tb-S1", "canPublish": True, "canSubscribe": True, "canPublishData": False}  # always written (review 9 D, I1)
     with pytest.raises(jwt.PyJWTError):
         jwt.decode(tok, "another-synthetic-secret-for-tests-only-0000", algorithms=["HS256"], options={"verify_exp": False})
     assert video.decode(tok, KEYS["api_secret"])["sub"] == "priya"
@@ -90,3 +90,22 @@ def test_video_routes(tc, data_root):
     assert As(tc, "priya").post("/meetings/S20991231-zzzz/video-token").status_code == 404
     from tumour_board import board
     assert "video_token" in [e["kind"] for e in board.read_audit() if e["session"] == mid]
+
+
+def test_token_grants_sources_and_data(keys):
+    from tumour_board import video as v
+    claims = jwt.decode(v.token("priya", "Dr Priya Nair", "tb-S1", now=1_700_000_000, can_publish_sources=v.MEMBER_SOURCES, can_publish_data=True), KEYS["api_secret"], algorithms=["HS256"], options={"verify_exp": False})
+    assert claims["video"]["canPublishSources"] == ["camera", "microphone", "screen_share", "screen_share_audio"] and claims["video"]["canPublishData"] is True
+    claims = jwt.decode(v.token("anil#room", "Room screen", "tb-S1", now=1_700_000_000, can_publish_sources=v.ROOM_SOURCES), KEYS["api_secret"], algorithms=["HS256"], options={"verify_exp": False})
+    assert claims["video"]["canPublishSources"] == ["camera", "microphone"] and claims["video"]["canPublishData"] is False
+    assert v.decode(v.hmac_jwt({"video": {"canPublishSources": ["camera"]}}, KEYS["api_secret"]), KEYS["api_secret"])["video"]["canPublishSources"] == ["camera"]
+
+
+def test_video_token_route_grants_a_member_the_screen_share_and_the_room_screen_not(tc, data_root):
+    mid = started(tc)
+    join_and_admit(tc, mid, "priya")
+    (data_root / "livekit.json").write_text(json.dumps(KEYS))
+    claims = jwt.decode(As(tc, "priya").post(f"/meetings/{mid}/video-token").json()["token"], KEYS["api_secret"], algorithms=["HS256"])
+    assert claims["video"]["canPublishSources"] == ["camera", "microphone", "screen_share", "screen_share_audio"] and claims["video"]["canPublishData"] is False  # no data grant (review)
+    claims = jwt.decode(As(tc, "anil").post(f"/meetings/{mid}/video-token", json={"screen": "room"}).json()["token"], KEYS["api_secret"], algorithms=["HS256"])
+    assert claims["sub"] == "anil#room" and claims["video"]["canPublishSources"] == ["camera", "microphone"] and claims["video"]["canPublishData"] is False

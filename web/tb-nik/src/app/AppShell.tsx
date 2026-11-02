@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { LogOut, Search, X } from "lucide-react";
+import { LogOut, MessageSquare, Search, X } from "lucide-react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/Wordmark";
@@ -18,6 +18,7 @@ import { OfflineBanner } from "@/components/OfflineBanner";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Splash } from "@/components/Splash";
+import { useMessagesLive, useMessagesUnread } from "@/features/messages";
 import { ErrorPage } from "@/app/ErrorPage";
 import { useSession } from "@/lib/session";
 import { navItems } from "@/lib/nav";
@@ -46,7 +47,13 @@ export function AppShell() {
   const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
   useScrollToHash();
-  const items = useMemo(() => (me ? navItems(me) : []), [me]);
+  const mayMessage = !!me?.messages;
+  useMessagesLive(mayMessage);  // the messages socket, once for the whole app (Phase 8)
+  const unreadMessages = useMessagesUnread(mayMessage);
+  const messagesUnread = unreadMessages.data?.unread_total ?? me?.counts?.messages_unread ?? 0;
+  const items = useMemo(() => (me ? navItems(me, messagesUnread) : []), [me, messagesUnread]);
+  // A move between two conversations keeps the Messages page mounted (no fade, no lost scroll).
+  const pageKey = location.pathname.startsWith("/messages") ? "/messages" : location.pathname;
   useEffect(() => { setSearchOpen(false); }, [location.pathname]);
   useEffect(() => {
     if (location.pathname.startsWith("/cases/") && location.pathname !== "/cases/new") {
@@ -108,6 +115,7 @@ export function AppShell() {
                   <Button type="button" variant="ghost" size="icon" className="lg:hidden" aria-label={searchOpen ? "Close search" : "Search"} aria-expanded={searchOpen} onClick={() => setSearchOpen((o) => !o)}>
                     {searchOpen ? <X className="size-5" aria-hidden /> : <Search className="size-5" aria-hidden />}
                   </Button>
+                  {me.messages ? <MessagesIcon unread={messagesUnread} /> : null}
                   <NotificationBell />
                   <ProfileMenu />
                 </div>
@@ -126,7 +134,7 @@ export function AppShell() {
         <main id="main" className={cn("mx-auto w-full max-w-[1440px] px-4 py-4 md:py-6", !bare && !full && "pb-28 lg:pb-10")} tabIndex={-1}>
           {full ? page : (
             <AnimatePresence mode="wait" initial={false}>
-              <motion.div key={location.pathname} variants={pageVariants} initial="initial" animate="animate" exit="exit">
+              <motion.div key={pageKey} variants={pageVariants} initial="initial" animate="animate" exit="exit">
                 {page}
               </motion.div>
             </AnimatePresence>
@@ -139,5 +147,23 @@ export function AppShell() {
         {!bare && !location.pathname.startsWith("/cases") ? <span className="sr-only"><Link to="/cases">Case Files</Link></span> : null}
       </div>
     </TooltipProvider>
+  );
+}
+
+/** The Messages icon beside the bell (Phase 8): a link to /messages with the unread count. Shown on every screen, so the Dock may
+ * leave Messages out when five other items fill it. */
+function MessagesIcon({ unread }: { unread: number }) {
+  const label = unread > 0 ? `Messages, ${unread} unread` : "Messages";
+  return (
+    <Button variant="ghost" size="icon" className="relative" asChild>
+      <Link to="/messages" aria-label={label} data-testid="messages-nav">
+        <MessageSquare className="size-5" aria-hidden />
+        {unread > 0 ? (
+          <span className="absolute right-1 top-1 min-w-4 rounded-full bg-primary px-1 text-center text-[10px] font-bold leading-4 text-primary-foreground" aria-hidden>
+            {unread > 99 ? "99+" : unread}
+          </span>
+        ) : null}
+      </Link>
+    </Button>
   );
 }

@@ -1,0 +1,556 @@
+{
+ "id": "soft_tissue_sarcoma",
+ "label": "Soft tissue sarcoma",
+ "version": "0.1-draft",
+ "approval": {
+  "status": "draft",
+  "note": "Draft checklist from NCG Guidelines for Bone and Soft Tissue Tumours (2019) and the NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019): needs a clinician's check"
+ },
+ "site": "sarcoma|soft tissue|rhabdomyosarcoma|thigh|extremity",
+ "site_note": "V2 item 5.3 (two primaries): only on a Case File linked to the same patient's other Case File, and only for histopathology, cytology, IHC and molecular records: among several candidates for one record, or several documents carrying a required value, one that names another protocol's site and not this one steps aside and is named on the row for review; a document naming no site never does, and when every candidate names another site every candidate stays. Organ words only. A preference, never a filter; a patient with one cancer is checked as before.",
+ "note": "DRAFT, not approved for real use: needs a clinician's check. Configurable by the clinical team. Required records transcribed from the NCG Guidelines for Bone and Soft Tissue Tumours (2019) (National Cancer Grid, India), the extremity soft tissue sarcoma pages (flow p 20 to 23, staging work-up p 26 and 27, pathology format p 41 to 43; the PDF page is the printed page), and, for rhabdomyosarcoma in a child, the NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019) (p 59, Annexure 1 p 64; PDF pages, the printed footer is one less; the heading of that page reads 'Treatment Algorithm: Neuroblastoma', a typing slip in the book). Each record has its verbatim quote and page; where both books give a record both are cited. Tiers printed by NCG are kept; the tiers whose tier_basis says 'proposed' are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). A record NCG gives only under a condition the system never judges (a finding, a plan) is shown with NCG's own tier and the condition, never counted. The stage and the risk group are as recorded by the clinician, never computed. Nothing here suggests treatment. The book has a flow for extremity soft tissue sarcoma only: retroperitoneal, trunk, head and neck and uterine sarcomas have none. The book's staging is TNM with grade and the surgico-pathologic grouping for rhabdomyosarcoma; it never names an AJCC edition. A child's treating team is Paediatric Oncology: clinical records go to the owner of the Case File.",
+ "settings_note": "Setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes stage and never decides the setting). The settings follow the book: 'Non-metastatic soft tissue sarcoma' and 'Metastatic soft tissue sarcoma' (p 20) and, for a child, 'Suspected Rhabdomyosarcoma' (paediatric book p 59). Each record carries its tier per setting; until a setting is recorded the strictest tier applies. Draft checklist: needs a clinician's check.",
+ "settings": [
+  {
+   "id": "non_metastatic",
+   "label": "Extremity soft tissue sarcoma, no distant disease recorded (as recorded)"
+  },
+  {
+   "id": "metastatic",
+   "label": "Extremity soft tissue sarcoma, distant disease recorded (as recorded)"
+  },
+  {
+   "id": "paediatric_rhabdomyosarcoma",
+   "label": "Rhabdomyosarcoma, child (as recorded)"
+  }
+ ],
+ "records": [
+  {
+   "id": "clinical_history",
+   "label": "Detailed history and examination (size, depth, growth)",
+   "tier": "a",
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ],
+   "department": "Orthopaedic Oncology",
+   "required_facts": [
+    "ecog",
+    "presenting_complaint"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 20,
+     "quote": "Detailed clinical history and examination"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 59,
+     "quote": "Suspected Rhabdomyosarcoma"
+    }
+   ],
+   "tier_basis": "Proposed a: the first box of the flow (p 20). The rhabdomyosarcoma flow starts at \"Suspected Rhabdomyosarcoma\" (paediatric book p 59). For a child the treating team is Paediatric Oncology: the record goes to the owner of the Case File",
+   "route": "owner"
+  },
+  {
+   "id": "basic_imaging_sts",
+   "label": "Radiograph, chest X-ray and local MRI",
+   "tier": "a",
+   "tiers": {
+    "non_metastatic": "a",
+    "metastatic": "a",
+    "paediatric_rhabdomyosarcoma": "none"
+   },
+   "doc_types": [
+    "xray",
+    "mri"
+   ],
+   "department": "Radiology",
+   "required_facts": [],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 20,
+     "quote": "Basic imaging (local & chest x-ray, local MRI) & routine blood investigations (a)"
+    }
+   ],
+   "tier_basis": "NCG a. The rhabdomyosarcoma flow lists CT and MRI instead (see the MRI and CT records)"
+  },
+  {
+   "id": "routine_blood_sts",
+   "label": "Routine blood investigations",
+   "tier": "a",
+   "doc_types": [
+    "lab"
+   ],
+   "department": "Biochemistry",
+   "required_facts": [
+    "haemoglobin",
+    "wbc",
+    "platelets",
+    "creatinine",
+    "bilirubin"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 20,
+     "quote": "Basic imaging (local & chest x-ray, local MRI) & routine blood investigations (a)"
+    }
+   ],
+   "tier_basis": "NCG a (the same line as the basic imaging) for the adult flows. Rhabdomyosarcoma: proposed a, as the paediatric book has no blood list"
+  },
+  {
+   "id": "mri_contrast_sts",
+   "label": "MRI with contrast of the primary site (before biopsy)",
+   "tier": "a",
+   "doc_types": [
+    "mri"
+   ],
+   "department": "Radiology",
+   "required_facts": [
+    "lesion_size",
+    "nodal_findings"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 26,
+     "quote": "contrast is recommended in all cases  (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 59,
+     "quote": "Essential: CT scan of chest/ abdomen/pelvis, MRI scan for extremity and head/neck primary/genitourinary RMS (must"
+    }
+   ],
+   "tier_basis": "NCG a: local imaging is done before the biopsy (p 26). Rhabdomyosarcoma: the paediatric book lists MRI for an extremity, head and neck or genitourinary primary as Essential (p 59)"
+  },
+  {
+   "id": "biopsy_sts",
+   "label": "Core needle biopsy",
+   "tier": "a",
+   "doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type",
+    "grade"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 20,
+     "quote": "Biopsy (core needle biopsy preferred) (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 59,
+     "quote": "Bone scan,Biopsy of mass, B/L bone marrow biopsy  (a)"
+    }
+   ],
+   "tier_basis": "NCG a. Rhabdomyosarcoma: biopsy of the mass is (a) in the paediatric book (p 59)"
+  },
+  {
+   "id": "histopathology_report_sts",
+   "label": "Pathology report: subtype, FNCLCC grade, depth, margins",
+   "tier": "a",
+   "doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type",
+    "grade",
+    "margins",
+    "lvi",
+    "tumour_depth"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 42,
+     "quote": "System used:  French Federation of Cancer Centres Sarcoma Group (FNCLCC)"
+    },
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 42,
+     "quote": "Superficial: Defined as above fascia."
+    }
+   ],
+   "tier_basis": "Proposed a: the grade and the margins are what the book's radiotherapy and chemotherapy lines are read against (p 21, 31). The depth wording is on p 42. The grade is the FNCLCC grade as written (grades 1 to 3), never computed"
+  },
+  {
+   "id": "molecular_sts",
+   "label": "Immunohistochemistry, cytogenetic and molecular studies (fusion tests)",
+   "tier": "b",
+   "tiers": {
+    "non_metastatic": "c",
+    "metastatic": "c",
+    "paediatric_rhabdomyosarcoma": "b"
+   },
+   "doc_types": [
+    "ihc",
+    "molecular"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "sarcoma_fusion"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 26,
+     "quote": "immunohistochemistry, cytogenetic, and molecular studies are desirable in some"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 59,
+     "quote": "Optimal: Molecular studies on tissue specimen (PAX-3 FKHR, PAX-7 FKHR fusion status) Whole body PET CT scan (b)"
+    }
+   ],
+   "tier_basis": "NCG c for the adult flows (p 26). Rhabdomyosarcoma: the paediatric book lists molecular studies (PAX3 and PAX7 fusion status) as Optimal (b, p 59)"
+  },
+  {
+   "id": "ct_chest_sts",
+   "label": "Non-contrast CT chest (metastatic work-up)",
+   "tier": "a",
+   "doc_types": [
+    "ct"
+   ],
+   "region": "chest|thorax|lung|abdomen|abdo|pelvis|tap|whole body",
+   "department": "Radiology",
+   "required_facts": [
+    "distant_findings"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 26,
+     "quote": "NCCT chest for metastatic workup  is"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 59,
+     "quote": "Essential: CT scan of chest/ abdomen/pelvis, MRI scan for extremity and head/neck primary/genitourinary RMS (must"
+    }
+   ],
+   "tier_basis": "NCG a. Rhabdomyosarcoma: CT of the chest, abdomen and pelvis is Essential (paediatric book p 59)"
+  },
+  {
+   "id": "usg_nodes_sts",
+   "label": "Ultrasound of abdomen, pelvis, groin, neck and axilla (regional nodes)",
+   "tier": "a",
+   "tiers": {
+    "non_metastatic": "a",
+    "metastatic": "a",
+    "paediatric_rhabdomyosarcoma": "none"
+   },
+   "doc_types": [
+    "ultrasound"
+   ],
+   "department": "Radiology",
+   "required_facts": [
+    "nodal_findings"
+   ],
+   "sla_days": 3,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 20,
+     "quote": "NCCT scan chest & USG abdomen pelvis/groin/neck / axilla) (a)"
+    }
+   ],
+   "tier_basis": "NCG a (p 20); p 26 says the ultrasound of the regional lymph node basin may be done for certain histologies"
+  },
+  {
+   "id": "histology_specific_imaging_sts",
+   "label": "Extra imaging by histology (MRI spine, CT abdomen and pelvis, MRI brain)",
+   "tier": "c",
+   "tiers": {
+    "non_metastatic": "c",
+    "metastatic": "c",
+    "paediatric_rhabdomyosarcoma": "none"
+   },
+   "doc_types": [
+    "mri",
+    "ct"
+   ],
+   "department": "Radiology",
+   "required_facts": [
+    "distant_findings"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 26,
+     "quote": "Additional imaging to be considered based on histology are as follows (a)"
+    },
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 27,
+     "quote": "iii) MRI brain: Alveolar soft part sarcoma and angiosarcoma"
+    }
+   ],
+   "tier_basis": "NCG a under a histology condition the system never judges, so system tier c with the condition (the book's list is on p 26 and 27)",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "for the histologies the book lists (for example MRI brain in alveolar soft part sarcoma and angiosarcoma)"
+   }
+  },
+  {
+   "id": "pet_ct_sts",
+   "label": "FDG PET-CT with breath-hold CT chest",
+   "tier": "b",
+   "tiers": {
+    "non_metastatic": "c",
+    "metastatic": "c",
+    "paediatric_rhabdomyosarcoma": "b"
+   },
+   "doc_types": [
+    "pet_ct"
+   ],
+   "department": "Nuclear Medicine",
+   "required_facts": [
+    "suv_max",
+    "distant_findings"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 27,
+     "quote": "The F18 FDG PET CT scan with a breath hold CT of the chest may be used for"
+    },
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 59,
+     "quote": "Optimal: Molecular studies on tissue specimen (PAX-3 FKHR, PAX-7 FKHR fusion status) Whole body PET CT scan (b)"
+    }
+   ],
+   "tier_basis": "Adult: c, as the book continues that the PET is not cost effective and is not recommended as standard of care (p 27). Rhabdomyosarcoma: whole body PET CT is Optimal (b, p 59)"
+  },
+  {
+   "id": "bone_scan_marrow_rms",
+   "label": "Bone scan and bilateral bone marrow biopsy (rhabdomyosarcoma)",
+   "tier": "a",
+   "tiers": {
+    "non_metastatic": "none",
+    "metastatic": "none",
+    "paediatric_rhabdomyosarcoma": "a"
+   },
+   "doc_types": [
+    "bone_scan",
+    "bone_marrow"
+   ],
+   "department": "Nuclear Medicine",
+   "required_facts": [
+    "bone_marrow_result",
+    "distant_findings"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+     "page": 59,
+     "quote": "Bone scan,Biopsy of mass, B/L bone marrow biopsy  (a)"
+    }
+   ],
+   "tier_basis": "NCG a for rhabdomyosarcoma only (paediatric book p 59, Annexure 1 p 64)"
+  },
+  {
+   "id": "prior_excision_sts",
+   "label": "Report of a prior excision with margins",
+   "tier": "c",
+   "tiers": {
+    "non_metastatic": "c",
+    "metastatic": "c",
+    "paediatric_rhabdomyosarcoma": "none"
+   },
+   "doc_types": [
+    "operative_note",
+    "histopathology"
+   ],
+   "department": "Orthopaedic Oncology",
+   "required_facts": [
+    "margins"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+     "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+     "page": 20,
+     "quote": "Tumors referred after prior excision with inadequate or unknown margins need to"
+    }
+   ],
+   "tier_basis": "No letter; shown only because the book names tumours referred after a prior excision with inadequate or unknown margins (p 20); proposed c",
+   "route": "owner"
+  }
+ ],
+ "optional": [
+  {
+   "id": "previous_board",
+   "label": "Previous Tumour Board record",
+   "doc_types": [
+    "tumour_board_record"
+   ],
+   "department": "MDT Coordinator",
+   "route": "coordinator"
+  }
+ ],
+ "extract_facts": [
+  "presenting_complaint",
+  "ecog",
+  "comorbidities",
+  "clinical_question",
+  "recorded_stage",
+  "lesion_size",
+  "nodal_findings",
+  "distant_findings",
+  "histologic_type",
+  "grade",
+  "haemoglobin",
+  "wbc",
+  "platelets",
+  "creatinine",
+  "bilirubin",
+  "patient_preference",
+  "clinical_trial_note",
+  "diagnosis_date_mode",
+  "treatment_received",
+  "margins",
+  "lvi",
+  "tumour_depth",
+  "sarcoma_fusion",
+  "bone_marrow_result",
+  "suv_max"
+ ],
+ "core_data": [
+  {
+   "id": "diagnosis",
+   "label": "Histopathological / cytological diagnosis",
+   "facts": [
+    "histologic_type"
+   ]
+  },
+  {
+   "id": "diagnosis_date_mode",
+   "label": "Date and mode of diagnosis",
+   "facts": [
+    "diagnosis_date_mode"
+   ]
+  },
+  {
+   "id": "stage",
+   "label": "Stage as recorded (with the investigations used)",
+   "facts": [
+    "recorded_stage"
+   ]
+  },
+  {
+   "id": "performance_status",
+   "label": "Performance status",
+   "facts": [
+    "ecog"
+   ]
+  },
+  {
+   "id": "comorbidities",
+   "label": "Co-morbidities",
+   "facts": [
+    "comorbidities"
+   ]
+  },
+  {
+   "id": "biomarkers",
+   "label": "Relevant genomic / biomarker testing",
+   "facts": [
+    "sarcoma_fusion"
+   ]
+  },
+  {
+   "id": "treatment_history",
+   "label": "Treatment history",
+   "facts": [
+    "treatment_received"
+   ]
+  },
+  {
+   "id": "patient_preference",
+   "label": "Patient preference / special circumstances",
+   "facts": [
+    "patient_preference"
+   ]
+  },
+  {
+   "id": "clinical_trial",
+   "label": "Clinical trial availability / suitability recorded",
+   "facts": [
+    "clinical_trial_note"
+   ]
+  },
+  {
+   "id": "question",
+   "label": "Question for the Tumour Board",
+   "facts": [
+    "clinical_question"
+   ]
+  }
+ ],
+ "core_data_source": "NHS England, Streamlining MDT meetings (2020), p.11 'minimum core data requirements'; aligned with the NCG Virtual Tumour Board case template (India)",
+ "post_board": {
+  "required_record_fields": [
+   "decision_text",
+   "recorded_by",
+   "participants",
+   "actions"
+  ],
+  "follow_up_default_days": 14,
+  "record_fields_source": "EUSOMA 2020 (names of all participants, evidence on decisions); Victorian Cancer MDM quality framework 2018 (report errors/changes raised, divergent recommendations and dissenting clinicians); PM-JAY HBP 2.2 s.3.9 (tumour board decision and treatment plan)"
+ },
+ "policy_basis": "PM-JAY Health Benefit Package 2.2 user guidelines (NHA, 2021), section 3.9: pre-authorization is mandatory at each step of cancer care and the decision on appropriate care is to be taken by a multidisciplinary tumour board; NHS England MDT streamlining guidance (2020) pre-listing conditions.",
+ "guideline_sources": [
+  {
+   "guideline": "NCG Guidelines for Bone and Soft Tissue Tumours (2019)",
+   "file": "ncg_india/ncg-guidelines-for-bone-soft-tissue-tumours-2019.pdf",
+   "pages": "20, 26, 27, 42 (PDF page = printed page)"
+  },
+  {
+   "guideline": "NCG Guidelines for Pediatric Haematolymphoid and Solid Tumours (2019)",
+   "file": "ncg_india/ncg-guidelines-for-pediatric-haematolymphoid-solid-tumours-2019.pdf",
+   "pages": "59 (PDF page; the printed footer is one less)"
+  }
+ ]
+}

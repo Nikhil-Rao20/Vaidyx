@@ -238,6 +238,9 @@ def test_minutes_hold_attendance_decisions_seat_and_followup(cases):
     assert "Surgical seat: Breast Surgery (Dr Meera Nair) ; check PM-JAY requirement" in h  # a breast surgeon outside the PM-JAY list (6.4)
     assert "the Surgical Oncology AI support agent stood in" in h and "No board decision recorded" in h
     assert "Marked ready by meera" in h and "MRI breast" in h and "Follow-up" in h and "—" not in h
+    # night-v3 item 3.1: the decision block lists every field with a value from the one table (a record from before 3.1 too)
+    assert {x["label"]: x["text"] for x in br["decision"]["fields"]} == {"Treatment intent": "Curative", "Next review": "22/11/2026"}
+    assert "<th>Treatment intent</th><td style='white-space:pre-wrap'>Curative</td>" in h and "<th>Next review</th><td style='white-space:pre-wrap'>22/11/2026</td>" in h
     ev = [json.loads(l) for l in (board.sessions_dir() / "audit.jsonl").read_text().splitlines()]
     assert any(e["kind"] == "decision_linked" for e in ev)
 
@@ -317,7 +320,7 @@ def test_a_doctor_sees_only_its_own_case_files_in_the_room_minutes_and_export(ca
     assert set(full["decisions"]) == {"TB-X1", "TB-X2"}
     v = board.session_view(full, {"TB-X1"})
     assert set(v["decisions"]) == {"TB-X1"} and all((e.get("case_id") or "TB-X1") == "TB-X1" for e in v["log"]) and set(v.get("agents") or {}) <= {"TB-X1"}
-    assert board.session_view(full, None) is full
+    assert board.session_view(full, None) == {k: v for k, v in full.items() if k != "chat"}  # a copy without the meeting chat (night-v3 5.3, review S1)
     m = board.minutes(s["id"], {"TB-X1"})
     assert [c.get("restricted", False) for c in m["cases"]] == [False, True] and "patient" not in m["cases"][1] and "decision" not in m["cases"][1]
     assert m["cases"][0]["patient"]["name"] == "SYNTHETIC, Breast Patient" and all(a["case_id"] == "TB-X1" for a in m["followup"]["actions"])

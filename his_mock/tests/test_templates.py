@@ -13,7 +13,7 @@ def store():
 
 def test_lab_templates_follow_the_fixture_keys_units_and_reference_intervals():
     t = templates.lab_templates()
-    assert set(t) == {"cbc", "lft", "rft", "cea", "viral_markers"}
+    assert set(t) == {"cbc", "lft", "rft", "cea", "viral_markers", "ca125_cea", "psa", "ldh"}
     cbc = {f["key"]: f for f in t["cbc"]["fields"]}
     assert list(cbc) == ["haemoglobin", "wbc", "platelets"]
     assert cbc["haemoglobin"]["unit"] == "gm%" and cbc["haemoglobin"]["reference"] == {"M": "13.0-17.0", "F": "12.0-15.0"}

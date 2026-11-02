@@ -1,0 +1,467 @@
+{
+ "id": "brain_cns",
+ "label": "Brain and CNS tumours",
+ "version": "0.1-draft",
+ "approval": {
+  "status": "draft",
+  "note": "Draft checklist from the EANO guidelines on diffuse gliomas of adulthood (a European guideline, because the National Cancer Grid has none): needs a clinician's check"
+ },
+ "site": "brain|cerebr|glioma|astrocytoma|oligodendroglioma|glioblastoma|medulloblastoma|spinal cord|cranial",
+ "site_note": "V2 item 5.3 (two primaries): only on a Case File linked to the same patient's other Case File, and only for histopathology, cytology, IHC and molecular records: among several candidates for one record, or several documents carrying a required value, one that names another protocol's site and not this one steps aside and is named on the row for review; a document naming no site never does, and when every candidate names another site every candidate stays. Organ words only. A preference, never a filter; a patient with one cancer is checked as before.",
+ "note": "DRAFT, not approved for real use: needs a clinician's check, and the child setting needs it even more than the rest. The National Cancer Grid has no brain or CNS guideline and no Indian national guideline for brain tumours was found, so the adult records come from a European guideline: the EANO guidelines on the diagnosis and treatment of diffuse gliomas of adulthood (Weller et al., Nature Reviews Clinical Oncology 2021;18:170-186, https://doi.org/10.1038/s41571-020-00447-z), open access under a Creative Commons Attribution 4.0 licence (https://creativecommons.org/licenses/by/4.0/; the licence line was read on the PDF and is logged beside it). Selected sentences are quoted verbatim, each with its PDF page (journal page = PDF page + 169); the labels, the tiers and the routing are this draft's own. The guideline rests on the WHO 2016 classification and the cIMPACT-NOW updates and is not Indian; the Indian ISNO papers were not used because their reuse terms are not confirmed. Tiers: EANO uses classes of evidence and levels of recommendation, so one rule maps them. Level A or B for a record the text asks for in every patient is a (Essential, a proposal). The same test asked only in a subgroup the system never judges (a negative IDH1 stain, retained ATRX, glioblastoma, midline location) is system tier c with the condition shown, never counted. A sentence with no level (the post-operative MRI) is a proposed b. All tiers are proposals, to be confirmed by the hospital Tumour Board (clinical review before real use). The guideline has no line on CSF or spinal imaging for diffuse gliomas, so none is listed. No treatment line is copied; the system never grades or stages. Brain metastases of another cancer belong to that cancer's checklist. For a child the NCG paediatric book has no brain tumour chapter (it names the brain only as a screening MRI in retinoblastoma and as CNS spread in leukaemia and lymphoma), so the child setting reuses the same records.",
+ "settings_note": "Setting of the Case File, chosen by the clinician from what the signed reports record (the system never computes grade or stage and never decides the setting). Adult diffuse glioma follows the EANO guideline; the second setting holds the other adult tumours (for example meningioma or metastasis) and the third a child, both with the adult records with child tiers in each tier_basis (the IDH and ATRX stains and the other markers Optional, the after-surgery MRI under optional). Each record carries its tier per setting; until a setting is recorded the strictest tier applies. Draft checklist: needs a clinician's check.",
+ "settings": [
+  {
+   "id": "adult_glioma",
+   "label": "Adult diffuse glioma, as recorded"
+  },
+  {
+   "id": "adult_other",
+   "label": "Other adult brain or CNS tumour (for example meningioma or metastasis), as recorded"
+  },
+  {
+   "id": "child",
+   "label": "Child with a brain or CNS tumour, as recorded"
+  }
+ ],
+ "records": [
+  {
+   "id": "clinical_history",
+   "label": "History, seizures, neurological examination and performance status (as recorded)",
+   "tier": "a",
+   "doc_types": [
+    "clinical_note",
+    "referral"
+   ],
+   "department": "Neurosurgery",
+   "required_facts": [
+    "ecog",
+    "kps",
+    "comorbidities",
+    "presenting_complaint",
+    "clinical_question"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "EANO guidelines on the diagnosis and treatment of diffuse gliomas of adulthood (Weller et al., Nature Reviews Clinical Oncology 2021)",
+     "file": "eano/EANO_2021_diffuse_gliomas_Weller.pdf",
+     "page": 2,
+     "quote": "Karnofsky performance score (KPS), neurologi- cal function, age, and individual risks and benefits should be considered for clinical decision- making."
+    },
+    {
+     "guideline": "EANO guidelines on the diagnosis and treatment of diffuse gliomas of adulthood (Weller et al., Nature Reviews Clinical Oncology 2021)",
+     "file": "eano/EANO_2021_diffuse_gliomas_Weller.pdf",
+     "page": 2,
+     "quote": "Characteristic modes of clinical presentation include new- onset epilepsy, focal deficits (such as pareses or sensory disturbances), neurocognitive impairment"
+    }
+   ],
+   "tier_basis": "EANO level of recommendation A (class of evidence IV), so a. EANO levels are mapped to tiers by the rule in the protocol note. The seizure history, the neurological findings and any steroid use are read as written in the note. Child setting: EANO is written for adults and the NCG paediatric book has no brain tumour chapter, so the child tier follows the adult line and needs a clinician's check even more than the rest. For a child the treating team is Paediatric Oncology: the record goes to the owner of the Case File",
+   "route": "owner"
+  },
+  {
+   "id": "mri_brain_contrast",
+   "label": "MRI brain without and with contrast (before surgery)",
+   "tier": "a",
+   "doc_types": [
+    "mri"
+   ],
+   "region": "brain|head|cranial|cranium|neuro|cerebr",
+   "department": "Radiology",
+   "required_facts": [
+    "lesion_size",
+    "distant_findings"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "EANO guidelines on the diagnosis and treatment of diffuse gliomas of adulthood (Weller et al., Nature Reviews Clinical Oncology 2021)",
+     "file": "eano/EANO_2021_diffuse_gliomas_Weller.pdf",
+     "page": 3,
+     "quote": "The first choice of diagnostic imaging modality is MRI without and with the administration of a gadolinium- based contrast agent. C: IV; L: B."
+    },
+    {
+     "guideline": "EANO guidelines on the diagnosis and treatment of diffuse gliomas of adulthood (Weller et al., Nature Reviews Clinical Oncology 2021)",
+     "file": "eano/EANO_2021_diffuse_gliomas_Weller.pdf",
+     "page": 3,
+     "quote": "diagnos- tic gold standard to detect a brain tumour"
+    }
+   ],
+   "tier_basis": "EANO level B (class IV), so a. EANO levels are mapped to tiers by the rule in the protocol note. The text calls brain MRI the diagnostic gold standard to detect a brain tumour, so the same record is proposed for the other adult and the child settings Child setting: EANO is written for adults and the NCG paediatric book has no brain tumour chapter, so the child tier follows the adult line and needs a clinician's check even more than the rest."
+  },
+  {
+   "id": "neurosurgery_opinion",
+   "label": "Neurosurgical assessment or operative note (resection or biopsy as recorded)",
+   "tier": "a",
+   "doc_types": [
+    "clinical_note",
+    "operative_note"
+   ],
+   "department": "Neurosurgery",
+   "required_facts": [
+    "clinical_question"
+   ],
+   "sla_days": 2,
+   "sources": [
+    {
+     "guideline": "EANO guidelines on the diagnosis and treatment of diffuse gliomas of adulthood (Weller et al., Nature Reviews Clinical Oncology 2021)",
+     "file": "eano/EANO_2021_diffuse_gliomas_Weller.pdf",
+     "page": 3,
+     "quote": "ideally by a dedicated multidisciplinary tumour board including neuroradiologists and neuropathologists as well as neurosurgeons"
+    }
+   ],
+   "tier_basis": "Proposed a: the guideline places the neurosurgeon in the multidisciplinary tumour board that manages the patient before surgery (p 3). No level is printed for the sentence Child setting: EANO is written for adults and the NCG paediatric book has no brain tumour chapter, so the child tier follows the adult line and needs a clinician's check even more than the rest.",
+   "route": "owner"
+  },
+  {
+   "id": "histopathology_brain",
+   "label": "Histopathology (tissue diagnosis): type, grade, Ki-67",
+   "tier": "a",
+   "doc_types": [
+    "histopathology"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "histologic_type",
+    "grade",
+    "ki67"
+   ],
+   "sla_days": 5,
+   "sources": [
+    {
+     "guideline": "EANO guidelines on the diagnosis and treatment of diffuse gliomas of adulthood (Weller et al., Nature Reviews Clinical Oncology 2021)",
+     "file": "eano/EANO_2021_diffuse_gliomas_Weller.pdf",
+     "page": 3,
+     "quote": "Treatment decisions in patients with glioma are made based on tissue diagnosis, including the assessment of molecular markers relevant for diagnosis"
+    },
+    {
+     "guideline": "EANO guidelines on the diagnosis and treatment of diffuse gliomas of adulthood (Weller et al., Nature Reviews Clinical Oncology 2021)",
+     "file": "eano/EANO_2021_diffuse_gliomas_Weller.pdf",
+     "page": 3,
+     "quote": "Clinical decision- making without obtaining a tis- sue diagnosis should be considered only in very exceptional situations. C: IV; L: not applicable."
+    }
+   ],
+   "tier_basis": "Proposed a: the guideline makes the tissue diagnosis the basis of every decision (p 3). The WHO grade is the one written in the report, never computed Child setting: EANO is written for adults and the NCG paediatric book has no brain tumour chapter, so the child tier follows the adult line and needs a clinician's check even more than the rest."
+  },
+  {
+   "id": "ihc_idh_atrx",
+   "label": "Immunohistochemistry for IDH1 R132H and ATRX",
+   "tier": "a",
+   "tiers": {
+    "adult_glioma": "a",
+    "adult_other": "none",
+    "child": "c"
+   },
+   "doc_types": [
+    "ihc"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "idh_status"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "EANO guidelines on the diagnosis and treatment of diffuse gliomas of adulthood (Weller et al., Nature Reviews Clinical Oncology 2021)",
+     "file": "eano/EANO_2021_diffuse_gliomas_Weller.pdf",
+     "page": 6,
+     "quote": "Immunohistochemistry for mutant IDH1 R132H protein and nuclear expression of ATRX should be performed routinely in the diagnostic assessment of diffuse gliomas. C: IV; L: B."
+    }
+   ],
+   "tier_basis": "EANO level B (class IV), so a for adult diffuse glioma. EANO levels are mapped to tiers by the rule in the protocol note. Not applicable to the other adult tumours. Child: c, because these are markers of adult diffuse gliomas and the paediatric book has none"
+  },
+  {
+   "id": "idh_sequencing",
+   "label": "IDH1 and IDH2 sequencing (when the IDH1 R132H stain is negative)",
+   "tier": "c",
+   "tiers": {
+    "adult_glioma": "c",
+    "adult_other": "none",
+    "child": "none"
+   },
+   "doc_types": [
+    "molecular"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "idh_status"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "EANO guidelines on the diagnosis and treatment of diffuse gliomas of adulthood (Weller et al., Nature Reviews Clinical Oncology 2021)",
+     "file": "eano/EANO_2021_diffuse_gliomas_Weller.pdf",
+     "page": 6,
+     "quote": "sequencing of IDH1 codon 132 and IDH2 codon 172 should be conducted in all WHO grade 2 and 3 diffuse astrocytic and oligodendroglial gliomas"
+    }
+   ],
+   "tier_basis": "EANO level B (class IV), a only when the IDH1 R132H stain is negative, a finding the system never judges: system tier c with the condition. EANO levels are mapped to tiers by the rule in the protocol note.",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "the IDH1 R132H stain is negative, in a WHO grade 2 or 3 diffuse glioma (and in a glioblastoma under 55 years)"
+   }
+  },
+  {
+   "id": "codeletion_1p19q",
+   "label": "1p/19q codeletion",
+   "tier": "c",
+   "tiers": {
+    "adult_glioma": "c",
+    "adult_other": "none",
+    "child": "none"
+   },
+   "doc_types": [
+    "molecular",
+    "cytogenetics"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "codeletion_1p19q"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "EANO guidelines on the diagnosis and treatment of diffuse gliomas of adulthood (Weller et al., Nature Reviews Clinical Oncology 2021)",
+     "file": "eano/EANO_2021_diffuse_gliomas_Weller.pdf",
+     "page": 6,
+     "quote": "1p/19q codeletion status should be determined in all IDH- mutant gliomas with retained nuclear expression of ATRX. C: II; L: B."
+    }
+   ],
+   "tier_basis": "EANO level B (class II), a only in an IDH-mutant glioma with retained nuclear ATRX, a finding the system never judges: system tier c with the condition. EANO levels are mapped to tiers by the rule in the protocol note.",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "an IDH-mutant glioma with retained nuclear ATRX expression"
+   }
+  },
+  {
+   "id": "mgmt_promoter",
+   "label": "MGMT promoter methylation",
+   "tier": "c",
+   "tiers": {
+    "adult_glioma": "c",
+    "adult_other": "none",
+    "child": "none"
+   },
+   "doc_types": [
+    "molecular"
+   ],
+   "department": "Pathology",
+   "required_facts": [
+    "mgmt_promoter"
+   ],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "EANO guidelines on the diagnosis and treatment of diffuse gliomas of adulthood (Weller et al., Nature Reviews Clinical Oncology 2021)",
+     "file": "eano/EANO_2021_diffuse_gliomas_Weller.pdf",
+     "page": 6,
+     "quote": "MGMT promoter methylation status should be determined in glioblastoma, notably in elderly or frail patients"
+    }
+   ],
+   "tier_basis": "EANO level B (class I), a only in glioblastoma, a diagnosis the system never judges: system tier c with the condition. EANO levels are mapped to tiers by the rule in the protocol note.",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "glioblastoma"
+   }
+  },
+  {
+   "id": "other_glioma_markers",
+   "label": "Other molecular markers (CDKN2A/B, H3 K27M, EGFR and TERT)",
+   "tier": "c",
+   "tiers": {
+    "adult_glioma": "c",
+    "adult_other": "none",
+    "child": "c"
+   },
+   "doc_types": [
+    "molecular"
+   ],
+   "department": "Pathology",
+   "required_facts": [],
+   "sla_days": 7,
+   "sources": [
+    {
+     "guideline": "EANO guidelines on the diagnosis and treatment of diffuse gliomas of adulthood (Weller et al., Nature Reviews Clinical Oncology 2021)",
+     "file": "eano/EANO_2021_diffuse_gliomas_Weller.pdf",
+     "page": 7,
+     "quote": "CDKN2A/B homozygous deletions should be explored in IDH- mutant astrocytomas. C: IV; L: B."
+    },
+    {
+     "guideline": "EANO guidelines on the diagnosis and treatment of diffuse gliomas of adulthood (Weller et al., Nature Reviews Clinical Oncology 2021)",
+     "file": "eano/EANO_2021_diffuse_gliomas_Weller.pdf",
+     "page": 7,
+     "quote": "Assessment of H3 K27M status should be done in diffuse gliomas involving the midline. C: IV; L: B."
+    },
+    {
+     "guideline": "EANO guidelines on the diagnosis and treatment of diffuse gliomas of adulthood (Weller et al., Nature Reviews Clinical Oncology 2021)",
+     "file": "eano/EANO_2021_diffuse_gliomas_Weller.pdf",
+     "page": 7,
+     "quote": "EGFR amplification and TERT promoter mutation should be tested in IDH- wild- type diffuse gliomas"
+    }
+   ],
+   "tier_basis": "EANO level B (class IV), a only in the subgroup each line names (IDH-mutant astrocytoma, midline glioma, IDH-wild-type glioma without necrosis or vessel proliferation), findings the system never judges: system tier c with the condition. EANO levels are mapped to tiers by the rule in the protocol note. Child: c, because these are adult guideline lines and the paediatric book has none",
+   "condition": {
+    "ncg_tier": "a",
+    "text": "the subgroup named in the line: IDH-mutant astrocytoma, a midline glioma, or an IDH-wild-type glioma lacking necrosis and vessel proliferation"
+   }
+  }
+ ],
+ "optional": [
+  {
+   "id": "post_op_mri_brain",
+   "label": "MRI brain after surgery",
+   "doc_types": [
+    "mri"
+   ],
+   "department": "Radiology",
+   "note": "An after-surgery record (a pre-operative MRI must never satisfy it; never a gap before the board; the proposed tier is kept in tiers_in_the_book: review, Phase 2).",
+   "sources": [
+    {
+     "guideline": "EANO guidelines on the diagnosis and treatment of diffuse gliomas of adulthood (Weller et al., Nature Reviews Clinical Oncology 2021)",
+     "file": "eano/EANO_2021_diffuse_gliomas_Weller.pdf",
+     "page": 7,
+     "quote": "through MRI (or CT if MRI is not possible), without and with contrast"
+    }
+   ],
+   "tier_basis": "Proposed b (a post-surgery record): the guideline asks for the extent of resection to be assessed by MRI within 24 to 48 hours of surgery (p 7); no level is printed for the sentence. Child setting: EANO is written for adults and the NCG paediatric book has no brain tumour chapter, so the child tier follows the adult line and needs a clinician's check even more than the rest.",
+   "required_facts": [
+    "comparison_prior"
+   ],
+   "region": "brain|head|cranial|cranium|neuro|cerebr",
+   "tiers_in_the_book": {
+    "adult_glioma": "b",
+    "adult_other": "none",
+    "child": "b"
+   }
+  },
+  {
+   "id": "previous_board",
+   "label": "Previous Tumour Board record",
+   "doc_types": [
+    "tumour_board_record"
+   ],
+   "department": "MDT Coordinator",
+   "route": "coordinator"
+  }
+ ],
+ "extract_facts": [
+  "presenting_complaint",
+  "ecog",
+  "comorbidities",
+  "clinical_question",
+  "recorded_stage",
+  "lesion_size",
+  "nodal_findings",
+  "distant_findings",
+  "histologic_type",
+  "grade",
+  "haemoglobin",
+  "wbc",
+  "platelets",
+  "creatinine",
+  "bilirubin",
+  "patient_preference",
+  "clinical_trial_note",
+  "diagnosis_date_mode",
+  "treatment_received",
+  "ki67",
+  "idh_status",
+  "codeletion_1p19q",
+  "mgmt_promoter",
+  "kps",
+  "comparison_prior"
+ ],
+ "core_data": [
+  {
+   "id": "diagnosis",
+   "label": "Histopathological / cytological diagnosis",
+   "facts": [
+    "histologic_type"
+   ]
+  },
+  {
+   "id": "diagnosis_date_mode",
+   "label": "Date and mode of diagnosis",
+   "facts": [
+    "diagnosis_date_mode"
+   ]
+  },
+  {
+   "id": "stage",
+   "label": "Stage as recorded (with the investigations used)",
+   "facts": [
+    "recorded_stage"
+   ]
+  },
+  {
+   "id": "performance_status",
+   "label": "Performance status",
+   "facts": [
+    "ecog"
+   ]
+  },
+  {
+   "id": "comorbidities",
+   "label": "Co-morbidities",
+   "facts": [
+    "comorbidities"
+   ]
+  },
+  {
+   "id": "biomarkers",
+   "label": "Relevant genomic / biomarker testing",
+   "facts": [
+    "idh_status",
+    "codeletion_1p19q",
+    "mgmt_promoter"
+   ]
+  },
+  {
+   "id": "treatment_history",
+   "label": "Treatment history",
+   "facts": [
+    "treatment_received"
+   ]
+  },
+  {
+   "id": "patient_preference",
+   "label": "Patient preference / special circumstances",
+   "facts": [
+    "patient_preference"
+   ]
+  },
+  {
+   "id": "clinical_trial",
+   "label": "Clinical trial availability / suitability recorded",
+   "facts": [
+    "clinical_trial_note"
+   ]
+  },
+  {
+   "id": "question",
+   "label": "Question for the Tumour Board",
+   "facts": [
+    "clinical_question"
+   ]
+  }
+ ],
+ "core_data_source": "NHS England, Streamlining MDT meetings (2020), p.11 'minimum core data requirements'; aligned with the NCG Virtual Tumour Board case template (India)",
+ "post_board": {
+  "required_record_fields": [
+   "decision_text",
+   "recorded_by",
+   "participants",
+   "actions"
+  ],
+  "follow_up_default_days": 14,
+  "record_fields_source": "EUSOMA 2020 (names of all participants, evidence on decisions); Victorian Cancer MDM quality framework 2018 (report errors/changes raised, divergent recommendations and dissenting clinicians); PM-JAY HBP 2.2 s.3.9 (tumour board decision and treatment plan)"
+ },
+ "policy_basis": "PM-JAY Health Benefit Package 2.2 user guidelines (NHA, 2021), section 3.9: pre-authorization is mandatory at each step of cancer care and the decision on appropriate care is to be taken by a multidisciplinary tumour board; NHS England MDT streamlining guidance (2020) pre-listing conditions.",
+ "guideline_sources": [
+  {
+   "guideline": "EANO guidelines on the diagnosis and treatment of diffuse gliomas of adulthood (Weller et al., Nature Reviews Clinical Oncology 2021)",
+   "file": "eano/EANO_2021_diffuse_gliomas_Weller.pdf",
+   "pages": "2, 3, 6, 7 (PDF page; journal page = PDF page + 169)"
+  }
+ ]
+}

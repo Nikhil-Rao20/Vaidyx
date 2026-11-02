@@ -1,11 +1,14 @@
 // A request card for the supporting doctor (SPEC 3.6): patient, UHID, IP/OP, accession, what is missing, who asked,
 // due date, Open order in HIS (straight to the order, after the HIS login if needed), Acknowledge, Done with a note.
-import { useState } from "react";
+// The note takes dictation (night-v3 4.4); it goes with "Send done" only.
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { CalendarClock, CheckCircle2, ExternalLink, FolderOpen, Handshake, Hourglass, Images, MessageSquareText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
+import { MicButton } from "@/components/MicButton";
+import { MessageButton } from "@/components/MessageButton";
 import { Label } from "@/components/ui/label";
 import { ActionButton } from "@/components/ActionButton";
 import { PatientLine } from "@/components/PatientLine";
@@ -22,6 +25,7 @@ import { cn } from "@/lib/utils";
 
 export function RequestCard({ request: r, onChanged, canAnswer = true }: { request: InboxRequest; onChanged: () => void; canAnswer?: boolean }) {
   const [note, setNote] = useState("");
+  const noteRef = useRef<HTMLTextAreaElement>(null);
   const [doneOpen, setDoneOpen] = useState(false);
   const completed = r.status === "completed";
   const ack = useAsyncAction(async () => {
@@ -85,6 +89,7 @@ export function RequestCard({ request: r, onChanged, canAnswer = true }: { reque
         <Button type="button" variant="ghost" size="sm" asChild>
           <Link to={`/cases/${encodeURIComponent(r.case_id)}`} title="What was asked, and your department's records in this Case File"><FolderOpen className="size-4" aria-hidden /> Case File</Link>
         </Button>
+        <MessageButton target={r.sent?.by ? { to: r.sent.by } : { coordinator: true }} caseId={r.case_id} label={r.sent?.by ? "Message the asker" : "Message the MDT Coordinator"} variant="ghost" size="sm" />
         {!completed && canAnswer ? (
           <span className="ml-auto flex items-center gap-2">
             {!r.acknowledged && !board ? (
@@ -105,7 +110,10 @@ export function RequestCard({ request: r, onChanged, canAnswer = true }: { reque
                     </div>
                     <div className="grid gap-1.5">
                       <Label htmlFor={`note-${r.action_id}`} className="flex items-center gap-1"><MessageSquareText className="size-3.5" aria-hidden /> Note (optional)</Label>
-                      <Textarea id={`note-${r.action_id}`} rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Signed today; addendum on IHC follows" />
+                      <div>
+                        <Textarea ref={noteRef} id={`note-${r.action_id}`} rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Signed today; addendum on IHC follows" />
+                        <div className="flex justify-end"><MicButton target={noteRef} screen="request-note" context="note" label="Dictate the note" caseId={r.case_id} /></div>
+                      </div>
                     </div>
                     <ActionButton type="submit" size="sm" state={done.state} doneText="Sent">Send done</ActionButton>
                   </form>

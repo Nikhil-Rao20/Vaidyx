@@ -1,10 +1,10 @@
-// The Case Files page (the home of every clinical role): the title with a greeting under it, "+ New Case File" and "Join with
-// a code", the waiting strip, the coordinator's next meeting card, the gift box when there is nothing yet, and the list.
+// The Case Files page (the home of every clinical role): the title with a greeting under it, "Join a Case File" and "Join a
+// meeting" (each opens the 6-digit code dialog; the owner, 18 Oct), "+ New Case File" for those who may create, the waiting
+// strip, the coordinator's next meeting card, the gift box when there is nothing yet, and the list.
 import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
-import { CalendarPlus, ChevronDown, KeyRound, Plus } from "lucide-react";
+import { KeyRound, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PageHeader } from "@/components/PageHeader";
 import { JoinDialog, type JoinKind } from "@/components/JoinDialog";
 import ClickSpark from "@/components/vendor/ClickSpark";
@@ -17,6 +17,16 @@ import type { Me } from "@/lib/session";
 function greeting(): string {
   const h = new Date().getHours();
   return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+}
+
+/** One of the two join buttons: the name in plain words and, under it, where the code comes from. */
+function JoinButton({ label, hint, onClick }: { label: string; hint: string; onClick: () => void }) {
+  return (
+    <Button type="button" variant="outline" onClick={onClick} className="h-auto min-h-10 min-w-0 flex-1 basis-0 flex-col items-start gap-0 whitespace-normal py-1.5 text-left sm:flex-none sm:basis-auto">
+      <span className="inline-flex items-center gap-1.5"><KeyRound className="size-4 text-muted-foreground" aria-hidden />{label}</span>
+      <span className="text-[11px] font-normal leading-tight text-muted-foreground">{hint}</span>
+    </Button>
+  );
 }
 
 export function CaseFileHome({ me }: { me: Me }) {
@@ -41,15 +51,8 @@ export function CaseFileHome({ me }: { me: Me }) {
         subtitle={`${greeting()}${name ? `, ${name}` : ""}. Here are ${where}.`}
         actions={
           <>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button type="button" variant="outline"><KeyRound className="size-4" aria-hidden /> Join with a code <ChevronDown className="size-3.5 opacity-70" aria-hidden /></Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => setJoin("case")}><KeyRound className="size-4" aria-hidden /> A Case File (6-digit code from the consultant)</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setJoin("meeting")}><CalendarPlus className="size-4" aria-hidden /> A meeting (6-digit code from the coordinator)</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <JoinButton label="Join a Case File" hint="6-digit code from the consultant" onClick={() => setJoin("case")} />
+            <JoinButton label="Join a meeting" hint="6-digit code from the coordinator" onClick={() => setJoin("meeting")} />
             {canCreate ? (
               <ClickSpark sparkColor="var(--primary)" sparkCount={8} sparkRadius={18} duration={420}>
                 <Button type="button" className="hover:bg-primary-hover active:scale-[0.97]" asChild>

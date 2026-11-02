@@ -48,6 +48,12 @@ export interface SlotAction {
   reason_required?: boolean;
 }
 
+/** The value a doctor picked for the board when two reports differ (a board_uses confirmation, night-v3 item 1.7). */
+export interface PickedValue { doc_id: string; doc_title?: string; value: string; by?: string; by_name?: string; at?: string; confirmation: string }
+
+/** One side of a difference between two reports (discord.py): the quote plus the value as that report writes it. */
+export type DiscordCitation = Citation & { value?: string; date?: string | null; status?: string | null; final?: boolean; confirmed_by?: string };
+
 export interface SlotConfirmation {
   type: string;
   key: string;
@@ -58,7 +64,9 @@ export interface SlotConfirmation {
   page?: number | null;
   why?: string;
   kind_label?: string;
-  citations?: Citation[];
+  citations?: DiscordCitation[];
+  /** Two reports differ and a doctor picked the value the board uses: the line is settled, the difference stays shown. */
+  picked?: PickedValue | null;
 }
 
 export interface Slot {
@@ -86,6 +94,7 @@ export interface Slot {
   draft?: { doc_id?: string; doc_title?: string; status?: string; signed?: string; value?: string } | null;
   pending?: boolean;
   waiver?: { by?: string; by_name?: string; at?: string; reason?: string } | null;
+  picked?: PickedValue | null;
 }
 
 export interface SlotSection {
@@ -153,6 +162,8 @@ export interface ChatThread {
   pinned?: boolean;
   stale?: boolean;
   seconds?: number;
+  /** The model that wrote the answer (review 9 C, S3); empty when no model was called (a request refused by the scope check). */
+  model?: string | null;
   /** Set by the page when the answer came from the old /ask route and is not saved. */
   unsaved?: boolean;
 }
@@ -161,11 +172,23 @@ export interface ChatThread {
 export type HelperRole = "radiology" | "pathology" | "medical_oncology" | "surgical_oncology" | "radiation_oncology" | "nuclear_medicine";
 export interface HelperBrief {
   status: "none" | "preparing" | "ready" | "stale";
-  at?: string;
+  at?: string | null;
+  /** Set while the ready mark's run still has to reach this head (status "preparing"). */
+  queued?: boolean;
+  message?: string;
+  stale_reason?: string;
   sections?: Array<{ heading?: string; title?: string; items?: Array<{ text: string; citations?: Citation[] }>; text?: string }>;
   points_for_review?: Array<{ text: string; citations?: Citation[] }>;
   not_documented?: string[];
   reviewed_by?: string;
+  /** The reviewer's display name beside the login (review 9 C, M11). */
+  reviewed_by_name?: string;
+  /** The doctor who flagged the brief for correction, and their display name (Phase 9 review E, I2). */
+  flagged_by?: string;
+  flagged_by_name?: string;
+  /** The review status of the brief: "reviewed", "flagged", "ai_draft" or "". */
+  review?: string;
+  label?: string;
   model?: string;
 }
 export interface Helper {
@@ -175,9 +198,21 @@ export interface Helper {
   brief: HelperBrief;
   thread_count: number;
   prepare_allowed: boolean;
+  head?: boolean;
+  /** The brief's job while it is prepared (poll GET /jobs/{id}). */
+  job?: string | null;
+  // night-v3 item 6.5: the "Specialty agents" (owner decision D2: AI agent, support only, never a member of the board)
+  /** "<Department>, AI agent". */
+  title?: string;
+  points_count?: number;
+  not_documented_count?: number;
+  /** How many exchanges on the shared thread were asked in a board meeting. */
+  meeting_exchanges?: number;
+  prepared_at?: string | null;
 }
 export interface HelperMessage {
   id?: string;
+  role?: string;
   by?: string;
   by_name?: string;
   at?: string;
@@ -186,6 +221,14 @@ export interface HelperMessage {
   statements?: ChatStatement[];
   status?: string;
   message?: string;
+  /** "case" or "meeting:<meeting id>": the one thread per Case File and role is shared with the board meetings (night-v3 item 6.3). */
+  source?: string;
+  /** The date of the board meeting the question was asked in (YYYY-MM-DD), for a meeting exchange. */
+  meeting_date?: string | null;
+  model?: string | null;
+  /** The records changed after this answer. */
+  stale?: boolean;
+  kind?: string;
 }
 
 // ---- published.py ------------------------------------------------------------------------------------------------
@@ -211,6 +254,48 @@ export interface PublishedResult {
 
 export interface PublishedSearch { by?: string; at?: string; terms: string; counts?: Record<string, number>; errors?: unknown }
 
+// ---- similar.py (night-v3 Phase 7, docs/night-v3/research/07_similar_cases.md 8.3 and 8.4) ------------------------------
+/** A quoted line and where it sits: the past file "<doc title>, Mon YYYY" (or "Board record, Mon YYYY", "Case summary, Mon YYYY"),
+ *  this file "<doc title>, DD/MM/YYYY". */
+/** A quoted line (text and where it sits). A Case summary sentence of the past file (outcome so far) is model-written: `label` says so
+ *  ("Case summary, AI draft, not reviewed"), and `quote` with `quote_where` is the verified record line it rests on (Phase 7 review, S1). */
+export interface SimilarQuote { text: string; where: string; quote?: string; quote_where?: string; label?: string }
+export interface SimilarStage { text: string; kind: "recorded" | "confirmed_draft" | "agreed" | string; label: string; quote?: string; where?: string }
+export interface SimilarValue { fact: string; label: string; value: string; quote?: string; where?: string; shared?: boolean }
+export interface SimilarDecision {
+  record_id: string; when: string; outcome?: string; outcome_label?: string; intent?: string; intent_label?: string;
+  text: string; modalities?: string[]; stage_as_agreed?: string;
+}
+export interface SimilarLine { about?: string; this: SimilarQuote; past: SimilarQuote }
+export type SimilarHow = "normal" | "with_reason" | "refused";
+/** POST /cases/{id}/similar/open: how this person may open the past file (the server computes access.scope). */
+export interface SimilarOpen { how: SimilarHow; scope?: string | null; reason?: string; via?: string; label?: string }
+/** One past Case File as the card shows it. No field ranks it: the order of the list is the only order. */
+export interface SimilarResult {
+  case_id: string; cancer: string; setting?: string; age_band?: string; sex?: string;
+  stage: SimilarStage[];
+  values: SimilarValue[];
+  decisions: SimilarDecision[];
+  outcome_so_far: { sentences: SimilarQuote[]; later_records?: string };
+  similar: SimilarLine[];
+  differs: SimilarLine[];
+  matched_by?: string[] | null;
+  no_reasons?: boolean;
+  open?: { how: SimilarHow; reason?: string; via?: string };
+  label?: string;
+}
+/** POST /cases/{id}/similar/search {words?} */
+export interface SimilarResponse {
+  label: string; ordered_by: "model" | "text"; order_note: string; model_line: string;
+  cancer_group?: string; group_label?: string; words?: string; note?: string;
+  results: SimilarResult[]; weaker: SimilarResult[];
+}
+/** GET /cases/{id}/similar: whether a search is possible here, and the last five searches of this file. */
+export interface SimilarInfo {
+  available: boolean; reason?: string; label?: string; order_note?: string; model_line?: string; cancer_group?: string; group_label?: string;
+  searches?: Array<{ words?: string; at?: string; by_name?: string }>;
+}
+
 // ---- team.py -----------------------------------------------------------------------------------------------------
 export interface Team {
   owner: { department: string; department_label?: string; doctors: Array<{ user: string; name: string }> };
@@ -226,7 +311,10 @@ export interface Team {
   derived?: boolean;
 }
 
-export type ProposalAction = "waive" | "not_needed" | "confirm" | "mark_ready" | "send_request" | "urgency" | "refer" | "typed_value" | "published_case";
+export type ProposalAction = "waive" | "not_needed" | "confirm" | "mark_ready" | "send_request" | "urgency" | "refer" | "typed_value" | "published_case"
+  | "key_value" | "reason" | "staging_confirm";
+/** What a resident's call answers instead of doing the step (night-v3 item 1.8): the proposal the consultant signs off. */
+export interface Proposed { proposal?: Proposal }
 export interface Proposal {
   id: string;
   action: ProposalAction | string;
@@ -278,6 +366,9 @@ export interface DocFact {
   reason?: string;
 }
 
+/** Final and signed as the report states it (steps.final_status), on every document of the Case File view. */
+export interface DocFinal { final: boolean; signed: boolean; preliminary: boolean; status: string; label: string; warn: boolean }
+
 export interface CaseDocument {
   doc_id: string;
   filename: string;
@@ -287,6 +378,8 @@ export interface CaseDocument {
   error?: string;
   dismissed?: { by?: string; reason?: string } | null;
   classification?: DocClassification;
+  /** Final and signed as the report states it (2 Nov 2026). */
+  final?: DocFinal;
   identity?: string;
   added?: string;
   department?: string;
@@ -418,12 +511,65 @@ export interface BoardRecord {
   /** The old board record keeps a sentence ("Radiology, Medical Oncology; absent: Pathology"); the new one a list. */
   participants?: string[] | string;
   concerns?: Array<{ by: string; text: string }>;
+  divergent_opinions?: string;
   meeting_outcome?: string;
   session?: string;
   recorded_at?: string;
   recorded_by?: string;
   board_date?: string;
+  // Decision record v2 (night-v3 3.1, tumour_board/decision_record.py): the same keys as the meeting's decision form.
+  not_discussed_reason?: string;
+  intent?: string;
+  modalities?: string[];
+  sequence?: string;
+  alternatives_discussed?: string;
+  stage_as_agreed?: string;
+  stage_source?: string;
+  report_corrections_raised?: string;
+  patient_preference?: string;
+  patient_preference_note?: string;
+  fitness_considered?: string;
+  trial_considered?: string;
+  trial_name?: string;
+  genomic_considered?: string;
+  supportive_needs?: string[];
+  consent_recorded?: string;
+  investigations?: Array<{ item: string; department: string; due?: string }>;
+  referrals?: Array<{ kind: string; department: string; note?: string }>;
+  next_review?: string;
+  next_review_trigger?: string;
+  key_worker?: string;
+  informed_by?: string;
+  inform_by_date?: string;
+  patient_informed_date?: string;
+  gp_informed_date?: string;
+  pmjay_plan_approval?: string;
+  pmjay_plan_note?: string;
+  /** Board actions ({task, department, due, kind}); investigations and referrals become rows of kind investigation or referral. */
+  actions?: Array<{ task: string; department?: string; due?: string; kind?: string }>;
+  /** Set when the owning consultant (or the MDT Coordinator on the meeting day) corrected the record; versions are kept. */
+  corrected?: { by: string; by_name?: string; at: string; reason?: string; version: number } | null;
+  entered_by?: string;
+  /** The current version number; every version is kept in `versions` (version 1 is the decision as recorded). */
+  version?: number;
+  versions?: BoardRecordVersion[];
 }
+
+/** One version of a board record (postboard._versions / _new_version): a correction carries the changed fields and why. */
+export interface BoardRecordVersion {
+  version: number;
+  at?: string;
+  by?: string;
+  by_name?: string;
+  reason?: string;
+  /** "correction" for a later correction; absent for version 1. */
+  change?: string;
+  changed?: Array<{ key: string; old?: unknown; new?: unknown }>;
+  decision_text?: string;
+  fields?: Record<string, unknown>;
+}
+
+export interface SummaryLine { text: string; version?: number; at?: string; by?: string; by_name?: string; edited?: boolean; stale?: boolean; vaidyx_text?: string }
 
 export interface CaseFile {
   case: {
@@ -441,8 +587,12 @@ export interface CaseFile {
     urgency?: Urgency | null;
     team?: { owner?: string; residents?: unknown[] };
     meeting_id?: string;
+    /** The choices of Send to the board (night-v3 item 1.4); withdrawn when the doctor took it off the agenda (item 1.6). */
+    board_send?: BoardSend | null;
     board_record?: BoardRecord | null;
     created?: string;
+    /** The short line under the patient (night-v3 3.4), built from the Case summary; the owner's consultant may edit it. */
+    summary_line?: SummaryLine | null;
   };
   state: {
     gate?: { passed?: boolean; readiness?: number; satisfied?: number; total?: number; requirements?: GateRequirement[]; blockers?: unknown[] };
@@ -465,6 +615,8 @@ export interface CaseFile {
     waive?: Record<string, boolean>;
     confirm?: Record<string, boolean>;
     board_record?: boolean;
+    /** Per board record id: may this login correct it (the owning department's consultants; the MDT Coordinator on the meeting day). */
+    correct_board_record?: Record<string, boolean>;
     manage_participants?: boolean;
     refer?: boolean;
   };
@@ -501,4 +653,35 @@ export interface RequestDraft {
   free?: boolean;
   sent?: unknown;
   status?: string;
+}
+
+export interface BoardSend {
+  list?: "discussion" | "noting";
+  meeting_id?: string;
+  presenter?: string;
+  note?: string;
+  reason?: string;
+  by?: string;
+  at?: string;
+  withdrawn?: { by: string; at: string; reason: string } | null;
+}
+
+/** POST /cases/{id}/meeting/move or /withdraw (night-v3 item 1.6). */
+export interface MeetingMoveResult {
+  case_id: string;
+  meeting_id: string;
+  board_date: string;
+  board_send?: BoardSend | null;
+  meeting?: { id: string; date: string; time?: string; room?: string; label?: string } | null;
+}
+
+/** Send to the board (night-v3 item 1.4, design B7): POST /cases/{id}/ready with ready true, or a resident's mark_ready proposal.
+ *  meeting_id "" is "not scheduled yet" (the coordinator picks); presenter "" is the consultant who sends it; reason is required by the
+ *  server when items are still open. */
+export interface SendToBoardBody {
+  list: "discussion" | "noting";
+  meeting_id: string;
+  presenter: string;
+  note: string;
+  reason: string;
 }
