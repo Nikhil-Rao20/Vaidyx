@@ -34,6 +34,8 @@ export interface StepRow {
   entered_at?: string | null;
   report_value?: { value: string; quote?: SlotQuote; as_of?: string | null };
   corrected_by?: string;
+  /** Only in a report not final and signed: the value, its line and the mark ("not signed", "preliminary"), never counted (2 Nov 2026). */
+  unsigned?: { value: string; word: string; quote?: SlotQuote | null };
 }
 
 export interface TodoItem { id: string; section: SectionId; label: string; why?: string; action: StepAction }

@@ -27,7 +27,11 @@ export interface PreAuthHandlers {
 }
 
 function why(it: MissingItem): string {
-  if (it.draft?.doc_title) return `${niceTitle(it.draft.doc_title)} is only ${String(it.draft.status || "not final").toLowerCase()}: a final, signed report is needed`;
+  if (it.draft?.doc_title) {  // a report marked final but not signed is "not signed yet", not "only final" (2 Nov test pass)
+    const st = String(it.draft.status || "").toUpperCase();
+    const state = ["FINAL", "AMENDED", "CORRECTED"].includes(st) ? "is not signed yet" : st === "PRELIMINARY" ? "is only preliminary" : "is not final yet";
+    return `${niceTitle(it.draft.doc_title)} ${state}: a final, signed report is needed`;
+  }
   if (it.pending) return screenNote(it.note) || "Pending in the report";
   const n = screenNote(it.note);
   return n && !/^No .* in the Case File$/i.test(n) ? n : "Not found in the reports";

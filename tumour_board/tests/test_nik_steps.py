@@ -86,6 +86,28 @@ def test_a_signature_flag_alone_never_makes_a_draft_final():
     assert steps.final_status(d)["preliminary"] is True  # the stricter of the text and the hospital system
 
 
+def test_a_value_only_in_a_report_not_signed_is_shown_marked():
+    """Owner, 2 Nov 2026: the value of a report that is final but not signed is shown with its line and the mark "not signed" (never
+    counted: the row stays not found); every chip citing such a report gets the same mark, on a copy."""
+    q = {"doc_id": "D1", "doc_title": "HISTOPATHOLOGY REPORT", "page": 0, "text": "Grade: Moderately differentiated"}
+    s = {"id": "fact:grade", "fact_id": "grade", "label": "Grade", "status": "not_found", "note": "Only in a non-final document (HISTOPATHOLOGY REPORT)",
+         "draft": {"doc_id": "D1", "doc_title": "HISTOPATHOLOGY REPORT", "status": "FINAL", "value": "Moderately differentiated", "quote": q}}
+    row = steps._row(s)
+    assert row["status"] == "not_found" and row["value"] == "" and row["unsigned"] == {"value": "Moderately differentiated", "word": "not signed", "quote": q}
+    assert "unsigned" not in steps._row({**s, "status": "found", "value": "Moderately differentiated"})
+    assert "unsigned" not in steps._row({**s, "draft": {**s["draft"], "value": ""}})
+    assert [steps.unsigned_word(x) for x in ("FINAL", "PRELIMINARY", "")] == ["not signed", "preliminary", "not final"]
+    docs = [util.make_doc("D1", "histopathology", status="FINAL", signed="no"), util.make_doc("D2", "ct"),
+            util.make_doc("D3", "mammogram", status="PRELIMINARY", signed="no")]
+    words = steps.unsigned_words("TB-X", docs)
+    assert words == {"D1": "not signed", "D3": "preliminary"}
+    node = {"sections": [{"sentences": [{"text": "a", "citations": [{"doc_id": "D1"}, {"doc_id": "D2"}]}]}], "points": [{"citations": [{"doc_id": "D3"}]}]}
+    marked = steps.mark_citations(node, words)
+    assert marked["sections"][0]["sentences"][0]["citations"] == [{"doc_id": "D1", "final_word": "not signed"}, {"doc_id": "D2"}]
+    assert marked["points"][0]["citations"] == [{"doc_id": "D3", "final_word": "preliminary"}]
+    assert "final_word" not in node["sections"][0]["sentences"][0]["citations"][0]  # the saved summary is not touched
+
+
 def test_the_check_of_one_document():
     case = {"protocol": "lung_nsclc"}
     good = util.make_doc("D2", "ct", facts={"lesion_size": util.fact("3.2 cm", quote="Size: 3.2 cm")}); good["extracted_under"] = "lung_nsclc"

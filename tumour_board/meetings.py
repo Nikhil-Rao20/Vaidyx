@@ -2036,7 +2036,9 @@ async def answer(mid: str, qid: str, user: str = "") -> dict | None:
                 speech = [f"AI agent, {dept}.", NOT_DOCUMENTED_SPOKEN if status == "not_documented" else str(a.get("message") or "")]
             elif any(x.get("citations") for x in stmts) or a.get("references"):
                 speech.append("Sources are on the screen.")
-            out = {**partial, "status": status, "text": " ".join(x.get("text", "") for x in stmts) or str(a.get("message") or ""), "statements": stmts,
+            from . import steps
+            out = {**partial, "status": status, "text": " ".join(x.get("text", "") for x in stmts) or str(a.get("message") or ""),
+                   "statements": steps.mark_citations(stmts, steps.unsigned_words(cid)),  # a report not final and signed: marked (2 Nov 2026)
                    "references": list(a.get("references") or []), "label": a.get("label") or partial["label"], "model": a.get("model"), "at": _now(),
                    "seconds": a.get("seconds"), "first_seconds": partial["first_seconds"] if partial.get("first_seconds") is not None else a.get("first_seconds"), "speech": speech,
                    "message": a.get("message") or "", "category": a.get("category"), "kind": a.get("kind"), "note": ANSWER_NOTE}
@@ -2104,7 +2106,8 @@ def _points_now(cid: str, points) -> tuple[list[dict], int]:
         if kept and not kept[0].get("approximate"):
             out.append({"text": kept[0]["text"], "citations": list(kept[0].get("citations") or []), "references": list(p.get("references") or []),
                         **({"flags": kept[0]["flags"]} if kept[0].get("flags") else {})})
-    return out, len(rows) - len(out)
+    from . import steps
+    return steps.mark_citations(out, steps.unsigned_words(cid)), len(rows) - len(out)  # a report not final and signed: marked (2 Nov 2026)
 
 
 def _dropped_note(n: int) -> str:
@@ -2707,6 +2710,8 @@ def slides(cid: str, r: dict | None = None) -> list[dict]:
                             "content": {"items": items, "note": "Published case, not advice for this patient"}})
     except Exception:
         pass
+    from . import steps
+    out = steps.mark_citations(out, steps.unsigned_words(cid, docs))  # a report not final and signed: its chips marked (2 Nov 2026)
     if outside_view(r, c):  # an outside expert without consent: nothing that names the patient (security review #9)
         out = strip_identity(out, c)
     return out

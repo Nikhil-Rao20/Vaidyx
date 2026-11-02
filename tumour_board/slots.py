@@ -572,7 +572,8 @@ def _fact_slot(fid, recs, rows, facts, typed, needs, disc, typable, required_ids
     elif hist and not any(h.get("doc_final") for h in hist):
         h = hist[-1]
         s["status"] = "not_found"; s["note"] = f"Only in a non-final document ({h.get('doc_title')}): a final, signed report is required"
-        s["draft"] = {"doc_id": h.get("doc_id"), "doc_title": h.get("doc_title"), "status": h.get("doc_status"), "value": h.get("value")}
+        s["draft"] = {"doc_id": h.get("doc_id"), "doc_title": h.get("doc_title"), "status": h.get("doc_status"), "value": h.get("value"),
+                      "quote": _quote(h, fid) if h.get("quote") else None}  # shown, marked "not signed" (owner, 2 Nov 2026)
     else:
         s["status"] = "not_found"; s["note"] = "Not found in the file"
     action = next((actions.get(r["id"]) for r in live if actions.get(r["id"])), None)

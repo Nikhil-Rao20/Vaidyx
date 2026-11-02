@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from src.auth_helpers import get_current_user, require_user
 from tumour_board import agents, config, guidelines, llm, notify, org, postboard, protocol, qa, rules, search, service, store, summary
+from tumour_board import steps  # final_status of a report (2 Nov 2026)
 from tumour_board import confirm  # clinician confirmations (V1 item 2.2)
 from tumour_board import intake  # department uploads and patient matching (V1 items 2.3, 2.4)
 from tumour_board import board  # board sessions, attendance, agent log (V1 items 6.1 to 6.3)
@@ -1016,7 +1017,8 @@ def setup_tumour_board_routes():
             st = access.limited_state(rl, c, st)
             mine = access.limited_docs(rl, c, rules.case_docs(case_id, store.get_state(case_id)), store.get_state(case_id))
             docs = [{k: d.get(k) for k in ("doc_id", "filename", "rel_path", "ext", "state", "error", "classification", "added", "department", "uploaded_by")}
-                    | {"facts": {}, "pages": len(d.get("pages") or []), "methods": [], "scan_pages": [], "page_flags": []} | his_case.doc_view(d) for d in mine]
+                    | {"facts": {}, "pages": len(d.get("pages") or []), "methods": [], "scan_pages": [], "page_flags": []} | his_case.doc_view(d)
+                    | {"final": steps.final_status(d)} for d in mine]  # final and signed, for the "not signed" mark on a source chip (2 Nov 2026)
             p = c.get("patient") if isinstance(c.get("patient"), dict) else {}
             case_view = {k: c.get(k) for k in ("case_id", "protocol", "setting", "board_date", "department", "listing", "hospital_level", "created_at")} | {"patient": {k: p.get(k) for k in ("name", "mrn", "agesex")}}
             return {"case": case_view, "state": st, "documents": docs, "facts": {}, "timeline": [], "signature": None, "stale": {},  # no referrals, participants, links or encounters without records (review Phase 5 M2)
@@ -1032,7 +1034,8 @@ def setup_tumour_board_routes():
                         {"facts": d.get("facts", {}), "pages": len(d.get("pages") or []), "methods": sorted({p["method"] for p in d.get("pages") or []}),
                          "scan_pages": scanned.scan_pages(d.get("pages")),  # pages read from an image: "from scan (OCR)" (V1 item 8.1)
                          "page_flags": sorted({f for p in d.get("pages") or [] for f in p.get("flags") or []})}  # Hindi / regional text, illegible parts (V1 item 3.6)
-                        | his_case.doc_view(d))  # HIS status, signature, encounter, accession, version history; outside reports (V2 items 3.3 to 3.6)
+                        | his_case.doc_view(d)  # HIS status, signature, encounter, accession, version history; outside reports (V2 items 3.3 to 3.6)
+                        | {"final": steps.final_status(d)})  # final and signed: a source chip of a report not final and signed says so (owner, 2 Nov 2026)
         facts = rules.resolve_facts(rules.case_docs(case_id, st), st.get("overrides"))  # confirmations overlaid (V1 item 2.2)
         cat = protocol.facts()
         sig = rules.case_signature(case_id, st)  # what a summary or brief would be generated from now (V1 item 4.5)

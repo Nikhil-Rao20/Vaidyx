@@ -6,6 +6,7 @@ import { CheckCircle2, CircleDashed, Clock, HelpCircle, Loader2, MinusCircle, Se
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ApiError } from "@/lib/api";
+import type { DocFinal } from "../types";
 
 // ---- dates -------------------------------------------------------------------------------------------------------
 // On screen: DD/MM/YYYY (India first); the API sends ISO 8601.
@@ -85,6 +86,22 @@ export function docTitleOf(docs: Array<{ doc_id: string; filename: string; class
   if (given) return niceTitle(given);
   const d = (docs ?? []).find((x) => x.doc_id === docId);
   return niceTitle(d?.classification?.title || d?.filename || "record");
+}
+
+
+/** The word for a source chip whose report is not final and signed: a value from such a report is shown everywhere, marked (owner,
+ *  2 Nov 2026). None for a final, signed report. */
+export function finalWord(f?: DocFinal | null): string | null {
+  if (!f || !f.warn) return null;
+  return f.final ? "not signed" : f.preliminary ? "preliminary" : f.status === "CANCELLED" ? "cancelled" : "not final";
+}
+
+export const finalWordOf = (docs: Array<{ doc_id: string; final?: DocFinal }> | undefined, docId: string) =>
+  finalWord((docs ?? []).find((d) => d.doc_id === docId)?.final);
+
+/** The amber mark itself, inside or beside a source chip. */
+export function NotSigned({ word }: { word?: string | null }) {
+  return word ? <span className="ml-1 rounded px-1 text-[10px] font-semibold status-warn" data-testid="not-signed">{word}</span> : null;
 }
 
 

@@ -16,7 +16,7 @@ import { primeAudio, stopSpeaking, VOICE_TEXT } from "@/lib/voice";
 import { askOld, getChats, notBuiltYet, pinChat, postChat } from "../api";
 import type { CaseDocument, ChatThread } from "../types";
 import type { SourceTarget } from "./SourceViewer";
-import { EmptyState, ErrorState, LoadingButton, SkeletonLines, StatusChip, errorText, fmtDateTime, indianDates, modelLabel, useAnnounce, niceTitle } from "./common";
+import { EmptyState, ErrorState, LoadingButton, SkeletonLines, StatusChip, errorText, fmtDateTime, indianDates, modelLabel, useAnnounce, niceTitle, NotSigned, finalWordOf } from "./common";
 import { cn } from "@/lib/utils";
 
 const MAX_Q = 600;
@@ -154,7 +154,7 @@ export function AskPanel({ caseId, docs, onOpenSource, compact }: { caseId: stri
                     <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
                       {(s.citations ?? []).map((c, j) => (
                         <button key={j} type="button" className="quote-chip hover:brightness-95 active:scale-95 transition" onClick={() => onOpenSource({ docId: c.doc_id, page: c.page ?? 0, quote: c.quote, title: c.doc_title || docTitle(c.doc_id) })} title={`Open ${c.doc_title || docTitle(c.doc_id)}, page ${(c.page ?? 0) + 1}`}>
-                          {niceTitle(c.doc_title) || docTitle(c.doc_id)} p. {(c.page ?? 0) + 1}
+                          {niceTitle(c.doc_title) || docTitle(c.doc_id)} p. {(c.page ?? 0) + 1}<NotSigned word={finalWordOf(docs, c.doc_id)} />
                         </button>
                       ))}
                     </span>

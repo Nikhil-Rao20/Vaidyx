@@ -366,6 +366,9 @@ export interface DocFact {
   reason?: string;
 }
 
+/** Final and signed as the report states it (steps.final_status), on every document of the Case File view. */
+export interface DocFinal { final: boolean; signed: boolean; preliminary: boolean; status: string; label: string; warn: boolean }
+
 export interface CaseDocument {
   doc_id: string;
   filename: string;
@@ -375,6 +378,8 @@ export interface CaseDocument {
   error?: string;
   dismissed?: { by?: string; reason?: string } | null;
   classification?: DocClassification;
+  /** Final and signed as the report states it (2 Nov 2026). */
+  final?: DocFinal;
   identity?: string;
   added?: string;
   department?: string;

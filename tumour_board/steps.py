@@ -393,7 +393,51 @@ def _row(s) -> dict:
             out["report_value"] = s["report_value"]
     if s.get("confirmed_by"):
         out["corrected_by"] = slots.display_name(s["confirmed_by"])
+    dr = s.get("draft") or {}
+    if s.get("status") in ("not_found", "waiting") and dr.get("value"):  # only in a report not final and signed: shown, marked (owner, 2 Nov 2026)
+        out["unsigned"] = {"value": dr["value"], "word": unsigned_word(dr.get("status")), "quote": dr.get("quote")}
     return out
+
+
+def unsigned_word(status) -> str:
+    """The mark on a value from a report that is not final and signed: "not signed" (final, unsigned), "preliminary", "not final"."""
+    st = str(status or "").upper()
+    return "not signed" if st in FINAL else "preliminary" if st == "PRELIMINARY" else "not final"
+
+
+def unsigned_words(case_id, docs=None) -> dict:
+    """doc_id -> the mark of every report of the Case File that is not final and signed ("not signed", "preliminary", "not final")."""
+    if docs is None:
+        docs = rules.case_docs(case_id, store.get_state(case_id))
+    out = {}
+    for d in docs:
+        f = final_status(d)
+        if f["warn"] and d.get("doc_id"):
+            out[d["doc_id"]] = unsigned_word(f["status"])
+    return out
+
+
+def mark_citations(node, words: dict):
+    """A copy of node in which every citation of such a report carries "final_word" for the mark on its chip: a value from a report not
+    final and signed is shown everywhere, marked (owner, 2 Nov 2026). The saved summary, brief or answer is not touched."""
+    import copy
+    if not words:
+        return node
+
+    def walk(x):
+        if isinstance(x, dict):
+            for c in x.get("citations") or []:
+                if isinstance(c, dict) and c.get("doc_id") in words:
+                    c["final_word"] = words[c["doc_id"]]
+            for v in x.values():
+                if isinstance(v, (dict, list)):
+                    walk(v)
+        elif isinstance(x, list):
+            for v in x:
+                walk(v)
+    node = copy.deepcopy(node)
+    walk(node)
+    return node
 
 
 def slots_note(s) -> str:
@@ -559,7 +603,9 @@ def build(case_id, roles=None) -> dict:
         n = len(g["items"])
         dep = g["department"]
         what = ", ".join(i["label"] for i in g["items"][:2]) + (f" and {n - 2} more" if n > 2 else "")
-        todo.append({"id": f"request:{dep['label']}", "section": "pre_authorization", "label": what, "why": "Not found in the reports",
+        unsigned = all(i.get("draft") for i in g["items"])  # the reports have it, but not final and signed (2 Nov 2026)
+        todo.append({"id": f"request:{dep['label']}", "section": "pre_authorization", "label": what,
+                     "why": "In a report not signed yet" if unsigned else "Not found in the reports",
                      "action": {"kind": "ask_department", "label": f"Send request to {dep['label']}", "department": dep, "slot_ids": [i["slot_id"] for i in g["items"]]}})
     for d in doc_todo:
         todo.append({"id": f"doc:{d['doc_id']}", "section": "reports", "label": d["title"], "why": d["check"]["reasons"][0],

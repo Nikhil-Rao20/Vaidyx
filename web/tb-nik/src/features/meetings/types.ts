@@ -10,7 +10,7 @@ export interface MeetingsResponse { meetings: MeetingRow[]; can_manage: boolean 
 export interface NewMeeting { date: string; time: string; room?: string; video: boolean; minutes_per_case?: number }
 
 // ---- slides (GET /meetings/{mid}/cases/{cid}/slides) ---------------------------------------------------------------------
-export interface SlideCitation { doc_id: string; doc_title?: string; page?: number | null; quote?: string }
+export interface SlideCitation { doc_id: string; doc_title?: string; page?: number | null; quote?: string; /** the report is not final and signed (2 Nov 2026) */ final_word?: string }
 export interface SlideSentence { text: string; citations?: SlideCitation[] }
 export interface SlideValue { id: string; label: string; value: string; quote?: string; doc_id?: string; doc_title?: string; date?: string; verification?: string; final?: boolean; page?: number | null }
 export interface SlideGap { id: string; label: string; department?: string; status: string; problems?: string[]; level?: number }

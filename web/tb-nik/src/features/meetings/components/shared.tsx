@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Bot, FileText, Hand, Images, Radio, Timer as TimerIcon, Wifi, WifiOff } from "lucide-react";
 import { answerText, handUsers, type AgentState, type Attendee, type LiveStatus, type MeetingQuestion, type MeetingState, type MeetingTimer, type QuestionAnswer } from "@/lib/live";
 import type { Slide, SlideCitation, SlideContentMap, SlideSentence } from "../types";
-import { StatusChip, fmtDate, indianDates, initials, modelLabel, niceTitle } from "@/features/casefile/components/common";
+import { NotSigned, StatusChip, fmtDate, indianDates, initials, modelLabel, niceTitle } from "@/features/casefile/components/common";
 import { cn } from "@/lib/utils";
 
 export function MeetingStatusChip({ status }: { status: string }) {
@@ -125,7 +125,7 @@ export function Dots() {
 
 function Cite({ c, big }: { c: SlideCitation; big?: boolean }) {
   const page = typeof c.page === "number" ? ` p. ${c.page + 1}` : "";
-  return <span className={cn("quote-chip ml-1 align-middle", big && "text-sm")} title={c.quote ? `"${c.quote}"` : undefined}><FileText className="size-3" aria-hidden />{niceTitle(c.doc_title) || "record"}{page}</span>;
+  return <span className={cn("quote-chip ml-1 align-middle", big && "text-sm")} title={c.quote ? `"${c.quote}"` : undefined}><FileText className="size-3" aria-hidden />{niceTitle(c.doc_title) || "record"}{page}<NotSigned word={c.final_word} /></span>;
 }
 
 /** The review-status line of a "Present your points" answer: the brief's label ("AI draft, not reviewed", or "Reviewed by Dr <name>")

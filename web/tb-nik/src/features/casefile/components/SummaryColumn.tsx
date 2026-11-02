@@ -4,15 +4,15 @@
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Bot, CheckCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown, CircleAlert, Hourglass, ListChecks, MessageSquareQuote, ShieldCheck, Sparkles } from "lucide-react";
-import type { Citation, ProseSection, Slot, SlotSection, SlotsResponse } from "../types";
+import type { Citation, DocFinal, ProseSection, Slot, SlotSection, SlotsResponse } from "../types";
 import { SlotLine, type SlotContext, type SlotHandlers } from "./SlotLine";
-import { LoadingButton, NotYetState, SkeletonLines, StatusChip, docTitleOf, fmtDate, fmtDateTime, indianDates, modelLabel } from "./common";
+import { LoadingButton, NotYetState, SkeletonLines, StatusChip, NotSigned, docTitleOf, finalWordOf, fmtDate, fmtDateTime, indianDates, modelLabel } from "./common";
 import type { CaseCitation } from "../steps/types";
 import { fieldOf } from "@/features/meetings/components/DecisionForm";
 import { cn } from "@/lib/utils";
 import { consultantTitle } from "@/lib/format";
 
-type Docs = Array<{ doc_id: string; filename: string; classification?: { title?: string } }>;
+type Docs = Array<{ doc_id: string; filename: string; classification?: { title?: string }; final?: DocFinal }>;
 const OPEN = new Set(["not_found", "waiting", "needs_confirmation"]);
 const isQuestion = (s: Slot) => (s.fact_id ?? s.id.replace(/^fact:/, "")) === "clinical_question";
 
@@ -30,7 +30,7 @@ export function CiteChip({ c, docs, h, onBoard }: { c: Citation | CaseCitation; 
     const title = docTitleOf(docs, r.doc_id, r.doc_title);
     return (
       <button type="button" className="quote-chip ml-1 align-middle active:scale-95" onClick={() => h.openSource({ docId: r.doc_id, page: r.page ?? 0, quote: r.quote, title })} title={`Open ${title} with the quote marked`}>
-        {title}{typeof r.page === "number" ? ` p. ${r.page + 1}` : ""}
+        {title}{typeof r.page === "number" ? ` p. ${r.page + 1}` : ""}<NotSigned word={finalWordOf(docs, r.doc_id)} />
       </button>
     );
   }

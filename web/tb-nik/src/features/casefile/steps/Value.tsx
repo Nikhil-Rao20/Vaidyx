@@ -4,7 +4,7 @@
 import { FileText, Hourglass, PenLine, ShieldQuestion } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SourceTarget } from "../components/SourceViewer";
-import { fmtDate, niceTitle, screenNote } from "../components/common";
+import { NotSigned, fmtDate, niceTitle, screenNote } from "../components/common";
 import type { StepRow } from "./types";
 
 export function SourceChip({ quote, onOpen, className }: { quote: NonNullable<StepRow["quote"]>; onOpen: (t: SourceTarget) => void; className?: string }) {
@@ -45,6 +45,19 @@ export function ValueCell({ row, onOpen, onCheck, dense }: { row: StepRow; onOpe
         <button type="button" onClick={onCheck} disabled={!onCheck} className="inline-flex items-center gap-1 rounded-md status-warn px-1.5 py-0.5 text-[11px] font-semibold enabled:hover:brightness-95">
           <ShieldQuestion className="size-3" aria-hidden />Please check
         </button>
+      </span>
+    );
+  }
+  if (row.unsigned) {  // only in a report not final and signed: shown, marked; the board still needs the signed one (owner, 2 Nov 2026)
+    const u = row.unsigned;
+    return (
+      <span className="flex min-w-0 flex-col gap-1">
+        <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className="text-foreground">{u.value}</span>
+          {u.quote?.doc_id ? <SourceChip quote={u.quote} onOpen={onOpen} /> : null}
+          <NotSigned word={u.word} />
+        </span>
+        {row.status === "waiting" ? <span className="inline-flex items-center gap-1 text-xs text-warn"><Hourglass className="size-3" aria-hidden />Request sent, waiting for the signed report</span> : null}
       </span>
     );
   }

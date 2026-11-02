@@ -19,7 +19,7 @@ import { askAgentOld, getHelperChat, getHelpers, getRoles, notBuiltYet, postHelp
 import { useJob } from "../hooks";
 import type { CaseFile, Helper, HelperMessage } from "../types";
 import type { SourceTarget } from "./SourceViewer";
-import { ErrorState, LoadingButton, NotYetState, SkeletonLines, StatusChip, docTitleOf, errorText, fmtDate, fmtDateTime, indianDates, modelLabel, useAnnounce } from "./common";
+import { ErrorState, LoadingButton, NotYetState, SkeletonLines, StatusChip, NotSigned, docTitleOf, errorText, finalWordOf, fmtDate, fmtDateTime, indianDates, modelLabel, useAnnounce } from "./common";
 import { cn } from "@/lib/utils";
 
 const MAX_Q = 1000;
@@ -307,7 +307,7 @@ function HelperDetail({ caseId, helper, notBuilt, docs, canReview, onBack, onOpe
                   <li key={j} className="text-sm text-foreground">
                     {indianDates(it.text)}
                     {(it.citations ?? []).map((c, k) => (
-                      <button key={k} type="button" className="quote-chip ml-1 align-middle hover:brightness-95" onClick={() => onOpenSource({ docId: c.doc_id, page: c.page ?? 0, quote: c.quote, title: docTitleOf(docs, c.doc_id, c.doc_title) })}>{docTitleOf(docs, c.doc_id, c.doc_title)}{typeof c.page === "number" ? ` p. ${c.page + 1}` : ""}</button>
+                      <button key={k} type="button" className="quote-chip ml-1 align-middle hover:brightness-95" onClick={() => onOpenSource({ docId: c.doc_id, page: c.page ?? 0, quote: c.quote, title: docTitleOf(docs, c.doc_id, c.doc_title) })}>{docTitleOf(docs, c.doc_id, c.doc_title)}{typeof c.page === "number" ? ` p. ${c.page + 1}` : ""}<NotSigned word={finalWordOf(docs, c.doc_id)} /></button>
                     ))}
                   </li>
                 ))}
@@ -319,7 +319,7 @@ function HelperDetail({ caseId, helper, notBuilt, docs, canReview, onBack, onOpe
               <h4 className="text-sm font-semibold text-foreground">Points for review</h4>
               <ol className="mt-1 list-decimal pl-5 space-y-1">
                 {brief.points_for_review!.map((p, i) => (
-                  <li key={i} className="text-sm text-foreground">{indianDates(p.text)}{(p.citations ?? []).map((c, k) => <button key={k} type="button" className="quote-chip ml-1 align-middle hover:brightness-95" onClick={() => onOpenSource({ docId: c.doc_id, page: c.page ?? 0, quote: c.quote, title: docTitleOf(docs, c.doc_id, c.doc_title) })}>{docTitleOf(docs, c.doc_id, c.doc_title)}{typeof c.page === "number" ? ` p. ${c.page + 1}` : ""}</button>)}</li>
+                  <li key={i} className="text-sm text-foreground">{indianDates(p.text)}{(p.citations ?? []).map((c, k) => <button key={k} type="button" className="quote-chip ml-1 align-middle hover:brightness-95" onClick={() => onOpenSource({ docId: c.doc_id, page: c.page ?? 0, quote: c.quote, title: docTitleOf(docs, c.doc_id, c.doc_title) })}>{docTitleOf(docs, c.doc_id, c.doc_title)}{typeof c.page === "number" ? ` p. ${c.page + 1}` : ""}<NotSigned word={finalWordOf(docs, c.doc_id)} /></button>)}</li>
                 ))}
               </ol>
             </section>
@@ -353,7 +353,7 @@ function HelperDetail({ caseId, helper, notBuilt, docs, canReview, onBack, onOpe
               <p className="text-xs text-muted-foreground">{m.by_name ?? m.by ?? ""}{m.at ? ` ${fmtDateTime(m.at)}` : ""}</p>
               {m.answer ? <p className="text-sm mt-1">{m.answer}</p> : null}
               {(m.statements ?? []).map((s, j) => (
-                <p key={j} className="text-sm mt-1 text-foreground">{indianDates(s.text)}{(s.citations ?? []).map((c, k) => <button key={k} type="button" className="quote-chip ml-1 align-middle hover:brightness-95" onClick={() => onOpenSource({ docId: c.doc_id, page: c.page ?? 0, quote: c.quote, title: docTitleOf(docs, c.doc_id, c.doc_title) })}>{docTitleOf(docs, c.doc_id, c.doc_title)}{typeof c.page === "number" ? ` p. ${c.page + 1}` : ""}</button>)}</p>
+                <p key={j} className="text-sm mt-1 text-foreground">{indianDates(s.text)}{(s.citations ?? []).map((c, k) => <button key={k} type="button" className="quote-chip ml-1 align-middle hover:brightness-95" onClick={() => onOpenSource({ docId: c.doc_id, page: c.page ?? 0, quote: c.quote, title: docTitleOf(docs, c.doc_id, c.doc_title) })}>{docTitleOf(docs, c.doc_id, c.doc_title)}{typeof c.page === "number" ? ` p. ${c.page + 1}` : ""}<NotSigned word={finalWordOf(docs, c.doc_id)} /></button>)}</p>
               ))}
               {!m.answer && !(m.statements ?? []).length ? <p className="text-sm text-muted-foreground mt-1">{m.message || "Nothing in the records answers this."}</p> : null}
               {m.stale ? <p className="mt-1 text-xs text-warn">Records changed since this answer.</p> : null}
