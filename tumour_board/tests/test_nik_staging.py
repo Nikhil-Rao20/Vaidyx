@@ -238,6 +238,13 @@ def test_cervix_figo_2018():
     assert staging.parse_written("FIGO stage IIIC1r")["stage"] == "IIIC1" and staging.parse_written("Stage IB3")["stage"] == "IB3"
     assert staging.parse_written("IIB")["stage"] == "IIB" and staging.parse_written("FIGO 2018 IIIC2p")["stage"] == "IIIC2"
     assert staging.parse_written("Invasive carcinoma")["stage"] is None
+    # words after the stage (the demo OPD note, 2 Nov test pass): the stage is read and a different one is flagged against the draft IB2
+    assert staging.parse_written("FIGO IB1 (as recorded by the clinician)")["stage"] == "IB1"
+    assert staging.parse_written("Stage: FIGO 2018 IIIC1r, as discussed")["stage"] == "IIIC1"
+    w = {"value": "FIGO IB1 (as recorded by the clinician)", "superseded": False, "prefix": "", "kind": "anatomic"}
+    c = staging.compare(d, [w])
+    assert c["result"] == "differs" and c["differences"] == ["Stage: the report writes IB1, the draft IB2"]
+    assert staging.compare(d, [{**w, "value": "FIGO IB2 (as recorded by the clinician)"}])["result"] == "matches"
     assert staging.stage_group(r, "IIA2", "N0", "M0")["stage"] == "IIA2" and staging.stage_group(r, "IVA", "IIIC1", "M0")["stage"] == "IVA"
 
 

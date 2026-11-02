@@ -203,7 +203,8 @@ def parse_written(v: str) -> dict:
     n = re.search(r"(?:yp|p|c)?(N(?:X|[0-3])[a-c]?(?:mi)?)", s)
     m = re.search(r"(?:p|c)?(M[01])", s)
     g = re.search(r"\bstage\s*(0|IV|I{1,3})\s*([ABC][123]?)?\s*(?:[rp]\b)?", s, re.I) or \
-        re.fullmatch(r"\s*(?:FIGO\s*(?:\d{4})?\s*)?(IV|I{1,3})([ABC][123]?)?[rp]?\s*", s)  # a bare stage as written: "IIB", "IIIC1r"
+        re.fullmatch(r"\s*(?:FIGO\s*(?:\d{4})?\s*)?(IV|I{1,3})([ABC][123]?)?[rp]?\s*", s) or \
+        re.search(r"\bFIGO\s*(?:\(?\d{4}\)?\s*)?(?:stage\s*)?(IV|I{1,3})([ABC][123]?)?[rp]?(?![A-Za-z0-9])", s)  # a bare stage as written: "IIB", "IIIC1r"; "FIGO IB1 (as recorded by the clinician)"
     return {"T": t.group(1) if t else None, "N": n.group(1) if n else None, "M": m.group(1) if m else None,
             "stage": (g.group(1).upper() + (g.group(2) or "").upper()) if g else None}
 

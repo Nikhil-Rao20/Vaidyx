@@ -398,10 +398,10 @@ export function StagingCard({ caseId, view, loading, canRun, canConfirm, canProp
           <div className="space-y-2 border-t border-border pt-3">
             <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><History className="size-3.5" aria-hidden />As written in the reports, over time</p>
             {view.comparison ? (
-              <p className={cn("rounded-md px-3 py-1.5 text-sm", view.comparison.result === "differs" ? "status-warn" : view.comparison.result === "matches" ? "status-ok" : "bg-muted text-muted-foreground")} data-testid="stage-compare">
+              <p className={cn("rounded-md px-3 py-1.5 text-sm", view.comparison.result === "matches" ? "status-ok" : "status-warn")} data-testid="stage-compare">
                 {view.comparison.result === "matches" ? `The draft matches what ${niceTitle(view.comparison.written.doc_title)} writes (${view.comparison.written.value}).`
                   : view.comparison.result === "differs" ? `${niceTitle(view.comparison.written.doc_title)} writes ${view.comparison.written.value}. ${view.comparison.differences.join("; ")}.`
-                  : `${niceTitle(view.comparison.written.doc_title)} writes ${view.comparison.written.value}.`}
+                  : `Compare by eye: ${niceTitle(view.comparison.written.doc_title)} writes ${view.comparison.written.value}, and Vaidyx could not read a stage in it.`}
               </p>
             ) : null}
             {/* a line that writes both stages ("pT2 pN1a M0, Anatomic stage IIB, Prognostic stage group IB") comes as kind "anatomic"
