@@ -1,7 +1,7 @@
 // Every call the meeting pages make (meetings.py, checked against tumour_board/api/meetings.py). The old /sessions
 // routes are the read-only fallback when the new routes are not on the server.
 import { api, TB } from "@/lib/api";
-import { routeMissing, type AgentInfo, type ChatMessage, type MeetingInfo, type MeetingQuestion, type MeetingState, type MeetingTimer, type Opened } from "@/lib/live";
+import { routeMissing, type AgentInfo, type BoardTab, type BoardViewState, type ChatMessage, type MeetingInfo, type MeetingQuestion, type MeetingState, type MeetingTimer, type Opened } from "@/lib/live";
 import type { CardsResponse, DecisionBody, DecisionSpec, JoinResponse, MeetingsResponse, MemberCard, NewMeeting, OldSession, SlidesResponse } from "./types";
 
 const enc = encodeURIComponent;
@@ -29,6 +29,17 @@ export const startMeeting = (mid: string) => api.post(`${mUrl(mid)}/start`, {});
 export const endMeeting = (mid: string) => api.post(`${mUrl(mid)}/end`, {});
 export const setCurrent = (mid: string, case_id: string, slide?: number) => api.post(`${mUrl(mid)}/current`, { case_id, slide });
 export const openOnScreen = (mid: string, kind: "record" | "images" | "none", doc_id?: string) => api.post<{ opened: Opened | null }>(`${mUrl(mid)}/open`, { kind, doc_id });
+/** The Board view's follow state (meetings-v2 2.2 / 2.4): the coordinator, or the presenter of the Case File on the floor, moves every
+ *  follower to a tab, a report at a page with its line highlighted, or the images (the server grants the admitted members the viewer).
+ *  Refusals: 409 not_in_session, no_current, moved_on; 403 not_member, forbidden; 400 bad_tab, bad_record, bad_page, bad_quote; 404
+ *  no_record, no_images; 429. */
+export const setView = (mid: string, b: { tab: BoardTab; doc_id?: string | null; page?: number | null; quote?: string }) =>
+  api.post<{ view: BoardViewState }>(`${mUrl(mid)}/view`, {
+    tab: b.tab,
+    ...(b.doc_id ? { doc_id: b.doc_id } : {}),
+    ...(b.doc_id && typeof b.page === "number" ? { page: b.page } : {}),
+    ...(b.quote ? { quote: b.quote } : {}),
+  });
 export const timer = (mid: string, action: "start" | "stop" | "reset", minutes?: number) => api.post<{ timer: MeetingTimer | null }>(`${mUrl(mid)}/timer`, { action, minutes });
 /** A question to the board, or to one stand-in agent when `role` names it (night-v3 5.1: the chip row of the Chat panel). */
 export const askQuestion = (mid: string, text: string, role?: string) => api.post(`${mUrl(mid)}/questions`, role ? { text, role } : { text });

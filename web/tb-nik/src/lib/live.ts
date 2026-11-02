@@ -13,7 +13,9 @@ export type LiveEventType =
   | "agents" | "spotlight" | "reaction" | "chat" | "presenting" | "present_allowed"
   // night-v3 Phase 6: the agents speak by reference ({role, question, index, final}) and a stop for everyone ({role, question, by});
   // both leave the state as it is and reach the shell through lastEvent
-  | "agent_speech" | "agent_stop";
+  | "agent_speech" | "agent_stop"
+  // meetings-v2 2.2: the follow state of the Board view
+  | "view";
 
 export interface LiveEvent { type: LiveEventType | string; [k: string]: unknown }
 
@@ -213,8 +215,31 @@ export interface Opened {
   viewer_url?: string;
   modality?: string | null;
   page?: number;
+  /** Images opened through the follow state: the admitted members granted the viewer on the study. */
+  granted?: string[];
   by?: string;
   at?: string;
+}
+
+/** The four tabs of the Board view (meetings-v2 D3). */
+export type BoardTab = "summary" | "reports" | "images" | "stage";
+export const BOARD_TABS: readonly BoardTab[] = ["summary", "reports", "images", "stage"];
+
+/** The follow state (meetings-v2 T1, item 2.2): what the room and every follower render in the Board view. Set by the coordinator or the
+ *  presenter of the Case File on the floor (POST /meetings/{mid}/view), reset to the Summary on Next; null when nothing is on the floor. */
+export interface BoardViewState {
+  case_id: string;
+  tab: BoardTab;
+  doc_id: string | null;
+  /** 0-based, only with a record. */
+  page: number | null;
+  /** The highlighted line (at most 300 characters). */
+  quote: string;
+  /** A record ({kind: "record", doc_id, title, url}) or the images ({kind: "images", doc_id, title, study_uid, url, modality, granted}). */
+  opened: Opened | null;
+  by: string;
+  by_name: string;
+  at: string;
 }
 
 export interface MeetingTimer { seconds_left: number; running: boolean; total?: number }
@@ -352,9 +377,26 @@ export interface MeetingState {
   heads?: Array<{ id: string; name?: string; role?: string } | string>;
   absent_roles?: string[];
   status?: string;
+  /** The follow state of the Board view (meetings-v2 2.2): sent to the admitted members and the coordinator only; null otherwise. */
+  view?: BoardViewState | null;
 }
 
 const EMPTY_CURRENT: NonNullable<MeetingState["current"]> = { case_id: null, slide: 0, opened: null, timer: null, presenter: null };
+
+/** A follow state from the server (GET /meetings/{mid} or the socket), checked loosely: null when it names no Case File. */
+export function asBoardView(v: unknown): BoardViewState | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const cid = typeof o.case_id === "string" ? o.case_id : "";
+  if (!cid) return null;
+  const tab = (BOARD_TABS as readonly string[]).includes(String(o.tab)) ? (o.tab as BoardTab) : "summary";
+  const page = typeof o.page === "number" && Number.isFinite(o.page) && o.page >= 0 ? Math.floor(o.page) : null;
+  return {
+    case_id: cid, tab, doc_id: typeof o.doc_id === "string" && o.doc_id ? o.doc_id : null, page,
+    quote: typeof o.quote === "string" ? o.quote : "", opened: asOpened(o.opened),
+    by: typeof o.by === "string" ? o.by : "", by_name: typeof o.by_name === "string" ? o.by_name : "", at: typeof o.at === "string" ? o.at : "",
+  };
+}
 
 /** One agent's state event merged into the list by role (the event carries the state, who it concerns, the question and the time). */
 export function mergeAgent(list: AgentInfo[] | undefined, a: Partial<AgentInfo> & { role?: string | null }): AgentInfo[] | undefined {
@@ -400,6 +442,13 @@ export function applyLiveEvent(s: MeetingState | null, ev: LiveEvent): MeetingSt
       if (changed) { next.presenting = null; }
       if (ev.status === "in_session" && s.meeting.status !== "in_session") next.meeting = { ...s.meeting, status: "in_session" };
       if (changed) next.decision_live = null;
+      // another Case File on the floor: the followers start on its Summary until the server's "view" event names who moved it (2.2)
+      if (changed) next.view = cid ? { case_id: cid, tab: "summary", doc_id: null, page: null, quote: "", opened: null, by: "", by_name: "", at: "" } : null;
+      return next;
+    }
+    case "view": {
+      // the follow state (meetings-v2 2.2): {type: "view", view: {case_id, tab, doc_id, page, quote, opened, by, by_name, at}}
+      next.view = asBoardView(ev.view);
       return next;
     }
     case "open": {
@@ -478,6 +527,7 @@ export function applyLiveEvent(s: MeetingState | null, ev: LiveEvent): MeetingSt
       const m = ev.meeting && typeof ev.meeting === "object" ? (ev.meeting as MeetingInfo) : null;
       next.meeting = m ? { ...s.meeting, ...m } : { ...s.meeting, status: ev.cancelled ? "cancelled" : "closed" };
       next.decision_live = null;
+      next.view = null;
       return next;
     }
     case "meeting": if (ev.meeting && typeof ev.meeting === "object") next.meeting = { ...s.meeting, ...(ev.meeting as MeetingInfo) }; return next;
@@ -544,7 +594,8 @@ export function useMeetingLive(mid: string, opts: { enabled?: boolean; onEvent?:
     setLoaded(true);
     const fresh = poll.data;
     const recentLive = lastEventAt.current >= fetchStartedAt.current;
-    setState((old) => (old && recentLive ? { ...fresh, current: old.current ?? fresh.current, decision_live: old.decision_live ?? fresh.decision_live, questions: old.questions?.length > (fresh.questions?.length ?? 0) ? old.questions : fresh.questions } : fresh));
+    // the follow state goes with the case on the floor: a slow poll never brings back an older view either (meetings-v2 2.4)
+    setState((old) => (old && recentLive ? { ...fresh, current: old.current ?? fresh.current, view: old.view !== undefined ? old.view : fresh.view, decision_live: old.decision_live ?? fresh.decision_live, questions: old.questions?.length > (fresh.questions?.length ?? 0) ? old.questions : fresh.questions } : fresh));
   }, [poll.data, poll.dataUpdatedAt]);
 
   useEffect(() => {
