@@ -470,3 +470,44 @@ def test_the_old_sessions_route_never_carries_the_notes():
     from tumour_board import board
     v = board.session_view({"id": "S1", "chat": [{"text": "x"}], "notes": {"TB-001": {"lines": [{"said": {"quote": "spoken words"}}]}}}, None)
     assert "notes" not in v and "chat" not in v
+
+
+# ---- the summary after the board (item 5.4) -------------------------------------------------------------------------------------------
+
+def test_the_summary_after_the_board_follows_the_notes(tc, stub, monkeypatch):  # noqa: F811
+    """Building the notes or editing a line writes the Case summary again (case_summary.on_notes_changed); a review changes no words.
+    With a board record of the meeting, the summary built now cites the note line ("said") with the speaker's exact words."""
+    from tumour_board import case_summary as cs
+    got = []
+    real = cs.on_notes_changed
+    monkeypatch.setattr(cs, "on_notes_changed", lambda mid, cid, by="", why="": got.append((mid, cid, by, why)) or real(mid, cid, by, why))
+    mid = recording_meeting(tc)
+    a, *_ = three_segments(tc, stub, mid)
+    line = {"text": "Dr Suresh noted the size of the mass in the CT thorax report.", "segment_id": a, "quote": "the CT thorax report shows a 3.5 cm mass"}
+    fake_reasoner(monkeypatch, lambda msgs: [line])
+    n = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-001/notes/build").json()
+    assert got == [(mid, "TB-001", "anil", "notes_built")]
+    assert real(mid, "TB-001", "anil") == {"scheduled": False, "how": "no_board_record"}  # no decision of this meeting yet
+    lid = n["lines"][0]["id"]
+    As(tc, "anil").put(f"/meetings/{mid}/cases/TB-001/notes/lines/{lid}", json={"text": "Dr Suresh read out the CT thorax report."})
+    assert got[-1] == (mid, "TB-001", "anil", "notes_line_edited")
+    As(tc, "anil").post(f"/meetings/{mid}/cases/TB-001/notes/review", json={"status": "reviewed"})
+    assert len(got) == 2
+    r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-001/decision", json={"outcome": "decision", "decision_text": "Surgery first (SYNTHETIC).",
+                                                                             "members_present": ["Anil Kumar"], "intent": "curative",
+                                                                             "responsible_doctor": "Dr Priya Nair"})
+    assert r.status_code == 200, r.text
+    assert real(mid, "TB-001", "anil")["how"] == "off"  # a board record of this meeting: scheduled (the scheduler is off in the unit suite)
+    said = {"text": "At the board, Dr Suresh noted that the CT thorax report shows a 3.5 cm mass.",
+            "citations": [{"note_line": lid, "quote": "the CT thorax report shows a 3.5 cm mass"}]}
+
+    async def chat(role, msgs, **kw):
+        return {"sentences": [said] if kw.get("purpose") == "case summary discussion" else [], "claims": []}
+    monkeypatch.setattr(llm, "chat", chat)
+    v = asyncio.run(cs.build("TB-001", {"kind": "notes", "meeting": mid}, "anil"))
+    disc = next(x for x in v["sections"] if x["id"] == "discussion")
+    c = disc["sentences"][0]["citations"][0]
+    assert disc["sentences"][0]["text"] == said["text"]
+    assert {k: c[k] for k in ("kind", "meeting_id", "line_id", "speaker", "speaker_name", "quote")} == {
+        "kind": "said", "meeting_id": mid, "line_id": lid, "speaker": "suresh", "speaker_name": "Dr Suresh", "quote": "the CT thorax report shows a 3.5 cm mass"}
+    assert cs.verify_said("TB-001", c) and SAID_1 not in json.dumps(v)  # only the quoted words, never the whole segment

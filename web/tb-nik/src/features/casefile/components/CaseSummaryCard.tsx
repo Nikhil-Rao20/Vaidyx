@@ -4,18 +4,22 @@
 // confirmation and a member's card show their quote. Sentences written by code carry no AI mark and are not editable; the owner's
 // consultant edits a model sentence (shown "edited by Dr X on DD/MM/YYYY"), reviews or flags the version. Earlier versions open
 // read-only through the version picker. Nothing here suggests a decision: the sentences quote the records and the board record.
+// meetings-v2 5.4 (owner decision D14, the prof's ask): it is titled "Summary after the board" with the latest board's date, and "Summary
+// before the board" (the pre-board summary) is one click away from its header. "What was said at the board" cites the meeting's AI notes
+// (chip "Board discussion DD/MM/YYYY": the speaker and the exact words on hover and on click). DiscussionNotes lists the Case File's notes
+// read-only under it, each line with its "said" chip and "AI draft, not reviewed" (or who reviewed them).
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, CheckCheck, Flag, Pencil, RefreshCw, Sparkles } from "lucide-react";
+import { Bot, CheckCheck, Flag, History, MessagesSquare, Pencil, RefreshCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SpeakButton } from "@/components/SpeakButton";  // voice (night-v3 item 4.4): a section of the current version read aloud
 import { Textarea } from "@/components/ui/textarea";
 import { drName, plural } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { buildCaseSummary, editCaseSentence, getCase, getCaseSummary, reviewCaseSummary } from "../api";
+import { buildCaseSummary, editCaseSentence, getCase, getCaseSummary, getMeetingNotes, reviewCaseSummary } from "../api";
 import type { CaseDocument, CaseFile } from "../types";
-import type { CaseSentence, CaseSummarySection, CaseSummaryView } from "../steps/types";
-import { Cites } from "./SummaryColumn";
+import type { CaseSentence, CaseSummarySection, CaseSummaryView, MeetingNotesRow } from "../steps/types";
+import { Cites, SaidChip } from "./SummaryColumn";
 import type { SlotHandlers } from "./SlotLine";
 import { LoadingButton, SkeletonLines, StatusChip, errorText, fmtDate, fmtDateTime, indianDates, modelLabel, useAnnounce } from "./common";
 
@@ -63,7 +67,7 @@ function Sentence({ s, sec, docs, h, onBoard, canEdit, onEdit }: {
       <span className="my-1 block rounded-md border border-border bg-muted/40 p-2" data-testid="cs-editing">
         <label htmlFor={id} className="text-xs font-medium text-foreground">The sentence, in your words</label>
         <Textarea id={id} value={text} onChange={(x) => setText(x.target.value)} className="mt-1 min-h-16 text-sm" maxLength={MAX_EDIT} aria-invalid={!!err || undefined} aria-describedby={`${id}-note`} />
-        <span id={`${id}-note`} className="mt-0.5 block text-xs text-muted-foreground">The report lines stay cited; Vaidyx checks whether every number and name is still in them. Your name is shown with the edit.</span>
+        <span id={`${id}-note`} className="mt-0.5 block text-xs text-muted-foreground">{sec.id === "discussion" ? "The spoken words stay cited" : "The report lines stay cited"}; Vaidyx checks whether every number and name is still in them. Your name is shown with the edit.</span>
         {err ? <span role="alert" className="mt-1 block text-xs text-bad">{err}</span> : null}
         <span className="mt-1.5 flex gap-2">
           <LoadingButton size="sm" loading={busy} onClick={() => void save()} data-testid="cs-edit-save">Save</LoadingButton>
@@ -107,6 +111,7 @@ function Section({ sec, docs, h, onBoard, canEdit, onEdit, caseId, speak }: { se
         <h3 id={`cs-h-${sec.id}`} className="text-sm font-semibold text-foreground">{sec.title}</h3>
         {speak ? <SpeakButton source={{ ref: { kind: "summary", case_id: caseId, id: sec.id } }} screen="summary" size="icon-xs" label={`Read aloud: ${sec.title}`} /> : null}
       </div>
+      {sec.note ? <p className="text-xs text-muted-foreground" data-testid={`cs-note-${sec.id}`}>{sec.note}</p> : null}
       {sec.blocks ? (
         <div className="mt-1 space-y-2">
           {sec.blocks.map((b) => (
@@ -115,13 +120,21 @@ function Section({ sec, docs, h, onBoard, canEdit, onEdit, caseId, speak }: { se
             </ul>
           ))}
         </div>
+      ) : sec.id === "discussion" ? (
+        <ul className="mt-0.5 space-y-0.5 text-foreground">{(sec.sentences ?? []).map((s) => <li key={s.id}>{one(s)}</li>)}</ul>
       ) : <p className="mt-0.5 text-foreground">{(sec.sentences ?? []).map(one)}</p>}
     </section>
   );
 }
 
-/** The Case summary card of the Summary section. `onBoard` opens the Board decisions panel from a board chip. */
-export function CaseSummaryCard({ caseId, view, docs, h, onBoard }: { caseId: string; view: CaseSummaryView; docs?: CaseDocument[]; h: Pick<SlotHandlers, "openSource">; onBoard?: () => void }) {
+export const AFTER_TITLE = "Summary after the board";
+export const BEFORE_TITLE = "Summary before the board";
+
+/** The Case summary card of the Summary section ("Summary after the board"). `onBoard` opens the Board decisions panel from a board chip;
+ *  `onBefore` opens the pre-board summary ("Summary before the board", of `beforeDate`). */
+export function CaseSummaryCard({ caseId, view, docs, h, onBoard, onBefore, beforeDate }: {
+  caseId: string; view: CaseSummaryView; docs?: CaseDocument[]; h: Pick<SlotHandlers, "openSource">; onBoard?: () => void; onBefore?: () => void; beforeDate?: string | null;
+}) {
   const qc = useQueryClient();
   const [announce, liveNode] = useAnnounce();
   const [pick, setPick] = useState<number>(view.current);
@@ -148,9 +161,17 @@ export function CaseSummaryCard({ caseId, view, docs, h, onBoard }: { caseId: st
       {liveNode}
       <header className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
         <Sparkles className="size-4 text-brand" aria-hidden />
-        <h2 id="cs-title" className="text-[15px]">Case summary</h2>
+        <h2 id="cs-title" className="text-[15px]">
+          {view.title || AFTER_TITLE}
+          {view.last_board_date ? <span className="font-normal text-muted-foreground" data-testid="cs-title-date">, board of {fmtDate(view.last_board_date)}</span> : null}
+        </h2>
         {shown ? <CaseSummaryLabel v={shown} current={!older} /> : null}
         <span className="flex-1" />
+        {onBefore ? (
+          <Button size="sm" variant="ghost" onClick={onBefore} className="h-8 px-2 text-xs text-link print:hidden" data-testid="cs-open-before">
+            <History className="size-3.5" aria-hidden />{view.before_title || BEFORE_TITLE}{beforeDate ? `, ${fmtDate(beforeDate)}` : ""}
+          </Button>
+        ) : null}
         {total > 1 ? (
           <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground print:hidden">
             <span className="sr-only">Show version</span>
@@ -211,8 +232,8 @@ export function useCaseFileCache(caseId: string): CaseFile | undefined {
   return useQuery<CaseFile>({ queryKey: ["case", caseId], queryFn: ({ signal }) => getCase(caseId, signal), enabled: false, staleTime: Infinity }).data;
 }
 
-/** The Overview's Case summary card: the summary line, the latest round's outcome and decision lines and the first two presentation
- *  sentences, each with its chips; "Open the Case summary" goes to the Summary section. */
+/** The Overview's Case summary card ("Summary after the board"): the summary line, the latest round's outcome and decision lines and the
+ *  first two presentation sentences, each with its chips; "Open the summary after the board" goes to the Summary section. */
 export function CaseSummaryGlance({ view, h, onBoard, onOpen, line, docs }: { view: CaseSummaryView; h: Pick<SlotHandlers, "openSource">; onBoard?: () => void; onOpen: () => void; line?: string; docs?: CaseDocument[] }) {
   const rounds = view.sections.find((s) => s.id === "rounds");
   const last = rounds?.blocks?.length ? rounds.blocks[rounds.blocks.length - 1] : null;
@@ -230,14 +251,66 @@ export function CaseSummaryGlance({ view, h, onBoard, onOpen, line, docs }: { vi
     <section className="surface overflow-hidden" aria-labelledby="ov-cs-title" data-testid="overview-case-summary">
       <header className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
         <Sparkles className="size-4 text-brand" aria-hidden />
-        <h2 id="ov-cs-title" className="text-[15px]">Case summary</h2>
+        <h2 id="ov-cs-title" className="text-[15px]">
+          {view.title || AFTER_TITLE}
+          {view.last_board_date ? <span className="font-normal text-muted-foreground">, board of {fmtDate(view.last_board_date)}</span> : null}
+        </h2>
         <CaseSummaryLabel v={view} />
       </header>
       <div className="space-y-2 px-4 py-3 text-[0.97rem] leading-relaxed">
         {line ? <p className="font-semibold text-foreground" data-testid="overview-summary-line">{line}</p> : null}
         {decided.length ? <p className="text-foreground">{decided.map(row(rounds))}</p> : null}
         {pres.length ? <p className="text-foreground">{pres.map(row(presSec))}</p> : null}
-        <Button size="sm" variant="outline" onClick={onOpen} data-testid="open-case-summary">Open the Case summary</Button>
+        <Button size="sm" variant="outline" onClick={onOpen} data-testid="open-case-summary">Open the summary after the board</Button>
+      </div>
+    </section>
+  );
+}
+
+/** "AI draft, not reviewed", or who reviewed the notes of that meeting (the MDT Coordinator: the name as given, no "Dr" added). */
+function NotesLabel({ m }: { m: MeetingNotesRow }) {
+  const rv = m.review;
+  return rv?.status === "reviewed"
+    ? <span className="text-xs text-ok" data-testid="notes-line-label">Reviewed by {rv.by_name || rv.by}{rv.at ? ` on ${fmtDate(rv.at)}` : ""}</span>
+    : <span className="text-xs text-review" data-testid="notes-line-label">AI draft, not reviewed</span>;
+}
+
+/** The Case File's AI discussion notes from every meeting (GET /cases/{id}/meeting-notes, readers of the whole Case File), read-only under
+ *  the board decision: each line with its "said" chip (the speaker and the exact words) and its label. Nothing is drawn when there are no
+ *  notes or the reader may not read them; asked only once the Case File went to a board (`enabled`). The MDT Coordinator edits and
+ *  reviews them on the meeting page. */
+export function DiscussionNotes({ caseId, enabled = true }: { caseId: string; enabled?: boolean }) {
+  const q = useQuery({ queryKey: ["meeting-notes", caseId], queryFn: ({ signal }) => getMeetingNotes(caseId, signal), staleTime: 60_000, retry: false, enabled });
+  const rows = (q.data?.meetings ?? []).filter((m) => (m.lines ?? []).length);
+  if (!rows.length) return null;
+  return (
+    <section className="surface overflow-hidden" aria-labelledby="dn-title" data-testid="discussion-notes">
+      <header className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
+        <MessagesSquare className="size-4 text-brand" aria-hidden />
+        <h2 id="dn-title" className="text-[15px]">Discussion notes of the board</h2>
+        <StatusChip kind="review" icon={Bot}>AI notes of what was said, never a decision</StatusChip>
+      </header>
+      <div className="space-y-3 px-4 py-3">
+        {rows.map((m) => (
+          <section key={m.meeting_id} aria-labelledby={`dn-${m.meeting_id}`} data-testid="discussion-notes-meeting">
+            <h3 id={`dn-${m.meeting_id}`} className="text-sm font-semibold text-foreground">
+              {m.date ? `Tumour Board ${fmtDate(m.date)}` : m.label_meeting || "Tumour Board"}
+              {m.model_line ? <span className="ml-2 text-xs font-normal text-muted-foreground">{/non-medical/i.test(m.model_line) ? m.model_line : `${m.model_line} (non-medical)`}</span> : null}
+            </h3>
+            <ul className="mt-1 space-y-1.5 border-l-2 border-review/50 pl-3 text-[0.95rem] leading-relaxed">
+              {m.lines.map((ln) => (
+                <li key={ln.id} data-testid="discussion-note">
+                  <span className="text-foreground">{indianDates(ln.text)}</span>
+                  {ln.said?.quote ? <SaidChip c={{ kind: "said", meeting_id: m.meeting_id, line_id: ln.id, speaker: ln.said.speaker, speaker_name: ln.said.speaker_name, at: ln.said.at, board_date: m.date, quote: ln.said.quote }} label="said" /> : null}
+                  <span className="ml-2 inline-flex flex-wrap gap-x-2">
+                    <NotesLabel m={m} />
+                    {ln.edited ? <span className="text-xs text-muted-foreground" data-testid="discussion-note-edited">edited by {ln.edited.by_name || ln.edited.by}{ln.edited.at ? ` on ${fmtDate(ln.edited.at)}` : ""}</span> : null}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
       </div>
     </section>
   );

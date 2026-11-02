@@ -8,8 +8,8 @@ import { expect, test, type Page } from "@playwright/test";
 import path from "node:path";
 import { SHOTS, SIZES, login, prepare, shoot, watchConsole } from "../support/helpers";
 import {
-  CID, baseSlots, caseFile, caseFileAfterBoard, caseFileBoardRounds, caseFileUnsent, routeCaseFile, stepsAfterBoard, stagingOff, stepsAfterSend, stepsCancerWarning, stepsReadyToSend, stepsResident,
-  stepsSummaryStale, similarMany, team, type CaseRouteOptions,
+  CID, baseSlots, caseFile, caseFileAfterBoard, caseFileBoardRounds, caseFileUnsent, caseMeetingNotes, caseSummaryView, discussionSection, routeCaseFile, stepsAfterBoard, stagingOff,
+  stepsAfterSend, stepsCancerWarning, stepsReadyToSend, stepsResident, stepsSummaryStale, similarMany, team, type CaseRouteOptions,
 } from "../support/f2";
 import { me, type Role } from "../support/fixtures";
 
@@ -421,9 +421,11 @@ test.describe("guided Case File", () => {
     // a sentence a doctor rewrote is theirs: no model mark (review 9 C, I5)
     await expect(card.locator("[data-id=presentation-1] [aria-label='Written by the AI model']")).toHaveCount(0);
     await expect(card.getByTestId("cs-edit")).toHaveCount(3);
-    // the pre-board summary folds under "Before the board on", closed
+    // the pre-board summary folds under "Summary before the board" with the first board's date, closed (meetings-v2 5.4: was "Before the board on")
+    await expect(card.locator("#cs-title")).toHaveText("Summary after the board, board of 23/10/2026");
+    await expect(page.getByTestId("discussion-notes")).toHaveCount(0);  // the notes route refused (a reader of part of the Case File): nothing drawn
     const pre = page.getByTestId("summary-card");
-    await expect(pre).toContainText("Before the board on 09/10/2026");
+    await expect(pre).toContainText("Summary before the board, 09/10/2026");
     await expect(pre).not.toHaveAttribute("open", "");
     await snap(page, "casefile", "case-summary", { sizes: DESKTOP_MOBILE });
     await laptop(page);
@@ -468,6 +470,62 @@ test.describe("guided Case File", () => {
     await expect(page.getByTestId("summary-line-edited")).toHaveCount(0);
     await expect(page.getByTestId("summary-line-vaidyx-tag")).toHaveText("Vaidyx line");
     await noSideways(page);
+    expect(errors).toEqual([]);
+  });
+
+  // meetings-v2 5.4 (D14, the prof's ask): the summary after the board cites what was said at the board; the Case File's discussion notes
+  // sit under it, read-only; the summary before the board is one click away from the header.
+  test("Summary after the board: what was said, the said chip, the discussion notes, the summary before the board one click away", async ({ page }) => {
+    const errors = watchConsole(page);
+    const v = caseSummaryView();
+    v.sections.splice(3, 0, discussionSection());
+    await open(page, { path: "/summary", steps: stepsAfterBoard({ sections: v.sections }), caseFile: caseFileAfterBoard(), meetingNotes: caseMeetingNotes() });
+    const card = page.getByTestId("case-summary-card");
+    await expect(card.locator("#cs-title")).toHaveText("Summary after the board, board of 23/10/2026");
+    const disc = card.getByTestId("cs-section-discussion");
+    await expect(disc).toContainText("What was said at the board");
+    await expect(disc.getByTestId("cs-note-discussion")).toHaveText("From the AI discussion notes of the board: what was said, attributed to the speakers; never the board's decision.");
+    // the chip: "Board discussion DD/MM/YYYY"; the speaker and the exact words on hover (title) and on click
+    const chip = disc.locator("[data-id=sdiscussion-1] [data-cite=said]");
+    await expect(chip).toHaveText("Board discussion 23/10/2026");
+    await expect(chip).toHaveAttribute("title", "Dr Thomas Joseph said (23/10/2026, 10:42): “the MRI breast shows a 1.8 cm lesion with no axillary nodes”");
+    await expect(disc.locator("[data-id=sdiscussion-1] [aria-label='Written by the AI model']")).toHaveCount(1);
+    await chip.click();
+    const words = disc.locator("[data-id=sdiscussion-1]").getByTestId("said-words");
+    await expect(words).toContainText("Dr Thomas Joseph, 23/10/2026, 10:42");
+    await expect(words).toContainText("“the MRI breast shows a 1.8 cm lesion with no axillary nodes”");
+    await expect(words).toContainText("no audio is kept");
+    await expect(chip).toHaveAttribute("aria-expanded", "true");
+    await expect(disc.locator("[data-id=sdiscussion-2] [data-cite=said]")).toHaveAttribute("title", /^Board room \(speaker not known\) said/);
+    // the discussion notes under the board decision: read-only, each line with its "said" chip and its label
+    const notes = page.getByTestId("discussion-notes");
+    await expect(notes).toContainText("Discussion notes of the board");
+    await expect(notes.getByTestId("discussion-notes-meeting")).toContainText("Tumour Board 23/10/2026");
+    await expect(notes.getByTestId("discussion-notes-meeting")).toContainText("Written by Gemma-4-31B (non-medical)");
+    await expect(notes.getByTestId("discussion-note")).toHaveCount(2);
+    await expect(notes.getByTestId("notes-line-label")).toHaveText(["AI draft, not reviewed", "AI draft, not reviewed"]);
+    await expect(notes.getByTestId("discussion-note-edited")).toHaveText("edited by Anil Kumar on 23/10/2026");
+    await expect(notes.locator("[data-cite=said]").first()).toHaveText("said");
+    await expect(notes.getByRole("textbox")).toHaveCount(0);
+    expect(await notes.boundingBox().then((b) => b!.y)).toBeGreaterThan(await card.boundingBox().then((b) => b!.y));
+    // the summary before the board: one click from the header
+    const pre = page.getByTestId("summary-card");
+    await expect(pre).not.toHaveAttribute("open", "");
+    await card.getByTestId("cs-open-before").click();
+    await expect(pre).toHaveAttribute("open", "");
+    await expect(pre.getByTestId("prose-text")).toBeVisible();
+    await expect(pre.locator("summary").first()).toContainText("Summary before the board, 09/10/2026");
+    await snap(page, "casefile", "summary-after-board", { sizes: DESKTOP_MOBILE });
+    await laptop(page);
+    await noSideways(page);
+    expect(errors).toEqual([]);
+  });
+
+  test("Summary after the board: reviewed discussion notes say who reviewed them", async ({ page }) => {
+    const errors = watchConsole(page);
+    await open(page, { path: "/summary", steps: stepsAfterBoard(), caseFile: caseFileAfterBoard(),
+      meetingNotes: caseMeetingNotes({ review: { status: "reviewed", by: "mdt@vxh.example", by_name: "Anil Kumar", at: "2026-10-24T09:00:00" } }) });
+    await expect(page.getByTestId("notes-line-label")).toHaveText(["Reviewed by Anil Kumar on 24/10/2026", "Reviewed by Anil Kumar on 24/10/2026"]);
     expect(errors).toEqual([]);
   });
 

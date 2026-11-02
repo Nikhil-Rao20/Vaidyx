@@ -17,8 +17,9 @@ The look: A4 portrait, ink on white, one teal accent, the hospital's logo when o
 page numbers and the quiet footer FOOTER. The CSS is meeting_pdf_template/meeting.css; the images are copies kept beside it, so this
 module does not depend on the deck (which item 4.2 removes).
 
-Phase 5 hook: discussion_notes(meeting, case_id, r) returns the AI notes of one Case File in one meeting. It returns [] until items 5.3 /
-5.4 fill it; each Case File section and each board record calls it and prints the block NOTES_HEADING when it returns lines.
+Phase 5: discussion_notes(meeting, case_id, r) returns the AI notes of one Case File in one meeting (meeting_notes, items 5.3 and 5.4) for
+a reader who may read them (the meeting's members, the Case File's full readers; never an outside expert without consent); each Case File
+section and the latest board record of each meeting print them under NOTES_HEADING, every line with the speaker's exact words.
 """
 from __future__ import annotations
 
@@ -213,24 +214,69 @@ def _is_coordinator(user: str) -> bool:
 
 # ---------------------------------------------------------------------------------------------------- the Phase 5 hook
 def discussion_notes(meeting: dict, case_id: str, r: dict | None = None) -> list[dict]:
-    """PHASE 5 HOOK (meetings-v2 items 5.3 and 5.4): the AI notes of what was said about one Case File in one meeting, for the reader `r`
-    (D13: every member of that meeting may read them). Returns [] until Phase 5 fills it; nothing is printed then. Each line:
+    """The AI notes of what was said about one Case File in one meeting (meetings-v2 items 5.3 and 5.4), for the reader `r`; [] when there
+    are none or the reader may not read them, and nothing is printed then. Who reads them is the rule of GET /meetings/{mid}/notes (D13:
+    every member of that meeting, the MDT Coordinator) and of GET /cases/{id}/meeting-notes (whoever reads the whole Case File); never an
+    outside expert without the patient's consent to an outside discussion; never a protected Case File. `r` None: internal, everything.
+    Each line:
 
         {"text": "...", "said": [{"speaker": "Dr X", "words": "exact words", "at": "2026-11-05T10:42:00"}], "edited": bool,
-         "reviewed_by": "Dr Y" | None}
+         "edited_by": "Dr Z" | None, "reviewed_by": "Dr Y" | None}
 
-    The section prints NOTES_HEADING ("Discussion notes (AI draft, not reviewed)"), each line with its "said" words and speaker beneath."""
-    return []
+    The section prints NOTES_HEADING ("Discussion notes (AI draft, not reviewed)", or reviewed by whom), each line with its "said" words
+    and speaker beneath."""
+    if not isinstance(meeting, dict) or not case_id or case_id in config.PROTECTED_CASES:
+        return []
+    e = (meeting.get("notes") or {}).get(case_id) if isinstance(meeting.get("notes"), dict) else None
+    if not isinstance(e, dict) or not e.get("lines"):
+        return []
+    if r is not None:
+        if not isinstance(r, dict) or r.get("disabled"):
+            return []
+        c = store.get_case(case_id)
+        if not c or access.is_protected(c):
+            return []
+        try:
+            full = access.scope(r, c) == access.FULL
+        except Exception:
+            full = False
+        if not (meetings.is_member(r, meeting) or full):
+            return []
+        if r.get("outside_expert") and not meetings.manage(r) and meetings.outside_view(r, c):
+            return []
+    rv = e.get("review") if isinstance(e.get("review"), dict) else {}
+    reviewed_by = _clean(rv.get("by_name") or meetings.display_name(rv.get("by"))) if rv.get("status") == "reviewed" and (rv.get("by_name") or rv.get("by")) else None
+    out = []
+    for ln in e.get("lines") or []:
+        if not isinstance(ln, dict) or not _clean(ln.get("text")):
+            continue
+        said = ln.get("said") if isinstance(ln.get("said"), dict) else {}
+        ed = ln.get("edited") if isinstance(ln.get("edited"), dict) else None
+        who = _clean(said.get("speaker_name")) or ("Board room" if said.get("speaker") == "room" else meetings.display_name(said.get("speaker")) if said.get("speaker") else "")
+        out.append({"text": _clean(ln.get("text")),
+                    "said": [{"speaker": who, "words": _clean(said.get("quote")), "at": said.get("at") or ""}] if _clean(said.get("quote")) else [],
+                    "edited": bool(ed), "edited_by": (_clean(ed.get("by_name")) or meetings.display_name(ed.get("by")) if ed and (ed.get("by_name") or ed.get("by")) else None),
+                    "reviewed_by": reviewed_by})
+    return out
+
+
+def notes_heading(notes: list) -> str:
+    """NOTES_HEADING while the notes are an AI draft; "Discussion notes (AI notes, reviewed by Dr Y)" once the coordinator marked them."""
+    by = {n.get("reviewed_by") for n in notes or [] if isinstance(n, dict)}
+    one = next(iter(by)) if len(by) == 1 else None
+    return f"Discussion notes (AI notes, reviewed by {one})" if one else NOTES_HEADING
 
 
 def _notes_html(notes: list) -> str:
     lines = [n for n in notes or [] if isinstance(n, dict) and _clean(n.get("text"))]
     if not lines:
         return ""
-    out = [f"<div class='notes'><div class='kicker'>{_h(NOTES_HEADING)}</div><ul class='plain'>"]
+    heading = notes_heading(lines)
+    out = [f"<div class='notes'><div class='kicker'>{_h(heading)}</div><ul class='plain'>"]
     for n in lines:
-        out.append(f"<li>{_h(n.get('text'))}" + (" <span class='muted small'>(edited)</span>" if n.get("edited") else "")
-                   + (f" <span class='muted small'>(reviewed by {_h(n['reviewed_by'])})</span>" if n.get("reviewed_by") else ""))
+        edited = (" <span class='muted small'>(edited" + (f" by {_h(n['edited_by'])}" if n.get("edited_by") else "") + ")</span>") if n.get("edited") else ""
+        out.append(f"<li>{_h(n.get('text'))}{edited}"
+                   + (f" <span class='muted small'>(reviewed by {_h(n['reviewed_by'])})</span>" if n.get("reviewed_by") and heading == NOTES_HEADING else ""))
         for x in n.get("said") or []:
             if isinstance(x, dict) and _clean(x.get("words")):
                 who = ", ".join(v for v in (_clean(x.get("speaker")), _hm(x.get("at"))) if v)
@@ -709,7 +755,7 @@ def case_data(cid: str, r: dict | None = None) -> dict:
     st = store.get_state(cid) or {}
     recs = [x for x in st.get("board_records") or [] if isinstance(x, dict)]
     recs = sorted(enumerate(recs), key=lambda p: (str(p[1].get("recorded_at") or ""), p[0]), reverse=True)
-    out = []
+    out, noted = [], set()
     for _, rec in recs:
         rv = _record_view(rec)
         s = meetings.get(rv["session"]) if rv["session"] else None
@@ -721,8 +767,10 @@ def case_data(cid: str, r: dict | None = None) -> dict:
         entry = None
         if s:
             entry = next((it for k in ("discussion", "noting") for it in (s.get("agenda_lists") or {}).get(k) or [] if isinstance(it, dict) and it.get("case_id") == cid), None)
-        out.append({"view": rv, "where": where, "taken_up": bool(s and entry and taken_up_during(s, entry)),
-                    "notes": discussion_notes(s, cid, r) if s else []})
+        notes = discussion_notes(s, cid, r) if s and s.get("id") not in noted else []  # a meeting's notes once, with its latest record
+        if s:
+            noted.add(s.get("id"))
+        out.append({"view": rv, "where": where, "taken_up": bool(s and entry and taken_up_during(s, entry)), "notes": notes})
     hospital = org.hospital()
     return {"case": c, "case_id": cid, "hospital": hospital, "patient_line": meetings.patient_line(c, r), "cancer": _cancer_line(c),
             "owner": org.department_name(access.owner(c)) if access.owner(c) else "", "presenter": _presenter(c),

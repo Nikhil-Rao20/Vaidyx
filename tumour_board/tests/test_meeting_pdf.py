@@ -144,6 +144,76 @@ def test_the_phase5_notes_hook_is_printed_when_filled(tc, monkeypatch):
     assert meeting_pdf.NOTES_HEADING in case_page
 
 
+def _notes(mid, cid="TB-002", reviewed=False):
+    """The AI discussion notes of `cid` kept in the meeting record (meeting_notes, item 5.3): one line edited by the coordinator."""
+    s = board.get(mid)
+    s["notes"] = {cid: {"lines": [
+        {"id": "n1", "text": "Dr Suresh noted the size of the mass in the CT report.",
+         "said": {"segment_id": "g1", "speaker": "suresh", "speaker_name": "Dr Suresh", "department": "radiology", "at": "2026-11-05T10:42:00",
+                  "quote": "The CT report shows a 3.5 cm mass"}},
+        {"id": "n2", "text": "In the room, someone asked about the EGFR status.",
+         "said": {"segment_id": "g2", "speaker": "room", "speaker_name": "Board room", "at": "2026-11-05T10:43:00", "quote": "Can pathology confirm the EGFR status"},
+         "edited": {"by": "anil", "by_name": "Anil Kumar", "at": "2026-11-05T12:00:00", "checked": True, "vaidyx_text": "In the room, it was asked."}}],
+        "review": {"status": "reviewed", "by": "anil", "by_name": "Anil Kumar", "at": "2026-11-05T12:05:00"} if reviewed else {"status": "draft"}}}
+    board.save_session(s)
+    return board.get(mid)
+
+
+def test_the_discussion_notes_are_printed_with_the_exact_words(tc):
+    owned("TB-002")
+    mid, _ = _closed_meeting(tc)
+    s = _notes(mid)
+    notes = meeting_pdf.discussion_notes(s, "TB-002", org.roles("anil"))
+    assert notes == [
+        {"text": "Dr Suresh noted the size of the mass in the CT report.", "said": [{"speaker": "Dr Suresh", "words": "The CT report shows a 3.5 cm mass",
+                                                                                  "at": "2026-11-05T10:42:00"}], "edited": False, "edited_by": None, "reviewed_by": None},
+        {"text": "In the room, someone asked about the EGFR status.", "said": [{"speaker": "Board room", "words": "Can pathology confirm the EGFR status",
+                                                                               "at": "2026-11-05T10:43:00"}], "edited": True, "edited_by": "Anil Kumar", "reviewed_by": None}]
+    page = meeting_pdf.meeting_html(mid, org.roles("anil"))
+    assert page.count(meeting_pdf.NOTES_HEADING) == 1
+    sec = page.split("Case 2 of 3", 1)[1].split("Case 3 of 3", 1)[0]  # under TB-002's own section
+    for want in ("Discussion notes (AI draft, not reviewed)", "Dr Suresh noted the size of the mass in the CT report.", "said by Dr Suresh, 10:42: “The CT report shows a 3.5 cm mass”",
+                 "said by Board room, 10:43: “Can pathology confirm the EGFR status”", "(edited by Anil Kumar)"):
+        assert want in sec, want
+    assert "\u2014" not in page
+    # reviewed: the heading says by whom
+    _notes(mid, reviewed=True)
+    page = meeting_pdf.meeting_html(mid, org.roles("anil"))
+    assert "Discussion notes (AI notes, reviewed by Anil Kumar)" in page and meeting_pdf.NOTES_HEADING not in page
+    # the board record PDF of the Case File: the notes once, with the record of that meeting
+    case_page = meeting_pdf.case_html("TB-002", org.roles("priya"))
+    assert case_page.count("Discussion notes (AI notes, reviewed by Anil Kumar)") == 1 and "The CT report shows a 3.5 cm mass" in case_page
+    st = store.get_state("TB-002")
+    rec = st["board_records"][0]
+    st["board_records"].append({**rec, "id": "Bsecond", "recorded_at": "2099-01-01T10:00:00"})  # a second record of the same meeting
+    store.save_state("TB-002", st)
+    assert meeting_pdf.case_html("TB-002", org.roles("priya")).count("The CT report shows a 3.5 cm mass") == 1
+    assert meeting_pdf.case_data("TB-002", None)["records"][0]["notes"] and not meeting_pdf.case_data("TB-002", None)["records"][1]["notes"]
+
+
+def test_who_reads_the_discussion_notes_in_a_pdf(tc):
+    owned("TB-002")
+    mid = started(tc)
+    join_and_admit(tc, mid, "suresh")
+    code = As(tc, "anil").post(f"/meetings/{mid}/code").json()["value"]
+    As(tc, "guest").post("/meetings/join", json={"code": code})
+    As(tc, "anil").post(f"/meetings/{mid}/admit", json={"user": "guest"})
+    s = _notes(mid)
+    assert meeting_pdf.discussion_notes(s, "TB-002", None)                       # internal use
+    assert meeting_pdf.discussion_notes(s, "TB-002", org.roles("anil"))          # the MDT Coordinator
+    assert meeting_pdf.discussion_notes(s, "TB-002", org.roles("suresh"))        # an admitted member (D13), not a reader of TB-002 in full
+    assert meeting_pdf.discussion_notes(s, "TB-002", org.roles("priya"))         # not in the meeting, reads the whole Case File
+    assert meeting_pdf.discussion_notes(s, "TB-002", org.roles("ravi")) == []    # neither
+    assert meeting_pdf.discussion_notes(s, "TB-002", {**org.roles("suresh"), "disabled": True}) == []
+    guest = org.roles("guest")
+    assert meeting_pdf.discussion_notes(s, "TB-002", guest) == []                # an outside expert without the patient's consent
+    c = store.get_case("TB-002"); c["consent"] = {"outside_discussion": True}; store.save_case(c)
+    assert meeting_pdf.discussion_notes(s, "TB-002", guest)
+    assert meeting_pdf.discussion_notes(s, "TB-001", org.roles("anil")) == []    # no notes for it
+    assert "Dr Suresh noted the size" in meeting_pdf.meeting_html(mid, org.roles("suresh"))
+    assert "Dr Suresh noted the size" not in meeting_pdf.meeting_html(mid, org.roles("ravi"))
+
+
 def test_case_html_lists_the_board_records_latest_first(tc):
     owned("TB-002")
     mid, rec = _closed_meeting(tc)

@@ -38,18 +38,21 @@ ADVICE = {"text": "Surgery is the best option for this patient.", "citations": [
 RELATIVE = {"text": "The CT done last month records a mass of 3.2 cm.", "citations": [{"doc_id": "Da0000003", "quote": "Right upper lobe mass measuring 3.2 cm"}]}
 
 
-def fake(monkeypatch, pres=(), since=(), fail=()):
-    """llm.chat replaced: the Case summary calls answer with the given sentences; the adjudication calls find no claims."""
+def fake(monkeypatch, pres=(), since=(), fail=(), said=(), seen=None):
+    """llm.chat replaced: the Case summary calls answer with the given sentences (`said` for what was said at the board); the
+    adjudication calls find no claims. `seen` (a list) keeps every call's messages and keywords."""
     calls = []
 
     async def chat(role, msgs, **kw):
         p = kw.get("purpose") or ""
         calls.append(p)
+        if seen is not None:
+            seen.append({"purpose": p, "messages": msgs, **kw})
         if p.startswith("case summary"):
             sec = p.split()[-1]
             if sec in fail:
                 raise llm.LLMError("the model server is down")
-            return {"sentences": copy.deepcopy(list(pres if sec == "presentation" else since))}
+            return {"sentences": copy.deepcopy(list(pres if sec == "presentation" else said if sec == "discussion" else since))}
         return {"claims": []}
     monkeypatch.setattr(llm, "chat", chat)
     return calls
@@ -558,7 +561,7 @@ def test_scheduled_build_writes_a_version_and_tells_the_owner(decided, monkeypat
     asyncio.run(main())
     v = cs.current(store.get_state(case_id))
     assert v["n"] == 1 and v["trigger"]["kind"] == "decision"
-    n = [x for x in notify._load() if x["title"].startswith("Case summary updated")]
+    n = [x for x in notify._load() if x["title"].startswith("Summary after the board updated")]
     assert len(n) == 1 and "Version 1 after the board decision of 26/10/2026: AI draft, not reviewed." in n[0]["text"]
 
 
@@ -866,3 +869,170 @@ def test_only_the_newest_three_archived_pre_board_summaries_come_in_full():
     assert [x["full"] for x in h] == [False, False, True, True, True, True] and h[-1]["live"] is True
     assert set(h[0]) == {"generated", "archived_at", "review", "model", "sentences", "live", "full"} and h[0]["sentences"] == 2
     assert h[2]["paragraphs"][0]["sentences"] == sec[0]["sentences"] and h[-1]["review"]["status"] == "reviewed"
+
+
+# ---- 9. what was said at the board (meetings-v2 item 5.4, owner decision D14) ---------------------------------------------------------
+
+SAID_LINES = [
+    {"id": "n1", "text": "Dr Suresh noted the size of the mass in the CT thorax report.",
+     "said": {"segment_id": "g1", "speaker": "dr.suresh", "speaker_name": "Dr Suresh", "department": "", "at": "2026-09-10T10:42:05",
+              "quote": "The CT thorax report shows a 3.2 cm mass in the right upper lobe"}},
+    {"id": "n2", "text": "In the room, someone asked whether pathology can confirm the EGFR status.",
+     "said": {"segment_id": "g2", "speaker": "room", "speaker_name": "Board room", "department": "", "at": "2026-09-10T10:43:00",
+              "quote": "Can pathology confirm the EGFR status before the next meeting?"}},
+    {"id": "n3", "text": "Dr Lata gave their view on surgery.",
+     "said": {"segment_id": "g3", "speaker": "dr.lata", "speaker_name": "Dr Lata", "department": "", "at": "2026-09-10T10:44:00",
+              "quote": "I would recommend a lobectomy if the PET-CT shows no distant disease"}}]
+SAID_OK = [  # given out of order: kept in the order spoken
+    {"text": "At the board of 10/09/2026, someone in the room asked: \"Can pathology confirm the EGFR status before the next meeting?\"",
+     "citations": [{"note_line": "n2", "quote": "Can pathology confirm the EGFR status before the next meeting?"}]},
+    {"text": "At the board of 10/09/2026, Dr Suresh noted that the CT thorax report shows a 3.2 cm mass.",
+     "citations": [{"note_line": "n1", "quote": "the CT thorax report shows a 3.2 cm mass"}]},
+    {"text": "At the board of 10/09/2026, Dr Lata gave her view: \"I would recommend a lobectomy if the PET-CT shows no distant disease\".",
+     "citations": [{"note_line": "n3", "quote": "I would recommend a lobectomy if the PET-CT shows no distant disease"}]}]
+SAID_BAD = [
+    ("said_as_decision", {"text": "At the board of 10/09/2026, the board agreed on a lobectomy as Dr Lata said.", "citations": [{"note_line": "n3", "quote": "I would recommend a lobectomy"}]}),
+    ("guardrail", {"text": "At the board of 10/09/2026, Dr Lata said a lobectomy is the best option.", "citations": [{"note_line": "n3", "quote": "I would recommend a lobectomy"}]}),
+    ("quote_not_found", {"text": "At the board of 10/09/2026, Dr Suresh noted a 4.5 cm mass.", "citations": [{"note_line": "n1", "quote": "a 4.5 cm mass"}]}),
+    ("quote_not_found", {"text": "At the board of 10/09/2026, Dr Suresh noted a mass.", "citations": [{"note_line": "n1", "quote": "mass"}]}),  # too short
+    ("not_attributed", {"text": "At the board of 10/09/2026, it was noted that the CT thorax report shows a 3.2 cm mass.",
+                        "citations": [{"note_line": "n1", "quote": "the CT thorax report shows a 3.2 cm mass"}]}),
+    ("names", {"text": "At the board of 10/09/2026, Dr Suresh told Pathology that the CT thorax report shows a 3.2 cm mass.",
+               "citations": [{"note_line": "n1", "quote": "the CT thorax report shows a 3.2 cm mass"}]}),
+    ("not_given", {"text": "At the board of 10/09/2026, Dr Suresh noted a mass.", "citations": [{"note_line": "n9", "quote": "the CT thorax report shows"}]}),
+    ("number_not_in_quote", {"text": "At the board of 10/09/2026, Dr Suresh noted a 4 cm node and that the CT thorax report shows a 3.2 cm mass.",
+                             "citations": [{"note_line": "n1", "quote": "the CT thorax report shows a 3.2 cm mass"}]}),
+    ("relative_date", {"text": "Last month Dr Suresh noted that the CT thorax report shows a 3.2 cm mass.", "citations": [{"note_line": "n1", "quote": "the CT thorax report shows a 3.2 cm mass"}]}),
+    ("no_citation", {"text": "Dr Suresh spoke about the mass.", "citations": []})]
+
+
+def with_notes(case_id, monkeypatch, lines=None, mid="M1"):
+    """The first board record came from meeting `mid`, which kept the AI discussion notes `lines` for this Case File."""
+    from tumour_board import meetings
+    m = {"id": mid, "date": "2026-09-10", "status": "closed", "notes": {case_id: {"lines": copy.deepcopy(SAID_LINES if lines is None else lines), "review": {"status": "draft"}}}}
+    monkeypatch.setattr(meetings, "get", lambda x: m if x == mid else None)
+    st = store.get_state(case_id)
+    st["board_records"][0]["session"] = mid
+    store.save_state(case_id, st)
+    return m
+
+
+def test_the_summary_after_the_board_cites_what_was_said(decided, monkeypatch):
+    case_id, rec = decided
+    m = with_notes(case_id, monkeypatch)
+    seen = []
+    fake(monkeypatch, pres=[P_OK], since=[S_OK], said=[x for _, x in SAID_BAD] + SAID_OK, seen=seen)
+    v = build(case_id)
+    assert v["title"] == cs.TITLE == "Summary after the board" and v["label"] == "AI draft, not reviewed" and v["last_board_date"] == "2026-09-10"
+    assert [s["id"] for s in v["sections"]] == ["presentation", "stage", "rounds", "discussion", "since", "status"]
+    disc = section(v, "discussion")
+    assert disc["title"] == "What was said at the board" and disc["built_by"] == "model" and disc["context"]["lines"] == 3
+    assert [s["text"] for s in disc["sentences"]] == [SAID_OK[1]["text"], SAID_OK[0]["text"], SAID_OK[2]["text"]]  # the order spoken
+    assert [s["id"] for s in disc["sentences"]] == ["sdiscussion-1", "sdiscussion-2", "sdiscussion-3"]
+    assert all(not s.get("code") and not s.get("fixed") for s in disc["sentences"])  # model sentences: the AI mark on screen
+    c = disc["sentences"][0]["citations"][0]
+    assert c == {"kind": "said", "meeting_id": "M1", "line_id": "n1", "speaker": "dr.suresh", "speaker_name": "Dr Suresh", "department": "",
+                 "at": "2026-09-10T10:42:05", "board_date": "2026-09-10", "quote": "the CT thorax report shows a 3.2 cm mass"}
+    assert disc["sentences"][1]["citations"][0]["speaker"] == "room"
+    dropped = sorted(r["reason"] for r in v["removed"] if r["where"] == "discussion")
+    assert dropped == sorted(r for r, _ in SAID_BAD)
+    assert next(r for r in v["removed"] if r["reason"] == "not_given")["citations"][0]["note_line"] == "n9"
+    assert all("—" not in s["text"] for s in disc["sentences"])
+    assert v["inputs"]["notes"] == [{"meeting_id": "M1", "lines": 3}] and v["signature"]["parts"]["notes"]
+    # the prompt: the notes as what was said at the board, attributed to the speakers; never the patient's name
+    call = next(x for x in seen if x["purpose"] == "case summary discussion")
+    assert call["json_schema"] == cs.DISCUSSION_SCHEMA
+    sysm, user = call["messages"][0]["content"], call["messages"][1]["content"]
+    assert user.startswith("WHAT WAS SAID AT THE BOARD (the discussion notes of this Case File, attributed to the speakers; not the board's decision)")
+    assert "BOARD OF 10/09/2026 (meeting notes, AI draft, not reviewed):" in user
+    assert ('[n1] 10:42 Dr Suresh. Note: Dr Suresh noted the size of the mass in the CT thorax report. Exact words: '
+            '"The CT thorax report shows a 3.2 cm mass in the right upper lobe"') in user
+    assert "[n2] 10:43 Board room microphone (speaker not known)." in user
+    assert store.get_case(case_id)["patient"]["name"] not in user
+    assert "never turn what someone said into a decision or a plan" in sysm and "never decide, advise, diagnose, stage" in sysm
+    # verify_said: the line is still in the notes and the quote is word for word in what was said
+    assert cs.verify_said(case_id, c) and cs.verify_said(case_id, {**c, "quote": "the ct THORAX report  shows a 3.2 cm mass"})
+    for bad in ({"quote": "a 4.5 cm mass"}, {"quote": "mass"}, {"line_id": "n9"}, {"meeting_id": "M2"}, {"kind": "card"}):
+        assert not cs.verify_said(case_id, {**c, **bad}), bad
+    assert not cs.verify_said(case_id, c, sentence="Dr Suresh noted a 5 cm mass.")
+    # the view: the title beside the pre-board summary's, and the latest board date
+    view = cs.view(case_id, store.get_state(case_id))
+    assert (view["title"], view["before_title"], view["last_board_date"], view["status"]) == ("Summary after the board", "Summary before the board", "2026-09-10", "ready")
+    assert [s["id"] for s in view["sections"]][3] == "discussion"
+    # the notes change: out of date, with the reason; a line rebuilt away no longer verifies
+    m["notes"][case_id]["lines"][0]["text"] = "Dr Suresh read out the CT thorax report."
+    stt = cs.status(store.get_state(case_id), case_id)
+    assert stt["status"] == "stale" and stt["stale_reason"] == "The discussion notes of the board changed since this was built"
+    m["notes"][case_id]["lines"] = m["notes"][case_id]["lines"][1:]
+    assert not cs.verify_said(case_id, c)
+
+
+def test_without_notes_the_summary_and_its_signature_are_as_before(decided, monkeypatch):
+    case_id, _ = decided
+    with_notes(case_id, monkeypatch, lines=[])
+    calls = fake(monkeypatch, pres=[P_OK])
+    v = build(case_id)
+    assert [s["id"] for s in v["sections"]] == ["presentation", "stage", "rounds", "since", "status"]
+    assert "case summary discussion" not in calls and v["inputs"]["notes"] == []
+    assert set(v["signature"]["parts"]) == {"case", "board", "status", "staging"}  # the hash of a Case File without notes is unchanged
+    assert cs.view(case_id, store.get_state(case_id))["status"] == "ready"
+    # a version built before item 5.4 reads with the title too
+    st = store.get_state(case_id)
+    old = copy.deepcopy(cs.current(st)); old.pop("title"); old.pop("last_board_date")
+    shown = cs.display(case_id, st, old)
+    assert shown["title"] == "Summary after the board" and shown["last_board_date"] == "2026-09-10"
+
+
+def test_the_model_down_for_what_was_said_leaves_the_fixed_sentence(decided, monkeypatch):
+    case_id, _ = decided
+    with_notes(case_id, monkeypatch)
+    fake(monkeypatch, pres=[P_OK], fail=("discussion",))
+    v = build(case_id)
+    s = section(v, "discussion")["sentences"]
+    assert [x["text"] for x in s] == [cs.NOTHING_DISCUSSION] and s[0]["fixed"] and "discussion" in v["model_error"]
+    assert "—" not in cs.NOTHING_DISCUSSION
+    with pytest.raises(ValueError, match="cannot be edited"):
+        cs.edit(case_id, v["n"], s[0]["id"], "Something else.", "dr.rao")
+
+
+def test_a_sentence_of_what_was_said_is_edited_and_kept_on_a_rebuild(decided, monkeypatch):
+    case_id, _ = decided
+    with_notes(case_id, monkeypatch)
+    fake(monkeypatch, said=SAID_OK)
+    v = build(case_id)
+    sid = section(v, "discussion")["sentences"][0]["id"]
+    s = cs.edit(case_id, v["n"], sid, "At the board of 10/09/2026, Dr Suresh read out that the CT thorax report shows a 3.2 cm mass.", "dr.rao")
+    assert s["edited"]["checked"] is True and s["citations"][0]["kind"] == "said"  # the speaker's name and the quote hold every name and number
+    s = cs.edit(case_id, v["n"], sid, "Dr Suresh noted a 5 cm mass.", "dr.rao")
+    assert s["edited"]["checked"] is False
+    v2 = build(case_id)
+    first = section(v2, "discussion")["sentences"][0]
+    assert first["text"] == "Dr Suresh noted a 5 cm mass." and first["edited"]["carried_from"] == v["n"]
+    assert first["edited"]["vaidyx_text"] == SAID_OK[1]["text"] and "suggested" not in first["edited"]  # the same Vaidyx sentence: no new suggestion
+
+
+def test_notes_built_or_edited_write_the_summary_after_the_board_again(decided, monkeypatch):
+    case_id, _ = decided
+    got = []
+    monkeypatch.setattr(cs, "schedule", lambda cid, trigger, user="": got.append((cid, trigger, user)) or {"scheduled": True, "how": "loop"})
+    assert cs.on_notes_changed("M1", case_id, "anil") == {"scheduled": False, "how": "no_board_record"}  # no board record of that meeting
+    st = store.get_state(case_id)
+    st["board_records"][0]["session"] = "M1"
+    store.save_state(case_id, st)
+    assert cs.on_notes_changed("M1", case_id, "anil", "notes_line_edited") == {"scheduled": True, "how": "loop"}
+    assert got == [(case_id, {"kind": "notes", "meeting": "M1", "why": "notes_line_edited"}, "anil")]
+    monkeypatch.setattr(cs, "records", lambda st: 1 / 0)
+    assert cs.on_notes_changed("M1", case_id, "anil") == {"scheduled": False, "how": "error"}  # never raises
+    monkeypatch.setattr(config, "PROTECTED_CASES", {case_id})
+    assert cs.on_notes_changed("M1", case_id, "anil")["how"] == "off" and len(got) == 1
+    assert cs.board_notes(case_id, [{"id": "B1", "session": "M1"}]) == []  # a protected Case File has no notes here
+
+
+def test_the_owner_is_told_a_version_with_the_notes(decided, monkeypatch):
+    case_id, rec = decided
+    with_notes(case_id, monkeypatch)
+    fake(monkeypatch, said=SAID_OK)
+    v = asyncio.run(cs.build(case_id, {"kind": "notes", "meeting": "M1"}, "anil"))
+    cs._notify_owner(case_id, v, "anil")
+    n = [x for x in notify._load() if x["title"].startswith("Summary after the board updated")]
+    assert n and n[-1]["text"].startswith(f"Version {v['n']} with the discussion notes of the board of 10/09/2026: AI draft, not reviewed.")

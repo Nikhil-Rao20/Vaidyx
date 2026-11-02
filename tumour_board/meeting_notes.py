@@ -510,7 +510,15 @@ async def build_notes(mid: str, case_id: str, by: str = "", trigger: str = "on_d
     meetings._save(s)
     board.audit_event(mid, "notes_built", by, case_id, "notes_built", lines=len(lines), dropped=entry["dropped"], segments=len(segs), trigger=trigger)
     meetings._send(s, {"type": "notes", "case_id": case_id, "lines": len(lines), "generated_at": entry["generated_at"], "review": "draft"})
+    _summary_after_board(mid, case_id, by, "notes_built")
     return {"case_id": case_id, "status": "built", **notes_view(entry)}
+
+
+def _summary_after_board(mid: str, case_id: str, by: str, why: str) -> None:
+    """The summary after the board cites these notes (item 5.4): it is written again in the background (case_summary.on_notes_changed,
+    which never raises)."""
+    from . import case_summary
+    case_summary.on_notes_changed(mid, case_id, by, why)
 
 
 # ---- edit and review (the coordinator) -------------------------------------------------------------------------------------------------
@@ -551,6 +559,7 @@ def edit_line(mid: str, case_id: str, line_id: str, text, by: str) -> dict:
     board.audit_event(mid, "notes_line_edited", by, case_id, "notes_line_edited", line_id=line_id, chars=len(text))
     meetings._send(s, {"type": "notes", "case_id": case_id, "lines": len(e.get("lines") or []), "generated_at": e.get("generated_at"),
                        "review": (e.get("review") or {}).get("status") or "draft"})
+    _summary_after_board(mid, case_id, by, "notes_line_edited")
     return line_view(line)
 
 
