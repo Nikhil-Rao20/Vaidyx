@@ -331,16 +331,23 @@ def _speaker_pool(seg: dict) -> str:
 
 
 def _names_ok(own: str, quote: str, seg: dict) -> bool:
-    """Every capitalised word of the line's own words (a name, a department, a marker, a test), the first word included, is in the quote
-    or is the speaker's name or department; a few plain words (The, In, Board, Dr ...) excepted. So "Pathology noted ..." on a segment
-    Radiology spoke is dropped, and so is a marker or test the quote does not name."""
-    pool = grounding.norm(quote + " " + _speaker_pool(seg))
+    """Every capitalised word of the line's own words (a name, a department, a marker, a test), the first word included, was said in
+    that segment (its quote or the rest of what the speaker said there) or is the speaker's name or department; a few plain words (The,
+    In, Board, Dr ...) excepted. So "Pathology noted ..." on a segment Radiology spoke is dropped, and so is a marker or test nobody said.
+    An acronym also matches with the spaces and stops speech to text put in it ("MR, I" for MRI). (The evaluation of 2 Nov: lines naming
+    the MRI were dropped because the model's shorter quote left the word out.)"""
+    said = quote + " " + str(seg.get("text") or "")
+    pool = grounding.norm(said + " " + _speaker_pool(seg))
+    compact = re.sub(r"[^a-z0-9]", "", said.lower())
     for m in _CAPS.finditer(own):
         w = m.group(0)
         if w.lower() in _ALLOWED_CAPS:
             continue
-        if grounding.norm(w) not in pool:
-            return False
+        if grounding.norm(w) in pool:
+            continue
+        if w.isupper() and len(w) >= 2 and re.sub(r"[^a-z0-9]", "", w.lower()) in compact:
+            continue
+        return False
     return True
 
 

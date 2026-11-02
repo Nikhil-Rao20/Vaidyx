@@ -511,3 +511,15 @@ def test_the_summary_after_the_board_follows_the_notes(tc, stub, monkeypatch):  
     assert {k: c[k] for k in ("kind", "meeting_id", "line_id", "speaker", "speaker_name", "quote")} == {
         "kind": "said", "meeting_id": mid, "line_id": lid, "speaker": "suresh", "speaker_name": "Dr Suresh", "quote": "the CT thorax report shows a 3.5 cm mass"}
     assert cs.verify_said("TB-001", c) and SAID_1 not in json.dumps(v)  # only the quoted words, never the whole segment
+
+
+def test_a_term_said_in_the_segment_counts_even_outside_the_short_quote():
+    """The 2 Nov evaluation: "MRI" was said by Radiology but left out of the model's shorter quote, and speech to text wrote "MR, I"."""
+    from tumour_board import meeting_notes as mn
+    seg = {"text": "On the MRI pelvis, the lesion measures 2.2 x 1.8 cm, and the parametria are free.", "speaker": "tb-rad-doc",
+           "speaker_name": "Dr Radiology (demo)", "department": "radiology"}
+    assert mn._names_ok("Radiology noted the lesion measures 2.2 x 1.8 cm on the MRI pelvis.", "the lesion measures 2.2 x 1.8 cm", seg)
+    seg2 = {"text": "Could radiology confirm whether the lesion size on MR, I matches the clinical examination?", "speaker": "room", "speaker_name": "Board room"}
+    assert mn._names_ok("In the room, someone asked radiology to confirm the lesion size on MRI.", "Could radiology confirm whether the lesion size", seg2)
+    assert not mn._names_ok("Pathology noted the lesion measures 2.2 cm.", "the lesion measures 2.2 x 1.8 cm", seg)  # nobody said Pathology
+    assert not mn._names_ok("Radiology noted the PET-CT was clear.", "the lesion measures 2.2 x 1.8 cm", seg)  # no PET-CT was said
