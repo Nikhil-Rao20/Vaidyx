@@ -429,7 +429,21 @@ def summary_row(s: dict) -> dict:
             "title": s.get("title") or "", "created_by": s.get("created_by"), "started_at": s.get("started_at"), "closed_at": s.get("closed_at"),
             "cancelled": s.get("cancelled"), "current": s.get("current"), "people": len(s.get("people") or {}),
             "label": f"Tumour Board {_dmy(s.get('date'))}" + (f" {s['time']}" if s.get("time") else ""),
-            "series_id": s.get("series_id") or "", "series_date": s.get("series_date") or ""}  # meetings-v2 3.1
+            "series_id": s.get("series_id") or "", "series_date": s.get("series_date") or "",  # meetings-v2 3.1
+            "recording": _recording_state(s)}  # the join page says when the meeting is recorded as text (meetings-v2 5.2)
+
+
+def _recording_view(s: dict) -> dict:
+    from . import meeting_notes
+    return meeting_notes.recording_view(s)
+
+
+def _recording_state(s: dict) -> str:
+    from . import meeting_notes
+    try:
+        return meeting_notes.recording_view(s)["state"]
+    except Exception:
+        return "off"
 
 
 def _timer_left(t: dict, now_ts: float | None = None) -> int:
@@ -892,7 +906,8 @@ def view(mid: str, r: dict) -> dict:
         af["agents"] = agents_public(af["agents"])  # no record quotes for a viewer who is not admitted
     return _for_outside(r, s, {"meeting": summary_row(s), "agenda": agenda, "agenda_order": {k: order_mode(s, k) for k in ORDERED},
             "code": {"value": code["value"], "expires_at": code.get("expires_at"), "attempts": code.get("attempts", 0)} if code else None,
-            "attendance": attendance_rows(s), "current": cv, "view": view_state(s) if member else None,  # the follow state for the members only (2.2)
+            "attendance": attendance_rows(s), "current": cv, "view": view_state(s) if member else None,
+            "recording": _recording_view(s),  # the recorder's state for every screen (meetings-v2 5.1)  # the follow state for the members only (2.2)
             "decision_live": dl, "questions": list(s.get("questions") or []) if member else [],
             "hands": list(s.get("hands") or []), **af, "spotlight": spotlight_view(s),
             "quorum": quorum_view(s), "present_allowed": present_allowed_view(s), "presenting": (s.get("live") or {}).get("presenting") or None,
@@ -2130,6 +2145,8 @@ def end(mid: str, by: str) -> dict:
     board.audit_event(mid, "meeting_ended", by, outcomes=len(s.get("outcomes") or {}), cards=sum(len(v) for v in (s.get("cards") or {}).values()),
                       agent_tasks_stopped=cancelled)
     _send(s, {"type": "ended", "meeting": summary_row(s)})
+    from . import meeting_notes
+    meeting_notes.on_meeting_ended(mid, by)  # stops the recorder, writes the notes still missing (meetings-v2 5.1, 5.3)
     return {"meeting": summary_row(s)}
 
 
@@ -3319,6 +3336,8 @@ def end_case(mid: str, cid: str, by: str) -> dict:
             log.warning("meeting %s: card request to %s failed (%s)", mid, h["id"], e)
     board.audit_event(mid, "case_ended", by, cid, "case_ended", cards_requested=asked)
     _send(s, {"type": "end_case", "case_id": cid, "cards_requested": asked, "timer": timer_view((s.get("live") or {}).get("timer"))})
+    from . import meeting_notes
+    meeting_notes.on_case_ended(mid, cid, by)  # the discussion notes of this case, in the background (meetings-v2 5.3)
     return {"case_id": cid, "cards_requested": asked, "ended": s["ended"][cid]}
 
 
