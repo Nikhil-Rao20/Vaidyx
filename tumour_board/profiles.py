@@ -76,12 +76,14 @@ def _complete(p: dict, doctor: bool) -> bool:
 
 def name_ok(name: str) -> bool:
     """A display name the screens show as it is (security review #19): 2 to 80 characters of letters (any script, with its vowel
-    signs), spaces, dots, apostrophes and hyphens; no digits, brackets or markup."""
+    signs), spaces, dots, apostrophes, hyphens and round brackets; no digits, other brackets or markup. Round brackets are allowed
+    because a department admin's placement accepts them ("Dr Meera (demo)") and such a login was stuck at its first set-up (owner,
+    2 Nov 2026)."""
     import unicodedata
     v = str(name or "")
     if not 2 <= len(v) <= 80:
         return False
-    return all(ch in " .'-\u2019" or unicodedata.category(ch)[0] in ("L", "M") for ch in v) and any(unicodedata.category(ch)[0] == "L" for ch in v)
+    return all(ch in " .'-\u2019()" or unicodedata.category(ch)[0] in ("L", "M") for ch in v) and any(unicodedata.category(ch)[0] == "L" for ch in v)
 
 
 def clean(fields: dict) -> dict:
@@ -96,7 +98,7 @@ def clean(fields: dict) -> dict:
             if len(v) > limit:
                 raise ValueError(f"{k.replace('_', ' ').capitalize()} is too long (at most {limit} characters).")
             if k == "display_name" and v and not name_ok(v):
-                raise ValueError("The name may hold letters, spaces, dots, apostrophes and hyphens only (2 to 80 characters).")
+                raise ValueError("The name may hold letters, spaces, dots, apostrophes, hyphens and round brackets only (2 to 80 characters).")
             if k == "phone" and v and not _PHONE.match(v):
                 raise ValueError("The mobile number may hold digits, spaces and hyphens, with an optional leading +.")
             if k == "registration_no" and v and not _REG.match(v):

@@ -216,10 +216,11 @@ def test_profile_validation_and_mirroring(api):
     assert api.put("/me/profile", {"photo": "data:image/png;base64,iVBORw0KGgo="}).status_code == 200
     assert api.put("/me/profile", {"saved_filters": [{"name": "Mine", "query": {"mine": "1"}, "pinned": True}]}).json()["profile"]["saved_filters"][0]["pinned"] is True
     assert api.put("/me/profile", {"display_name": "x" * 81}).status_code == 400
-    for bad in ("Dr Rao (synthetic)", "<b>Rao</b>", "R", "Dr Rao 2"):  # letters, spaces, dots, apostrophes, hyphens; 2 to 80 (review #19)
+    for bad in ("<b>Rao</b>", "R", "Dr Rao 2", "Dr Rao [x]", "Dr Rao {x}"):  # letters, spaces, dots, apostrophes, hyphens, round brackets; 2 to 80 (review #19)
         r = api.put("/me/profile", {"display_name": bad})
         assert r.status_code == 400 and "letters, spaces, dots" in r.json()["detail"]["message"], bad
     assert api.put("/me/profile", {"display_name": "Dr. K. O'Neil-Rao"}).status_code == 200
+    assert api.put("/me/profile", {"display_name": "Dr Rao (synthetic)"}).status_code == 200  # as a placement may write it (2 Nov 2026)
     r = api.put("/me/profile", {"display_name": "Dr Rao Renamed Synthetic"})
     assert r.status_code == 200
     assert org.load()["users"][RAO]["display_name"] == "Dr Rao Renamed Synthetic" and profiles.display_name(RAO) == "Dr Rao Renamed Synthetic"
