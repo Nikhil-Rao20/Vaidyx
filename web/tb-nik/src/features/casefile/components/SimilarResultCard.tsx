@@ -6,7 +6,7 @@
 // (Phase 7 review, S1).
 import { FolderOpen } from "lucide-react";
 import type { SimilarLine, SimilarResult } from "../types";
-import { LoadingButton, StatusChip, indianDates } from "./common";
+import { LoadingButton, StatusChip, indianDates, indianDatesOnly } from "./common";
 
 export const SIMILAR_LABEL = "Past Case File, not advice for this patient";
 
@@ -24,8 +24,14 @@ function Part({ title, children }: { title: string; children: React.ReactNode })
 }
 
 /** A quote in the published-case style: the words as written, then where they sit. */
+/** A past patient's day-level dates and identifiers are masked by the server ("[date]", "[id]"); they read as words, never as a template
+ *  slip (2 Nov test pass). */
+function hidden(text?: string | null): string {
+  return String(text ?? "").replace(/\[date\]/g, "a date hidden for privacy").replace(/\[id\]/g, "(hidden for privacy)");
+}
+
 function Quoted({ text, where }: { text: string; where?: string }) {
-  return <span className="block border-l-2 border-border pl-2 text-sm"><span className="text-foreground">{text}</span>{where ? <> <span className="text-xs text-muted-foreground">({where})</span></> : null}</span>;
+  return <span className="block border-l-2 border-border pl-2 text-sm"><span className="text-foreground">{hidden(text)}</span>{where ? <> <span className="text-xs text-muted-foreground">({where})</span></> : null}</span>;
 }
 
 function Lines({ lines, testId }: { lines: SimilarLine[]; testId: string }) {
@@ -34,8 +40,8 @@ function Lines({ lines, testId }: { lines: SimilarLine[]; testId: string }) {
       {lines.map((l, i) => (
         <li key={i} className="space-y-0.5 text-sm">
           {l.about ? <StatusChip kind="muted" className="whitespace-normal">{words(l.about)}</StatusChip> : null}
-          <span className="block text-foreground">This file, {l.this.where}: &quot;{l.this.text}&quot;.</span>
-          <span className="block text-foreground">Past file, {l.past.where}: &quot;{l.past.text}&quot;.</span>
+          <span className="block text-foreground">This file, {l.this.where}: &quot;{hidden(l.this.text)}&quot;.</span>
+          <span className="block text-foreground">Past file, {l.past.where}: &quot;{hidden(l.past.text)}&quot;.</span>
         </li>
       ))}
     </ul>
@@ -65,7 +71,7 @@ export function SimilarResultCard({ r, onOpen, opening, message }: { r: SimilarR
           <ul className="space-y-1">
             {r.stage.map((s, i) => (
               <li key={i} className="text-sm">
-                <span className="font-medium text-foreground">{indianDates(s.text)}</span>{" "}
+                <span className="font-medium text-foreground">{hidden(indianDates(s.text))}</span>{" "}
                 <span className="text-xs text-muted-foreground">({[s.label, s.where].filter(Boolean).join(", ")})</span>
                 {s.quote && !same(s.quote, s.text) ? <Quoted text={s.quote} /> : null}
               </li>
@@ -79,7 +85,7 @@ export function SimilarResultCard({ r, onOpen, opening, message }: { r: SimilarR
           <ul className="space-y-1">
             {values.map((v, i) => (
               <li key={`${v.fact}-${i}`} className="text-sm">
-                <span className="text-muted-foreground">{v.label}:</span> <span className="text-foreground">{indianDates(v.value)}</span>
+                <span className="text-muted-foreground">{v.label}:</span> <span className="text-foreground">{hidden(indianDatesOnly(v.value))}</span>
                 {v.shared ? <> <StatusChip kind="muted">also on this file</StatusChip></> : null}
                 {v.quote && !same(v.quote, v.value) ? <Quoted text={v.quote} where={v.where} /> : v.where ? <> <span className="text-xs text-muted-foreground">({v.where})</span></> : null}
               </li>
@@ -98,7 +104,7 @@ export function SimilarResultCard({ r, onOpen, opening, message }: { r: SimilarR
                 </p>
                 {d.text ? (
                   <figure className="border-l-2 border-border pl-2">
-                    <blockquote className="text-sm text-foreground">{d.text}</blockquote>
+                    <blockquote className="text-sm text-foreground">{hidden(d.text)}</blockquote>
                     <figcaption className="text-xs text-muted-foreground">as written by the board</figcaption>
                   </figure>
                 ) : null}
@@ -118,7 +124,7 @@ export function SimilarResultCard({ r, onOpen, opening, message }: { r: SimilarR
                 {outcome.sentences.map((s, i) => (
                   <li key={i} className="space-y-0.5 text-sm" data-testid="similar-outcome">
                     <span className="block">
-                      <span className="text-foreground">{indianDates(s.text)}</span>
+                      <span className="text-foreground">{hidden(indianDates(s.text))}</span>
                       {s.label ? <> <StatusChip kind="muted" className="whitespace-normal">{s.label}</StatusChip></> : null}
                       {s.where ? <> <span className="text-xs text-muted-foreground">({s.where})</span></> : null}
                     </span>

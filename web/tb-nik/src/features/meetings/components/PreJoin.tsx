@@ -83,7 +83,7 @@ export function PreJoin({ title, subtitle, onJoin, onSkip, allowSkip = true }: {
               </label>
             </div>
           ) : null}
-          {err ? <p role="alert" className="rounded-md bg-bad/15 px-3 py-2 text-sm text-[#ffb4a8]">{err} You can still join and follow the shared screen.</p> : null}
+          {err ? <p role="alert" className="rounded-md bg-bad/15 px-3 py-2 text-sm text-[#ffb4a8]">{/[.!?]$/.test(err.trim()) ? err.trim() : `${err.trim()}.`} You can still join and follow the shared screen.</p> : null}
           <div className="flex flex-wrap items-center gap-2">
             <Button size="lg" className="h-11 rounded-full px-6" onClick={() => join(true)} data-testid="prejoin-join"><Video className="size-4" />Join now</Button>
             {allowSkip ? <Button size="lg" variant="ghost" className="h-11 rounded-full text-stage-fg hover:bg-stage-raised hover:text-stage-fg" onClick={() => join(false)}><VideoOff className="size-4" />Join without video</Button> : null}

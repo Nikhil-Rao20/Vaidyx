@@ -36,8 +36,9 @@ export function StageFrame({ children, className, testId, attrs }: { children: R
 export function StageTopBar({ left, center, right, className }: { left?: ReactNode; center?: ReactNode; right?: ReactNode; className?: string }) {
   return (
     <header className={cn("flex min-h-12 items-center gap-3 border-b border-stage-line px-3 py-1.5 lg:px-4", className)}>
-      <div className="flex min-w-0 shrink-0 items-center gap-2.5">
-        <VaidyxIcon tone="white" className="h-5 opacity-90" />
+      {/* the meeting line may shrink: the case on the floor in the middle must stay readable at laptop width (2 Nov test pass) */}
+      <div className="flex min-w-0 max-w-[22%] items-center gap-2.5">
+        <VaidyxIcon tone="white" className="h-5 shrink-0 opacity-90" />
         {left}
       </div>
       <div className="min-w-0 flex-1">{center}</div>

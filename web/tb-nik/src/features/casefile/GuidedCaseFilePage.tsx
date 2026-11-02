@@ -415,7 +415,14 @@ export default function GuidedCaseFilePage() {
       {steps ? (
         wide ? (
           <div className="grid items-start gap-5 lg:grid-cols-[248px_minmax(0,1fr)]">
-            <aside className="sticky top-[4.5rem] print:hidden"><SectionNav steps={steps} active={section} leftOff={leftOff} onOpen={(s) => go(s)} onGo={go} /></aside>
+            <aside className="sticky top-[4.5rem] space-y-3 print:hidden">
+              <SectionNav steps={steps} active={section} leftOff={leftOff} onOpen={(s) => go(s)} onGo={go} />
+              {/* on a laptop Ask sits under the sections, never over the page (it covered a Prepare button; 2 Nov test pass) */}
+              <button type="button" onClick={() => setSide({ kind: "ask" })} data-testid="ask-bubble"
+                className="inline-flex w-full items-center gap-2 rounded-xl bg-foreground px-4 py-3 text-sm font-semibold text-background shadow-[var(--shadow-lift)] transition hover:brightness-110 active:scale-[0.98]">
+                <MessageSquareText className="size-5" aria-hidden />Ask about this patient
+              </button>
+            </aside>
             <main className="min-w-0" aria-label={sectionTitle} data-print-area>
               <h2 className="sr-only">{sectionTitle}</h2>
               {body}
@@ -429,10 +436,12 @@ export default function GuidedCaseFilePage() {
         )
       ) : body}
 
-      <button type="button" onClick={() => setSide({ kind: "ask" })} data-testid="ask-bubble" aria-label="Ask about this patient"
-        className="fixed bottom-28 right-4 z-40 inline-flex size-12 items-center justify-center gap-2 rounded-full bg-foreground text-sm font-semibold text-background shadow-[var(--shadow-lift)] transition hover:brightness-110 active:scale-95 lg:bottom-6 lg:right-6 lg:size-auto lg:px-4 lg:py-3 print:hidden">
-        <MessageSquareText className="size-5" aria-hidden /><span className="hidden lg:inline">Ask about this patient</span>
-      </button>
+      {steps && wide ? null : (
+        <button type="button" onClick={() => setSide({ kind: "ask" })} data-testid="ask-bubble" aria-label="Ask about this patient"
+          className="fixed bottom-28 right-4 z-40 inline-flex size-12 items-center justify-center rounded-full bg-foreground text-background shadow-[var(--shadow-lift)] transition hover:brightness-110 active:scale-95 print:hidden">
+          <MessageSquareText className="size-5" aria-hidden />
+        </button>
+      )}
 
       <SidePanel open={!!side} onClose={() => setSide(null)} title={panelTitle} width={side?.kind === "source" ? "wide" : "normal"}
         subtitle={side?.kind === "source" ? "Shown as printed; nothing is interpreted." : side?.kind === "ask" ? "Answers come only from this patient's reports, each with the line it came from." : undefined}>

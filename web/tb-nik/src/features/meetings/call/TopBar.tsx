@@ -126,7 +126,7 @@ export function TopBar() {
 
   return (
     <StageTopBar
-      left={<span className={cn("text-stage-muted", room ? "text-sm" : "hidden text-sm sm:inline")}>{meetingLine(c, room || coordinator)}</span>}
+      left={<span className={cn("truncate text-stage-muted", room ? "text-sm" : "hidden text-sm sm:inline")} title={meetingLine(c, room || coordinator)}>{meetingLine(c, room || coordinator)}</span>}
       center={(
         <div className="min-w-0">
           {room ? <h1 className="truncate text-xl text-stage-fg lg:text-2xl">{headline}</h1> : <p className="truncate text-sm font-semibold text-stage-fg" data-testid="case-headline">{headline}</p>}
@@ -137,7 +137,7 @@ export function TopBar() {
       right={(
         <>
           {coordinator ? <TimerControl /> : s.meeting.status === "closed" || s.meeting.status === "cancelled" ? null : <TimerBadge timer={s.current?.timer} big={room} />}
-          {presenter ? <span className={cn("hidden items-center gap-1 rounded-full bg-stage-raised px-2 py-0.5 text-stage-fg lg:inline-flex", room ? "text-sm" : "text-xs")} data-testid="presenter-chip">Presenter: {presenter.name}{presenter.department_name || presenter.department ? ` (${presenter.department_name ?? presenter.department})` : ""}</span> : null}
+          {presenter ? <span className={cn("hidden max-w-[11rem] items-center gap-1 truncate rounded-full bg-stage-raised px-2 py-0.5 text-stage-fg lg:inline-block", room ? "text-sm max-w-[24rem]" : "text-xs")} data-testid="presenter-chip" title={`Presenter: ${presenter.name}`}>Presenter: {presenter.name}{presenter.department_name || presenter.department ? ` (${presenter.department_name ?? presenter.department})` : ""}</span> : null}
           {q ? <QuorumChip room={room} /> : null}
           <LiveDot status={c.liveStatus} detail={c.liveDetail} className={c.phone && !room ? "hidden" : undefined} />
           {room ? null : <VideoChip />}

@@ -22,7 +22,18 @@ export function fmtDateTime(iso?: string | null): string {
 }
 /** ISO dates inside a sentence written by the server or a model ("on 2026-09-17") shown as DD/MM/YYYY. Never used on quotes. */
 export function indianDates(text?: string | null): string {
+  return indianSpelling(indianDatesOnly(text));
+}
+
+/** ISO dates as DD/MM/YYYY and nothing else changed: for a report's own value, which stays as printed. */
+export function indianDatesOnly(text?: string | null): string {
   return (text ?? "").replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (_m, y, mo, d) => `${d}/${mo}/${y}`);
+}
+
+/** "tumor" in a sentence the model wrote reads "tumour", as everywhere else on the screens (2 Nov test pass); a part in quotation marks
+ *  is a report's own words and stays exactly as printed. */
+function indianSpelling(text: string): string {
+  return text.split(/("[^"]*"|“[^”]*”)/).map((part, i) => (i % 2 ? part : part.replace(/\b([Tt])umor(s?)\b/g, "$1umour$2"))).join("");
 }
 
 const ACRONYMS = ["PET/CT", "PET-CT", "MRI", "CECT", "CT", "USG", "IHC", "HPE", "FNAC", "ECOG", "HER2", "CBC", "LFT", "RFT", "PSA", "CEA", "NCG", "UHID", "ABHA"];

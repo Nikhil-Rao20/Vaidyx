@@ -33,8 +33,9 @@ File `TB-2026-0005` already exists (the Phase 2 check created it). To watch the 
    Ovarian cancer (epithelial). The "Checklist and setting" card shows the checklist's records with their tiers and the label
    "Draft checklist: needs a clinician's check" (every new checklist is a draft from the NCG book, page cited). Pick the setting as
    recorded (advanced). Continue.
-4. Step 3 "Logistics": "Filled in with the usual choices" (the Responsible Department, the meeting, the urgency); change the urgency
-   if you like. Press Create and fetch records: the records come from the demo hospital system through the HIS connector.
+4. Step 3 "Logistics": the Responsible Department and the records to fetch are filled in; pick the urgency tag (1 to 5, required:
+   Create stays off until one is picked). Press Create and fetch records: the records come from the demo hospital system through the
+   HIS connector.
 5. The guided Case File opens on the Overview. Watch the section nav on the left: Records (the eight reports, "Open" shows the page,
    "Open images" the hospital viewer), Check (every checklist row: found, missing, late; each value with its quoted line; a pick
    between two differing reports needs a doctor's choice), Pre-Authorization (PM-JAY), Summary (the pre-board summary, every
