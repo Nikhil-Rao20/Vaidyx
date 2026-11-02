@@ -201,10 +201,8 @@ export default function GuidedCaseFilePage() {
     const seen = new Set<string>();
     const once = items.filter((it) => { const k = it.department?.action_id || it.slot_id; if (seen.has(k)) return false; seen.add(k); return true; });
     deferred.schedule(key, `Request to ${dept}`, async () => {
-      for (const it of once) {
-        try { await slotAskDepartment(id, it.slot_id); }
-        catch (e) { if (!(e instanceof ApiError && e.status === 409)) throw e; }
-      }
+      // all at once: when the page is being left only the requests started right away reach the server (2 Nov test pass)
+      await Promise.all(once.map((it) => slotAskDepartment(id, it.slot_id).catch((e) => { if (!(e instanceof ApiError && e.status === 409)) throw e; })));
       announce(`Request sent to ${dept}.`);
       await refresh();
     });
