@@ -10,6 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Page, Route } from "@playwright/test";
 import * as fx from "./fixtures";
+import { pubmedDefaults } from "./pubmed_mock";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "../../../..");
@@ -45,6 +46,8 @@ function mockAnswer(method: string, p: string, role: fx.Role): { status: number;
     if (p === "/api/auth/login") return ok({ ok: true });
     if (p === "/api/tb/cases/from-his") return ok({ case: { case_id: "TB-2026-0032" }, job: "J1a2b3c4d", total: 9 });
     if (p.endsWith("/team/code")) return ok({ code: "482913", expires_at: new Date(Date.now() + 864e5).toISOString() });
+    // Ask PubMed (docs/pubmed-ask section 8): a question starts a job; a spec that walks the steps routes PubMed itself (pubmed_mock.ts)
+    if (p === "/api/tb/pubmed/ask") return { status: 202, body: { job_id: "PJ-mock" } };
     return ok({ ok: true });
   }
   if (p === "/api/tb/me") return ok(fx.me(role));
@@ -58,6 +61,8 @@ function mockAnswer(method: string, p: string, role: fx.Role): { status: number;
   if (p.startsWith("/api/tb/protocols/")) return ok(fx.protocols.protocols.find((x) => x.id === p.split("/").pop()) ?? {});
   if (p === "/api/tb/his/lookup") return ok(fx.hisLookup);
   if (p.startsWith("/api/tb/jobs/")) return ok(fx.job("running"));
+  if (p === "/api/tb/pubmed/history") return ok(pubmedDefaults.history());
+  if (p.startsWith("/api/tb/pubmed/jobs/")) return ok(pubmedDefaults.job(p.split("/").pop() ?? "PJ-mock"));
   if (p === "/api/tb/setup") return ok(fx.setup);
   if (p === "/api/tb/accounts") return ok(fx.accounts);
   if (p.startsWith("/api/tb/departments/")) return ok(fx.people);

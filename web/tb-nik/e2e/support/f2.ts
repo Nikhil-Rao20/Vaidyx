@@ -9,6 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Page, Route, WebSocketRoute } from "@playwright/test";
+import { pubmedDefaults } from "./pubmed_mock";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const load = <T = any>(f: string): T => JSON.parse(fs.readFileSync(path.join(HERE, "f2", f), "utf8")); // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -716,6 +717,11 @@ export async function routeCaseFile(page: Page, o: CaseRouteOptions = {}) {
       return route.fulfill({ status: 200, contentType: "image/svg+xml", body: pageSvg(docTitle(file[1]), facts.length ? facts.slice(0, 18) : ["Report text (SYNTHETIC)."]) });
     }
     if (/^\/documents\/[^/]+\/images$/.test(p)) return json({ available: false, reason: "The study is not in the image viewer yet (SYNTHETIC test answer)." });
+    // Ask PubMed in the Case File (docs/pubmed-ask section 8): the team's threads, a question's job, pin and Save (pubmed_mock.ts
+    // routes them with live steps for the PubMed spec; these are the quiet defaults for every other Case File screen)
+    if (p === "/pubmed" && m === "GET") return json(pubmedDefaults.caseThreads());
+    if (p === "/pubmed/ask" && m === "POST") return json({ job_id: "PJ-mock" }, 202);
+    if (/^\/pubmed\/[^/]+\/(pin|save)$/.test(p) && m === "POST") return json(p.endsWith("/pin") ? { ...pubmedDefaults.caseThreads().threads[0], pinned: !!body().pinned } : { id: "PUB-1", source: "pubmed" });
     if (/^\/requests\/[^/]+\/draft$/.test(p)) return json({ action_id: p.split("/")[2], to: "Radiology", subject: "Request for MRI breast report (VXH/26/004219)", body: "Dear colleague,\n\nFor the Tumour Board Case File of the patient below, please share the final, signed MRI breast report.\n\nThank you.", due: dayIso(3), accession: "RAD/26/01021" });
     if (m !== "GET") return json({ ok: true });
     return json(NOT_FOUND, 404);

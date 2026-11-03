@@ -153,17 +153,20 @@ const PANEL_TITLE: Record<Exclude<PanelKind, null>, { label: string; title: stri
   people: { label: "People", title: "Show people (Ctrl+Alt+P)", keys: "Control+Alt+P" },
   agenda: { label: "Agenda", title: "Show the agenda (Ctrl+Alt+A)", keys: "Control+Alt+A" },
   agents: { label: "Agents", title: "Show the agents" },
+  pubmed: { label: "PubMed", title: "Ask PubMed: general questions answered from PubMed abstracts, every line quoted" },
   decision: { label: "Decision", title: "Open the decision form" },
   notes: { label: "Notes", title: "The discussion notes of the Case Files (AI draft, not reviewed)" },
 };
-export const panelWord = (k: Exclude<PanelKind, null>) => (k === "chat" ? "Chat and questions" : PANEL_TITLE[k].label);
+export const panelWord = (k: Exclude<PanelKind, null>) => (k === "chat" ? "Chat and questions" : k === "pubmed" ? "Ask PubMed" : PANEL_TITLE[k].label);
 
 /** The side panels this person may open, in the bar's order. The coordinator's laptop has the agenda rail beside the Board view, so
- *  its bar leaves Agenda out (Ctrl+Alt+A still opens the panel); a phone has no rail and keeps it. */
+ *  its bar leaves Agenda out (Ctrl+Alt+A still opens the panel); a phone has no rail and keeps it. Ask PubMed sits beside Agents for
+ *  the coordinator and the members (not on the room screen). */
 export function panelKinds(c: { agents: unknown[]; canManage: boolean; canRecord: boolean; phone?: boolean; variant?: string }): Array<Exclude<PanelKind, null>> {
   const rail = !c.phone && c.variant === "coordinator" && c.canManage;
   const out: Array<Exclude<PanelKind, null>> = rail ? ["chat", "people"] : ["chat", "people", "agenda"];
   if (c.agents.length) out.push("agents");
+  if (c.variant !== "room") out.push("pubmed");
   if (c.canManage || c.canRecord) out.push("decision");
   return out;
 }
@@ -173,8 +176,9 @@ function PanelButton({ kind, compact = true }: { kind: Exclude<PanelKind, null>;
   const t = PANEL_TITLE[kind];
   const badge = panelBadge(kind, c);
   const open = c.panel === kind;
+  const name = kind === "pubmed" ? "Ask PubMed" : t.label;
   // the word under the button is the panel's name; its count is the bubble, and the button's name says both ("Chat 2")
-  return <RoundButton icon={PANEL_ICONS[kind]} label={t.label} aria-label={badge ? `${t.label} ${badge}` : t.label} title={open ? `Close ${t.label.toLowerCase()}` : t.title} keys={t.keys} active={open} badge={badge || undefined} onClick={() => c.togglePanel(kind)} compact={compact} disabled={c.waiting && kind !== "people"} testId={`panel-${kind}`} />;
+  return <RoundButton icon={PANEL_ICONS[kind]} label={t.label} aria-label={badge ? `${name} ${badge}` : name} title={open ? `Close ${t.label.toLowerCase()}` : t.title} keys={t.keys} active={open} badge={badge || undefined} onClick={() => c.togglePanel(kind)} compact={compact} disabled={c.waiting && kind !== "people"} testId={`panel-${kind}`} />;
 }
 
 function CardButton() {
@@ -217,6 +221,7 @@ export function CallBar() {
   const statusWords = v.error ? v.error : v.status === "connecting" ? "Joining the video" : v.status === "connected" ? "Video on the hospital's server"
     : c.inRoom && c.variant === "member" ? "In the room: video stays off on this device" : "";
   const count = useMeetingCount();
+  const panels = panelKinds(c);
   const line = [statusWords, `${c.state.meeting.room ? `${c.state.meeting.room} · ` : ""}${count} in the meeting`].filter(Boolean).join(" · ");
 
   return (
@@ -226,7 +231,10 @@ export function CallBar() {
         <p className={cn("min-w-0 truncate text-xs", v.error ? "text-bad" : "text-stage-muted")} title={line} role={v.error ? "alert" : undefined} data-testid="bar-status">{line}</p>
       </>}
       right={<>
-        <div className="flex items-center gap-1" role="group" aria-label="Panels">{panelKinds(c).map((k) => <PanelButton key={k} kind={k} compact={false} />)}</div>
+        {/* five or more panels (Ask PubMed beside Agents) sit a little closer, so the bar still fits a 1366 px screen with video on */}
+        <DenseBar.Provider value={panels.length >= 5}>
+          <div className={cn("flex items-center", panels.length >= 5 ? "gap-0" : "gap-1")} role="group" aria-label="Panels">{panels.map((k) => <PanelButton key={k} kind={k} compact={false} />)}</div>
+        </DenseBar.Provider>
       </>}
     >
       <DenseBar.Provider value={coordinator}>

@@ -2,12 +2,16 @@
 // quote marked. Pin keeps a thread on top; "records changed since" stamps an answer older than the Case File.
 // Voice (night-v3 item 4.4): the mic fills the question box as an editable edit; "Read aloud" reads a saved answer. Talk mode: a
 // question that came from the mic (and was not cleared) gets its answer read aloud once, by itself; a typed question never does.
+// Ask PubMed (3 Nov 2026, docs/pubmed-ask/DESIGN.md): two equal tabs at the top, "This patient's records" (this chat, unchanged) and
+// "PubMed" (general questions answered only from PubMed abstracts). A records answer the server marks suggest_pubmed (nothing in the
+// records, a general question) offers "This is a general question. Ask PubMed?": one click asks it in the PubMed tab.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { MessageSquareText, Pin, PinOff, SendHorizontal, Square } from "lucide-react";
+import { BookOpen, FileText, Pin, PinOff, Search, SendHorizontal, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MicButton } from "@/components/MicButton";
 import { SpeakButton } from "@/components/SpeakButton";
 import { useAudioStatus } from "@/hooks/useAudioStatus";
@@ -16,17 +20,24 @@ import { primeAudio, stopSpeaking, VOICE_TEXT } from "@/lib/voice";
 import { askOld, getChats, notBuiltYet, pinChat, postChat } from "../api";
 import type { CaseDocument, ChatThread } from "../types";
 import type { SourceTarget } from "./SourceViewer";
+import { PubMedAsk } from "@/features/pubmed/PubMedAsk";
 import { EmptyState, ErrorState, LoadingButton, SkeletonLines, StatusChip, errorText, fmtDateTime, indianDates, modelLabel, useAnnounce, niceTitle, NotSigned, finalWordOf } from "./common";
 import { cn } from "@/lib/utils";
 
 const MAX_Q = 600;
 /** A thread with a final answer (or a final "not found" / "outside" message) that the server can read aloud. */
-/** The line under an answer with statements: "From the records only. Gemma-4-31B (non-medical)." (review 9 C, S3); "a model" only when
- * the server names none. */
-export const answerModelLine = (t: Pick<ChatThread, "model">) => `From the records only. ${modelLabel(t.model) || "Written by a model"}.`;
+/** The line under an answer with statements: "From this patient's records only. Gemma-4-31B (non-medical)." (review 9 C, S3; the
+ * wording of docs/pubmed-ask/DESIGN.md); "a model" only when the server names none. */
+export const answerModelLine = (t: Pick<ChatThread, "model">) => `From this patient's records only. ${modelLabel(t.model) || "Written by a model"}.`;
 const speakable = (t: ChatThread) => !t.unsaved && (t.status === "answered" || t.status === "not_documented" || t.status === "out_of_scope");
 
-export function AskPanel({ caseId, docs, onOpenSource, compact }: { caseId: string; docs: CaseDocument[]; onOpenSource: (t: SourceTarget) => void; compact?: boolean }) {
+type AskTab = "records" | "pubmed";
+
+export function AskPanel({ caseId, docs, onOpenSource, compact, canSavePubmed }: {
+  caseId: string; docs: CaseDocument[]; onOpenSource: (t: SourceTarget) => void; compact?: boolean;
+  /** This login may Save a PubMed paper to the Published list (the owner consultant); the server's own flag wins when it sends one. */
+  canSavePubmed?: boolean;
+}) {
   const qc = useQueryClient();
   const reduce = useReducedMotion();
   const [question, setQuestion] = useState("");
@@ -39,6 +50,13 @@ export function AskPanel({ caseId, docs, onOpenSource, compact }: { caseId: stri
   const [dictated, setDictated] = useState(false);
   /** The thread whose answer is read aloud once, by itself (talk mode); cleared when the reading ends or is stopped. */
   const [talkId, setTalkId] = useState<string | null>(null);
+  const [tab, setTab] = useState<AskTab>("records");
+  /** The PubMed tab mounts on first use and then stays (a search keeps running while the doctor looks at the records). */
+  const [pubmedOpened, setPubmedOpened] = useState(false);
+  /** The question the suggestion sends to the PubMed tab (asked once). */
+  const [pubmedSeed, setPubmedSeed] = useState<string | undefined>(undefined);
+  const openTab = (v: AskTab) => { if (v === "pubmed") setPubmedOpened(true); setTab(v); };
+  const askPubMed = (text: string) => { setPubmedSeed(text); openTab("pubmed"); };
   const q = useQuery({ queryKey: ["chats", caseId], queryFn: () => getChats(caseId), retry: false });
   const notBuilt = q.isError && notBuiltYet(q.error);
   const docTitle = (id: string) => niceTitle(docs.find((d) => d.doc_id === id)?.classification?.title ?? docs.find((d) => d.doc_id === id)?.filename ?? "record");
@@ -61,7 +79,7 @@ export function AskPanel({ caseId, docs, onOpenSource, compact }: { caseId: stri
       setQuestion("");
       setDictated(false);
       setTalkId(vars.talk && !t.unsaved ? t.id : null);
-      announce(t.status === "answered" ? "Answer ready." : t.message ?? "No answer found in the records.");
+      announce(t.status === "answered" ? "Answer ready." : `${t.message ?? "No answer found in the records."}${t.suggest_pubmed ? " This is a general question: you can ask PubMed." : ""}`);
     },
   });
   const pin = useMutation({
@@ -91,81 +109,105 @@ export function AskPanel({ caseId, docs, onOpenSource, compact }: { caseId: stri
   const askErr = ask.error ? (ask.error instanceof ApiError && ask.error.status === 429 ? "Too many questions in a short time. Please wait a minute." : errorText(ask.error)) : null;
 
   return (
-    <section className={cn("surface flex flex-col", compact ? "p-3" : "p-4")} aria-labelledby="h-ask" data-testid="ask-panel">
+    <section className={cn("surface flex flex-col", compact ? "p-3" : "p-4")} aria-labelledby="h-ask" data-testid="ask-panel" data-tab={tab}>
       {liveNode}
-      <header className="flex items-center gap-2 mb-2">
-        <MessageSquareText className="size-4 text-brand" aria-hidden />
-        <h2 id="h-ask" className="text-base">Ask about this patient</h2>
-        <span className="text-xs text-muted-foreground ml-auto">shared with the team, saved</span>
-      </header>
-      <form className="flex flex-col gap-1.5" onSubmit={(e) => { e.preventDefault(); submit(); }}>
-        <label htmlFor="ask-input" className="sr-only">Your question about the records</label>
-        <Textarea ref={inputRef} id="ask-input" value={question} onChange={(e) => { setQuestion(e.target.value); if (!e.target.value.trim()) setDictated(false); }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }} placeholder="For example: what did the HPE report say about the margins? Is ECOG noted?" className="min-h-14 text-sm resize-y" maxLength={MAX_Q} disabled={ask.isPending} />
-        <div className="flex flex-wrap items-center gap-2">
-          {dictated && question.trim() ? <span className="min-w-[11rem] flex-1 text-xs text-muted-foreground" data-testid="ask-heard">{VOICE_TEXT.heard}</span>
-            : <span className="min-w-[11rem] flex-1 text-xs text-muted-foreground">Answers come only from the reports, each with its line.</span>}
-          {talking ? <Button type="button" variant="outline" size="xs" onClick={() => stopSpeaking()} data-testid="ask-stop-reading"><Square className="size-3 fill-current" aria-hidden />{VOICE_TEXT.stopReading}</Button> : null}
-          <MicButton target={inputRef} screen="ask" context="question" caseId={caseId} label="Dictate the question" hint={false}
-            onInsert={(next) => { setDictated(true); if (next.length > MAX_Q) setQuestion(next.slice(0, MAX_Q)); }} />
-          <LoadingButton type="submit" size="sm" loading={ask.isPending} loadingText="Reading the records" disabled={question.trim().length < 3}><SendHorizontal className="size-4" />Ask</LoadingButton>
-        </div>
-        {askErr ? <p role="alert" className="text-xs text-bad">{askErr}</p> : null}
-      </form>
-      {notBuilt ? <p className="mt-2 text-xs text-muted-foreground rounded-md bg-muted px-2 py-1">Saved team chats are not on this server yet: answers here are not kept after you leave the page.</p> : null}
-      <div ref={listRef} className={cn("mt-3 space-y-3 overflow-y-auto", compact ? "max-h-[50dvh]" : "max-h-[60dvh]")}>
-        {q.isLoading ? <SkeletonLines n={3} /> : null}
-        {q.isError && !notBuilt ? <ErrorState error={q.error} retry={() => void q.refetch()} compact /> : null}
-        {!q.isLoading && threads.length === 0 && !ask.isPending ? <EmptyState kind="search" title="No questions yet" text="Ask the first one; the team sees every answer here." className="py-5" /> : null}
-        {ask.isPending ? (
-          <div className="rounded-md border border-border p-3" aria-busy="true">
-            <p className="text-sm font-medium text-foreground">{question.trim()}</p>
-            <p className="text-xs text-muted-foreground mt-1 mb-2">Preview filling in: lines become sentences only after their quote is verified.</p>
-            <SkeletonLines n={3} />
+      <h2 id="h-ask" className="sr-only">Ask about this patient, or ask PubMed</h2>
+      <Tabs value={tab} onValueChange={(v) => openTab(v as AskTab)} className="gap-3">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1" aria-label="Where the answer comes from">
+          <TabsTrigger value="records" className="min-h-10 gap-1 whitespace-normal px-1.5 py-1.5 text-[13px] leading-tight" data-testid="ask-tab-records">
+            <FileText className="size-3.5 text-brand" aria-hidden />This patient's records
+          </TabsTrigger>
+          <TabsTrigger value="pubmed" className="min-h-10 gap-1 whitespace-normal px-1.5 py-1.5 text-[13px] leading-tight" data-testid="ask-tab-pubmed">
+            <BookOpen className="size-3.5 text-pubmed" aria-hidden />PubMed
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="records" forceMount className="flex flex-col data-[state=inactive]:hidden" data-testid="ask-records">
+          <p className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground" data-testid="ask-records-scope">
+            <span className="font-medium text-foreground">From this patient's records only.</span>
+            <span className="ml-auto">Shared with the team, saved</span>
+          </p>
+          <form className="flex flex-col gap-1.5" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+            <label htmlFor="ask-input" className="sr-only">Your question about the records</label>
+            <Textarea ref={inputRef} id="ask-input" value={question} onChange={(e) => { setQuestion(e.target.value); if (!e.target.value.trim()) setDictated(false); }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }} placeholder="For example: what did the HPE report say about the margins? Is ECOG noted?" className="min-h-14 text-sm resize-y" maxLength={MAX_Q} disabled={ask.isPending} />
+            <div className="flex flex-wrap items-center gap-2">
+              {dictated && question.trim() ? <span className="min-w-[11rem] flex-1 text-xs text-muted-foreground" data-testid="ask-heard">{VOICE_TEXT.heard}</span>
+                : <span className="min-w-[11rem] flex-1 text-xs text-muted-foreground">Answers come only from the reports, each with its line.</span>}
+              {talking ? <Button type="button" variant="outline" size="xs" onClick={() => stopSpeaking()} data-testid="ask-stop-reading"><Square className="size-3 fill-current" aria-hidden />{VOICE_TEXT.stopReading}</Button> : null}
+              <MicButton target={inputRef} screen="ask" context="question" caseId={caseId} label="Dictate the question" hint={false}
+                onInsert={(next) => { setDictated(true); if (next.length > MAX_Q) setQuestion(next.slice(0, MAX_Q)); }} />
+              <LoadingButton type="submit" size="sm" loading={ask.isPending} loadingText="Reading the records" disabled={question.trim().length < 3}><SendHorizontal className="size-4" />Ask</LoadingButton>
+            </div>
+            {askErr ? <p role="alert" className="text-xs text-bad">{askErr}</p> : null}
+          </form>
+          {notBuilt ? <p className="mt-2 text-xs text-muted-foreground rounded-md bg-muted px-2 py-1">Saved team chats are not on this server yet: answers here are not kept after you leave the page.</p> : null}
+          <div ref={listRef} className={cn("mt-3 space-y-3 overflow-y-auto", compact ? "max-h-[50dvh]" : "max-h-[60dvh]")}>
+            {q.isLoading ? <SkeletonLines n={3} /> : null}
+            {q.isError && !notBuilt ? <ErrorState error={q.error} retry={() => void q.refetch()} compact /> : null}
+            {!q.isLoading && threads.length === 0 && !ask.isPending ? <EmptyState kind="search" title="No questions yet" text="Ask the first one; the team sees every answer here." className="py-5" /> : null}
+            {ask.isPending ? (
+              <div className="rounded-md border border-border p-3" aria-busy="true">
+                <p className="text-sm font-medium text-foreground">{question.trim()}</p>
+                <p className="text-xs text-muted-foreground mt-1 mb-2">Preview filling in: lines become sentences only after their quote is verified.</p>
+                <SkeletonLines n={3} />
+              </div>
+            ) : null}
+            <AnimatePresence initial={false}>
+              {threads.map((t) => (
+                <motion.article key={t.id} layout initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={cn("rounded-md border p-3", t.pinned ? "border-primary/60 bg-secondary/40" : "border-border")} data-testid="chat-thread">
+                  <div className="flex items-start gap-2">
+                    <p className="text-sm font-medium text-foreground flex-1">{t.question}</p>
+                    {speakable(t) ? (
+                      <SpeakButton source={{ ref: { kind: "chat", case_id: caseId, id: t.id } }} screen="ask" size="icon-xs" className="justify-end"
+                        autoplay={t.id === talkId} onEnd={t.id === talkId ? () => setTalkId(null) : undefined} />
+                    ) : null}
+                    {!t.unsaved ? (
+                      <Button variant="ghost" size="icon-xs" aria-label={t.pinned ? "Unpin" : "Pin"} aria-pressed={!!t.pinned} title={t.pinned ? "Unpin" : "Pin to the top"} onClick={() => pin.mutate({ tid: t.id, pinned: !t.pinned })} disabled={pin.isPending}>
+                        {t.pinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
+                      </Button>
+                    ) : null}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">{t.by_name ?? t.by}{t.at ? `, ${fmtDateTime(t.at)}` : ""}{t.seconds ? `, ${Math.round(t.seconds)} s` : ""}</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {t.stale ? <StatusChip kind="warn">records changed since</StatusChip> : null}
+                    {t.unsaved ? <StatusChip kind="muted">not saved</StatusChip> : null}
+                    {t.status === "not_documented" ? <StatusChip kind="muted">not found in the records</StatusChip> : null}
+                    {t.status === "out_of_scope" ? <StatusChip kind="bad">outside what Vaidyx answers</StatusChip> : null}
+                    {t.status === "pending" ? <StatusChip kind="info">answering</StatusChip> : null}
+                  </div>
+                  {t.message && t.status !== "answered" ? <p className="mt-2 text-sm text-muted-foreground">{t.message}</p> : null}
+                  {t.suggest_pubmed ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-pubmed-line bg-pubmed-soft px-2.5 py-2" data-testid="suggest-pubmed">
+                      <BookOpen className="size-4 shrink-0 text-pubmed" aria-hidden />
+                      <span className="min-w-0 flex-1 text-sm font-medium text-pubmed">This is a general question. Ask PubMed?</span>
+                      <Button type="button" size="xs" onClick={() => askPubMed(t.question)} className="min-h-11 hover:bg-primary-hover active:scale-[0.97] sm:min-h-6" data-testid="suggest-pubmed-ask">
+                        <Search className="size-3" aria-hidden />Ask PubMed
+                      </Button>
+                    </div>
+                  ) : null}
+                  <ol className="mt-2 space-y-2">
+                    {(t.statements ?? []).map((s, i) => (
+                      <li key={i} className="text-sm text-foreground">
+                        <span>{indianDates(s.text)}</span>
+                        <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
+                          {(s.citations ?? []).map((c, j) => (
+                            <button key={j} type="button" className="quote-chip hover:brightness-95 active:scale-95 transition" onClick={() => onOpenSource({ docId: c.doc_id, page: c.page ?? 0, quote: c.quote, title: c.doc_title || docTitle(c.doc_id) })} title={`Open ${c.doc_title || docTitle(c.doc_id)}, page ${(c.page ?? 0) + 1}`}>
+                              {niceTitle(c.doc_title) || docTitle(c.doc_id)} p. {(c.page ?? 0) + 1}<NotSigned word={finalWordOf(docs, c.doc_id)} />
+                            </button>
+                          ))}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                  {(t.statements ?? []).length ? <p className="mt-1 text-[11px] text-muted-foreground" data-testid="chat-model-line">{answerModelLine(t)}</p> : null}
+                </motion.article>
+              ))}
+            </AnimatePresence>
           </div>
-        ) : null}
-        <AnimatePresence initial={false}>
-          {threads.map((t) => (
-            <motion.article key={t.id} layout initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={cn("rounded-md border p-3", t.pinned ? "border-primary/60 bg-secondary/40" : "border-border")} data-testid="chat-thread">
-              <div className="flex items-start gap-2">
-                <p className="text-sm font-medium text-foreground flex-1">{t.question}</p>
-                {speakable(t) ? (
-                  <SpeakButton source={{ ref: { kind: "chat", case_id: caseId, id: t.id } }} screen="ask" size="icon-xs" className="justify-end"
-                    autoplay={t.id === talkId} onEnd={t.id === talkId ? () => setTalkId(null) : undefined} />
-                ) : null}
-                {!t.unsaved ? (
-                  <Button variant="ghost" size="icon-xs" aria-label={t.pinned ? "Unpin" : "Pin"} aria-pressed={!!t.pinned} title={t.pinned ? "Unpin" : "Pin to the top"} onClick={() => pin.mutate({ tid: t.id, pinned: !t.pinned })} disabled={pin.isPending}>
-                    {t.pinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
-                  </Button>
-                ) : null}
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">{t.by_name ?? t.by}{t.at ? `, ${fmtDateTime(t.at)}` : ""}{t.seconds ? `, ${Math.round(t.seconds)} s` : ""}</p>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {t.stale ? <StatusChip kind="warn">records changed since</StatusChip> : null}
-                {t.unsaved ? <StatusChip kind="muted">not saved</StatusChip> : null}
-                {t.status === "not_documented" ? <StatusChip kind="muted">not found in the records</StatusChip> : null}
-                {t.status === "out_of_scope" ? <StatusChip kind="bad">outside what Vaidyx answers</StatusChip> : null}
-                {t.status === "pending" ? <StatusChip kind="info">answering</StatusChip> : null}
-              </div>
-              {t.message && t.status !== "answered" ? <p className="mt-2 text-sm text-muted-foreground">{t.message}</p> : null}
-              <ol className="mt-2 space-y-2">
-                {(t.statements ?? []).map((s, i) => (
-                  <li key={i} className="text-sm text-foreground">
-                    <span>{indianDates(s.text)}</span>
-                    <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
-                      {(s.citations ?? []).map((c, j) => (
-                        <button key={j} type="button" className="quote-chip hover:brightness-95 active:scale-95 transition" onClick={() => onOpenSource({ docId: c.doc_id, page: c.page ?? 0, quote: c.quote, title: c.doc_title || docTitle(c.doc_id) })} title={`Open ${c.doc_title || docTitle(c.doc_id)}, page ${(c.page ?? 0) + 1}`}>
-                          {niceTitle(c.doc_title) || docTitle(c.doc_id)} p. {(c.page ?? 0) + 1}<NotSigned word={finalWordOf(docs, c.doc_id)} />
-                        </button>
-                      ))}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-              {(t.statements ?? []).length ? <p className="mt-1 text-[11px] text-muted-foreground" data-testid="chat-model-line">{answerModelLine(t)}</p> : null}
-            </motion.article>
-          ))}
-        </AnimatePresence>
-      </div>
+        </TabsContent>
+        <TabsContent value="pubmed" forceMount className="data-[state=inactive]:hidden" data-testid="ask-pubmed">
+          {pubmedOpened ? <PubMedAsk caseId={caseId} variant="panel" initialQuestion={pubmedSeed} autoAsk={!!pubmedSeed} canSave={canSavePubmed} compact={compact} /> : null}
+        </TabsContent>
+      </Tabs>
     </section>
   );
 }

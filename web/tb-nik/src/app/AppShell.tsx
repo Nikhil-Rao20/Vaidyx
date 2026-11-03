@@ -79,7 +79,7 @@ export function AppShell() {
         <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-[60] focus:rounded-md focus:bg-card focus:px-3 focus:py-2 focus:shadow-[var(--shadow-lift)]">Skip to content</a>
         <header className="sticky top-0 z-40 border-b border-border bg-card/90 backdrop-blur supports-[backdrop-filter]:bg-card/80">
           <div className="mx-auto flex h-14 max-w-[1440px] items-center gap-3 px-4 lg:gap-5">
-            <Wordmark to={bare ? null : "/cases"} />
+            <div className="shrink-0 whitespace-nowrap"><Wordmark to={bare ? null : "/cases"} /></div>
             {bare ? (
               <div className="ml-auto flex items-center gap-2">
                 <ThemeToggle saveToProfile={false} />
@@ -89,7 +89,7 @@ export function AppShell() {
               </div>
             ) : (
               <>
-                <nav aria-label="Main" className="hidden items-center gap-0.5 rounded-full bg-muted p-0.5 lg:flex">
+                <nav aria-label="Main" className="hidden shrink-0 items-center gap-0.5 rounded-full bg-muted p-0.5 lg:flex">
                   {items.map((it) => {
                     const active = it.match(location.pathname);
                     const Icon = it.icon;
@@ -98,7 +98,7 @@ export function AppShell() {
                         key={it.key}
                         to={it.to}
                         aria-current={active ? "page" : undefined}
-                        className={cn("relative inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring", active ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
+                        className={cn("relative inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-[13px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring", active ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
                       >
                         {active ? <motion.span layoutId="topnav-pill" className="absolute inset-0 rounded-full bg-card shadow-[var(--shadow-outer)]" transition={spring} aria-hidden /> : null}
                         <Icon className="relative size-4" aria-hidden />
@@ -108,7 +108,7 @@ export function AppShell() {
                     );
                   })}
                 </nav>
-                <div className="ml-auto hidden w-full max-w-lg lg:block">
+                <div className="ml-auto hidden w-full min-w-0 max-w-lg lg:block">
                   <ActionSearch canCreate={canCreate} />
                 </div>
                 <div className="ml-auto flex items-center gap-1 lg:ml-0">

@@ -47,6 +47,10 @@
   --bad-soft: #fbe8e5;
   --review: #5b3fc4;
   --review-soft: #eeebff;
+  /* Ask PubMed's mark and its answer band: the library's ink blue, apart from the brand teal (never the NLM logo). 7.4:1 on its band. */
+  --pubmed: #2f4b94;
+  --pubmed-soft: #eef2fc;
+  --pubmed-line: #c7d3f1;
   --radius: 12px;
   --shadow-outer: 0 1px 2px rgba(18, 26, 36, 0.05), 0 2px 8px rgba(18, 26, 36, 0.04);
   --shadow-inner: 0 1px 2px rgba(18, 26, 36, 0.06), 0 6px 18px rgba(18, 26, 36, 0.07);
@@ -101,6 +105,9 @@
   --bad-soft: #3a1612;
   --review: #b6a6ff;
   --review-soft: #241b4b;
+  --pubmed: #b4c4ff;
+  --pubmed-soft: #161f38;
+  --pubmed-line: #2d3b66;
   --shadow-outer: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.3);
   --shadow-inner: 0 1px 2px rgba(0, 0, 0, 0.45), 0 6px 18px rgba(0, 0, 0, 0.4);
   --shadow-lift: 0 10px 30px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.4);
@@ -149,6 +156,9 @@
   --color-bad-soft: var(--bad-soft);
   --color-review: var(--review);
   --color-review-soft: var(--review-soft);
+  --color-pubmed: var(--pubmed);
+  --color-pubmed-soft: var(--pubmed-soft);
+  --color-pubmed-line: var(--pubmed-line);
   --radius-sm: calc(var(--radius) - 6px);
   --radius-md: calc(var(--radius) - 3px);
   --radius-lg: var(--radius);

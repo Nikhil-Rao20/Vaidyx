@@ -327,7 +327,7 @@ test.describe("guided Case File", () => {
     await expect(page.getByTestId("side-panel").getByTestId("ask-panel")).toBeVisible();
     await expect(page.getByTestId("chat-thread").first()).toBeVisible();
     // an answer names the model that wrote it (review 9 C, S3); a thread with no statements has no such line
-    await expect(page.getByTestId("chat-thread").first().getByTestId("chat-model-line")).toHaveText("From the records only. Gemma-4-31B (non-medical).");
+    await expect(page.getByTestId("chat-thread").first().getByTestId("chat-model-line")).toHaveText("From this patient's records only. Gemma-4-31B (non-medical).");
     await expect(page.getByTestId("chat-thread").nth(1).getByTestId("chat-model-line")).toHaveCount(0);
     await snap(page, "casefile", "ask", { sizes: DESKTOP_MOBILE, fullPage: false });
     expect(errors).toEqual([]);

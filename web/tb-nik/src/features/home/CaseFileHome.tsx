@@ -1,6 +1,6 @@
 // The Case Files page (the home of every clinical role): the title with a greeting under it, "Join a Case File" and "Join a
 // meeting" (each opens the 6-digit code dialog; the owner, 18 Oct), "+ New Case File" for those who may create, the waiting
-// strip, the coordinator's next meeting card, the gift box when there is nothing yet, and the list.
+// strip, the coordinator's next meeting card, the gift box when there is nothing yet, the Ask PubMed card (3 Nov 2026) and the list.
 import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 import { KeyRound, Plus } from "lucide-react";
@@ -12,6 +12,7 @@ import { WaitingStrip } from "@/features/home/WaitingStrip";
 import { NextMeetingCard } from "@/features/home/NextMeetingCard";
 import { GiftBox } from "@/features/home/GiftBox";
 import { CaseFileList, type ListCounts } from "@/features/home/CaseFileList";
+import { AskPubMedCard } from "@/features/pubmed/AskPubMedCard";
 import type { Me } from "@/lib/session";
 
 function greeting(): string {
@@ -67,6 +68,7 @@ export function CaseFileHome({ me }: { me: Me }) {
       {coordinator ? <NextMeetingCard readyCount={counts?.ready ?? 0} waitingCount={counts?.waiting ?? 0} /> : null}
       {canCreate && counts && counts.all === 0 ? <GiftBox className="mb-5" /> : null}
       {canCreate && counts && counts.all > 0 && counts.all < 3 ? <GiftBox compact className="mb-5" /> : null}
+      <AskPubMedCard className="mb-5" />
       <CaseFileList me={me} canCreate={canCreate} onCount={onCount} />
       <JoinDialog kind={join ?? "case"} open={join !== null} onOpenChange={(o) => { if (!o) setJoin(null); }} />
     </div>
