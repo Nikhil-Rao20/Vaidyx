@@ -37,7 +37,7 @@ the paper cards (title, authors, journal, year, study type, peer reviewed, India
 |---|---|
 | 1. Sort | About this patient: records (unchanged). General: PubMed. Advice for this patient ("should we give her..."): refused (unchanged). |
 | 2. Search words | The model writes PubMed search words from the question (in a Case File it may add the cancer site and the documented histology, stage and biomarkers). Never sent: name, UHID, IP / OP No., ABHA, dates, age, place, hospital, long digit runs (the published.py filter, extended). The words are shown. |
-| 3. Papers | Only from NCBI E-utilities: esearch (Best Match, humans, last 10 years by default, the doctor may widen), then efetch XML for the top 20. Retracted papers dropped. Order: meta-analysis and systematic review, trial, guideline, review, cohort, case report. India mark from the authors' affiliations. |
+| 3. Papers | Only from NCBI E-utilities: esearch (Best Match, every year by default so a landmark trial such as the 2015 Tata Memorial neck dissection trial is found; the doctor may limit the years), then efetch XML for the top 20. Plain words only: field tags the model writes are taken out (a wrong tag such as "breast cancer"[MeSH] made PubMed drop that part, 3 Nov live run). Fewer than 5 papers widens the search (broader words, then the question's own words). Retracted papers dropped. Order: meta-analysis and systematic review, trial, guideline, review, cohort, case report. India mark from the authors' affiliations. |
 | 4. Answer | The model writes 2 to 5 short lines; each cites a PMID and an exact quote. A PMID not in the fetched set, or a quote not found word for word in that abstract, drops the line. |
 | 5. Output check | No advice and no "this patient" in Vaidyx's own words (quotes are the papers' words and may say "recommended"). Conflicting papers are shown side by side, never resolved. |
 | 6. Nothing | "No answer found in the PubMed abstracts read." PubMed down: "PubMed could not be reached (reason). Try again." Never the model's own memory. |
@@ -70,3 +70,23 @@ Paper details (title, authors, journal, year, type, DOI, PMCID) come from the AP
 3. The public website wording is the owner's (content.ts); the public demo only on the owner's word.
 4. Branding: the word "PubMed" with a link and "U.S. National Library of Medicine", no NLM logo (NLM asks that its logo is not used to
    suggest endorsement).
+
+## 7. Part 1 (backend only) status, 3 Nov 2026
+
+The owner split the work: Part 1 the backend on its own with worst-case testing and a proof that the papers come from PubMed only;
+Part 2 the platform (routes, Case File Ask, Home, meeting) only after the owner has seen Part 1.
+
+| Piece | File |
+|---|---|
+| PubMed client | `tumour_board/pubmed.py` |
+| Ask PubMed pipeline | `tumour_board/pubmed_ask.py` (`python -m tumour_board.pubmed_ask "question"`) |
+| Unit tests (no network, no model) | `tumour_board/tests/test_pubmed.py`, `tumour_board/tests/test_pubmed_ask.py` |
+| Proof (two independent PubMed routes) | `docs/pubmed-ask/tools/prove.py` -> `PROOF.md`, `proof/q1-4.json` |
+| Live worst-case run | `docs/pubmed-ask/tools/live_eval.py` -> `LIVE_EVAL.md`, `proof/live_eval.json` |
+
+Added in Part 1 beyond section 3: a quote the model shortened is shown as the paper's whole sentence when it is clearly that sentence
+(90% of its words in order, every number, the same negation); a number the quote lacks is shown by one more sentence of the same
+paper only when that sentence states it the same way ("phase 2", "36 months", the % sign); an elided quote may not leave out a negation;
+a paper's year excuses a year, never a count; dates in any form, "her 2 cycles" and the patient's own name are refused; the contact
+email and the key never appear in stored provenance. Settings: `data/tumour_board/pubmed.json` (email; NCBI API key when the owner
+makes one).
