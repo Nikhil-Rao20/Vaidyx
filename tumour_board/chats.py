@@ -79,6 +79,7 @@ def public(t, sig_hash) -> dict:
     stale = bool(t.get("signature") and sig_hash and t["signature"].get("hash") != sig_hash)
     return {**{k: t.get(k) for k in ("id", "by", "by_name", "at", "question", "status", "statements", "message", "pinned", "seconds", "dropped_unverified", "category",
                                      "model")},
+            "suggest_pubmed": bool(t.get("suggest_pubmed")),
             "stale": stale, "stale_reason": "The records changed since this answer was computed" if stale else "", "signature": (t.get("signature") or {}).get("hash")}
 
 
@@ -105,6 +106,7 @@ async def ask(case_id, question, user, history=None) -> dict:
          "statements": _citations(res.get("statements")), "message": res.get("message") or "", "pinned": False, "seconds": res.get("seconds"),
          "dropped_unverified": res.get("dropped_unverified", 0), "category": res.get("category"), "model": _model(res), "signature": {k: sig.get(k) for k in ("hash", "documents", "ready", "confirmations")},
          "shared": True}
+    t["suggest_pubmed"] = suggest_pubmed(t["status"], q, store.get_case(case_id))  # kept with the thread: the list shows the offer too
     with _lock:
         data = load(case_id)
         data["threads"].append(t)
@@ -115,7 +117,7 @@ async def ask(case_id, question, user, history=None) -> dict:
         save(case_id, data)
     store.audit(case_id, {"kind": "chat_asked", "by": user, "thread": t["id"], "question": q[:300], "status": t["status"], "statements": len(t["statements"]),
                           "dropped_unverified": t["dropped_unverified"]})
-    return {**public(t, sig["hash"]), "suggest_pubmed": suggest_pubmed(t["status"], q, store.get_case(case_id))}
+    return public(t, sig["hash"])
 
 
 # A question that names a record or the patient stays a records question. "report", "record", "note", "letter", "document" count as the

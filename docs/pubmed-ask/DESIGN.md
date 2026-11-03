@@ -134,3 +134,10 @@ the first author, journal and year of its paper; same access as reading the thre
   `suggest_pubmed` shows "This is a general question. Ask PubMed?" (one click asks it in the PubMed tab).
 - Home: an "Ask PubMed" card on the Case Files home and a page `/pubmed` in the nav (BookOpen icon, after Meetings) and the Dock.
 - Meeting: a side panel kind "pubmed" ("Ask PubMed") beside Agents, Case File mode for the case on the floor; Read aloud.
+
+## 9. Part 2 status, 3 Nov 2026
+Built and checked: the routes and jobs (ffa5d59, 1ea7826), the screens (cf7ff51), the records offer kept with its thread and Escape on a
+quote closing the quote only (this commit). Live on :7000 with real PubMed and the model: Case File answer in 5 to 9 s, the offer and
+its one click, a refused question, the Home page, the phone, the meeting panel, access refusals (department admin 403, another login's
+job 404), no email, key or eutils URL in any answer: 0 problems. Mocked screens 157 passed; unit suite 4858 passed (backend helper run).
+How to try: HOW_TO_TRY.md. Not done: the public demo (only on the owner's word); the NCBI API key (the owner makes it).

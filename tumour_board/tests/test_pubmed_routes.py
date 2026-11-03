@@ -490,6 +490,8 @@ def test_suggest_pubmed_on_a_records_answer(hosp, fake, records, question, want)
     r = As(hosp, "priya").post(f"/cases/{CASE}/chats", json={"question": question})
     assert r.status_code == 200, r.text
     assert r.json()["suggest_pubmed"] is want
+    listed = As(hosp, "priya").get(f"/cases/{CASE}/chats").json()["threads"]
+    assert [t["suggest_pubmed"] for t in listed if t["id"] == r.json()["id"]] == [want]  # the list keeps the offer (the screen reloads it)
     assert not fake.calls  # only a suggestion: nothing is asked of PubMed
 
 
