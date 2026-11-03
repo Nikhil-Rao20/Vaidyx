@@ -3,6 +3,7 @@ the answer of qa.ask (statements, each with its verified quotes: document, title
 was computed from (a later change marks the thread stale: "records changed since"), and a pin. Visible to the owner's team and the
 participating departments with FULL scope, never to a supporting-only doctor and never in REQUESTS scope; "View as" stays general.
 Audited "chat_asked" / "chat_pinned". The model is called only through qa.ask."""
+import re
 import threading
 import uuid
 
@@ -114,7 +115,25 @@ async def ask(case_id, question, user, history=None) -> dict:
         save(case_id, data)
     store.audit(case_id, {"kind": "chat_asked", "by": user, "thread": t["id"], "question": q[:300], "status": t["status"], "statements": len(t["statements"]),
                           "dropped_unverified": t["dropped_unverified"]})
-    return public(t, sig["hash"])
+    return {**public(t, sig["hash"]), "suggest_pubmed": suggest_pubmed(t["status"], q, store.get_case(case_id))}
+
+
+# A question that names a record or the patient stays a records question. "report", "record", "note", "letter", "document" count as the
+# record only as a noun ("the report", "her biopsy report"): "What did trials report ...?" is the design's own general question.
+RECORD_WORDS = re.compile(
+    r"\b(?:the|a|an|this|that|these|those|her|his|its|their|any|which|latest|last|recent|previous|final|pathology|histopathology|"
+    r"biopsy|scan|ct|mri|pet|radiology|lab|laboratory|blood|discharge|opd|clinic|referral|ihc|outside)\s+"
+    r"(?:reports?|records?|notes?|letters?|documents?)\b|\b(?:documented|recorded|discharge\w*|this patient|his)\b|"
+    r"\bher\b(?!\s*-?\s*2\b)", re.I)
+
+
+def suggest_pubmed(status, question, case=None) -> bool:
+    """The records found nothing and the question reads as a general one (Ask PubMed's scope allows it, it names no record and not
+    the patient): the screen offers "This is a general question. Ask PubMed?" (docs/pubmed-ask/DESIGN.md section 8)."""
+    if status != "not_documented" or not question or RECORD_WORDS.search(question):
+        return False
+    from . import published, pubmed_ask
+    return bool(pubmed_ask.scope(question, published._identifiers(case) if isinstance(case, dict) else ())["allowed"])
 
 
 def pin(case_id, thread_id, pinned, user) -> dict:

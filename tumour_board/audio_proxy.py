@@ -10,7 +10,7 @@ for signed-in Tumour Board users; the browser never reaches the service.
     speak(text, voice, speed)   one piece of text to the service's /tts; the WAV and the allowed response headers back
     error_for(status, code)     the service's refusal as the app's (status, plain message, code); everything degrades to typing
     split_sentences(text)       the fixed sentence rule the front end carries too (item 4.3)
-    RESOLVERS / resolve(...)    a saved statement by reference (chat, agent, meeting_answer, summary, points): the screen's own check
+    RESOLVERS / resolve(...)    a saved statement by reference (chat, agent, meeting_answer, summary, points, pubmed): the screen's own check
                                 first, then the exact text the screen shows; None for refused and unknown alike
     audit_*                     audit lines without content: never the text, the audio, a filename or the token
 
@@ -37,8 +37,8 @@ SPEED_MIN, SPEED_MAX = 0.8, 1.25
 CONTEXTS = ("question", "decision", "note", "reason")
 ENGINES = ("whisper", "parakeet")
 LIMITS = {"stt_seconds": 60, "stt_bytes": STT_MAX_BYTES, "tts_chars": TTS_MAX}
-KINDS = ("chat", "agent", "meeting_answer", "summary", "points")
-CASE_KINDS = ("chat", "agent", "summary", "points")
+KINDS = ("chat", "agent", "meeting_answer", "summary", "points", "pubmed")
+CASE_KINDS = ("chat", "agent", "summary", "points", "pubmed")  # a Home PubMed thread has no case_id: its audit line names none
 _SCREEN = re.compile(r"^[A-Za-z0-9_-]{1,40}$")  # the helper roles carry an underscore (medical_oncology)
 TEXT_SCREENS = ("decision",)  # the only boxes whose on-screen text may be read back (mode b)
 RESP_HEADERS = ("content-type", "content-length", "x-took-ms", "x-sample-rate")
@@ -361,6 +361,20 @@ def _meeting_member(roles, ref) -> bool:
     return meetings.may_view(roles, s) and meetings.is_member(roles, s)
 
 
+def _pubmed_reader(roles, ref) -> bool:
+    """An Ask PubMed thread: in a Case File, the readers of its PubMed threads (pubmed_threads.may_read: the team chat's readers, or
+    an admitted member of the running meeting while it is on the floor); on Home (no case_id), the login's own history only (the
+    loader looks nowhere else)."""
+    from . import pubmed_threads
+    if not isinstance(roles, dict):
+        return False
+    case_id = _sid(ref.get("case_id"))
+    if not case_id:
+        return bool(roles.get("user"))
+    c = _case(case_id)
+    return bool(c) and pubmed_threads.may_read(roles, c)
+
+
 def _statements(rows) -> str:
     return " ".join(str(s.get("text") or "").strip() for s in rows or [] if isinstance(s, dict) and str(s.get("text") or "").strip())
 
@@ -434,6 +448,21 @@ def _meeting_text(ref, roles=None):
     return _spoken(e, i) if i is not None else str(e.get("text") or "")
 
 
+def _pubmed_text(ref, roles=None):
+    """"From PubMed." then each line with the first author, journal and year of its first cited paper (pubmed_threads.speech)."""
+    from . import pubmed_threads
+    rid = _sid(ref.get("id"))
+    if not pubmed_threads.THREAD_ID.match(rid):
+        return None
+    case_id = _sid(ref.get("case_id"))
+    if case_id:
+        t = pubmed_threads.case_thread(case_id, rid)
+    else:
+        user = str((roles or {}).get("user") or "")
+        t = pubmed_threads.home_thread(user, rid) if user else None
+    return pubmed_threads.speech(t) if t else None
+
+
 def _section_text(sec) -> str:
     rows = list(sec.get("sentences") or [])
     for b in sec.get("blocks") or []:
@@ -467,8 +496,10 @@ def _points_text(ref):
     return "\n".join(str(p.get("text") or "").strip() for p in summ.get("points_for_review") or [] if isinstance(p, dict) and str(p.get("text") or "").strip())
 
 
-_LOADERS = {"chat": _chat_text, "agent": _agent_text, "meeting_answer": _meeting_text, "summary": _summary_text, "points": _points_text}
-_CHECKS = {"chat": _team_chat, "agent": _team_chat, "meeting_answer": _meeting_member, "summary": _full, "points": _full}
+_LOADERS = {"chat": _chat_text, "agent": _agent_text, "meeting_answer": _meeting_text, "summary": _summary_text, "points": _points_text,
+            "pubmed": _pubmed_text}
+_CHECKS = {"chat": _team_chat, "agent": _team_chat, "meeting_answer": _meeting_member, "summary": _full, "points": _full, "pubmed": _pubmed_reader}
+_WITH_ROLES = ("meeting_answer", "pubmed")  # loaders that need who is asking (a log entry's Case File, a login's own history)
 
 
 def statement_text(kind, ref, roles=None) -> str | None:
@@ -478,7 +509,7 @@ def statement_text(kind, ref, roles=None) -> str | None:
     if not fn or not isinstance(ref, dict):
         return None
     try:
-        t = fn(ref, roles) if kind == "meeting_answer" else fn(ref)
+        t = fn(ref, roles) if kind in _WITH_ROLES else fn(ref)
     except (KeyError, ValueError, OSError):
         return None
     t = screen_text(t).strip() if isinstance(t, str) else ""

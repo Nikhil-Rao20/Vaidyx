@@ -50,10 +50,10 @@ _PASSWORD_FIRST_OK = _re.compile(r"^/api/tb/(me|me/password|health)$")
 # What a Vaidyx admin, or a doctor who opened the Case File with a reason (scope READ, night-v3 item 1.9), may send inside a window
 # besides reading (security review #6): questions that change nothing and opening the images of a record (viewing). Everything else
 # that writes is refused: the window is read only.
-_BREAK_GLASS_OK = _re.compile(r"^/(ask|search|published/search|documents/[^/]+/images)$")
+_BREAK_GLASS_OK = _re.compile(r"^/(ask|search|published/search|documents/[^/]+/images|pubmed/ask|pubmed/PM[0-9a-f]{8}/pin)$")  # Ask PubMed: the meeting window's members ask (its route refuses the other windows)
 
 # What an archived Case File still accepts besides reading: taking it out of the archive, and questions that change nothing.
-_ARCHIVE_OK = _re.compile(r"^/(unarchive|archive|ask|search|chats|published/search|helpers/[^/]+/chat|documents/[^/]+/images)$")
+_ARCHIVE_OK = _re.compile(r"^/(unarchive|archive|ask|search|chats|published/search|helpers/[^/]+/chat|documents/[^/]+/images|pubmed/ask)$")  # Ask PubMed like the records chat
 
 
 MEETING_SCOPE = "meeting"  # one record open on the shared screen of a running meeting, for its admitted members (read only, that record only)
@@ -404,7 +404,7 @@ def _include_nik_routers(r):
     and skipped so one broken area never takes the whole API down."""
     import importlib
     for name in ("me", "cases_list", "team", "patients", "setup", "slots", "steps", "staging", "chats", "helpers", "published", "meetings", "live", "video", "push", "deck", "meeting_pdf", "case_summary", "audio", "similar",
-                 "messages", "messages_ws", "directory", "meeting_notes"):  # Phase 8: messages, their socket, the people directory; meetings-v2 5.1 / 5.3: the recorder and the notes
+                 "messages", "messages_ws", "directory", "meeting_notes", "pubmed"):  # Phase 8: messages, their socket, the people directory; meetings-v2 5.1 / 5.3: the recorder and the notes; Ask PubMed
         try:
             mod = importlib.import_module(f"tumour_board.api.{name}")
         except ModuleNotFoundError as e:
