@@ -29,6 +29,8 @@ REFUSED = ("Ask PubMed answers general questions about published research. It do
 RECORDS = "That is a question about this patient's records. Ask it under This patient's records."
 IDENT = "Take the patient's name or number out of the question: Ask PubMed sends only search words to PubMed."
 NOT_MEDICAL = "Ask PubMed answers questions about medical research."
+WORDS_REFUSED = ("These search words cannot be sent to PubMed: use 2 to 300 characters with balanced brackets and quotes, and no name, "
+                 "number or date of a patient.")
 MAX_QUESTION = 600
 MAX_QUERY = 300
 RETMAX = 20
@@ -452,10 +454,11 @@ def model_line() -> str:
 
 # ---- the whole question ---------------------------------------------------------------------------------------------------------------
 async def ask(question: str, *, context: dict | None = None, identifiers=(), in_case_file: bool = False, fresh: bool = False,
-              years: int | None = None, on_step=None, audit=None, client=None) -> dict:
+              years: int | None = None, words: str | None = None, on_step=None, audit=None, client=None) -> dict:
     """One Ask PubMed question. context (inside a Case File): {"cancer": ..., "terms": [...]} may sharpen the search words; identifiers:
     the patient's name and numbers, refused in the question and in the words; years limits the publication date to the last n years
-    (None: every year, PubMed's Best Match order, so a landmark trial of 2015 is found). on_step(step, detail) reports progress."""
+    (None: every year, PubMed's Best Match order, so a landmark trial of 2015 is found); words: the doctor's own search words (Search
+    again), used as they are after the same identifier check, instead of the model's. on_step(step, detail) reports progress."""
     identifiers = _idents(identifiers)
     t0 = time.time()
     steps = []
@@ -487,8 +490,16 @@ async def ask(question: str, *, context: dict | None = None, identifiers=(), in_
         out["refusal"] = gate["reason"]
         return done("refused", gate["message"])
 
-    await step("words", "writing the PubMed search words")
-    w = await search_words(q, context, identifiers, audit)
+    if words is not None:  # the doctor's own words: checked like the model's, never widened to other words
+        mine = untagged(" ".join(str(words).split()))
+        if not query_ok(mine, identifiers):
+            out["refusal"] = "words"
+            return done("refused", WORDS_REFUSED)
+        await step("words", "using your search words")
+        w = {"kind": "general", "query": mine, "broader_query": "", "by": "doctor"}
+    else:
+        await step("words", "writing the PubMed search words")
+        w = await search_words(q, context, identifiers, audit)
     if w["kind"] == "about_a_patient":
         out["refusal"] = "about_patient_model"
         return done("refused", REFUSED)
@@ -499,7 +510,9 @@ async def ask(question: str, *, context: dict | None = None, identifiers=(), in_
 
     # PubMed's Best Match, widened step by step until MIN_FOUND papers are found; else the search that found the most
     tries, seen = [], set()
-    for term, yrs in ((w["query"], years), (w["broader_query"], years), (w["query"], None), (keywords(q), None)):
+    widen = ((w["query"], years), (w["query"], None)) if w["by"] == "doctor" else \
+        ((w["query"], years), (w["broader_query"], years), (w["query"], None), (keywords(q), None))
+    for term, yrs in widen:
         if term and (term, yrs) not in seen:
             seen.add((term, yrs))
             tries.append((term, yrs))

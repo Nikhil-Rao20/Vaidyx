@@ -376,7 +376,7 @@ def running(user) -> int:
         return sum(1 for j in _jobs.values() if j["user"] == user and j["status"] == "running")
 
 
-def start(question: str, user: str, *, case_id: str | None = None, years=None) -> dict:
+def start(question: str, user: str, *, case_id: str | None = None, years=None, words: str | None = None) -> dict:
     """Start one question as a task on the running loop. Busy when the login already has MAX_RUNNING running. The caller checked
     who may ask and the input."""
     case = store.get_case(case_id) if case_id else None
@@ -391,11 +391,11 @@ def start(question: str, user: str, *, case_id: str | None = None, years=None) -
         job = {"id": "J" + uuid.uuid4().hex, "user": user, "case_id": case_id or None, "status": "running", "steps": [], "thread": None,
                "error": None, "started": now, "task": None}
         _jobs[job["id"]] = job
-        job["task"] = loop.create_task(_run(job, question, context, identifiers, years))  # kept here so the task is never collected
+        job["task"] = loop.create_task(_run(job, question, context, identifiers, years, words))  # kept here so the task is never collected
     return job
 
 
-async def _run(job: dict, question: str, context, identifiers, years) -> None:
+async def _run(job: dict, question: str, context, identifiers, years, words=None) -> None:
     t0 = time.time()
     case_id, user = job["case_id"], job["user"]
     model_calls = [0]
@@ -414,7 +414,7 @@ async def _run(job: dict, question: str, context, identifiers, years) -> None:
     failed = ""
     try:
         res = await asyncio.wait_for(pubmed_ask.ask(question, context=context, identifiers=identifiers, in_case_file=bool(case_id),
-                                                    years=years, on_step=on_step, audit=audit), JOB_TIMEOUT)
+                                                    years=years, words=words, on_step=on_step, audit=audit), JOB_TIMEOUT)
         if not isinstance(res, dict):
             raise TypeError("no answer")
     except asyncio.TimeoutError:

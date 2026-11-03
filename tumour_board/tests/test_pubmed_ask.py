@@ -1092,3 +1092,15 @@ def test_a_dropped_line_keeps_the_models_quote_for_the_logs():
     papers = _one("Event-free survival improved.")
     _, removed, _ = pa.verify([st("Survival improved.", ("40000001", "overall survival doubled"))], papers)
     assert removed[0]["model_quotes"] == ["overall survival doubled"]
+
+
+def test_the_doctors_own_search_words_are_used_as_they_are(remote, model):
+    out = ask(remote, words="pembrolizumab[tiab] AND TNBC")
+    assert out["search"]["by"] == "doctor" and out["search"]["query"] == "pembrolizumab AND TNBC"
+    assert remote.terms()[0] == "pembrolizumab AND TNBC" and "pubmed search words" not in model.purposes()
+
+
+@pytest.mark.parametrize("words", ["Lakshmi AND breast cancer", "UHID 1234567", "(unbalanced", "x"])
+def test_the_doctors_search_words_are_checked_too(remote, model, words):
+    out = ask(remote, words=words, identifiers=["Lakshmi Devi"])
+    assert out["status"] == "refused" and out["refusal"] == "words" and remote.seen == []

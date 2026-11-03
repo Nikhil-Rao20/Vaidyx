@@ -71,9 +71,10 @@ class FakeAsk:
     def __init__(self):
         self.calls, self.gate, self.crash = [], None, None
 
-    async def __call__(self, question, *, context=None, identifiers=(), in_case_file=False, fresh=False, years=None, on_step=None, audit=None,
-                       client=None):
-        self.calls.append({"question": question, "context": context, "identifiers": list(identifiers), "in_case_file": in_case_file, "years": years})
+    async def __call__(self, question, *, context=None, identifiers=(), in_case_file=False, fresh=False, years=None, words=None, on_step=None,
+                       audit=None, client=None):
+        self.calls.append({"question": question, "context": context, "identifiers": list(identifiers), "in_case_file": in_case_file, "years": years,
+                           **({"words": words} if words is not None else {})})
         on_step("words", "writing the PubMed search words")
         if audit:
             audit({"kind": "llm_call", "role": "reasoner", "model": "fake", "purpose": "pubmed search words", "seconds": 0.1, "attempts": 1})
@@ -556,3 +557,18 @@ def test_home_file_name_never_comes_from_an_odd_login():
     for odd in ("../x", "a/b", ".hidden", "", "x" * 80):
         p = pt.home_path(odd)
         assert p.parent == config.DATA_ROOT / "pubmed_home" and p.name.startswith("h-") and "/" not in p.name[:-5]
+
+
+
+def test_search_again_with_the_doctors_words_and_can_save(hosp, fake):
+    tc = hosp
+    r = ask_case(tc, "asha", words="  drug A   AND  TNBC ")
+    assert r.status_code == 202, r.text
+    wait(tc, "asha", r.json()["job_id"])
+    assert fake.calls[-1]["words"] == "drug A AND TNBC"
+    wait(tc, "anil", ask_home(tc, "anil").json()["job_id"])
+    assert "words" not in fake.calls[-1]  # no words given: the model writes them
+    for bad in ("x", 5, "w" * 301):
+        assert ask_case(tc, "asha", words=bad).status_code == 400
+    assert As(tc, "priya").get(f"/cases/{CASE}/pubmed").json()["can_save"] is True  # the owning department's consultant
+    assert As(tc, "asha").get(f"/cases/{CASE}/pubmed").json()["can_save"] is False

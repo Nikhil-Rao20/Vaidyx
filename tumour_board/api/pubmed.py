@@ -29,7 +29,8 @@ def _case_reader(request, case_id, write=False):
 
 
 async def _question(request) -> tuple:
-    """(question, years) from {question, years?}: 3 to 600 characters after trimming; years all (null), 5 or 10."""
+    """(question, years, words) from {question, years?, words?}: 3 to 600 characters after trimming; years all (null), 5 or 10; words
+    (Search again with the doctor's own search words) up to 300 characters, checked again by the pipeline."""
     b = await common.body(request)
     q = b.get("question")
     q = " ".join(q.split()) if isinstance(q, str) else ""
@@ -38,15 +39,18 @@ async def _question(request) -> tuple:
     years = b.get("years")
     if isinstance(years, bool) or years not in pt.YEARS:
         common.fail(400, "Choose all years, the last 10 years or the last 5 years.", "bad_years")
-    return q, years
+    words = b.get("words")
+    if words is not None and (not isinstance(words, str) or not 2 <= len(" ".join(words.split())) <= 300):
+        common.fail(400, "Search words are 2 to 300 characters.", "bad_words")
+    return q, years, (" ".join(words.split()) if isinstance(words, str) else None)
 
 
-def _start(u, q, years, case_id=None) -> dict:
+def _start(u, q, years, case_id=None, words=None) -> dict:
     if pt.running(u) >= pt.MAX_RUNNING:  # checked before the rate limit, so a refused question does not use up the login's count
         common.fail(429, pt.BUSY, "too_many_running")
     ASK_LIMIT.check(u, "Too many PubMed questions in a short time (12 in 10 minutes). Please wait a few minutes.")
     try:
-        job = pt.start(q, u, case_id=case_id, years=years)
+        job = pt.start(q, u, case_id=case_id, years=years, words=words)
     except pt.Busy:
         common.fail(429, pt.BUSY, "too_many_running")
     return {"job_id": job["id"]}
@@ -58,8 +62,8 @@ async def ask_home(request: Request):
     u = common.user(request); rl = common.roles(request)
     if not pt.clinical(rl):
         common.fail(403, pt.NOT_CLINICAL, "not_clinical")
-    q, years = await _question(request)
-    return _start(u, q, years)
+    q, years, words = await _question(request)
+    return _start(u, q, years, words=words)
 
 
 @router.get("/pubmed/history")
@@ -84,15 +88,16 @@ async def ask_case(case_id: str, request: Request):
     """{question, years?} -> 202 {job_id}. The search may use the cancer and the documented terms; the patient's name and numbers are
     refused in the question and never sent."""
     u, rl, c = _case_reader(request, case_id, write=True)
-    q, years = await _question(request)
-    return _start(u, q, years, case_id=str(c.get("case_id") or case_id))
+    q, years, words = await _question(request)
+    return _start(u, q, years, case_id=str(c.get("case_id") or case_id), words=words)
 
 
 @router.get("/cases/{case_id}/pubmed")
 async def list_threads(case_id: str, request: Request):
-    """{threads[]}: pinned first, newest first; the whole team sees them."""
+    """{threads[], can_save}: pinned first, newest first; the whole team sees them. can_save: this login may save a paper to the
+    Case File's Published list (the owning department's consultants, as POST /cases/{id}/published)."""
     u, rl, c = _case_reader(request, case_id)
-    return {"threads": pt.case_threads(str(c.get("case_id") or case_id))}
+    return {"threads": pt.case_threads(str(c.get("case_id") or case_id)), "can_save": bool(access.is_owner_consultant(rl, c)) and not access.is_archived(c)}
 
 
 @router.post("/cases/{case_id}/pubmed/{thread_id}/pin")
