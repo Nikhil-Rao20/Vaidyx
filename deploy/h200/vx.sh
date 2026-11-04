@@ -92,7 +92,7 @@ status() {
   echo "app  :$APP_PORT  $(up $APP_PORT && echo up || { held_by_other $APP_PORT && echo "HELD BY ANOTHER USER" || echo DOWN; })  code $(git -C "$APP" rev-parse --short HEAD 2>/dev/null)"
   echo "gate :$GATE_PORT  $(up $GATE_PORT && echo "up (health $(gate_ok))" || { held_by_other $GATE_PORT && echo "HELD BY ANOTHER USER" || echo DOWN; })"
   echo "link       $([ -n "$(link_pid)" ] && echo up || echo DOWN)  -> https://$HOST/vx-link"
-  echo "public     $(curl -s -m 10 -o /dev/null -w '%{http_code}' "https://$HOST/login")  https://$HOST/tb-nik"
+  echo "public     $(curl -s -m 10 -o /dev/null -w '%{http_code}' "https://$HOST/sign-in")  https://$HOST/"
 }
 
 case "${1:-}" in

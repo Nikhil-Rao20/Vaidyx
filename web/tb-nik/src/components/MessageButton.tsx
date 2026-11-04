@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 
 type ButtonProps = ComponentProps<typeof Button>;
 import { useSession } from "@/lib/session";
+import { BASE } from "@/lib/base";
 
 export type MessageTarget = { to: string } | { dept: string } | { coordinator: true };
 
@@ -55,7 +56,7 @@ export function MessageButton({ target, caseId, label = "Message", name, size = 
   if (newTab) {
     return (
       <Button asChild size={size} variant={variant} className={className}>
-        <a href={`/tb-nik${href}`} target="_blank" rel="noopener noreferrer" aria-label={name ?? label} data-testid="message-button">{inner}</a>
+        <a href={`${BASE}${href}`} target="_blank" rel="noopener noreferrer" aria-label={name ?? label} data-testid="message-button">{inner}</a>
       </Button>
     );
   }

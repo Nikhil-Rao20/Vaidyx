@@ -14,6 +14,7 @@ import { settingsRoutes } from "@/features/settings/routes";
 import { adminRoutes } from "@/features/admin/routes";
 import { messageRoutes } from "@/features/messages/routes";
 import { NotFound } from "@/app/NotFound";
+import { BASE } from "@/lib/base";
 
 // Every feature folder exports its own RouteObject[] (src/features/<name>/routes.tsx).
 // Pages inside the shell are children of the AppShell layout; public pages (the landing page, sign in) sit outside it.
@@ -46,7 +47,7 @@ function Routed() {
 
 export default function App() {
   return (
-    <BrowserRouter basename="/tb-nik">
+    <BrowserRouter basename={BASE}>
       <SessionProvider>
         <Suspense fallback={<PageSkeleton />}>
           <Routed />

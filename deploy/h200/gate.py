@@ -57,6 +57,27 @@ GET_ONLY = re.compile(r"^(/tb(/.*)?|/tb-nik(/.*)?|/static/.+|/login|/favicon\.ic
 POST_ONLY = {"/api/auth/login", "/api/auth/logout", "/api/auth/2fa/setup", "/api/auth/2fa/confirm",
              "/api/auth/2fa/disable"}  # the website's sign-in and two-factor set-up (password change is /api/tb/me/password)
 WS_PATHS = re.compile(r"^/api/tb/(meetings/[A-Za-z0-9_-]{1,64}|messages)/ws$")
+# The website's own pages, at the root of the public address (no /tb-nik in anyone's address bar). The app serves the website
+# under /tb-nik, so the gate adds the prefix on the way in; old /tb-nik/... links are redirected to the plain form.
+SITE_PAGES = re.compile(r"^/(about|activity|admin|cases|contact|docs|first-login|home|meetings|messages|people|pubmed|requests"
+                        r"|research|settings|sign-in|welcome)(/.*)?$")
+SITE_PREFIX = "/tb-nik"
+
+
+def site_upstream(path: str) -> str | None:
+    """The app path for a website page asked at the root ('/' and SITE_PAGES), else None."""
+    if path == "/":
+        return SITE_PREFIX
+    return SITE_PREFIX + path if SITE_PAGES.match(path) else None
+
+
+def plain_site_path(path: str) -> str | None:
+    """The root form of an old /tb-nik page address (not its API), else None."""
+    if path == SITE_PREFIX or path == SITE_PREFIX + "/":
+        return "/"
+    if path.startswith(SITE_PREFIX + "/") and not path.startswith(SITE_PREFIX + "/api/"):
+        return path[len(SITE_PREFIX):]
+    return None
 NOT_FORWARDED = {"/api/tb/admin"}  # never, even under /api/tb (none exists today; kept as a guard)
 
 HOP_REQ = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "trailers",
@@ -117,8 +138,15 @@ async def handle(request: Request):
         except httpx.HTTPError:
             ok = False
         return JSONResponse({"gate": "ok", "app": "ok" if ok else "down"}, status_code=200 if ok else 503)
-    if path in ("/", "/index.html"):
-        return RedirectResponse("/tb-nik", status_code=302)
+    if path == "/index.html":
+        return RedirectResponse("/", status_code=302)
+    if request.method in ("GET", "HEAD"):
+        old = plain_site_path(path)
+        if old is not None:
+            return RedirectResponse(old + (f"?{request.url.query}" if request.url.query else ""), status_code=301)
+        site = site_upstream(path)
+        if site is not None:
+            path = site          # forwarded as the app's /tb-nik page; the browser keeps the plain address
     if not allowed(request.method, path):
         if path.startswith("/api/"):
             return JSONResponse({"detail": "Not available."}, status_code=404)
