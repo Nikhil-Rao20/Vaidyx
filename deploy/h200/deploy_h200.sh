@@ -38,6 +38,19 @@ else
   git -C "$APP" checkout -q --detach "$SHA" || exit 1
 fi
 
+# The tests CI cannot run (they need files kept only on the H200, deploy/ci/h200_only_tests.txt), on the new checkout.
+PY=${VX_PY:-/data/vaidyx/venv/app/bin/python}
+H200_TESTS=$(grep -v '^#' "$APP/deploy/ci/h200_only_tests.txt" 2>/dev/null | grep .)
+if [ -n "$H200_TESTS" ]; then
+  if ! (cd "$APP" && "$PY" -m pytest -q -p no:cacheprovider $H200_TESTS > "$HOME/vaidyx/deploy_vm/logs/h200_tests.log" 2>&1); then
+    echo "refusing: the H200-only tests failed (see ~/vaidyx/deploy_vm/logs/h200_tests.log)"
+    if [ -n "$PREV" ]; then git -C "$APP" checkout -q --detach "$PREV"; else git -C "$REPO" worktree remove --force "$APP"; fi
+    note "REFUSED ${SHA:0:7}: H200-only tests failed; checkout left at ${PREV:0:7}"
+    exit 1
+  fi
+  echo "H200-only tests: $(tail -1 "$HOME/vaidyx/deploy_vm/logs/h200_tests.log")"
+fi
+
 if "$APP/deploy/h200/vx.sh" restart-app && "$APP/deploy/h200/vx.sh" ensure; then
   note "deployed ${SHA:0:7} (from ${PREV:0:7}) ci=${CI:-skipped} · $("$APP/deploy/h200/vx.sh" status | tr '\n' ' ')"
 else

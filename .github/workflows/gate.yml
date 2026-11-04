@@ -25,6 +25,20 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
+      # The PDF toolkit first (its own venv, like /data/vaidyx/venv/pdf on the H200), then the app's Python on top.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.14"   # the H200 pdf venv
+
+      - name: PDF toolkit for the demo hospital's documents
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 fonts-dejavu-core
+          python -m venv "$RUNNER_TEMP/pdf"
+          "$RUNNER_TEMP/pdf/bin/python" -m pip install --disable-pip-version-check -q pip==26.2.1
+          "$RUNNER_TEMP/pdf/bin/python" -m pip install --disable-pip-version-check -q -r requirements-ci-pdf.lock
+          echo "TB_PDF_PYTHON=$RUNNER_TEMP/pdf/bin/python" >> "$GITHUB_ENV"
+
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.10"   # the H200 app venv
@@ -50,8 +64,12 @@ jobs:
           python -m pip install --disable-pip-version-check pip==26.2.1   # the H200 venv's pip
           python -m pip install --disable-pip-version-check -r requirements-ci.lock
 
+      # Tests listed in deploy/ci/h200_only_tests.txt need a file that is not in the repo; deploy_h200.sh runs them on
+      # the H200 before every release.
       - name: Unit tests (Tumour Board, demo hospital, deployment gate)
-        run: python -m pytest tumour_board/tests his_mock/tests deploy/tests -q -p no:cacheprovider
+        run: |
+          deselect=$(grep -v '^#' deploy/ci/h200_only_tests.txt | grep . | sed 's/^/--deselect=/' | tr '\n' ' ')
+          python -m pytest tumour_board/tests his_mock/tests deploy/tests -q -p no:cacheprovider $deselect
 
       - name: Dependency advisories (report only)
         continue-on-error: true
