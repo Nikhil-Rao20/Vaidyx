@@ -23,6 +23,16 @@ instance: `~/vaidyx/.tb_deploy_logins` (mode 600).
 RHV (renal portal, `renal-data-collection.tanuh.ai`) and TQC (`tqc-8-231-83-210.sslip.io`) run on the same VM. Never
 read, restart or edit their units, files, certificates or nginx sites. Every VM step prints their status before and after.
 
+## Setting up the doctors' instance (H200, once)
+
+```bash
+/data/vaidyx/venv/app/bin/python deploy/h200/setup_instance.py --app /data/vaidyx/tb_deploy/app   # synthetic cases, logins
+/data/vaidyx/venv/app/bin/python deploy/h200/demo_owners.py   # after the app and gate run: TB-001..TB-008 get their department
+```
+
+`demo_owners.py` signs in as the MDT Coordinator and uses the app's own audited route, so each doctor finds the practice Case
+Files of their department at the first sign-in. Run it again after `setup_instance.py --reset-cases`.
+
 ## Everyday commands (H200)
 
 ```bash
