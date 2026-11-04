@@ -63,7 +63,7 @@ status() {
 }
 
 case "${1:-}" in
-  start|ensure) start_app && start_gate && start_link; [ "$1" = start ] && status ;;
+  start|ensure) start_app && start_gate && start_link; rc=$?; [ "$1" = start ] && status; exit $rc ;;
   stop) stop_all ;;
   restart-app) P=$(pid_on $APP_PORT); [ -n "$P" ] && kill "$P"; for _ in $(seq 1 30); do up $APP_PORT || break; sleep 1; done; start_app ;;
   status) status ;;
