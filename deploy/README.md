@@ -33,6 +33,16 @@ read, restart or edit their units, files, certificates or nginx sites. Every VM 
 `demo_owners.py` signs in as the MDT Coordinator and uses the app's own audited route, so each doctor finds the practice Case
 Files of their department at the first sign-in. Run it again after `setup_instance.py --reset-cases`.
 
+## The demo hospital (HIMS) on the public site
+
+The public site has its own copy of the synthetic HIMS: `/data/vaidyx/tb_deploy/his_mock` on `127.0.0.1:7330` (own access key,
+own staff passwords, no sessions or audit from the internal one), started and watched by `vx.sh` like the app and the gate.
+Visitors reach its screens at `/his` and `/desk`; its data API (`/fhir`) is not public, the doctors' app reads it with its key
+(`his.json` of the instance points at :7330). The internal development HIMS (`:7130`) is never reached from outside. The HIMS
+staff logins (reception, OPD and ward doctors, lab, radiology, pathology, admin) are in
+`/data/vaidyx/tb_deploy/his_mock/logins.tsv` (mode 600); new passwords: `TB_HIS_MOCK_DATA=/data/vaidyx/tb_deploy/his_mock
+python -m his_mock.auth --reset`, run from the pinned checkout.
+
 ## Everyday commands (H200)
 
 ```bash

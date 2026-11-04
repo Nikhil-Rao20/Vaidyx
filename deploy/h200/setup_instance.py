@@ -28,6 +28,12 @@ SRC_TB = SRC_REPO / "data" / "tumour_board"
 SRC_GUIDE = Path("/data/vaidyx/tb_resources/guidelines")
 ROOT = Path(os.getenv("VX_DEPLOY_ROOT", "/data/vaidyx/tb_deploy"))
 VDATA, TB, GUIDE = ROOT / "vaidyx_data", ROOT / "tumour_board", ROOT / "guidelines"
+# The public site's own copy of the synthetic demo hospital (HIMS): its own data, access key, passwords and port, so the internal
+# development HIMS (:7130) is never reached from outside.
+SRC_HIMS = SRC_REPO / "data" / "his_mock"
+HIMS = ROOT / "his_mock"
+HIMS_PORT = 7330
+HIMS_SKIP = ("sessions.json", "write_token", "desk_audit.jsonl", "his_audit.jsonl", "ui_shots")
 LOGINS = Path.home() / "vaidyx" / ".tb_deploy_logins"
 
 # Synthetic Case Files only. The real case (TB-2026-bharath) and the test clutter never come here.
@@ -152,6 +158,26 @@ def make_accounts(app: Path) -> int:
     return made
 
 
+def setup_hims(app: Path) -> str:
+    """Copy the synthetic HIMS once (a new access key, new passwords for its 9 staff logins, no sessions or audit from the internal
+    one) and point the instance's his.json at it. Returns what was done."""
+    import subprocess
+    done = "kept"
+    if not HIMS.exists():
+        shutil.copytree(SRC_HIMS, HIMS, ignore=shutil.ignore_patterns(*HIMS_SKIP))
+        (HIMS / "token").write_text(secrets.token_urlsafe(32) + "\n")
+        os.chmod(HIMS / "token", 0o600)
+        subprocess.run([sys.executable, "-m", "his_mock.auth", "--reset"], cwd=app, check=True, capture_output=True,
+                       env={**os.environ, "TB_HIS_MOCK_DATA": str(HIMS)})
+        done = "copied"
+    os.chmod(HIMS, 0o700)
+    cfg = json.loads((TB / "his.json").read_text()) if (TB / "his.json").exists() else {"kind": "fhir", "enabled": True}
+    cfg.update({"url": f"http://127.0.0.1:{HIMS_PORT}", "token": (HIMS / "token").read_text().strip(), "token_file": str(HIMS / "token")})
+    (TB / "his.json").write_text(json.dumps(cfg, indent=1))
+    os.chmod(TB / "his.json", 0o600)
+    return done
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--app", required=True, type=Path, help="the pinned checkout the instance runs from")
@@ -162,12 +188,14 @@ def main():
     os.chmod(ROOT, 0o700)
     cases = copy_cases(a.reset_cases)
     copy_config()
+    hims = setup_hims(a.app.resolve())
     write_org()
     link_guidelines()
     made = make_accounts(a.app.resolve())
     print("doctors' instance ready:", ROOT)
     print("Case Files:", len(cases), "(", ", ".join(cases), ")")
     print("guideline folders:", sorted(p.name for p in GUIDE.iterdir()))
+    print(f"demo hospital (HIMS): {hims}, {HIMS} on 127.0.0.1:{HIMS_PORT}; its staff logins in {HIMS / 'logins.tsv'} (mode 600)")
     print(f"accounts: {len(ROLE_USERS)} role logins ({made} new), plain users, no Vaidyx admin; passwords in {LOGINS} (mode 600)")
 
 

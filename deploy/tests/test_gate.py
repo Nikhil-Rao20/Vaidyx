@@ -118,12 +118,23 @@ def test_short_secret_refuses_to_start(tmp_path, monkeypatch):
         sys.modules.pop("gate", None)
 
 
-@pytest.mark.parametrize("method,path", [
-    ("GET", "/his/patients"), ("GET", "/desk"), ("POST", "/his/login"), ("GET", "/view/reports/x"), ("GET", "/documents/x"),
-])
-def test_demo_hospital_is_not_public(client, method, path):
+@pytest.mark.parametrize("method,path", [("GET", "/his/patients"), ("GET", "/desk"), ("POST", "/his/login"), ("GET", "/his/open")])
+def test_demo_hospital_screens_go_to_the_public_copy(client, method, path):
+    r = client.request(method, path, headers=OK)
+    assert r.status_code == 502, (method, path, r.status_code)  # forwarded to the (absent) HIMS copy
+
+
+@pytest.mark.parametrize("method,path", [("GET", "/fhir/Patient"), ("GET", "/view/reports/x"), ("GET", "/documents/x"),
+                                         ("GET", "/hisx"), ("GET", "/his%2f..%2fadmin")])
+def test_demo_hospital_data_api_is_not_public(client, method, path):
     r = client.request(method, path, headers=OK)
     assert r.status_code == 404, (method, path, r.status_code)
+
+
+def test_his_goes_to_its_own_copy_never_the_internal_one(gate):
+    src = open(gate.__file__).read()   # the default (the fixture points the HIMS at an absent port)
+    assert 'os.getenv("VX_HIS_UPSTREAM", "http://127.0.0.1:7330")' in src and ":7130" not in src.split("HIS_UPSTREAM =")[1].split("\n")[0]
+    assert gate.HIS_PATHS.match("/his/login") and gate.HIS_PATHS.match("/desk") and not gate.HIS_PATHS.match("/api/tb/his")
 
 
 @pytest.mark.parametrize("method,path", [

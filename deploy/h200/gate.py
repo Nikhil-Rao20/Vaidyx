@@ -49,9 +49,12 @@ def _load_secret() -> bytes:
 
 SECRET = _load_secret()
 
-# The demo hospital (HIS, RIS / LIS desk, report views) is NOT public: the website never links to it, and the app reads it
-# server-side (tumour_board/his_client.py). Security review 4 Nov.
-ANY_METHOD = re.compile(r"^(/api/tb(/.*)?|/tb-nik/api/enquiry)$")
+# The demo hospital's screens (/his: HIMS, /desk: RIS / LIS desk) go to the public site's OWN copy of the synthetic HIMS
+# (127.0.0.1:7330, own data, key and passwords; set up by setup_instance.py), never to the internal development HIMS (:7130).
+# Its data API (/fhir) is not public: the app reads it server-side with its key.
+HIS_UPSTREAM = os.getenv("VX_HIS_UPSTREAM", "http://127.0.0.1:7330")
+HIS_PATHS = re.compile(r"^/(his|desk)(/.*)?$")
+ANY_METHOD = re.compile(r"^(/api/tb(/.*)?|/tb-nik/api/enquiry|/his(/.*)?|/desk(/.*)?)$")
 GET_ONLY = re.compile(r"^(/tb(/.*)?|/tb-nik(/.*)?|/static/.+|/login|/favicon\.ico|/api/version"
                       r"|/api/auth/(status|policy|features|settings|2fa/status)|/api/prefs/(theme|custom-themes))$")
 POST_ONLY = {"/api/auth/login", "/api/auth/logout", "/api/auth/2fa/setup", "/api/auth/2fa/confirm",
@@ -89,6 +92,7 @@ HOP_RESP = {"connection", "keep-alive", "transfer-encoding", "upgrade", "trailer
 _NO_COOKIES = http.cookiejar.CookieJar(policy=http.cookiejar.DefaultCookiePolicy(allowed_domains=[]))
 _TIMEOUT = httpx.Timeout(connect=10.0, read=900.0, write=900.0, pool=30.0)
 client = httpx.AsyncClient(base_url=UPSTREAM, follow_redirects=False, cookies=_NO_COOKIES, timeout=_TIMEOUT)
+his_client = httpx.AsyncClient(base_url=HIS_UPSTREAM, follow_redirects=False, cookies=_NO_COOKIES, timeout=_TIMEOUT)
 
 
 def has_secret(headers) -> bool:
@@ -159,7 +163,7 @@ async def handle(request: Request):
         headers.append(("x-forwarded-proto", request.url.scheme))
 
     body = request.stream() if request.method not in ("GET", "HEAD", "OPTIONS") else None
-    target = client
+    target = his_client if HIS_PATHS.match(path) else client
     upstream = target.build_request(request.method, path, params=request.url.query or None, headers=headers, content=body)
     try:
         r = await target.send(upstream, stream=True)
@@ -232,6 +236,7 @@ METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 async def lifespan(_app):
     yield
     await client.aclose()
+    await his_client.aclose()
 
 
 app = Starlette(routes=[WebSocketRoute("/{path:path}", ws_handle), Route("/{path:path}", handle, methods=METHODS)],

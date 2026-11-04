@@ -29,10 +29,11 @@ if [ -n "$end" ]; then
 else problems+=("certificate unreadable"); fi
 
 # 3. the protections still hold (each must be refused)
-for p in /_gate/health "/_ga%09te/health" /his /desk "/api/tb/%2561dmin/x" /api/admin/users /openapi.json /api/chat; do
+for p in /_gate/health "/_ga%09te/health" /fhir/metadata "/api/tb/%2561dmin/x" /api/admin/users /openapi.json /api/chat; do
   c=$(code "https://$HOST$p"); [ "$c" = 404 ] || problems+=("$p answered $c (expected 404)")
 done
 c=$(code "https://$HOST/api/tb/cases"); [ "$c" = 401 ] || problems+=("case list without a session answered $c (expected 401)")
+c=$(code "https://$HOST/his/login"); [ "$c" = 200 ] || problems+=("demo hospital sign-in answered $c (expected 200)")
 hsts=$(curl -s -m 15 -D - -o /dev/null "https://$HOST/login" | grep -ci '^strict-transport-security')
 [ "$hsts" = 1 ] || problems+=("HSTS headers: $hsts (expected 1)")
 
