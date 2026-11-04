@@ -62,6 +62,7 @@ install_units() {
   local www_uid; www_uid=$(id -u www-data)
   sed "s/@WWW_UID@/$www_uid/" "$HERE/vaidyx.nft" > "$ETC/vaidyx.nft"; chmod 0600 "$ETC/vaidyx.nft"
   /usr/sbin/nft -c -f "$ETC/vaidyx.nft"
+  /usr/sbin/nft -f "$ETC/vaidyx.nft"     # load now (replaces only our table, atomically; the link server keeps running)
   install -m 0644 "$HERE/vaidyx-firewall.service" /etc/systemd/system/vaidyx-firewall.service
   install -m 0644 "$HERE/vaidyx-link.service" /etc/systemd/system/vaidyx-link.service
   install -m 0644 "$HERE/vaidyx-proxy.conf" "$ETC/nginx/vaidyx-proxy.conf"

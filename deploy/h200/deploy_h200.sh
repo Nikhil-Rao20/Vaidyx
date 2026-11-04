@@ -7,6 +7,7 @@
 # The instance runs from its own pinned checkout (/data/vaidyx/tb_deploy/app, a detached git worktree), never from a
 # working tree someone is editing. On a failed start the previous commit is put back and started again.
 set -u
+export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH
 REPO=${VX_REPO:-$HOME/vaidyx/Vaidyx}
 ROOT=${VX_DEPLOY_ROOT:-/data/vaidyx/tb_deploy}
 APP=$ROOT/app
@@ -51,11 +52,15 @@ if [ -n "$H200_TESTS" ]; then
   echo "H200-only tests: $(tail -1 "$HOME/vaidyx/deploy_vm/logs/h200_tests.log")"
 fi
 
+# The gate runs from the pinned checkout too: restart it when gate.py changed (ensure starts it again).
+restart_gate() { P=$(ss -Hltnp 'sport = :7301' 2>/dev/null | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2); [ -n "$P" ] && kill "$P"; sleep 1; }
+if [ -n "$PREV" ] && ! git -C "$APP" diff --quiet "$PREV" "$SHA" -- deploy/h200/gate.py; then echo "gate.py changed: restarting the gate"; restart_gate; fi
+
 if "$APP/deploy/h200/vx.sh" restart-app && "$APP/deploy/h200/vx.sh" ensure; then
   note "deployed ${SHA:0:7} (from ${PREV:0:7}) ci=${CI:-skipped} · $("$APP/deploy/h200/vx.sh" status | tr '\n' ' ')"
 else
   echo "start failed: putting ${PREV:0:7} back"
-  [ -n "$PREV" ] && git -C "$APP" checkout -q --detach "$PREV" && "$APP/deploy/h200/vx.sh" restart-app && "$APP/deploy/h200/vx.sh" ensure
+  [ -n "$PREV" ] && git -C "$APP" checkout -q --detach "$PREV" && restart_gate && "$APP/deploy/h200/vx.sh" restart-app && "$APP/deploy/h200/vx.sh" ensure
   note "FAILED ${SHA:0:7}, rolled back to ${PREV:0:7}"
   exit 1
 fi
